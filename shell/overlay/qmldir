@@ -1,0 +1,15 @@
+module qs.overlay
+Overlay 1.0 Overlay.qml
+Dialog 1.0 Dialog.qml
+ConfirmDialog 1.0 ConfirmDialog.qml
+NoticeDialog 1.0 NoticeDialog.qml
+AboutPanel 1.0 AboutPanel.qml
+AppAboutPanel 1.0 AppAboutPanel.qml
+ForceQuitPanel 1.0 ForceQuitPanel.qml
+SystemMenu 1.0 SystemMenu.qml
+AppMenu 1.0 AppMenu.qml
+VolumeMenu 1.0 VolumeMenu.qml
+NetworkMenu 1.0 NetworkMenu.qml
+BatteryMenu 1.0 BatteryMenu.qml
+ControlCenter 1.0 ControlCenter.qml
+DockMenu 1.0 DockMenu.qml
