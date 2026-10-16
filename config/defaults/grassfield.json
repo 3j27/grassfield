@@ -1,10 +1,32 @@
 {
   "version": 1,
   "appearance": "dark",
-  "material": { "transparency": 0.25, "profile": "balanced" },
-  "accessibility": { "reduceTransparency": false, "reduceMotion": false },
-  "dock": { "pinned": ["foot", "chromium", "org.gnome.Nautilus"], "magnification": 1.6, "autohide": false },
-  "windows": { "titlebarDoubleClick": "zoom" },
-  "notifications": { "dnd": false, "previews": "unlocked" },
-  "lock": { "idleMinutes": 5 }
+  "material": {
+    "transparency": 0.25,
+    "profile": "balanced"
+  },
+  "accessibility": {
+    "reduceTransparency": false,
+    "reduceMotion": false
+  },
+  "dock": {
+    "pinned": [
+      "foot",
+      "chromium",
+      "org.gnome.Nautilus"
+    ],
+    "magnification": 1.6,
+    "magnificationEnabled": true,
+    "autohide": false
+  },
+  "windows": {
+    "titlebarDoubleClick": "zoom"
+  },
+  "notifications": {
+    "dnd": false,
+    "previews": "unlocked"
+  },
+  "lock": {
+    "idleMinutes": 5
+  }
 }
