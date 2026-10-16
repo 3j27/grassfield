@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# S2 spike shim (throwaway): lets scripts/dev/nested-up.sh run unchanged while the nested instance
+# uses spikes/s2-ipc/nested-plugin.lua (dev.lua + a parse-time plugin load).
+# Usage: PATH="$PWD/spikes/s2-ipc/bin:$PATH" scripts/dev/nested-up.sh
+set -euo pipefail
+spike_config="$(cd "$(dirname "$0")/.." && pwd)/nested-plugin.lua"
+args=()
+for a in "$@"; do
+  [[ $a == */config/hypr/dev.lua ]] && a=$spike_config
+  args+=("$a")
+done
+exec /usr/bin/Hyprland "${args[@]}"
