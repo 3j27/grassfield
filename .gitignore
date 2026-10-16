@@ -9,3 +9,4 @@ compositor/build/
 *.so
 # Throwaway spike outputs
 spikes/**/out/
+.claude/worktrees/
