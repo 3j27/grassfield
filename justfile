@@ -53,6 +53,10 @@ shot name:
 scenario name:
     tests/scenarios/{{name}}.sh
 
+# Scripted pointer in the nested instance, e.g. `just pointer output GF-REF abs 960 1050 click` (ask).
+pointer *args:
+    scripts/dev/pointer.sh {{args}}
+
 # Build the compositor plugin against the installed Hyprland headers.
 plugin-build:
     cmake -S compositor -B compositor/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
