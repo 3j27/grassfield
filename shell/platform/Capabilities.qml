@@ -19,6 +19,12 @@ Singleton {
     property bool settled: false
     property var features: []
 
+    // Hello transport (ASSUMPTION until ADR-0007): Hyprland 0.56 is Lua-only, and Quickshell
+    // wraps the request as `return hl.dispatch(<request>)`, so a Lua function is sent that
+    // calls the plugin's `hello` when the plugin registered one. Without the plugin it is a
+    // silent no-op, which then ends in degraded mode via the timeout.
+    readonly property string helloRequest: "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.hello then p.hello() end end"
+
     function has(feature: string): bool {
         return pluginPresent && features.indexOf(feature) !== -1;
     }
@@ -60,6 +66,6 @@ Singleton {
 
     Component.onCompleted: {
         timeout.start();
-        Hyprland.dispatch("grassfield:hello");
+        Hyprland.dispatch(root.helloRequest);
     }
 }
