@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 
 // "Restrained glass" surface (master-prompt 5.5): high-opacity tint, subtle top
 // highlight, 1 px inner border and a diffused shadow drawn outside the shape.
@@ -26,26 +27,59 @@ Item {
 
     default property alias content: contentItem.data
 
-    // Diffused shadow: concentric 1 px rings with a smooth falloff, always outside the
-    // shape (never under the glass).
-    Repeater {
-        model: root.shadowEnabled ? Tokens.shadowBlur : 0
-        delegate: Rectangle {
-            id: ring
-            required property int index
-            readonly property real grow: index + 1
-            readonly property real falloff: 1 - grow / Tokens.shadowBlur
-            readonly property real topGrow: Math.max(grow - Tokens.shadowOffsetY, 1)
-            x: -grow
-            y: -topGrow
-            width: root.width + 2 * grow
-            height: root.height + topGrow + grow + Tokens.shadowOffsetY
-            radius: root.radius + grow
-            color: "transparent"
-            border.width: 1
-            border.color: Appearance.withAlpha(Appearance.colors.shadow,
-                Tokens.shadowOpacity * Math.pow(ring.falloff, 2.2) * (0.35 + 0.65 * root.tintAlpha))
+    // Diffused gaussian shadow (RectangularShadow, Qt 6.9+), masked so that it never shows
+    // under the glass: the shape is cut out of the shadow layer.
+    Item {
+        id: shadowSource
+        visible: false
+        layer.enabled: root.shadowEnabled
+        x: -root.shadowMargin
+        y: -root.shadowMargin
+        width: root.width + 2 * root.shadowMargin
+        height: root.height + 2 * root.shadowMargin
+
+        RectangularShadow {
+            x: root.shadowMargin
+            y: root.shadowMargin
+            width: root.width
+            height: root.height
+            radius: root.radius
+            blur: Tokens.shadowBlur
+            offset: Qt.vector2d(0, Tokens.shadowOffsetY)
+            color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.shadowOpacity * (0.35 + 0.65 * root.tintAlpha))
         }
+    }
+
+    Item {
+        id: shadowCutout
+        visible: false
+        layer.enabled: root.shadowEnabled
+        x: shadowSource.x
+        y: shadowSource.y
+        width: shadowSource.width
+        height: shadowSource.height
+
+        Rectangle {
+            x: root.shadowMargin
+            y: root.shadowMargin
+            width: root.width
+            height: root.height
+            radius: root.radius
+            color: "black"
+        }
+    }
+
+    MultiEffect {
+        visible: root.shadowEnabled
+        x: shadowSource.x
+        y: shadowSource.y
+        width: shadowSource.width
+        height: shadowSource.height
+        source: shadowSource
+        autoPaddingEnabled: false
+        maskEnabled: true
+        maskSource: shadowCutout
+        maskInverted: true
     }
 
     Rectangle {

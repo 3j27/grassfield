@@ -2,3 +2,11 @@ module Grassfield.Ui
 singleton Tokens 1.0 Tokens.qml
 singleton Appearance 1.0 Appearance.qml
 Material 1.0 Material.qml
+Icon 1.0 Icon.qml
+MenuItem 1.0 MenuItem.qml
+MenuSeparator 1.0 MenuSeparator.qml
+PopupMenu 1.0 PopupMenu.qml
+Slider 1.0 Slider.qml
+Toggle 1.0 Toggle.qml
+Tooltip 1.0 Tooltip.qml
+Button 1.0 Button.qml

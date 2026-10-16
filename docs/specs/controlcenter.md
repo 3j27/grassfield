@@ -8,6 +8,9 @@
   optional Keyboard brightness. Clicking a tile's chevron expands it in place (list of networks/devices).
 - Toggles are rounded tiles with an icon circle filled with the accent when on.
 
+## M1 subset (implemented, shell-engineer)
+Opened by the Control Center menu bar icon (`qs.overlay/ControlCenter.qml`, 320 px, anchored under the icon): Appearance (Light/Dark), Transparency slider (`material.transparency` 0–1, live), Reduce Transparency toggle, Reduce Motion toggle, output volume slider. Everything persists to grassfield.json through `Settings` (see ui.md). Verified: screenshots at transparency 0, 0.25, 0.6 and in the light appearance; `grassfield.json` written in the dev config dir. Not in M1: Wi-Fi/Bluetooth/airplane/Focus tiles, brightness, Now Playing, device lists (CC1–CC4, CC5, CC7).
+
 ## Purpose and non-goals
 Quick settings backed by real services only (§5.8): NetworkManager (Quickshell Networking), BlueZ (Quickshell
 Bluetooth), PipeWire (Quickshell Pipewire), UPower, MPRIS, brightness via `brightnessctl` or logind
