@@ -13,7 +13,10 @@ check: check-config check-shell check-scripts
 
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland.
 check-config:
-    GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/dev.lua 2>&1 | sed -n '/Config parsing result/,$p' | tee /dev/stderr | grep -qx 'config ok'
+    for cfg in dev session; do \
+      GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/$cfg.lua 2>&1 \
+        | sed -n '/Config parsing result/,$p' | tee /dev/stderr | grep -qx 'config ok'; \
+    done
 
 # Lint QML (0 warnings required in changed files, gate Q1).
 check-shell:
