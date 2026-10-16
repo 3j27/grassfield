@@ -1,5 +1,5 @@
 # ADR-0007: Shell ↔ plugin IPC (`gfc/1`)
-Status: Proposed — pending spike S2 evidence · Date: 2026-10-17 · Decider: owner
+Status: Proposed (S2 evidence recorded; applied provisionally) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 grassfield-shell (Quickshell) must drive `grassfield-compositor` (minimize with target rectangles,
@@ -20,22 +20,31 @@ Hyprland 0.56.2 plugin API offers `addDispatcherV2`, `registerHyprCtlCommand`, `
 3. D-Bus service inside the compositor process. Cons: event-loop integration in Hyprland, heavier.
 
 ## Decision (proposed)
-Option 1, versioned `gfc/1`:
-- Handshake: at startup the shell dispatches `grassfield:hello gfc/1`; the plugin answers (and also emits at
-  load) `grassfield>>{"v":"gfc/1","type":"capabilities","features":[...]}`. No reply within 1500 ms →
-  degraded mode (§5.6) and one notification.
-- Shell → plugin verbs: `grassfield:minimize <address> <x> <y> <w> <h>`, `grassfield:restore <address>`,
-  `grassfield:overview <on|off>`, `grassfield:dock-rects <json>`; arguments are space-separated or one
-  compact JSON object; the plugin validates everything (untrusted input).
-- Plugin → shell events: `capabilities`, `minimized`, `restored`, `appmenu` (address → service, path),
-  `button` (titlebar actions needing the shell). Payloads never contain window contents or secrets.
+Option 1 adapted to the Lua config, versioned `gfc/1`:
+- **Shell → plugin: Lua functions**, registered by the plugin with `HyprlandAPI::addLuaFunction(handle,
+  "grassfield", "<verb>", fn)` and reachable as `hl.plugin.grassfield.<verb>(...)`. The shell's platform layer
+  sends them through `Hyprland.dispatch(<Lua function body>)` (Quickshell wraps requests as
+  `return hl.dispatch(<request>)` when `usingLua` is true), guarded by
+  `local p = hl.plugin and hl.plugin.grassfield; if p and p.<verb> then ... end` so a missing plugin is a no-op.
+  Each function returns `hl.dsp.no_op()` so the wrapping dispatch does not error.
+- **Plugin → shell: socket2 events** `grassfield>>{json}` (`g_pEventManager->postEvent`), received by
+  `Hyprland.rawEvent` in `shell/platform/`.
+- **Diagnostics**: `hyprctl grassfield` (read-only JSON, same as the capabilities event).
+- Handshake: the shell calls `hl.plugin.grassfield.hello()` at startup; the plugin answers (and emits at load)
+  `{"v":"gfc/1","type":"capabilities","features":[...]}`. No reply within 1500 ms → degraded mode (§5.6).
+- Verbs (planned): `hello()`, `minimize(address, x, y, w, h)`, `restore(address)`, `overview(on)`,
+  `theme(json)`; events: `capabilities`, `minimize-request`, `minimized`, `restored`, `appmenu`.
+- All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
 
 ## Evidence
-To be filled from S2: whether `Hyprland.dispatch` reaches plugin dispatchers when Hyprland runs a Lua
-config, and the event API used.
+Spike S2 (2026-10-17, nested Hyprland 0.56.2, Quickshell 0.3.1):
+- `Hyprland.dispatch("grassfield:hello")` with an `addDispatcherV2` dispatcher FAILS under the Lua config:
+  Quickshell sends `return hl.dispatch(grassfield:hello)` → Lua error "function arguments expected".
+- `hl.plugin.grassfield.hello()` registered with `addLuaFunction` WORKS; Quickshell received
+  `rawEvent grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations"]}`.
+- `hyprctl grassfield` returns the capabilities JSON.
 
 ## Consequences
 - Breaking payload changes bump `gfc/N` and need a new ADR.
-- If S2 shows dispatch does not reach plugin dispatchers under Lua, fall back to `addLuaFunction` +
-  `hyprctl eval` from the shell platform layer (one-shot process per action, no polling) or option 2.
+- Depends on Quickshell keeping the `usingLua` dispatch wrapping; re-verify on every Quickshell minor update.
