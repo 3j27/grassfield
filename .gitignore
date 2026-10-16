@@ -1,0 +1,11 @@
+# Dev state of the nested instance (master-prompt R3)
+.dev/
+# Apple reference material: never committed (master-prompt §2, §14)
+design/reference/
+# Build outputs
+build/
+compositor/build/
+*.o
+*.so
+# Throwaway spike outputs
+spikes/**/out/
