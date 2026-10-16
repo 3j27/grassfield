@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Stop the nested shell and compositor started by nested-up.sh and remove their records.
+set -uo pipefail
+
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+dev=$root/.dev
+main=$(cat "$dev/main.instance" 2>/dev/null || true)
+
+stop_pid() { # <pidfile> <name>
+  [[ -s $1 ]] || return 0
+  local pid
+  pid=$(<"$1")
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null
+    for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+    echo "nested-down: stopped $2 (pid $pid)"
+  fi
+  rm -f "$1"
+}
+
+# Safety: never signal the owner's compositor even if the records were tampered with.
+if [[ -s $dev/nested.pid ]]; then
+  pid=$(<"$dev/nested.pid")
+  owner_pid=$(hyprctl instances -j 2>/dev/null | jq -r --arg s "$main" '.[] | select(.instance == $s) | .pid')
+  if [[ -n $owner_pid && $pid == "$owner_pid" ]]; then
+    echo "nested-down: refusing: recorded PID is the owner's compositor" >&2
+    exit 1
+  fi
+fi
+
+stop_pid "$dev/shell.pid" grassfield-shell
+stop_pid "$dev/nested.pid" "nested Hyprland"
+rm -f "$dev/nested.instance" "$dev/nested.wayland"
