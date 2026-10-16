@@ -7,3 +7,4 @@ singleton Trash 1.0 Trash.qml
 singleton Audio 1.0 Audio.qml
 singleton Apps 1.0 Apps.qml
 singleton Connectivity 1.0 Connectivity.qml
+singleton Brightness 1.0 Brightness.qml
