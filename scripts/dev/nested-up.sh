@@ -18,6 +18,10 @@ fi
 # 1. Record the owner's main instance.
 printf '%s\n' "$HYPRLAND_INSTANCE_SIGNATURE" > "$dev/main.instance"
 
+# Plugin to load at startup (C2: GRASSFIELD_NO_PLUGIN=1 starts without it).
+plugin=${GRASSFIELD_PLUGIN:-$root/compositor/build/grassfield-compositor.so}
+[[ -f $plugin && -z ${GRASSFIELD_NO_PLUGIN:-} ]] || plugin=""
+
 # 2. Start Hyprland nested. Its children inherit the nested WAYLAND_DISPLAY/HYPRLAND_INSTANCE_SIGNATURE.
 env -u HYPRLAND_INSTANCE_SIGNATURE -u HYPRLAND_CMD \
   GRASSFIELD_CONFIG_DIR="$root/config/hypr" \
@@ -25,6 +29,7 @@ env -u HYPRLAND_INSTANCE_SIGNATURE -u HYPRLAND_CMD \
   GRASSFIELD_STATE_HOME="$dev/state" \
   GRASSFIELD_CONFIG_HOME="$dev/config" \
   GRASSFIELD_DEV=1 \
+  GRASSFIELD_PLUGIN="$plugin" \
   setsid Hyprland --config "$root/config/hypr/dev.lua" >"$dev/hyprland.log" 2>&1 </dev/null &
 pid=$!
 printf '%s\n' "$pid" > "$dev/nested.pid"
@@ -52,7 +57,7 @@ if [[ $sig == "$(<"$dev/main.instance")" ]]; then
 fi
 printf '%s\n' "$sig" > "$dev/nested.instance"
 printf '%s\n' "$sock" > "$dev/nested.wayland"
-echo "nested-up: pid $pid, instance $sig, socket $sock"
+echo "nested-up: pid $pid, instance $sig, socket $sock, plugin ${plugin:-none}"
 
 # 4. Start grassfield-shell against the nested instance, if it exists yet.
 if [[ -f $root/shell/shell.qml ]]; then

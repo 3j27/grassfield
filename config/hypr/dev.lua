@@ -14,6 +14,22 @@ hl.monitor({ output = "", mode = "1440x900", position = "auto", scale = 1 })
 
 require("grassfield.core")
 
+-- Optional: load grassfield-compositor into THIS nested instance at startup (R13).
+-- nested-up.sh sets GRASSFIELD_PLUGIN when a built plugin exists; unset it to test degraded mode (C2).
+local plugin = os.getenv("GRASSFIELD_PLUGIN")
+if plugin and plugin ~= "" then
+  local f = io.open(plugin, "r")
+  if f then
+    f:close()
+    hl.on("hyprland.start", function()
+      local ok, err = pcall(hl.plugin.load, plugin)
+      if not ok then
+        print("grassfield: plugin load failed: " .. tostring(err))
+      end
+    end)
+  end
+end
+
 -- Reference output for deterministic screenshots: 1920x1080 @ scale 1, like the reference machine panel.
 -- The visible WAYLAND-1 window is sized by the owner's session layout, so it can't be relied on.
 hl.monitor({ output = "GF-REF", mode = "1920x1080@60", position = "auto-right", scale = 1 })
