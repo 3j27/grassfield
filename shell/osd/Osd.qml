@@ -1,0 +1,179 @@
+pragma ComponentBehavior: Bound
+pragma Singleton
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import Grassfield.Ui
+import qs.services
+
+// On-screen display state (volume and brightness). Spec: docs/specs/osd.md.
+//
+// Shown when the default sink volume/mute or the backlight change (by any program), and by the
+// IPC targets osd (tests), volume and brightness (real changes).
+Singleton {
+    id: root
+
+    property string kind: "volume"
+    property real level: 0
+    property bool muted: false
+    property bool shown: false
+
+    readonly property string iconName: kind === "brightness" ? "sun" : (muted || level <= 0 ? "volume-mute" : level < 0.34 ? "volume-1" : level < 0.67 ? "volume-2" : "volume-3")
+
+    // Changes before this are start-up noise (initial volume read), not user actions.
+    property bool armed: false
+
+    function showValue(osdKind: string, osdLevel: real, osdMuted: bool): void {
+        kind = osdKind === "brightness" ? "brightness" : "volume";
+        level = Math.max(0, Math.min(1, osdLevel));
+        muted = osdMuted;
+        shown = true;
+        hideTimer.restart();
+    }
+
+    function showVolume(): void {
+        if (Audio.ready)
+            showValue("volume", Audio.volume, Audio.muted);
+    }
+
+    function showBrightness(): void {
+        if (Brightness.available)
+            showValue("brightness", Brightness.level, false);
+    }
+
+    function hide(): void {
+        shown = false;
+    }
+
+    // Real volume change through wpctl (the default sink), then show.
+    function volumeStep(direction: string): void {
+        switch (direction) {
+        case "up":
+            wpctl.command = ["wpctl", "set-volume", "-l", "1", "@DEFAULT_AUDIO_SINK@", "5%+"];
+            break;
+        case "down":
+            wpctl.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"];
+            break;
+        case "mute":
+            wpctl.command = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"];
+            break;
+        default:
+            console.warn("osd: unknown volume command", direction);
+            return;
+        }
+        wpctl.running = true;
+    }
+
+    function brightnessStep(direction: string): void {
+        if (!Brightness.available) {
+            console.info("osd: no backlight device; brightness", direction, "ignored");
+            return;
+        }
+        if (direction !== "up" && direction !== "down") {
+            console.warn("osd: unknown brightness command", direction);
+            return;
+        }
+        // In a dev session adjust() only logs; the OSD still shows the current level.
+        if (!Brightness.adjust(direction === "up" ? 0.05 : -0.05))
+            showBrightness();
+    }
+
+    Timer {
+        id: hideTimer
+        interval: Tokens.osdHideDelay
+        onTriggered: root.shown = false
+    }
+
+    Timer {
+        id: arm
+        interval: 1500
+        onTriggered: root.armed = true
+    }
+
+    Process {
+        id: wpctl
+        onRunningChanged: {
+            if (!running)
+                settle.restart();
+        }
+    }
+
+    // wpctl returned; PipeWire reports the new state a moment later.
+    Timer {
+        id: settle
+        interval: 120
+        onTriggered: root.showVolume()
+    }
+
+    Connections {
+        target: Audio
+
+        function onVolumeChanged(): void {
+            if (root.armed)
+                root.showVolume();
+        }
+
+        function onMutedChanged(): void {
+            if (root.armed)
+                root.showVolume();
+        }
+
+        // A new default output starts with its own volume: not a user change.
+        function onSinkChanged(): void {
+            root.armed = false;
+            arm.restart();
+        }
+    }
+
+    Connections {
+        target: Brightness
+
+        function onValueChanged(): void {
+            if (Brightness.loaded && root.armed)
+                root.showBrightness();
+        }
+    }
+
+    Component.onCompleted: arm.start()
+
+    IpcHandler {
+        target: "osd"
+
+        // qs ipc call osd display <volume|brightness> <0..1> <muted>
+        function display(kind: string, level: real, muted: bool): void {
+            root.showValue(kind, level, muted);
+        }
+
+        function hide(): void {
+            root.hide();
+        }
+    }
+
+    IpcHandler {
+        target: "volume"
+
+        function up(): void {
+            root.volumeStep("up");
+        }
+
+        function down(): void {
+            root.volumeStep("down");
+        }
+
+        function mute(): void {
+            root.volumeStep("mute");
+        }
+    }
+
+    IpcHandler {
+        target: "brightness"
+
+        function up(): void {
+            root.brightnessStep("up");
+        }
+
+        function down(): void {
+            root.brightnessStep("down");
+        }
+    }
+}

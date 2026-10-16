@@ -5,6 +5,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.UPower
 import Grassfield.Ui
+import qs.notifications
 import qs.platform
 import qs.services
 
@@ -224,6 +225,19 @@ Scope {
                     }
                     spacing: 0
 
+                    // Do Not Disturb indicator; click turns it off.
+                    BarButton {
+                        id: dndButton
+                        visible: Notifications.dnd
+                        accessibleName: qsTr("Do Not Disturb is on")
+                        onActivated: Notifications.setDnd(false)
+
+                        Icon {
+                            size: Tokens.menubarIconSize
+                            name: "moon"
+                        }
+                    }
+
                     BarButton {
                         id: networkButton
                         accessibleName: qsTr("Network: %1").arg(Connectivity.description)
@@ -282,21 +296,20 @@ Scope {
                         }
                     }
 
-                    Item {
-                        width: clockText.implicitWidth + 2 * Tokens.spacingSm
-                        height: Tokens.menubarHeight
+                    BarButton {
+                        id: clockButton
+                        accessibleName: qsTr("Date and time: %1. Open Notification Center").arg(clockText.text)
+                        active: Notifications.centerOpen && Notifications.centerScreen === win.screen.name
+                        onActivated: Notifications.toggleCenter(win.screen.name)
 
                         Text {
                             id: clockText
-                            anchors.centerIn: parent
                             text: Qt.formatDateTime(clock.date, qsTr("ddd d MMM")) + " "
                                 + Qt.formatTime(clock.date, Qt.locale().timeFormat(Locale.ShortFormat))
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyMenuSize
                             font.weight: Tokens.typographyMenuWeight
-                            Accessible.role: Accessible.StaticText
-                            Accessible.name: qsTr("Date and time: %1").arg(text)
                         }
                     }
                 }

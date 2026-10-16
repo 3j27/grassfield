@@ -83,6 +83,8 @@ QtObject {
     readonly property int radiusDialog: 14
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusTooltip: 6
+    // spec notifications.md: about 16 pt
+    readonly property int radiusBanner: 16
 
     // estimate, pending F1 measurement from design/reference
     readonly property int shadowBlur: 18
@@ -201,4 +203,42 @@ QtObject {
     readonly property int panelPopupMargin: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int panelStatusPopupWidth: 260
+
+    // spec notifications.md: about 344 pt
+    readonly property int notificationBannerWidth: 344
+    // spec notifications.md: 8 pt gaps
+    readonly property int notificationBannerGap: 8
+    // estimate, pending F1 measurement from design/reference
+    readonly property int notificationBannerIconSize: 36
+    // spec N2: default 5 s
+    readonly property int notificationBannerTimeout: 5000
+    // spec: body up to 4 lines
+    readonly property int notificationBannerBodyLines: 4
+    // estimate: older banners wait in the queue
+    readonly property int notificationBannerMaxVisible: 5
+    // estimate, pending F1 measurement from design/reference
+    readonly property int notificationCloseSize: 18
+    // spec N3: 30 percent of the width
+    readonly property real notificationDismissFraction: 0.3
+    // spec N5
+    readonly property int notificationMaxActions: 3
+    // spec N9
+    readonly property int notificationImageMax: 256
+    // estimate, pending F1 measurement from design/reference
+    readonly property int notificationCenterWidth: 380
+    // estimate: entries per group before Show all
+    readonly property int notificationCenterGroupCollapsed: 3
+
+    // estimate: compact pill
+    readonly property int osdWidth: 220
+    // estimate
+    readonly property int osdHeight: 44
+    // estimate
+    readonly property int osdIconSize: 18
+    // estimate
+    readonly property int osdBarHeight: 6
+    // estimate: below the menu bar
+    readonly property int osdGap: 8
+    // estimate
+    readonly property int osdHideDelay: 1600
 }

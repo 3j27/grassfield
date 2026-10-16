@@ -28,6 +28,8 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.magnification` | number 1–2.5 | 1.6 | Dock |
 | `dock.magnificationEnabled` | bool | true | Dock |
 | `dock.autohide` | bool | false | Dock |
+| `notifications.dnd` | bool | false | Notifications (banners suppressed except critical), menu bar moon |
+| `notifications.previews` | `"always"` \| `"unlocked"` \| `"never"` | `"unlocked"` | Notifications (`never` hides bodies) |
 
 Location: `$GRASSFIELD_CONFIG_HOME/grassfield.json` (dev) else `$XDG_CONFIG_HOME/grassfield/grassfield.json`. The file is created on the first UI change (Control Center, Dock menu); setters clamp values, write atomically after 150 ms and the file is watched for external edits.
 

@@ -1,0 +1,3 @@
+module qs.osd
+singleton Osd 1.0 Osd.qml
+OsdWindow 1.0 OsdWindow.qml

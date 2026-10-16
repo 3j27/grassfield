@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import qs.notifications
 import qs.services
 
 // Control Center, M1 subset: Appearance, Transparency, Reduce Transparency, Reduce Motion, Sound.
@@ -83,6 +84,39 @@ FocusScope {
             text: qsTr("Control Center")
             font.pixelSize: Tokens.typographyTitleSize
             font.weight: Tokens.typographyMenuBoldWeight
+        }
+
+        Card {
+            Caption {
+                text: qsTr("Focus")
+            }
+
+            Row {
+                width: parent.width
+                spacing: Tokens.spacingSm
+                height: Tokens.controlToggleHeight
+
+                Icon {
+                    id: focusIcon
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: Tokens.menuIconSize
+                    name: "moon"
+                }
+
+                Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Do Not Disturb")
+                    width: parent.width - focusIcon.width - dndToggle.width - 2 * parent.spacing
+                }
+
+                Toggle {
+                    id: dndToggle
+                    anchors.verticalCenter: parent.verticalCenter
+                    accessibleName: qsTr("Do Not Disturb")
+                    checked: Notifications.dnd
+                    onToggled: value => Notifications.setDnd(value)
+                }
+            }
         }
 
         Card {

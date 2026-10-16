@@ -29,6 +29,9 @@ Singleton {
     readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
     readonly property bool dockAutohide: store.data.dock.autohide
 
+    readonly property bool notificationsDnd: store.data.notifications.dnd
+    readonly property string notificationsPreviews: store.data.notifications.previews
+
     function setAppearance(value: string): void {
         store.setAppearance(value);
     }
@@ -55,6 +58,14 @@ Singleton {
 
     function setDockPinned(list: var): void {
         store.setDockPinned(list);
+    }
+
+    function setNotificationsDnd(value: bool): void {
+        store.setNotificationsDnd(value);
+    }
+
+    function setNotificationsPreviews(value: string): void {
+        store.setNotificationsPreviews(value);
     }
 
     function flush(): void {
