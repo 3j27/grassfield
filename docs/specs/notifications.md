@@ -1,4 +1,5 @@
 # Notifications spec · shell-engineer · M2
+Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belongs to the lock module.
 
 ## macOS reference behavior (described in words)
 - Banners slide in at the top-right under the menu bar, ~344 pt wide, rounded ~16 pt, material background,
@@ -45,6 +46,65 @@ IPC target `notifications`: `toggleCenter()`, `dnd(on)`.
 ## Degraded behavior
 If another server owns the name (e.g. mako), show one warning and run banners-only off.
 
+## Dependencies (verified versions)
+Quickshell 0.3.1 `Quickshell.Services.Notifications` (`NotificationServer`, `Notification`, `NotificationAction`; API read
+from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`mkdir`/`chmod` (history file creation).
+
+## Implementation notes (M2)
+- Code: `shell/notifications/` (`Notifications.qml` singleton: server, banner queue, history, IPC; `Banners.qml`/`Banner.qml`;
+  `NotificationCenter.qml`; `NotificationContent.qml`; pure `Sanitizer.js`, `History.js`).
+- Banners: one layer-shell window (Overlay layer, no keyboard focus) on the first screen only; input and blur follow the cards.
+  Timeout: `expire_timeout` (seconds), -1 = 5 s, 0 and critical = never. Expiry only hides the banner: the entry stays in the Center
+  and stays actionable while the sender keeps the notification alive. x / drag-dismiss calls `dismiss()` (sender told "dismissed"),
+  the entry stays in the Center as non-actionable. A sender `CloseNotification` removes the entry. Invoking an action or the default
+  click clears the entry unless `resident`. Max 5 banners visible; older ones wait in the queue.
+- Actions: first 3 non-default actions are buttons, the rest appear after "More" (inline expansion, not a menu).
+- Click on a banner/row runs `default` and focuses a window of `desktop-entry` when one is open.
+- Notification Center: separate full-screen transparent window (Esc and click outside close, the menu bar strip stays clickable so the
+  clock toggles it). Groups by app name, newest first, 3 rows per group then "Show All". No widgets area in M2 (omitted, not stubbed).
+  Opening a menu/popup closes the Center.
+- Body markup: `Sanitizer.sanitize` keeps only b, i, u and br (balanced); links render as "label (url)" text and are not clickable;
+  images are dropped (alt kept); everything else is stripped; 4000 characters max. Images in hints are loaded at <= 256 px.
+- DND: `notifications.dnd` in grassfield.json; Control Center "Focus > Do Not Disturb" toggle; moon icon in the menu bar (click turns it off).
+  Critical notifications still show; history is kept. `notifications.previews = never` hides bodies (banners and Center).
+- History (ADR-0004): `$GRASSFIELD_STATE_HOME/notifications.json` (dev) else `$XDG_STATE_HOME/grassfield/notifications.json`
+  (default `~/.local/state/grassfield`). FileView cannot set a mode, so a one-shot `sh -c` Process creates the directory (`mkdir -m 700`)
+  and the file (`install -m 600 /dev/null`, then `chmod 600`) before the first read/write; FileView's atomic write (temp + rename) keeps
+  the 0600 mode (verified with `stat -c %a`). Max 200 entries, max 7 days (pruned on every arrival and every 30 s), `transient` and
+  low-urgency non-resident notifications are not stored, images are not stored, actions are stored as labels and restored non-actionable.
+  Writes are debounced 400 ms and blocked until the file was read, so a slow start never wipes the history.
+- IPC target `notifications`: `toggleCenter()`, `dnd(on)`, and test hooks `invoke(actionId)` (newest live notification; "default" =
+  banner click), `status()`, `dismissAll()`.
+
+## Dev / nested testing (private bus)
+The nested session shares the owner's D-Bus session bus, where omarchy-shell owns `org.freedesktop.Notifications`. Never take it over:
+- In a `GRASSFIELD_DEV=1` session the server is **not created** unless `GRASSFIELD_PRIVATE_BUS=1` (log: "dev session on the shared
+  bus; server disabled"). History is still loaded and the Center and DND work.
+- `GRASSFIELD_PRIVATE_BUS=1 scripts/dev/shell-run.sh` (or exported before `nested-up.sh`) wraps the shell in `dbus-run-session`; the bus
+  address is written to `.dev/bus.address`. Send test notifications with
+  `DBUS_SESSION_BUS_ADDRESS=$(cat .dev/bus.address) notify-send ...` and IPC with the same variable
+  (`qs -p shell ipc call notifications status`). `shell-run.sh` stops the previous shell by process group so no orphan keeps the old bus.
+- The nested output order is WAYLAND-1 (window) then GF-REF: banners, OSD and the Center use the first screen, so capture with
+  `scripts/dev/shot.sh <name> WAYLAND-1`.
+
+## Degraded behavior (implemented)
+If another process owns the name (probe 1.5 s after start: `busctl --user status` PID differs from Quickshell's), one warning is logged
+("owned by another process; banners and history are off"), `serverState` becomes `external` and history writes are blocked. Quickshell
+itself logs its own registration warning. Verified on a private bus with a foreign owner.
+
+## Verified (L1, nested, private bus, 2026-10-17)
+N1 name owned by qs (`busctl --user status`: PID of qs) · N2/N3 three normal banners gone after 6 s, critical (`-t 1000`) stays ·
+N5 `notify-send -A snooze=Snooze` prints `snooze` after `ipc call notifications invoke snooze` · N6 restart restores history, file 0600 ·
+N7 Center opens by IPC, Esc (wtype) closes · N8 DND hides banners, moon in bar, critical still shown · N9 unit tests (L0).
+Screenshots under `.dev/shots/` (not committed).
+
 ## Known limitations
-- Inline reply depends on Quickshell support; otherwise hidden (not faked).
+- Inline reply depends on Quickshell support; otherwise hidden (not faked). Not offered in M2 (`inlineReplySupported: false`).
 - No per-app notification sounds in M2.
+- Pointer interactions (hover pause, x button, drag dismiss, button clicks) are implemented with Qt handlers but were NOT verified with a
+  real pointer in the nested session (no safe input injection for pointers); keyboard (Esc) and IPC hooks were.
+- Banners appear on the first screen only; no per-app settings UI (only the global `notifications.previews`).
+- "unlocked" previews behave like "always" until the lock screen (L4) exists.
+- Replacing notifications (same id) update the entry and restart the banner timer, but do not re-show a banner that already expired.
+- Relative times refresh every 30 s.
+- `appIcon` names resolve through the icon theme only; a missing icon shows a bell tile.

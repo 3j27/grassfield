@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # (Re)start grassfield-shell inside the nested instance only. Never against the owner's session (R3).
+#
+# GRASSFIELD_PRIVATE_BUS=1: run the shell on its own D-Bus session bus (dbus-run-session) so that it
+# can own org.freedesktop.Notifications without touching the owner's session. The bus address is
+# written to .dev/bus.address for test clients (notify-send, busctl --user).
 set -euo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -14,13 +18,25 @@ main=$(cat "$dev/main.instance" 2>/dev/null || true)
 [[ $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "shell-run: refusing the main Wayland socket" >&2; exit 1; }
 
 if [[ -s $dev/shell.pid ]] && kill -0 "$(<"$dev/shell.pid")" 2>/dev/null; then
-  kill "$(<"$dev/shell.pid")" 2>/dev/null || true
-  sleep 0.3
+  # The shell runs as a session leader (setsid): signal its whole group so that a private-bus
+  # wrapper (dbus-run-session) does not leave an orphaned qs behind.
+  kill -- "-$(<"$dev/shell.pid")" 2>/dev/null || kill "$(<"$dev/shell.pid")" 2>/dev/null || true
+  sleep 0.5
+fi
+
+launch=(qs -p "$root/shell" --log-times --no-color)
+private=""
+rm -f "$dev/bus.address"
+if [[ ${GRASSFIELD_PRIVATE_BUS:-} == 1 ]]; then
+  command -v dbus-run-session >/dev/null || { echo "shell-run: dbus-run-session not found" >&2; exit 1; }
+  launch=(dbus-run-session -- sh -c 'printf "%s\n" "$DBUS_SESSION_BUS_ADDRESS" > "$1/bus.address"; shift; exec "$@"' sh "$dev" "${launch[@]}")
+  private=1
 fi
 
 env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
+  GRASSFIELD_PRIVATE_BUS="$private" \
   QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui" \
-  setsid qs -p "$root/shell" --log-times --no-color >"$dev/shell.log" 2>&1 </dev/null &
+  setsid "${launch[@]}" >"$dev/shell.log" 2>&1 </dev/null &
 printf '%s\n' "$!" > "$dev/shell.pid"
-echo "shell-run: grassfield-shell pid $! (log .dev/shell.log)"
+echo "shell-run: grassfield-shell pid $! (log .dev/shell.log${private:+, private bus: .dev/bus.address})"
