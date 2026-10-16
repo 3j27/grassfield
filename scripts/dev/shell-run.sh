@@ -20,7 +20,7 @@ fi
 
 env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
-  QT_QPA_PLATFORM=wayland \
+  QT_QPA_PLATFORM=wayland QML_IMPORT_PATH="$root/ui" \
   setsid qs -p "$root/shell" --log-times --no-color >"$dev/shell.log" 2>&1 </dev/null &
 printf '%s\n' "$!" > "$dev/shell.pid"
 echo "shell-run: grassfield-shell pid $! (log .dev/shell.log)"
