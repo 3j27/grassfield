@@ -1,0 +1,73 @@
+# Maintainer: Grassfield project
+# Local package build from this repository (private project, no source download):
+#   cd packaging/arch && makepkg -si        (owner runs it; installs with sudo through pacman)
+# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor
+# Never constrain the hyprland version here (ADR-0009, master-prompt §5.6).
+
+pkgbase=grassfield
+pkgname=(grassfield-desktop grassfield-compositor)
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Grassfield Desktop: a macOS-class desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
+arch=(x86_64)
+url="https://grassfield.invalid"
+license=(MIT)
+makedepends=(cmake ninja pkgconf hyprland gtest lua)
+options=(!debug)
+
+_root() { realpath "$startdir/../.."; }
+
+build() {
+  cmake -S "$(_root)/compositor" -B "$srcdir/compositor-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DGRASSFIELD_BUILD_TESTS=ON
+  cmake --build "$srcdir/compositor-build"
+}
+
+check() {
+  "$(_root)/compositor/build/grassfield-compositor-tests"
+}
+
+package_grassfield-desktop() {
+  pkgdesc+=" — shell, design system, session"
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font libnotify)
+  optdepends=(
+    'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
+    'brightnessctl: display brightness OSD and Control Center slider'
+    'localsearch: file results in Search'
+  )
+  local root
+  root=$(_root)
+
+  install -d "$pkgdir/usr/share/grassfield"
+  cp -a "$root/shell" "$pkgdir/usr/share/grassfield/shell"
+  find "$pkgdir/usr/share/grassfield/shell" \( -name '.qmlls.ini' -o -name '*.qmlc' \) -delete
+
+  # Design system as a regular QML module; icons copied into the module (repo symlink resolved).
+  install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui"
+  cp -a "$root/ui/Grassfield/Ui/." "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/"
+  rm -f "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
+  install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
+  install -m644 "$root"/branding/icons/symbolic/*.svg "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons/"
+
+  # `qs -c grassfield` resolves configs under $XDG_CONFIG_DIRS/quickshell/<name>.
+  install -d "$pkgdir/etc/xdg/quickshell"
+  ln -s /usr/share/grassfield/shell "$pkgdir/etc/xdg/quickshell/grassfield"
+
+  install -d "$pkgdir/usr/share/grassfield/hypr/grassfield"
+  install -m644 "$root/config/hypr/session.lua" "$pkgdir/usr/share/grassfield/hypr/session.lua"
+  install -m644 "$root"/config/hypr/grassfield/*.lua "$pkgdir/usr/share/grassfield/hypr/grassfield/"
+  install -Dm644 "$root/config/defaults/grassfield.json" "$pkgdir/usr/share/grassfield/defaults/grassfield.json"
+  install -Dm644 "$root/config/schema/grassfield.schema.json" "$pkgdir/usr/share/grassfield/schema/grassfield.schema.json"
+
+  install -Dm644 "$root/packaging/wayland-sessions/grassfield.desktop" "$pkgdir/usr/share/wayland-sessions/grassfield.desktop"
+  install -Dm644 "$root/packaging/systemd/grassfield-shell.service" "$pkgdir/usr/lib/systemd/user/grassfield-shell.service"
+
+  install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
+  install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"
+}
+
+package_grassfield-compositor() {
+  pkgdesc+=" — optional Hyprland plugin (titlebars, minimize, appmenu)"
+  depends=(hyprland)
+  install -Dm755 "$(_root)/compositor/build/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
+}

@@ -10,7 +10,8 @@ Item {
     property color color: Appearance.colors.text
     property int size: Tokens.menubarIconSize
     // Overridable so that an installed layout can point at its own icon directory.
-    property url directory: Qt.resolvedUrl("../../../branding/icons/symbolic/")
+    // `icons` is a symlink to branding/icons/symbolic in the repo and a real directory once installed.
+    property url directory: Qt.resolvedUrl("icons/")
 
     implicitWidth: size
     implicitHeight: size

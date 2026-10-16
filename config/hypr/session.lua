@@ -16,3 +16,16 @@ hl.env("GRASSFIELD_SESSION", "1")
 
 require("grassfield.core")
 require("grassfield.autostart")
+
+-- Optional compositor extension (ADR-0009). Loaded at parse time (Hyprland applies the plugin list right
+-- after parsing). A build for another Hyprland ABI is refused by the plugin itself; the shell then runs in
+-- degraded mode and notifies once (§5.6).
+local plugin = "/usr/lib/grassfield/grassfield-compositor.so"
+local f = io.open(plugin, "r")
+if f then
+  f:close()
+  local ok, err = pcall(hl.plugin.load, plugin)
+  if not ok then
+    print("grassfield: compositor extension not loaded: " .. tostring(err))
+  end
+end
