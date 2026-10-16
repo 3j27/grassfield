@@ -47,6 +47,8 @@ ShellRoot {
             root.check("magnification", Math.abs(reader.data.dock.magnification - 2.0) < 1e-9);
             root.check("magnificationEnabled", reader.data.dock.magnificationEnabled === false);
             root.check("pinned", reader.data.dock.pinned.join(",") === "foot,kitty");
+            root.check("dnd", reader.data.notifications.dnd === true);
+            root.check("previews", reader.data.notifications.previews === "never");
             root.check("version", reader.data.version === 1);
             root.finish();
         }
@@ -80,6 +82,10 @@ ShellRoot {
         writer.setDockMagnification(0.2, true);
         check("magnification min", writer.data.dock.magnification === 1);
 
+        check("default dnd", writer.data.notifications.dnd === false);
+        writer.setNotificationsPreviews("bogus");
+        check("previews normalized", writer.data.notifications.previews === "unlocked");
+
         // Values written to disk.
         writer.setAppearance("light");
         writer.setTransparency(0.6);
@@ -88,6 +94,8 @@ ShellRoot {
         writer.setDockAutohide(true);
         writer.setDockMagnification(2.0, false);
         writer.setDockPinned(["foot", "kitty"]);
+        writer.setNotificationsDnd(true);
+        writer.setNotificationsPreviews("never");
         writer.flush();
     }
 }

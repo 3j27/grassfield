@@ -36,6 +36,12 @@ Scope {
         property bool autohide: false
     }
 
+    component NotificationsConfig: JsonObject {
+        property bool dnd: false
+        // always | unlocked | never (ADR-0004). "never" hides bodies; "unlocked" equals "always" until the lock screen exists.
+        property string previews: "unlocked"
+    }
+
     function setAppearance(value: string): void {
         config.appearance = value === "light" ? "light" : "dark";
         save();
@@ -69,6 +75,16 @@ Scope {
 
     function setDockPinned(list: var): void {
         config.dock.pinned = list;
+        save();
+    }
+
+    function setNotificationsDnd(value: bool): void {
+        config.notifications.dnd = value;
+        save();
+    }
+
+    function setNotificationsPreviews(value: string): void {
+        config.notifications.previews = ["always", "unlocked", "never"].indexOf(value) >= 0 ? value : "unlocked";
         save();
     }
 
@@ -109,6 +125,7 @@ Scope {
         property MaterialConfig material: MaterialConfig {}
         property AccessibilityConfig accessibility: AccessibilityConfig {}
         property DockConfig dock: DockConfig {}
+        property NotificationsConfig notifications: NotificationsConfig {}
     }
 
     FileView {
