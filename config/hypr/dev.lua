@@ -21,12 +21,12 @@ if plugin and plugin ~= "" then
   local f = io.open(plugin, "r")
   if f then
     f:close()
-    hl.on("hyprland.start", function()
-      local ok, err = pcall(hl.plugin.load, plugin)
-      if not ok then
-        print("grassfield: plugin load failed: " .. tostring(err))
-      end
-    end)
+    -- Must run at parse time: Hyprland applies the config's plugin list right after parsing,
+    -- so a load requested from a "hyprland.start" callback is ignored (spike S2).
+    local ok, err = pcall(hl.plugin.load, plugin)
+    if not ok then
+      print("grassfield: plugin load failed: " .. tostring(err))
+    end
   end
 end
 
