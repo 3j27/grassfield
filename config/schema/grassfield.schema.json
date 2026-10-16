@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://grassfield.invalid/schema/grassfield-1.json",
+  "title": "grassfield.json (contract version 1)",
+  "description": "User configuration of Grassfield Desktop. Unknown keys are ignored by the shell; migrations are explicit (master-prompt §5.3).",
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "integer", "enum": [1] },
+    "appearance": { "type": "string", "enum": ["dark", "light", "auto"] },
+    "material": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "transparency": { "type": "number", "minimum": 0, "maximum": 1 },
+        "profile": { "type": "string", "enum": ["full", "balanced", "reduced"] }
+      }
+    },
+    "accessibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reduceTransparency": { "type": "boolean" },
+        "reduceMotion": { "type": "boolean" }
+      }
+    },
+    "dock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pinned": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "magnification": { "type": "number", "minimum": 1, "maximum": 2.5 },
+        "autohide": { "type": "boolean" }
+      }
+    },
+    "windows": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "titlebarDoubleClick": { "type": "string", "enum": ["zoom", "minimize", "none"] }
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dnd": { "type": "boolean" },
+        "previews": { "type": "string", "enum": ["always", "unlocked", "never"] }
+      }
+    },
+    "lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idleMinutes": { "type": "integer", "minimum": 0, "maximum": 240 }
+      }
+    }
+  }
+}

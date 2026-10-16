@@ -9,7 +9,7 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-shell check-scripts
+check: check-config check-schema check-shell check-scripts
 
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland.
 check-config:
@@ -17,6 +17,10 @@ check-config:
       GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/$cfg.lua 2>&1 \
         | sed -n '/Config parsing result/,$p' | tee /dev/stderr | grep -qx 'config ok'; \
     done
+
+# Validate the default grassfield.json (and any given files) against the versioned schema.
+check-schema *files:
+    python3 -I scripts/dev/check-schema.py {{files}}
 
 # Lint QML (0 warnings required in changed files, gate Q1).
 check-shell:
