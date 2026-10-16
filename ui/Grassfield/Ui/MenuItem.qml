@@ -1,0 +1,105 @@
+import QtQuick
+
+// One row of a PopupMenu. Highlight is driven by the owning menu (hover and keyboard share it).
+Item {
+    id: root
+
+    property string text: ""
+    property string shortcut: ""
+    property string iconName: ""
+    property bool highlighted: false
+    property bool checked: false
+    property bool hasSubmenu: false
+    property bool destructive: false
+
+    signal clicked
+    signal hovered
+
+    readonly property color foreground: !enabled ? Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
+        : highlighted ? Appearance.colors.accentText
+        : destructive ? Appearance.colors.danger
+        : Appearance.colors.text
+
+    implicitWidth: row.implicitWidth + 2 * Tokens.menuItemPadding
+    implicitHeight: Tokens.menuItemHeight
+    Accessible.role: Accessible.MenuItem
+    Accessible.name: root.text
+    Accessible.description: root.shortcut
+    Accessible.checkable: root.checked
+    Accessible.checked: root.checked
+    Accessible.focusable: true
+    Accessible.onPressAction: root.clicked()
+
+    Rectangle {
+        anchors.fill: parent
+        radius: Tokens.radiusControl
+        color: Appearance.colors.accent
+        visible: root.highlighted && root.enabled
+    }
+
+    Row {
+        id: row
+        anchors {
+            left: parent.left
+            leftMargin: Tokens.menuItemPadding
+            verticalCenter: parent.verticalCenter
+        }
+        spacing: Tokens.spacingSm
+
+        Item {
+            width: Tokens.menuIconSize
+            height: Tokens.menuIconSize
+            anchors.verticalCenter: parent.verticalCenter
+
+            Icon {
+                anchors.fill: parent
+                size: Tokens.menuIconSize
+                name: root.checked ? "checkmark" : root.iconName
+                color: root.foreground
+            }
+        }
+
+        Text {
+            id: label
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.text
+            color: root.foreground
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyMenuSize
+            font.weight: Tokens.typographySmallWeight
+        }
+
+        Item {
+            // Gap between label and shortcut / chevron.
+            width: root.shortcut !== "" || root.hasSubmenu ? Tokens.menuShortcutGap : 0
+            height: 1
+        }
+
+        Text {
+            visible: root.shortcut !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.shortcut
+            color: root.highlighted && root.enabled ? root.foreground : Appearance.colors.textSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyMenuSize
+            font.weight: Tokens.typographySmallWeight
+        }
+
+        Icon {
+            visible: root.hasSubmenu
+            anchors.verticalCenter: parent.verticalCenter
+            size: Tokens.menuIconSize
+            name: "chevron-right"
+            color: root.foreground
+        }
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        enabled: root.enabled
+        onEntered: root.hovered()
+        onPositionChanged: root.hovered()
+        onClicked: root.clicked()
+    }
+}

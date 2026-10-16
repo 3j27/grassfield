@@ -15,7 +15,11 @@ QtObject {
         materialTint: "#1D1F24",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
         materialBorder: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
-        shadow: "#000000"  // estimate, pending F1 measurement from design/reference
+        shadow: "#000000",  // estimate, pending F1 measurement from design/reference
+        accentText: "#FFFFFF",  // estimate
+        separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
+        fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
+        danger: "#FF6B63"  // estimate
     })
 
     // color roles, light appearance
@@ -28,7 +32,11 @@ QtObject {
         materialTint: "#F3F4F6",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
         materialBorder: "#000000",  // estimate, pending F1 measurement from design/reference
-        shadow: "#000000"  // estimate, pending F1 measurement from design/reference
+        shadow: "#000000",  // estimate, pending F1 measurement from design/reference
+        accentText: "#FFFFFF",  // estimate
+        separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
+        fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
+        danger: "#D93025"  // estimate
     })
 
     // ADR-0003 candidate (OFL); owner installs it
@@ -43,6 +51,12 @@ QtObject {
     readonly property int typographyMenuBoldWeight: 700
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyBodySize: 13
+    // estimate, pending F1 measurement from design/reference
+    readonly property int typographyCaptionSize: 11
+    // estimate, pending F1 measurement from design/reference
+    readonly property int typographyTitleSize: 15
+    // estimate, pending F1 measurement from design/reference
+    readonly property int typographySmallWeight: 400
 
     // estimate
     readonly property int spacingXs: 4
@@ -61,6 +75,14 @@ QtObject {
     readonly property int radiusDockIcon: 11
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusMenuBar: 0
+    // estimate, pending F1 measurement from design/reference
+    readonly property int radiusMenu: 10
+    // estimate, pending F1 measurement from design/reference
+    readonly property int radiusPanel: 18
+    // estimate, pending F1 measurement from design/reference
+    readonly property int radiusDialog: 14
+    // estimate, pending F1 measurement from design/reference
+    readonly property int radiusTooltip: 6
 
     // estimate, pending F1 measurement from design/reference
     readonly property int shadowBlur: 18
@@ -90,6 +112,12 @@ QtObject {
     readonly property real materialBorderOpacity: 0.14
     // estimate, pending F1 measurement from design/reference
     readonly property real materialHoverOpacity: 0.12
+    // estimate, pending F1 measurement from design/reference
+    readonly property real materialSeparatorOpacity: 0.16
+    // estimate, pending F1 measurement from design/reference
+    readonly property real materialFillOpacity: 0.14
+    // estimate, pending F1 measurement from design/reference
+    readonly property real materialDisabledOpacity: 0.38
 
     // task spec / macOS convention, pending F1 measurement
     readonly property int menubarHeight: 24
@@ -108,4 +136,69 @@ QtObject {
     readonly property int dockBottomMargin: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIndicatorSize: 4
+    // task spec default; user value in grassfield.json dock.magnification
+    readonly property real dockMagnificationMax: 1.6
+    // task spec: cosine falloff over about 3 icons each side
+    readonly property int dockMagnificationRadius: 3
+    // estimate: pointer hot strip in px when autohidden
+    readonly property int dockRevealZone: 2
+    // estimate
+    readonly property int dockHideDelay: 450
+    // estimate, pending F1 measurement from design/reference
+    readonly property int dockSeparatorWidth: 1
+    // estimate, pending F1 measurement from design/reference
+    readonly property int dockSeparatorHeight: 40
+    // estimate, pending F1 measurement from design/reference
+    readonly property int dockTooltipGap: 8
+
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menuItemHeight: 22
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menuMinWidth: 220
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menuPadding: 5
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menuItemPadding: 10
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menuSeparatorHeight: 9
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menuIconSize: 14
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menuShortcutGap: 24
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menuSubmenuOverlap: 4
+
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlSliderTrack: 4
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlSliderKnob: 16
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlSliderHeight: 22
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlToggleWidth: 38
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlToggleHeight: 22
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlToggleKnob: 18
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlFocusRing: 2
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlTooltipPadding: 6
+    // estimate
+    readonly property int controlTooltipDelay: 500
+
+    // estimate, pending F1 measurement from design/reference
+    readonly property int panelControlCenterWidth: 320
+    // estimate, pending F1 measurement from design/reference
+    readonly property int panelDialogWidth: 380
+    // estimate, pending F1 measurement from design/reference
+    readonly property int panelAboutWidth: 340
+    // estimate, pending F1 measurement from design/reference
+    readonly property int panelForceQuitWidth: 380
+    // estimate, pending F1 measurement from design/reference
+    readonly property int panelTileHeight: 56
+    // estimate, pending F1 measurement from design/reference
+    readonly property int panelPopupMargin: 6
+    // estimate, pending F1 measurement from design/reference
+    readonly property int panelStatusPopupWidth: 260
 }
