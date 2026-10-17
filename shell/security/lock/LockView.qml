@@ -82,7 +82,7 @@ Item {
         Text {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.formatDate(clock.date, qsTr("dddd d MMMM"))
+            text: Qt.locale().toString(clock.date, qsTr("dddd d MMMM"))
             color: root.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.lockDateSize

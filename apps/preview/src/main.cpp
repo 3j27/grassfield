@@ -6,6 +6,7 @@
 #include <QTextStream>
 #include <QUrl>
 
+#include "translationloader.h"
 #include "previewapp.h"
 #include "previewlogic.h"
 
@@ -25,6 +26,7 @@ int main(int argc, char *argv[])
     QImageReader::setAllocationLimit(preview::kAllocationLimitMb);
 
     QGuiApplication app(argc, argv);
+    grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
     app.setApplicationName(QStringLiteral("grassfield-preview"));
     app.setApplicationVersion(QStringLiteral(GRASSFIELD_PREVIEW_VERSION));
     app.setOrganizationName(QStringLiteral("Grassfield"));

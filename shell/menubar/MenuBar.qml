@@ -380,7 +380,7 @@ Scope {
                         Text {
                             textFormat: Text.PlainText
                             id: clockText
-                            text: Qt.formatDateTime(clock.date, qsTr("ddd d MMM")) + " "
+                            text: Qt.locale().toString(clock.date, qsTr("ddd d MMM")) + " "
                                 + Qt.formatTime(clock.date, Qt.locale().timeFormat(Locale.ShortFormat))
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily

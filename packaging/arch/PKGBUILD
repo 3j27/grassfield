@@ -12,7 +12,7 @@ pkgdesc="Grassfield Desktop: a macOS-class desktop session for Omarchy (built fo
 arch=(x86_64)
 url="https://grassfield.invalid"
 license=(MIT)
-makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules)
+makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools)
 options=(!debug)
 
 _root() { realpath "$startdir/../.."; }
@@ -21,6 +21,10 @@ build() {
   cmake -S "$(_root)/compositor" -B "$srcdir/compositor-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DGRASSFIELD_BUILD_TESTS=ON
   cmake --build "$srcdir/compositor-build"
+  # Grassfield.I18n QML module (Translator singleton) and the compiled catalogs (translations/*.ts).
+  cmake -S "$(_root)/ui/i18n" -B "$srcdir/i18n-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/i18n-build"
   cmake -S "$(_root)/apps/settings" -B "$srcdir/settings-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/settings-build"
@@ -58,6 +62,9 @@ package_grassfield-desktop() {
   rm -f "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -m644 "$root"/branding/icons/symbolic/*.svg "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons/"
+
+  # Grassfield.I18n -> /usr/lib/qt6/qml/Grassfield/I18n; grassfield_<lang>.qm -> /usr/share/grassfield/translations.
+  DESTDIR="$pkgdir" cmake --install "$srcdir/i18n-build"
 
   # `qs -c grassfield` resolves configs under $XDG_CONFIG_DIRS/quickshell/<name>.
   install -d "$pkgdir/etc/xdg/quickshell"

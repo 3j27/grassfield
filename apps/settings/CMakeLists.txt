@@ -16,3 +16,4 @@ target_compile_definitions(grassfield-settings PRIVATE
 install(TARGETS grassfield-settings RUNTIME DESTINATION bin)
 install(DIRECTORY qml/ DESTINATION share/grassfield/settings/qml FILES_MATCHING PATTERN "*.qml" PATTERN "*.js")
 install(FILES org.grassfield.Settings.desktop DESTINATION share/applications)
+target_include_directories(grassfield-settings PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n)

@@ -13,6 +13,7 @@ add_executable(grassfield-preview
     src/main.cpp
     src/previewapp.cpp src/previewapp.h
     src/previewlogic.cpp src/previewlogic.h)
+target_include_directories(grassfield-preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n)
 target_link_libraries(grassfield-preview PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
 target_compile_definitions(grassfield-preview PRIVATE
     GRASSFIELD_PREVIEW_VERSION="${PROJECT_VERSION}"

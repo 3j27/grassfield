@@ -3,6 +3,7 @@
 #include <QQmlApplicationEngine>
 #include <QUrl>
 
+#include "translationloader.h"
 #include "backend.h"
 
 #ifndef GRASSFIELD_SETTINGS_QML_DIR
@@ -15,6 +16,7 @@
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+    grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
     app.setApplicationName(QStringLiteral("Grassfield Settings"));
     app.setApplicationVersion(QStringLiteral(GRASSFIELD_SETTINGS_VERSION));
     app.setOrganizationName(QStringLiteral("Grassfield"));

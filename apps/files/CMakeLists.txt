@@ -21,6 +21,7 @@ add_executable(grassfield-files
     src/placesmodel.cpp src/placesmodel.h
     src/imageproviders.cpp src/imageproviders.h
     src/filelogic.cpp src/filelogic.h)
+target_include_directories(grassfield-files PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n)
 target_link_libraries(grassfield-files PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick
     KF6::KIOCore KF6::KIOGui KF6::KIOWidgets KF6::CoreAddons KF6::Service KF6::Solid)
