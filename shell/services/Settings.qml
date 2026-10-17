@@ -28,6 +28,8 @@ Singleton {
     readonly property real dockMagnification: store.data.dock.magnification
     readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
     readonly property bool dockAutohide: store.data.dock.autohide
+    // Schema: integer 0..240 (0 = never); values outside the range are clamped.
+    readonly property int lockIdleMinutes: Math.max(0, Math.min(240, Math.round(store.data.lock.idleMinutes)))
 
     function setAppearance(value: string): void {
         store.setAppearance(value);

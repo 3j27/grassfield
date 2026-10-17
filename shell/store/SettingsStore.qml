@@ -36,6 +36,11 @@ Scope {
         property bool autohide: false
     }
 
+    component LockConfig: JsonObject {
+        // Idle minutes before the screen locks; 0 disables the idle lock (schema: 0..240).
+        property int idleMinutes: 5
+    }
+
     function setAppearance(value: string): void {
         config.appearance = value === "light" ? "light" : "dark";
         save();
@@ -109,6 +114,7 @@ Scope {
         property MaterialConfig material: MaterialConfig {}
         property AccessibilityConfig accessibility: AccessibilityConfig {}
         property DockConfig dock: DockConfig {}
+        property LockConfig lock: LockConfig {}
     }
 
     FileView {
