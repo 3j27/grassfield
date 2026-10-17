@@ -1,13 +1,13 @@
-# menubar spec · shell-engineer · M1
+# menubar spec · shell-engineer · M1 (T1/T2 global menus: M3, see menu-bridge.md)
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
 Not yet measured (F1 pending). Assumed: 24 px translucent bar across the top; Grassfield mark (system menu) and bold active-application name (application menu) on the left; status items, Control Center icon and clock on the right. Menus open under their title, highlight rows in the accent color, and clicking another title switches menus.
 
 ## Purpose and non-goals
-Per-screen top bar with the system menu, a T0 application menus (app, File, Window), status menus and the Control Center entry. Non-goals now: T1/T2 app menus (menu bridge ADR-0008), Services and Settings… items, Bluetooth/brightness/media items, notification center.
+Per-screen top bar with the system menu, the application menus (T0: app, File, Window; T1/T2: the application's own menus through grassfield-menu-bridge, `docs/specs/menu-bridge.md`, ADR-0008), status menus and the Control Center entry. Non-goals now: Services and Settings… items, Bluetooth/brightness/media items, notification center.
 
 ## Functional requirements
-1. One layer-shell window per screen, namespace `grassfield-menubar`, layer Top, exclusive zone 24 px, keyboard focus OnDemand (click the bar, then Tab/Return/Space/Down).
+1. One layer-shell window per screen, namespace `grassfield-menubar`, layer Top, exclusive zone 24 px. Keyboard focus None by default (hovering the bar or starting the shell never takes the keyboard from the focused window); OnDemand only while one of this bar's menus is open, released when it closes. CTRL+F2 opens the system menu, whose popup takes exclusive keyboard focus.
 2. Popups are drawn by `qs.overlay` (one full-screen layer-shell window per screen, mapped only while a popup is open, exclusive keyboard focus, click outside closes, the menu bar strip stays clickable). State: `qs.services` `Popups` (kind, anchor, payload).
 3. Grassfield menu: About This Computer (real panel: Omarchy NAME/VERSION_ID from `/etc/os-release`, Grassfield version, kernel, hostname, CPU and threads from `/proc/cpuinfo`, memory from `/proc/meminfo`, graphics from `lspci`; read-only), System Settings… (launches `grassfield-settings`; `GRASSFIELD_SETTINGS_CMD` overrides the command in dev), Force Quit… (lists toplevels; the selected app's PID comes from Hyprland window data; `kill -9` only after a second confirmation), Sleep (`systemctl suspend`), Restart…, Shut Down… (confirmation, then `systemctl reboot`/`poweroff`), Lock Screen (PLACEHOLDER, disabled "(coming in M2)"), Log Out <user>… (confirmation, then `hl.dsp.exit()` through the platform layer; Quickshell wraps the request as `hl.dispatch(<request>)` when `Hyprland.usingLua`).
 4. Dev guard: with `GRASSFIELD_DEV=1` Sleep, Restart and Shut Down never run `systemctl`; they log a warning and show a notice dialog. Log Out ends only the compositor of the session (the nested one).
@@ -17,6 +17,7 @@ Per-screen top bar with the system menu, a T0 application menus (app, File, Wind
    - Window: Minimize, Zoom (toggles the maximized state), Enter/Exit Full Screen (toggle through the foreign-toplevel `maximized`/`fullscreen` requests), Move to Desktop > (existing Spaces, the current one checked and disabled, then New Desktop; moves without following), Bring All to Front, then the app's windows (title as plain text, elided to 40 characters, check on the focused one; a minimized window is marked and restored when chosen).
    - Shortcut text comes from one table in `AppMenuModel.qml` that mirrors `config/hypr/grassfield/bindings.lua` (SUPER+H Hide, SUPER+M Minimize, SUPER+ALT+F Zoom, SUPER+CTRL+F Full Screen). Update both together.
    - With a popup open the keyboard focus leaves the app, so the "focused window" of an app is its most recently focused window.
+   - T1/T2 (M3): when the shown app exports its menus (Qt/KDE, Chromium; `shell/platform/MenuBridge`), its visible top-level menus follow the app name in its order and open as popup kind `appbridge` (`shell/menubar/BridgeMenu.qml`, routed by the overlay); the T0 File menu gives way (its desktop actions stay in the Dock menu), the T0 app menu and Window stay. Items show the app's labels (plain text), shortcuts, check marks, disabled state and submenus, and choosing one runs the app's own action. Without such a menu the T0 menus stay. Details: `docs/specs/menu-bridge.md` MB11–MB12.
 6. Status area, real backends only: Network (Quickshell.Networking: wifi strength icon, wired icon, off icon; menu: Wi-Fi on/off, current network), Volume (Pipewire default sink: icon follows level/mute, scroll ±5 %, menu: volume slider, mute, output device list that selects the default sink), Battery (UPower, hidden when no laptop battery; menu: percentage, time remaining/until full), Control Center icon (see controlcenter.md), clock.
 7. Keyboard in menus: Up/Down/Home/End, Return/Space activate, Right opens a submenu, Left closes it, Esc closes. Disabled rows are skipped.
 8. Every string uses `qsTr()`; every control has `Accessible.name`/role and a visible focus ring.
@@ -26,7 +27,7 @@ Per-screen top bar with the system menu, a T0 application menus (app, File, Wind
 - Dev guard: Shut Down confirmation in the nested session logs `suppressed systemctl poweroff` and shows the notice (L2).
 
 ## Interfaces / contracts (versions)
-Reads `Compositor` (toplevels, focused app, pid, hide, close, exitSession), `Settings`, `Appearance`, `Audio`, `Connectivity`, `Power`, `Popups`. Test hooks (IpcHandler): `menubar open <system|app|appfile|appwindow|...> <output>`, `menubar panel <about|forcequit> <output>`, `menubar close`, `controlcenter <transparency|appearance|reduceTransparency|reduceMotion>`.
+Reads `Compositor` (toplevels, focused app, pid, hide, close, exitSession), `MenuBridge` (T1/T2 menus, menu/1), `Settings`, `Appearance`, `Audio`, `Connectivity`, `Power`, `Popups`. Test hooks (IpcHandler): `menubar open <system|app|appfile|appwindow|...> <output>`, `menubar panel <about|forcequit> <output>`, `menubar close`, `menubar bridgeState <output>` (JSON: shown window, bridge state, left titles and open bridge menu rows in output coordinates), `controlcenter <transparency|appearance|reduceTransparency|reduceMotion>`.
 
 `windows` IPC (platform, for key bindings): `windows minimize` (focused window), `windows hide` (focused app).
 

@@ -89,7 +89,7 @@ namespace {
     void post(const am::Announcement& a) {
         if (!st().ready)
             return;
-        gf::ipc::postEvent(gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path));
+        gf::ipc::postEvent(gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path, a.registration.pid));
     }
 
     void post(const std::optional<am::Announcement>& a) {
@@ -166,8 +166,10 @@ namespace {
             if (!surface)
                 return; // the surface is gone: nothing to link
             const auto window = mappedWindowOf(surface);
-            gf::log(Log::INFO, "appmenu: set_address service {} path {} on surface {:x} (window {})", s, p, o->surfaceId, window ? hexAddress(idOf(window.get())) : "not mapped");
-            post(st().registry.setAddress(o->surfaceId, o->id(), am::Registration{.service = std::string{s}, .path = std::string{p}}, window ? idOf(window.get()) : 0));
+            const int  pid    = clientPid(o->resource->client());
+            gf::log(Log::INFO, "appmenu: set_address service {} path {} on surface {:x} (window {}, pid {})", s, p, o->surfaceId,
+                    window ? hexAddress(idOf(window.get())) : "not mapped", pid);
+            post(st().registry.setAddress(o->surfaceId, o->id(), am::Registration{.service = std::string{s}, .path = std::string{p}, .pid = pid}, window ? idOf(window.get()) : 0));
         });
     }
 

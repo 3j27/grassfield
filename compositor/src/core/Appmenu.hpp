@@ -5,8 +5,10 @@
 // org_kde_kwin_appmenu_manager global: clients link a wl_surface to a DBusMenu (service name, object path)
 // with org_kde_kwin_appmenu.set_address. The plugin validates the strings (untrusted client input), keeps
 // the latest address per surface here, and announces it per window to the shell over gfc/1:
-//   grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<path>"}
-// with empty service and path when the window has no (more) registration.
+//   grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<path>","pid":N}
+// with empty service and path (and pid 0) when the window has no (more) registration. `pid` is the process id
+// of the Wayland client that made the registration (wl_client_get_credentials): the menu bridge accepts the
+// (service, path) only if that bus name belongs to the same process (spoofing check, ADR-0008).
 
 #include <cstddef>
 #include <cstdint>
@@ -35,6 +37,7 @@ namespace gf::appmenu {
     struct Registration {
         std::string service;
         std::string path;
+        int         pid = 0; // the registering client's process id (0: unknown)
 
         bool        operator==(const Registration&) const = default;
     };

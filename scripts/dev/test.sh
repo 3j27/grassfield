@@ -62,6 +62,17 @@ if [[ -f /usr/include/gtest/gtest.h ]]; then
 else
   echo "SKIP: tests/unit/preview (gtest not installed)"
 fi
+# grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards): gtest, built here.
+# The peer-to-peer D-Bus case skips itself inside the sandbox (no Unix sockets).
+if [[ -f /usr/include/gtest/gtest.h ]]; then
+  if bridges/menu-bridge/build-direct.sh --tests >/dev/null; then
+    .dev/build/menu-bridge-unit-tests --gtest_brief=1 || status=1
+  else
+    echo "FAIL: building tests/unit/menu-bridge"; status=1
+  fi
+else
+  echo "SKIP: tests/unit/menu-bridge (gtest not installed)"
+fi
 if [[ -x compositor/build/grassfield-compositor-tests ]]; then
   compositor/build/grassfield-compositor-tests || status=1
 fi

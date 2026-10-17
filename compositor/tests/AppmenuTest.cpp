@@ -170,3 +170,18 @@ TEST(AppmenuRegistry, ClearReturnsAnnouncedWindowsOnly) {
     EXPECT_EQ(clears[0], cleared(WINDOW));
     EXPECT_EQ(r.size(), 0U);
 }
+
+TEST(AppmenuRegistry, PidTravelsWithTheRegistrationAndClearsReset) {
+    // The registering client's pid is part of the announcement (gfc/1 "pid", the bridge's spoofing check).
+    CRegistry  r;
+    const auto withPid = Registration{.service = ":1.42", .path = "/MenuBar/1", .pid = 4242};
+    EXPECT_EQ(r.setAddress(SURFACE, OBJECT, withPid, 0), std::nullopt);
+    EXPECT_EQ(r.windowMapped(SURFACE, WINDOW), (Announcement{.window = WINDOW, .registration = withPid}));
+    EXPECT_EQ(r.query(WINDOW).registration.pid, 4242);
+    // The same address from another client (pid) is a new registration: it is announced again.
+    const auto otherPid = Registration{.service = ":1.42", .path = "/MenuBar/1", .pid = 99};
+    EXPECT_EQ(r.setAddress(SURFACE, OBJECT, otherPid, WINDOW), (Announcement{.window = WINDOW, .registration = otherPid}));
+    // A clear carries no pid.
+    EXPECT_EQ(r.windowGone(WINDOW), cleared(WINDOW));
+    EXPECT_EQ(cleared(WINDOW).registration.pid, 0);
+}

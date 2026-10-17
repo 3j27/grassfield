@@ -13,18 +13,36 @@ the shell cannot open an arbitrary DBusMenu by itself.
 2. Python + dbus-next — new runtime dependency, slower startup.
 3. Rust + zbus — new toolchain (not installed), duplicated build infrastructure.
 
-## Decision (proposed)
-Option 1: `bridges/menu-bridge/`, binary `grassfield-menu-bridge`, systemd **user** unit
-(`grassfield-menu-bridge.service`, `PartOf=graphical-session.target`, hardened: `NoNewPrivileges`,
-`ProtectSystem=strict`, `PrivateNetwork`, `RestrictAddressFamilies=AF_UNIX`, `MemoryMax=64M`).
-- Input: appmenu registrations from the plugin (`grassfield>>{"type":"appmenu",...}` events, ADR-0007) or,
-  for T1 apps, the `com.canonical.AppMenu.Registrar` D-Bus interface that Qt uses (the bridge owns the
-  registrar name `com.canonical.AppMenu.Registrar` in the Grassfield session).
-- Output: `$XDG_RUNTIME_DIR/grassfield/menu-bridge.sock`, JSON lines, versioned `menu/1`:
-  `{"type":"menu","window":"<address>","items":[...]}` and requests `{"type":"activate","id":N}`,
-  `{"type":"about-to-show","id":N}`. Also `org.grassfield.MenuBridge1` on D-Bus for diagnostics, with XML in
-  `bridges/menu-bridge/dbus/`.
-- It executes nothing except DBusMenu `Event`/`AboutToShow` calls (§5.2).
+## Decision (proposed; applied provisionally in M3 step B, 2026-10-17)
+Option 1: `bridges/menu-bridge/`, binary `grassfield-menu-bridge` (C++/Qt 6: QtCore, QtDBus, QtNetwork; CMake and
+`build-direct.sh`), systemd **user** unit `packaging/systemd/grassfield-menu-bridge.service` (`PartOf=` and
+`Requisite=graphical-session.target`, `ConditionEnvironment=GRASSFIELD_SESSION=1`, hardened: `NoNewPrivileges`,
+`ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp`, `PrivateNetwork`, `RestrictAddressFamilies=AF_UNIX`,
+`SystemCallFilter=@system-service`, empty capability set, `MemoryMax=64M`, `TasksMax=16`), started by
+`config/hypr/grassfield/autostart.lua` before the shell and applications. Contract details: `docs/specs/menu-bridge.md`.
+- **Input**: only from the shell, which is the single consumer of the plugin's `appmenu` events (data flow 1–4 below,
+  adopted as proposed). The bridge never trusts names from anywhere else and checks each one (spoofing rule below).
+- **Registrar**: `com.canonical.AppMenu.Registrar` is owned only while the connected shell's latest hello says
+  `"appmenu": true`; released on `false` and on disconnect; standby at start. Its methods answer errors
+  (`RegisterWindow`/`UnregisterWindow` NotSupported, `GetMenuForWindow` NotFound, `GetMenus` NotSupported): Wayland
+  clients never call them and nothing pretends to keep a registration.
+- **Output**: `$XDG_RUNTIME_DIR/grassfield/menu-bridge.sock` (directory 0700, socket 0600), JSON lines `menu/1`.
+  shell → bridge: `hello` (`v`, `appmenu`), `open` (`window`, `service`, `path`, `pid`), `about-to-show` and
+  `activate` (`window`, `id`), `close` (`window`). bridge → shell: `status`, `menu` (`window`, `revision`, `items`
+  tree), `error` (`window`, `code`, `message`). Every message is validated on both sides (line, depth, item and string
+  caps). Diagnostics: `org.grassfield.MenuBridge1` (`Version`, `Status`), XML in `bridges/menu-bridge/dbus/`.
+- **Spoofing rule**: additive gfc/1 field `"pid"` in `appmenu` events (`wl_client_get_credentials` of the registering
+  client); the bridge resolves the bus name to its unique owner and accepts it only if
+  `GetConnectionUnixProcessID(owner)` equals that pid. Verified true for Qt 6.11 and Chromium 152 (same process for
+  their Wayland and D-Bus connections).
+- It executes nothing except DBusMenu `GetLayout`/`AboutToShow`/`Event` calls (explicit D-Bus types) and the two
+  bus-daemon queries of the spoofing rule (§5.2).
+- **Shell**: `shell/platform/MenuBridge` keeps `window → {service, path, pid}`, re-queries the plugin after a shell
+  restart, opens the focused window's menu; the menu bar shows the app's menus after the app name (T0 app menu and
+  Window kept, T0 File replaced) and keeps T0 when there is no T1/T2 menu.
+- **Development**: the registrar, the bridge and test apps share the nested session's private bus (one dbus-daemon per
+  nested session, `scripts/dev/nested-up.sh --private-bus`); with `GRASSFIELD_DEV=1` the bridge refuses the owner's
+  default session bus.
 
 ## Evidence
 Spike S5 and step A (2026-10-17, compositor-engineer; details, commands and run directories in
@@ -55,7 +73,7 @@ Spike S5 and step A (2026-10-17, compositor-engineer; details, commands and run 
   (test fixture `tests/fixtures/fake-registrar`) runs only on private buses; it refuses a bus with well-known
   names.
 
-Data flow proposed for step B (input for the Decision above, not yet decided):
+Data flow proposed for step B (input for the Decision above; adopted as written, see the Decision):
 1. **Registrar ownership is gated.** The bridge owns `com.canonical.AppMenu.Registrar` on the session bus only
    once the shell's handshake shows the plugin feature `appmenu` and the shell's menu bar can render bridge menus,
    and before applications start (Qt and Chromium check once, at their start). If the plugin is absent or loses
@@ -83,6 +101,16 @@ Data flow proposed for step B (input for the Decision above, not yet decided):
 6. **Development**: the bridge, the registrar and test apps share the nested shell's private bus
    (`GRASSFIELD_PRIVATE_BUS=1`, `.dev/bus.address`), never the owner's bus.
 
+Step B (2026-10-17, platform-engineer; branch of this change): `tests/integration/global_menus.sh` PASS on the nested
+session's private bus — menu-demo (Qt 6.11.2) and Chromium 152 show their own menus in the menu bar when focused;
+pointer clicks ran File > New and View > Theme > Dark (action log) and Chromium File > New window (second window);
+the menus come back after a shell restart (plugin re-query); Nautilus (GTK4) keeps T0; with `--no-plugin` no
+registrar is owned and menu-demo keeps its in-window menu bar (`platformMenuBar=0 menuBarVisible=1`); no bridge or
+private bus is left after `nested-down.sh`. On a throwaway private bus an `open` naming another process's bus name
+was refused (`pid-mismatch`).
+
 ## Consequences
 - Implemented in M3 (T1 + T2). M2 T0 menus need no bridge.
 - Resource budget: ≤ 20 MB RSS, 0 % idle CPU (event-driven).
+- X11/XWayland apps (RegisterWindow) are not served; Qt under XWayland hides its menu bar while the registrar exists
+  (limitation listed in `docs/specs/menu-bridge.md`). Sandboxed apps behind a D-Bus proxy need a later rule.

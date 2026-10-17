@@ -74,9 +74,10 @@ namespace gf::gfc {
     std::string restoredJson(std::string_view windowAddress);
 
     // A window's DBusMenu address, from org_kde_kwin_appmenu.set_address (validated by core/Appmenu); empty
-    // service and path when the window has no (more) registration.
-    // {"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}
-    std::string appmenuJson(std::string_view windowAddress, std::string_view service, std::string_view path);
+    // service and path when the window has no (more) registration. `pid`: process id of the Wayland client that
+    // registered it (additive gfc/1 field; 0 when unknown or cleared; negative values are written as 0).
+    // {"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>","pid":N}
+    std::string appmenuJson(std::string_view windowAddress, std::string_view service, std::string_view path, int pid);
 
     // The line a socket2 subscriber receives for a given payload (without the trailing newline).
     std::string socket2Line(std::string_view json);

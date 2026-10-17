@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Stop the nested shell and compositor started by nested-up.sh and remove their records.
+# Stop the nested shell, menu bridge, private bus and compositor started by nested-up.sh / shell-run.sh and
+# remove their records.
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -35,5 +36,9 @@ if [[ -s $dev/nested.pid ]]; then
 fi
 
 stop_pid "$dev/shell.pid" grassfield-shell
+# The menu bridge releases com.canonical.AppMenu.Registrar on SIGTERM, then the private bus goes (shell-run.sh).
+stop_pid "$dev/menu-bridge.pid" grassfield-menu-bridge
+stop_pid "$dev/bus.pid" "private D-Bus bus"
+rm -f "$dev/bus.address" "$dev/run/menu-bridge.sock"
 stop_pid "$dev/nested.pid" "nested Hyprland"
 rm -f "$dev/nested.instance" "$dev/nested.wayland"

@@ -36,21 +36,27 @@ TEST(Protocol, OnlyRegisteredFeaturesAreAdvertised) {
 }
 
 TEST(Protocol, AppmenuJsonIsExactWireFormat) {
-    EXPECT_EQ(appmenuJson("55d3c2a0b1f0", ":1.42", "/MenuBar/1"),
-              R"({"v":"gfc/1","type":"appmenu","address":"55d3c2a0b1f0","service":":1.42","path":"/MenuBar/1"})");
-    EXPECT_EQ(socket2Line(appmenuJson("55d3c2a0b1f0", "org.kde.Foo", "/a/b")),
-              R"(grassfield>>{"v":"gfc/1","type":"appmenu","address":"55d3c2a0b1f0","service":"org.kde.Foo","path":"/a/b"})");
+    EXPECT_EQ(appmenuJson("55d3c2a0b1f0", ":1.42", "/MenuBar/1", 4242),
+              R"({"v":"gfc/1","type":"appmenu","address":"55d3c2a0b1f0","service":":1.42","path":"/MenuBar/1","pid":4242})");
+    EXPECT_EQ(socket2Line(appmenuJson("55d3c2a0b1f0", "org.kde.Foo", "/a/b", 7)),
+              R"(grassfield>>{"v":"gfc/1","type":"appmenu","address":"55d3c2a0b1f0","service":"org.kde.Foo","path":"/a/b","pid":7})");
 }
 
 TEST(Protocol, AppmenuClearHasEmptyServiceAndPath) {
-    EXPECT_EQ(appmenuJson("55d3c2a0b1f0", "", ""), R"({"v":"gfc/1","type":"appmenu","address":"55d3c2a0b1f0","service":"","path":""})");
+    EXPECT_EQ(appmenuJson("55d3c2a0b1f0", "", "", 0), R"({"v":"gfc/1","type":"appmenu","address":"55d3c2a0b1f0","service":"","path":"","pid":0})");
+}
+
+TEST(Protocol, AppmenuPidIsANonNegativeInteger) {
+    // pid is additive within gfc/1 (consumers that ignore it keep working); unknown or invalid pids are 0.
+    EXPECT_EQ(appmenuJson("1", ":1.2", "/m", -1), R"({"v":"gfc/1","type":"appmenu","address":"1","service":":1.2","path":"/m","pid":0})");
+    EXPECT_EQ(appmenuJson("1", ":1.2", "/m", 2147483647), R"({"v":"gfc/1","type":"appmenu","address":"1","service":":1.2","path":"/m","pid":2147483647})");
 }
 
 TEST(Protocol, AppmenuJsonEscapesEveryField) {
     // Validation rejects these strings before they reach the JSON; the JSON stays well-formed regardless.
-    EXPECT_EQ(appmenuJson(R"(a"b)", R"(x","type":"evil)", "/p\n\\"),
-              R"({"v":"gfc/1","type":"appmenu","address":"a\"b","service":"x\",\"type\":\"evil","path":"/p\n\\"})");
-    EXPECT_EQ(appmenuJson("1", std::string_view(":1.\0", 4), "/\x01"), R"({"v":"gfc/1","type":"appmenu","address":"1","service":":1.\u0000","path":"/\u0001"})");
+    EXPECT_EQ(appmenuJson(R"(a"b)", R"(x","type":"evil)", "/p\n\\", 1),
+              R"({"v":"gfc/1","type":"appmenu","address":"a\"b","service":"x\",\"type\":\"evil","path":"/p\n\\","pid":1})");
+    EXPECT_EQ(appmenuJson("1", std::string_view(":1.\0", 4), "/\x01", 0), R"({"v":"gfc/1","type":"appmenu","address":"1","service":":1.\u0000","path":"/\u0001","pid":0})");
 }
 
 TEST(Protocol, MinimizeRequestJson) {

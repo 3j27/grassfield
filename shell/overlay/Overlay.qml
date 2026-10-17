@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.menubar
 import qs.services
 
 // Host of every popup (menus, status menus, Control Center, dialogs): one transparent
@@ -130,6 +131,8 @@ Variants {
                 case "appfile":
                 case "appwindow":
                     return appMenu;
+                case "appbridge":
+                    return bridgeMenu;
                 case "volume":
                     return volumeMenu;
                 case "network":
@@ -165,6 +168,12 @@ Variants {
         Component {
             id: appMenu
             AppMenu {}
+        }
+
+        // An application's own menu (T1/T2, qs.menubar BridgeMenu).
+        Component {
+            id: bridgeMenu
+            BridgeMenu {}
         }
 
         Component {

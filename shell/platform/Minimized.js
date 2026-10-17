@@ -32,6 +32,13 @@ function windowCall(verb, address, rect) {
     return guardedPluginCall(verb, args);
 }
 
+// hl.plugin.grassfield.appmenu(address): the plugin re-posts that window's gfc/1 appmenu event (FR22). Used after a
+// shell restart for the windows that already exist. "" when the address is invalid.
+function appmenuCall(address) {
+    const hex = normalizeAddress(address);
+    return hex === "" ? "" : guardedPluginCall("appmenu", ["\"0x" + hex + "\""]);
+}
+
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
 var pluginConfig = {
     titlebarDoubleClick: ["zoom", "minimize", "none"]

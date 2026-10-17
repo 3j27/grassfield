@@ -13,7 +13,8 @@ while [[ $# -gt 0 ]]; do
     --no-plugin) export GRASSFIELD_NO_PLUGIN=1 ;;
     --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
     --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
-    -h|--help) echo "usage: nested-up.sh [--private-bus] [--no-plugin] [--lang LL] [--desktop-dir PATH]"; exit 0 ;;
+    --menu-bridge) export GRASSFIELD_MENU_BRIDGE=${2:?--menu-bridge needs a path}; shift ;;
+    -h|--help) echo "usage: nested-up.sh [--private-bus] [--no-plugin] [--lang LL] [--desktop-dir PATH] [--menu-bridge PATH]"; exit 0 ;;
     *) echo "nested-up: unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -73,7 +74,9 @@ printf '%s\n' "$sig" > "$dev/nested.instance"
 printf '%s\n' "$sock" > "$dev/nested.wayland"
 echo "nested-up: pid $pid, instance $sig, socket $sock, plugin ${plugin:-none}"
 
-# 4. Start grassfield-shell against the nested instance, if it exists yet.
+# 4. Start grassfield-shell against the nested instance, if it exists yet. With --private-bus, shell-run.sh
+#    also starts the private bus and grassfield-menu-bridge on it (before any test app; ADR-0008). The bridge
+#    binary: --menu-bridge PATH, else .dev/build/grassfield-menu-bridge (bridges/menu-bridge/build-direct.sh).
 if [[ -f $root/shell/shell.qml ]]; then
   "$root/scripts/dev/shell-run.sh"
 fi

@@ -1,0 +1,14 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- grassfield-menu-bridge diagnostics (master-prompt §5.3, ADR-0008). Object path: /org/grassfield/MenuBridge1.
+     Read-only: nothing here changes the bridge or an application. A breaking change needs MenuBridge2. -->
+<node>
+  <interface name="org.grassfield.MenuBridge1">
+    <method name="Version">
+      <arg name="version" type="s" direction="out"/>
+    </method>
+    <method name="Status">
+      <arg name="status" type="a{sv}" direction="out"/>
+    </method>
+  </interface>
+</node>
