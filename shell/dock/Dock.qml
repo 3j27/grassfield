@@ -307,6 +307,8 @@ Scope {
                     id: areaHover
                     // Using the pointer leaves keyboard mode (focus returns to the app).
                     onPointChanged: {
+                        if (hovered)
+                            PointerTracker.report(win.screen.name, point.position.x, win.screen.height - win.height + point.position.y);
                         if (hovered && root.keyboardMode)
                             root.keyboardMode = false;
                     }

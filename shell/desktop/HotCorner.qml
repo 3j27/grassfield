@@ -2,10 +2,13 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.services
 
 // One hot corner trigger: a tiny transparent layer-shell window in a screen corner
 // (namespace grassfield-hotcorner, no exclusive zone, no keyboard). Not mapped while its
 // action is "none", so it never intercepts anything then.
+//
+// The window never grows: the latch is released by PointerTracker positions (see DwellGate).
 //
 // Click safety: the window is Tokens.hotCornerSize px square in the very corner. The menu bar
 // buttons start spacingXs px from the screen edge and the Dock is centered, so no control is
@@ -32,12 +35,8 @@ PanelWindow {
         left: win.corner.endsWith("Left")
         right: win.corner.endsWith("Right")
     }
-    // While the gate is latched (fired, pointer not yet proven to have left) the window grows to
-    // `latchZone` px so the pointer's distance from the corner can be observed; it shrinks back
-    // once the pointer left.
-    readonly property int latchZone: 24
-    implicitWidth: dwell.latched ? latchZone : Tokens.hotCornerSize
-    implicitHeight: dwell.latched ? latchZone : Tokens.hotCornerSize
+    implicitWidth: Tokens.hotCornerSize
+    implicitHeight: Tokens.hotCornerSize
     exclusionMode: ExclusionMode.Ignore
     color: "transparent"
     focusable: false
@@ -49,8 +48,20 @@ PanelWindow {
         id: dwell
         hovering: hover.hovered
         blocked: win.blocked
-        distance: Math.max(win.corner.endsWith("Left") ? hover.point.position.x : win.width - hover.point.position.x, win.corner.startsWith("top") ? hover.point.position.y : win.height - hover.point.position.y)
         onTriggered: win.fire()
+    }
+
+    // Pointer positions seen by other surfaces on this screen prove the pointer left the corner.
+    Connections {
+        target: PointerTracker
+
+        function onMoved(screenName: string, x: real, y: real): void {
+            if (!win.screen || screenName !== win.screen.name)
+                return;
+            const dx = win.corner.endsWith("Left") ? x : win.screen.width - x;
+            const dy = win.corner.startsWith("top") ? y : win.screen.height - y;
+            dwell.pointerSeen(Math.max(dx, dy));
+        }
     }
 
     Item {

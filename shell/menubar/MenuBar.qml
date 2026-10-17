@@ -170,6 +170,11 @@ Scope {
                 radius: material.radius
             }
 
+            HoverHandler {
+                onPointChanged: if (hovered)
+                    PointerTracker.report(win.screen.name, point.position.x, point.position.y)
+            }
+
             SystemClock {
                 id: clock
                 precision: SystemClock.Minutes
