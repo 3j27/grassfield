@@ -6,7 +6,7 @@
 
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor)
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Grassfield Desktop: a macOS-class desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
@@ -21,6 +21,9 @@ build() {
   cmake -S "$(_root)/compositor" -B "$srcdir/compositor-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DGRASSFIELD_BUILD_TESTS=ON
   cmake --build "$srcdir/compositor-build"
+  cmake -S "$(_root)/apps/settings" -B "$srcdir/settings-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/settings-build"
 }
 
 check() {
@@ -61,6 +64,9 @@ package_grassfield-desktop() {
 
   install -Dm644 "$root/packaging/wayland-sessions/grassfield.desktop" "$pkgdir/usr/share/wayland-sessions/grassfield.desktop"
   install -Dm644 "$root/packaging/systemd/grassfield-shell.service" "$pkgdir/usr/lib/systemd/user/grassfield-shell.service"
+
+  # Grassfield Settings app (M4).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/settings-build"
 
   install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
   install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"
