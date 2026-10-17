@@ -2,15 +2,25 @@
 """WCAG contrast check on GF-REF screenshots (gate A2). Standard library + ImageMagick only.
 
   contrast.py gen DIR                      write the five worst-case wallpapers (1920x1080 PNG) into DIR
-  contrast.py measure DIR [--regions F]    measure DIR/<wallpaper>__<appearance>__<transparency>/<surface>.png
+  contrast.py measure DIR [--regions F]    measure DIR/<wallpaper>__<appearance>__<transparency>/<surface>*.png
                                            against tests/visual/contrast-regions.json, print the table,
                                            write DIR/contrast.csv, exit 1 when a cell is below its threshold
 
-Method (per region box of a known text item or icon, see contrast-regions.json):
-  background luminance = median luminance of the box (text covers a minority of the pixels);
-  foreground luminance = mean luminance of the 2% of pixels farthest from the median, on the side (lighter or
-  darker) with the largest deviation, i.e. the fully covered glyph pixels (antialiased edge pixels excluded);
-  contrast = (L1 + 0.05) / (L2 + 0.05) with WCAG relative luminance.
+Method: glyph mask (docs/testing/visual.md). Each surface is captured in four glyph modes (the shell's dev-only
+`visual glyphs` IPC, which recolours every text/icon colour and nothing else):
+  <surface>.png          normal (A)
+  <surface>.hidden.png   glyphs transparent: the exact backdrop behind and around every glyph (B), shadows and
+                         outlines of the label included
+  <surface>.white.png    glyphs pure white (W)
+  <surface>.black.png    glyphs pure black (K)
+Per pixel and channel, with coverage alpha: W = alpha*255 + (1-alpha)*B and K = (1-alpha)*B, so W - K = alpha*255
+recovers the coverage exactly, whatever the backdrop (objects that do not follow the glyph colour have W = K and
+alpha 0). Glyph pixels are the
+pixels with alpha >= 0.5. The glyph colour is c = (A - (1-alpha)*B) / alpha. For each glyph pixel the WCAG ratio
+of the glyph colour against the local backdrop (mean linear luminance of B in the 5x5 window around the pixel:
+the eye averages a high-frequency texture) is computed; the cell value is the 5th percentile of those ratios (the
+worst case, not a median of extremes). A box with no glyph pixel yields "n/a" (box misplaced or
+image icon) and is reported, never counted as a pass.
 Thresholds: kind "text" >= 4.5, kind "large" (large text) and "icon" >= 3.0.
 """
 import argparse
@@ -18,7 +28,6 @@ import csv
 import json
 import os
 import random
-import re
 import struct
 import subprocess
 import sys
@@ -27,20 +36,24 @@ import zlib
 W, H = 1920, 1080
 THRESHOLD = {"text": 4.5, "large": 3.0, "icon": 3.0}
 WALLPAPERS = ["white", "black", "gray", "noise", "checker"]
+MODES = ("", ".hidden", ".white", ".black")  # file suffixes: A, B, W, K
+GLYPH_ALPHA = 0.5
+PERCENTILE = 0.05
+LOCAL = 2  # local backdrop window radius: 5x5 pixels
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 # ---- wallpapers ---------------------------------------------------------------------------------
 
-def write_png(path, rows):
-    """rows: iterable of H bytes objects of W*3 bytes (RGB8)."""
+def write_png(path, rows, w=W, h=H):
+    """rows: iterable of h bytes objects of w*3 bytes (RGB8)."""
     raw = b"".join(b"\x00" + r for r in rows)
 
     def chunk(tag, data):
         c = struct.pack(">I", len(data)) + tag + data
         return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
 
-    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0))
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
     png += chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b"")
     with open(path, "wb") as f:
         f.write(png)
@@ -65,7 +78,7 @@ def gen(outdir):
     print("wallpapers written to", outdir)
 
 
-# ---- measurement --------------------------------------------------------------------------------
+# ---- pixels -------------------------------------------------------------------------------------
 
 def lin(c):
     c /= 255.0
@@ -77,33 +90,106 @@ def luminance(rgb):
     return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
 
 
-PIX = re.compile(r"\((\d+),\s*(\d+),\s*(\d+)")
-
-
-def region_pixels(png, box):
-    x, y, w, h = box
-    out = subprocess.run(
-        ["magick", png, "-alpha", "off", "-crop", f"{w}x{h}+{x}+{y}", "+repage", "-depth", "8", "txt:-"],
-        capture_output=True, text=True, check=True).stdout
-    pixels = [tuple(int(v) for v in m.groups()) for m in PIX.finditer(out)]
-    if not pixels:
-        raise RuntimeError(f"empty region {box} in {png}")
-    return pixels
-
-
 def ratio(l1, l2):
     hi, lo = max(l1, l2), min(l1, l2)
     return (hi + 0.05) / (lo + 0.05)
 
 
-def measure_region(png, box):
-    lums = sorted(luminance(p) for p in region_pixels(png, box))
-    n = len(lums)
-    med = lums[n // 2]
-    k = max(3, n // 50)
-    lighter = lums[-1] - med >= med - lums[0]
-    fg = sum(lums[-k:] if lighter else lums[:k]) / k
-    return ratio(fg, med)
+def read_rgb(png):
+    """(width, height, raw RGB8 bytes) of a PNG: raw bytes from ImageMagick, exactly 3 per pixel, no text parsing."""
+    dims = subprocess.run(["magick", "identify", "-format", "%w %h", png + "[0]"],
+                          capture_output=True, text=True, check=True).stdout.split()
+    w, h = int(dims[0]), int(dims[1])
+    data = subprocess.run(["magick", png, "-alpha", "off", "-depth", "8", "rgb:-"],
+                          capture_output=True, check=True).stdout
+    if len(data) != w * h * 3:
+        raise RuntimeError(f"{png}: {len(data)} bytes, expected {w * h * 3}")
+    return w, h, data
+
+
+def crop(buf, width, height, box):
+    """Pixels (r, g, b tuples, row-major) of box [x, y, w, h] in a raw RGB8 buffer of width x height."""
+    x, y, w, h = box
+    if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > width or y + h > height:
+        raise ValueError(f"box {box} outside the {width}x{height} image")
+    out = []
+    for row in range(y, y + h):
+        base = (row * width + x) * 3
+        seg = buf[base:base + w * 3]
+        out.extend(zip(seg[0::3], seg[1::3], seg[2::3]))
+    return out
+
+
+# ---- glyph mask measurement -----------------------------------------------------------------------
+
+def coverage(w, k):
+    """Glyph coverage alpha of one pixel from the white (w) and black (k) captures. The glyph colours are the
+    markers (255,255,254) and (0,0,1): W - K = alpha * (255, 255, 253) per channel, whatever the backdrop."""
+    return min(1.0, max(0.0, sum((w[i] - k[i]) / d for i, d in enumerate((255.0, 255.0, 253.0))) / 3))
+
+
+def local_luminance(ctx, x, y):
+    """Mean linear luminance of the backdrop in the 5x5 window around box pixel (x, y); ctx = (pixels, w, h, ox, oy)
+    is the hidden capture around the box (pixels row-major, w x h, the box starting at (ox, oy)). The window is
+    clipped to the capture."""
+    px, cw, ch, ox, oy = ctx
+    cx, cy = ox + x, oy + y
+    total = n = 0
+    for yy in range(max(0, cy - LOCAL), min(ch, cy + LOCAL + 1)):
+        for xx in range(max(0, cx - LOCAL), min(cw, cx + LOCAL + 1)):
+            total += luminance(px[yy * cw + xx])
+            n += 1
+    return total / n
+
+
+def glyph_ratios(a_px, b_px, w_px, k_px, bw, bh, ctx=None):
+    """WCAG ratio of the glyph colour against the local backdrop (5x5 mean of the hidden capture), for every glyph
+    pixel (coverage >= 0.5) of a box of bw x bh pixels. ctx: wider hidden capture, default the box itself."""
+    ctx = ctx or (b_px, bw, bh, 0, 0)
+    out = []
+    for i, (a, b, w, k) in enumerate(zip(a_px, b_px, w_px, k_px)):
+        alpha = coverage(w, k)
+        if alpha < GLYPH_ALPHA:
+            continue
+        c = tuple(min(255.0, max(0.0, (a[j] - (1 - alpha) * b[j]) / alpha)) for j in range(3))
+        out.append(ratio(luminance(c), local_luminance(ctx, i % bw, i // bw)))
+    return out
+
+
+def percentile(values, p):
+    s = sorted(values)
+    return s[min(len(s) - 1, int(p * len(s)))]
+
+
+def score(a_px, b_px, w_px, k_px, bw, bh, ctx=None):
+    """Worst-case contrast of the glyphs in a box (5th percentile of the per-pixel ratios), None without glyph pixels."""
+    ratios = glyph_ratios(a_px, b_px, w_px, k_px, bw, bh, ctx)
+    return percentile(ratios, PERCENTILE) if ratios else None
+
+
+def measure_surface(root_dir, surface, regions):
+    """{region name: score or None} for one surface directory; raises when a capture mode is missing."""
+    bufs = []
+    for suffix in MODES:
+        path = os.path.join(root_dir, surface + suffix + ".png")
+        if not os.path.exists(path):
+            return None
+        bufs.append(read_rgb(path))
+    if len({(w, h) for w, h, _ in bufs}) != 1:
+        raise RuntimeError(f"{root_dir}/{surface}: captures differ in size")
+    width, height, _ = bufs[0]
+    out = {}
+    for reg in regions:
+        if reg.get("image"):
+            out[reg["name"]] = "skip"
+            continue
+        x, y, bw, bh = reg["box"]
+        px = [crop(b[2], width, height, reg["box"]) for b in bufs]
+        wx, wy = max(0, x - LOCAL), max(0, y - LOCAL)
+        wx2, wy2 = min(width, x + bw + LOCAL), min(height, y + bh + LOCAL)
+        wide = crop(bufs[1][2], width, height, (wx, wy, wx2 - wx, wy2 - wy))
+        out[reg["name"]] = score(*px, bw, bh, (wide, wx2 - wx, wy2 - wy, x - wx, y - wy))
+    return out
 
 
 def measure(root, regions_file):
@@ -115,44 +201,65 @@ def measure(root, regions_file):
     if not combos:
         sys.exit("contrast: no <wallpaper>__<appearance>__<transparency> directories in " + root)
     short = lambda c: "%s.%s.%s" % (c.split("__")[0][:2], c.split("__")[1][0], c.split("__")[2].replace("0.", ""))
-    rows, fails = [], []
+    results = {}  # (surface, region, combo) -> value
+    for surface, regions in spec["surfaces"].items():
+        for c in combos:
+            res = measure_surface(os.path.join(root, c), surface, regions)
+            if res is not None:
+                for name, v in res.items():
+                    results[(surface, name, c)] = v
+    rows, fails, nomask, skipped = [], [], [], 0
     for surface, regions in spec["surfaces"].items():
         for reg in regions:
             thr = THRESHOLD[reg["kind"]]
             vals = []
             for c in combos:
-                png = os.path.join(root, c, surface + ".png")
-                if not os.path.exists(png):
-                    vals.append(None)
-                    continue
-                v = measure_region(png, reg["box"])
+                v = results.get((surface, reg["name"], c))
                 vals.append(v)
-                if v < thr:
+                if v == "skip":
+                    skipped += 1
+                elif v is None and (surface, reg["name"], c) in results:
+                    nomask.append((surface, reg["name"], c))
+                elif isinstance(v, float) and v < thr:
                     fails.append((surface, reg["name"], c, v, thr))
             rows.append((surface, reg["name"], reg["kind"], thr, vals))
-    # Table.
+
+    def cell(v, thr):
+        if v is None:
+            return "%5s" % "-"
+        if v == "skip":
+            return "%5s" % "skip"
+        return "%4.1f%s" % (v, "*" if v < thr else " ")
+
+    present_of = lambda vals: [v for v in vals if isinstance(v, float)]
     head = "%-34s %-5s %4s " % ("surface/region", "kind", "min") + " ".join("%5s" % short(c) for c in combos)
     print(head)
     print("-" * len(head))
     for surface, name, kind, thr, vals in rows:
-        present = [v for v in vals if v is not None]
+        present = present_of(vals)
         lo = min(present) if present else float("nan")
-        cells = " ".join(("%5s" % "-") if v is None else ("%4.1f%s" % (v, "*" if v < thr else " ")) for v in vals)
+        cells = " ".join(cell(v, thr) for v in vals)
         print("%-34s %-5s %4.1f %s" % ((surface + "/" + name)[:34], kind, lo, cells))
     with open(os.path.join(root, "contrast.csv"), "w", newline="") as f:
         wr = csv.writer(f)
         wr.writerow(["surface", "region", "kind", "threshold"] + combos)
         for surface, name, kind, thr, vals in rows:
-            wr.writerow([surface, name, kind, thr] + ["" if v is None else "%.2f" % v for v in vals])
-    total = sum(1 for r in rows for v in r[4] if v is not None)
-    print("\n'*' = below threshold (text 4.5, large/icon 3.0). Columns: wallpaper(2 letters).appearance(l/d).transparency(25/6).")
-    print("cells: %d, FAIL: %d, PASS: %d" % (total, len(fails), total - len(fails)))
-    by_combo = {}
+            wr.writerow([surface, name, kind, thr] +
+                        [("%.2f" % v) if isinstance(v, float) else ("" if v is None else v) for v in vals])
+    total = sum(1 for r in rows for v in r[4] if isinstance(v, float))
+    print("\n'*' = below threshold (text 4.5, large/icon 3.0); '-' = no capture; 'skip' = image icon (not colour-driven)."
+          " Columns: wallpaper(2 letters).appearance(l/d).transparency(25/6).")
+    print("cells: %d, FAIL: %d, PASS: %d, no glyph pixel found: %d, skipped (image icons): %d"
+          % (total, len(fails), total - len(fails), len(nomask), skipped))
+    by_region = {}
     for s, n, c, v, t in fails:
-        by_combo.setdefault(c, []).append("%s/%s %.2f<%.1f" % (s, n, v, t))
-    for c, items in by_combo.items():
-        print("FAIL %s: %s" % (c, "; ".join(items)))
-    return 1 if fails else 0
+        by_region.setdefault((s, n), []).append((c, v))
+    print("FAIL by region (failing cells, minimum):")
+    for (s, n), items in sorted(by_region.items(), key=lambda kv: -len(kv[1])):
+        print("  %-40s %2d cells, min %.2f" % (s + "/" + n, len(items), min(v for _, v in items)))
+    for s, n, c in nomask:
+        print("NO GLYPH %s/%s in %s" % (s, n, c))
+    return 1 if fails or nomask else 0
 
 
 def main():
