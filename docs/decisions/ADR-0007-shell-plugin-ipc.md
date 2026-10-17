@@ -45,7 +45,7 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   one post per key per 100 ms with an event-loop timer posting the final state after a burst; global cap 32 events
   burst, then 50/s. Events are coalesced, never required one by one: the shell rebuilds minimize state from
   `movewindowv2` and can ask for a window's registration again with `appmenu(address)`. Client-triggerable log lines
-  share one budget (titlebar debug lines still to be moved under it).
+  share one budget, titlebar pointer actions included.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.

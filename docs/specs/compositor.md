@@ -144,7 +144,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   one key are ≥ 100 ms apart); all keys together 32 at once, then 50 per second (token bucket; waiting events keep
   their latest-submission order, so a key that keeps changing goes behind keys that changed once). Unload posts
   every waiting event, then removes the timer. Log lines that requests trigger (appmenu bind/create/set_address,
-  rejected Lua verb arguments, `config`) share one budget of 20 lines, then 1 per second, and the next written line
+  rejected Lua verb arguments, `config`, titlebar presses and actions from any pointer) share one budget of 20 lines, then 1 per second, and the next written line
   reports how many were held back; set_address is logged at the 1st, 10th, 100th, ... request of an object, never
   per request.
 

@@ -29,7 +29,7 @@ namespace gf::ipc {
     namespace {
         struct SEvents {
             events::CEventThrottle           throttle;
-            SP<CEventLoopTimer>              timer;    // CEventLoopManager keeps only a weak reference
+            SP<CEventLoopTimer>              timer;    // shared: CEventLoopManager holds a strong reference too (stopEvents removes it before dlclose)
             std::optional<events::TimePoint> armedFor; // when the timer fires, if armed
             bool                             running       = false;
             uint64_t                         seenCoalesced = 0;
