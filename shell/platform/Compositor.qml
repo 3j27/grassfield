@@ -51,8 +51,8 @@ Singleton {
         if (!toplevel)
             return;
         const top = hyprlandToplevel(toplevel);
-        if (top && top.workspace && top.workspace.name === hiddenWorkspace && root.focusedWorkspace)
-            Hyprland.dispatch(moveRequest(top.address, String(root.focusedWorkspace.id)));
+        if (top && top.workspace && (top.workspace.name === hiddenWorkspace || top.workspace.name === minimizedWorkspace) && root.focusedWorkspace)
+            dispatchRequest(moveRequest(top.address, String(root.focusedWorkspace.id)));
         if (isMinimized(toplevel))
             unminimize(toplevel);
         else
@@ -62,15 +62,25 @@ Singleton {
     // Name of the special workspace used by hide().
     readonly property string hiddenWorkspace: "special:hidden"
 
+    // Lua request moving a window ("" when the address or workspace is invalid: the single
+    // validator lives in Minimized.js, so every caller is protected).
     function moveRequest(address: string, workspace: string): string {
-        return "hl.dsp.window.move({ workspace = \"" + workspace + "\", follow = false, window = \"address:0x" + address + "\" })";
+        return Minimized.moveRequest(address, workspace);
+    }
+
+    // Dispatches a request built by the validating builders; "" (rejected input) is dropped.
+    function dispatchRequest(request: string): bool {
+        if (request === "")
+            return false;
+        Hyprland.dispatch(request);
+        return true;
     }
 
     // Hide (macOS "Hide"): park the window on a special workspace nobody toggles.
     function hide(toplevel: var): void {
         const top = hyprlandToplevel(toplevel);
         if (top)
-            Hyprland.dispatch(moveRequest(top.address, hiddenWorkspace));
+            dispatchRequest(moveRequest(top.address, hiddenWorkspace));
     }
 
     // ---- Minimize (ADR-0002, master-prompt 5.6) ----
@@ -86,9 +96,12 @@ Singleton {
     // Plugin verb call (ADR-0007), wrapped as a Lua function like the hello request. Only
     // validated hex addresses and numbers are interpolated.
     function pluginRequest(verb: string, address: string, rect: var): string {
-        const args = ["\"0x" + address + "\""];
+        const hex = Minimized.normalizeAddress(address);
+        if (hex === "" || (rect && !Minimized.finiteRect(rect)))
+            return "";
+        const args = ["\"0x" + hex + "\""];
         if (rect)
-            [rect.x, rect.y, rect.w, rect.h].forEach(n => args.push(String(Math.round(Number(n) || 0))));
+            [rect.x, rect.y, rect.w, rect.h].forEach(n => args.push(String(Math.round(Number(n)))));
         return "function() local p = hl.plugin and hl.plugin.grassfield; if p and p." + verb + " then p." + verb + "(" + args.join(", ") + ") end end";
     }
 
@@ -104,9 +117,9 @@ Singleton {
             return false;
         root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title});
         if (Capabilities.has("minimize"))
-            Hyprland.dispatch(pluginRequest("minimize", address, root.dockTarget ? root.dockTarget : {x: 0, y: 0, w: 0, h: 0}));
+            dispatchRequest(pluginRequest("minimize", address, Minimized.finiteRect(root.dockTarget) || {x: 0, y: 0, w: 0, h: 0}));
         else
-            Hyprland.dispatch(moveRequest(address, minimizedWorkspace));
+            dispatchRequest(moveRequest(address, minimizedWorkspace));
         return true;
     }
 
@@ -117,9 +130,9 @@ Singleton {
             return;
         root.minimized = Minimized.remove(root.minimized, toplevel);
         if (Capabilities.has("minimize"))
-            Hyprland.dispatch(pluginRequest("restore", rec.address, null));
+            dispatchRequest(pluginRequest("restore", rec.address, null));
         else if (root.focusedWorkspace)
-            Hyprland.dispatch(moveRequest(rec.address, String(root.focusedWorkspace.id)));
+            dispatchRequest(moveRequest(rec.address, String(root.focusedWorkspace.id)));
         toplevel.activate();
     }
 
@@ -135,6 +148,46 @@ Singleton {
             if (root.minimized.length > 0)
                 root.minimized = Minimized.prune(root.minimized, root.toplevels.values);
         }
+    }
+
+    // Rebuilds the minimized list from windows sitting on special:minimized (the shell may have
+    // restarted since they were minimized). Window data is re-read first, then merged.
+    function syncMinimized(): void {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        let list = root.minimized;
+        for (let i = 0; i < all.length; i++) {
+            const top = all[i];
+            if (!top.wayland || !top.workspace || top.workspace.name !== minimizedWorkspace)
+                continue;
+            const address = Minimized.normalizeAddress(top.address);
+            if (address !== "")
+                list = Minimized.add(list, {toplevel: top.wayland, address: address, appId: top.wayland.appId, title: top.wayland.title});
+        }
+        if (list !== root.minimized)
+            root.minimized = list;
+    }
+
+    // Debounced: re-read window data, then rebuild the list once it has arrived.
+    Timer {
+        id: minimizedSyncTimer
+        interval: 100
+        onTriggered: {
+            Hyprland.refreshToplevels();
+            minimizedMergeTimer.restart();
+        }
+    }
+
+    Timer {
+        id: minimizedMergeTimer
+        interval: 200
+        onTriggered: root.syncMinimized()
+    }
+
+    // First rebuild shortly after the shell starts (Hyprland data has to arrive first).
+    Timer {
+        running: true
+        interval: 600
+        onTriggered: minimizedSyncTimer.restart()
     }
 
     // The titlebar button (plugin) posts a minimize-request event; the address is validated.
@@ -166,7 +219,7 @@ Singleton {
     function showAll(): void {
         if (!root.focusedWorkspace)
             return;
-        hiddenWindows(0).forEach(w => Hyprland.dispatch(moveRequest(Minimized.normalizeAddress(w.address), String(root.focusedWorkspace.id))));
+        hiddenWindows(0).forEach(w => dispatchRequest(moveRequest(Minimized.normalizeAddress(w.address), String(root.focusedWorkspace.id))));
     }
 
     // "Hide Others": hides every visible window of other apps.
@@ -202,10 +255,35 @@ Singleton {
             activate(top);
     }
 
-    // Zoom = maximized, full screen = fullscreen (ADR-0002), through the foreign-toplevel protocol.
+    // Zoom = the "maximized" fullscreen mode, toggled by a dispatch (the foreign-toplevel
+    // `maximized` request is ignored: windows.lua suppresses maximize events). Full screen = fullscreen
+    // (ADR-0002), through the foreign-toplevel protocol.
     function toggleZoom(toplevel: var): void {
-        if (toplevel)
-            toplevel.maximized = !toplevel.maximized;
+        const top = hyprlandToplevel(toplevel);
+        if (top && dispatchRequest(Minimized.fullscreenRequest(top.address, "maximized")))
+            zoomRefreshTimer.restart();
+    }
+
+    // Zoom state from Hyprland's window data (fullscreen mode 1), reactive on `revision`.
+    function isZoomed(toplevel: var, revision: int): bool {
+        const top = hyprlandToplevel(toplevel);
+        return top ? Minimized.isZoomed(top.lastIpcObject) : false;
+    }
+
+    // Window data is only re-read on request: after a Zoom toggle, refresh and notify.
+    Timer {
+        id: zoomRefreshTimer
+        interval: 120
+        onTriggered: {
+            Hyprland.refreshToplevels();
+            zoomNotifyTimer.restart();
+        }
+    }
+
+    Timer {
+        id: zoomNotifyTimer
+        interval: 150
+        onTriggered: root.topologyRevision++
     }
 
     function toggleFullscreen(toplevel: var): void {
@@ -263,6 +341,15 @@ Singleton {
                     root.minimizeByAddress(address);
                 return;
             }
+            if (event.name === "activespecialv2") {
+                // "<id>,<name>,<monitor>": the minimized parking workspace must never show as
+                // an overlay (a window minimized while it is focused would keep it open).
+                if (event.data.split(",")[1] === root.minimizedWorkspace)
+                    Hyprland.dispatch("hl.dsp.workspace.toggle_special(\"minimized\")");
+                return;
+            }
+            if ((event.name === "openwindow" || event.name === "movewindowv2") && (event.name === "openwindow" || event.data.indexOf(root.minimizedWorkspace) >= 0))
+                minimizedSyncTimer.restart();
             switch (event.name) {
             case "openwindow":
             case "closewindow":
@@ -379,14 +466,11 @@ Singleton {
             Hyprland.dispatch("hl.dsp.focus({ workspace = \"" + Math.floor(id) + "\" })");
     }
 
-    // Move a window to a Space without following it. The address comes from Hyprland data but
-    // is validated as hex before it is put into the Lua request.
+    // Move a window to a Space without following it (the address is validated by moveRequest).
     function moveToSpace(address: string, id: int): bool {
-        const m = /^(?:0x)?([0-9a-fA-F]{1,16})$/.exec(String(address));
-        if (!m || !(id > 0))
+        if (!(id > 0))
             return false;
-        Hyprland.dispatch(moveRequest(m[1].toLowerCase(), String(Math.floor(id))));
-        return true;
+        return dispatchRequest(moveRequest(address, String(Math.floor(id))));
     }
 
     // Move a window (foreign-toplevel handle) to a Space without following it.

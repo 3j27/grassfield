@@ -68,7 +68,7 @@ Singleton {
             windows: wins.map(t => ({ref: t, title: t.title, focused: t === focusedHere, minimized: Compositor.isMinimized(t)})),
             focusedWindow: focusedHere,
             fullscreen: focusedHere ? focusedHere.fullscreen : false,
-            maximized: focusedHere ? focusedHere.maximized : false,
+            maximized: focusedHere ? Compositor.isZoomed(focusedHere, rev) : false,
             windowSpaceId: focusedHere ? Compositor.spaceOf(focusedHere) : 0,
             othersCount: hasApp ? Compositor.othersCount(appId, rev) : 0,
             hiddenCount: Compositor.hiddenWindows(rev).length,

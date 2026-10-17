@@ -36,13 +36,19 @@ capability is present. Non-goal: capturing protected surfaces.
 ## v1 implementation (shell/overview/, 2026-10-17)
 - `Overview.qml` (controller + IPC `overview toggle|open|close|status`), `OverviewWindow.qml` (one layer-shell
   overlay per output, namespace `grassfield-overview`, starts below the menu bar, keyboard exclusive while open),
-  `Layout.js` (pure layout, keyboard neighbor search, hex address validation; `tests/unit/tst_overviewlayout.qml`).
+  `Layout.js` (pure layout, keyboard neighbor search, input signature; `tests/unit/tst_overviewlayout.qml`).
 - Layout: one uniform scale <= 0.8, centers scaled about the group's center, overlaps relaxed apart (min gap 24 px);
   if that does not fit, or row packing gives clearly larger windows (identical stacked windows), rows in reading
   order are used. Window rectangles interpolate from the real rectangle to the layout rectangle (zoom). Reduce
   Motion: no movement, crossfade capped at `motion.reducedMax`.
+- Cost bounds: the area comes from the screen geometry (never the unconfigured layer-surface size) and the layout
+  is recomputed only when the signature of window ids, rects and area changes. Row packing is a direct
+  computation (rows 1..ceil(sqrt n)+1), the relaxed layout a <= 5-step binary search on the scale with <= 12
+  relaxation passes. Offscreen: 20 windows ~12 ms, 9 ~6 ms (tests allow 20 ms); in the nested shell one layout
+  takes 2-3 ms and open -> fully zoomed is the animation itself (~360 ms). Esc, like every other action, releases
+  the keyboard before closing (a Space just created with "+" is kept). The action always closes the overlay (try/finally).
 - Platform (`shell/platform/Compositor.qml`, new functions only): `spacesOn`, `windowsOn`, `nextSpaceId`,
-  `focusSpace`, `moveToSpace` (address validated as hex, Lua `hl.dsp.window.move({... follow = false ...})`),
+  `focusSpace`, `moveToSpace` (address validated by `Minimized.moveRequest`, the single validator, Lua `hl.dsp.window.move({... follow = false ...})`),
   `refreshSpaces`, `topologyRevision`/`refreshOnEvents`.
 - Spaces bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
   tile thumbnails need v2). Click a tile: switch and close. "+": focus the next workspace id, Overview stays open.

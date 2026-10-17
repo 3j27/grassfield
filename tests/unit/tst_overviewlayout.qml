@@ -122,11 +122,45 @@ TestCase {
         compare(Layout.neighbor(rects, 0, "up"), -1);
     }
 
-    function test_hexAddress() {
-        compare(Layout.hexAddress("0x55AB12"), "55ab12");
-        compare(Layout.hexAddress("55ab12"), "55ab12");
-        compare(Layout.hexAddress("0x1; hl.dsp.exit()"), "");
-        compare(Layout.hexAddress("\"})"), "");
-        compare(Layout.hexAddress(""), "");
+    function test_timing() {
+        const full = {x: 0, y: 100, w: 1920, h: 900};
+        for (const c of [{n: 4, max: 20}, {n: 9, max: 20}, {n: 20, max: 20}]) {
+            const input = grid(c.n, 700, 450, true);
+            let best = Infinity;
+            for (let k = 0; k < 5; k++) {
+                const t0 = Date.now();
+                Layout.layout(input, full, opts);
+                best = Math.min(best, Date.now() - t0);
+            }
+            console.log("layout n=" + c.n + " min ms " + best);
+            verify(best <= c.max, "n=" + c.n + " took " + best + " ms");
+        }
+        const stack = [];
+        for (let i = 0; i < 20; i++)
+            stack.push({id: "s" + i, x: 200 + i * 40, y: 150 + i * 30, w: 900, h: 600});
+        let best = Infinity;
+        for (let k = 0; k < 5; k++) {
+            const t0 = Date.now();
+            Layout.layout(stack, area, opts);
+            best = Math.min(best, Date.now() - t0);
+        }
+        console.log("layout stack20 min ms " + best);
+        verify(best <= 40, "stack20 took " + best + " ms");
+        checkInvariants(stack, Layout.layout(stack, area, opts), "stack20");
+    }
+
+    function test_tinyAreaDoesNotHang() {
+        const input = grid(9, 700, 450, false);
+        const res = Layout.layout(input, {x: 0, y: 0, w: 1, h: 1}, opts);
+        compare(res.rects.length, 9);
+    }
+
+    function test_signature() {
+        const a = [{id: "a", x: 0, y: 0, w: 100, h: 100}];
+        const same = [{id: "a", x: 0.2, y: 0, w: 100, h: 100.3}];
+        const moved = [{id: "a", x: 5, y: 0, w: 100, h: 100}];
+        compare(Layout.signature(a, area), Layout.signature(same, area));
+        verify(Layout.signature(a, area) !== Layout.signature(moved, area));
+        verify(Layout.signature(a, area) !== Layout.signature(a, {x: 0, y: 100, w: 1900, h: 900}));
     }
 }

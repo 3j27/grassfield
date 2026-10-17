@@ -63,9 +63,12 @@ Scope {
         onTriggered: {
             const action = root.pending;
             root.pending = null;
-            if (action)
-                action();
-            root.hide();
+            try {
+                if (action)
+                    action();
+            } finally {
+                root.hide();
+            }
         }
     }
 
