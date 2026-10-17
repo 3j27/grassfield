@@ -37,6 +37,10 @@ fi
 settings_cmd=${GRASSFIELD_SETTINGS_CMD:-}
 [[ -z $settings_cmd && -x $dev/build/grassfield-settings ]] && settings_cmd=$dev/build/grassfield-settings
 
+# Grassfield Preview built by apps/preview/build-direct.sh (Space on a desktop icon opens Glance in dev).
+preview_cmd=${GRASSFIELD_PREVIEW_CMD:-}
+[[ -z $preview_cmd && -x $dev/build/grassfield-preview ]] && preview_cmd=$dev/build/grassfield-preview
+
 # GRASSFIELD_RENDER_TIMING=1: opt-in Qt scene graph render timing (QSG_RENDER_TIMING) in the shell log.
 timing=()
 [[ ${GRASSFIELD_RENDER_TIMING:-} == 1 ]] && timing=(QSG_RENDER_TIMING=1)
@@ -47,7 +51,7 @@ desktop_dir=${GRASSFIELD_DESKTOP_DIR:-$dev/desktop-sandbox}
 
 env "${timing[@]}" GRASSFIELD_DESKTOP_DIR="$desktop_dir" WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
-  GRASSFIELD_PRIVATE_BUS="$private" GRASSFIELD_SETTINGS_CMD="$settings_cmd" \
+  GRASSFIELD_PRIVATE_BUS="$private" GRASSFIELD_SETTINGS_CMD="$settings_cmd" GRASSFIELD_PREVIEW_CMD="$preview_cmd" \
   QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui" \
   setsid "${launch[@]}" >"$dev/shell.log" 2>&1 </dev/null &
 printf '%s\n' "$!" > "$dev/shell.pid"
