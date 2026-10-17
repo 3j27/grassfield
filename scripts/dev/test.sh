@@ -36,6 +36,16 @@ for script in tests/shell/*.sh; do
   [[ -f $script ]] || continue
   bash "$script" || { echo "FAIL: $script"; status=1; }
 done
+# Grassfield Files pure logic (sort keys, sizes, dates, path segments, names): gtest, built here.
+if [[ -f /usr/include/gtest/gtest.h ]]; then
+  if apps/files/build-direct.sh --tests >/dev/null; then
+    .dev/build/files-unit-tests --gtest_brief=1 || status=1
+  else
+    echo "FAIL: building tests/unit/files"; status=1
+  fi
+else
+  echo "SKIP: tests/unit/files (gtest not installed)"
+fi
 if [[ -x compositor/build/grassfield-compositor-tests ]]; then
   compositor/build/grassfield-compositor-tests || status=1
 fi

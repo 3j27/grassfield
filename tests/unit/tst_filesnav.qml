@@ -1,0 +1,88 @@
+import QtQuick
+import QtTest
+import "../../apps/files/qml/Nav.js" as Nav
+
+// grassfield-files pure navigation logic: grid and list keyboard moves, history, type-to-select,
+// header sort clicks, rubber band hit testing, column view prefix.
+TestCase {
+    name: "FilesNav"
+
+    function test_gridMoves() {
+        // 10 items, 4 per row: rows [0..3] [4..7] [8,9]
+        compare(Nav.gridMove(5, "left", 4, 10, 2), 4);
+        compare(Nav.gridMove(0, "left", 4, 10, 2), 0);
+        compare(Nav.gridMove(5, "right", 4, 10, 2), 6);
+        compare(Nav.gridMove(9, "right", 4, 10, 2), 9);
+        compare(Nav.gridMove(5, "up", 4, 10, 2), 1);
+        compare(Nav.gridMove(1, "up", 4, 10, 2), 1);
+        compare(Nav.gridMove(1, "down", 4, 10, 2), 5);
+        compare(Nav.gridMove(5, "down", 4, 10, 2), 9);
+        compare(Nav.gridMove(7, "down", 4, 10, 2), 9);
+        compare(Nav.gridMove(9, "down", 4, 10, 2), 9);
+        compare(Nav.gridMove(6, "home", 4, 10, 2), 0);
+        compare(Nav.gridMove(2, "end", 4, 10, 2), 9);
+    }
+
+    function test_gridPages() {
+        compare(Nav.gridMove(1, "pagedown", 4, 30, 2), 9);
+        compare(Nav.gridMove(25, "pagedown", 4, 30, 2), 29);
+        compare(Nav.gridMove(13, "pageup", 4, 30, 2), 5);
+        compare(Nav.gridMove(5, "pageup", 4, 30, 2), 1);
+    }
+
+    function test_noCurrentSelectsFirstOrLast() {
+        compare(Nav.gridMove(-1, "down", 4, 10, 2), 0);
+        compare(Nav.gridMove(-1, "end", 4, 10, 2), 9);
+        compare(Nav.gridMove(-1, "down", 4, 0, 2), -1);
+    }
+
+    function test_listMoves() {
+        compare(Nav.listMove(3, "down", 10, 5), 4);
+        compare(Nav.listMove(3, "up", 10, 5), 2);
+        compare(Nav.listMove(3, "left", 10, 5), 3);
+        compare(Nav.listMove(3, "pagedown", 10, 5), 8);
+        compare(Nav.listMove(0, "up", 10, 5), 0);
+    }
+
+    function test_history() {
+        let h = Nav.pushHistory([], -1, "file:///a");
+        compare(h.entries, ["file:///a"]);
+        compare(h.index, 0);
+        h = Nav.pushHistory(h.entries, h.index, "file:///b");
+        h = Nav.pushHistory(h.entries, h.index, "file:///c");
+        compare(h.index, 2);
+        // Same location: unchanged.
+        h = Nav.pushHistory(h.entries, h.index, "file:///c");
+        compare(h.entries.length, 3);
+        // Back twice then elsewhere: forward entries dropped.
+        h = Nav.pushHistory(h.entries, 0, "file:///d");
+        compare(h.entries, ["file:///a", "file:///d"]);
+        compare(h.index, 1);
+    }
+
+    function test_typeahead() {
+        compare(Nav.typeahead("", "a", 0, 1000), "a");
+        compare(Nav.typeahead("a", "l", 200, 1000), "al");
+        compare(Nav.typeahead("al", "b", 1500, 1000), "b");
+    }
+
+    function test_sortClick() {
+        compare(Nav.sortClick(0, false, 0, false), {key: 0, descending: true});
+        compare(Nav.sortClick(0, true, 2, true), {key: 2, descending: true});
+        compare(Nav.sortClick(2, true, 2, true), {key: 2, descending: false});
+    }
+
+    function test_cellsInRect() {
+        // 4 columns of 100 x 100, 10 items.
+        compare(Nav.cellsInRect(10, 10, 150, 50, 100, 100, 4, 10), [0, 1]);
+        compare(Nav.cellsInRect(150, 250, 10, 120, 100, 100, 4, 10), [4, 5, 8, 9]);
+        compare(Nav.cellsInRect(350, 250, 390, 290, 100, 100, 4, 10), []);
+        compare(Nav.cellsInRect(0, 0, 10, 10, 100, 100, 4, 0), []);
+    }
+
+    function test_commonPrefix() {
+        compare(Nav.commonPrefix(["file:///h", "file:///h/a", "file:///h/a/b"], ["file:///h", "file:///h/a", "file:///h/a/c"]), 2);
+        compare(Nav.commonPrefix(["file:///h"], ["file:///h", "file:///h/x"]), 1);
+        compare(Nav.commonPrefix([], ["file:///"]), 0);
+    }
+}
