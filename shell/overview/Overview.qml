@@ -22,9 +22,8 @@ Scope {
     readonly property bool thumbnailMode: !Capabilities.has("overview")
     // Settings material.profile: full | balanced | reduced.
     readonly property string profile: Settings.materialProfile
-    // Live capture for full and balanced (the capture API has no rate control, so balanced is
-    // the same as full); reduced takes one snapshot per window when opening.
-    readonly property bool liveCapture: profile !== "reduced"
+    // full: live capture. balanced: ScreencopyView has no rate control, so single frames are
+    // requested every overviewBalancedIntervalMs. reduced: one snapshot per window when opening.
 
     Binding {
         target: Compositor

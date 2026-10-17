@@ -327,4 +327,6 @@ QtObject {
     readonly property int overviewDragThreshold: 8
     // estimate: dragged thumbnail
     readonly property real overviewDragOpacity: 0.8
+    // estimate: balanced profile refreshes thumbnails at 4 fps (the capture API has no rate control)
+    readonly property int overviewBalancedIntervalMs: 250
 }

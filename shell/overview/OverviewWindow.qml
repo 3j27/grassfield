@@ -552,7 +552,7 @@ Variants {
                             id: view
                             anchors.fill: parent
                             captureSource: thumb.info ? thumb.info.toplevel : null
-                            live: root.controller.liveCapture
+                            live: root.controller.profile === "full"
                             paintCursor: false
                             Component.onCompleted: {
                                 if (!live)
@@ -562,6 +562,16 @@ Variants {
                                 if (!live && captureSource)
                                     captureFrame();
                             }
+                        }
+                    }
+
+                    // Balanced profile: one captured frame every balancedIntervalMs.
+                    Timer {
+                        interval: Tokens.overviewBalancedIntervalMs
+                        repeat: true
+                        running: root.controller.profile === "balanced" && win.shown && thumb.visible && view.captureSource !== null
+                        onTriggered: {
+                            view.captureFrame();
                         }
                     }
 
