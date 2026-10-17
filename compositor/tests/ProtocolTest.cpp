@@ -24,13 +24,35 @@ TEST(Protocol, CapabilitiesWithSeveralFeaturesKeepsOrder) {
     EXPECT_EQ(capabilitiesJson(features), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize"]})");
 }
 
-TEST(Protocol, OnlyImplementedFeaturesAreAdvertised) {
-    // R11: minimize is a placeholder in this build and must not be advertised.
+TEST(Protocol, OnlyRegisteredFeaturesAreAdvertised) {
+    // R11: minimize and config are advertised only when their entry points registered at load.
     EXPECT_EQ(capabilitiesJson().find("minimize"), std::string::npos);
+    EXPECT_EQ(capabilitiesJson(features(false, false)), R"({"v":"gfc/1","type":"capabilities","features":["decorations"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, false)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config"]})");
 }
 
 TEST(Protocol, MinimizeRequestJson) {
     EXPECT_EQ(minimizeRequestJson("55d3c2a0b1f0"), R"({"v":"gfc/1","type":"minimize-request","address":"55d3c2a0b1f0"})");
+}
+
+TEST(Protocol, MinimizedAndRestoredEvents) {
+    EXPECT_EQ(minimizedJson("55d3c2a0b1f0"), R"({"v":"gfc/1","type":"minimized","address":"55d3c2a0b1f0"})");
+    EXPECT_EQ(restoredJson("55d3c2a0b1f0"), R"({"v":"gfc/1","type":"restored","address":"55d3c2a0b1f0"})");
+    EXPECT_EQ(restoredJson(R"(x"})"), R"({"v":"gfc/1","type":"restored","address":"x\"}"})");
+}
+
+TEST(Protocol, ConfigAllowlist) {
+    EXPECT_EQ(parseDoubleClickAction("titlebarDoubleClick", "zoom"), DoubleClickAction::Zoom);
+    EXPECT_EQ(parseDoubleClickAction("titlebarDoubleClick", "minimize"), DoubleClickAction::Minimize);
+    EXPECT_EQ(parseDoubleClickAction("titlebarDoubleClick", "none"), DoubleClickAction::None);
+    EXPECT_FALSE(parseDoubleClickAction("titlebarDoubleClick", "Zoom"));
+    EXPECT_FALSE(parseDoubleClickAction("titlebarDoubleClick", "zoom "));
+    EXPECT_FALSE(parseDoubleClickAction("titlebarDoubleClick", ""));
+    EXPECT_FALSE(parseDoubleClickAction("titlebarDoubleClick", std::string_view("zoom\0", 5)));
+    EXPECT_FALSE(parseDoubleClickAction("appearance", "zoom"));
+    EXPECT_FALSE(parseDoubleClickAction("", "zoom"));
 }
 
 TEST(Protocol, JsonEscapeQuotesBackslashAndControls) {
@@ -54,6 +76,12 @@ TEST(Protocol, NamesAreStable) {
     EXPECT_EQ(kHyprctlCommand, "grassfield");
     EXPECT_EQ(kLuaNamespace, "grassfield");
     EXPECT_EQ(kLuaHello, "hello");
+    EXPECT_EQ(kLuaMinimize, "minimize");
+    EXPECT_EQ(kLuaRestore, "restore");
+    EXPECT_EQ(kLuaConfig, "config");
+    EXPECT_EQ(kFeatureMinimize, "minimize");
+    EXPECT_EQ(kFeatureConfig, "config");
+    EXPECT_EQ(kConfigTitlebarDoubleClick, "titlebarDoubleClick");
 }
 
 TEST(Protocol, LuaDispatchRequestIsWhatTheShellSends) {

@@ -2,6 +2,8 @@
 
 // Shared plugin state and safety helpers (R13: no exception may escape into Hyprland).
 
+#include "core/Protocol.hpp"
+
 #include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/helpers/signal/Signal.hpp>
@@ -18,7 +20,7 @@ class IHyprWindowDecoration;
 namespace gf {
 
     inline constexpr const char* kPluginName    = "grassfield-compositor";
-    inline constexpr const char* kPluginVersion = "0.1.0-s2";
+    inline constexpr const char* kPluginVersion = "0.2.0-m2";
 
     struct SPluginState {
         HANDLE                             handle = nullptr;
@@ -26,7 +28,13 @@ namespace gf {
 
         std::vector<CHyprSignalListener>   listeners;
         SP<SHyprCtlCommand>                hyprctlCommand;
-        bool                               luaHelloRegistered = false;
+        bool                               luaHelloRegistered    = false;
+        bool                               luaMinimizeRegistered = false;
+        bool                               luaRestoreRegistered  = false;
+        bool                               luaConfigRegistered   = false;
+
+        // Settings pushed by the shell (hl.plugin.grassfield.config).
+        gfc::DoubleClickAction doubleClickAction = gfc::DoubleClickAction::Zoom;
 
         // Live titlebars. Owned by their windows; each removes itself in its destructor.
         std::vector<CGrassfieldTitlebar*> titlebars;

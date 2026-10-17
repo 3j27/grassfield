@@ -109,6 +109,13 @@ namespace {
             gf::log(Log::WARN, "titlebar {} failed: {}", action, result.error().message);
     }
 
+    // The minimize path, shared by the minimize button and a double-click set to "minimize": the shell owns
+    // the Dock tile rectangle, so it is asked to minimize (it answers with hl.plugin.grassfield.minimize, or
+    // parks the window on special:minimized itself when the plugin lacks the feature).
+    void requestMinimize(const PHLWINDOW& w) {
+        gf::ipc::postEvent(gf::gfc::minimizeRequestJson(std::format("{:x}", reinterpret_cast<uintptr_t>(w.get()))));
+    }
+
     // The one zoom toggle, shared by the zoom button and the double-click on the drag area.
     void toggleZoom(const PHLWINDOW& w) {
         auto& fs = Fullscreen::controller();
@@ -435,13 +442,23 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         return true;
     }
 
-    // Drag area: double-click zooms (the zoom button's toggle, nothing else), otherwise start an
-    // interactive move.
+    // Drag area: a double-click does what Settings say (windows.titlebarDoubleClick, pushed by the shell with
+    // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, or nothing (the
+    // press is then a single press). Otherwise the press starts an interactive move.
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
-        gf::log(Log::DEBUG, "titlebar double-click -> toggle zoom");
-        toggleZoom(w);
-        input.presses.claim(e.button, false); // acts now; its release is still the titlebar's
-        return true;
+        switch (gf::state().doubleClickAction) {
+            case gf::gfc::DoubleClickAction::Zoom:
+                gf::log(Log::DEBUG, "titlebar double-click -> toggle zoom");
+                toggleZoom(w);
+                input.presses.claim(e.button, false); // acts now; its release is still the titlebar's
+                return true;
+            case gf::gfc::DoubleClickAction::Minimize:
+                gf::log(Log::DEBUG, "titlebar double-click -> minimize");
+                requestMinimize(w);
+                input.presses.claim(e.button, false);
+                return true;
+            case gf::gfc::DoubleClickAction::None: break;
+        }
     }
 
     const auto mode = fullscreenMode(w);
@@ -478,12 +495,7 @@ void CGrassfieldTitlebar::activate(tb::Button button) {
             logIfFailed("close", Config::Actions::closeWindow(w));
             break;
         case tb::Button::Zoom: gf::log(Log::DEBUG, "titlebar zoom"); toggleZoom(w); break;
-        case tb::Button::Minimize:
-            // PLACEHOLDER (M2): real minimize (hidden state + animation to the Dock) is not implemented.
-            // The button only reports the request on the gfc/1 event stream; the window stays visible.
-            gf::log(Log::DEBUG, "titlebar minimize (placeholder: event only)");
-            gf::ipc::postEvent(gf::gfc::minimizeRequestJson(std::format("{:x}", reinterpret_cast<uintptr_t>(w.get()))));
-            break;
+        case tb::Button::Minimize: gf::log(Log::DEBUG, "titlebar minimize"); requestMinimize(w); break;
     }
 }
 

@@ -1,11 +1,13 @@
 # grassfield-compositor
 
-Hyprland plugin for the Grassfield session (master-prompt §5.6). Spike S2 scope:
+Hyprland plugin for the Grassfield session (master-prompt §5.6):
 
 - titlebars on floating windows: close / minimize / zoom buttons on the left, centered title,
-  drag to move, double-click to zoom;
-- shell IPC `gfc/1`: capabilities event on Hyprland's socket2, `hl.plugin.grassfield.hello()`,
-  `hyprctl grassfield`.
+  drag to move (a maximized window un-zooms under the pointer), double-click per Settings (zoom by default);
+- minimize / restore with a "Scale" animation into / out of the Dock tile the shell sends (M2), hidden state
+  `special:minimized` (shared with the shell's fallback);
+- shell IPC `gfc/1`: capabilities event on Hyprland's socket2, `hl.plugin.grassfield.{hello, minimize,
+  restore, config}()`, `hyprctl grassfield`.
 
 Spec: [`docs/specs/compositor.md`](../docs/specs/compositor.md).
 
@@ -32,13 +34,13 @@ plugin + tests + compdb). The exact commands it runs, from `compositor/`:
 ```sh
 g++ -std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra \
   $(pkg-config --cflags hyprland pixman-1 libdrm) $(pkg-config --cflags lua) -shared \
-  src/main.cpp src/Titlebar.cpp src/Ipc.cpp \
-  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp \
+  src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp \
+  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp \
   $(pkg-config --libs hyprland pixman-1 libdrm) -o build/grassfield-compositor.so
 
 g++ -std=c++23 -O0 -g -Wall -Wextra -Isrc $(pkg-config --cflags gtest_main) \
-  tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp \
-  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp \
+  tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp \
+  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp \
   $(pkg-config --libs gtest_main) -o build/grassfield-compositor-tests
 ```
 
@@ -51,7 +53,8 @@ Outputs: `compositor/build/grassfield-compositor.so`, `compositor/build/grassfie
 
 ```sh
 compositor/build/grassfield-compositor-tests     # pure logic: protocol JSON, button layout, hit-testing,
-                                                 # double-click, pointer press ownership / gesture end
+                                                 # double-click, drag threshold, pointer press ownership,
+                                                 # minimize validation / easing / frames / texture boxes
 ```
 
 ## Lint (gate Q1)
@@ -63,9 +66,9 @@ Config: `compositor/.clang-tidy` (`clang-analyzer-*`, `bugprone-*`, `performance
 ```sh
 compositor/build-direct.sh tidy
 # = compositor/build-direct.sh compdb && cd compositor && \
-#   clang-tidy -p build --quiet src/main.cpp src/Titlebar.cpp src/Ipc.cpp \
-#     src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp \
-#     tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp
+#   clang-tidy -p build --quiet src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp \
+#     src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp \
+#     tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp
 ```
 
 Clean = exit code 0 and no diagnostics. It takes several minutes (Hyprland headers).
@@ -85,7 +88,8 @@ scripts/dev/pointer.sh output GF-REF abs 960 250 down drag 700 400 up   # drag a
 ```
 
 Startup log line (in `$XDG_RUNTIME_DIR/hypr/<nested instance>/hyprland.log`):
-`[grassfield] grassfield-compositor 0.1.0-s2 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+`[grassfield] grassfield-compositor 0.2.0-m2 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+Hyprland buffers this log file: later lines can take a long time to appear.
 
 ## Soak (gate C1, nested only)
 
@@ -95,13 +99,24 @@ tests/compositor/soak.sh 3600     # duration in seconds; log: .dev/soak-<timesta
 ```
 
 Window churn (short-lived and long-lived foot windows) with titlebar drags (some abandoned mid-drag),
-zoom, close and cancelled clicks through the virtual pointer. PASS (exit 0) = nested Hyprland alive, no
+zoom, close and cancelled clicks, and minimize + restore from the Dock (when the plugin advertises
+`minimize` and the shell runs) through the virtual pointer. PASS (exit 0) = nested Hyprland alive, no
 `coredumpctl list Hyprland` entry for its PID since the start (dumps of other Hyprland instances, e.g. other
 worktrees' nested sessions, are listed but not counted), no grassfield exception in the nested log.
 
 Input consistency (FR13 regression, nested only): `tests/compositor/input_consistency.sh [rounds]` — fast
 titlebar drags and close-button cancels on one mouse-reporting foot window, each followed by a click inside
 another; PASS (exit 0) = every click reached the clicked window and none reached the dragged one.
+
+Minimize (nested only, plugin + shell): `tests/compositor/minimize.sh [repeats]` — minimize with the titlebar
+button, restore from the Dock tile, repeated (some restores interrupt the minimize animation), windows closed
+mid-animation, screenshots of the animation; PASS (exit 0) = window hidden on `special:minimized` with a
+`minimized` event and a Dock tile, restored at its geometry and focused with a `restored` event, every round
+completed, Hyprland alive without core dump.
+
+Double-click setting (nested only, plugin + shell): `tests/compositor/double_click_setting.sh` — rewrites the dev
+settings file (`.dev/config/grassfield.json`, restored at exit) to `minimize`, `none`, `zoom` and double-clicks a
+titlebar; PASS (exit 0) = minimized, unchanged, maximized then restored.
 
 Zoom restore (FR8 regression, nested only): `tests/compositor/zoom_restore.sh` — double-click, click + zoom
 button and a drag on a maximized titlebar; PASS (exit 0) = the zoom toggle always restores the floating
@@ -130,30 +145,33 @@ destroys the others (unmapped or hidden windows, for which Hyprland 0.56.2 defer
 erase from `CWindow::m_decosToRemove`, `CDecorationPositioner::uncacheDecoration`, erase from
 `CWindow::m_windowDecorations`. Each titlebar also removes itself from the plugin's
 `CPlugin::m_registeredDecorations`, which Hyprland walks with `removeWindowDecoration` after `PLUGIN_EXIT`.
+Before that, `minimizer::stop()` removes the minimize render hooks, completes running animations (a restoring
+window is made visible; minimized windows stay on `special:minimized`), drops the snapshots and its timer.
 
 ## IPC (gfc/1)
 
 | Direction | How | Payload |
 |---|---|---|
-| plugin → shell | socket2 event, posted at load and on `hello` | `grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations"]}` |
-| plugin → shell | socket2 event, minimize button (**placeholder**) | `grassfield>>{"v":"gfc/1","type":"minimize-request","address":"<hex>"}` |
+| plugin → shell | socket2 event, posted at load and on `hello` | `grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config"]}` (minimize / config only when registered) |
+| plugin → shell | socket2 event, minimize button or double-click set to minimize | `grassfield>>{"v":"gfc/1","type":"minimize-request","address":"<hex>"}` |
+| plugin → shell | socket2 event, end of a minimize / restore | `grassfield>>{"v":"gfc/1","type":"minimized","address":"<hex>"}`, `..."restored"...` |
 | shell → plugin | `Hyprland.dispatch("hl.plugin.grassfield.hello()")` (Quickshell) | re-posts capabilities |
+| shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` | Dock tile in layout px; validated |
+| shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | allowlisted |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dispatch is evaluated as
 `return hl.dispatch(<arg>)`, so legacy plugin dispatchers (`HyprlandAPI::addDispatcherV2`) are unreachable.
 
-## Placeholders
-
-- **Minimize** (button): posts `minimize-request` only; the window is not minimized (real minimize is M2).
-  `minimize` is not advertised in `capabilities`.
-
 ## Layout
 
 - `src/core/` — plain C++ without Hyprland includes (unit-tested): `Theme.hpp` (all visual constants),
-  `TitlebarLayout.*` (geometry, hit-testing, double-click), `PointerGesture.*` (press ownership, gesture
-  end), `Protocol.*` (gfc/1 JSON).
+  `TitlebarLayout.*` (geometry, hit-testing, double-click, drag threshold), `PointerGesture.*` (press
+  ownership, gesture end), `Protocol.*` (gfc/1 JSON, features, config allowlist), `Minimize.*` (argument
+  validation, easing, frames, snapshot texture boxes).
 - `src/` — Hyprland glue: `main.cpp` (entry points, ABI check, event bus listeners, unload), `Titlebar.*`
-  (decoration, drawing, input), `Ipc.*` (socket2 events, Lua function, hyprctl command).
+  (decoration, drawing, input), `Ipc.*` (socket2 events, Lua functions, hyprctl command), `Minimize.*`
+  (hidden state, snapshots, render hooks).
 - `tests/` — GoogleTest unit tests for `src/core/`. Nested scenarios (repository root):
-  `tests/compositor/soak.sh`, `tests/compositor/input_consistency.sh`, `tests/compositor/zoom_restore.sh`.
+  `tests/compositor/soak.sh`, `tests/compositor/input_consistency.sh`, `tests/compositor/zoom_restore.sh`,
+  `tests/compositor/minimize.sh`, `tests/compositor/double_click_setting.sh`.
