@@ -4,6 +4,7 @@
 // mismatch the plugin refuses to hook anything and notifies once; the shell then falls back to
 // its degraded mode because no `grassfield` capabilities event is ever posted.
 
+#include "AppmenuServer.hpp"
 #include "Ipc.hpp"
 #include "Minimize.hpp"
 #include "Plugin.hpp"
@@ -165,6 +166,7 @@ namespace {
         };
         step("listeners", [&] { s.listeners.clear(); });
         step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
+        step("appmenu", [] { gf::appmenuServer::stop(); }); // no wl_resource may point into this library after dlclose
         step("ipc", [] { gf::ipc::unregisterAll(); });
         step("titlebars", [] { removeAllTitlebars(); });
         s.active = false;
@@ -184,7 +186,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     auto& s  = state();
     s.handle = handle;
 
-    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
+    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
 
     const std::string serverHash = __hyprland_api_get_hash();
     const std::string clientHash = __hyprland_api_get_client_hash();
@@ -200,6 +202,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         registerListeners();
         if (!gf::minimizer::start())
             gf::log(Log::WARN, "minimize render hooks failed to register; minimize not advertised");
+        // Optional feature: a failure here only drops appmenu from the capabilities (the shell keeps T0 menus).
+        bool appmenuOk = false;
+        gf::guarded("appmenu start", [&] { appmenuOk = gf::appmenuServer::start(); });
+        if (!appmenuOk) {
+            gf::guarded("appmenu rollback", [] { gf::appmenuServer::stop(); });
+            gf::log(Log::WARN, "appmenu global failed to start; appmenu not advertised");
+        }
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");
 

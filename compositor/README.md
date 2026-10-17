@@ -6,8 +6,10 @@ Hyprland plugin for the Grassfield session (master-prompt §5.6):
   drag to move (a maximized window un-zooms under the pointer), double-click per Settings (zoom by default);
 - minimize / restore with a "Scale" animation into / out of the Dock tile the shell sends (M2), hidden state
   `special:minimized` (shared with the shell's fallback);
+- appmenu protocol (feature 3, D4): the `org_kde_kwin_appmenu_manager` global (version 2); each window's
+  DBusMenu address (service, object path) is validated and posted to the shell as a gfc/1 `appmenu` event;
 - shell IPC `gfc/1`: capabilities event on Hyprland's socket2, `hl.plugin.grassfield.{hello, minimize,
-  restore, config}()`, `hyprctl grassfield`.
+  restore, config, appmenu}()`, `hyprctl grassfield`.
 
 Spec: [`docs/specs/compositor.md`](../docs/specs/compositor.md).
 
@@ -18,29 +20,32 @@ Spec: [`docs/specs/compositor.md`](../docs/specs/compositor.md).
 - Hyprland **0.56.2** headers (`pkg-config --modversion hyprland`), built with the same compiler (GCC).
 - C++23 (the 0.56.2 headers use `std::expected` and `std::string_view::contains`).
 - Lua 5.5 headers (`pkg-config lua`); Lua symbols resolve at load time from Hyprland's own `liblua`.
+- `hyprwayland-scanner` (0.4.6 tested): generates the appmenu server code from `protocols/appmenu.xml`.
 - Tests: GoogleTest (`gtest`).
 
 ## Build
 
-CMake (once the owner has installed `cmake` and `ninja`):
+CMake (`cmake` and `ninja` are installed now; same outputs, protocol code generated in the CMake build dir):
 
 ```sh
 just plugin-build      # = cmake -S compositor -B compositor/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build compositor/build
 ```
 
-Interim build (no CMake/Ninja yet): `compositor/build-direct.sh [plugin|tests|compdb|all|tidy]` (default `all` =
+Direct build (no CMake): `compositor/build-direct.sh [plugin|tests|compdb|all|tidy]` (default `all` =
 plugin + tests + compdb). The exact commands it runs, from `compositor/`:
 
 ```sh
-g++ -std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra \
-  $(pkg-config --cflags hyprland pixman-1 libdrm) $(pkg-config --cflags lua) -shared \
-  src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp \
-  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp \
-  $(pkg-config --libs hyprland pixman-1 libdrm) -o build/grassfield-compositor.so
+hyprwayland-scanner protocols/appmenu.xml build/protocols     # when the XML is newer than the output
+FLAGS="-std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm) $(pkg-config --cflags lua)"
+g++ $FLAGS -fvisibility=hidden -w -c build/protocols/appmenu.cpp -o build/protocols/appmenu.o
+g++ $FLAGS -shared \
+  src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp \
+  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp \
+  build/protocols/appmenu.o $(pkg-config --libs hyprland pixman-1 libdrm) -o build/grassfield-compositor.so
 
 g++ -std=c++23 -O0 -g -Wall -Wextra -Isrc $(pkg-config --cflags gtest_main) \
-  tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp \
-  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp \
+  tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp \
+  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp \
   $(pkg-config --libs gtest_main) -o build/grassfield-compositor-tests
 ```
 
@@ -54,7 +59,8 @@ Outputs: `compositor/build/grassfield-compositor.so`, `compositor/build/grassfie
 ```sh
 compositor/build/grassfield-compositor-tests     # pure logic: protocol JSON, button layout, hit-testing,
                                                  # double-click, drag threshold, pointer press ownership,
-                                                 # minimize validation / easing / frames / texture boxes
+                                                 # minimize validation / easing / frames / texture boxes,
+                                                 # appmenu name/path validation and registrations
 ```
 
 ## Lint (gate Q1)
@@ -88,7 +94,7 @@ scripts/dev/pointer.sh output GF-REF abs 960 250 down drag 700 400 up   # drag a
 ```
 
 Startup log line (in `$XDG_RUNTIME_DIR/hypr/<nested instance>/hyprland.log`):
-`[grassfield] grassfield-compositor 0.2.0-m2 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+`[grassfield] grassfield-compositor 0.3.0-s5 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
 Hyprland buffers this log file: later lines can take a long time to appear.
 
 ## Soak (gate C1, nested only)
@@ -118,6 +124,14 @@ Double-click setting (nested only, plugin + shell): `tests/compositor/double_cli
 settings file (`.dev/config/grassfield.json`, restored at exit) to `minimize`, `none`, `zoom` and double-clicks a
 titlebar; PASS (exit 0) = minimized, unchanged, maximized then restored.
 
+Appmenu and spike S5 (nested only; every variant on its own private D-Bus bus without service activation):
+`tests/compositor/appmenu.sh [variant...]` — runs the Qt reference app `tests/fixtures/menu-demo` (and
+Chromium) with or without the test registrar `tests/fixtures/fake-registrar` (built by
+`tests/fixtures/build.sh`), records the client's `org_kde_kwin_appmenu` requests (`WAYLAND_DEBUG`), the plugin's
+`appmenu` events, the DBusMenu introspection and layout, triggers real app actions through DBusMenu and checks
+the clear event at close; PASS (exit 0) = the `qt-registrar` checks all pass and Hyprland is alive.
+Never start the registrar fixture on the owner's bus: Qt/KDE apps of the real session would hide their menus.
+
 Zoom restore (FR8 regression, nested only): `tests/compositor/zoom_restore.sh` — double-click, click + zoom
 button and a drag on a maximized titlebar; PASS (exit 0) = the zoom toggle always restores the floating
 geometry and a drag un-zooms the window under the pointer.
@@ -146,7 +160,12 @@ erase from `CWindow::m_decosToRemove`, `CDecorationPositioner::uncacheDecoration
 `CWindow::m_windowDecorations`. Each titlebar also removes itself from the plugin's
 `CPlugin::m_registeredDecorations`, which Hyprland walks with `removeWindowDecoration` after `PLUGIN_EXIT`.
 Before that, `minimizer::stop()` removes the minimize render hooks, completes running animations (a restoring
-window is made visible; minimized windows stay on `special:minimized`), drops the snapshots and its timer.
+window is made visible; minimized windows stay on `special:minimized`), drops the snapshots and its timer, and
+`appmenuServer::stop()` makes sure no Wayland object points into the library after `dlclose`: at compositor
+shutdown it destroys every appmenu resource and the global; on a runtime unload with client objects still alive
+it pins the library in memory (`dlopen(RTLD_NOLOAD | RTLD_NODELETE)`), removes the global and leaves those
+objects inert, because destroying them would make libwayland disconnect the client at its next request on them
+(a rebuilt plugin at the same path then loads only after Hyprland restarts).
 
 ## IPC (gfc/1)
 
@@ -155,9 +174,11 @@ window is made visible; minimized windows stay on `special:minimized`), drops th
 | plugin → shell | socket2 event, posted at load and on `hello` | `grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config"]}` (minimize / config only when registered) |
 | plugin → shell | socket2 event, minimize button or double-click set to minimize | `grassfield>>{"v":"gfc/1","type":"minimize-request","address":"<hex>"}` |
 | plugin → shell | socket2 event, end of a minimize / restore | `grassfield>>{"v":"gfc/1","type":"minimized","address":"<hex>"}`, `..."restored"...` |
+| plugin → shell | socket2 event: a mapped window's appmenu registration changed, the window was mapped with one, got focus, or on `appmenu(address)`; empty strings when it has none (any more) | `grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}` |
 | shell → plugin | `Hyprland.dispatch("hl.plugin.grassfield.hello()")` (Quickshell) | re-posts capabilities |
 | shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` | Dock tile in layout px; validated |
 | shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | allowlisted |
+| shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's `appmenu` event (shell restart) |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dispatch is evaluated as
@@ -168,10 +189,13 @@ There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dis
 - `src/core/` — plain C++ without Hyprland includes (unit-tested): `Theme.hpp` (all visual constants),
   `TitlebarLayout.*` (geometry, hit-testing, double-click, drag threshold), `PointerGesture.*` (press
   ownership, gesture end), `Protocol.*` (gfc/1 JSON, features, config allowlist), `Minimize.*` (argument
-  validation, easing, frames, snapshot texture boxes).
+  validation, easing, frames, snapshot texture boxes), `Appmenu.*` (D-Bus name / object path validation,
+  per-surface registrations and the events they produce).
 - `src/` — Hyprland glue: `main.cpp` (entry points, ABI check, event bus listeners, unload), `Titlebar.*`
   (decoration, drawing, input), `Ipc.*` (socket2 events, Lua functions, hyprctl command), `Minimize.*`
-  (hidden state, snapshots, render hooks).
+  (hidden state, snapshots, render hooks), `AppmenuServer.*` (the `org_kde_kwin_appmenu_manager` global, its
+  resources, window listeners, unload policy).
+- `protocols/appmenu.xml` — KDE's appmenu protocol, version 2 (LGPL-2.1-or-later, upstream notice kept).
 - `tests/` — GoogleTest unit tests for `src/core/`. Nested scenarios (repository root):
   `tests/compositor/soak.sh`, `tests/compositor/input_consistency.sh`, `tests/compositor/zoom_restore.sh`,
-  `tests/compositor/minimize.sh`, `tests/compositor/double_click_setting.sh`.
+  `tests/compositor/minimize.sh`, `tests/compositor/double_click_setting.sh`, `tests/compositor/appmenu.sh`.
