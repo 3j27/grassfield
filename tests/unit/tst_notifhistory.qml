@@ -29,6 +29,23 @@ TestCase {
         compare(kept[199].key, "k199");
     }
 
+    function test_pushNewestMatchesPrune() {
+        let list = [];
+        for (let i = 0; i < 200; i++)
+            list.push(entry("k" + i, "a", now - (i + 1) * 1000));
+        const next = entry("new", "a", now);
+        const fast = History.pushNewest(list, next, now);
+        compare(fast.map(e => e.key).join(","), History.prune([next].concat(list), now).map(e => e.key).join(","));
+        compare(fast.length, 200);
+        compare(fast[0].key, "new");
+        // Older than the head: falls back to the full prune (sorted).
+        const late = History.pushNewest(list, entry("late", "a", now - 5000), now);
+        compare(late[4].key, "late");
+        // Aged-out tail is dropped.
+        const aged = History.pushNewest([entry("x", "a", now - 7 * day - 1)], next, now);
+        compare(aged.map(e => e.key).join(","), "new");
+    }
+
     function test_transientAndLowNotPersisted() {
         verify(!History.shouldPersist(entry("t", "a", now, {transient: true})));
         verify(!History.shouldPersist(entry("l", "a", now, {urgency: 0})));

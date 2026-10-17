@@ -55,29 +55,44 @@ TestCase {
     }
 
     // Closing the surface the action opened: the covered window loses and regains hover with the
-    // pointer still in the corner. Must not fire again.
+    // pointer still in the corner. Must not fire again (fire -> covered -> uncovered).
     function test_coverExitAndReenterDoesNotRefire() {
         gate.coverGraceMs = 5000;
         gate.hovering = true;
         tryCompare(testCase, "fires", 1, 1000);
         gate.hovering = false;
         verify(gate.latched);
+        gate.pointerSeen(3);
         gate.hovering = true;
-        gate.distance = 1;
         wait(150);
         compare(fires, 1);
+        verify(gate.latched);
     }
 
-    function test_movingOutOfLatchZoneRearms() {
+    // Moving away (reported by another surface) re-arms; coming back fires again.
+    function test_movingAwayRearms() {
         gate.coverGraceMs = 5000;
         gate.hovering = true;
         tryCompare(testCase, "fires", 1, 1000);
         gate.hovering = false;
         gate.hovering = true;
-        gate.distance = 20;
-        verify(!gate.latched);
+        gate.pointerSeen(5);
+        verify(gate.latched);
         gate.hovering = false;
-        gate.distance = 0;
+        gate.pointerSeen(20);
+        verify(!gate.latched);
+        gate.hovering = true;
+        tryCompare(testCase, "fires", 2, 1000);
+    }
+
+    // The pointer leaves within the cover grace window and jumps straight back.
+    function test_quickLeaveAndJumpBackFires() {
+        gate.coverGraceMs = 5000;
+        gate.hovering = true;
+        tryCompare(testCase, "fires", 1, 1000);
+        gate.hovering = false;
+        gate.pointerSeen(40);
+        verify(!gate.latched);
         gate.hovering = true;
         tryCompare(testCase, "fires", 2, 1000);
     }

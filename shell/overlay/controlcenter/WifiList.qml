@@ -75,14 +75,20 @@ Column {
             password.forceActiveFocus();
     }
 
-    function cancelPassword(): void {
-        root.pendingName = "";
-        password.text = "";
+    // Hands keyboard focus back to the previous item (the network row) so the hidden field does
+    // not keep it (a single Esc then closes the panel).
+    function releaseFocus(): void {
         const prev = password.nextItemInFocusChain(false);
         if (prev && prev !== password)
             prev.forceActiveFocus();
         else
             password.focus = false;
+    }
+
+    function cancelPassword(): void {
+        root.releaseFocus();
+        root.pendingName = "";
+        password.text = "";
     }
 
     function submit(): void {
@@ -94,6 +100,7 @@ Column {
         root.watchName = root.pendingName;
         Connectivity.connectWithPassword(row, password.text);
         password.text = "";
+        root.releaseFocus();
         root.pendingName = "";
     }
 

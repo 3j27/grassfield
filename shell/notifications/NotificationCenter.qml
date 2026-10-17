@@ -11,7 +11,7 @@ import qs.services
 //
 // The window exists per screen but its content (a Loader) only while the Center is open on that
 // screen, so a closed Center costs nothing. Rows come from the keyed Notifications.centerModel
-// (already ordered by group, with rank/groupCount), so new notifications never rebuild the list.
+// (already ordered by group; ListView sections draw the headers), so new notifications never rebuild the list.
 // Keyboard: Tab moves between rows and buttons, Return opens the row's default action, Delete or
 // Backspace clears the row.
 Variants {
@@ -180,6 +180,54 @@ Variants {
                     model: Notifications.centerModel
                     // Rows near the viewport stay alive so Tab can reach them.
                     cacheBuffer: Tokens.notificationCenterCache
+                    // One section per app: the header carries the app name, the count and Clear.
+                    section.property: "appName"
+                    section.criteria: ViewSection.FullString
+                    section.delegate: Item {
+                        id: head
+
+                        required property string section
+                        readonly property bool first: Notifications.firstGroupApp() === section
+                        readonly property int groupCount: Notifications.groupSize(section)
+
+                        width: list.width
+                        height: clearGroup.implicitHeight + Tokens.spacingSm + (first ? 0 : Tokens.spacingLg)
+
+                        Row {
+                            y: head.first ? 0 : Tokens.spacingLg
+                            height: clearGroup.implicitHeight
+                            spacing: Tokens.spacingSm
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Notifications.groupLabel(head.section)
+                                textFormat: Text.PlainText
+                                color: Appearance.colors.text
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyBodySize
+                                font.weight: Tokens.typographyMenuBoldWeight
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                textFormat: Text.PlainText
+                                visible: head.groupCount > 1
+                                text: String(head.groupCount)
+                                color: Appearance.colors.textSecondary
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyBodySize
+                                font.weight: Tokens.typographyMenuWeight
+                            }
+                        }
+
+                        Button {
+                            id: clearGroup
+                            y: head.first ? 0 : Tokens.spacingLg
+                            anchors.right: parent.right
+                            text: qsTr("Clear")
+                            onClicked: Notifications.clearApp(head.section)
+                        }
+                    }
 
                     delegate: Column {
                         id: item
@@ -195,9 +243,11 @@ Variants {
                         required property real time
                         required property int urgency
                         required property string actionsJson
-                        required property int rank
-                        required property int groupCount
 
+                        // Position in the app group and group size, from Notifications' O(1) bookkeeping
+                        // (no per-row model roles: an insert would have to renumber the whole group).
+                        readonly property int rank: Notifications.rankOf(key, appName)
+                        readonly property int groupCount: Notifications.groupSize(appName)
                         readonly property bool expanded: panel.expanded[appName] === true
                         readonly property bool rowShown: rank < Tokens.notificationCenterGroupCollapsed || expanded
                         // The last visible row of a long group carries the Show All / Show Less button.
@@ -208,47 +258,6 @@ Variants {
                         height: rowShown ? implicitHeight : 0
                         visible: rowShown
                         spacing: Tokens.spacingSm
-
-                        Item {
-                            visible: item.rank === 0
-                            width: parent.width
-                            height: visible ? clearGroup.implicitHeight + (item.index > 0 ? Tokens.spacingLg : 0) : 0
-
-                            Row {
-                                y: item.index > 0 ? Tokens.spacingLg : 0
-                                height: clearGroup.implicitHeight
-                                spacing: Tokens.spacingSm
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: Notifications.groupLabel(item.appName)
-                                    textFormat: Text.PlainText
-                                    color: Appearance.colors.text
-                                    font.family: Appearance.fontFamily
-                                    font.pixelSize: Tokens.typographyBodySize
-                                    font.weight: Tokens.typographyMenuBoldWeight
-                                }
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    textFormat: Text.PlainText
-                                    visible: item.groupCount > 1
-                                    text: String(item.groupCount)
-                                    color: Appearance.colors.textSecondary
-                                    font.family: Appearance.fontFamily
-                                    font.pixelSize: Tokens.typographyBodySize
-                                    font.weight: Tokens.typographyMenuWeight
-                                }
-                            }
-
-                            Button {
-                                id: clearGroup
-                                y: item.index > 0 ? Tokens.spacingLg : 0
-                                anchors.right: parent.right
-                                text: qsTr("Clear")
-                                onClicked: Notifications.clearApp(item.appName)
-                            }
-                        }
 
                         Item {
                             id: row

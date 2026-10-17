@@ -6,9 +6,9 @@ import Grassfield.Ui
 // re-arms, so closing the surface the action opened (which covered the corner window and gave a
 // hover exit + re-enter with a stationary pointer) does not fire it again.
 //
-// Leaving is proven by either
-//  - `distance` (pointer px from the corner, reported while hovering the enlarged latch zone)
-//    exceeding `leaveDistance`, or
+// The corner window never grows (it must not cover controls), so leaving is proven by either
+//  - `pointerSeen(distance)`: another surface under the pointer (menu bar, wallpaper, Dock,
+//    through PointerTracker) reported a position more than `leaveDistance` px from the corner, or
 //  - a hover exit later than `coverGraceMs` after firing (earlier exits are the opened surface
 //    covering the window, not the pointer moving).
 // No firing while `blocked` (the target surface is open).
@@ -17,8 +17,6 @@ QtObject {
 
     property bool hovering: false
     property int interval: Tokens.hotCornerDwellMs
-    // Pointer distance from the corner in px, updated while hovering.
-    property real distance: 0
     property real leaveDistance: 8
     property int coverGraceMs: 800
     property bool blocked: false
@@ -27,6 +25,12 @@ QtObject {
     property double firedAt: 0
 
     signal triggered
+
+    // A position reported by a surface other than the corner window: distance from the corner in px.
+    function pointerSeen(distance: real): void {
+        if (latched && distance > leaveDistance)
+            latched = false;
+    }
 
     onHoveringChanged: {
         if (hovering) {
@@ -37,11 +41,6 @@ QtObject {
             if (latched && Date.now() - firedAt >= coverGraceMs)
                 latched = false;
         }
-    }
-
-    onDistanceChanged: {
-        if (latched && hovering && distance > leaveDistance)
-            latched = false;
     }
 
     onBlockedChanged: {

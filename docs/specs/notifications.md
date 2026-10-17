@@ -63,6 +63,11 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
 - Notification Center: separate full-screen transparent window (Esc and click outside close, the menu bar strip stays clickable so the
   clock toggles it). Groups by app name, newest first, 3 rows per group then "Show All". No widgets area in M2 (omitted, not stubbed).
   Opening a menu/popup closes the Center.
+  Rows carry no rank/group-size roles: the ListView draws one section per app (`section.property: appName`; header = name, count,
+  Clear) and `Notifications` keeps group size and per-key order ids in a JS book (insert at group head is O(1), a removal marks it
+  dirty and `ensureRanks()` renumbers lazily when the open Center asks). History insert is O(dropped) (`History.pushNewest`) and
+  evicted live notifications are dismissed after the Notify reply (`Qt.callLater`). Notify round trip on the nested shell,
+  loaded machine: median 32-38 ms from 60 to 200 same-app entries (bare gdbus 16-17 ms); before: 44-54 ms at 200.
 - Body markup: `Sanitizer.sanitize` keeps only b, i, u and br (balanced); links render as "label (url)" text and are not clickable;
   images are dropped (alt kept); everything else is stripped; 4000 characters max. Images in hints are loaded at <= 256 px.
 - DND: `notifications.dnd` in grassfield.json; Control Center "Focus > Do Not Disturb" toggle; moon icon in the menu bar (click turns it off).

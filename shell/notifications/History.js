@@ -26,6 +26,17 @@ function prune(entries, now) {
     return kept.slice(0, MAX_ENTRIES);
 }
 
+// `entries` (newest first, already pruned) with `entry` on top, pruned like prune() but in
+// O(dropped): only the tail can fall out. Falls back to prune() when `entry` is not the newest.
+function pushNewest(entries, entry, now) {
+    if (typeof entry.time !== "number" || (entries.length > 0 && entry.time < entries[0].time))
+        return prune([entry].concat(entries), now);
+    const list = [entry].concat(entries);
+    while (list.length > MAX_ENTRIES || (list.length > 0 && now - list[list.length - 1].time > MAX_AGE_MS))
+        list.pop();
+    return list;
+}
+
 // JSON for notifications.json: persistable entries only, actions as labels, no images.
 function serialize(entries, now) {
     const stored = prune(entries.filter(shouldPersist), now).map(e => ({
