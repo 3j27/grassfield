@@ -36,3 +36,4 @@ No timers run until the pointer is in a corner. Corners are pointer-only; every 
 - A real pointer is clamped to the output edge, so a corner is reached only on an edge shared with the screen boundary; with side-by-side outputs, the inner corners are not at the pointer's stop and still work only where the pointer can reach them.
 - The Overlay-layer corner windows cover the 2 px corner of the Control Center/popup overlay and of fullscreen apps by design.
 - The `apps` IPC target name (`apps`, function `toggle`) is an assumption until the Apps surface exists.
+- Jumping from a hot corner onto a client window and straight back to the corner within 800 ms does not refire it: client windows do not report the pointer position to the shell, so the shell sees no exit/re-entry.
