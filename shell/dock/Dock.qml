@@ -526,7 +526,7 @@ Scope {
                                         drop.accept(Qt.MoveAction);
                                         const paths = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
                                         if (paths.length > 0)
-                                            Quickshell.execDetached(["gio", "trash", "--"].concat(paths));
+                                            Apps.openDetached(["gio", "trash", "--"].concat(paths)); // isolated trash in dev (ADR-0011)
                                     }
                                 }
 

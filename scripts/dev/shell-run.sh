@@ -133,6 +133,10 @@ timing=()
 "$root/ui/i18n/build-direct.sh" >&2
 "$root/scripts/dev/i18n-build.sh" >&2
 
+# The isolated trash of the dev session (shell/services/Trash.qml watches it; ADR-0011): the shell's "Move to Trash"
+# and the Dock's Trash drop put files here, never in the owner's ~/.local/share/Trash.
+mkdir -p "$dev/apps-home/data/Trash/files" "$dev/apps-home/data/Trash/info"
+
 # Desktop icons: the folder is a sandbox in dev (never the owner's real desktop); an exported
 # GRASSFIELD_DESKTOP_DIR wins.
 desktop_dir=${GRASSFIELD_DESKTOP_DIR:-$dev/desktop-sandbox}

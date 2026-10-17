@@ -92,14 +92,15 @@ Scope {
         releaseTimer.restart();
     }
 
-    // Move files to the trash (gio trash). `paths` are absolute.
+    // Move files to the trash (gio trash). `paths` are absolute. In a dev session the trash is the isolated one
+    // under .dev/apps-home (XDG_DATA_HOME of Apps.openEnvironment()), never the owner's (ADR-0011).
     function trash(paths: var): void {
         const list = paths.filter(p => typeof p === "string" && p.startsWith("/"));
         if (list.length === 0)
             return;
         run(["gio", "trash", "--"].concat(list), "trash", () => {
             Trash.refresh();
-        });
+        }, Apps.openEnvironment());
     }
 
     // Returns "" when started, else the validation reason (see IconsLogic.validateName).

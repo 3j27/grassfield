@@ -4,13 +4,16 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Trash state for the Dock, read-only: empty or not, from ~/.local/share/Trash/files.
+// Trash state for the Dock, read-only: empty or not, from ~/.local/share/Trash/files (in a dev session the isolated
+// trash under .dev/apps-home, where the shell's own trash actions put files; ADR-0011).
 // Event-driven: `gio monitor` reports changes; a check also runs at start and on demand.
 // Nothing here ever modifies the trash.
 Singleton {
     id: root
 
     readonly property string filesPath: {
+        if (Apps.devSession)
+            return Apps.appsHome + "/data/Trash/files";
         const xdg = Quickshell.env("XDG_DATA_HOME");
         return (xdg ? xdg : Quickshell.env("HOME") + "/.local/share") + "/Trash/files";
     }
