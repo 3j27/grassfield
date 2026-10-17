@@ -4,11 +4,15 @@
 #
 #   tests/visual/run.sh                     run every scenario in en and fr, compare with tests/visual/baselines/
 #   tests/visual/run.sh --update            write CANDIDATE baselines to .dev/visual/candidates/ (never the repo)
-#   tests/visual/run.sh --determinism       run everything twice and require byte-identical-within-fuzz-0 shots
+#   tests/visual/run.sh --determinism       run everything twice; every shot pair must differ by at most
+#                                           VISUAL_DET_MAX_PX (default 50) pixels at fuzz 2% (a compare error fails)
 #   tests/visual/run.sh --only menubar,dock --lang en --keep
 #
 # Baselines (tests/visual/baselines/<scenario>.<lang>.png) are approved by the owner (gate F1): the owner
 # reviews .dev/visual/candidates/ and copies the accepted files over. This script never writes them.
+# A regression is more than VISUAL_MAX_PX (default 150) pixels differing at fuzz 2% (docs/testing/visual.md).
+# The nested session this script starts is torn down on exit (also on failure or interruption); a session that
+# was already running is left alone.
 # Exit status: 0 all within threshold, 1 regression / missing baseline / scenario failure, 2 usage.
 set -uo pipefail
 
@@ -17,9 +21,9 @@ root=$(cd "$here/../.." && pwd)
 out=$root/.dev/visual
 update=0 determinism=0 keep=0 langs="en fr" only=""
 # Perceptual threshold: a pixel counts as different when a channel differs by more than 2% (-fuzz 2%,
-# absorbs antialiasing/hinting noise); a scenario regresses when more than MAX_AE_PPM parts per million of
-# the 2073600 pixels differ (default 500 ppm = 1037 px, about one 32x32 patch).
-max_ppm=${VISUAL_MAX_PPM:-500}
+# absorbs antialiasing/hinting noise); a scenario regresses when more than max_px pixels differ. 150 px is
+# 3x the determinism limit (50) and well below one hover or selection highlight (603 px for an Apps tile).
+max_px=${VISUAL_MAX_PX:-150}
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -28,7 +32,7 @@ while [[ $# -gt 0 ]]; do
     --keep) keep=1 ;;
     --lang) langs=${2:?--lang needs en|fr|both}; [[ $langs == both ]] && langs="en fr"; shift ;;
     --only) only=${2:?--only needs a comma list}; shift ;;
-    -h|--help) sed -n 2,14p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,19p "$0"; exit 0 ;;
     *) echo "visual: unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -47,6 +51,17 @@ done
 [[ -z $only || ,$only, == *,lock,* ]] && scenarios+=(lock)
 
 mkdir -p "$out"
+
+# Tear the nested session down on any exit, but only when this run started it.
+was_running=0
+[[ -s $root/.dev/nested.pid ]] && kill -0 "$(<"$root/.dev/nested.pid")" 2>/dev/null && was_running=1
+cleanup() {
+  if (( ! keep && ! was_running )); then
+    "$root/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 # run_all DIR: every scenario x language, shots into DIR as <name>.<lang>.png. Returns the number of failed scenarios.
 run_all() {
@@ -89,15 +104,14 @@ if (( determinism )); then
     n0=$(ae 0% "$f" "$out/run2/$b" "$out/diffs/determinism-$b")
     n=$(ae 2% "$f" "$out/run2/$b" "$out/diffs/determinism-$b")
     printf '%-34s %12s %12s\n' "$b" "$n0" "$n"
-    (( n <= ${VISUAL_DET_MAX_PX:-50} )) || status=1
+    # -1 (compare error: size mismatch, unreadable file) is a failure, never a pass.
+    if (( n < 0 || n > ${VISUAL_DET_MAX_PX:-50} )); then status=1; fi
   done
   (( status == 0 )) && echo "DETERMINISM PASS" || echo "DETERMINISM FAIL"
-  (( keep )) || "$root/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
   exit "$status"
 fi
 
 run_all "$shots" || status=1
-(( keep )) || "$root/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
 
 if (( update )); then
   rm -rf "$out/candidates"; mkdir -p "$out/candidates"
@@ -125,8 +139,8 @@ for f in "$shots"/*.png; do
     continue
   fi
   ppm=$(( n * 1000000 / total ))
-  if (( ppm > max_ppm )); then
-    printf '%-30s %10s %8s  %s\n' "$b" "$n" "$ppm" "FAIL (diff: .dev/visual/diffs/$b)"
+  if (( n > max_px )); then
+    printf '%-30s %10s %8s  %s\n' "$b" "$n" "$ppm" "FAIL (> $max_px px; diff: .dev/visual/diffs/$b)"
     status=1
   else
     printf '%-30s %10s %8s  %s\n' "$b" "$n" "$ppm" "ok"

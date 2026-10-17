@@ -160,7 +160,7 @@ tile_x() { # <index> <count>
 
 # ---- Window helpers ----
 open_foot() { # -> PID
-  WAYLAND_DISPLAY=$sock setsid foot >/dev/null 2>&1 </dev/null &
+  WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot >/dev/null 2>&1 </dev/null &
   echo $!
 }
 client() { # <pid> -> "<address> <x> <y> <w> <h> <workspace name>" (x/y relative to the output)

@@ -255,10 +255,10 @@ say "  bridge resources (ADR-0008 budget: <= 20 MB RSS): $(ps -o rss=,time= -p "
 # ---- GTK4 (no DBusMenu): T0 ----
 say ""
 gtk_app=foot
-gtk_cmd=(/usr/bin/foot)
+gtk_cmd=(/usr/bin/foot)  # isolation-ok: start_app runs it with HOME and XDG_* in a private home
 if [[ -x /usr/bin/nautilus ]] && ldd /usr/bin/nautilus 2>/dev/null | grep -q 'libgtk-4'; then
   gtk_app=nautilus
-  gtk_cmd=(/usr/bin/nautilus --new-window)
+  gtk_cmd=(/usr/bin/nautilus --new-window)  # isolation-ok: start_app runs it with HOME and XDG_* in a private home
 fi
 say "[T0] $gtk_app (no DBusMenu export)"
 start_app "$gtk_app" "${gtk_cmd[@]}"

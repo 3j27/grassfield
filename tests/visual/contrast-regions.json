@@ -1,5 +1,5 @@
 {
- "_doc": "Boxes [x,y,w,h] in GF-REF pixels (1920x1080, scale 1, English, default layout) around known text items and icons. kind: text >= 4.5:1, large|icon >= 3:1. Re-measure when a layout changes (see docs/testing/visual.md).",
+ "_doc": "Boxes [x,y,w,h] in GF-REF pixels (1920x1080, scale 1, English, default layout) around known text items and icons. kind: text >= 4.5:1, large|icon >= 3:1. \"image\": true marks an image icon that the glyph-mask hook cannot recolour (not measured). Re-measure when a layout changes (see docs/testing/visual.md).",
  "surfaces": {
   "desktop": [
    {"name": "menubar app name", "box": [40, 5, 60, 14], "kind": "text"},
@@ -9,8 +9,8 @@
    {"name": "icon label Notes.txt", "box": [1820, 236, 80, 13], "kind": "text"},
    {"name": "icon label Projects", "box": [1820, 348, 80, 13], "kind": "text"},
    {"name": "icon label Report.md", "box": [1820, 460, 80, 13], "kind": "text"},
-   {"name": "icon Projects folder", "box": [1802, 266, 116, 80], "kind": "icon"},
-   {"name": "icon Notes document", "box": [1802, 156, 116, 70], "kind": "icon"}
+   {"name": "icon Projects folder", "box": [1802, 266, 116, 80], "kind": "icon", "image": true},
+   {"name": "icon Notes document", "box": [1802, 156, 116, 70], "kind": "icon", "image": true}
   ],
   "systemmenu": [
    {"name": "About This Computer", "box": [44, 34, 130, 14], "kind": "text"},

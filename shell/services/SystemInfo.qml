@@ -18,7 +18,7 @@ Singleton {
     property string cpu: ""
     property string memory: ""
     property string graphics: ""
-    readonly property string user: Quickshell.env("USER")
+    readonly property string user: VisualFixtures.active ? VisualFixtures.user : Quickshell.env("USER")
 
     // Pure parsers (exposed for tests).
     function osReleaseValue(text: string, key: string): string {
@@ -98,7 +98,7 @@ Singleton {
         id: hostFile
         path: "/proc/sys/kernel/hostname"
         printErrors: false
-        onLoaded: root.hostname = text().trim()
+        onLoaded: root.hostname = VisualFixtures.active ? VisualFixtures.hostname : text().trim()
     }
 
     Process {

@@ -18,17 +18,28 @@ VS_SHOTS=${VISUAL_SHOTS:-$VS_STATE/shots}
 VS_LANG=${VISUAL_LANG:-en}
 VS_OUTPUT=GF-REF
 VS_FIXED_TIME="2026-10-17T09:41:00"
-VS_PARK_X=200
-VS_PARK_Y=700
+# Pointer parking (vs_park): a fixed spot on GF-REF in the left margin, where no scenario surface (Apps cell, Dock
+# tile, Search row, popup menu, window, Overview thumbnail) extends, so no hover state is a race. The cursor is part
+# of the screenshot; its position is fixed. (A second nested output would be better still, but a pointer there
+# takes the focus away from focus-bound surfaces such as Search, Apps and the notification banners.)
+VS_PARK_X=24
+VS_PARK_Y=540
 
-# Stable absolute path: the Files breadcrumb shows it (not under the worktree).
-VS_FILES=/tmp/grassfield-visual/files-sandbox
+# Files sandbox folder: under this worktree's .dev/visual (never /tmp: fixed and shared between worktrees). The
+# breadcrumb and the Search subtitle show the absolute path; those pixels are masked (VS_MASK), see docs/testing/visual.md.
+VS_FILES=$VS_STATE/files-sandbox
 
 mkdir -p "$VS_STATE" "$VS_SHOTS"
 
 vs_ipc() { "$VS_HERE/ipc.sh" "$@"; }
 vs_pointer() { "$VS_ROOT/scripts/dev/pointer.sh" output "$VS_OUTPUT" "$@"; }
 vs_sleep() { sleep "${1:-0.5}"; }
+
+# Park the pointer on the fixed spot of GF-REF, then let hover state settle (VS_HOVER_SETTLE seconds).
+vs_park() {
+  vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
+  vs_sleep "${VS_HOVER_SETTLE:-0.8}"
+}
 
 vs_nested_wayland() { cat "$VS_DEV/nested.wayland"; }
 
@@ -63,11 +74,12 @@ vs_session() {
   local lang=${1:-$VS_LANG} cur=""
   vs_fixtures
   export GRASSFIELD_FIXED_TIME=$VS_FIXED_TIME
+  export GRASSFIELD_VISUAL_FIXTURES=1  # fixed Wi-Fi/Bluetooth/user/battery (shell/services/VisualFixtures.qml, dev only)
   export LC_ALL=en_US.UTF-8
   export GRASSFIELD_DESKTOP_SCREEN=$VS_OUTPUT
   export GRASSFIELD_SEARCH_ROOT=$VS_FILES
   # Dev state/config of THIS worktree only (never the owner's): defaults, no notification history.
-  rm -rf "$VS_DEV/state/"* "$VS_DEV/config/"* 2>/dev/null || true
+  rm -rf "$VS_DEV/state/"* "$VS_DEV/config/"* "$VS_DEV/isolated/visual" 2>/dev/null || true
   [[ -f $VS_STATE/session.lang ]] && cur=$(<"$VS_STATE/session.lang")
   if ! vs_nested_running; then
     "$VS_ROOT/scripts/dev/nested-up.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop"
@@ -104,7 +116,10 @@ vs_spawn() {
   local sock bus=""
   sock=$(vs_nested_wayland)
   [[ -f $VS_DEV/bus.address ]] && bus=$(<"$VS_DEV/bus.address")
-  env WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="${bus:-}" LC_ALL=en_US.UTF-8 \
+  # scripts/dev/isolated.sh: XDG_* and GRASSFIELD_*_HOME under .dev/ (config/state shared with the nested shell,
+  # so an app shows the settings the shell wrote), never the owner's home.
+  "$VS_ROOT/scripts/dev/isolated.sh" --name visual --config-home "$VS_DEV/config" --state-home "$VS_DEV/state" -- \
+    env WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="${bus:-}" LC_ALL=en_US.UTF-8 \
     QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$VS_ROOT/ui:$VS_DEV/build/qml" \
     GRASSFIELD_TRANSLATIONS_DIR="$VS_DEV/translations" GRASSFIELD_LANG="$(<"$VS_STATE/session.lang")" \
     HYPRLAND_INSTANCE_SIGNATURE="$(<"$VS_DEV/nested.instance")" "$@" >/dev/null 2>&1 </dev/null &
@@ -120,19 +135,20 @@ vs_reset() {
   vs_ipc apps close >/dev/null || true
   vs_ipc overview close >/dev/null || true
   vs_ipc dock unhover >/dev/null || true
-  vs_ipc wallpaper set "" >/dev/null || true
+  vs_wallpaper "" || true
+  vs_ipc visual glyphs normal >/dev/null || true
   vs_ipc controlcenter appearance "$appearance" >/dev/null
   vs_ipc controlcenter transparency "$transparency" >/dev/null
   vs_ipc controlcenter reduceTransparency false >/dev/null
   vs_ipc controlcenter reduceMotion true >/dev/null
   vs_ipc notifications dnd false >/dev/null || true
-  vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
-  vs_sleep 0.8
+  vs_park
 }
 
 # vs_capture NAME: GF-REF screenshot → $VS_SHOTS/NAME.<lang>.png
 vs_capture() {
   local name=$1
+  [[ -n ${VS_NOPARK:-} ]] || vs_park
   vs_sleep "${VS_SETTLE:-1}"
   "$VS_ROOT/scripts/dev/shot.sh" "visual-$name" "$VS_OUTPUT" >/dev/null
   cp "$VS_DEV/shots/visual-$name.png" "$VS_SHOTS/$name.$VS_LANG.png"
@@ -143,6 +159,24 @@ vs_capture() {
     magick "$VS_SHOTS/$name.$VS_LANG.png" -fill black -draw "rectangle $x1,$y1 $x2,$y2" "$VS_SHOTS/$name.$VS_LANG.png"
   done
   echo "$VS_SHOTS/$name.$VS_LANG.png"
+}
+
+# vs_wallpaper PATH: cover the artwork with an image (dev IPC validates it: absolute .png/.jpg/.jpeg regular file
+# under 64 MB) and wait for the outcome; "" restores the artwork. Fails with the refusal reason.
+vs_wallpaper() {
+  local r i
+  r=$(vs_ipc wallpaper set "$1") || return 1
+  if [[ $r == validating ]]; then
+    for i in $(seq 1 40); do
+      r=$(vs_ipc wallpaper status)
+      [[ $r == validating ]] || break
+      sleep 0.1
+    done
+  fi
+  case $r in
+    ok|applied) return 0 ;;
+    *) echo "visual: wallpaper $1: $r" >&2; return 1 ;;
+  esac
 }
 
 # Three test notifications on the private bus.

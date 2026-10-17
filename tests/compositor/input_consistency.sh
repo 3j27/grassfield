@@ -60,7 +60,7 @@ pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log
 # so cat gets every byte at once (no line buffering).
 foot_capture() { # <capture file> -> prints the foot PID
   : >"$1"
-  WAYLAND_DISPLAY=$sock setsid foot -e sh -c \
+  WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot -e sh -c \
     'stty raw -echo; printf "\033[?1000h\033[?1006h"; exec cat -v >"$0"' "$1" \
     >/dev/null 2>&1 </dev/null &
   echo $!

@@ -407,7 +407,7 @@ Variants {
                     y: (parent.height - height) / 2
                     size: Tokens.menuIconSize
                     name: "search"
-                    color: Tokens.colorDark.textSecondary
+                    color: Appearance.darkColors.textSecondary
                 }
 
                 TextInput {
@@ -416,7 +416,7 @@ Variants {
                     width: parent.width - x - Tokens.spacingMd
                     height: parent.height
                     verticalAlignment: TextInput.AlignVCenter
-                    color: Tokens.colorDark.text
+                    color: Appearance.darkColors.text
                     selectionColor: Appearance.colors.accent
                     selectedTextColor: Appearance.colors.accentText
                     font.family: Appearance.fontFamily
@@ -439,7 +439,7 @@ Variants {
                         visible: field.text === "" && field.preeditText === ""
                         text: qsTr("Search")
                         textFormat: Text.PlainText
-                        color: Tokens.colorDark.textSecondary
+                        color: Appearance.darkColors.textSecondary
                         font: field.font
                     }
                 }
@@ -459,7 +459,7 @@ Variants {
                 visible: root.controller.searching && root.controller.items.length === 0
                 text: qsTr("No results")
                 textFormat: Text.PlainText
-                color: Tokens.colorDark.textSecondary
+                color: Appearance.darkColors.textSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyTitleSize
             }
@@ -495,7 +495,7 @@ Variants {
                             width: Tokens.appsDotSize
                             height: Tokens.appsDotSize
                             radius: width / 2
-                            color: Tokens.colorDark.text
+                            color: Appearance.darkColors.text
                             opacity: dot.current ? 1 : Tokens.appsDotInactiveOpacity
                         }
 
@@ -577,7 +577,7 @@ Variants {
                     height: panel.nameHeight
                     horizontalAlignment: TextInput.AlignHCenter
                     verticalAlignment: TextInput.AlignVCenter
-                    color: Tokens.colorDark.text
+                    color: Appearance.darkColors.text
                     selectionColor: Appearance.colors.accent
                     selectedTextColor: Appearance.colors.accentText
                     font.family: Appearance.fontFamily

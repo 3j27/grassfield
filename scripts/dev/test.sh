@@ -82,6 +82,12 @@ if [[ -f /usr/include/gtest/gtest.h ]]; then
 else
   echo "SKIP: tests/unit/menu-bridge (gtest not installed)"
 fi
+# Isolation: no test or dev script may start an app (grassfield-settings/files/preview, foot, ...) without
+# scripts/dev/isolated.sh (nothing may be written to the owner's home), and the checker itself is tested.
+python3 -I tests/tools/check-isolation.py --selftest || status=1
+python3 -I tests/tools/check-isolation.py || status=1
+# Visual suite tooling: contrast pixel reading and glyph-mask measurement on synthetic images.
+python3 -I tests/visual/test_contrast.py || status=1
 if [[ -x compositor/build/grassfield-compositor-tests ]]; then
   compositor/build/grassfield-compositor-tests || status=1
 fi

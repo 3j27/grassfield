@@ -51,7 +51,7 @@ end_epoch=$((start_epoch + duration))
 say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" | tee -a "$log"; }
 rss_kb() { awk '/^VmRSS:/ {print $2}' "/proc/$hypr_pid/status" 2>/dev/null || echo "?"; }
 pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log" 2>&1; }
-foot_bg() { WAYLAND_DISPLAY=$sock setsid foot "$@" >/dev/null 2>&1 </dev/null & echo $!; }
+foot_bg() { WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot "$@" >/dev/null 2>&1 </dev/null & echo $!; }
 
 # Output size, for targets that stay clear of the menu bar (top) and the Dock (bottom).
 read -r out_w out_h < <(timeout 20 "$root/scripts/dev/pointer.sh" outputs 2>/dev/null \

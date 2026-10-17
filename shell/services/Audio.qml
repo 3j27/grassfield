@@ -10,9 +10,10 @@ Singleton {
     id: root
 
     readonly property var sink: Pipewire.defaultAudioSink
-    readonly property bool ready: sink !== null && sink.audio !== null
-    readonly property real volume: ready ? sink.audio.volume : 0
-    readonly property bool muted: ready ? sink.audio.muted : false
+    // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): an output at 50 percent, not muted.
+    readonly property bool ready: VisualFixtures.active || (sink !== null && sink.audio !== null)
+    readonly property real volume: VisualFixtures.active ? 0.5 : (ready ? sink.audio.volume : 0)
+    readonly property bool muted: VisualFixtures.active ? false : (ready ? sink.audio.muted : false)
     readonly property string iconName: !ready || muted || volume <= 0 ? "volume-mute"
         : volume < 0.34 ? "volume-1"
         : volume < 0.67 ? "volume-2"
@@ -48,7 +49,7 @@ Singleton {
     signal devSuppressed(string what)
 
     function setVolume(value: real): void {
-        if (!ready)
+        if (!ready || VisualFixtures.active)
             return;
         let v = Math.max(0, Math.min(1, value));
         if (devSession) {
