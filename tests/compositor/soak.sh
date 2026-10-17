@@ -11,8 +11,9 @@
 # New windows open centered on the output, so their titlebar is at a known place:
 #   SOAK_OUTPUT (GF-REF), SOAK_WIN_W (700, foot's default width), SOAK_BAR_Y (250, titlebar middle).
 # At the end: PASS (exit 0) when the nested Hyprland is still alive, `coredumpctl list Hyprland`
-# shows no dump since the start, and the nested log has no grassfield exception; FAIL (exit 1)
-# otherwise; 2 = usage or environment error. Log: .dev/soak-<timestamp>.log.
+# shows no dump of its PID since the start (dumps of other Hyprland instances are listed, not counted),
+# and the nested log has no grassfield exception; FAIL (exit 1) otherwise; 2 = usage or environment
+# error. Log: .dev/soak-<timestamp>.log.
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -152,10 +153,17 @@ fi
 dumps=$(coredumpctl --no-pager list Hyprland --since "$start_human" 2>&1)
 say "check: coredumpctl --no-pager list Hyprland --since '$start_human':"
 printf '%s\n' "$dumps" | tee -a "$log"
-if ! grep -q 'No coredumps found' <<<"$dumps"; then
-  say "check: FAIL new Hyprland core dump(s)"
-  fail=1
-fi
+# Other Hyprland instances (e.g. other worktrees' nested sessions) may dump too: only this instance's
+# PID fails the run; the others are listed with their command line.
+pids=$(coredumpctl --no-pager --json=short list Hyprland --since "$start_human" 2>/dev/null | jq -r '.[].pid' 2>/dev/null)
+for p in $pids; do
+  if [[ $p == "$hypr_pid" ]]; then
+    say "check: FAIL core dump of the nested Hyprland (pid $p)"
+    fail=1
+  else
+    say "check: core dump of another Hyprland (pid $p, not this nested instance): $(coredumpctl --no-pager info "$p" 2>/dev/null | sed -n 's/^ *Command Line: //p' | head -n 1)"
+  fi
+done
 
 if [[ -r $hyprlog ]]; then
   exceptions=$(grep -c '\[grassfield\].*exception' "$hyprlog")
