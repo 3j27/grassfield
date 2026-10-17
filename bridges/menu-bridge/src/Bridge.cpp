@@ -8,6 +8,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QFile>
 #include <QLocalSocket>
+#include <QTimer>
 
 #include <sys/stat.h>
 
@@ -18,8 +19,7 @@ namespace gf::menubridge {
     namespace {
         constexpr int       kDBusTimeoutMs   = 2000;
         constexpr qsizetype kMaxPendingWrite = 16 * 1024 * 1024; // a shell that stops reading is dropped
-        constexpr int       kMaxPenalties    = 256;              // remembered (pid, path) pairs
-        constexpr int       kMaxBackoffExp   = 6;                // 1, 2, 4 ... 64 s
+        constexpr int       kCallTimeoutMs   = 3000;             // MenuClient::kCallTimeoutMs (+ slack below)
 
         QDBusMessage busCall(const char* method, const QString& name) {
             QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"), QStringLiteral("org.freedesktop.DBus"),
@@ -33,7 +33,6 @@ namespace gf::menubridge {
         m_server.setSocketOptions(QLocalServer::UserAccessOption);
         m_server.setMaxPendingConnections(2);
         connect(&m_server, &QLocalServer::newConnection, this, [this] { onNewConnection(); });
-        m_clock.start();
     }
 
     Bridge::~Bridge() {
@@ -49,7 +48,6 @@ namespace gf::menubridge {
             *error = dirError;
             return false;
         }
-        loadInflight();
         const QByteArray local = QFile::encodeName(m_socketPath);
         struct stat      st{};
         if (::lstat(local.constData(), &st) == 0) {
@@ -65,6 +63,8 @@ namespace gf::menubridge {
             }
             QLocalServer::removeServer(m_socketPath); // stale socket of a previous run
         }
+        // Only now: a second instance that found the live bridge above must not touch its state file.
+        loadState();
         if (!m_server.listen(m_socketPath)) {
             *error = QStringLiteral("cannot listen on %1: %2").arg(m_socketPath, m_server.errorString());
             return false;
@@ -77,6 +77,8 @@ namespace gf::menubridge {
     void Bridge::stop() {
         setRegistrar(false);
         dropAll();
+        m_calls.clear(); // a clean stop leaves nothing in flight
+        saveState();
         if (m_client) {
             m_client->disconnect(this);
             m_client->abort();
@@ -261,10 +263,11 @@ namespace gf::menubridge {
         if (m_pending.value(msg.window) != token)
             return;
         close(msg.window); // a previous menu of this window
-        const QString key = penaltyKey(msg.pid, msg.path);
-        if (QString why; refused(key, &why)) {
+        // The application's identity as the bridge observes it (the pid was checked against the bus name's owner).
+        const QString key = appIdentity(msg.pid);
+        if (QString why; m_penalties.refused(key, &why)) {
             m_pending.remove(msg.window);
-            log(QStringLiteral("window %1: %2 %3 (pid %4) refused: %5").arg(msg.window, owner, msg.path).arg(msg.pid).arg(why));
+            log(QStringLiteral("window %1: %2 %3 (pid %4, %5) refused: %6").arg(msg.window, owner, msg.path).arg(msg.pid).arg(key, why));
             sendError(msg.window, QStringLiteral("backoff"), why);
             return;
         }
@@ -276,12 +279,12 @@ namespace gf::menubridge {
         m_opened.insert(msg.window, SOpened{.service = msg.service, .path = msg.path, .pid = msg.pid});
         m_order.append(msg.window);
         m_keyOf.insert(msg.window, key);
-        markInflight(key, true);
+        connect(c, &MenuClient::callBegun, this, [this, key] { beginCall(key); });
+        connect(c, &MenuClient::callEnded, this, [this, key] { endCall(key); });
         connect(c, &MenuClient::menuChanged, this, [this, c, key](const QString& window) {
             if (m_menus.value(window) != c)
                 return;
-            m_penalties.remove(key);
-            markInflight(key, false);
+            m_penalties.delivered(key);
             send(menuMessage(window, ++m_revision[window], c->items()));
         });
         connect(c, &MenuClient::failed, this, [this, c](const QString& window, const QString& code, const QString& message) {
@@ -291,81 +294,75 @@ namespace gf::menubridge {
             sendError(window, code, message);
             close(window);
         });
-        log(QStringLiteral("window %1: menu %2 %3 (pid %4) opened").arg(msg.window, owner, msg.path).arg(msg.pid));
+        log(QStringLiteral("window %1: menu %2 %3 (pid %4, %5) opened").arg(msg.window, owner, msg.path).arg(msg.pid).arg(key));
         c->start();
-    }
-
-    QString Bridge::penaltyKey(qint64 pid, const QString& path) const {
-        return QString::number(pid) + u' ' + path;
-    }
-
-    bool Bridge::refused(const QString& key, QString* why) const {
-        const auto it = m_penalties.constFind(key);
-        if (it == m_penalties.constEnd())
-            return false;
-        if (it->permanent) {
-            *why = QStringLiteral("this application's menu was refused for the rest of the session");
-            return true;
-        }
-        const qint64 left = it->untilMs - m_clock.elapsed();
-        if (left <= 0)
-            return false;
-        *why = QStringLiteral("this application's menu failed %1 times, retrying in %2 s").arg(it->failures).arg((left + 999) / 1000);
-        return true;
     }
 
     void Bridge::recordFailure(const QString& window, const QString& code) {
         const QString key = m_keyOf.value(window);
         if (key.isEmpty())
             return;
-        markInflight(key, false);
-        if (m_penalties.size() >= kMaxPenalties && !m_penalties.contains(key))
-            m_penalties.erase(m_penalties.begin()); // bounded memory; an arbitrary older entry is forgotten
-        Penalty& p = m_penalties[key];
-        ++p.failures;
-        if (code == QLatin1String("oversized"))
-            p.permanent = true;
+        if (code == QLatin1String("gone"))
+            m_penalties.leftCleanly(key);
+        else if (code == QLatin1String("oversized"))
+            m_penalties.record(key, Offence::Oversized);
         else if (code == QLatin1String("layout-failed"))
-            p.untilMs = m_clock.elapsed() + (1000LL << qMin(p.failures, kMaxBackoffExp));
+            m_penalties.record(key, Offence::LayoutFailed);
+        saveState();
     }
 
-    void Bridge::markInflight(const QString& key, bool on) {
-        if (on ? m_inflight.contains(key) : !m_inflight.contains(key))
-            return;
-        if (on)
-            m_inflight.insert(key);
-        else
-            m_inflight.remove(key);
-        QFile f(m_socketPath + QStringLiteral(".inflight"));
-        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-            return;
-        for (const QString& k : std::as_const(m_inflight))
-            f.write(k.toUtf8() + '\n');
+    void Bridge::beginCall(const QString& id) {
+        if (m_calls[id]++ == 0)
+            saveState(); // written before the call leaves: a crash while it is outstanding is attributed
     }
 
-    void Bridge::loadInflight() {
-        // A bridge that died while a first GetLayout was outstanding (killed by the memory limit) blames those
-        // applications: they stay refused for the rest of the session so a restart does not repeat the fetch.
-        QFile f(m_socketPath + QStringLiteral(".inflight"));
-        if (!f.open(QIODevice::ReadOnly))
+    void Bridge::endCall(const QString& id, int n) {
+        const auto it = m_calls.find(id);
+        if (it == m_calls.end())
             return;
-        const QList<QByteArray> lines = f.read(64 * 1024).split('\n');
-        f.close();
-        for (const QByteArray& line : lines) {
-            if (line.isEmpty() || m_penalties.size() >= kMaxPenalties)
-                continue;
-            log(QStringLiteral("a previous run died while reading the menu of \"%1\": refused").arg(QString::fromUtf8(line)));
-            m_penalties[QString::fromUtf8(line)].permanent = true;
+        *it -= n;
+        if (*it <= 0) {
+            m_calls.erase(it);
+            saveState();
         }
-        QFile::remove(f.fileName());
+    }
+
+    void Bridge::saveState() {
+        if (!m_stateOwned)
+            return; // an instance that never passed the singleton probe must not overwrite the live bridge's state
+        const QStringList inflight = m_calls.keys();
+        if (!writeStateFile(stateFile(), m_penalties.serialize(inflight, bootId())))
+            log(QStringLiteral("cannot write %1: crash attribution is degraded").arg(stateFile()));
+    }
+
+    void Bridge::loadState() {
+        // A previous run that died while a call to an application was outstanding (killed by the memory limit, or
+        // crashed on its reply) blames those applications: they are refused (Penalties.h) so a restart does not
+        // repeat the call. The file is rewritten at once with the outcome.
+        QByteArray data;
+        QString    why;
+        if (readStateFile(stateFile(), &data, &why)) {
+            QStringList crashed;
+            if (!m_penalties.load(data, bootId(), &why, &crashed))
+                log(QStringLiteral("ignored %1: %2").arg(stateFile(), why));
+            for (const QString& id : std::as_const(crashed))
+                log(QStringLiteral("a previous run died while a call to \"%1\" was in flight: refused").arg(id));
+        } else if (!why.isEmpty()) {
+            log(QStringLiteral("ignored %1: %2").arg(stateFile(), why));
+            QFile::remove(stateFile()); // unlink never follows a symlink
+        }
+        m_stateOwned = true; // past the singleton probe (listen): this instance now owns the file
+        saveState();
     }
 
     void Bridge::close(const QString& window) {
-        if (const QString key = m_keyOf.take(window); !key.isEmpty())
-            markInflight(key, false);
+        const QString key = m_keyOf.take(window);
         m_pending.remove(window);
         if (MenuClient* c = m_menus.take(window)) {
             c->disconnect(this);
+            // Replies still on their way keep the application marked until they arrived or timed out.
+            if (const int n = c->outstanding(); n > 0 && !key.isEmpty())
+                QTimer::singleShot(kCallTimeoutMs + 1000, this, [this, key, n] { endCall(key, n); });
             c->deleteLater();
         }
         m_opened.remove(window);

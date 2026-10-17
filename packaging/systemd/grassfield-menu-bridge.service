@@ -45,7 +45,7 @@ CapabilityBoundingSet=
 # Resource budget (ADR-0008: <= 20 MB RSS expected, idle CPU 0 %).
 # Measured: idle ~15 MB; one 30 MB GetLayout reply peaked at 115 MB (the message is held several times while read).
 # MemoryHigh throttles at 64 MB, MemoryMax = 256 MB leaves room for a reply of ~60 MB; the bridge refuses larger
-# layouts after the first read and remembers an application that killed it (see Bridge::refused).
+# layouts after the first read and remembers an application that killed it (docs/specs/menu-bridge.md MB14).
 MemoryHigh=64M
 MemoryMax=256M
 TasksMax=16

@@ -189,8 +189,9 @@ Singleton {
             break;
         case "error":
             console.info("grassfield: menu bridge:", msg.code, msg.window, msg.message);
-            // The window's menu is unusable (spoofed name, app gone, unreadable layout): back to T0 for it.
-            if (msg.window !== "" && msg.window === root.openedWindow && ["pid-mismatch", "no-owner", "gone", "layout-failed"].indexOf(msg.code) >= 0) {
+            // The window's menu is unusable (spoofed name, app gone, unreadable, oversized or refused layout, also
+            // when the refusal answers a re-read of a menu that was shown): clear it, back to T0 for the window.
+            if (msg.window !== "" && msg.window === root.openedWindow && Logic.menuLost(msg.code)) {
                 root.items = [];
                 root.itemsWindow = "";
             }

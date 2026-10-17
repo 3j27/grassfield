@@ -84,6 +84,14 @@ TestCase {
         return JSON.stringify({type: "menu", window: "1a", revision: 3, items: items});
     }
 
+    function test_menuLostCodes() {
+        // A refusal on a re-read ("oversized", "backoff") must clear the menu that was on screen, like the older codes.
+        for (const code of ["pid-mismatch", "no-owner", "gone", "layout-failed", "oversized", "backoff"])
+            verify(Bridge.menuLost(code), code);
+        for (const code of ["bad-request", "busy", "registrar-busy", "unknown-item", "unknown", ""])
+            verify(!Bridge.menuLost(code), code);
+    }
+
     function test_bridgeLines() {
         compare(Bridge.parseBridgeLine("{\"type\":\"status\",\"v\":\"menu/1\",\"state\":\"active\",\"registrar\":true}"), {type: "status", state: "active", registrar: true});
         compare(Bridge.parseBridgeLine("{\"type\":\"status\",\"v\":\"menu/9\",\"state\":\"active\",\"registrar\":true}"), null);

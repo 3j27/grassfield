@@ -189,7 +189,12 @@ namespace gf::menubridge {
             arg.endMapEntry();
             if (!isKnownProperty(key))
                 continue;
-            out.properties.insert(key, key == QLatin1String("shortcut") ? readShortcut(value.variant()) : value.variant());
+            QVariant v = key == QLatin1String("shortcut") ? readShortcut(value.variant()) : value.variant();
+            // Only what the mapping can use is kept: a label of megabytes would otherwise stay resident until the
+            // whole tree is mapped (plainLabel keeps kLabel characters; whitespace runs and mnemonics need slack).
+            if (key == QLatin1String("label") && v.metaType() == QMetaType::fromType<QString>() && v.toString().size() > limits::kLabel * 8)
+                v = v.toString().left(limits::kLabel * 8);
+            out.properties.insert(key, std::move(v));
         }
         arg.endMap();
         arg.beginArray();

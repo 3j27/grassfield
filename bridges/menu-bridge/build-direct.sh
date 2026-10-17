@@ -11,7 +11,7 @@ mkdir -p "$out/menu-bridge-moc"
 
 # GCC 16 warns inside Qt headers (-Wsfinae-incomplete); keep our own warnings visible.
 cxxflags=(-std=c++20 -O2 -g -Wall -Wextra -Wno-sfinae-incomplete -fPIC)
-logic=("$here/src/Protocol.cpp" "$here/src/Layout.cpp" "$here/src/Safety.cpp" "$here/src/DBusObjects.cpp")
+logic=("$here/src/Protocol.cpp" "$here/src/Layout.cpp" "$here/src/Safety.cpp" "$here/src/Penalties.cpp" "$here/src/DBusObjects.cpp")
 
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)

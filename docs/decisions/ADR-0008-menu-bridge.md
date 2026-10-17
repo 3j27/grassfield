@@ -18,7 +18,7 @@ Option 1: `bridges/menu-bridge/`, binary `grassfield-menu-bridge` (C++/Qt 6: QtC
 `build-direct.sh`), systemd **user** unit `packaging/systemd/grassfield-menu-bridge.service` (`PartOf=` and
 `Requisite=graphical-session.target`, `ConditionEnvironment=GRASSFIELD_SESSION=1`, hardened: `NoNewPrivileges`,
 `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp`, `PrivateNetwork`, `RestrictAddressFamilies=AF_UNIX`,
-`SystemCallFilter=@system-service`, empty capability set, `MemoryMax=64M`, `TasksMax=16`), started by
+`SystemCallFilter=@system-service`, empty capability set, `MemoryHigh=64M` / `MemoryMax=256M`, `TasksMax=16`; measured: idle ~15 MB, one 30 MB reply peaks at 115 MB, hence the 256 MB kill limit and the crash attribution below), started by
 `config/hypr/grassfield/autostart.lua` before the shell and applications. Contract details: `docs/specs/menu-bridge.md`.
 - **Input**: only from the shell, which is the single consumer of the plugin's `appmenu` events (data flow 1–4 below,
   adopted as proposed). The bridge never trusts names from anywhere else and checks each one (spoofing rule below).
@@ -114,3 +114,11 @@ was refused (`pid-mismatch`).
 - Resource budget: ≤ 20 MB RSS, 0 % idle CPU (event-driven).
 - X11/XWayland apps (RegisterWindow) are not served; Qt under XWayland hides its menu bar while the registrar exists
   (limitation listed in `docs/specs/menu-bridge.md`). Sandboxed apps behind a D-Bus proxy need a later rule.
+
+## Amendment 2026-10-17: crash attribution (global menus counter-review)
+A hostile or buggy application can make the bridge allocate a multiple of its reply and hit `MemoryMax`. Decision: every
+outbound call (GetLayout including re-reads, AboutToShow, Event) is recorded as in flight in `<socket>.state` until its
+reply was handled; a restarted bridge refuses the application whose call was in flight, keyed by its executable
+(`/proc/<pid>/exe`), not its pid, so a new process does not escape. At most one restart per refusal period (15 min,
+doubling to 6 h, decaying); bounded to 128 identities; the file is atomic, symlink-safe, size-bounded and validated.
+Details and residual risks: `docs/specs/menu-bridge.md` MB14 and "Known limitations".

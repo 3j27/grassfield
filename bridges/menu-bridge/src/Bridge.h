@@ -15,6 +15,7 @@
 
 #include "DBusObjects.h"
 #include "MenuClient.h"
+#include "Penalties.h"
 #include "Protocol.h"
 
 #include <QByteArray>
@@ -23,8 +24,6 @@
 #include <QLocalServer>
 #include <QObject>
 #include <QPointer>
-#include <QSet>
-#include <QElapsedTimer>
 #include <QStringList>
 #include <QVariantMap>
 
@@ -56,20 +55,23 @@ namespace gf::menubridge {
         void    open(const ShellMessage& msg);
         void    verified(const ShellMessage& msg, quint64 token, const QString& owner);
         void    close(const QString& window);
-    // Hostile or broken applications (a huge GetLayout reply costs the bridge several times its size in memory):
-    // after a failed first fetch (service pid, path) is refused with a growing back-off, after an oversized layout or a
-    // crash during the fetch for the rest of the session.
-    QString penaltyKey(qint64 pid, const QString& path) const;
-    bool    refused(const QString& key, QString* why) const;
-    void    recordFailure(const QString& window, const QString& code);
-    void    markInflight(const QString& key, bool on);
-    void    loadInflight();
+        // Hostile or broken applications (Penalties.h): refusals are keyed by the application's executable identity.
+        // Every call sent to an application is recorded as in flight in the state file until its reply was handled, so
+        // a bridge that dies meanwhile blames that application in its next run.
+        void    recordFailure(const QString& window, const QString& code);
+        void    beginCall(const QString& id);
+        void    endCall(const QString& id, int n = 1);
+        void    saveState();
+        void    loadState();
         void    dropAll();
         void    setRegistrar(bool wanted);
         void    send(const QByteArray& line);
         void    sendStatus();
         void    sendError(const QString& window, const QString& code, const QString& message);
         QString state() const;
+        QString stateFile() const {
+            return m_socketPath + QStringLiteral(".state");
+        }
 
         QDBusConnection                m_bus;
         QString                        m_socketPath;
@@ -93,16 +95,11 @@ namespace gf::menubridge {
         QStringList                 m_order;   // windows, least recently opened first
         QHash<QString, quint64>     m_pending; // window -> token of the open being verified
         quint64                     m_token = 0;
+        bool                        m_stateOwned = false; // loadState ran: this instance is the one bridge that may write the state file
 
-        struct Penalty {
-            int    failures  = 0;
-            qint64 untilMs   = 0;     // QElapsedTimer milliseconds; refused until then
-            bool   permanent = false;
-        };
-        QHash<QString, Penalty>     m_penalties;
-        QSet<QString>               m_inflight; // keys whose first GetLayout has not answered (mirrored in a file: a crash blames them)
-        QHash<QString, QString>     m_keyOf;    // window -> penalty key
-        QElapsedTimer               m_clock;
+        PenaltyBook                 m_penalties;
+        QHash<QString, int>         m_calls;    // identity -> calls in flight (mirrored in the state file)
+        QHash<QString, QString>     m_keyOf;    // window -> identity
     };
 
 } // namespace gf::menubridge
