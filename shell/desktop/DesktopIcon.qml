@@ -23,6 +23,8 @@ Item {
     property var dragPaths: []
     // Names carried with the internal-rearrange marker format (the selection).
     property var dragNames: []
+    // The current press only cancelled a menu / rename: no tap, drag or menu from it.
+    property bool blocked: false
 
     // Pointer events for the grid.
     signal pressedIcon(int modifiers, bool right)
@@ -32,6 +34,8 @@ Item {
     signal menuRequested(real x, real y)
     signal renameAccepted(string text)
     signal renameCancelled
+    // The rename field lost the active focus (the keyboard went elsewhere).
+    signal renameFocusLost
     signal dragFinished
 
     readonly property bool launcher: Logic.isLauncher(name)
@@ -216,13 +220,14 @@ Item {
             field.focus = false;
     }
 
-    // Focus leaving the field commits nothing: the rename ends.
+    // Focus leaving the field commits nothing: the grid ends the rename (renameFocusLost), unless the
+    // keyboard only went to a click catcher of another output.
     Connections {
         target: field
 
         function onActiveFocusChanged(): void {
             if (root.renaming && !field.activeFocus)
-                root.renameCancelled();
+                root.renameFocusLost();
         }
     }
 
@@ -231,7 +236,7 @@ Item {
     // A press selects at once (a drag of an unselected icon moves it alone); a double tap opens.
     TapHandler {
         acceptedButtons: Qt.LeftButton
-        enabled: !root.renaming
+        enabled: !root.renaming && !root.blocked
         onPressedChanged: if (pressed)
             root.pressedIcon(point.modifiers, false)
         // Release without drag: narrows a multi-selection to this icon.
@@ -241,6 +246,7 @@ Item {
 
     TapHandler {
         acceptedButtons: Qt.RightButton
+        enabled: !root.blocked
         onPressedChanged: if (pressed) {
             const p = root.mapToItem(null, point.position.x, point.position.y);
             root.pressedIcon(Qt.NoModifier, true);
@@ -253,7 +259,7 @@ Item {
     DragHandler {
         id: drag
         target: null
-        enabled: !root.renaming
+        enabled: !root.renaming && !root.blocked
         acceptedButtons: Qt.LeftButton
         dragThreshold: Tokens.desktopIconDragThreshold
         onActiveChanged: {

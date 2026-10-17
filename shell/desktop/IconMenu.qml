@@ -9,6 +9,9 @@ PopupMenu {
 
     property string kind: "desktop"
     property int count: 1
+    // Shortcut hints are shown only for actions that work: the desktop keyboard actions (F2,
+    // Ctrl+Backspace) are off in keyboard safe mode.
+    property bool shortcutsShown: false
 
     signal choose(string action)
 
@@ -26,7 +29,7 @@ PopupMenu {
         {
             id: "rename",
             text: qsTr("Rename"),
-            shortcut: "F2",
+            shortcut: shortcutsShown ? "F2" : "",
             enabled: count === 1
         },
         {
@@ -39,7 +42,7 @@ PopupMenu {
         {
             id: "trash",
             text: qsTr("Move to Trash"),
-            shortcut: "Ctrl+Backspace",
+            shortcut: shortcutsShown ? "Ctrl+Backspace" : "",
             destructive: true
         }
     ] : [

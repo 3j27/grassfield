@@ -28,6 +28,11 @@ FocusScope {
     // beyond the menu itself during the hand-off to the rename field.
     property bool kbMenuMapped: false
     property bool kbMenuHoldsKeys: false
+    // The click catchers of the other outputs are up (DesktopIcons.qml): the menu window may take the keyboard.
+    property bool kbGate: true
+    // A click catcher of another output has the keyboard (the pointer is on that output): a rename
+    // does not end for that, it only stops receiving keys until the pointer is back.
+    property bool kbCatcherHasKeys: false
     // New Folder was chosen and its rename field is not open yet: the menu window keeps the keyboard.
     property bool awaitingFolder: false
     // An icon drag (real drag-and-drop) is in progress.
@@ -94,12 +99,8 @@ FocusScope {
         activeFocusOnTab: false
     }
 
-    // A user press on the desktop: the key sink becomes the focus item at once.
-    function takeFocus(): void {
-        keySink.forceActiveFocus();
-    }
-
-    // End of a rename or menu: the key sink is the scope's focus item again.
+    // The key sink becomes the scope's focus item: at a user press on the desktop and at the end of a
+    // rename or menu.
     function restoreFocus(): void {
         keySink.forceActiveFocus();
     }
@@ -166,6 +167,16 @@ FocusScope {
         restoreFocus();
         focusEvent({
             type: "renameClosed"
+        });
+    }
+
+    // The rename field lost the keyboard. Hyprland gives the keyboard to a click catcher while the pointer is on
+    // another output: that is not the end of the rename. The check is deferred so that the catcher's
+    // activation, delivered right after the desktop's deactivation, is seen.
+    function renameFocusLost(name: string): void {
+        Qt.callLater(() => {
+            if (root.renaming === name && !root.kbCatcherHasKeys)
+                root.endRename();
         });
     }
 
@@ -251,14 +262,45 @@ FocusScope {
             files.trash(paths);
     }
 
+    // While a menu or a rename is active, a press on the desktop surface only cancels it: it never
+    // selects, opens or drags an icon, nor starts a rubber band. The press may come through a window
+    // that covers an icon (an Exclusive surface takes the pointer), so it says nothing about the desktop.
+    // `swallow` keeps the rest of that gesture (drag, release) inert until the pointer is up.
+    property bool swallow: false
+
+    // Returns whether the press was swallowed (a menu or rename was active, now cancelled).
+    function swallowPress(): bool {
+        if (!cancelInteraction())
+            return false;
+        swallow = true;
+        return true;
+    }
+
+    // Ends the open menu or the active rename (never commits, never renames, never trashes). Called by a
+    // press on the desktop surface and by the click catchers of the other outputs (DesktopIcons.qml).
+    // Returns whether there was anything to cancel.
+    function cancelInteraction(): bool {
+        const active = menuOpen || awaitingFolder || renaming !== "";
+        if (menuOpen || awaitingFolder)
+            closeMenu();
+        if (renaming !== "")
+            endRename();
+        return active;
+    }
+
+    // The pointer is up again: the next press counts.
+    PointHandler {
+        acceptedButtons: Qt.AllButtons
+        onActiveChanged: if (!active)
+            root.swallow = false
+    }
+
     // Select by press: Ctrl toggles, Shift adds, otherwise the icon alone (kept as is when it is
     // already part of the selection, so that a drag carries the whole selection).
     function press(name: string, modifiers: int, right: bool): void {
-        root.takeFocus();
-        if (menuOpen)
-            closeMenu();
-        if (renaming !== "" && renaming !== name)
-            endRename();
+        root.restoreFocus();
+        if (swallowPress())
+            return;
         if (modifiers & Qt.ControlModifier) {
             const next = Object.assign({}, selected);
             if (next[name])
@@ -360,6 +402,7 @@ FocusScope {
     // ---- keyboard --------------------------------------------------------------------------------
 
     // Safe mode: off (Keys.enabled), see desktopKeyboardNav. The surface has no keyboard anyway.
+    // Gated off, kept for the macOS-model redesign: do not delete (Space / Glance, F2, Ctrl+Backspace ...).
     Keys.enabled: root.desktopKeyboardNav
     Keys.onPressed: event => {
         if (root.menuOpen) {
@@ -457,11 +500,9 @@ FocusScope {
                 mouse.accepted = false;
                 return;
             }
-            root.takeFocus();
-            if (root.menuOpen)
-                root.closeMenu();
-            if (root.renaming !== "")
-                root.endRename();
+            root.restoreFocus();
+            if (root.swallowPress())
+                return;
             if (mouse.button === Qt.RightButton) {
                 root.clearSelection();
                 root.menuAt = root.mapToItem(null, mouse.x, mouse.y);
@@ -476,7 +517,7 @@ FocusScope {
                 root.clearSelection();
         }
         onPositionChanged: mouse => {
-            if (!pressed || mouse.buttons !== Qt.LeftButton)
+            if (!pressed || mouse.buttons !== Qt.LeftButton || root.swallow)
                 return;
             if (!banding && Math.abs(mouse.x - x0) + Math.abs(mouse.y - y0) < Tokens.desktopIconDragThreshold)
                 return;
@@ -522,6 +563,7 @@ FocusScope {
             renameError: root.renameError
             dragPaths: root.selectedPaths
             dragNames: root.selectedNames
+            blocked: root.swallow
             onPressedIcon: (modifiers, right) => root.press(modelData.name, modifiers, right)
             onTappedIcon: modifiers => root.tap(modelData.name, modifiers)
             onDragActiveChanged: root.dragging = icon.dragActive
@@ -542,6 +584,7 @@ FocusScope {
                     root.renameError = why;
             }
             onRenameCancelled: root.endRename()
+            onRenameFocusLost: root.renameFocusLost(modelData.name)
         }
     }
 
@@ -569,7 +612,7 @@ FocusScope {
         id: menuWin
 
         screen: root.screen
-        visible: root.menuKind !== "" || root.kbMenuMapped
+        visible: (root.menuKind !== "" || root.kbMenuMapped) && root.kbGate
         anchors {
             top: true
             bottom: true
@@ -579,7 +622,7 @@ FocusScope {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: (root.menuKind !== "" || root.kbMenuHoldsKeys) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: (root.menuKind !== "" || root.kbMenuHoldsKeys) && root.kbGate ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.onKeyboardFocusChanged: root.commitMenu()
         WlrLayershell.namespace: "grassfield-icons-menu"
 
@@ -597,6 +640,7 @@ FocusScope {
             sourceComponent: IconMenu {
                 kind: root.menuKind
                 count: root.selectedNames.length
+                shortcutsShown: root.desktopKeyboardNav
                 onChoose: action => root.applyMenu(action)
                 onCloseRequested: root.closeMenu()
             }

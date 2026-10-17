@@ -27,6 +27,8 @@
 //   committed              the desktop's Exclusive commit of the hand-off was sent
 //   keys {hasKeys}         the desktop surface gained or lost the keyboard
 //   settled                the hand-off's grace period is over (the menu window may unmap)
+// A press on a click catcher (another output) ends the menu / rename through the same menuClosed /
+// renameClosed events as a click outside on the hosting output.
 // Anything else (pointer motion, hover, a pointer on another monitor, window events) changes nothing.
 //
 // next(state, event) -> state.
@@ -58,6 +60,13 @@ function menuMapped(state) {
 // The menu window holds the keyboard (Exclusive): while the menu is open and until the desktop's commit is out.
 function menuHoldsKeys(state) {
     return state.mode === "menu" || state.handoff === "commit";
+}
+
+// Click catchers (transparent Overlay surfaces, keyboard None) are mapped on every screen that does not
+// host the menu / rename for as long as either is active, so a press on another output cancels it
+// (an Exclusive layer swallows pointer input elsewhere). Unmapped again when the state is idle.
+function catchersMapped(state) {
+    return state.mode !== "idle";
 }
 
 function next(state, event) {
