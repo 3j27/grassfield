@@ -123,7 +123,11 @@ FocusScope {
         }
     }
 
+    // Cell of an icon; empty for a name without a slot (a delegate can be re-evaluated while a rename
+    // swaps the old name for the new one in the folder model).
     function rectOf(name: string): rect {
+        if (lay[name] === undefined)
+            return Qt.rect(0, 0, 0, 0);
         const s = Logic.slotPos(lay[name].col, lay[name].row, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight);
         return Qt.rect(margin + s.x, topInset + s.y, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight);
     }
