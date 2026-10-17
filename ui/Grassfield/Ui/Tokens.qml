@@ -225,6 +225,22 @@ QtObject {
     readonly property int panelStatusPopupWidth: 260
     // estimate
     readonly property int panelAboutLabelWidth: 100
+    // estimate: round icon button of a Control Center row
+    readonly property int panelCcIconButton: 30
+    // estimate: list row in an expanded Control Center section
+    readonly property int panelCcRowHeight: 34
+    // estimate: height of the top tile grid
+    readonly property int panelCcGridHeight: 144
+    // estimate: width share of the connectivity tile
+    readonly property real panelCcLeftFraction: 0.56
+    // estimate: chevron glyph size
+    readonly property int panelCcChevron: 12
+    // estimate: Now Playing artwork
+    readonly property int panelCcArtSize: 34
+    // estimate: visible rows before a list scrolls
+    readonly property int panelCcListMaxRows: 6
+    // estimate: dev-guard note lifetime in ms
+    readonly property int panelCcNoteTimeout: 3000
     // estimate: width of a percentage readout
     readonly property int panelPercentWidth: 36
     // estimate: centred dialogs sit this fraction of the screen height above centre

@@ -1,0 +1,12 @@
+module qs.overlay.controlcenter
+Label 1.0 Label.qml
+Caption 1.0 Caption.qml
+Tile 1.0 Tile.qml
+NavItem 1.0 NavItem.qml
+RadioRow 1.0 RadioRow.qml
+ListRow 1.0 ListRow.qml
+WifiList 1.0 WifiList.qml
+BluetoothList 1.0 BluetoothList.qml
+SoundList 1.0 SoundList.qml
+NowPlaying 1.0 NowPlaying.qml
+AppearanceSection 1.0 AppearanceSection.qml

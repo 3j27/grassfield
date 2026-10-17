@@ -3,11 +3,30 @@ import QtQuick
 import Grassfield.Ui
 import qs.notifications
 import qs.services
+import qs.overlay.controlcenter
 
-// Control Center, M1 subset: Appearance, Transparency, Reduce Transparency, Reduce Motion, Sound.
-// Every change is applied live and persisted to grassfield.json through Settings.
+// Control Center (spec controlcenter.md): connectivity tile (Wi-Fi, Bluetooth, airplane mode), Focus,
+// Now Playing, Display and Sound sliders, keyboard backlight, and the Appearance section.
+// One section is expanded at a time (`expanded`). Values come live from the services.
 FocusScope {
     id: root
+
+    // "", "wifi", "bluetooth", "sound" or "appearance".
+    property string expanded: ""
+    // Shown while a GRASSFIELD_DEV session suppresses a change to the owner's machine.
+    property bool devNote: false
+
+    readonly property real gap: Tokens.spacingSm
+    readonly property real innerWidth: width - 2 * Tokens.spacingMd
+
+    function toggleSection(id: string): void {
+        expanded = expanded === id ? "" : id;
+    }
+
+    function showDevNote(): void {
+        devNote = true;
+        noteTimer.restart();
+    }
 
     width: Tokens.panelControlCenterWidth
     height: column.implicitHeight + 2 * Tokens.spacingMd
@@ -16,57 +35,39 @@ FocusScope {
 
     Keys.onEscapePressed: Popups.close()
 
-    component Card: Rectangle {
-        default property alias body: inner.data
-        width: parent.width
-        height: inner.implicitHeight + 2 * Tokens.spacingMd
-        radius: Tokens.radiusMenu
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity / 2)
+    // Scanning only while the list is on screen.
+    readonly property bool scanWanted: expanded === "wifi" && Connectivity.wifiEnabled
+    onScanWantedChanged: Connectivity.setScanning(scanWanted)
 
-        Column {
-            id: inner
-            x: Tokens.spacingMd
-            y: Tokens.spacingMd
-            width: parent.width - 2 * Tokens.spacingMd
-            spacing: Tokens.spacingSm
+    Component.onDestruction: {
+        Connectivity.setScanning(false);
+        Audio.devRestore();
+    }
+
+    Timer {
+        id: noteTimer
+        interval: Tokens.panelCcNoteTimeout
+        onTriggered: root.devNote = false
+    }
+
+    Connections {
+        target: Connectivity
+        function onDevSuppressed() {
+            root.showDevNote();
         }
     }
 
-    component Caption: Text {
-        textFormat: Text.PlainText
-        color: Appearance.colors.textSecondary
-        font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.typographyCaptionSize
-        font.weight: Tokens.typographyMenuBoldWeight
-    }
-
-    component Label: Text {
-        textFormat: Text.PlainText
-        color: Appearance.colors.text
-        font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.typographyBodySize
-        font.weight: Tokens.typographyMenuWeight
-    }
-
-    component SwitchRow: Item {
-        id: sw
-        property string text: ""
-        property alias checked: toggle.checked
-        signal toggled(bool checked)
-        width: parent.width
-        height: Tokens.controlToggleHeight
-
-        Label {
-            anchors.verticalCenter: parent.verticalCenter
-            text: sw.text
+    Connections {
+        target: BluetoothState
+        function onDevSuppressed() {
+            root.showDevNote();
         }
+    }
 
-        Toggle {
-            id: toggle
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            accessibleName: sw.text
-            onToggled: value => sw.toggled(value)
+    Connections {
+        target: Audio
+        function onDevSuppressed() {
+            root.showDevNote();
         }
     }
 
@@ -79,166 +80,159 @@ FocusScope {
         id: column
         x: Tokens.spacingMd
         y: Tokens.spacingMd
-        width: root.width - 2 * Tokens.spacingMd
+        width: root.innerWidth
         spacing: Tokens.spacingSm
 
-        Label {
-            text: qsTr("Control Center")
-            font.pixelSize: Tokens.typographyTitleSize
-            font.weight: Tokens.typographyMenuBoldWeight
+        Item {
+            width: parent.width
+            height: title.implicitHeight
+
+            Label {
+                id: title
+                width: parent.width - note.width - Tokens.spacingSm
+                text: qsTr("Control Center")
+                font.pixelSize: Tokens.typographyTitleSize
+                font.weight: Tokens.typographyMenuBoldWeight
+            }
+
+            Caption {
+                id: note
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.devNote
+                elide: Text.ElideNone
+                text: qsTr("dev: not applied")
+            }
         }
 
-        Card {
+        // Top grid: connectivity on the left; Focus and Now Playing on the right.
+        Item {
+            width: parent.width
+            height: Tokens.panelCcGridHeight
+
+            Tile {
+                id: connectivity
+                width: (parent.width - root.gap) * Tokens.panelCcLeftFraction
+                height: parent.height
+                padding: Tokens.spacingSm + Tokens.spacingXs
+
+                Column {
+                    width: parent.width
+                    spacing: (connectivity.height - 2 * connectivity.padding - 3 * Tokens.panelCcIconButton) / 2
+
+                    RadioRow {
+                        iconName: Connectivity.wifiEnabled ? Connectivity.iconName === "wifi-off" ? "wifi-3" : Connectivity.iconName : "wifi-off"
+                        title: qsTr("Wi-Fi")
+                        subtitle: !Connectivity.available || Connectivity.wifiDevice === null ? qsTr("Unavailable")
+                            : !Connectivity.wifiEnabled ? qsTr("Off")
+                            : Connectivity.wifiConnected ? Connectivity.wifiConnected.name : qsTr("Not connected")
+                        on: Connectivity.wifiEnabled && Connectivity.wifiDevice !== null
+                        available: Connectivity.available && Connectivity.wifiDevice !== null
+                        expandable: true
+                        expanded: root.expanded === "wifi"
+                        onToggled: Connectivity.toggleWifi(!Connectivity.wifiEnabled)
+                        onExpandToggled: root.toggleSection("wifi")
+                    }
+
+                    RadioRow {
+                        iconName: "bluetooth"
+                        title: qsTr("Bluetooth")
+                        subtitle: BluetoothState.description
+                        on: BluetoothState.enabled
+                        available: BluetoothState.available
+                        expandable: true
+                        expanded: root.expanded === "bluetooth"
+                        onToggled: BluetoothState.setEnabled(!BluetoothState.enabled)
+                        onExpandToggled: root.toggleSection("bluetooth")
+                    }
+
+                    RadioRow {
+                        iconName: "airplane"
+                        title: qsTr("Airplane Mode")
+                        subtitle: Connectivity.airplane ? qsTr("Wi-Fi and Bluetooth off") : qsTr("Off")
+                        on: Connectivity.airplane
+                        available: Connectivity.airplaneAvailable
+                        onToggled: Connectivity.setAirplane(!Connectivity.airplane)
+                    }
+                }
+            }
+
+            Tile {
+                id: focus
+                x: connectivity.width + root.gap
+                width: parent.width - x
+                height: Media.available ? parent.height - nowPlaying.height - root.gap : parent.height
+                padding: Tokens.spacingSm + Tokens.spacingXs
+
+                RadioRow {
+                    iconName: "moon"
+                    title: qsTr("Focus")
+                    subtitle: Notifications.dnd ? qsTr("Do Not Disturb") : qsTr("Off")
+                    on: Notifications.dnd
+                    onToggled: Notifications.setDnd(!Notifications.dnd)
+                }
+            }
+
+            NowPlaying {
+                id: nowPlaying
+                visible: Media.available
+                x: connectivity.width + root.gap
+                y: parent.height - height
+                width: parent.width - x
+            }
+        }
+
+        Tile {
+            visible: root.expanded === "wifi"
             Caption {
-                text: qsTr("Focus")
+                text: qsTr("Wi-Fi")
+            }
+
+            WifiList {}
+        }
+
+        Tile {
+            visible: root.expanded === "bluetooth"
+            Caption {
+                text: qsTr("Bluetooth")
+            }
+
+            BluetoothList {}
+        }
+
+        Tile {
+            visible: Brightness.available
+
+            Caption {
+                text: qsTr("Display")
             }
 
             Row {
                 width: parent.width
                 spacing: Tokens.spacingSm
-                height: Tokens.controlToggleHeight
+                height: Tokens.controlSliderHeight
 
                 Icon {
-                    id: focusIcon
+                    id: displayIcon
                     anchors.verticalCenter: parent.verticalCenter
                     size: Tokens.menuIconSize
-                    name: "moon"
+                    name: "display"
                 }
 
-                Label {
+                Slider {
+                    width: parent.width - displayIcon.width - parent.spacing
                     anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("Do Not Disturb")
-                    width: parent.width - focusIcon.width - dndToggle.width - 2 * parent.spacing
-                }
-
-                Toggle {
-                    id: dndToggle
-                    anchors.verticalCenter: parent.verticalCenter
-                    accessibleName: qsTr("Do Not Disturb")
-                    checked: Notifications.dnd
-                    onToggled: value => Notifications.setDnd(value)
-                }
-            }
-        }
-
-        Card {
-            Caption {
-                text: qsTr("Appearance")
-            }
-
-            Row {
-                width: parent.width
-                spacing: Tokens.spacingSm
-
-                Repeater {
-                    model: [
-                        {id: "light", text: qsTr("Light"), icon: "sun"},
-                        {id: "dark", text: qsTr("Dark"), icon: "moon"}
-                    ]
-
-                    delegate: Item {
-                        id: choice
-
-                        required property var modelData
-                        readonly property bool selected: Settings.appearance === modelData.id
-
-                        width: (parent.width - Tokens.spacingSm) / 2
-                        height: Tokens.panelTileHeight
-                        activeFocusOnTab: true
-                        Accessible.role: Accessible.RadioButton
-                        Accessible.name: modelData.text
-                        Accessible.checked: selected
-                        Accessible.onPressAction: Settings.setAppearance(modelData.id)
-                        Keys.onPressed: event => {
-                            if (event.key === Qt.Key_Space || event.key === Qt.Key_Return) {
-                                Settings.setAppearance(modelData.id);
-                                event.accepted = true;
-                            }
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: Tokens.radiusControl
-                            color: choice.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                            border.width: choice.activeFocus ? Tokens.controlFocusRing : 0
-                            border.color: Appearance.colors.text
-                        }
-
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: Tokens.spacingXs
-
-                            Icon {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                size: Tokens.menuIconSize + 4
-                                name: choice.modelData.icon
-                                color: choice.selected ? Appearance.colors.accentText : Appearance.colors.text
-                            }
-
-                            Label {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: choice.modelData.text
-                                color: choice.selected ? Appearance.colors.accentText : Appearance.colors.text
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Settings.setAppearance(choice.modelData.id)
-                        }
+                    accessibleName: qsTr("Display brightness")
+                    value: Brightness.level
+                    onMoved: v => {
+                        if (!Brightness.setLevel(v) && Brightness.devSession)
+                            root.showDevNote();
                     }
                 }
             }
         }
 
-        Card {
-            Caption {
-                text: qsTr("Material")
-            }
-
-            Row {
-                width: parent.width
-                spacing: Tokens.spacingSm
-
-                Label {
-                    id: transparencyLabel
-                    text: qsTr("Transparency")
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Slider {
-                    width: parent.width - transparencyLabel.width - percent.width - 2 * parent.spacing
-                    anchors.verticalCenter: parent.verticalCenter
-                    accessibleName: qsTr("Transparency")
-                    value: Settings.transparency
-                    stepSize: 0.05
-                    onMoved: v => Settings.setTransparency(v)
-                }
-
-                Label {
-                    id: percent
-                    width: Tokens.panelPercentWidth
-                    anchors.verticalCenter: parent.verticalCenter
-                    horizontalAlignment: Text.AlignRight
-                    text: qsTr("%1%").arg(Math.round(Settings.transparency * 100))
-                }
-            }
-
-            SwitchRow {
-                text: qsTr("Reduce Transparency")
-                checked: Settings.reduceTransparency
-                onToggled: value => Settings.setReduceTransparency(value)
-            }
-
-            SwitchRow {
-                text: qsTr("Reduce Motion")
-                checked: Settings.reduceMotion
-                onToggled: value => Settings.setReduceMotion(value)
-            }
-        }
-
-        Card {
+        Tile {
             Caption {
                 text: qsTr("Sound")
             }
@@ -248,20 +242,121 @@ FocusScope {
                 spacing: Tokens.spacingSm
                 height: Tokens.controlSliderHeight
 
-                Icon {
-                    id: soundIcon
+                NavItem {
+                    id: mute
                     anchors.verticalCenter: parent.verticalCenter
-                    size: Tokens.menuIconSize
-                    name: Audio.iconName
+                    width: Tokens.menuIconSize + Tokens.spacingXs
+                    height: width
+                    accessibleName: Audio.muted ? qsTr("Unmute") : qsTr("Mute")
+                    onActivated: Audio.toggleMute()
+
+                    Icon {
+                        anchors.centerIn: parent
+                        size: Tokens.menuIconSize
+                        name: Audio.iconName
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            mute.forceActiveFocus();
+                            Audio.toggleMute();
+                        }
+                    }
                 }
 
                 Slider {
-                    width: parent.width - soundIcon.width - parent.spacing
+                    width: parent.width - mute.width - soundChevron.width - 2 * parent.spacing
                     anchors.verticalCenter: parent.verticalCenter
                     accessibleName: qsTr("Output volume")
                     value: Audio.volume
                     onMoved: v => Audio.setVolume(v)
                 }
+
+                NavItem {
+                    id: soundChevron
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Tokens.menuIconSize + Tokens.spacingXs
+                    height: width
+                    accessibleName: qsTr("Sound devices")
+                    Accessible.checkable: true
+                    Accessible.checked: root.expanded === "sound"
+                    onActivated: root.toggleSection("sound")
+                    onArrow: direction => {
+                        if ((direction > 0) !== (root.expanded === "sound"))
+                            root.toggleSection("sound");
+                    }
+
+                    Icon {
+                        anchors.centerIn: parent
+                        size: Tokens.panelCcChevron
+                        name: root.expanded === "sound" ? "chevron-down" : "chevron-right"
+                        color: Appearance.colors.textSecondary
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            soundChevron.forceActiveFocus();
+                            root.toggleSection("sound");
+                        }
+                    }
+                }
+            }
+
+            SoundList {
+                visible: root.expanded === "sound"
+            }
+        }
+
+        Tile {
+            visible: Brightness.kbdAvailable
+
+            Caption {
+                text: qsTr("Keyboard Brightness")
+            }
+
+            Row {
+                width: parent.width
+                spacing: Tokens.spacingSm
+                height: Tokens.controlSliderHeight
+
+                Icon {
+                    id: kbdIcon
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: Tokens.menuIconSize
+                    name: "keyboard"
+                }
+
+                Slider {
+                    width: parent.width - kbdIcon.width - parent.spacing
+                    anchors.verticalCenter: parent.verticalCenter
+                    accessibleName: qsTr("Keyboard brightness")
+                    value: Brightness.kbdLevel
+                    onMoved: v => {
+                        if (!Brightness.setKbdLevel(v) && Brightness.devSession)
+                            root.showDevNote();
+                    }
+                }
+            }
+        }
+
+        Tile {
+            RadioRow {
+                iconName: Appearance.dark ? "moon" : "sun"
+                title: qsTr("Appearance")
+                subtitle: Settings.appearance === "light" ? qsTr("Light") : qsTr("Dark")
+                on: root.expanded === "appearance"
+                expandable: true
+                expanded: root.expanded === "appearance"
+                onToggled: root.toggleSection("appearance")
+                onExpandToggled: root.toggleSection("appearance")
+            }
+
+            AppearanceSection {
+                visible: root.expanded === "appearance"
             }
         }
     }
