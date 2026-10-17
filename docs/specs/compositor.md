@@ -53,10 +53,12 @@ per-Settings double-click action, tiled windows, CSD negotiation, appmenu protoc
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
   and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers
   their removal), and no pointer to a destroyed titlebar stays in Hyprland's plugin bookkeeping.
-- **FR13** Press ownership: a release is kept from clients if and only if a titlebar consumed the matching
-  press (per button; a new press of a button supersedes an older one). Such a release is consumed by the
-  titlebar when Hyprland routes it there, otherwise cancelled on the event bus; releases of presses that
-  went to clients are never touched.
+- **FR13** Input consistency: the plugin never cancels a pointer button event, so Hyprland's held-button
+  state always matches the device and the click after any titlebar gesture reaches the window under the
+  pointer. Press ownership: a titlebar consumes a release if and only if a titlebar consumed the matching
+  press (per button; a new press of a button supersedes an older one) and Hyprland routes that release to
+  a titlebar; elsewhere the release reaches the seat, which drops it for a client that never got the press.
+  The release of a press that went to a client is never consumed, even over a titlebar.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -69,12 +71,12 @@ per-Settings double-click action, tiled windows, CSD negotiation, appmenu protoc
 | FR5 | unit `TitlebarLayout.Title*`; screenshot with long and short titles | L0 / L1 | verified |
 | FR6 | nested: virtual pointer clicks on close / zoom / minimize; press on close + release elsewhere | L1 | verified (close closed the window; zoom toggled `fullscreen` 0↔1; minimize posted `minimize-request`; cancel kept the window) |
 | FR7 | nested: virtual pointer drag, window position before/after; abandoned drag (pointer tool exits after `down drag`, its device is destroyed) then move and click elsewhere with a new pointer | L1 | verified: press (500,186) → release (600,286) moved the window (370,200) → (470,300), cursor not warped. Abandoned drag (2026-10-17): before the fix the window followed the unpressed pointer and jumped to the next click; after it the window stays where the drag left it, the next click lands on the desktop, log `titlebar gesture cancelled: no button held or a pointer device went away` |
-| FR8 | unit `ClickTracker.*`; nested double-click | L0 / L1 | verified: `fullscreen` 0 → 1, titlebar kept on the maximized window |
+| FR8 | unit `ClickTracker.*`; nested double-click | L0 / L1 | verified: `fullscreen` 0 → 1, titlebar kept on the maximized window. Restore by double-click on the maximized bar: **open issue** (2026-10-17, same before and after the FR13 fix): `fullscreen` 1 → 0 but the window keeps the maximized size (1920×980 at the work-area origin); the zoom button restores 700×500 correctly |
 | FR9 | spike `spikes/s2-ipc/shell.qml` (Quickshell `rawEvent`) | L1 | verified for `hello`; load-time event not observable |
 | FR10 | `hyprctl grassfield` against the nested instance | L1 | verified |
 | FR11 | code review; `clang-tidy` (Q1); C1 soak `tests/compositor/soak.sh` | L0 / L1 | see "Performance (gates affected)" |
 | FR12 | `just plugin-unload` (needs `scripts/nestctl`); nested shutdown (SIGTERM → `CCompositor::cleanup` → `unloadAllPlugins` → `PLUGIN_EXIT`, then dlclose, then windows destroyed) with windows on `special:hidden` | L1 | runtime `hyprctl plugin unload` NOT VERIFIED (no `scripts/nestctl`); shutdown with 2 windows on `special:hidden`: log `[grassfield] grassfield-compositor unloaded`, `Hyprland has reached the end.`, no core dump. Hidden (`isHidden()`) / unmapped-window path: code inspection only |
-| FR13 | unit `PointerGesture.*`; nested: double-click zoom, zoom-button press moved away, drag-select in another window after a titlebar click or drag | L0 / L1 | verified: no seat warning during these scenarios, the cancelled zoom press changed nothing, the other window received its selection drag. Releases cancelled on the bus leave a stale held button in Hyprland (Known limitations) |
+| FR13 | unit `PointerGesture.*`; nested `tests/compositor/input_consistency.sh` (two mouse-reporting foot windows: fast titlebar drag and close-button press moved away on C, then a click inside B) | L0 / L1 | 2026-10-17, 3 rounds (6 gestures): before the fix (releases cancelled on the bus) FAIL, exit 1: all 6 clicks inside B were delivered to C at its edge (`[<0;1;1M`/`m`), B got none; after the fix PASS, exit 0: B got all 6 clicks (`[<0;13;8M`/`m`), C got no button event, 2 seat warnings `sendButton release on a non-pressed button` (the dropped releases). Also after the fix: double-click maximize, zoom-button restore, drag (+140,+150 exact), close press moved away (window kept), close click (closed) |
 
 ## Interfaces / contracts (versions)
 
@@ -102,21 +104,41 @@ Findings for ADR-0007 (evidence in "Automated tests · Manual verification steps
 Future verbs (minimize, restore, …) follow the same pattern: `hl.plugin.grassfield.<verb>(args)`, results as
 `grassfield` socket2 events.
 
+Pointer input contract with Hyprland (FR13), decided 2026-10-17 after the counter-review finding. The
+plugin observes `input.mouse.button` and never cancels it, for presses and releases alike:
+
+- Hyprland 0.56.2 appends a press to `m_currentlyHeldButtons` before dispatching it, so a press the titlebar
+  consumes (`onInputOnDeco` returns true) is recorded as held exactly like a client press, and only a
+  release that Hyprland processes removes it. While the list is not empty, `mouseMoveUnified` pins pointer
+  focus (binary facts under "Dependencies").
+- Keeping the press from the client needs nothing more: the titlebar is a decoration outside the client
+  surface, so the consumed press never reaches `CSeatManager::sendPointerButton`.
+- Keeping the release from the client needs nothing more either: over a titlebar the titlebar consumes it
+  (only if a titlebar consumed the press, `CPointerGestureTracker::takeTitlebarRelease`); elsewhere the seat
+  sends it only to a pointer resource that got the press (`CWLPointerResource::m_pressedButtons`), so a
+  client that gained pointer focus during the drag gets nothing.
+- Rejected: cancelling the release only (the previous strategy). Hyprland had recorded the press, so the
+  button stayed held and pointer focus stayed pinned to the dragged window: the next click on another window
+  went to it. Rejected: cancelling both press and release. Hyprland would then skip its whole button path
+  (keybinds such as SUPER+drag on the bar, decoration routing, focus hold during the drag, refocus after the
+  release), and the plugin would have to re-implement it; nothing is gained because the default path
+  already keeps both events from clients.
+
 ## Dependencies (verified versions)
 
 - Hyprland 0.56.2 (commit `efb50993780079460b0cbed1363e2166a2de1d9f`), headers in `/usr/include/hyprland`.
 - APIs used (all read from the 0.56.2 headers): `HyprlandAPI::{addWindowDecoration, removeWindowDecoration,
   addLuaFunction, removeLuaFunction, registerHyprCtlCommand, unregisterHyprCtlCommand, addNotification,
   getHyprlandVersion}`, `Event::bus()->m_events.{window.open, window.floating, window.fullscreen,
-  window.title, window.updateRules, input.mouse.button}` (the deprecated `registerCallbackDynamic` is not
-  used), `g_pEventManager->postEvent`, `IHyprWindowDecoration`, `g_pDecorationPositioner`,
-  `g_pHyprRenderer->addPassElement` with `CRectPassElement` / `CTexPassElement`, `renderText`,
-  `g_layoutManager->setTargetGeom` (move), `Desktop::focusState()->fullWindowFocus`,
-  `Fullscreen::controller()->setFullscreenMode`, `Config::Actions::{closeWindow, alterZOrder}`,
-  `Event::bus()->m_events.input.mouse.move`, `g_pInputManager->{hasHeldButtons(), m_pointers,
-  getMouseCoordsInternal()}`, `Desktop::viewState()->hitTest().windowAt`, `CWindow::{hasPopupAt,
-  m_windowDecorations, m_decosToRemove}`, `g_pDecorationPositioner->{uncacheDecoration, forceRecalcFor}`,
-  `g_pPluginSystem->getPluginByHandle()->m_registeredDecorations`.
+  window.title, window.updateRules, input.mouse.button}` (observed, never cancelled; the deprecated
+  `registerCallbackDynamic` is not used), `g_pEventManager->postEvent`, `IHyprWindowDecoration`,
+  `g_pDecorationPositioner`, `g_pHyprRenderer->addPassElement` with `CRectPassElement` /
+  `CTexPassElement`, `renderText`, `g_layoutManager->setTargetGeom` (move),
+  `Desktop::focusState()->fullWindowFocus`, `Fullscreen::controller()->setFullscreenMode`,
+  `Config::Actions::{closeWindow, alterZOrder}`, `Event::bus()->m_events.input.mouse.move`,
+  `g_pInputManager->{hasHeldButtons(), m_pointers, getMouseCoordsInternal()}`,
+  `CWindow::{m_windowDecorations, m_decosToRemove}`, `g_pDecorationPositioner->{uncacheDecoration,
+  forceRecalcFor}`, `g_pPluginSystem->getPluginByHandle()->m_registeredDecorations`.
 - Behavior read from the installed 0.56.2 binary (`objdump -d` of the exported symbols; member offsets
   checked with `static_assert(offsetof(...))` against the headers), relied on by FR7, FR12, FR13:
   - `CWindow::updateWindowDecos()` returns at once when `!m_isMapped` or `isHidden()`, so a removal queued by
@@ -126,12 +148,20 @@ Future verbs (minimize, restore, …) follow the same pattern: `hl.plugin.grassf
     every pointer in a copy of `CPlugin::m_registeredDecorations` (never pruned by Hyprland), then `dlclose`.
     `CCompositor::cleanup()` (normal exit) unloads every plugin this way.
   - `CInputManager::onMouseButton` emits `input.mouse.button` first; a cancelled event returns before
-    `m_currentlyHeldButtons` is updated. Releases of buttons not in that list are dropped. Button events
-    then go to `CKeybindManager::onMouseEvent`, the decorations of `windowAt(pos, RESERVED_EXTENTS |
-    INPUT_EXTENTS | ALLOW_FLOATING)` through `CWindow::checkInputOnDecos` (box contains point, no popup there),
-    and finally `CSeatManager::sendPointerButton`.
-  - `CWLPointerResource::sendButton` logs `sendButton release on a non-pressed button` and sends nothing
-    when the client never got the press.
+    `m_currentlyHeldButtons` is updated. Otherwise a press is appended to that list *before* it is
+    dispatched, so a press a decoration consumes is recorded as held too; a release removes every entry
+    of its button, and a release of a button not in the list is dropped. Button events are then
+    dispatched by `processMouseDownNormal`: `CKeybindManager::onMouseEvent`, the decorations of
+    `windowAt(pos, RESERVED_EXTENTS | INPUT_EXTENTS | ALLOW_FLOATING)` through `CWindow::checkInputOnDecos`
+    (box contains point, no popup there), and finally `CSeatManager::sendPointerButton`. After a release
+    that empties the list while `m_focusHeldByButtons` is set, pointer focus is recomputed.
+  - `CInputManager::mouseMoveUnified`: while `m_currentlyHeldButtons` is not empty (and no drag-and-drop
+    runs), pointer focus stays on the current pointer-focus surface whatever is under the pointer
+    (`m_focusHeldByButtons`). A stale entry therefore pins pointer focus indefinitely.
+  - `CInputManager::releaseAllMouseButtons` sends a release for every held button straight to the seat
+    (no `input.mouse.button` event) and empties the list.
+  - `CWLPointerResource::sendButton` logs `sendButton release on a non-pressed button` (with its source
+    location) and sends nothing when that resource never got the press (`m_pressedButtons`).
   - `CInputManager::destroyPointer` does not release the buttons held by the removed device.
 - Measured pitfalls: `Config::Actions::focus()` warps the cursor to the window middle when the pointer is
   on the titlebar (outside the client surface); with it, drags through `CLayoutManager::beginDragTarget` or
@@ -175,13 +205,17 @@ Manual (L1, nested only):
 
 ## Performance (gates affected) · Accessibility · i18n
 
-- C1: soak script `tests/compositor/soak.sh` (nested only). 2026-10-17, plugin at commit a475092:
-  `tests/compositor/soak.sh 1260` → PASS (1260 s, 758 rounds: 758 short-lived + 758 churn windows,
-  217 drags, 109 abandoned drags, 216 zoom pairs, 108 cancelled and 108 real close clicks; 1197 titlebar
-  presses; nested Hyprland alive, RSS 151.7 → 158.5 MB, no core dump, 0 grassfield exceptions, clean unload
-  at shutdown). 9 seat warnings `sendButton release on a non-pressed button` came from Hyprland releasing
-  stale held buttons at window map/unmap (see Known limitations); the seat drops them. The 1 h and 8 h runs
-  are scheduled: C1 stays NOT VERIFIED until the 8 h run passes. C2 (scripted degradation) not run.
+- C1: soak script `tests/compositor/soak.sh` (nested only). 2026-10-17, plugin at commit 62bd114 (FR13
+  fix, button events never cancelled): `tests/compositor/soak.sh 600` → PASS, exit 0 (600 s, 319 rounds:
+  319 short-lived + 319 churn windows, 91 drags, 46 abandoned drags, 92 zoom pairs, 45 cancelled and 45 real
+  close clicks; nested Hyprland alive, RSS 150.4 → 165.9 MB, flat over the last 200 rounds, no core dump,
+  0 grassfield exceptions). 168 seat warnings `sendButton release on a non-pressed button`: the releases of
+  titlebar presses that ended outside a titlebar while a client had pointer focus, dropped by the seat as
+  designed (FR13). `tests/compositor/input_consistency.sh 5` right after the soak, same instance → PASS.
+  Earlier run (plugin at commit a475092, releases still cancelled on the bus): `soak.sh 1260` → PASS
+  (758 rounds, RSS 151.7 → 158.5 MB), but that build had the held-button defect, which the soak does not
+  detect. The 1 h and 8 h runs are scheduled: C1 stays NOT VERIFIED until the 8 h run passes. C2 (scripted
+  degradation) not run.
   Title textures are cached per window and rebuilt only when the title, scale or available width changes;
   drawing adds 6 rect pass elements and 1 texture per decorated window.
 - Q1: `compositor/build-direct.sh tidy` must exit 0 with no diagnostics.
@@ -205,11 +239,15 @@ Manual (L1, nested only):
 - Fractional scaling: geometry is scaled by the monitor scale but only scale 1 was tested.
 - Runtime unload (`hyprctl plugin unload`, needs `scripts/nestctl`) is untested; unload at compositor exit
   is tested.
-- When a titlebar release has to be cancelled on the event bus (pointer no longer over a titlebar: a
-  button press moved away, a double-click zoom, and in practice every drag, because the bar lags the
-  pointer while the window's move animation runs), Hyprland's held-button list keeps that button until its
-  next release (no public API to clear it). When a window maps or unmaps meanwhile, Hyprland's
-  `releaseAllMouseButtons` sends that stale release to the focused client, and the seat drops it with the
-  warning `sendButton release on a non-pressed button`. Input to the next window clicked was correct in
-  the nested test (drag-select after a titlebar drag). Hyprland itself never releases the buttons of a
-  removed pointer device.
+- The release of a titlebar press that ends outside a titlebar (a button press moved away, a double-click
+  zoom, and most fast drags, because the bar lags the pointer while the window's move animation runs) is
+  processed by Hyprland like any release and reaches the seat, which drops it because the client never got
+  the press. When a client surface has pointer focus at that moment, Hyprland logs `sendButton release on
+  a non-pressed button` (log noise only). Until 2026-10-17 the plugin cancelled these releases on the event
+  bus instead; Hyprland then kept the button as held and pinned pointer focus to the dragged window, so
+  motion over other windows reached nothing and the next click on another window was delivered to the
+  dragged one (counter-review finding, reproduced by `tests/compositor/input_consistency.sh`; an earlier
+  version of this section wrongly stated that the next click was correct).
+- Hyprland itself never releases the buttons of a removed pointer device: after an abandoned drag (device
+  destroyed with the button down) it keeps that button as held until that button's next release, with or
+  without the plugin. The plugin only ends its own gesture (FR7).
