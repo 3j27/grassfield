@@ -17,7 +17,8 @@ Dialog {
         spacing: Tokens.spacingMd
         visible: value !== ""
         Text {
-            width: 100
+            textFormat: Text.PlainText
+            width: Tokens.panelAboutLabelWidth
             text: line.label
             color: Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
@@ -25,6 +26,7 @@ Dialog {
             horizontalAlignment: Text.AlignRight
         }
         Text {
+            textFormat: Text.PlainText
             width: line.width - 100 - Tokens.spacingMd
             text: line.value
             color: Appearance.colors.text

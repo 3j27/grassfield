@@ -10,12 +10,9 @@ Singleton {
     id: root
 
     readonly property bool dev: Quickshell.env("GRASSFIELD_DEV") === "1"
-    // Last action that was suppressed in dev mode (also logged), for tests.
-    property string lastSuppressed: ""
 
     function systemctl(verb: string): void {
         if (dev) {
-            lastSuppressed = verb;
             console.warn("grassfield-shell: dev session, suppressed `systemctl " + verb + "`");
             return;
         }

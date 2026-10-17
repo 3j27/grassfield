@@ -118,6 +118,7 @@ Variants {
                 height: clearAll.implicitHeight
 
                 Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: qsTr("Notifications")
                     color: Appearance.colors.text
@@ -136,6 +137,7 @@ Variants {
             }
 
             Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 visible: Notifications.count === 0
                 text: qsTr("No Notifications")
@@ -192,6 +194,7 @@ Variants {
                                     }
 
                                     Text {
+                                        textFormat: Text.PlainText
                                         visible: groupItem.modelData.items.length > 1
                                         text: String(groupItem.modelData.items.length)
                                         color: Appearance.colors.textSecondary

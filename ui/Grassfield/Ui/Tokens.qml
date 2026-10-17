@@ -16,7 +16,8 @@ QtObject {
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
         materialBorder: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
         shadow: "#000000",  // estimate, pending F1 measurement from design/reference
-        accentText: "#FFFFFF",  // estimate
+        accentText: "#06240F",  // dark text on the bright green: contrast above 4.5:1 (gate A2, tested)
+        knob: "#FFFFFF",  // estimate; slider and toggle knobs
         separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         danger: "#FF6B63"  // estimate
@@ -26,14 +27,15 @@ QtObject {
     readonly property var colorLight: ({
         text: "#1B1B1F",  // estimate, pending F1 measurement from design/reference
         textSecondary: "#55555D",  // estimate, pending F1 measurement from design/reference
-        accent: "#2E8B4B",  // own Grassfield green, not copied
+        accent: "#26763F",  // own Grassfield green, not copied
         indicator: "#2A2A30",  // estimate, pending F1 measurement from design/reference
         hover: "#000000",  // estimate; drawn at hoverOpacity
         materialTint: "#F3F4F6",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
         materialBorder: "#000000",  // estimate, pending F1 measurement from design/reference
         shadow: "#000000",  // estimate, pending F1 measurement from design/reference
-        accentText: "#FFFFFF",  // estimate
+        accentText: "#FFFFFF",  // white on the darker light-mode green: contrast above 4.5:1 (gate A2, tested)
+        knob: "#FFFFFF",  // estimate; slider and toggle knobs
         separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         danger: "#D93025"  // estimate
@@ -122,6 +124,10 @@ QtObject {
     readonly property real materialFillOpacity: 0.14
     // estimate, pending F1 measurement from design/reference
     readonly property real materialDisabledOpacity: 0.38
+    // estimate: hover opacity multiplier for an active menu bar item
+    readonly property real materialHoverActiveFactor: 1.5
+    // estimate: notification body text
+    readonly property real materialBodyOpacity: 0.85
 
     // task spec / macOS convention, pending F1 measurement
     readonly property int menubarHeight: 24
@@ -129,6 +135,10 @@ QtObject {
     readonly property int menubarItemPadding: 10
     // estimate, pending F1 measurement from design/reference
     readonly property int menubarIconSize: 14
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menubarHoverInsetTop: 1
+    // estimate, pending F1 measurement from design/reference
+    readonly property int menubarHoverInsetBottom: 2
 
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIconSize: 48
@@ -154,6 +164,10 @@ QtObject {
     readonly property int dockSeparatorHeight: 40
     // estimate, pending F1 measurement from design/reference
     readonly property int dockTooltipGap: 8
+    // estimate: height reserved above the shelf for the label
+    readonly property int dockTooltipArea: 36
+    // estimate, pending F1 measurement from design/reference
+    readonly property real dockTrashIconScale: 0.6
 
     // estimate, pending F1 measurement from design/reference
     readonly property int menuItemHeight: 22
@@ -190,6 +204,10 @@ QtObject {
     readonly property int controlTooltipPadding: 6
     // estimate
     readonly property int controlTooltipDelay: 500
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlButtonMinWidth: 72
+    // estimate
+    readonly property int controlSliderDefaultWidth: 200
 
     // estimate, pending F1 measurement from design/reference
     readonly property int panelControlCenterWidth: 320
@@ -205,6 +223,12 @@ QtObject {
     readonly property int panelPopupMargin: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int panelStatusPopupWidth: 260
+    // estimate
+    readonly property int panelAboutLabelWidth: 100
+    // estimate: width of a percentage readout
+    readonly property int panelPercentWidth: 36
+    // estimate: centred dialogs sit this fraction of the screen height above centre
+    readonly property real panelDialogRaise: 0.08
 
     // spec notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344

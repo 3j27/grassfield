@@ -48,7 +48,7 @@ Item {
         radius: width / 2
         y: inset
         x: root.checked ? root.width - width - inset : inset
-        color: "#FFFFFF"
+        color: Appearance.colors.knob
 
         Behavior on x {
             NumberAnimation {

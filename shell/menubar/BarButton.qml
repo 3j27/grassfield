@@ -31,11 +31,11 @@ Item {
     Rectangle {
         anchors {
             fill: parent
-            topMargin: 1
-            bottomMargin: 2
+            topMargin: Tokens.menubarHoverInsetTop
+            bottomMargin: Tokens.menubarHoverInsetBottom
         }
         radius: Tokens.radiusControl
-        color: Appearance.withAlpha(Appearance.colors.hover, root.active ? Tokens.materialHoverOpacity * 1.5 : Tokens.materialHoverOpacity)
+        color: Appearance.withAlpha(Appearance.colors.hover, root.active ? Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor : Tokens.materialHoverOpacity)
         opacity: root.hovered || root.active ? 1 : 0
         border.width: root.activeFocus ? Tokens.controlFocusRing : 0
         border.color: Appearance.colors.accent

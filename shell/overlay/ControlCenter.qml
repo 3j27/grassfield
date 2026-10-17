@@ -33,6 +33,7 @@ FocusScope {
     }
 
     component Caption: Text {
+        textFormat: Text.PlainText
         color: Appearance.colors.textSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyCaptionSize
@@ -40,6 +41,7 @@ FocusScope {
     }
 
     component Label: Text {
+        textFormat: Text.PlainText
         color: Appearance.colors.text
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyBodySize
@@ -216,7 +218,7 @@ FocusScope {
 
                 Label {
                     id: percent
-                    width: 36
+                    width: Tokens.panelPercentWidth
                     anchors.verticalCenter: parent.verticalCenter
                     horizontalAlignment: Text.AlignRight
                     text: qsTr("%1%").arg(Math.round(Settings.transparency * 100))

@@ -14,10 +14,16 @@ Item {
     // Emitted when the user changes the value (not when it is set from outside).
     signal moved(real value)
 
-    readonly property real position: to > from ? Math.max(0, Math.min(1, (value - from) / (to - from))) : 0
+    // `value` stays a pure input (external bindings survive). A user change is held in `local`
+    // until the host sets a new value, so an unbound slider still follows the user.
+    property real local: NaN
+    readonly property real shown: isNaN(local) ? value : local
+    onValueChanged: local = NaN
+
+    readonly property real position: to > from ? Math.max(0, Math.min(1, (shown - from) / (to - from))) : 0
     readonly property real travel: Math.max(0, width - Tokens.controlSliderKnob)
 
-    implicitWidth: 200
+    implicitWidth: Tokens.controlSliderDefaultWidth
     implicitHeight: Tokens.controlSliderHeight
     activeFocusOnTab: true
     Accessible.role: Accessible.Slider
@@ -32,14 +38,14 @@ Item {
 
     function commit(v: real): void {
         const next = clampValue(v);
-        if (next === value)
+        if (next === shown)
             return;
-        value = next;
+        local = next;
         moved(next);
     }
 
     function nudge(direction: int): void {
-        commit(value + direction * stepSize * (to - from));
+        commit(shown + direction * stepSize * (to - from));
     }
 
     Keys.onPressed: event => {
@@ -81,7 +87,7 @@ Item {
         radius: width / 2
         x: root.position * root.travel
         anchors.verticalCenter: parent.verticalCenter
-        color: Appearance.dark ? Appearance.colors.text : "#FFFFFF"
+        color: Appearance.colors.knob
         border.width: root.activeFocus ? Tokens.controlFocusRing : 1
         border.color: root.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
     }

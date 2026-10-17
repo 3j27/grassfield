@@ -93,6 +93,31 @@ Singleton {
         return e !== null && e.nid >= 0;
     }
 
+    // Shell-originated notice (no D-Bus involved, works with the server disabled): a transient,
+    // non-actionable entry plus a banner. Normal urgency, so Do Not Disturb silences it.
+    function postInternal(summary: string, body: string): void {
+        counter++;
+        const key = Date.now() + "-" + counter;
+        const entry = {
+            key: key,
+            nid: -1,
+            appName: "Grassfield",
+            appIcon: "",
+            image: "",
+            summary: summary,
+            body: body,
+            time: Date.now(),
+            urgency: 1,
+            transient: true,
+            resident: false,
+            actions: [],
+            restored: false
+        };
+        setHistory(History.prune([entry].concat(history), Date.now()).slice());
+        if (!dnd)
+            banners = [{key: key}].concat(banners);
+    }
+
     function toggleCenter(screen: string): void {
         if (centerOpen) {
             closeCenter();

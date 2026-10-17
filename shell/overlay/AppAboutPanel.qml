@@ -17,6 +17,7 @@ Dialog {
     onRejected: Popups.close()
 
     component Line: Text {
+        textFormat: Text.PlainText
         width: parent.width
         wrapMode: Text.WordWrap
         color: Appearance.colors.textSecondary

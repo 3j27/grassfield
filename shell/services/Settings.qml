@@ -18,19 +18,22 @@ Singleton {
         return (xdg ? xdg : Quickshell.env("HOME") + "/.config") + "/grassfield";
     }
 
-    readonly property int version: store.data.version
-    readonly property string appearance: store.data.appearance
-    readonly property bool dark: store.data.appearance !== "light"
-    readonly property real transparency: store.data.material.transparency
+    // Validated by the store (out-of-range or unknown values fall back to the schema defaults).
+    readonly property string appearance: store.appearance
+    readonly property bool dark: store.appearance !== "light"
+    readonly property real transparency: store.transparency
+    readonly property string materialProfile: store.materialProfile
     readonly property bool reduceTransparency: store.data.accessibility.reduceTransparency
     readonly property bool reduceMotion: store.data.accessibility.reduceMotion
-    readonly property var dockPinned: store.data.dock.pinned
-    readonly property real dockMagnification: store.data.dock.magnification
+    readonly property var dockPinned: store.dockPinned
+    readonly property real dockMagnification: store.dockMagnification
     readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
     readonly property bool dockAutohide: store.data.dock.autohide
 
     readonly property bool notificationsDnd: store.data.notifications.dnd
-    readonly property string notificationsPreviews: store.data.notifications.previews
+    readonly property string notificationsPreviews: store.notificationsPreviews
+    readonly property string titlebarDoubleClick: store.titlebarDoubleClick
+    readonly property int lockIdleMinutes: store.lockIdleMinutes
 
     function setAppearance(value: string): void {
         store.setAppearance(value);
@@ -66,10 +69,6 @@ Singleton {
 
     function setNotificationsPreviews(value: string): void {
         store.setNotificationsPreviews(value);
-    }
-
-    function flush(): void {
-        store.flush();
     }
 
     SettingsStore {

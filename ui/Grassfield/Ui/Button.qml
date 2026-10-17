@@ -12,7 +12,7 @@ Item {
 
     readonly property bool hovered: mouse.containsMouse
 
-    implicitWidth: Math.max(72, label.implicitWidth + 2 * Tokens.spacingLg)
+    implicitWidth: Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg)
     implicitHeight: Tokens.menuItemHeight + Tokens.spacingSm
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
@@ -43,6 +43,7 @@ Item {
     }
 
     Text {
+        textFormat: Text.PlainText
         id: label
         anchors.centerIn: parent
         text: root.text
