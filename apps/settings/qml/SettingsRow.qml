@@ -12,7 +12,7 @@ Item {
     default property alias control: slot.data
 
     width: parent ? parent.width : implicitWidth
-    implicitHeight: Math.max(Tokens.settingsRowHeight, labels.implicitHeight + 2 * Tokens.spacingSm)
+    implicitHeight: Math.max(Tokens.settingsRowHeight, Math.max(labels.implicitHeight, slot.implicitHeight) + 2 * Tokens.spacingSm)
 
     Accessible.role: root.valueText !== "" ? Accessible.StaticText : Accessible.Grouping
     Accessible.name: root.valueText !== "" ? root.title + ": " + root.valueText : root.title
@@ -71,7 +71,8 @@ Item {
             visible: root.valueText !== ""
             width: visible ? Math.min(implicitWidth, root.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg) : 0
             text: root.valueText
-            elide: Text.ElideRight
+            wrapMode: Text.Wrap
+            horizontalAlignment: Text.AlignRight
             color: Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize

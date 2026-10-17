@@ -14,7 +14,7 @@ SettingsPage {
         if (minutes.indexOf(root.idleMinutes) < 0)
             minutes.push(root.idleMinutes);
         minutes.sort((a, b) => a === 0 ? -1 : b === 0 ? 1 : a - b);
-        return minutes.map(m => ({id: String(m), text: m === 0 ? qsTr("Never") : qsTr("%n minute(s)", "", m)}));
+        return minutes.map(m => ({id: String(m), text: m === 0 ? qsTr("Never") : m === 1 ? qsTr("1 minute") : qsTr("%1 minutes").arg(m)}));
     }
 
     SettingsGroup {

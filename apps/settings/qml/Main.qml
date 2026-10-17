@@ -49,6 +49,13 @@ Window {
         value: cfg.value("appearance") !== "light"
     }
 
+    // App windows are opaque: menus drawn with the shared material must not show what is behind them.
+    Binding {
+        target: Appearance
+        property: "transparency"
+        value: 0
+    }
+
     Binding {
         target: Appearance
         property: "reduceMotion"

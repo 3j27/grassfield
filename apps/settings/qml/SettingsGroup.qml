@@ -10,6 +10,7 @@ Item {
     property string footnote: ""
     default property alias rows: column.data
 
+    width: parent ? parent.width : implicitWidth
     implicitHeight: captionText.height + column.height + footnoteText.height
     implicitWidth: Tokens.settingsContentMaxWidth
     Accessible.role: Accessible.Grouping
