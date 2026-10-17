@@ -44,6 +44,8 @@ Scope {
     property string lastError: ""
 
     signal renameWanted(string name)
+    // New Folder could not create the folder (no rename will follow).
+    signal newFolderFailed
     // An accepted rename that the file system refused (the view shows it inline).
     signal renameFailed(string name, string reason)
 
@@ -128,8 +130,10 @@ Scope {
         markBusy(name);
         run(["gio", "mkdir", "-p", path(name)], "mkdir", ok => {
             unmarkBusy(name);
-            if (!ok)
+            if (!ok) {
                 pendingRename = "";
+                newFolderFailed();
+            }
         });
     }
 

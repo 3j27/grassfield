@@ -18,12 +18,18 @@ FocusScope {
 
     // Screen of the hosting window (the context menu window opens there).
     required property ShellScreen screen
-    // The host's keyboard state machine says the desktop owns the keyboard (KeyboardFocus.holdsKeys):
-    // only then does a finished rename or menu hand focus back to the key sink.
-    property bool holdsKeys: false
-    // The desktop is taking the keyboard back after the menu closed: the menu window stays mapped
-    // until it has it (KeyboardFocus.menuLingers), so Hyprland never falls back to another window.
-    property bool menuLingers: false
+    // KEYBOARD SAFE MODE (docs/specs/desktop.md, "Keyboard safe mode (2026-10-17)"): the desktop surface
+    // never holds the keyboard on its own, so none of the desktop keyboard actions below (arrows, Return,
+    // Space, F2, Ctrl+A, Ctrl+Backspace, Esc) can run. Off until the macOS-model redesign; the pointer
+    // (selection, double click, drag and drop, context menu) is unaffected. Setting it true alone
+    // does nothing: the host would also have to give the surface the keyboard.
+    readonly property bool desktopKeyboardNav: false
+    // The host's keyboard state machine (KeyboardFocus.js): the menu window stays mapped / Exclusive
+    // beyond the menu itself during the hand-off to the rename field.
+    property bool kbMenuMapped: false
+    property bool kbMenuHoldsKeys: false
+    // New Folder was chosen and its rename field is not open yet: the menu window keeps the keyboard.
+    property bool awaitingFolder: false
     // An icon drag (real drag-and-drop) is in progress.
     property bool dragging: false
 
@@ -75,12 +81,13 @@ FocusScope {
         id: files
     }
 
-    // Keyboard focus events for the host's state machine (KeyboardFocus.js): {type: "itemOpened"},
-    // {type: "menuOpened"}, {type: "menuClosed"}, {type: "renameOpened"}, {type: "escape", ...}.
+    // Keyboard focus events for the host's state machine (KeyboardFocus.js): {type: "menuOpened"},
+    // {type: "menuClosed"}, {type: "renameOpened"}, {type: "renameClosed"}.
     signal focusEvent(var event)
 
     // Dedicated key sink: the focus item of this scope whenever no rename field is open, so that a
-    // finished rename can never hand focus back to its (hidden) field.
+    // finished rename can never hand focus back to its (hidden) field. (No keyboard reaches it in
+    // safe mode.)
     Item {
         id: keySink
         focus: true
@@ -92,13 +99,9 @@ FocusScope {
         keySink.forceActiveFocus();
     }
 
-    // End of a rename or menu: the key sink is the scope's focus item again, and takes the active
-    // focus only while the desktop owns the keyboard.
+    // End of a rename or menu: the key sink is the scope's focus item again.
     function restoreFocus(): void {
-        if (root.holdsKeys)
-            keySink.forceActiveFocus();
-        else
-            keySink.focus = true;
+        keySink.forceActiveFocus();
     }
 
     activeFocusOnTab: false
@@ -161,30 +164,28 @@ FocusScope {
         renaming = "";
         renameError = "";
         restoreFocus();
+        focusEvent({
+            type: "renameClosed"
+        });
     }
 
-    // byUser: opened by the user (F2, menu Rename, New Folder), which asks for the keyboard; a rename
-    // reopened after a file system failure does not.
-    function beginRename(name: string, byUser: bool): void {
+    // Opens the rename field: the rename surface takes the keyboard (the host's state machine; from the
+    // menu, before the menu window lets go of it).
+    function beginRename(name: string): void {
         if (name === "" || lay[name] === undefined)
             return;
+        awaitingFolder = false;
         selectOnly(name);
         renameError = "";
         renaming = name;
-        if (byUser)
-            focusEvent({
-                type: "renameOpened"
-            });
+        focusEvent({
+            type: "renameOpened"
+        });
     }
 
-    // Opening hands the keyboard to whatever opens: the desktop lets go of it.
     function openNames(names: var): void {
         for (const n of names)
             files.open(n);
-        if (names.length > 0)
-            focusEvent({
-                type: "itemOpened"
-            });
     }
 
     readonly property bool menuOpen: menuKind !== ""
@@ -196,14 +197,22 @@ FocusScope {
             });
     }
 
-    // Closes the menu: the host is told first (the desktop starts taking the keyboard back and keeps
-    // the menu window mapped, see menuLingers), then the menu goes away.
+    // Closes the menu: the menu window lets go of the keyboard and nobody re-takes it (a no-op for the
+    // state machine when the menu already handed it to the rename field).
     function endMenu(): void {
-        if (menuOpen)
+        if (menuOpen || awaitingFolder)
             focusEvent({
                 type: "menuClosed"
             });
+        awaitingFolder = false;
         menuKind = "";
+    }
+
+    // Layer state reaches the compositor with the next surface commit: render the menu window now.
+    function commitMenu(): void {
+        const w = menuLoader.Window.window;
+        if (w)
+            w.update();
     }
 
     function closeMenu(): void {
@@ -215,17 +224,27 @@ FocusScope {
         const names = selectedNames;
         const paths = selectedPaths;
         const kind = menuKind;
-        endMenu();
         restoreFocus();
         if (kind === "desktop") {
-            if (action === "newFolder")
+            if (action === "newFolder") {
+                // The menu window keeps the keyboard until the new folder's rename field takes it.
+                awaitingFolder = true;
+                menuKind = "";
                 files.newFolder();
+            } else {
+                endMenu();
+            }
             return;
         }
+        if (action === "rename" && names.length === 1) {
+            // The rename surface takes the keyboard before the menu window releases it.
+            beginRename(names[0]);
+            menuKind = "";
+            return;
+        }
+        endMenu();
         if (action === "open")
             openNames(names);
-        else if (action === "rename" && names.length === 1)
-            Qt.callLater(() => root.beginRename(names[0], true));
         else if (action === "copy")
             files.copy(paths);
         else if (action === "trash")
@@ -340,7 +359,8 @@ FocusScope {
 
     // ---- keyboard --------------------------------------------------------------------------------
 
-    // While the menu is open its own window holds the keyboard; nothing reaches the desktop actions below.
+    // Safe mode: off (Keys.enabled), see desktopKeyboardNav. The surface has no keyboard anyway.
+    Keys.enabled: root.desktopKeyboardNav
     Keys.onPressed: event => {
         if (root.menuOpen) {
             event.accepted = true;
@@ -372,19 +392,13 @@ FocusScope {
             event.accepted = true;
         } else if (event.key === Qt.Key_Space && !ctrl) {
             // Glance at the selected files (Space again closes it; folders are skipped by Glance itself).
-            // Opening it (none shown yet): the desktop lets go of the keyboard first, so Glance is
-            // focused by Hyprland when it maps and gives the keyboard back when it closes.
             if (root.selectedPaths.length > 0) {
-                if (GlanceApp.shownKey === "")
-                    root.focusEvent({
-                        type: "previewOpened"
-                    });
                 GlanceApp.toggle(root.selectedPaths);
             }
             event.accepted = true;
         } else if (event.key === Qt.Key_F2) {
             if (root.selectedNames.length === 1)
-                root.beginRename(root.selectedNames[0], true);
+                root.beginRename(root.selectedNames[0]);
             event.accepted = true;
         } else if (ctrl && event.key === Qt.Key_Backspace) {
             if (root.selectedPaths.length > 0)
@@ -397,15 +411,7 @@ FocusScope {
             root.selected = all;
             event.accepted = true;
         } else if (event.key === Qt.Key_Escape) {
-            // Esc clears the selection; with nothing selected it lets go of the keyboard.
-            if (root.selectedNames.length > 0)
-                root.clearSelection();
-            else
-                root.focusEvent({
-                    type: "escape",
-                    hasSelection: false,
-                    renaming: false
-                });
+            root.clearSelection();
             event.accepted = true;
         }
     }
@@ -415,14 +421,23 @@ FocusScope {
 
         // New Folder (a user action) opens the rename field of the folder it created.
         function onRenameWanted(name: string): void {
-            Qt.callLater(() => root.beginRename(name, true));
+            Qt.callLater(() => {
+                root.beginRename(name);
+                if (root.renaming === "" && root.awaitingFolder)
+                    root.endMenu();
+            });
         }
 
-        // The file system refused an accepted rename: reopen the field with the reason inline. It
-        // gets the keyboard only if the desktop still owns it.
+        // The folder could not be created: the menu window lets go of the keyboard.
+        function onNewFolderFailed(): void {
+            if (root.awaitingFolder)
+                root.endMenu();
+        }
+
+        // The file system refused an accepted rename: reopen the field with the reason inline.
         function onRenameFailed(name: string, reason: string): void {
             root.restoreFocus();
-            root.beginRename(name, false);
+            root.beginRename(name);
             root.renameError = "failed";
         }
     }
@@ -545,17 +560,16 @@ FocusScope {
 
     // Context menu window: an Overlay window (the desktop surface cannot show a menu above windows);
     // clicking anywhere else dismisses it. While the menu is open this window holds the keyboard
-    // (Exclusive: Hyprland routes the pointer only to an Exclusive layer, so the desktop surface cannot
-    // hold it, or the menu would get no hover or click) and the desktop is None. On close the desktop
-    // takes the keyboard back first and this window unmaps afterwards (menuLingers), because Hyprland
-    // refocuses the last window when a focused layer unmaps.
+    // (Exclusive) and the desktop is None. On close it goes back to None and unmaps, and the desktop does
+    // not take the keyboard: Hyprland decides (the last window). Handing over to a rename field, the
+    // rename surface is Exclusive first, then this window lets go and unmaps (KeyboardFocus.js, hand-off).
     // qmllint disable uncreatable-type
     PanelWindow {
         // qmllint enable uncreatable-type
         id: menuWin
 
         screen: root.screen
-        visible: root.menuKind !== "" || root.menuLingers
+        visible: root.menuKind !== "" || root.kbMenuMapped
         anchors {
             top: true
             bottom: true
@@ -565,7 +579,8 @@ FocusScope {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: (root.menuKind !== "" || root.menuLingers) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: (root.menuKind !== "" || root.kbMenuHoldsKeys) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.onKeyboardFocusChanged: root.commitMenu()
         WlrLayershell.namespace: "grassfield-icons-menu"
 
         MouseArea {
