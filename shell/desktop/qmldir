@@ -5,3 +5,8 @@ HotCorners 1.0 HotCorners.qml
 HotCorner 1.0 HotCorner.qml
 DwellGate 1.0 DwellGate.qml
 DesktopWidgets 1.0 DesktopWidgets.qml
+DesktopFiles 1.0 DesktopFiles.qml
+DesktopIcons 1.0 DesktopIcons.qml
+IconsView 1.0 IconsView.qml
+DesktopIcon 1.0 DesktopIcon.qml
+IconMenu 1.0 IconMenu.qml
