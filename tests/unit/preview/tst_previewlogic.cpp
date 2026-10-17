@@ -102,6 +102,34 @@ TEST(PreviewLogic, RoutesByType)
     EXPECT_EQ(kindName(Kind::Unsupported), QStringLiteral("unsupported"));
 }
 
+// Playlists are text whatever Qt calls them: the canonical type (audio/x-ms-asx for every ASX suffix),
+// its aliases and the content of extensionless files.
+TEST(PreviewLogic, PlaylistsAreTextWhateverTheMimeName)
+{
+    for (const char *ext : {"asx", "wvx", "wax", "wmx", "WVX", "m3u", "m3u8", "pls", "xspf", "wpl", "vlc"})
+        EXPECT_EQ(classify(QStringLiteral("/x/a.") + QString::fromLatin1(ext)), Kind::Text) << ext;
+    // A real ASF container is not a playlist (its alias video/x-ms-asf-plugin must not make it one).
+    EXPECT_NE(classify(QStringLiteral("/x/a.asf")), Kind::Text);
+
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const struct { const char *name; const char *data; } samples[] = {
+        {"asx-plain", "<ASX version=\"3.0\"><Entry><Ref href=\"http://example.invalid/a\"/></Entry></ASX>"},
+        {"asx-xml", "<?xml version=\"1.0\"?>\n<asx version=\"3.0\"><entry><ref href=\"mms://example.invalid/a\"/></entry></asx>"},
+        {"asx-lead-space", "\n  <asx version=\"3.0\"></asx>"},
+        {"m3u", "#EXTM3U\nhttp://example.invalid/a.mp3\n"},
+        {"pls", "[playlist]\nFile1=http://example.invalid/a\n"},
+        {"xspf", "<?xml version=\"1.0\"?><playlist version=\"1\" xmlns=\"http://xspf.org/ns/0/\"></playlist>"},
+        {"wpl", "<?wpl version=\"1.0\"?><smil><body><seq><media src=\"http://example.invalid/a\"/></seq></body></smil>"},
+    };
+    for (const auto &s : samples)
+        EXPECT_EQ(classify(touch(dir, QString::fromLatin1(s.name), s.data)), Kind::Text) << s.name;
+    // The same content under a media suffix is still a playlist.
+    EXPECT_EQ(classify(touch(dir, QStringLiteral("clip.mp3"), "<asx version=\"3.0\"></asx>")), Kind::Text);
+    // A plain binary stays unsupported.
+    EXPECT_EQ(classify(touch(dir, QStringLiteral("blob"), QByteArray("\x00\x01\x02\x03", 4))), Kind::Unsupported);
+}
+
 TEST(PreviewLogic, ImageSizeCaps)
 {
     EXPECT_TRUE(imageSizeAllowed(QSize(4000, 3000)));
