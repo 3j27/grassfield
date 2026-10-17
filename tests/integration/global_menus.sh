@@ -183,7 +183,7 @@ say "  bridge version: $(bus_call org.grassfield.MenuBridge1 /org/grassfield/Men
 
 # ---- T1: the Qt reference app ----
 say ""
-say "[T1] tests/fixtures/menu-demo (Qt $(qtpaths6 --qt-version 2>/dev/null))"
+say "[T1] tests/fixtures/menu-demo (Qt $(/usr/lib/qt6/bin/qtpaths --qt-version 2>/dev/null))"
 start_app menu-demo "$dev/build/menu-demo" --log "$run/menu-demo-actions.log"
 qt_pid=$last_pid
 check "menu-demo window mapped" wait_for 15 has_window "$qt_pid"
@@ -250,6 +250,7 @@ before=$(windows_of "$cr_pid")
 click_row '^New [Ww]indow$'
 check "pointer click on File > New window opened a window ($before -> 2)" wait_for 10 has_window "$cr_pid" 2
 say "  Chromium windows now: $(windows_of "$cr_pid")"
+say "  bridge resources (ADR-0008 budget: <= 20 MB RSS): $(ps -o rss=,time= -p "$(cat "$dev/menu-bridge.pid")" | awk '{printf "RSS %d kB, CPU time %s", $1, $2}')"
 
 # ---- GTK4 (no DBusMenu): T0 ----
 say ""
