@@ -975,7 +975,7 @@
     </message>
     <message>
         <source>Focus</source>
-        <translation>Concentration</translation>
+        <translation>Focus</translation>
     </message>
     <message>
         <source>Do Not Disturb</source>
