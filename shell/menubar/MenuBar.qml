@@ -77,8 +77,18 @@ Scope {
             required property ShellScreen modelData
 
             // Last non-empty app: layer-shell focus (a popup is open) clears the active toplevel.
+            // It only counts while that app still has a window: a killed last window must not leave
+            // its name in the bar.
             property string lastAppId: ""
-            readonly property string shownAppId: Compositor.focusedAppId !== "" ? Compositor.focusedAppId : (Popups.active ? lastAppId : "")
+            readonly property bool lastAppAlive: {
+                const list = Compositor.toplevels.values;
+                for (let i = 0; i < list.length; i++) {
+                    if (list[i].appId === lastAppId)
+                        return true;
+                }
+                return false;
+            }
+            readonly property string shownAppId: Compositor.focusedAppId !== "" ? Compositor.focusedAppId : (Popups.active && lastAppId !== "" && lastAppAlive ? lastAppId : "")
             readonly property string appName: {
                 if (shownAppId === "")
                     return qsTr("Desktop");
@@ -91,6 +101,9 @@ Scope {
 
             // SingleMainWindow of the app's desktop entry decides whether File has New Window.
             onShownAppIdChanged: {
+                // The app is gone: its open app menu would act on nothing.
+                if (shownAppId === "" && ["app", "appfile", "appwindow"].indexOf(Popups.kind) >= 0 && Popups.screenName === win.screen.name)
+                    Qt.callLater(Popups.close);
                 const entry = shownAppId !== "" ? Apps.lookup(shownAppId) : null;
                 if (entry)
                     AppMenus.probe(entry.id);
@@ -103,6 +116,12 @@ Scope {
                     if (Compositor.focusedAppId !== "")
                         win.lastAppId = Compositor.focusedAppId;
                 }
+            }
+
+            // Forget the remembered app once its last window is gone.
+            onLastAppAliveChanged: {
+                if (!lastAppAlive)
+                    lastAppId = "";
             }
 
             function isOpen(kind: string): bool {
