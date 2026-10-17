@@ -17,3 +17,8 @@ If Hyprland or Quickshell changed: rebuild the plugin and run the C2 degradation
 | Mesa | 26.2.2 | 2026-10-17 | `pacman -Q mesa` |
 | Kernel | 7.2.5-3-omarchy | 2026-10-17 | `uname -r` |
 | grassfield-compositor built for | — (not built yet) | — | — |
+
+## Known upstream issues (observed, not caused by Grassfield)
+| Component | Issue | Evidence | Impact / mitigation |
+|---|---|---|---|
+| Hyprland 0.56.2 | SIGSEGV during process exit in `Screenshare::CScreenshareManager` destructor (`CScreenshareSession::~CScreenshareSession` → `screenshareEvents`) when a toplevel capture session is still active | `coredumpctl info 89926` (nested instance, 2026-10-17 02:56, Overview live thumbnails active at compositor exit); no grassfield-compositor frames in the stack | Only at compositor exit (logout). Overview stops captures when it closes; leaves a core dump if the session ends while Overview is open. Report upstream (owner decision). |
