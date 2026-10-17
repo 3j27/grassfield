@@ -1,0 +1,8 @@
+{
+  "id": "nowplaying",
+  "name": "Now Playing",
+  "version": "1.0.0",
+  "sizes": ["small", "medium"],
+  "contract": "widgets/1",
+  "permissions": ["media"]
+}

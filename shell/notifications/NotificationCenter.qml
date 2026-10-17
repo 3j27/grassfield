@@ -4,10 +4,12 @@ import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.services
+import qs.widgets
 
 // Notification Center (N7): full-height panel at the right edge, opened from the clock or by
 // IPC. Grouped by app, newest first; Clear per group and Clear All; Esc or a click outside
-// closes. Widgets are not part of M2 (no empty placeholder region).
+// closes. Below the notifications (scrolling with them) sits the widgets area: tiles of the
+// widgets placed there, and Edit Widgets (gallery overlay, docs/specs/widgets.md).
 //
 // The window exists per screen but its content (a Loader) only while the Center is open on that
 // screen, so a closed Center costs nothing. Rows come from the keyed Notifications.centerModel
@@ -103,6 +105,41 @@ Variants {
 
                 readonly property real margin: Tokens.spacingSm
 
+                // Widgets: the gallery overlay and the context menu of a placed widget.
+                property bool galleryOpen: false
+                property var menuEntry: null
+                property real menuX: 0
+                property real menuY: 0
+                property Item menuReturn: null
+
+                function openWidgetMenu(tile: Item, x: real, y: real, entry: var): void {
+                    const p = tile.mapToItem(panel, x, y);
+                    menuX = p.x;
+                    menuY = p.y;
+                    menuReturn = tile;
+                    menuEntry = entry;
+                }
+
+                function closeWidgetMenu(): void {
+                    menuEntry = null;
+                    if (menuReturn)
+                        menuReturn.forceActiveFocus();
+                    else
+                        panel.forceActiveFocus();
+                }
+
+                function applyWidgetMenu(action: string): void {
+                    const entry = menuEntry;
+                    menuEntry = null;
+                    panel.forceActiveFocus();
+                    if (!entry)
+                        return;
+                    if (action === "remove")
+                        Widgets.remove(entry.uid);
+                    else if (action.startsWith("size:"))
+                        Widgets.setSize(entry.uid, action.substring(5));
+                }
+
                 x: host.width - width - margin + (host.shown ? 0 : width)
                 y: Tokens.menubarHeight + margin
                 width: Tokens.notificationCenterWidth
@@ -156,17 +193,6 @@ Variants {
                     }
                 }
 
-                Text {
-                    textFormat: Text.PlainText
-                    anchors.centerIn: parent
-                    visible: Notifications.count === 0
-                    text: qsTr("No Notifications")
-                    color: Appearance.colors.textSecondary
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyTitleSize
-                    font.weight: Tokens.typographyMenuWeight
-                }
-
                 ListView {
                     id: list
                     x: Tokens.spacingLg
@@ -176,6 +202,23 @@ Variants {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
                     model: Notifications.centerModel
+                    header: Item {
+                        width: list.width
+                        height: Notifications.count === 0 ? emptyText.implicitHeight + 2 * Tokens.spacingLg : 0
+                        visible: Notifications.count === 0
+
+                        Text {
+                            id: emptyText
+                            textFormat: Text.PlainText
+                            anchors.centerIn: parent
+                            text: qsTr("No Notifications")
+                            color: Appearance.colors.textSecondary
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyTitleSize
+                            font.weight: Tokens.typographyMenuWeight
+                        }
+                    }
+                    footer: widgetsArea
                     // Rows near the viewport stay alive so Tab can reach them.
                     cacheBuffer: Tokens.notificationCenterCache
                     delegate: Column {
@@ -386,6 +429,107 @@ Variants {
                                 }
                             }
                         }
+                    }
+                }
+
+                // Widgets area: the footer of the list, so it scrolls with the notifications.
+                Component {
+                    id: widgetsArea
+
+                    Column {
+                        width: list.width
+                        topPadding: Tokens.spacingLg
+                        spacing: Tokens.spacingMd
+
+                        Text {
+                            textFormat: Text.PlainText
+                            visible: Widgets.center.length > 0
+                            text: qsTr("Widgets")
+                            color: Appearance.colors.text
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyTitleSize
+                            font.weight: Tokens.typographyMenuBoldWeight
+                        }
+
+                        Flow {
+                            width: parent.width
+                            spacing: Tokens.widgetGap
+
+                            Repeater {
+                                model: Widgets.center
+
+                                delegate: WidgetHost {
+                                    id: tile
+
+                                    required property var modelData
+
+                                    entry: modelData
+                                    flat: true
+                                    cell: (list.width - Tokens.widgetGap) / 2
+                                    onMenuRequested: (x, y) => panel.openWidgetMenu(tile, x, y, modelData)
+                                    onRemoveRequested: {
+                                        Widgets.remove(modelData.uid);
+                                        panel.forceActiveFocus();
+                                    }
+                                    onActiveFocusChanged: {
+                                        if (!activeFocus)
+                                            return;
+                                        const top = tile.mapToItem(list.contentItem, 0, 0).y;
+                                        if (top < list.contentY)
+                                            list.contentY = top;
+                                        else if (top + tile.height > list.contentY + list.height)
+                                            list.contentY = top + tile.height - list.height;
+                                    }
+                                }
+                            }
+                        }
+
+                        Item {
+                            width: parent.width
+                            height: editWidgets.implicitHeight + Tokens.spacingSm
+
+                            Button {
+                                id: editWidgets
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: qsTr("Edit Widgets")
+                                onClicked: panel.galleryOpen = true
+                            }
+                        }
+                    }
+                }
+
+                // Widget context menu (sizes, Remove Widget) at the click or the focused tile.
+                MouseArea {
+                    anchors.fill: parent
+                    visible: panel.menuEntry !== null
+                    acceptedButtons: Qt.AllButtons
+                    onPressed: panel.closeWidgetMenu()
+                }
+
+                Loader {
+                    id: widgetMenu
+                    active: panel.menuEntry !== null
+                    x: Math.max(Tokens.spacingSm, Math.min(panel.menuX, panel.width - width - Tokens.spacingSm))
+                    y: Math.max(Tokens.spacingSm, Math.min(panel.menuY, panel.height - height - Tokens.spacingSm))
+                    sourceComponent: WidgetMenu {
+                        entry: panel.menuEntry
+                        onChoose: action => panel.applyWidgetMenu(action)
+                        onCloseRequested: panel.closeWidgetMenu()
+                        Component.onCompleted: forceActiveFocus()
+                    }
+                }
+
+                Loader {
+                    id: gallery
+                    anchors.fill: parent
+                    active: panel.galleryOpen
+                    sourceComponent: WidgetGallery {
+                        screenName: win.modelData.name
+                        onClosed: {
+                            panel.galleryOpen = false;
+                            panel.forceActiveFocus();
+                        }
+                        Component.onCompleted: forceActiveFocus()
                     }
                 }
             }

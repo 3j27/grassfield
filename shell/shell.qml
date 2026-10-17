@@ -80,6 +80,7 @@ ShellRoot {
 
     Wallpaper {}
     HotCorners {}
+    DesktopWidgets {}
     MenuBar {}
     Dock {}
     Overlay {}

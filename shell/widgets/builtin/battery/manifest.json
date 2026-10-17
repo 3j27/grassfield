@@ -1,0 +1,8 @@
+{
+  "id": "battery",
+  "name": "Battery",
+  "version": "1.0.0",
+  "sizes": ["small", "medium"],
+  "contract": "widgets/1",
+  "permissions": ["battery"]
+}
