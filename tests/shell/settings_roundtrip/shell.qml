@@ -1,15 +1,26 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.store
 
-// Persistence round trip of grassfield.json through the real Quickshell FileView/JsonAdapter.
+// Persistence of grassfield.json through the real Quickshell FileView/JsonAdapter.
 // Run by scripts/dev/test.sh: `qs -p tests/shell/settings_roundtrip` (offscreen). Prints
 // "settings-roundtrip: PASS" and exits 0, or prints the failures and exits 1.
+// Phases: (1) defaults, clamping, write and read back; (2) a write keeps every schema key;
+// (3) a malformed file is never overwritten; (4) out-of-range loaded values are clamped.
+// Files live under $GRASSFIELD_TEST_TMP (test.sh removes it); the test also removes its own dir.
 ShellRoot {
     id: root
 
-    property string dir: "/tmp/gf-settings-" + Date.now() + "-" + Math.floor(Math.random() * 1e6)
+    readonly property string base: (Quickshell.env("GRASSFIELD_TEST_TMP") || "/tmp") + "/gf-settings-" + Date.now() + "-" + Math.floor(Math.random() * 1e6)
+    readonly property string dir: base + "/rt"
+    readonly property string dirKeep: base + "/keep"
+    readonly property string dirBad: base + "/bad"
+    readonly property string dirRange: base + "/range"
+    readonly property string badText: '{ "appearance": "light", oops'
+    readonly property string keepText: '{"version":1,"appearance":"light","material":{"transparency":0.5,"profile":"full"},"accessibility":{"reduceTransparency":false,"reduceMotion":false},"dock":{"pinned":["a","b"],"magnification":1.2,"magnificationEnabled":true,"autohide":false},"windows":{"titlebarDoubleClick":"minimize"},"notifications":{"dnd":false,"previews":"always"},"lock":{"idleMinutes":17}}'
+    readonly property string rangeText: '{"version":1,"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999}}'
     property var failures: []
 
     function check(name: string, ok: bool): void {
@@ -18,6 +29,10 @@ ShellRoot {
     }
 
     function finish(): void {
+        cleanup.running = true;
+    }
+
+    function report(): void {
         if (failures.length === 0) {
             console.log("settings-roundtrip: PASS");
             Qt.exit(0);
@@ -27,7 +42,7 @@ ShellRoot {
         }
     }
 
-    // Defaults and clamping first, then write, then read back with a second instance.
+    // Phase 1: defaults and clamping first, then write, then read back with a second instance.
     SettingsStore {
         id: writer
         configDir: root.dir
@@ -50,12 +65,129 @@ ShellRoot {
             root.check("dnd", reader.data.notifications.dnd === true);
             root.check("previews", reader.data.notifications.previews === "never");
             root.check("version", reader.data.version === 1);
-            root.finish();
+            root.check("defaults kept: profile", reader.data.material.profile === "balanced");
+            root.check("defaults kept: titlebar", reader.data.windows.titlebarDoubleClick === "zoom");
+            root.check("defaults kept: idle", reader.data.lock.idleMinutes === 5);
+            setup.running = true;
+        }
+    }
+
+    // Phase 2 to 4 fixtures.
+    Process {
+        id: setup
+        command: ["sh", "-c", 'mkdir -p "$1" "$2" "$3" && printf "%s" "$4" > "$1/grassfield.json" && printf "%s" "$5" > "$2/grassfield.json" && printf "%s" "$6" > "$3/grassfield.json"', "sh", root.dirKeep, root.dirBad, root.dirRange, root.keepText, root.badText, root.rangeText]
+        onRunningChanged: {
+            if (!running)
+                keep.configDir = root.dirKeep;
+        }
+    }
+
+    // Phase 2: a file holding every schema key; one setter must not drop the others.
+    SettingsStore {
+        id: keep
+        saveDelay: 10
+        property bool done: false
+        onLoadedFile: {
+            if (done)
+                return;
+            done = true;
+            root.check("keep loaded profile", keep.data.material.profile === "full");
+            keep.setNotificationsDnd(true);
+            keep.flush();
+        }
+        onSaved: readKeep.running = true
+    }
+
+    Process {
+        id: readKeep
+        command: ["cat", root.dirKeep + "/grassfield.json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let o = {};
+                try {
+                    o = JSON.parse(text);
+                } catch (e) {
+                    root.check("keep parse", false);
+                }
+                root.check("keep dnd written", !!o.notifications && o.notifications.dnd === true);
+                root.check("keep profile", !!o.material && o.material.profile === "full");
+                root.check("keep transparency", !!o.material && o.material.transparency === 0.5);
+                root.check("keep titlebar", !!o.windows && o.windows.titlebarDoubleClick === "minimize");
+                root.check("keep idle", !!o.lock && o.lock.idleMinutes === 17);
+                root.check("keep previews", !!o.notifications && o.notifications.previews === "always");
+                root.check("keep pinned", !!o.dock && o.dock.pinned.join(",") === "a,b");
+                bad.configDir = root.dirBad;
+            }
+        }
+    }
+
+    // Phase 3: a malformed file stays byte for byte; setters never write.
+    SettingsStore {
+        id: bad
+        saveDelay: 10
+        property bool done: false
+        onLoadedFile: {
+            if (done)
+                return;
+            done = true;
+            root.check("bad blocked", bad.writeBlocked);
+            bad.setAppearance("light");
+            bad.setDockPinned(["x"]);
+            bad.flush();
+            badWait.start();
         }
     }
 
     Timer {
-        interval: 10000
+        id: badWait
+        interval: 400
+        onTriggered: readBad.running = true
+    }
+
+    Process {
+        id: readBad
+        command: ["cat", root.dirBad + "/grassfield.json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.check("bad untouched", text === root.badText);
+                range.configDir = root.dirRange;
+            }
+        }
+    }
+
+    // Phase 4: hand-edited garbage is clamped by the validated views.
+    SettingsStore {
+        id: range
+        saveDelay: 10
+        property bool done: false
+        onLoadedFile: {
+            if (done)
+                return;
+            done = true;
+            root.check("range not blocked", !range.writeBlocked);
+            root.check("range appearance", range.appearance === "dark");
+            root.check("range transparency", range.transparency === 1);
+            root.check("range profile", range.materialProfile === "balanced");
+            root.check("range magnification", range.dockMagnification === 2.5);
+            root.check("range pinned", range.dockPinned.join(",") === "a");
+            root.check("range titlebar", range.titlebarDoubleClick === "zoom");
+            root.check("range previews", range.notificationsPreviews === "unlocked");
+            root.check("range idle", range.lockIdleMinutes === 240);
+            root.finish();
+        }
+    }
+
+    Process {
+        id: cleanup
+        command: ["rm", "-rf", root.base]
+        onRunningChanged: {
+            if (!running)
+                root.report();
+        }
+    }
+
+    Timer {
+        interval: 15000
         running: true
         onTriggered: {
             root.failures.push("timeout");

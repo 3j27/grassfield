@@ -6,7 +6,9 @@ import Quickshell.Io
 // grassfield.json (contract version 1): schema, defaults, persistence. Not a singleton so that
 // tests can create independent instances; the shell uses it through the Settings singleton.
 // A missing or unreadable file leaves the defaults in place. The file is created on the first
-// change made through a setter (Control Center, Dock menu), never otherwise.
+// change made through a setter (Control Center, Dock menu), never otherwise. Every key of
+// config/schema/grassfield.schema.json is declared so that a write keeps the whole file. A file
+// that exists but is not valid JSON is never overwritten (`writeBlocked`); the user fixes it.
 Scope {
     id: root
 
@@ -16,12 +18,41 @@ Scope {
 
     readonly property alias data: config
     readonly property alias loaded: file.loaded
+    // True while the file on disk could not be parsed: nothing is written until it loads again.
+    property bool writeBlocked: false
+
+    // Validated views of the loaded values (a hand-edited file may hold anything).
+    readonly property string appearance: ["dark", "light", "auto"].indexOf(config.appearance) >= 0 ? config.appearance : "dark"
+    readonly property real transparency: clampNumber(config.material.transparency, 0, 1, 0.25)
+    readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
+    readonly property real dockMagnification: clampNumber(config.dock.magnification, 1, 2.5, 1.6)
+    readonly property var dockPinned: stringList(config.dock.pinned)
+    readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
+    readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
+    readonly property int lockIdleMinutes: Math.round(clampNumber(config.lock.idleMinutes, 0, 240, 5))
+
+    // Array-like (the adapter hands out a QVariantList) to a plain array of non-empty strings.
+    function stringList(list: var): var {
+        const out = [];
+        const n = list && typeof list.length === "number" ? list.length : 0;
+        for (let i = 0; i < n; i++) {
+            if (typeof list[i] === "string" && list[i] !== "")
+                out.push(list[i]);
+        }
+        return out;
+    }
+
+    function clampNumber(value: var, min: real, max: real, fallback: real): real {
+        const n = Number(value);
+        return isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+    }
 
     signal saved
     signal loadedFile
 
     component MaterialConfig: JsonObject {
         property real transparency: 0.25
+        property string profile: "balanced"
     }
 
     component AccessibilityConfig: JsonObject {
@@ -34,6 +65,14 @@ Scope {
         property real magnification: 1.6
         property bool magnificationEnabled: true
         property bool autohide: false
+    }
+
+    component WindowsConfig: JsonObject {
+        property string titlebarDoubleClick: "zoom"
+    }
+
+    component LockConfig: JsonObject {
+        property int idleMinutes: 5
     }
 
     component NotificationsConfig: JsonObject {
@@ -89,13 +128,32 @@ Scope {
     }
 
     function save(): void {
-        saveTimer.restart();
+        if (!writeBlocked)
+            saveTimer.restart();
     }
 
     // Write now (tests, shutdown).
     function flush(): void {
         saveTimer.stop();
-        mkdir.running = true;
+        if (!writeBlocked)
+            mkdir.running = true;
+    }
+
+    // Called with the file contents after each load: a malformed file blocks all writes.
+    function checkText(text: string): void {
+        let ok = true;
+        // An empty file is a fresh one, not a damaged one.
+        try {
+            const parsed = text.trim() === "" ? {} : JSON.parse(text);
+            ok = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed);
+        } catch (e) {
+            ok = false;
+        }
+        if (!ok && !writeBlocked)
+            console.warn("settings: " + file.path + " is not valid JSON; keeping the file untouched, changes will not be saved until it is fixed");
+        writeBlocked = !ok;
+        if (!ok)
+            saveTimer.stop();
     }
 
     function reload(): void {
@@ -105,7 +163,10 @@ Scope {
     Timer {
         id: saveTimer
         interval: root.saveDelay
-        onTriggered: mkdir.running = true
+        onTriggered: {
+            if (!root.writeBlocked)
+                mkdir.running = true;
+        }
     }
 
     // The config directory may not exist yet.
@@ -113,7 +174,7 @@ Scope {
         id: mkdir
         command: ["mkdir", "-p", root.configDir]
         onRunningChanged: {
-            if (!running)
+            if (!running && !root.writeBlocked)
                 file.writeAdapter();
         }
     }
@@ -125,7 +186,9 @@ Scope {
         property MaterialConfig material: MaterialConfig {}
         property AccessibilityConfig accessibility: AccessibilityConfig {}
         property DockConfig dock: DockConfig {}
+        property WindowsConfig windows: WindowsConfig {}
         property NotificationsConfig notifications: NotificationsConfig {}
+        property LockConfig lock: LockConfig {}
     }
 
     FileView {
@@ -140,6 +203,9 @@ Scope {
         // qmllint enable missing-type
         onFileChanged: reload()
         onSaved: root.saved()
-        onLoaded: root.loadedFile()
+        onLoaded: {
+            root.checkText(file.text());
+            root.loadedFile();
+        }
     }
 }
