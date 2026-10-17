@@ -32,8 +32,11 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
 - **Diagnostics**: `hyprctl grassfield` (read-only JSON, same as the capabilities event).
 - Handshake: the shell calls `hl.plugin.grassfield.hello()` at startup; the plugin answers (and emits at load)
   `{"v":"gfc/1","type":"capabilities","features":[...]}`. No reply within 1500 ms → degraded mode (§5.6).
-- Verbs (planned): `hello()`, `minimize(address, x, y, w, h)`, `restore(address)`, `overview(on)`,
-  `theme(json)`; events: `capabilities`, `minimize-request`, `minimized`, `restored`, `appmenu`.
+- Verbs implemented (2026-10-17): `hello()`, `minimize(address, x, y, w, h)`, `restore(address, x, y, w, h)`
+  (target rect = the Dock tile in layout coordinates), `config(key, value)` (allowlist: `titlebarDoubleClick` ∈
+  zoom|minimize|none). Planned: `overview(on)`, `theme(json)`. Events: `capabilities` (features: `decorations`,
+  `minimize`, `config`), `minimize-request`, `minimized`, `restored`; planned `appmenu`.
+- The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
 
