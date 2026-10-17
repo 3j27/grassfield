@@ -62,11 +62,35 @@ function menuHoldsKeys(state) {
     return state.mode === "menu" || state.handoff === "commit";
 }
 
-// Click catchers (transparent Overlay surfaces, keyboard None) are mapped on every screen that does not
-// host the menu / rename for as long as either is active, so a press on another output cancels it
-// (an Exclusive layer swallows pointer input elsewhere). Unmapped again when the state is idle.
+// Click catchers (transparent Overlay surfaces, keyboard Exclusive so that they receive the pointer of their
+// output) are mapped on every screen that does not host the menu / rename for as long as either is active,
+// so a press on another output cancels it (an Exclusive layer swallows pointer input elsewhere). Unmapped
+// again when the state is idle.
 function catchersMapped(state) {
     return state.mode !== "idle";
+}
+
+// The catchers that must exist, given the state and the release phase (the catchers unmap before the menu /
+// rename surface lets go of the keyboard). This is the ONLY input of the catcher model.
+function catchersShown(state, releasing) {
+    return catchersMapped(state) && !releasing;
+}
+
+// End of the release phase: the snapshots {kb, releasing} the surface walks through, in order. The final
+// keyboard state is applied BEFORE the releasing flag is cleared, so no snapshot has a mapped state with
+// releasing false unless `pending` itself is mapped: a catcher can never come back (briefly) during release
+// (it would take the keyboard, be destroyed, and leave Hyprland with no surface to refocus).
+function releaseEnd(pending) {
+    return [
+        {
+            kb: pending,
+            releasing: true
+        },
+        {
+            kb: pending,
+            releasing: false
+        }
+    ];
 }
 
 function next(state, event) {
