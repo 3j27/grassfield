@@ -261,7 +261,7 @@ Singleton {
     function toggleZoom(toplevel: var): void {
         const top = hyprlandToplevel(toplevel);
         if (top && dispatchRequest(Minimized.fullscreenRequest(top.address, "maximized")))
-            zoomRefreshTimer.restart();
+            requestWindowRefresh();
     }
 
     // Zoom state from Hyprland's window data (fullscreen mode 1), reactive on `revision`.
@@ -270,19 +270,27 @@ Singleton {
         return top ? Minimized.isZoomed(top.lastIpcObject) : false;
     }
 
-    // Window data is only re-read on request: after a Zoom toggle, refresh and notify.
+    // Window data is only re-read on request. Events that change window state (fullscreen,
+    // floating mode, title) request a re-read; requests inside one 50 ms window coalesce into a
+    // single refresh (trailing edge, never starved by a burst), then bindings are notified once
+    // the data has arrived.
+    function requestWindowRefresh(): void {
+        if (!windowRefreshTimer.running)
+            windowRefreshTimer.start();
+    }
+
     Timer {
-        id: zoomRefreshTimer
-        interval: 120
+        id: windowRefreshTimer
+        interval: 50
         onTriggered: {
             Hyprland.refreshToplevels();
-            zoomNotifyTimer.restart();
+            windowNotifyTimer.restart();
         }
     }
 
     Timer {
-        id: zoomNotifyTimer
-        interval: 150
+        id: windowNotifyTimer
+        interval: 100
         onTriggered: root.topologyRevision++
     }
 
@@ -347,6 +355,11 @@ Singleton {
                 if (event.data.split(",")[1] === root.minimizedWorkspace)
                     Hyprland.dispatch("hl.dsp.workspace.toggle_special(\"minimized\")");
                 return;
+            }
+            if (event.name === "windowtitlev2" || event.name === "fullscreen" || event.name === "changefloatingmode") {
+                root.requestWindowRefresh();
+                if (event.name === "windowtitlev2")
+                    return;
             }
             if ((event.name === "openwindow" || event.name === "movewindowv2") && (event.name === "openwindow" || event.data.indexOf(root.minimizedWorkspace) >= 0))
                 minimizedSyncTimer.restart();
