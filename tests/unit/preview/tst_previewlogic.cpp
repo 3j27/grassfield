@@ -90,6 +90,11 @@ TEST(PreviewLogic, RoutesByType)
     EXPECT_EQ(classify(QStringLiteral("/x/a.wav")), Kind::Audio);
     EXPECT_EQ(classify(QStringLiteral("/x/a.zip")), Kind::Unsupported);
     EXPECT_EQ(classify(QStringLiteral("/x/a.exe")), Kind::Unsupported);
+    EXPECT_EQ(classify(QStringLiteral("/x/a.m3u")), Kind::Text);
+    EXPECT_EQ(classify(QStringLiteral("/x/a.m3u8")), Kind::Text);
+    EXPECT_EQ(classify(QStringLiteral("/x/a.pls")), Kind::Text);
+    EXPECT_EQ(classify(QStringLiteral("/x/a.xspf")), Kind::Text);
+    EXPECT_EQ(classify(QStringLiteral("/x/a.vlc")), Kind::Text);
     EXPECT_EQ(kindName(Kind::Pdf), QStringLiteral("pdf"));
     EXPECT_EQ(kindName(Kind::Unsupported), QStringLiteral("unsupported"));
 }
@@ -133,4 +138,16 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
+}
+
+TEST(PreviewLogic, SystemPathsRefused)
+{
+    EXPECT_TRUE(isSystemPath(QStringLiteral("/proc/self/status")));
+    EXPECT_TRUE(isSystemPath(QStringLiteral("/sys/class")));
+    EXPECT_TRUE(isSystemPath(QStringLiteral("/dev/null")));
+    EXPECT_FALSE(isSystemPath(QStringLiteral("/home/u/devices.txt")));
+    EXPECT_FALSE(isSystemPath(QStringLiteral("/procfile")));
+    const Arguments a = resolveArguments({QStringLiteral("/proc/self/status"), QStringLiteral("/proc/version")}, QStringLiteral("/"));
+    EXPECT_TRUE(a.paths.isEmpty());
+    EXPECT_EQ(a.errors.size(), 2);
 }

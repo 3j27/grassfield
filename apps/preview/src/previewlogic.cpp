@@ -41,6 +41,15 @@ Kind classify(const QString &path)
     const QString name = mime.name();
     if (name == QLatin1String("application/pdf"))
         return Kind::Pdf;
+    // Playlists can reference network URLs: show them as text, never hand them to the player.
+    static const QStringList playlistTypes = {
+        QStringLiteral("audio/x-mpegurl"), QStringLiteral("audio/mpegurl"), QStringLiteral("application/vnd.apple.mpegurl"),
+        QStringLiteral("application/x-mpegurl"), QStringLiteral("application/mpegurl"), QStringLiteral("video/vnd.mpegurl"),
+        QStringLiteral("audio/x-scpls"), QStringLiteral("application/xspf+xml"), QStringLiteral("application/vnd.apple.mpegurl.audio")};
+    static const QStringList playlistSuffixes = {QStringLiteral("m3u"), QStringLiteral("m3u8"), QStringLiteral("pls"),
+                                                 QStringLiteral("vlc"), QStringLiteral("xspf")};
+    if (playlistTypes.contains(name) || playlistSuffixes.contains(QFileInfo(path).suffix().toLower()))
+        return Kind::Text;
     if (name.startsWith(QLatin1String("image/")))
         return Kind::Image;
     if (name.startsWith(QLatin1String("video/")))
@@ -104,6 +113,16 @@ bool looksBinary(const QByteArray &sample)
     return sample.contains('\0');
 }
 
+bool isSystemPath(const QString &canonical)
+{
+    for (const char *root : {"/proc", "/sys", "/dev"}) {
+        const QString r = QString::fromLatin1(root);
+        if (canonical == r || canonical.startsWith(r + QLatin1Char('/')))
+            return true;
+    }
+    return false;
+}
+
 Arguments resolveArguments(const QStringList &args, const QString &cwd)
 {
     Arguments out;
@@ -115,6 +134,10 @@ Arguments resolveArguments(const QStringList &args, const QString &cwd)
             continue;
         }
         const QFileInfo info(path);
+        if (isSystemPath(info.canonicalFilePath())) {
+            out.errors << QStringLiteral("not a user file: %1").arg(path);
+            continue;
+        }
         if (!info.isFile()) { // follows symlinks; rejects directories, devices, FIFOs, sockets
             out.errors << QStringLiteral("not a regular file: %1").arg(path);
             continue;
