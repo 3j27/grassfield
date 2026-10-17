@@ -24,9 +24,13 @@ if [[ $what == appmenu-client || $what == all ]]; then
   mkdir -p "$gen"
   wayland-scanner client-header "$root/compositor/protocols/appmenu.xml" "$gen/appmenu-client-protocol.h"
   wayland-scanner private-code "$root/compositor/protocols/appmenu.xml" "$gen/appmenu-protocol.c"
+  # xdg-shell for the --spam mode (a real, mapped toplevel window).
+  xdg_shell=$(pkg-config --variable=pkgdatadir wayland-protocols)/stable/xdg-shell/xdg-shell.xml
+  wayland-scanner client-header "$xdg_shell" "$gen/xdg-shell-client-protocol.h"
+  wayland-scanner private-code "$xdg_shell" "$gen/xdg-shell-protocol.c"
   # shellcheck disable=SC2046
   gcc -std=c11 -O1 -g -Wall -Wextra -I"$gen" "$root/tests/fixtures/appmenu-client/main.c" "$gen/appmenu-protocol.c" \
-    $(pkg-config --cflags --libs wayland-client) -o "$out/appmenu-client"
+    "$gen/xdg-shell-protocol.c" $(pkg-config --cflags --libs wayland-client) -o "$out/appmenu-client"
   echo "built $out/appmenu-client"
 fi
 
