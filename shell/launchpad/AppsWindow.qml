@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.services
 import "Model.js" as Model
 
 // Apps overlay, one per screen, mapped on the controller's screen only: a full-screen layer-shell

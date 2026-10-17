@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.services
 
 // Search window, one per screen, mapped only on the controller's screen while open. Full-screen
 // transparent layer-shell overlay (a click outside closes), keyboard exclusive while open.
