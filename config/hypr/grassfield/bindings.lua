@@ -44,3 +44,16 @@ bind("SUPER + RETURN", "Terminal", hl.dsp.exec_cmd("xdg-terminal-exec"))
 bind("SUPER + SPACE", "Search", shell("search", "toggle"))
 bind("CTRL + UP", "Overview", shell("overview", "toggle"))
 bind("SUPER + CTRL + Q", "Lock screen", shell("lock", "lock"))
+bind("SUPER + N", "Notification Center", shell("notifications", "toggleCenter"))
+bind("SUPER + ALT + ESCAPE", "Force Quit Applications", shell("menubar", "panel forcequit ''"))
+
+-- Keyboard access to the menu bar and the Dock (gate A1), like Ctrl+F2 / Ctrl+F3.
+bind("CTRL + F2", "Focus the menu bar", shell("menubar", "open system ''"))
+bind("CTRL + F3", "Focus the Dock", shell("dock", "keyboard"))
+
+-- Hardware keys: real volume/brightness changes plus the OSD (shell/osd).
+bind("XF86AudioRaiseVolume", "Volume up", shell("volume", "up"), { repeating = true, locked = true })
+bind("XF86AudioLowerVolume", "Volume down", shell("volume", "down"), { repeating = true, locked = true })
+bind("XF86AudioMute", "Mute", shell("volume", "mute"), { locked = true })
+bind("XF86MonBrightnessUp", "Brightness up", shell("brightness", "up"), { repeating = true, locked = true })
+bind("XF86MonBrightnessDown", "Brightness down", shell("brightness", "down"), { repeating = true, locked = true })
