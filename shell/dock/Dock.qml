@@ -8,6 +8,7 @@ import Grassfield.Ui
 import qs.platform
 import qs.services
 import "DockModel.js" as DockModel
+import "../desktop/IconsLogic.js" as Icons
 import "Magnify.js" as Magnify
 
 // Bottom dock, one per screen: pinned apps (Settings) and running apps (foreign-toplevel app ids
@@ -505,6 +506,32 @@ Scope {
                                     id: tileHover
                                     enabled: !tile.isSeparator
                                     cursorShape: Qt.PointingHandCursor
+                                }
+
+                                // Files dropped on the Trash tile (from the desktop icons or any
+                                // application offering text/uri-list) are moved to the trash.
+                                DropArea {
+                                    id: trashDrop
+                                    anchors.fill: parent
+                                    enabled: tile.isTrash
+                                    keys: ["text/uri-list"]
+                                    onDropped: drop => {
+                                        drop.accept(Qt.MoveAction);
+                                        const paths = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
+                                        if (paths.length > 0)
+                                            Quickshell.execDetached(["gio", "trash", "--"].concat(paths));
+                                    }
+                                }
+
+                                // Drop highlight on the Trash tile.
+                                Rectangle {
+                                    visible: tile.isTrash && trashDrop.containsDrag
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: win.indicatorArea
+                                    radius: Tokens.radiusDockIcon * tile.tileScale
+                                    color: Appearance.withAlpha(Appearance.colors.accent, Tokens.desktopIconSelectionOpacity)
                                 }
 
                                 TapHandler {
