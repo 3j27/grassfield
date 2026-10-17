@@ -28,6 +28,9 @@ Dialog {
 
     onRejected: Popups.close()
 
+    // Windows opened after the shell started have no pid until Hyprland's list is refreshed.
+    Component.onCompleted: Compositor.refreshToplevels()
+
     content: [
         Rectangle {
             width: parent.width
@@ -90,6 +93,7 @@ Dialog {
                             width: list.width - 3 * Tokens.spacingLg
                             elide: Text.ElideRight
                             text: Apps.nameFor(row.modelData.appId)
+                            textFormat: Text.PlainText
                             color: row.current ? Appearance.colors.accentText : Appearance.colors.text
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyMenuSize
