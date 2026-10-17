@@ -1,10 +1,8 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Wayland
 import qs.services
-import qs.platform
 import "KeyboardFocus.js" as Focus
 
 // Desktop icons (docs/specs/desktop.md): their own layer surface (namespace grassfield-desktop-icons)
@@ -23,30 +21,17 @@ Variants {
 
         required property ShellScreen modelData
 
-        // Window class of Glance (grassfield-preview --glance): opened from the desktop with Space, it
-        // gets the keyboard and gives it back to the desktop when it closes.
-        readonly property string glanceClass: "org.grassfield.Preview.Glance"
-
-        // Keyboard focus state machine (KeyboardFocus.js): None by default, OnDemand only after a
-        // pointer press on this surface, Exclusive briefly to take the keyboard without pointer motion
-        // (also when the icon menu closes). While the menu is open the menu window holds the keyboard and
-        // this surface is None. Hovering never changes it.
+        // Keyboard safe mode (KeyboardFocus.js, docs/specs/desktop.md): this surface is None, except
+        // Exclusive while a rename field is active. The context menu has its own window (Exclusive while
+        // open). Nothing here re-takes the keyboard: after a menu or a rename it is whatever Hyprland decides.
         property var kb: Focus.initial()
-        readonly property string kbMode: kb.mode
-        // Frames swapped since "take" started (its Exclusive commit is out after two).
-        property int takeFrames: 0
+        // Frames swapped since the hand-off phase started (the surface commit goes out within two).
+        property int handoffFrames: 0
         // The surface has the keyboard (wl_keyboard enter).
         readonly property bool hasKeys: view.Window.active
-        // The pointer is off the surface and no rename, menu or drag keeps the keyboard here: the
-        // desktop lets go of it, because Hyprland would not move it when the user clicks the window it
-        // still counts as focused (see KeyboardFocus.js, `away`).
-        readonly property bool away: !hover.hovered && view.renaming === "" && !view.menuOpen && !view.dragging
 
         function feed(event: var): void {
-            const r = Focus.next(win.kb, event);
-            win.kb = r.state;
-            if (r.focus !== "")
-                Compositor.focusWindow(r.focus);
+            win.kb = Focus.next(win.kb, event);
         }
 
         // Layer state reaches the compositor with the next surface commit: render one now, so a
@@ -68,99 +53,33 @@ Variants {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Background
-        WlrLayershell.keyboardFocus: {
-            switch (Focus.interactivity(win.kb)) {
-            case "exclusive":
-                return WlrKeyboardFocus.Exclusive;
-            case "onDemand":
-                return WlrKeyboardFocus.OnDemand;
-            default:
-                return WlrKeyboardFocus.None;
-            }
-        }
+        WlrLayershell.keyboardFocus: Focus.interactivity(win.kb) === "exclusive" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-desktop-icons"
 
-        onKbModeChanged: {
-            win.takeFrames = 0;
+        onKbChanged: {
+            win.handoffFrames = 0;
             win.commitSoon();
         }
         onHasKeysChanged: win.feed({
             type: "keys",
             hasKeys: win.hasKeys
         })
-        onAwayChanged: win.feed({
-            type: "pointer",
-            away: win.away
-        })
         onVisibleChanged: win.kb = Focus.initial()
 
-        // "take" ends once its Exclusive commit has certainly been sent, even if the keyboard never
-        // arrives (e.g. a locked session), so the surface never stays Exclusive.
+        // The hand-off menu -> rename ends by frames, even if the keyboard never arrives (e.g. a locked
+        // session): first the Exclusive commit of this surface goes out (the menu window then lets go),
+        // then the menu window unmaps once this surface had the time to receive the keyboard.
         Connections {
-            target: win.kbMode === "take" ? view.Window.window : null
+            target: win.kb.handoff !== "" ? view.Window.window : null
 
             function onFrameSwapped(): void {
-                win.takeFrames++;
-                if (win.takeFrames >= 2)
+                win.handoffFrames++;
+                if (win.handoffFrames >= 2)
                     win.feed({
-                        type: "committed"
+                        type: win.kb.handoff === "commit" ? "committed" : "settled"
                     });
                 else
                     win.commitSoon();
-            }
-        }
-
-        // The window Hyprland counts as active, also from before the shell started (no event was seen).
-        Component.onCompleted: win.seedActive()
-
-        function seedActive(): void {
-            const t = Hyprland.activeToplevel;
-            win.feed({
-                type: "seedActive",
-                address: t ? t.address : ""
-            });
-        }
-
-        Connections {
-            target: Hyprland
-
-            function onActiveToplevelChanged(): void {
-                win.seedActive();
-            }
-
-            function onRawEvent(event: HyprlandEvent): void {
-                switch (event.name) {
-                case "openwindow":
-                    {
-                        const w = Focus.parseOpenWindow(event.data);
-                        if (w)
-                            win.feed({
-                                type: "openWindow",
-                                address: w.address,
-                                workspace: w.workspace,
-                                focusedWorkspace: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.name : "",
-                                returnsFocus: w.appClass === win.glanceClass
-                            });
-                        break;
-                    }
-                case "activewindowv2":
-                    win.feed({
-                        type: "activeWindow",
-                        address: event.data
-                    });
-                    break;
-                case "closewindow":
-                    win.feed({
-                        type: "closeWindow",
-                        address: event.data
-                    });
-                    break;
-                case "workspacev2":
-                    win.feed({
-                        type: "workspace"
-                    });
-                    break;
-                }
             }
         }
 
@@ -168,25 +87,13 @@ Variants {
             id: view
             anchors.fill: parent
             screen: win.modelData
-            holdsKeys: Focus.holdsKeys(win.kb)
-            menuLingers: Focus.menuLingers(win.kb)
+            kbMenuMapped: Focus.menuMapped(win.kb)
+            kbMenuHoldsKeys: Focus.menuHoldsKeys(win.kb)
             onFocusEvent: event => win.feed(event)
         }
 
-        // Every press and release on the surface (icons and empty space), seen through a passive grab
-        // above the view so it never interferes with the view's own handlers. Hover is not a press.
         Item {
             anchors.fill: parent
-
-            PointHandler {
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onActiveChanged: win.feed(active ? {
-                    type: "press"
-                } : {
-                    type: "release",
-                    hasKeys: win.hasKeys
-                })
-            }
 
             // The wallpaper below no longer sees the pointer: report it for the hot corner re-arm.
             HoverHandler {
