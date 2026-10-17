@@ -45,6 +45,7 @@ namespace {
         CGrassfieldTitlebar*      deco = nullptr; // checked against state().titlebars before use
         std::optional<tb::Button> button;         // pressed button, activated on release over the same button
         bool                      dragging = false;
+        bool                      moved    = false; // the pointer passed kDragThreshold: the window follows it
         PHLWINDOWREF              window;   // window being moved
         Vector2D                  pressPos; // pointer at press (global logical)
         CBox                      startBox; // window layout box at press
@@ -106,6 +107,7 @@ namespace {
             gf::log(Log::WARN, "titlebar {} failed: {}", action, result.error().message);
     }
 
+    // The one zoom toggle, shared by the zoom button and the double-click on the drag area.
     void toggleZoom(const PHLWINDOW& w) {
         auto& fs = Fullscreen::controller();
         if (!fs)
@@ -115,12 +117,21 @@ namespace {
         fs->setFullscreenMode(w, target, target, false);
     }
 
+    // Maximized or full screen: the layout owns the window's box. A titlebar move would write that box
+    // into the floating geometry the zoom toggle restores (FR8 regression, 2026-10-17).
+    bool inFullscreenMode(const PHLWINDOW& w) {
+        const auto& fs = Fullscreen::controller();
+        return fs && fs->getFullscreenModes(w).internal != Fullscreen::FSMODE_NONE;
+    }
+
     // Interactive move driven by the plugin: the window follows the pointer from the press point.
     // S2 history: with CLayoutManager::beginDragTarget and CKeybindManager::changeMouseBindMode the window
     // jumped by (window middle - press point). The cause was most likely Config::Actions::focus() warping
     // the cursor to the window middle before the drag started (found afterwards, now avoided in
     // focusAndRaise). Hyprland's own drag (with snapping) should be re-evaluated in M1; this move has no snapping.
-    void updateMove(const SPointerGrab& grab) {
+    // Nothing moves until the pointer has passed kDragThreshold: a click (or the first click of a
+    // double-click) never writes the window geometry.
+    void updateMove(SPointerGrab& grab) {
         const auto w = grab.window.lock();
         if (!w || !g_layoutManager || !g_pInputManager)
             return;
@@ -128,7 +139,10 @@ namespace {
         if (!target)
             return;
         const Vector2D delta = g_pInputManager->getMouseCoordsInternal() - grab.pressPos;
-        CBox           box   = grab.startBox;
+        if (!grab.moved && !tb::exceedsDragThreshold(delta.x, delta.y))
+            return;
+        grab.moved = true;
+        CBox box   = grab.startBox;
         box.translate(delta);
         g_layoutManager->setTargetGeom(box, target);
     }
@@ -402,11 +416,17 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         return true;
     }
 
-    // Drag area: double-click zooms, otherwise start an interactive move.
+    // Drag area: double-click zooms (the zoom button's toggle, nothing else), otherwise start an
+    // interactive move.
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
         gf::log(Log::DEBUG, "titlebar double-click -> toggle zoom");
         toggleZoom(w);
         input.presses.claim(e.button, false); // acts now; its release is still the titlebar's
+        return true;
+    }
+
+    if (inFullscreenMode(w)) {
+        input.presses.claim(e.button, false); // focus and raise only; the release is still the titlebar's
         return true;
     }
 
@@ -470,9 +490,9 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
         if (!release.owned || !release.endsGesture)
             return; // a client's press (or an immediate action): nothing to finish here
 
-        const SPointerGrab grab = std::exchange(input.grab, {});
+        SPointerGrab grab = std::exchange(input.grab, {});
         if (grab.dragging)
-            updateMove(grab); // final position at the release point
+            updateMove(grab); // final position at the release point (none for a click)
 
         if (grab.button && isLive(grab.deco) && g_pInputManager) {
             const auto pos = g_pInputManager->getMouseCoordsInternal();

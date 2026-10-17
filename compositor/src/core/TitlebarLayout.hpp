@@ -74,6 +74,10 @@ namespace gf::titlebar {
     // Centers a title of width textWidth on the bar; keeps it clear of the buttons.
     TitlePlacement placeTitle(double barWidth, double textWidth, const Metrics& m = {});
 
+    // True once a press on the drag area has travelled far enough (Euclidean distance strictly greater than
+    // threshold) to move the window; until then it is a click.
+    bool exceedsDragThreshold(double dx, double dy, double threshold = theme::kDragThreshold);
+
     // Detects a double-click from consecutive presses on the drag area.
     class CClickTracker {
       public:

@@ -140,6 +140,24 @@ TEST(ClickTracker, ResetForgetsThePreviousPress) {
     EXPECT_FALSE(t.press(1100, 100, 10));
 }
 
+TEST(DragThreshold, ClickJitterNeverMovesTheWindow) {
+    // FR8 regression: the first click of a double-click on a maximized bar wrote the maximized box into
+    // the floating geometry. A press that stays within the threshold is a click.
+    EXPECT_FALSE(exceedsDragThreshold(0, 0));
+    EXPECT_FALSE(exceedsDragThreshold(3, 0));
+    EXPECT_FALSE(exceedsDragThreshold(0, -4));          // exactly the threshold: still a click
+    EXPECT_FALSE(exceedsDragThreshold(2.8, 2.8));       // diagonal, distance 3.96
+    // Any press-release that may still be the first half of a double-click stays a click.
+    EXPECT_GE(gf::theme::kDragThreshold, gf::theme::kDoubleClickSlop);
+}
+
+TEST(DragThreshold, TravelBeyondTheThresholdIsADrag) {
+    EXPECT_TRUE(exceedsDragThreshold(4.01, 0));
+    EXPECT_TRUE(exceedsDragThreshold(-3, -3));          // distance 4.24
+    EXPECT_TRUE(exceedsDragThreshold(0, 120));
+    EXPECT_TRUE(exceedsDragThreshold(1, 1, 1.0));       // custom threshold
+}
+
 TEST(Theme, ColorsAreGrassfieldValues) {
     using namespace gf::theme;
     EXPECT_FLOAT_EQ(kCloseColor.r, 0xE5 / 255.F);

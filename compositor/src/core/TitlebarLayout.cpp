@@ -88,6 +88,10 @@ namespace gf::titlebar {
 
     CClickTracker::CClickTracker(uint32_t thresholdMs, double slop) : m_thresholdMs(thresholdMs), m_slop(slop) {}
 
+    bool exceedsDragThreshold(double dx, double dy, double threshold) {
+        return std::hypot(dx, dy) > threshold;
+    }
+
     bool CClickTracker::press(uint32_t timeMs, double x, double y) {
         if (m_hasPrevious) {
             const uint32_t elapsed = timeMs - m_prevTimeMs; // unsigned: correct across 32-bit wrap-around
