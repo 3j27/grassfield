@@ -34,8 +34,11 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   `{"v":"gfc/1","type":"capabilities","features":[...]}`. No reply within 1500 ms → degraded mode (§5.6).
 - Verbs implemented (2026-10-17): `hello()`, `minimize(address, x, y, w, h)`, `restore(address, x, y, w, h)`
   (target rect = the Dock tile in layout coordinates), `config(key, value)` (allowlist: `titlebarDoubleClick` ∈
-  zoom|minimize|none). Planned: `overview(on)`, `theme(json)`. Events: `capabilities` (features: `decorations`,
-  `minimize`, `config`), `minimize-request`, `minimized`, `restored`; planned `appmenu`.
+  zoom|minimize|none), `appmenu(address)` (re-posts that window's registration). Planned: `overview(on)`,
+  `theme(json)`. Events: `capabilities` (features: `decorations`, `minimize`, `config`, `appmenu`),
+  `minimize-request`, `minimized`, `restored`, `appmenu` `{address, service, path, pid}` (additive field `pid` =
+  the Wayland client's pid from `wl_client_get_credentials`; the menu bridge checks it against
+  `GetConnectionUnixProcessID(service)` to stop one app pointing its window at another app's menu).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
