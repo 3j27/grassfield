@@ -64,20 +64,25 @@ TestCase {
         compare(items[2].index, 1);
     }
 
-    function test_fileMenuNewWindowWithoutActions() {
+    function test_fileMenuNoNewWindowWithoutAction() {
+        // Launching the entry again is not known to open a window: no item.
         const entry = {id: "foot", actions: []};
-        compare(ids(model.fileMenu(ctx({entry: entry, singleMain: false}))).join(","), "newWindow");
-    }
-
-    function test_fileMenuEmptyForSingleWindowAppWithoutActions() {
-        const entry = {id: "solo", actions: []};
-        compare(model.fileMenu(ctx({entry: entry, singleMain: true})).length, 0);
+        compare(model.fileMenu(ctx({entry: entry, singleMain: false})).length, 0);
         verify(!model.hasFileMenu(ctx({entry: entry, singleMain: true})));
         verify(!model.hasFileMenu(ctx({entry: null})));
     }
 
-    function test_fileMenuSingleWindowAppWithActionsKeepsNewWindow() {
-        verify(model.hasFileMenu(ctx({singleMain: true})));
+    function test_fileMenuSingleWindowAppWithOtherActionsOnly() {
+        // SingleMainWindow=true with actions but no new-window action: no New Window, actions stay.
+        const entry = {id: "solo", actions: [{id: "open-settings", name: "Settings"}]};
+        const items = model.fileMenu(ctx({entry: entry, singleMain: true}));
+        compare(items.map(i => i.text).join("|"), "Settings");
+        verify(!items.some(i => i.id === "newWindow"));
+    }
+
+    function test_fileMenuNewWindowFromAction() {
+        const entry = {id: "chromium", actions: [{id: "new-window", name: "New Window"}]};
+        compare(ids(model.fileMenu(ctx({entry: entry}))).join(","), "newWindow");
     }
 
     function test_windowMenu() {

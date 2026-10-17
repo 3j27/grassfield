@@ -50,8 +50,10 @@ QtObject {
             return [];
         const actions = entry.actions ? entry.actions : [];
         const items = [];
-        // New Window: the entry declares actions, or it is not a single-window app (launching it again).
-        if (actions.length > 0 || !ctx.singleMain)
+        // New Window only when the entry declares a `new-window` action (R11). Launching the entry
+        // again is not known to open a window (SingleMainWindow=true, single-instance apps), so
+        // without that action the item is not shown.
+        if (actions.some(a => a.id === "new-window"))
             items.push({id: "newWindow", text: qsTr("New Window")});
         const others = [];
         for (let i = 0; i < actions.length; i++) {

@@ -18,6 +18,8 @@ PanelWindow {
     // topLeft | topRight | bottomLeft | bottomRight
     property string corner: "topLeft"
     property string action: "none"
+    // True while the surface the action opens is open (no firing then).
+    property bool blocked: false
 
     signal fire
 
@@ -30,8 +32,12 @@ PanelWindow {
         left: win.corner.endsWith("Left")
         right: win.corner.endsWith("Right")
     }
-    implicitWidth: Tokens.hotCornerSize
-    implicitHeight: Tokens.hotCornerSize
+    // While the gate is latched (fired, pointer not yet proven to have left) the window grows to
+    // `latchZone` px so the pointer's distance from the corner can be observed; it shrinks back
+    // once the pointer left.
+    readonly property int latchZone: 24
+    implicitWidth: dwell.latched ? latchZone : Tokens.hotCornerSize
+    implicitHeight: dwell.latched ? latchZone : Tokens.hotCornerSize
     exclusionMode: ExclusionMode.Ignore
     color: "transparent"
     focusable: false
@@ -42,6 +48,8 @@ PanelWindow {
     DwellGate {
         id: dwell
         hovering: hover.hovered
+        blocked: win.blocked
+        distance: Math.max(win.corner.endsWith("Left") ? hover.point.position.x : win.width - hover.point.position.x, win.corner.startsWith("top") ? hover.point.position.y : win.height - hover.point.position.y)
         onTriggered: win.fire()
     }
 
