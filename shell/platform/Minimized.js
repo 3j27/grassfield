@@ -10,6 +10,42 @@ function normalizeAddress(address) {
     return m ? m[1].toLowerCase() : "";
 }
 
+// Lua requests built from validated pieces only (untrusted data is never interpolated). ""
+// means the input was rejected: callers must not dispatch it.
+
+// Hyprland workspace specifier: a regular id or a name, optionally "special:<name>".
+function validWorkspace(workspace) {
+    return /^(?:special:)?[A-Za-z0-9_-]{1,64}$/.test(String(workspace));
+}
+
+function moveRequest(address, workspace) {
+    const hex = normalizeAddress(address);
+    if (hex === "" || !validWorkspace(workspace))
+        return "";
+    return "hl.dsp.window.move({ workspace = \"" + workspace + "\", follow = false, window = \"address:0x" + hex + "\" })";
+}
+
+// Fullscreen state change of a window; mode "maximized" is Zoom, "fullscreen" is full screen.
+function fullscreenRequest(address, mode) {
+    const hex = normalizeAddress(address);
+    if (hex === "" || (mode !== "maximized" && mode !== "fullscreen"))
+        return "";
+    return "hl.dsp.window.fullscreen({ mode = \"" + mode + "\", window = \"address:0x" + hex + "\" })";
+}
+
+// {x, y, w, h} as finite numbers, or null.
+function finiteRect(rect) {
+    if (!rect)
+        return null;
+    const out = [rect.x, rect.y, rect.w, rect.h].map(Number);
+    return out.every(n => Number.isFinite(n)) ? {x: out[0], y: out[1], w: out[2], h: out[3]} : null;
+}
+
+// Hyprland window data `fullscreen` field: 0 none, 1 maximized (Zoom), 2 fullscreen.
+function isZoomed(data) {
+    return !!data && data.fullscreen === 1;
+}
+
 function has(list, toplevel) {
     return list.some(r => r.toplevel === toplevel);
 }

@@ -68,4 +68,34 @@ TestCase {
         const tiles = DockModel.minimizedItems([{toplevel: "a", address: "1", appId: "foot", title: ""}], lookup);
         compare(tiles[0].name, "Foot");
     }
+
+    function test_moveRequestValidates() {
+        compare(Minimized.moveRequest("0x55AB", "3"), "hl.dsp.window.move({ workspace = \"3\", follow = false, window = \"address:0x55ab\" })");
+        compare(Minimized.moveRequest("55ab", "special:minimized").indexOf("special:minimized") > 0, true);
+        compare(Minimized.moveRequest("0x1; hl.dsp.exit()", "3"), "");
+        compare(Minimized.moveRequest("\"})", "3"), "");
+        compare(Minimized.moveRequest("55ab", "3\", x = 1"), "");
+        compare(Minimized.moveRequest("55ab", ""), "");
+        compare(Minimized.moveRequest("", "3"), "");
+    }
+
+    function test_fullscreenRequest() {
+        compare(Minimized.fullscreenRequest("0xAB12", "maximized"), "hl.dsp.window.fullscreen({ mode = \"maximized\", window = \"address:0xab12\" })");
+        compare(Minimized.fullscreenRequest("0xAB12", "bogus"), "");
+        compare(Minimized.fullscreenRequest("zz", "maximized"), "");
+    }
+
+    function test_finiteRect() {
+        verify(Minimized.finiteRect({x: 1, y: 2, w: 3, h: 4}) !== null);
+        compare(Minimized.finiteRect({x: NaN, y: 2, w: 3, h: 4}), null);
+        compare(Minimized.finiteRect({x: 1, y: Infinity, w: 3, h: 4}), null);
+        compare(Minimized.finiteRect(null), null);
+    }
+
+    function test_isZoomed() {
+        compare(Minimized.isZoomed({fullscreen: 1}), true);
+        compare(Minimized.isZoomed({fullscreen: 2}), false);
+        compare(Minimized.isZoomed({fullscreen: 0}), false);
+        compare(Minimized.isZoomed(null), false);
+    }
 }
