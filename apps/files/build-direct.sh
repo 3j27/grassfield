@@ -17,7 +17,7 @@ kfdefs=(-DKF_DISABLE_DEPRECATED_BEFORE_AND_AT=0x061D00)
 if [[ ${1:-} == "--tests" ]]; then
   # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core) \
-    "$root/tests/unit/files/tst_filelogic.cpp" "$here/src/filelogic.cpp" \
+    "$root/tests/unit/files/tst_filelogic.cpp" "$root/tests/unit/files/tst_previewqueue.cpp" "$here/src/filelogic.cpp" \
     $(pkg-config --libs Qt6Core) -lgtest -lgtest_main -pthread \
     -o "$out/files-unit-tests"
   echo "built $out/files-unit-tests"

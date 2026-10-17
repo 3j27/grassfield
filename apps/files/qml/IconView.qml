@@ -177,6 +177,8 @@ FocusScope {
 
             Component.onCompleted: if (cell.canPreview) root.model.requestPreview(cell.index)
             onCanPreviewChanged: if (cell.canPreview) root.model.requestPreview(cell.index)
+            // Scrolled away before its thumbnail was started: drop the request.
+            Component.onDestruction: if (root.model) root.model.cancelPreview(cell.url)
 
             Rectangle {
                 id: backdrop
@@ -220,7 +222,7 @@ FocusScope {
                 anchors.topMargin: Tokens.spacingXs + Tokens.spacingXs / 2
                 width: cell.width - 2 * Tokens.spacingXs
                 horizontalAlignment: Text.AlignHCenter
-                text: cell.name
+                text: cell.name.replace(/[\r\n]+/g, "\u23CE")
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 maximumLineCount: Tokens.filesIconLabelLines
                 elide: Text.ElideRight
