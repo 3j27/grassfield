@@ -241,6 +241,13 @@ FocusScope {
         }
     }
 
+    // A click (release without drag) on an icon: without Ctrl or Shift it leaves that icon alone
+    // selected, also when it was part of a larger selection (kept on press for a group drag).
+    function tap(name: string, modifiers: int): void {
+        if (!(modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) && lay[name] !== undefined)
+            selectOnly(name);
+    }
+
     function rects(): var {
         const out = {};
         for (const n of Object.keys(lay)) {
@@ -485,6 +492,7 @@ FocusScope {
             dragPaths: root.selectedPaths
             dragNames: root.selectedNames
             onPressedIcon: (modifiers, right) => root.press(modelData.name, modifiers, right)
+            onTappedIcon: modifiers => root.tap(modelData.name, modifiers)
             onDragActiveChanged: root.dragging = icon.dragActive
             onActivated: root.openNames([modelData.name])
             onMenuRequested: (px, py) => {
