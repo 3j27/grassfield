@@ -194,12 +194,13 @@ namespace gf::menubridge {
         arg.endMap();
         arg.beginArray();
         while (!arg.atEnd()) {
+            if (depth >= limits::kDepth || budget.items <= 0) {
+                // Over a cap: the rest of the array is not read at all (nothing is allocated for it).
+                budget.truncated = true;
+                break;
+            }
             QDBusVariant child;
             arg >> child;
-            if (depth >= limits::kDepth || budget.items <= 0) {
-                budget.truncated = true;
-                continue;
-            }
             const QVariant v = child.variant();
             if (v.metaType() != QMetaType::fromType<QDBusArgument>())
                 continue;

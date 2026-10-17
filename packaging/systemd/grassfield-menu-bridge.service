@@ -15,7 +15,10 @@ Type=simple
 Slice=session.slice
 ExecStart=/usr/bin/grassfield-menu-bridge
 Restart=on-failure
+# Back-off between restarts (systemd >= 254): 1 s, growing to 30 s, so a crash loop cannot reach the start limit quickly.
 RestartSec=1
+RestartSteps=5
+RestartMaxDelaySec=30
 TimeoutStopSec=5
 # Socket: $XDG_RUNTIME_DIR/grassfield/menu-bridge.sock (directory 0700, socket 0600). Kept across restarts.
 RuntimeDirectory=grassfield
@@ -40,7 +43,11 @@ SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 CapabilityBoundingSet=
 # Resource budget (ADR-0008: <= 20 MB RSS expected, idle CPU 0 %).
-MemoryMax=64M
+# Measured: idle ~15 MB; one 30 MB GetLayout reply peaked at 115 MB (the message is held several times while read).
+# MemoryHigh throttles at 64 MB, MemoryMax = 256 MB leaves room for a reply of ~60 MB; the bridge refuses larger
+# layouts after the first read and remembers an application that killed it (see Bridge::refused).
+MemoryHigh=64M
+MemoryMax=256M
 TasksMax=16
 
 [Install]

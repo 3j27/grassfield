@@ -58,6 +58,7 @@ namespace gf::menubridge {
 
       signals:
         void menuChanged(const QString& window);
+        // code: "gone", "layout-failed" or "oversized". After it the client sends nothing more.
         void failed(const QString& window, const QString& code, const QString& message);
 
       private slots:
@@ -65,6 +66,8 @@ namespace gf::menubridge {
 
       private:
         void fetch();
+        void scheduleRefetch();
+        void fail(const QString& code, const QString& why);
 
         QDBusConnection     m_bus;
         QString             m_window;
@@ -78,6 +81,8 @@ namespace gf::menubridge {
         bool                m_fetching = false;
         bool                m_again    = false;
         bool                m_gone     = false;
+        bool                m_stopped  = false; // gave up (failure or oversized layout): no further GetLayout
+        int                 m_failures = 0;     // consecutive failed re-reads
     };
 
 } // namespace gf::menubridge

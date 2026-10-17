@@ -31,7 +31,7 @@ option(GRASSFIELD_BUILD_TESTS "Build the menu bridge unit tests" ON)
 find_package(GTest)
 if(GRASSFIELD_BUILD_TESTS AND GTest_FOUND)
     enable_testing()
-    add_executable(menu-bridge-unit-tests ../../tests/unit/menu-bridge/tst_menubridge.cpp ${MENU_BRIDGE_LOGIC})
+    add_executable(menu-bridge-unit-tests ../../tests/unit/menu-bridge/tst_menubridge.cpp src/MenuClient.cpp src/MenuClient.h ${MENU_BRIDGE_LOGIC})
     target_include_directories(menu-bridge-unit-tests PRIVATE src)
     target_compile_definitions(menu-bridge-unit-tests PRIVATE
         GRASSFIELD_MENU_BRIDGE_DBUS_XML="${CMAKE_CURRENT_SOURCE_DIR}/dbus/org.grassfield.MenuBridge1.xml")

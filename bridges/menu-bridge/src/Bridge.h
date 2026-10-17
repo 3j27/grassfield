@@ -23,6 +23,8 @@
 #include <QLocalServer>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
+#include <QElapsedTimer>
 #include <QStringList>
 #include <QVariantMap>
 
@@ -54,6 +56,14 @@ namespace gf::menubridge {
         void    open(const ShellMessage& msg);
         void    verified(const ShellMessage& msg, quint64 token, const QString& owner);
         void    close(const QString& window);
+    // Hostile or broken applications (a huge GetLayout reply costs the bridge several times its size in memory):
+    // after a failed first fetch (service pid, path) is refused with a growing back-off, after an oversized layout or a
+    // crash during the fetch for the rest of the session.
+    QString penaltyKey(qint64 pid, const QString& path) const;
+    bool    refused(const QString& key, QString* why) const;
+    void    recordFailure(const QString& window, const QString& code);
+    void    markInflight(const QString& key, bool on);
+    void    loadInflight();
         void    dropAll();
         void    setRegistrar(bool wanted);
         void    send(const QByteArray& line);
@@ -83,6 +93,16 @@ namespace gf::menubridge {
         QStringList                 m_order;   // windows, least recently opened first
         QHash<QString, quint64>     m_pending; // window -> token of the open being verified
         quint64                     m_token = 0;
+
+        struct Penalty {
+            int    failures  = 0;
+            qint64 untilMs   = 0;     // QElapsedTimer milliseconds; refused until then
+            bool   permanent = false;
+        };
+        QHash<QString, Penalty>     m_penalties;
+        QSet<QString>               m_inflight; // keys whose first GetLayout has not answered (mirrored in a file: a crash blames them)
+        QHash<QString, QString>     m_keyOf;    // window -> penalty key
+        QElapsedTimer               m_clock;
     };
 
 } // namespace gf::menubridge

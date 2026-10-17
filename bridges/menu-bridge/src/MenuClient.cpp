@@ -15,6 +15,8 @@ namespace gf::menubridge {
         constexpr int kCallTimeoutMs = 3000;
         // Bursts of LayoutUpdated / ItemsPropertiesUpdated collapse into one GetLayout.
         constexpr int kRefetchDelayMs = 40;
+        // Consecutive failed re-reads of a menu that was shown before the bridge gives up on it.
+        constexpr int kMaxFailures = 3;
     } // namespace
 
     MenuClient::MenuClient(const QDBusConnection& bus, QString window, QString service, QString path, QObject* parent) :
@@ -49,12 +51,18 @@ namespace gf::menubridge {
     }
 
     void MenuClient::onMenuSignal(const QDBusMessage& /*message*/) {
-        if (!m_gone)
+        scheduleRefetch();
+    }
+
+    void MenuClient::scheduleRefetch() {
+        // Not restarted while pending: a burst of signals less than kRefetchDelayMs apart would otherwise push the
+        // refetch back for as long as it lasts. During a burst the layout is read at most every kRefetchDelayMs.
+        if (!m_gone && !m_stopped && !m_refetch.isActive())
             m_refetch.start();
     }
 
     void MenuClient::fetch() {
-        if (m_gone)
+        if (m_gone || m_stopped)
             return;
         if (m_fetching) {
             m_again = true;
@@ -66,32 +74,48 @@ namespace gf::menubridge {
             w->deleteLater();
             m_fetching            = false;
             const QDBusMessage reply = w->reply();
-            if (m_gone)
+            if (m_gone || m_stopped)
                 return;
             if (reply.type() != QDBusMessage::ReplyMessage || reply.signature() != QLatin1String("u(ia{sv}av)") || reply.arguments().size() != 2) {
                 const QString why = reply.type() == QDBusMessage::ErrorMessage ? reply.errorName() : QStringLiteral("unexpected reply signature %1").arg(reply.signature());
                 log(QStringLiteral("window %1: GetLayout on %2 %3 failed: %4").arg(m_window, m_service, m_path, why));
-                if (!m_ready)
-                    emit failed(m_window, QStringLiteral("layout-failed"), why);
+                fail(QStringLiteral("layout-failed"), why);
                 return;
             }
             RawItem      root;
             LayoutBudget readBudget;
             if (!readLayout(qvariant_cast<QDBusArgument>(reply.arguments().at(1)), root, 0, readBudget)) {
-                if (!m_ready)
-                    emit failed(m_window, QStringLiteral("layout-failed"), QStringLiteral("malformed layout"));
+                fail(QStringLiteral("layout-failed"), QStringLiteral("malformed layout"));
                 return;
             }
+            if (readBudget.truncated) {
+                // More items or levels than any real menu has: the application is not trusted any more, its menu is not
+                // shown and no further GetLayout is sent (the bridge remembers the refusal, see Bridge::refuse).
+                log(QStringLiteral("window %1: menu of %2 has more than %3 items or %4 levels: refused").arg(m_window, m_service).arg(limits::kItems).arg(limits::kDepth));
+                m_stopped = true;
+                m_refetch.stop();
+                emit failed(m_window, QStringLiteral("oversized"), QStringLiteral("the menu is larger than the supported limits"));
+                return;
+            }
+            m_failures = 0;
             LayoutBudget mapBudget;
             m_items = mapChildren(root, mapBudget);
             m_index = indexItems(m_items);
             m_ready = true;
-            if (readBudget.truncated || mapBudget.truncated)
-                log(QStringLiteral("window %1: menu of %2 truncated (more than %3 items or %4 levels)").arg(m_window, m_service).arg(limits::kItems).arg(limits::kDepth));
             emit menuChanged(m_window);
             if (std::exchange(m_again, false))
                 fetch();
         });
+    }
+
+    void MenuClient::fail(const QString& code, const QString& why) {
+        // The first layout never arrived: the menu cannot be shown. Later failures keep the previous menu until the
+        // application keeps failing.
+        if (!m_ready || ++m_failures >= kMaxFailures) {
+            m_stopped = true;
+            m_refetch.stop();
+            emit failed(m_window, code, why);
+        }
     }
 
     bool MenuClient::aboutToShow(int id) {
@@ -103,7 +127,7 @@ namespace gf::menubridge {
             const QDBusMessage reply = w->reply();
             // needUpdate = true: the application changed the submenu; read it again.
             if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() == 1 && reply.arguments().at(0).toBool())
-                m_refetch.start();
+                scheduleRefetch();
         });
         return true;
     }
