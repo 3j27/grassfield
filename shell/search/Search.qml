@@ -119,7 +119,7 @@ Scope {
         const out = [];
         const list = DesktopEntries.applications.values;
         for (const e of list) {
-            if (e.noDisplay)
+            if (!Apps.isListed(e))
                 continue;
             out.push({id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
                 keywords: Array.from(e.keywords), icon: e.icon, entry: e});
@@ -430,9 +430,9 @@ Scope {
     }
 
     Connections {
-        target: DesktopEntries
+        target: Apps
 
-        function onApplicationsChanged(): void {
+        function onListChanged(): void {
             root.rebuildApps();
             if (root.open)
                 root.compute();
@@ -475,7 +475,8 @@ Scope {
     }
 
     Component.onCompleted: {
-        rebuildApps();
+        if (Apps.hiddenReady)
+            rebuildApps();
         prepare.running = true;
     }
 
