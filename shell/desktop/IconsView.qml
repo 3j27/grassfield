@@ -3,6 +3,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.widgets
+import "../widgets/Placements.js" as Placements
 import "IconsLogic.js" as Logic
 
 // Desktop icons (docs/specs/desktop.md): the files of the desktop folder as a grid of icons on the
@@ -36,13 +38,47 @@ FocusScope {
     readonly property real areaH: Math.max(0, height - topInset - bottomInset)
     readonly property var grid: Logic.gridSize(areaW, areaH, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight)
     readonly property bool ready: width > 0 && height > 0 && files.positionsLoaded && files.dir !== ""
-    readonly property var lay: Logic.layout(files.names, files.positions, grid.cols, grid.rows)
+    // Widgets of this screen are never overlapped: slots under a widget tile are not available to
+    // icons (widgets win; the icons move to the next free slot).
+    readonly property var widgetRects: {
+        const g = Widgets.gridFor(screen);
+        const out = [];
+        for (const e of Widgets.desktop) {
+            if (e.screen !== screen.name)
+                continue;
+            const s = Placements.px(e.size, g.cell, g.gap);
+            out.push({
+                x: g.x0 + e.col * (g.cell + g.gap),
+                y: g.y0 + e.row * (g.cell + g.gap),
+                w: s.w,
+                h: s.h
+            });
+        }
+        return out;
+    }
+    readonly property var blocked: Logic.blockedSlots(widgetRects, margin, topInset, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight, grid.cols, grid.rows)
+    readonly property var lay: Logic.layout(files.names, files.positions, grid.cols, grid.rows, blocked)
     readonly property var shown: files.entries.filter(e => lay[e.name] !== undefined)
     readonly property var selectedNames: Object.keys(selected).filter(n => selected[n] === true && lay[n] !== undefined)
     readonly property var selectedPaths: selectedNames.map(n => files.path(n))
 
     DesktopFiles {
         id: files
+    }
+
+    // Emitted after an item was opened: the host window lets go of the keyboard.
+    signal released
+
+    // Dedicated key sink: the focus item of this scope whenever no rename field is open, so that a
+    // finished rename can never hand focus back to its (hidden) field.
+    Item {
+        id: keySink
+        focus: true
+        activeFocusOnTab: false
+    }
+
+    function takeFocus(): void {
+        keySink.forceActiveFocus();
     }
 
     activeFocusOnTab: false
@@ -100,7 +136,7 @@ FocusScope {
     function endRename(): void {
         renaming = "";
         renameError = "";
-        root.forceActiveFocus();
+        keySink.forceActiveFocus();
     }
 
     function beginRename(name: string): void {
@@ -111,13 +147,18 @@ FocusScope {
         renaming = name;
     }
 
+    // Opening hands the keyboard to whatever opens: the desktop lets go of it.
     function openNames(names: var): void {
         for (const n of names)
             files.open(n);
+        released();
     }
+
+    readonly property bool menuOpen: menuKind !== ""
 
     function closeMenu(): void {
         menuKind = "";
+        takeFocus();
     }
 
     function applyMenu(action: string): void {
@@ -125,7 +166,7 @@ FocusScope {
         const paths = selectedPaths;
         const kind = menuKind;
         menuKind = "";
-        root.forceActiveFocus();
+        keySink.forceActiveFocus();
         if (kind === "desktop") {
             if (action === "newFolder")
                 files.newFolder();
@@ -144,7 +185,7 @@ FocusScope {
     // Select by press: Ctrl toggles, Shift adds, otherwise the icon alone (kept as is when it is
     // already part of the selection, so that a drag carries the whole selection).
     function press(name: string, modifiers: int, right: bool): void {
-        root.forceActiveFocus();
+        root.takeFocus();
         if (renaming !== "" && renaming !== name)
             endRename();
         if (modifiers & Qt.ControlModifier) {
@@ -291,6 +332,13 @@ FocusScope {
         function onRenameWanted(name: string): void {
             Qt.callLater(() => root.beginRename(name));
         }
+
+        // The file system refused an accepted rename: reopen the field with the reason inline.
+        function onRenameFailed(name: string, reason: string): void {
+            root.takeFocus();
+            root.beginRename(name);
+            root.renameError = "failed";
+        }
     }
 
     // ---- empty space: rubber band, focus, context menu ---------------------------------------------
@@ -308,7 +356,7 @@ FocusScope {
                 mouse.accepted = false;
                 return;
             }
-            root.forceActiveFocus();
+            root.takeFocus();
             if (root.renaming !== "")
                 root.endRename();
             if (mouse.button === Qt.RightButton) {
@@ -378,6 +426,8 @@ FocusScope {
                 root.menuKind = "icon";
             }
             onRenameAccepted: text => {
+                if (root.renaming !== modelData.name)
+                    return;
                 const why = files.rename(modelData.name, text);
                 if (why === "" || why === "same") {
                     root.endRename();

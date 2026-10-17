@@ -54,6 +54,23 @@ TestCase {
         verify(lay.c === undefined);
     }
 
+    function test_blockedSlotsFollowWidgetRects() {
+        // 2 cols x 2 rows of 100x100 cells, grid origin (10, 20), areaW 200: col 0 is the right column.
+        const b = Logic.blockedSlots([{x: 110, y: 20, w: 100, h: 50}], 10, 20, 200, 100, 100, 2, 2);
+        compare(Object.keys(b).sort(), ["0,0"]);
+        const two = Logic.blockedSlots([{x: 50, y: 60, w: 100, h: 100}], 10, 20, 200, 100, 100, 2, 2);
+        compare(Object.keys(two).sort(), ["0,0", "0,1", "1,0", "1,1"]);
+        compare(Object.keys(Logic.blockedSlots([], 10, 20, 200, 100, 100, 2, 2)).length, 0);
+    }
+
+    function test_layoutAvoidsBlockedSlots() {
+        const blocked = {"0,0": true};
+        const lay = Logic.layout(["a", "b"], {a: {col: 0, row: 0}}, 2, 2, blocked);
+        verify(!(lay.a.col === 0 && lay.a.row === 0));
+        verify(!(lay.b.col === 0 && lay.b.row === 0));
+        compare(Object.keys(lay).length, 2);
+    }
+
     function test_slotMath() {
         // Area 1000 wide, cells 100x100: col 0 is the right-most.
         compare(Logic.slotPos(0, 0, 1000, 100, 100), {x: 900, y: 0});

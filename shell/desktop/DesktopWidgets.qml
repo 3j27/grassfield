@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.platform
+import qs.services
 import qs.widgets
 import "../widgets/Placements.js" as Placements
 
@@ -122,6 +123,28 @@ Variants {
                 if (event.name === "openwindow" || event.name === "closewindow" || event.name === "movewindowv2" || event.name === "workspacev2" || event.name === "changefloatingmode")
                     Compositor.requestWindowRefresh();
             }
+        }
+
+        // Hyprland emits nothing when a floating window is moved or resized, so a hidden widget could
+        // stay hidden after the window left. While a widget of this screen is hidden, the pointer
+        // moving over the desktop (reported by the surfaces below the windows) asks, debounced, for a
+        // re-read of the window geometry.
+        readonly property bool anyCovered: mine.some(e => covered(e))
+
+        Connections {
+            target: PointerTracker
+            enabled: scope.anyCovered
+
+            function onMoved(screen: string): void {
+                if (screen === scope.modelData.name)
+                    recheck.restart();
+            }
+        }
+
+        Timer {
+            id: recheck
+            interval: 300
+            onTriggered: Compositor.requestWindowRefresh()
         }
 
         Connections {

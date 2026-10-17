@@ -73,12 +73,33 @@ function nearestFree(taken, want, cols, rows) {
     return best;
 }
 
+// Slots ({"col,row": true}) whose cell overlaps one of the widget rects ({x, y, w, h} in view px).
+// The grid origin is (margin, topInset); slot geometry as in slotPos.
+function blockedSlots(widgetRects, margin, topInset, areaW, cellW, cellH, cols, rows) {
+    const out = {};
+    for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+            const s = slotPos(c, r, areaW, cellW, cellH);
+            const x = margin + s.x;
+            const y = topInset + s.y;
+            for (const w of widgetRects) {
+                if (x < w.x + w.w && x + cellW > w.x && y < w.y + w.h && y + cellH > w.y) {
+                    out[key(c, r)] = true;
+                    break;
+                }
+            }
+        }
+    }
+    return out;
+}
+
 // Layout for `names`: saved slots are kept when valid and not taken (first name in sort order wins),
 // every other name takes the first free slot. Returns {name: {col, row}}; a name that finds no room
 // (grid full) is left out.
-function layout(names, saved, cols, rows) {
+function layout(names, saved, cols, rows, blocked) {
     const out = {};
-    const taken = {};
+    // Blocked slots (under a desktop widget) are never handed out nor kept.
+    const taken = Object.assign({}, blocked || {});
     const pending = [];
     const sorted = sortNames(names);
     for (const n of sorted) {

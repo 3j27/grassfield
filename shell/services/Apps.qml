@@ -52,6 +52,18 @@ Singleton {
         onTriggered: root.refreshHidden()
     }
 
+    // In-place edits of an existing .desktop file (not reported by DesktopEntries.applicationsChanged):
+    // watched with inotifywait when it is installed, one line per change. Without it the list is
+    // refreshed only when an entry is added or removed (documented limitation, docs/specs/apps.md).
+    Process {
+        id: watch
+        running: true
+        command: ["sh", Quickshell.shellPath("launchpad/watch-applications.sh")]
+        stdout: SplitParser {
+            onRead: debounce.restart()
+        }
+    }
+
     Process {
         id: scan
         // Set when entries changed while the script was running: run it once more.
