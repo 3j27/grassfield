@@ -10,7 +10,9 @@
 #include <QLocalSocket>
 #include <QTimer>
 
+#include <algorithm>
 #include <sys/stat.h>
+#include <time.h>
 
 #include <utility>
 
@@ -20,6 +22,12 @@ namespace gf::menubridge {
         constexpr int       kDBusTimeoutMs   = 2000;
         constexpr qsizetype kMaxPendingWrite = 16 * 1024 * 1024; // a shell that stops reading is dropped
         constexpr int       kCallTimeoutMs   = 3000;             // MenuClient::kCallTimeoutMs (+ slack below)
+
+        qint64 monotonicMs() {
+            timespec ts{};
+            ::clock_gettime(CLOCK_MONOTONIC, &ts);
+            return static_cast<qint64>(ts.tv_sec) * 1000 + ts.tv_nsec / 1000000;
+        }
 
         QDBusMessage busCall(const char* method, const QString& name) {
             QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"), QStringLiteral("org.freedesktop.DBus"),
@@ -33,6 +41,8 @@ namespace gf::menubridge {
         m_server.setSocketOptions(QLocalServer::UserAccessOption);
         m_server.setMaxPendingConnections(2);
         connect(&m_server, &QLocalServer::newConnection, this, [this] { onNewConnection(); });
+        m_heartbeat.setInterval(penalty::kHeartbeatMs);
+        connect(&m_heartbeat, &QTimer::timeout, this, [this] { heartbeat(); });
     }
 
     Bridge::~Bridge() {
@@ -78,7 +88,9 @@ namespace gf::menubridge {
         setRegistrar(false);
         dropAll();
         m_calls.clear(); // a clean stop leaves nothing in flight
-        saveState();
+        m_heartbeat.stop();
+        m_running = false;
+        saveState(); // "run 0": the next start knows this was not a crash
         if (m_client) {
             m_client->disconnect(this);
             m_client->abort();
@@ -94,12 +106,15 @@ namespace gf::menubridge {
         return {
             {QStringLiteral("state"), state()},
             {QStringLiteral("registrar"), m_registrar},
+            {QStringLiteral("degraded"), m_degraded},
             {QStringLiteral("shell"), !m_client.isNull()},
             {QStringLiteral("menus"), static_cast<uint>(m_menus.size())},
         };
     }
 
     QString Bridge::state() const {
+        if (m_degraded)
+            return QStringLiteral("degraded");
         if (m_registrar)
             return QStringLiteral("active");
         return m_appmenu && m_registrarBusy ? QStringLiteral("busy") : QStringLiteral("standby");
@@ -199,6 +214,11 @@ namespace gf::menubridge {
     }
 
     void Bridge::open(const ShellMessage& msg) {
+        if (m_degraded) {
+            // Gave up (too many crashes the bridge could not attribute): no menu is served, the shell shows T0.
+            sendError(msg.window, QStringLiteral("backoff"), QStringLiteral("the menu bridge gave up after repeated unexplained crashes; menus are not served until it is restarted later"));
+            return;
+        }
         // The same request as the open menu: send its menu again.
         if (MenuClient* c = m_menus.value(msg.window)) {
             const SOpened& o = m_opened.value(msg.window);
@@ -312,44 +332,71 @@ namespace gf::menubridge {
     }
 
     void Bridge::beginCall(const QString& id) {
-        if (m_calls[id]++ == 0)
-            saveState(); // written before the call leaves: a crash while it is outstanding is attributed
+        Calls& c = m_calls[id];
+        if (c.count++ == 0)
+            c.startedMs = monotonicMs();
+        if (!m_heartbeat.isActive())
+            m_heartbeat.start();
+        saveState(); // written before the call leaves: a crash while it is outstanding is attributed
     }
 
     void Bridge::endCall(const QString& id, int n) {
         const auto it = m_calls.find(id);
         if (it == m_calls.end())
             return;
-        *it -= n;
-        if (*it <= 0) {
+        it->count -= n;
+        if (it->count <= 0)
             m_calls.erase(it);
-            saveState();
+        if (m_calls.isEmpty())
+            m_heartbeat.stop();
+        saveState();
+    }
+
+    void Bridge::heartbeat() {
+        if (m_calls.isEmpty()) {
+            m_heartbeat.stop();
+            return;
         }
+        saveState(); // refreshes the age of the calls in flight
     }
 
     void Bridge::saveState() {
         if (!m_stateOwned)
             return; // an instance that never passed the singleton probe must not overwrite the live bridge's state
-        const QStringList inflight = m_calls.keys();
-        if (!writeStateFile(stateFile(), m_penalties.serialize(inflight, bootId())))
+        QList<InflightCall> inflight;
+        const qint64        now = monotonicMs();
+        for (auto it = m_calls.cbegin(); it != m_calls.cend(); ++it)
+            inflight.append({it.key(), it->count, std::max<qint64>(0, now - it->startedMs)});
+        if (!writeStateFile(stateFile(), m_penalties.serialize(inflight, bootId(), m_running)))
             log(QStringLiteral("cannot write %1: crash attribution is degraded").arg(stateFile()));
     }
 
     void Bridge::loadState() {
-        // A previous run that died while a call to an application was outstanding (killed by the memory limit, or
-        // crashed on its reply) blames those applications: they are refused (Penalties.h) so a restart does not
-        // repeat the call. The file is rewritten at once with the outcome.
+        // A previous run that did not stop cleanly (killed by the memory limit, crashed) is attributed ONLY when
+        // exactly one fresh call to one application was in flight: that application is refused (Penalties.h).
+        // Otherwise the crash is unattributed (unsolicited traffic, several calls, a stale call): nobody is refused,
+        // it is counted, and after penalty::kMaxUnattributed of them the bridge gives up (degraded). The file is
+        // rewritten at once with the outcome.
         QByteArray data;
         QString    why;
         if (readStateFile(stateFile(), &data, &why)) {
-            QStringList crashed;
-            if (!m_penalties.load(data, bootId(), &why, &crashed))
+            CrashOutcome outcome;
+            if (!m_penalties.load(data, bootId(), &why, &outcome)) {
                 log(QStringLiteral("ignored %1: %2").arg(stateFile(), why));
-            for (const QString& id : std::as_const(crashed))
-                log(QStringLiteral("a previous run died while a call to \"%1\" was in flight: refused").arg(id));
+            } else if (!outcome.culprit.isEmpty()) {
+                log(QStringLiteral("a previous run died while a call to \"%1\" was in flight: refused").arg(outcome.culprit));
+            } else if (outcome.crashed) {
+                log(QStringLiteral("a previous run died without a single fresh call in flight: unattributed crash %1 of %2, nobody is refused")
+                        .arg(outcome.unattributed)
+                        .arg(penalty::kMaxUnattributed));
+            }
         } else if (!why.isEmpty()) {
             log(QStringLiteral("ignored %1: %2").arg(stateFile(), why));
             QFile::remove(stateFile()); // unlink never follows a symlink
+        }
+        if (m_penalties.degraded()) {
+            m_degraded = true;
+            log(QStringLiteral("gave up: %1 unattributed crashes within the last hour; the registrar is not owned and no menu is served (T0 menus)").arg(m_penalties.unattributed()));
         }
         m_stateOwned = true; // past the singleton probe (listen): this instance now owns the file
         saveState();
@@ -383,6 +430,8 @@ namespace gf::menubridge {
                 m_registrarBusy = false;
             return;
         }
+        if (wanted && m_degraded)
+            return; // gave up: never owns the registrar, applications keep their in-window menus
         const QString service = QLatin1String(kRegistrarService);
         const QString path    = QLatin1String(kRegistrarPath);
         if (!wanted) {

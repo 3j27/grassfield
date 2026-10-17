@@ -564,15 +564,32 @@ namespace {
     PenaltyBook book(Clock& c) {
         return PenaltyBook([&c] { return c.now; });
     }
-    const QString kApp  = QStringLiteral("exe:/usr/bin/evil");
-    const QString kOther = QStringLiteral("exe:/usr/bin/calc");
+    const QString kApp   = QStringLiteral("id:exe=/usr/bin/evil");
+    const QString kOther = QStringLiteral("id:exe=/usr/bin/calc");
+    const QString kBoot  = QStringLiteral("boot-1");
+
+    QString cgroupOf(const QString& path) {
+        return QStringLiteral("0::") + path + u'\n';
+    }
+    // A state file as the previous run left it.
+    QByteArray previousRun(Clock& c, const QList<InflightCall>& inflight, bool running = true) {
+        PenaltyBook before = book(c);
+        return before.serialize(inflight, kBoot, running);
+    }
+    CrashOutcome crashOutcome(Clock&, PenaltyBook& after, const QByteArray& data) {
+        QString      why;
+        CrashOutcome out;
+        EXPECT_TRUE(after.load(data, kBoot, &why, &out)) << qPrintable(why);
+        return out;
+    }
 } // namespace
 
-TEST(Penalties, IdentityOfThisProcessSurvivesANewPid) {
+// ---- identity -----------------------------------------------------------------------------------------------------
+
+TEST(Identity, OfThisProcessSurvivesANewPidAndIsNeverAPid) {
     const QString me = appIdentity(::getpid());
-    EXPECT_TRUE(me.startsWith(QStringLiteral("exe:/"))) << qPrintable(me);
+    EXPECT_TRUE(me.startsWith(QStringLiteral("id:")) && me.contains(QStringLiteral("exe=/"))) << qPrintable(me);
     EXPECT_TRUE(validIdentity(me));
-    // Another pid of the same executable (here: our own parent chain is not guaranteed, so fork).
     const pid_t child = ::fork();
     if (child == 0)
         ::_exit(appIdentity(::getpid()) == appIdentity(::getppid()) ? 0 : 1);
@@ -580,25 +597,105 @@ TEST(Penalties, IdentityOfThisProcessSurvivesANewPid) {
     int status = 0;
     ASSERT_EQ(::waitpid(child, &status, 0), child);
     EXPECT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0) << "a forked child must have the parent's identity";
-    EXPECT_EQ(appIdentity(2147483000), QStringLiteral("pid:2147483000")); // no such process: the pid is all there is
+    EXPECT_EQ(appIdentity(2147483000), kUnknownIdentity) << "no such process: the shared bucket, never pid:<n>";
 }
 
-TEST(Penalties, IdentityValidation) {
-    EXPECT_TRUE(validIdentity(QStringLiteral("exe:/usr/bin/foo bar")));
-    EXPECT_TRUE(validIdentity(QStringLiteral("pid:4242")));
+TEST(Identity, AppScopeOfCgroupSamples) {
+    // systemd app scopes: the instance suffix is stripped.
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/app.slice/app-Hyprland-foot-12345.scope"))), QStringLiteral("app-Hyprland-foot"));
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/app.slice/app-Hyprland-foot-99999.scope"))), QStringLiteral("app-Hyprland-foot"))
+        << "another instance of the same application has the same scope";
+    // flatpak: the id is part of the scope, the instance is not.
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/app.slice/app-flatpak-org.mozilla.firefox-4242.scope"))), QStringLiteral("app-flatpak-org.mozilla.firefox"));
+    // a process in a sub-cgroup of the scope
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/app.slice/app-gnome-code-7.scope/sandbox"))), QStringLiteral("app-gnome-code"));
+    // a template service: the instance after '@' is stripped
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/user.slice/user-1000.slice/user@1000.service/app.slice/app-org.kde.kalk@autostart.service"))), QStringLiteral("app-org.kde.kalk"));
+    // hybrid hierarchies: the v2 line wins
+    EXPECT_EQ(appScopeOf(QStringLiteral("1:name=systemd:/other.scope\n0::/app.slice/app-x-y-1.scope\n")), QStringLiteral("app-x-y"));
+    // not in an app scope: none
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/user.slice/user-1000.slice/session-3.scope"))), QString());
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/"))), QString());
+    EXPECT_EQ(appScopeOf(QString()), QString());
+    EXPECT_EQ(appScopeOf(QStringLiteral("garbage")), QString());
+    // a unit name carrying a separator or control character is not trusted
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-a|b-1.scope"))), QString());
+}
+
+TEST(Identity, ScriptOfInterpreters) {
+    const auto cmd = [](std::initializer_list<const char*> args) {
+        QByteArray out;
+        for (const char* a : args)
+            out += QByteArray(a) + '\0';
+        return out;
+    };
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3.14"), cmd({"python3", "-I", "/home/u/app.py", "--x"})), QStringLiteral("/home/u/app.py"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-m", "http.server"})), QStringLiteral("-m http.server"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/bash"), cmd({"bash", "/opt/run.sh"})), QStringLiteral("/opt/run.sh"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/node"), cmd({"node", "--inspect", "server.js"})), QStringLiteral("server.js"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/lib/jvm/default/bin/java"), cmd({"java", "-jar", "app.jar"})), QStringLiteral("app.jar"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-c", "print(1)"})), QString()) << "inline code is not a script identity";
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), QByteArray()), QString()) << "unreadable cmdline";
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/foot"), cmd({"foot", "something"})), QString()) << "not an interpreter";
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "a|b\x01.py"})), QStringLiteral("a?b?.py"));
+}
+
+TEST(Identity, FromFacts) {
+    PeerFacts f;
+    f.exe    = QStringLiteral("/usr/bin/foot");
+    f.cgroup = cgroupOf(QStringLiteral("/user.slice/user@1000.service/app.slice/app-Hyprland-foot-5.scope"));
+    EXPECT_EQ(identityFrom(f), QStringLiteral("id:scope=app-Hyprland-foot|exe=/usr/bin/foot"));
+    // Same application, another instance and another pid: same identity.
+    f.cgroup = cgroupOf(QStringLiteral("/user.slice/user@1000.service/app.slice/app-Hyprland-foot-77.scope"));
+    EXPECT_EQ(identityFrom(f), QStringLiteral("id:scope=app-Hyprland-foot|exe=/usr/bin/foot"));
+    // No app scope: executable only.
+    f.cgroup = cgroupOf(QStringLiteral("/user.slice/session-2.scope"));
+    EXPECT_EQ(identityFrom(f), QStringLiteral("id:exe=/usr/bin/foot"));
+    // An interpreter adds the script: two python applications are not one identity.
+    PeerFacts a, b;
+    a.exe     = b.exe = QStringLiteral("/usr/bin/python3.14");
+    a.cmdline = QByteArrayLiteral("python3\0/opt/one.py\0");
+    b.cmdline = QByteArrayLiteral("python3\0/opt/two.py\0");
+    EXPECT_NE(identityFrom(a), identityFrom(b));
+    EXPECT_TRUE(identityFrom(a).endsWith(QStringLiteral("|script=/opt/one.py")));
+    // The same python script from two scopes is two applications as well (a distro-shared runtime).
+    a.cgroup = cgroupOf(QStringLiteral("/app.slice/app-x-one-1.scope"));
+    b.cmdline = a.cmdline;
+    b.cgroup  = cgroupOf(QStringLiteral("/app.slice/app-x-two-1.scope"));
+    EXPECT_NE(identityFrom(a), identityFrom(b));
+    // A replaced binary keeps its identity.
+    PeerFacts g;
+    g.exe = QStringLiteral("/usr/bin/foot (deleted)");
+    EXPECT_EQ(identityFrom(g), QStringLiteral("id:exe=/usr/bin/foot"));
+    // Unreadable (empty or not absolute): the one shared bucket, whatever else is known.
+    PeerFacts u;
+    u.cgroup  = cgroupOf(QStringLiteral("/app.slice/app-x-y-1.scope"));
+    u.cmdline = QByteArrayLiteral("whatever\0");
+    EXPECT_EQ(identityFrom(u), kUnknownIdentity);
+    u.exe = QStringLiteral("relative");
+    EXPECT_EQ(identityFrom(u), kUnknownIdentity);
+    EXPECT_TRUE(validIdentity(kUnknownIdentity));
+}
+
+TEST(Identity, Validation) {
+    EXPECT_TRUE(validIdentity(QStringLiteral("id:exe=/usr/bin/foo bar")));
+    EXPECT_TRUE(validIdentity(QStringLiteral("id:scope=app-x|exe=/usr/bin/foo|script=a.py")));
+    EXPECT_TRUE(validIdentity(QStringLiteral("unknown")));
     EXPECT_FALSE(validIdentity(QString()));
-    EXPECT_FALSE(validIdentity(QStringLiteral("exe:relative")));
-    EXPECT_FALSE(validIdentity(QStringLiteral("exe:/a\nb")));
-    EXPECT_FALSE(validIdentity(QStringLiteral("pid:12x")));
-    EXPECT_FALSE(validIdentity(QStringLiteral("pid:")));
-    EXPECT_FALSE(validIdentity(QStringLiteral("exe:/") + QString(penalty::kMaxIdentity, u'a')));
+    EXPECT_FALSE(validIdentity(QStringLiteral("pid:4242"))) << "a pid is never an identity";
+    EXPECT_FALSE(validIdentity(QStringLiteral("exe:/usr/bin/foo")));
+    EXPECT_FALSE(validIdentity(QStringLiteral("id:exe=relative")));
+    EXPECT_FALSE(validIdentity(QStringLiteral("id:exe=/a\nb")));
+    EXPECT_FALSE(validIdentity(QStringLiteral("id:exe=/") + QString(penalty::kMaxIdentity, u'a')));
     EXPECT_FALSE(validIdentity(QStringLiteral("window 1")));
 }
 
+// ---- refusals, doubling, eviction ----------------------------------------------------------------------------------
+
 TEST(Penalties, CrashRefusesForTheBaseSpanThenDoubles) {
-    Clock      c;
+    Clock       c;
     PenaltyBook b = book(c);
-    QString    why;
+    QString     why;
     EXPECT_FALSE(b.refused(kApp, &why));
     b.record(kApp, Offence::Crash);
     EXPECT_TRUE(b.refused(kApp, &why));
@@ -620,10 +717,30 @@ TEST(Penalties, CrashRefusesForTheBaseSpanThenDoubles) {
     EXPECT_FALSE(b.refused(kApp, &why));
 }
 
-TEST(Penalties, LayoutFailureBacksOffShortlyAndDeliveryEndsIt) {
-    Clock      c;
+TEST(Penalties, UnknownBucketIsRefusedBrieflyNeverDoublesNeverPermanent) {
+    Clock       c;
     PenaltyBook b = book(c);
-    QString    why;
+    QString     why;
+    for (int i = 0; i < 10; ++i)
+        b.record(kUnknownIdentity, Offence::Crash);
+    EXPECT_TRUE(b.refused(kUnknownIdentity, &why));
+    c.now += penalty::kUnknownDenySec - 1;
+    EXPECT_TRUE(b.refused(kUnknownIdentity, &why));
+    c.now += 1;
+    EXPECT_FALSE(b.refused(kUnknownIdentity, &why)) << "ten strikes, still only the short refusal";
+    // A forged state file cannot make the bucket long-refused.
+    PenaltyBook forged = book(c);
+    const QByteArray data = QByteArray("grassfield-menu-bridge-state 2\nboot boot-1\nrun 0\ndeny 5 ") + QByteArray::number(c.now + penalty::kDenyMaxSec) + " 0 unknown\n";
+    ASSERT_TRUE(forged.load(data, kBoot, &why, nullptr)) << qPrintable(why);
+    EXPECT_TRUE(forged.refused(kUnknownIdentity, &why));
+    c.now += penalty::kUnknownDenySec;
+    EXPECT_FALSE(forged.refused(kUnknownIdentity, &why));
+}
+
+TEST(Penalties, LayoutFailureBacksOffShortlyAndDeliveryEndsIt) {
+    Clock       c;
+    PenaltyBook b = book(c);
+    QString     why;
     b.record(kApp, Offence::LayoutFailed);
     EXPECT_TRUE(b.refused(kApp, &why));
     c.now += 2;
@@ -639,95 +756,224 @@ TEST(Penalties, LayoutFailureBacksOffShortlyAndDeliveryEndsIt) {
     EXPECT_FALSE(b.refused(kApp, &why));
 }
 
-TEST(Penalties, EntriesDecay) {
-    Clock      c;
+TEST(Penalties, CleanExitDoesNotResetTheDoublingInsideTheDecayWindow) {
+    Clock       c;
     PenaltyBook b = book(c);
-    QString    why;
+    QString     why;
     b.record(kApp, Offence::Crash);
     c.now += penalty::kDenyBaseSec;
     EXPECT_FALSE(b.refused(kApp, &why));
-    EXPECT_TRUE(b.has(kApp)) << "the strike is remembered for the doubling";
-    // Leaving the bus in good standing forgives one strike.
+    // Leaving the bus cleanly right after the refusal does not forget the strike: the next one doubles.
     b.leftCleanly(kApp);
-    EXPECT_FALSE(b.has(kApp));
-    // A refused application's exit does not clear its refusal.
+    EXPECT_TRUE(b.has(kApp));
     b.record(kApp, Offence::Crash);
+    c.now += penalty::kDenyBaseSec * 2 - 1;
+    EXPECT_TRUE(b.refused(kApp, &why)) << "the second strike doubled although the app exited cleanly in between";
+    // A refused application's exit does not clear its refusal either.
     b.leftCleanly(kApp);
     EXPECT_TRUE(b.refused(kApp, &why));
-    // Without a new strike for kForgiveSec the entry is dropped.
+}
+
+TEST(Penalties, EntriesDecay) {
+    Clock       c;
+    PenaltyBook b = book(c);
+    QString     why;
+    b.record(kApp, Offence::Crash);
+    c.now += penalty::kForgiveSec;
+    // A clean exit after the decay window forgives the strike.
+    b.leftCleanly(kApp);
+    EXPECT_FALSE(b.has(kApp));
+    // Without a new strike for kForgiveSec the entry is dropped when asked about.
+    b.record(kApp, Offence::Crash);
     c.now += penalty::kForgiveSec;
     EXPECT_FALSE(b.refused(kApp, &why));
     EXPECT_FALSE(b.has(kApp));
 }
 
-TEST(Penalties, BoundedLruKeepsRefusalsAndForgetsTheOldest) {
-    Clock      c;
+TEST(Penalties, FreshIdentitiesNeverEvictARefusalBeforeItExpires) {
+    Clock       c;
     PenaltyBook b = book(c);
-    b.record(kApp, Offence::Crash); // refused: kept while others are evicted
-    for (int i = 0; i < penalty::kMaxEntries * 2; ++i)
-        b.record(QStringLiteral("pid:%1").arg(i + 1), Offence::LayoutFailed);
-    EXPECT_LE(b.size(), penalty::kMaxEntries);
-    EXPECT_TRUE(b.has(kApp));
-    EXPECT_TRUE(b.has(QStringLiteral("pid:%1").arg(penalty::kMaxEntries * 2)));
-    EXPECT_FALSE(b.has(QStringLiteral("pid:1")));
+    QString     why;
+    b.record(kApp, Offence::Crash); // refused: kept while idle entries are evicted
+    for (int i = 0; i < penalty::kMaxIdle * 3; ++i)
+        b.record(QStringLiteral("id:exe=/tmp/copy-%1").arg(i + 1), Offence::LayoutFailed);
+    EXPECT_LE(b.size(), penalty::kMaxIdle + 1);
+    EXPECT_TRUE(b.refused(kApp, &why)) << "128+ cheap identities did not evict the refusal";
+    EXPECT_TRUE(b.has(QStringLiteral("id:exe=/tmp/copy-%1").arg(penalty::kMaxIdle * 3)));
+    EXPECT_FALSE(b.has(QStringLiteral("id:exe=/tmp/copy-1"))) << "the least recently used idle entry went first";
+    // Once the refusal has expired the entry is idle and evictable.
+    c.now += penalty::kDenyBaseSec;
+    for (int i = 0; i < penalty::kMaxIdle * 2; ++i)
+        b.record(QStringLiteral("id:exe=/tmp/more-%1").arg(i + 1), Offence::LayoutFailed);
+    EXPECT_FALSE(b.has(kApp));
 }
 
-TEST(PenaltyState, InflightIdentitiesBecomeCrashRefusals) {
-    Clock      c;
-    PenaltyBook before = book(c);
-    const QByteArray data = before.serialize({kApp, QStringLiteral("exe:/opt/with space/app")}, QStringLiteral("boot-1"));
-    PenaltyBook after = book(c);
-    QString     why;
-    QStringList crashed;
-    ASSERT_TRUE(after.load(data, QStringLiteral("boot-1"), &why, &crashed)) << qPrintable(why);
-    EXPECT_EQ(crashed, (QStringList{kApp, QStringLiteral("exe:/opt/with space/app")}));
+TEST(Penalties, RefusedEntriesAreCappedSeparatelyAndTheSoonestToExpireGoes) {
+    Clock       c;
+    PenaltyBook b = book(c);
+    for (int i = 0; i < penalty::kMaxRefused + 10; ++i) {
+        b.record(QStringLiteral("id:exe=/tmp/bad-%1").arg(i + 1), Offence::Crash);
+        c.now += 1; // later refusals expire later
+    }
+    EXPECT_EQ(b.refusedCount(), penalty::kMaxRefused);
+    QString why;
+    EXPECT_TRUE(b.refused(QStringLiteral("id:exe=/tmp/bad-%1").arg(penalty::kMaxRefused + 10), &why));
+    EXPECT_FALSE(b.has(QStringLiteral("id:exe=/tmp/bad-1")));
+}
+
+// ---- crash attribution --------------------------------------------------------------------------------------------
+
+TEST(Attribution, ExactlyOneFreshCallIsBlamed) {
+    Clock            c;
+    const QByteArray data = previousRun(c, {{kApp, 1, 120}});
+    PenaltyBook      after = book(c);
+    const CrashOutcome out  = crashOutcome(c, after, data);
+    QString          why;
+    EXPECT_TRUE(out.crashed);
+    EXPECT_EQ(out.culprit, kApp);
+    EXPECT_EQ(out.unattributed, 0);
     EXPECT_TRUE(after.refused(kApp, &why));
     EXPECT_FALSE(after.refused(kOther, &why));
-    // A refusal is carried over the next restart too (and keeps its strike count).
-    const QByteArray again = after.serialize({}, QStringLiteral("boot-1"));
-    PenaltyBook third = book(c);
-    ASSERT_TRUE(third.load(again, QStringLiteral("boot-1"), &why, nullptr)) << qPrintable(why);
+    EXPECT_EQ(after.unattributed(), 0);
+}
+
+TEST(Attribution, SeveralCallsInFlightBlameNobody) {
+    Clock c;
+    QString why;
+    for (const auto& calls : {QList<InflightCall>{{kApp, 1, 10}, {kOther, 1, 10}},  // two peers
+                              QList<InflightCall>{{kApp, 2, 10}},                   // two calls to one identity
+                              QList<InflightCall>{{kApp, 1, 10}, {kApp + QStringLiteral("2"), 1, 10}}}) {
+        PenaltyBook  after = book(c);
+        const CrashOutcome out = crashOutcome(c, after, previousRun(c, calls));
+        EXPECT_TRUE(out.crashed);
+        EXPECT_TRUE(out.culprit.isEmpty());
+        EXPECT_EQ(out.unattributed, 1);
+        for (const InflightCall& ic : calls)
+            EXPECT_FALSE(after.refused(ic.id, &why)) << "an innocent was refused: " << qPrintable(ic.id);
+    }
+}
+
+TEST(Attribution, NothingInFlightIsAnUnattributedCrash) {
+    Clock              c;
+    PenaltyBook        after = book(c);
+    const CrashOutcome out   = crashOutcome(c, after, previousRun(c, {}));
+    EXPECT_TRUE(out.crashed);
+    EXPECT_TRUE(out.culprit.isEmpty());
+    EXPECT_EQ(after.unattributed(), 1);
+    EXPECT_EQ(after.refusedCount(), 0);
+}
+
+TEST(Attribution, AStaleSingleCallIsNotBlamed) {
+    // A slow application's call open when someone else's message kills the bridge.
+    Clock              c;
+    PenaltyBook        after = book(c);
+    const CrashOutcome out   = crashOutcome(c, after, previousRun(c, {{kApp, 1, penalty::kFreshCallMs + 1}}));
+    QString            why;
+    EXPECT_TRUE(out.culprit.isEmpty());
+    EXPECT_FALSE(after.refused(kApp, &why));
+    EXPECT_EQ(after.unattributed(), 1);
+    PenaltyBook edge = book(c);
+    EXPECT_EQ(crashOutcome(c, edge, previousRun(c, {{kApp, 1, penalty::kFreshCallMs}})).culprit, kApp) << "exactly at the limit is still fresh";
+}
+
+TEST(Attribution, ACleanStopIsNoCrashAndIgnoresStaleInflightLines) {
+    Clock              c;
+    PenaltyBook        after = book(c);
+    const CrashOutcome out   = crashOutcome(c, after, previousRun(c, {{kApp, 1, 5}}, /*running=*/false));
+    QString            why;
+    EXPECT_FALSE(out.crashed);
+    EXPECT_FALSE(after.refused(kApp, &why));
+    EXPECT_EQ(after.unattributed(), 0);
+}
+
+TEST(Attribution, UnattributedCrashesAreCountedPersistedAndMakeTheBridgeGiveUp) {
+    Clock c;
+    QByteArray data = previousRun(c, {});
+    for (int i = 1; i <= penalty::kMaxUnattributed; ++i) {
+        PenaltyBook after = book(c);
+        crashOutcome(c, after, data);
+        EXPECT_EQ(after.unattributed(), i);
+        EXPECT_EQ(after.degraded(), i >= penalty::kMaxUnattributed) << i;
+        data = after.serialize({}, kBoot, true); // this run crashes too, unexplained
+        c.now += 30;
+    }
+    // The count decays after the window: a bridge that restarts much later starts fresh.
+    c.now += penalty::kUnattributedWindowSec;
+    PenaltyBook later = book(c);
+    crashOutcome(c, later, data);
+    EXPECT_EQ(later.unattributed(), 1);
+    EXPECT_FALSE(later.degraded());
+    // A clean stop keeps the count (the file still says what happened) but is no new crash.
+    PenaltyBook clean = book(c);
+    crashOutcome(c, clean, later.serialize({}, kBoot, false));
+    EXPECT_EQ(clean.unattributed(), 1);
+}
+
+TEST(PenaltyState, RefusalsAndStrikesSurviveARestart) {
+    Clock       c;
+    PenaltyBook first = book(c);
+    first.record(kApp, Offence::Crash);
+    const QByteArray data = first.serialize({}, kBoot, false);
+    PenaltyBook      third = book(c);
+    QString          why;
+    ASSERT_TRUE(third.load(data, kBoot, &why, nullptr)) << qPrintable(why);
     EXPECT_TRUE(third.refused(kApp, &why));
+    EXPECT_FALSE(third.refused(kOther, &why));
     c.now += penalty::kDenyBaseSec;
     EXPECT_FALSE(third.refused(kApp, &why));
     third.record(kApp, Offence::Crash);
     c.now += penalty::kDenyBaseSec * 2 - 1;
-    EXPECT_TRUE(third.refused(kApp, &why)) << "the second strike doubled";
+    EXPECT_TRUE(third.refused(kApp, &why)) << "the second strike doubled (strike count restored)";
+    // The identity with spaces and separators round-trips.
+    PenaltyBook      sp = book(c);
+    const QString    odd = QStringLiteral("id:scope=app-x|exe=/opt/with space/app|script=a b.py");
+    sp.record(odd, Offence::Crash);
+    PenaltyBook back = book(c);
+    ASSERT_TRUE(back.load(sp.serialize({}, kBoot, false), kBoot, &why, nullptr)) << qPrintable(why);
+    EXPECT_TRUE(back.refused(odd, &why));
 }
 
 TEST(PenaltyState, ForgedOrDamagedContentIsRefusedWhole) {
-    Clock      c;
-    QString    why;
-    const QString boot = QStringLiteral("boot-1");
-    const auto valid = [&](const QByteArray& body) {
+    Clock         c;
+    QString       why;
+    const QString boot = kBoot;
+    const auto    valid = [&](const QByteArray& body, const char* run = "run 1\n") {
         PenaltyBook b = book(c);
-        return b.load(QByteArray("grassfield-menu-bridge-state 1\nboot boot-1\n") + body, boot, &why, nullptr);
+        return b.load(QByteArray("grassfield-menu-bridge-state 2\nboot boot-1\n") + run + body, boot, &why, nullptr);
     };
-    EXPECT_TRUE(valid("inflight exe:/usr/bin/x\n"));
-    EXPECT_FALSE(valid("inflight exe:relative\n"));
-    EXPECT_FALSE(valid("inflight exe:/a%0Ab\n")) << "control characters";
-    EXPECT_FALSE(valid("inflight pid:1x\n"));
+    EXPECT_TRUE(valid("inflight 1 5 id:exe=/usr/bin/x\n"));
+    EXPECT_TRUE(valid("inflight 1 5 unknown\n"));
+    EXPECT_FALSE(valid("inflight 1 5 id:exe=relative\n"));
+    EXPECT_FALSE(valid("inflight 1 5 id:exe=/a%0Ab\n")) << "control characters";
+    EXPECT_FALSE(valid("inflight 1 5 pid:12\n")) << "a pid is not an identity";
+    EXPECT_FALSE(valid("inflight 0 5 id:exe=/x\n")) << "zero calls";
+    EXPECT_FALSE(valid("inflight 1 -5 id:exe=/x\n")) << "negative age";
     EXPECT_FALSE(valid("inflight a b\n"));
-    EXPECT_FALSE(valid("deny 0 1 1 exe:/x\n")) << "zero strikes";
-    EXPECT_FALSE(valid("deny 1 99999999999 1 exe:/x\n")) << "deny far in the future";
-    EXPECT_FALSE(valid("deny 1 5 99999 exe:/x\n")) << "last strike in the future";
-    EXPECT_FALSE(valid("deny 1 5 5 exe:/x extra\n"));
+    EXPECT_FALSE(valid("unattributed 0 5\n"));
+    EXPECT_FALSE(valid("unattributed 1 99999\n")) << "in the future";
+    EXPECT_FALSE(valid("deny 0 1 1 id:exe=/x\n")) << "zero strikes";
+    EXPECT_FALSE(valid("deny 1 99999999999 1 id:exe=/x\n")) << "deny far in the future";
+    EXPECT_FALSE(valid("deny 1 5 99999 id:exe=/x\n")) << "last strike in the future";
+    EXPECT_FALSE(valid("deny 1 5 5 id:exe=/x extra\n"));
     EXPECT_FALSE(valid("unknown line\n"));
+    EXPECT_FALSE(valid("", "run 2\n"));
+    EXPECT_FALSE(valid("run 0\n")) << "two run lines";
     {
         PenaltyBook b = book(c);
-        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 2\nboot boot-1\n", boot, &why, nullptr));
-        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 1\nboot other\n", boot, &why, nullptr)) << "another boot";
+        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 1\nboot boot-1\nrun 0\n", boot, &why, nullptr)) << "old format";
+        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 2\nboot other\nrun 0\n", boot, &why, nullptr)) << "another boot";
+        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 2\nboot boot-1\n", boot, &why, nullptr)) << "no run line";
         EXPECT_FALSE(b.load("", boot, &why, nullptr));
         EXPECT_EQ(b.size(), 0) << "nothing merged from a refused file";
     }
     QByteArray many;
-    for (int i = 0; i < penalty::kMaxEntries * 2 + 1; ++i)
-        many += "inflight pid:" + QByteArray::number(i + 1) + "\n";
+    for (int i = 0; i < (penalty::kMaxIdle + penalty::kMaxRefused) * 2 + 1; ++i)
+        many += "inflight 1 1 id:exe=/x" + QByteArray::number(i + 1) + "\n";
     EXPECT_FALSE(valid(many)) << "entry count is bounded";
     // One bad line among good ones: nothing at all is merged (an attacker cannot smuggle entries in).
     PenaltyBook b = book(c);
-    EXPECT_FALSE(b.load("grassfield-menu-bridge-state 1\nboot boot-1\ninflight exe:/usr/bin/x\ninflight bad\n", boot, &why, nullptr));
-    EXPECT_FALSE(b.has(QStringLiteral("exe:/usr/bin/x")));
+    EXPECT_FALSE(b.load("grassfield-menu-bridge-state 2\nboot boot-1\nrun 1\ndeny 1 5000 5 id:exe=/usr/bin/x\ndeny bad\n", boot, &why, nullptr));
+    EXPECT_FALSE(b.has(QStringLiteral("id:exe=/usr/bin/x")));
 }
 
 TEST(PenaltyState, FileIsReadWithoutFollowingSymlinksAndBounded) {
