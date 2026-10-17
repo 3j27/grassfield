@@ -1,10 +1,11 @@
 import QtQuick
+import Quickshell
 import Grassfield.Ui
 import qs.security.lock
 import qs.services
 
 // Grassfield menu (leaf mark): About, Force Quit, Sleep/Restart/Shut Down, Lock Screen, Log Out.
-// System Settings is a placeholder until M4. Lock Screen engages the session lock.
+// System Settings launches grassfield-settings (GRASSFIELD_SETTINGS_CMD overrides it in dev). Lock Screen engages the session lock.
 PopupMenu {
     id: root
 
@@ -14,8 +15,7 @@ PopupMenu {
     model: [
         {id: "about", text: qsTr("About This Computer")},
         {separator: true},
-        // PLACEHOLDER (M4): no System Settings app exists yet.
-        {id: "settings", text: qsTr("System Settings… (coming in M4)"), enabled: false},
+        {id: "settings", text: qsTr("System Settings…")},
         {separator: true},
         {id: "forcequit", text: qsTr("Force Quit…")},
         {separator: true},
@@ -33,6 +33,10 @@ PopupMenu {
         switch (item.id) {
         case "about":
             Popups.openCentered("about", {});
+            break;
+        case "settings":
+            Quickshell.execDetached((Quickshell.env("GRASSFIELD_SETTINGS_CMD") || "grassfield-settings").split(" "));
+            Popups.close();
             break;
         case "forcequit":
             Popups.openCentered("forcequit", {});
