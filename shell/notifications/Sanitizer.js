@@ -47,39 +47,82 @@ function isAlnum(c) {
     return isAlpha(c) || (c >= 48 && c <= 57);
 }
 
+// Next-occurrence tables for ">", "\"" and "'": one backward pass, O(1) lookups afterwards. Plain
+// indexOf() rescans to the end of the input for a missing character on every "<", which made
+// tag-like input quadratic (review finding).
+function nextTables(input) {
+    const n = input.length;
+    const gt = new Int32Array(n + 2);
+    const dq = new Int32Array(n + 2);
+    const sq = new Int32Array(n + 2);
+    gt[n] = dq[n] = sq[n] = gt[n + 1] = dq[n + 1] = sq[n + 1] = -1;
+    for (let i = n - 1; i >= 0; i--) {
+        const c = input.charCodeAt(i);
+        gt[i] = c === 62 ? i : gt[i + 1];
+        dq[i] = c === 34 ? i : dq[i + 1];
+        sq[i] = c === 39 ? i : sq[i + 1];
+    }
+    const memo = new Int32Array(n + 2).fill(-2);
+    return {gt: gt, dq: dq, sq: sq, memo: memo, n: n};
+}
+
+// End of the tag body starting at i (outside quotes): index of the first ">" not inside a quoted
+// attribute value, or -1. The walk from i only depends on i, so results are memoised for every
+// position visited: each position is resolved once and the whole sanitize stays O(n).
+function tagEnd(input, i, t) {
+    const path = [];
+    let result = -1;
+    for (;;) {
+        if (i > t.n)
+            break;
+        const known = t.memo[i];
+        if (known !== -2) {
+            result = known;
+            break;
+        }
+        path.push(i);
+        const gt = t.gt[i];
+        if (gt < 0)
+            break;
+        const dq = t.dq[i];
+        const sq = t.sq[i];
+        let quote = -1;
+        if (dq >= 0 && dq < gt)
+            quote = dq;
+        if (sq >= 0 && sq < gt && (quote < 0 || sq < quote))
+            quote = sq;
+        if (quote < 0) {
+            result = gt;
+            break;
+        }
+        const close = (input.charCodeAt(quote) === 34 ? t.dq : t.sq)[quote + 1];
+        if (close < 0)
+            break;
+        i = close + 1;
+    }
+    for (let k = 0; k < path.length; k++)
+        t.memo[path[k]] = result;
+    return result;
+}
+
 // Scans a tag at input[start] === "<": {end, closing, name, attrs} or null when it is not one.
-// Quoted attribute values may contain ">".
-function scanTag(input, start) {
+// Quoted attribute values may contain ">"; tags longer than MAX_TAG are plain text.
+function scanTag(input, start, t) {
     let i = start + 1;
     const closing = input[i] === "/";
     if (closing)
         i++;
     if (!isAlpha(input.charCodeAt(i)))
         return null;
+    const limit = Math.min(input.length, start + MAX_TAG);
     const nameStart = i;
-    while (isAlnum(input.charCodeAt(i)))
+    while (i < limit && isAlnum(input.charCodeAt(i)))
         i++;
     const nameEnd = i;
-    const limit = Math.min(input.length, start + MAX_TAG);
-    for (;;) {
-        // Native searches only, no per-character JS loop. No ">" in reach means no tag here.
-        const gt = input.indexOf(">", i);
-        if (gt < 0 || gt >= limit)
-            return null;
-        const dq = input.indexOf("\"", i);
-        const sq = input.indexOf("'", i);
-        let quote = -1;
-        if (dq >= 0 && dq < gt)
-            quote = dq;
-        if (sq >= 0 && sq < gt && (quote < 0 || sq < quote))
-            quote = sq;
-        if (quote < 0)
-            return {end: gt + 1, closing: closing, name: input.slice(nameStart, nameEnd), attrs: input.slice(nameEnd, gt)};
-        const close = input.indexOf(input[quote], quote + 1);
-        if (close < 0 || close >= limit)
-            return null;
-        i = close + 1;
-    }
+    const gt = tagEnd(input, nameEnd, t);
+    if (gt < 0 || gt >= limit)
+        return null;
+    return {end: gt + 1, closing: closing, name: input.slice(nameStart, nameEnd), attrs: input.slice(nameEnd, gt)};
 }
 
 // Markup subset to StyledText.
@@ -100,11 +143,12 @@ function sanitize(body) {
         out += escapeText(plainText).replace(/\r?\n/g, "<br>");
     };
 
+    const tables = nextTables(input);
     let last = 0;
     let pos = 0;
     let lt;
     while ((lt = input.indexOf("<", pos)) >= 0) {
-        const tag = scanTag(input, lt);
+        const tag = scanTag(input, lt, tables);
         if (tag === null) {
             pos = lt + 1;
             continue;

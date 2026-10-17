@@ -51,7 +51,7 @@ TestCase {
 
     // Tag-like input must stay linear (was O(n^2): 250 ms per 4000 characters).
     function test_tagLikeInputIsLinear() {
-        const inputs = ["<a".repeat(2000), "<a \"".repeat(1000), "<a '\"".repeat(800), "<".repeat(4000), "<b ".repeat(1300) + ">", "<a '>".repeat(660), "<a \">".repeat(660)];
+        const inputs = ["<a\">\"".repeat(800), "<a".repeat(2000), "<a \"".repeat(1000), "<a '\"".repeat(800), "<".repeat(4000), "<b ".repeat(1300) + ">", "<a '>".repeat(660), "<a \">".repeat(660)];
         for (const input of inputs) {
             const t0 = Date.now();
             Sanitizer.sanitize(input);
@@ -60,6 +60,21 @@ TestCase {
             // Generous bound for loaded CI/dev machines: the quadratic version took ~885 ms on this input.
             verify(ms < 150, "sanitize took " + ms + " ms");
         }
+    }
+
+    // Growth check independent of machine speed: 4x the input must cost far less than 16x (quadratic).
+    function test_quoteHeavyInputScalesLinearly() {
+        const cost = n => {
+            const input = "<a\">\"".repeat(n / 5);
+            const t0 = Date.now();
+            for (let r = 0; r < 5; r++)
+                Sanitizer.sanitize(input);
+            return Math.max(1, Date.now() - t0);
+        };
+        const small = cost(1000);
+        const large = cost(4000);
+        console.log("sanitize scaling 1k=" + small + " ms, 4k=" + large + " ms");
+        verify(large / small < 9, "growth " + (large / small).toFixed(1) + "x for 4x input");
     }
 
     // 1000 valid tags: every tag produces output, so this is slower than the failing scans above.

@@ -55,7 +55,10 @@ Singleton {
         return qsTr("Not connected");
     }
 
+    // Every radio change goes through the dev guard, whoever calls it (menu bar, Control Center).
     function setWifiEnabled(on: bool): void {
+        if (guarded("wifi " + (on ? "on" : "off")))
+            return;
         Networking.wifiEnabled = on;
     }
 
@@ -100,8 +103,7 @@ Singleton {
     }
 
     function toggleWifi(on: bool): void {
-        if (!guarded("wifi toggle"))
-            setWifiEnabled(on);
+        setWifiEnabled(on);
     }
 
     // row: an entry of `networks`. Returns the action (see Model.networkAction); "password" is left to the UI.

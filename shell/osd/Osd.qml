@@ -64,6 +64,11 @@ Singleton {
             console.warn("osd: unknown volume command", direction);
             return;
         }
+        // The nested dev shell runs on the owner's machine: never touch the real sink there.
+        if (Quickshell.env("GRASSFIELD_DEV") === "1") {
+            console.info("dev guard: volume " + direction + " suppressed");
+            return;
+        }
         wpctl.running = true;
     }
 
