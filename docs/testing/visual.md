@@ -84,7 +84,7 @@ Why 150 px (the old 500 ppm = 1 037 px would have accepted a whole Apps tile hov
 
 | Measured | Pixels at fuzz 2 % |
 |---|---|
-| Run-to-run noise, 26 shots, two full runs (after the pointer fix) | 0 (24 shots), 9 (`lock.en`, `lock.fr`: caret and blur rounding) |
+| Run-to-run noise, 26 shots, two full runs (after the pointer fix) | 0 for all 26 (9 px on the lock screen in the previous full run) |
 | Run-to-run noise at fuzz 0 | 0-18 |
 | Hover highlight of one Apps tile (the old race) | 603 |
 | Selection or hover state of any row/tile/button | several hundred to thousands |
@@ -142,8 +142,9 @@ white scores 1, white text on a 1 px checker scores about 1.9 (the old method re
 
 ## Results (reference machine, 2026-10-17)
 
-Determinism, two full runs (26 shots, `just visual --determinism`): PASS. 24 shots identical at fuzz 2 % (0 px), `lock.en`
-and `lock.fr` 9 px; at fuzz 0 the shots differ by 0-18 px (sparse gradient/caret noise). Limit 50 px.
+Determinism, two full runs (26 shots, `just visual --determinism`): PASS. Every shot is identical at fuzz 2 % (0 px);
+at fuzz 0 the shots differ by 0-18 px (sparse gradient/caret noise; the first scenario of a fresh session is the
+noisiest). Limit 50 px.
 
 A2 (`just contrast`, glyph-mask method, exit 1): 900 cells = 45 regions x 20 combinations; 860 measured, 40 skipped
 (2 image icons x 20), 0 boxes without glyph; **677 PASS, 183 FAIL**. These are findings, not tool errors. Failing cells
