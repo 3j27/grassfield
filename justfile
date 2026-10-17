@@ -9,7 +9,7 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-shell check-scripts check-secrets
+check: check-config check-schema check-shell check-i18n check-scripts check-secrets
 
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland.
 check-config:
@@ -25,6 +25,14 @@ check-schema *files:
 # Lint QML (0 warnings required in changed files, gate Q1).
 check-shell:
     scripts/dev/qmllint.sh
+
+# Gate I1: every visible string is in qsTr(); the fr catalog is current and complete.
+check-i18n:
+    python3 -I scripts/dev/check-i18n.py
+
+# Regenerate translations/grassfield_fr.ts after adding or changing qsTr() strings.
+i18n-update:
+    scripts/dev/i18n-update.sh
 
 # Secret scan of the whole history (gate S1).
 check-secrets:
