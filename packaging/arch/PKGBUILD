@@ -6,13 +6,13 @@
 
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor)
-pkgver=0.3.0
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="Grassfield Desktop: a macOS-class desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
 license=(MIT)
-makedepends=(cmake ninja pkgconf hyprland gtest lua)
+makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules)
 options=(!debug)
 
 _root() { realpath "$startdir/../.."; }
@@ -24,6 +24,9 @@ build() {
   cmake -S "$(_root)/apps/settings" -B "$srcdir/settings-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/settings-build"
+  cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/files-build"
 }
 
 check() {
@@ -32,11 +35,12 @@ check() {
 
 package_grassfield-desktop() {
   pkgdesc+=" — shell, design system, session"
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font libnotify)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font libnotify kio solid kcoreaddons kservice)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
     'brightnessctl: display brightness OSD and Control Center slider'
     'localsearch: file results in Search'
+    'kio-extras: network locations and image thumbnails in Files'
   )
   local root
   root=$(_root)
@@ -67,6 +71,8 @@ package_grassfield-desktop() {
 
   # Grassfield Settings app (M4).
   DESTDIR="$pkgdir" cmake --install "$srcdir/settings-build"
+  # Grassfield Files (M4, KIO).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
 
   install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
   install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"
