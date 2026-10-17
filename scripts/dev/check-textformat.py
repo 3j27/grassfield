@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard against rich-text injection: every QML `Text {` block in shell/ and ui/ must set `textFormat`.
+"""Guard against rich-text injection: every QML `Text {` block in shell/, ui/ and apps/ must set `textFormat`.
 
 Untrusted strings (app ids, titles, desktop entries, SSIDs, notification fields) rendered as rich text can
 spoof UI or fetch remote resources. `Text.StyledText`/`Text.RichText` are allowed only in ALLOW.
@@ -38,7 +38,7 @@ def blocks(src):
 
 def main():
     bad = []
-    for path in sorted(list(ROOT.glob("shell/**/*.qml")) + list(ROOT.glob("ui/**/*.qml"))):
+    for path in sorted(list(ROOT.glob("shell/**/*.qml")) + list(ROOT.glob("ui/**/*.qml")) + list(ROOT.glob("apps/**/*.qml"))):
         rel = str(path.relative_to(ROOT))
         for line, own in blocks(path.read_text()):
             fmt = re.search(r"textFormat\s*:\s*([\w.]+)", own)

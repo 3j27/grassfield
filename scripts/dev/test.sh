@@ -9,7 +9,7 @@ export GRASSFIELD_TEST_TMP="$root/.dev/test-tmp.$$"
 mkdir -p "$GRASSFIELD_TEST_TMP"
 trap 'rm -rf "$GRASSFIELD_TEST_TMP"' EXIT
 if compgen -G "tests/unit/tst_*.qml" >/dev/null; then
-  unit_out=$(QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -input tests/unit 2>&1) || status=1
+  unit_out=$(QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -input tests/unit 2>&1) || status=1
   echo "$unit_out"
   # A failing case fails the run even if the runner exited 0.
   if grep -qE '^FAIL' <<<"$unit_out"; then status=1; fi

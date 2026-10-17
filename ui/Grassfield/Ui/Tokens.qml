@@ -494,4 +494,37 @@ QtObject {
     readonly property int appsSelectionWidth: 3
     // estimate: grid scale at the start of the open animation
     readonly property real appsOpenScale: 0.96
+
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsWindowWidth: 715
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsWindowHeight: 640
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsWindowMinWidth: 560
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsWindowMinHeight: 420
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsSidebarWidth: 215
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsSidebarItemHeight: 30
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsSidebarIconBox: 22
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsSidebarIconSize: 14
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsSearchHeight: 28
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsContentMaxWidth: 520
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsRowHeight: 40
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsGroupGap: 20
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsPageTitleSize: 20
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsGroupLabelWidth: 150
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsPickerWidth: 150
+    // estimate: Settings app (docs/specs/settings.md)
+    readonly property int settingsShortcutKeyMinWidth: 28
 }

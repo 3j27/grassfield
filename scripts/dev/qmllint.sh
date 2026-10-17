@@ -6,7 +6,7 @@ cd "$root"
 
 python3 ui/tools/gen-tokens.py --check
 
-mapfile -t files < <(git ls-files --cached --others --exclude-standard -- 'ui/*.qml' 'shell/*.qml' 'tests/*.qml')
+mapfile -t files < <(git ls-files --cached --others --exclude-standard -- 'ui/*.qml' 'shell/*.qml' 'apps/*.qml' 'tests/*.qml')
 [[ ${#files[@]} -gt 0 ]] || { echo "qmllint: no QML files"; exit 0; }
 
 # Quickshell resolves `import qs.<dir>` against the shell root; expose the same mapping to
