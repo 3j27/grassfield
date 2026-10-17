@@ -46,8 +46,8 @@ single instance.
    The Hyprland rule `gf-glance` (`config/hypr/grassfield/windows.lua`) floats and centers it and sets
    `decorate = false` so the compositor plugin draws no titlebar.
 8. P8 Triggers: Files (Space, item menu "Glance at …", `docs/specs/files.md` F12) and desktop icons (Space toggles
-   it, `docs/specs/desktop.md`). There is no single-instance logic in the app: a second launch is a second window.
-   The desktop toggles through `shell/services/GlanceApp.qml`, which owns the process and closes it when Space is
+   it, `docs/specs/desktop.md`; OFF in desktop keyboard safe mode, back with the macOS-model redesign). There is no single-instance logic in the app: a second launch is a second window.
+   (Off in safe mode.) The desktop toggles through `shell/services/GlanceApp.qml`, which owns the process and closes it when Space is
    pressed again (a layer surface keeps the keyboard focus when a window maps, so the Glance cannot always close
    itself there: click it to use the arrow keys).
 9. P9 Untrusted input: only local regular files; `QImageReader::setAllocationLimit(256)` for every decoder (also QML
@@ -84,6 +84,7 @@ is not installed).
 - Toolbar buttons are text (no zoom/rotate icons in the design system yet).
 - The PDF page view does not scroll by arrow keys (it is a TableView): arrows turn pages, wheel scrolls.
 - A Glance is sized once, for its first file; later files of a multi-file Glance are fitted into that window.
-- Glance opened from the desktop does not take the keyboard focus (layer-shell on-demand focus): Space on the
-  desktop closes it; click it before using the arrow keys.
+- Glance opened from the desktop (OFF in desktop keyboard safe mode, back with the macOS-model redesign) does not
+  take the keyboard focus (layer-shell on-demand focus): Space on the desktop closes it; click it before using
+  the arrow keys.
 - libtiff prints "foo: Not a TIFF or MDI file" to stderr while Qt probes multi-page TIFF; harmless.
