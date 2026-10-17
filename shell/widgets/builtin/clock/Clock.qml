@@ -1,0 +1,152 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import Quickshell
+import Grassfield.Ui
+import qs.widgets
+
+// Clock widget: digital time and date (small); analog face drawn in QML plus digital time (medium, large).
+WidgetBase {
+    id: root
+
+    readonly property bool analog: !isSmall
+    readonly property date now: clock.date
+    readonly property string timeText: Qt.locale().toString(now, Qt.locale().timeFormat(Locale.ShortFormat))
+    readonly property string dateText: Qt.locale().toString(now, "dddd d MMMM")
+
+    SystemClock {
+        id: clock
+        enabled: root.active
+        // The seconds hand only exists on the analog face.
+        precision: root.analog ? SystemClock.Seconds : SystemClock.Minutes
+    }
+
+    Accessible.role: Accessible.StaticText
+    Accessible.name: qsTr("Clock, %1, %2").arg(timeText).arg(dateText)
+
+    // Analog face.
+    Item {
+        id: face
+
+        readonly property real edge: root.isLarge ? Math.min(root.width - 2 * root.padding, root.height * 0.58) : root.height - 2 * root.padding
+
+        visible: root.analog
+        x: root.isLarge ? (root.width - width) / 2 : root.padding
+        y: root.padding
+        width: edge
+        height: edge
+
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+            border.width: 1
+            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+        }
+
+        Repeater {
+            model: 12
+
+            Rectangle {
+                id: tick
+
+                required property int index
+                readonly property bool major: index % 3 === 0
+
+                x: face.width / 2 - width / 2
+                y: Tokens.spacingXs
+                width: major ? 2 : 1
+                height: major ? Tokens.spacingSm : Tokens.spacingXs
+                color: major ? Appearance.colors.text : Appearance.colors.textSecondary
+                antialiasing: true
+                transform: Rotation {
+                    origin.x: tick.width / 2
+                    origin.y: face.height / 2 - Tokens.spacingXs
+                    angle: tick.index * 30
+                }
+            }
+        }
+
+        // Hour, minute, second hands; a hand is a bar rotated about the face center.
+        component Hand: Rectangle {
+            id: hand
+
+            property real angle: 0
+            property real length: 0.5
+            property color tint: Appearance.colors.text
+
+            x: face.width / 2 - width / 2
+            y: face.height / 2 - height
+            width: Tokens.widgetAnalogHandWidth
+            height: face.height / 2 * length
+            radius: width / 2
+            color: tint
+            antialiasing: true
+            transform: Rotation {
+                origin.x: hand.width / 2
+                origin.y: hand.height
+                angle: hand.angle
+            }
+        }
+
+        Hand {
+            angle: (root.now.getHours() % 12 + root.now.getMinutes() / 60) * 30
+            length: 0.5
+        }
+
+        Hand {
+            angle: (root.now.getMinutes() + root.now.getSeconds() / 60) * 6
+            length: 0.78
+        }
+
+        Hand {
+            visible: root.analog
+            width: 1
+            angle: root.now.getSeconds() * 6
+            length: 0.85
+            tint: Appearance.colors.accent
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Tokens.spacingSm
+            height: width
+            radius: width / 2
+            color: Appearance.colors.accent
+        }
+    }
+
+    // Digital readout: below the face (large), right of it (medium), or filling the tile (small).
+    Column {
+        id: digital
+
+        x: root.isSmall ? root.padding : (root.isLarge ? root.padding : face.x + face.width + root.padding)
+        y: root.isLarge ? face.y + face.height + Tokens.spacingSm : (root.isMedium ? (root.height - height) / 2 : root.padding)
+        width: root.isMedium ? root.width - x - root.padding : root.width - 2 * root.padding
+        spacing: Tokens.spacingXs
+
+        WidgetLabel {
+            width: parent.width
+            visible: root.isSmall
+            text: Qt.locale().toString(root.now, "dddd")
+            color: Appearance.colors.accent
+            font.weight: Tokens.typographyMenuBoldWeight
+        }
+
+        WidgetLabel {
+            width: parent.width
+            text: root.timeText
+            font.pixelSize: root.isSmall ? Tokens.widgetBigSize : Tokens.widgetGlyphSize
+            font.weight: Tokens.typographyMenuBoldWeight
+            horizontalAlignment: root.isLarge ? Text.AlignHCenter : Text.AlignLeft
+            fontSizeMode: Text.Fit
+            minimumPixelSize: Tokens.typographyBodySize
+        }
+
+        WidgetLabel {
+            width: parent.width
+            text: root.isSmall ? Qt.locale().toString(root.now, "d MMMM") : root.dateText
+            color: Appearance.colors.textSecondary
+            horizontalAlignment: root.isLarge ? Text.AlignHCenter : Text.AlignLeft
+        }
+    }
+}

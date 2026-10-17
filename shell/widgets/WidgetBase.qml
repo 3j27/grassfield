@@ -1,0 +1,25 @@
+import QtQuick
+import Quickshell
+import Grassfield.Ui
+
+// widgets/1 host API, as seen by a widget (docs/specs/widgets.md). Every widget's root is a
+// WidgetBase; the host fills it into its tile and sets the properties below.
+Item {
+    id: root
+
+    // "small" | "medium" | "large": one of the manifest's sizes. The widget lays out in its own width/height.
+    property string size: "small"
+    // False while the widget is not visible (gallery closed, Center closed): stop timers and sampling.
+    property bool active: true
+    // Appearance and motion settings, mirrored from the shell.
+    property bool dark: Appearance.dark
+    property bool reduceMotion: Appearance.reduceMotion
+    // True in the nested development session (GRASSFIELD_DEV=1): actions that reach the owner's real apps are suppressed.
+    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+
+    // Inner padding of the tile (a token).
+    readonly property real padding: Tokens.spacingLg
+    readonly property bool isSmall: size === "small"
+    readonly property bool isMedium: size === "medium"
+    readonly property bool isLarge: size === "large"
+}

@@ -1,0 +1,9 @@
+module qs.widgets
+singleton Registry 1.0 Registry.qml
+singleton Widgets 1.0 Widgets.qml
+WidgetBase 1.0 WidgetBase.qml
+WidgetLabel 1.0 WidgetLabel.qml
+WidgetHost 1.0 WidgetHost.qml
+WidgetMenu 1.0 WidgetMenu.qml
+SizePicker 1.0 SizePicker.qml
+WidgetGallery 1.0 WidgetGallery.qml
