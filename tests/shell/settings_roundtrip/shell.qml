@@ -8,7 +8,8 @@ import qs.store
 // Run by scripts/dev/test.sh: `qs -p tests/shell/settings_roundtrip` (offscreen). Prints
 // "settings-roundtrip: PASS" and exits 0, or prints the failures and exits 1.
 // Phases: (1) defaults, clamping, write and read back; (2) a write keeps every schema key;
-// (3) a malformed file is never overwritten; (4) out-of-range loaded values are clamped.
+// (3) a malformed file is never overwritten; (4) out-of-range loaded values are clamped;
+// (5) an external edit made right before a setter survives it, and unknown keys are preserved.
 // Files live under $GRASSFIELD_TEST_TMP (test.sh removes it); the test also removes its own dir.
 ShellRoot {
     id: root
@@ -21,6 +22,9 @@ ShellRoot {
     readonly property string badText: '{ "appearance": "light", oops'
     readonly property string keepText: '{"version":1,"appearance":"light","material":{"transparency":0.5,"profile":"full"},"accessibility":{"reduceTransparency":false,"reduceMotion":false},"dock":{"pinned":["a","b"],"magnification":1.2,"magnificationEnabled":true,"autohide":false},"windows":{"titlebarDoubleClick":"minimize"},"notifications":{"dnd":false,"previews":"always"},"lock":{"idleMinutes":17}}'
     readonly property string rangeText: '{"version":1,"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999}}'
+    readonly property string dirMerge: base + "/merge"
+    readonly property string mergeText: '{"version":1,"appearance":"dark","lock":{"idleMinutes":3},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
+    readonly property string mergeEdited: '{"version":1,"appearance":"light","lock":{"idleMinutes":42},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
     property var failures: []
 
     function check(name: string, ok: bool): void {
@@ -173,7 +177,63 @@ ShellRoot {
             root.check("range titlebar", range.titlebarDoubleClick === "zoom");
             root.check("range previews", range.notificationsPreviews === "unlocked");
             root.check("range idle", range.lockIdleMinutes === 240);
-            root.finish();
+            mergeSetup.running = true;
+        }
+    }
+
+    // Phase 5: the store loads, the file is edited externally, then a setter runs at once.
+    Process {
+        id: mergeSetup
+        command: ["sh", "-c", 'mkdir -p "$1" && printf "%s" "$2" > "$1/grassfield.json"', "sh", root.dirMerge, root.mergeText]
+        onRunningChanged: {
+            if (!running)
+                merge.configDir = root.dirMerge;
+        }
+    }
+
+    SettingsStore {
+        id: merge
+        saveDelay: 10
+        property bool done: false
+        onLoadedFile: {
+            if (done)
+                return;
+            done = true;
+            external.running = true;
+        }
+        onSaved: readMerge.running = true
+    }
+
+    Process {
+        id: external
+        command: ["sh", "-c", 'printf "%s" "$1" > "$2/grassfield.json"', "sh", root.mergeEdited, root.dirMerge]
+        onRunningChanged: {
+            if (!running) {
+                // Immediately after the external write, before any reload could be relied on.
+                merge.setNotificationsDnd(true);
+                merge.flush();
+            }
+        }
+    }
+
+    Process {
+        id: readMerge
+        command: ["cat", root.dirMerge + "/grassfield.json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let o = {};
+                try {
+                    o = JSON.parse(text);
+                } catch (e) {
+                    root.check("merge parse", false);
+                }
+                root.check("merge shell change", !!o.notifications && o.notifications.dnd === true);
+                root.check("merge external appearance", o.appearance === "light");
+                root.check("merge external idle", !!o.lock && o.lock.idleMinutes === 42);
+                root.check("merge unknown key", !!o.futureKey && o.futureKey.a.join(",") === "1,2");
+                root.check("merge unknown nested key", !!o.notifications && o.notifications.extra === "keep");
+                root.finish();
+            }
         }
     }
 
