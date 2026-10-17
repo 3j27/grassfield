@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Runs hyprctl against the NESTED Grassfield dev compositor only. Refuses the owner's main instance.
+set -euo pipefail
+
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+sig_file="$root/.dev/nested.instance"
+
+[[ -s $sig_file ]] || { echo "nestctl: no nested instance recorded (run: just nested-up)" >&2; exit 1; }
+sig=$(<"$sig_file")
+
+main_sig=$(cat "$root/.dev/main.instance" 2>/dev/null || true)
+if [[ $sig == "${HYPRLAND_INSTANCE_SIGNATURE:-}" || ( -n $main_sig && $sig == "$main_sig" ) ]]; then
+  echo "nestctl: refusing to target the owner's main Hyprland instance" >&2
+  exit 1
+fi
+
+hyprctl instances -j | jq -e --arg s "$sig" 'any(.[]; .instance == $s)' >/dev/null \
+  || { echo "nestctl: nested instance $sig is not running" >&2; exit 1; }
+
+exec hyprctl --instance "$sig" "$@"
