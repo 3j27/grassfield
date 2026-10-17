@@ -21,6 +21,8 @@ bind("SUPER + W", "Close window", hl.dsp.window.close())
 bind("SUPER + CTRL + F", "Full screen", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 bind("SUPER + ALT + F", "Zoom (fill the screen)", hl.dsp.window.fullscreen({ mode = "maximized" }))
 bind("SUPER + T", "Toggle floating/tiling", hl.dsp.window.float({ action = "toggle" }))
+bind("SUPER + M", "Minimize window", shell("windows", "minimize"))
+bind("SUPER + H", "Hide app", shell("windows", "hide"))
 bind("SUPER + mouse:272", "Move window", hl.dsp.window.drag(), { mouse = true })
 bind("SUPER + mouse:273", "Resize window", hl.dsp.window.resize(), { mouse = true })
 
