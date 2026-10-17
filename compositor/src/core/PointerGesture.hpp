@@ -5,7 +5,12 @@
 // motion events; it answers which releases belong to a titlebar and when a gesture must end.
 //
 // Rules:
-// - A release is kept from clients only when a titlebar consumed the matching press ("owned").
+// - No button event is ever cancelled: Hyprland 0.56.2 records every press as held, also one a titlebar
+//   consumes, and only a release it processes clears it (a stale held button pins pointer focus).
+// - A titlebar consumes a release only when a titlebar consumed the matching press ("owned"), and only
+//   when Hyprland routes that release to a titlebar. Elsewhere the release goes to the seat, which drops
+//   it for a client that never got the press. The release of a press that went to a client is never
+//   consumed, even over a titlebar.
 // - A new press of a button supersedes any older ownership of that button (its release was lost).
 // - A press while a gesture (drag, armed titlebar button) is active cancels the gesture.
 // - A motion while no button is held, or after a pointer device present at the press disappeared,
@@ -28,11 +33,12 @@ namespace gf::input {
         void claim(uint32_t button, bool startsGesture);
 
         struct SRelease {
-            bool owned       = false; // a titlebar consumed the matching press: keep this release from clients
+            bool owned       = false; // a titlebar consumed the matching press
             bool endsGesture = false; // the release completes the active gesture
         };
 
-        // Every release, before anything consumes it.
+        // Every release, before anything consumes it. An owned release is offered to the titlebars
+        // (takeTitlebarRelease) until the next button event; it is never cancelled.
         SRelease onRelease(uint32_t button);
 
         // Every motion while a gesture is active. `buttonsHeld`: the compositor still sees a held button;
@@ -41,14 +47,12 @@ namespace gf::input {
         bool onMotion(bool buttonsHeld, bool devicesIntact);
 
         // The gesture's window/titlebar went away: forget the gesture but keep the press ownership, so
-        // the release (which will still arrive) is kept from the client that never saw the press.
+        // the release (which will still arrive) is still treated as the titlebars', not a client's.
         void dropGesture();
 
-        // An owned release that the compositor will route to a titlebar: the titlebar consumes it there.
-        // The expectation lasts until the next button event.
-        void expectTitlebarRelease(uint32_t button);
-
-        // Called for every release routed to a titlebar. True when it is the expected one (consume it).
+        // Called for every release the compositor routes to a titlebar. True when it is the owned release
+        // of the current button event (the titlebar consumes it); false for any other release, which then
+        // continues to the seat.
         bool takeTitlebarRelease(uint32_t button);
 
         bool                    owns(uint32_t button) const;
@@ -60,7 +64,7 @@ namespace gf::input {
 
         std::vector<uint32_t>   m_owned; // buttons whose press a titlebar consumed (a handful at most)
         std::optional<uint32_t> m_gesture;
-        std::optional<uint32_t> m_expectedRelease;
+        std::optional<uint32_t> m_offeredRelease; // owned release of the current button event
     };
 
 } // namespace gf::input
