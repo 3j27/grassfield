@@ -135,3 +135,11 @@ function bannerTimeout(urgency, expireMs, defaultMs) {
         return Math.round(expireMs);
     return defaultMs;
 }
+
+// An image that is an absolute local file (a plain path, or Quickshell's image://icon//abs/path
+// for an app_icon path): returned as given; "" for anything else (themed names, other URLs).
+function absoluteImage(image) {
+    if (typeof image !== "string")
+        return "";
+    return image.startsWith("/") || image.startsWith("image://icon//") ? image : "";
+}
