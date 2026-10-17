@@ -48,8 +48,33 @@ Variants {
         // The surface has the keyboard (wl_keyboard enter).
         readonly property bool hasKeys: view.Window.active
 
+        // Release phase: when the state goes back to idle the catchers unmap FIRST, the menu / rename surface
+        // lets go of the keyboard two frames later. Hyprland then has no Exclusive surface left to hand the
+        // keyboard to and falls back to its last window, as without catchers (the other order leaves the
+        // keyboard on nobody). `pendingKb` is the state to apply when the release is over.
+        property bool catchReleasing: false
+        property int releaseFrames: 0
+        property var pendingKb: Focus.initial()
+
         function feed(event: var): void {
-            win.kb = Focus.next(win.kb, event);
+            const cur = win.catchReleasing ? win.pendingKb : win.kb;
+            const n = Focus.next(cur, event);
+            if (win.catchReleasing) {
+                win.pendingKb = n;
+                if (Focus.catchersMapped(n)) {
+                    win.catchReleasing = false;
+                    win.kb = n;
+                }
+                return;
+            }
+            if (Focus.catchersMapped(win.kb) && !Focus.catchersMapped(n) && win.catcherScreens.length > 0) {
+                win.pendingKb = n;
+                win.releaseFrames = 0;
+                win.catchReleasing = true;
+                win.commitSoon();
+                return;
+            }
+            win.kb = n;
         }
 
         // Layer state reaches the compositor with the next surface commit: render one now, so a
@@ -81,6 +106,21 @@ Variants {
             win.commitSoon();
         }
         onCatchGateChanged: win.commitSoon()
+
+        // End of the release phase: two frames after the catchers unmapped.
+        Connections {
+            target: win.catchReleasing ? view.Window.window : null
+
+            function onFrameSwapped(): void {
+                win.releaseFrames++;
+                if (win.releaseFrames >= 2) {
+                    win.catchReleasing = false;
+                    win.kb = win.pendingKb;
+                } else {
+                    win.commitSoon();
+                }
+            }
+        }
         onHasKeysChanged: win.feed({
             type: "keys",
             hasKeys: win.hasKeys
@@ -115,7 +155,7 @@ Variants {
         // pointer returns. The catchers unmap when the state is idle again. The click is consumed, like a
         // click outside on this output. No pointer polling.
         Variants {
-            model: Focus.catchersMapped(win.kb) ? win.catcherScreens : []
+            model: Focus.catchersMapped(win.kb) && !win.catchReleasing ? win.catcherScreens : []
 
             // qmllint disable uncreatable-type
             PanelWindow {
