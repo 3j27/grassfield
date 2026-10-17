@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 namespace gf::gfc {
 
@@ -83,7 +84,7 @@ namespace gf::gfc {
         return windowEventJson("restored", windowAddress);
     }
 
-    std::string appmenuJson(std::string_view windowAddress, std::string_view service, std::string_view path) {
+    std::string appmenuJson(std::string_view windowAddress, std::string_view service, std::string_view path, int pid) {
         std::string out;
         appendHeader(out, "appmenu");
         out += R"(,"address":")";
@@ -92,7 +93,9 @@ namespace gf::gfc {
         out += jsonEscape(service);
         out += R"(","path":")";
         out += jsonEscape(path);
-        out += "\"}";
+        out += R"(","pid":)";
+        out += std::to_string(pid > 0 ? pid : 0);
+        out += '}';
         return out;
     }
 
