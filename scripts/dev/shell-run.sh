@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 # (Re)start grassfield-shell inside the nested instance only. Never against the owner's session (R3).
 #
-# GRASSFIELD_PRIVATE_BUS=1: run the shell on its own D-Bus session bus (dbus-run-session) so that it
-# can own org.freedesktop.Notifications without touching the owner's session. The bus address is
-# written to .dev/bus.address for test clients (notify-send, busctl --user).
+# GRASSFIELD_PRIVATE_BUS=1 (--private-bus): run the shell on a private D-Bus session bus so that it can
+# own org.freedesktop.Notifications without touching the owner's session. One dbus-daemon per nested
+# session (session configuration, socket in /tmp as with dbus-run-session: libdbus caps socket paths at
+# 99 bytes, too short for .dev/ in a worktree), started by the first shell start and reused by shell restarts, so
+# applications on it keep their connection as on a real session bus; nested-down.sh stops it. The
+# address is in .dev/bus.address for test clients (notify-send, busctl --address, test apps).
+#
+# Global menus (ADR-0008): with the private bus, grassfield-menu-bridge (.dev/build/grassfield-menu-bridge
+# from bridges/menu-bridge/build-direct.sh, or GRASSFIELD_MENU_BRIDGE) is (re)started on that bus before
+# the shell and before any test app: socket .dev/run/menu-bridge.sock, log .dev/menu-bridge.log. It owns
+# com.canonical.AppMenu.Registrar only after the shell's hello reports the plugin's appmenu feature. It is
+# NEVER started on the owner's session bus (no private bus: no bridge; the bridge refuses that bus too).
 set -euo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -14,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --private-bus) export GRASSFIELD_PRIVATE_BUS=1 ;;
     --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
     --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
+    --menu-bridge) export GRASSFIELD_MENU_BRIDGE=${2:?--menu-bridge needs a path}; shift ;;
     *) echo "shell-run: unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -35,13 +45,69 @@ if [[ -s $dev/shell.pid ]] && kill -0 "$(<"$dev/shell.pid")" 2>/dev/null; then
   sleep 0.5
 fi
 
+# Stops a process started here with setsid (its PID is its process group) and removes its pidfile.
+stop_group() { # <pidfile>
+  [[ -s $1 ]] || { rm -f "$1"; return 0; }
+  local pid
+  pid=$(<"$1")
+  if kill -0 "$pid" 2>/dev/null; then
+    local target=$pid
+    [[ $(ps -o pgid= -p "$pid" | tr -d ' ') == "$pid" ]] && target=-$pid
+    kill -- "$target" 2>/dev/null
+    for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    kill -0 "$pid" 2>/dev/null && kill -9 -- "$target" 2>/dev/null
+  fi
+  rm -f "$1"
+}
+
 launch=(qs -p "$root/shell" --log-times --no-color)
 private=""
-rm -f "$dev/bus.address"
+bus_env=()
+bridge_sock=""
 if [[ ${GRASSFIELD_PRIVATE_BUS:-} == 1 ]]; then
-  command -v dbus-run-session >/dev/null || { echo "shell-run: dbus-run-session not found" >&2; exit 1; }
-  launch=(dbus-run-session -- sh -c 'printf "%s\n" "$DBUS_SESSION_BUS_ADDRESS" > "$1/bus.address"; shift; exec "$@"' sh "$dev" "${launch[@]}")
+  command -v dbus-daemon >/dev/null || { echo "shell-run: dbus-daemon not found" >&2; exit 1; }
+  mkdir -p "$dev/run"
+  chmod 700 "$dev/run"
+  # sockaddr_un.sun_path: 107 bytes for the bridge socket.
+  ((${#dev} + 21 < 108)) || { echo "shell-run: $dev is too long for the bridge's Unix socket path" >&2; exit 1; }
+  if ! { [[ -s $dev/bus.pid && -s $dev/bus.address ]] && kill -0 "$(<"$dev/bus.pid")" 2>/dev/null; }; then
+    stop_group "$dev/bus.pid"
+    rm -f "$dev/bus.address" "$dev/bus.address.new"
+    # Same configuration as dbus-run-session (session bus, service activation, unix:tmpdir=/tmp); activated
+    # services inherit the nested Wayland socket, never the owner's.
+    env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" GRASSFIELD_DEV=1 \
+      setsid dbus-daemon --session --nofork --print-address=1 \
+      >"$dev/bus.address.new" 2>"$dev/bus.log" </dev/null &
+    printf '%s\n' "$!" >"$dev/bus.pid"
+    for _ in $(seq 1 50); do [[ -s $dev/bus.address.new ]] && break; sleep 0.1; done
+    [[ -s $dev/bus.address.new ]] || { echo "shell-run: the private bus did not start (see .dev/bus.log)" >&2; exit 1; }
+    head -n 1 "$dev/bus.address.new" >"$dev/bus.address"
+    rm -f "$dev/bus.address.new"
+  fi
+  bus=$(<"$dev/bus.address")
+  case $bus in
+    unix:path=/tmp/dbus-*) ;;
+    *) echo "shell-run: refusing: unexpected private bus address $bus" >&2; exit 1 ;;
+  esac
+  bus_env=(DBUS_SESSION_BUS_ADDRESS="$bus")
   private=1
+
+  # grassfield-menu-bridge on the private bus, (re)started with the shell.
+  stop_group "$dev/menu-bridge.pid"
+  bridge=${GRASSFIELD_MENU_BRIDGE:-$dev/build/grassfield-menu-bridge}
+  if [[ -x $bridge ]]; then
+    bridge_sock=$dev/run/menu-bridge.sock
+    env -u GRASSFIELD_SESSION DBUS_SESSION_BUS_ADDRESS="$bus" GRASSFIELD_DEV=1 GRASSFIELD_MENU_BRIDGE_SOCKET="$bridge_sock" \
+      setsid "$bridge" >"$dev/menu-bridge.log" 2>&1 </dev/null &
+    printf '%s\n' "$!" >"$dev/menu-bridge.pid"
+    for _ in $(seq 1 30); do [[ -S $bridge_sock ]] && break; sleep 0.1; done
+    [[ -S $bridge_sock ]] || { echo "shell-run: grassfield-menu-bridge did not start (see .dev/menu-bridge.log)" >&2; bridge_sock=""; }
+  else
+    echo "shell-run: no menu bridge ($bridge; build it with bridges/menu-bridge/build-direct.sh): T0 menus only" >&2
+  fi
+else
+  # Without a private bus there is no bridge: a leftover one would serve the wrong shell.
+  stop_group "$dev/menu-bridge.pid"
 fi
 
 # Grassfield Settings built by apps/settings/build-direct.sh (menu item "System Settings…" in dev).
@@ -64,10 +130,11 @@ timing=()
 # GRASSFIELD_DESKTOP_DIR wins.
 desktop_dir=${GRASSFIELD_DESKTOP_DIR:-$dev/desktop-sandbox}
 
-env "${timing[@]}" GRASSFIELD_DESKTOP_DIR="$desktop_dir" WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
+env "${timing[@]}" "${bus_env[@]}" GRASSFIELD_MENU_BRIDGE_SOCKET="$bridge_sock" \
+  GRASSFIELD_DESKTOP_DIR="$desktop_dir" WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
   GRASSFIELD_PRIVATE_BUS="$private" GRASSFIELD_SETTINGS_CMD="$settings_cmd" GRASSFIELD_PREVIEW_CMD="$preview_cmd" \
   QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui:$dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$dev/translations" \
   setsid "${launch[@]}" >"$dev/shell.log" 2>&1 </dev/null &
 printf '%s\n' "$!" > "$dev/shell.pid"
-echo "shell-run: grassfield-shell pid $! (log .dev/shell.log${private:+, private bus: .dev/bus.address})"
+echo "shell-run: grassfield-shell pid $! (log .dev/shell.log${private:+, private bus: .dev/bus.address}${bridge_sock:+, menu bridge: .dev/menu-bridge.log})"
