@@ -315,31 +315,57 @@ Singleton {
     // Same for bannerStore (keys, newest first).
     property var bannerKeys: []
 
-    // rank = position inside the app group, groupCount = group size (Center rows are grouped
-    // by app, newest group first, so the delegates need no grouping logic). Only the block of
-    // one app is numbered; its rows are contiguous.
-    function renumberGroup(app: string): void {
-        const start = centerApps.indexOf(app);
-        if (start < 0)
+    // Group bookkeeping for the Center (rows are grouped by app, newest group first, newest row first
+    // inside a group), kept outside the model so an insert touches no other row:
+    //  - book.groups[app] = {size, head}: rows in the group, lowest order id in it;
+    //  - book.order[key] = order id; a new row takes head - 1, so rank = order - head in O(1);
+    //  - a removal only marks the ids dirty: ensureRanks() renumbers lazily, when a delegate asks.
+    // `book` is mutated in place (never reassigned) so reading it in a binding creates no loop;
+    // `groupRev` changes on every insert/removal so open delegates re-read size and rank.
+    readonly property var book: ({groups: {}, order: {}, dirty: false})
+    property int groupRev: 0
+
+    function ensureRanks(): void {
+        if (!book.dirty)
             return;
-        let end = start;
-        while (end < centerApps.length && centerApps[end] === app)
-            end++;
-        const total = end - start;
-        for (let i = start; i < end; i++)
-            centerStore.set(i, {rank: i - start, groupCount: total});
+        book.dirty = false;
+        const groups = {};
+        for (let i = 0; i < centerKeys.length; i++) {
+            const app = centerApps[i];
+            const g = groups[app] ? groups[app] : (groups[app] = {size: 0, head: 0});
+            book.order[centerKeys[i]] = g.size++;
+        }
+        book.groups = groups;
+    }
+
+    // Position of a row inside its app group (0 = newest). Reactive through `groupRev`.
+    function rankOf(key: string, app: string): int {
+        void groupRev;
+        ensureRanks();
+        const g = book.groups[app];
+        return g && book.order[key] !== undefined ? book.order[key] - g.head : 0;
+    }
+
+    function groupSize(app: string): int {
+        void groupRev;
+        ensureRanks();
+        const g = book.groups[app];
+        return g ? g.size : 0;
+    }
+
+    // App of the first (top) group, "" when empty. Reactive through `groupRev`.
+    function firstGroupApp(): string {
+        void groupRev;
+        return centerApps.length > 0 ? centerApps[0] : "";
     }
 
     // New (newest) entry: on top, followed by the rest of its group (one move for the block).
     function addToCenter(e: var): void {
         const start = centerApps.indexOf(e.appName);
-        let size = 0;
-        if (start >= 0) {
-            while (start + size < centerApps.length && centerApps[start + size] === e.appName)
-                size++;
-        }
+        const g = book.groups[e.appName] ? book.groups[e.appName] : (book.groups[e.appName] = {size: 0, head: 0});
+        const size = start >= 0 ? g.size : 0;
         const at = start >= 0 ? start : 0;
-        centerStore.insert(at, Object.assign(rowOf(e), {rank: 0, groupCount: 1}));
+        centerStore.insert(at, rowOf(e));
         centerKeys.splice(at, 0, e.key);
         centerApps.splice(at, 0, e.appName);
         if (at > 0) {
@@ -347,33 +373,36 @@ Singleton {
             centerKeys.unshift(...centerKeys.splice(at, size + 1));
             centerApps.unshift(...centerApps.splice(at, size + 1));
         }
-        renumberGroup(e.appName);
+        book.order[e.key] = --g.head;
+        g.size++;
+        groupRev++;
     }
 
     // Drops model rows whose entry left the history (removal, pruning).
     // Returns the number of rows dropped (0 takes the fast path: no work when the sizes agree).
-    // `pending` entries of history are not in the model yet (the caller inserts them next) and
-    // `deferApp`'s group is renumbered by that insert, so it is skipped here.
-    function syncRemovals(pending: int, deferApp: string): int {
+    // `pending` entries of history are not in the model yet (the caller inserts them next).
+    function syncRemovals(pending: int): int {
         if (centerKeys.length + pending === history.length)
             return 0;
         let dropped = 0;
         const alive = {};
         history.forEach(e => alive[e.key] = true);
-        const touched = {};
         for (let i = centerKeys.length - 1; i >= 0; i--) {
             if (!alive[centerKeys[i]]) {
-                touched[centerApps[i]] = true;
+                const g = book.groups[centerApps[i]];
+                if (g && --g.size <= 0)
+                    delete book.groups[centerApps[i]];
+                delete book.order[centerKeys[i]];
                 centerStore.remove(i);
                 centerKeys.splice(i, 1);
                 centerApps.splice(i, 1);
                 dropped++;
             }
         }
-        Object.keys(touched).forEach(app => {
-            if (app !== deferApp)
-                renumberGroup(app);
-        });
+        if (dropped > 0) {
+            book.dirty = true;
+            groupRev++;
+        }
         return dropped;
     }
 
@@ -381,24 +410,30 @@ Singleton {
         centerStore.clear();
         centerKeys = [];
         centerApps = [];
+        book.groups = {};
+        book.order = {};
+        book.dirty = false;
+        groupRev++;
     }
 
     function rebuildCenter(): void {
         clearCenter();
         for (const g of History.group(history)) {
-            g.items.forEach((e, rank) => {
-                centerStore.append(Object.assign(rowOf(e), {rank: rank, groupCount: g.items.length}));
+            g.items.forEach(e => {
+                centerStore.append(rowOf(e));
                 centerKeys.push(e.key);
                 centerApps.push(e.appName);
             });
         }
+        book.dirty = true;
+        groupRev++;
     }
 
     function addEntry(entry: var): void {
         history = History.prune([entry].concat(history), Date.now());
         count = history.length;
         saveTimer.restart();
-        const dropped = syncRemovals(1, entry.appName);
+        const dropped = syncRemovals(1);
         addToCenter(entry);
         if (dropped > 0)
             pruneLive();
@@ -434,7 +469,7 @@ Singleton {
         if (list.length === 0)
             clearCenter();
         else
-            syncRemovals(0, "");
+            syncRemovals(0);
     }
 
     // ---- banners ----
