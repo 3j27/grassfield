@@ -7,3 +7,4 @@ WidgetHost 1.0 WidgetHost.qml
 WidgetMenu 1.0 WidgetMenu.qml
 SizePicker 1.0 SizePicker.qml
 WidgetGallery 1.0 WidgetGallery.qml
+singleton SystemSampler 1.0 SystemSampler.qml

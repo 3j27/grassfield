@@ -1,71 +1,37 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Quickshell.Io
 import Grassfield.Ui
 import qs.widgets
-import "../../SystemStats.js" as Stats
 
 // System widget: CPU load and memory use from /proc (small: CPU; medium: CPU and memory), sampled
-// every Tokens.widgetSampleMs only while the widget is visible (WidgetBase.active).
+// by the shared SystemSampler only while a System widget is visible (WidgetBase.active). The gauges jump to
+// each new value (no animation): a periodic animation would repaint the surface every sample.
 WidgetBase {
     id: root
 
-    property real cpu: 0
-    property real memory: 0
-    property real memUsedGb: 0
-    property real memTotalGb: 0
-    property bool haveSample: false
-    // Previous /proc/stat totals {idle, total}.
-    property var lastCpu: null
+    readonly property real cpu: SystemSampler.cpu
+    readonly property real memory: SystemSampler.memory
+    readonly property real memUsedGb: SystemSampler.memUsedGb
+    readonly property real memTotalGb: SystemSampler.memTotalGb
+    readonly property bool haveSample: SystemSampler.haveSample
 
     Accessible.role: Accessible.StaticText
     Accessible.name: haveSample ? qsTr("System, CPU %1%, memory %2%").arg(Math.round(cpu * 100)).arg(Math.round(memory * 100)) : qsTr("System")
 
-    function sample(): void {
-        statFile.reload();
-        memFile.reload();
+    // Registers with the shared sampler while active (it stops with its last user).
+    property bool registered: false
+    function register(): void {
+        const want = root.active;
+        if (want === registered)
+            return;
+        registered = want;
+        SystemSampler.users += want ? 1 : -1;
     }
-
-    Timer {
-        interval: Tokens.widgetSampleMs
-        running: root.active
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: root.sample()
-    }
-
-    // Sampling stops with the widget; the next visit starts a fresh delta.
-    onActiveChanged: if (!active)
-        lastCpu = null
-
-    FileView {
-        id: statFile
-        path: "/proc/stat"
-        printErrors: false
-        onLoaded: {
-            const now = Stats.parseCpu(statFile.text());
-            if (now === null)
-                return;
-            if (root.lastCpu !== null) {
-                root.cpu = Stats.cpuLoad(root.lastCpu, now);
-                root.haveSample = true;
-            }
-            root.lastCpu = now;
-        }
-    }
-
-    FileView {
-        id: memFile
-        path: "/proc/meminfo"
-        printErrors: false
-        onLoaded: {
-            const m = Stats.parseMemory(memFile.text());
-            if (m === null)
-                return;
-            root.memory = m.used / m.total;
-            root.memUsedGb = m.used / 1048576;
-            root.memTotalGb = m.total / 1048576;
-        }
+    onActiveChanged: register()
+    Component.onCompleted: register()
+    Component.onDestruction: {
+        if (registered)
+            SystemSampler.users -= 1;
     }
 
     component Gauge: Item {
@@ -106,13 +72,6 @@ WidgetBase {
                     height: parent.height
                     radius: parent.radius
                     color: gauge.value > 0.9 ? Appearance.colors.danger : Appearance.colors.accent
-
-                    Behavior on width {
-                        enabled: !root.reduceMotion
-                        NumberAnimation {
-                            duration: Appearance.duration(Tokens.motionNormal)
-                        }
-                    }
                 }
             }
 

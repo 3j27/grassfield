@@ -3,6 +3,7 @@ import QtTest
 import "../../shell/widgets/Registry.js" as Registry
 import "../../shell/widgets/Placements.js" as Placements
 import "../../shell/widgets/Calendar.js" as Calendar
+import "../../shell/widgets/ArtUrl.js" as ArtUrl
 import "../../shell/widgets/SystemStats.js" as Stats
 
 // Widgets v1 logic: registry/manifest validation, placement persistence, grid snapping, calendar math.
@@ -218,5 +219,141 @@ TestCase {
         compare(m.total, 16000000);
         compare(m.used, 12000000);
         compare(Stats.parseMemory("MemTotal: 5 kB\n"), null);
+    }
+
+    // ---- hostile widgets.json ------------------------------------------------------------------
+
+    function bigFile(count, ids) {
+        const desktop = [];
+        for (let i = 0; i < count; i++)
+            desktop.push({uid: "clock-1", id: ids ? ids[i % ids.length] : "clock", size: "small", screen: "GF-REF", col: i % 1000, row: 5});
+        return JSON.stringify({version: 1, center: desktop.slice(0, 100).map(e => ({uid: "clock-1", id: "clock", size: "small"})), desktop: desktop});
+    }
+
+    function test_entriesAreCapped() {
+        const r = Placements.parse(JSON.stringify({version: 1, center: [], desktop: Array.from({length: 200}, (_, i) => ({id: "clock", size: "small", screen: "S", col: i, row: 0}))}));
+        verify(r.ok);
+        compare(r.state.desktop.length, 64);
+        const uids = {};
+        r.state.desktop.forEach(e => uids[e.uid] = true);
+        compare(Object.keys(uids).length, 64, "uids are unique");
+        const c = Placements.parse(JSON.stringify({version: 1, center: Array.from({length: 200}, () => ({id: "clock", size: "small"})), desktop: []}));
+        compare(c.state.center.length, 64);
+        let s = Placements.empty();
+        for (let i = 0; i < 80; i++)
+            s = Placements.addCenter(s, "clock", "small");
+        compare(s.center.length, 64);
+    }
+
+    function test_oversizedFileIsRejectedFast() {
+        const text = bigFile(40000);
+        verify(text.length > 262144);
+        const t0 = Date.now();
+        const r = Placements.parse(text);
+        const ms = Date.now() - t0;
+        verify(!r.ok);
+        compare(r.state.desktop.length, 0);
+        verify(ms < 50, "40k entries took " + ms + " ms");
+    }
+
+    function test_manyDuplicateUidsAreLinear() {
+        // Within the byte cap: thousands of entries that all claim the same uid.
+        const text = JSON.stringify({version: 1, center: [], desktop: Array.from({length: 3000}, () => ({uid: "clock-1", id: "clock", size: "small", screen: "S", col: 0, row: 0}))});
+        verify(text.length < 262144);
+        const t0 = Date.now();
+        const r = Placements.parse(text);
+        const ms = Date.now() - t0;
+        verify(r.ok);
+        compare(r.state.desktop.length, 64);
+        verify(ms < 50, "took " + ms + " ms");
+    }
+
+    function test_fitScreenMovesOffGridAndOverlaps() {
+        const mk = (uid, size, col, row, screen) => ({uid: uid, id: "clock", size: size, screen: screen || "S", col: col, row: row});
+        const s = {version: 1, center: [], desktop: [mk("clock-1", "large", 0, 0), mk("clock-2", "small", 1, 1), mk("clock-3", "small", 1000, 1000), mk("clock-4", "small", 9, 9, "OTHER")]};
+        const r = Placements.fitScreen(s, "S", 6, 4);
+        verify(r.changed);
+        const mine = r.state.desktop.filter(e => e.screen === "S");
+        compare(mine.length, 3);
+        mine.forEach(e => verify(Placements.isFree(mine.filter(o => o !== e), e.size, e, 6, 4), e.uid + " is inside the grid and free"));
+        const other = r.state.desktop.find(e => e.screen === "OTHER");
+        compare(other.col, 9, "other screens are untouched");
+        compare(s.desktop[2].col, 1000, "input is not modified");
+        // A fitted state is stable.
+        verify(!Placements.fitScreen(r.state, "S", 6, 4).changed);
+        // No room: the entry is dropped.
+        const full = Placements.fitScreen({version: 1, center: [], desktop: [mk("clock-1", "large", 0, 0), mk("clock-2", "large", 0, 0)]}, "S", 2, 2);
+        compare(full.state.desktop.length, 1);
+    }
+
+    // ---- grid below the menu bar and above the Dock ------------------------------------------------
+
+    function test_gridAvoidsMenuBarAndDock() {
+        const cell = 158, gap = 16, margin = 24, top = 24, dock = 48 + 14 + 6 + 4 + 6;
+        [[1366, 768], [1600, 960], [1920, 1080], [3840, 2160]].forEach(sz => {
+            const g = Placements.gridFor(sz[0], sz[1], cell, gap, margin, top, dock);
+            verify(g.rows >= 1 && g.cols >= 1);
+            compare(g.y0, top + margin);
+            const bottom = g.y0 + g.rows * (cell + gap) - gap;
+            verify(bottom <= sz[1] - dock - margin + 0.001 || g.rows === 1, sz[1] + ": grid bottom " + bottom + " clears the Dock");
+            const right = g.x0 + g.cols * (cell + gap) - gap;
+            verify(right <= sz[0] - margin);
+            // One more row would not fit.
+            verify(g.y0 + (g.rows + 1) * (cell + gap) - gap > sz[1] - dock - margin, sz[1] + ": rows are maximal");
+        });
+        compare(Placements.gridFor(1366, 768, cell, gap, margin, top, dock).rows, 3);
+        compare(Placements.gridFor(1920, 1080, cell, gap, margin, top, dock).rows, 5);
+        compare(Placements.gridFor(3840, 2160, cell, gap, margin, top, dock).rows, 11);
+        compare(Placements.gridFor(300, 200, cell, gap, margin, top, dock).rows, 1, "never below one row");
+    }
+
+    // ---- art URL filter --------------------------------------------------------------------------
+
+    function test_artUrlFilter() {
+        compare(ArtUrl.safe("file:///home/u/.cache/art.png"), "file:///home/u/.cache/art.png");
+        compare(ArtUrl.safe("file://localhost/tmp/a.jpg"), "file://localhost/tmp/a.jpg");
+        compare(ArtUrl.safe("FILE:///tmp/a.jpg"), "FILE:///tmp/a.jpg");
+        compare(ArtUrl.safe("data:image/png;base64,AAAA"), "data:image/png;base64,AAAA");
+        ["http://127.0.0.1:18765/art.png", "https://example.com/a.png", "HTTP://x/a", "//example.com/a.png", "ftp://x/a", "smb://h/s/a.png",
+         "file://example.com/share/a.png", "file:////server/share/a.png", "file:///tmp/a.png?x=1", "file:///", "file://", "qrc:/a.png", "image://theme/x",
+         "/tmp/a.png", "a.png", "", "data:text/html,<script>", "data:application/octet-stream;base64,AAAA", " http://x/a", "file:///tmp/a\u0000.png",
+         "file:///tmp/a\n.png", null, undefined, 5, {}].forEach(u => compare(ArtUrl.safe(u), "", "rejected: " + u));
+        compare(ArtUrl.safe("data:image/png;base64," + "A".repeat(2000), 1000), "", "oversized data URL");
+        compare(ArtUrl.safe("data:image/png;base64," + "A".repeat(500), 1000).length, 522);
+        compare(ArtUrl.safe("data:image/png;base64," + "A".repeat(2000000)), "", "default cap");
+    }
+
+    // ---- calendar in a zone with DST at midnight ------------------------------------------------------
+
+    function test_daysInMonthIgnoresLocalTime() {
+        // Asia/Beirut starts DST at 00:00 on the last Sunday of March (2024-03-31, 2030-03-31), so local
+        // midnight of that day does not exist; the count must come from UTC date math.
+        compare(Calendar.daysInMonth(2024, 2), 31);
+        compare(Calendar.daysInMonth(2030, 2), 31);
+        compare(Calendar.daysInMonth(2024, 1), 29);
+        compare(Calendar.daysInMonth(2100, 1), 28);
+        compare(Calendar.daysInMonth(2000, 1), 29);
+        const real = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        for (let y = 2000; y <= 2060; y++) {
+            for (let m = 0; m < 12; m++) {
+                const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+                compare(Calendar.daysInMonth(y, m), m === 1 && leap ? 29 : real[m], y + "-" + m);
+            }
+        }
+        // March 2024 starts on a Friday: with Sunday first, five leading cells; 31 days -> 6 weeks.
+        const g = Calendar.monthGrid(2024, 2, 0);
+        compare(g.length, 6);
+        compare(g[0].filter(c => !c.inMonth).length, 5);
+        compare(g[5].filter(c => c.inMonth).map(c => c.day).join(","), "31");
+        compare(Calendar.monthGrid(2030, 2, 1)[0][4].day, 1, "March 2030 starts on a Friday");
+    }
+
+    function test_coveredBy() {
+        const tile = {x: 24, y: 48, w: 332, h: 158};
+        verify(Placements.coveredBy(tile, [{x: 0, y: 0, w: 1920, h: 1080}]), "fullscreen");
+        verify(Placements.coveredBy(tile, [{x: 24, y: 48, w: 332, h: 158}]), "exact");
+        verify(!Placements.coveredBy(tile, [{x: 25, y: 48, w: 1000, h: 1000}]), "one px short");
+        verify(!Placements.coveredBy(tile, [{x: 0, y: 0, w: 200, h: 1080}, {x: 190, y: 0, w: 1000, h: 1080}]), "two windows do not add up");
+        verify(!Placements.coveredBy(tile, []));
     }
 }
