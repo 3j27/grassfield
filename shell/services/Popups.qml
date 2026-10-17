@@ -5,7 +5,7 @@ import Quickshell
 // Which shell popup is open, where, and with which payload. One at a time. The Overlay window
 // of the matching screen renders it; menus, status items and the Dock only call open()/close().
 //
-// kind: "" | "system" | "app" | "volume" | "network" | "battery" | "controlcenter" | "dock"
+// kind: "" | "system" | "app" | "appfile" | "appwindow" | "volume" | "network" | "battery" | "controlcenter" | "dock"
 //       | "about" | "forcequit" | "confirm" | "appabout" | "notice"
 Singleton {
     id: root

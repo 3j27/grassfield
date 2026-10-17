@@ -84,8 +84,17 @@ Scope {
                     return qsTr("Desktop");
                 return Apps.nameFor(shownAppId);
             }
+            readonly property bool hasApp: shownAppId !== ""
+            readonly property bool hasFileMenu: hasApp && AppMenus.model.hasFileMenu(AppMenus.context(shownAppId))
             readonly property var battery: UPower.displayDevice
             readonly property bool hasBattery: battery !== null && battery.isPresent && battery.isLaptopBattery
+
+            // SingleMainWindow of the app's desktop entry decides whether File has New Window.
+            onShownAppIdChanged: {
+                const entry = shownAppId !== "" ? Apps.lookup(shownAppId) : null;
+                if (entry)
+                    AppMenus.probe(entry.id);
+            }
 
             Connections {
                 target: Compositor
@@ -113,6 +122,12 @@ Scope {
                     break;
                 case "app":
                     openFor("app", appButton, "left", {appId: win.shownAppId});
+                    break;
+                case "appfile":
+                    openFor("appfile", fileButton, "left", {appId: win.shownAppId});
+                    break;
+                case "appwindow":
+                    openFor("appwindow", windowButton, "left", {appId: win.shownAppId});
                     break;
                 case "network":
                     openFor("network", networkButton, "right", {});
@@ -214,6 +229,40 @@ Scope {
                             font.pixelSize: Tokens.typographyMenuSize
                             font.weight: Tokens.typographyMenuBoldWeight
                             elide: Text.ElideRight
+                        }
+                    }
+
+                    BarButton {
+                        id: fileButton
+                        visible: win.hasFileMenu
+                        accessibleName: qsTr("File menu")
+                        active: win.isOpen("appfile")
+                        onActivated: win.popup("appfile")
+
+                        Text {
+                            textFormat: Text.PlainText
+                            text: qsTr("File")
+                            color: Appearance.colors.text
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyMenuSize
+                            font.weight: Tokens.typographyMenuWeight
+                        }
+                    }
+
+                    BarButton {
+                        id: windowButton
+                        visible: win.hasApp
+                        accessibleName: qsTr("Window menu")
+                        active: win.isOpen("appwindow")
+                        onActivated: win.popup("appwindow")
+
+                        Text {
+                            textFormat: Text.PlainText
+                            text: qsTr("Window")
+                            color: Appearance.colors.text
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyMenuSize
+                            font.weight: Tokens.typographyMenuWeight
                         }
                     }
                 }

@@ -49,7 +49,7 @@ Scope {
         const tops = Compositor.toplevels ? Compositor.toplevels.values : [];
         for (let i = 0; i < tops.length; i++)
             running.push({appId: tops[i].appId, ref: tops[i]});
-        items = DockModel.withTail(DockModel.merge(Settings.dockPinned, running, Apps.lookup));
+        items = DockModel.withTail(DockModel.merge(Settings.dockPinned, running, Apps.lookup), DockModel.minimizedItems(Compositor.minimized, Apps.lookup));
     }
 
     function activateItem(item: var): void {
@@ -59,15 +59,22 @@ Scope {
             Trash.refresh();
             return;
         }
+        if (item.kind === "minimized") {
+            Compositor.unminimize(item.toplevel);
+            return;
+        }
         if (item.windows.length === 0) {
             if (item.entry)
                 item.entry.execute();
             return;
         }
+        // Minimized windows take part only when the app has nothing else (then the click restores one).
+        const visible = item.windows.filter(t => !Compositor.isMinimized(t));
+        const pool = visible.length > 0 ? visible : item.windows;
         const focused = Compositor.focusedToplevel;
-        const focusedHere = focused !== null && item.windows.indexOf(focused) >= 0;
+        const focusedHere = focused !== null && pool.indexOf(focused) >= 0;
         // Already focused: cycle through this app's windows; otherwise raise the most recent one.
-        Compositor.activate(focusedHere ? Compositor.nextAfter(item.windows, focused) : Compositor.mostRecent(item.windows));
+        Compositor.activate(focusedHere ? Compositor.nextAfter(pool, focused) : Compositor.mostRecent(pool));
     }
 
     Component.onCompleted: rebuild()
@@ -76,6 +83,14 @@ Scope {
         target: Compositor.toplevels
 
         function onValuesChanged(): void {
+            root.rebuild();
+        }
+    }
+
+    Connections {
+        target: Compositor
+
+        function onMinimizedChanged(): void {
             root.rebuild();
         }
     }
@@ -238,6 +253,29 @@ Scope {
                 radius: shelf.radius
             }
 
+            // Rectangle (global compositor coordinates) of the first slot right of the separator:
+            // where a minimized window lands. The plugin's minimize animation targets it.
+            readonly property var minimizeTarget: {
+                const sep = root.items.findIndex(it => it.kind === "separator");
+                const slot = baseCenters[sep >= 0 ? sep + 1 : root.items.length - 1];
+                const mon = Compositor.monitorByName(win.screen.name);
+                if (slot === undefined || !mon)
+                    return null;
+                return {
+                    x: mon.x + slot - iconSize / 2,
+                    y: mon.y + win.screen.height - Tokens.dockBottomMargin - shelfHeight + Tokens.dockPadding,
+                    w: iconSize,
+                    h: iconSize
+                };
+            }
+
+            Binding {
+                target: Compositor
+                property: "dockTarget"
+                value: win.minimizeTarget
+                when: win.modelData === Quickshell.screens[0]
+            }
+
             Behavior on influence {
                 NumberAnimation {
                     duration: Appearance.duration(Tokens.motionFast)
@@ -320,15 +358,16 @@ Scope {
                                 readonly property bool isApp: modelData.kind === "app"
                                 readonly property bool isTrash: modelData.kind === "trash"
                                 readonly property bool isSeparator: modelData.kind === "separator"
+                                readonly property bool isMinimized: modelData.kind === "minimized"
                                 readonly property bool running: isApp && modelData.windows.length > 0
-                                readonly property string label: isTrash ? qsTr("Trash") : (isApp ? modelData.name : "")
+                                readonly property string label: isTrash ? qsTr("Trash") : (isApp || isMinimized ? modelData.name : "")
                                 readonly property real iconPx: win.iconSize * tileScale
 
                                 width: isSeparator ? win.separatorWidth : iconPx
                                 height: win.iconSize + win.indicatorArea
                                 activeFocusOnTab: !isSeparator
                                 Accessible.role: isSeparator ? Accessible.Separator : Accessible.Button
-                                Accessible.name: isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (running ? qsTr("%1, running").arg(label) : label)
+                                Accessible.name: isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : (running ? qsTr("%1, running").arg(label) : label))
                                 Accessible.focusable: !isSeparator
                                 Accessible.ignored: isSeparator
                                 Accessible.onPressAction: root.activateItem(modelData)
@@ -362,6 +401,50 @@ Scope {
                                     source: tile.isApp ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
                                     smooth: true
                                     mipmap: true
+                                }
+
+                                // Minimized window: live thumbnail with the app icon badge in the
+                                // `full` material profile, the app icon alone otherwise.
+                                Item {
+                                    id: minimizedTile
+                                    visible: tile.isMinimized
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: win.indicatorArea
+
+                                    readonly property bool live: Settings.materialProfile === "full"
+                                    readonly property string iconSource: tile.isMinimized ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
+
+                                    Rectangle {
+                                        visible: minimizedTile.live
+                                        anchors.fill: parent
+                                        radius: Tokens.radiusDockIcon * tile.tileScale
+                                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                                        clip: true
+
+                                        ScreencopyView {
+                                            id: thumb
+                                            // Fit inside the tile keeping the aspect ratio.
+                                            readonly property real ratio: implicitWidth > 0 && implicitHeight > 0 ? implicitWidth / implicitHeight : 1
+                                            width: ratio >= 1 ? parent.width : parent.height * ratio
+                                            height: ratio >= 1 ? parent.width / ratio : parent.height
+                                            anchors.centerIn: parent
+                                            captureSource: minimizedTile.live && tile.isMinimized ? tile.modelData.toplevel : null
+                                            live: true
+                                            paintCursor: false
+                                        }
+                                    }
+
+                                    IconImage {
+                                        width: minimizedTile.live ? Math.round(parent.width * Tokens.dockMinimizedBadgeScale) : parent.width
+                                        height: width
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        source: minimizedTile.iconSource
+                                        smooth: true
+                                        mipmap: true
+                                    }
                                 }
 
                                 // Trash: own symbolic icon on a rounded tile.

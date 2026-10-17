@@ -127,6 +127,8 @@ Variants {
                 case "system":
                     return systemMenu;
                 case "app":
+                case "appfile":
+                case "appwindow":
                     return appMenu;
                 case "volume":
                     return volumeMenu;

@@ -3,7 +3,9 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import Quickshell.Wayland
+import "Minimized.js" as Minimized
 
 // Compositor state and actions for the shell (master-prompt 5.2: the only place, together
 // with Capabilities, that talks to the compositor). Event-driven; never polls hyprctl.
@@ -51,7 +53,10 @@ Singleton {
         const top = hyprlandToplevel(toplevel);
         if (top && top.workspace && top.workspace.name === hiddenWorkspace && root.focusedWorkspace)
             Hyprland.dispatch(moveRequest(top.address, String(root.focusedWorkspace.id)));
-        toplevel.activate();
+        if (isMinimized(toplevel))
+            unminimize(toplevel);
+        else
+            toplevel.activate();
     }
 
     // Name of the special workspace used by hide().
@@ -66,6 +71,160 @@ Singleton {
         const top = hyprlandToplevel(toplevel);
         if (top)
             Hyprland.dispatch(moveRequest(top.address, hiddenWorkspace));
+    }
+
+    // ---- Minimize (ADR-0002, master-prompt 5.6) ----
+
+    // Special workspace used by the fallback minimize (no plugin).
+    readonly property string minimizedWorkspace: "special:minimized"
+    // Windows minimized by the shell: [{toplevel, address, appId, title}] (see Minimized.js).
+    property var minimized: []
+    // Dock icon rectangle in screen coordinates {x, y, w, h}, published by the Dock; the plugin
+    // animates toward it. null until a Dock exists.
+    property var dockTarget: null
+
+    // Plugin verb call (ADR-0007), wrapped as a Lua function like the hello request. Only
+    // validated hex addresses and numbers are interpolated.
+    function pluginRequest(verb: string, address: string, rect: var): string {
+        const args = ["\"0x" + address + "\""];
+        if (rect)
+            [rect.x, rect.y, rect.w, rect.h].forEach(n => args.push(String(Math.round(Number(n) || 0))));
+        return "function() local p = hl.plugin and hl.plugin.grassfield; if p and p." + verb + " then p." + verb + "(" + args.join(", ") + ") end end";
+    }
+
+    // Minimize a window. With the plugin ("minimize" capability) the plugin hides it with an
+    // animation toward the Dock; otherwise it is parked on special:minimized. Either way the
+    // shell records it so the Dock can list and restore it.
+    function minimize(toplevel: var): bool {
+        if (!toplevel || Minimized.has(root.minimized, toplevel))
+            return false;
+        const top = hyprlandToplevel(toplevel);
+        const address = top ? Minimized.normalizeAddress(top.address) : "";
+        if (address === "")
+            return false;
+        root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title});
+        if (Capabilities.has("minimize"))
+            Hyprland.dispatch(pluginRequest("minimize", address, root.dockTarget ? root.dockTarget : {x: 0, y: 0, w: 0, h: 0}));
+        else
+            Hyprland.dispatch(moveRequest(address, minimizedWorkspace));
+        return true;
+    }
+
+    // Restore a minimized window to the current workspace and focus it.
+    function unminimize(toplevel: var): void {
+        const rec = root.minimized.find(r => r.toplevel === toplevel);
+        if (!rec)
+            return;
+        root.minimized = Minimized.remove(root.minimized, toplevel);
+        if (Capabilities.has("minimize"))
+            Hyprland.dispatch(pluginRequest("restore", rec.address, null));
+        else if (root.focusedWorkspace)
+            Hyprland.dispatch(moveRequest(rec.address, String(root.focusedWorkspace.id)));
+        toplevel.activate();
+    }
+
+    function isMinimized(toplevel: var): bool {
+        return Minimized.has(root.minimized, toplevel);
+    }
+
+    // Closed windows leave the minimized list.
+    Connections {
+        target: root.toplevels
+
+        function onValuesChanged(): void {
+            if (root.minimized.length > 0)
+                root.minimized = Minimized.prune(root.minimized, root.toplevels.values);
+        }
+    }
+
+    // The titlebar button (plugin) posts a minimize-request event; the address is validated.
+    function minimizeByAddress(address: string): void {
+        const wanted = Minimized.normalizeAddress(address);
+        if (wanted === "")
+            return;
+        const top = (Hyprland.toplevels ? Hyprland.toplevels.values : []).find(t => Minimized.normalizeAddress(t.address) === wanted);
+        if (top && top.wayland)
+            root.minimize(top.wayland);
+    }
+
+    function hideApp(appId: string): void {
+        toplevelsFor(appId).forEach(t => hide(t));
+    }
+
+    // Windows parked on special:hidden by hide(): [{address, toplevel}].
+    function hiddenWindows(revision: int): var {
+        const out = [];
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        for (let i = 0; i < all.length; i++) {
+            if (all[i].workspace && all[i].workspace.name === hiddenWorkspace)
+                out.push({address: all[i].address, toplevel: all[i].wayland});
+        }
+        return out;
+    }
+
+    // "Show All": brings every hidden window back to the focused workspace.
+    function showAll(): void {
+        if (!root.focusedWorkspace)
+            return;
+        hiddenWindows(0).forEach(w => Hyprland.dispatch(moveRequest(Minimized.normalizeAddress(w.address), String(root.focusedWorkspace.id))));
+    }
+
+    // "Hide Others": hides every visible window of other apps.
+    function hideOthers(appId: string): void {
+        const keep = appId.toLowerCase();
+        const all = root.toplevels ? root.toplevels.values : [];
+        for (let i = 0; i < all.length; i++) {
+            if (all[i].appId.toLowerCase() !== keep && !isMinimized(all[i]))
+                hide(all[i]);
+        }
+    }
+
+    // Number of visible (not minimized, not hidden) windows of other apps.
+    function othersCount(appId: string, revision: int): int {
+        const keep = appId.toLowerCase();
+        const hidden = hiddenWindows(revision).map(w => w.toplevel);
+        const all = root.toplevels ? root.toplevels.values : [];
+        return all.filter(t => t.appId.toLowerCase() !== keep && !isMinimized(t) && hidden.indexOf(t) < 0).length;
+    }
+
+    // Regular workspace id of a toplevel, 0 if unknown (special workspaces report <= 0).
+    function spaceOf(toplevel: var): int {
+        const top = hyprlandToplevel(toplevel);
+        return top && top.workspace && top.workspace.id > 0 ? top.workspace.id : 0;
+    }
+
+    // Raise every visible window of an app, the most recent last so that it ends up focused.
+    function bringAllToFront(appId: string): void {
+        const list = toplevelsFor(appId).filter(t => !isMinimized(t));
+        const top = mostRecent(list);
+        list.filter(t => t !== top).forEach(t => activate(t));
+        if (top)
+            activate(top);
+    }
+
+    // Zoom = maximized, full screen = fullscreen (ADR-0002), through the foreign-toplevel protocol.
+    function toggleZoom(toplevel: var): void {
+        if (toplevel)
+            toplevel.maximized = !toplevel.maximized;
+    }
+
+    function toggleFullscreen(toplevel: var): void {
+        if (toplevel)
+            toplevel.fullscreen = !toplevel.fullscreen;
+    }
+
+    // Hyprland-independent entry points for key bindings (SUPER+M, SUPER+H).
+    IpcHandler {
+        target: "windows"
+
+        function minimize(): void {
+            root.minimize(root.focusedToplevel);
+        }
+
+        function hide(): void {
+            if (root.focusedAppId !== "")
+                root.hideApp(root.focusedAppId);
+        }
     }
 
     // Ask the client to close this window (xdg close request, not a kill).
@@ -98,6 +257,12 @@ Singleton {
         target: Hyprland
 
         function onRawEvent(event: HyprlandEvent): void {
+            if (event.name === "grassfield") {
+                const address = Minimized.minimizeRequestAddress(event.data);
+                if (address !== "")
+                    root.minimizeByAddress(address);
+                return;
+            }
             switch (event.name) {
             case "openwindow":
             case "closewindow":
@@ -222,6 +387,12 @@ Singleton {
             return false;
         Hyprland.dispatch(moveRequest(m[1].toLowerCase(), String(Math.floor(id))));
         return true;
+    }
+
+    // Move a window (foreign-toplevel handle) to a Space without following it.
+    function moveToplevelToSpace(toplevel: var, id: int): bool {
+        const top = hyprlandToplevel(toplevel);
+        return top ? moveToSpace(top.address, id) : false;
     }
 
     // Focus recency (most recently activated wins), kept per toplevel handle.

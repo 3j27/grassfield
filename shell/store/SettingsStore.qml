@@ -32,6 +32,16 @@ Scope {
     readonly property int lockIdleMinutes: Math.round(clampNumber(config.lock.idleMinutes, 0, 240, 5))
 
     // Array-like (the adapter hands out a QVariantList) to a plain array of non-empty strings.
+    readonly property string hotCornerTopLeft: cornerAction(config.hotCorners.topLeft)
+    readonly property string hotCornerTopRight: cornerAction(config.hotCorners.topRight)
+    readonly property string hotCornerBottomLeft: cornerAction(config.hotCorners.bottomLeft)
+    readonly property string hotCornerBottomRight: cornerAction(config.hotCorners.bottomRight)
+
+    // Hot corner action clamped to the schema enum.
+    function cornerAction(value: var): string {
+        return ["none", "overview", "notifications", "apps", "lock"].indexOf(value) >= 0 ? value : "none";
+    }
+
     function stringList(list: var): var {
         const out = [];
         const n = list && typeof list.length === "number" ? list.length : 0;
@@ -75,6 +85,13 @@ Scope {
         property int idleMinutes: 5
     }
 
+    component HotCornersConfig: JsonObject {
+        property string topLeft: "none"
+        property string topRight: "none"
+        property string bottomLeft: "none"
+        property string bottomRight: "none"
+    }
+
     component NotificationsConfig: JsonObject {
         property bool dnd: false
         // always | unlocked | never (ADR-0004). "never" hides bodies; "unlocked" equals "always" until the lock screen exists.
@@ -114,6 +131,14 @@ Scope {
 
     function setDockPinned(list: var): void {
         config.dock.pinned = list;
+        save();
+    }
+
+    // corner: topLeft | topRight | bottomLeft | bottomRight.
+    function setHotCorner(corner: string, action: string): void {
+        if (["topLeft", "topRight", "bottomLeft", "bottomRight"].indexOf(corner) < 0)
+            return;
+        config.hotCorners[corner] = cornerAction(action);
         save();
     }
 
@@ -189,6 +214,7 @@ Scope {
         property WindowsConfig windows: WindowsConfig {}
         property NotificationsConfig notifications: NotificationsConfig {}
         property LockConfig lock: LockConfig {}
+        property HotCornersConfig hotCorners: HotCornersConfig {}
     }
 
     FileView {

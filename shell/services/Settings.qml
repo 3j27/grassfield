@@ -35,6 +35,15 @@ Singleton {
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
     readonly property int lockIdleMinutes: store.lockIdleMinutes
 
+    readonly property string hotCornerTopLeft: store.hotCornerTopLeft
+    readonly property string hotCornerTopRight: store.hotCornerTopRight
+    readonly property string hotCornerBottomLeft: store.hotCornerBottomLeft
+    readonly property string hotCornerBottomRight: store.hotCornerBottomRight
+
+    function setHotCorner(corner: string, action: string): void {
+        store.setHotCorner(corner, action);
+    }
+
     function setAppearance(value: string): void {
         store.setAppearance(value);
     }

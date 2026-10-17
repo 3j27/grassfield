@@ -65,6 +65,7 @@ ShellRoot {
     }
 
     Wallpaper {}
+    HotCorners {}
     MenuBar {}
     Dock {}
     Overlay {}

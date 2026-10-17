@@ -36,9 +36,27 @@ function merge(pinned, running, lookup) {
     return list;
 }
 
-// Apps, then a separator, then the trash.
-function withTail(apps) {
-    return apps.concat([{kind: "separator"}, {kind: "trash"}]);
+// Minimized windows as tiles: {kind: "minimized", key, name, icon, appId, toplevel}.
+// records: [{toplevel, address, appId, title}] (platform/Minimized.js); lookup resolves desktop entries.
+function minimizedItems(records, lookup) {
+    return (records ? records : []).map(r => {
+        const entry = lookup(r.appId);
+        const app = entry ? entry.name : r.appId;
+        return {
+            kind: "minimized",
+            key: "min:" + r.address,
+            name: r.title ? r.title : app,
+            appName: app,
+            icon: entry ? entry.icon : r.appId,
+            appId: r.appId,
+            toplevel: r.toplevel
+        };
+    });
+}
+
+// Apps, a separator, minimized windows (right of the separator), then the trash.
+function withTail(apps, minimized) {
+    return apps.concat([{kind: "separator"}], minimized ? minimized : [], [{kind: "trash"}]);
 }
 
 function pin(pinned, id) {

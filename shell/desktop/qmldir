@@ -1,3 +1,6 @@
 module qs.desktop
 Wallpaper 1.0 Wallpaper.qml
 WallpaperArt 1.0 WallpaperArt.qml
+HotCorners 1.0 HotCorners.qml
+HotCorner 1.0 HotCorner.qml
+DwellGate 1.0 DwellGate.qml
