@@ -11,6 +11,16 @@ TestCase {
         return {toplevel: top, address: address ? address : "1a", appId: appId, title: "T " + top};
     }
 
+    function test_pluginVerbAllowlist() {
+        for (const v of ["hello", "minimize", "restore", "overview", "theme"])
+            verify(Minimized.isPluginVerb(v), v);
+        for (const v of ["", "Minimize", "minimize ", "x end os.execute('id') --", "minimize(1) end; os.exit() --", "constructor", "__proto__", "length"])
+            verify(!Minimized.isPluginVerb(v), v);
+        verify(!Minimized.isPluginVerb(undefined));
+        verify(!Minimized.isPluginVerb(null));
+        verify(!Minimized.isPluginVerb(7));
+    }
+
     function test_addIsIdempotentAndRemove() {
         let list = Minimized.add([], rec("a", "foot"));
         list = Minimized.add(list, rec("a", "foot"));

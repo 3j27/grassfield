@@ -5,6 +5,13 @@
 // Record: {toplevel, address, appId, title}.
 
 // Validated lowercase hex of a Hyprland window address ("0x" prefix optional), "" if invalid.
+// Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
+var pluginVerbs = ["hello", "minimize", "restore", "overview", "theme"];
+
+function isPluginVerb(verb) {
+    return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
+}
+
 function normalizeAddress(address) {
     const m = /^(?:0x)?([0-9a-fA-F]{1,16})$/.exec(String(address));
     return m ? m[1].toLowerCase() : "";

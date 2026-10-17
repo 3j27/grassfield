@@ -189,6 +189,10 @@ Singleton {
 
     function closeCenter(): void {
         centerOpen = false;
+        if (Object.keys(expandedApps).length > 0) {
+            expandedApps = ({});
+            syncShown();
+        }
     }
 
     function setDnd(on: bool): void {
@@ -281,8 +285,6 @@ Singleton {
     // ---- models ----
 
     function indexOfKey(model: var, key: string): int {
-        if (model === centerStore)
-            return centerKeys.indexOf(key);
         if (model === bannerStore)
             return bannerKeys.indexOf(key);
         for (let i = 0; i < model.count; i++) {
@@ -308,79 +310,106 @@ Singleton {
         };
     }
 
-    // JS mirrors of centerStore (row i = centerKeys[i], centerApps[i]) so that inserts and removals
-    // never read the ListModel row by row (ListModel.get() is slow; the Notify call waits for this).
+    // The Center model holds only the rows that are DISPLAYED (first `notificationCenterGroupCollapsed`
+    // of each app group, all of an expanded group), so collapsed rows never get a delegate. The full
+    // order lives in two JS arrays (row i = centerKeys[i], centerApps[i]; grouped by app, newest group
+    // first, newest row first inside a group); the shown rows are kept in sync by syncShown(), which
+    // touches the model only where the displayed set changed (a few rows per Notify).
     property var centerKeys: []
     property var centerApps: []
+    // Mirrors of centerStore: key and meta signature of each shown row.
+    property var shownKeys: []
+    property var shownSig: []
+    // App names whose group is expanded ("Show All"); reset when the Center closes.
+    property var expandedApps: ({})
     // Same for bannerStore (keys, newest first).
     property var bannerKeys: []
 
-    // Group bookkeeping for the Center (rows are grouped by app, newest group first, newest row first
-    // inside a group), kept outside the model so an insert touches no other row:
-    //  - book.groups[app] = {size, head}: rows in the group, lowest order id in it;
-    //  - book.order[key] = order id; a new row takes head - 1, so rank = order - head in O(1);
-    //  - a removal only marks the ids dirty: ensureRanks() renumbers lazily, when a delegate asks.
-    // `book` is mutated in place (never reassigned) so reading it in a binding creates no loop;
-    // `groupRev` changes on every insert/removal so open delegates re-read size and rank.
-    readonly property var book: ({groups: {}, order: {}, dirty: false})
-    property int groupRev: 0
+    function setExpanded(app: string, on: bool): void {
+        const next = Object.assign({}, expandedApps);
+        next[app] = on;
+        expandedApps = next;
+        syncShown();
+    }
 
-    function ensureRanks(): void {
-        if (!book.dirty)
-            return;
-        book.dirty = false;
-        const groups = {};
+    // Reconciles centerStore with the displayed subset of centerKeys. Per-row group info travels as
+    // roles of the rows that need it: headCount (> 0 on the first row of a group: draws the group
+    // header), headFirst (that group is the top one), toggleCount (> 0 on the row that carries
+    // Show All / Show Less). A role is only written when its value changed.
+    function syncShown(): void {
+        const collapsed = Tokens.notificationCenterGroupCollapsed;
+        const sizes = {};
+        for (const a of centerApps)
+            sizes[a] = (sizes[a] || 0) + 1;
+        const wantKeys = [];
+        const wantMeta = [];
+        const wantSig = [];
+        const seen = {};
         for (let i = 0; i < centerKeys.length; i++) {
             const app = centerApps[i];
-            const g = groups[app] ? groups[app] : (groups[app] = {size: 0, head: 0});
-            book.order[centerKeys[i]] = g.size++;
+            const rank = seen[app] || 0;
+            seen[app] = rank + 1;
+            const expanded = expandedApps[app] === true;
+            if (rank >= collapsed && !expanded)
+                continue;
+            const size = sizes[app];
+            const meta = {
+                headCount: rank === 0 ? size : 0,
+                headFirst: rank === 0 && i === 0,
+                toggleCount: size > collapsed && rank === (expanded ? size - 1 : collapsed - 1) ? size : 0
+            };
+            wantKeys.push(centerKeys[i]);
+            wantMeta.push(meta);
+            wantSig.push(meta.headCount + "|" + meta.headFirst + "|" + meta.toggleCount);
         }
-        book.groups = groups;
+        const want = {};
+        wantKeys.forEach(k => want[k] = true);
+        for (let i = shownKeys.length - 1; i >= 0; i--) {
+            if (!want[shownKeys[i]]) {
+                centerStore.remove(i);
+                shownKeys.splice(i, 1);
+                shownSig.splice(i, 1);
+            }
+        }
+        for (let i = 0; i < wantKeys.length; i++) {
+            if (shownKeys[i] !== wantKeys[i]) {
+                const j = shownKeys.indexOf(wantKeys[i], i + 1);
+                if (j > i) {
+                    centerStore.move(j, i, 1);
+                    shownKeys.splice(i, 0, shownKeys.splice(j, 1)[0]);
+                    shownSig.splice(i, 0, shownSig.splice(j, 1)[0]);
+                } else {
+                    centerStore.insert(i, Object.assign(rowOf(entryFor(wantKeys[i])), wantMeta[i]));
+                    shownKeys.splice(i, 0, wantKeys[i]);
+                    shownSig.splice(i, 0, wantSig[i]);
+                    continue;
+                }
+            }
+            if (shownSig[i] !== wantSig[i]) {
+                centerStore.set(i, wantMeta[i]);
+                shownSig[i] = wantSig[i];
+            }
+        }
     }
 
-    // Position of a row inside its app group (0 = newest). Reactive through `groupRev`.
-    function rankOf(key: string, app: string): int {
-        void groupRev;
-        ensureRanks();
-        const g = book.groups[app];
-        return g && book.order[key] !== undefined ? book.order[key] - g.head : 0;
-    }
-
-    function groupSize(app: string): int {
-        void groupRev;
-        ensureRanks();
-        const g = book.groups[app];
-        return g ? g.size : 0;
-    }
-
-    // App of the first (top) group, "" when empty. Reactive through `groupRev`.
-    function firstGroupApp(): string {
-        void groupRev;
-        return centerApps.length > 0 ? centerApps[0] : "";
-    }
-
-    // New (newest) entry: on top, followed by the rest of its group (one move for the block).
+    // New (newest) entry: on top, followed by the rest of its group. Call syncShown() afterwards.
     function addToCenter(e: var): void {
         const start = centerApps.indexOf(e.appName);
-        const g = book.groups[e.appName] ? book.groups[e.appName] : (book.groups[e.appName] = {size: 0, head: 0});
-        const size = start >= 0 ? g.size : 0;
         const at = start >= 0 ? start : 0;
-        centerStore.insert(at, rowOf(e));
         centerKeys.splice(at, 0, e.key);
         centerApps.splice(at, 0, e.appName);
         if (at > 0) {
-            centerStore.move(at, 0, size + 1);
+            let size = 0;
+            while (at + 1 + size < centerApps.length && centerApps[at + 1 + size] === e.appName)
+                size++;
             centerKeys.unshift(...centerKeys.splice(at, size + 1));
             centerApps.unshift(...centerApps.splice(at, size + 1));
         }
-        book.order[e.key] = --g.head;
-        g.size++;
-        groupRev++;
     }
 
-    // Drops model rows whose entry left the history (removal, pruning).
+    // Drops rows whose entry left the history (removal, pruning). Call syncShown() afterwards.
     // Returns the number of rows dropped (0 takes the fast path: no work when the sizes agree).
-    // `pending` entries of history are not in the model yet (the caller inserts them next).
+    // `pending` entries of history are not in the arrays yet (the caller inserts them next).
     function syncRemovals(pending: int): int {
         if (centerKeys.length + pending === history.length)
             return 0;
@@ -389,59 +418,40 @@ Singleton {
         history.forEach(e => alive[e.key] = true);
         for (let i = centerKeys.length - 1; i >= 0; i--) {
             if (!alive[centerKeys[i]]) {
-                const g = book.groups[centerApps[i]];
-                if (g && --g.size <= 0)
-                    delete book.groups[centerApps[i]];
-                delete book.order[centerKeys[i]];
-                centerStore.remove(i);
                 centerKeys.splice(i, 1);
                 centerApps.splice(i, 1);
                 dropped++;
             }
         }
-        if (dropped > 0) {
-            book.dirty = true;
-            groupRev++;
-        }
         return dropped;
     }
 
+    // Call syncShown() afterwards.
     function removeFromCenter(key: string): void {
         const i = centerKeys.indexOf(key);
         if (i < 0)
             return;
-        const g = book.groups[centerApps[i]];
-        if (g && --g.size <= 0)
-            delete book.groups[centerApps[i]];
-        delete book.order[key];
-        centerStore.remove(i);
         centerKeys.splice(i, 1);
         centerApps.splice(i, 1);
-        book.dirty = true;
-        groupRev++;
     }
 
     function clearCenter(): void {
         centerStore.clear();
         centerKeys = [];
         centerApps = [];
-        book.groups = {};
-        book.order = {};
-        book.dirty = false;
-        groupRev++;
+        shownKeys = [];
+        shownSig = [];
     }
 
     function rebuildCenter(): void {
         clearCenter();
         for (const g of History.group(history)) {
             g.items.forEach(e => {
-                centerStore.append(rowOf(e));
                 centerKeys.push(e.key);
                 centerApps.push(e.appName);
             });
         }
-        book.dirty = true;
-        groupRev++;
+        syncShown();
     }
 
     function addEntry(entry: var): void {
@@ -457,6 +467,7 @@ Singleton {
         evicted.forEach(k => removeFromCenter(k));
         syncRemovals(1);
         addToCenter(entry);
+        syncShown();
         // Dismissing a live notification costs ~5 ms in the server; after the Notify reply went out.
         if (evicted.length > 0)
             Qt.callLater(() => evicted.forEach(k => finishLive(k)));
@@ -474,7 +485,7 @@ Singleton {
             return;
         saveTimer.restart();
         const row = rowOf(entryFor(key));
-        const ci = indexOfKey(centerStore, key);
+        const ci = shownKeys.indexOf(key);
         if (ci >= 0)
             centerStore.set(ci, row);
         const bi = indexOfKey(bannerStore, key);
@@ -491,8 +502,8 @@ Singleton {
         saveTimer.restart();
         if (list.length === 0)
             clearCenter();
-        else
-            syncRemovals(0);
+        else if (syncRemovals(0) > 0)
+            syncShown();
     }
 
     // ---- banners ----
@@ -629,7 +640,7 @@ Singleton {
             next[hi] = Object.assign({}, history[hi], {nid: -1});
             history = next;
             saveTimer.restart();
-            const ci = indexOfKey(centerStore, key);
+            const ci = shownKeys.indexOf(key);
             if (ci >= 0)
                 centerStore.set(ci, {nid: -1});
         }
