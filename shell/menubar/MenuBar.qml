@@ -147,7 +147,7 @@ Scope {
             // A menu of this bar is open: only then may the bar take the keyboard (never on hover or at start).
             readonly property bool menuOpen: Popups.active && Popups.screenName === win.screen.name
             readonly property var battery: UPower.displayDevice
-            readonly property bool hasBattery: battery !== null && battery.isPresent && battery.isLaptopBattery
+            readonly property bool hasBattery: !VisualFixtures.active && battery !== null && battery.isPresent && battery.isLaptopBattery
 
             // SingleMainWindow of the app's desktop entry decides whether File has New Window.
             onShownAppIdChanged: {

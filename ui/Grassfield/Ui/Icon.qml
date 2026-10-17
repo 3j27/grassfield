@@ -37,5 +37,8 @@ Item {
         brightness: 1.0
         colorization: 1.0
         colorizationColor: root.color
+        // Dev-only glyph mask (Appearance.devGlyphMode, tests/visual): a hidden marker colour hides the icon (a
+        // fully transparent colorization would otherwise leave the lifted white glyph). Never true in production.
+        opacity: Appearance.devGlyphMode === "hidden" && Appearance.isGlyphMarker(root.color) ? 0 : 1
     }
 }

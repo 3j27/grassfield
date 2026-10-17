@@ -93,7 +93,7 @@ Item {
         textFormat: Text.PlainText
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
-        color: Tokens.colorDark.text
+        color: Appearance.darkColors.text
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.appsLabelSize
         font.weight: Tokens.typographyMenuWeight

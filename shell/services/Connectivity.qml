@@ -8,9 +8,13 @@ import "../overlay/controlcenter/Model.js" as Model
 Singleton {
     id: root
 
-    readonly property bool available: Networking.backend === NetworkBackendType.NetworkManager
+    // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): one fake Wi-Fi network, Wi-Fi on.
+    readonly property bool fixture: VisualFixtures.active
+    readonly property var fixtureNet: ({name: VisualFixtures.network, signalStrength: 0.9, connected: true})
+
+    readonly property bool available: fixture || Networking.backend === NetworkBackendType.NetworkManager
     readonly property var devices: Networking.devices ? Networking.devices.values : []
-    readonly property bool wifiEnabled: Networking.wifiEnabled
+    readonly property bool wifiEnabled: fixture || Networking.wifiEnabled
 
     function deviceOfType(type: int): var {
         for (let i = 0; i < devices.length; i++) {
@@ -20,12 +24,14 @@ Singleton {
         return null;
     }
 
-    readonly property var wifiDevice: deviceOfType(DeviceType.Wifi)
-    readonly property var wiredDevice: deviceOfType(DeviceType.Wired)
+    readonly property var wifiDevice: fixture ? ({scannerEnabled: false, networks: null}) : deviceOfType(DeviceType.Wifi)
+    readonly property var wiredDevice: fixture ? null : deviceOfType(DeviceType.Wired)
     readonly property bool wiredConnected: wiredDevice !== null && wiredDevice.connected
 
     // The Wi-Fi network this machine is connected to, or null.
     readonly property var wifiConnected: {
+        if (fixture)
+            return fixtureNet;
         const nets = wifiDevice && wifiDevice.networks ? wifiDevice.networks.values : [];
         for (let i = 0; i < nets.length; i++) {
             if (nets[i].connected)
@@ -77,6 +83,8 @@ Singleton {
 
     // Scan results as rows for the Control Center (sorted, deduplicated; see Model.sortNetworks).
     readonly property var networks: {
+        if (fixture)
+            return [{name: fixtureNet.name, strength: fixtureNet.signalStrength, secured: true, enterprise: false, connected: true, known: true, connecting: false, net: null}];
         const nets = wifiDevice && wifiDevice.networks ? wifiDevice.networks.values : [];
         const rows = [];
         for (let i = 0; i < nets.length; i++) {

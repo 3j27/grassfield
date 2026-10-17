@@ -19,8 +19,9 @@ Singleton {
     // True after the first read; consumers ignore changes before that.
     property bool loaded: false
 
-    readonly property bool available: device !== "" && max > 0
-    readonly property real level: available ? Math.max(0, Math.min(1, value / max)) : 0
+    // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): a backlight at 50 percent, no keyboard backlight.
+    readonly property bool available: VisualFixtures.active || (device !== "" && max > 0)
+    readonly property real level: VisualFixtures.active ? 0.5 : (available ? Math.max(0, Math.min(1, value / max)) : 0)
     readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
 
     signal commandFinished
@@ -56,7 +57,7 @@ Singleton {
     property string kbdDevice: ""
     property int kbdMax: 0
     property int kbdValue: 0
-    readonly property bool kbdAvailable: kbdDevice !== "" && kbdMax > 0
+    readonly property bool kbdAvailable: !VisualFixtures.active && kbdDevice !== "" && kbdMax > 0
     readonly property real kbdLevel: kbdAvailable ? Math.max(0, Math.min(1, kbdValue / kbdMax)) : 0
 
     function setKbdLevel(fraction: real): bool {

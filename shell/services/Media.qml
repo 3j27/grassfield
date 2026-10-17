@@ -16,7 +16,8 @@ Singleton {
         }
         return players.length > 0 ? players[0] : null;
     }
-    readonly property bool available: player !== null
+    // No player in the visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES).
+    readonly property bool available: !VisualFixtures.active && player !== null
     readonly property string title: available ? player.trackTitle : ""
     readonly property string artist: available ? player.trackArtist : ""
     readonly property string artUrl: available ? player.trackArtUrl : ""

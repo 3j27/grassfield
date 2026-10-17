@@ -21,6 +21,9 @@ Item {
     // Persistent warning under the error line (e.g. crash recovery unavailable); never replaced.
     property string notice: ""
     property string userName: ""
+    // What is drawn for the account name (display only; authentication never reads it). Fixed fake name in the
+    // visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES), else the account's own.
+    readonly property string shownName: VisualFixtures.active ? VisualFixtures.user : userName
     // file:// URL of the account picture, or "" for the initials disc.
     property string avatarSource: ""
 
@@ -122,7 +125,7 @@ Item {
             width: Tokens.lockAvatarSize
             height: Tokens.lockAvatarSize
             Accessible.role: Accessible.Graphic
-            Accessible.name: qsTr("Picture of %1").arg(root.userName)
+            Accessible.name: qsTr("Picture of %1").arg(root.shownName)
 
             Rectangle {
                 id: disc
@@ -134,7 +137,7 @@ Item {
                 Text {
                     textFormat: Text.PlainText
                     anchors.centerIn: parent
-                    text: Machine.initials(root.userName)
+                    text: Machine.initials(root.shownName)
                     color: root.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.lockInitialsSize
@@ -146,7 +149,7 @@ Item {
                 id: picture
                 anchors.fill: parent
                 visible: false
-                source: root.avatarSource
+                source: VisualFixtures.active ? "" : root.avatarSource
                 sourceSize: Qt.size(width * 2, height * 2)
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
@@ -174,7 +177,7 @@ Item {
         Text {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
-            text: root.userName
+            text: root.shownName
             color: root.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyTitleSize

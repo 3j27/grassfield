@@ -14,13 +14,16 @@ Singleton {
     // resolve its model types (the runtime can).
     // qmllint disable unresolved-type
     readonly property var adapter: Bluetooth.defaultAdapter
-    readonly property bool available: adapter !== null
-    readonly property bool enabled: available && adapter.enabled
+    // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): adapter on, no devices.
+    readonly property bool available: VisualFixtures.active || adapter !== null
+    readonly property bool enabled: VisualFixtures.active || (available && adapter.enabled)
     readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
     signal devSuppressed(string what)
 
     // Paired devices as rows {name, paired, connected, battery, dev}.
     readonly property var devices: {
+        if (VisualFixtures.active)
+            return [];
         const all = Bluetooth.devices ? Bluetooth.devices.values : [];
         const rows = [];
         for (let i = 0; i < all.length; i++) {
