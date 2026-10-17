@@ -97,7 +97,7 @@ Singleton {
     // validated hex addresses and numbers are interpolated.
     function pluginRequest(verb: string, address: string, rect: var): string {
         const hex = Minimized.normalizeAddress(address);
-        if (hex === "" || (rect && !Minimized.finiteRect(rect)))
+        if (!Minimized.isPluginVerb(verb) || hex === "" || (rect && !Minimized.finiteRect(rect)))
             return "";
         const args = ["\"0x" + hex + "\""];
         if (rect)
