@@ -10,10 +10,54 @@ Scope {
     id: root
 
     // Dev-only wallpaper override for tests/visual (contrast on worst-case wallpapers): with
-    // GRASSFIELD_DEV=1, GRASSFIELD_WALLPAPER_FILE (initial) or `qs ipc call wallpaper set <png>` covers
-    // the artwork with that image; an empty path restores the artwork. Inert outside dev.
+    // GRASSFIELD_DEV=1, GRASSFIELD_WALLPAPER_FILE (initial, trusted: set by the dev scripts) or
+    // `qs ipc call wallpaper set <path>` covers the artwork with that image; an empty path restores the artwork.
+    // The IPC path must be absolute, end in .png/.jpg/.jpeg and name an existing regular file of at most
+    // maxBytes (checked with stat before it is used; `wallpaper status` reports the outcome in plain text).
+    // Inert outside dev: every call is refused.
     readonly property bool dev: Quickshell.env("GRASSFIELD_DEV") === "1"
     property string overrideFile: dev ? Quickshell.env("GRASSFIELD_WALLPAPER_FILE") : ""
+    readonly property real maxBytes: 64 * 1024 * 1024
+    property string pendingFile: ""
+    property string outcome: "idle"
+
+    // "" when the path is acceptable for a stat check, else the reason it is refused.
+    function pathProblem(path: string): string {
+        if (path.charAt(0) !== "/")
+            return "path must be absolute";
+        if (/[\u0000-\u001f]/.test(path))
+            return "path contains control characters";
+        if (!/\.(png|jpe?g)$/i.test(path))
+            return "only .png, .jpg and .jpeg files are accepted";
+        return "";
+    }
+
+    // stat output "<file type>|<size>": a regular file under the size cap, or the reason it is refused.
+    function statProblem(out: string): string {
+        const m = out.trim().match(/^(.*)\|(\d+)$/);
+        if (!m)
+            return "file not found";
+        if (m[1] !== "regular file" && m[1] !== "regular empty file")
+            return "not a regular file";
+        if (parseInt(m[2]) > maxBytes)
+            return "file larger than " + (maxBytes / (1024 * 1024)) + " MB";
+        return "";
+    }
+
+    Process {
+        id: stat
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const why = root.statProblem(text);
+                if (why !== "") {
+                    root.outcome = "refused: " + why;
+                } else {
+                    root.overrideFile = root.pendingFile;
+                    root.outcome = "applied";
+                }
+            }
+        }
+    }
 
     IpcHandler {
         target: "wallpaper"
@@ -21,8 +65,27 @@ Scope {
         function set(path: string): string {
             if (!root.dev)
                 return "refused";
-            root.overrideFile = path;
-            return "ok";
+            if (path === "") {
+                root.overrideFile = "";
+                root.outcome = "idle";
+                return "ok";
+            }
+            const why = root.pathProblem(path);
+            if (why !== "") {
+                root.outcome = "refused: " + why;
+                return root.outcome;
+            }
+            root.pendingFile = path;
+            root.outcome = "validating";
+            stat.command = ["stat", "-L", "-c", "%F|%s", "--", path];
+            stat.running = false;
+            stat.running = true;
+            return "validating";
+        }
+
+        // idle | validating | applied | refused: <reason>
+        function status(): string {
+            return root.dev ? root.outcome : "refused";
         }
     }
 
@@ -65,6 +128,7 @@ Scope {
                 visible: root.overrideFile !== ""
                 source: root.overrideFile !== "" ? "file://" + root.overrideFile : ""
                 fillMode: Image.Stretch
+                sourceSize: Qt.size(win.width, win.height)
                 cache: false
                 smooth: false
             }
