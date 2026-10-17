@@ -6,7 +6,8 @@
 //   unlocked -request-> locking -acquired-> locked -submit-> authenticating
 //   authenticating -success-> unlocked
 //   authenticating -failure|error|timeout|abort-> locked
-//   locking|locked|authenticating -lost-> locking        (compositor dropped the lock: re-acquire)
+//   locking|locked|authenticating -lost-> locking        (lock dropped, or the session found unlocked
+//                                                         under a lock still reported secure: re-acquire)
 //   locked|authenticating -fingerprint-> unlocked        (PAM success of omarchy-lock-fingerprint)
 //
 // Only a PAM success ("success", "fingerprint") ever leads to "unlocked". Unknown events and
@@ -102,6 +103,26 @@ function compositorLockState(monitors) {
             readable = true;
     }
     return readable ? "unlocked" : "unknown";
+}
+
+// Lock watchdog decision while this shell holds a lock the compositor confirmed (locked or
+// authenticating, WlSessionLock secure), from a fresh compositorLockState() answer and the number of
+// consecutive "unlocked" answers just before it. Hyprland 0.56 with misc.allow_session_lock_restore
+// hands a live session lock to the next client that asks and tells the previous holder nothing; when
+// either client then releases it, the session is unlocked although the other one's lock object still
+// reports secure. Returns:
+//   "ok"      the compositor reports the session locked (by this shell, or by a foreign locker that
+//             took it over: coexist, the session is locked);
+//   "unknown" no complete monitor list (not Hyprland, outputs coming up): rely on WlSessionLock;
+//   "confirm" first "unlocked" answer: ask once more, so that an answer to a request sent before this
+//             lock existed can never trigger a re-lock;
+//   "relock"  confirmed unlocked: drop the stale lock object and take a fresh lock (fail closed).
+function ownershipAction(compositorState, unlockedBefore) {
+    if (compositorState === "locked")
+        return "ok";
+    if (compositorState !== "unlocked")
+        return "unknown";
+    return unlockedBefore >= 1 ? "relock" : "confirm";
 }
 
 // File name of the marker; the instance id is reduced to safe file-name characters.

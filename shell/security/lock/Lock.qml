@@ -33,14 +33,28 @@ import "../LockMachine.js" as Machine
 //   before the reload pass. File watching is off (shell.qml), so only an explicit reload can happen.
 // A fresh session (no marker, no carried intent) starts unlocked: if a marker was removed while
 // locked, the compositor still holds the dead client's lock and strandedProbe re-acquires it.
+//
+// Lock ownership (docs/specs/security.md "Lock ownership and foreign lockers"): Hyprland 0.56 with
+// misc.allow_session_lock_restore hands a LIVE session lock to the next client that asks and tells
+// the previous holder nothing; when either client releases its lock, the session is unlocked
+// although the other one's WlSessionLock still reports locked and secure. While this shell holds a
+// confirmed lock, ownershipProbe therefore asks Hyprland for the real session lock state (no
+// Hyprland event exists for it) and takes a fresh lock as soon as the session is found unlocked.
+// A foreign locker that takes the lock over is left alone (the session stays locked); its release
+// is followed by a fresh Grassfield lock.
 Singleton {
     id: root
 
     // "unlocked" | "locking" | "locked" | "authenticating"
     readonly property string lockState: controller.lockState
     readonly property bool locked: controller.locked
-    // The compositor confirmed that every output shows a lock surface.
-    readonly property bool secure: sessionLock.secure
+    // This shell holds a lock the compositor confirmed (its `locked` event: every output shows a
+    // lock surface). On Hyprland the lock may since have been taken over: see `secure`.
+    readonly property bool holding: (controller.lockState === Machine.LOCKED || controller.lockState === Machine.AUTHENTICATING) && sessionLock.secure
+    // Holding, and Hyprland reported the session locked since the last verify() (or the lock was
+    // just acquired). SleepInhibitor releases the sleep delay only on this.
+    readonly property bool secure: holding && verified
+    property bool verified: false
     readonly property bool pamAvailable: controller.pamAvailable
     readonly property bool fingerprintAvailable: fingerprintFile.available
 
@@ -59,11 +73,26 @@ Singleton {
     // unaffected: a crash still leaves the compositor locked).
     readonly property bool recoveryDegraded: markerPath === "" || markerFailed
 
+    // Hyprland IPC is available for the lock ownership checks (Quickshell.Hyprland, no hyprctl).
+    readonly property bool hyprland: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== ""
+    // Date.now() when the compositor last confirmed a lock of this shell (its `locked` event).
+    property double securedAt: 0
+    // Consecutive Hyprland answers reporting the session unlocked while holding (see checkOwnership).
+    property int unlockedAnswers: 0
+
     // Engage the lock. reason: "ipc" | "menu" | "idle" | "sleep" | "restore". Returns "ok",
-    // "already-locked" or "refused: missing-pam".
+    // "already-locked" or "refused: missing-pam". When this shell already holds a lock, the
+    // compositor is asked again (verify()): a session found unlocked under it gets a fresh lock, at
+    // once if the last answer already said so (then "ok").
     function lock(reason: string): string {
         if (controller.locked) {
+            console.info("grassfield-lock: lock requested (" + reason + ") while " + controller.lockState + "; verifying the session lock");
+            if (holding && unlockedAnswers > 0) {
+                relock(reason);
+                return "ok";
+            }
             engage();
+            verify();
             return "already-locked";
         }
         controller.pamAvailable = pamServiceInstalled();
@@ -93,6 +122,49 @@ Singleton {
             retryTimer.start();
     }
 
+    // Ask Hyprland again whether the session is locked (repeated lock request, before sleep, lock
+    // surface lost keyboard focus). `secure` is false until the answer; checkOwnership() takes a
+    // fresh lock if the session is found unlocked. A lock confirmed less than verifyGraceMs ago
+    // needs no answer: the compositor's own `locked` event is the proof.
+    function verify(): void {
+        if (!holding || !hyprland || Date.now() - securedAt < ownershipProbe.verifyGraceMs)
+            return;
+        verified = false;
+        Hyprland.refreshMonitors();
+    }
+
+    // The session is unlocked under a lock object that still reports secure (another client took
+    // the lock over and released it): drop that stale object and request a new lock in the same
+    // event-loop turn, so both requests reach the compositor together. Never unlocks anything that
+    // is not already unlocked; the carried intent and the marker stay "locked".
+    function relock(why: string): void {
+        console.warn("grassfield-lock: the session is unlocked although this shell holds a lock (taken over and released by another client; " + why + "); taking a fresh lock");
+        unlockedAnswers = 0;
+        verified = false;
+        controller.lockLost();
+        sessionLock.locked = false;
+        engage();
+    }
+
+    // Runs after every Hyprland monitor answer (whoever asked). While holding, a session reported
+    // unlocked twice in a row (Machine.ownershipAction) is re-locked. Answers in the first
+    // verifyGraceMs after the lock was confirmed are skipped: they may answer a request sent before.
+    function checkOwnership(): void {
+        if (!holding || Date.now() - securedAt < ownershipProbe.verifyGraceMs) {
+            unlockedAnswers = 0;
+            return;
+        }
+        const state = Machine.compositorLockState(Hyprland.monitors.values.map(m => m.lastIpcObject));
+        const action = Machine.ownershipAction(state, unlockedAnswers);
+        unlockedAnswers = state === "unlocked" ? unlockedAnswers + 1 : 0;
+        if (action === "confirm")
+            Hyprland.refreshMonitors();
+        else if (action === "relock")
+            relock("confirmed by Hyprland");
+        else
+            verified = true; // "ok": the session is locked; "unknown": WlSessionLock's word is all there is
+    }
+
     // Called by the controller after a PAM success only: the only path that clears the carried
     // intent and writes "unlocked".
     function release(): void {
@@ -100,6 +172,8 @@ Singleton {
         fingerprintRetry.stop();
         if (fingerprintPam.active)
             fingerprintPam.abort();
+        verified = false;
+        unlockedAnswers = 0;
         persist.intent = false;
         sessionLock.locked = false;
         writeMarker("unlocked");
@@ -147,7 +221,10 @@ Singleton {
     }
 
     // Stranded lock: Hyprland holds a session lock although this instance never locked, i.e. a
-    // crashed instance whose marker was missing or wrong. Re-acquire it so it can be unlocked.
+    // crashed instance whose marker was missing or wrong, or a live foreign locker (Hyprland cannot
+    // tell them apart). Take it over (fail closed: a dead client's lock could never be unlocked
+    // otherwise). If it was a live locker, its later release unlocks the session under this lock
+    // and ownershipProbe takes a fresh one.
     function checkStranded(): void {
         if (controller.locked) {
             strandedProbe.stop();
@@ -157,7 +234,7 @@ Singleton {
         const state = Machine.compositorLockState(monitors);
         if (state === "locked") {
             strandedProbe.stop();
-            console.warn("grassfield-lock: the compositor holds a session lock this shell did not take (crash with a missing or wrong marker); re-acquiring it");
+            console.warn("grassfield-lock: the compositor holds a session lock this shell did not take (a crash with a missing or wrong marker, or a foreign locker); taking it over");
             lock("restore");
         } else if (state === "unlocked") {
             strandedProbe.stop();
@@ -238,6 +315,10 @@ Singleton {
 
         onSecureStateChanged: {
             if (secure) {
+                // A fresh `locked` event: the compositor uses this lock now.
+                root.securedAt = Date.now();
+                root.unlockedAnswers = 0;
+                root.verified = true;
                 retryTimer.stop();
                 controller.lockAcquired();
             }
@@ -256,6 +337,16 @@ Singleton {
             id: surface
 
             color: Tokens.colorDark.shadow
+
+            // Keyboard focus left this lock surface: on Hyprland that also happens when another
+            // client takes the session lock over or the session is unlocked under it. Ask now
+            // rather than at the next ownershipProbe tick (moving between outputs only costs a query).
+            Item {
+                Window.onActiveChanged: {
+                    if (!Window.active)
+                        root.verify();
+                }
+            }
 
             LockView {
                 id: view
@@ -338,6 +429,49 @@ Singleton {
         onTriggered: root.checkStranded()
     }
 
+    // Lock ownership check, only while holding a lock on Hyprland: one monitor query
+    // (Quickshell.Hyprland IPC request, no hyprctl process) per second. Hyprland 0.56.2 emits no
+    // event when a session lock is taken over or released (verified on its event socket), so a
+    // low-frequency query is the only way to notice that the session was unlocked under this lock.
+    // The answer is handled by checkOwnership() (monitorAnswers), as are answers to anyone's query.
+    Timer {
+        id: ownershipProbe
+
+        // Answers this soon after the compositor confirmed the lock are not trusted (see checkOwnership).
+        readonly property int verifyGraceMs: 500
+
+        interval: 1000
+        repeat: true
+        running: root.holding && root.hyprland && !devPause.running
+        onTriggered: Hyprland.refreshMonitors()
+    }
+
+    // Dev-only (GRASSFIELD_DEV=1): `lock devPauseOwnershipCheck` stops the periodic check for 10 s so
+    // that tests/security/reload_locked.sh can hold a desync and check the lock()/before-sleep paths.
+    Timer {
+        id: devPause
+        interval: 10000
+        onTriggered: console.warn("grassfield-lock: dev pause of the lock ownership check ended")
+    }
+
+    Instantiator {
+        id: monitorAnswers
+
+        active: root.hyprland
+        model: Hyprland.monitors
+
+        delegate: Connections {
+            required property HyprlandMonitor modelData
+
+            target: modelData
+
+            // One call per answer, after every monitor of it was updated.
+            function onLastIpcObjectChanged(): void {
+                Qt.callLater(root.checkOwnership);
+            }
+        }
+    }
+
     FileView {
         id: passwordFile
         path: "/etc/pam.d/omarchy-lock-password"
@@ -408,7 +542,7 @@ Singleton {
     Component.onCompleted: {
         controller.pamAvailable = pamServiceInstalled();
         restore(false, "start");
-        if (!controller.locked && Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== "")
+        if (!controller.locked && root.hyprland)
             strandedProbe.start();
     }
 
@@ -433,6 +567,16 @@ Singleton {
             console.warn("grassfield-lock: dev soft reload requested");
             Qt.callLater(() => Quickshell.reload(false));
             return "reloading";
+        }
+
+        // Dev-only test hook (GRASSFIELD_DEV=1, nested): pause the periodic lock ownership check for
+        // 10 s (answers to other queries, lock() and verify() still check). Refused otherwise.
+        function devPauseOwnershipCheck(): string {
+            if (Quickshell.env("GRASSFIELD_DEV") !== "1")
+                return "refused";
+            console.warn("grassfield-lock: dev pause of the lock ownership check (10 s)");
+            devPause.restart();
+            return "paused";
         }
     }
 }

@@ -116,6 +116,32 @@ TestCase {
         verify(!Machine.markerSaysLocked(Machine.markerRead(true, true, "")));
     }
 
+    // Lock watchdog (R12 re-review): a session found unlocked under a lock still reported secure is
+    // re-locked after a confirming answer; a locked session (ours or a foreign locker's) is left alone.
+    function test_ownershipAction() {
+        compare(Machine.ownershipAction("locked", 0), "ok");
+        compare(Machine.ownershipAction("locked", 5), "ok");
+        compare(Machine.ownershipAction("unlocked", 0), "confirm");
+        compare(Machine.ownershipAction("unlocked", 1), "relock");
+        compare(Machine.ownershipAction("unlocked", 3), "relock");
+        compare(Machine.ownershipAction("unknown", 0), "unknown");
+        compare(Machine.ownershipAction("unknown", 2), "unknown");
+        compare(Machine.ownershipAction(undefined, 1), "unknown");
+        // Never "relock" without an "unlocked" answer; never anything that unlocks.
+        const states = ["locked", "unlocked", "unknown", "", null];
+        for (let i = 0; i < states.length; i++) {
+            for (let n = 0; n < 3; n++) {
+                const a = Machine.ownershipAction(states[i], n);
+                verify(["ok", "unknown", "confirm", "relock"].indexOf(a) !== -1, a);
+                if (a === "relock")
+                    verify(states[i] === "unlocked" && n >= 1, states[i] + " " + n);
+            }
+        }
+        // Answers as Hyprland 0.56 gives them, before and after a foreign locker released the session.
+        compare(Machine.ownershipAction(Machine.compositorLockState([{solitaryBlockedBy: ["LOCK", "WINDOWED", "CANDIDATE"]}]), 0), "ok");
+        compare(Machine.ownershipAction(Machine.compositorLockState([{solitaryBlockedBy: ["WINDOWED", "CANDIDATE"]}]), 1), "relock");
+    }
+
     // Hyprland 0.56 `hyprctl -j monitors` shapes (verified in nested: LOCK stays after the lock
     // client is killed).
     function test_compositorLockState() {

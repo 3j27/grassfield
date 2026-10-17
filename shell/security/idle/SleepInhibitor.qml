@@ -7,7 +7,10 @@ import "IdleModel.js" as IdleModel
 
 // Lock before sleep (SEC1, ADR-0010): a logind *delay* inhibitor on "sleep" is held while the
 // session runs; on PrepareForSleep(true) the screen locks and the inhibitor is released as soon
-// as the compositor confirms the lock surfaces, so suspend continues; it is taken again on resume.
+// as Lock.secure holds, so suspend continues; it is taken again on resume. Lock.secure is a lock
+// of this shell that the compositor confirmed AND, if it was already held, that Hyprland reported
+// locked again after this sleep request (Lock.lock() re-verifies; a session found unlocked under
+// a stale lock gets a fresh one first).
 //
 // Quickshell 0.3.1 has no D-Bus or logind API, so both halves are small child processes:
 //   - inhibitor: `systemd-inhibit --mode=delay … cat`; `cat` reads this process's stdin pipe, so
@@ -38,6 +41,8 @@ Scope {
 
     function release(why: string): void {
         releaseTimer.stop();
+        if (sleeping)
+            console.info("grassfield-idle: ready for sleep (" + why + ", lock " + (Lock.secure ? "confirmed" : "NOT confirmed") + ")");
         if (!inhibitor.running)
             return;
         inhibitor.running = false;
