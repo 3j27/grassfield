@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.platform
@@ -10,10 +11,14 @@ import "../widgets/Placements.js" as Placements
 
 // Desktop widgets (docs/specs/widgets.md): the widgets placed on the desktop of each screen, on a
 // layer above the wallpaper and below windows (namespace grassfield-widgets, no exclusive zone).
-// The input mask is exactly the widget rectangles (plus the whole window while a context menu
-// is open, to catch the click that dismisses it), so clicks between widgets reach the layers below.
-// Drag moves a widget; on release it snaps to the grid (nearest free cell) and is saved. While a
-// window has focus on a screen its widgets are desaturated and dimmed; clicking a widget makes the
+// Each widget has its OWN small layer surface (its tile plus Tokens.widgetSurfacePad for the shadow),
+// so a repaint touches a few hundred px instead of the whole screen. The input mask of a surface is
+// the tile; clicks around it reach the layers below. While a tile is dragged its surface grows to the
+// whole screen (full-window input region, so the pointer never leaves it) and shrinks again on
+// release, when the tile snaps to the nearest free cell and the placement is saved.
+// A widget whose tile is fully covered by a window on the visible workspace (fullscreen, maximized or
+// tiled over it) has its surface hidden and its widget inactive (no sampling, no timers). While a
+// window has focus on a screen the widgets are desaturated and dimmed; clicking a widget makes the
 // desktop the active surface again until the focus changes.
 Variants {
     model: Quickshell.screens
@@ -23,159 +28,191 @@ Variants {
 
         required property ShellScreen modelData
 
-        // Quickshell qmltypes mark PanelWindow uncreatable (metadata quirk); suppress just this warning.
-        // qmllint disable uncreatable-type
-        PanelWindow {
-            // qmllint enable uncreatable-type
-            id: win
+        readonly property var grid: Widgets.gridFor(modelData)
+        readonly property int cols: grid.cols
+        readonly property int rows: grid.rows
+        readonly property real pitch: grid.cell + grid.gap
+        // Placements of this screen that lie on the grid (the rest are moved by fitScreen below).
+        readonly property var mine: Widgets.desktop.filter(e => e.screen === modelData.name && e.col >= 0 && e.row >= 0 && e.col + Placements.cells(e.size).w <= cols && e.row + Placements.cells(e.size).h <= rows)
+        // Windows of the workspace shown on this screen (geometry relative to the screen).
+        readonly property var shownWindows: mine.length > 0 ? Compositor.windowsOn(modelData.name, Compositor.topologyRevision) : []
+        readonly property bool windowFocused: Compositor.focusedToplevel !== null && Compositor.focusedScreenName === modelData.name
+        property bool desktopActive: false
+        readonly property bool dimmed: windowFocused && !desktopActive
+        property real dimAmount: dimmed ? 1 : 0
 
-            readonly property ShellScreen modelData: scope.modelData
+        // Drag in progress: uid of the widget and the pointer's offset from where the drag began.
+        property string dragUid: ""
+        property point dragOffset: Qt.point(0, 0)
+        // Context menu.
+        property var menuEntry: null
+        property point menuAt: Qt.point(0, 0)
 
-            readonly property var grid: Widgets.gridFor(modelData)
-            readonly property real pitch: grid.cell + grid.gap
-            readonly property var mine: Widgets.desktop.filter(e => e.screen === modelData.name)
-            readonly property bool windowFocused: Compositor.focusedToplevel !== null && Compositor.focusedScreenName === modelData.name
-            property bool desktopActive: false
-            readonly property bool dimmed: windowFocused && !desktopActive
-            property real dimAmount: dimmed ? 1 : 0
+        // Cell position of an entry in screen px (no drag offset).
+        function originOf(entry: var): point {
+            return Qt.point(grid.x0 + entry.col * pitch, grid.y0 + entry.row * pitch);
+        }
 
-            // Drag in progress: uid of the widget and its offset from the cell.
-            property string dragUid: ""
-            property point dragOffset: Qt.point(0, 0)
-            // Context menu.
-            property var menuEntry: null
-            property point menuAt: Qt.point(0, 0)
+        function sizeOf(entry: var): size {
+            const s = Placements.px(entry.size, grid.cell, grid.gap);
+            return Qt.size(s.w, s.h);
+        }
 
-            function rectOf(entry: var): rect {
-                const size = Placements.px(entry.size, grid.cell, grid.gap);
-                const dragged = entry.uid === dragUid;
-                return Qt.rect(grid.x0 + entry.col * pitch + (dragged ? dragOffset.x : 0), grid.y0 + entry.row * pitch + (dragged ? dragOffset.y : 0), size.w, size.h);
+        // True when one window of the shown workspace contains the whole tile.
+        function covered(entry: var): bool {
+            const o = originOf(entry);
+            const s = sizeOf(entry);
+            return Placements.coveredBy({x: o.x, y: o.y, w: s.width, h: s.height}, shownWindows);
+        }
+
+        function commitDrag(entry: var, at: point): void {
+            const spot = Placements.snap(at.x - grid.x0, at.y - grid.y0, entry.size, grid.cell, grid.gap, grid.cols, grid.rows);
+            dragUid = "";
+            dragOffset = Qt.point(0, 0);
+            Widgets.moveDesktop(entry.uid, spot.col, spot.row, modelData.name);
+        }
+
+        // A click on a widget keeps the desktop active (full color) for a while, as long as the
+        // pointer stays over a widget; a window that is already focused sends no event to end it.
+        function keepActive(): void {
+            desktopActive = true;
+            activeTimer.restart();
+        }
+
+        function closeMenu(): void {
+            menuEntry = null;
+        }
+
+        function applyMenu(action: string): void {
+            const entry = menuEntry;
+            menuEntry = null;
+            if (!entry)
+                return;
+            if (action === "remove")
+                Widgets.remove(entry.uid);
+            else if (action.startsWith("size:"))
+                Widgets.setSize(entry.uid, action.substring(5));
+        }
+
+        // Off-grid or overlapping placements (screen geometry changed, hand-edited file) move to
+        // the nearest free cell.
+        onColsChanged: Widgets.fitScreen(modelData.name)
+        onRowsChanged: Widgets.fitScreen(modelData.name)
+        Component.onCompleted: Widgets.fitScreen(modelData.name)
+
+        Behavior on dimAmount {
+            NumberAnimation {
+                duration: Appearance.duration(Tokens.widgetDimMs)
             }
+        }
 
-            function commitDrag(entry: var): void {
-                const r = rectOf(entry);
-                const spot = Placements.snap(r.x - grid.x0, r.y - grid.y0, entry.size, grid.cell, grid.gap, grid.cols, grid.rows);
-                dragUid = "";
-                dragOffset = Qt.point(0, 0);
-                Widgets.moveDesktop(entry.uid, spot.col, spot.row, modelData.name);
-            }
+        Timer {
+            id: activeTimer
+            interval: Tokens.widgetActiveMs
+            onTriggered: scope.desktopActive = false
+        }
 
-            // A click on a widget keeps the desktop active (full color) for a while, as long as the
-            // pointer stays over a widget; a window that is already focused sends no event to end it.
-            function keepActive(): void {
-                desktopActive = true;
-                activeTimer.restart();
-            }
+        // Window geometry is only read on request: a new, moved or closed window or a workspace
+        // switch asks for a re-read (coalesced by Compositor) while this screen has widgets.
+        Connections {
+            target: Hyprland
+            enabled: scope.mine.length > 0
 
-            function closeMenu(): void {
-                menuEntry = null;
+            function onRawEvent(event: HyprlandEvent): void {
+                if (event.name === "openwindow" || event.name === "closewindow" || event.name === "movewindowv2" || event.name === "workspacev2" || event.name === "changefloatingmode")
+                    Compositor.requestWindowRefresh();
             }
+        }
 
-            function applyMenu(action: string): void {
-                const entry = menuEntry;
-                menuEntry = null;
-                if (!entry)
-                    return;
-                if (action === "remove")
-                    Widgets.remove(entry.uid);
-                else if (action.startsWith("size:"))
-                    Widgets.setSize(entry.uid, action.substring(5));
-            }
+        Connections {
+            target: Compositor
 
-            screen: modelData
-            visible: mine.length > 0
-            anchors {
-                top: true
-                bottom: true
-                left: true
-                right: true
+            function onFocusedToplevelChanged(): void {
+                scope.desktopActive = false;
             }
-            exclusionMode: ExclusionMode.Ignore
-            color: "transparent"
-            WlrLayershell.layer: WlrLayer.Bottom
-            // Never takes the keyboard: focus stays with the user's window.
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            WlrLayershell.namespace: "grassfield-widgets"
-            // qmllint disable missing-type
-            mask: Region {
-                regions: maskRects.instances
-            }
-            // qmllint enable missing-type
+        }
 
-            Behavior on dimAmount {
-                NumberAnimation {
-                    duration: Appearance.duration(Tokens.widgetDimMs)
+        Variants {
+            // The uids: Variants keeps a surface for a uid that stays in the list, so a saved
+            // placement change does not recreate it.
+            model: scope.mine.map(e => e.uid)
+
+            // Quickshell qmltypes mark PanelWindow uncreatable (metadata quirk); suppress just this warning.
+            // qmllint disable uncreatable-type
+            PanelWindow {
+                // qmllint enable uncreatable-type
+                id: win
+
+                required property string modelData
+
+                readonly property var entry: scope.mine.find(e => e.uid === modelData) ?? lastEntry
+                property var lastEntry: ({uid: modelData, id: "clock", size: "small", col: 0, row: 0})
+                readonly property bool dragging: modelData === scope.dragUid
+                readonly property bool isCovered: scope.covered(entry)
+                readonly property point origin: scope.originOf(entry)
+                readonly property size tileSize: scope.sizeOf(entry)
+                readonly property real pad: Tokens.widgetSurfacePad
+
+                screen: scope.modelData
+                visible: !isCovered
+                // Small surface at the tile; the whole screen while dragging.
+                anchors {
+                    top: true
+                    left: true
+                    right: win.dragging
+                    bottom: win.dragging
                 }
-            }
-
-            // One mask rectangle per widget, following drags.
-            Variants {
-                id: maskRects
-                model: win.mine
-
+                // qmllint disable unqualified unresolved-type
+                margins.left: win.dragging ? 0 : win.origin.x - win.pad
+                margins.top: win.dragging ? 0 : win.origin.y - win.pad
+                // qmllint enable unqualified unresolved-type
+                implicitWidth: tileSize.width + 2 * pad
+                implicitHeight: tileSize.height + 2 * pad
+                exclusionMode: ExclusionMode.Ignore
+                color: "transparent"
+                WlrLayershell.layer: WlrLayer.Bottom
+                // Never takes the keyboard: focus stays with the user's window.
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                WlrLayershell.namespace: "grassfield-widgets"
                 // qmllint disable missing-type
-                delegate: Region {
-                    // qmllint enable missing-type
-                    required property var modelData
-                    readonly property rect r: win.rectOf(modelData)
-
-                    x: r.x
-                    y: r.y
-                    width: r.width
-                    height: r.height
+                mask: Region {
+                    x: win.dragging ? 0 : win.pad
+                    y: win.dragging ? 0 : win.pad
+                    width: win.dragging ? win.width : win.tileSize.width
+                    height: win.dragging ? win.height : win.tileSize.height
                 }
-            }
+                // qmllint enable missing-type
 
-            Timer {
-                id: activeTimer
-                interval: Tokens.widgetActiveMs
-                onTriggered: win.desktopActive = false
-            }
+                // Window origin in screen px, as the pointer sees it (the surface moves and grows).
+                readonly property point windowOrigin: win.dragging && win.width > win.tileSize.width + 2 * win.pad ? Qt.point(0, 0) : Qt.point(win.origin.x - win.pad, win.origin.y - win.pad)
 
-            Connections {
-                target: Compositor
-
-                function onFocusedToplevelChanged(): void {
-                    win.desktopActive = false;
-                }
-            }
-
-            Item {
-                id: tiles
-                anchors.fill: parent
-                layer.enabled: win.dimAmount > 0
-                layer.effect: MultiEffect {
-                    saturation: Tokens.widgetDimSaturation * win.dimAmount
-                    brightness: Tokens.widgetDimBrightness * win.dimAmount
-                }
-
-                Repeater {
-                    model: ScriptModel {
-                        values: win.mine
-                        objectProp: "uid"
+                Item {
+                    anchors.fill: parent
+                    layer.enabled: scope.dimAmount > 0
+                    layer.effect: MultiEffect {
+                        saturation: Tokens.widgetDimSaturation * scope.dimAmount
+                        brightness: Tokens.widgetDimBrightness * scope.dimAmount
                     }
 
-                    delegate: WidgetHost {
+                    WidgetHost {
                         id: tile
 
-                        required property var modelData
-
-                        entry: modelData
-                        cell: win.grid.cell
-                        gap: win.grid.gap
-                        x: win.rectOf(modelData).x
-                        y: win.rectOf(modelData).y
-                        z: modelData.uid === win.dragUid ? 1 : 0
-                        scale: modelData.uid === win.dragUid ? 1.03 : 1
-                        onPressed: win.keepActive()
+                        entry: win.entry
+                        cell: scope.grid.cell
+                        gap: scope.grid.gap
+                        active: !win.isCovered
+                        x: win.dragging ? win.origin.x + scope.dragOffset.x : win.pad
+                        y: win.dragging ? win.origin.y + scope.dragOffset.y : win.pad
+                        scale: win.dragging ? Tokens.widgetLiftScale : 1
+                        onPressed: scope.keepActive()
                         onMenuRequested: (px, py) => {
                             const p = tile.mapToItem(null, px, py);
-                            win.menuAt = Qt.point(p.x, p.y);
-                            win.menuEntry = modelData;
+                            scope.menuAt = Qt.point(p.x + win.windowOrigin.x, p.y + win.windowOrigin.y);
+                            scope.menuEntry = win.entry;
                         }
-                        onHoveredChanged: if (hovered && win.desktopActive)
-                            win.keepActive()
-                        onRemoveRequested: Widgets.remove(modelData.uid)
+                        onHoveredChanged: if (hovered && scope.desktopActive)
+                            scope.keepActive()
+                        onRemoveRequested: Widgets.remove(win.modelData)
 
                         Behavior on scale {
                             NumberAnimation {
@@ -185,18 +222,24 @@ Variants {
 
                         DragHandler {
                             id: drag
+
+                            // Pointer position in screen px at the press, and the surface origin then.
+                            property point pressAt: Qt.point(0, 0)
+
                             target: null
                             acceptedButtons: Qt.LeftButton
                             cursorShape: active ? Qt.ClosedHandCursor : Qt.ArrowCursor
                             onActiveChanged: {
-                                if (active)
-                                    win.dragUid = tile.modelData.uid;
-                                else if (win.dragUid === tile.modelData.uid)
-                                    win.commitDrag(tile.modelData);
+                                if (active) {
+                                    pressAt = Qt.point(win.windowOrigin.x + centroid.scenePressPosition.x, win.windowOrigin.y + centroid.scenePressPosition.y);
+                                    scope.dragUid = win.modelData;
+                                } else if (scope.dragUid === win.modelData) {
+                                    scope.commitDrag(win.entry, Qt.point(win.origin.x + scope.dragOffset.x, win.origin.y + scope.dragOffset.y));
+                                }
                             }
-                            onActiveTranslationChanged: {
+                            onCentroidChanged: {
                                 if (active)
-                                    win.dragOffset = Qt.point(activeTranslation.x, activeTranslation.y);
+                                    scope.dragOffset = Qt.point(win.windowOrigin.x + centroid.scenePosition.x - pressAt.x, win.windowOrigin.y + centroid.scenePosition.y - pressAt.y);
                             }
                         }
                     }
@@ -212,7 +255,7 @@ Variants {
             id: menuWin
 
             screen: scope.modelData
-            visible: win.menuEntry !== null
+            visible: scope.menuEntry !== null
             anchors {
                 top: true
                 bottom: true
@@ -228,17 +271,17 @@ Variants {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
-                onPressed: win.closeMenu()
+                onPressed: scope.closeMenu()
             }
 
             Loader {
-                active: win.menuEntry !== null
-                x: Math.max(Tokens.spacingSm, Math.min(win.menuAt.x, menuWin.width - width - Tokens.spacingSm))
-                y: Math.max(Tokens.spacingSm, Math.min(win.menuAt.y, menuWin.height - height - Tokens.spacingSm))
+                active: scope.menuEntry !== null
+                x: Math.max(Tokens.spacingSm, Math.min(scope.menuAt.x, menuWin.width - width - Tokens.spacingSm))
+                y: Math.max(Tokens.spacingSm, Math.min(scope.menuAt.y, menuWin.height - height - Tokens.spacingSm))
                 sourceComponent: WidgetMenu {
-                    entry: win.menuEntry
-                    onChoose: action => win.applyMenu(action)
-                    onCloseRequested: win.closeMenu()
+                    entry: scope.menuEntry
+                    onChoose: action => scope.applyMenu(action)
+                    onCloseRequested: scope.closeMenu()
                     Component.onCompleted: forceActiveFocus()
                 }
             }

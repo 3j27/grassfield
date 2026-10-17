@@ -3,6 +3,7 @@ import QtQuick
 import Grassfield.Ui
 import qs.services
 import qs.widgets
+import "../../ArtUrl.js" as ArtUrl
 
 // Now Playing widget: the active MPRIS player's track (small: art and title; medium: art, title,
 // artist and transport). Says "Not Playing" when no player runs or nothing is loaded. Transport
@@ -44,7 +45,7 @@ WidgetBase {
 
         Image {
             anchors.fill: parent
-            source: root.hasTrack ? Media.artUrl : ""
+            source: root.hasTrack ? ArtUrl.safe(Media.artUrl) : ""
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             visible: status === Image.Ready

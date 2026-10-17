@@ -4,7 +4,8 @@
 
 // Number of days in `month` (0-11) of `year`.
 function daysInMonth(year, month) {
-    return new Date(year, month + 1, 0).getDate();
+    // UTC date math: local midnight may not exist (DST at 00:00 in some zones).
+    return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
 
 // Weekday indexes (0 = Sunday ... 6 = Saturday) of the seven columns, starting at firstDay.
@@ -18,7 +19,7 @@ function weekdayOrder(firstDay) {
 // Weeks of the month: arrays of 7 cells {day, inMonth}, padded with the neighbouring months'
 // days. `firstDay` is the first column's weekday (0 = Sunday); the result has 4-6 rows.
 function monthGrid(year, month, firstDay) {
-    const lead = (new Date(year, month, 1).getDay() - firstDay + 7) % 7;
+    const lead = (new Date(Date.UTC(year, month, 1)).getUTCDay() - firstDay + 7) % 7;
     const count = daysInMonth(year, month);
     const prevCount = daysInMonth(month === 0 ? year - 1 : year, month === 0 ? 11 : month - 1);
     const weeks = [];

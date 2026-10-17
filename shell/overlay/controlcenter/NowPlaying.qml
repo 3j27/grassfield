@@ -2,6 +2,7 @@ import QtQuick
 import Grassfield.Ui
 import qs.services
 import qs.overlay.controlcenter
+import "../../widgets/ArtUrl.js" as ArtUrl
 
 // Now Playing tile (CC7): artwork, title, artist and transport controls of the active MPRIS player.
 // Hidden by the host when Media.available is false.
@@ -25,7 +26,7 @@ Tile {
 
             Image {
                 anchors.fill: parent
-                source: Media.artUrl
+                source: ArtUrl.safe(Media.artUrl)
                 sourceSize: Qt.size(Tokens.panelCcArtSize * 2, Tokens.panelCcArtSize * 2)
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true

@@ -30,7 +30,7 @@ WidgetBase {
         visible: !root.isLarge
         x: root.padding
         y: root.padding
-        width: root.isMedium ? Math.min(root.width * 0.34, Tokens.widgetCell - root.padding) : root.width - 2 * root.padding
+        width: root.isMedium ? Math.min(root.width * Tokens.widgetDateColumnRatio, Tokens.widgetCell - root.padding) : root.width - 2 * root.padding
         spacing: Tokens.spacingXs
 
         WidgetLabel {
@@ -59,7 +59,7 @@ WidgetBase {
         id: month
 
         visible: !root.isSmall
-        x: root.isLarge ? root.padding : root.width * 0.34 + root.padding
+        x: root.isLarge ? root.padding : root.width * Tokens.widgetDateColumnRatio + root.padding
         y: root.padding
         width: root.width - x - root.padding
         height: root.height - 2 * root.padding
