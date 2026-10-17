@@ -1,0 +1,4 @@
+module qs.security.polkit
+AuthAgent 1.0 AuthAgent.qml
+AuthDialog 1.0 AuthDialog.qml
+AuthDialogModel 1.0 AuthDialogModel.qml
