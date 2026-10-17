@@ -114,9 +114,26 @@ Singleton {
         syncOpen();
     }
 
-    function updateFocus(): void {
+    // The foreign-toplevel focused window's Hyprland address, once Hyprland's window data maps it. A binding: it
+    // follows the list and each window's mapping (`wayland`), which arrive asynchronously after a shell start.
+    readonly property string mappedFocus: {
+        const focused = Compositor.focusedToplevel;
+        const mapped = focused ? Compositor.hyprlandToplevel(focused) : null;
+        return mapped ? Minimized.normalizeAddress(mapped.address) : "";
+    }
+
+    onMappedFocusChanged: updateFocus()
+
+    // Hyprland address of the focused window. Hyprland's active window is known only after its first focus event,
+    // so right after a (shell) start the foreign-toplevel activated state (mappedFocus) stands in for it.
+    function focusedAddress(): string {
         const top = Hyprland.activeToplevel;
         const address = top ? Minimized.normalizeAddress(top.address) : "";
+        return address !== "" ? address : root.mappedFocus;
+    }
+
+    function updateFocus(): void {
+        const address = focusedAddress();
         // A shell popup (menus) takes the keyboard: the bar keeps showing the app's menus meanwhile.
         if (address !== "" || !Popups.active)
             setWindow(address);
@@ -249,6 +266,5 @@ Singleton {
                 root.updateFocus();
         }
     }
-
     Component.onCompleted: updateFocus()
 }

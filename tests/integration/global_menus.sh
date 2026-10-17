@@ -153,8 +153,9 @@ click_row() { # <regex>
 
 log_has() { grep -q -- "$2" "$1" 2>/dev/null; }
 
-shell_qml_issues() { # QML-level warnings and errors in the shell log (the polkit agent line is environmental)
-  grep -E "WARN qml|ERROR|Binding loop|TypeError|ReferenceError" "$dev/shell.log" | grep -v -E "grassfield-polkit: not registered|quickshell.service.polkit" || true
+shell_qml_issues() { # [log...] QML-level warnings and errors (default .dev/shell.log; the polkit agent line is environmental)
+  (($# > 0)) || set -- "$dev/shell.log"
+  grep -h -E "WARN qml|ERROR|Binding loop|TypeError|ReferenceError" "$@" | grep -v -E "grassfield-polkit: not registered|quickshell.service.polkit" || true
 }
 
 start_session() { # [nested-up options]
@@ -223,6 +224,13 @@ else
 fi
 say "  action log: $(tr '\n' ' ' <"$run/menu-demo-actions.log" 2>/dev/null)"
 
+# The shell (and, in development, the bridge) restarts while the app runs: the shell re-queries the plugin
+# (hl.plugin.grassfield.appmenu) and the menus come back without a focus change.
+cp "$dev/shell.log" "$run/shell-a-before-restart.log"
+"$root/scripts/dev/shell-run.sh" --private-bus >"$run/shell-restart.log" 2>&1
+wait_for 20 grep -q "shell connected" "$dev/menu-bridge.log"
+check "after a shell restart the focused app's menus are back (plugin re-query)" wait_for 20 menus_are "$qt_addr" '.menus == ["File","Edit","View"]'
+
 # ---- T2: Chromium ----
 say ""
 say "[T2] Chromium $(/usr/lib/chromium/chromium --version 2>/dev/null | head -n 1)"
@@ -261,7 +269,7 @@ say "  bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .ki
 say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-gtk4 "$output")"
 
 cleanup_apps
-issues=$(shell_qml_issues)
+issues=$(shell_qml_issues "$run/shell-a-before-restart.log" "$dev/shell.log")
 check "shell log: no QML warnings or errors in phase A" test -z "$issues"
 [[ -n $issues ]] && say "$issues"
 cp "$dev/menu-bridge.log" "$run/menu-bridge-a.log"
