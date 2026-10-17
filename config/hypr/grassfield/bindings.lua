@@ -57,3 +57,8 @@ bind("XF86AudioLowerVolume", "Volume down", shell("volume", "down"), { repeating
 bind("XF86AudioMute", "Mute", shell("volume", "mute"), { locked = true })
 bind("XF86MonBrightnessUp", "Brightness up", shell("brightness", "up"), { repeating = true, locked = true })
 bind("XF86MonBrightnessDown", "Brightness down", shell("brightness", "down"), { repeating = true, locked = true })
+
+-- Trackpad gestures (L2: verified by the owner on real hardware; nested sessions have no touchpad).
+hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
+hl.gesture({ fingers = 3, direction = "up", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call overview open") end })
+hl.gesture({ fingers = 3, direction = "down", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call overview close") end })
