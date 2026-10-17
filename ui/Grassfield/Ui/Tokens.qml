@@ -230,7 +230,7 @@ QtObject {
     // estimate: list row in an expanded Control Center section
     readonly property int panelCcRowHeight: 34
     // estimate: height of the top tile grid
-    readonly property int panelCcGridHeight: 144
+    readonly property int panelCcGridHeight: 156
     // estimate: width share of the connectivity tile
     readonly property real panelCcLeftFraction: 0.56
     // estimate: chevron glyph size
