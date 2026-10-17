@@ -10,15 +10,15 @@
   as size, dates read "Today at 14:05". Column view shows one column per folder level with a preview column for a
   selected file.
 - Tabs appear only from the second tab (Cmd+T). Get Info opens a small separate window per item. Space opens
-  Quick Look. Type-to-select jumps to the first matching name. Drag and drop moves on the same volume and copies
+  Glance. Type-to-select jumps to the first matching name. Drag and drop moves on the same volume and copies
   across volumes.
 
 ## Purpose and non-goals
 Browse and manage files on KDE Frameworks KIO (owner decision D6): the feature is called "Files" (code
 `grassfield-files`, app id `org.grassfield.Files`; never "Finder"). Trash, mounts, network protocols and thumbnailers
 are KIO/Solid's, never reimplemented. Non-goals for v1: gallery view, tags, recursive/indexed search (the shell
-Search covers files), Recents, sharing, Group By, exported global menus (menu bridge pending), Quick Look itself
-(comes with `grassfield-preview`).
+Search covers files), Recents, sharing, Group By, exported global menus (menu bridge pending), a built-in viewer (Space
+starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 
 ## Functional requirements
 1. F1 Launcher `apps/files/src/main.cpp`: `QApplication` (KIO's conflict/Open With/undo dialogs are widgets),
@@ -46,7 +46,7 @@ Search covers files), Recents, sharing, Group By, exported global menus (menu br
 7. F7 Opening: folders navigate; files open with `KIO::OpenUrlJob` (MIME associations, executables never run);
    Open With lists `KApplicationTrader::queryByMimeType` apps and launches with `ApplicationLauncherJob`.
 8. F8 Context menus (Grassfield `PopupMenu`): item menu (Open, Open With, Open in New Tab, Move to Trash, Get Info,
-   Rename, Duplicate, Quick Look placeholder, Copy, Cut, Show in Enclosing Folder while searching), Trash item menu
+   Rename, Duplicate, Glance, Copy, Cut, Show in Enclosing Folder while searching), Trash item menu
    (Put Back, Delete Immediately…, Get Info, Copy), background menu (New Folder or Empty Trash…, Get Info, Paste,
    View As, Sort By, Show Hidden Files). The toolbar Action menu offers the same items.
 9. F9 Get Info window: icon/thumbnail, name, kind, size (folders: `KIO::directorySize`), where, created, modified,
@@ -59,8 +59,10 @@ Search covers files), Recents, sharing, Group By, exported global menus (menu br
 11. F11 Drag and drop: items drag out as `text/uri-list` (Drag.Automatic, works with other apps); drops on the
     background, folders, sidebar items and path segments; same filesystem moves, otherwise copies; Ctrl/Alt forces
     a copy.
-12. F12 Quick Look hook (placeholder, R11): Space and the disabled menu item "Quick Look “name” (coming with
-    Preview)" emit `FilesApp.quickLookRequested`; Space shows the notice "Quick Look is coming with Preview".
+12. F12 Glance: Space and the menu item "Glance at “name”" call `FilesApp.glance(urls)`, which starts
+    `grassfield-preview --glance -- <paths>` detached for the local regular files of the selection (folders and remote
+    items are skipped, at most 50 files). The Glance window takes the focus; Space or Esc there closes it. Blocked by
+    `GRASSFIELD_FILES_NO_LAUNCH=1` like every launch. A missing binary raises the usual failure banner.
 13. F13 Appearance: light/dark and Reduce Motion follow `grassfield.json` (read only, watched); app windows are
     opaque; tokens only (`files.*` group of `ui/tokens/tokens.json`).
 
@@ -85,7 +87,8 @@ Search covers files), Recents, sharing, Group By, exported global menus (menu br
 - Environment: `GRASSFIELD_FILES_QML` (dev QML dir), `GRASSFIELD_FILES_NO_LAUNCH=1` (scripted tests: opening
   reports an error instead of starting apps, logged), `QT_LOGGING_RULES="grassfield.files.debug=true"` (listing
   times, selection and expectation traces).
-- Quick Look: `FilesApp.quickLookRequested(QList<QUrl>)`; no IPC contract with `grassfield-preview` yet.
+- Glance: `FilesApp.glance(QList<QUrl>)` runs `grassfield-preview --glance -- <paths>`; the program is
+  `GRASSFIELD_PREVIEW_CMD` (dev, may carry arguments), else `grassfield-preview` next to the Files binary, else the PATH.
 
 ## Dependencies (verified 2026-10-17)
 Qt 6.11.2 (Core, Gui, Widgets, Qml, Quick), KDE Frameworks 6.29 (KIOCore, KIOGui, KIOWidgets, CoreAddons, Service,
@@ -133,7 +136,7 @@ installed (not built here).
   not installed per brief).
 - No Network entry: `kio-extras` (smb/sftp workers) is not installed. Nothing is faked.
 - No gallery view, tags, Recents, Group By, sharing; search filters the current folder by name only.
-- Quick Look is a labelled placeholder until `grassfield-preview` exists.
+- Space does not close a Glance from Files by itself; the Glance window has the focus and closes on Space/Esc.
 - KIO's own dialogs are QWidget dialogs, not Grassfield-styled: file-exists conflicts (paste/drop), the Open With
   chooser when no application is associated, and the undo confirmation for deleting copied files.
 - Terminal applications (for example `nvim.desktop`, the default for text files here) fail to open: KIO starts them

@@ -12,6 +12,7 @@
 #include <QJsonObject>
 #include <QMimeData>
 #include <QMimeDatabase>
+#include <QProcess>
 #include <QStorageInfo>
 
 #include <KApplicationTrader>
@@ -67,6 +68,9 @@ bool launchingBlocked()
     qInfo("grassfield-files: launch blocked (GRASSFIELD_FILES_NO_LAUNCH=1)");
     return true;
 }
+
+// Files handed to one Glance at most.
+constexpr int kMaxGlanceFiles = 50;
 
 // Singular/plural pair (no translation catalogs with numerus forms yet, like the Settings app).
 QString countText(const QString &one, const QString &many, qsizetype n)
@@ -384,10 +388,27 @@ void FilesApp::openWith(const QString &storageId, const QList<QUrl> &urls)
     job->start();
 }
 
-void FilesApp::quickLook(const QList<QUrl> &urls)
+void FilesApp::glance(const QList<QUrl> &urls)
 {
-    if (!urls.isEmpty())
-        emit quickLookRequested(urls);
+    // Glance shows local regular files only (it validates them again): folders and remote items are skipped.
+    QStringList paths;
+    for (const QUrl &url : urls) {
+        if (url.isLocalFile() && QFileInfo(url.toLocalFile()).isFile() && paths.size() < kMaxGlanceFiles)
+            paths << url.toLocalFile();
+    }
+    if (paths.isEmpty() || launchingBlocked())
+        return;
+    // GRASSFIELD_PREVIEW_CMD (dev) wins, then a grassfield-preview next to this binary, then the PATH.
+    QStringList command = qEnvironmentVariable("GRASSFIELD_PREVIEW_CMD").split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if (command.isEmpty()) {
+        const QString sibling = QCoreApplication::applicationDirPath() + QStringLiteral("/grassfield-preview");
+        command << (QFileInfo(sibling).isExecutable() ? sibling : QStringLiteral("grassfield-preview"));
+    }
+    const QString program = command.takeFirst();
+    command.removeAll(QStringLiteral("--glance"));
+    const QStringList args = command + QStringList{QStringLiteral("--glance"), QStringLiteral("--")} + paths;
+    if (!QProcess::startDetached(program, args))
+        emit operationFailed(tr("Glance could not be started: grassfield-preview was not found."));
 }
 
 void FilesApp::copyToClipboard(const QList<QUrl> &urls, bool cut)

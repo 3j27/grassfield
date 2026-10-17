@@ -90,8 +90,8 @@ public:
     // [{id, name}] of the applications registered for the first item's MIME type, preferred first.
     Q_INVOKABLE QVariantList applicationsFor(const QList<QUrl> &urls) const;
     Q_INVOKABLE void openWith(const QString &storageId, const QList<QUrl> &urls);
-    // Quick Look hook: grassfield-preview does not exist yet, so this only emits quickLookRequested.
-    Q_INVOKABLE void quickLook(const QList<QUrl> &urls);
+    // Glance: starts `grassfield-preview --glance` (detached) for the local regular files among `urls`.
+    Q_INVOKABLE void glance(const QList<QUrl> &urls);
 
     // Operations. `folder` (a FolderModel, may be null) selects the created items when they appear.
     Q_INVOKABLE void copyToClipboard(const QList<QUrl> &urls, bool cut);
@@ -119,7 +119,6 @@ signals:
     void prefsChanged();
     void activityChanged();
     void operationFailed(const QString &message);
-    void quickLookRequested(const QList<QUrl> &urls);
 
 private:
     void track(KJob *job, const QString &activity);

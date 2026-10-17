@@ -283,10 +283,10 @@ FocusScope {
             root.win.showInfo(m.info(rows[i]));
     }
 
-    function quickLook(): void {
+    function glance(): void {
         const urls = root.selection();
         if (urls.length > 0)
-            root.app.quickLook(urls);
+            root.app.glance(urls);
     }
 
     function showInEnclosingFolder(): void {
@@ -347,7 +347,7 @@ FocusScope {
             return;
         case Qt.Key_Space:
             if (!ctrl) {
-                root.quickLook();
+                root.glance();
                 event.accepted = true;
             }
             return;
@@ -440,8 +440,7 @@ FocusScope {
         items.push({id: "info", text: qsTr("Get Info"), shortcut: qsTr("Ctrl+I")});
         items.push({id: "rename", text: qsTr("Rename"), shortcut: qsTr("F2"), enabled: count === 1 && model.writable});
         items.push({id: "duplicate", text: qsTr("Duplicate"), shortcut: qsTr("Ctrl+D"), enabled: model.writable});
-        // Placeholder (R11): Quick Look needs grassfield-preview, which is not built yet.
-        items.push({id: "quicklook", text: count === 1 ? qsTr("Quick Look “%1” (coming with Preview)").arg(name) : qsTr("Quick Look (coming with Preview)"), shortcut: qsTr("Space"), enabled: false});
+        items.push({id: "glance", text: count === 1 ? qsTr("Glance at “%1”").arg(name) : qsTr("Glance at %1 Items").arg(count), shortcut: qsTr("Space")});
         items.push({separator: true});
         items.push({id: "copy", text: count === 1 ? qsTr("Copy “%1”").arg(name) : qsTr("Copy %1 Items").arg(count), shortcut: qsTr("Ctrl+C")});
         items.push({id: "cut", text: qsTr("Cut"), shortcut: qsTr("Ctrl+X"), enabled: model.writable});
@@ -533,6 +532,9 @@ FocusScope {
             break;
         case "info":
             root.getInfo();
+            break;
+        case "glance":
+            root.glance();
             break;
         case "rename":
             root.renameSelection();

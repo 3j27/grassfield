@@ -135,10 +135,6 @@ Window {
             if (win.active)
                 win.showBanner(message);
         }
-        function onQuickLookRequested(urls: var): void {
-            if (win.active)
-                win.showNotice(qsTr("Quick Look is coming with Preview"));
-        }
     }
 
     // Shortcuts ------------------------------------------------------------------------------
