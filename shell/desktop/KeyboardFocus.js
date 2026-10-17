@@ -123,7 +123,14 @@ function make(mode, fields, from) {
 
 // Back to "hold" after taking the keyboard or closing the menu, or straight to "none" when the
 // pointer has meanwhile left the desktop.
+// After the menu closed, the pointer is reported as away only because the (still mapped) menu window
+// covers the desktop: the desktop holds the keyboard whatever `away` says, and `away` restarts from
+// "here" (the desktop's pointer events correct it once the menu window has unmapped).
 function held(s, fields) {
+    if (s.menu === true)
+        return make("hold", Object.assign({
+            away: false
+        }, fields), s);
     return make(s.away ? "none" : "hold", fields, s);
 }
 
@@ -230,6 +237,13 @@ function next(state, event) {
                     active: ""
                 }) : s);
             }
+            // The menu window is taking the keyboard from the desktop (or the desktop from the menu window):
+            // Hyprland reports the window it falls back to meanwhile. It is only remembered, or the
+            // desktop would never take the keyboard back when the menu closes.
+            if (s.mode === "menu" || menuLingers(s))
+                return to(Object.assign({}, s, {
+                    active: address
+                }));
             // Hyprland's own fallback focus while the keyboard comes back from the lent / closed window.
             if (s.mode === "take" && s.reclaim)
                 return to(Object.assign({}, s, {
