@@ -20,7 +20,7 @@ Window {
     readonly property bool showSidebar: win.sidebarOpen && win.hasSidebar
     readonly property int pages: win.view ? win.view.pageCount : 1
 
-    title: content.info.name ?? qsTr("Preview")
+    title: content.info.name ? content.info.name.replace(/[\r\n]+/g, "\u23CE") : qsTr("Preview")
     width: Tokens.previewWindowWidth
     height: Tokens.previewWindowHeight
     minimumWidth: Tokens.previewWindowMinWidth

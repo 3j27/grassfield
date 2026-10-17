@@ -42,7 +42,7 @@ Window {
         return Qt.size(Tokens.previewGlanceMediaWidth, Tokens.previewGlanceMediaHeight);
     }
 
-    title: content.info.name ?? qsTr("Glance")
+    title: content.info.name ? content.info.name.replace(/[\r\n]+/g, "\u23CE") : qsTr("Glance")
     width: Math.max(Tokens.previewGlanceMinWidth, Math.min(win.maxWidth, win.wanted.width))
     height: Math.max(Tokens.previewGlanceMinHeight, Math.min(win.maxHeight, win.wanted.height + Tokens.previewGlanceHeaderHeight))
     visible: true
@@ -126,7 +126,7 @@ Window {
             }
             elide: Text.ElideMiddle
             textFormat: Text.PlainText
-            text: content.info.name ?? ""
+            text: (content.info.name ?? "").replace(/[\r\n]+/g, "\u23CE")
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyMenuSize
