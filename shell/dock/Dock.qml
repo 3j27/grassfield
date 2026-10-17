@@ -276,8 +276,13 @@ Scope {
                 };
             }
 
-            Component.onCompleted: Compositor.registerDock(win.modelData.name, win)
-            Component.onDestruction: Compositor.unregisterDock(win.modelData.name, win)
+            // modelData is already null when a removed screen destroys this window: keep the name.
+            property string screenName: ""
+            Component.onCompleted: {
+                screenName = win.modelData.name;
+                Compositor.registerDock(screenName, win);
+            }
+            Component.onDestruction: Compositor.unregisterDock(screenName, win)
 
             Behavior on influence {
                 NumberAnimation {

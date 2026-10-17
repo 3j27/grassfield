@@ -25,7 +25,7 @@ QString configFile()
 
 QString sizeText(qint64 bytes)
 {
-    return QLocale().formattedDataSize(bytes, 1, QLocale::DataSizeSIFormat);
+    return QLocale().formattedDataSize(bytes, 1, QLocale::DataSizeIecFormat);
 }
 
 // Size of the image as displayed (EXIF rotation by 90 degrees swaps the sides); invalid when unknown.

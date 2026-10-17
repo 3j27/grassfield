@@ -36,6 +36,9 @@ bool textSizeAllowed(qint64 bytes);
 // NUL bytes in the sample: not text.
 bool looksBinary(const QByteArray &sample);
 
+// Canonical (symlink-resolved) path under /proc, /sys or /dev: never previewed.
+bool isSystemPath(const QString &canonical);
+
 // Command line: accepted local paths (at most kMaxFiles, regular files only, duplicates removed) and
 // one message per rejected argument.
 struct Arguments {

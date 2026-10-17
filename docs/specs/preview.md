@@ -31,7 +31,7 @@ single instance.
    rotation, page navigation (PgUp/PgDn, Home/End, arrows turn pages, toolbar), thumbnails, text search (Ctrl+F,
    Enter next, Shift+Enter previous, Esc closes). Encrypted documents show a notice ("not supported yet").
 5. P5 Text and code (`TextView.qml`): read only, monospace, always `PlainText` (never markup), selectable; zoom
-   scales the font. Files over 2 MB show "This file is too large to preview"; files with NUL bytes in the first 8 KB
+   scales the font. Files over 2 MiB show "This file is too large to preview"; files with NUL bytes in the first 8 KB
    show "This file is not text". Decoded as UTF-8.
 6. P6 Audio and video (`MediaView.qml`): QtMultimedia `MediaPlayer`, only the local `file:` URL of a validated file;
    play/pause (button, Space in the viewer), a position slider, elapsed and total time. Glance starts playing at
@@ -49,7 +49,7 @@ single instance.
    pressed again (a layer surface keeps the keyboard focus when a window maps, so the Glance cannot always close
    itself there: click it to use the arrow keys).
 9. P9 Untrusted input: only local regular files; `QImageReader::setAllocationLimit(256)` for every decoder (also QML
-   `Image`/`AnimatedImage`); images over 16384 px per side or 256 MB at 4 bytes per pixel are refused before decoding
+   `Image`/`AnimatedImage`); images over 16384 px per side or 256 MiB at 4 bytes per pixel are refused before decoding
    with a notice; PNG headers are sniffed so that a huge image gets the right message; the file is never opened for
    writing and never executed; no network access; text is `PlainText`.
 
