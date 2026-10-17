@@ -35,6 +35,7 @@ Singleton {
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
     readonly property int lockIdleMinutes: store.lockIdleMinutes
 
+    readonly property bool desktopShowIcons: store.data.desktop.showIcons
     readonly property string hotCornerTopLeft: store.hotCornerTopLeft
     readonly property string hotCornerTopRight: store.hotCornerTopRight
     readonly property string hotCornerBottomLeft: store.hotCornerBottomLeft
@@ -42,6 +43,10 @@ Singleton {
 
     function setHotCorner(corner: string, action: string): void {
         store.setHotCorner(corner, action);
+    }
+
+    function setDesktopShowIcons(value: bool): void {
+        store.setDesktopShowIcons(value);
     }
 
     function setAppearance(value: string): void {

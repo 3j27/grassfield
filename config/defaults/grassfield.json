@@ -34,5 +34,8 @@
     "topRight": "none",
     "bottomLeft": "none",
     "bottomRight": "none"
+  },
+  "desktop": {
+    "showIcons": true
   }
 }

@@ -165,6 +165,15 @@
           ]
         }
       }
+    },
+    "desktop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "showIcons": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

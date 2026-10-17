@@ -562,4 +562,29 @@ QtObject {
     readonly property int widgetBigSize: 44
     // estimate: widgets v1, how long a click keeps the desktop active while a window has focus
     readonly property int widgetActiveMs: 10000
+
+    // estimate: desktop icons v1 (docs/specs/desktop.md), px width of a grid slot
+    readonly property int desktopIconCellWidth: 104
+    // estimate: desktop icons v1, px height of a grid slot
+    readonly property int desktopIconCellHeight: 112
+    // estimate: desktop icons v1, px from the screen edges and the menu bar to the grid
+    readonly property int desktopIconMargin: 16
+    // estimate: desktop icons v1, icon edge
+    readonly property int desktopIconSize: 64
+    // estimate: desktop icons v1, label font size
+    readonly property int desktopIconLabelSize: 12
+    // task spec: labels wrap to at most 2 lines
+    readonly property int desktopIconLabelMaxLines: 2
+    // estimate: desktop icons v1, label highlight and icon selection radius
+    readonly property int desktopIconSelectionRadius: 6
+    // estimate: desktop icons v1, icon selection tint alpha
+    readonly property real desktopIconSelectionOpacity: 0.35
+    // estimate: desktop icons v1, rubber band fill alpha
+    readonly property real desktopIconRubberBandOpacity: 0.18
+    // estimate: desktop icons v1, sourceSize cap of image thumbnails
+    readonly property int desktopIconThumbnailMax: 128
+    // estimate: desktop icons v1, px before a press becomes a drag
+    readonly property int desktopIconDragThreshold: 6
+    // estimate: desktop icons v1, debounce of the positions file
+    readonly property int desktopIconSaveMs: 300
 }

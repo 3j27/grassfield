@@ -99,6 +99,10 @@ Scope {
         property string bottomRight: "none"
     }
 
+    component DesktopConfig: JsonObject {
+        property bool showIcons: true
+    }
+
     component NotificationsConfig: JsonObject {
         property bool dnd: false
         // always | unlocked | never (ADR-0004). "never" hides bodies; "unlocked" equals "always" until the lock screen exists.
@@ -139,6 +143,10 @@ Scope {
         if (["topLeft", "topRight", "bottomLeft", "bottomRight"].indexOf(corner) < 0)
             return;
         change("hotCorners." + corner, cornerAction(action));
+    }
+
+    function setDesktopShowIcons(value: bool): void {
+        change("desktop.showIcons", value);
     }
 
     function setNotificationsDnd(value: bool): void {
@@ -293,6 +301,7 @@ Scope {
         property NotificationsConfig notifications: NotificationsConfig {}
         property LockConfig lock: LockConfig {}
         property HotCornersConfig hotCorners: HotCornersConfig {}
+        property DesktopConfig desktop: DesktopConfig {}
     }
 
     // Fresh read of the file for the merge (the watched FileView may lag behind an external write).
