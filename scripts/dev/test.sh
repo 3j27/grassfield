@@ -27,11 +27,14 @@ if compgen -G "tests/security/tst_*.qml" >/dev/null; then
 fi
 # Quickshell-level tests (real FileView/JsonAdapter, reloads): each tests/shell/<name>/shell.qml and
 # tests/security/<name>/shell.qml prints PASS/FAIL. Run offscreen and detached from any compositor session.
+# The i18n tests import the Grassfield.I18n plugin and read the compiled catalogs.
+ui/i18n/build-direct.sh >/dev/null
+scripts/dev/i18n-build.sh >/dev/null
 for dir in tests/shell/*/ tests/security/*/; do
   [[ -f ${dir}shell.qml ]] || continue
   # Private runtime/cache dirs: works inside the Claude Code sandbox (no writes to /run/user or ~/.cache).
   mkdir -p -m 700 "$GRASSFIELD_TEST_TMP/runtime" "$GRASSFIELD_TEST_TMP/cache"
-  out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui" \
+  out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" GRASSFIELD_LANG=en \
     XDG_RUNTIME_DIR="$GRASSFIELD_TEST_TMP/runtime" XDG_CACHE_HOME="$GRASSFIELD_TEST_TMP/cache" \
     timeout 60 qs -p "$dir" --no-color 2>&1) || { echo "$out"; echo "FAIL: $dir"; status=1; continue; }
   echo "$out" | grep -E "PASS|FAIL" || { echo "$out"; status=1; }

@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../launchpad/Model.js" as Model
+import "AppLaunch.js" as AppLaunch
 
 // Desktop entry resolution shared by the menu bar and the Dock, and the list of entries that
 // Search and Apps may show. Apps are identified by their foreign-toplevel app id mapped to a
@@ -92,6 +93,55 @@ Singleton {
             return null;
         const byId = DesktopEntries.byId(id);
         return byId ? byId : DesktopEntries.heuristicLookup(id);
+    }
+
+    // ---- launching ------------------------------------------------------------------------------
+
+    // A GRASSFIELD_DEV session (nested, on the owner's machine) must never start an app with the
+    // owner's profiles: apps launched by the shell get their own XDG config, cache and state homes
+    // (docs/specs/dock.md, dev notes). Production launches are untouched.
+    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    readonly property string appsHome: AppLaunch.appsHomeFor(Quickshell.env("GRASSFIELD_STATE_HOME"), Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+
+    // Starts a desktop entry or one of its actions. The one launch path of the Dock, Apps, Search and the
+    // menus.
+    function launch(target: var): void {
+        if (!target)
+            return;
+        if (!devSession) {
+            target.execute();
+            return;
+        }
+        let command = AppLaunch.stripFieldCodes(target.command);
+        if (command.length === 0)
+            return;
+        // Entries that run in a terminal: the default terminal wrapper, as Quickshell's execute() does.
+        if (target.runInTerminal === true)
+            command = ["xdg-terminal-exec"].concat(command);
+        const context = {
+            "command": command,
+            "environment": AppLaunch.isolatedEnvironment(appsHome)
+        };
+        if (target.workingDirectory)
+            context.workingDirectory = target.workingDirectory;
+        Quickshell.execDetached(context);
+    }
+
+    // Runs a helper that opens files in an application (gio open, xdg-open, gtk-launch): same isolation.
+    function openDetached(argv: var): void {
+        if (!devSession) {
+            Quickshell.execDetached(argv);
+            return;
+        }
+        Quickshell.execDetached({
+            "command": argv,
+            "environment": AppLaunch.isolatedEnvironment(appsHome)
+        });
+    }
+
+    // Environment of a Process that opens files in an application: the isolated homes in a dev session.
+    function openEnvironment(): var {
+        return devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({});
     }
 
     function nameFor(appId: string): string {

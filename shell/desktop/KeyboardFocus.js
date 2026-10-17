@@ -11,8 +11,12 @@
 //            motion, so a click without motion (and the return from Glance) takes it explicitly with
 //            one Exclusive commit; the host reports "keys" (keyboard arrived) or "committed" (the
 //            commit went out) and the mode becomes "hold".
-//   "menu" - Exclusive while the icon menu is open. The menu window never takes the keyboard (keys are
-//            forwarded to it), so closing it cannot hand the keyboard to another window.
+//   "menu" - None while the icon / desktop menu is open: the MENU window holds the keyboard
+//            (Exclusive) and the pointer. Hyprland routes the pointer only to an Exclusive layer, so an
+//            Exclusive desktop would swallow every hover and click meant for the menu.
+//            Closing: the desktop takes the keyboard back first ("take" with `menu` set, the menu
+//            window stays mapped and keyboard-less meanwhile) and the menu unmaps only once the desktop
+//            has it, so no moment exists in which Hyprland falls back to another window.
 //
 // State fields besides the mode:
 //   away      - the pointer is off the desktop surface and no rename, menu or drag keeps it there.
@@ -25,6 +29,10 @@
 //   lendNext  - Glance is being opened: the desktop let go of the keyboard first, so Hyprland focuses
 //               the new window itself (an explicit focus request would also warp the pointer into it);
 //               the next window that maps on the focused workspace with returnsFocus becomes `lent`.
+//   active    - address of the window Hyprland counts as active (last activewindowv2), "" if unknown. The
+//               desktop holding the keyboard does not change it. When that window closes by itself,
+//               Hyprland's fallback focus would take the keyboard from the desktop: it is re-taken.
+//   menu      - "take" was started by the menu closing: the menu window stays mapped (menuLingers()).
 //   reclaim   - "take" was started because the lent window closed: the activation Hyprland reports
 //               for its own fallback window meanwhile is ignored.
 //
@@ -44,6 +52,8 @@
 //   activeWindow {address}                    Hyprland activewindowv2 ("" = no window)
 //   closeWindow {address}                     Hyprland closewindow
 //   workspace                                 the focused workspace changed
+//   seedActive {address}                      the window Hyprland counts as active, from its state (at
+//                                             startup, when `activewindowv2` was missed); only fills `active` when it is unknown
 //
 // next(state, event) -> {state, focus}: `focus` is "" or a validated lowercase hex address to focus.
 
@@ -81,7 +91,6 @@ function interactivity(state) {
     case "hold":
         return "onDemand";
     case "take":
-    case "menu":
         return "exclusive";
     default:
         return "none";
@@ -89,8 +98,14 @@ function interactivity(state) {
 }
 
 // True while the desktop owns (or is taking) the keyboard: only then does it move focus to its key sink.
+// (In "menu" the menu window owns the keyboard, but the desktop is where it returns to.)
 function holdsKeys(state) {
     return state.mode !== "none";
+}
+
+// The menu window is mapped (besides while the menu is open) until the desktop has the keyboard back.
+function menuLingers(state) {
+    return state.mode === "take" && state.menu === true;
 }
 
 // A state with `mode`; the other fields default to "nothing pending", `away` is kept from `from`.
@@ -100,7 +115,9 @@ function make(mode, fields, from) {
         away: from ? from.away : true,
         lent: "",
         lendNext: false,
-        reclaim: false
+        reclaim: false,
+        menu: false,
+        active: from ? from.active : ""
     }, fields || {});
 }
 
@@ -123,7 +140,8 @@ function next(state, event) {
     case "press":
         // The opening right press of a menu, or a press while the keyboard is being taken: unchanged.
         return to(make(s.mode === "menu" || s.mode === "take" ? s.mode : "hold", {
-            away: false
+            away: false,
+            menu: s.menu
         }, s));
     case "release":
         // A click without pointer motion: the OnDemand surface has not received the keyboard.
@@ -165,8 +183,12 @@ function next(state, event) {
     case "menuOpened":
         return to(make("menu", {}, s));
     case "menuClosed":
+        // The desktop takes the keyboard back before the menu window unmaps (even if the pointer has
+        // left it: Hyprland would otherwise fall back to the last window when the menu unmaps).
         if (s.mode === "menu")
-            return to(held(s, {}));
+            return to(make("take", {
+                menu: true
+            }, s));
         return to(s);
     case "renameOpened":
         if (s.mode === "none")
@@ -202,15 +224,22 @@ function next(state, event) {
     case "activeWindow":
         {
             const address = normalizeAddress(event.address);
-            if (address === "")
-                return to(s);
-            // Hyprland's own fallback focus while the keyboard comes back from the lent window.
+            if (address === "") {
+                // No window is active any more (the last one closed).
+                return to(event.address === "" ? Object.assign({}, s, {
+                    active: ""
+                }) : s);
+            }
+            // Hyprland's own fallback focus while the keyboard comes back from the lent / closed window.
             if (s.mode === "take" && s.reclaim)
-                return to(s);
+                return to(Object.assign({}, s, {
+                    active: address
+                }));
             // Hyprland's fallback focus right after the release for Glance keeps lendNext.
             return to(make("none", {
                 lent: address === s.lent ? s.lent : "",
-                lendNext: s.lendNext
+                lendNext: s.lendNext,
+                active: address
             }, s));
         }
     case "closeWindow":
@@ -222,6 +251,14 @@ function next(state, event) {
                 return to(s.away ? make("none", {}, s) : make("take", {
                     reclaim: true
                 }, s));
+            // The window Hyprland counts as active closed while the desktop holds the keyboard (a click
+            // on the desktop does not change that): Hyprland's fallback focus would hand the keyboard
+            // to another window, so the desktop takes it again once the fallback is reported.
+            if (address !== "" && address === s.active && !s.away && (s.mode === "hold" || s.mode === "take"))
+                return to(make("take", {
+                    reclaim: true,
+                    active: ""
+                }, s));
             // Any other window: Hyprland moves the keyboard itself when the closed window had it and
             // reports it with activewindowv2. Releasing here would make Hyprland hand the keyboard of
             // the desktop to the previously focused window (refocusLastWindow).
@@ -229,6 +266,12 @@ function next(state, event) {
         }
     case "workspace":
         return to(make("none", {}, s));
+    case "seedActive":
+        // Only fills a gap: Quickshell updates its toplevel before the raw events of the same change
+        // arrive, so a seed must never override what the events say.
+        return to(s.active === "" ? Object.assign({}, s, {
+            active: normalizeAddress(event.address)
+        }) : s);
     default:
         return to(s);
     }

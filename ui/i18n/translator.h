@@ -17,8 +17,13 @@ class Translator : public QObject
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged FINAL)
 
 public:
-    explicit Translator(QObject *parent = nullptr);
+    // The factory is the only way QML gets the singleton (the constructor is private on purpose: with a
+    // public default constructor QML would use it, never call create(), and the instance would have no
+    // engine to retranslate).
     static Translator *create(QQmlEngine *engine, QJSEngine *);
+    // Installs the process-wide catalog (GRASSFIELD_LANG or the system locale) once. Called by the plugin's
+    // initializeEngine(), on the engine's thread, before any binding of the engine is evaluated.
+    static void installCatalog();
 
     QString language() const { return m_language; }
     void setLanguage(const QString &language);
@@ -29,6 +34,8 @@ signals:
     void languageChanged();
 
 private:
+    explicit Translator(QObject *parent = nullptr);
+
     QString m_language;
     QTranslator *m_translator = nullptr;
     QPointer<QQmlEngine> m_engine;

@@ -2277,7 +2277,7 @@
     </message>
     <message>
         <source>Show a quick, floating look at the files (Space or Esc closes it).</source>
-        <translation>Affiche un coup d’œil flottant sur les fichiers (Espace ou Échap le ferme).</translation>
+        <translation>Affiche un Survol flottant des fichiers (Espace ou Échap le ferme).</translation>
     </message>
     <message>
         <source>Local files or file: URLs.</source>
@@ -2843,7 +2843,7 @@
         <translation>Le Wi-Fi est désactivé</translation>
     </message>
     <message>
-        <source>Searching for networks...</source>
+        <source>Searching for networks…</source>
         <translation>Recherche de réseaux…</translation>
     </message>
     <message>

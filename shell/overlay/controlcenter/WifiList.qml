@@ -108,7 +108,7 @@ Column {
         width: parent.width
         visible: !Connectivity.wifiEnabled || Connectivity.wifiDevice === null || Connectivity.networks.length === 0
         text: Connectivity.wifiDevice === null ? qsTr("No Wi-Fi adapter")
-            : !Connectivity.wifiEnabled ? qsTr("Wi-Fi is off") : qsTr("Searching for networks...")
+            : !Connectivity.wifiEnabled ? qsTr("Wi-Fi is off") : qsTr("Searching for networks…")
     }
 
     ListView {

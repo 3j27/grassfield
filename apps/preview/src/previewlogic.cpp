@@ -45,9 +45,11 @@ Kind classify(const QString &path)
     static const QStringList playlistTypes = {
         QStringLiteral("audio/x-mpegurl"), QStringLiteral("audio/mpegurl"), QStringLiteral("application/vnd.apple.mpegurl"),
         QStringLiteral("application/x-mpegurl"), QStringLiteral("application/mpegurl"), QStringLiteral("video/vnd.mpegurl"),
-        QStringLiteral("audio/x-scpls"), QStringLiteral("application/xspf+xml"), QStringLiteral("application/vnd.apple.mpegurl.audio")};
+        QStringLiteral("audio/x-scpls"), QStringLiteral("application/xspf+xml"), QStringLiteral("application/vnd.apple.mpegurl.audio"),
+        QStringLiteral("application/vnd.ms-wpl"), QStringLiteral("video/x-ms-asf-plugin"), QStringLiteral("application/x-ms-asx")};
+    // .asx (and .wpl) are playlists of video/x-ms-asf (a real .asf video stays a video): decided by suffix.
     static const QStringList playlistSuffixes = {QStringLiteral("m3u"), QStringLiteral("m3u8"), QStringLiteral("pls"),
-                                                 QStringLiteral("vlc"), QStringLiteral("xspf")};
+                                                 QStringLiteral("vlc"), QStringLiteral("xspf"), QStringLiteral("asx"), QStringLiteral("wpl")};
     if (playlistTypes.contains(name) || playlistSuffixes.contains(QFileInfo(path).suffix().toLower()))
         return Kind::Text;
     if (name.startsWith(QLatin1String("image/")))

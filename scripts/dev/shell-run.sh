@@ -24,6 +24,7 @@ while [[ $# -gt 0 ]]; do
     --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
     --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
     --menu-bridge) export GRASSFIELD_MENU_BRIDGE=${2:?--menu-bridge needs a path}; shift ;;
+    --desktop-screen) export GRASSFIELD_DESKTOP_SCREEN=${2:?--desktop-screen needs an output name}; shift ;;
     *) echo "shell-run: unknown option $1" >&2; exit 2 ;;
   esac
   shift

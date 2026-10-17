@@ -39,6 +39,9 @@ No desktop entry for a running app: shown with the app id and a theme icon of th
 ## Automated tests · Manual verification steps
 `scripts/dev/test.sh`. Manual: nested-up, launch foot, `qs ipc call dock hover 960`, `shot.sh`.
 
+## Dev notes: isolated app launches
+In a `GRASSFIELD_DEV=1` session the shell runs on the owner's machine, so an app started from the Dock, Apps, Search, the Dock/app menus or by opening a desktop file must never use the owner's profiles (incident: Chromium launched from the nested Dock with the default profile). `Apps.launch(entryOrAction)` (`shell/services/Apps.qml`, the one launch path; helpers in `AppLaunch.js`, `tests/unit/tst_applaunch.qml`) starts the entry's `command` (Exec field codes dropped; `runInTerminal` through `xdg-terminal-exec`) with `Quickshell.execDetached({command, environment})` and `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME` set to `<dev>/apps-home/{config,cache,state}` (`<dev>` is the parent of `GRASSFIELD_STATE_HOME`, i.e. `.dev/`, which is ignored by version control). `XDG_DATA_HOME` and `XDG_DATA_DIRS` are kept so desktop entries and icons resolve. File openers (`gio open`, `xdg-open`, `gtk-launch` for desktop files and Search results) get the same environment through `Apps.openDetached` / `Apps.openEnvironment`. Outside a dev session `DesktopEntry.execute()` is called unchanged. Check: launch foot from the nested Dock, then `tr '\0' '\n' < /proc/<pid>/environ | grep XDG_`.
+
 ## Performance · Accessibility · i18n
 Model rebuilt on toplevel, application or pin changes; no polling. Tiles are `Accessible.Button` with names (", running"; Trash state). Strings via `qsTr()`.
 

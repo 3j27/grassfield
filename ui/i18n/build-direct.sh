@@ -28,24 +28,8 @@ done
 "$reg" "${foreign[@]}" --generate-qmltypes="$out/plugin.qmltypes" --import-name=Grassfield.I18n \
   --major-version=1 --minor-version=0 -o "$obj/registration.cpp" "$obj/moc_translator.cpp.json"
 
-cat > "$obj/plugin.cpp" <<'PLUGIN'
-#include <QtQml/qqmlextensionplugin.h>
-#include <QtQml/qqmlengine.h>
-extern void qml_register_types_Grassfield_I18n();
-class GrassfieldI18nPlugin : public QQmlEngineExtensionPlugin
-{
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID QQmlEngineExtensionInterface_iid)
-public:
-    explicit GrassfieldI18nPlugin(QObject *parent = nullptr) : QQmlEngineExtensionPlugin(parent)
-    {
-        volatile auto registration = &qml_register_types_Grassfield_I18n;
-        Q_UNUSED(registration);
-    }
-};
-#include "plugin.moc"
-PLUGIN
-"$moc" $qtflags "$obj/plugin.cpp" -o "$obj/plugin.moc"
+cp "$here/plugin.cpp" "$obj/plugin.cpp"
+"$moc" $qtflags -I"$here" "$obj/plugin.cpp" -o "$obj/plugin.moc"
 
 cat > "$out/qmldir" <<'QMLDIR'
 module Grassfield.I18n

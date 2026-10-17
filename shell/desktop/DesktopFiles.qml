@@ -69,11 +69,13 @@ Scope {
 
     // ---- operations (explicit user actions only) -------------------------------------------------
 
-    function run(argv: var, label: string, done: var): void {
+    // `env`: extra environment of the process (the isolated app homes of a dev session for "open").
+    function run(argv: var, label: string, done: var, env: var): void {
         const p = runner.createObject(root, {
             command: argv,
             label: label,
-            done: done ? done : null
+            done: done ? done : null,
+            environment: env ? env : ({})
         });
         p.running = true;
     }
@@ -163,7 +165,7 @@ Scope {
             openAsText(p);
             return;
         }
-        run(["gio", "open", p], "open", null);
+        run(["gio", "open", p], "open", null, Apps.openEnvironment());
     }
 
     function openAsText(p: string): void {
@@ -286,7 +288,7 @@ Scope {
             onStreamFinished: {
                 const m = /Default application for .*?:\s*(\S+\.desktop)/.exec(text);
                 if (m && textEditor.target !== "")
-                    Quickshell.execDetached(["gtk-launch", m[1].replace(/\.desktop$/, ""), textEditor.target]);
+                    Apps.openDetached(["gtk-launch", m[1].replace(/\.desktop$/, ""), textEditor.target]);
             }
         }
     }

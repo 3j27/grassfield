@@ -15,6 +15,9 @@ PopupMenu {
     accessibleName: qsTr("Desktop menu")
     currentIndex: 0
 
+    // The menu window holds the keyboard while it is open: the menu takes the active focus.
+    Component.onCompleted: forceActiveFocus()
+
     model: kind === "icon" ? [
         {
             id: "open",

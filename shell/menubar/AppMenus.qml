@@ -101,12 +101,12 @@ Singleton {
                 const acts = entry.actions ? entry.actions : [];
                 const act = acts.find(a => a.id === "new-window");
                 if (act)
-                    act.execute();
+                    Apps.launch(act);
             }
             break;
         case "entryAction":
             if (entry && entry.actions[item.index])
-                entry.actions[item.index].execute();
+                Apps.launch(entry.actions[item.index]);
             break;
         case "minimize":
             Compositor.minimize(ctx.focusedWindow);
