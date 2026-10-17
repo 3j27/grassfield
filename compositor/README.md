@@ -26,44 +26,100 @@ CMake (once the owner has installed `cmake` and `ninja`):
 just plugin-build      # = cmake -S compositor -B compositor/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build compositor/build
 ```
 
-Interim build (no CMake/Ninja yet): `compositor/build-direct.sh [plugin|tests|all]`. The exact commands it runs,
-from `compositor/`:
+Interim build (no CMake/Ninja yet): `compositor/build-direct.sh [plugin|tests|compdb|all|tidy]` (default `all` =
+plugin + tests + compdb). The exact commands it runs, from `compositor/`:
 
 ```sh
-g++ -std=c++23 -O2 -g -DNDEBUG -shared -fPIC -Wall -Wextra \
-  src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/core/Protocol.cpp src/core/TitlebarLayout.cpp \
-  $(pkg-config --cflags --libs hyprland pixman-1 libdrm) $(pkg-config --cflags lua) \
-  -o build/grassfield-compositor.so
+g++ -std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra \
+  $(pkg-config --cflags hyprland pixman-1 libdrm) $(pkg-config --cflags lua) -shared \
+  src/main.cpp src/Titlebar.cpp src/Ipc.cpp \
+  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp \
+  $(pkg-config --libs hyprland pixman-1 libdrm) -o build/grassfield-compositor.so
 
-g++ -std=c++23 -O0 -g -Wall -Wextra -Isrc \
-  tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp src/core/Protocol.cpp src/core/TitlebarLayout.cpp \
-  $(pkg-config --cflags --libs gtest_main) \
-  -o build/grassfield-compositor-tests
+g++ -std=c++23 -O0 -g -Wall -Wextra -Isrc $(pkg-config --cflags gtest_main) \
+  tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp \
+  src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp \
+  $(pkg-config --libs gtest_main) -o build/grassfield-compositor-tests
 ```
 
-Outputs: `compositor/build/grassfield-compositor.so`, `compositor/build/grassfield-compositor-tests`
-(`compositor/build/` is gitignored).
+`compdb` writes `build/compile_commands.json` (one entry per translation unit, same flags as above, via `jq`).
+
+Outputs: `compositor/build/grassfield-compositor.so`, `compositor/build/grassfield-compositor-tests`,
+`compositor/build/compile_commands.json` (`compositor/build/` is gitignored).
 
 ## Test
 
 ```sh
-compositor/build/grassfield-compositor-tests     # pure logic: protocol JSON, button layout, hit-testing, double-click
+compositor/build/grassfield-compositor-tests     # pure logic: protocol JSON, button layout, hit-testing,
+                                                 # double-click, pointer press ownership / gesture end
 ```
+
+## Lint (gate Q1)
+
+Config: `compositor/.clang-tidy` (`clang-analyzer-*`, `bugprone-*`, `performance-*` minus
+`bugprone-easily-swappable-parameters`; analyzer findings are errors; only `compositor/src` and
+`compositor/tests` headers are reported). Exact command (writes the compile database first):
+
+```sh
+compositor/build-direct.sh tidy
+# = compositor/build-direct.sh compdb && cd compositor && \
+#   clang-tidy -p build --quiet src/main.cpp src/Titlebar.cpp src/Ipc.cpp \
+#     src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp \
+#     tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp
+```
+
+Clean = exit code 0 and no diagnostics. It takes several minutes (Hyprland headers).
 
 ## Run (nested only)
 
-`scripts/dev/nested-up.sh` passes the built `.so` to the nested config (`GRASSFIELD_PLUGIN`).
-Known issue (S2): `config/hypr/dev.lua` registers the plugin from a `hyprland.start` callback, which is
-after Hyprland has applied the config's plugin list, so the plugin is not loaded. Until dev.lua is fixed
-(see the spec), the spike shim loads it at parse time:
+`scripts/dev/nested-up.sh` passes the built `.so` to the nested config (`GRASSFIELD_PLUGIN`), and
+`config/hypr/dev.lua` loads it with `hl.plugin.load` at parse time (a load requested from a `hyprland.start`
+callback would be ignored: Hyprland applies the config's plugin list right after parsing).
+`GRASSFIELD_PLUGIN=/path/to.so` loads another build; `GRASSFIELD_NO_PLUGIN=1` starts without it (C2).
 
 ```sh
-PATH="$PWD/spikes/s2-ipc/bin:$PATH" scripts/dev/nested-up.sh
+scripts/dev/nested-up.sh
 WAYLAND_DISPLAY=$(cat .dev/nested.wayland) setsid foot >/dev/null 2>&1 &
-scripts/dev/shot.sh titlebar
+scripts/dev/shot.sh titlebar GF-REF
+scripts/dev/pointer.sh output GF-REF abs 960 250 down drag 700 400 up   # drag a titlebar
 ```
 
-Startup log line: `[grassfield] grassfield-compositor 0.1.0-s2 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+Startup log line (in `$XDG_RUNTIME_DIR/hypr/<nested instance>/hyprland.log`):
+`[grassfield] grassfield-compositor 0.1.0-s2 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+
+## Soak (gate C1, nested only)
+
+```sh
+scripts/dev/nested-up.sh
+tests/compositor/soak.sh 3600     # duration in seconds; log: .dev/soak-<timestamp>.log
+```
+
+Window churn (short-lived and long-lived foot windows) with titlebar drags (some abandoned mid-drag),
+zoom, close and cancelled clicks through the virtual pointer. PASS (exit 0) = nested Hyprland alive, no
+`coredumpctl list Hyprland` entry for its PID since the start (dumps of other Hyprland instances, e.g. other
+worktrees' nested sessions, are listed but not counted), no grassfield exception in the nested log.
+
+## Pointer input
+
+A titlebar consumes left presses on its bar. Press ownership and gesture lifetime are pure logic
+(`src/core/PointerGesture.*`, unit-tested); `Titlebar.cpp` feeds it Hyprland's events:
+
+- only the release of a press a titlebar consumed is kept from clients; a release whose press went to a
+  client (or nowhere) is never touched;
+- that release is consumed by the titlebar when Hyprland routes it there (pointer over the bar), so
+  Hyprland's held-button bookkeeping stays right; otherwise it is cancelled on the event bus (logged;
+  Hyprland then keeps that button as held until its next release, see the spec's known limitations);
+- a drag or armed button ends on its release, on any new press (the release was lost), or on a motion
+  when Hyprland reports no held button or a pointer device present at the press has disappeared
+  (Hyprland 0.56.2 does not release the buttons of a removed pointer device).
+
+## Unload
+
+`PLUGIN_EXIT` removes the titlebars of visible windows through `HyprlandAPI::removeWindowDecoration` and
+destroys the others (unmapped or hidden windows, for which Hyprland 0.56.2 defers the removal) directly:
+erase from `CWindow::m_decosToRemove`, `CDecorationPositioner::uncacheDecoration`, erase from
+`CWindow::m_windowDecorations`. Each titlebar also removes itself from the plugin's
+`CPlugin::m_registeredDecorations`, which Hyprland walks with `removeWindowDecoration` after `PLUGIN_EXIT`.
 
 ## IPC (gfc/1)
 
@@ -85,7 +141,8 @@ There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dis
 ## Layout
 
 - `src/core/` — plain C++ without Hyprland includes (unit-tested): `Theme.hpp` (all visual constants),
-  `TitlebarLayout.*` (geometry, hit-testing, double-click), `Protocol.*` (gfc/1 JSON).
-- `src/` — Hyprland glue: `main.cpp` (entry points, ABI check, event bus listeners), `Titlebar.*`
+  `TitlebarLayout.*` (geometry, hit-testing, double-click), `PointerGesture.*` (press ownership, gesture
+  end), `Protocol.*` (gfc/1 JSON).
+- `src/` — Hyprland glue: `main.cpp` (entry points, ABI check, event bus listeners, unload), `Titlebar.*`
   (decoration, drawing, input), `Ipc.*` (socket2 events, Lua function, hyprctl command).
-- `tests/` — GoogleTest unit tests for `src/core/`.
+- `tests/` — GoogleTest unit tests for `src/core/`. Soak script: `tests/compositor/soak.sh` (repository root).
