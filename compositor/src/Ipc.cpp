@@ -64,7 +64,7 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
-        std::string hyprctlGrassfield(eHyprCtlOutputFormat /*format*/, std::string /*args*/) noexcept {
+        std::string hyprctlGrassfield(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             // Same JSON for both output formats: the payload is already machine-readable.
             std::string out;
             if (!guarded("hyprctl grassfield", [&] { out = gfc::capabilitiesJson(); }))

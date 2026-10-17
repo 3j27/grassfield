@@ -41,14 +41,22 @@ per-Settings double-click action, tiled windows, CSD negotiation, appmenu protoc
   window (Hyprland's close action); zoom → toggle full-screen mode *maximized*; minimize → post
   `minimize-request` only (**placeholder**, M2).
 - **FR7** A left press elsewhere on the bar focuses and raises the window (without warping the cursor) and
-  starts an interactive move that follows the pointer from the press point; release ends it.
+  starts an interactive move that follows the pointer from the press point; release ends it. The move (and
+  an armed button, FR6) also ends, where it is, on any new press, and on a pointer motion when Hyprland
+  reports no held button or a pointer device present at the press has disappeared: a lost release never
+  leaves the window following the pointer.
 - **FR8** Two presses on the drag area within 400 ms and 4 px toggle maximized (no move).
 - **FR9** At load and on `hl.plugin.grassfield.hello()` the plugin posts the socket2 event
   `grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations"]}`.
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
-  and ends a drag in progress.
+  and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers
+  their removal), and no pointer to a destroyed titlebar stays in Hyprland's plugin bookkeeping.
+- **FR13** Press ownership: a release is kept from clients if and only if a titlebar consumed the matching
+  press (per button; a new press of a button supersedes an older one). Such a release is consumed by the
+  titlebar when Hyprland routes it there, otherwise cancelled on the event bus; releases of presses that
+  went to clients are never touched.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -60,12 +68,13 @@ per-Settings double-click action, tiled windows, CSD negotiation, appmenu protoc
 | FR4 | unit `TitlebarLayout.*`, `Theme.*`; screenshot | L0 / L1 | verified |
 | FR5 | unit `TitlebarLayout.Title*`; screenshot with long and short titles | L0 / L1 | verified |
 | FR6 | nested: virtual pointer clicks on close / zoom / minimize; press on close + release elsewhere | L1 | verified (close closed the window; zoom toggled `fullscreen` 0↔1; minimize posted `minimize-request`; cancel kept the window) |
-| FR7 | nested: virtual pointer drag, window position before/after | L1 | verified: press (500,186) → release (600,286) moved the window (370,200) → (470,300), cursor not warped |
+| FR7 | nested: virtual pointer drag, window position before/after; abandoned drag (pointer tool exits after `down drag`, its device is destroyed) then move and click elsewhere with a new pointer | L1 | verified: press (500,186) → release (600,286) moved the window (370,200) → (470,300), cursor not warped. Abandoned drag (2026-10-17): before the fix the window followed the unpressed pointer and jumped to the next click; after it the window stays where the drag left it, the next click lands on the desktop, log `titlebar gesture cancelled: no button held or a pointer device went away` |
 | FR8 | unit `ClickTracker.*`; nested double-click | L0 / L1 | verified: `fullscreen` 0 → 1, titlebar kept on the maximized window |
 | FR9 | spike `spikes/s2-ipc/shell.qml` (Quickshell `rawEvent`) | L1 | verified for `hello`; load-time event not observable |
 | FR10 | `hyprctl grassfield` against the nested instance | L1 | verified |
-| FR11 | code review; C1 soak | L0 / L1 | review only; C1 NOT VERIFIED |
-| FR12 | `just plugin-unload` (needs `scripts/nestctl`) | L1 | NOT VERIFIED |
+| FR11 | code review; `clang-tidy` (Q1); C1 soak `tests/compositor/soak.sh` | L0 / L1 | see "Performance (gates affected)" |
+| FR12 | `just plugin-unload` (needs `scripts/nestctl`); nested shutdown (SIGTERM → `CCompositor::cleanup` → `unloadAllPlugins` → `PLUGIN_EXIT`, then dlclose, then windows destroyed) with windows on `special:hidden` | L1 | runtime `hyprctl plugin unload` NOT VERIFIED (no `scripts/nestctl`); shutdown with 2 windows on `special:hidden`: log `[grassfield] grassfield-compositor unloaded`, `Hyprland has reached the end.`, no core dump. Hidden (`isHidden()`) / unmapped-window path: code inspection only |
+| FR13 | unit `PointerGesture.*`; nested: double-click zoom, zoom-button press moved away, drag-select in another window after a titlebar click or drag | L0 / L1 | verified: no seat warning during these scenarios, the cancelled zoom press changed nothing, the other window received its selection drag. Releases cancelled on the bus leave a stale held button in Hyprland (Known limitations) |
 
 ## Interfaces / contracts (versions)
 
@@ -103,7 +112,27 @@ Future verbs (minimize, restore, …) follow the same pattern: `hl.plugin.grassf
   used), `g_pEventManager->postEvent`, `IHyprWindowDecoration`, `g_pDecorationPositioner`,
   `g_pHyprRenderer->addPassElement` with `CRectPassElement` / `CTexPassElement`, `renderText`,
   `g_layoutManager->setTargetGeom` (move), `Desktop::focusState()->fullWindowFocus`,
-  `Fullscreen::controller()->setFullscreenMode`, `Config::Actions::{closeWindow, alterZOrder}`.
+  `Fullscreen::controller()->setFullscreenMode`, `Config::Actions::{closeWindow, alterZOrder}`,
+  `Event::bus()->m_events.input.mouse.move`, `g_pInputManager->{hasHeldButtons(), m_pointers,
+  getMouseCoordsInternal()}`, `Desktop::viewState()->hitTest().windowAt`, `CWindow::{hasPopupAt,
+  m_windowDecorations, m_decosToRemove}`, `g_pDecorationPositioner->{uncacheDecoration, forceRecalcFor}`,
+  `g_pPluginSystem->getPluginByHandle()->m_registeredDecorations`.
+- Behavior read from the installed 0.56.2 binary (`objdump -d` of the exported symbols; member offsets
+  checked with `static_assert(offsetof(...))` against the headers), relied on by FR7, FR12, FR13:
+  - `CWindow::updateWindowDecos()` returns at once when `!m_isMapped` or `isHidden()`, so a removal queued by
+    `removeWindowDecoration` → `CWindow::removeWindowDeco` (push to `m_decosToRemove`) waits for the window
+    to be mapped and visible again.
+  - `CPluginSystem::unloadPlugin(plugin, false)` calls `pluginExit` first, then `removeWindowDecoration()` for
+    every pointer in a copy of `CPlugin::m_registeredDecorations` (never pruned by Hyprland), then `dlclose`.
+    `CCompositor::cleanup()` (normal exit) unloads every plugin this way.
+  - `CInputManager::onMouseButton` emits `input.mouse.button` first; a cancelled event returns before
+    `m_currentlyHeldButtons` is updated. Releases of buttons not in that list are dropped. Button events
+    then go to `CKeybindManager::onMouseEvent`, the decorations of `windowAt(pos, RESERVED_EXTENTS |
+    INPUT_EXTENTS | ALLOW_FLOATING)` through `CWindow::checkInputOnDecos` (box contains point, no popup there),
+    and finally `CSeatManager::sendPointerButton`.
+  - `CWLPointerResource::sendButton` logs `sendButton release on a non-pressed button` and sends nothing
+    when the client never got the press.
+  - `CInputManager::destroyPointer` does not release the buttons held by the removed device.
 - Measured pitfalls: `Config::Actions::focus()` warps the cursor to the window middle when the pointer is
   on the titlebar (outside the client surface); with it, drags through `CLayoutManager::beginDragTarget` or
   `CKeybindManager::changeMouseBindMode` jumped by (middle − press point). The plugin now focuses through
@@ -124,43 +153,38 @@ Future verbs (minimize, restore, …) follow the same pattern: `hl.plugin.grassf
 ## Automated tests · Manual verification steps
 
 Automated (L0): `compositor/build/grassfield-compositor-tests` — protocol JSON (wire format, escaping,
-advertised features), button layout, hit-testing, title placement, double-click detection, theme values.
+advertised features), button layout, hit-testing, title placement, double-click detection, theme values,
+pointer press ownership and gesture end (`PointerGesture.*`). Lint (Q1): `compositor/build-direct.sh tidy`
+(`compositor/.clang-tidy`). Soak (C1): `tests/compositor/soak.sh [seconds]` (see `compositor/README.md`).
 
 Manual (L1, nested only):
 
 1. Build: `compositor/build-direct.sh`.
-2. Start: `PATH="$PWD/spikes/s2-ipc/bin:$PATH" scripts/dev/nested-up.sh` (see the dev.lua issue below).
-3. Log: `[grassfield] grassfield-compositor 0.1.0-s2 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
-4. `WAYLAND_DISPLAY=$(cat .dev/nested.wayland) setsid foot >/dev/null 2>&1 &`, then `scripts/dev/shot.sh titlebar`.
+2. Start: `scripts/dev/nested-up.sh` (`config/hypr/dev.lua` loads `GRASSFIELD_PLUGIN` at parse time; a load
+   from a `hyprland.start` callback would be ignored because Hyprland applies the config's plugin list right
+   after parsing; fixed in commit eaa953c, the S2 shim is gone).
+3. Log (`$XDG_RUNTIME_DIR/hypr/<nested instance>/hyprland.log`):
+   `[grassfield] grassfield-compositor 0.1.0-s2 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+4. `WAYLAND_DISPLAY=$(cat .dev/nested.wayland) setsid foot >/dev/null 2>&1 &`, then
+   `scripts/dev/shot.sh titlebar GF-REF`.
 5. IPC: `WAYLAND_DISPLAY=… HYPRLAND_INSTANCE_SIGNATURE=… timeout 10 qs -p spikes/s2-ipc/shell.qml`.
-6. Pointer: `spikes/s2-ipc/vpointer/build.sh`, then e.g.
-   `WAYLAND_DISPLAY=… spikes/s2-ipc/out/vpointer extent <layout w> <layout h> abs X Y down drag X2 Y2 up`.
-
-### dev.lua plugin loading (owner/config owner action)
-
-`config/hypr/dev.lua` calls `hl.plugin.load(plugin)` inside `hl.on("hyprland.start", …)`. Hyprland applies
-the config's plugin list right after parsing the config (log: `Loading plugin … which is now present in
-config`), so a plugin registered from that callback is never loaded (S2: no plugin log lines at all).
-Proposed diff (not applied: outside this task's ownership):
-
-```diff
--    hl.on("hyprland.start", function()
--      local ok, err = pcall(hl.plugin.load, plugin)
--      if not ok then
--        print("grassfield: plugin load failed: " .. tostring(err))
--      end
--    end)
-+    local ok, err = pcall(hl.plugin.load, plugin)
-+    if not ok then
-+      print("grassfield: plugin load failed: " .. tostring(err))
-+    end
-```
+6. Pointer (`tests/tools/vpointer`, coordinates relative to an output): e.g.
+   `scripts/dev/pointer.sh output GF-REF abs 960 250 down drag 700 400 up`. Abandoned drag (FR7):
+   `scripts/dev/pointer.sh output GF-REF abs 960 250 down drag 800 350` (no `up`), then
+   `scripts/dev/pointer.sh output GF-REF abs 1400 700 sleep 200 abs 300 300 click`: the window must not move.
 
 ## Performance (gates affected) · Accessibility · i18n
 
-- C1 (8 h soak) and C2 (scripted degradation) not run in S2. Title textures are cached per window and
-  rebuilt only when the title, scale or available width changes; drawing adds 6 rect pass elements and
-  1 texture per decorated window.
+- C1: soak script `tests/compositor/soak.sh` (nested only). 2026-10-17, plugin at commit a475092:
+  `tests/compositor/soak.sh 1260` → PASS (1260 s, 758 rounds: 758 short-lived + 758 churn windows,
+  217 drags, 109 abandoned drags, 216 zoom pairs, 108 cancelled and 108 real close clicks; 1197 titlebar
+  presses; nested Hyprland alive, RSS 151.7 → 158.5 MB, no core dump, 0 grassfield exceptions, clean unload
+  at shutdown). 9 seat warnings `sendButton release on a non-pressed button` came from Hyprland releasing
+  stale held buttons at window map/unmap (see Known limitations); the seat drops them. The 1 h and 8 h runs
+  are scheduled: C1 stays NOT VERIFIED until the 8 h run passes. C2 (scripted degradation) not run.
+  Title textures are cached per window and rebuilt only when the title, scale or available width changes;
+  drawing adds 6 rect pass elements and 1 texture per decorated window.
+- Q1: `compositor/build-direct.sh tidy` must exit 0 with no diagnostics.
 - Accessibility: titlebar buttons are compositor-drawn and not exposed to assistive technologies; keyboard
   equivalents exist (SUPER+W close, SUPER+ALT+F zoom).
 - i18n: no plugin strings are shown except the degradation notifications (English, compositor-side).
@@ -179,4 +203,13 @@ Proposed diff (not applied: outside this task's ownership):
 - The titlebar sits above the client's requested position, so a centered window's titlebar extends 28 px
   above the centered area.
 - Fractional scaling: geometry is scaled by the monitor scale but only scale 1 was tested.
-- Plugin unload is untested (needs `scripts/nestctl`).
+- Runtime unload (`hyprctl plugin unload`, needs `scripts/nestctl`) is untested; unload at compositor exit
+  is tested.
+- When a titlebar release has to be cancelled on the event bus (pointer no longer over a titlebar: a
+  button press moved away, a double-click zoom, and in practice every drag, because the bar lags the
+  pointer while the window's move animation runs), Hyprland's held-button list keeps that button until its
+  next release (no public API to clear it). When a window maps or unmaps meanwhile, Hyprland's
+  `releaseAllMouseButtons` sends that stale release to the focused client, and the seat drops it with the
+  warning `sendButton release on a non-pressed button`. Input to the next window clicked was correct in
+  the nested test (drag-select after a titlebar drag). Hyprland itself never releases the buttons of a
+  removed pointer device.

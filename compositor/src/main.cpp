@@ -13,8 +13,12 @@
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/plugins/PluginSystem.hpp>
+#include <hyprland/src/render/decorations/DecorationPositioner.hpp>
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -22,6 +26,15 @@ namespace gf {
     SPluginState& state() {
         static SPluginState s;
         return s;
+    }
+
+    void forgetRegisteredDecoration(IHyprWindowDecoration* deco) noexcept {
+        guarded("forgetRegisteredDecoration", [deco] {
+            if (!g_pPluginSystem || !state().handle)
+                return;
+            if (auto* plugin = g_pPluginSystem->getPluginByHandle(state().handle))
+                std::erase(plugin->m_registeredDecorations, deco);
+        });
     }
 } // namespace gf
 
@@ -72,21 +85,66 @@ namespace {
         l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& info) { CGrassfieldTitlebar::onGlobalMouseButton(e, info); }));
     }
 
+    // The window whose m_windowDecorations owns `deco` (normally deco->window(); scanned as a fallback).
+    PHLWINDOW ownerOf(const CGrassfieldTitlebar* deco) {
+        const auto owns = [deco](const PHLWINDOW& w) {
+            return w && std::ranges::any_of(w->m_windowDecorations, [deco](const UP<IHyprWindowDecoration>& d) { return d.get() == deco; });
+        };
+        if (const auto w = deco->window(); owns(w))
+            return w;
+        for (const auto& w : Desktop::windowState()->windows()) {
+            if (owns(w))
+                return w;
+        }
+        return nullptr;
+    }
+
+    // Destroys a titlebar now, whatever its window's state. HyprlandAPI::removeWindowDecoration only queues
+    // the removal (CWindow::m_decosToRemove) and runs CWindow::updateWindowDecos(), which in 0.56.2 returns
+    // at once for an unmapped or hidden window (it tests m_isMapped, then isHidden(); read from the binary):
+    // such a titlebar would survive dlclose. This does what updateWindowDecos does for a queued removal
+    // (uncache it from the positioner, erase it from m_windowDecorations) without that early return.
+    bool destroyNow(CGrassfieldTitlebar* deco) {
+        const auto w = ownerOf(deco);
+        if (!w)
+            return false;
+        auto&      decos = w->m_windowDecorations;
+        const auto it    = std::ranges::find_if(decos, [deco](const UP<IHyprWindowDecoration>& d) { return d.get() == deco; });
+        if (it == decos.end())
+            return false;
+        std::erase(w->m_decosToRemove, deco);
+        if (g_pDecorationPositioner)
+            g_pDecorationPositioner->uncacheDecoration(deco); // pointer comparison only; deco still alive
+        UP<IHyprWindowDecoration> owned = std::move(*it);
+        decos.erase(it);
+        owned.reset(); // ~CGrassfieldTitlebar runs here, while this library is still loaded
+        if (g_pDecorationPositioner)
+            g_pDecorationPositioner->forceRecalcFor(w);
+        return true;
+    }
+
     void removeAllTitlebars() {
         CGrassfieldTitlebar::cancelPointerGrab();
 
-        const auto                decos = state().titlebars; // copy: removal destroys entries
-        std::vector<PHLWINDOWREF> windows;
-        windows.reserve(decos.size());
-        for (auto* deco : decos) {
-            windows.emplace_back(deco->window());
-            HyprlandAPI::removeWindowDecoration(state().handle, deco);
+        // Visible windows: Hyprland's own removal path, which also lays the window out again without the
+        // titlebar. It destroys the decoration synchronously for a mapped, visible window.
+        for (auto* deco : std::vector(state().titlebars)) { // copy: removal destroys entries
+            const auto w = deco->window();
+            if (w && w->m_isMapped && !w->isHidden())
+                HyprlandAPI::removeWindowDecoration(state().handle, deco);
         }
-        // Flush removals that the window defers, while this library is still loaded.
-        for (const auto& ref : windows) {
-            if (const auto w = ref.lock())
-                w->updateWindowDecos();
+
+        // Everything left (unmapped or hidden windows): destroy directly, so that no object of this library
+        // outlives dlclose.
+        size_t direct = 0;
+        for (auto* deco : std::vector(state().titlebars)) {
+            if (destroyNow(deco))
+                ++direct;
+            else
+                gf::log(Log::ERR, "titlebar {:x} has no owning window; cannot destroy it before unload", reinterpret_cast<uintptr_t>(deco));
         }
+        if (direct > 0)
+            gf::log(Log::INFO, "destroyed {} titlebar(s) of unmapped or hidden windows directly", direct);
     }
 
     void teardown() {

@@ -20,7 +20,7 @@ pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland pixman-1 libdrm)
 pkg_check_modules(LUA REQUIRED lua) # headers only: symbols resolve from Hyprland's liblua at load time
 
 # Pure logic, no Hyprland includes (unit-testable).
-add_library(gfcore STATIC src/core/Protocol.cpp src/core/TitlebarLayout.cpp)
+add_library(gfcore STATIC src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp)
 target_include_directories(gfcore PUBLIC src)
 set_target_properties(gfcore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_options(gfcore PRIVATE -Wall -Wextra)
@@ -37,7 +37,7 @@ option(GRASSFIELD_BUILD_TESTS "Build unit tests" ON)
 if(GRASSFIELD_BUILD_TESTS)
   find_package(GTest REQUIRED)
   enable_testing()
-  add_executable(grassfield-compositor-tests tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp)
+  add_executable(grassfield-compositor-tests tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp)
   target_link_libraries(grassfield-compositor-tests PRIVATE gfcore GTest::gtest_main)
   target_compile_options(grassfield-compositor-tests PRIVATE -Wall -Wextra)
   set_target_properties(grassfield-compositor-tests PROPERTIES

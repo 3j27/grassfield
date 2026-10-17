@@ -13,6 +13,7 @@
 #include <vector>
 
 class CGrassfieldTitlebar;
+class IHyprWindowDecoration;
 
 namespace gf {
 
@@ -32,6 +33,12 @@ namespace gf {
     };
 
     SPluginState& state();
+
+    // Removes a decoration that is being destroyed from this plugin's CPlugin::m_registeredDecorations.
+    // Hyprland 0.56.2 never prunes that list, and after PLUGIN_EXIT CPluginSystem::unloadPlugin calls
+    // removeWindowDecoration() on every pointer still in it: a stale pointer whose address was reused by
+    // another window's decoration would remove that decoration.
+    void forgetRegisteredDecoration(IHyprWindowDecoration* deco) noexcept;
 
     template <typename... Args>
     void log(Hyprutils::CLI::eLogLevel level, std::format_string<Args...> fmt, Args&&... args) {
