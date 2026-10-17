@@ -73,19 +73,30 @@ function usageFor(usage, id) {
     return usage && id in usage ? usage[id] : null;
 }
 
-// Normalized fields of an app, computed once per app object (a keystroke ranks every app).
-const prepared = new WeakMap();
+// Normalized fields of an app, cached by content (a keystroke ranks every app). Keyed by a string, not by the
+// app object: a WeakMap keyed by QObject wrappers (DesktopEntry) crashed the QML engine (V4 sameValueZero,
+// review 2026-10-17). The cache is bounded and rebuilt when it grows past MAX_PREPARED.
+const MAX_PREPARED = 4000;
+let prepared = new Map();
+
+function prepKey(app) {
+    // id + name: cheap and changes when a desktop entry is replaced by an updated one.
+    return (app.id || "") + "\u0000" + (app.name || "");
+}
 
 function prep(app) {
-    let p = prepared.get(app);
+    const key = prepKey(app);
+    let p = prepared.get(key);
     if (p === undefined) {
+        if (prepared.size >= MAX_PREPARED)
+            prepared = new Map();
         p = {
             name: norm(app.name),
             keywords: (app.keywords || []).map(norm),
             generic: norm(app.genericName),
             comment: norm(app.comment)
         };
-        prepared.set(app, p);
+        prepared.set(key, p);
     }
     return p;
 }
