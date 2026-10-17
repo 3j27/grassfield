@@ -35,18 +35,19 @@ Direct build (no CMake): `compositor/build-direct.sh [plugin|tests|compdb|all|ti
 plugin + tests + compdb). The exact commands it runs, from `compositor/`:
 
 ```sh
-hyprwayland-scanner protocols/appmenu.xml build/protocols     # when the XML is newer than the output
+hyprwayland-scanner protocols/appmenu.xml build/protocols     # when an output is missing, empty or older than the XML
 FLAGS="-std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm) $(pkg-config --cflags lua)"
 g++ $FLAGS -fvisibility=hidden -w -c build/protocols/appmenu.cpp -o build/protocols/appmenu.o
 g++ $FLAGS -shared \
   src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp \
   src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp \
-  build/protocols/appmenu.o $(pkg-config --libs hyprland pixman-1 libdrm) -o build/grassfield-compositor.so
+  src/core/EventThrottle.cpp build/protocols/appmenu.o $(pkg-config --libs hyprland pixman-1 libdrm) -o build/grassfield-compositor.so
 
 g++ -std=c++23 -O0 -g -Wall -Wextra -Isrc $(pkg-config --cflags gtest_main) \
   tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp \
+  tests/EventThrottleTest.cpp \
   src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp \
-  $(pkg-config --libs gtest_main) -o build/grassfield-compositor-tests
+  src/core/EventThrottle.cpp $(pkg-config --libs gtest_main) -o build/grassfield-compositor-tests
 ```
 
 `compdb` writes `build/compile_commands.json` (one entry per translation unit, same flags as above, via `jq`).
@@ -60,7 +61,8 @@ Outputs: `compositor/build/grassfield-compositor.so`, `compositor/build/grassfie
 compositor/build/grassfield-compositor-tests     # pure logic: protocol JSON, button layout, hit-testing,
                                                  # double-click, drag threshold, pointer press ownership,
                                                  # minimize validation / easing / frames / texture boxes,
-                                                 # appmenu name/path validation and registrations
+                                                 # appmenu name/path validation and registrations,
+                                                 # event coalescing and log rate limits (FR24)
 ```
 
 ## Lint (gate Q1)

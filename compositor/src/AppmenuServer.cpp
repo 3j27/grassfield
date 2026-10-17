@@ -37,8 +37,9 @@ namespace {
         WP<CWLSurfaceResource> surface;
         uint64_t               surfaceId = 0; // address of the surface, compared, never followed
         CHyprSignalListener    surfaceDestroyed;
-        bool                   live   = true;  // false: inert (runtime unload), requests ignored
-        bool                   warned = false; // one log line per object for rejected requests
+        bool                   live     = true;  // false: inert (runtime unload), requests ignored
+        bool                   warned   = false; // one log line per object for rejected requests
+        uint64_t               requests = 0;     // valid set_address requests (logged at 1, 10, 100, ...)
 
         uint64_t               id() const {
             return reinterpret_cast<uintptr_t>(this);
@@ -86,10 +87,13 @@ namespace {
         return std::format("{:x}", address);
     }
 
+    // Coalesced per window (spec FR24): a client can send set_address by the thousand, the shell gets the latest
+    // registration at most every 100 ms.
     void post(const am::Announcement& a) {
         if (!st().ready)
             return;
-        gf::ipc::postEvent(gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path, a.registration.pid));
+        gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::Appmenu, .id = a.window},
+                           gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path, a.registration.pid));
     }
 
     void post(const std::optional<am::Announcement>& a) {
@@ -142,6 +146,8 @@ namespace {
 
     void objectGone(SObject* o) {
         if (o->live) {
+            if (o->requests >= 10)
+                gf::logRequest(Log::INFO, "appmenu: object of surface {:x} gone after {} set_address requests", o->surfaceId, o->requests);
             post(st().registry.objectGone(o->id()));
             eraseFrom(st().live.objects, o); // destroys o and its wl_resource (if still alive)
         } else
@@ -157,8 +163,8 @@ namespace {
             if (!am::isValidAddress(s, p)) {
                 // Protocol-safe no-op: the request is ignored, the client is not disconnected.
                 if (!o->warned)
-                    gf::log(Log::WARN, "appmenu: ignored set_address with an invalid D-Bus name or object path (lengths {} and {}) on surface {:x}", s.size(), p.size(),
-                            o->surfaceId);
+                    gf::logRequest(Log::WARN, "appmenu: ignored set_address with an invalid D-Bus name or object path (lengths {} and {}) on surface {:x}", s.size(),
+                                   p.size(), o->surfaceId);
                 o->warned = true;
                 return;
             }
@@ -167,8 +173,14 @@ namespace {
                 return; // the surface is gone: nothing to link
             const auto window = mappedWindowOf(surface);
             const int  pid    = clientPid(o->resource->client());
-            gf::log(Log::INFO, "appmenu: set_address service {} path {} on surface {:x} (window {}, pid {})", s, p, o->surfaceId,
-                    window ? hexAddress(idOf(window.get())) : "not mapped", pid);
+            // Never one line per request (FR24): the first one, then at 10, 100, 1000, ... requests on this object.
+            ++o->requests;
+            if (o->requests == 1)
+                gf::logRequest(Log::INFO, "appmenu: set_address service {} path {} on surface {:x} (window {}, pid {})", s, p, o->surfaceId,
+                               window ? hexAddress(idOf(window.get())) : "not mapped", pid);
+            else if (gf::events::isLogMilestone(o->requests))
+                gf::logRequest(Log::INFO, "appmenu: {} set_address requests on the object of surface {:x} (pid {}), latest service {} path {}; posted to the shell at most every 100 ms",
+                               o->requests, o->surfaceId, pid, s, p);
             post(st().registry.setAddress(o->surfaceId, o->id(), am::Registration{.service = std::string{s}, .path = std::string{p}, .pid = pid}, window ? idOf(window.get()) : 0));
         });
     }
@@ -219,7 +231,7 @@ namespace {
             raw->surfaceId     = idOf(surface.get());
             if (surface)
                 raw->surfaceDestroyed = surface->m_events.destroy.listen([raw] { onSurfaceDestroyed(raw); });
-            gf::log(Log::INFO, "appmenu: client pid {} created an appmenu object for surface {:x}", clientPid(client), raw->surfaceId);
+            gf::logRequest(Log::INFO, "appmenu: client pid {} created an appmenu object for surface {:x}", clientPid(client), raw->surfaceId);
             st().live.objects.push_back(std::move(o));
         });
     }
@@ -246,7 +258,7 @@ namespace {
             raw->resource->setRelease([raw](COrgKdeKwinAppmenuManager* /*r*/) { onManagerRelease(raw); });
             raw->resource->setOnDestroy([raw](COrgKdeKwinAppmenuManager* /*r*/) { onManagerDestroyed(raw); });
             if (raw->live)
-                gf::log(Log::INFO, "appmenu: client pid {} bound org_kde_kwin_appmenu_manager version {}", clientPid(client), version);
+                gf::logRequest(Log::INFO, "appmenu: client pid {} bound org_kde_kwin_appmenu_manager version {}", clientPid(client), version);
             (raw->live ? st().live.managers : retired().managers).push_back(std::move(m));
         });
     }

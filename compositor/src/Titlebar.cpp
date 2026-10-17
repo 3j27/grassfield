@@ -111,9 +111,11 @@ namespace {
 
     // The minimize path, shared by the minimize button and a double-click set to "minimize": the shell owns
     // the Dock tile rectangle, so it is asked to minimize (it answers with hl.plugin.grassfield.minimize, or
-    // parks the window on special:minimized itself when the plugin lacks the feature).
+    // parks the window on special:minimized itself when the plugin lacks the feature). Clicks can come from a
+    // virtual pointer at any rate: the request is coalesced per window (spec FR24).
     void requestMinimize(const PHLWINDOW& w) {
-        gf::ipc::postEvent(gf::gfc::minimizeRequestJson(std::format("{:x}", reinterpret_cast<uintptr_t>(w.get()))));
+        const uint64_t address = reinterpret_cast<uintptr_t>(w.get());
+        gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::MinimizeRequest, .id = address}, gf::gfc::minimizeRequestJson(std::format("{:x}", address)));
     }
 
     // The one zoom toggle, shared by the zoom button and the double-click on the drag area.

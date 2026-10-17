@@ -118,8 +118,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   its toplevel window when that window is mapped (comparing `CWindow::resource()`, nothing the client sent is
   dereferenced). It posts `grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"…",
   "path":"…"}`: when a mapped window's registration changes (an unchanged one is not re-posted), when a window
-  is mapped with one, and for every focused window (with empty service and path when it has none). A
-  registration made before the window is mapped is posted at map.
+  is mapped with one, and for every focused window (with empty service and path when it has none), coalesced
+  per window (FR24). A registration made before the window is mapped is posted at map.
 - **FR21** When an announced registration goes away — the window is unmapped (`window.close`) or destroyed,
   the appmenu object is released or destroyed (client exit), or the surface is destroyed — the plugin posts
   the same event with `"service":"","path":""`. A window mapped again on the same surface is announced again.
@@ -133,6 +133,20 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   and the shell receives a clear event for each announced window; with no client object the global is simply
   destroyed. If pinning fails the objects are destroyed (their clients get a protocol error at their next
   request on them; logged as an error).
+- **FR24** No request can flood socket2 (R11). Hyprland disconnects a socket2 subscriber whose event queue
+  overflows (`Socket2 fd N overflowed event queue, removing`); Quickshell then gets no Hyprland event until it
+  restarts. Every plugin → shell event goes through a throttle (`core/EventThrottle.*`, glue `gf::ipc::postEvent`)
+  keyed by (kind, window): `appmenu` per window, `minimize-request` per window, `minimized`/`restored` per window
+  (one key: two values of one state), `capabilities` (one key). An event replaces a waiting event of the same key
+  (the latest wins); a key posts at once when it has not posted in the last 100 ms, otherwise its latest event is
+  posted 100 ms after the previous post by a Hyprland event loop timer (`CEventLoopTimer`; trailing edge: the
+  final state of a burst is never dropped). Hard caps: 10 posts per key per second (by construction: two posts of
+  one key are ≥ 100 ms apart); all keys together 32 at once, then 50 per second (token bucket; waiting events keep
+  their latest-submission order, so a key that keeps changing goes behind keys that changed once). Unload posts
+  every waiting event, then removes the timer. Log lines that requests trigger (appmenu bind/create/set_address,
+  rejected Lua verb arguments, `config`) share one budget of 20 lines, then 1 per second, and the next written line
+  reports how many were held back; set_address is logged at the 1st, 10th, 100th, ... request of an object, never
+  per request.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -160,6 +174,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 | FR21 | unit `AppmenuRegistry.*`; nested `appmenu.sh` | L0 / L1 | 2026-10-17 verified: File > Quit through DBusMenu → `closewindow` then the clear event (same address, empty strings); killed apps (all variants) → clear event |
 | FR22 | nested `appmenu.sh qt-registrar` (Quickshell `Hyprland.dispatch`, `tests/compositor/appmenu-reemit/`) | L1 | 2026-10-17 verified: three calls (the window, `"0xnot-hex"`, `"0x1"`) → exactly one event, for the window; log `appmenu: rejected: invalid window address`, `appmenu: no mapped window 1 (or appmenu inactive)` |
 | FR23 | nested shutdown with live appmenu clients (`scripts/dev/nested-down.sh`); code review | L1 | 2026-10-17 shutdown verified: `appmenu: global and 5 client object(s) destroyed (shutdown)`, `Hyprland has reached the end.`, no core dump; runtime unload NOT VERIFIED (no `scripts/nestctl`) |
+| FR24 | unit `TokenBucket.*`, `EventThrottle.*`, `LogLimiter.*`, `LogMilestone.*` (timer simulated, time injected); nested `tests/compositor/event_flood.sh` (`appmenu-client --spam N`: a mapped window, N valid set_address on one object in one burst, last path `/MenuBar/final`; one Lua dispatch with 1000 `hello()` + 1000 `appmenu(<window>)`; after each flood a foot window with its own app id must become the menu bar's window, `qs ipc call menubar bridgeState`) | L0 / L1 | 2026-10-17. Before the fix (plugin at 6791eea, run `.dev/event-flood/run-20261017-174942`, exit 1): 200 requests → 200 `appmenu` events; the Lua flood → 491 `capabilities` + 490 `appmenu` events (and 491 `config` pushes back from the shell), `Socket2 fd 52 overflowed event queue, removing` (the shell) and `fd 87` (the test's socat), the shell's menu bar stuck on an old window, 202 plugin log lines. After (run `.dev/event-flood/run-20261017-185707`, exit 0): 200 requests → 2 events (`/MenuBar/1`, then `/MenuBar/final`), 25000 requests (sent in 83 ms) → 3 events ending with `/MenuBar/final`; Lua flood → 2 `capabilities` + 2 `appmenu`; no overflow line, no shell event socket error, the shell showed each new foot window; 14 plugin log lines for 25200 requests + 2000 Lua calls |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -457,13 +472,14 @@ advertised features, config allowlist), button layout, hit-testing, title placem
 drag threshold and un-zoom box, theme values, pointer press ownership and gesture end (`PointerGesture.*`),
 minimize logic (`Minimize*`: address parsing, target validation, aspect fit, Bézier easing, frames,
 snapshot texture box on the same and on another monitor), appmenu logic (`Appmenu*`: bus name and object path
-validation, registrations and their announcements; `Protocol.Appmenu*`: event JSON). Shell side: `tests/unit/tst_minimized.qml`
+validation, registrations and their announcements; `Protocol.Appmenu*`: event JSON), event and log rate limits
+(`TokenBucket.*`, `EventThrottle.*`, `LogLimiter.*`, `LogMilestone.*`, FR24). Shell side: `tests/unit/tst_minimized.qml`
 (request builders, config allowlist, `movewindowv2` parsing). Lint (Q1): `compositor/build-direct.sh tidy`
 (`compositor/.clang-tidy`). Soak (C1): `tests/compositor/soak.sh [seconds]` (see `compositor/README.md`).
 Nested scenarios: `tests/compositor/minimize.sh [repeats]` (FR6, FR14–FR17), `tests/compositor/double_click_setting.sh` (FR8, FR16), `tests/compositor/zoom_restore.sh`
 (FR8), `tests/compositor/input_consistency.sh [rounds]` (FR13), `tests/compositor/appmenu.sh [variants]`
 (FR18–FR22, spike S5; fixtures `tests/fixtures/{menu-demo, fake-registrar, appmenu-client}`, built by
-`tests/fixtures/build.sh`).
+`tests/fixtures/build.sh`), `tests/compositor/event_flood.sh [requests...]` (FR24; needs grassfield-shell).
 
 Manual (L1, nested only):
 
@@ -507,6 +523,12 @@ Manual (L1, nested only):
   (758 rounds, RSS 151.7 → 158.5 MB), but that build had the held-button defect, which the soak does not
   detect. The 1 h and 8 h runs are scheduled: C1 stays NOT VERIFIED until the 8 h run passes. C2 (scripted
   degradation) not run.
+  FR24 (event throttle, 2026-10-17): `soak.sh 1200` → PASS (711 rounds, 89 animated minimize pairs, RSS
+  152.1 → 159.0 MB, no core dump, 0 grassfield exceptions) on the build before a tidy-only refactor of
+  `CEventThrottle::due`/`drain`; on the final build `soak.sh 600` → PASS (354 rounds, 44 animated minimize pairs,
+  RSS 152.3 → 160.6 MB, no core dump, 0 exceptions), `minimize.sh` 20 rounds PASS, `input_consistency.sh` PASS,
+  `appmenu.sh` PASS, `event_flood.sh` PASS, `tests/integration/global_menus.sh` 26/26 PASS (a first run failed
+  1 check: transient shell QML warnings in phase B, which runs without the plugin).
   Title textures are cached per window and rebuilt only when the title, scale or available width changes;
   drawing adds 6 rect pass elements and 1 texture per decorated window.
 - Q1: `compositor/build-direct.sh tidy` must exit 0 with no diagnostics.

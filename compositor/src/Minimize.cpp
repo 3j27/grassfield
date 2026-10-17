@@ -71,6 +71,12 @@ namespace {
         return std::format("{:x}", address);
     }
 
+    // minimized / restored: two values of one per-window state, coalesced under one key (spec FR24).
+    void postState(mz::Kind kind, uint64_t address) {
+        gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::MinimizeState, .id = address},
+                           kind == mz::Kind::Minimize ? gf::gfc::minimizedJson(hexAddress(address)) : gf::gfc::restoredJson(hexAddress(address)));
+    }
+
     mz::Box toBox(const CBox& b) {
         return mz::Box{b.x, b.y, b.w, b.h};
     }
@@ -166,7 +172,7 @@ namespace {
             showWindow(w);
         releaseSnapshot(a.snapshot);
         if (postEvent && w)
-            gf::ipc::postEvent(a.kind == mz::Kind::Minimize ? gf::gfc::minimizedJson(hexAddress(a.address)) : gf::gfc::restoredJson(hexAddress(a.address)));
+            postState(a.kind, a.address);
     }
 
     void completeAll(bool postEvents) {
@@ -376,11 +382,11 @@ namespace gf::minimizer {
     void minimize(uint64_t address, std::optional<mz::Box> target) {
         const auto w = windowByAddress(address);
         if (!w || !w->m_isMapped) {
-            gf::log(Log::WARN, "minimize: no mapped window {:x}", address);
+            gf::logRequest(Log::WARN, "minimize: no mapped window {:x}", address);
             return;
         }
         if (onMinimizedWorkspace(w)) {
-            gf::log(Log::DEBUG, "minimize: window {:x} is already minimized", address);
+            gf::logRequest(Log::DEBUG, "minimize: window {:x} is already minimized", address);
             return;
         }
 
@@ -408,7 +414,7 @@ namespace gf::minimizer {
         }
         if (!snapshot || !target) { // no snapshot without a target: no animation
             releaseSnapshot(snapshot);
-            gf::ipc::postEvent(gf::gfc::minimizedJson(hexAddress(address)));
+            postState(mz::Kind::Minimize, address);
             return;
         }
         startAnimation(SAnimation{.kind     = mz::Kind::Minimize,
@@ -427,13 +433,13 @@ namespace gf::minimizer {
     void restore(uint64_t address, std::optional<mz::Box> target) {
         const auto w = windowByAddress(address);
         if (!w || !w->m_isMapped) {
-            gf::log(Log::WARN, "restore: no mapped window {:x}", address);
+            gf::logRequest(Log::WARN, "restore: no mapped window {:x}", address);
             return;
         }
         if (auto running = takeAnimation(w))
             complete(*running, true);
         if (!onMinimizedWorkspace(w)) {
-            gf::log(Log::DEBUG, "restore: window {:x} is not minimized", address);
+            gf::logRequest(Log::DEBUG, "restore: window {:x} is not minimized", address);
             return;
         }
 
@@ -465,7 +471,7 @@ namespace gf::minimizer {
         auto       snapshot = target && mon ? takeSnapshot(w) : nullptr;
         if (!snapshot || !target) {
             releaseSnapshot(snapshot);
-            gf::ipc::postEvent(gf::gfc::restoredJson(hexAddress(address)));
+            postState(mz::Kind::Restore, address);
             return;
         }
 
