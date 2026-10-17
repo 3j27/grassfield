@@ -1,0 +1,676 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import Grassfield.Ui
+
+// A Files window: sidebar, toolbar (back/forward, title, view switcher, Action menu, search), tab bar
+// (from two tabs), the current tab's view, path bar and status bar. Keyboard shortcuts follow the
+// macOS file manager with Ctrl in place of Command.
+Window {
+    id: win
+
+    required property var app
+    // Main.qml: newWindow(url).
+    required property var manager
+    required property url startUrl
+
+    property var tabs: []
+    property int currentIndex: 0
+    readonly property var tab: win.tabs.length > 0 ? win.tabs[Math.min(win.currentIndex, win.tabs.length - 1)] : null
+    readonly property var folder: win.tab ? win.tab.activeFolder : null
+    readonly property alias menuLayer: menuLayer
+    property string notice: ""
+    property string bannerText: ""
+
+    title: win.tab ? win.tab.title : qsTr("Files")
+    width: Tokens.filesWindowWidth
+    height: Tokens.filesWindowHeight
+    minimumWidth: Tokens.filesWindowMinWidth
+    minimumHeight: Tokens.filesWindowMinHeight
+    color: Appearance.colors.materialTint
+    visible: true
+
+    onClosing: Qt.callLater(win.destroy)
+
+    Component.onCompleted: win.newTab(win.startUrl)
+
+    // Tabs -----------------------------------------------------------------------------------
+
+    Component {
+        id: tabComponent
+        BrowserTab {}
+    }
+
+    function newTab(url: url): void {
+        const t = tabComponent.createObject(tabHost, {app: win.app, win: win, startUrl: url});
+        if (!t)
+            return;
+        const list = win.tabs.slice();
+        list.push(t);
+        win.tabs = list;
+        win.currentIndex = list.length - 1;
+        Qt.callLater(() => {
+            if (win.tab)
+                win.tab.focusView();
+        });
+    }
+
+    function closeTab(index: int): void {
+        if (win.tabs.length <= 1) {
+            win.close();
+            return;
+        }
+        const list = win.tabs.slice();
+        const t = list.splice(index, 1)[0];
+        win.tabs = list;
+        win.currentIndex = Math.min(win.currentIndex >= index && win.currentIndex > 0 ? win.currentIndex - 1 : win.currentIndex, list.length - 1);
+        t.destroy();
+        Qt.callLater(() => {
+            if (win.tab)
+                win.tab.focusView();
+        });
+    }
+
+    function selectTab(index: int): void {
+        if (win.tabs.length === 0)
+            return;
+        win.currentIndex = (index + win.tabs.length) % win.tabs.length;
+        win.tab.focusView();
+    }
+
+    // Dialogs --------------------------------------------------------------------------------
+
+    Component {
+        id: infoComponent
+        InfoWindow {}
+    }
+
+    function showInfo(info: var): void {
+        if (info && info.name !== undefined)
+            infoComponent.createObject(win, {app: win.app, info: info, transientParent: win});
+    }
+
+    function confirm(title: string, message: string, confirmText: string, action: var): void {
+        confirmSheet.title = title;
+        confirmSheet.message = message;
+        confirmSheet.confirmText = confirmText;
+        confirmSheet.confirmHandler = () => {
+            action();
+            return "";
+        };
+        confirmSheet.focusBack = win.tab ? win.tab.view : null;
+        confirmSheet.open();
+    }
+
+    function goToFolder(): void {
+        goSheet.focusBack = win.tab ? win.tab.view : null;
+        goSheet.setField("");
+        goSheet.open();
+    }
+
+    function showNotice(text: string): void {
+        win.notice = text;
+        noticeTimer.restart();
+    }
+
+    function showBanner(text: string): void {
+        win.bannerText = text;
+        bannerTimer.restart();
+    }
+
+    Timer {
+        id: noticeTimer
+        interval: Tokens.filesNoticeTimeout
+        onTriggered: win.notice = ""
+    }
+
+    Timer {
+        id: bannerTimer
+        interval: Tokens.filesBannerTimeout
+        onTriggered: win.bannerText = ""
+    }
+
+    Connections {
+        target: win.app
+        function onOperationFailed(message: string): void {
+            if (win.active)
+                win.showBanner(message);
+        }
+        function onQuickLookRequested(urls: var): void {
+            if (win.active)
+                win.showNotice(qsTr("Quick Look is coming with Preview"));
+        }
+    }
+
+    // Shortcuts ------------------------------------------------------------------------------
+
+    Shortcut {
+        sequence: "Ctrl+T"
+        onActivated: win.newTab(win.tab ? win.tab.url : win.startUrl)
+    }
+    Shortcut {
+        sequence: "Ctrl+W"
+        onActivated: win.closeTab(win.currentIndex)
+    }
+    Shortcut {
+        sequence: "Ctrl+N"
+        onActivated: win.manager.newWindow(win.tab ? win.tab.url : win.startUrl)
+    }
+    Shortcut {
+        sequences: ["Ctrl+Tab", "Ctrl+Shift+]"]
+        onActivated: win.selectTab(win.currentIndex + 1)
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+Tab", "Ctrl+Shift+["]
+        onActivated: win.selectTab(win.currentIndex - 1)
+    }
+    Shortcut {
+        sequences: ["Ctrl+[", "Alt+Left"]
+        onActivated: win.tab.back()
+    }
+    Shortcut {
+        sequences: ["Ctrl+]", "Alt+Right"]
+        onActivated: win.tab.forward()
+    }
+    Shortcut {
+        sequences: ["Ctrl+Up", "Alt+Up"]
+        onActivated: win.tab.up()
+    }
+    Shortcut {
+        sequences: ["Ctrl+Down", "Alt+Down"]
+        onActivated: win.tab.openSelection()
+    }
+    Shortcut {
+        sequence: "Ctrl+Backspace"
+        onActivated: win.tab.trashSelection()
+    }
+    Shortcut {
+        sequence: "Delete"
+        onActivated: {
+            if (!win.folder.isTrash)
+                win.tab.trashSelection();
+        }
+    }
+    Shortcut {
+        sequence: "F2"
+        onActivated: win.tab.renameSelection()
+    }
+    Shortcut {
+        sequence: "Ctrl+C"
+        onActivated: win.tab.copySelection(false)
+    }
+    Shortcut {
+        sequence: "Ctrl+X"
+        onActivated: win.tab.copySelection(true)
+    }
+    Shortcut {
+        sequence: "Ctrl+V"
+        onActivated: win.tab.paste()
+    }
+    Shortcut {
+        sequence: "Ctrl+A"
+        onActivated: win.folder.selectAll()
+    }
+    Shortcut {
+        sequence: "Ctrl+D"
+        onActivated: win.tab.duplicateSelection()
+    }
+    Shortcut {
+        sequence: "Ctrl+I"
+        onActivated: win.tab.getInfo()
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+N"
+        onActivated: win.tab.newFolder()
+    }
+    Shortcut {
+        sequence: "Ctrl+Z"
+        enabled: win.app.canUndo
+        onActivated: win.app.undo()
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]
+        enabled: win.app.canRedo
+        onActivated: win.app.redo()
+    }
+    Shortcut {
+        sequence: "Ctrl+F"
+        onActivated: search.forceActiveFocus()
+    }
+    Shortcut {
+        sequence: "Ctrl+H"
+        onActivated: win.app.showHidden = !win.app.showHidden
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+G", "Ctrl+L"]
+        onActivated: win.goToFolder()
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+H"
+        onActivated: win.tab.navigate(Qt.url("file://" + win.app.homePath), true)
+    }
+    Shortcut {
+        sequences: ["Ctrl+R", "F5"]
+        onActivated: win.tab.folder.reload()
+    }
+    Shortcut {
+        sequence: "Ctrl+1"
+        onActivated: win.tab.setViewMode("icons")
+    }
+    Shortcut {
+        sequence: "Ctrl+2"
+        onActivated: win.tab.setViewMode("list")
+    }
+    Shortcut {
+        sequence: "Ctrl+3"
+        onActivated: win.tab.setViewMode("columns")
+    }
+
+    // Layout ---------------------------------------------------------------------------------
+
+    Sidebar {
+        id: sidebar
+        width: Tokens.filesSidebarWidth
+        height: parent.height
+        app: win.app
+        tab: win.tab
+    }
+
+    Item {
+        id: main
+        x: sidebar.width
+        width: parent.width - sidebar.width
+        height: parent.height
+
+        // Toolbar
+        Item {
+            id: toolbar
+            width: parent.width
+            height: Tokens.filesToolbarHeight
+            Accessible.role: Accessible.ToolBar
+            Accessible.name: qsTr("Toolbar")
+
+            Row {
+                id: navButtons
+                x: Tokens.spacingSm
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Tokens.spacingXs / 2
+
+                ToolButton {
+                    iconName: "chevron-right"
+                    iconRotation: 180
+                    enabled: win.tab !== null && win.tab.canBack
+                    accessibleName: qsTr("Back")
+                    onClicked: win.tab.back()
+                }
+
+                ToolButton {
+                    iconName: "chevron-right"
+                    enabled: win.tab !== null && win.tab.canForward
+                    accessibleName: qsTr("Forward")
+                    onClicked: win.tab.forward()
+                }
+            }
+
+            Text {
+                textFormat: Text.PlainText
+                anchors.left: navButtons.right
+                anchors.leftMargin: Tokens.spacingMd
+                anchors.right: tools.left
+                anchors.rightMargin: Tokens.spacingMd
+                anchors.verticalCenter: parent.verticalCenter
+                text: win.title
+                elide: Text.ElideRight
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyTitleSize
+                font.weight: Tokens.typographyMenuBoldWeight
+                Accessible.role: Accessible.Heading
+                Accessible.name: text
+            }
+
+            Row {
+                id: tools
+                anchors.right: parent.right
+                anchors.rightMargin: Tokens.spacingMd
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Tokens.spacingSm
+
+                // View switcher (segmented)
+                Rectangle {
+                    width: viewRow.width + Tokens.spacingXs
+                    height: Tokens.filesToolbarButtonSize + Tokens.spacingXs
+                    radius: Tokens.radiusControl + Tokens.spacingXs / 2
+                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.filesStripeOpacity * 2)
+                    anchors.verticalCenter: parent.verticalCenter
+                    Accessible.role: Accessible.Grouping
+                    Accessible.name: qsTr("View")
+
+                    Row {
+                        id: viewRow
+                        anchors.centerIn: parent
+
+                        Repeater {
+                            model: [
+                                {mode: "icons", name: qsTr("as Icons")},
+                                {mode: "list", name: qsTr("as List")},
+                                {mode: "columns", name: qsTr("as Columns")}
+                            ]
+                            delegate: ToolButton {
+                                required property var modelData
+                                glyph: modelData.mode
+                                checkable: true
+                                checked: win.tab !== null && win.tab.viewMode === modelData.mode
+                                accessibleName: modelData.name
+                                onClicked: win.tab.setViewMode(modelData.mode)
+                            }
+                        }
+                    }
+                }
+
+                ToolButton {
+                    id: actionButton
+                    glyph: "more"
+                    accessibleName: qsTr("Action")
+                    anchors.verticalCenter: parent.verticalCenter
+                    onClicked: {
+                        const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
+                        win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+                    }
+                }
+
+                // Search field (filters the current folder)
+                Rectangle {
+                    width: Tokens.filesSearchWidth
+                    height: Tokens.filesToolbarButtonSize
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: Tokens.radiusControl
+                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                    border.width: search.activeFocus ? Tokens.controlFocusRing : 0
+                    border.color: Appearance.colors.accent
+
+                    Icon {
+                        id: searchIcon
+                        name: "search"
+                        size: Tokens.menuIconSize
+                        color: Appearance.colors.textSecondary
+                        x: Tokens.spacingSm
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    TextInput {
+                        id: search
+                        anchors.left: searchIcon.right
+                        anchors.leftMargin: Tokens.spacingXs
+                        anchors.right: parent.right
+                        anchors.rightMargin: Tokens.spacingSm
+                        anchors.verticalCenter: parent.verticalCenter
+                        clip: true
+                        activeFocusOnTab: true
+                        color: Appearance.colors.text
+                        selectionColor: Appearance.colors.accent
+                        selectedTextColor: Appearance.colors.accentText
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyBodySize
+                        text: win.tab ? win.tab.searchText : ""
+                        onTextEdited: win.tab.setSearch(text)
+                        Accessible.role: Accessible.EditableText
+                        Accessible.name: qsTr("Search in this folder")
+                        Accessible.searchEdit: true
+
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Escape) {
+                                win.tab.setSearch("");
+                                win.tab.focusView();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                if (win.folder.count > 0 && win.folder.selectedCount === 0)
+                                    win.folder.select(0, 0);
+                                win.tab.focusView();
+                                event.accepted = true;
+                            }
+                        }
+
+                        Text {
+                            textFormat: Text.PlainText
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: search.text === ""
+                            text: qsTr("Search")
+                            color: Appearance.colors.textSecondary
+                            font: search.font
+                        }
+                    }
+                }
+            }
+        }
+
+        // Tab bar (from two tabs on)
+        Row {
+            id: tabBar
+            anchors.top: toolbar.bottom
+            width: parent.width
+            height: win.tabs.length > 1 ? Tokens.filesTabHeight : 0
+            visible: win.tabs.length > 1
+            Accessible.role: Accessible.PageTabList
+            Accessible.name: qsTr("Tabs")
+
+            Repeater {
+                model: win.tabs
+
+                delegate: Item {
+                    id: tabItem
+                    required property var modelData
+                    required property int index
+                    readonly property bool current: tabItem.index === win.currentIndex
+
+                    width: (tabBar.width - newTabButton.width) / Math.max(1, win.tabs.length)
+                    height: tabBar.height
+                    Accessible.role: Accessible.PageTab
+                    Accessible.name: tabItem.modelData.title
+                    Accessible.selected: tabItem.current
+                    Accessible.onPressAction: win.selectTab(tabItem.index)
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: tabItem.current ? "transparent" : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                        border.width: Tokens.appsBorderWidth
+                        border.color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                    }
+
+                    Text {
+                        textFormat: Text.PlainText
+                        anchors.centerIn: parent
+                        width: parent.width - 2 * Tokens.filesTabHeight
+                        horizontalAlignment: Text.AlignHCenter
+                        text: tabItem.modelData.title
+                        elide: Text.ElideMiddle
+                        color: tabItem.current ? Appearance.colors.text : Appearance.colors.textSecondary
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyCaptionSize
+                        font.weight: tabItem.current ? Tokens.typographyMenuWeight : Tokens.typographySmallWeight
+                    }
+
+                    MouseArea {
+                        id: tabMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        onClicked: mouse => {
+                            if (mouse.button === Qt.MiddleButton)
+                                win.closeTab(tabItem.index);
+                            else
+                                win.selectTab(tabItem.index);
+                        }
+                    }
+
+                    HoverHandler {
+                        id: tabHover
+                    }
+
+                    ToolButton {
+                        visible: tabHover.hovered
+                        anchors.left: parent.left
+                        anchors.leftMargin: Tokens.spacingXs
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Tokens.filesTabHeight - Tokens.spacingSm
+                        height: width
+                        iconName: "close-glyph"
+                        accessibleName: qsTr("Close Tab")
+                        onClicked: win.closeTab(tabItem.index)
+                    }
+                }
+            }
+
+            ToolButton {
+                id: newTabButton
+                width: Tokens.filesTabHeight
+                height: Tokens.filesTabHeight
+                glyph: "plus"
+                accessibleName: qsTr("New Tab")
+                onClicked: win.newTab(win.tab.url)
+            }
+        }
+
+        Rectangle {
+            id: toolbarRule
+            anchors.top: tabBar.bottom
+            width: parent.width
+            height: Tokens.appsBorderWidth
+            color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+        }
+
+        // Error banner
+        Rectangle {
+            id: banner
+            anchors.top: toolbarRule.bottom
+            anchors.topMargin: visible ? Tokens.spacingSm : 0
+            x: Tokens.spacingMd
+            width: parent.width - 2 * Tokens.spacingMd
+            readonly property string text: win.bannerText !== "" ? win.bannerText : win.folder && win.folder.error !== "" && win.folder.count > 0 ? win.folder.error : ""
+            visible: banner.text !== ""
+            height: visible ? bannerLabel.implicitHeight + 2 * Tokens.spacingSm : 0
+            radius: Tokens.radiusMenu
+            color: Appearance.withAlpha(Appearance.colors.danger, Tokens.materialFillOpacity)
+            border.width: Tokens.appsBorderWidth
+            border.color: Appearance.colors.danger
+            Accessible.role: Accessible.AlertMessage
+            Accessible.name: banner.text
+
+            Text {
+                id: bannerLabel
+                textFormat: Text.PlainText
+                anchors.left: parent.left
+                anchors.right: bannerClose.left
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: Tokens.spacingSm
+                text: banner.text
+                wrapMode: Text.Wrap
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyBodySize
+            }
+
+            ToolButton {
+                id: bannerClose
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "close-glyph"
+                accessibleName: qsTr("Dismiss")
+                onClicked: win.bannerText = ""
+            }
+        }
+
+        Item {
+            id: tabHost
+            anchors.top: banner.bottom
+            anchors.bottom: pathBar.top
+            width: parent.width
+
+            // Only the current tab is shown; the others keep their state.
+            property var currentTab: win.tab
+            onChildrenChanged: tabHost.layoutTabs()
+            onCurrentTabChanged: tabHost.layoutTabs()
+            function layoutTabs(): void {
+                for (let i = 0; i < tabHost.children.length; i++) {
+                    const t = tabHost.children[i];
+                    t.anchors.fill = tabHost;
+                    t.visible = t === tabHost.currentTab;
+                    t.focus = t === tabHost.currentTab;
+                }
+            }
+        }
+
+        PathBar {
+            id: pathBar
+            anchors.bottom: statusBar.top
+            width: parent.width
+            height: Tokens.filesPathBarHeight
+            tab: win.tab
+        }
+
+        // Status bar
+        Item {
+            id: statusBar
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: Tokens.filesStatusBarHeight
+            Accessible.role: Accessible.StatusBar
+            Accessible.name: statusText.text
+
+            Rectangle {
+                width: parent.width
+                height: Tokens.appsBorderWidth
+                color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+            }
+
+            Text {
+                id: statusText
+                textFormat: Text.PlainText
+                anchors.centerIn: parent
+                width: parent.width - 2 * Tokens.spacingMd
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+                text: {
+                    if (win.notice !== "")
+                        return win.notice;
+                    if (win.app.activity !== "")
+                        return win.app.activityPercent >= 0 ? qsTr("%1 %2%").arg(win.app.activity).arg(win.app.activityPercent) : win.app.activity;
+                    const f = win.folder;
+                    if (!f)
+                        return "";
+                    if (f.loading && f.count === 0)
+                        return qsTr("Loading…");
+                    const total = f.count === 1 ? qsTr("1 item") : qsTr("%1 items").arg(f.count);
+                    const items = f.selectedCount > 0 ? qsTr("%1 of %2 selected").arg(f.selectedCount).arg(total) : total;
+                    return f.freeSpace >= 0 ? qsTr("%1, %2 available").arg(items).arg(win.app.formatSize(f.freeSpace)) : items;
+                }
+            }
+        }
+    }
+
+    Sheet {
+        id: goSheet
+        title: qsTr("Go to the folder:")
+        withField: true
+        placeholder: qsTr("~/Documents, /usr/share or trash:/")
+        confirmText: qsTr("Go")
+        confirmHandler: text => {
+            const url = win.app.resolveLocation(text, win.tab.url);
+            if (String(url) === "")
+                return qsTr("The folder “%1” can’t be found.").arg(text);
+            win.tab.navigate(url, true);
+            return "";
+        }
+    }
+
+    Sheet {
+        id: confirmSheet
+        destructive: true
+    }
+
+    MenuLayer {
+        id: menuLayer
+    }
+}
