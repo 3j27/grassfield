@@ -7,7 +7,9 @@
 # (`foot -e true`), opens a new churn window (the oldest of 4 is killed first), and drives the titlebar
 # of the new window with the virtual pointer (scripts/dev/pointer.sh): drags (some abandoned mid-drag,
 # so the pointer device disappears while a button is held), double-click zoom, zoom button, close
-# button, press-move-away cancel.
+# button, press-move-away cancel, and (when the plugin advertises "minimize" and grassfield-shell runs)
+# minimize button + restore through a click on the Dock tile (geometry as in tests/compositor/minimize.sh).
+# The double-click rounds expect Settings windows.titlebarDoubleClick = zoom (the default).
 # New windows open centered on the output, so their titlebar is at a known place:
 #   SOAK_OUTPUT (GF-REF), SOAK_WIN_W (700, foot's default width), SOAK_BAR_Y (250, titlebar middle).
 # At the end: PASS (exit 0) when the nested Hyprland is still alive, `coredumpctl list Hyprland`
@@ -59,13 +61,38 @@ read -r out_w out_h < <(timeout 20 "$root/scripts/dev/pointer.sh" outputs 2>/dev
 left=$(((out_w - win_w) / 2))
 mid_x=$((out_w / 2))
 close_x=$((left + 18))
+min_x=$((left + 38))
 zoom_x=$((left + 58))
+
+# Minimize rounds: plugin feature (read-only `hyprctl grassfield`) and a running shell (Dock, minimize-request).
+minimize_rounds=0
+shell_pid=$(cat "$dev/shell.pid" 2>/dev/null || true)
+if HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null | jq -e '.features | index("minimize")' >/dev/null 2>&1 \
+  && [[ -n $shell_pid ]] && kill -0 "$shell_pid" 2>/dev/null; then
+  minimize_rounds=1
+  token() { sed -n "s/.*readonly property int $1: \([0-9]*\).*/\1/p" "$root/ui/Grassfield/Ui/Tokens.qml" | head -n 1; }
+  icon=$(token dockIconSize)
+  dspacing=$(token dockSpacing)
+  dpadding=$(token dockPadding)
+  sep_w=$((2 * dspacing + $(token dockSeparatorWidth)))
+  tile_y=$((out_h - $(token dockBottomMargin) - (icon + 2 * dpadding + $(token dockIndicatorSize) + dspacing) + dpadding + icon / 2))
+  config=$dev/config/grassfield.json
+  [[ -f $config ]] || config=$root/config/defaults/grassfield.json
+  apps=0
+  while read -r id; do
+    for d in "${XDG_DATA_HOME:-$HOME/.local/share}" /usr/local/share /usr/share; do
+      if [[ -f $d/applications/$id.desktop ]]; then apps=$((apps + 1)); break; fi
+    done
+  done < <(jq -r '.dock.pinned[]' "$config")
+  n=$((apps + 2)) # apps, one minimized tile, the Trash
+  restore_x=$(((out_w - (n * icon + sep_w + n * dspacing)) / 2 + apps * (icon + dspacing) + sep_w + dspacing + icon / 2))
+fi
 rand_x() { echo $((100 + RANDOM % (out_w - 200))); }
 rand_y() { echo $((80 + RANDOM % (out_h - 280))); }
 
 pool=()      # churn windows, oldest first
 resident=() # long-lived windows (whole run)
-spawned=0 short=0 drags=0 abandoned=0 zooms=0 closes=0 cancels=0 round=0
+spawned=0 short=0 drags=0 abandoned=0 zooms=0 closes=0 cancels=0 minimizes=0 round=0
 cleanup() {
   for p in "${pool[@]}" "${resident[@]}"; do kill "$p" 2>/dev/null; done
 }
@@ -109,7 +136,7 @@ while (( $(date +%s) < end_epoch )); do
   spawned=$((spawned + 1))
   sleep 0.7 # let it map
 
-  case $((round % 7)) in
+  case $((round % (7 + minimize_rounds))) in
     0 | 1) # drag the newest window somewhere and release
       pointer abs $((mid_x + RANDOM % 80 - 40)) "$bar_y" sleep 50 down drag "$(rand_x)" "$(rand_y)" sleep 30 up
       drags=$((drags + 1)) ;;
@@ -131,16 +158,20 @@ while (( $(date +%s) < end_epoch )); do
     6) # close the newest window with its close button
       pointer abs "$close_x" "$bar_y" sleep 50 click
       closes=$((closes + 1)) ;;
+    7) # minimize the newest window with its button, restore it from its Dock tile (while it may still animate)
+      pointer abs "$min_x" "$bar_y" sleep 50 click sleep $((150 + RANDOM % 400))
+      pointer abs "$restore_x" "$tile_y" sleep 50 click sleep 300
+      minimizes=$((minimizes + 1)) ;;
   esac
 
   if (( round % 100 == 0 )); then
-    say "soak: round $round, $(( $(date +%s) - start_epoch ))s, short $short, churn $spawned, resident ${#resident[@]}, drags $drags, abandoned $abandoned, zoom pairs $zooms, cancels $cancels, closes $closes, RSS $(rss_kb) kB"
+    say "soak: round $round, $(( $(date +%s) - start_epoch ))s, short $short, churn $spawned, resident ${#resident[@]}, drags $drags, abandoned $abandoned, zoom pairs $zooms, cancels $cancels, closes $closes, minimize pairs $minimizes, RSS $(rss_kb) kB"
   fi
   sleep 0.3
 done
 
 elapsed=$(( $(date +%s) - start_epoch ))
-say "soak: done after ${elapsed}s, $round rounds: short $short, churn $spawned, drags $drags, abandoned $abandoned, zoom pairs $zooms, cancels $cancels, closes $closes"
+say "soak: done after ${elapsed}s, $round rounds: short $short, churn $spawned, drags $drags, abandoned $abandoned, zoom pairs $zooms, cancels $cancels, closes $closes, minimize pairs $minimizes"
 
 fail=0
 if kill -0 "$hypr_pid" 2>/dev/null; then
