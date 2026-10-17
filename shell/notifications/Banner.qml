@@ -1,27 +1,41 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
-import "History.js" as History
 
-// One banner (N2-N5): material card, hover pauses the timeout and shows the close button, a
-// drag to the right beyond 30 % of the width dismisses, a click runs the default action.
+// One banner (N2-N5): material card, hover pauses the timeout (the timer lives in Notifications)
+// and shows the close button, a drag to the right beyond 30 % of the width dismisses, a click
+// runs the default action. Fields come from the banner model row.
 Item {
     id: root
 
     required property string key
-    readonly property var entry: Notifications.entryFor(key)
-    readonly property var notif: Notifications.liveByKey[key]
+    property int nid: -1
+    property string appName: ""
+    property string appIcon: ""
+    property string image: ""
+    property string summary: ""
+    property string bodyHtml: ""
+    property real time: 0
+    property int urgency: 1
+    property string actionsJson: "[]"
+
     readonly property Item cardItem: card
     readonly property bool hovered: hover.hovered
-    readonly property int timeout: entry && notif ? History.bannerTimeout(entry.urgency, notif.expireTimeout, Tokens.notificationBannerTimeout) : Tokens.notificationBannerTimeout
+    // Hover or drag pauses this notification's expiry timer.
+    readonly property bool held: hovered || drag.active
     // Entrance offset (slides in from the right edge).
     property real slide: Tokens.notificationBannerWidth
 
     width: Tokens.notificationBannerWidth
-    height: entry ? card.height : 0
-    visible: entry !== null
+    height: card.height
+
+    Accessible.role: Accessible.AlertMessage
+    Accessible.name: summary !== "" ? summary : appName
+    Accessible.description: appName
 
     Component.onCompleted: slide = 0
+
+    onHeldChanged: Notifications.holdBanner(key, held)
 
     Behavior on slide {
         NumberAnimation {
@@ -29,19 +43,6 @@ Item {
             easing.type: Easing.BezierSpline
             easing.bezierCurve: Appearance.curve
         }
-    }
-
-    Timer {
-        id: expiry
-        interval: root.timeout
-        running: root.timeout > 0 && !root.hovered && !drag.active && root.entry !== null
-        onTriggered: Notifications.expireBanner(root.key)
-    }
-
-    // A replacement of the same notification (new entry object) restarts the timeout.
-    onEntryChanged: {
-        if (entry)
-            expiry.restart();
     }
 
     HoverHandler {
@@ -68,10 +69,14 @@ Item {
             x: Tokens.spacingMd
             y: Tokens.spacingMd
             width: parent.width - 2 * Tokens.spacingMd
-            entry: root.entry ? root.entry : ({nid: -1, actions: [], summary: "", appName: ""})
-            body: root.entry ? Notifications.bodyFor(root.entry) : ""
-            timeText: root.entry ? Notifications.timeFor(root.entry) : ""
-            iconSource: root.entry ? Notifications.iconSource(root.entry) : ""
+            summary: root.summary
+            appName: root.appName
+            urgency: root.urgency
+            actionsJson: root.actionsJson
+            live: root.nid >= 0
+            body: Notifications.bodyFor(root.bodyHtml)
+            timeText: Notifications.timeFor(root.time)
+            iconSource: Notifications.iconSource(root.image, root.appIcon)
             onActionTriggered: actionId => Notifications.invokeAction(root.key, actionId)
         }
 
@@ -127,14 +132,14 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 radius: width / 2
-                color: Appearance.withAlpha(Appearance.colors.materialTint, 0.95)
+                color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
                 border.width: 1
-                border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * 2)
+                border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
             }
 
             Icon {
                 anchors.centerIn: parent
-                size: parent.width - 8
+                size: parent.width - Tokens.notificationCloseGlyphInset
                 name: "close-glyph"
             }
 

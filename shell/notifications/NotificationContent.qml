@@ -8,15 +8,18 @@ import Grassfield.Ui
 Item {
     id: root
 
-    // History entry (see History.js); live: the sender still holds the notification.
-    required property var entry
+    // Model row fields (see Notifications.rowOf). live: the sender still holds the notification.
+    property string summary: ""
+    property string appName: ""
+    property int urgency: 1
+    property string actionsJson: "[]"
+    property bool live: false
     property int maxBodyLines: Tokens.notificationBannerBodyLines
     property string body: ""
     property string timeText: ""
     property string iconSource: ""
-    readonly property bool live: entry.nid >= 0
-    // "default" is the click action, never a button.
-    readonly property var buttons: (entry.actions || []).filter(a => a.id !== "default" && a.id !== "")
+    // "default" is the click action, never a button. Dead and restored entries have none.
+    readonly property var buttons: live ? JSON.parse(actionsJson).filter(a => a.id !== "default" && a.id !== "") : []
     property bool moreOpen: false
 
     signal actionTriggered(string actionId)
@@ -39,7 +42,7 @@ Item {
 
         Icon {
             anchors.centerIn: parent
-            size: Tokens.menuIconSize + 4
+            size: Tokens.menuIconSize + Tokens.notificationIconGlyphExtra
             name: "bell"
             visible: appImage.status !== Image.Ready
         }
@@ -81,9 +84,9 @@ Item {
             Text {
                 id: title
                 width: parent.width - stamp.implicitWidth - Tokens.spacingSm
-                text: root.entry.summary !== "" ? root.entry.summary : root.entry.appName
+                text: root.summary !== "" ? root.summary : root.appName
                 textFormat: Text.PlainText
-                color: root.entry.urgency === 2 ? Appearance.colors.danger : Appearance.colors.text
+                color: root.urgency === 2 ? Appearance.colors.danger : Appearance.colors.text
                 elide: Text.ElideRight
                 maximumLineCount: 1
                 font.family: Appearance.fontFamily
@@ -107,10 +110,22 @@ Item {
             font.weight: Tokens.typographyMenuWeight
         }
 
-        Flow {
+        // No delegate exists unless the notification is live and has buttons: a sender's labels
+        // never instantiate for dead, expired or restored entries.
+        Loader {
             width: parent.width
+            active: root.buttons.length > 0
+            visible: active
+            sourceComponent: actionRow
+        }
+    }
+
+    Component {
+        id: actionRow
+
+        Flow {
+            width: root.width - iconTile.width - Tokens.spacingSm
             spacing: Tokens.spacingSm
-            visible: root.live && root.buttons.length > 0
             topPadding: Tokens.spacingXs
 
             Repeater {

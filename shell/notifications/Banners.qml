@@ -3,90 +3,126 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.osd
+import qs.platform
 
-// Banner stack, top-right under the menu bar, on the first screen only. The window exists
-// per screen but is mapped only while a banner is shown; input and blur follow the banners.
-Variants {
-    id: root
+// Banner stack, top-right under the menu bar, on ONE screen: the focused one (first screen
+// when unknown). A single window and a single Repeater, so there is exactly one set of
+// banner delegates (hover state and expiry belong to the one visible banner). The window is
+// mapped only while a banner exists; delegates exist only for the banners that are shown
+// (the rest of the queue is just model rows). While the OSD pill is visible the stack sits
+// below it, so the two never overlap.
+// qmllint disable uncreatable-type
+PanelWindow {
+    // qmllint enable uncreatable-type
+    id: win
 
-    model: Quickshell.screens
-
-    // Quickshell qmltypes mark PanelWindow uncreatable (metadata quirk); suppress just this warning.
-    // qmllint disable uncreatable-type
-    PanelWindow {
-        // qmllint enable uncreatable-type
-        id: win
-
-        required property ShellScreen modelData
-
-        readonly property bool primary: Quickshell.screens.length > 0 && modelData.name === Quickshell.screens[0].name
-        readonly property int pad: Tokens.spacingLg
-
-        function itemFor(key: string): var {
-            for (let i = 0; i < stack.count; i++) {
-                const item = stack.itemAt(i) as Banner;
-                if (item && item.key === key)
-                    return item;
-            }
-            return null;
+    readonly property string targetName: Compositor.focusedScreenName
+    readonly property var targetScreen: {
+        for (const s of Quickshell.screens) {
+            if (s.name === targetName)
+                return s;
         }
+        return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null;
+    }
+    readonly property int pad: Tokens.spacingLg
+    // Space taken by the OSD pill (plus its gap) while it is on this screen.
+    readonly property real osdOffset: Osd.shown && targetScreen !== null && Quickshell.screens.length > 0 && targetScreen.name === Quickshell.screens[0].name ?Tokens.osdHeight + Tokens.osdGap : 0
 
-        screen: modelData
-        visible: primary && Notifications.banners.length > 0
-        anchors {
-            top: true
-            right: true
-        }
-        // No layer-shell margins: the offset under the menu bar lives inside the transparent window.
-        implicitWidth: Tokens.notificationBannerWidth + 2 * win.pad
-        implicitHeight: column.y + column.height + win.pad
-        exclusionMode: ExclusionMode.Ignore
-        color: "transparent"
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        WlrLayershell.namespace: "grassfield-banners"
-        // qmllint disable missing-type
-        mask: Region {
-            item: column
-        }
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.visible ? blur : null
-        // qmllint enable missing-type
+    function itemFor(index: int): var {
+        const loader = stack.itemAt(index) as Loader;
+        return loader ? (loader.item as Banner) : null;
+    }
+
+    screen: targetScreen
+    visible: targetScreen !== null && Notifications.bannerCount > 0
+    anchors {
+        top: true
+        right: true
+    }
+    // No layer-shell margins: the offset under the menu bar lives inside the transparent window.
+    implicitWidth: Tokens.notificationBannerWidth + 2 * win.pad
+    implicitHeight: column.y + column.height + win.pad
+    exclusionMode: ExclusionMode.Ignore
+    color: "transparent"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    WlrLayershell.namespace: "grassfield-banners"
+    // qmllint disable missing-type
+    mask: Region {
+        item: column
+    }
+    BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.visible ? blur : null
+    // qmllint enable missing-type
+
+    Region {
+        id: blur
+        regions: blurRegions.instances
+    }
+
+    Variants {
+        id: blurRegions
+        model: Array.from({length: Math.min(Notifications.bannerCount, Tokens.notificationBannerMaxVisible)}, (_, i) => i)
 
         Region {
-            id: blur
-            regions: blurRegions.instances
+            id: region
+            required property int modelData
+            item: {
+                stack.count;
+                const banner = win.itemFor(region.modelData);
+                return banner ? banner.cardItem : null;
+            }
+            radius: Tokens.radiusBanner
         }
+    }
 
-        Variants {
-            id: blurRegions
-            model: Notifications.banners.slice(0, Tokens.notificationBannerMaxVisible)
+    Column {
+        id: column
+        x: win.pad
+        y: Tokens.menubarHeight + Tokens.notificationBannerGap + win.osdOffset
+        width: Tokens.notificationBannerWidth
+        spacing: Tokens.notificationBannerGap
 
-            Region {
-                id: region
-                required property var modelData
-                item: {
-                    stack.count;
-                    const banner = win.itemFor(region.modelData.key);
-                    return banner ? banner.cardItem : null;
-                }
-                radius: Tokens.radiusBanner
+        Behavior on y {
+            NumberAnimation {
+                duration: Appearance.duration(Tokens.motionNormal)
             }
         }
 
-        Column {
-            id: column
-            x: win.pad
-            y: Tokens.menubarHeight + Tokens.notificationBannerGap
-            width: Tokens.notificationBannerWidth
-            spacing: Tokens.notificationBannerGap
+        Repeater {
+            id: stack
+            model: Notifications.bannerModel
 
-            Repeater {
-                id: stack
-                model: Notifications.banners.slice(0, Tokens.notificationBannerMaxVisible)
+            delegate: Loader {
+                id: slot
 
-                delegate: Banner {
-                    required property var modelData
-                    key: modelData.key
+                required property int index
+                required property string key
+                required property int nid
+                required property string appName
+                required property string appIcon
+                required property string image
+                required property string summary
+                required property string bodyHtml
+                required property real time
+                required property int urgency
+                required property string actionsJson
+
+                // Queued banners (beyond the visible count) have no delegate at all.
+                active: index < Tokens.notificationBannerMaxVisible
+                visible: active
+
+                sourceComponent: Banner {
+                    key: slot.key
+                    nid: slot.nid
+                    appName: slot.appName
+                    appIcon: slot.appIcon
+                    image: slot.image
+                    summary: slot.summary
+                    bodyHtml: slot.bodyHtml
+                    time: slot.time
+                    urgency: slot.urgency
+                    actionsJson: slot.actionsJson
                 }
             }
         }

@@ -67,7 +67,7 @@ TestCase {
         const list = [entry("1", "mail", now - 3000), entry("2", "chat", now - 1000), entry("3", "mail", now - 2000, {appIcon: "mail-icon"}),
             entry("4", "", now - 4000)];
         const groups = History.group(list);
-        compare(groups.map(g => g.appName).join(","), "chat,mail,Notification");
+        compare(groups.map(g => g.appName).join(","), "chat,mail,");
         compare(groups[1].items.map(e => e.key).join(","), "3,1");
         compare(groups[1].appIcon, "mail-icon");
         compare(groups[1].latest, now - 2000);
@@ -79,18 +79,19 @@ TestCase {
         compare(History.removeApp(list, "mail").map(e => e.key).join(","), "2");
     }
 
-    function test_relativeTime() {
-        compare(History.relativeTime(now - 5000, now), "now");
-        compare(History.relativeTime(now - 120000, now), "2m ago");
-        compare(History.relativeTime(now - 3 * 3600 * 1000, now), "3h ago");
-        compare(History.relativeTime(now - 2 * day, now), "2d ago");
-        compare(History.relativeTime(now + 5000, now), "now");
+    function test_relativeParts() {
+        compare(History.relativeParts(now - 5000, now).unit, "now");
+        compare(JSON.stringify(History.relativeParts(now - 120000, now)), "{\"unit\":\"m\",\"n\":2}");
+        compare(JSON.stringify(History.relativeParts(now - 3 * 3600 * 1000, now)), "{\"unit\":\"h\",\"n\":3}");
+        compare(JSON.stringify(History.relativeParts(now - 2 * day, now)), "{\"unit\":\"d\",\"n\":2}");
+        compare(History.relativeParts(now + 5000, now).unit, "now");
     }
 
+    // Quickshell's Notification.expireTimeout is in milliseconds.
     function test_bannerTimeout() {
-        compare(History.bannerTimeout(2, 3, 5000), 0);
+        compare(History.bannerTimeout(2, 3000, 5000), 0);
         compare(History.bannerTimeout(1, 0, 5000), 0);
-        compare(History.bannerTimeout(1, 3, 5000), 3000);
+        compare(History.bannerTimeout(1, 2000, 5000), 2000);
         compare(History.bannerTimeout(1, -1, 5000), 5000);
         compare(History.bannerTimeout(0, -1, 5000), 5000);
     }

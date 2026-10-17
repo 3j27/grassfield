@@ -244,6 +244,14 @@ QtObject {
     readonly property int notificationBannerMaxVisible: 5
     // estimate, pending F1 measurement from design/reference
     readonly property int notificationCloseSize: 18
+    // estimate: close glyph is this much smaller than its button
+    readonly property int notificationCloseGlyphInset: 8
+    // estimate: bell glyph is this much larger than a menu icon
+    readonly property int notificationIconGlyphExtra: 4
+    // estimate: banner close button backing
+    readonly property real notificationCloseTintOpacity: 0.95
+    // estimate: banner close button border vs material border
+    readonly property int notificationCloseBorderScale: 2
     // spec N3: 30 percent of the width
     readonly property real notificationDismissFraction: 0.3
     // spec N5
@@ -254,6 +262,8 @@ QtObject {
     readonly property int notificationCenterWidth: 380
     // estimate: entries per group before Show all
     readonly property int notificationCenterGroupCollapsed: 3
+    // estimate: pixels of rows kept alive beyond the viewport (keyboard reach)
+    readonly property int notificationCenterCache: 2000
 
     // estimate: compact pill
     readonly property int osdWidth: 220
@@ -284,6 +294,14 @@ QtObject {
     readonly property int searchRowIconSize: 28
     // estimate
     readonly property int searchHeaderHeight: 28
+    // estimate: glyph size relative to the row icon tile
+    readonly property real searchGlyphScale: 0.7
+    // estimate: decoded icon size relative to the row icon tile
+    readonly property int searchIconOversample: 2
+    // estimate: subtitle on the selected row
+    readonly property real searchSelectedSubtitleOpacity: 0.8
+    // estimate: minimum gap between the panel and the screen edges
+    readonly property int searchEdgeMargin: 16
     // task: results at most 60 percent of the screen
     readonly property real searchMaxHeightFraction: 0.6
     // spec S5
