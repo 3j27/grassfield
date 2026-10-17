@@ -13,16 +13,26 @@ function normalizeAddress(address) {
 // Lua requests built from validated pieces only (untrusted data is never interpolated). ""
 // means the input was rejected: callers must not dispatch it.
 
-// Hyprland workspace specifier: a regular id or a name, optionally "special:<name>".
+// Hyprland workspace specifier the shell uses: a positive integer id or "special:<name>".
+// Arbitrary names (e.g. "undefined" from a missing value) are rejected.
 function validWorkspace(workspace) {
-    return /^(?:special:)?[A-Za-z0-9_-]{1,64}$/.test(String(workspace));
+    return /^(?:[1-9][0-9]{0,8}|special:[A-Za-z0-9_-]{1,64})$/.test(String(workspace));
 }
 
 function moveRequest(address, workspace) {
     const hex = normalizeAddress(address);
-    if (hex === "" || !validWorkspace(workspace))
+    const ws = String(workspace);
+    if (hex === "" || !validWorkspace(ws))
         return "";
-    return "hl.dsp.window.move({ workspace = \"" + workspace + "\", follow = false, window = \"address:0x" + hex + "\" })";
+    return "hl.dsp.window.move({ workspace = \"" + ws + "\", follow = false, window = \"address:0x" + hex + "\" })";
+}
+
+// Focus of a regular workspace by id (positive integer), "" if invalid.
+function focusRequest(id) {
+    const ws = String(id);
+    if (!/^[1-9][0-9]{0,8}$/.test(ws))
+        return "";
+    return "hl.dsp.focus({ workspace = \"" + ws + "\" })";
 }
 
 // Fullscreen state change of a window; mode "maximized" is Zoom, "fullscreen" is full screen.

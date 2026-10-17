@@ -63,6 +63,13 @@ capability is present. Non-goal: capturing protected surfaces.
 - Backdrop: the wallpaper is a separate layer surface, so the overlay dims and blurs everything below it (real
   windows included, blurred) instead of showing a wallpaper-only backdrop; with Reduce Transparency the dim is
   near-opaque. A wallpaper-only backdrop needs the wallpaper art shared with the overlay (follow-up).
+- Blur timing: the compositor re-blurs the full-screen region every frame while the surface animates (nested
+  swap up to 1 s). `BackgroundEffect.blurRegion` is set only once the zoom-in has finished and dropped when the
+  zoom-out starts; the dim animates on its own. The overlay window is persistent (one per screen, always mapped,
+  empty input mask and hidden content between opens). Nested, 3 open/close cycles: max swap 717-1110 ms ->
+  107 ms.
+- Close (Esc, backdrop click) releases the keyboard grab, then re-focuses the Space that was active on that
+  output when closing started, so Hyprland's refocus of its last window cannot jump back after "+".
 
 ## S4 results (spike: ScreencopyView cost of 9 toplevels)
 Nested Hyprland 0.56.2 on the owner's session (parent GPU path, UHD 630; indication only), 9 foot windows (700x500)

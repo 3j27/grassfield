@@ -33,7 +33,11 @@ if [[ ${GRASSFIELD_PRIVATE_BUS:-} == 1 ]]; then
   private=1
 fi
 
-env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
+# GRASSFIELD_RENDER_TIMING=1: opt-in Qt scene graph render timing (QSG_RENDER_TIMING) in the shell log.
+timing=()
+[[ ${GRASSFIELD_RENDER_TIMING:-} == 1 ]] && timing=(QSG_RENDER_TIMING=1)
+
+env "${timing[@]}" WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
   GRASSFIELD_PRIVATE_BUS="$private" \
   QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui" \
