@@ -38,11 +38,20 @@ Item {
             items.push({id: root.model[i].id, text: root.model[i].text, checked: i === root.currentIndex});
         menu.model = items;
         menu.currentIndex = Math.max(0, root.currentIndex);
-        const p = root.mapToItem(layer, 0, root.height + Tokens.spacingXs);
-        menu.x = Math.max(Tokens.spacingSm, Math.min(layer.width - menu.width - Tokens.spacingSm, p.x + root.width - menu.width));
-        menu.y = Math.min(layer.height - menu.height - Tokens.spacingSm, p.y);
         layer.visible = true;
+        root.place();
         menu.forceActiveFocus();
+    }
+
+    // Below the picker, flipped above it when that would run past the window bottom, always inside the window.
+    // Called again whenever the menu's size changes, so the position never uses a stale height.
+    function place(): void {
+        const below = root.mapToItem(layer, 0, root.height + Tokens.spacingXs);
+        const above = root.mapToItem(layer, 0, -Tokens.spacingXs - menu.height);
+        const maxY = layer.height - menu.height - Tokens.spacingSm;
+        const y = below.y > maxY && above.y >= Tokens.spacingSm ? above.y : below.y;
+        menu.x = Math.max(Tokens.spacingSm, Math.min(layer.width - menu.width - Tokens.spacingSm, below.x + root.width - menu.width));
+        menu.y = Math.max(Tokens.spacingSm, Math.min(maxY, y));
     }
 
     function hide(): void {
@@ -127,6 +136,8 @@ Item {
         PopupMenu {
             id: menu
             accessibleName: root.accessibleName
+            onHeightChanged: if (layer.visible) root.place()
+            onWidthChanged: if (layer.visible) root.place()
             onCloseRequested: root.hide()
             onActivated: item => {
                 root.hide();

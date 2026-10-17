@@ -95,7 +95,14 @@ QString Backend::run(const QStringList &argv) const
     QProcess p;
     p.start(argv.first(), argv.mid(1), QIODevice::ReadOnly);
     if (!p.waitForFinished(kRunTimeoutMs) || p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
-        p.kill();
+        // Never destroy a running QProcess: terminate, then kill, each with a bounded wait.
+        if (p.state() != QProcess::NotRunning) {
+            p.terminate();
+            if (!p.waitForFinished(500)) {
+                p.kill();
+                p.waitForFinished(1000);
+            }
+        }
         return QString();
     }
     return QString::fromUtf8(p.readAllStandardOutput());

@@ -516,8 +516,6 @@ QtObject {
     // estimate: Settings app (docs/specs/settings.md)
     readonly property int settingsSidebarItemHeight: 30
     // estimate: Settings app (docs/specs/settings.md)
-    readonly property int settingsSidebarIconBox: 22
-    // estimate: Settings app (docs/specs/settings.md)
     readonly property int settingsSidebarIconSize: 14
     // estimate: Settings app (docs/specs/settings.md)
     readonly property int settingsSearchHeight: 28

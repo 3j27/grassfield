@@ -7,8 +7,12 @@ import Quickshell.Io
 // tests can create independent instances; the shell uses it through the Settings singleton.
 // A missing or unreadable file leaves the defaults in place. The file is created on the first
 // change made through a setter (Control Center, Dock menu), never otherwise. Every key of
-// config/schema/grassfield.schema.json is declared so that a write keeps the whole file. A file
-// that exists but is not valid JSON is never overwritten (`writeBlocked`); the user fixes it.
+// config/schema/grassfield.schema.json is declared so that a fresh file holds every key. Writes
+// are merges: each setter records its dotted key in `dirty`; before writing, the file is re-read
+// and only the dirty keys are replaced, so external edits (Settings app, by hand) and keys this
+// shell does not know (not allowed by the schema, but never dropped) survive. The result is
+// written atomically. A file that exists but is not valid JSON is never overwritten
+// (`writeBlocked`); the user fixes it.
 Scope {
     id: root
 
@@ -99,57 +103,116 @@ Scope {
     }
 
     function setAppearance(value: string): void {
-        config.appearance = value === "light" ? "light" : "dark";
-        save();
+        change("appearance", value === "light" ? "light" : "dark");
     }
 
     function setTransparency(value: real): void {
-        config.material.transparency = Math.max(0, Math.min(1, value));
-        save();
+        change("material.transparency", Math.max(0, Math.min(1, value)));
     }
 
     function setReduceTransparency(value: bool): void {
-        config.accessibility.reduceTransparency = value;
-        save();
+        change("accessibility.reduceTransparency", value);
     }
 
     function setReduceMotion(value: bool): void {
-        config.accessibility.reduceMotion = value;
-        save();
+        change("accessibility.reduceMotion", value);
     }
 
     function setDockAutohide(value: bool): void {
-        config.dock.autohide = value;
-        save();
+        change("dock.autohide", value);
     }
 
     function setDockMagnification(value: real, enabled: bool): void {
-        config.dock.magnification = Math.max(1, Math.min(2.5, value));
-        config.dock.magnificationEnabled = enabled;
-        save();
+        change("dock.magnification", Math.max(1, Math.min(2.5, value)));
+        change("dock.magnificationEnabled", enabled);
     }
 
     function setDockPinned(list: var): void {
-        config.dock.pinned = list;
-        save();
+        change("dock.pinned", list);
     }
 
     // corner: topLeft | topRight | bottomLeft | bottomRight.
     function setHotCorner(corner: string, action: string): void {
         if (["topLeft", "topRight", "bottomLeft", "bottomRight"].indexOf(corner) < 0)
             return;
-        config.hotCorners[corner] = cornerAction(action);
-        save();
+        change("hotCorners." + corner, cornerAction(action));
     }
 
     function setNotificationsDnd(value: bool): void {
-        config.notifications.dnd = value;
-        save();
+        change("notifications.dnd", value);
     }
 
     function setNotificationsPreviews(value: string): void {
-        config.notifications.previews = ["always", "unlocked", "never"].indexOf(value) >= 0 ? value : "unlocked";
+        change("notifications.previews", ["always", "unlocked", "never"].indexOf(value) >= 0 ? value : "unlocked");
+    }
+
+    // Keys the shell changed since its last write: dotted path -> value. Only these are merged into
+    // the file, so edits made elsewhere (Settings app, by hand) survive.
+    property var dirty: ({})
+
+    // Setter helper: update the in-memory adapter and remember the key for the next merge.
+    function change(path: string, value: var): void {
+        applyPath(path, value);
+        const d = dirty;
+        d[path] = value;
+        dirty = d;
         save();
+    }
+
+    function applyPath(path: string, value: var): void {
+        const parts = path.split(".");
+        let target = config;
+        for (let i = 0; i < parts.length - 1; i++)
+            target = target[parts[i]];
+        target[parts[parts.length - 1]] = value;
+    }
+
+    // A reload from disk replaces the adapter values; put pending local changes back on top.
+    function reapplyDirty(): void {
+        for (const path in dirty)
+            applyPath(path, dirty[path]);
+    }
+
+    // Merge the dirty keys into the file as it is on disk right now (fresh read) and write the
+    // result atomically. Keys the shell does not know are kept as they are. A file that is
+    // missing or empty is created from the full adapter state. A malformed file is never written.
+    function writeMerged(): void {
+        if (writeBlocked)
+            return;
+        diskRead.running = true;
+    }
+
+    // Second half of writeMerged(), once the fresh file text is in.
+    function mergeInto(text: string): void {
+        if (writeBlocked)
+            return;
+        if (text.trim() === "") {
+            file.writeAdapter();
+            dirty = ({});
+            return;
+        }
+        let obj = null;
+        try {
+            obj = JSON.parse(text);
+        } catch (e) {
+            obj = null;
+        }
+        if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+            checkText(text);
+            return;
+        }
+        for (const path in dirty) {
+            const parts = path.split(".");
+            let target = obj;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (target[parts[i]] === null || typeof target[parts[i]] !== "object" || Array.isArray(target[parts[i]]))
+                    target[parts[i]] = {};
+                target = target[parts[i]];
+            }
+            target[parts[parts.length - 1]] = dirty[path];
+        }
+        dirty = ({});
+        disk.setText(JSON.stringify(obj, null, 2) + "\n");
     }
 
     function save(): void {
@@ -200,7 +263,7 @@ Scope {
         command: ["mkdir", "-p", root.configDir]
         onRunningChanged: {
             if (!running && !root.writeBlocked)
-                file.writeAdapter();
+                root.writeMerged();
         }
     }
 
@@ -217,6 +280,24 @@ Scope {
         property HotCornersConfig hotCorners: HotCornersConfig {}
     }
 
+    // Fresh read of the file for the merge (the watched FileView may lag behind an external write).
+    Process {
+        id: diskRead
+        command: ["sh", "-c", 'cat "$1" 2>/dev/null; true', "sh", file.path]
+        stdout: StdioCollector {
+            onStreamFinished: root.mergeInto(text)
+        }
+    }
+
+    // Atomic write of the merged text; never watched.
+    FileView {
+        id: disk
+        path: file.path
+        printErrors: false
+        atomicWrites: true
+        onSaved: root.saved()
+    }
+
     FileView {
         id: file
         path: root.configDir !== "" ? root.configDir + "/grassfield.json" : ""
@@ -231,6 +312,7 @@ Scope {
         onSaved: root.saved()
         onLoaded: {
             root.checkText(file.text());
+            root.reapplyDirty();
             root.loadedFile();
         }
     }

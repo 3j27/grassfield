@@ -68,6 +68,56 @@ function validate(path, value) {
     return "unsupported rule";
 }
 
+// The app edits by parsing and re-serializing the whole file. That is lossless except for three
+// things JSON.parse cannot keep: integers beyond 2^53, duplicate keys in one object (the last wins)
+// and integer-like object keys (JavaScript lists them first). A file containing any of them is
+// refused (read-only, same banner as a malformed file) instead of being silently altered.
+// `text` is already valid JSON here. Returns "" when safe, else the reason.
+function unsafeReason(text) {
+    const stack = [];
+    const n = text.length;
+    for (let i = 0; i < n; i++) {
+        const c = text[i];
+        if (c === "{") {
+            stack.push({obj: true, keys: {}, expectKey: true});
+        } else if (c === "[") {
+            stack.push({obj: false});
+        } else if (c === "}" || c === "]") {
+            stack.pop();
+        } else if (c === ",") {
+            if (stack.length > 0 && stack[stack.length - 1].obj)
+                stack[stack.length - 1].expectKey = true;
+        } else if (c === "\"") {
+            let j = i + 1;
+            while (j < n && text[j] !== "\"")
+                j += text[j] === "\\" ? 2 : 1;
+            const top = stack.length > 0 ? stack[stack.length - 1] : null;
+            if (top && top.obj && top.expectKey) {
+                const key = JSON.parse(text.slice(i, j + 1));
+                if (Object.prototype.hasOwnProperty.call(top.keys, key))
+                    return "it has the key \"" + key + "\" twice in one object";
+                if (/^(0|[1-9][0-9]*)$/.test(key))
+                    return "it has the numeric object key \"" + key + "\", whose order cannot be kept";
+                top.keys[key] = true;
+                top.expectKey = false;
+            }
+            i = j;
+        } else if (c === "-" || (c >= "0" && c <= "9")) {
+            let j = i;
+            while (j < n && /[-+0-9.eE]/.test(text[j]))
+                j++;
+            const token = text.slice(i, j);
+            if (/^-?[0-9]+$/.test(token)) {
+                const digits = token.replace(/^-/, "");
+                if (digits.length > 16 || (digits.length === 16 && digits > "9007199254740991"))
+                    return "it holds the integer " + token + ", beyond 2^53, which cannot be kept exactly";
+            }
+            i = j - 1;
+        }
+    }
+    return "";
+}
+
 // Parse the file text. Empty text is a fresh file ({}); anything that is not a JSON object is an error.
 function parse(text) {
     if (text === null || text === undefined || String(text).trim() === "")
@@ -80,6 +130,9 @@ function parse(text) {
     }
     if (data === null || typeof data !== "object" || Array.isArray(data))
         return {ok: false, data: {}, fresh: false, error: "the top level is not a JSON object"};
+    const unsafe = unsafeReason(String(text));
+    if (unsafe !== "")
+        return {ok: false, data: {}, fresh: false, error: "it cannot be edited safely: " + unsafe};
     return {ok: true, data: data, fresh: false, error: ""};
 }
 
