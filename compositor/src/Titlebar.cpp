@@ -189,6 +189,7 @@ CGrassfieldTitlebar::CGrassfieldTitlebar(const PHLWINDOW& window) : IHyprWindowD
 
 CGrassfieldTitlebar::~CGrassfieldTitlebar() {
     std::erase(gf::state().titlebars, this);
+    gf::forgetRegisteredDecoration(this);
     gf::guarded("titlebar destructor", [this] {
         auto& input = pointerInput();
         if (input.grab.deco == this) {
