@@ -18,18 +18,20 @@ Item {
     property bool inFolder: false
     property bool dragEnabled: true
     property bool selected: false
+    // False when the item is not on a displayed page (the cell stays, hidden).
+    property bool shown: true
 
     signal activated
 
     readonly property bool real: info.kind !== "none"
-    readonly property real labelHeight: Tokens.appsLabelSize * 1.4
+    readonly property real labelHeight: Tokens.appsLabelSize * Tokens.appsLabelLineHeight
     readonly property bool beingDragged: host.dragging && host.dragKey === info.key
     readonly property bool dropMerge: !inFolder && host.dragging && host.hoverIndex === itemIndex && host.hoverMerge
     readonly property bool dropBefore: !inFolder && host.dragging && host.hoverIndex === itemIndex && !host.hoverMerge
 
     width: cellW
     height: cellH
-    visible: real
+    visible: real && shown
     Accessible.role: Accessible.Button
     Accessible.name: info.kind === "folder" ? qsTr("%1, folder").arg(info.name) : info.name
     Accessible.focused: selected
@@ -53,7 +55,7 @@ Item {
     Rectangle {
         // Reorder indicator: insertion bar on the left edge of the target.
         visible: root.dropBefore
-        x: 2
+        x: Tokens.appsDropBarInset
         y: root.iconTop
         width: Tokens.appsSelectionWidth
         height: root.iconSize

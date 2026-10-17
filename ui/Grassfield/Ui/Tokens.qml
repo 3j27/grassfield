@@ -492,6 +492,12 @@ QtObject {
     readonly property real appsFolderPanelIconScale: 0.85
     // estimate: keyboard focus ring
     readonly property int appsSelectionWidth: 3
+    // estimate: label box height relative to the label size
+    readonly property real appsLabelLineHeight: 1.4
+    // estimate: reorder insertion bar offset from the cell edge
+    readonly property int appsDropBarInset: 2
+    // estimate: hairline border of the search field and folder tile
+    readonly property int appsBorderWidth: 1
     // estimate: grid scale at the start of the open animation
     readonly property real appsOpenScale: 0.96
 }
