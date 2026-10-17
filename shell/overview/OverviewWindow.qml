@@ -110,7 +110,11 @@ Variants {
         ])
 
         screen: modelData
-        visible: shown || progress > 0.001
+        // Persistent: created once per screen and kept mapped (transparent, no input) between
+        // opens, so opening does not pay for a new surface and its first frame.
+        readonly property bool active: shown || progress > 0.001
+        visible: true
+        mask: active ? null : emptyMask
         anchors {
             top: true
             bottom: true
@@ -126,8 +130,15 @@ Variants {
         WlrLayershell.keyboardFocus: holdsKeyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-overview"
         // qmllint disable missing-type
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && shown ? blur : null
+        // The full-screen blur is re-computed by the compositor every frame while the surface
+        // animates (swap up to 1 s); it is applied only once the zoom-in has finished and dropped
+        // when the zoom-out starts. The dim animates on its own meanwhile.
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && shown && progress >= 1 ? blur : null
         // qmllint enable missing-type
+
+        Region {
+            id: emptyMask
+        }
 
         Region {
             id: blur
@@ -185,6 +196,16 @@ Variants {
                 root.controller.closeAnd(() => Compositor.activate(info.toplevel));
             else
                 root.controller.hide();
+        }
+
+        // Esc / backdrop: closes and re-focuses the Space shown on this output now. Releasing
+        // the exclusive keyboard grab lets Hyprland refocus its last window, which can live on
+        // the previous Space (e.g. right after "+"), so the current Space is focused again once
+        // the grab is gone.
+        function closeKeepingSpace(): void {
+            const mon = Compositor.monitorByName(screenName);
+            const id = mon && mon.activeWorkspace ? mon.activeWorkspace.id : 0;
+            root.controller.closeAnd(id > 0 ? () => Compositor.focusSpace(id) : null);
         }
 
         function switchSpace(id: int): void {
@@ -296,6 +317,7 @@ Variants {
         Item {
             id: contentRoot
             anchors.fill: parent
+            visible: win.active
             Accessible.role: Accessible.Pane
             Accessible.name: qsTr("Overview")
 
@@ -311,7 +333,7 @@ Variants {
                     acceptedButtons: Qt.AllButtons
                     onPressed: {
                         root.controller.keyScreen = win.screenName;
-                        root.controller.hide();
+                        win.closeKeepingSpace();
                     }
                 }
             }
@@ -329,7 +351,7 @@ Variants {
                     case Qt.Key_Escape:
                         // Release-then-act as for the other actions: staying on a Space just
                         // created with "+" instead of returning to the previous one.
-                        root.controller.closeAnd(null);
+                        win.closeKeepingSpace();
                         break;
                     case Qt.Key_Return:
                     case Qt.Key_Enter:
