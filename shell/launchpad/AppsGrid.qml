@@ -1,9 +1,10 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Quickshell
 import Grassfield.Ui
 
-// Paged grid of the Apps items. Only the current page and its neighbours (and the page a drag
-// started on) have cells; pages slide, or crossfade under Reduce Motion.
+// Paged grid of the Apps items: one persistent cell per item; only the current page, its
+// neighbours and the page a drag started on are shown. Pages slide, or crossfade under Reduce Motion.
 Item {
     id: root
 
@@ -16,57 +17,56 @@ Item {
     width: g.gridW
     height: g.gridH
 
-    Repeater {
-        model: root.controller.pageCount
+    // One cell per display item, kept across searches and layout edits (ScriptModel matches by key):
+    // a cell only moves to its slot, or hides when its item is not shown, so filtering never
+    // rebuilds or rebinds cells. Pages slide by moving `pager`.
+    Item {
+        id: pager
 
-        Item {
-            id: pg
+        x: Appearance.reduceMotion ? 0 : -root.controller.page * root.host.width
 
-            required property int index
+        Behavior on x {
+            enabled: root.controller.open
+            NumberAnimation {
+                duration: Appearance.duration(Tokens.motionNormal)
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.curve
+            }
+        }
 
-            readonly property bool near: Math.abs(index - root.controller.page) <= 1 || index === root.host.dragPage
-            readonly property bool current: index === root.controller.page
-
-            width: root.width
-            height: root.height
-            x: Appearance.reduceMotion ? 0 : (index - root.controller.page) * root.host.width
-            opacity: Appearance.reduceMotion ? (current ? 1 : 0) : 1
-            visible: near && (current || !Appearance.reduceMotion || opacity > 0.01)
-
-            Behavior on x {
-                enabled: root.controller.open
-                NumberAnimation {
-                    duration: Appearance.duration(Tokens.motionNormal)
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.curve
-                }
+        Repeater {
+            model: ScriptModel {
+                values: root.controller.allItems
+                objectProp: "key"
             }
 
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Appearance.duration(Tokens.motionFast)
-                }
-            }
+            AppsCell {
+                id: cell
 
-            Repeater {
-                model: pg.near ? Math.max(0, Math.min(root.g.perPage, root.controller.items.length - pg.index * root.g.perPage)) : 0
+                required property var modelData
 
-                AppsCell {
-                    id: cell
+                readonly property int slot: modelData.state.slot
+                // Few derived properties: a keystroke re-evaluates them for every cell whose slot changes.
+                readonly property int pageIndex: Math.floor(slot / root.g.perPage)
 
-                    required property int index
+                itemIndex: slot
+                info: root.controller.itemByKey[modelData.key] ?? root.placeholder
+                host: root.host
+                cellW: root.g.cellW
+                cellH: root.g.cellH
+                iconSize: root.g.icon
+                dragEnabled: !root.controller.searching
+                selected: root.controller.selected === slot
+                shown: slot >= 0 && (Math.abs(pageIndex - root.controller.page) <= 1 || pageIndex === root.host.dragPage) && (pageIndex === root.controller.page || !Appearance.reduceMotion || opacity > 0.01)
+                opacity: Appearance.reduceMotion ? (pageIndex === root.controller.page ? 1 : 0) : 1
+                x: (Appearance.reduceMotion ? 0 : pageIndex * root.host.width) + (slot % root.g.perPage % root.g.cols) * root.g.cellW
+                y: Math.floor(slot % root.g.perPage / root.g.cols) * root.g.cellH
+                onActivated: root.controller.activate(info)
 
-                    itemIndex: pg.index * root.g.perPage + index
-                    info: root.controller.items[itemIndex] ?? root.placeholder
-                    host: root.host
-                    cellW: root.g.cellW
-                    cellH: root.g.cellH
-                    iconSize: root.g.icon
-                    dragEnabled: !root.controller.searching
-                    selected: root.controller.selected === itemIndex
-                    x: (index % root.g.cols) * root.g.cellW
-                    y: Math.floor(index / root.g.cols) * root.g.cellH
-                    onActivated: root.controller.activate(info)
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.duration(Tokens.motionFast)
+                    }
                 }
             }
         }
