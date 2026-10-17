@@ -7,6 +7,7 @@ import qs.dock
 import qs.menubar
 import qs.notifications
 import qs.osd
+import qs.overview
 import qs.overlay
 import qs.platform
 import qs.search
@@ -59,6 +60,7 @@ ShellRoot {
     NotificationCenter {}
     OsdWindow {}
     Search {}
+    Overview {}
 
     // Referencing Capabilities instantiates it, which sends the plugin hello.
     Component.onCompleted: console.info("grassfield-shell: started, plugin protocol", Capabilities.protocol)

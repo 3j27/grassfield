@@ -62,6 +62,16 @@ TestCase {
         checkInvariants(input, Layout.layout(input, area, opts), "stack");
     }
 
+    function test_identicalRectsUseTheArea() {
+        // Four windows at the same place spread into a grid, not one thin column.
+        const input = [];
+        for (let i = 0; i < 4; i++)
+            input.push({id: "t" + i, x: 610, y: 266, w: 700, h: 500});
+        const res = Layout.layout(input, area, opts);
+        checkInvariants(input, res, "identical");
+        verify(res.scale > 0.5, "scale " + res.scale);
+    }
+
     function test_oddAspectRatios() {
         const input = [
             {id: "wide", x: 0, y: 0, w: 1900, h: 80},

@@ -154,20 +154,32 @@ function layout(rects, area, opts) {
     let s = Math.min(maxScale, area.w / b.w, area.h / b.h);
 
     // 1. Relative positions kept, overlaps relaxed, scale reduced until it fits.
+    let relaxed = null;
     for (let step = 0; step < 60; step++, s *= 0.94) {
         const list = scaled(valid, area, s);
         for (const r of list)
             clampInto(r, area);
-        if (inside(list, area) && (!anyConflict(list, gap) || relax(list, area, gap)) && inside(list, area) && !anyConflict(list, gap))
-            return {scale: s, rects: list};
+        if (inside(list, area) && (!anyConflict(list, gap) || relax(list, area, gap)) && inside(list, area) && !anyConflict(list, gap)) {
+            relaxed = {scale: s, rects: list};
+            break;
+        }
     }
-    // 2. Row packing.
-    s = maxScale;
-    for (let step = 0; step < 200; step++, s *= 0.95) {
-        const packed = packRows(valid, area, s, gap);
-        if (packed)
-            return {scale: s, rects: packed};
+    // 2. Row packing in reading order: also the fallback, and preferred when it gives clearly
+    // larger windows (e.g. windows stacked on top of each other relax into one thin column).
+    let packedResult = null;
+    let ps = maxScale;
+    for (let step = 0; step < 200; step++, ps *= 0.95) {
+        const packed = packRows(valid, area, ps, gap);
+        if (packed) {
+            packedResult = {scale: ps, rects: packed};
+            break;
+        }
     }
+    if (relaxed && (!packedResult || packedResult.scale <= relaxed.scale * 1.3))
+        return relaxed;
+    if (packedResult)
+        return packedResult;
+    s = ps;
     return {scale: s, rects: scaled(valid, area, s)};
 }
 
