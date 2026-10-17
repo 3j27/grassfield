@@ -61,6 +61,13 @@ Singleton {
         toplevel.activate();
     }
 
+    // Keyboard focus to a window by Hyprland address. Only a validated hex address is interpolated
+    // (Minimized.normalizeAddress); anything else is dropped. Returns whether it was dispatched.
+    function focusWindow(address: string): bool {
+        const hex = Minimized.normalizeAddress(address);
+        return hex !== "" && dispatchRequest("hl.dsp.focus({ window = \"address:0x" + hex + "\" })");
+    }
+
     // Name of the special workspace used by hide().
     readonly property string hiddenWorkspace: "special:hidden"
 
