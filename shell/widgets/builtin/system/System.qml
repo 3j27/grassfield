@@ -56,7 +56,7 @@ WidgetBase {
 
             WidgetLabel {
                 width: parent.width
-                text: root.haveSample ? qsTr("%1%").arg(Math.round(gauge.value * 100)) : qsTr("...")
+                text: root.haveSample ? qsTr("%1%").arg(Math.round(gauge.value * 100)) : qsTr("…")
                 font.pixelSize: Tokens.widgetGlyphSize
                 font.weight: Tokens.typographyMenuBoldWeight
             }
