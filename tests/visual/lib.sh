@@ -26,8 +26,8 @@ VS_PARK_X=24
 VS_PARK_Y=540
 
 # Files sandbox folder: under this worktree's .dev/visual (never /tmp: fixed and shared between worktrees). The
-# breadcrumb (and the Search file subtitle) show the absolute path; those pixels are masked (VS_MASK) in the scenarios
-# files.sh and search.sh, see docs/testing/visual.md. The contrast run does not mask (it measures that subtitle).
+# breadcrumb shows the absolute path; those pixels are masked (VS_MASK) in files.sh, see docs/testing/visual.md. The Search
+# scenario shows no path (the Files row subtitle is "Application"), so nothing in it is masked.
 VS_FILES=$VS_STATE/files-sandbox
 
 mkdir -p "$VS_STATE" "$VS_SHOTS"

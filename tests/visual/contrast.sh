@@ -93,11 +93,34 @@ center() {
 }
 
 # differs REF IMG MIN: capture check that IMG shows something REF (the bare desktop of the same combination) does not.
-differs() {
+differs_q() {
   local n
   n=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1 || true)
   # compare prints "4394.01 (0.0021)" with a fuzz: keep the integer part.
-  [[ $n =~ ^[0-9]+ ]] && (( ${BASH_REMATCH[0]} >= $3 )) || fail "$(basename "$2") looks like $(basename "$1") (differs in '$n' px, need $3): the surface did not open"
+  [[ $n =~ ^[0-9]+ ]] && (( ${BASH_REMATCH[0]} >= $3 ))
+}
+differs() { differs_q "$@" || fail "$(basename "$2") looks like $(basename "$1"): the surface did not open (fewer than $3 px differ)"; }
+
+# overlay NAME OPEN_ARGS...: open a Search/Apps style overlay by IPC (target = NAME), check its state AND that it is on GF-REF,
+# capture it, and verify by pixels that it is shown; up to three attempts (the first open can land on another output), then fail.
+overlay() {
+  local name=$1 n
+  shift
+  for n in 1 2 3; do
+    vs_ipc "$name" open "$@" >/dev/null
+    need_json "$name" .open true
+    vs_sleep 1
+    cap "$name"
+    if differs_q "$dir/desktop.png" "$dir/$name.png" 2000; then
+      vs_ipc "$name" close >/dev/null
+      need_json "$name" .open false
+      return 0
+    fi
+    vs_ipc "$name" close >/dev/null
+    need_json "$name" .open false
+    vs_park
+  done
+  fail "$name did not show on GF-REF after three attempts"
 }
 
 if (( ! measure_only )); then
@@ -127,12 +150,10 @@ if (( ! measure_only )); then
           differs "$dir/desktop.png" "$dir/controlcenter.png" 2000
         fi
         if want search; then
-          vs_ipc search open files >/dev/null; need_json search .open true; vs_sleep 1; cap search; vs_ipc search close >/dev/null
-          need_json search .open false
+          overlay search files
         fi
         if want apps; then
-          vs_ipc apps open >/dev/null; need_json apps .open true; vs_sleep 1; cap apps; vs_ipc apps close >/dev/null
-          need_json apps .open false
+          overlay apps
         fi
         if want banners || want notificationcenter; then
           # Banners stay up for the four captures (about 6 s), then expire before the Notification Center is opened.
