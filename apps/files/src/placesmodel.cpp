@@ -15,6 +15,13 @@
 
 namespace
 {
+// A GRASSFIELD_DEV session (nested, on the owner's machine) must never see or touch the owner's real trash:
+// KIO's trash:/ is served by the session, so the Trash place and its listing are off (ADR-0011).
+bool devSession()
+{
+    return qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1");
+}
+
 QString symbolic(const QString &icon, const QString &fallback)
 {
     const QString name = icon + QStringLiteral("-symbolic");
@@ -39,6 +46,8 @@ PlacesModel::PlacesModel(QObject *parent)
     connect(notifier, &Solid::DeviceNotifier::deviceRemoved, this, &PlacesModel::rebuild);
 
     // The Trash entry shows full/empty from a KIO listing of trash:/ (kept up to date by KDirWatch).
+    if (devSession())
+        return;
     m_trashLister = new KCoreDirLister(this);
     m_trashLister->setAutoErrorHandlingEnabled(false);
     m_trashLister->setDelayedMimeTypes(true);
@@ -118,13 +127,15 @@ void PlacesModel::rebuild()
         places.append(network);
     }
 
-    Place trash;
-    trash.section = QStringLiteral("locations");
-    trash.name = tr("Trash");
-    trash.url = QUrl(QStringLiteral("trash:/"));
-    trash.iconName = m_trashEmpty ? QStringLiteral("user-trash-symbolic") : symbolic(QStringLiteral("user-trash-full"), QStringLiteral("user-trash-symbolic"));
-    trash.kind = QStringLiteral("trash");
-    places.append(trash);
+    if (!devSession()) {
+        Place trash;
+        trash.section = QStringLiteral("locations");
+        trash.name = tr("Trash");
+        trash.url = QUrl(QStringLiteral("trash:/"));
+        trash.iconName = m_trashEmpty ? QStringLiteral("user-trash-symbolic") : symbolic(QStringLiteral("user-trash-full"), QStringLiteral("user-trash-symbolic"));
+        trash.kind = QStringLiteral("trash");
+        places.append(trash);
+    }
 
     beginResetModel();
     m_places = places;
