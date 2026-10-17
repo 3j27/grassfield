@@ -38,7 +38,7 @@ add_library(gfprotocols OBJECT ${GF_PROTO_DIR}/appmenu.cpp)
 target_link_libraries(gfprotocols PRIVATE PkgConfig::HYPRLAND)
 set_target_properties(gfprotocols PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden)
 
-add_library(grassfield-compositor SHARED src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp $<TARGET_OBJECTS:gfprotocols>)
+add_library(grassfield-compositor SHARED src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp $<TARGET_OBJECTS:gfprotocols>)
 target_link_libraries(grassfield-compositor PRIVATE gfcore PkgConfig::HYPRLAND)
 target_include_directories(grassfield-compositor PRIVATE ${LUA_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_options(grassfield-compositor PRIVATE -Wall -Wextra)

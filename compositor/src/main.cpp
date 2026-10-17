@@ -7,6 +7,7 @@
 #include "AppmenuServer.hpp"
 #include "Ipc.hpp"
 #include "Minimize.hpp"
+#include "Overview.hpp"
 #include "Plugin.hpp"
 #include "Titlebar.hpp"
 
@@ -166,6 +167,7 @@ namespace {
         };
         step("listeners", [&] { s.listeners.clear(); });
         step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
+        step("overview", [] { gf::overviewer::stop(); });   // every window back to normal rendering, transformers detached
         step("appmenu", [] { gf::appmenuServer::stop(); }); // no wl_resource may point into this library after dlclose
         step("events", [] { gf::ipc::stopEvents(); });      // after the appmenu clears: waiting events posted, timer removed
         step("ipc", [] { gf::ipc::unregisterAll(); });
@@ -187,7 +189,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     auto& s  = state();
     s.handle = handle;
 
-    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
+    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu, overview and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
 
     const std::string serverHash = __hyprland_api_get_hash();
     const std::string clientHash = __hyprland_api_get_client_hash();
@@ -204,6 +206,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         registerListeners();
         if (!gf::minimizer::start())
             gf::log(Log::WARN, "minimize render hooks failed to register; minimize not advertised");
+        // Optional feature: a failure here only drops overview from the capabilities (the shell keeps thumbnails).
+        bool overviewOk = false;
+        gf::guarded("overview start", [&] { overviewOk = gf::overviewer::start(); });
+        if (!overviewOk) {
+            gf::guarded("overview rollback", [] { gf::overviewer::stop(); });
+            gf::log(Log::WARN, "overview hooks failed to register; overview not advertised");
+        }
         // Optional feature: a failure here only drops appmenu from the capabilities (the shell keeps T0 menus).
         bool appmenuOk = false;
         gf::guarded("appmenu start", [&] { appmenuOk = gf::appmenuServer::start(); });

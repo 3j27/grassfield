@@ -2,8 +2,10 @@
 
 #include "AppmenuServer.hpp"
 #include "Minimize.hpp"
+#include "Overview.hpp"
 #include "Plugin.hpp"
 #include "core/Minimize.hpp"
+#include "core/Overview.hpp"
 #include "core/Protocol.hpp"
 
 #include <hyprland/src/managers/EventManager.hpp>
@@ -133,9 +135,13 @@ namespace gf::ipc {
         return state().luaAppmenuRegistered && appmenuServer::ready();
     }
 
+    bool overviewAvailable() {
+        return state().luaOverviewRegistered && overviewer::ready();
+    }
+
     namespace {
         std::string currentCapabilities() {
-            const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable());
+            const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -247,6 +253,27 @@ namespace gf::ipc {
             });
         }
 
+        // The payload is copied out of Lua like every argument (fixed-size, trivially destructible); one byte more than
+        // the limit so that an oversized payload is recognized as such.
+        using SOverviewPayload = SLuaString<gf::overview::kMaxPayloadBytes + 1>;
+
+        void overviewNoThrow(const SOverviewPayload& payload) noexcept {
+            guarded("hl.plugin.grassfield.overview", [&] {
+                if (!payload.ok) {
+                    logRequest(Log::WARN, "overview: rejected: the argument must be a JSON string of at most {} bytes", gf::overview::kMaxPayloadBytes);
+                    overviewer::refuse(gf::overview::Reason::Invalid);
+                    return;
+                }
+                const auto request = gf::overview::parseRequest(payload.view());
+                if (!request) {
+                    logRequest(Log::WARN, "overview: rejected: {}", request.error());
+                    overviewer::refuse(gf::overview::Reason::Invalid);
+                    return;
+                }
+                overviewer::request(*request);
+            });
+        }
+
         // Pushes the result of hl.dsp.no_op() so that `hl.dispatch(hl.plugin.grassfield.hello())` (what
         // `hyprctl dispatch` / Quickshell's Hyprland.dispatch() evaluate under the Lua config) succeeds.
         // Pushes nothing if the dispatcher can't be obtained. Only trivially destructible values live in
@@ -314,6 +341,14 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
+        // hl.plugin.grassfield.overview(json): live window transforms (docs/specs/overview.md "v2"). Untrusted: parsed
+        // and validated strictly (core/Overview.*), windows compared with the live ones, rects checked against monitors.
+        int luaOverview(lua_State* L) {
+            const auto payload = readString<gf::overview::kMaxPayloadBytes + 1>(L, 1);
+            overviewNoThrow(payload);
+            return pushNoOpDispatcher(L);
+        }
+
         std::string hyprctlGrassfield(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             // Same JSON for both output formats: the payload is already machine-readable.
             std::string out;
@@ -350,6 +385,7 @@ namespace gf::ipc {
         s.luaRestoreRegistered  = addLua(gfc::kLuaRestore, luaRestore);
         s.luaConfigRegistered   = addLua(gfc::kLuaConfig, luaConfig);
         s.luaAppmenuRegistered  = appmenuServer::ready() && addLua(gfc::kLuaAppmenu, luaAppmenu); // only with the global
+        s.luaOverviewRegistered = overviewer::ready() && addLua(gfc::kLuaOverview, luaOverview);  // only with the render hooks
         bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
@@ -368,6 +404,7 @@ namespace gf::ipc {
         removeLua(s.luaRestoreRegistered, gfc::kLuaRestore);
         removeLua(s.luaConfigRegistered, gfc::kLuaConfig);
         removeLua(s.luaAppmenuRegistered, gfc::kLuaAppmenu);
+        removeLua(s.luaOverviewRegistered, gfc::kLuaOverview);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();

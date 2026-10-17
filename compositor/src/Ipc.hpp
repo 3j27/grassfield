@@ -30,6 +30,9 @@ namespace gf::ipc {
     // The appmenu global is advertised and hl.plugin.grassfield.appmenu is registered.
     bool appmenuAvailable();
 
+    // The overview render hooks are registered and hl.plugin.grassfield.overview is registered.
+    bool overviewAvailable();
+
     // Registers the Lua function(s) (hl.plugin.grassfield.*) and the hyprctl command. Returns false if any failed.
     bool registerAll();
 
