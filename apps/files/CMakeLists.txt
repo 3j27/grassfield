@@ -8,7 +8,11 @@ set(CMAKE_AUTOMOC ON)
 set(KF_MIN_VERSION "6.17") # FileUndoManager::redo()
 find_package(ECM ${KF_MIN_VERSION} NO_MODULE)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick)
-find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS KIO CoreAddons Service Solid)
+# KDE Frameworks are separate CMake packages (there is no umbrella "KF6" package).
+find_package(KF6KIO ${KF_MIN_VERSION} REQUIRED)
+find_package(KF6CoreAddons ${KF_MIN_VERSION} REQUIRED)
+find_package(KF6Service ${KF_MIN_VERSION} REQUIRED)
+find_package(KF6Solid ${KF_MIN_VERSION} REQUIRED)
 
 add_executable(grassfield-files
     src/main.cpp
