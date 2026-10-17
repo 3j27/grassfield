@@ -56,6 +56,40 @@ function markerSaysLocked(text) {
     return t !== "" && t !== "unlocked";
 }
 
+// Lock to restore when a shell instance starts (crash restart, reload or session start), from
+// what it can read synchronously. Fail closed:
+//   - intent: the previous instance's lock intent carried over a soft reload (PersistentProperties);
+//   - markerAvailable false (XDG_RUNTIME_DIR unset): no marker can prove the session unlocked;
+//   - otherwise the marker decides (markerSaysLocked). A missing marker is the first start of this
+//     compositor instance; if it was removed while locked, the compositor still holds the dead
+//     client's lock (ext-session-lock) and compositorLockState() finds it.
+function restoreAtStart(intent, markerAvailable, markerText) {
+    return intent === true || markerAvailable !== true || markerSaysLocked(markerText);
+}
+
+// Session lock state as reported by Hyprland, from `hyprctl -j monitors` objects
+// (Quickshell HyprlandMonitor.lastIpcObject). Hyprland has no lock query, but an active
+// ext-session-lock, including one whose client died, puts "LOCK" in solitaryBlockedBy. Hyprland
+// stops listing at "WORKSPACE" (monitor without a workspace yet), so such a list proves nothing.
+// Returns "locked", "unlocked" or "unknown" (no complete list; e.g. not Hyprland).
+function compositorLockState(monitors) {
+    var readable = false;
+    var list = monitors || [];
+    for (var i = 0; i < list.length; i++) {
+        var blockers = list[i] ? list[i].solitaryBlockedBy : undefined;
+        if (!blockers || typeof blockers === "string" || typeof blockers.length !== "number")
+            continue;
+        var names = [];
+        for (var j = 0; j < blockers.length; j++)
+            names.push(String(blockers[j]));
+        if (names.indexOf("LOCK") !== -1)
+            return "locked";
+        if (names.indexOf("WORKSPACE") === -1)
+            readable = true;
+    }
+    return readable ? "unlocked" : "unknown";
+}
+
 // File name of the marker; the instance id is reduced to safe file-name characters.
 function markerName(instance, display) {
     var id = String(instance || display || "default").replace(/[^A-Za-z0-9_.-]/g, "_");

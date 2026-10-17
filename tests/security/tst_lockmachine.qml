@@ -73,6 +73,38 @@ TestCase {
         compare(Machine.markerName("", ""), "grassfield-lock-default");
     }
 
+    // Start/reload decision (R12 review blocker): fail closed; only a proven unlock starts unlocked.
+    function test_restoreAtStart() {
+        // Soft reload while locked: the carried intent wins over a missing or forged marker.
+        verify(Machine.restoreAtStart(true, true, ""));
+        verify(Machine.restoreAtStart(true, true, "unlocked\n"));
+        verify(Machine.restoreAtStart(true, false, ""));
+        // Crash restart: the marker decides.
+        verify(Machine.restoreAtStart(false, true, "locked\n"));
+        verify(Machine.restoreAtStart(false, true, "garbage"));
+        // No XDG_RUNTIME_DIR: nothing can prove the session unlocked.
+        verify(Machine.restoreAtStart(false, false, ""));
+        verify(Machine.restoreAtStart(false, undefined, "unlocked\n"));
+        // After an explicit unlock (intent cleared, marker "unlocked") and on a fresh session.
+        verify(!Machine.restoreAtStart(false, true, "unlocked\n"));
+        verify(!Machine.restoreAtStart(false, true, ""));
+        verify(!Machine.restoreAtStart(undefined, true, undefined));
+    }
+
+    // Hyprland 0.56 `hyprctl -j monitors` shapes (verified in nested: LOCK stays after the lock
+    // client is killed).
+    function test_compositorLockState() {
+        compare(Machine.compositorLockState([{name: "A", solitaryBlockedBy: ["LOCK", "WINDOWED", "CANDIDATE"]}]), "locked");
+        compare(Machine.compositorLockState([{solitaryBlockedBy: ["WORKSPACE"]}, {solitaryBlockedBy: ["WINDOWED", "LOCK"]}]), "locked");
+        compare(Machine.compositorLockState([{solitaryBlockedBy: ["WINDOWED", "CANDIDATE"]}]), "unlocked");
+        // A monitor without a workspace stops the list before LOCK: proves nothing.
+        compare(Machine.compositorLockState([{solitaryBlockedBy: ["WORKSPACE"]}]), "unknown");
+        compare(Machine.compositorLockState([{solitaryBlockedBy: ["WORKSPACE"]}, {solitaryBlockedBy: []}]), "unlocked");
+        compare(Machine.compositorLockState([]), "unknown");
+        compare(Machine.compositorLockState(undefined), "unknown");
+        compare(Machine.compositorLockState([null, {}, {solitaryBlockedBy: "LOCK"}]), "unknown");
+    }
+
     function test_displayNameAndInitials() {
         const passwd = "root:x:0:0::/root:/bin/bash\nada:x:1000:1000:Ada Lovelace,,,:/home/ada:/bin/bash\nbob:x:1001:1001::/home/bob:/bin/sh\n";
         compare(Machine.displayName(passwd, "ada"), "Ada Lovelace");

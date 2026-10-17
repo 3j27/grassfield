@@ -20,6 +20,11 @@ import qs.services
 ShellRoot {
     id: root
 
+    // Never reload on file changes: a reload is a security event for the session lock (R12,
+    // shell/security/lock/Lock.qml). Re-applied by every reload (Quickshell resets it to true).
+    // Development restarts the shell instead (scripts/dev/shell-run.sh).
+    settings.watchFiles: false
+
     Binding {
         target: Appearance
         property: "dark"
