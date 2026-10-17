@@ -3,8 +3,9 @@
 #include "translationloader.h"
 
 namespace {
-// The catalog is process-wide. It is installed when the plugin is loaded (that is, while shell.qml's imports
-// are resolved, before any object is created) so that no qsTr() is evaluated against an empty catalog.
+// The catalog is process-wide. It is installed by the plugin's initializeEngine() (on the engine's thread,
+// while shell.qml's imports are resolved, before any object is created) so that no qsTr() is evaluated
+// against an empty catalog. Never from a static initializer: that can run off the GUI thread.
 QString g_language;
 QTranslator *g_translator = nullptr;
 bool g_loaded = false;
@@ -18,10 +19,6 @@ void ensureLoaded()
     g_translator = grassfield::i18n::install(g_language);
 }
 
-struct EarlyInstall
-{
-    EarlyInstall() { ensureLoaded(); }
-} earlyInstall;
 } // namespace
 
 Translator::Translator(QObject *parent)
@@ -32,13 +29,15 @@ Translator::Translator(QObject *parent)
     m_translator = g_translator;
 }
 
+void Translator::installCatalog()
+{
+    ensureLoaded();
+}
+
 Translator *Translator::create(QQmlEngine *engine, QJSEngine *)
 {
     auto *translator = new Translator;
     translator->m_engine = engine;
-    // Strings evaluated before the catalog was installed are refreshed once the engine is running.
-    if (translator->m_translator)
-        QMetaObject::invokeMethod(translator, &Translator::retranslate, Qt::QueuedConnection);
     return translator;
 }
 
