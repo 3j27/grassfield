@@ -308,7 +308,7 @@ Variants {
                             anchors.fill: parent
                             visible: !row.isHeader && row.info.badge !== undefined
                             radius: Tokens.radiusControl
-                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
                             Text {
                                 anchors.centerIn: parent

@@ -8,7 +8,7 @@ QtObject {
     // color roles, dark appearance
     readonly property var colorDark: ({
         text: "#F5F5F7",  // estimate, pending F1 measurement from design/reference
-        textSecondary: "#B8B8C0",  // estimate, pending F1 measurement from design/reference
+        textSecondary: "#C4C4CC",  // A2: was #B8B8C0 (2.5:1 on a white wallpaper at transparency 0.6); 4.5:1 or more on every material backdrop, tested in tests/visual/test_contrast_tokens.py
         accent: "#4FB36B",  // own Grassfield green, not copied
         indicator: "#E6E6EA",  // estimate, pending F1 measurement from design/reference
         hover: "#FFFFFF",  // estimate; drawn at hoverOpacity
@@ -20,13 +20,13 @@ QtObject {
         knob: "#FFFFFF",  // estimate; slider and toggle knobs
         separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        danger: "#FF6B63"  // estimate
+        danger: "#FFB3AD"  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop, tested
     })
 
     // color roles, light appearance
     readonly property var colorLight: ({
         text: "#1B1B1F",  // estimate, pending F1 measurement from design/reference
-        textSecondary: "#55555D",  // estimate, pending F1 measurement from design/reference
+        textSecondary: "#4A4A52",  // A2: was #55555D (2.7:1 on a black wallpaper at transparency 0.6); 4.5:1 or more on every material backdrop, tested in tests/visual/test_contrast_tokens.py
         accent: "#26763F",  // own Grassfield green, not copied
         indicator: "#2A2A30",  // estimate, pending F1 measurement from design/reference
         hover: "#000000",  // estimate; drawn at hoverOpacity
@@ -38,7 +38,7 @@ QtObject {
         knob: "#FFFFFF",  // estimate; slider and toggle knobs
         separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        danger: "#D93025"  // estimate
+        danger: "#8F1E18"  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop, tested
     })
 
     // generic family: code and plain text views (Preview)
@@ -112,8 +112,8 @@ QtObject {
 
     // master-prompt 5.5 default, owner validates on screenshots
     readonly property real materialDefaultTransparency: 0.25
-    // estimate: tint alpha at transparency 1; legibility gate A2 limits use to 0.6
-    readonly property real materialTintAlphaMin: 0.4
+    // A2 tint floor: tint alpha at transparency 1 (was 0.4: text fell to 2.5:1 over a white wallpaper at 0.6); every slider value up to 0.6 passes, tested
+    readonly property real materialTintAlphaMin: 0.85
     // estimate, pending F1 measurement from design/reference
     readonly property real materialHighlightOpacity: 0.22
     // estimate, pending F1 measurement from design/reference
@@ -128,8 +128,6 @@ QtObject {
     readonly property real materialDisabledOpacity: 0.38
     // estimate: hover opacity multiplier for an active menu bar item
     readonly property real materialHoverActiveFactor: 1.5
-    // estimate: notification body text
-    readonly property real materialBodyOpacity: 0.85
 
     // task spec / macOS convention, pending F1 measurement
     readonly property int menubarHeight: 24
@@ -323,8 +321,8 @@ QtObject {
     readonly property real searchGlyphScale: 0.7
     // estimate: decoded icon size relative to the row icon tile
     readonly property int searchIconOversample: 2
-    // estimate: subtitle on the selected row
-    readonly property real searchSelectedSubtitleOpacity: 0.8
+    // A2: subtitle on the selected row (was 0.8: 4.2-4.4:1 on the accent); 4.5:1 or more in both appearances, tested
+    readonly property real searchSelectedSubtitleOpacity: 0.9
     // estimate: minimum gap between the panel and the screen edges
     readonly property int searchEdgeMargin: 16
     // task: results at most 60 percent of the screen
@@ -438,10 +436,12 @@ QtObject {
     readonly property int appsMinRows: 2
     // estimate
     readonly property int appsMaxRows: 7
-    // estimate: dim over the blurred wallpaper
-    readonly property real appsBackdropOpacity: 0.5
+    // A2: dim over the blurred wallpaper (was 0.5: white labels fell to 2.8:1 on a white wallpaper)
+    readonly property real appsBackdropOpacity: 0.6
     // estimate: dim when blur is off (Reduce Transparency)
     readonly property real appsBackdropOpacityOpaque: 0.94
+    // A2: the search field is a darker inset (shadow colour) on the dim, so its placeholder reaches 4.5:1
+    readonly property real appsSearchFillOpacity: 0.25
     // estimate: search field at the top centre
     readonly property int appsSearchWidth: 260
     // estimate
@@ -593,6 +593,14 @@ QtObject {
     readonly property int desktopIconSelectionRadius: 6
     // estimate: desktop icons v1, icon selection tint alpha
     readonly property real desktopIconSelectionOpacity: 0.35
+    // A2: core alpha of the label drop shadow; white label text over the shadow is tested over white and black wallpapers
+    readonly property real desktopIconLabelShadowOpacity: 0.8
+    // estimate: MultiEffect shadowBlur (0..1) of the label drop shadow, soft but tight
+    readonly property real desktopIconLabelShadowBlur: 0.35
+    // estimate: px the label shadow is pushed down
+    readonly property int desktopIconLabelShadowOffsetY: 1
+    // estimate: backing of the inline rename field (was materialBodyOpacity)
+    readonly property real desktopIconRenameFillOpacity: 0.85
     // estimate: desktop icons v1, rubber band fill alpha
     readonly property real desktopIconRubberBandOpacity: 0.18
     // estimate: desktop icons v1, sourceSize cap of image thumbnails

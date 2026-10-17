@@ -88,6 +88,8 @@ python3 -I tests/tools/check-isolation.py --selftest || status=1
 python3 -I tests/tools/check-isolation.py || status=1
 # Visual suite tooling: contrast pixel reading and glyph-mask measurement on synthetic images.
 python3 -I tests/visual/test_contrast.py || status=1
+# Gate A2, exact token calculation (primary evidence): every text role over the worst-case wallpapers, both appearances, transparency 0..0.6.
+python3 -I tests/visual/test_contrast_tokens.py || status=1
 if [[ -x compositor/build/grassfield-compositor-tests ]]; then
   compositor/build/grassfield-compositor-tests || status=1
 fi

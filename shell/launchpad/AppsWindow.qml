@@ -395,7 +395,7 @@ Variants {
                 width: Tokens.appsSearchWidth
                 height: Tokens.appsSearchHeight
                 radius: height / 2
-                color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+                color: Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.appsSearchFillOpacity)
                 border.width: field.activeFocus ? Tokens.controlFocusRing : Tokens.appsBorderWidth
                 border.color: field.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
                 Accessible.role: Accessible.Pane
@@ -459,7 +459,7 @@ Variants {
                 visible: root.controller.searching && root.controller.items.length === 0
                 text: qsTr("No results")
                 textFormat: Text.PlainText
-                color: Appearance.darkColors.textSecondary
+                color: Appearance.darkColors.text
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyTitleSize
             }

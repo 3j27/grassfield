@@ -1,0 +1,75 @@
+{
+ "_doc": [
+  "Text roles of the shell for the exact token calculation of gate A2 (tests/visual/test_contrast_tokens.py).",
+  "fg: <palette>.<colour token> (palette colors = the current appearance, darkColors = always dark). opacity: factors applied to the",
+  "text alpha (numbers or token paths such as search.selectedSubtitleOpacity). backdrop: material (tint at 1 - t*(1-tintAlphaMin) over a",
+  "flat wallpaper colour, with and without a fill overlay), accent (solid accent), apps (black dim over the wallpaper), apps-field",
+  "(dim + the Apps search field fill), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
+  "the drop shadow). kind: text >= 4.5, large|icon >= 3.0. exempt: reason, the role is listed but not asserted (a disabled control, or a",
+  "surface outside the A2 scope that is tracked as an open finding in docs/testing/visual.md).",
+  "sites: where the role is used in QML. A file x class count is cross-checked against shell/ and ui/Grassfield/ by the same test, so a new",
+  "textSecondary / withAlpha text / text-with-opacity / danger-text use without a role fails. classes: secondary (any [dark]colors.textSecondary),",
+  "alpha (withAlpha of text/accentText), opacity (a Text item with an opacity property), danger (any colors.danger use, text or graphic)."
+ ],
+ "roles": [
+  {"id": "text on material", "fg": "colors.text", "backdrop": "material", "kind": "text", "sites": []},
+  {"id": "secondary on material", "fg": "colors.textSecondary", "backdrop": "material", "kind": "text", "sites": [
+   {"file": "shell/notifications/NotificationContent.qml", "class": "secondary", "count": 1},
+   {"file": "shell/notifications/NotificationCenter.qml", "class": "secondary", "count": 2},
+   {"file": "shell/overlay/ControlCenter.qml", "class": "secondary", "count": 1},
+   {"file": "shell/overlay/Dialog.qml", "class": "secondary", "count": 1},
+   {"file": "shell/overlay/AppAboutPanel.qml", "class": "secondary", "count": 1},
+   {"file": "shell/overlay/AboutPanel.qml", "class": "secondary", "count": 1},
+   {"file": "shell/overlay/VolumeMenu.qml", "class": "secondary", "count": 1},
+   {"file": "shell/overlay/controlcenter/Caption.qml", "class": "secondary", "count": 1},
+   {"file": "shell/overlay/controlcenter/RadioRow.qml", "class": "secondary", "count": 1},
+   {"file": "shell/overlay/controlcenter/ListRow.qml", "class": "secondary", "count": 1},
+   {"file": "shell/search/SearchPanel.qml", "class": "secondary", "count": 4},
+   {"file": "shell/security/PasswordField.qml", "class": "secondary", "count": 1},
+   {"file": "shell/security/polkit/AuthDialog.qml", "class": "secondary", "count": 3},
+   {"file": "shell/widgets/WidgetGallery.qml", "class": "secondary", "count": 1},
+   {"file": "shell/widgets/WidgetHost.qml", "class": "secondary", "count": 1},
+   {"file": "shell/widgets/builtin/battery/Battery.qml", "class": "secondary", "count": 3},
+   {"file": "shell/widgets/builtin/clock/Clock.qml", "class": "secondary", "count": 2},
+   {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "secondary", "count": 2},
+   {"file": "shell/widgets/builtin/system/System.qml", "class": "secondary", "count": 2},
+   {"file": "shell/widgets/builtin/nowplaying/NowPlaying.qml", "class": "secondary", "count": 3},
+   {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "secondary", "count": 1}
+  ]},
+  {"id": "danger text on material", "fg": "colors.danger", "backdrop": "material", "kind": "text", "sites": [
+   {"file": "shell/notifications/NotificationContent.qml", "class": "danger", "count": 1},
+   {"file": "shell/security/polkit/AuthDialog.qml", "class": "danger", "count": 1},
+   {"file": "ui/Grassfield/Ui/Button.qml", "class": "danger", "count": 1},
+   {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "danger", "count": 1}
+  ]},
+  {"id": "danger graphic on material", "fg": "colors.danger", "backdrop": "material", "kind": "icon", "sites": [
+   {"file": "shell/widgets/builtin/battery/Battery.qml", "class": "danger", "count": 1},
+   {"file": "shell/widgets/builtin/system/System.qml", "class": "danger", "count": 1}
+  ]},
+  {"id": "accent text on accent", "fg": "colors.accentText", "backdrop": "accent", "kind": "text", "sites": []},
+  {"id": "search selected subtitle on accent", "fg": "colors.accentText", "opacity": ["search.selectedSubtitleOpacity"], "backdrop": "accent", "kind": "text", "sites": [
+   {"file": "shell/search/SearchPanel.qml", "class": "alpha", "count": 1}
+  ]},
+  {"id": "desktop label (white, shadow)", "fg": "darkColors.text", "backdrop": "desktop-label", "kind": "text", "sites": []},
+  {"id": "desktop label error (shadow)", "fg": "darkColors.danger", "backdrop": "desktop-label", "kind": "text", "sites": [
+   {"file": "shell/desktop/DesktopIcon.qml", "class": "danger", "count": 2}
+  ]},
+  {"id": "apps label", "fg": "darkColors.text", "backdrop": "apps", "kind": "text", "sites": []},
+  {"id": "apps search field glyph and placeholder", "fg": "darkColors.textSecondary", "backdrop": "apps-field", "kind": "text", "sites": [
+   {"file": "shell/launchpad/AppsWindow.qml", "class": "secondary", "count": 2}
+  ]},
+  {"id": "apps label (drag source ghost)", "fg": "darkColors.text", "opacity": ["apps.dragSourceOpacity"], "backdrop": "apps", "kind": "text",
+   "exempt": "the cell an item is dragged from is a faded ghost; the dragged item itself is shown at full opacity under the pointer",
+   "sites": [{"file": "shell/launchpad/AppsCell.qml", "class": "opacity", "count": 1}]},
+  {"id": "overview captions (dim over wallpaper)", "fg": "colors.textSecondary", "backdrop": "material", "kind": "text",
+   "exempt": "Overview Spaces strip sits on a black dim over the wallpaper, not on material: outside the A2 scope of this pass, open finding in docs/testing/visual.md",
+   "sites": [{"file": "shell/overview/OverviewWindow.qml", "class": "secondary", "count": 1}]},
+  {"id": "disabled text", "fg": "colors.textSecondary", "opacity": ["material.disabledOpacity"], "backdrop": "material", "kind": "text",
+   "exempt": "disabled or inactive component: exempt from WCAG 1.4.3",
+   "sites": [
+    {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "secondary", "count": 1},
+    {"file": "shell/menubar/MenuBar.qml", "class": "alpha", "count": 1},
+    {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "alpha", "count": 1}
+  ]}
+ ]
+}

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import QtQuick.Effects
 import Quickshell.Widgets
 import Grassfield.Ui
 import "IconsLogic.js" as Logic
@@ -118,9 +119,9 @@ Item {
         width: root.renaming ? root.width - Tokens.spacingXs : Math.min(root.width - Tokens.spacingXs, labelText.implicitWidth + 2 * Tokens.spacingXs)
         height: (field.visible ? field.height : labelText.implicitHeight) + Tokens.spacingXs
         radius: Tokens.desktopIconSelectionRadius
-        color: root.renaming ? Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBodyOpacity) : (root.selected ? Appearance.colors.accent : "transparent")
+        color: root.renaming ? Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.desktopIconRenameFillOpacity) : (root.selected ? Appearance.colors.accent : "transparent")
         border.width: root.renaming ? Tokens.controlFocusRing : 0
-        border.color: root.renameError !== "" ? Appearance.colors.danger : Appearance.colors.accent
+        border.color: root.renameError !== "" ? Appearance.darkColors.danger : Appearance.colors.accent
 
         Text {
             id: labelText
@@ -135,13 +136,23 @@ Item {
             elide: Text.ElideRight
             text: root.label
             textFormat: Text.PlainText
-            color: root.selected ? Appearance.colors.accentText : Appearance.colors.text
+            // White text with a soft dark drop shadow whatever the appearance (a desktop label sits on the wallpaper, not
+            // on material); the selected label is drawn on the accent highlight with the accent text colour (gate A2).
+            color: root.selected ? Appearance.colors.accentText : Appearance.darkColors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.desktopIconLabelSize
             font.weight: Tokens.typographyMenuWeight
-            // Legible on any wallpaper.
+            // The core of the shadow is a one pixel outline at labelShadowOpacity, softened by the blurred copy below.
             style: root.selected ? Text.Normal : Text.Outline
-            styleColor: Appearance.withAlpha(Appearance.colors.shadow, Tokens.desktopIconSelectionOpacity)
+            styleColor: Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.desktopIconLabelShadowOpacity)
+            layer.enabled: !root.selected
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: Appearance.darkColors.shadow
+                shadowOpacity: Tokens.desktopIconLabelShadowOpacity
+                shadowBlur: Tokens.desktopIconLabelShadowBlur
+                shadowVerticalOffset: Tokens.desktopIconLabelShadowOffsetY
+            }
         }
 
         TextInput {
@@ -180,11 +191,11 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
         textFormat: Text.PlainText
-        color: Appearance.colors.danger
+        color: Appearance.darkColors.danger
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.desktopIconLabelSize
         style: Text.Outline
-        styleColor: Appearance.withAlpha(Appearance.colors.shadow, Tokens.desktopIconSelectionOpacity)
+        styleColor: Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.desktopIconLabelShadowOpacity)
         text: {
             switch (root.renameError) {
             case "empty":

@@ -36,6 +36,8 @@ import zlib
 W, H = 1920, 1080
 THRESHOLD = {"text": 4.5, "large": 3.0, "icon": 3.0}
 WALLPAPERS = ["white", "black", "gray", "noise", "checker"]
+# Saturated yellow/green noise wallpaper: the four colours a pixel is drawn from (also the token calculation's bounds).
+NOISE_PALETTE = [(255, 235, 0), (0, 200, 40), (200, 255, 0), (0, 150, 0)]
 MODES = ("", ".hidden", ".white", ".black")  # file suffixes: A, B, W, K
 GLYPH_ALPHA = 0.5
 PERCENTILE = 0.05
@@ -67,7 +69,7 @@ def gen(outdir):
     write_png(os.path.join(outdir, "gray.png"), solid((128, 128, 128)))
     # Saturated yellow/green noise: per-pixel random pick between a saturated yellow and a saturated green.
     rnd = random.Random(20261017)
-    palette = [bytes((255, 235, 0)), bytes((0, 200, 40)), bytes((200, 255, 0)), bytes((0, 150, 0))]
+    palette = [bytes(c) for c in NOISE_PALETTE]
     write_png(os.path.join(outdir, "noise.png"),
               (b"".join(palette[rnd.randrange(4)] for _ in range(W)) for _ in range(H)))
     # High-frequency checker: 2x2 black/white cells.
