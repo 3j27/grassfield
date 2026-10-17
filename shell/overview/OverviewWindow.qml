@@ -57,23 +57,45 @@ Variants {
         property int dropIndex: -1
 
         readonly property real barBottom: Tokens.overviewBarTopMargin + Tokens.overviewTileHeight
+        // Free region in this window's coordinates (the overlay starts below the menu bar). Taken
+        // from the screen, never from the window size, which is 0 until the compositor configures
+        // the layer surface.
         readonly property var area: ({
                 x: Tokens.overviewAreaMargin,
                 y: barBottom + Tokens.overviewAreaMargin,
-                w: Math.max(1, width - 2 * Tokens.overviewAreaMargin),
-                h: Math.max(1, height - barBottom - 2 * Tokens.overviewAreaMargin - Tokens.overviewLabelHeight)
+                w: modelData.width - 2 * Tokens.overviewAreaMargin,
+                h: modelData.height - Tokens.menubarHeight - barBottom - 2 * Tokens.overviewAreaMargin - Tokens.overviewLabelHeight
             })
-        // Window rectangles in this window's coordinates (the overlay starts below the menu bar).
-        readonly property var placement: Layout.layout(wins.map(w => ({
-                    id: w.address,
-                    x: w.x,
-                    y: w.y - Tokens.menubarHeight,
-                    w: w.w,
-                    h: w.h
-                })), area, {
-            maxScale: Tokens.overviewMaxScale,
-            gap: Tokens.overviewMinGap
-        })
+        // Layout of `wins`, recomputed only when the inputs change (see relayout()).
+        property var placement: ({
+                scale: Tokens.overviewMaxScale,
+                rects: []
+            })
+        property string layoutSignature: ""
+
+        // Window rectangles in this window's coordinates, laid out when the window ids, rects or
+        // the area actually changed (toplevel refreshes re-deliver identical data).
+        function relayout(): void {
+            const a = area;
+            if (!(a.w > 1 && a.h > 1))
+                return;
+            const input = wins.map(w => ({
+                        id: w.address,
+                        x: w.x,
+                        y: w.y - Tokens.menubarHeight,
+                        w: w.w,
+                        h: w.h
+                    }));
+            const sig = Layout.signature(input, a);
+            if (sig === layoutSignature)
+                return;
+            layoutSignature = sig;
+            placement = Layout.layout(input, a, {
+                maxScale: Tokens.overviewMaxScale,
+                gap: Tokens.overviewMinGap
+            });
+        }
+        onAreaChanged: relayout()
         readonly property var placedMap: {
             const m = {};
             for (const r of placement.rects)
@@ -124,6 +146,7 @@ Variants {
             if (!liveWins)
                 return;
             wins = liveWins;
+            relayout();
             const keys = liveWins.map(w => w.address);
             if (keys.join(",") !== winKeys.join(","))
                 winKeys = keys;
@@ -304,7 +327,9 @@ Variants {
                     event.accepted = true;
                     switch (event.key) {
                     case Qt.Key_Escape:
-                        root.controller.hide();
+                        // Release-then-act as for the other actions: staying on a Space just
+                        // created with "+" instead of returning to the previous one.
+                        root.controller.closeAnd(null);
                         break;
                     case Qt.Key_Return:
                     case Qt.Key_Enter:
@@ -314,7 +339,7 @@ Variants {
                             win.activateWindow(win.selected);
                         break;
                     case Qt.Key_Tab:
-                        win.cycle(1);
+                        win.cycle((event.modifiers & Qt.ShiftModifier) ? -1 : 1);
                         break;
                     case Qt.Key_Backtab:
                         win.cycle(-1);
@@ -414,7 +439,7 @@ Variants {
                             anchors.bottom: parent.bottom
                             anchors.bottomMargin: Tokens.spacingSm
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: qsTr("%n window(s)", "", tile.isPlus ? 0 : tile.modelData.windowCount)
+                            text: tile.modelData.windowCount === 1 ? qsTr("1 window") : qsTr("%1 windows").arg(tile.isPlus ? 0 : tile.modelData.windowCount)
                             textFormat: Text.PlainText
                             color: Appearance.colors.textSecondary
                             font.family: Appearance.fontFamily
@@ -554,14 +579,19 @@ Variants {
                             captureSource: thumb.info ? thumb.info.toplevel : null
                             live: root.controller.profile === "full"
                             paintCursor: false
-                            Component.onCompleted: {
-                                if (!live)
+                            // A single frame can only be requested once the capture context knows
+                            // the buffer size (sourceSize); earlier calls warn "Cannot capture frame".
+                            readonly property bool ready: captureSource !== null && sourceSize.width > 0 && sourceSize.height > 0
+                            property bool snapshotTaken: false
+                            function snapshot(): void {
+                                if (!live && ready && !snapshotTaken) {
+                                    snapshotTaken = true;
                                     captureFrame();
+                                }
                             }
-                            onCaptureSourceChanged: {
-                                if (!live && captureSource)
-                                    captureFrame();
-                            }
+                            onReadyChanged: snapshot()
+                            onLiveChanged: snapshot()
+                            onCaptureSourceChanged: snapshotTaken = false
                         }
                     }
 
@@ -569,7 +599,7 @@ Variants {
                     Timer {
                         interval: Tokens.overviewBalancedIntervalMs
                         repeat: true
-                        running: root.controller.profile === "balanced" && win.shown && thumb.visible && view.captureSource !== null
+                        running: root.controller.profile === "balanced" && win.shown && thumb.visible && view.ready
                         onTriggered: {
                             view.captureFrame();
                         }
