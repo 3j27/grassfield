@@ -41,6 +41,8 @@ QtObject {
         danger: "#D93025"  // estimate
     })
 
+    // generic family: code and plain text views (Preview)
+    readonly property string typographyMonoFamily: "monospace"
     // ADR-0003 candidate (OFL); owner installs it
     readonly property string typographyFamily: "Inter"
     // installed fallback
@@ -700,4 +702,61 @@ QtObject {
     readonly property real filesScrollbarThumbOpacity: 0.3
     // estimate: dragged scroll bar thumb
     readonly property real filesScrollbarPressedOpacity: 0.55
+
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewWindowWidth: 860
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewWindowHeight: 640
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewWindowMinWidth: 480
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewWindowMinHeight: 320
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewSidebarWidth: 168
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewToolbarHeight: 44
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewToolbarButtonSize: 28
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewThumbnailWidth: 112
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewSidebarItemHeight: 28
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewSearchWidth: 200
+    // page background of PDF thumbnails (documents are white in both themes)
+    readonly property string previewPaper: "#FFFFFF"
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlanceMinWidth: 360
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlanceMinHeight: 240
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property real previewGlanceScreenFraction: 0.7
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlanceTextWidth: 720
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlanceTextHeight: 520
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlancePdfWidth: 620
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlancePdfHeight: 780
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlanceMediaWidth: 480
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlanceVideoWidth: 800
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlanceVideoHeight: 480
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlanceMediaHeight: 220
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewGlanceHeaderHeight: 40
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property real previewZoomStep: 1.25
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property real previewZoomMin: 0.05
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewZoomMax: 16
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewCodeFontSize: 12
+    // estimate: Preview app (docs/specs/preview.md)
+    readonly property int previewControlsHeight: 40
 }
