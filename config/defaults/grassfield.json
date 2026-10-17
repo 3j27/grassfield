@@ -28,5 +28,11 @@
   },
   "lock": {
     "idleMinutes": 5
+  },
+  "hotCorners": {
+    "topLeft": "none",
+    "topRight": "none",
+    "bottomLeft": "none",
+    "bottomRight": "none"
   }
 }

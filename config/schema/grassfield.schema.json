@@ -119,6 +119,52 @@
           "maximum": 240
         }
       }
+    },
+    "hotCorners": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "topLeft": {
+          "type": "string",
+          "enum": [
+            "none",
+            "overview",
+            "notifications",
+            "apps",
+            "lock"
+          ]
+        },
+        "topRight": {
+          "type": "string",
+          "enum": [
+            "none",
+            "overview",
+            "notifications",
+            "apps",
+            "lock"
+          ]
+        },
+        "bottomLeft": {
+          "type": "string",
+          "enum": [
+            "none",
+            "overview",
+            "notifications",
+            "apps",
+            "lock"
+          ]
+        },
+        "bottomRight": {
+          "type": "string",
+          "enum": [
+            "none",
+            "overview",
+            "notifications",
+            "apps",
+            "lock"
+          ]
+        }
+      }
     }
   }
 }
