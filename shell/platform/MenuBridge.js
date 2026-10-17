@@ -181,6 +181,15 @@ function parseBridgeLine(line) {
     return null;
 }
 
+// Error codes after which the window's current bridge menu must not stay on screen (its items would be dead):
+// the application's menu was refused at open (pid-mismatch, no-owner, backoff), left the bus (gone), could not be
+// read again (layout-failed) or was refused as too large when re-read (oversized). The window falls back to T0.
+var menuLostCodes = ["pid-mismatch", "no-owner", "gone", "layout-failed", "oversized", "backoff"];
+
+function menuLost(code) {
+    return menuLostCodes.indexOf(code) >= 0;
+}
+
 // ---- menu bar models ----
 
 // Top-level menus shown in the bar after the app name: [{dbusId, title, enabled}] (visible, labeled, not separators).
