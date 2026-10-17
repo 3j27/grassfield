@@ -166,8 +166,15 @@ QtObject {
     readonly property int dockTooltipGap: 8
     // estimate: height reserved above the shelf for the label
     readonly property int dockTooltipArea: 36
+    // estimate: app badge on a minimized-window tile
+    readonly property real dockMinimizedBadgeScale: 0.4
     // estimate, pending F1 measurement from design/reference
     readonly property real dockTrashIconScale: 0.6
+
+    // task spec: pointer dwell before a hot corner fires
+    readonly property int hotCornerDwellMs: 150
+    // estimate: px side of the corner trigger window
+    readonly property int hotCornerSize: 2
 
     // estimate, pending F1 measurement from design/reference
     readonly property int menuItemHeight: 22
