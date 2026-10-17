@@ -151,9 +151,10 @@ FolderModel::FolderModel(QObject *parent)
         }
     });
 
-    // Expected items are handled after the views have processed the model change: reacting inside
-    // rowsInserted (connected before any view) would emit dataChanged for rows the views still map to
-    // their old delegates.
+    // Everything that reacts to a structural change runs after the views have processed it. These
+    // connections are made before any view connects, so a synchronous reaction would reach QML
+    // (count, currentRow -> GridView.currentIndex, selection dataChanged) while the views still hold
+    // the previous rows, which shows up as duplicated or stale delegates.
     m_expectTimer.setSingleShot(true);
     m_expectTimer.setInterval(0);
     connect(&m_expectTimer, &QTimer::timeout, this, &FolderModel::checkExpected);
@@ -161,18 +162,23 @@ FolderModel::FolderModel(QObject *parent)
         if (!m_expected.isEmpty() && !m_checkingExpected)
             m_expectTimer.start();
     };
-    connect(this, &QAbstractItemModel::rowsInserted, this, [this, queueCheck] {
+    m_structureTimer.setSingleShot(true);
+    m_structureTimer.setInterval(0);
+    connect(&m_structureTimer, &QTimer::timeout, this, [this] {
         emit countChanged();
-        queueCheck();
+        emit currentRowChanged();
     });
+    const auto queueStructure = [this, queueCheck] {
+        m_structureTimer.start();
+        queueCheck();
+    };
+    connect(this, &QAbstractItemModel::rowsInserted, this, queueStructure);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, queueStructure);
+    connect(this, &QAbstractItemModel::rowsMoved, this, queueStructure);
+    connect(this, &QAbstractItemModel::modelReset, this, queueStructure);
+    connect(this, &QAbstractItemModel::layoutChanged, this, queueStructure);
     // A renamed item is refreshed in place (no insertion) and may move when re-sorted.
     connect(this, &QAbstractItemModel::dataChanged, this, queueCheck);
-    connect(this, &QAbstractItemModel::layoutChanged, this, queueCheck);
-    connect(this, &QAbstractItemModel::rowsRemoved, this, &FolderModel::countChanged);
-    connect(this, &QAbstractItemModel::modelReset, this, &FolderModel::countChanged);
-    connect(this, &QAbstractItemModel::layoutChanged, this, &FolderModel::currentRowChanged);
-    connect(this, &QAbstractItemModel::rowsInserted, this, &FolderModel::currentRowChanged);
-    connect(this, &QAbstractItemModel::rowsRemoved, this, &FolderModel::currentRowChanged);
 
     m_previewTimer.setSingleShot(true);
     m_previewTimer.setInterval(kPreviewBatchDelayMs);
@@ -735,7 +741,7 @@ void FolderModel::onItemsDeleted(const KFileItemList &items)
     }
     if (selectionTouched)
         emit selectionChanged();
-    emit currentRowChanged();
+    m_structureTimer.start();
     refreshFreeSpace();
 }
 

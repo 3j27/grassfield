@@ -185,6 +185,7 @@ private:
     KFileItemList m_previewQueue;
     QTimer m_previewTimer;
     QTimer m_expectTimer;
+    QTimer m_structureTimer;
     QPointer<KIO::PreviewJob> m_previewJob;
     QPointer<KJob> m_freeSpaceJob;
 };
