@@ -4,6 +4,20 @@
 set -euo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+
+# Options (preferred over env prefixes: a bare `scripts/dev/nested-up.sh …` command matches the
+# Claude Code sandbox exclusion, an `VAR=… scripts/dev/nested-up.sh` prefix may not).
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --private-bus) export GRASSFIELD_PRIVATE_BUS=1 ;;
+    --no-plugin) export GRASSFIELD_NO_PLUGIN=1 ;;
+    --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
+    --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
+    -h|--help) echo "usage: nested-up.sh [--private-bus] [--no-plugin] [--lang LL] [--desktop-dir PATH]"; exit 0 ;;
+    *) echo "nested-up: unknown option $1" >&2; exit 2 ;;
+  esac
+  shift
+done
 dev=$root/.dev
 mkdir -p "$dev/state" "$dev/config" "$dev/shots"
 

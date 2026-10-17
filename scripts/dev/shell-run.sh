@@ -7,6 +7,17 @@
 set -euo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+
+# Same options as nested-up.sh (bare commands match the sandbox exclusion; env prefixes may not).
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --private-bus) export GRASSFIELD_PRIVATE_BUS=1 ;;
+    --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
+    --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
+    *) echo "shell-run: unknown option $1" >&2; exit 2 ;;
+  esac
+  shift
+done
 dev=$root/.dev
 sig=$(cat "$dev/nested.instance" 2>/dev/null || true)
 sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
