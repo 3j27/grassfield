@@ -4,6 +4,7 @@
 
 #include "DBusObjects.h"
 #include "Layout.h"
+#include "MenuClient.h"
 #include "Protocol.h"
 #include "Safety.h"
 
@@ -390,6 +391,107 @@ TEST(DBusMenuWire, ExplicitSignaturesAndLayoutRoundTrip) {
     // Chromium accepts only these exact types (it has no introspection data to coerce untyped arguments).
     EXPECT_EQ(menu.calls, (QStringList{QStringLiteral("GetLayout:iias"), QStringLiteral("AboutToShow:i"), QStringLiteral("Event:isvu")}));
     QDBusConnection::disconnectFromPeer(QStringLiteral("menu-bridge-test"));
+}
+
+namespace {
+    // A private peer-to-peer connection serving `menu` at /MenuBar/1 (no bus daemon).
+    struct PeerMenu {
+        QTemporaryDir dir;
+        QDBusServer*  server = nullptr;
+        FakeMenu      menu;
+        bool          registered = false;
+        QDBusConnection client{QStringLiteral("unconnected")};
+        QString       name;
+
+        explicit PeerMenu(const QString& connectionName) : name(connectionName) {
+            server = new QDBusServer(QStringLiteral("unix:dir=") + dir.path());
+            if (!server->isConnected())
+                return;
+            server->setAnonymousAuthenticationAllowed(true);
+            QObject::connect(server, &QDBusServer::newConnection, [this](const QDBusConnection& peer) {
+                QDBusConnection c(peer);
+                registered = c.registerVirtualObject(QStringLiteral("/MenuBar/1"), &menu, QDBusConnection::SingleNode);
+            });
+            client = QDBusConnection::connectToPeer(server->address(), name);
+            QElapsedTimer timer;
+            timer.start();
+            while (!registered && timer.elapsed() < 5000)
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        }
+        ~PeerMenu() {
+            QDBusConnection::disconnectFromPeer(name);
+            delete server;
+        }
+        bool ok() const {
+            return server && server->isConnected() && registered;
+        }
+        int getLayoutCalls() const {
+            return static_cast<int>(menu.calls.filter(QStringLiteral("GetLayout:")).size());
+        }
+    };
+
+    void pump(int ms) {
+        QElapsedTimer timer;
+        timer.start();
+        while (timer.elapsed() < ms)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    }
+} // namespace
+
+// A burst of LayoutUpdated signals less than the 40 ms coalescing delay apart must not starve the refetch (the timer
+// used to restart on every signal: 1 ms spam gave one GetLayout in 10 s).
+TEST(MenuClientRefetch, BurstOfSignalsStillRefetchesEveryCoalescingInterval) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-burst"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    peer.menu.layout = item(0, {{QStringLiteral("children-display"), QStringLiteral("submenu")}}, {item(1, {{QStringLiteral("label"), QStringLiteral("File")}})});
+    MenuClient client(peer.client, QStringLiteral("1"), QString(), QStringLiteral("/MenuBar/1"));
+    client.start();
+    QElapsedTimer timer;
+    timer.start();
+    while (!client.ready() && timer.elapsed() < 5000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    ASSERT_TRUE(client.ready());
+    ASSERT_EQ(peer.getLayoutCalls(), 1);
+
+    // 1 ms spam for 600 ms: with the restarting timer this would stay at 1; with a pending timer it is about 600/40.
+    QTimer spam;
+    spam.setInterval(1);
+    QObject::connect(&spam, &QTimer::timeout, [&] { QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage())); });
+    spam.start();
+    pump(600);
+    spam.stop();
+    pump(150);
+    const int calls = peer.getLayoutCalls() - 1;
+    EXPECT_GE(calls, 6) << "refetch starved by the signal burst";
+    EXPECT_LE(calls, 18) << "refetch not coalesced";
+}
+
+// More items than any real menu has: refused, no menu, and not a single GetLayout more however many signals follow.
+TEST(MenuClientRefetch, OversizedLayoutIsRefusedAndNeverReread) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-huge"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    QList<RawItem> many;
+    for (int i = 1; i <= limits::kItems + 500; ++i)
+        many.append(item(i, {{QStringLiteral("label"), QStringLiteral("x")}}));
+    peer.menu.layout = item(0, {{QStringLiteral("children-display"), QStringLiteral("submenu")}}, many);
+    MenuClient client(peer.client, QStringLiteral("2"), QString(), QStringLiteral("/MenuBar/1"));
+    QString    code;
+    int        menus = 0;
+    QObject::connect(&client, &MenuClient::failed, [&](const QString&, const QString& c, const QString&) { code = c; });
+    QObject::connect(&client, &MenuClient::menuChanged, [&](const QString&) { ++menus; });
+    client.start();
+    QElapsedTimer timer;
+    timer.start();
+    while (code.isEmpty() && timer.elapsed() < 5000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    EXPECT_EQ(code, QStringLiteral("oversized"));
+    EXPECT_EQ(menus, 0);
+    for (int i = 0; i < 20; ++i)
+        QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
+    pump(200);
+    EXPECT_EQ(peer.getLayoutCalls(), 1);
 }
 
 TEST(DBusMenuWire, NonLayoutArgumentsAreRefused) {
