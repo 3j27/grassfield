@@ -549,6 +549,13 @@
     </message>
 </context>
 <context>
+    <name>BridgeMenu</name>
+    <message>
+        <source>%1 menu</source>
+        <translation>Menu %1</translation>
+    </message>
+</context>
+<context>
     <name>BrowserTab</name>
     <message>
         <source>“%1” will be deleted immediately. You can’t undo this action.</source>
@@ -1808,6 +1815,10 @@
     <message>
         <source>Application menu: %1</source>
         <translation>Menu de l’app&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>%1 menu</source>
+        <translation>Menu %1</translation>
     </message>
     <message>
         <source>File menu</source>
