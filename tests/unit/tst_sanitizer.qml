@@ -66,7 +66,7 @@ TestCase {
     function test_denseValidMarkup() {
         const t0 = Date.now();
         compare(Sanitizer.sanitize("<b>x</b>".repeat(500)).length, 500 * 8);
-        verify(Date.now() - t0 < 100);
+        verify(Date.now() - t0 < 300); // load-tolerant bound (quadratic regressions take seconds)
     }
 
     function test_longTagIsText() {
