@@ -18,6 +18,11 @@ FocusScope {
 
     // Screen of the hosting window (the context menu window opens there).
     required property ShellScreen screen
+    // The host's keyboard state machine says the desktop owns the keyboard (KeyboardFocus.holdsKeys):
+    // only then does a finished rename or menu hand focus back to the key sink.
+    property bool holdsKeys: false
+    // An icon drag (real drag-and-drop) is in progress.
+    property bool dragging: false
 
     // Selected names ({name: true}) and the keyboard cursor.
     property var selected: ({})
@@ -67,8 +72,9 @@ FocusScope {
         id: files
     }
 
-    // Emitted after an item was opened: the host window lets go of the keyboard.
-    signal released
+    // Keyboard focus events for the host's state machine (KeyboardFocus.js): {type: "itemOpened"},
+    // {type: "menuOpened"}, {type: "menuClosed"}, {type: "renameOpened"}, {type: "escape", ...}.
+    signal focusEvent(var event)
 
     // Dedicated key sink: the focus item of this scope whenever no rename field is open, so that a
     // finished rename can never hand focus back to its (hidden) field.
@@ -78,8 +84,18 @@ FocusScope {
         activeFocusOnTab: false
     }
 
+    // A user press on the desktop: the key sink becomes the focus item at once.
     function takeFocus(): void {
         keySink.forceActiveFocus();
+    }
+
+    // End of a rename or menu: the key sink is the scope's focus item again, and takes the active
+    // focus only while the desktop owns the keyboard.
+    function restoreFocus(): void {
+        if (root.holdsKeys)
+            keySink.forceActiveFocus();
+        else
+            keySink.focus = true;
     }
 
     activeFocusOnTab: false
@@ -137,29 +153,43 @@ FocusScope {
     function endRename(): void {
         renaming = "";
         renameError = "";
-        keySink.forceActiveFocus();
+        restoreFocus();
     }
 
-    function beginRename(name: string): void {
+    // byUser: opened by the user (F2, menu Rename, New Folder), which asks for the keyboard; a rename
+    // reopened after a file system failure does not.
+    function beginRename(name: string, byUser: bool): void {
         if (name === "" || lay[name] === undefined)
             return;
         selectOnly(name);
         renameError = "";
         renaming = name;
+        if (byUser)
+            focusEvent({
+                type: "renameOpened"
+            });
     }
 
     // Opening hands the keyboard to whatever opens: the desktop lets go of it.
     function openNames(names: var): void {
         for (const n of names)
             files.open(n);
-        released();
+        if (names.length > 0)
+            focusEvent({
+                type: "itemOpened"
+            });
     }
 
     readonly property bool menuOpen: menuKind !== ""
 
+    // The menu window is hidden synchronously by its binding, before the host's next commit.
+    onMenuOpenChanged: focusEvent({
+        type: menuOpen ? "menuOpened" : "menuClosed"
+    })
+
     function closeMenu(): void {
         menuKind = "";
-        takeFocus();
+        restoreFocus();
     }
 
     function applyMenu(action: string): void {
@@ -167,7 +197,7 @@ FocusScope {
         const paths = selectedPaths;
         const kind = menuKind;
         menuKind = "";
-        keySink.forceActiveFocus();
+        restoreFocus();
         if (kind === "desktop") {
             if (action === "newFolder")
                 files.newFolder();
@@ -176,7 +206,7 @@ FocusScope {
         if (action === "open")
             openNames(names);
         else if (action === "rename" && names.length === 1)
-            Qt.callLater(() => root.beginRename(names[0]));
+            Qt.callLater(() => root.beginRename(names[0], true));
         else if (action === "copy")
             files.copy(paths);
         else if (action === "trash")
@@ -187,6 +217,8 @@ FocusScope {
     // already part of the selection, so that a drag carries the whole selection).
     function press(name: string, modifiers: int, right: bool): void {
         root.takeFocus();
+        if (menuOpen)
+            closeMenu();
         if (renaming !== "" && renaming !== name)
             endRename();
         if (modifiers & Qt.ControlModifier) {
@@ -282,7 +314,15 @@ FocusScope {
 
     // ---- keyboard --------------------------------------------------------------------------------
 
+    // While the icon menu is open the desktop holds the keyboard for it: keys go to the menu, and
+    // nothing reaches the desktop actions below.
+    Keys.forwardTo: root.menuOpen && menuLoader.item ? [menuLoader.item] : []
+
     Keys.onPressed: event => {
+        if (root.menuOpen) {
+            event.accepted = true;
+            return;
+        }
         if (root.renaming !== "")
             return;
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
@@ -309,12 +349,19 @@ FocusScope {
             event.accepted = true;
         } else if (event.key === Qt.Key_Space && !ctrl) {
             // Glance at the selected files (Space again closes it; folders are skipped by Glance itself).
-            if (root.selectedPaths.length > 0)
+            // Opening it (none shown yet): the desktop lets go of the keyboard first, so Glance is
+            // focused by Hyprland when it maps and gives the keyboard back when it closes.
+            if (root.selectedPaths.length > 0) {
+                if (GlanceApp.shownKey === "")
+                    root.focusEvent({
+                        type: "previewOpened"
+                    });
                 GlanceApp.toggle(root.selectedPaths);
+            }
             event.accepted = true;
         } else if (event.key === Qt.Key_F2) {
             if (root.selectedNames.length === 1)
-                root.beginRename(root.selectedNames[0]);
+                root.beginRename(root.selectedNames[0], true);
             event.accepted = true;
         } else if (ctrl && event.key === Qt.Key_Backspace) {
             if (root.selectedPaths.length > 0)
@@ -327,7 +374,15 @@ FocusScope {
             root.selected = all;
             event.accepted = true;
         } else if (event.key === Qt.Key_Escape) {
-            root.clearSelection();
+            // Esc clears the selection; with nothing selected it lets go of the keyboard.
+            if (root.selectedNames.length > 0)
+                root.clearSelection();
+            else
+                root.focusEvent({
+                    type: "escape",
+                    hasSelection: false,
+                    renaming: false
+                });
             event.accepted = true;
         }
     }
@@ -335,14 +390,16 @@ FocusScope {
     Connections {
         target: files
 
+        // New Folder (a user action) opens the rename field of the folder it created.
         function onRenameWanted(name: string): void {
-            Qt.callLater(() => root.beginRename(name));
+            Qt.callLater(() => root.beginRename(name, true));
         }
 
-        // The file system refused an accepted rename: reopen the field with the reason inline.
+        // The file system refused an accepted rename: reopen the field with the reason inline. It
+        // gets the keyboard only if the desktop still owns it.
         function onRenameFailed(name: string, reason: string): void {
-            root.takeFocus();
-            root.beginRename(name);
+            root.restoreFocus();
+            root.beginRename(name, false);
             root.renameError = "failed";
         }
     }
@@ -363,6 +420,8 @@ FocusScope {
                 return;
             }
             root.takeFocus();
+            if (root.menuOpen)
+                root.closeMenu();
             if (root.renaming !== "")
                 root.endRename();
             if (mouse.button === Qt.RightButton) {
@@ -426,6 +485,7 @@ FocusScope {
             dragPaths: root.selectedPaths
             dragNames: root.selectedNames
             onPressedIcon: (modifiers, right) => root.press(modelData.name, modifiers, right)
+            onDragActiveChanged: root.dragging = icon.dragActive
             onActivated: root.openNames([modelData.name])
             onMenuRequested: (px, py) => {
                 root.menuAt = Qt.point(px, py);
@@ -459,8 +519,10 @@ FocusScope {
         border.color: Appearance.withAlpha(Appearance.colors.accent, Tokens.desktopIconSelectionOpacity)
     }
 
-    // Context menu window: an Overlay window that takes the keyboard while it is open (the desktop
-    // surface cannot show a menu above windows); clicking anywhere else dismisses it.
+    // Context menu window: an Overlay window (the desktop surface cannot show a menu above windows);
+    // clicking anywhere else dismisses it. It never takes the keyboard: the desktop surface holds it
+    // (Exclusive) while the menu is open and forwards keys to it, so closing the menu cannot hand the
+    // keyboard to another window (Hyprland refocuses the last window when a focused layer unmaps).
     // qmllint disable uncreatable-type
     PanelWindow {
         // qmllint enable uncreatable-type
@@ -477,7 +539,7 @@ FocusScope {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-icons-menu"
 
         MouseArea {
@@ -487,6 +549,7 @@ FocusScope {
         }
 
         Loader {
+            id: menuLoader
             active: root.menuKind !== ""
             x: Math.max(Tokens.spacingSm, Math.min(root.menuAt.x, menuWin.width - width - Tokens.spacingSm))
             y: Math.max(Tokens.spacingSm, Math.min(root.menuAt.y, menuWin.height - height - Tokens.spacingSm))
@@ -495,7 +558,6 @@ FocusScope {
                 count: root.selectedNames.length
                 onChoose: action => root.applyMenu(action)
                 onCloseRequested: root.closeMenu()
-                Component.onCompleted: forceActiveFocus()
             }
         }
     }
