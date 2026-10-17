@@ -24,6 +24,7 @@ FocusScope {
     readonly property string widgetId: entry.id
     readonly property var footprint: Placements.px(size, cell, gap)
     readonly property WidgetBase widget: loader.item as WidgetBase
+    readonly property bool hovered: hover.hovered
 
     // (x, y) in this item's coordinates; keyboard requests use the center.
     signal menuRequested(real x, real y)
@@ -115,11 +116,16 @@ FocusScope {
         }
     }
 
-    TapHandler {
+    HoverHandler {
+        id: hover
+        enabled: root.interactive
+    }
+
+    // Passive: reports any press without taking the grab from the handlers above or from drags.
+    PointHandler {
         enabled: root.interactive
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        gesturePolicy: TapHandler.ReleaseWithinBounds
-        onPressedChanged: if (pressed)
+        onActiveChanged: if (active)
             root.pressed()
     }
 }

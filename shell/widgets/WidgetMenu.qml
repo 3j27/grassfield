@@ -17,9 +17,19 @@ PopupMenu {
         const items = [];
         const sizes = Registry.sizesOf(entry.id);
         for (let i = 0; i < sizes.length; i++)
-            items.push({id: "size:" + sizes[i], text: Registry.sizeLabel(sizes[i]), checked: sizes[i] === entry.size});
-        items.push({separator: true});
-        items.push({id: "remove", text: qsTr("Remove Widget"), destructive: true});
+            items.push({
+                id: "size:" + sizes[i],
+                text: Registry.sizeLabel(sizes[i]),
+                checked: sizes[i] === entry.size
+            });
+        items.push({
+            separator: true
+        });
+        items.push({
+            id: "remove",
+            text: qsTr("Remove Widget"),
+            destructive: true
+        });
         return items;
     }
 

@@ -41,6 +41,7 @@ WidgetBase {
     Item {
         id: ring
 
+        visible: root.present || !root.isSmall
         readonly property real edge: root.isSmall ? Math.min(root.width, root.height) - 2 * root.padding : root.height - 2 * root.padding
         readonly property real stroke: Tokens.spacingSm
 
@@ -96,6 +97,15 @@ WidgetBase {
             fontSizeMode: Text.Fit
             minimumPixelSize: Tokens.typographyCaptionSize
         }
+    }
+
+    WidgetLabel {
+        anchors.centerIn: parent
+        width: parent.width - 2 * root.padding
+        horizontalAlignment: Text.AlignHCenter
+        visible: root.isSmall && !root.present
+        text: root.stateText
+        color: Appearance.colors.textSecondary
     }
 
     Column {

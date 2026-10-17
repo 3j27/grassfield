@@ -22,7 +22,7 @@ FocusScope {
     Rectangle {
         anchors.fill: parent
         radius: Tokens.radiusPanel
-        color: Appearance.withAlpha(Appearance.colors.materialTint, Math.max(Appearance.tintAlpha(Appearance.effectiveTransparency), Tokens.materialBodyOpacity))
+        color: Appearance.withAlpha(Appearance.colors.materialTint, 1)
     }
 
     // Swallows clicks on the gallery.

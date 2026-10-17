@@ -560,4 +560,6 @@ QtObject {
     readonly property int widgetGlyphSize: 34
     // estimate: widgets v1, primary figure size
     readonly property int widgetBigSize: 44
+    // estimate: widgets v1, how long a click keeps the desktop active while a window has focus
+    readonly property int widgetActiveMs: 10000
 }

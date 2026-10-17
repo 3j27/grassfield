@@ -97,9 +97,21 @@ WidgetBase {
 
         Repeater {
             model: [
-                {icon: "media-prev", name: qsTr("Previous track"), action: "previous"},
-                {icon: Media.playing ? "media-pause" : "media-play", name: Media.playing ? qsTr("Pause") : qsTr("Play"), action: "toggle"},
-                {icon: "media-next", name: qsTr("Next track"), action: "next"}
+                {
+                    icon: "media-prev",
+                    name: qsTr("Previous track"),
+                    action: "previous"
+                },
+                {
+                    icon: Media.playing ? "media-pause" : "media-play",
+                    name: Media.playing ? qsTr("Pause") : qsTr("Play"),
+                    action: "toggle"
+                },
+                {
+                    icon: "media-next",
+                    name: qsTr("Next track"),
+                    action: "next"
+                }
             ]
 
             delegate: Item {

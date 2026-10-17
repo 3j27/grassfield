@@ -66,28 +66,6 @@ WidgetBase {
             }
         }
 
-        // Hour, minute, second hands; a hand is a bar rotated about the face center.
-        component Hand: Rectangle {
-            id: hand
-
-            property real angle: 0
-            property real length: 0.5
-            property color tint: Appearance.colors.text
-
-            x: face.width / 2 - width / 2
-            y: face.height / 2 - height
-            width: Tokens.widgetAnalogHandWidth
-            height: face.height / 2 * length
-            radius: width / 2
-            color: tint
-            antialiasing: true
-            transform: Rotation {
-                origin.x: hand.width / 2
-                origin.y: hand.height
-                angle: hand.angle
-            }
-        }
-
         Hand {
             angle: (root.now.getHours() % 12 + root.now.getMinutes() / 60) * 30
             length: 0.5
@@ -112,6 +90,28 @@ WidgetBase {
             height: width
             radius: width / 2
             color: Appearance.colors.accent
+        }
+    }
+
+    // Hour, minute, second hands; a hand is a bar rotated about the face center.
+    component Hand: Rectangle {
+        id: hand
+
+        property real angle: 0
+        property real length: 0.5
+        property color tint: Appearance.colors.text
+
+        x: face.width / 2 - width / 2
+        y: face.height / 2 - height
+        width: Tokens.widgetAnalogHandWidth
+        height: face.height / 2 * length
+        radius: width / 2
+        color: tint
+        antialiasing: true
+        transform: Rotation {
+            origin.x: hand.width / 2
+            origin.y: hand.height
+            angle: hand.angle
         }
     }
 
