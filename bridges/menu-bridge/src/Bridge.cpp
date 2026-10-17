@@ -214,7 +214,14 @@ namespace gf::menubridge {
                 if (m_pending.value(msg.window) != token)
                     return; // superseded or closed meanwhile
                 const QDBusMessage reply = call->reply();
-                const qint64       pid   = reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty() ? reply.arguments().at(0).toLongLong() : -1;
+                if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+                    // Typically the application left the bus meanwhile (window closing).
+                    m_pending.remove(msg.window);
+                    log(QStringLiteral("window %1: no process for %2: %3").arg(msg.window, owner, reply.errorName()));
+                    sendError(msg.window, QStringLiteral("no-owner"), QStringLiteral("%1 has no owner on the bus").arg(owner));
+                    return;
+                }
+                const qint64 pid = reply.arguments().at(0).toLongLong();
                 if (pid != msg.pid) {
                     m_pending.remove(msg.window);
                     log(QStringLiteral("window %1: refused %2 %3: bus name owned by pid %4, window client is pid %5").arg(msg.window, msg.service, msg.path).arg(pid).arg(msg.pid));

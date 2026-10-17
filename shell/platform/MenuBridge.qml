@@ -38,6 +38,8 @@ Singleton {
 
     // Hyprland window address (lowercase hex) -> {service, path, pid}, from the plugin's appmenu events.
     property var registrations: ({})
+    // Windows whose appmenu event was re-requested from the plugin (once each).
+    property var queried: ({})
     // Window whose menus the bar shows: the focused window, kept while a shell popup holds the keyboard focus.
     property string window: ""
     // Window whose menu the bridge was asked to open, and the registration it was opened with.
@@ -111,6 +113,13 @@ Singleton {
         if (address === root.window)
             return;
         root.window = address;
+        // A window this shell has not heard about (it started after the window registered): ask the plugin once.
+        if (address !== "" && root.registrations[address] === undefined && root.appmenuFeature && !root.queried[address]) {
+            root.queried[address] = true;
+            const call = Minimized.appmenuCall(address);
+            if (call !== "")
+                Hyprland.dispatch(call);
+        }
         syncOpen();
     }
 
@@ -196,6 +205,12 @@ Singleton {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
         for (let i = 0; i < all.length; i++) {
             const call = Minimized.appmenuCall(all[i].address);
+            if (call !== "")
+                Hyprland.dispatch(call);
+        }
+        // The focused window may predate the feature (or the list): ask for it too.
+        if (root.window !== "" && root.registrations[root.window] === undefined) {
+            const call = Minimized.appmenuCall(root.window);
             if (call !== "")
                 Hyprland.dispatch(call);
         }

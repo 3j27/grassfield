@@ -33,7 +33,7 @@ top-level menus (Left/Right).
 - **MB5 Ownership check (spoofing).** `open` carries the pid the plugin reported for the Wayland client that called
   `set_address` (gfc/1 `appmenu` field `pid`, `wl_client_get_credentials`). The bridge resolves a well-known name to
   its unique owner (`GetNameOwner`) and accepts the pair only if `GetConnectionUnixProcessID(owner)` equals that pid;
-  otherwise `pid-mismatch`. Afterwards it talks to the unique name only.
+  otherwise `pid-mismatch` (`no-owner` when the name or its process is gone). Afterwards it talks to the unique name only.
 - **MB6 DBusMenu client.** Explicit signatures (Chromium has no introspection data): `GetLayout(int32 0, int32 -1,
   as [])`, `AboutToShow(int32)`, `Event(int32 id, "clicked", variant<int32 0>, uint32 0)`. `LayoutUpdated` and
   `ItemsPropertiesUpdated` trigger one coalesced `GetLayout` (40 ms); `AboutToShow` returning `needUpdate` too. The
@@ -82,7 +82,7 @@ top-level menus (Left/Right).
 | MB4, MB7, MB10 (logic), MB9 XML | `tests/unit/menu-bridge/tst_menubridge.cpp` (gtest, 23 cases; the wire case runs over a peer-to-peer D-Bus connection and skips where Unix sockets are forbidden) | L0 | 2026-10-17: 23/23 PASS outside the sandbox, 22 + 1 skipped inside |
 | MB11, MB12 (models) | `tests/unit/tst_menubridge.qml` (event parsing, menu/1 lines, sanitizing, caps, popup model, shortcut text) | L0 | 2026-10-17: 8/8 PASS |
 | gfc/1 `pid` | `compositor/tests` `Protocol.AppmenuJson*`, `AppmenuRegistry.PidTravels…` | L0 | 2026-10-17: 92/92 PASS |
-| M3 exit (MB1, MB5, MB6, MB11, MB12, MB13) | `tests/integration/global_menus.sh` (nested, private bus, virtual pointer) | L1 | 2026-10-17: PASS (run `.dev/global-menus/run-20261017-132207`) |
+| M3 exit (MB1, MB5, MB6, MB11, MB12, MB13) | `tests/integration/global_menus.sh` (nested, private bus, virtual pointer) | L1 | 2026-10-17: PASS twice in a row (runs `.dev/global-menus/run-20261017-133714`, `run-20261017-133805`); bridge RSS 19.4–19.5 MiB (shared Qt libraries included), CPU time 0 s |
 | MB5 refusal, MB4 errors, MB3 cleanup | throwaway private bus, `open` naming the bridge's own name with a wrong pid → `pid-mismatch`; right pid → accepted; invalid lines → `bad-request`; SIGTERM removes the socket | L1 | 2026-10-17 verified manually (session log) |
 | MB10 | bridge started with `GRASSFIELD_DEV=1` and the owner's bus address, no address, no session variables, no socket → exit 3 before connecting | L0 | 2026-10-17 verified |
 | Unit hardening | `systemd-analyze --user verify packaging/systemd/grassfield-menu-bridge.service` | L0 | only finding: `/usr/bin/grassfield-menu-bridge` not installed; runtime under systemd NOT VERIFIED (owner L2) |
