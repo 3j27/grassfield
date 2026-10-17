@@ -34,10 +34,16 @@ build() {
   cmake -S "$(_root)/apps/preview" -B "$srcdir/preview-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/preview-build"
+  # grassfield-menu-bridge (ADR-0008): global menus, systemd user unit, D-Bus diagnostics XML.
+  cmake -S "$(_root)/bridges/menu-bridge" -B "$srcdir/menu-bridge-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DGRASSFIELD_BUILD_TESTS=ON
+  cmake --build "$srcdir/menu-bridge-build"
 }
 
 check() {
   "$(_root)/compositor/build/grassfield-compositor-tests"
+  # The peer-to-peer D-Bus case skips itself where Unix sockets cannot be created (build sandboxes).
+  "$srcdir/menu-bridge-build/menu-bridge-unit-tests"
 }
 
 package_grassfield-desktop() {
@@ -78,6 +84,9 @@ package_grassfield-desktop() {
 
   install -Dm644 "$root/packaging/wayland-sessions/grassfield.desktop" "$pkgdir/usr/share/wayland-sessions/grassfield.desktop"
   install -Dm644 "$root/packaging/systemd/grassfield-shell.service" "$pkgdir/usr/lib/systemd/user/grassfield-shell.service"
+  # Menu bridge: /usr/bin/grassfield-menu-bridge, /usr/lib/systemd/user/grassfield-menu-bridge.service,
+  # /usr/share/dbus-1/interfaces/org.grassfield.MenuBridge1.xml (started by the session's autostart.lua).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/menu-bridge-build"
 
   # Grassfield Settings app (M4).
   DESTDIR="$pkgdir" cmake --install "$srcdir/settings-build"
