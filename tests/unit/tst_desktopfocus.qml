@@ -268,4 +268,55 @@ TestCase {
         compare(Focus.interactivity(s), "none");
         verify(!Focus.menuMapped(s));
     }
+
+    // ---- click catchers on the other outputs ---------------------------------------------------------
+
+    function test_noClickCatcherWhileTheDesktopIsIdle() {
+        verify(!Focus.catchersMapped(Focus.initial()));
+        verify(!Focus.catchersMapped(run(noise)));
+    }
+
+    function test_clickCatchersAreMappedWhileAMenuIsOpenAndUnmappedWhenItCloses() {
+        const open = run([{type: "menuOpened"}]);
+        verify(Focus.catchersMapped(open));
+        verify(!Focus.catchersMapped(run([{type: "menuClosed"}], open)));
+    }
+
+    function test_clickCatchersAreMappedDuringARenameAndUnmappedWhenItEnds() {
+        const renaming = run([{type: "renameOpened"}]);
+        verify(Focus.catchersMapped(renaming));
+        verify(!Focus.catchersMapped(run([{type: "renameClosed"}], renaming)));
+    }
+
+    function test_clickCatchersStayMappedAcrossTheMenuToRenameHandOff() {
+        let s = Focus.initial();
+        for (const e of [{type: "menuOpened"}, {type: "renameOpened"}, {type: "menuClosed"}, {type: "committed"}, {type: "keys", hasKeys: true}]) {
+            s = Focus.next(s, e);
+            verify(Focus.catchersMapped(s), e.type);
+        }
+    }
+
+    function test_aPressOnACatcherCancelsTheRenameAndReleasesTheKeyboard() {
+        // The catcher cancels through renameClosed: nothing holds the keyboard afterwards, the
+        // catchers go away.
+        const s = run([{type: "renameOpened"}, {type: "renameClosed"}, {type: "press"}]);
+        compare(s.mode, "idle");
+        compare(Focus.interactivity(s), "none");
+        verify(!holder(s));
+        verify(!Focus.catchersMapped(s));
+    }
+
+    function test_aPressOnACatcherDuringTheHandOffUnmapsTheMenuWindowToo() {
+        const s = run([{type: "menuOpened"}, {type: "renameOpened"}, {type: "committed"}, {type: "renameClosed"}, {type: "settled"}]);
+        compare(s.mode, "idle");
+        verify(!Focus.menuMapped(s));
+        verify(!Focus.catchersMapped(s));
+    }
+
+    function test_aPressOnACatcherClosesTheMenuWithoutChoosingAnItem() {
+        const s = run([{type: "menuOpened"}, {type: "menuClosed"}, {type: "press"}]);
+        compare(s.mode, "idle");
+        verify(!Focus.menuHoldsKeys(s));
+        verify(!Focus.catchersMapped(s));
+    }
 }
