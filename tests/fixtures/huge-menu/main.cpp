@@ -5,8 +5,12 @@
 // It owns --service on the session bus and serves com.canonical.dbusmenu at /MenuBar/1: GetLayout answers a layout of
 // --items children whose label is --label-kb kB. Then it plays the shell on the bridge socket: for every one of
 // --windows rounds it connects (retrying, so a restarted bridge is found), sends hello and an open request for this
-// process, and prints what the bridge answers. With --kill-pid it SIGKILLs that process (the bridge) on the first
-// GetLayout, to emulate a kill by the memory limit.
+// process, and prints what the bridge answers. With --kill-pid it SIGKILLs that process (the bridge) on the
+// --kill-on'th GetLayout (default 1), to emulate a kill by the memory limit. With --emit-updates it sends a
+// LayoutUpdated signal after answering the first GetLayout, so the bridge re-reads the layout (the "small first
+// layout, hostile re-read" crash loop). Before every round after the first it waits until the bridge reports no
+// shell connection (org.grassfield.MenuBridge1.Status "shell" false), so a round never races the bridge's handling of
+// the previous disconnect.
 //
 // Refuses to run unless DBUS_SESSION_BUS_ADDRESS is a private /tmp/dbus-* bus (never the owner's session bus).
 //
@@ -22,6 +26,8 @@
 #include <QLocalSocket>
 #include <QMetaType>
 #include <QStringList>
+#include <QTimer>
+#include <QVariantMap>
 
 #include <csignal>
 #include <cstdio>
@@ -32,6 +38,8 @@ namespace {
     int   gLabelKb   = 20;
     int   gGetLayout = 0;
     pid_t gKillPid   = 0;
+    int   gKillOn    = 1;
+    bool  gEmitUpdates = false;
 
     class HugeMenu : public QDBusVirtualObject {
       public:
@@ -46,11 +54,19 @@ namespace {
             ++gGetLayout;
             std::printf("huge-menu: GetLayout #%d\n", gGetLayout);
             std::fflush(stdout);
-            if (gKillPid > 0 && gGetLayout == 1) {
+            if (gKillPid > 0 && gGetLayout == gKillOn) {
                 ::kill(gKillPid, SIGKILL);
                 return true; // the caller is dead: no reply
             }
             conn.send(msg.createReply(m_reply.toList()));
+            if (gEmitUpdates && gGetLayout == 1) {
+                const QDBusConnection c = conn;
+                QTimer::singleShot(150, [c] {
+                    QDBusMessage sig = QDBusMessage::createSignal(QStringLiteral("/MenuBar/1"), QStringLiteral("com.canonical.dbusmenu"), QStringLiteral("LayoutUpdated"));
+                    sig << QVariant::fromValue<uint>(2) << QVariant::fromValue<int>(0);
+                    c.send(sig);
+                });
+            }
             return true;
         }
 
@@ -79,6 +95,17 @@ namespace {
         QVariant m_reply;
     };
 
+    // The bridge's own view of the shell connection: 1 connected, 0 not, -1 the bridge does not answer (down).
+    int bridgeHasShell(QDBusConnection& conn) {
+        QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("org.grassfield.MenuBridge1"), QStringLiteral("/org/grassfield/MenuBridge1"), QStringLiteral("org.grassfield.MenuBridge1"),
+                                                           QStringLiteral("Status"));
+        const QDBusMessage reply = conn.call(call, QDBus::Block, 500);
+        if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+            return -1;
+        const QVariantMap status = qdbus_cast<QVariantMap>(reply.arguments().at(0).value<QDBusArgument>());
+        return status.value(QStringLiteral("shell")).toBool() ? 1 : 0;
+    }
+
     void pump(int ms) {
         QElapsedTimer t;
         t.start();
@@ -99,9 +126,15 @@ int main(int argc, char** argv) {
     int               windows = 3;
     int               gapMs   = 800;
     const QStringList args    = app.arguments();
-    for (qsizetype i = 1; i + 1 < args.size(); i += 2) {
+    for (qsizetype i = 1; i < args.size(); ++i) {
+        if (args.at(i) == QLatin1String("--emit-updates")) {
+            gEmitUpdates = true;
+            continue;
+        }
+        if (i + 1 >= args.size())
+            break;
         const QString& a = args.at(i);
-        const QString& v = args.at(i + 1);
+        const QString& v = args.at(++i);
         if (a == QLatin1String("--items"))
             gItems = v.toInt();
         else if (a == QLatin1String("--label-kb"))
@@ -114,11 +147,13 @@ int main(int argc, char** argv) {
             gapMs = v.toInt();
         else if (a == QLatin1String("--kill-pid"))
             gKillPid = static_cast<pid_t>(v.toInt());
+        else if (a == QLatin1String("--kill-on"))
+            gKillOn = v.toInt();
         else if (a == QLatin1String("--service"))
             service = v;
     }
     if (socket.isEmpty()) {
-        std::fprintf(stderr, "usage: huge-menu --socket PATH [--items N] [--label-kb K] [--windows W] [--gap-ms MS] [--kill-pid PID] [--service NAME]\n");
+        std::fprintf(stderr, "usage: huge-menu --socket PATH [--items N] [--label-kb K] [--windows W] [--gap-ms MS] [--kill-pid PID] [--kill-on N] [--emit-updates] [--service NAME]\n");
         return 2;
     }
 
@@ -133,6 +168,13 @@ int main(int argc, char** argv) {
     std::fflush(stdout);
 
     for (int round = 1; round <= windows; ++round) {
+        if (round > 1) {
+            // The previous round's connection must be handled (the bridge accepts one shell at a time).
+            QElapsedTimer settle;
+            settle.start();
+            while (bridgeHasShell(conn) == 1 && settle.elapsed() < 10000)
+                pump(20);
+        }
         QLocalSocket  sock;
         QElapsedTimer wait;
         wait.start();
@@ -157,6 +199,8 @@ int main(int argc, char** argv) {
             sock.waitForReadyRead(50);
             QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
             buffer += sock.readAll();
+            if (buffer.contains("\"type\":\"error\""))
+                break; // refused or failed: nothing more to wait for
         }
         for (const QByteArray& line : buffer.split('\n')) {
             if (!line.isEmpty() && line.contains("\"type\":\"error\""))
