@@ -125,6 +125,28 @@ TestCase {
         compare(flow.submits, 2);
     }
 
+    // Untrusted strings are flattened to one capped plain line (R12 review).
+    function test_untrustedTextIsOneCappedLine() {
+        compare(model.plainLine("a\nb\r\n\tc\u0007d\u009be", 100), "a b c d e");
+        compare(model.plainLine("x\u2028y\u2029z", 100), "x y z");
+        compare(model.plainLine("\u202eevil\u202c \u2066iso\u2069 \u200fmark\u200e", 100), "evil iso mark");
+        compare(model.plainLine(undefined, 10), "");
+        compare(model.plainLine(null, 10), "");
+        compare(model.plainLine("abcdefghijkl", 5), "abcd\u2026");
+        compare(model.plainLine("\u00e9 \u00fc \u65e5\u672c", 100), "\u00e9 \u00fc \u65e5\u672c");
+
+        flow.message = "Run /usr/bin/true\n\nAction: org.example.fake\n" + "y".repeat(5000);
+        verify(model.message.indexOf("\n") === -1);
+        verify(model.message.length <= model.maxMessageLength);
+        verify(model.message.endsWith("\u2026"));
+        flow.actionId = "org.example\nAction: fake";
+        compare(model.actionId, "org.example Action: fake");
+        flow.supplementaryMessage = "line1\nline2";
+        compare(model.feedback, "line1 line2");
+        flow.selectedIdentity = {displayName: "root\n\u202eeve"};
+        compare(model.identityName, "root eve");
+    }
+
     function test_newFlowResetsState() {
         flow.isResponseRequired = true;
         model.submit("pw");

@@ -17,6 +17,8 @@ Item {
     property bool authenticating: false
     property bool inputEnabled: true
     property string message: ""
+    // Persistent warning under the error line (e.g. crash recovery unavailable); never replaced.
+    property string notice: ""
     property string userName: ""
     // file:// URL of the account picture, or "" for the initials disc.
     property string avatarSource: ""
@@ -246,6 +248,21 @@ Item {
             width: Math.max(Tokens.lockFieldWidth, implicitWidth)
             horizontalAlignment: Text.AlignHCenter
             text: root.message !== "" ? root.message : (field.capsLock ? qsTr("Caps Lock is on") : " ")
+            color: root.colors.text
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyCaptionSize
+            font.weight: Tokens.typographyMenuWeight
+            Accessible.role: Accessible.AlertMessage
+            Accessible.name: text
+        }
+
+        Text {
+            textFormat: Text.PlainText
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.max(Tokens.lockFieldWidth, implicitWidth)
+            horizontalAlignment: Text.AlignHCenter
+            visible: root.notice !== ""
+            text: root.notice
             color: root.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize

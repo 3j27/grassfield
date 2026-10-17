@@ -15,18 +15,24 @@ QtObject {
     // supplementaryIsError; methods submit(string), cancelAuthenticationRequest().
     property var flow: null
 
+    // Length caps of the requester/polkit strings once flattened to one line (the dialog also caps
+    // their rendered lines): a long or multi-line message cannot push the action ID and the buttons
+    // away, nor draw a fake "Action:" line of its own.
+    readonly property int maxMessageLength: 400
+    readonly property int maxDetailLength: 200
+
     // Every binding tests `flow` itself: the flow object can disappear between two updates.
     readonly property bool active: !!flow
-    readonly property string message: flow ? String(flow.message || "") : ""
-    readonly property string actionId: flow ? String(flow.actionId || "") : ""
+    readonly property string message: flow ? plainLine(flow.message, maxMessageLength) : ""
+    readonly property string actionId: flow ? plainLine(flow.actionId, maxDetailLength) : ""
     readonly property var identities: flow && flow.identities ? flow.identities : []
     readonly property var selectedIdentity: flow ? flow.selectedIdentity : null
     readonly property string identityName: identityLabel(selectedIdentity)
     readonly property bool responseRequired: !!flow && flow.isResponseRequired === true
     readonly property bool responseVisible: !!flow && flow.responseVisible === true
-    readonly property string prompt: flow ? cleanPrompt(String(flow.inputPrompt || "")) : ""
+    readonly property string prompt: flow ? cleanPrompt(plainLine(flow.inputPrompt, maxDetailLength)) : ""
     // Polkit/PAM feedback, or our own message after a failed attempt.
-    readonly property string feedback: priv.error !== "" ? priv.error : (flow ? String(flow.supplementaryMessage || "") : "")
+    readonly property string feedback: priv.error !== "" ? priv.error : (flow ? plainLine(flow.supplementaryMessage, maxDetailLength) : "")
     readonly property bool feedbackIsError: priv.error !== "" || (!!flow && flow.supplementaryIsError === true)
     // An answer was sent and polkit has not asked again yet.
     readonly property bool submitted: priv.submitted
@@ -47,7 +53,21 @@ QtObject {
     function identityLabel(identity: var): string {
         if (!identity)
             return "";
-        return String(identity.displayName || identity.string || "");
+        return plainLine(identity.displayName || identity.string, maxDetailLength);
+    }
+
+    // Untrusted text as one plain line: C0/C1 control characters (newlines, tabs, escapes) and
+    // line/paragraph separators become spaces, bidirectional overrides/isolates and marks are
+    // removed (no reordered or spoofed text), whitespace runs collapse, and the result is capped
+    // at maxLength characters with an ellipsis.
+    function plainLine(text: var, maxLength: int): string {
+        let t = String(text === undefined || text === null ? "" : text);
+        t = t.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ");
+        t = t.replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "");
+        t = t.replace(/\s+/g, " ").trim();
+        if (maxLength > 0 && t.length > maxLength)
+            t = t.slice(0, maxLength - 1).trim() + "\u2026";
+        return t;
     }
 
     // "Password: " → "Password"

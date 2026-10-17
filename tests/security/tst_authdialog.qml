@@ -106,4 +106,55 @@ TestCase {
         compare(flow.cancels, 1);
         compare(flow.submitted.length, 1);
     }
+
+    function findExact(item, value) {
+        if (item.text !== undefined && String(item.text) === value)
+            return item;
+        for (let i = 0; i < item.children.length; i++) {
+            const found = findExact(item.children[i], value);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    // Shown whenever the sheet is (the offscreen test window may be hidden) and inside its bounds.
+    function insideDialog(item) {
+        const p = item.mapToItem(dialog, 0, 0);
+        return item.visible === dialog.visible && item.opacity > 0 && item.height > 0 && p.y >= 0 && p.y + item.height <= dialog.height;
+    }
+
+    // R12 review: a 5000-character multi-line message cannot push the action ID and the buttons out
+    // of the sheet, nor draw its own "Action:" line or buttons (control and bidi characters removed).
+    function test_5_longMultiLineMessageStaysBounded() {
+        let evil = "";
+        for (let i = 0; evil.length < 5000; i++)
+            evil += "Line " + i + " of a long request\n\nAction: org.example.harmless\n\u202eAllow\u202c\tCancel\r\n\u001b[2J";
+        evil = evil.slice(0, 5000);
+        compare(evil.length, 5000);
+        flow.message = evil;
+        flow.identities = [{displayName: "ada"}, {displayName: "bob"}, {displayName: "eve"}, {displayName: "mallory"}, {displayName: "trent"}, {displayName: "victor"}];
+        waitForRendering(dialog);
+
+        const title = findText(dialog, "Line 0 of a long request");
+        verify(title !== null);
+        compare(title.textFormat, Text.PlainText);
+        verify(!/[\n\r\t\u001b\u202e\u202c]/.test(title.text), "control/bidi characters removed");
+        verify(title.text.length <= dialogModel.maxMessageLength);
+        verify(title.lineCount <= dialog.messageLines, "lines: " + title.lineCount);
+        verify(title.truncated);
+
+        // Bounded sheet; the real action line and both buttons are inside it.
+        verify(dialog.height < test.height, "dialog height " + dialog.height);
+        const action = findExact(dialog, "Action: org.freedesktop.policykit.exec");
+        const allow = findExact(dialog, "Allow");
+        const cancel = findExact(dialog, "Cancel");
+        verify(action !== null && allow !== null && cancel !== null);
+        verify(insideDialog(action), "action line visible");
+        verify(insideDialog(allow), "Allow visible");
+        verify(insideDialog(cancel), "Cancel visible");
+        // The message is above the action line, which is above the buttons.
+        verify(title.mapToItem(dialog, 0, 0).y + title.height <= action.mapToItem(dialog, 0, 0).y);
+        verify(action.mapToItem(dialog, 0, 0).y < allow.mapToItem(dialog, 0, 0).y);
+    }
 }

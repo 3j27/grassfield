@@ -22,9 +22,9 @@ if compgen -G "tests/security/tst_*.qml" >/dev/null; then
   QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -import "$qs_root" -input tests/security || status=1
   rm -rf "$qs_root"
 fi
-# Quickshell-level tests (real FileView/JsonAdapter): each tests/shell/<name>/shell.qml prints PASS/FAIL.
-# Run offscreen and detached from any compositor session.
-for dir in tests/shell/*/; do
+# Quickshell-level tests (real FileView/JsonAdapter, reloads): each tests/shell/<name>/shell.qml and
+# tests/security/<name>/shell.qml prints PASS/FAIL. Run offscreen and detached from any compositor session.
+for dir in tests/shell/*/ tests/security/*/; do
   [[ -f ${dir}shell.qml ]] || continue
   out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui" \
     timeout 60 qs -p "$dir" --no-color 2>&1) || { echo "$out"; echo "FAIL: $dir"; status=1; continue; }
