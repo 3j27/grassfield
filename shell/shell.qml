@@ -4,6 +4,7 @@ import Quickshell
 import Grassfield.Ui
 import qs.desktop
 import qs.dock
+import qs.launchpad
 import qs.menubar
 import qs.notifications
 import qs.osd
@@ -81,6 +82,7 @@ ShellRoot {
     AuthAgent {}
     Idle {}
     Overview {}
+    AppsController {}
 
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore).

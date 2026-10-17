@@ -417,4 +417,81 @@ QtObject {
     readonly property real overviewDragOpacity: 0.8
     // estimate: balanced profile refreshes thumbnails at 4 fps (the capture API has no rate control)
     readonly property int overviewBalancedIntervalMs: 250
+
+    // task spec: about 96 px at 1080p; scaled by screen height
+    readonly property int appsIconSize: 96
+    // estimate: grid width share of the screen
+    readonly property real appsWidthFraction: 0.8
+    // estimate: grid height share of the screen
+    readonly property real appsHeightFraction: 0.7
+    // estimate: cell width relative to the icon (7 columns at 1080p)
+    readonly property real appsCellWidthScale: 2.2
+    // estimate: cell height relative to the icon (5 rows at 1080p)
+    readonly property real appsCellHeightScale: 1.55
+    // estimate
+    readonly property int appsMinCols: 3
+    // estimate
+    readonly property int appsMaxCols: 10
+    // estimate
+    readonly property int appsMinRows: 2
+    // estimate
+    readonly property int appsMaxRows: 7
+    // estimate: dim over the blurred wallpaper
+    readonly property real appsBackdropOpacity: 0.5
+    // estimate: dim when blur is off (Reduce Transparency)
+    readonly property real appsBackdropOpacityOpaque: 0.94
+    // estimate: search field at the top centre
+    readonly property int appsSearchWidth: 260
+    // estimate
+    readonly property int appsSearchHeight: 30
+    // estimate: gap below the screen top
+    readonly property int appsSearchTop: 28
+    // estimate: app name under the icon
+    readonly property int appsLabelSize: 12
+    // estimate: icon to label
+    readonly property int appsLabelGap: 8
+    // estimate: page indicator dot
+    readonly property int appsDotSize: 8
+    // estimate: gap between dots
+    readonly property int appsDotGap: 14
+    // estimate: dots above the screen bottom
+    readonly property int appsDotBottom: 44
+    // estimate: inactive page dot
+    readonly property real appsDotInactiveOpacity: 0.4
+    // estimate: px before a press becomes a drag
+    readonly property int appsDragThreshold: 8
+    // estimate: dragged icon
+    readonly property real appsDragOpacity: 0.9
+    // estimate: dragged icon scale
+    readonly property real appsDragScale: 1.1
+    // estimate: central share of a cell where a drop creates or fills a folder
+    readonly property real appsMergeFraction: 0.55
+    // estimate: px from the screen edge where a drag flips the page
+    readonly property int appsEdgeFlip: 56
+    // estimate: dwell in ms before the page flips
+    readonly property int appsEdgeFlipDelay: 650
+    // estimate: accumulated wheel delta that flips a page
+    readonly property int appsWheelThreshold: 120
+    // estimate: px of horizontal drag that flips a page
+    readonly property int appsSwipeThreshold: 80
+    // estimate: folder tile corner radius relative to the icon
+    readonly property real appsFolderRadiusScale: 0.22
+    // estimate: mini icons per row in a folder tile
+    readonly property int appsFolderMiniCols: 3
+    // estimate: folder tile inner padding relative to the icon
+    readonly property real appsFolderPadding: 0.12
+    // estimate: columns of the open folder panel
+    readonly property int appsFolderPanelCols: 4
+    // estimate
+    readonly property int appsFolderPanelPadding: 32
+    // estimate: editable folder name
+    readonly property int appsFolderNameSize: 22
+    // estimate
+    readonly property int appsFolderNameWidth: 280
+    // estimate: icons in the folder panel relative to the grid icon
+    readonly property real appsFolderPanelIconScale: 0.85
+    // estimate: keyboard focus ring
+    readonly property int appsSelectionWidth: 3
+    // estimate: grid scale at the start of the open animation
+    readonly property real appsOpenScale: 0.96
 }
