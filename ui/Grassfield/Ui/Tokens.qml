@@ -290,4 +290,51 @@ QtObject {
     readonly property int searchMaxFiles: 20
     // estimate: recent documents shown for an empty query
     readonly property int searchRecentCount: 5
+
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockTopMargin: 64
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockDateSize: 22
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockDateWeight: 600
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockClockSize: 104
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockClockWeight: 600
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockAvatarSize: 64
+    // estimate, pending F1 measurement from design/reference
+    readonly property real lockAvatarFillOpacity: 0.3
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockInitialsSize: 26
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockNameWeight: 600
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockFieldWidth: 220
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockFieldHeight: 32
+    // estimate, pending F1 measurement from design/reference
+    readonly property real lockFieldFillOpacity: 0.22
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockSubmitSize: 22
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockBottomMargin: 112
+    // estimate: darkens the blurred wallpaper for text contrast (A2)
+    readonly property real lockDimOpacity: 0.28
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockBlurMax: 64
+    // estimate, pending F1 measurement from design/reference
+    readonly property int lockShakeDistance: 12
+    // estimate: duration of one shake leg in ms
+    readonly property int lockShakeDuration: 60
+
+    // estimate: idle dim before the lock
+    readonly property real idleDimOpacity: 0.55
+    // estimate: idle dim fade-in in ms
+    readonly property int idleDimFade: 1000
+
+    // estimate, pending F1 measurement from design/reference
+    readonly property int polkitIconSize: 40
+    // estimate, pending F1 measurement from design/reference
+    readonly property int polkitFieldHeight: 28
 }

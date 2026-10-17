@@ -14,6 +14,14 @@ if compgen -G "tests/unit/tst_*.qml" >/dev/null; then
   # A failing case fails the run even if the runner exited 0.
   if grep -qE '^FAIL' <<<"$unit_out"; then status=1; fi
 fi
+# Security module logic (lock state machine and controller, polkit dialog model, idle timings).
+# `import qs.<dir>` resolves through a temporary import root holding a `qs` -> shell symlink.
+if compgen -G "tests/security/tst_*.qml" >/dev/null; then
+  qs_root=$(mktemp -d)
+  ln -s "$root/shell" "$qs_root/qs"
+  QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -import "$qs_root" -input tests/security || status=1
+  rm -rf "$qs_root"
+fi
 # Quickshell-level tests (real FileView/JsonAdapter): each tests/shell/<name>/shell.qml prints PASS/FAIL.
 # Run offscreen and detached from any compositor session.
 for dir in tests/shell/*/; do

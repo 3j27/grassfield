@@ -1,9 +1,10 @@
 import QtQuick
 import Grassfield.Ui
+import qs.security.lock
 import qs.services
 
-// Grassfield menu (leaf mark): About, Force Quit, Sleep/Restart/Shut Down, Log Out.
-// System Settings and Lock Screen are placeholders until M4 and M2.
+// Grassfield menu (leaf mark): About, Force Quit, Sleep/Restart/Shut Down, Lock Screen, Log Out.
+// System Settings is a placeholder until M4. Lock Screen engages the session lock.
 PopupMenu {
     id: root
 
@@ -22,8 +23,7 @@ PopupMenu {
         {id: "restart", text: qsTr("Restart…")},
         {id: "shutdown", text: qsTr("Shut Down…")},
         {separator: true},
-        // PLACEHOLDER (M2 security): the lock screen module is not built yet.
-        {id: "lock", text: qsTr("Lock Screen (coming in M2)"), enabled: false},
+        {id: "lock", text: qsTr("Lock Screen")},
         {id: "logout", text: qsTr("Log Out %1…").arg(SystemInfo.user)}
     ]
 
@@ -46,6 +46,10 @@ PopupMenu {
             break;
         case "shutdown":
             Popups.confirm(qsTr("Are you sure you want to shut down your computer now?"), qsTr("Open applications will be closed."), qsTr("Shut Down"), "shutdown", {}, true);
+            break;
+        case "lock":
+            Popups.close();
+            Lock.lock("menu");
             break;
         case "logout":
             Popups.confirm(qsTr("Are you sure you want to quit all applications and log out %1?").arg(SystemInfo.user), qsTr("Open applications will be closed."), qsTr("Log Out"), "logout", {}, true);
