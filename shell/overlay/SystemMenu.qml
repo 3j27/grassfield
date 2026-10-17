@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import Grassfield.Ui
 import qs.security.lock
 import qs.services
@@ -35,7 +34,7 @@ PopupMenu {
             Popups.openCentered("about", {});
             break;
         case "settings":
-            Quickshell.execDetached((Quickshell.env("GRASSFIELD_SETTINGS_CMD") || "grassfield-settings").split(" "));
+            SettingsApp.open();
             Popups.close();
             break;
         case "forcequit":

@@ -55,6 +55,14 @@ ShellRoot {
     property string degradedNoticeKey: ""
 
     Connections {
+        target: SettingsApp
+
+        function onMissing(): void {
+            Notifications.postInternal(qsTr("Grassfield Settings is not installed"), qsTr("Install the grassfield-desktop package to open System Settings."));
+        }
+    }
+
+    Connections {
         target: Capabilities
 
         function onSettledChanged(): void {

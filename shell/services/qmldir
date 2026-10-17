@@ -11,3 +11,4 @@ singleton Brightness 1.0 Brightness.qml
 singleton BluetoothState 1.0 BluetoothState.qml
 singleton Media 1.0 Media.qml
 singleton PointerTracker 1.0 PointerTracker.qml
+singleton SettingsApp 1.0 SettingsApp.qml
