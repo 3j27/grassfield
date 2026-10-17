@@ -64,6 +64,7 @@ Item {
 
     // columns: outlined box split in three
     Rectangle {
+        id: columnsBox
         visible: root.kind === "columns"
         anchors.centerIn: parent
         width: root.size
@@ -79,12 +80,12 @@ Item {
                 Item {
                     id: pane
                     required property int index
-                    width: parent.width / 3
-                    height: parent.height
+                    width: columnsBox.width / 3
+                    height: columnsBox.height
                     Rectangle {
                         visible: pane.index > 0
                         width: root.stroke
-                        height: parent.height
+                        height: columnsBox.height
                         color: root.color
                     }
                 }
