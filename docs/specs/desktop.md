@@ -88,6 +88,6 @@ Works with the pointer: selection (click, Ctrl, Shift, rubber band), double clic
 
 Off until the redesign: every keyboard action on the desktop itself (arrows, Return, F2, Space / Glance, Ctrl+A, Ctrl+Backspace, Esc), the desktop re-taking the keyboard after a menu or a rename, B2-like logic (Hyprland's fallback focus after the active window closes) and the Glance lend, which only served the held-keyboard mode.
 
-Remaining lost-key edge cases: see the nested evidence in STATE.md; none is known after the atomic release, apart from the deliberate one: with the pointer on another output a catcher swallows typing.
+Remaining lost-key edge case (known, not fixed): keys that arrive within the release phase itself (about two frames plus Hyprland's refocus, measured below ~60 ms after the menu closes: a second `keys.sh` process started right after the Esc or the item click) go to the closing menu surface and are dropped, with or without the plugin; the next key after that window arrives, and the keyboard is never lost for good (20 runs with the plugin, 20 without: 0 permanent losses). With 50 ms or more between the close and the typing, every run delivered every key (80 runs, both modes). A press on a catcher while the pointer is on another output swallows typing by design.
 
 Dev: `scripts/dev/shell-run.sh` seeds `lock.idleMinutes: 0` in the dev config when the key is absent, so nested sessions never idle-lock.
