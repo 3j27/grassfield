@@ -164,7 +164,7 @@ Scope {
         const cache = {};
         for (const e of DesktopEntries.applications.values) {
             // DesktopEntry exposes NoDisplay only; OnlyShowIn / NotShowIn come from `hiddenIds`.
-            if (e.noDisplay || root.hiddenIds[e.id] === true)
+            if (e.noDisplay || Model.isHidden(root.hiddenIds, e.id))
                 continue;
             const rec = {id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
                 keywords: Array.from(e.keywords), icon: e.icon, entry: e};
@@ -360,12 +360,7 @@ Scope {
         command: ["sh", Quickshell.shellPath("launchpad/hidden-entries.sh")]
         stdout: StdioCollector {
             onStreamFinished: {
-                const map = {};
-                for (const line of text.split("\n")) {
-                    if (line !== "")
-                        map[line] = true;
-                }
-                root.hiddenIds = map;
+                root.hiddenIds = Model.parseHidden(text);
                 root.rebuildApps();
             }
         }

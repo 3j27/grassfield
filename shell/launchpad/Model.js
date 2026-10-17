@@ -217,3 +217,19 @@ function step(sel, key, cols, perPage, n) {
     }
     return sel;
 }
+
+// Set of hidden desktop entry ids from the output of hidden-entries.sh. Ids are normalized like
+// Quickshell's DesktopEntry.id (no ".desktop" suffix, no CR) so a lookup by entry id matches.
+function parseHidden(text) {
+    const set = {};
+    for (const line of String(text).split("\n")) {
+        const id = line.replace(/\r$/, "").replace(/\.desktop$/, "");
+        if (id !== "")
+            set[id] = true;
+    }
+    return set;
+}
+
+function isHidden(set, id) {
+    return set[String(id).replace(/\.desktop$/, "")] === true;
+}
