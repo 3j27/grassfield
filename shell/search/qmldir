@@ -1,0 +1,3 @@
+module qs.search
+Search 1.0 Search.qml
+SearchPanel 1.0 SearchPanel.qml
