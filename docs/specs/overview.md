@@ -10,8 +10,9 @@
 ## Purpose and non-goals
 v1 (M2): shell surface with ScreencopyView thumbnails of toplevels (Quickshell `ScreencopyView` with
 Hyprland toplevel capture), layout algorithm, Spaces bar, keyboard nav, drag to Space.
-v2 (M3): live transforms of real windows by `grassfield-compositor` (`grassfield:overview on`) when the
-capability is present. Non-goal: capturing protected surfaces.
+v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.grassfield.overview(json)`, feature
+`overview`) when the capability is present (compositor side done 2026-10-18, see "v2 implementation"; shell side
+pending). Non-goal: capturing protected surfaces.
 
 ## Functional requirements
 1. O1 Toggle via IPC `overview toggle` (CTRL+UP) and gesture (owner config, L2).
@@ -29,9 +30,12 @@ capability is present. Non-goal: capturing protected surfaces.
 | O1/O4/O6 | nested scenario with 6 windows + screenshots | L1 |
 | P3 | frame timing open/close | L2† |
 | S4 spike | ScreencopyView cost of 9 toplevels recorded in ADR-0006 notes | L1 |
+| v2 spike | live transforms: mechanism, layering, input, CPU, cleanup (`tests/compositor/overview.sh check`, `perf`) | L1 |
 
 ## Known limitations
 - v1 shows thumbnails, not the real windows moving; real-window transforms need the plugin (v2).
+- v2 (plugin side): popups are not transformed, full-screen windows are not transformed, fractional scales and
+  rotated outputs are not verified (see "Shell contract" item 8).
 
 ## v1 implementation (shell/overview/, 2026-10-17)
 - `Overview.qml` (controller + IPC `overview toggle|open|close|status`), `OverviewWindow.qml` (one layer-shell
@@ -87,3 +91,152 @@ on one workspace, output GF-REF 1920x1080, idle terminals, 60 s windows, CPU = %
 - Observation (nested only, real session not verified): on the first open after the shell starts, the zoom
   animation progressed only to ~14 % and resumed after an external wake-up (IPC call); later opens reach 100 %
   within ~0.3 s. Needs a check on the real session (P3, L2).
+
+## v2 spike (live transforms in grassfield-compositor, 2026-10-18)
+Nested Hyprland 0.56.2 (commit `efb50993780079460b0cbed1363e2166a2de1d9f`) on the owner's session (parent GPU path,
+UHD 630; indication only), output GF-REF 1920x1080 scale 1, plugin 0.4.0-ov2 built against `/usr/include/hyprland`.
+Hyprland's v0.56.2 sources were read as data (`render/Renderer.cpp` `renderWindow`, `render/ElementRenderer.cpp`
+`drawTransformedWindow` and `drawSurface`, `render/pass/Pass.cpp`, `render/OpenGL.cpp`, `output/MonitorResources.cpp`)
+and every API used was checked in the installed headers. Runs: `.dev/overview/run-20261018-001222` and
+`run-20261018-003207` (check, both PASS; the figures below are from the first), `run-20261018-001341` (perf).
+
+**Mechanism: a `Render::IWindowTransformer` per transformed window** (`CWindow::m_transformers`, public; Hyprland uses
+it for its own motion blur and only ever touches its `CMotionBlurTransformer` entries, through `dynamic_cast`).
+- With a transformer attached, `renderWindow` records the window's main pass (decorations, surface, subsurfaces) into
+  a sub-pass and adds a `CTransformedWindowPassElement`. At draw time Hyprland renders that sub-pass into a cleared
+  monitor-sized work buffer, passes it to each transformer's `transform(fb)` and composites the returned buffer over
+  the whole output, limited to the frame damage (the element disables pass simplification, so every element gets the
+  whole frame damage instead of its own bounding box).
+- The plugin's `transform()` draws the received buffer into a second pooled work buffer, scaled and moved so that the
+  window's surface box lands on its layout rect (the minimize snapshot math, `core textureBox`), and returns it. The
+  decorations (titlebar, border, shadow) scale with the window.
+- The client is never resized nor configured: `hyprctl clients` at/size identical before, during and after (check
+  "sizes"). Its buffers are sampled every frame: a terminal printing the time every 200 ms changes inside its layout
+  rect between two frames while an idle one does not (check "live": 2233 px vs 0 px). Frame callbacks keep flowing
+  because the surfaces are drawn in the sub-pass.
+- Damage: animation ticks (`render.preChecks`, like Hyprland's own animations) damage each window's previous and new
+  visual box, which schedules the next frames. While open, `render.pre` (after Hyprland's animation tick, before
+  `beginRender` reads the damage ring) adds the layout boxes of that output to its damage ring whenever the output has
+  damage (`m_damage.hasChanged()`), because Hyprland damages a window's real place when its content changes. An idle
+  open overview renders no frame at all.
+
+Rejected:
+- **Renderer hints** (`CRendererHintsPassElement` with a translate + scale `SRenderModifData` around a window's elements,
+  from `RENDER_PRE_WINDOW` / `RENDER_POST_WINDOW`): `renderModif` moves the drawn boxes but not the damage: surfaces are
+  drawn with `damage ∩ windowBox` in unmodified coordinates (`drawSurface`) and scissored with unmodified rects
+  (`renderTextureInternal`), and pass simplification uses unmodified bounding boxes and opaque regions. A window moved
+  outside its real box is clipped away, and its opaque region still hides what is under its real place.
+- **`CWindow` animated variables** (`m_realPosition` / `m_realSize`): they configure the client (`sendWindowSize`), as
+  already found for minimize.
+- **Function hooks or calling the protected `renderWindow`**: fragile against Hyprland updates and not needed.
+- **Capturing a window's elements with `redirectPass` and replaying them after the Overlay layer** (windows above the
+  shell's dim): needs a nested pass render on the main framebuffer, damage save/restore and a second software cursor
+  draw, popups bypass the redirect, and windows would cover notifications. The layering has a simpler answer (b).
+- **`makeSnapshotFB` per window per frame**: a newly allocated monitor-sized framebuffer and a full window render per
+  frame; the transformer path renders into Hyprland's pooled work buffers.
+
+Defects found and fixed during the spike (nested only, before any further run):
+1. `CMonitor::resources()` is a weak pointer over a unique pointer: `lock()` hits a hyprutils assertion (abort, not an
+   exception, so `gf::guarded` cannot catch it) and the nested Hyprland crashed with SIGABRT on the first transformed
+   frame. The plugin now checks and dereferences it, as Hyprland's `drawTransformedWindow` does.
+2. After rendering the window into the work buffer Hyprland leaves `m_renderData.damage` at the window's box: a clear
+   inside `transform()` then cleared only that box, and the previous content of the reused work buffer was composited
+   over the output as noise. `transform()` now sets the damage to the whole buffer for its clear and draw and restores
+   it afterwards.
+
+Answers:
+- **(a) Windows.** The shell lists them; the plugin transforms a window only if it is mapped, not hidden, not pinned,
+  on the active, non-special workspace of its monitor (minimized windows on `special:minimized` are excluded) and not
+  full screen (`FSMODE_FULLSCREEN`; maximized windows are transformed), and if its rect lies inside that monitor. A
+  window that closes, moves to another workspace, becomes full screen or pinned while the overview is shown goes back
+  to normal rendering at once. Popups are not transformed (Hyprland: "transformers for now only affect the main pass").
+- **(b) Layering.** The windows stay in Hyprland's normal window pass, between the Bottom and the Top layers. Chosen:
+  the shell splits its overview in two surfaces: the backdrop (dim, and blur through `BackgroundEffect` if wanted) on
+  the **Bottom** layer, above the wallpaper and the desktop icons (Background) and below the windows, and the chrome
+  (Spaces bar, labels, selection, input) on the **Overlay** layer with a transparent background. No holes, no second
+  animation to keep in step, notifications, OSD and the cursor keep their place, and the Dock (Top) stays above the
+  windows as on macOS. Verified with the stand-in `tests/compositor/overview-fixture` (screenshot `open.png` of the
+  check run: dimmed wallpaper, crisp windows, labels and Spaces bar on top). Rejected: windows above the Overlay layer
+  (see `redirectPass` above); the shell layer on Top with a transparent area (its dim still covers the windows unless
+  it punches holes); holes (the shell would have to animate them in step with the plugin's per-frame boxes: one or two
+  frames of offset at ~3 px/ms leave a 50-100 px band of dim on moving windows).
+- **(c) Input.** With the windows transformed, the fixture's Overlay chrome (whole-surface input, keyboard exclusive)
+  received a click at the capture window's real, untransformed place (outside every layout rect), a click on its image
+  and a key; the window itself (a foot reporting mouse buttons and typed bytes) received nothing and the active window
+  did not change (check "input"). Hyprland's input routing is untouched: real windows keep their real boxes.
+- **(d) CPU** (`tests/compositor/overview.sh perf 30`: 9 foot windows 700x500 on GF-REF, 30 s per phase where S4 used
+  60 s, % of one core from `/proc/<pid>/stat`):
+
+| Phase | nested Hyprland | grassfield-shell | fixture (v2 chrome stand-in) | Hyprland RSS |
+|---|---|---|---|---|
+| closed, idle | 0.2 % | 0.5 % | – | 161 MB |
+| closed, one terminal printing 10 lines/s | 3.7 % | 0.2 % | – | 161 MB |
+| open, idle | 0.3 % | 0.3 % | 0.0 % | 161 MB |
+| open, one terminal printing 10 lines/s | 6.4 % | 0.1 % | 0.0 % | 161 MB |
+| open/close every 0.5 s (350 ms animations, continuous) | 12.2 % | 0.4 % | 0.0 % | 161 MB |
+
+  v1 live thumbnails of the same 9 windows: shell 104.8 %, nested Hyprland 43.1 % (S4). The grassfield-shell column is
+  the running shell with its v1 overview closed: a v2 shell captures nothing and its chrome is static.
+- **(e) Animation.** The shell sends `durationMs` (0 = Reduce Motion) and optionally the timing curve (cubic-bezier
+  control points, default `Tokens.motionCurveStandard` 0.2, 0, 0, 1); the plugin interpolates every frame, so there is
+  no per-frame IPC. A new layout while open continues from where each window is drawn. Hyprland's animation variables
+  are not used: they belong to its config animation tree, and per-frame interpolation is already proven by minimize.
+- **(f) Exit and cleanup.** `on:false` animates back, then detaches the transformers: the output after matches the
+  output before (0.35 px differ, menu bar masked). A plugin unload during an open overview detaches every transformer
+  in `PLUGIN_EXIT` (normal rendering on the next frame, windows at their place, Hyprland alive) and posts
+  `closed`/`unavailable`; loading the plugin again brings the feature back. Failsafes: the chrome surface (namespace
+  `grassfield-overview`) going away, or a window getting the keyboard, closes the overview; a workspace switch or a
+  monitor change puts every window back at once. Refused requests change nothing and report the reason, so the shell
+  falls back to thumbnails; without the plugin (or with an ABI mismatch) there is no `overview` feature at all.
+
+Result: positive; implemented as below.
+
+## v2 implementation (compositor side, 2026-10-18)
+Code: `compositor/src/core/Overview.*` (payload parser and validation, interpolation, event JSON; unit tests
+`compositor/tests/OverviewTest.cpp`), `compositor/src/Overview.*` (transformers, damage, failsafes), verb in
+`compositor/src/Ipc.cpp`. Plugin requirements: `docs/specs/compositor.md` FR25-FR29. Nested scenario:
+`tests/compositor/overview.sh` (`check`, `perf`) with the stand-in `tests/compositor/overview-fixture/shell.qml`.
+
+### Shell contract (for the shell-engineer; the shell side is not implemented yet)
+1. **Capability.** `Capabilities.has("overview")` selects v2 (`Overview.thumbnailMode` false); otherwise v1.
+2. **Surfaces** (per output):
+   - backdrop, namespace `grassfield-overview-backdrop`, `WlrLayer.Bottom`, full screen, no input (empty mask), dim
+     from tokens (near-opaque with Reduce Transparency), blur through `BackgroundEffect` if wanted (it only blurs the
+     wallpaper and the desktop: the windows are above it). Same-layer surfaces stack in mapping order: map it when the
+     overview opens so that it is above the desktop widgets (Bottom), or decide that they stay undimmed.
+   - chrome, namespace **`grassfield-overview`** (the plugin closes an open overview when a surface with this namespace
+     goes away), `WlrLayer.Overlay`, transparent background (no dim or blur where windows are drawn), Spaces bar,
+     labels, selection, whole-surface input, keyboard `Exclusive` while open (as v1).
+3. **Open / update.** Once the chrome holds the keyboard, send `hl.plugin.grassfield.overview("<json>")` through
+   `Hyprland.dispatch`, guarded like the other verbs (add `overview` to `isPluginVerb` in `shell/platform/Minimized.js`),
+   the JSON built only from validated pieces (hex address, finite rounded numbers) and quoted as a Lua string (escape
+   `\` and `"`). Payload:
+   `{"on":true,"durationMs":350,"curve":[0.2,0,0,1],"windows":[{"address":"0x…","x":…,"y":…,"w":…,"h":…},…]}`.
+   - Rects are layout coordinates (global logical, like `hyprctl clients` at/size) of where the window's **surface box**
+     (at/size, without the titlebar) is drawn. The scale is uniform: a rect of another aspect ratio gets the window
+     centred in it. The plugin's titlebar (28 px) and shadow are drawn around it, scaled: keep `28 × scale` free above
+     each rect and include that band in hit-testing and label placement.
+   - Limits (else the request is refused): a JSON object of at most 16 KiB; `on` (bool) and `durationMs` (integer
+     0..2000) required; `windows` required when `on` is true, at most 64 entries, unique addresses, finite numbers,
+     `w` and `h` ≥ 1; `curve` 4 numbers, x in [0, 1], y in [-1, 2]. Ignored per window (not refused): an unknown or
+     ineligible window (see (a)), a rect not inside the window's monitor (1 px tolerance).
+   - `on:true` again while open (a window opened or closed, a window dragged to a Space) retargets: listed windows
+     animate from where they are drawn, windows left out go back to their place at once.
+   - Use the same `durationMs` and curve for the shell's own label and chrome animation.
+4. **Close.** `{"on":false,"durationMs":350}` (curve optional), before or together with the focus action. The plugin
+   also closes on its own when a window gets the keyboard (v1 releases the grab, then activates the clicked window),
+   when the chrome goes away, and at once on a workspace switch or a monitor change.
+5. **Events** `grassfield>>{"v":"gfc/1","type":"overview","state":"opening|open|closing|closed","windows":N}`, plus
+   `"reason":"invalid|no-windows|unavailable|interrupted"` when relevant. They are coalesced (latest wins, at most one
+   per 100 ms): treat them as a state, not as a log. `invalid` / `no-windows`: the request was refused, the state is
+   unchanged: show thumbnails for this open. `unavailable`: the plugin is unloading: thumbnails from now on.
+   `interrupted`: the overview ended without the shell's `on:false`: close the chrome. `windows` smaller than the
+   number sent: some windows were not eligible (full screen, pinned, another workspace): leave them out or show
+   thumbnails for them.
+6. **Input.** Clicks and keys go to the chrome; the shell maps them through its own rects. Hyprland's real window
+   boxes are unchanged during the overview, so activation, drag to a Space and close act on the real window as in v1.
+7. **Restart.** After each `capabilities` event, if the shell has no overview open, send `{"on":false,"durationMs":0}`
+   (idempotent: a closed overview answers `closed`).
+8. **Limits to show honestly:** popups (menus) of a window stay at its real place and are not scaled; full-screen
+   windows are not transformed; Spaces bar tiles of other workspaces still need captures (nothing of another
+   workspace is rendered); fractional scales and rotated outputs are not verified.
