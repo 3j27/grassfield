@@ -406,6 +406,21 @@ Singleton {
         return dropped;
     }
 
+    function removeFromCenter(key: string): void {
+        const i = centerKeys.indexOf(key);
+        if (i < 0)
+            return;
+        const g = book.groups[centerApps[i]];
+        if (g && --g.size <= 0)
+            delete book.groups[centerApps[i]];
+        delete book.order[key];
+        centerStore.remove(i);
+        centerKeys.splice(i, 1);
+        centerApps.splice(i, 1);
+        book.dirty = true;
+        groupRev++;
+    }
+
     function clearCenter(): void {
         centerStore.clear();
         centerKeys = [];
@@ -430,13 +445,21 @@ Singleton {
     }
 
     function addEntry(entry: var): void {
-        history = History.prune([entry].concat(history), Date.now());
+        const before = history;
+        history = History.pushNewest(history, entry, Date.now());
         count = history.length;
         saveTimer.restart();
-        const dropped = syncRemovals(1);
+        // Only the tail can fall out: drop exactly those rows, without scanning the whole model.
+        const dropped = before.length + 1 - history.length;
+        const evicted = [];
+        for (let i = 0; i < dropped; i++)
+            evicted.push(before[before.length - 1 - i].key);
+        evicted.forEach(k => removeFromCenter(k));
+        syncRemovals(1);
         addToCenter(entry);
-        if (dropped > 0)
-            pruneLive();
+        // Dismissing a live notification costs ~5 ms in the server; after the Notify reply went out.
+        if (evicted.length > 0)
+            Qt.callLater(() => evicted.forEach(k => finishLive(k)));
     }
 
     function updateEntry(key: string, entry: var): void {
@@ -598,7 +621,13 @@ Singleton {
         if (reason === NotificationCloseReason.CloseRequested) {
             setHistory(History.removeKey(history, key));
         } else {
-            history = history.map(e => e.key === key ? Object.assign({}, e, {nid: -1}) : e);
+            // An entry that was pruned meanwhile has nothing left to update.
+            const hi = history.findIndex(e => e.key === key);
+            if (hi < 0)
+                return;
+            const next = history.slice();
+            next[hi] = Object.assign({}, history[hi], {nid: -1});
+            history = next;
             saveTimer.restart();
             const ci = indexOfKey(centerStore, key);
             if (ci >= 0)
