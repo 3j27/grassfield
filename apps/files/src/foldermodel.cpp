@@ -17,6 +17,7 @@
 #include <KIO/FileSystemFreeSpaceJob>
 #include <KIO/Job>
 #include <KIO/PreviewJob>
+#include <QMimeDatabase>
 
 // QT_LOGGING_RULES="grassfield.files.debug=true": listing times, selection and expectation traces.
 Q_LOGGING_CATEGORY(lcFiles, "grassfield.files", QtInfoMsg)
@@ -25,6 +26,9 @@ namespace
 {
 constexpr int kSelectionBulkThreshold = 64;
 constexpr int kPreviewBatchDelayMs = 30;
+// One PreviewJob never holds more than this many items, and at most this many thumbnails are kept
+// (a 128 px thumbnail is ~64 KB: 512 of them stay below ~32 MB).
+constexpr int kPreviewBatchSize = 32;
 // An expected item that has not appeared by then (failed or slow job) no longer steers the selection.
 constexpr int kExpectationLifetimeMs = 10000;
 
@@ -55,8 +59,25 @@ FileLogic::SortEntry sortEntry(const KFileItem &item, FileLogic::SortKey key)
     FileLogic::SortEntry e;
     e.name = item.text();
     e.isDir = item.isDir();
-    if (key == FileLogic::SortKey::Kind)
-        e.kind = item.mimeComment();
+    if (key == FileLogic::SortKey::Kind) {
+        // The lister resolves MIME types lazily (setDelayedMimeTypes): never sniff file content on the
+        // GUI thread while sorting. Until an item's type is known, use the extension/name guess.
+        if (item.isMimeTypeKnown()) {
+            e.kind = item.mimeComment();
+        } else {
+            // Memoized per file name: the glob lookup is ~100 us and lessThan asks O(n log n) times.
+            static QHash<QString, QString> guesses;
+            static const QMimeDatabase db;
+            const QString name = item.name();
+            auto it = guesses.constFind(name);
+            if (it == guesses.cend()) {
+                if (guesses.size() > 50000)
+                    guesses.clear();
+                it = guesses.insert(name, db.mimeTypeForFile(name, QMimeDatabase::MatchExtension).comment());
+            }
+            e.kind = *it;
+        }
+    }
     else if (key == FileLogic::SortKey::Date)
         e.modified = item.time(KFileItem::ModificationTime);
     else if (key == FileLogic::SortKey::Size)
@@ -99,7 +120,7 @@ FolderModel::FolderModel(QObject *parent)
     m_dirModel = new KDirModel(this);
     m_lister = m_dirModel->dirLister();
     m_lister->setAutoErrorHandlingEnabled(false);
-    m_lister->setDelayedMimeTypes(false);
+    m_lister->setDelayedMimeTypes(true);
     setSourceModel(m_dirModel);
     setDynamicSortFilter(true);
 
@@ -136,8 +157,12 @@ FolderModel::FolderModel(QObject *parent)
             const QString key = m_thumbs.take(url);
             if (!key.isEmpty())
                 ThumbnailStore::remove(key);
-            if (m_previewAsked.remove(url))
+            m_thumbLru.remove(url);
+            if (m_previews.asked(url)) {
+                m_previews.cancel(url);
+                m_previews.forget(url);
                 requestPreview(rowForUrl(url));
+            }
         }
     });
     connect(m_lister, &KCoreDirLister::jobError, this, [this](KIO::Job *job) {
@@ -217,7 +242,10 @@ void FolderModel::setSortKey(int key)
     if (key == m_sortKey)
         return;
     m_sortKey = key;
+    QElapsedTimer sortTimer;
+    sortTimer.start();
     invalidate();
+    qCDebug(lcFiles) << "sorted by key" << key << rowCount() << "items in" << sortTimer.elapsed() << "ms";
     emit sortChanged();
 }
 
@@ -321,6 +349,10 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
     const KFileItem item = m_dirModel->itemForIndex(mapToSource(index));
     if (item.isNull())
         return {};
+    // Lazy refinement: the lister only guessed the type from the name (setDelayedMimeTypes). A row a
+    // view actually shows reads its content once (a few hundred bytes); sorting never does.
+    if ((role == IconNameRole || role == KindRole || role == CanPreviewRole) && !item.isMimeTypeKnown())
+        item.determineMimeType();
     switch (role) {
     case NameRole:
         return item.text();
@@ -572,49 +604,81 @@ QVariantMap FolderModel::info(int row) const
 void FolderModel::requestPreview(int row)
 {
     const KFileItem item = itemAt(row);
-    if (item.isNull() || !previewSupported(item) || m_previewAsked.contains(item.url()))
+    if (item.isNull() || !previewSupported(item))
         return;
-    m_previewAsked.insert(item.url());
-    m_previewQueue.append(item);
-    if (!m_previewTimer.isActive())
+    if (m_previews.request(item.url()) && !m_previewTimer.isActive())
         m_previewTimer.start();
+}
+
+void FolderModel::cancelPreview(const QUrl &url)
+{
+    m_previews.cancel(url);
 }
 
 void FolderModel::startPreviews()
 {
-    if (m_previewJob || m_previewQueue.isEmpty())
+    if (m_previewJob || m_previews.isEmpty())
         return;
-    const KFileItemList batch = m_previewQueue;
-    m_previewQueue.clear();
+    KFileItemList batch;
+    const QList<QUrl> urls = m_previews.takeBatch(kPreviewBatchSize);
+    for (const QUrl &url : urls) {
+        const KFileItem item = itemAt(rowForUrl(url));
+        if (item.isNull())
+            m_previews.forget(url);
+        else
+            batch.append(item);
+    }
+    if (batch.isEmpty()) {
+        if (!m_previews.isEmpty())
+            QTimer::singleShot(0, this, &FolderModel::startPreviews);
+        return;
+    }
     auto *job = KIO::filePreview(batch, QSize(m_previewSize, m_previewSize), &previewPlugins());
     m_previewJob = job;
     connect(job, &KIO::PreviewJob::generated, this, [this](const KFileItem &item, const QImage &image) {
         if (image.isNull())
             return;
-        const QString old = m_thumbs.value(item.url());
+        const QUrl url = item.url();
+        qCDebug(lcFiles) << "thumbnail" << item.name() << "stored" << m_thumbs.size() + 1;
+        const QString old = m_thumbs.value(url);
         if (!old.isEmpty())
             ThumbnailStore::remove(old);
-        m_thumbs.insert(item.url(), ThumbnailStore::insert(image));
-        const int r = rowForUrl(item.url());
+        m_thumbs.insert(url, ThumbnailStore::insert(image));
+        const int r = rowForUrl(url);
         if (r >= 0)
             emit dataChanged(index(r, 0), index(r, 0), {ThumbnailRole});
+        // Least recently loaded thumbnails go first; they may be asked for again when shown.
+        const QList<QUrl> evicted = m_thumbLru.add(url);
+        for (const QUrl &gone : evicted) {
+            const QString key = m_thumbs.take(gone);
+            if (!key.isEmpty())
+                ThumbnailStore::remove(key);
+            m_previews.forget(gone);
+            const int gr = rowForUrl(gone);
+            if (gr >= 0)
+                emit dataChanged(index(gr, 0), index(gr, 0), {ThumbnailRole});
+        }
     });
     connect(job, &KJob::result, this, [this] {
-        // The next batch starts once this job is gone (m_previewJob is a QPointer).
-        QTimer::singleShot(0, this, &FolderModel::startPreviews);
+        // The finished job is only deleteLater()'d: release the slot now so the next batch can start.
+        m_previewJob.clear();
+        if (!m_previews.isEmpty())
+            QTimer::singleShot(0, this, &FolderModel::startPreviews);
     });
 }
 
 void FolderModel::clearPreviews()
 {
     m_previewTimer.stop();
-    if (m_previewJob)
+    if (m_previewJob) {
         m_previewJob->kill(KJob::Quietly);
+        m_previewJob.clear();
+    }
     for (const QString &key : std::as_const(m_thumbs))
         ThumbnailStore::remove(key);
     m_thumbs.clear();
-    m_previewAsked.clear();
-    m_previewQueue.clear();
+    m_thumbLru.clear();
+    m_previews.clear();
 }
 
 QString FolderModel::thumbnailFor(const QUrl &url) const
@@ -737,7 +801,9 @@ void FolderModel::onItemsDeleted(const KFileItemList &items)
         const QString key = m_thumbs.take(url);
         if (!key.isEmpty())
             ThumbnailStore::remove(key);
-        m_previewAsked.remove(url);
+        m_thumbLru.remove(url);
+        m_previews.cancel(url);
+        m_previews.forget(url);
     }
     if (selectionTouched)
         emit selectionChanged();

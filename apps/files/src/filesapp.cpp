@@ -97,8 +97,10 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
 
     // Appearance follows grassfield.json like every Grassfield surface (read only).
     const QString file = configFile();
-    QDir().mkpath(QFileInfo(file).absolutePath());
-    m_watcher.addPath(QFileInfo(file).absolutePath());
+    // Never create the directory: this app only reads the file (defaults apply until it exists).
+    const QString configDir = QFileInfo(file).absolutePath();
+    if (QFileInfo(configDir).isDir())
+        m_watcher.addPath(configDir);
     if (QFileInfo::exists(file))
         m_watcher.addPath(file);
     const auto reread = [this] {

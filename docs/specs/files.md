@@ -113,7 +113,14 @@ installed (not built here).
   listed and scrolled (baseline with a 2-item folder ≈166 MB); wheel scrolling through the icon and list views:
   103/102 frames, render median 15 ms, max 16–17 ms (≥ 99 % under 16.7 ms), polish ≤ 1 ms
   (`QSG_RENDER_TIMING`). Not measured on the reference hardware (L2).
-- Thumbnails are requested only for created (visible) delegates and batched into one `KIO::PreviewJob`.
+- Thumbnails are requested by created delegates and cancelled when the delegate is destroyed (a request not yet
+  started is dropped); the newest request is served first (LIFO, `previewqueue.h`), jobs hold at most 32 items,
+  and at most 512 thumbnails are kept (oldest evicted, re-requested when shown again). Measured with 2000 PDFs:
+  the visible page after End is thumbnailed in ~0.3 s; paging through the whole folder generated ~140 thumbnails.
+- The lister uses delayed MIME types: the Kind sort uses the extension/name guess (memoized) until an item's type is
+  known, and rows a view displays refine their type from content once (never the whole folder on the GUI thread).
+  Kind sort of 2000 extension-less files: 529 ms (was ~3100 ms).
+- Names with line breaks show on one line with `⏎` in place of each break (display only).
 - Accessibility: `Accessible.role/name` on every control, list item, header, banner and dialog; full keyboard
   operation; untrusted text (file names, KIO messages) is `Text.PlainText`.
 - i18n: every visible string is `qsTr()` / `tr()`; plurals use singular/plural pairs (no catalogs with numerus forms).

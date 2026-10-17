@@ -11,6 +11,8 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include "previewqueue.h"
+
 #include <KFileItem>
 
 class KDirLister;
@@ -115,6 +117,8 @@ public:
     Q_INVOKABLE QVariantMap info(int row) const;
     // Ask for a thumbnail (icon view delegates call this when created); batched into one PreviewJob.
     Q_INVOKABLE void requestPreview(int row);
+    // Delegates call this when destroyed: a queued request that is not started yet is dropped.
+    Q_INVOKABLE void cancelPreview(const QUrl &url);
     Q_INVOKABLE void reload();
     Q_INVOKABLE void refreshFreeSpace();
     // Select `url` (and ask the view to start renaming it) once it appears in the listing. Successive calls
@@ -181,8 +185,8 @@ private:
 
     // Thumbnails: url -> key in ThumbnailStore; urls already asked for (done or failed).
     QHash<QUrl, QString> m_thumbs;
-    QSet<QUrl> m_previewAsked;
-    KFileItemList m_previewQueue;
+    PreviewQueue m_previews;
+    ThumbnailLru m_thumbLru{512};
     QTimer m_previewTimer;
     QTimer m_expectTimer;
     QTimer m_structureTimer;
