@@ -55,9 +55,19 @@ function toInt(value, fallback) {
     return isFinite(n) ? Math.max(0, Math.min(1000, Math.round(n))) : fallback;
 }
 
+// Limits against a hostile or corrupt widgets.json (mirrored by Tokens.widgetMaxEntries and
+// Tokens.widgetMaxFileBytes, which the callers may override).
+const MAX_ENTRIES = 64;
+const MAX_BYTES = 262144;
+
 // Text of widgets.json to a valid state. Unknown ids, sizes the widget does not offer and
-// malformed entries are dropped; a text that is not a version 1 object gives {state: empty, ok: false}.
-function parse(text) {
+// malformed entries are dropped; at most `maxEntries` entries are kept per list (the rest is
+// ignored); a text that is larger than `maxBytes` or not a version 1 object gives
+// {state: empty, ok: false}. Linear in the number of entries kept.
+function parse(text, maxEntries, maxBytes) {
+    const cap = maxEntries > 0 ? maxEntries : MAX_ENTRIES;
+    if (typeof text !== "string" || text.length > (maxBytes > 0 ? maxBytes : MAX_BYTES))
+        return {state: empty(), ok: false};
     let raw;
     try {
         raw = text.trim() === "" ? null : JSON.parse(text);
@@ -70,31 +80,37 @@ function parse(text) {
         return {state: empty(), ok: false};
     const state = empty();
     const used = {};
+    const counters = {};
     const accept = (entry, target) => {
         if (entry === null || typeof entry !== "object" || typeof entry.id !== "string" || !validSize(entry.id, entry.size))
             return null;
         const e = {uid: isUid(entry.uid) && !used[entry.uid] ? entry.uid : "", id: entry.id, size: entry.size};
         if (e.uid === "") {
-            let n = 1;
+            let n = counters[e.id] || 1;
             while (used[e.id + "-" + n])
                 n++;
+            counters[e.id] = n + 1;
             e.uid = e.id + "-" + n;
         }
         used[e.uid] = true;
         target.push(e);
         return e;
     };
-    (Array.isArray(raw.center) ? raw.center : []).forEach(entry => accept(entry, state.center));
-    (Array.isArray(raw.desktop) ? raw.desktop : []).forEach(entry => {
+    const center = Array.isArray(raw.center) ? raw.center : [];
+    for (let i = 0; i < center.length && state.center.length < cap; i++)
+        accept(center[i], state.center);
+    const desktop = Array.isArray(raw.desktop) ? raw.desktop : [];
+    for (let i = 0; i < desktop.length && state.desktop.length < cap; i++) {
+        const entry = desktop[i];
         if (entry === null || typeof entry !== "object" || typeof entry.screen !== "string" || entry.screen === "")
-            return;
+            continue;
         const e = accept(entry, state.desktop);
         if (e) {
             e.screen = entry.screen;
             e.col = toInt(entry.col, 0);
             e.row = toInt(entry.row, 0);
         }
-    });
+    }
     return {state: state, ok: true};
 }
 
@@ -104,7 +120,7 @@ function serialize(state) {
 
 function addCenter(state, id, size) {
     const s = clone(state);
-    if (!validSize(id, size))
+    if (!validSize(id, size) || s.center.length >= MAX_ENTRIES)
         return s;
     s.center.push({uid: nextUid(s, id), id: id, size: size});
     return s;
@@ -156,6 +172,14 @@ function gridSize(width, height, cell, gap, margin) {
     };
 }
 
+// Grid of a screen: the usable area is the screen minus the menu bar on top and the Dock's
+// reserved height at the bottom, then `margin` on every side. Returns {cols, rows, x0, y0}
+// (origin in screen px).
+function gridFor(width, height, cell, gap, margin, top, bottom) {
+    const g = gridSize(width, height - top - bottom, cell, gap, margin);
+    return {cols: g.cols, rows: g.rows, x0: margin, y0: top + margin};
+}
+
 // Nearest grid cell for a top-left position in px relative to the grid origin; clamped so that
 // a widget of `size` stays inside cols x rows.
 function snap(x, y, size, cell, gap, cols, rows) {
@@ -203,7 +227,7 @@ function nearestFree(others, size, want, cols, rows) {
 // (like the macOS desktop). Without room the widget is not added.
 function addDesktop(state, id, size, screen, cols, rows) {
     const s = clone(state);
-    if (!validSize(id, size) || screen === "")
+    if (!validSize(id, size) || screen === "" || s.desktop.length >= MAX_ENTRIES)
         return s;
     const others = s.desktop.filter(e => e.screen === screen);
     const c = cells(size);
@@ -231,4 +255,41 @@ function moveDesktop(state, uid, spot, cols, rows) {
         e.row = target.row;
     }
     return s;
+}
+
+// Re-places the desktop entries of one screen into a cols x rows grid: an entry keeps its cell
+// when it fits and is free, else it moves to the nearest free cell (clamped first); an entry that
+// finds no room is dropped. Entries of other screens are untouched. Returns {state, changed}.
+function fitScreen(state, screen, cols, rows) {
+    const s = clone(state);
+    const placed = [];
+    let changed = false;
+    const keep = [];
+    s.desktop.forEach(e => {
+        if (e.screen !== screen) {
+            keep.push(e);
+            return;
+        }
+        const c = cells(e.size);
+        const want = {col: Math.min(e.col, Math.max(0, cols - c.w)), row: Math.min(e.row, Math.max(0, rows - c.h))};
+        const spot = isFree(placed, e.size, want, cols, rows) ? want : nearestFree(placed, e.size, want, cols, rows);
+        if (!spot) {
+            changed = true;
+            return;
+        }
+        if (spot.col !== e.col || spot.row !== e.row)
+            changed = true;
+        e.col = spot.col;
+        e.row = spot.row;
+        placed.push(e);
+        keep.push(e);
+    });
+    s.desktop = keep;
+    return {state: s, changed: changed};
+}
+
+// True when a single window {x, y, w, h} contains the whole rectangle {x, y, w, h} (a widget tile
+// under it is invisible, so the widget can stop).
+function coveredBy(rect, windows) {
+    return windows.some(w => w.x <= rect.x && w.y <= rect.y && w.x + w.w >= rect.x + rect.w && w.y + w.h >= rect.y + rect.h);
 }

@@ -10,7 +10,9 @@ import "Placements.js" as Placements
 // Widget placements (widgets/1, docs/specs/widgets.md): where each widget sits, in the Notification
 // Center and on the desktop, persisted in $GRASSFIELD_STATE_HOME (dev) or $XDG_STATE_HOME/grassfield
 // as widgets.json (directory 0700, file 0600, written atomically, version 1). Ids that are not in
-// the registry, and sizes a widget does not offer, are dropped when the file is read. A file that
+// the registry, sizes a widget does not offer and entries past the cap are dropped when the file is read
+// (and a file over Tokens.widgetMaxFileBytes is rejected); desktop entries that are off the grid or
+// overlap are moved to the nearest free cell. A file that
 // cannot be parsed is copied to widgets.json.bak before the next write replaces it.
 Singleton {
     id: root
@@ -38,19 +40,20 @@ Singleton {
         return id !== "battery" || hasBattery;
     }
 
-    // Grid of a screen: {cols, rows, x0, y0, cell, gap} in screen px.
+    // Height the Dock reserves at the bottom of a screen (shelf, indicator row, bottom margin);
+    // reserved even when the Dock autohides, so widgets never sit where it appears.
+    readonly property int dockReserve: Tokens.dockIconSize + 2 * Tokens.dockPadding + Tokens.dockIndicatorSize + Tokens.dockSpacing + Tokens.dockBottomMargin
+
+    // Grid of a screen: {cols, rows, x0, y0, cell, gap} in screen px, below the menu bar and above the Dock.
     function gridFor(screen: var): var {
-        const cell = Tokens.widgetCell;
-        const gap = Tokens.widgetGap;
-        const margin = Tokens.widgetDesktopMargin;
-        const g = Placements.gridSize(screen.width, screen.height - Tokens.menubarHeight, cell, gap, margin);
+        const g = Placements.gridFor(screen.width, screen.height, Tokens.widgetCell, Tokens.widgetGap, Tokens.widgetDesktopMargin, Tokens.menubarHeight, dockReserve);
         return {
             cols: g.cols,
             rows: g.rows,
-            x0: margin,
-            y0: Tokens.menubarHeight + margin,
-            cell: cell,
-            gap: gap
+            x0: g.x0,
+            y0: g.y0,
+            cell: Tokens.widgetCell,
+            gap: Tokens.widgetGap
         };
     }
 
@@ -109,16 +112,30 @@ Singleton {
         }, grid.cols, grid.rows));
     }
 
+    // Moves the desktop widgets of a screen onto its grid (off-grid or overlapping ones go to the
+    // nearest free cell; none that fits is dropped). Called on load and when the grid changes.
+    function fitScreen(screenName: string): void {
+        const screen = screenByName(screenName);
+        if (!screen || !loaded)
+            return;
+        const grid = gridFor(screen);
+        const r = Placements.fitScreen(placements, screenName, grid.cols, grid.rows);
+        if (r.changed)
+            apply(r.state);
+    }
+
     // ---- persistence ----------------------------------------------------------------------------
 
     function load(text: string): void {
-        const r = Placements.parse(text);
+        const r = Placements.parse(text, Tokens.widgetMaxEntries, Tokens.widgetMaxFileBytes);
         if (!r.ok) {
             console.warn("widgets: " + path + " is not a version 1 widgets file; keeping a copy as widgets.json.bak and starting empty");
             Quickshell.execDetached(["cp", "-p", path, path + ".bak"]);
         }
         placements = r.state;
         loaded = true;
+        for (const screen of Quickshell.screens)
+            fitScreen(screen.name);
     }
 
     Component.onCompleted: prepare.running = true

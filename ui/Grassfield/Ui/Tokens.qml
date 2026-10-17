@@ -562,4 +562,16 @@ QtObject {
     readonly property int widgetBigSize: 44
     // estimate: widgets v1, how long a click keeps the desktop active while a window has focus
     readonly property int widgetActiveMs: 10000
+    // estimate: widgets v1, scale of a tile while it is dragged
+    readonly property real widgetLiftScale: 1.03
+    // estimate: widgets v1, analog face edge over tile height in the large Clock
+    readonly property real widgetClockFaceRatio: 0.58
+    // estimate: widgets v1, date column over tile width in the Calendar
+    readonly property real widgetDateColumnRatio: 0.34
+    // estimate: widgets v1, px around a desktop tile in its layer surface so the shadow is not clipped
+    readonly property int widgetSurfacePad: 40
+    // estimate: widgets v1, cap of placements per list in widgets.json
+    readonly property int widgetMaxEntries: 64
+    // estimate: widgets v1, widgets.json larger than this is rejected
+    readonly property int widgetMaxFileBytes: 262144
 }

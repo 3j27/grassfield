@@ -27,7 +27,7 @@ WidgetBase {
     Item {
         id: face
 
-        readonly property real edge: root.isLarge ? Math.min(root.width - 2 * root.padding, root.height * 0.58) : root.height - 2 * root.padding
+        readonly property real edge: root.isLarge ? Math.min(root.width - 2 * root.padding, root.height * Tokens.widgetClockFaceRatio) : root.height - 2 * root.padding
 
         visible: root.analog
         x: root.isLarge ? (root.width - width) / 2 : root.padding
