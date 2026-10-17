@@ -63,11 +63,19 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
 - Notification Center: separate full-screen transparent window (Esc and click outside close, the menu bar strip stays clickable so the
   clock toggles it). Groups by app name, newest first, 3 rows per group then "Show All". No widgets area in M2 (omitted, not stubbed).
   Opening a menu/popup closes the Center.
-  Rows carry no rank/group-size roles: the ListView draws one section per app (`section.property: appName`; header = name, count,
-  Clear) and `Notifications` keeps group size and per-key order ids in a JS book (insert at group head is O(1), a removal marks it
-  dirty and `ensureRanks()` renumbers lazily when the open Center asks). History insert is O(dropped) (`History.pushNewest`) and
-  evicted live notifications are dismissed after the Notify reply (`Qt.callLater`). Notify round trip on the nested shell,
-  loaded machine: median 32-38 ms from 60 to 200 same-app entries (bare gdbus 16-17 ms); before: 44-54 ms at 200.
+  The Center list shows only the DISPLAYED rows: `Notifications.centerModel` (keyed ListModel) holds the first 3 rows of each app
+  group (all rows of a group the user expanded with "Show All"; the expansion resets when the Center closes), so collapsed rows
+  never get a delegate and the ListView has no sections. The full order lives in two JS arrays (`centerKeys` / `centerApps`:
+  grouped by app, newest group first, newest row first inside a group); `syncShown()` reconciles the model with the displayed
+  subset and touches it only where that set changed (insert / remove / move by key, a few rows per Notify). Per-row group info
+  travels as roles of the rows that need it: `headCount` (> 0 on the first row of a group: draws the header with name, count and
+  Clear), `headFirst` (top group, no leading gap), `toggleCount` (> 0 on the row that carries Show All / Show Less); a role is
+  written only when its value changed. History insert is O(dropped) (`History.pushNewest`) and
+  evicted live notifications are dismissed after the Notify reply (`Qt.callLater`). The Center window is full-screen and keeps its
+  size while open (the panel slides in once; blur region = the constant panel item), so a Notify never reconfigures the layer
+  surface or the blur region. Notify round trip on the nested shell,
+  loaded machine: median 32-38 ms from 60 to 200 same-app entries (bare gdbus 16-17 ms); before: 44-54 ms at 200. With the Center
+  open (history 200, `notifications toggleCenter`): median 35-37 ms against 28-33 ms closed (60 / 40 sends, 2026-10-17).
 - Body markup: `Sanitizer.sanitize` keeps only b, i, u and br (balanced); links render as "label (url)" text and are not clickable;
   images are dropped (alt kept); everything else is stripped; 4000 characters max. Images in hints are loaded at <= 256 px.
 - DND: `notifications.dnd` in grassfield.json; Control Center "Focus > Do Not Disturb" toggle; moon icon in the menu bar (click turns it off).
