@@ -83,6 +83,13 @@ Variants {
             }
         }
 
+        Rectangle {
+            id: backdrop
+            anchors.fill: parent
+            opacity: win.progress
+            color: Qt.rgba(0, 0, 0, Appearance.effectiveTransparency > 0 ? Tokens.appsBackdropOpacity : Tokens.appsBackdropOpacityOpaque)
+        }
+
         Item {
             id: host
 
@@ -305,12 +312,6 @@ Variants {
                 }
             }
 
-            Rectangle {
-                id: backdrop
-                anchors.fill: parent
-                color: Qt.rgba(0, 0, 0, Appearance.effectiveTransparency > 0 ? Tokens.appsBackdropOpacity : Tokens.appsBackdropOpacityOpaque)
-            }
-
             // Empty space: click closes, a horizontal swipe flips the page; the wheel flips too.
             MouseArea {
                 id: background
@@ -479,6 +480,11 @@ Variants {
                 visible: root.controller.folder !== null
                 acceptedButtons: Qt.AllButtons
                 onClicked: root.controller.closeFolder()
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: Qt.rgba(0, 0, 0, Tokens.appsBackdropOpacity)
+                }
             }
 
             Item {

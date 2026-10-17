@@ -103,7 +103,7 @@ Scope {
         selected = -1;
         folderKey = "";
         usageFile.reload();
-        rebuildItems();
+        rebuildItems(false);
         open = true;
     }
 
@@ -126,7 +126,7 @@ Scope {
         query = text;
         folderKey = "";
         page = 0;
-        rebuildItems();
+        rebuildItems(false);
         selected = searching && items.length > 0 ? 0 : -1;
     }
 
@@ -150,15 +150,16 @@ Scope {
         }
         records = out;
         byId = map;
-        rebuildItems();
+        rebuildItems(true);
     }
 
     function appItem(rec: var): var {
         return {kind: "app", key: "app:" + rec.id, id: rec.id, name: rec.name, rec: rec};
     }
 
-    function rebuildItems(): void {
-        layout = Model.reconcile(saved, records.map(r => ({id: r.id, name: r.name})));
+    function rebuildItems(relayout: bool): void {
+        if (relayout)
+            layout = Model.reconcile(saved, records.map(r => ({id: r.id, name: r.name})));
         const t0 = Date.now();
         let list = [];
         if (searching) {
@@ -188,7 +189,7 @@ Scope {
 
     function commit(next: var): void {
         saved = next;
-        rebuildItems();
+        rebuildItems(true);
         if (layoutFile.path !== "")
             layoutFile.setText(Model.serialize(next));
     }
@@ -330,7 +331,7 @@ Scope {
         atomicWrites: true
         onLoaded: {
             root.saved = Model.parse(layoutFile.text());
-            root.rebuildItems();
+            root.rebuildItems(true);
         }
     }
 
