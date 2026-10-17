@@ -403,7 +403,7 @@ Scope {
 
     Process {
         id: prepare
-        command: ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\"; [ -e \"$2\" ] || install -m 600 /dev/null \"$2\"; chmod 600 \"$2\"", "sh", root.stateDir, root.usagePath]
+        command: ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\"; chmod 700 \"$1\"; [ -e \"$2\" ] || install -m 600 /dev/null \"$2\"; chmod 600 \"$2\"", "sh", root.stateDir, root.usagePath]
         onRunningChanged: {
             if (!running)
                 usageFile.path = root.usagePath;
@@ -423,7 +423,7 @@ Scope {
         path: root.dataHome + "/recently-used.xbel"
         printErrors: false
         onLoaded: {
-            root.recentList = Files.parseXbel(recentFile.text());
+            root.recentList = Files.parseXbel(recentFile.text(), root.filesRoot);
             if (root.open)
                 root.compute();
         }

@@ -95,7 +95,7 @@ Variants {
 
             x: (win.width - width) / 2
             y: win.height * Tokens.searchTopFraction
-            width: Tokens.searchWidth
+            width: Math.min(Tokens.searchWidth, win.width - 2 * Tokens.searchEdgeMargin)
             height: Tokens.searchFieldHeight + (hasResults ? Math.min(list.contentHeight + 2 * Tokens.spacingSm, win.maxResults) : 0)
             opacity: win.shown ? 1 : 0
             Accessible.role: Accessible.Pane
@@ -172,7 +172,8 @@ Variants {
                         c.move(-1);
                         break;
                     case Qt.Key_Tab:
-                        c.moveGroup(1);
+                        // Some injectors (wtype) deliver Shift+Tab as Tab with Shift held.
+                        c.moveGroup((event.modifiers & Qt.ShiftModifier) !== 0 ? -1 : 1);
                         break;
                     case Qt.Key_Backtab:
                         c.moveGroup(-1);
@@ -290,7 +291,7 @@ Variants {
                             anchors.fill: parent
                             visible: !row.isHeader && row.info.iconSource !== undefined
                             source: !row.isHeader && row.info.iconSource !== undefined ? row.info.iconSource : ""
-                            sourceSize: Qt.size(Tokens.searchRowIconSize * 2, Tokens.searchRowIconSize * 2)
+                            sourceSize: Qt.size(Tokens.searchRowIconSize * Tokens.searchIconOversample, Tokens.searchRowIconSize * Tokens.searchIconOversample)
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
                         }
@@ -298,7 +299,7 @@ Variants {
                         Icon {
                             anchors.centerIn: parent
                             visible: !row.isHeader && row.info.glyph !== undefined
-                            size: Tokens.searchRowIconSize * 0.7
+                            size: Tokens.searchRowIconSize * Tokens.searchGlyphScale
                             name: !row.isHeader && row.info.glyph !== undefined ? row.info.glyph : ""
                             color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
                         }
@@ -346,7 +347,7 @@ Variants {
                             text: row.isHeader ? "" : row.info.subtitle
                             textFormat: Text.PlainText
                             elide: Text.ElideMiddle
-                            color: row.selected ? Appearance.withAlpha(Appearance.colors.accentText, 0.8) : Appearance.colors.textSecondary
+                            color: row.selected ? Appearance.withAlpha(Appearance.colors.accentText, Tokens.searchSelectedSubtitleOpacity) : Appearance.colors.textSecondary
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyCaptionSize
                         }
