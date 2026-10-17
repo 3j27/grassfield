@@ -1,7 +1,8 @@
-# grassfield-compositor spec · compositor-engineer · M0 spike S2 → M1 decorations → M2 minimize
+# grassfield-compositor spec · compositor-engineer · M0 spike S2 → M1 decorations → M2 minimize → S5 appmenu
 
-Status: titlebars, gfc/1 capabilities, minimize/restore with animation (M2) and the `config` verb
-(double-click setting) implemented. Code: `compositor/`. Build and run: `compositor/README.md`.
+Status: titlebars, gfc/1 capabilities, minimize/restore with animation (M2), the `config` verb
+(double-click setting) and the appmenu protocol server (feature 3, step A of global menus; spike S5) implemented.
+Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
 
@@ -26,7 +27,9 @@ tile rectangle the shell sends (ADR-0002), and the user's double-click setting.
 
 Non-goals: the "Genie" warp (the animation is the "Scale" effect: uniform shrink + move; a genie would need a
 mesh-deformed texture draw, which Hyprland's pass elements do not offer), hover glyphs and inactive-state
-buttons, appearance switching, tiled windows, CSD negotiation, appmenu protocol, overview transforms.
+buttons, appearance switching, tiled windows, CSD negotiation, overview transforms; for appmenu: reading or
+rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B, ADR-0008), the
+`com.canonical.AppMenu.Registrar` service, X11 (XWayland) menus.
 
 ## Functional requirements (numbered, testable)
 
@@ -100,6 +103,36 @@ buttons, appearance switching, tiled windows, CSD negotiation, appmenu protocol,
   completes every animation (a restoring window is made visible, minimized windows stay on
   `special:minimized` for the shell's fallback), drops the snapshots and removes the render hooks and timer;
   nothing is drawn while the session is locked (the drawing hook is not emitted then).
+- **FR18** Appmenu global: at load the plugin advertises `org_kde_kwin_appmenu_manager` version 2 (KDE's
+  protocol, `compositor/protocols/appmenu.xml`; version 2 adds the manager's `release`), created with
+  `wl_global_create` on Hyprland's display; feature `appmenu` is advertised only when the global and the Lua
+  function `appmenu` both registered. Version 1 clients (Qt 6.11, Chromium 152) work unchanged.
+- **FR19** `org_kde_kwin_appmenu.set_address(service_name, object_path)` is untrusted input: accepted only when
+  the service is a D-Bus bus name (unique `:1.42` or well-known `org.foo.Bar`: at least 2 non-empty
+  dot-separated elements of `[A-Za-z0-9_-]`, well-known elements not starting with a number, at most 255 bytes)
+  and the path a D-Bus object path (`/` or `/`-separated non-empty `[A-Za-z0-9_]` elements, no trailing `/`, at
+  most 255 bytes). Anything else is ignored (no protocol error, the client stays connected; one log line per
+  object). Strings are JSON-escaped anyway.
+- **FR20** The plugin keeps, per `wl_surface`, the latest valid address (the latest request on any appmenu
+  object of that surface wins; releasing an object drops the registration it made) and maps the surface to
+  its toplevel window when that window is mapped (comparing `CWindow::resource()`, nothing the client sent is
+  dereferenced). It posts `grassfield>>{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"…",
+  "path":"…"}`: when a mapped window's registration changes (an unchanged one is not re-posted), when a window
+  is mapped with one, and for every focused window (with empty service and path when it has none). A
+  registration made before the window is mapped is posted at map.
+- **FR21** When an announced registration goes away — the window is unmapped (`window.close`) or destroyed,
+  the appmenu object is released or destroyed (client exit), or the surface is destroyed — the plugin posts
+  the same event with `"service":"","path":""`. A window mapped again on the same surface is announced again.
+- **FR22** `hl.plugin.grassfield.appmenu(address)`: `address` as in FR14; for a mapped window the plugin posts
+  its `appmenu` event (registration or empty); an invalid or unknown address posts nothing (logged). Returns
+  `hl.dsp.no_op()`. The shell calls it after a restart (or a missed event) for the windows it shows.
+- **FR23** Unload never leaves a Wayland object pointing into the unloaded library: at compositor shutdown
+  (`g_pCompositor->m_isShuttingDown`) every appmenu resource and the global are destroyed in `PLUGIN_EXIT`;
+  on a runtime unload with client objects alive the library pins itself (`dlopen(RTLD_NOLOAD | RTLD_NODELETE)`),
+  removes the global (`wl_global_remove`) and keeps those objects inert (requests ignored, destructors honored),
+  and the shell receives a clear event for each announced window; with no client object the global is simply
+  destroyed. If pinning fails the objects are destroyed (their clients get a protocol error at their next
+  request on them; logged as an error).
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -121,6 +154,12 @@ buttons, appearance switching, tiled windows, CSD negotiation, appmenu protocol,
 | FR14 | unit `MinimizeAddress.*`, `MinimizeTarget.*`, `MinimizeGeometry.*`, `MinimizeEasing.*`, `MinimizeFrames.*`, `MinimizeSnapshot.*`; nested `tests/compositor/minimize.sh` | L0 / L1 | 2026-10-17, `minimize.sh 20` PASS exit 0 (run `.dev/minimize/run-20261017-065654`): titlebar button → `minimized` event, window on `special:minimized`, Dock tile appeared (the Trash moved exactly one slot right: 0 px differ; the new slot differs from the Trash by 421/2304 px); move → `minimized` event 368 ms (animated); a capture during the animation shows the window at ≈90 % size moving toward the target (`minimize-frames.png`). Earlier back-to-back captures (`.dev/shots/minimize-burst.png`) show the shrink across 3 frames. Without a valid rectangle (the shell's Dock target outside the current monitor layout after the nested WAYLAND-1 window was resized) the move → event time is ≈0 ms: minimized without animation, as specified |
 | FR15 | same | L0 / L1 | same run: click on the Dock tile → `restored` event 395 ms after the move back (animated), window back at 700×500 (610,264) on workspace 2 and focused (`activewindow`); captures during the animation (`restore-frames.png`, `.dev/shots/restore-burst.png`) show it growing from the target. Rapid repetition: 20 minimize + restore rounds, every 4th restore clicked 120 ms after the minimize click: 0 missing events, final geometry unchanged; a second run of 60 rounds on a fresh instance: PASS (22 + 26 of them animated before the nested WAYLAND-1 window was resized, the rest without animation) |
 | FR16 | unit `Protocol.ConfigAllowlist`, `tst_minimized` `configCall`; nested `double_click_setting.sh` | L0 / L1 | 2026-10-17 PASS (see FR8). Push after the handshake: before the fix the shell's first push was skipped (`features` is assigned before `pluginPresent`, so `has("config")` was still false); after it the shell logs `compositor setting titlebarDoubleClick = minimize` right before `plugin present` and a fresh plugin honored it |
+| FR18 | `hyprctl grassfield`; plugin log; `WAYLAND_DEBUG` of clients (`tests/compositor/appmenu.sh`) | L1 | 2026-10-17 verified: features `["decorations","minimize","config","appmenu"]`; log `appmenu: org_kde_kwin_appmenu_manager version 2 advertised`; Qt and Chromium see `wl_registry.global(69, "org_kde_kwin_appmenu_manager", 2)` and bind version 1; the edge-case client binds version 2 and releases the manager without error |
+| FR19 | unit `AppmenuBusName.*`, `AppmenuObjectPath.*`, `AppmenuAddress.*`, `Protocol.AppmenuJson*`; nested `appmenu.sh edge-cases` | L0 / L1 | 2026-10-17 verified: 15 invalid requests (empty, missing parts, space, `..`, leading number, `:1`, Latin-1 byte, relative path, `//`, trailing `/`, `-` in a path, JSON-breaking quotes, 299-byte name and path) ignored, client still connected (roundtrip without error), no event |
+| FR20 | unit `AppmenuRegistry.*`; nested `appmenu.sh qt-registrar`, `chromium` | L0 / L1 | 2026-10-17 verified: Qt sent `set_address(":1.1", "/MenuBar/1")`, released it, then `set_address(":1.1", "/MenuBar/2")`, both before map; the plugin posted one event right after `openwindow` with `/MenuBar/2`; Chromium's second window (File > New window clicked through DBusMenu) got its own event (`/com/canonical/menu/3`); focus path verified in run `run-20261017-113205` (`activewindowv2` → appmenu event, empty strings for an unregistered window) |
+| FR21 | unit `AppmenuRegistry.*`; nested `appmenu.sh` | L0 / L1 | 2026-10-17 verified: File > Quit through DBusMenu → `closewindow` then the clear event (same address, empty strings); killed apps (all variants) → clear event |
+| FR22 | nested `appmenu.sh qt-registrar` (Quickshell `Hyprland.dispatch`, `tests/compositor/appmenu-reemit/`) | L1 | 2026-10-17 verified: three calls (the window, `"0xnot-hex"`, `"0x1"`) → exactly one event, for the window; log `appmenu: rejected: invalid window address`, `appmenu: no mapped window 1 (or appmenu inactive)` |
+| FR23 | nested shutdown with live appmenu clients (`scripts/dev/nested-down.sh`); code review | L1 | 2026-10-17 shutdown verified: `appmenu: global and 5 client object(s) destroyed (shutdown)`, `Hyprland has reached the end.`, no core dump; runtime unload NOT VERIFIED (no `scripts/nestctl`) |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -135,6 +174,9 @@ buttons, appearance switching, tiled windows, CSD negotiation, appmenu protocol,
 | shell → plugin | Lua function `hl.plugin.grassfield.hello()` via `Hyprland.dispatch("hl.plugin.grassfield.hello()")` | re-posts capabilities |
 | shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` (Dock tile, layout px, integers) | FR14 / FR15 |
 | shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | FR16 |
+| plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}`; `"service":"","path":""` = no menu (FR20–FR22) |
+| shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's appmenu event (FR22) |
+| client → plugin | Wayland global `org_kde_kwin_appmenu_manager` v2 (`create(new_id, wl_surface)`, `release` since 2); `org_kde_kwin_appmenu.set_address(s, s)`, `release` | FR18–FR21 |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 The shell sends every verb guarded (`local p = hl.plugin and hl.plugin.grassfield; if p and p.<verb> then
@@ -157,6 +199,112 @@ Verbs follow the same pattern: `hl.plugin.grassfield.<verb>(args)`, results as `
 ADR-0007 lists `restore(address)`; the implemented verb takes the Dock tile too (`restore(address, x, y, w, h)`)
 for the reverse animation; `config(key, value)` is new. Both are additions within `gfc/1` (no payload of an
 existing message changed); the ADR's verb list should be updated by its owner.
+
+## Appmenu (feature 3, spike S5): mechanism
+
+Feasibility in Hyprland 0.56.2 (headers in `/usr/include/hyprland`, exported symbols of `/usr/bin/Hyprland`):
+
+- `HyprlandAPI` (`src/plugins/PluginAPI.hpp`) has **no protocol or Wayland-global function**. What Hyprland's own
+  protocols use is reachable from a plugin, though: `g_pCompositor->m_wlDisplay` (public member), libwayland-server
+  (`wl_global_create`, `wl_global_remove`, `wl_global_destroy`, resolved from Hyprland's process), the exported
+  `IWaylandProtocol` constructor / destructor / `removeGlobal`, the exported `CWLSurfaceResource::fromResource`,
+  and hyprwayland-scanner 0.4.6, which generates the same kind of server wrappers Hyprland compiles
+  (`COrgKdeKwinAppmenuManager`, `COrgKdeKwinAppmenu`). So a plugin **can** add a Wayland global. It is internal API
+  covered by the same ABI-hash check as the rest of the plugin, not a stable plugin API: re-verify on every
+  Hyprland update.
+- `IWaylandProtocol` is not used: its bind trampoline is Hyprland's but calls a virtual of the plugin's subclass,
+  and its destructor destroys the global at once. Plain libwayland keeps every pointer on the plugin side and lets
+  the plugin choose between removing and destroying the global at unload.
+- The generated code is compiled as its own object with `-fvisibility=hidden`: its `wl_interface` symbols cannot
+  clash with a future Hyprland that would export the same names.
+- **Unload hazard.** Every `wl_resource` the plugin creates points into the library (its `wl_interface` tables, the
+  request table, the destroy listener); libwayland follows those pointers on each request and when the client
+  disconnects, and Hyprland's shutdown order is `unloadAllPlugins` (PLUGIN_EXIT, `dlclose`) first, clients later.
+  Destroying a resource the client still holds is no alternative at runtime: libwayland answers the client's next
+  request on it with `invalid object` and disconnects the client. Hence FR23: destroy everything at shutdown,
+  pin the library (`RTLD_NODELETE`) and keep the objects inert on a runtime unload with live client objects.
+  The bind callback of a removed (not destroyed) global stays valid because the library stays mapped. Pinning
+  is the technique GStreamer uses for plugins whose registrations cannot be revoked.
+- Windows: `window.open` (map: announce a stored registration), `window.close` (unmap: clear),
+  `window.destroy` (sweep registered windows that are no longer mapped), `window.active` (focus: post the focused
+  window's registration or an empty one). The registrations themselves are pure logic (`core/Appmenu.*`).
+- Third-party notice: `compositor/protocols/appmenu.xml` is KDE's protocol description (LGPL-2.1-or-later,
+  © 2017 David Edmundson, notice kept in the file); the generated server code is compiled into the MIT plugin,
+  as Hyprland (BSD-3-Clause) does with KDE's LGPL-2.1-or-later server-decoration protocol. To list in
+  `THIRD_PARTY.md` and to cover in the §14 legal review (ADR-0005). Not a legal conclusion.
+
+## S5 results
+
+2026-10-17, nested Hyprland 0.56.2 with plugin 0.3.0-s5, Qt 6.11.2 (`qt6-base` 6.11.2-3: the Wayland QPA now lives
+in qt6-base), Chromium 152.0.7977.82 (`/usr/lib/chromium/chromium` directly, so the owner's `chromium-flags.conf`
+is not read; no extra flag), Firefox not installed (not tested; per §2 its Wayland global menu needs
+`widget.gtk.global-menu.wayland.enabled`, off by default). Command: `tests/compositor/appmenu.sh <variants>`; each
+variant runs on its own private D-Bus bus **without service activation** (no portal or other service can start),
+the registrar is `tests/fixtures/fake-registrar`, the Qt app `tests/fixtures/menu-demo`. Runs
+`.dev/appmenu/run-20261017-110915` (qt-registrar, PASS, exit 0), `run-20261017-110937` (five Qt variants, exit 0),
+`run-20261017-111508` (chromium), `run-20261017-111403` (chromium-no-registrar), `run-20261017-111816`
+(edge-cases, PASS), `run-20261017-112009` (qt-no-global).
+
+| Variant | Registrar on the bus | Environment | Client requests (`WAYLAND_DEBUG`) | Menu bar in the window | Plugin event |
+|---|---|---|---|---|---|
+| qt-registrar | before the app | `QT_QPA_PLATFORMTHEME` unset | bind v1; `create`, `set_address(":1.1", "/MenuBar/1")`, `release`, `create`, `set_address(":1.1", "/MenuBar/2")`, all before map | hidden (DBusMenu bar) | yes, right after `openwindow`; clear after `closewindow` |
+| qt-gtk3 | before | `QT_QPA_PLATFORMTHEME=gtk3` | same | hidden | yes |
+| qt-portal | before | `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (no portal on the bus) | same | hidden | yes |
+| qt-kde | before | `XDG_CURRENT_DESKTOP=KDE KDE_SESSION_VERSION=6 KDE_FULL_SESSION=true` | same | hidden | yes |
+| qt-no-registrar | none | unset | bind v1 only | shown | none |
+| qt-late-registrar | 3 s after the app | unset | bind v1 only | shown | none |
+| qt-no-global | before | `QT_WAYLAND_DISABLED_INTERFACES=org_kde_kwin_appmenu_manager` | none | **hidden** (no menu anywhere) | none |
+| chromium | before | none | bind v1; `create`, `set_address(":1.2", "/com/canonical/menu/1")`; a second window: `/com/canonical/menu/3` | (browser has no menu bar) | yes, per window; clears at exit |
+| chromium-no-registrar | none | none | bind v1 only | – | none |
+
+(Menu bar visibility as reported by the app: `QMenuBar::platformMenuBar()` / `isVisible()`; visual NOT verified.)
+
+DBusMenu side (same runs): Qt exports `com.canonical.dbusmenu` at the announced address (introspection lists the
+interface; `GetLayout(0, -1, [])` returns File / Edit / View with submenus, mnemonics as `_`, shortcuts, toggle
+state); `Event(id, "clicked", <0>, 0)` on File > New and on View > Theme > Dark (after `AboutToShow` on Theme) ran
+the app's own actions (action log `file.new`, `view.theme.dark=on`), File > Quit closed the app and the plugin
+posted the clear event. Chromium's object has **no introspection data** (empty node) and rejects untyped
+arguments (`GetLayout` with `[]` guessed as `av` → `error occurred in GetLayout`); with explicit signatures
+(`int32 0`, `int32 -1`, `@as []`) it returns File (New tab, New window, …), Edit, View, History, …, and
+`Event(int32 2, "clicked", <int32 0>, uint32 0)` on "New window" opened a second browser window.
+
+Findings:
+
+1. **Qt 6.11 calls `set_address` if and only if `com.canonical.AppMenu.Registrar` is owned on the session bus
+   when the menu bar is created** (QtGui creates its `QDBusMenuBar` only then; the check is done once, a registrar
+   that appears later changes nothing). The platform theme (generic, gtk3, xdgdesktopportal, KDE) and KDE
+   variables do not matter. Qt never calls `RegisterWindow` on Wayland: the registrar only has to exist; the link
+   goes through `QWaylandPlatformServices::registerDBusMenuForWindow` → `org_kde_kwin_appmenu`. Service = the app's
+   unique bus name, path `/MenuBar/<n>`; Qt recreates the object once while starting (before map).
+2. **Chromium 152 behaves the same without any flag**: registrar present → one appmenu object per browser
+   window at `/com/canonical/menu/<n>`; no registrar → nothing. Its DBusMenu needs explicit D-Bus signatures.
+3. Both clients bind manager version 1; version 2 (manager `release`) is exercised only by the test client.
+4. **Registrar without a working appmenu path hides menus**: with the registrar present but no global (or no
+   compositor support), Qt hides its in-window menu bar and nothing shows the menu (qt-no-global). Owning the
+   registrar is therefore only allowed while the whole chain works (plugin feature `appmenu`, bridge, shell
+   menu bar), and never on the owner's bus during development.
+5. KDE apps with the KF6 platform theme (plasma-integration) and GTK apps were not tested (not installed / no
+   Wayland menu export).
+
+Shutdown with live appmenu clients (FR23, `.dev/s5/shutdown-test.sh`, scratch): two menu-demo instances with
+registered menus on a private bus, then `scripts/dev/nested-down.sh` (SIGTERM): the nested log ends with
+`appmenu: global and 5 client object(s) destroyed (shutdown)`, `grassfield-compositor unloaded`,
+`[PluginSystem] Plugin grassfield-compositor unloaded.`, `Hyprland has reached the end.`; no Hyprland core dump
+since the start (`coredumpctl list --since`), no fixture process left. Runtime unload (pinning path): NOT
+VERIFIED (no `scripts/nestctl`; `hyprctl plugin unload` is an owner action).
+
+Full matrix on the same instance after the soak (run `.dev/appmenu/run-20261017-113205`, all ten variants,
+RESULT PASS, exit 0): same results as the table; the windows took focus this time, so the focus path is
+verified too: `openwindow` → appmenu (map) → `activewindowv2` → appmenu (focus, same registration); a window
+without a registration gets `activewindowv2` → appmenu with empty strings; no clear is posted for a window that
+never had a registration.
+
+Regressions (same plugin build, 2026-10-17): `compositor/build-direct.sh tidy` exit 0, no diagnostic;
+`grassfield-compositor-tests` 90/90 PASS (direct and CMake builds); `tests/compositor/input_consistency.sh 3`
+PASS exit 0; `tests/compositor/soak.sh 300` PASS exit 0 (178 rounds, 22/22 minimizes animated, RSS 152.0 →
+158.8 MB, no core dump, 0 grassfield exceptions); `tests/unit/tst_minimized.qml` 20/20 PASS. The CMake build
+(`cmake -S compositor -B .dev/cmake-build -G Ninja`, now that cmake and ninja are installed) builds the plugin
+and the tests (exit 0).
 
 ## Minimize (M2): mechanism
 
@@ -276,6 +424,12 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   `focusState()` and moves the window itself (no snapping); Hyprland's drag path should be re-tested in M1.
 - The decoration priority must be above the border's (10005 used): at 10000 the titlebar was placed
   outside the border.
+- Appmenu (S5, read from the 0.56.2 headers, exported symbols checked with `nm -D /usr/bin/Hyprland`):
+  `g_pCompositor->{m_wlDisplay, m_isShuttingDown}`, libwayland-server 1.26.0 `wl_global_{create, remove,
+  destroy}`, `wl_client_get_credentials`, `CWLSurfaceResource::fromResource` and `m_events.destroy`,
+  `Desktop::View::IView::resource()`, `Event::bus()->m_events.window.{open, close, destroy, active}`, glibc
+  `dladdr`, `dlopen(RTLD_NOW | RTLD_NOLOAD | RTLD_NODELETE)`. Code generator: hyprwayland-scanner 0.4.6
+  (`compositor/protocols/appmenu.xml`). Test fixtures: Qt 6.11.2 Widgets/DBus, wayland-scanner 1.26.0, gdbus.
 - GCC 16.2.1, C++23. Lua 5.5 headers (Hyprland links `liblua.so.5.5`). GoogleTest 1.18.0 for tests.
 - Quickshell 0.3.1 for the IPC spike.
 
@@ -291,6 +445,10 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   plugin minimizes/restores without animation; with no shell at all, the minimize button only posts
   `minimize-request` and nothing happens (there would be no way to restore the window).
 - Without the `config` feature the double-click always zooms (the default).
+- Without the `appmenu` feature (plugin absent, mismatched, or the global failed): no
+  `org_kde_kwin_appmenu_manager` global, no `appmenu` events; the shell keeps T0 menus. Whoever owns
+  `com.canonical.AppMenu.Registrar` (the bridge, step B) must not own it then: Qt would hide its in-window menu
+  bars with nowhere to show them (S5 finding 4).
 
 ## Automated tests · Manual verification steps
 
@@ -298,11 +456,14 @@ Automated (L0): `compositor/build/grassfield-compositor-tests` — protocol JSON
 advertised features, config allowlist), button layout, hit-testing, title placement, double-click detection,
 drag threshold and un-zoom box, theme values, pointer press ownership and gesture end (`PointerGesture.*`),
 minimize logic (`Minimize*`: address parsing, target validation, aspect fit, Bézier easing, frames,
-snapshot texture box on the same and on another monitor). Shell side: `tests/unit/tst_minimized.qml`
+snapshot texture box on the same and on another monitor), appmenu logic (`Appmenu*`: bus name and object path
+validation, registrations and their announcements; `Protocol.Appmenu*`: event JSON). Shell side: `tests/unit/tst_minimized.qml`
 (request builders, config allowlist, `movewindowv2` parsing). Lint (Q1): `compositor/build-direct.sh tidy`
 (`compositor/.clang-tidy`). Soak (C1): `tests/compositor/soak.sh [seconds]` (see `compositor/README.md`).
 Nested scenarios: `tests/compositor/minimize.sh [repeats]` (FR6, FR14–FR17), `tests/compositor/double_click_setting.sh` (FR8, FR16), `tests/compositor/zoom_restore.sh`
-(FR8), `tests/compositor/input_consistency.sh [rounds]` (FR13).
+(FR8), `tests/compositor/input_consistency.sh [rounds]` (FR13), `tests/compositor/appmenu.sh [variants]`
+(FR18–FR22, spike S5; fixtures `tests/fixtures/{menu-demo, fake-registrar, appmenu-client}`, built by
+`tests/fixtures/build.sh`).
 
 Manual (L1, nested only):
 
@@ -311,7 +472,7 @@ Manual (L1, nested only):
    from a `hyprland.start` callback would be ignored because Hyprland applies the config's plugin list right
    after parsing; fixed in commit eaa953c, the S2 shim is gone).
 3. Log (`$XDG_RUNTIME_DIR/hypr/<nested instance>/hyprland.log`):
-   `[grassfield] grassfield-compositor 0.2.0-m2 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+   `[grassfield] grassfield-compositor 0.3.0-s5 initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
    Hyprland buffers this log: lines written after start-up can appear only much later.
 4. `WAYLAND_DISPLAY=$(cat .dev/nested.wayland) setsid foot >/dev/null 2>&1 &`, then
    `scripts/dev/shot.sh titlebar GF-REF`.
@@ -387,6 +548,14 @@ Manual (L1, nested only):
   motion over other windows reached nothing and the next click on another window was delivered to the
   dragged one (counter-review finding, reproduced by `tests/compositor/input_consistency.sh`; an earlier
   version of this section wrongly stated that the next click was correct).
+- Appmenu: only Wayland clients that implement `org_kde_kwin_appmenu` (Qt 6.11, Chromium 152) and only when
+  `com.canonical.AppMenu.Registrar` is on their bus at start-up; X11 apps, GTK and Electron apps are not covered
+  (T0 menus). The plugin only links windows to DBusMenu addresses; reading and showing the menus is step B.
+- Appmenu runtime unload with client objects alive keeps the plugin library in memory (FR23): a rebuilt plugin
+  at the same path loads only after Hyprland restarts; those clients' menus are not re-announced by a reloaded
+  plugin until they create new appmenu objects.
+- Window addresses are reused by Hyprland after a window is destroyed (seen in S5 runs): the shell must apply
+  `appmenu` events in order, and a clear always precedes a reuse.
 - Hyprland itself never releases the buttons of a removed pointer device: after an abandoned drag (device
   destroyed with the button down) it keeps that button as held until that button's next release, with or
   without the plugin. The plugin only ends its own gesture (FR7).
