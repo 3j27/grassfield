@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.services
+import qs.notifications
 import "HotCornerActions.js" as Actions
 
 // Hot corners (docs/specs/desktop.md): four trigger windows per screen; after the dwell time the
@@ -26,7 +27,12 @@ Scope {
         return "none";
     }
 
-    function run(action: string): void {
+    // `screen`: output name of the corner that fired (surfaces that take a screen open there).
+    function run(action: string, screen: string): void {
+        if (Actions.isDirect(action)) {
+            Notifications.toggleCenter(screen);
+            return;
+        }
         const argv = Actions.command(action, Quickshell.processId);
         if (!argv)
             return;
@@ -66,7 +72,8 @@ Scope {
                     screen: perScreen.modelData
                     corner: modelData
                     action: root.actionFor(modelData)
-                    onFire: root.run(action)
+                    blocked: action === "notifications" && Notifications.centerOpen
+                    onFire: root.run(action, perScreen.modelData.name)
                 }
             }
         }

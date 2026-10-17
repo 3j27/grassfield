@@ -102,8 +102,6 @@ Singleton {
                 const act = acts.find(a => a.id === "new-window");
                 if (act)
                     act.execute();
-                else
-                    entry.execute();
             }
             break;
         case "entryAction":

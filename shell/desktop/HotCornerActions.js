@@ -18,9 +18,17 @@ function normalize(action) {
     return ACTIONS.indexOf(action) >= 0 ? action : "none";
 }
 
-// argv of the IPC call for an action against the shell process `pid`, or null for none.
+// Actions that need the corner's screen and so are called in-process (the IPC handler takes no
+// argument): HotCorners calls Notifications.toggleCenter(screen) itself.
+function isDirect(action) {
+    return normalize(action) === "notifications";
+}
+
+// argv of the IPC call for an action against the shell process `pid`, or null for none and for
+// direct actions.
 function command(action, pid) {
-    const target = IPC[normalize(action)];
+    const name = normalize(action);
+    const target = isDirect(name) ? null : IPC[name];
     return target ? ["qs", "ipc", "--pid", String(pid), "call", target[0], target[1]] : null;
 }
 
