@@ -8,7 +8,7 @@ hl.window_rule({ name = "gf-no-maximize-event", match = { class = ".*" }, suppre
 
 -- Grassfield shell surfaces (layer-shell namespaces start with "grassfield-").
 -- Blur behind them comes from BackgroundEffect when available; this rule is the fallback (§5.5).
-hl.layer_rule({ name = "gf-shell-blur", match = { namespace = "^grassfield-(menubar|dock|panel|popup|overview|search|controlcenter|notifications|launchpad|osd)" }, blur = true, ignore_alpha = 0.01 })
+hl.layer_rule({ name = "gf-shell-blur", match = { namespace = "^grassfield-(menubar|dock|overlay|overview|search|banners|notification-center|apps|osd|polkit)$" }, blur = true, ignore_alpha = 0.01 })
 
 -- The menu bar and dock must appear instantly; panels fade.
 hl.layer_rule({ name = "gf-bar-no-anim", match = { namespace = "^grassfield-(menubar|dock)$" }, no_anim = true })
