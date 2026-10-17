@@ -25,12 +25,32 @@ TEST(Protocol, CapabilitiesWithSeveralFeaturesKeepsOrder) {
 }
 
 TEST(Protocol, OnlyRegisteredFeaturesAreAdvertised) {
-    // R11: minimize and config are advertised only when their entry points registered at load.
+    // R11: minimize, config and appmenu are advertised only when their entry points registered at load.
     EXPECT_EQ(capabilitiesJson().find("minimize"), std::string::npos);
-    EXPECT_EQ(capabilitiesJson(features(false, false)), R"({"v":"gfc/1","type":"capabilities","features":["decorations"]})");
-    EXPECT_EQ(capabilitiesJson(features(true, false)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize"]})");
-    EXPECT_EQ(capabilitiesJson(features(false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})");
-    EXPECT_EQ(capabilitiesJson(features(true, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, false, false)), R"({"v":"gfc/1","type":"capabilities","features":["decorations"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, false, false)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, true, false)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","appmenu"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, true, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu"]})");
+}
+
+TEST(Protocol, AppmenuJsonIsExactWireFormat) {
+    EXPECT_EQ(appmenuJson("55d3c2a0b1f0", ":1.42", "/MenuBar/1"),
+              R"({"v":"gfc/1","type":"appmenu","address":"55d3c2a0b1f0","service":":1.42","path":"/MenuBar/1"})");
+    EXPECT_EQ(socket2Line(appmenuJson("55d3c2a0b1f0", "org.kde.Foo", "/a/b")),
+              R"(grassfield>>{"v":"gfc/1","type":"appmenu","address":"55d3c2a0b1f0","service":"org.kde.Foo","path":"/a/b"})");
+}
+
+TEST(Protocol, AppmenuClearHasEmptyServiceAndPath) {
+    EXPECT_EQ(appmenuJson("55d3c2a0b1f0", "", ""), R"({"v":"gfc/1","type":"appmenu","address":"55d3c2a0b1f0","service":"","path":""})");
+}
+
+TEST(Protocol, AppmenuJsonEscapesEveryField) {
+    // Validation rejects these strings before they reach the JSON; the JSON stays well-formed regardless.
+    EXPECT_EQ(appmenuJson(R"(a"b)", R"(x","type":"evil)", "/p\n\\"),
+              R"({"v":"gfc/1","type":"appmenu","address":"a\"b","service":"x\",\"type\":\"evil","path":"/p\n\\"})");
+    EXPECT_EQ(appmenuJson("1", std::string_view(":1.\0", 4), "/\x01"), R"({"v":"gfc/1","type":"appmenu","address":"1","service":":1.\u0000","path":"/\u0001"})");
 }
 
 TEST(Protocol, MinimizeRequestJson) {
@@ -79,8 +99,10 @@ TEST(Protocol, NamesAreStable) {
     EXPECT_EQ(kLuaMinimize, "minimize");
     EXPECT_EQ(kLuaRestore, "restore");
     EXPECT_EQ(kLuaConfig, "config");
+    EXPECT_EQ(kLuaAppmenu, "appmenu");
     EXPECT_EQ(kFeatureMinimize, "minimize");
     EXPECT_EQ(kFeatureConfig, "config");
+    EXPECT_EQ(kFeatureAppmenu, "appmenu");
     EXPECT_EQ(kConfigTitlebarDoubleClick, "titlebarDoubleClick");
 }
 

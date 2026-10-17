@@ -15,6 +15,9 @@ namespace gf::ipc {
     // The minimize / restore entry points and the minimize render hooks are all registered.
     bool minimizeAvailable();
 
+    // The appmenu global is advertised and hl.plugin.grassfield.appmenu is registered.
+    bool appmenuAvailable();
+
     // Registers the Lua function(s) (hl.plugin.grassfield.*) and the hyprctl command. Returns false if any failed.
     bool registerAll();
 

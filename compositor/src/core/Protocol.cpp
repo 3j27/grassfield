@@ -83,12 +83,27 @@ namespace gf::gfc {
         return windowEventJson("restored", windowAddress);
     }
 
-    std::vector<std::string_view> features(bool minimize, bool config) {
+    std::string appmenuJson(std::string_view windowAddress, std::string_view service, std::string_view path) {
+        std::string out;
+        appendHeader(out, "appmenu");
+        out += R"(,"address":")";
+        out += jsonEscape(windowAddress);
+        out += R"(","service":")";
+        out += jsonEscape(service);
+        out += R"(","path":")";
+        out += jsonEscape(path);
+        out += "\"}";
+        return out;
+    }
+
+    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu) {
         std::vector<std::string_view> out{kFeatureDecorations};
         if (minimize)
             out.push_back(kFeatureMinimize);
         if (config)
             out.push_back(kFeatureConfig);
+        if (appmenu)
+            out.push_back(kFeatureAppmenu);
         return out;
     }
 

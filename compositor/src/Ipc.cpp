@@ -1,5 +1,6 @@
 #include "Ipc.hpp"
 
+#include "AppmenuServer.hpp"
 #include "Minimize.hpp"
 #include "Plugin.hpp"
 #include "core/Minimize.hpp"
@@ -30,9 +31,13 @@ namespace gf::ipc {
         return s.luaMinimizeRegistered && s.luaRestoreRegistered && minimizer::ready();
     }
 
+    bool appmenuAvailable() {
+        return state().luaAppmenuRegistered && appmenuServer::ready();
+    }
+
     namespace {
         std::string currentCapabilities() {
-            const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered);
+            const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -132,6 +137,18 @@ namespace gf::ipc {
             guarded("hl.plugin.grassfield.hello", [] { postCapabilities(); });
         }
 
+        void appmenuNoThrow(const SLuaString<24>& address) noexcept {
+            guarded("hl.plugin.grassfield.appmenu", [&] {
+                const auto window = address.ok ? minimize::parseAddress(address.view()) : std::nullopt;
+                if (!window) {
+                    log(Log::WARN, "appmenu: rejected: invalid window address");
+                    return;
+                }
+                if (!appmenuServer::announce(*window))
+                    log(Log::WARN, "appmenu: no mapped window {:x} (or appmenu inactive)", *window);
+            });
+        }
+
         // Pushes the result of hl.dsp.no_op() so that `hl.dispatch(hl.plugin.grassfield.hello())` (what
         // `hyprctl dispatch` / Quickshell's Hyprland.dispatch() evaluate under the Lua config) succeeds.
         // Pushes nothing if the dispatcher can't be obtained. Only trivially destructible values live in
@@ -191,6 +208,14 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
+        // hl.plugin.grassfield.appmenu(address): re-posts the appmenu event of a mapped window (the shell calls it
+        // after a restart). Untrusted: the address is parsed and compared with the live windows.
+        int luaAppmenu(lua_State* L) {
+            const auto address = readString<24>(L, 1);
+            appmenuNoThrow(address);
+            return pushNoOpDispatcher(L);
+        }
+
         std::string hyprctlGrassfield(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             // Same JSON for both output formats: the payload is already machine-readable.
             std::string out;
@@ -226,6 +251,7 @@ namespace gf::ipc {
         s.luaMinimizeRegistered = addLua(gfc::kLuaMinimize, luaMinimize);
         s.luaRestoreRegistered  = addLua(gfc::kLuaRestore, luaRestore);
         s.luaConfigRegistered   = addLua(gfc::kLuaConfig, luaConfig);
+        s.luaAppmenuRegistered  = appmenuServer::ready() && addLua(gfc::kLuaAppmenu, luaAppmenu); // only with the global
         bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
@@ -243,6 +269,7 @@ namespace gf::ipc {
         removeLua(s.luaMinimizeRegistered, gfc::kLuaMinimize);
         removeLua(s.luaRestoreRegistered, gfc::kLuaRestore);
         removeLua(s.luaConfigRegistered, gfc::kLuaConfig);
+        removeLua(s.luaAppmenuRegistered, gfc::kLuaAppmenu);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="appmenu">
+  <copyright><![CDATA[
+    SPDX-FileCopyrightText: 2017 David Edmundson
+
+    SPDX-License-Identifier: LGPL-2.1-or-later
+  ]]></copyright>
+  <!--
+    KDE's org_kde_kwin_appmenu protocol, version 2 (the version KWin implements). Qt 6.11 ships version 1
+    of this file (/usr/share/qt6/wayland/protocols/appmenu/appmenu.xml, package qt6-base); version 2 only
+    adds the manager's `release` destructor (since 2). Request order (= opcodes) is unchanged, so version 1
+    clients work as before. grassfield-compositor compiles the server code hyprwayland-scanner generates
+    from this file (compositor/build-direct.sh). Hyprland (BSD-3-Clause) does the same with KDE's
+    LGPL-2.1-or-later server-decoration protocol. Third-party notice: docs/specs/compositor.md (appmenu).
+  -->
+  <interface name="org_kde_kwin_appmenu_manager" version="2">
+      <description summary="appmenu dbus address interface">
+          This interface allows a client to link a window (or wl_surface) to an com.canonical.dbusmenu
+          interface registered on DBus.
+      </description>
+      <request name="create">
+          <arg name="id" type="new_id" interface="org_kde_kwin_appmenu"/>
+          <arg name="surface" type="object" interface="wl_surface"/>
+      </request>
+      <request name="release" type="destructor" since="2">
+        <description summary="destroy the org_kde_kwin_appmenu_manager object"/>
+      </request>
+  </interface>
+  <interface name="org_kde_kwin_appmenu" version="2">
+      <description summary="appmenu dbus address interface">
+          The DBus service name and object path where the appmenu interface is present
+          The object should be registered on the session bus before sending this request.
+          If not applicable, clients should remove this object.
+      </description>
+      <request name="set_address">
+          <description summary="initialise or update the location of the AppMenu interface">
+              Set or update the service name and object path.
+              Strings should be formatted in Latin-1 matching the relevant DBus specifications.
+          </description>
+          <arg name="service_name" type="string" />
+          <arg name="object_path" type="string" />
+      </request>
+      <request name="release" type="destructor">
+        <description summary="release the appmenu object"/>
+      </request>
+  </interface>
+</protocol>

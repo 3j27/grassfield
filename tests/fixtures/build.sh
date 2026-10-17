@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Builds the test fixtures with g++/gcc + pkg-config (no CMake, no moc):
+#   .dev/build/menu-demo        tests/fixtures/menu-demo      (Qt6Widgets + Qt6DBus)
+#   .dev/build/fake-registrar   tests/fixtures/fake-registrar (Qt6DBus)
+#   .dev/build/appmenu-client   tests/fixtures/appmenu-client (C, wayland-client + wayland-scanner)
+# Usage: tests/fixtures/build.sh [menu-demo|fake-registrar|appmenu-client|all]   (default all)
+set -euo pipefail
+
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+out=$root/.dev/build
+mkdir -p "$out"
+what=${1:-all}
+flags=(-std=c++17 -O1 -g -fPIC -Wall -Wextra)
+
+if [[ $what == menu-demo || $what == all ]]; then
+  # shellcheck disable=SC2046
+  g++ "${flags[@]}" $(pkg-config --cflags Qt6Widgets Qt6DBus) "$root/tests/fixtures/menu-demo/main.cpp" \
+    $(pkg-config --libs Qt6Widgets Qt6DBus) -o "$out/menu-demo"
+  echo "built $out/menu-demo"
+fi
+
+if [[ $what == appmenu-client || $what == all ]]; then
+  gen=$out/appmenu-client-gen
+  mkdir -p "$gen"
+  wayland-scanner client-header "$root/compositor/protocols/appmenu.xml" "$gen/appmenu-client-protocol.h"
+  wayland-scanner private-code "$root/compositor/protocols/appmenu.xml" "$gen/appmenu-protocol.c"
+  # shellcheck disable=SC2046
+  gcc -std=c11 -O1 -g -Wall -Wextra -I"$gen" "$root/tests/fixtures/appmenu-client/main.c" "$gen/appmenu-protocol.c" \
+    $(pkg-config --cflags --libs wayland-client) -o "$out/appmenu-client"
+  echo "built $out/appmenu-client"
+fi
+
+if [[ $what == fake-registrar || $what == all ]]; then
+  # shellcheck disable=SC2046
+  g++ "${flags[@]}" $(pkg-config --cflags Qt6DBus) "$root/tests/fixtures/fake-registrar/main.cpp" \
+    $(pkg-config --libs Qt6DBus) -o "$out/fake-registrar"
+  echo "built $out/fake-registrar"
+fi
