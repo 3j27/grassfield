@@ -79,6 +79,151 @@ Singleton {
         Hyprland.dispatch(Hyprland.usingLua ? "hl.dsp.exit()" : "exit");
     }
 
+    // ---- Overview support (spec overview.md): Spaces (workspaces) and window geometry ----
+
+    // Bumped on Hyprland events that change windows or workspaces, so that bindings calling
+    // spacesOn()/windowsOn() with it as an argument re-evaluate.
+    property int topologyRevision: 0
+    // While true, window/workspace events trigger a debounced re-read of Hyprland's data (new
+    // windows only carry geometry after a refresh). Overview sets it while open.
+    property bool refreshOnEvents: false
+
+    Timer {
+        id: refreshTimer
+        interval: 60
+        onTriggered: root.refreshSpaces()
+    }
+
+    Connections {
+        target: Hyprland
+
+        function onRawEvent(event: HyprlandEvent): void {
+            switch (event.name) {
+            case "openwindow":
+            case "closewindow":
+            case "movewindowv2":
+            case "workspacev2":
+            case "createworkspacev2":
+            case "destroyworkspacev2":
+            case "moveworkspacev2":
+            case "changefloatingmode":
+            case "fullscreen":
+                root.topologyRevision++;
+                if (root.refreshOnEvents)
+                    refreshTimer.restart();
+            }
+        }
+    }
+
+    // Re-reads windows and workspaces from Hyprland (call when Overview opens).
+    function refreshSpaces(): void {
+        Hyprland.refreshWorkspaces();
+        Hyprland.refreshToplevels();
+    }
+
+    function monitorByName(screenName: string): var {
+        const all = Hyprland.monitors ? Hyprland.monitors.values : [];
+        for (let i = 0; i < all.length; i++) {
+            if (all[i].name === screenName)
+                return all[i];
+        }
+        return null;
+    }
+
+    // Regular workspaces (id > 0) of an output, ordered by id:
+    // [{id, name, active, windowCount, appIds}].
+    function spacesOn(screenName: string, revision: int): var {
+        const out = [];
+        const mon = monitorByName(screenName);
+        const all = Hyprland.workspaces ? Hyprland.workspaces.values : [];
+        const wins = windowsAcross(screenName);
+        for (let i = 0; i < all.length; i++) {
+            const ws = all[i];
+            if (ws.id <= 0 || !ws.monitor || ws.monitor.name !== screenName)
+                continue;
+            const appIds = [];
+            let count = 0;
+            for (let j = 0; j < wins.length; j++) {
+                if (wins[j].workspaceId !== ws.id)
+                    continue;
+                count++;
+                if (appIds.indexOf(wins[j].appId) === -1)
+                    appIds.push(wins[j].appId);
+            }
+            out.push({
+                id: ws.id,
+                name: ws.name,
+                active: mon && mon.activeWorkspace ? mon.activeWorkspace.id === ws.id : false,
+                windowCount: count,
+                appIds: appIds
+            });
+        }
+        out.sort((a, b) => a.id - b.id);
+        return out;
+    }
+
+    // Mapped windows of an output on any regular workspace, monitor-relative geometry:
+    // [{address, toplevel, appId, title, x, y, w, h, workspaceId}]. `toplevel` is the
+    // foreign-toplevel handle (null until matched), usable as a capture source.
+    function windowsAcross(screenName: string): var {
+        const out = [];
+        const mon = monitorByName(screenName);
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        if (!mon)
+            return out;
+        for (let i = 0; i < all.length; i++) {
+            const top = all[i];
+            const data = top.lastIpcObject;
+            if (!data || !data.at || !data.size || !data.workspace || data.workspace.id <= 0 || data.mapped === false || data.hidden === true)
+                continue;
+            if (data.monitor !== mon.id)
+                continue;
+            out.push({
+                address: top.address,
+                toplevel: top.wayland,
+                appId: top.wayland ? top.wayland.appId : (data["class"] ? data["class"] : ""),
+                title: top.title,
+                x: data.at[0] - mon.x,
+                y: data.at[1] - mon.y,
+                w: data.size[0],
+                h: data.size[1],
+                workspaceId: data.workspace.id
+            });
+        }
+        return out;
+    }
+
+    // Windows on the output's currently shown workspace.
+    function windowsOn(screenName: string, revision: int): var {
+        const mon = monitorByName(screenName);
+        const activeId = mon && mon.activeWorkspace ? mon.activeWorkspace.id : -1;
+        return windowsAcross(screenName).filter(w => w.workspaceId === activeId);
+    }
+
+    // Id for a new Space: one past the highest workspace id in use.
+    function nextSpaceId(): int {
+        let max = 0;
+        const all = Hyprland.workspaces ? Hyprland.workspaces.values : [];
+        for (let i = 0; i < all.length; i++)
+            max = Math.max(max, all[i].id);
+        return max + 1;
+    }
+
+    function focusSpace(id: int): void {
+        if (id > 0)
+            Hyprland.dispatch("hl.dsp.focus({ workspace = \"" + Math.floor(id) + "\" })");
+    }
+
+    // Move a window to a Space without following it. The address comes from Hyprland data but
+    // is validated as hex before it is put into the Lua request.
+    function moveToSpace(address: string, id: int): bool {
+        const m = /^(?:0x)?([0-9a-fA-F]{1,16})$/.exec(String(address));
+        if (!m || !(id > 0))
+            return false;
+        Hyprland.dispatch(moveRequest(m[1].toLowerCase(), String(Math.floor(id))));
+        return true;
+    }
+
     // Focus recency (most recently activated wins), kept per toplevel handle.
     property var recency: new Map()
 

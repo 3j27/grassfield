@@ -7,6 +7,7 @@ import qs.dock
 import qs.menubar
 import qs.notifications
 import qs.osd
+import qs.overview
 import qs.overlay
 import qs.platform
 import qs.search
@@ -73,6 +74,7 @@ ShellRoot {
     Search {}
     AuthAgent {}
     Idle {}
+    Overview {}
 
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore).

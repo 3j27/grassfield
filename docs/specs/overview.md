@@ -32,3 +32,45 @@ capability is present. Non-goal: capturing protected surfaces.
 
 ## Known limitations
 - v1 shows thumbnails, not the real windows moving; real-window transforms need the plugin (v2).
+
+## v1 implementation (shell/overview/, 2026-10-17)
+- `Overview.qml` (controller + IPC `overview toggle|open|close|status`), `OverviewWindow.qml` (one layer-shell
+  overlay per output, namespace `grassfield-overview`, starts below the menu bar, keyboard exclusive while open),
+  `Layout.js` (pure layout, keyboard neighbor search, hex address validation; `tests/unit/tst_overviewlayout.qml`).
+- Layout: one uniform scale <= 0.8, centers scaled about the group's center, overlaps relaxed apart (min gap 24 px);
+  if that does not fit, or row packing gives clearly larger windows (identical stacked windows), rows in reading
+  order are used. Window rectangles interpolate from the real rectangle to the layout rectangle (zoom). Reduce
+  Motion: no movement, crossfade capped at `motion.reducedMax`.
+- Platform (`shell/platform/Compositor.qml`, new functions only): `spacesOn`, `windowsOn`, `nextSpaceId`,
+  `focusSpace`, `moveToSpace` (address validated as hex, Lua `hl.dsp.window.move({... follow = false ...})`),
+  `refreshSpaces`, `topologyRevision`/`refreshOnEvents`.
+- Spaces bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
+  tile thumbnails need v2). Click a tile: switch and close. "+": focus the next workspace id, Overview stays open.
+- Click a window: activate and close. The keyboard grab is released 80 ms before the focus action, otherwise Hyprland
+  refocuses the previous window (and workspace) when the exclusive layer goes away and undoes the switch.
+- Keyboard: arrows (spatial), Return, Tab/Shift+Tab cycle windows -> each Space tile -> "+", Esc. Up from the top
+  row of windows enters the Spaces bar.
+- Profiles (`material.profile`): full = live `ScreencopyView`; balanced = single frames every
+  `overview.balancedIntervalMs` (250 ms; the API has no rate control, so `captureFrame()` on a timer); reduced = one
+  snapshot per window when opening.
+- v2 branch point: `Overview.thumbnailMode` (`!Capabilities.has("overview")`, always true in v1).
+- Backdrop: the wallpaper is a separate layer surface, so the overlay dims and blurs everything below it (real
+  windows included, blurred) instead of showing a wallpaper-only backdrop; with Reduce Transparency the dim is
+  near-opaque. A wallpaper-only backdrop needs the wallpaper art shared with the overlay (follow-up).
+
+## S4 results (spike: ScreencopyView cost of 9 toplevels)
+Nested Hyprland 0.56.2 on the owner's session (parent GPU path, UHD 630; indication only), 9 foot windows (700x500)
+on one workspace, output GF-REF 1920x1080, idle terminals, 60 s windows, CPU = % of one core from /proc stat deltas.
+
+| State | grassfield-shell CPU | grassfield-shell RSS | nested Hyprland CPU |
+|---|---|---|---|
+| Overview closed | 0.1 % | 292 MB | 0.0 % (RSS 167 MB) |
+| open, full (live) | 104.8 % | 311 MB | 43.1 % |
+| open, balanced (4 fps) | 1.3 % | 307 MB | 0.3 % |
+| open, reduced (snapshot) | 0.1 % | 324 MB | 0.1 % |
+
+- Live capture of 9 windows saturates the shell's main thread in this environment (every frame is copied, even
+  for idle windows): full is not viable as a default here; the default profile (`balanced`) costs ~1 %.
+- Observation (nested only, real session not verified): on the first open after the shell starts, the zoom
+  animation progressed only to ~14 % and resumed after an external wake-up (IPC call); later opens reach 100 %
+  within ~0.3 s. Needs a check on the real session (P3, L2).
