@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import Grassfield.Ui
 import qs.widgets
 import "../widgets/Placements.js" as Placements
+import qs.services
 import "IconsLogic.js" as Logic
 
 // Desktop icons (docs/specs/desktop.md): the files of the desktop folder as a grid of icons on the
@@ -305,6 +306,11 @@ FocusScope {
             event.accepted = true;
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             root.openNames(root.selectedNames);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Space && !ctrl) {
+            // Glance at the selected files (Space again closes it; folders are skipped by Glance itself).
+            if (root.selectedPaths.length > 0)
+                GlanceApp.toggle(root.selectedPaths);
             event.accepted = true;
         } else if (event.key === Qt.Key_F2) {
             if (root.selectedNames.length === 1)

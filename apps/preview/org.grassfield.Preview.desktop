@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Preview
+Comment=View images, PDF documents, text, audio and video
+Exec=grassfield-preview %U
+Icon=image-x-generic
+Terminal=false
+Categories=Graphics;Viewer;
+MimeType=image/png;image/jpeg;image/gif;image/webp;image/bmp;image/tiff;image/svg+xml;image/avif;image/heif;image/x-icon;image/vnd.microsoft.icon;application/pdf;text/plain;text/markdown;text/x-python;text/x-csrc;text/x-c++src;text/x-chdr;text/x-log;text/csv;text/html;text/css;application/json;application/xml;application/x-shellscript;video/mp4;video/x-matroska;video/webm;video/quicktime;video/ogg;audio/mpeg;audio/flac;audio/ogg;audio/x-wav;audio/wav;audio/mp4;audio/aac;audio/opus;audio/x-vorbis+ogg;
+StartupWMClass=org.grassfield.Preview

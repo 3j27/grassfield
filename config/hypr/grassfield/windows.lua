@@ -6,6 +6,9 @@ hl.window_rule({ name = "gf-float-all", match = { class = ".*" }, float = true }
 -- Don't let apps maximize themselves into a tiled state; Zoom is a Grassfield action.
 hl.window_rule({ name = "gf-no-maximize-event", match = { class = ".*" }, suppress_event = "maximize" })
 
+-- Glance (quick look of Preview): a floating panel centered on the screen, without the plugin titlebar.
+hl.window_rule({ name = "gf-glance", match = { class = "^org\\.grassfield\\.Preview\\.Glance$" }, float = true, center = true, decorate = false })
+
 -- Grassfield shell surfaces (layer-shell namespaces start with "grassfield-").
 -- Blur behind them comes from BackgroundEffect when available; this rule is the fallback (§5.5).
 hl.layer_rule({ name = "gf-shell-blur", match = { namespace = "^grassfield-(menubar|dock|overlay|overview|search|banners|notification-center|apps|osd|polkit)$" }, blur = true, ignore_alpha = 0.01 })
