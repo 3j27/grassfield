@@ -49,6 +49,29 @@ TestCase {
         compare(Sanitizer.sanitize("x".repeat(10000)).length, 4000);
     }
 
+    // Tag-like input must stay linear (was O(n^2): 250 ms per 4000 characters).
+    function test_tagLikeInputIsLinear() {
+        const inputs = ["<a".repeat(2000), "<a \"".repeat(1000), "<a '\"".repeat(800), "<".repeat(4000), "<b ".repeat(1300) + ">", "<a '>".repeat(660), "<a \">".repeat(660)];
+        for (const input of inputs) {
+            const t0 = Date.now();
+            Sanitizer.sanitize(input);
+            const ms = Date.now() - t0;
+            console.log("sanitize " + input.length + " chars: " + ms + " ms");
+            verify(ms < 20, "sanitize took " + ms + " ms");
+        }
+    }
+
+    // 1000 valid tags: every tag produces output, so this is slower than the failing scans above.
+    function test_denseValidMarkup() {
+        const t0 = Date.now();
+        compare(Sanitizer.sanitize("<b>x</b>".repeat(500)).length, 500 * 8);
+        verify(Date.now() - t0 < 100);
+    }
+
+    function test_longTagIsText() {
+        compare(Sanitizer.sanitize("<b " + "x".repeat(600) + ">hi"), "&lt;b " + "x".repeat(600) + "&gt;hi");
+    }
+
     function test_plain() {
         compare(Sanitizer.plain("<b>1</b> &amp; <i>2</i><br>3"), "1 & 2\n3");
     }

@@ -78,8 +78,9 @@ function parse(text, now) {
     return prune(entries, now);
 }
 
+// Group key: the app name ("" for senders without one; the UI shows a translated label).
 function groupName(entry) {
-    return entry.appName !== "" ? entry.appName : "Notification";
+    return entry.appName;
 }
 
 // Groups by app, newest group first, items newest first: [{appName, appIcon, latest, items}].
@@ -108,28 +109,29 @@ function removeApp(entries, appName) {
     return entries.filter(e => groupName(e) !== appName);
 }
 
-// "now", "5m ago", "3h ago", "2d ago".
-function relativeTime(time, now) {
+// Age as {unit: "now"|"m"|"h"|"d", n}; the UI turns it into translated text.
+function relativeParts(time, now) {
     const seconds = Math.max(0, Math.floor((now - time) / 1000));
     if (seconds < 60)
-        return "now";
+        return {unit: "now", n: 0};
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60)
-        return minutes + "m ago";
+        return {unit: "m", n: minutes};
     const hours = Math.floor(minutes / 60);
     if (hours < 24)
-        return hours + "h ago";
-    return Math.floor(hours / 24) + "d ago";
+        return {unit: "h", n: hours};
+    return {unit: "d", n: Math.floor(hours / 24)};
 }
 
 // Banner timeout in ms (spec N2): critical never expires; expire_timeout 0 never; negative = default.
-// expireSeconds is Quickshell's Notification.expireTimeout (seconds).
-function bannerTimeout(urgency, expireSeconds, defaultMs) {
+// expireMs is Quickshell's Notification.expireTimeout, which is in MILLISECONDS (the D-Bus
+// expire_timeout unit; verified with `notify-send -t 2000`).
+function bannerTimeout(urgency, expireMs, defaultMs) {
     if (urgency === 2)
         return 0;
-    if (expireSeconds === 0)
+    if (expireMs === 0)
         return 0;
-    if (expireSeconds > 0)
-        return Math.round(expireSeconds * 1000);
+    if (expireMs > 0)
+        return Math.round(expireMs);
     return defaultMs;
 }

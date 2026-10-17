@@ -24,6 +24,32 @@ function fileUrlToPath(url) {
     }
 }
 
+// Lexical canonical form: collapses "//", "." and ".." (".." never climbs above "/"). Symlinks are
+// not resolved (no filesystem access here).
+function canonical(path) {
+    const out = [];
+    for (const seg of path.split("/")) {
+        if (seg === "" || seg === ".")
+            continue;
+        if (seg === "..")
+            out.pop();
+        else
+            out.push(seg);
+    }
+    return "/" + out.join("/");
+}
+
+// Canonical path when it lies strictly under home and has no hidden segment, else "".
+function homePath(path, home) {
+    if (!home || !path.startsWith("/"))
+        return "";
+    const c = canonical(path);
+    const h = canonical(home);
+    if (!c.startsWith(h + "/") || hasHiddenSegment(c, h))
+        return "";
+    return c;
+}
+
 // Shows "~/x" for paths under home.
 function tildePath(path, home) {
     if (home && (path === home || path.startsWith(home + "/")))
@@ -44,8 +70,8 @@ function parseLocalsearch(text, home, limit) {
         const m = /(file:\/\/\S+)/.exec(line);
         if (!m)
             continue;
-        const path = fileUrlToPath(m[1]);
-        if (path !== "" && !hasHiddenSegment(path, home))
+        const path = homePath(fileUrlToPath(m[1]), home);
+        if (path !== "")
             out.push(path);
         if (out.length >= limit)
             break;
@@ -59,10 +85,11 @@ function parsePlocate(text, query, home, limit) {
     const q = query.toLowerCase();
     const hits = [];
     for (const line of text.split("\n")) {
-        if (!line.startsWith(home + "/") || hasHiddenSegment(line, home))
+        const path = homePath(line, home);
+        if (path === "")
             continue;
-        const name = baseName(line).toLowerCase();
-        hits.push({path: line, rank: name.startsWith(q) ? 0 : (name.indexOf(q) >= 0 ? 1 : 2)});
+        const name = baseName(path).toLowerCase();
+        hits.push({path: path, rank: name.startsWith(q) ? 0 : (name.indexOf(q) >= 0 ? 1 : 2)});
     }
     hits.sort((a, b) => a.rank - b.rank || a.path.length - b.path.length);
     return hits.slice(0, limit).map(h => h.path);
@@ -73,7 +100,8 @@ function unescapeXml(s) {
 }
 
 // recently-used.xbel -> [{path, mime, modified (ms)}], newest first.
-function parseXbel(text) {
+// With home set, entries outside it (or hidden) are dropped; non-file:// URIs always are.
+function parseXbel(text, home) {
     const out = [];
     const re = /<bookmark\s([^>]*)>([\s\S]*?)<\/bookmark>/g;
     let m;
@@ -83,7 +111,9 @@ function parseXbel(text) {
         const mime = /<mime:mime-type\s+type="([^"]*)"/.exec(m[2]);
         if (!href)
             continue;
-        const path = fileUrlToPath(unescapeXml(href[1]));
+        let path = fileUrlToPath(unescapeXml(href[1]));
+        if (home !== undefined)
+            path = homePath(path, home);
         if (path === "")
             continue;
         const t = mod ? Date.parse(mod[1]) : 0;

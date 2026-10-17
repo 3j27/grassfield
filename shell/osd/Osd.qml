@@ -24,6 +24,9 @@ Singleton {
     property bool armed: false
 
     function showValue(osdKind: string, osdLevel: real, osdMuted: bool): void {
+        // NaN or infinite levels (bad IPC input, sensor glitch) are ignored; the rest is clamped.
+        if (!isFinite(osdLevel))
+            return;
         kind = osdKind === "brightness" ? "brightness" : "volume";
         level = Math.max(0, Math.min(1, osdLevel));
         muted = osdMuted;

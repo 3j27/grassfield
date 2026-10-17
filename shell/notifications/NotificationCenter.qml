@@ -8,6 +8,12 @@ import qs.services
 // Notification Center (N7): full-height panel at the right edge, opened from the clock or by
 // IPC. Grouped by app, newest first; Clear per group and Clear All; Esc or a click outside
 // closes. Widgets are not part of M2 (no empty placeholder region).
+//
+// The window exists per screen but its content (a Loader) only while the Center is open on that
+// screen, so a closed Center costs nothing. Rows come from the keyed Notifications.centerModel
+// (already ordered by group, with rank/groupCount), so new notifications never rebuild the list.
+// Keyboard: Tab moves between rows and buttons, Return opens the row's default action, Delete or
+// Backspace clears the row.
 Variants {
     id: root
 
@@ -48,18 +54,13 @@ Variants {
                 intersection: Intersection.Subtract
             }
         }
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? blur : null
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open && content.item ? blur : null
         // qmllint enable missing-type
 
         Region {
             id: blur
-            item: panel
+            item: content.item ? (content.item as CenterContent).panel : null
             radius: Tokens.radiusPanel
-        }
-
-        onOpenChanged: {
-            if (open)
-                panel.forceActiveFocus();
         }
 
         // A popup (menus, Control Center) takes over.
@@ -72,157 +73,286 @@ Variants {
             }
         }
 
-        MouseArea {
+        Loader {
+            id: content
             anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-            onPressed: Notifications.closeCenter()
+            active: win.open
+            sourceComponent: CenterContent {}
         }
 
-        FocusScope {
-            id: panel
+        component CenterContent: Item {
+            id: host
 
-            readonly property real margin: Tokens.spacingSm
+            readonly property Item panel: panel
+            // Slides in from the right edge after creation.
+            property bool shown: false
 
-            x: win.width - width - margin + (win.open ? 0 : width)
-            y: Tokens.menubarHeight + margin
-            width: Tokens.notificationCenterWidth
-            height: win.height - y - margin
-            Accessible.role: Accessible.Window
-            Accessible.name: qsTr("Notification Center")
-            Keys.onEscapePressed: Notifications.closeCenter()
-
-            Behavior on x {
-                NumberAnimation {
-                    duration: Appearance.duration(Tokens.motionNormal)
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.curve
-                }
+            Component.onCompleted: {
+                shown = true;
+                panel.forceActiveFocus();
             }
 
-            // Swallows clicks on the panel itself.
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
+                onPressed: Notifications.closeCenter()
             }
 
-            Material {
-                anchors.fill: parent
-                radius: Tokens.radiusPanel
-            }
+            FocusScope {
+                id: panel
 
-            Item {
-                id: header
-                x: Tokens.spacingLg
-                y: Tokens.spacingLg
-                width: parent.width - 2 * Tokens.spacingLg
-                height: clearAll.implicitHeight
+                readonly property real margin: Tokens.spacingSm
+                // App names whose group is expanded ("Show All").
+                property var expanded: ({})
+
+                x: host.width - width - margin + (host.shown ? 0 : width)
+                y: Tokens.menubarHeight + margin
+                width: Tokens.notificationCenterWidth
+                height: host.height - y - margin
+                Accessible.role: Accessible.Window
+                Accessible.name: qsTr("Notification Center")
+                Keys.onEscapePressed: Notifications.closeCenter()
+
+                Behavior on x {
+                    NumberAnimation {
+                        duration: Appearance.duration(Tokens.motionNormal)
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.curve
+                    }
+                }
+
+                // Swallows clicks on the panel itself.
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.AllButtons
+                }
+
+                Material {
+                    anchors.fill: parent
+                    radius: Tokens.radiusPanel
+                }
+
+                Item {
+                    id: header
+                    x: Tokens.spacingLg
+                    y: Tokens.spacingLg
+                    width: parent.width - 2 * Tokens.spacingLg
+                    height: clearAll.implicitHeight
+
+                    Text {
+                        textFormat: Text.PlainText
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("Notifications")
+                        color: Appearance.colors.text
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyTitleSize
+                        font.weight: Tokens.typographyMenuBoldWeight
+                    }
+
+                    Button {
+                        id: clearAll
+                        anchors.right: parent.right
+                        visible: Notifications.count > 0
+                        text: qsTr("Clear All")
+                        onClicked: Notifications.clearAll()
+                    }
+                }
 
                 Text {
                     textFormat: Text.PlainText
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("Notifications")
-                    color: Appearance.colors.text
+                    anchors.centerIn: parent
+                    visible: Notifications.count === 0
+                    text: qsTr("No Notifications")
+                    color: Appearance.colors.textSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyTitleSize
-                    font.weight: Tokens.typographyMenuBoldWeight
+                    font.weight: Tokens.typographyMenuWeight
                 }
 
-                Button {
-                    id: clearAll
-                    anchors.right: parent.right
-                    visible: Notifications.count > 0
-                    text: qsTr("Clear All")
-                    onClicked: Notifications.clearAll()
-                }
-            }
+                ListView {
+                    id: list
+                    x: Tokens.spacingLg
+                    y: header.y + header.height + Tokens.spacingMd
+                    width: parent.width - 2 * Tokens.spacingLg
+                    height: parent.height - y - Tokens.spacingLg
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: Notifications.centerModel
+                    // Rows near the viewport stay alive so Tab can reach them.
+                    cacheBuffer: Tokens.notificationCenterCache
 
-            Text {
-                textFormat: Text.PlainText
-                anchors.centerIn: parent
-                visible: Notifications.count === 0
-                text: qsTr("No Notifications")
-                color: Appearance.colors.textSecondary
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyTitleSize
-                font.weight: Tokens.typographyMenuWeight
-            }
+                    delegate: Column {
+                        id: item
 
-            Flickable {
-                id: scroller
-                x: Tokens.spacingLg
-                y: header.y + header.height + Tokens.spacingMd
-                width: parent.width - 2 * Tokens.spacingLg
-                height: parent.height - y - Tokens.spacingLg
-                contentWidth: width
-                contentHeight: groupsColumn.implicitHeight
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
+                        required property int index
+                        required property string key
+                        required property int nid
+                        required property string appName
+                        required property string appIcon
+                        required property string image
+                        required property string summary
+                        required property string bodyHtml
+                        required property real time
+                        required property int urgency
+                        required property string actionsJson
+                        required property int rank
+                        required property int groupCount
 
-                Column {
-                    id: groupsColumn
-                    width: scroller.width
-                    spacing: Tokens.spacingLg
+                        readonly property bool expanded: panel.expanded[appName] === true
+                        readonly property bool rowShown: rank < Tokens.notificationCenterGroupCollapsed || expanded
+                        // The last visible row of a long group carries the Show All / Show Less button.
+                        readonly property bool carriesToggle: groupCount > Tokens.notificationCenterGroupCollapsed
+                            && rank === (expanded ? groupCount - 1 : Tokens.notificationCenterGroupCollapsed - 1)
 
-                    Repeater {
-                        model: Notifications.groups
+                        width: list.width
+                        height: rowShown ? implicitHeight : 0
+                        visible: rowShown
+                        spacing: Tokens.spacingSm
 
-                        delegate: Column {
-                            id: groupItem
+                        Item {
+                            visible: item.rank === 0
+                            width: parent.width
+                            height: visible ? clearGroup.implicitHeight + (item.index > 0 ? Tokens.spacingLg : 0) : 0
 
-                            required property var modelData
-                            property bool expanded: false
-                            readonly property var shown: expanded ? modelData.items : modelData.items.slice(0, Tokens.notificationCenterGroupCollapsed)
-
-                            width: groupsColumn.width
-                            spacing: Tokens.spacingSm
-
-                            Item {
-                                width: parent.width
+                            Row {
+                                y: item.index > 0 ? Tokens.spacingLg : 0
                                 height: clearGroup.implicitHeight
+                                spacing: Tokens.spacingSm
 
-                                Row {
+                                Text {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    spacing: Tokens.spacingSm
-
-                                    Text {
-                                        text: groupItem.modelData.appName
-                                        textFormat: Text.PlainText
-                                        color: Appearance.colors.text
-                                        font.family: Appearance.fontFamily
-                                        font.pixelSize: Tokens.typographyBodySize
-                                        font.weight: Tokens.typographyMenuBoldWeight
-                                    }
-
-                                    Text {
-                                        textFormat: Text.PlainText
-                                        visible: groupItem.modelData.items.length > 1
-                                        text: String(groupItem.modelData.items.length)
-                                        color: Appearance.colors.textSecondary
-                                        font.family: Appearance.fontFamily
-                                        font.pixelSize: Tokens.typographyBodySize
-                                        font.weight: Tokens.typographyMenuWeight
-                                    }
+                                    text: Notifications.groupLabel(item.appName)
+                                    textFormat: Text.PlainText
+                                    color: Appearance.colors.text
+                                    font.family: Appearance.fontFamily
+                                    font.pixelSize: Tokens.typographyBodySize
+                                    font.weight: Tokens.typographyMenuBoldWeight
                                 }
 
-                                Button {
-                                    id: clearGroup
-                                    anchors.right: parent.right
-                                    text: qsTr("Clear")
-                                    onClicked: Notifications.clearApp(groupItem.modelData.appName)
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    textFormat: Text.PlainText
+                                    visible: item.groupCount > 1
+                                    text: String(item.groupCount)
+                                    color: Appearance.colors.textSecondary
+                                    font.family: Appearance.fontFamily
+                                    font.pixelSize: Tokens.typographyBodySize
+                                    font.weight: Tokens.typographyMenuWeight
                                 }
                             }
 
-                            Repeater {
-                                model: groupItem.shown
+                            Button {
+                                id: clearGroup
+                                y: item.index > 0 ? Tokens.spacingLg : 0
+                                anchors.right: parent.right
+                                text: qsTr("Clear")
+                                onClicked: Notifications.clearApp(item.appName)
+                            }
+                        }
 
-                                delegate: Item {
-                                    id: row
+                        Item {
+                            id: row
 
-                                    required property var modelData
-                                    readonly property bool hovered: rowHover.hovered
+                            readonly property bool hovered: rowHover.hovered
+                            readonly property bool live: item.nid >= 0
 
-                                    width: groupItem.width
-                                    height: rowContent.implicitHeight + 2 * Tokens.spacingMd
+                            width: item.width
+                            height: item.rowShown ? rowLoader.height : 0
+                            visible: item.rowShown
+                            activeFocusOnTab: item.rowShown
+                            Accessible.role: Accessible.ListItem
+                            Accessible.name: item.summary !== "" ? item.summary : Notifications.groupLabel(item.appName)
+                            Accessible.description: item.appName
+                            Accessible.focusable: true
+                            Accessible.onPressAction: row.open()
+
+                            function open(): void {
+                                if (!live)
+                                    return;
+                                Notifications.activateDefault(item.key);
+                                Notifications.closeCenter();
+                            }
+
+                            Keys.onPressed: event => {
+                                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                    row.open();
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                                    Notifications.clear(item.key);
+                                    panel.forceActiveFocus();
+                                    event.accepted = true;
+                                }
+                            }
+
+                            onActiveFocusChanged: {
+                                if (activeFocus)
+                                    list.positionViewAtIndex(item.index, ListView.Contain);
+                            }
+
+                            HoverHandler {
+                                id: rowHover
+                            }
+
+                            TapHandler {
+                                acceptedButtons: Qt.LeftButton
+                                enabled: row.live
+                                onTapped: row.open()
+                            }
+
+                            // The row (and its action buttons) exists only while it is shown.
+                            Loader {
+                                id: rowLoader
+                                width: parent.width
+                                active: item.rowShown
+                                sourceComponent: rowBody
+                            }
+
+                            // Keyboard focus ring.
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Tokens.radiusMenu
+                                color: "transparent"
+                                border.width: row.activeFocus ? Tokens.controlFocusRing : 0
+                                border.color: Appearance.colors.accent
+                            }
+
+                            // Remove this entry; shown on hover or keyboard focus.
+                            Item {
+                                x: row.width - width - Tokens.spacingXs
+                                y: Tokens.spacingXs
+                                width: Tokens.notificationCloseSize
+                                height: width
+                                opacity: row.hovered || row.activeFocus ? 1 : 0
+                                visible: item.rowShown
+                                Accessible.role: Accessible.Button
+                                Accessible.name: qsTr("Clear notification")
+                                Accessible.onPressAction: Notifications.clear(item.key)
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: width / 2
+                                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                                }
+
+                                Icon {
+                                    anchors.centerIn: parent
+                                    size: parent.width - Tokens.notificationCloseGlyphInset
+                                    name: "close-glyph"
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: parent.opacity > 0
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Notifications.clear(item.key)
+                                }
+                            }
+
+                            Component {
+                                id: rowBody
+
+                                Item {
+                                    implicitHeight: rowContent.implicitHeight + 2 * Tokens.spacingMd
 
                                     Rectangle {
                                         anchors.fill: parent
@@ -230,74 +360,38 @@ Variants {
                                         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity / 2)
                                     }
 
-                                    HoverHandler {
-                                        id: rowHover
-                                    }
-
-                                    TapHandler {
-                                        acceptedButtons: Qt.LeftButton
-                                        enabled: row.modelData.nid >= 0
-                                        onTapped: {
-                                            Notifications.activateDefault(row.modelData.key);
-                                            Notifications.closeCenter();
-                                        }
-                                    }
-
                                     NotificationContent {
                                         id: rowContent
                                         x: Tokens.spacingMd
                                         y: Tokens.spacingMd
                                         width: parent.width - 2 * Tokens.spacingMd
-                                        entry: row.modelData
-                                        body: Notifications.bodyFor(row.modelData)
-                                        timeText: Notifications.timeFor(row.modelData)
-                                        iconSource: Notifications.iconSource(row.modelData)
-                                        onActionTriggered: actionId => Notifications.invokeAction(row.modelData.key, actionId)
-                                    }
-
-                                    // Remove this entry; shown on hover.
-                                    Item {
-                                        x: row.width - width - Tokens.spacingXs
-                                        y: Tokens.spacingXs
-                                        width: Tokens.notificationCloseSize
-                                        height: width
-                                        opacity: row.hovered ? 1 : 0
-                                        Accessible.role: Accessible.Button
-                                        Accessible.name: qsTr("Clear notification")
-                                        Accessible.onPressAction: Notifications.clear(row.modelData.key)
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: width / 2
-                                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                                        }
-
-                                        Icon {
-                                            anchors.centerIn: parent
-                                            size: parent.width - 8
-                                            name: "close-glyph"
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            enabled: parent.opacity > 0
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: Notifications.clear(row.modelData.key)
-                                        }
+                                        summary: item.summary
+                                        appName: item.appName
+                                        urgency: item.urgency
+                                        actionsJson: item.actionsJson
+                                        live: row.live
+                                        body: Notifications.bodyFor(item.bodyHtml)
+                                        timeText: Notifications.timeFor(item.time)
+                                        iconSource: Notifications.iconSource(item.image, item.appIcon)
+                                        onActionTriggered: actionId => Notifications.invokeAction(item.key, actionId)
                                     }
                                 }
                             }
+                        }
 
-                            Item {
-                                visible: groupItem.modelData.items.length > Tokens.notificationCenterGroupCollapsed
-                                width: parent.width
-                                height: toggle.implicitHeight
+                        Item {
+                            visible: item.carriesToggle
+                            width: parent.width
+                            height: visible ? toggle.implicitHeight : 0
 
-                                Button {
-                                    id: toggle
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text: groupItem.expanded ? qsTr("Show Less") : qsTr("Show All (%1)").arg(groupItem.modelData.items.length)
-                                    onClicked: groupItem.expanded = !groupItem.expanded
+                            Button {
+                                id: toggle
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: item.expanded ? qsTr("Show Less") : qsTr("Show All (%1)").arg(item.groupCount)
+                                onClicked: {
+                                    const next = Object.assign({}, panel.expanded);
+                                    next[item.appName] = !item.expanded;
+                                    panel.expanded = next;
                                 }
                             }
                         }

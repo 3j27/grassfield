@@ -41,7 +41,8 @@ Singleton {
 
     Process {
         id: monitor
-        command: ["gio", "monitor", root.filesPath]
+        // pdeathsig: the monitor dies with the shell even on SIGKILL.
+        command: ["setpriv", "--pdeathsig", "KILL", "--", "gio", "monitor", root.filesPath]
         stdout: SplitParser {
             onRead: check.running = true
         }

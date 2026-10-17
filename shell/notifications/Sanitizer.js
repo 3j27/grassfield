@@ -35,6 +35,53 @@ function attribute(tag, name) {
     return match[1] !== undefined ? match[1] : (match[2] !== undefined ? match[2] : match[3]);
 }
 
+// Longest tag (name and attributes) recognised; anything longer is plain text. Bounds the scan
+// per "<" so tag-like input stays linear.
+const MAX_TAG = 512;
+
+function isAlpha(c) {
+    return (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+}
+
+function isAlnum(c) {
+    return isAlpha(c) || (c >= 48 && c <= 57);
+}
+
+// Scans a tag at input[start] === "<": {end, closing, name, attrs} or null when it is not one.
+// Quoted attribute values may contain ">".
+function scanTag(input, start) {
+    let i = start + 1;
+    const closing = input[i] === "/";
+    if (closing)
+        i++;
+    if (!isAlpha(input.charCodeAt(i)))
+        return null;
+    const nameStart = i;
+    while (isAlnum(input.charCodeAt(i)))
+        i++;
+    const nameEnd = i;
+    const limit = Math.min(input.length, start + MAX_TAG);
+    for (;;) {
+        // Native searches only, no per-character JS loop. No ">" in reach means no tag here.
+        const gt = input.indexOf(">", i);
+        if (gt < 0 || gt >= limit)
+            return null;
+        const dq = input.indexOf("\"", i);
+        const sq = input.indexOf("'", i);
+        let quote = -1;
+        if (dq >= 0 && dq < gt)
+            quote = dq;
+        if (sq >= 0 && sq < gt && (quote < 0 || sq < quote))
+            quote = sq;
+        if (quote < 0)
+            return {end: gt + 1, closing: closing, name: input.slice(nameStart, nameEnd), attrs: input.slice(nameEnd, gt)};
+        const close = input.indexOf(input[quote], quote + 1);
+        if (close < 0 || close >= limit)
+            return null;
+        i = close + 1;
+    }
+}
+
 // Markup subset to StyledText.
 function sanitize(body) {
     let input = typeof body === "string" ? body : "";
@@ -53,14 +100,20 @@ function sanitize(body) {
         out += escapeText(plainText).replace(/\r?\n/g, "<br>");
     };
 
-    const re = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/g;
     let last = 0;
-    let match;
-    while ((match = re.exec(input)) !== null) {
-        text(input.slice(last, match.index));
-        last = re.lastIndex;
-        const closing = match[1] === "/";
-        const name = match[2].toLowerCase();
+    let pos = 0;
+    let lt;
+    while ((lt = input.indexOf("<", pos)) >= 0) {
+        const tag = scanTag(input, lt);
+        if (tag === null) {
+            pos = lt + 1;
+            continue;
+        }
+        text(input.slice(last, lt));
+        last = tag.end;
+        pos = tag.end;
+        const closing = tag.closing;
+        const name = tag.name.toLowerCase();
         if (ALLOWED[name]) {
             if (!closing) {
                 open.push(name);
@@ -77,7 +130,7 @@ function sanitize(body) {
         } else if (name === "a") {
             if (!closing) {
                 inLink = true;
-                linkHref = attribute(match[3], "href");
+                linkHref = attribute(tag.attrs, "href");
                 linkText = "";
             } else if (inLink) {
                 inLink = false;
@@ -86,7 +139,7 @@ function sanitize(body) {
                 linkHref = "";
             }
         } else if (name === "img" && !closing) {
-            const alt = attribute(match[3], "alt");
+            const alt = attribute(tag.attrs, "alt");
             if (alt !== "")
                 text(alt);
         }

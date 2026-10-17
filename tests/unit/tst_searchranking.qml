@@ -110,4 +110,17 @@ TestCase {
         compare(Files.parseLocalsearch("file:///home/u/a%20b.txt\n  file:///home/u/.hidden/x\nnoise", "/home/u", 20).join(), "/home/u/a b.txt");
         compare(Files.tildePath("/home/u/a", "/home/u"), "~/a");
     }
+
+    function test_filesRestrictedToHome() {
+        const ls = "file:///home/u/ok.txt\nfile:///etc/passwd\nfile:///home/u/../v/x\nfile:///home/u/a/../b.txt\n"
+            + "file:///home/uu/x\nfile:///home/u/.ssh/id\nfile://host/home/u/x\nfile:///home/u/%2e%2e/etc/y\nfile:///home/u";
+        compare(Files.parseLocalsearch(ls, "/home/u", 20).join(), "/home/u/ok.txt,/home/u/b.txt");
+        compare(Files.parsePlocate("/home/u/../etc/report\n/home/u/./report2", "report", "/home/u", 20).join(), "/home/u/report2");
+        const xbel = "<xbel><bookmark href=\"file:///home/u/a.txt\" modified=\"2026-01-02T00:00:00Z\"></bookmark>"
+            + "<bookmark href=\"file:///etc/shadow\" modified=\"2026-01-03T00:00:00Z\"></bookmark>"
+            + "<bookmark href=\"file:///home/u/.config/x\" modified=\"2026-01-04T00:00:00Z\"></bookmark>"
+            + "<bookmark href=\"file:///home/u/../w/z\" modified=\"2026-01-05T00:00:00Z\"></bookmark>"
+            + "<bookmark href=\"smb://srv/share/f\" modified=\"2026-01-06T00:00:00Z\"></bookmark></xbel>";
+        compare(Files.parseXbel(xbel, "/home/u").map(r => r.path).join(), "/home/u/a.txt");
+    }
 }

@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Notifications
+import Grassfield.Ui
 import qs.platform
 import qs.services
 import "History.js" as History
@@ -12,17 +13,23 @@ import "Sanitizer.js" as Sanitizer
 // The session's org.freedesktop.Notifications server, banner queue, history (ADR-0004) and
 // Notification Center state. Spec: docs/specs/notifications.md.
 //
-// - banners: [{key}] currently shown (newest first); expiry only hides the banner, the
-//   notification stays in the history (and stays actionable while the sender keeps it alive).
-// - history: entries as in History.js, newest first, persisted to notifications.json (0600).
+// - history: plain array of entries as in History.js (+ bodyHtml, sanitized once on arrival),
+//   newest first, persisted to notifications.json (0600). Not bound to by the UI.
+// - centerModel / bannerModel: keyed ListModels the UI views. They are updated in place
+//   (insert / remove / set by key), never rebuilt, so a new notification costs O(entries) JS
+//   and no delegate churn.
+// - Banner expiry only hides the banner; the notification stays in the history (and stays
+//   actionable while the sender keeps it alive). One Timer per shown banner lives here, not in
+//   the delegates, so hover pauses exactly the timer that matters.
 Singleton {
     id: root
 
     // ---- state ----
     property var history: []
-    property var banners: []
-    readonly property var groups: History.group(history)
-    readonly property int count: history.length
+    property int count: 0
+    readonly property ListModel centerModel: centerStore
+    readonly property ListModel bannerModel: bannerStore
+    readonly property int bannerCount: bannerStore.count
     readonly property bool dnd: Settings.notificationsDnd
     readonly property bool previewsHidden: Settings.notificationsPreviews === "never"
     // Wall clock for relative times, refreshed every 30 s.
@@ -55,29 +62,74 @@ Singleton {
 
     // Live Notification objects by entry key (not reactive).
     property var liveByKey: ({})
+    // Banner expiry timers by key (not reactive).
+    property var bannerTimers: ({})
+    // Keys of banners under the pointer (a timer recreated by an update starts paused).
+    property var heldKeys: ({})
+
+    ListModel {
+        id: centerStore
+        dynamicRoles: true
+    }
+
+    ListModel {
+        id: bannerStore
+        dynamicRoles: true
+    }
 
     // ---- API used by the UI ----
 
-    function bodyFor(entry: var): string {
-        return previewsHidden ? "" : Sanitizer.sanitize(entry.body);
+    // Sanitized body (computed once per entry); empty when previews are hidden.
+    function bodyFor(bodyHtml: string): string {
+        return previewsHidden ? "" : bodyHtml;
     }
 
-    // Image (hint) first, then the app icon (theme name or path); "" when none resolves.
-    function iconSource(entry: var): string {
-        if (entry.image)
-            return entry.image;
-        const icon = entry.appIcon;
+    // Image (hint) first, then the app icon (theme name or path); "" when none resolves, so the
+    // UI falls back to the bell tile without asking Qt for a missing icon.
+    function iconSource(image: string, appIcon: string): string {
+        if (image) {
+            // Quickshell reports a themed app_icon name as image://icon/<name>.
+            const themed = "image://icon/";
+            if (image.startsWith(themed) && image.indexOf("?") < 0) {
+                let name = "";
+                try {
+                    name = decodeURIComponent(image.slice(themed.length));
+                } catch (e) {
+                    return "";
+                }
+                return Quickshell.hasThemeIcon(name) ? image : "";
+            }
+            return image;
+        }
+        const icon = appIcon;
         if (!icon)
             return "";
         if (icon.startsWith("/"))
             return "file://" + icon;
         if (icon.startsWith("file:"))
             return icon;
-        return Quickshell.iconPath(icon, true);
+        // iconPath(name, true) still yields an image://icon URL for a missing icon (Qt then warns
+        // and paints a checkerboard), so ask the theme first.
+        return Quickshell.hasThemeIcon(icon) ? Quickshell.iconPath(icon) : "";
     }
 
-    function timeFor(entry: var): string {
-        return History.relativeTime(entry.time, nowMs);
+    // "now", "5m ago", "3h ago", "2d ago" (translatable).
+    function timeFor(time: real): string {
+        const r = History.relativeParts(time, nowMs);
+        switch (r.unit) {
+        case "m":
+            return qsTr("%1m ago").arg(r.n);
+        case "h":
+            return qsTr("%1h ago").arg(r.n);
+        case "d":
+            return qsTr("%1d ago").arg(r.n);
+        default:
+            return qsTr("now");
+        }
+    }
+
+    function groupLabel(appName: string): string {
+        return appName !== "" ? appName : qsTr("Notification");
     }
 
     function entryFor(key: string): var {
@@ -95,7 +147,7 @@ Singleton {
 
     // Shell-originated notice (no D-Bus involved, works with the server disabled): a transient,
     // non-actionable entry plus a banner. Normal urgency, so Do Not Disturb silences it.
-    // Posts a shell-originated, non-D-Bus banner; returns its key (for clear()).
+    // Returns its key (for clear()).
     function postInternal(summary: string, body: string): string {
         counter++;
         const key = Date.now() + "-" + counter;
@@ -107,6 +159,7 @@ Singleton {
             image: "",
             summary: summary,
             body: body,
+            bodyHtml: Sanitizer.sanitize(body),
             time: Date.now(),
             urgency: 1,
             transient: true,
@@ -114,9 +167,9 @@ Singleton {
             actions: [],
             restored: false
         };
-        setHistory(History.prune([entry].concat(history), Date.now()).slice());
+        addEntry(entry);
         if (!dnd)
-            banners = [{key: key}].concat(banners);
+            showBanner(entry, Tokens.notificationBannerTimeout);
         return key;
     }
 
@@ -140,7 +193,23 @@ Singleton {
 
     // Banner timed out: hide it only.
     function expireBanner(key: string): void {
-        banners = banners.filter(b => b.key !== key);
+        const i = indexOfKey(bannerStore, key);
+        if (i >= 0)
+            bannerStore.remove(i);
+        delete heldKeys[key];
+        dropTimer(key);
+        syncBannerTimers();
+    }
+
+    // Hover or drag on a banner pauses its expiry.
+    function holdBanner(key: string, held: bool): void {
+        if (held)
+            heldKeys[key] = true;
+        else
+            delete heldKeys[key];
+        const t = bannerTimers[key];
+        if (t)
+            t.held = held;
     }
 
     // User dismissed the banner (x or drag): tell the sender, keep the history entry.
@@ -179,11 +248,7 @@ Singleton {
     // Removes one entry from banners and history and closes the live notification.
     function finish(key: string): void {
         expireBanner(key);
-        const n = liveByKey[key];
-        if (n) {
-            delete liveByKey[key];
-            n.dismiss();
-        }
+        finishLive(key);
         setHistory(History.removeKey(history, key));
     }
 
@@ -192,19 +257,175 @@ Singleton {
     }
 
     function clearApp(appName: string): void {
-        for (const e of history) {
-            if ((e.appName !== "" ? e.appName : "Notification") === appName)
-                expireBanner(e.key);
-        }
-        const doomed = history.filter(e => (e.appName !== "" ? e.appName : "Notification") === appName).map(e => e.key);
-        doomed.forEach(k => finishLive(k));
+        const doomed = history.filter(e => e.appName === appName);
+        doomed.forEach(e => {
+            expireBanner(e.key);
+            finishLive(e.key);
+        });
         setHistory(History.removeApp(history, appName));
     }
 
     function clearAll(): void {
         history.forEach(e => finishLive(e.key));
-        banners = [];
+        while (bannerStore.count > 0)
+            expireBanner(bannerStore.get(0).key);
         setHistory([]);
+    }
+
+    // ---- models ----
+
+    function indexOfKey(model: var, key: string): int {
+        for (let i = 0; i < model.count; i++) {
+            if (model.get(i).key === key)
+                return i;
+        }
+        return -1;
+    }
+
+    // Model row for an entry (no `body`: only the sanitized text goes to the UI).
+    function rowOf(e: var): var {
+        return {
+            key: e.key,
+            nid: e.nid,
+            appName: e.appName,
+            appIcon: e.appIcon,
+            image: e.image ? e.image : "",
+            summary: e.summary,
+            bodyHtml: e.bodyHtml,
+            time: e.time,
+            urgency: e.urgency,
+            actionsJson: JSON.stringify(e.actions || [])
+        };
+    }
+
+    // rank = position inside the app group, groupCount = group size (Center rows are grouped
+    // by app, newest group first, so the delegates need no grouping logic).
+    function renumber(): void {
+        const totals = {};
+        for (let i = 0; i < centerStore.count; i++) {
+            const app = centerStore.get(i).appName;
+            totals[app] = (totals[app] || 0) + 1;
+        }
+        const seen = {};
+        for (let i = 0; i < centerStore.count; i++) {
+            const row = centerStore.get(i);
+            const rank = seen[row.appName] || 0;
+            seen[row.appName] = rank + 1;
+            if (row.rank !== rank || row.groupCount !== totals[row.appName])
+                centerStore.set(i, {rank: rank, groupCount: totals[row.appName]});
+        }
+    }
+
+    // New (newest) entry: on top, followed by the rest of its group.
+    function addToCenter(e: var): void {
+        centerStore.insert(0, Object.assign(rowOf(e), {rank: 0, groupCount: 1}));
+        let target = 1;
+        for (let i = 1; i < centerStore.count; i++) {
+            if (centerStore.get(i).appName === e.appName) {
+                if (i !== target)
+                    centerStore.move(i, target, 1);
+                target++;
+            }
+        }
+        renumber();
+    }
+
+    // Drops model rows whose entry left the history (removal, pruning).
+    function syncRemovals(): void {
+        const alive = {};
+        history.forEach(e => alive[e.key] = true);
+        for (let i = centerStore.count - 1; i >= 0; i--) {
+            if (!alive[centerStore.get(i).key])
+                centerStore.remove(i);
+        }
+        renumber();
+    }
+
+    function rebuildCenter(): void {
+        centerStore.clear();
+        for (const g of History.group(history)) {
+            for (const e of g.items)
+                centerStore.append(Object.assign(rowOf(e), {rank: 0, groupCount: 1}));
+        }
+        renumber();
+    }
+
+    function addEntry(entry: var): void {
+        history = History.prune([entry].concat(history), Date.now());
+        count = history.length;
+        saveTimer.restart();
+        addToCenter(entry);
+        syncRemovals();
+        pruneLive();
+    }
+
+    function updateEntry(key: string, entry: var): void {
+        let found = false;
+        history = history.map(e => {
+            if (e.key !== key)
+                return e;
+            found = true;
+            return Object.assign({}, entry, {time: e.time});
+        });
+        if (!found)
+            return;
+        saveTimer.restart();
+        const row = rowOf(entryFor(key));
+        const ci = indexOfKey(centerStore, key);
+        if (ci >= 0)
+            centerStore.set(ci, row);
+        const bi = indexOfKey(bannerStore, key);
+        if (bi >= 0) {
+            bannerStore.set(bi, row);
+            dropTimer(key);
+            syncBannerTimers();
+        }
+    }
+
+    function setHistory(list: var): void {
+        history = list;
+        count = list.length;
+        saveTimer.restart();
+        if (list.length === 0)
+            centerStore.clear();
+        else
+            syncRemovals();
+    }
+
+    // ---- banners ----
+
+    function showBanner(entry: var, timeoutMs: int): void {
+        const old = indexOfKey(bannerStore, entry.key);
+        if (old >= 0)
+            bannerStore.remove(old);
+        dropTimer(entry.key);
+        bannerStore.insert(0, Object.assign(rowOf(entry), {timeout: timeoutMs}));
+        syncBannerTimers();
+    }
+
+    function dropTimer(key: string): void {
+        const t = bannerTimers[key];
+        if (t) {
+            delete bannerTimers[key];
+            t.running = false;
+            t.destroy();
+        }
+    }
+
+    // Only the banners that are shown (first N) run a timer; queued ones wait their turn.
+    function syncBannerTimers(): void {
+        const wanted = {};
+        const n = Math.min(bannerStore.count, Tokens.notificationBannerMaxVisible);
+        for (let i = 0; i < n; i++) {
+            const row = bannerStore.get(i);
+            wanted[row.key] = true;
+            if (!bannerTimers[row.key] && row.timeout > 0)
+                bannerTimers[row.key] = bannerTimer.createObject(root, {key: row.key, interval: row.timeout, held: heldKeys[row.key] === true});
+        }
+        for (const k in bannerTimers) {
+            if (!wanted[k])
+                dropTimer(k);
+        }
     }
 
     // ---- internals ----
@@ -225,11 +446,6 @@ Singleton {
             Compositor.activate(list[0]);
     }
 
-    function setHistory(list: var): void {
-        history = list;
-        saveTimer.restart();
-    }
-
     function actionsOf(n: var): var {
         return (n.actions || []).map(a => ({id: a.identifier, text: a.text}));
     }
@@ -243,6 +459,7 @@ Singleton {
             image: n.image,
             summary: n.summary,
             body: n.body,
+            bodyHtml: Sanitizer.sanitize(n.body),
             time: Date.now(),
             urgency: n.urgency === NotificationUrgency.Critical ? 2 : (n.urgency === NotificationUrgency.Low ? 0 : 1),
             transient: n.transient,
@@ -268,15 +485,13 @@ Singleton {
             tracker.createObject(root, {notif: n, key: key});
         }
         const entry = makeEntry(n, key);
-        if (isNew) {
-            setHistory(History.prune([entry].concat(history), Date.now()).slice());
-            pruneLive();
-        } else {
-            setHistory(history.map(e => e.key === key ? Object.assign({}, entry, {time: e.time}) : e));
-        }
+        if (isNew)
+            addEntry(entry);
+        else
+            updateEntry(key, entry);
         if (!dnd || entry.urgency === 2) {
-            const rest = banners.filter(b => b.key !== key);
-            banners = [{key: key}].concat(rest);
+            // Notification.expireTimeout is in milliseconds (see History.bannerTimeout).
+            showBanner(entry, History.bannerTimeout(entry.urgency, n.expireTimeout, Tokens.notificationBannerTimeout));
         }
     }
 
@@ -295,16 +510,20 @@ Singleton {
     function closed(key: string, reason: int): void {
         delete liveByKey[key];
         expireBanner(key);
-        if (reason === NotificationCloseReason.CloseRequested)
+        if (reason === NotificationCloseReason.CloseRequested) {
             setHistory(History.removeKey(history, key));
-        else
-            setHistory(history.map(e => e.key === key ? Object.assign({}, e, {nid: -1}) : e));
+        } else {
+            history = history.map(e => e.key === key ? Object.assign({}, e, {nid: -1}) : e);
+            saveTimer.restart();
+            const ci = indexOfKey(centerStore, key);
+            if (ci >= 0)
+                centerStore.set(ci, {nid: -1});
+        }
     }
 
     function updated(key: string, n: var): void {
-        const old = entryFor(key);
-        if (old)
-            setHistory(history.map(e => e.key === key ? Object.assign({}, makeEntry(n, key), {time: e.time}) : e));
+        if (entryFor(key))
+            updateEntry(key, makeEntry(n, key));
     }
 
     // ---- persistence ----
@@ -312,7 +531,10 @@ Singleton {
     function loadHistory(text: string): void {
         // Entries received before the file was read stay on top.
         const restored = History.parse(text, Date.now());
+        restored.forEach(e => e.bodyHtml = Sanitizer.sanitize(e.body));
         history = History.prune(history.concat(restored), Date.now());
+        count = history.length;
+        rebuildCenter();
         historyReady = true;
     }
 
@@ -339,7 +561,7 @@ Singleton {
     // existing target.
     Process {
         id: prepare
-        command: ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\"; [ -e \"$2\" ] || install -m 600 /dev/null \"$2\"; chmod 600 \"$2\"", "sh", root.stateDir, root.historyPath]
+        command: ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\"; chmod 700 \"$1\"; [ -e \"$2\" ] || install -m 600 /dev/null \"$2\"; chmod 600 \"$2\"", "sh", root.stateDir, root.historyPath]
         onRunningChanged: {
             if (!running)
                 file.path = root.historyPath;
@@ -374,6 +596,19 @@ Singleton {
                 root.setHistory(kept);
                 root.pruneLive();
             }
+        }
+    }
+
+    Component {
+        id: bannerTimer
+
+        Timer {
+            required property string key
+            property bool held: false
+
+            running: !held
+            repeat: false
+            onTriggered: root.expireBanner(key)
         }
     }
 
@@ -472,13 +707,14 @@ Singleton {
 
         // Test hook: one-line state.
         function status(): string {
-            return "server=" + root.serverState + " history=" + root.count + " banners=" + root.banners.length
+            return "server=" + root.serverState + " history=" + root.count + " banners=" + root.bannerCount
                 + " dnd=" + root.dnd + " center=" + root.centerOpen;
         }
 
         // Test hook: dismiss every banner as a swipe would.
         function dismissAll(): void {
-            root.banners.slice().forEach(b => root.dismissBanner(b.key));
+            while (root.bannerCount > 0)
+                root.dismissBanner(root.bannerModel.get(0).key);
         }
     }
 }
