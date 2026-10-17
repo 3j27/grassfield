@@ -1,0 +1,13 @@
+# clang-tidy for grassfield-compositor (gate Q1). Run: compositor/build-direct.sh tidy (see README.md).
+# Analyzer findings fail the run; the other checks must also stay at zero warnings in src/ and tests/.
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  -bugprone-easily-swappable-parameters
+WarningsAsErrors: 'clang-analyzer-*'
+# Report only our own headers, never Hyprland's or the system's.
+HeaderFilterRegex: '.*/compositor/(src|tests)/.*'
+SystemHeaders: false
+FormatStyle: none
