@@ -5,7 +5,7 @@
 // Record: {toplevel, address, appId, title}.
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "config"];
+var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
