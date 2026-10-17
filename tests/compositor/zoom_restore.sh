@@ -63,7 +63,7 @@ check() { # <label> <condition result 0/1> <details>
 
 say "zoom_restore: nested pid $hypr_pid, instance $sig, output $out ${mon_w}x${mon_h}"
 pointer abs $((mon_w / 2)) $((mon_h - 150)) sleep 50 # windows open on the output under the pointer
-WAYLAND_DISPLAY=$sock setsid foot >/dev/null 2>&1 </dev/null &
+WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot >/dev/null 2>&1 </dev/null &
 pid=$!
 sleep 1.5
 

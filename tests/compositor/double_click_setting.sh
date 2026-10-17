@@ -71,7 +71,7 @@ check() { if [[ $2 == 0 ]]; then say "  $1: OK   ($3)"; else say "  $1: FAIL ($3
 
 say "double_click_setting: nested pid $hypr_pid, output $out"
 pointer abs 960 360 sleep 50
-WAYLAND_DISPLAY=$sock setsid foot >/dev/null 2>&1 </dev/null &
+WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot >/dev/null 2>&1 </dev/null &
 pid=$!
 sleep 1.5
 read -r x0 y0 w0 h0 fs0 ws0 < <(geom)
@@ -91,7 +91,7 @@ if [[ $ws == special:minimized ]]; then
   pointer abs 960 360 sleep 50
   kill "$pid" 2>/dev/null
   sleep 0.5
-  WAYLAND_DISPLAY=$sock setsid foot >/dev/null 2>&1 </dev/null &
+  WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot >/dev/null 2>&1 </dev/null &
   pid=$!
   sleep 1.5
   read -r x0 y0 w0 h0 fs0 ws0 < <(geom)

@@ -119,6 +119,12 @@ settings_cmd=${GRASSFIELD_SETTINGS_CMD:-}
 preview_cmd=${GRASSFIELD_PREVIEW_CMD:-}
 [[ -z $preview_cmd && -x $dev/build/grassfield-preview ]] && preview_cmd=$dev/build/grassfield-preview
 
+# Apps started from the shell in dev (System Settings, Glance) run through the isolating helper: XDG_* under .dev/,
+# GRASSFIELD_*_HOME shared with this shell (the command is split on spaces by the shell; .dev paths have none).
+isolate=("$root/scripts/dev/isolated.sh" --name shell --config-home "$dev/config" --state-home "$dev/state" --)
+[[ -n $settings_cmd ]] && settings_cmd="${isolate[*]} $settings_cmd"
+[[ -n $preview_cmd ]] && preview_cmd="${isolate[*]} $preview_cmd"
+
 # GRASSFIELD_RENDER_TIMING=1: opt-in Qt scene graph render timing (QSG_RENDER_TIMING) in the shell log.
 timing=()
 [[ ${GRASSFIELD_RENDER_TIMING:-} == 1 ]] && timing=(QSG_RENDER_TIMING=1)

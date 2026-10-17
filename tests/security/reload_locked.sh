@@ -94,7 +94,7 @@ step_setup() {
   "$root/scripts/dev/pointer.sh" output GF-REF abs 960 540 >/dev/null
   # Raw mode: every key reaches cat at once, no Return needed.
   env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
-    setsid foot --app-id=gf-reload-probe -- sh -c 'stty raw -echo; exec cat >"$1"' sh "$typed" >/dev/null 2>&1 </dev/null &
+    setsid "$root/scripts/dev/isolated.sh" foot --app-id=gf-reload-probe -- sh -c 'stty raw -echo; exec cat >"$1"' sh "$typed" >/dev/null 2>&1 </dev/null &
   echo $! >"$dev/reload-foot.pid"
   local geo=""
   for _ in $(seq 1 40); do

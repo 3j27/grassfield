@@ -59,7 +59,7 @@ shot() { "$root/scripts/dev/shot.sh" "files-scenario-$1" "$output" >/dev/null; }
 # Clicking the empty desktop focuses that monitor, so the window opens there (centred).
 "$pointer" output "$output" abs 960 540 sleep 100 click >/dev/null
 env XDG_CONFIG_HOME="$envdir/config" XDG_DATA_HOME="$envdir/data" XDG_CACHE_HOME="$envdir/cache" \
-  XDG_STATE_HOME="$envdir/state" GRASSFIELD_CONFIG_HOME="$envdir/grassfield" \
+  XDG_STATE_HOME="$envdir/state" GRASSFIELD_CONFIG_HOME="$envdir/grassfield" GRASSFIELD_STATE_HOME="$envdir/state" \
   GRASSFIELD_FILES_NO_LAUNCH=1 QML_IMPORT_PATH="$root/ui" QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=wayland WAYLAND_DISPLAY="$sock" \
   setsid "$bin" "$scenario/src" >"$log" 2>&1 </dev/null &
 app=$!
