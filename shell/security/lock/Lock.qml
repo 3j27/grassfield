@@ -127,12 +127,14 @@ Singleton {
         return ok;
     }
 
-    function readMarker(): string {
+    // null when the marker does not exist; "" when it exists but cannot be read (locks); else its
+    // text (Machine.markerRead).
+    function readMarker(): var {
         if (markerPath === "")
-            return "";
+            return null;
         marker.reload();
         marker.waitForJob();
-        return String(marker.text());
+        return Machine.markerRead(marker.loadError === FileViewError.FileNotFound, marker.loadError !== FileViewError.Success, marker.text());
     }
 
     // Restore the lock if the previous instance held or wanted it (see the header). Only ever
@@ -351,11 +353,17 @@ Singleton {
 
     FileView {
         id: marker
+
+        // Result of the last read (FileViewError): tells a missing marker from an unreadable one.
+        property int loadError: FileViewError.Success
+
         path: root.markerPath
         blockLoading: true
         blockWrites: true
         atomicWrites: true
         printErrors: false
+        onLoaded: loadError = FileViewError.Success
+        onLoadFailed: error => loadError = error
         onSaveFailed: error => console.warn("grassfield-lock: crash recovery marker write failed:", FileViewError.toString(error))
     }
 

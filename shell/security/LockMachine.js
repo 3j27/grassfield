@@ -49,20 +49,34 @@ function isLocked(state) {
     return state !== UNLOCKED;
 }
 
-// Crash-recovery marker ($XDG_RUNTIME_DIR, one per compositor instance). Anything but an exact
-// "unlocked" in an existing, non-empty marker means the session was locked: re-lock.
+// Crash-recovery marker ($XDG_RUNTIME_DIR, one per compositor instance), as returned by markerRead:
+// null when the file does not exist, else its content. Anything but an exact "unlocked" means the
+// session was (or may have been) locked: re-lock. That includes an empty or unreadable marker.
 function markerSaysLocked(text) {
-    var t = String(text === undefined || text === null ? "" : text).trim();
-    return t !== "" && t !== "unlocked";
+    if (text === null || text === undefined)
+        return false; // missing: the first start of this compositor instance
+    return String(text).trim() !== "unlocked";
+}
+
+// Meaning of a marker read, from FileView's result: null when the file does not exist (FileNotFound);
+// "" when it exists but could not be read (permission denied, not a file, I/O error), which locks like
+// any other content that is not exactly "unlocked"; else the file's text. `failed` must be exactly
+// false for the text to be used (fail closed).
+function markerRead(missing, failed, text) {
+    if (missing === true)
+        return null;
+    if (failed !== false)
+        return "";
+    return String(text === undefined || text === null ? "" : text);
 }
 
 // Lock to restore when a shell instance starts (crash restart, reload or session start), from
 // what it can read synchronously. Fail closed:
 //   - intent: the previous instance's lock intent carried over a soft reload (PersistentProperties);
 //   - markerAvailable false (XDG_RUNTIME_DIR unset): no marker can prove the session unlocked;
-//   - otherwise the marker decides (markerSaysLocked). A missing marker is the first start of this
-//     compositor instance; if it was removed while locked, the compositor still holds the dead
-//     client's lock (ext-session-lock) and compositorLockState() finds it.
+//   - otherwise the marker decides (markerSaysLocked on a markerRead result). A missing marker (null)
+//     is the first start of this compositor instance; if it was removed while locked, the compositor
+//     still holds the dead client's lock (ext-session-lock) and compositorLockState() finds it.
 function restoreAtStart(intent, markerAvailable, markerText) {
     return intent === true || markerAvailable !== true || markerSaysLocked(markerText);
 }
