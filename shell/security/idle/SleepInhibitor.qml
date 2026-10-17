@@ -13,6 +13,8 @@ import "IdleModel.js" as IdleModel
 //   - inhibitor: `systemd-inhibit --mode=delay … cat`; `cat` reads this process's stdin pipe, so
 //     the inhibitor dies with the shell (EOF) and can never outlive it;
 //   - watcher: `gdbus monitor` on /org/freedesktop/login1 (signal subscription, no privileges).
+// Both run under `setpriv --pdeathsig TERM` (util-linux): the kernel sends them SIGTERM when the
+// shell dies, even by SIGKILL, so a crash leaves no orphan behind.
 // In the nested dev session (GRASSFIELD_DEV=1) the inhibitor is never taken: it would delay the
 // owner's real suspend. The watcher only listens and stays on.
 Scope {
@@ -25,6 +27,8 @@ Scope {
     property int inhibitorFailures: 0
     property int watcherFailures: 0
     readonly property int maxFailures: 5
+    // Prefix for long-lived children: die with the shell (PR_SET_PDEATHSIG, kept across exec).
+    readonly property var dieWithShell: ["setpriv", "--pdeathsig", "TERM", "--"]
 
     function take(): void {
         if (dev || inhibitor.running || inhibitorFailures >= maxFailures)
@@ -86,7 +90,7 @@ Scope {
 
         property double startedAt: 0
 
-        command: ["systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Grassfield", "--why=" + qsTr("Lock the screen before sleep"), "cat"]
+        command: root.dieWithShell.concat(["systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Grassfield", "--why=" + qsTr("Lock the screen before sleep"), "cat"])
         stdinEnabled: true
         onStarted: {
             startedAt = Date.now();
@@ -115,7 +119,7 @@ Scope {
         property double startedAt: 0
 
         running: true
-        command: ["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", "/org/freedesktop/login1"]
+        command: root.dieWithShell.concat(["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", "/org/freedesktop/login1"])
         stdout: SplitParser {
             onRead: line => root.handleLine(line)
         }
