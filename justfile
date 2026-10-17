@@ -9,7 +9,7 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-shell check-scripts
+check: check-config check-schema check-shell check-scripts check-secrets
 
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland.
 check-config:
@@ -25,6 +25,10 @@ check-schema *files:
 # Lint QML (0 warnings required in changed files, gate Q1).
 check-shell:
     scripts/dev/qmllint.sh
+
+# Secret scan of the whole history (gate S1).
+check-secrets:
+    gitleaks detect --source . --no-banner --redact
 
 # Syntax-check shell scripts.
 check-scripts:
