@@ -56,8 +56,12 @@ TestCase {
     }
 
     function test_pluginVerbAllowlist() {
-        for (const v of ["hello", "minimize", "restore", "overview", "theme", "config"])
+        for (const v of ["hello", "minimize", "restore", "config"])
             verify(Minimized.isPluginVerb(v), v);
+        for (const v of ["overview", "theme"])
+            verify(!Minimized.isPluginVerb(v), v);
+        compare(Minimized.guardedPluginCall("overview", []), "");
+        compare(Minimized.guardedPluginCall("x end os.exit() --", []), "");
         for (const v of ["", "Minimize", "minimize ", "x end os.execute('id') --", "minimize(1) end; os.exit() --", "constructor", "__proto__", "length"])
             verify(!Minimized.isPluginVerb(v), v);
         verify(!Minimized.isPluginVerb(undefined));

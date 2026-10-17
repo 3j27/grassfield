@@ -5,7 +5,7 @@
 // Record: {toplevel, address, appId, title}.
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "overview", "theme", "config"];
+var pluginVerbs = ["hello", "minimize", "restore", "config"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -14,6 +14,8 @@ function isPluginVerb(verb) {
 // Lua function body calling a plugin verb only when the plugin registered it (a missing plugin is a
 // no-op), built from already validated pieces. Quickshell sends it as `return hl.dispatch(<body>)`.
 function guardedPluginCall(verb, args) {
+    if (!isPluginVerb(verb))
+        return "";
     return "function() local p = hl.plugin and hl.plugin.grassfield; if p and p." + verb + " then p." + verb + "(" + args.join(", ") + ") end end";
 }
 

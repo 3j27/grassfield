@@ -91,15 +91,37 @@ Singleton {
     readonly property string minimizedWorkspace: "special:minimized"
     // Windows minimized by the shell: [{toplevel, address, appId, title}] (see Minimized.js).
     property var minimized: []
-    // Dock icon rectangle in screen coordinates {x, y, w, h}, published by the Dock; the plugin
-    // animates toward it. null until a Dock exists.
-    property var dockTarget: null
+    // Per-screen Docks by screen name: each Dock instance registers itself (an object with
+    // tileRect(index, adding) -> {x, y, w, h} in global layout coordinates, or null) and unregisters
+    // on destruction, so a window animates toward the Dock of its own monitor.
+    property var dockOwners: ({})
 
-    // Plugin minimize/restore call (gfc/1, ADR-0007) toward/from the Dock tile. Without a Dock
-    // the rectangle is empty: the plugin then hides/shows the window without animation. Only
-    // validated hex addresses and numbers are interpolated (Minimized.windowCall).
-    function pluginWindowCall(verb: string, address: string): string {
-        return Minimized.windowCall(verb, address, Minimized.finiteRect(root.dockTarget) || {x: 0, y: 0, w: 0, h: 0});
+    function registerDock(screenName: string, owner: var): void {
+        root.dockOwners[screenName] = owner;
+    }
+
+    function unregisterDock(screenName: string, owner: var): void {
+        if (root.dockOwners[screenName] === owner)
+            delete root.dockOwners[screenName];
+    }
+
+    // Dock tile rectangle of the minimized slot `index` on a screen (`adding`: a tile that does not
+    // exist yet, appended before the Trash). Empty ({0,0,0,0}) without a Dock there: the plugin then
+    // hides/shows the window without animation.
+    function dockRect(screenName: string, index: int, adding: bool): var {
+        const owner = root.dockOwners[screenName];
+        return Minimized.finiteRect(owner ? owner.tileRect(index, adding) : null) || {x: 0, y: 0, w: 0, h: 0};
+    }
+
+    // Name of the monitor a window is on ("" if unknown).
+    function windowScreenName(top: var): string {
+        return top && top.workspace && top.workspace.monitor ? top.workspace.monitor.name : "";
+    }
+
+    // Plugin minimize/restore call (gfc/1, ADR-0007) toward/from a Dock tile. Only validated hex
+    // addresses and numbers are interpolated (Minimized.windowCall).
+    function pluginWindowCall(verb: string, address: string, rect: var): string {
+        return Minimized.windowCall(verb, address, rect);
     }
 
     // Minimize a window. With the plugin ("minimize" capability) the plugin hides it with an
@@ -112,9 +134,12 @@ Singleton {
         const address = top ? Minimized.normalizeAddress(top.address) : "";
         if (address === "")
             return false;
+        // Rectangle of the tile this window gets (appended after the existing minimized tiles),
+        // computed before the list changes.
+        const tile = dockRect(windowScreenName(top) || focusedScreenName, root.minimized.length, true);
         root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title});
         if (Capabilities.has("minimize"))
-            dispatchRequest(pluginWindowCall("minimize", address));
+            dispatchRequest(pluginWindowCall("minimize", address, tile));
         else
             dispatchRequest(moveRequest(address, minimizedWorkspace));
         return true;
@@ -127,9 +152,10 @@ Singleton {
         const rec = root.minimized.find(r => r.toplevel === toplevel);
         if (!rec)
             return;
+        const tile = dockRect(focusedScreenName, root.minimized.indexOf(rec), false);
         root.minimized = Minimized.remove(root.minimized, toplevel);
         if (Capabilities.has("minimize")) {
-            dispatchRequest(pluginWindowCall("restore", rec.address));
+            dispatchRequest(pluginWindowCall("restore", rec.address, tile));
             return;
         }
         if (root.focusedWorkspace)

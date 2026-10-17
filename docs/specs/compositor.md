@@ -359,11 +359,10 @@ Manual (L1, nested only):
 - The animation shows a snapshot taken at the start: a window that changes while it animates (video) is
   frozen for 300 ms; translucent windows are drawn without their blur during the animation (Hyprland renders
   snapshots without blur).
-- The Dock tile rectangle comes from the shell: `Compositor.dockTarget` is published only by the Dock of
-  `Quickshell.screens[0]` (shell/dock/Dock.qml), so on several monitors a window minimizes into the first
-  screen's Dock, and the rectangle is the slot right of the separator (exact for the first minimized window;
-  later ones land on the first minimized tile, not on their own). Restore animates from that same rectangle,
-  not from the clicked tile. Per-screen, per-window tile rectangles are a shell (Dock) change: follow-up.
+- The Dock tile rectangle comes from the shell: each per-screen Dock registers a provider
+  (`Compositor.registerDock`), minimize targets the tile of the window on the Dock of its own monitor
+  (separator + 1 + the window's index in the minimized list), restore the window's current tile on the
+  focused monitor's Dock. Rectangles are in global layout coordinates, as the plugin validates them.
 - `animations:enabled = false` in the Hyprland config does not disable the minimize animation.
 - A restoring window is transparent but still receives input during its 300 ms animation (as during
   Hyprland's own fade-in).
