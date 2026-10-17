@@ -23,8 +23,9 @@ Scope {
         function open(kind: string, screen: string): void {
             const all = bars.instances;
             let bar = all.length > 0 ? all[0] : null;
+            const wanted = screen !== "" ? screen : Compositor.focusedScreenName;
             for (let i = 0; i < all.length; i++) {
-                if (all[i].screen.name === screen)
+                if (all[i].screen.name === wanted)
                     bar = all[i];
             }
             if (bar)
@@ -78,11 +79,10 @@ Scope {
             // Last non-empty app: layer-shell focus (a popup is open) clears the active toplevel.
             property string lastAppId: ""
             readonly property string shownAppId: Compositor.focusedAppId !== "" ? Compositor.focusedAppId : (Popups.active ? lastAppId : "")
-            readonly property var focusedEntry: Apps.lookup(shownAppId)
             readonly property string appName: {
                 if (shownAppId === "")
                     return qsTr("Desktop");
-                return focusedEntry ? focusedEntry.name : shownAppId;
+                return Apps.nameFor(shownAppId);
             }
             readonly property var battery: UPower.displayDevice
             readonly property bool hasBattery: battery !== null && battery.isPresent && battery.isLaptopBattery
@@ -207,6 +207,7 @@ Scope {
                         onActivated: win.popup("app")
 
                         Text {
+                            textFormat: Text.PlainText
                             text: win.appName
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily
@@ -276,6 +277,7 @@ Scope {
                         }
 
                         Text {
+                            textFormat: Text.PlainText
                             text: win.battery ? qsTr("%1%").arg(Math.round(win.battery.percentage * 100)) : ""
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily
@@ -303,6 +305,7 @@ Scope {
                         onActivated: Notifications.toggleCenter(win.screen.name)
 
                         Text {
+                            textFormat: Text.PlainText
                             id: clockText
                             text: Qt.formatDateTime(clock.date, qsTr("ddd d MMM")) + " "
                                 + Qt.formatTime(clock.date, Qt.locale().timeFormat(Locale.ShortFormat))

@@ -22,8 +22,27 @@ Scope {
     // Test hooks (IPC): a pointer x forcing magnification, and a forced reveal.
     property real testPointerX: -1
     property bool testReveal: false
-    // Keyboard navigation mode: the dock takes exclusive keyboard focus until Esc.
+    // Keyboard navigation mode: the dock takes exclusive keyboard focus until Esc, an
+    // activation, or pointer use; then the layer releases focus and the compositor restores the app.
     property bool keyboardMode: false
+    // Output whose Dock has the keyboard (the focused one when the mode was entered).
+    property string keyboardScreen: ""
+
+    // Enter keyboard mode and focus the first tile.
+    function enterKeyboardMode(): void {
+        keyboardScreen = Compositor.focusedScreenName !== "" ? Compositor.focusedScreenName : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+        keyboardMode = true;
+        Qt.callLater(() => {
+            const all = windows.instances;
+            let bar = null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === root.keyboardScreen)
+                    bar = all[i];
+            }
+            if (bar)
+                bar.focusFirstTile();
+        });
+    }
 
     function rebuild(): void {
         const running = [];
@@ -34,6 +53,7 @@ Scope {
     }
 
     function activateItem(item: var): void {
+        keyboardMode = false;
         if (item.kind === "trash") {
             Trash.open();
             Trash.refresh();
@@ -107,7 +127,7 @@ Scope {
         }
 
         function keyboard(): void {
-            root.keyboardMode = true;
+            root.enterKeyboardMode();
         }
 
         function menu(index: int, screen: string): void {
@@ -142,7 +162,7 @@ Scope {
             readonly property int indicatorArea: Tokens.dockIndicatorSize + Tokens.dockSpacing
             readonly property int shelfHeight: iconSize + 2 * Tokens.dockPadding + indicatorArea
             readonly property real overhang: Math.ceil((maxScale - 1) * iconSize)
-            readonly property int tooltipArea: 36
+            readonly property int tooltipArea: Tokens.dockTooltipArea
             readonly property bool autohide: Settings.dockAutohide
 
             // Layout from the unmagnified geometry (stable under the pointer), then scaled.
@@ -165,7 +185,18 @@ Scope {
             property bool revealedState: false
             readonly property bool revealed: !autohide || revealedState || root.testReveal || root.keyboardMode || Popups.kind === "dock"
 
+            function focusFirstTile(): void {
+                for (let i = 0; i < tileRepeater.count; i++) {
+                    const t = tileRepeater.itemAt(i) as Item;
+                    if (t && t.activeFocusOnTab) {
+                        t.forceActiveFocus();
+                        return;
+                    }
+                }
+            }
+
             function openMenu(index: int): void {
+                root.keyboardMode = false;
                 const item = root.items[index];
                 if (!item || item.kind !== "app")
                     return;
@@ -191,7 +222,7 @@ Scope {
             color: "transparent"
             focusable: true
             WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.keyboardFocus: root.keyboardMode ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: root.keyboardMode && win.screen.name === root.keyboardScreen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-dock"
             // Only the dock itself (or the reveal strip while hidden) takes input.
             // qmllint disable missing-type
@@ -236,6 +267,11 @@ Scope {
 
                 HoverHandler {
                     id: areaHover
+                    // Using the pointer leaves keyboard mode (focus returns to the app).
+                    onPointChanged: {
+                        if (hovered && root.keyboardMode)
+                            root.keyboardMode = false;
+                    }
                 }
 
                 // Input area: the shelf (plus magnified icons and tooltips while hovered), or the
@@ -300,6 +336,8 @@ Scope {
                                 Keys.onEnterPressed: root.activateItem(modelData)
                                 Keys.onSpacePressed: root.activateItem(modelData)
                                 Keys.onEscapePressed: root.keyboardMode = false
+                                Keys.onLeftPressed: (tile.nextItemInFocusChain(false) as Item).forceActiveFocus()
+                                Keys.onRightPressed: (tile.nextItemInFocusChain(true) as Item).forceActiveFocus()
                                 Keys.onMenuPressed: win.openMenu(index)
 
                                 // Separator hairline.
@@ -339,7 +377,7 @@ Scope {
 
                                     Icon {
                                         anchors.centerIn: parent
-                                        size: Math.round(tile.iconPx * 0.6)
+                                        size: Math.round(tile.iconPx * Tokens.dockTrashIconScale)
                                         name: Trash.empty ? "trash" : "trash-full"
                                     }
                                 }
