@@ -462,6 +462,8 @@ QtObject {
     readonly property int appsDragThreshold: 8
     // estimate: dragged icon
     readonly property real appsDragOpacity: 0.9
+    // estimate: opacity of the cell an item is dragged from
+    readonly property real appsDragSourceOpacity: 0.3
     // estimate: dragged icon scale
     readonly property real appsDragScale: 1.1
     // estimate: central share of a cell where a drop creates or fills a folder

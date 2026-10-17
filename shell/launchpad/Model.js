@@ -233,3 +233,11 @@ function parseHidden(text) {
 function isHidden(set, id) {
     return set[String(id).replace(/\.desktop$/, "")] === true;
 }
+
+// Keyboard selection inside an open folder: like step() on one page, plus Up from the first row
+// moves to the folder title (-1; Return there renames) and Down from the title returns to the grid.
+function stepFolder(sel, key, cols, n) {
+    if (key === "up" && sel < cols)
+        return -1;
+    return step(sel, key, cols, 1000000, n);
+}

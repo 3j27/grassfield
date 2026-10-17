@@ -130,4 +130,12 @@ TestCase {
         verify(!Model.isHidden(set, "rvhide"));
         verify(!Model.isHidden(Model.parseHidden(""), "plain"));
     }
+
+    function test_folderStepTitle() {
+        compare(Model.stepFolder(1, "up", 3, 7), -1);
+        compare(Model.stepFolder(4, "up", 3, 7), 1);
+        compare(Model.stepFolder(-1, "down", 3, 7), 0);
+        compare(Model.stepFolder(-1, "up", 3, 7), -1);
+        compare(Model.stepFolder(2, "down", 3, 7), 5);
+    }
 }
