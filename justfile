@@ -61,6 +61,14 @@ shell-run:
 shot name:
     scripts/dev/shot.sh {{name}}
 
+# Visual regression on GF-REF vs tests/visual/baselines (reference machine, nested session; ask). Flags: --update --determinism --only a,b --lang en|fr|both
+visual *args:
+    tests/visual/run.sh {{args}}
+
+# Gate A2 contrast table on 5 worst-case wallpapers x light/dark x transparency 0.25/0.6 (nested session; ask).
+contrast *args:
+    tests/visual/contrast.sh {{args}}
+
 # Scripted nested scenario → tests/scenarios/<name>.sh (ask).
 scenario name:
     tests/scenarios/{{name}}.sh

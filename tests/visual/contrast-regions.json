@@ -1,0 +1,64 @@
+{
+ "_doc": "Boxes [x,y,w,h] in GF-REF pixels (1920x1080, scale 1, English, default layout) around known text items and icons. kind: text >= 4.5:1, large|icon >= 3:1. Re-measure when a layout changes (see docs/testing/visual.md).",
+ "surfaces": {
+  "desktop": [
+   {"name": "menubar app name", "box": [40, 5, 60, 14], "kind": "text"},
+   {"name": "menubar clock", "box": [1795, 5, 115, 14], "kind": "text"},
+   {"name": "menubar status icons", "box": [1700, 4, 82, 16], "kind": "icon"},
+   {"name": "icon label Archive.zip", "box": [1820, 122, 80, 13], "kind": "text"},
+   {"name": "icon label Notes.txt", "box": [1820, 236, 80, 13], "kind": "text"},
+   {"name": "icon label Projects", "box": [1820, 348, 80, 13], "kind": "text"},
+   {"name": "icon label Report.md", "box": [1820, 460, 80, 13], "kind": "text"},
+   {"name": "icon Projects folder", "box": [1802, 266, 116, 80], "kind": "icon"},
+   {"name": "icon Notes document", "box": [1802, 156, 116, 70], "kind": "icon"}
+  ],
+  "systemmenu": [
+   {"name": "About This Computer", "box": [44, 34, 130, 14], "kind": "text"},
+   {"name": "System Settings", "box": [44, 64, 100, 14], "kind": "text"},
+   {"name": "Force Quit", "box": [44, 95, 70, 14], "kind": "text"},
+   {"name": "Sleep", "box": [44, 125, 40, 14], "kind": "text"},
+   {"name": "Lock Screen", "box": [44, 201, 70, 14], "kind": "text"},
+   {"name": "Log Out", "box": [44, 223, 130, 14], "kind": "text"}
+  ],
+  "controlcenter": [
+   {"name": "title", "box": [1478, 40, 100, 12], "kind": "text"},
+   {"name": "Wi-Fi label", "box": [1526, 78, 40, 12], "kind": "text"},
+   {"name": "Bluetooth label", "box": [1526, 128, 60, 12], "kind": "text"},
+   {"name": "Airplane Mode label", "box": [1526, 178, 96, 14], "kind": "text"},
+   {"name": "Display label", "box": [1488, 240, 36, 12], "kind": "text"},
+   {"name": "Appearance label", "box": [1528, 392, 76, 14], "kind": "text"},
+   {"name": "Appearance value", "box": [1528, 408, 28, 10], "kind": "text"}
+  ],
+  "search": [
+   {"name": "query", "box": [668, 256, 48, 22], "kind": "text"},
+   {"name": "Top Hit header", "box": [640, 315, 44, 12], "kind": "text"},
+   {"name": "Files row title (selected)", "box": [680, 341, 34, 14], "kind": "text"},
+   {"name": "Files row subtitle (selected)", "box": [680, 358, 56, 10], "kind": "text"},
+   {"name": "Applications header", "box": [640, 388, 72, 12], "kind": "text"},
+   {"name": "Neovim title", "box": [680, 414, 44, 13], "kind": "text"},
+   {"name": "Neovim subtitle", "box": [680, 431, 62, 10], "kind": "text"}
+  ],
+  "banners": [
+   {"name": "banner 1 title", "box": [1610, 46, 100, 12], "kind": "text"},
+   {"name": "banner 1 body", "box": [1610, 66, 170, 12], "kind": "text"},
+   {"name": "banner 2 title", "box": [1610, 114, 100, 12], "kind": "text"},
+   {"name": "banner 2 body", "box": [1610, 134, 220, 12], "kind": "text"},
+   {"name": "banner time", "box": [1868, 44, 26, 10], "kind": "text"}
+  ],
+  "notificationcenter": [
+   {"name": "header", "box": [1546, 56, 100, 14], "kind": "text"},
+   {"name": "Clear All", "box": [1826, 56, 56, 12], "kind": "text"},
+   {"name": "group Calendar", "box": [1546, 98, 60, 12], "kind": "text"},
+   {"name": "item title", "box": [1602, 142, 100, 12], "kind": "text"},
+   {"name": "item body", "box": [1602, 162, 190, 12], "kind": "text"}
+  ],
+  "apps": [
+   {"name": "search placeholder", "box": [866, 36, 50, 12], "kind": "text"},
+   {"name": "label Aether", "box": [276, 282, 56, 12], "kind": "text"},
+   {"name": "label Chromium", "box": [1590, 282, 56, 12], "kind": "text"},
+   {"name": "label Disks", "box": [1160, 434, 40, 12], "kind": "text"},
+   {"name": "label Files", "box": [510, 584, 22, 12], "kind": "text"},
+   {"name": "page dots", "box": [940, 1028, 40, 14], "kind": "icon"}
+  ]
+ }
+}

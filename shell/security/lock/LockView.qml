@@ -5,6 +5,7 @@ import Quickshell
 import Grassfield.Ui
 import qs.desktop
 import qs.security
+import qs.services
 import "../LockMachine.js" as Machine
 
 // Content of one lock surface (one per screen): blurred and dimmed wallpaper, date and clock at
@@ -82,7 +83,7 @@ Item {
         Text {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.locale().toString(clock.date, qsTr("dddd d MMMM"))
+            text: Qt.locale().toString(FixedTime.date(clock.date), qsTr("dddd d MMMM"))
             color: root.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.lockDateSize
@@ -94,7 +95,7 @@ Item {
         Text {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.formatTime(clock.date, Machine.clockFormat(Qt.locale().timeFormat(Locale.ShortFormat)))
+            text: Qt.formatTime(FixedTime.date(clock.date), Machine.clockFormat(Qt.locale().timeFormat(Locale.ShortFormat)))
             color: root.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.lockClockSize
