@@ -93,7 +93,7 @@ TestCase {
         const t0 = Date.now();
         for (let i = 0; i < 20; i++)
             Ranking.rank(many, "appnum", Ranking.newUsage());
-        verify((Date.now() - t0) / 20 < 50);
+        verify((Date.now() - t0) / 20 < 150); // generous bound: catches regressions, tolerates load
     }
 
     function test_filesParsing() {

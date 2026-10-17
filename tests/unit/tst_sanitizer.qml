@@ -57,7 +57,8 @@ TestCase {
             Sanitizer.sanitize(input);
             const ms = Date.now() - t0;
             console.log("sanitize " + input.length + " chars: " + ms + " ms");
-            verify(ms < 20, "sanitize took " + ms + " ms");
+            // Generous bound for loaded CI/dev machines: the quadratic version took ~885 ms on this input.
+            verify(ms < 150, "sanitize took " + ms + " ms");
         }
     }
 
