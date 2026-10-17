@@ -45,6 +45,10 @@ Scope {
     property var recentList: []
 
     readonly property string home: Quickshell.env("HOME")
+    // Dev/test knobs: file results are limited to this root (default $HOME) and plocate can use
+    // another database, so tests do not depend on the owner's index.
+    readonly property string filesRoot: Quickshell.env("GRASSFIELD_SEARCH_ROOT") || home
+    readonly property string plocateDb: Quickshell.env("GRASSFIELD_SEARCH_PLOCATE_DB")
     readonly property string dataHome: {
         const xdg = Quickshell.env("XDG_DATA_HOME");
         return xdg ? xdg : home + "/.local/share";
@@ -151,7 +155,7 @@ Scope {
     }
 
     function mkPath(kind: string, path: string): var {
-        return {kind: kind, key: kind + ":" + path, title: Files.baseName(path), subtitle: Files.tildePath(Files.dirName(path), home),
+        return {kind: kind, key: kind + ":" + path, title: Files.baseName(path), subtitle: Files.tildePath(Files.dirName(path), filesRoot),
             iconSource: Quickshell.iconPath("text-x-generic", true), path: path};
     }
 
@@ -278,7 +282,7 @@ Scope {
     function spawnSearch(seq: int, term: string, stage: string): void {
         const argv = stage === "localsearch"
             ? ["timeout", "2", "localsearch", "search", "-f", "-l", String(Tokens.searchMaxFiles), "--", term]
-            : ["timeout", "2", "plocate", "-i", "-b", "-l", "1500", "--", term];
+            : ["timeout", "2", "plocate", "-i", "-b", "-l", "1500"].concat(plocateDb !== "" ? ["-d", plocateDb] : [], ["--", term]);
         const p = searchProc.createObject(root, {seq: seq, term: term, stage: stage, command: argv});
         liveSearches.push(p);
         p.running = true;
@@ -307,7 +311,7 @@ Scope {
         if (proc.seq !== fileSeq)
             return;
         const limit = Tokens.searchMaxFiles;
-        const paths = proc.stage === "localsearch" ? Files.parseLocalsearch(text, home, limit) : Files.parsePlocate(text, proc.term, home, limit);
+        const paths = proc.stage === "localsearch" ? Files.parseLocalsearch(text, filesRoot, limit) : Files.parsePlocate(text, proc.term, filesRoot, limit);
         if (paths.length === 0 && proc.stage === "localsearch") {
             spawnSearch(proc.seq, proc.term, "plocate");
             return;

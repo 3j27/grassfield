@@ -29,6 +29,8 @@ function fuzzy(text, query) {
         ti = idx + 1;
     }
     const span = last - first + 1;
+    if (span > 2 * query.length + 2)
+        return 0;
     const gaps = span - query.length;
     return Math.max(1, 25 - gaps * 2 - first);
 }
