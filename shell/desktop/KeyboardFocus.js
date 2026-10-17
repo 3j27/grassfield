@@ -52,6 +52,8 @@
 //   activeWindow {address}                    Hyprland activewindowv2 ("" = no window)
 //   closeWindow {address}                     Hyprland closewindow
 //   workspace                                 the focused workspace changed
+//   seedActive {address}                      the window Hyprland counts as active, from its state (at
+//                                             startup, when `activewindowv2` was missed); only fills `active` when it is unknown
 //
 // next(state, event) -> {state, focus}: `focus` is "" or a validated lowercase hex address to focus.
 
@@ -264,6 +266,12 @@ function next(state, event) {
         }
     case "workspace":
         return to(make("none", {}, s));
+    case "seedActive":
+        // Only fills a gap: Quickshell updates its toplevel before the raw events of the same change
+        // arrive, so a seed must never override what the events say.
+        return to(s.active === "" ? Object.assign({}, s, {
+            active: normalizeAddress(event.address)
+        }) : s);
     default:
         return to(s);
     }

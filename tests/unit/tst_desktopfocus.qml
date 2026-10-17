@@ -296,6 +296,19 @@ TestCase {
         compare(run([{type: "press"}, {type: "release", hasKeys: true}], st("none", {active: a1})).state.active, a1);
     }
 
+    function test_seedActiveOnlySetsTheActiveWindow() {
+        // At startup the active window is known from Hyprland's state, not from an event.
+        const s = run([{type: "seedActive", address: "0x" + a1.toUpperCase()}], st("hold")).state;
+        compare(s, st("hold", {active: a1}));
+        compare(run([{type: "seedActive", address: "zz"}], st("hold")).state, st("hold"));
+        // It never overrides what the events said (Quickshell updates its toplevel before the raw events).
+        compare(run([{type: "seedActive", address: ""}], st("hold", {active: a1})).state.active, a1);
+        compare(run([{type: "seedActive", address: a2}], st("hold", {active: a1})).state.active, a1);
+        // ...so that a window that was active before the shell started is retaken when it closes.
+        const r = run([{type: "seedActive", address: a1}, {type: "press"}, {type: "release", hasKeys: true}, {type: "closeWindow", address: a1}]);
+        compare(r.state.mode, "take");
+    }
+
     function test_activeWindowClosingWhileHoldingRetakesTheKeyboard() {
         // Scenario B2: foot1 is Hyprland's active window, the desktop is clicked, foot1 closes by itself.
         let r = run([{type: "activeWindow", address: a1}, {type: "press"}, {type: "release", hasKeys: true}]);

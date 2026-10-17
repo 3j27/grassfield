@@ -13,7 +13,8 @@ while [[ $# -gt 0 ]]; do
     --no-plugin) export GRASSFIELD_NO_PLUGIN=1 ;;
     --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
     --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
-    -h|--help) echo "usage: nested-up.sh [--private-bus] [--no-plugin] [--lang LL] [--desktop-dir PATH]"; exit 0 ;;
+    --desktop-screen) export GRASSFIELD_DESKTOP_SCREEN=${2:?--desktop-screen needs an output name}; shift ;;
+    -h|--help) echo "usage: nested-up.sh [--private-bus] [--no-plugin] [--lang LL] [--desktop-dir PATH] [--desktop-screen NAME]"; exit 0 ;;
     *) echo "nested-up: unknown option $1" >&2; exit 2 ;;
   esac
   shift

@@ -110,8 +110,23 @@ Variants {
             }
         }
 
+        // The window Hyprland counts as active, also from before the shell started (no event was seen).
+        Component.onCompleted: win.seedActive()
+
+        function seedActive(): void {
+            const t = Hyprland.activeToplevel;
+            win.feed({
+                type: "seedActive",
+                address: t ? t.address : ""
+            });
+        }
+
         Connections {
             target: Hyprland
+
+            function onActiveToplevelChanged(): void {
+                win.seedActive();
+            }
 
             function onRawEvent(event: HyprlandEvent): void {
                 switch (event.name) {
