@@ -37,3 +37,31 @@ No timers run until the pointer is in a corner. Corners are pointer-only; every 
 - The Overlay-layer corner windows cover the 2 px corner of the Control Center/popup overlay and of fullscreen apps by design.
 - The `apps` IPC target name (`apps`, function `toggle`) is an assumption until the Apps surface exists.
 - Jumping from a hot corner onto a client window and straight back to the corner within 800 ms does not refire it: client windows do not report the pointer position to the shell, so the shell sees no exit/re-entry.
+
+---
+
+# Desktop icons v1 · shell-engineer
+
+## macOS reference behavior (words)
+The desktop shows the files and folders of the Desktop folder as large icons with wrapped labels (two lines at most), highlighted when selected, arranged in columns from the top-right corner. Dragging on empty space draws a selection rectangle, a double click opens, icons can be dragged to rearrange (positions are remembered), onto the Dock Trash to trash them, and into or out of applications. The context menu of empty space offers New Folder; the one of an icon offers Open, Rename, Copy and Move to Trash.
+
+## Functional requirements
+1. Surface: `DesktopIcons.qml` maps one layer-shell window per primary screen (the first screen; dev override `GRASSFIELD_DESKTOP_SCREEN=<output>`), namespace `grassfield-desktop-icons`, Background layer, created after the wallpaper (so above it) and below the Bottom-layer widgets surface (`DesktopWidgets.qml`, not touched). The window spans the screen and has no input mask: a click on empty desktop starts a rubber band and gives the desktop the keyboard (`keyboardFocus: OnDemand`; never otherwise). The widgets layer above keeps its own input. It reports the pointer to `PointerTracker` (the wallpaper below no longer sees it). Nothing animates or repaints on a timer.
+2. Folder: `$GRASSFIELD_DESKTOP_DIR`; else, in a dev session (`GRASSFIELD_DEV=1`), `<state>/desktop-sandbox`; else `xdg-user-dir DESKTOP`; else `~/Desktop` (also when XDG answers `$HOME`). `scripts/dev/shell-run.sh` always passes `GRASSFIELD_DESKTOP_DIR` (default `.dev/desktop-sandbox`). Model: `Qt.labs.folderlistmodel` (hidden files are not shown). The folder is never created or modified except by explicit user actions below.
+3. Grid (`IconsLogic.js`, pure): slot (col, row), col 0 right-most. Unplaced icons take the first free slot column-first from the top-right, in case-insensitive name order. Cell, margins and sizes are tokens (`desktopIcon*`); the grid avoids the menu bar and the Dock footprint.
+4. Icons: theme icon from an extension map (fallback `text-x-generic`), images show a thumbnail with `sourceSize` capped at `desktopIconThumbnailMax`. A `.desktop` file shows its `Name` and `Icon` as plain text (parsed, never executed).
+5. Interaction: click selects (Ctrl toggles, Shift adds); rubber band on empty space; double click or Return opens; arrows move the selection; F2 renames; Ctrl+Backspace moves the selection to the Trash; Ctrl+A selects all; Esc clears. Context menus use `PopupMenu` in an Overlay window (`grassfield-icons-menu`).
+6. File operations, only on those user actions and always as one argv: `gio trash`, `gio rename`, `gio mkdir -p`, `gio move`, `cp -a --no-clobber` (copy; `gio copy` refuses directories), `gio open`, `wl-copy --type text/uri-list` (Copy). Rename validation: not empty, no `/`, not `.`/`..`, no control characters, at most 255 bytes, never an existing name (a refused name keeps the field open with a red border). New Folder creates `untitled folder` (numbered) and opens its rename field. `.desktop` files are opened as text in the default text editor (`gio mime text/plain` then `gtk-launch`), never executed: the GNOME trust model (`metadata::trusted`) is not implemented.
+7. Positions: `desktop-icons.json` in `$GRASSFIELD_STATE_HOME` (dev) or `$XDG_STATE_HOME/grassfield`, version 1, keyed by file name, directory 0700, file 0600, atomic write, debounced. Names that no longer exist are pruned (only once the folder model is ready, and not for names with an operation in flight). A rename keeps the position. A broken file is copied to `.bak`.
+8. Drag and drop (real `wl_data_device` drags through Qt `Drag.Automatic`, mime `text/uri-list` plus the marker `application/x-grassfield-desktop-icons`): a drop on the desktop with the marker rearranges (group keeps its shape, occupied slots resolve to the nearest free one); other `text/uri-list` drops are copied into the desktop folder under unclaimed names and placed at the drop point; a drop on the Dock Trash tile (`shell/dock/Dock.qml`, highlighted while hovered) runs `gio trash`.
+9. Setting `desktop.showIcons` (bool, default true; schema, defaults, `Settings.desktopShowIcons`, `Settings.setDesktopShowIcons`; the Settings app rule list in `apps/settings/qml/Store.js` mirrors it).
+
+## Acceptance criteria
+- `tests/unit/tst_desktopicons.qml`: top-right column-first layout, saved slots, moves, navigation, rename validation, unique names, positions parse/serialize/prune, URI lists, launcher parsing, folder resolution.
+- Nested screenshots (`.dev/shots/`): icons, selection, rubber band, inline rename, both context menus, drag onto the Trash (`gio list trash://` shows the file; restored with `gio trash --restore`).
+
+## Known limitations
+- Icons appear on the first screen only. Positions are slots, so a smaller grid re-places icons.
+- Drops from other applications always copy: Qt does not tell Shift (move) from the default action. Not exercised with a real foreign source (no DnD source app in the nested session); the drop path is the same code as the internal one.
+- Get Info, Change Wallpaper and Use Stacks are omitted. No paste, no icon size or sort options, no mounted-volume icons.
+- Because the surface takes the whole screen, windows that are unmapped leave the empty desktop owned by the icons surface, not the wallpaper (the wallpaper has no input of its own).
