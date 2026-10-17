@@ -9,7 +9,18 @@
 - Toggles are rounded tiles with an icon circle filled with the accent when on.
 
 ## M1 subset (implemented, shell-engineer)
-Opened by the Control Center menu bar icon (`qs.overlay/ControlCenter.qml`, 320 px, anchored under the icon): Appearance (Light/Dark), Transparency slider (`material.transparency` 0–1, live), Reduce Transparency toggle, Reduce Motion toggle, output volume slider. Everything persists to grassfield.json through `Settings` (see ui.md). Verified: screenshots at transparency 0, 0.25, 0.6 and in the light appearance; `grassfield.json` written in the dev config dir. Not in M1: Wi-Fi/Bluetooth/airplane/Focus tiles, brightness, Now Playing, device lists (CC1–CC4, CC5, CC7).
+Opened by the Control Center menu bar icon (`qs.overlay/ControlCenter.qml`, 320 px, anchored under the icon): Appearance (Light/Dark), Transparency slider (`material.transparency` 0–1, live), Reduce Transparency toggle, Reduce Motion toggle, output volume slider. Everything persists to grassfield.json through `Settings` (see ui.md). Verified: screenshots at transparency 0, 0.25, 0.6 and in the light appearance; `grassfield.json` written in the dev config dir. 
+
+## M2 implementation (shell-engineer)
+`shell/overlay/ControlCenter.qml` + `shell/overlay/controlcenter/*` (pure logic in `Model.js`, tests `tests/unit/tst_ccmodel.qml`).
+- Layout: connectivity tile (Wi-Fi, Bluetooth, Airplane Mode) left; Focus and Now Playing right (Focus fills the column when no player runs); Display slider (hidden without backlight); Sound slider with mute button and device chevron; Keyboard Brightness (only with a `*kbd_backlight` LED); Appearance row expanding to Appearance + Material. One section expanded at a time; the detail card opens under the tile grid (full width) rather than inside the half-width tile.
+- Wi-Fi: Quickshell Networking; scan list (deduplicated, connected first, then strength), lock icon for secured, connect to known/open networks, new WPA/WPA2/WPA3-personal network: inline password field (`connectWithPsk`), 802.1X: `nm-connection-editor`. Scanning is enabled only while the list is open. SSIDs are PlainText and elided.
+- Bluetooth: paired devices, connect/disconnect, battery if exposed. Devices are not discovered or paired from here (no pairing flow).
+- Airplane Mode: derived (on when every present radio is off); switches the Wi-Fi radio (NetworkManager) and the Bluetooth adapter power (BlueZ). It is NOT an rfkill soft block, and the label says "Wi-Fi and Bluetooth off".
+- Sound: output and input device lists (PipeWire), default checked.
+- Keyboard: Tab and Up/Down move between controls, Space/Return activate, Right/Left expand/collapse rows and the sound chevron, Esc closes; sliders use arrows.
+- Dev guard (`GRASSFIELD_DEV=1`): Wi-Fi/Bluetooth/airplane toggles, connects, device switches and mute are not executed (logged as `dev guard: ... suppressed`, header shows "dev: not applied"); volume stays within +-5 % of its starting value and is restored when the panel closes; brightness is never changed.
+- Known gaps: Now Playing transport and Bluetooth device lists are not exercised in the dev session guard (player controls act on the real player); keyboard backlight and Bluetooth device rows unverified on this hardware (no kbd LED, no paired devices).
 
 ## Purpose and non-goals
 Quick settings backed by real services only (§5.8): NetworkManager (Quickshell Networking), BlueZ (Quickshell

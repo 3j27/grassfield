@@ -39,11 +39,79 @@ Singleton {
         return true;
     }
 
-    function refresh(): void {
-        current.reload();
+    // Absolute level 0..1 (a slider). Returns false when nothing was changed.
+    function setLevel(fraction: real): bool {
+        if (!available)
+            return false;
+        if (devSession) {
+            console.info("brightness: dev session, not changing the backlight (set " + Math.round(fraction * 100) + "%)");
+            return false;
+        }
+        setter.command = ["brightnessctl", "-q", "-d", root.device, "set", Math.round(Math.max(0, Math.min(1, fraction)) * 100) + "%"];
+        setter.running = true;
+        return true;
     }
 
-    Component.onCompleted: finder.running = true
+    // Keyboard backlight (/sys/class/leds/*kbd_backlight). Absent on most desktops.
+    property string kbdDevice: ""
+    property int kbdMax: 0
+    property int kbdValue: 0
+    readonly property bool kbdAvailable: kbdDevice !== "" && kbdMax > 0
+    readonly property real kbdLevel: kbdAvailable ? Math.max(0, Math.min(1, kbdValue / kbdMax)) : 0
+
+    function setKbdLevel(fraction: real): bool {
+        if (!kbdAvailable)
+            return false;
+        if (devSession) {
+            console.info("brightness: dev session, not changing the keyboard backlight");
+            return false;
+        }
+        kbdSetter.command = ["brightnessctl", "-q", "-d", root.kbdDevice, "set", Math.round(Math.max(0, Math.min(1, fraction)) * root.kbdMax).toString()];
+        kbdSetter.running = true;
+        return true;
+    }
+
+    function refresh(): void {
+        current.reload();
+        kbdCurrent.reload();
+    }
+
+    Component.onCompleted: {
+        finder.running = true;
+        kbdFinder.running = true;
+    }
+
+    Process {
+        id: kbdFinder
+        command: ["sh", "-c", "ls -1 /sys/class/leds 2>/dev/null | grep kbd_backlight | head -n 1"]
+        stdout: StdioCollector {
+            onStreamFinished: root.kbdDevice = text.trim()
+        }
+    }
+
+    Process {
+        id: kbdSetter
+        onRunningChanged: {
+            if (!running)
+                root.refresh();
+        }
+    }
+
+    FileView {
+        id: kbdMaximum
+        path: root.kbdDevice !== "" ? "/sys/class/leds/" + root.kbdDevice + "/max_brightness" : ""
+        printErrors: false
+        onLoaded: root.kbdMax = parseInt(kbdMaximum.text().trim(), 10) || 0
+    }
+
+    FileView {
+        id: kbdCurrent
+        path: root.kbdDevice !== "" ? "/sys/class/leds/" + root.kbdDevice + "/brightness" : ""
+        printErrors: false
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: root.kbdValue = parseInt(kbdCurrent.text().trim(), 10) || 0
+    }
 
     Process {
         id: finder
