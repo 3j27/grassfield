@@ -46,6 +46,16 @@ if [[ -f /usr/include/gtest/gtest.h ]]; then
 else
   echo "SKIP: tests/unit/files (gtest not installed)"
 fi
+# Grassfield Preview pure logic (URL validation, size caps, file-type routing): gtest, built here.
+if [[ -f /usr/include/gtest/gtest.h ]]; then
+  if apps/preview/build-direct.sh --tests >/dev/null; then
+    .dev/build/preview-unit-tests --gtest_brief=1 || status=1
+  else
+    echo "FAIL: building tests/unit/preview"; status=1
+  fi
+else
+  echo "SKIP: tests/unit/preview (gtest not installed)"
+fi
 if [[ -x compositor/build/grassfield-compositor-tests ]]; then
   compositor/build/grassfield-compositor-tests || status=1
 fi
