@@ -1,0 +1,122 @@
+import QtQuick
+import QtTest
+import "../../shell/overview/Layout.js" as Layout
+
+TestCase {
+    name: "OverviewLayout"
+
+    readonly property var area: ({x: 0, y: 100, w: 1920, h: 900})
+    readonly property var opts: ({maxScale: 0.8, gap: 24})
+
+    function grid(n, w, h, jitter) {
+        const out = [];
+        const cols = Math.ceil(Math.sqrt(n));
+        for (let i = 0; i < n; i++) {
+            const c = i % cols;
+            const r = Math.floor(i / cols);
+            out.push({id: "w" + i, x: 20 + c * (1920 / cols) * 0.9 + (jitter ? (i * 37) % 60 : 0), y: 30 + r * (1080 / cols) * 0.9, w: w, h: h});
+        }
+        return out;
+    }
+
+    function checkInvariants(input, res, label) {
+        compare(res.rects.length, input.length, label + " count");
+        verify(res.scale <= 0.8 + 1e-9, label + " scale <= max");
+        verify(res.scale > 0, label + " scale > 0");
+        for (let i = 0; i < res.rects.length; i++) {
+            const r = res.rects[i];
+            compare(r.id, input[i].id, label + " id order");
+            verify(r.x >= area.x - 1e-6 && r.y >= area.y - 1e-6 && r.x + r.w <= area.x + area.w + 1e-6 && r.y + r.h <= area.y + area.h + 1e-6, label + " inside area " + JSON.stringify(r));
+            for (let j = i + 1; j < res.rects.length; j++) {
+                const o = res.rects[j];
+                const sepX = Math.max(o.x - (r.x + r.w), r.x - (o.x + o.w));
+                const sepY = Math.max(o.y - (r.y + r.h), r.y - (o.y + o.h));
+                verify(Math.max(sepX, sepY) >= 24 - 1e-6, label + " gap " + i + "," + j + " = " + Math.max(sepX, sepY));
+            }
+        }
+    }
+
+    function test_empty() {
+        compare(Layout.layout([], area, opts).rects.length, 0);
+    }
+
+    function test_single() {
+        const input = [{id: "a", x: 100, y: 100, w: 800, h: 600}];
+        const res = Layout.layout(input, area, opts);
+        checkInvariants(input, res, "single");
+        fuzzyCompare(res.scale, 0.8, 1e-9);
+        fuzzyCompare(res.rects[0].w, 640, 1e-6);
+    }
+
+    function test_counts() {
+        for (const n of [1, 2, 4, 9, 20]) {
+            const input = grid(n, 700, 450, false);
+            checkInvariants(input, Layout.layout(input, area, opts), "n=" + n);
+        }
+    }
+
+    function test_overlappingStack() {
+        const input = [];
+        for (let i = 0; i < 9; i++)
+            input.push({id: "s" + i, x: 200 + i * 40, y: 150 + i * 30, w: 900, h: 600});
+        checkInvariants(input, Layout.layout(input, area, opts), "stack");
+    }
+
+    function test_oddAspectRatios() {
+        const input = [
+            {id: "wide", x: 0, y: 0, w: 1900, h: 80},
+            {id: "tall", x: 50, y: 100, w: 90, h: 900},
+            {id: "tiny", x: 700, y: 400, w: 40, h: 40},
+            {id: "square", x: 900, y: 200, w: 500, h: 500},
+            {id: "huge", x: 0, y: 0, w: 4000, h: 2000}
+        ];
+        checkInvariants(input, Layout.layout(input, area, opts), "odd");
+    }
+
+    function test_manyJittered() {
+        const input = grid(20, 300, 200, true);
+        checkInvariants(input, Layout.layout(input, area, opts), "20 jitter");
+    }
+
+    function test_relativeOrder() {
+        const input = [{id: "l", x: 0, y: 0, w: 900, h: 700}, {id: "r", x: 1000, y: 0, w: 900, h: 700}];
+        const res = Layout.layout(input, area, opts);
+        checkInvariants(input, res, "pair");
+        verify(res.rects[0].x < res.rects[1].x);
+        verify(Math.abs(res.rects[0].y - res.rects[1].y) < 1e-6);
+        const three = [{id: "a", x: 0, y: 0, w: 600, h: 800}, {id: "b", x: 650, y: 0, w: 600, h: 800}, {id: "c", x: 1300, y: 0, w: 600, h: 800}];
+        const r3 = Layout.layout(three, area, opts);
+        checkInvariants(three, r3, "three");
+        verify(r3.rects[0].x < r3.rects[1].x && r3.rects[1].x < r3.rects[2].x);
+    }
+
+    function test_farApartOrderKept() {
+        // Windows that are far apart vertically (over one window height) keep their vertical order.
+        const input = grid(20, 700, 450, false);
+        const res = Layout.layout(input, area, opts);
+        for (let i = 0; i < 20; i++) {
+            for (let j = 0; j < 20; j++) {
+                if (input[j].y - input[i].y > 1.5 * 450)
+                    verify(res.rects[i].y < res.rects[j].y, "vertical order " + i + "," + j);
+            }
+        }
+    }
+
+    function test_neighbor() {
+        const rects = [{x: 0, y: 0, w: 10, h: 10}, {x: 20, y: 0, w: 10, h: 10}, {x: 0, y: 20, w: 10, h: 10}, {x: 20, y: 20, w: 10, h: 10}];
+        compare(Layout.neighbor(rects, 0, "right"), 1);
+        compare(Layout.neighbor(rects, 0, "down"), 2);
+        compare(Layout.neighbor(rects, 3, "left"), 2);
+        compare(Layout.neighbor(rects, 3, "up"), 1);
+        compare(Layout.neighbor(rects, 0, "left"), -1);
+        compare(Layout.neighbor(rects, 0, "up"), -1);
+    }
+
+    function test_hexAddress() {
+        compare(Layout.hexAddress("0x55AB12"), "55ab12");
+        compare(Layout.hexAddress("55ab12"), "55ab12");
+        compare(Layout.hexAddress("0x1; hl.dsp.exit()"), "");
+        compare(Layout.hexAddress("\"})"), "");
+        compare(Layout.hexAddress(""), "");
+    }
+}

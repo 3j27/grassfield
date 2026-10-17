@@ -290,4 +290,41 @@ QtObject {
     readonly property int searchMaxFiles: 20
     // estimate: recent documents shown for an empty query
     readonly property int searchRecentCount: 5
+
+    // spec O2: max window scale 0.8
+    readonly property real overviewMaxScale: 0.8
+    // spec O2: min gap 24 px
+    readonly property int overviewMinGap: 24
+    // estimate: margin around the window area
+    readonly property int overviewAreaMargin: 32
+    // estimate: dim over the blurred wallpaper
+    readonly property real overviewBackdropOpacity: 0.45
+    // estimate: dim when blur is off (Reduce Transparency)
+    readonly property real overviewBackdropOpacityOpaque: 0.92
+    // estimate: Spaces bar tile
+    readonly property int overviewTileWidth: 168
+    // estimate: Spaces bar tile
+    readonly property int overviewTileHeight: 104
+    // estimate: gap between Spaces tiles
+    readonly property int overviewTileGap: 14
+    // estimate: Spaces bar below the menu bar
+    readonly property int overviewBarTopMargin: 12
+    // estimate: app icons in a Space tile
+    readonly property int overviewTileIconSize: 24
+    // estimate: icons shown per Space tile
+    readonly property int overviewTileMaxIcons: 4
+    // estimate: window name pill
+    readonly property int overviewLabelHeight: 34
+    // estimate: window name pill icon
+    readonly property int overviewLabelIconSize: 20
+    // estimate: window name pill
+    readonly property int overviewLabelMaxWidth: 280
+    // estimate: selection outline
+    readonly property int overviewSelectionWidth: 3
+    // estimate: thumbnail corner radius
+    readonly property int overviewThumbRadius: 10
+    // estimate: px before a press becomes a drag
+    readonly property int overviewDragThreshold: 8
+    // estimate: dragged thumbnail
+    readonly property real overviewDragOpacity: 0.8
 }
