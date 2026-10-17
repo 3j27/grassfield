@@ -1,0 +1,8 @@
+{
+  "id": "calendar",
+  "name": "Calendar",
+  "version": "1.0.0",
+  "sizes": ["small", "medium", "large"],
+  "contract": "widgets/1",
+  "permissions": []
+}

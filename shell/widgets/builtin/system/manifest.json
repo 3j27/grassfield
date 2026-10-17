@@ -1,0 +1,8 @@
+{
+  "id": "system",
+  "name": "System",
+  "version": "1.0.0",
+  "sizes": ["small", "medium"],
+  "contract": "widgets/1",
+  "permissions": ["system"]
+}

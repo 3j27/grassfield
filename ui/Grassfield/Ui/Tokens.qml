@@ -533,4 +533,31 @@ QtObject {
     readonly property int settingsPickerWidth: 150
     // estimate: Settings app (docs/specs/settings.md)
     readonly property int settingsShortcutKeyMinWidth: 28
+
+    // estimate: widgets v1 (docs/specs/widgets.md), px side of a small widget on the desktop grid
+    readonly property int widgetCell: 158
+    // estimate: widgets v1, px between widgets
+    readonly property int widgetGap: 16
+    // estimate: widgets v1, tile corner radius
+    readonly property int widgetRadius: 20
+    // estimate: widgets v1, px from the screen edges to the desktop grid
+    readonly property int widgetDesktopMargin: 24
+    // estimate: widgets v1, saturation shift while a window has focus
+    readonly property real widgetDimSaturation: -0.75
+    // estimate: widgets v1, brightness shift while a window has focus
+    readonly property real widgetDimBrightness: -0.12
+    // estimate: widgets v1, dim transition
+    readonly property int widgetDimMs: 300
+    // estimate: widgets v1, gallery preview row
+    readonly property int widgetGalleryRowHeight: 120
+    // estimate: widgets v1, size picker segment
+    readonly property int widgetSizeButtonWidth: 64
+    // estimate: widgets v1, analog clock hand width
+    readonly property int widgetAnalogHandWidth: 3
+    // task spec: System widget sampling interval
+    readonly property int widgetSampleMs: 2000
+    // estimate: widgets v1, secondary figure size
+    readonly property int widgetGlyphSize: 34
+    // estimate: widgets v1, primary figure size
+    readonly property int widgetBigSize: 44
 }
