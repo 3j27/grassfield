@@ -26,6 +26,8 @@ Item {
 
     // Pointer events for the grid.
     signal pressedIcon(int modifiers, bool right)
+    // Left click released without a drag.
+    signal tappedIcon(int modifiers)
     signal activated
     signal menuRequested(real x, real y)
     signal renameAccepted(string text)
@@ -232,6 +234,8 @@ Item {
         enabled: !root.renaming
         onPressedChanged: if (pressed)
             root.pressedIcon(point.modifiers, false)
+        // Release without drag: narrows a multi-selection to this icon.
+        onTapped: root.tappedIcon(point.modifiers)
         onDoubleTapped: root.activated()
     }
 
