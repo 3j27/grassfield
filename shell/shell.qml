@@ -63,6 +63,14 @@ ShellRoot {
     }
 
     Connections {
+        target: GlanceApp
+
+        function onMissing(): void {
+            Notifications.postInternal(qsTr("Glance is not available"), qsTr("Install the grassfield-desktop package to preview files with Space."));
+        }
+    }
+
+    Connections {
         target: Capabilities
 
         function onSettledChanged(): void {
