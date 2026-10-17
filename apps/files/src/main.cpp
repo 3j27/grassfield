@@ -4,6 +4,7 @@
 #include <QQmlApplicationEngine>
 #include <QUrl>
 
+#include "translationloader.h"
 #include "filesapp.h"
 #include "imageproviders.h"
 
@@ -18,6 +19,7 @@ int main(int argc, char *argv[])
 {
     // QApplication (not QGuiApplication): KIO's conflict, Open With and undo confirmation dialogs are widgets.
     QApplication app(argc, argv);
+    grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
     app.setApplicationName(QStringLiteral("grassfield-files"));
     app.setApplicationDisplayName(QObject::tr("Files"));
     app.setApplicationVersion(QStringLiteral(GRASSFIELD_FILES_VERSION));

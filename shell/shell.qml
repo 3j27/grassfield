@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Grassfield.I18n
 import Grassfield.Ui
 import qs.desktop
 import qs.dock
@@ -26,6 +27,10 @@ ShellRoot {
     // shell/security/lock/Lock.qml). Re-applied by every reload (Quickshell resets it to true).
     // Development restarts the shell instead (scripts/dev/shell-run.sh).
     settings.watchFiles: false
+
+    // Instantiates the Translator singleton first: it installs the catalog (GRASSFIELD_LANG or system
+    // locale) before the surfaces below evaluate their qsTr() strings.
+    readonly property string language: Translator.language
 
     Binding {
         target: Appearance

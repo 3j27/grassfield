@@ -45,6 +45,10 @@ preview_cmd=${GRASSFIELD_PREVIEW_CMD:-}
 timing=()
 [[ ${GRASSFIELD_RENDER_TIMING:-} == 1 ]] && timing=(QSG_RENDER_TIMING=1)
 
+# Grassfield.I18n (ui/i18n) and the compiled catalogs (scripts/dev/i18n-build.sh), rebuilt when stale.
+"$root/ui/i18n/build-direct.sh" >&2
+"$root/scripts/dev/i18n-build.sh" >&2
+
 # Desktop icons: the folder is a sandbox in dev (never the owner's real desktop); an exported
 # GRASSFIELD_DESKTOP_DIR wins.
 desktop_dir=${GRASSFIELD_DESKTOP_DIR:-$dev/desktop-sandbox}
@@ -52,7 +56,7 @@ desktop_dir=${GRASSFIELD_DESKTOP_DIR:-$dev/desktop-sandbox}
 env "${timing[@]}" GRASSFIELD_DESKTOP_DIR="$desktop_dir" WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
   GRASSFIELD_PRIVATE_BUS="$private" GRASSFIELD_SETTINGS_CMD="$settings_cmd" GRASSFIELD_PREVIEW_CMD="$preview_cmd" \
-  QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui" \
+  QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui:$dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$dev/translations" \
   setsid "${launch[@]}" >"$dev/shell.log" 2>&1 </dev/null &
 printf '%s\n' "$!" > "$dev/shell.pid"
 echo "shell-run: grassfield-shell pid $! (log .dev/shell.log${private:+, private bus: .dev/bus.address})"

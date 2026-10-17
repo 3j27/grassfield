@@ -57,7 +57,7 @@ pids=() objs=()
 for src in "${sources[@]}"; do
   obj=$objdir/$(basename "${src%.cpp}").o
   objs+=("$obj")
-  g++ "${cxxflags[@]}" "${kfdefs[@]}" "${defs[@]}" -I"$here/src" -I"$out" "${kf_includes[@]}" "${qt_cflags[@]}" \
+  g++ "${cxxflags[@]}" "${kfdefs[@]}" "${defs[@]}" -I"$here/src" -I"$root/ui/i18n" -I"$out" "${kf_includes[@]}" "${qt_cflags[@]}" \
     -c "$src" -o "$obj" &
   pids+=($!)
 done
