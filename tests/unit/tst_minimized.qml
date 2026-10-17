@@ -11,8 +11,52 @@ TestCase {
         return {toplevel: top, address: address ? address : "1a", appId: appId, title: "T " + top};
     }
 
+    function test_windowCallIsBuiltFromValidatedPieces() {
+        compare(Minimized.windowCall("minimize", "0x55AB", {x: 2300.4, y: 1010.6, w: 52, h: 52}),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.minimize then p.minimize(\"0x55ab\", 2300, 1011, 52, 52) end end");
+        compare(Minimized.windowCall("restore", "55ab", {x: 0, y: 0, w: 0, h: 0}),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.restore then p.restore(\"0x55ab\", 0, 0, 0, 0) end end");
+        // Rejected: unknown verb, bad address, missing or non-finite rectangle, injection attempts.
+        compare(Minimized.windowCall("hello", "55ab", {x: 0, y: 0, w: 1, h: 1}), "");
+        compare(Minimized.windowCall("minimize(1) end; os.exit() --", "55ab", {x: 0, y: 0, w: 1, h: 1}), "");
+        compare(Minimized.windowCall("minimize", "55ab\"); os.exit() --", {x: 0, y: 0, w: 1, h: 1}), "");
+        compare(Minimized.windowCall("minimize", "55ab", null), "");
+        compare(Minimized.windowCall("minimize", "55ab", {x: NaN, y: 0, w: 1, h: 1}), "");
+        compare(Minimized.windowCall("minimize", "55ab", {x: "1); os.exit(", y: 0, w: 1, h: 1}), "");
+    }
+
+    function test_configCallAllowlist() {
+        compare(Minimized.configCall("titlebarDoubleClick", "minimize"),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.config then p.config(\"titlebarDoubleClick\", \"minimize\") end end");
+        verify(Minimized.configCall("titlebarDoubleClick", "zoom") !== "");
+        verify(Minimized.configCall("titlebarDoubleClick", "none") !== "");
+        compare(Minimized.configCall("titlebarDoubleClick", "Zoom"), "");
+        compare(Minimized.configCall("titlebarDoubleClick", "zoom\") os.exit() --"), "");
+        compare(Minimized.configCall("titlebarDoubleClick", undefined), "");
+        compare(Minimized.configCall("appearance", "dark"), "");
+        compare(Minimized.configCall("__proto__", "zoom"), "");
+        compare(Minimized.configCall("constructor", "zoom"), "");
+    }
+
+    function test_moveWindowV2Parsing() {
+        const m = Minimized.parseMoveWindowV2("55924770ce00,-98,special:minimized");
+        compare(m.address, "55924770ce00");
+        compare(m.workspace, "special:minimized");
+        compare(Minimized.parseMoveWindowV2("55AB,2,2").workspace, "2");
+        compare(Minimized.parseMoveWindowV2("55ab,3,name, with, commas").workspace, "name, with, commas");
+        compare(Minimized.parseMoveWindowV2("55ab,2"), null);
+        compare(Minimized.parseMoveWindowV2("zz,2,2"), null);
+        compare(Minimized.parseMoveWindowV2("55ab,2,"), null);
+        compare(Minimized.parseMoveWindowV2(""), null);
+    }
+
+    function test_pluginEventsOtherThanMinimizeRequestAreIgnored() {
+        compare(Minimized.minimizeRequestAddress('{"v":"gfc/1","type":"minimized","address":"55ab"}'), "");
+        compare(Minimized.minimizeRequestAddress('{"v":"gfc/1","type":"restored","address":"55ab"}'), "");
+    }
+
     function test_pluginVerbAllowlist() {
-        for (const v of ["hello", "minimize", "restore", "overview", "theme"])
+        for (const v of ["hello", "minimize", "restore", "overview", "theme", "config"])
             verify(Minimized.isPluginVerb(v), v);
         for (const v of ["", "Minimize", "minimize ", "x end os.execute('id') --", "minimize(1) end; os.exit() --", "constructor", "__proto__", "length"])
             verify(!Minimized.isPluginVerb(v), v);

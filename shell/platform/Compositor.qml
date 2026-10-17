@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
+import qs.services
 import "Minimized.js" as Minimized
 
 // Compositor state and actions for the shell (master-prompt 5.2: the only place, together
@@ -50,13 +51,14 @@ Singleton {
     function activate(toplevel: var): void {
         if (!toplevel)
             return;
+        if (isMinimized(toplevel)) {
+            unminimize(toplevel);
+            return;
+        }
         const top = hyprlandToplevel(toplevel);
         if (top && top.workspace && (top.workspace.name === hiddenWorkspace || top.workspace.name === minimizedWorkspace) && root.focusedWorkspace)
             dispatchRequest(moveRequest(top.address, String(root.focusedWorkspace.id)));
-        if (isMinimized(toplevel))
-            unminimize(toplevel);
-        else
-            toplevel.activate();
+        toplevel.activate();
     }
 
     // Name of the special workspace used by hide().
@@ -93,21 +95,16 @@ Singleton {
     // animates toward it. null until a Dock exists.
     property var dockTarget: null
 
-    // Plugin verb call (ADR-0007), wrapped as a Lua function like the hello request. Only
-    // validated hex addresses and numbers are interpolated.
-    function pluginRequest(verb: string, address: string, rect: var): string {
-        const hex = Minimized.normalizeAddress(address);
-        if (!Minimized.isPluginVerb(verb) || hex === "" || (rect && !Minimized.finiteRect(rect)))
-            return "";
-        const args = ["\"0x" + hex + "\""];
-        if (rect)
-            [rect.x, rect.y, rect.w, rect.h].forEach(n => args.push(String(Math.round(Number(n)))));
-        return "function() local p = hl.plugin and hl.plugin.grassfield; if p and p." + verb + " then p." + verb + "(" + args.join(", ") + ") end end";
+    // Plugin minimize/restore call (gfc/1, ADR-0007) toward/from the Dock tile. Without a Dock
+    // the rectangle is empty: the plugin then hides/shows the window without animation. Only
+    // validated hex addresses and numbers are interpolated (Minimized.windowCall).
+    function pluginWindowCall(verb: string, address: string): string {
+        return Minimized.windowCall(verb, address, Minimized.finiteRect(root.dockTarget) || {x: 0, y: 0, w: 0, h: 0});
     }
 
     // Minimize a window. With the plugin ("minimize" capability) the plugin hides it with an
-    // animation toward the Dock; otherwise it is parked on special:minimized. Either way the
-    // shell records it so the Dock can list and restore it.
+    // animation toward the Dock; otherwise it is parked on special:minimized. Both use the same
+    // hidden state, so the shell records it either way and rebuilds the record from it.
     function minimize(toplevel: var): bool {
         if (!toplevel || Minimized.has(root.minimized, toplevel))
             return false;
@@ -117,24 +114,56 @@ Singleton {
             return false;
         root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title});
         if (Capabilities.has("minimize"))
-            dispatchRequest(pluginRequest("minimize", address, Minimized.finiteRect(root.dockTarget) || {x: 0, y: 0, w: 0, h: 0}));
+            dispatchRequest(pluginWindowCall("minimize", address));
         else
             dispatchRequest(moveRequest(address, minimizedWorkspace));
         return true;
     }
 
-    // Restore a minimized window to the current workspace and focus it.
+    // Restore a minimized window to the current workspace and focus it. The plugin moves, focuses
+    // and animates it itself; activating it here too would race the plugin (a focus request for a
+    // window still on special:minimized opens that workspace).
     function unminimize(toplevel: var): void {
         const rec = root.minimized.find(r => r.toplevel === toplevel);
         if (!rec)
             return;
         root.minimized = Minimized.remove(root.minimized, toplevel);
-        if (Capabilities.has("minimize"))
-            dispatchRequest(pluginRequest("restore", rec.address, null));
-        else if (root.focusedWorkspace)
+        if (Capabilities.has("minimize")) {
+            dispatchRequest(pluginWindowCall("restore", rec.address));
+            return;
+        }
+        if (root.focusedWorkspace)
             dispatchRequest(moveRequest(rec.address, String(root.focusedWorkspace.id)));
         toplevel.activate();
     }
+
+    // ---- Plugin settings (gfc/1 `config`, allowlisted keys in Minimized.js) ----
+
+    // Settings the titlebars honor; pushed after the capabilities handshake (and again on each
+    // capabilities event, e.g. a reloaded plugin) and whenever they change.
+    readonly property string titlebarDoubleClick: Settings.titlebarDoubleClick
+
+    onTitlebarDoubleClickChanged: pushPluginConfig()
+
+    function pushPluginConfig(): void {
+        if (Capabilities.has("config") && dispatchRequest(Minimized.configCall("titlebarDoubleClick", root.titlebarDoubleClick)))
+            console.info("grassfield: compositor setting titlebarDoubleClick =", root.titlebarDoubleClick);
+    }
+
+    Connections {
+        target: Capabilities
+
+        function onFeaturesChanged(): void {
+            root.pushPluginConfig();
+        }
+
+        function onPluginPresentChanged(): void {
+            root.pushPluginConfig();
+        }
+    }
+
+    // The handshake may have completed before this singleton was first used.
+    Component.onCompleted: pushPluginConfig()
 
     function isMinimized(toplevel: var): bool {
         return Minimized.has(root.minimized, toplevel);
@@ -151,7 +180,9 @@ Singleton {
     }
 
     // Rebuilds the minimized list from windows sitting on special:minimized (the shell may have
-    // restarted since they were minimized). Window data is re-read first, then merged.
+    // restarted since they were minimized). Window data is re-read first, then merged. A window
+    // whose latest move event took it elsewhere is skipped: re-read data can predate that move
+    // (fast minimize/restore sequences re-added restored windows before this check).
     function syncMinimized(): void {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
         let list = root.minimized;
@@ -160,10 +191,36 @@ Singleton {
             if (!top.wayland || !top.workspace || top.workspace.name !== minimizedWorkspace)
                 continue;
             const address = Minimized.normalizeAddress(top.address);
-            if (address !== "")
-                list = Minimized.add(list, {toplevel: top.wayland, address: address, appId: top.wayland.appId, title: top.wayland.title});
+            if (address === "" || (root.lastWorkspace.has(address) && root.lastWorkspace.get(address) !== minimizedWorkspace))
+                continue;
+            list = Minimized.add(list, {toplevel: top.wayland, address: address, appId: top.wayland.appId, title: top.wayland.title});
         }
         if (list !== root.minimized)
+            root.minimized = list;
+    }
+
+    // Latest workspace name per window address, from movewindowv2 events: ordered and
+    // authoritative, unlike re-read window data.
+    property var lastWorkspace: new Map()
+
+    // A window moved: onto special:minimized (by the plugin, the fallback or anything else) it is
+    // recorded; off it (restored by any means) its record goes, so the Dock never shows a stale tile.
+    function onWindowMoved(data: string): void {
+        const move = Minimized.parseMoveWindowV2(data);
+        if (!move)
+            return;
+        root.lastWorkspace.set(move.address, move.workspace);
+        let list = root.minimized;
+        if (move.workspace === minimizedWorkspace) {
+            const top = (Hyprland.toplevels ? Hyprland.toplevels.values : []).find(t => Minimized.normalizeAddress(t.address) === move.address);
+            if (top && top.wayland)
+                list = Minimized.add(list, {toplevel: top.wayland, address: move.address, appId: top.wayland.appId, title: top.wayland.title});
+            else
+                minimizedSyncTimer.restart(); // handle not matched yet: merge once window data arrived
+        } else {
+            list = list.filter(r => r.address !== move.address);
+        }
+        if (list.length !== root.minimized.length)
             root.minimized = list;
     }
 
@@ -361,8 +418,12 @@ Singleton {
                 if (event.name === "windowtitlev2")
                     return;
             }
-            if ((event.name === "openwindow" || event.name === "movewindowv2") && (event.name === "openwindow" || event.data.indexOf(root.minimizedWorkspace) >= 0))
-                minimizedSyncTimer.restart();
+            if (event.name === "movewindowv2")
+                root.onWindowMoved(event.data);
+            else if (event.name === "openwindow")
+                minimizedSyncTimer.restart(); // a window may map directly onto special:minimized
+            else if (event.name === "closewindow")
+                root.lastWorkspace.delete(Minimized.normalizeAddress(event.data));
             switch (event.name) {
             case "openwindow":
             case "closewindow":
