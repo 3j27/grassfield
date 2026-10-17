@@ -53,11 +53,14 @@ TestCase {
     function test_tagLikeInputIsLinear() {
         const inputs = ["<a\">\"".repeat(800), "<a".repeat(2000), "<a \"".repeat(1000), "<a '\"".repeat(800), "<".repeat(4000), "<b ".repeat(1300) + ">", "<a '>".repeat(660), "<a \">".repeat(660)];
         for (const input of inputs) {
-            const t0 = Date.now();
-            Sanitizer.sanitize(input);
-            const ms = Date.now() - t0;
+            let ms = Infinity;
+            for (let rep = 0; rep < 5; rep++) {
+                const t0 = Date.now();
+                Sanitizer.sanitize(input);
+                ms = Math.min(ms, Date.now() - t0);
+            }
             console.log("sanitize " + input.length + " chars: " + ms + " ms");
-            // Generous bound for loaded CI/dev machines: the quadratic version took ~885 ms on this input.
+            // Minimum of 5 runs: robust against load; the quadratic version took ~885 ms on this input.
             verify(ms < 150, "sanitize took " + ms + " ms");
         }
     }
@@ -79,9 +82,13 @@ TestCase {
 
     // 1000 valid tags: every tag produces output, so this is slower than the failing scans above.
     function test_denseValidMarkup() {
-        const t0 = Date.now();
-        compare(Sanitizer.sanitize("<b>x</b>".repeat(500)).length, 500 * 8);
-        verify(Date.now() - t0 < 300); // load-tolerant bound (quadratic regressions take seconds)
+        let ms = Infinity;
+        for (let rep = 0; rep < 5; rep++) {
+            const t0 = Date.now();
+            compare(Sanitizer.sanitize("<b>x</b>".repeat(500)).length, 500 * 8);
+            ms = Math.min(ms, Date.now() - t0);
+        }
+        verify(ms < 300, "dense markup took " + ms + " ms"); // minimum of 5 runs (quadratic regressions take seconds)
     }
 
     function test_longTagIsText() {
