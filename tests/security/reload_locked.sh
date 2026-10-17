@@ -11,7 +11,22 @@
 #   marker-unlocked forge the marker to "unlocked", soft reload -> still locked, nothing reaches foot
 #   l1              kill -9 the shell -> nothing reaches foot; restart the shell -> locked again
 #   forged-crash    forge the marker to "unlocked", kill -9, restart -> the shell re-acquires the lock
-#   cleanup         close the foot probe window (run automatically after the default sequence)
+#   foreign-takeover (b) a foreign locker takes over the live Grassfield lock -> still locked; it
+#                   releases and exits -> Grassfield takes a fresh lock, nothing reaches foot
+#   foreign-restart (a) foreign locker holding the lock + marker forged "unlocked" + shell restart ->
+#                   the shell takes the lock over; the foreign locker releases -> locked by Grassfield
+#   lock-desync     (c) desync held on purpose (periodic check paused by the dev hook
+#                   `lock devPauseOwnershipCheck`: Hyprland unlocked, shell "locked"), then `lock lock`
+#                   -> a real lock, triggered by that request
+#   sleep-desync    before-sleep path (dev hook `idle devSleep`): the sleep delay ends only on a
+#                   confirmed lock; during a held desync, only after the fresh lock is acquired
+#   cleanup         close the foot probe window and any foreign locker (run after the default sequence)
+#
+# Foreign locker: tests/security/foreign_locker/ForeignLocker.qml (Quickshell WlSessionLock client,
+# released over its IPC). Hyprland 0.56.2 (misc.allow_session_lock_restore = true) hands a live lock
+# to the next client and tells the previous holder nothing; a release by either client unlocks the
+# session. The foreign steps print "unlocked window": the time from the foreign release until Hyprland
+# reports the session locked again (bounded by the shell's 1 s ownership check, docs/specs/security.md).
 #
 # Requires scripts/dev/nested-up.sh (the shell runs with GRASSFIELD_DEV=1, which enables the
 # `lock devReload` hook). The nested session stays locked afterwards: finish with nested-down.sh.
@@ -28,9 +43,17 @@ main=$(cat "$dev/main.instance" 2>/dev/null || true)
 [[ $sig != "$main" && $sig != "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || { echo "reload_locked: refusing the main instance" >&2; exit 2; }
 [[ $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "reload_locked: refusing the main Wayland socket" >&2; exit 2; }
 [[ -n ${XDG_RUNTIME_DIR:-} ]] || { echo "reload_locked: XDG_RUNTIME_DIR unset" >&2; exit 2; }
+# Wayland clients (foot, wtype, the foreign locker) must only reach the nested socket: it has to be
+# the one Hyprland lists for the nested instance, and never the owner's (read-only `hyprctl instances`).
+instances=$(hyprctl instances -j 2>/dev/null)
+[[ -n $main && $(jq -r --arg s "$main" '.[] | select(.instance == $s) | .wl_socket' <<<"$instances") != "$sock" ]] \
+  || { echo "reload_locked: refusing: no owner instance record, or its socket is the nested one" >&2; exit 2; }
+[[ $(jq -r --arg s "$sig" '.[] | select(.instance == $s) | .wl_socket' <<<"$instances") == "$sock" ]] \
+  || { echo "reload_locked: refusing: $sock is not the nested instance's socket" >&2; exit 2; }
 
 marker=$XDG_RUNTIME_DIR/grassfield-lock-${sig//[^A-Za-z0-9_.-]/_}
 typed=$dev/reload-typed.txt
+foreign=$root/tests/security/foreign_locker/ForeignLocker.qml
 status=0
 
 nested() { env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" "$@"; }
@@ -151,6 +174,168 @@ step_forged_crash() {
   crash_and_restart forged-crash 15
 }
 
+# --- Foreign locker (R12 re-review: a lock taken over and released by another client) ---
+
+foreign_ipc() { nested qs ipc -p "$foreign" call foreign "$@" 2>/dev/null; }
+
+# All monitors list LOCK (read-only hyprctl query of the nested instance).
+compositor_locked() {
+  nested hyprctl -j monitors 2>/dev/null | jq -e 'length > 0 and all(.[]; (.solitaryBlockedBy // []) | index("LOCK") != null)' >/dev/null
+}
+
+foreign_start() { # <step>: start the foreign locker; it takes the session lock over
+  # Nested socket and instance only (checked at the top); the fixture refuses anything else itself.
+  env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" GRASSFIELD_FOREIGN_LOCKER=1 \
+    setsid qs -p "$foreign" --no-color >"$dev/foreign-locker.log" 2>&1 </dev/null &
+  echo $! >"$dev/foreign-locker.pid"
+  local got=""
+  for _ in $(seq 1 40); do
+    got=$(foreign_ipc status)
+    [[ $got == "locked secure" ]] && break
+    sleep 0.25
+  done
+  if [[ $got == "locked secure" ]]; then pass "$1: the foreign locker holds the session lock"; else fail "$1: foreign locker status '${got:-no-answer}'"; fi
+}
+
+foreign_wait_exit() { # <step>: the foreign locker exits after its release
+  local pid
+  pid=$(cat "$dev/foreign-locker.pid" 2>/dev/null)
+  for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$pid" 2>/dev/null; then fail "$1: the foreign locker did not exit"; else pass "$1: the foreign locker exited"; rm -f "$dev/foreign-locker.pid"; fi
+}
+
+# Releases the foreign lock, then measures how long Hyprland reports the session unlocked before the
+# shell's fresh lock: prints "unlocked window". Fails if the session is not locked by Grassfield
+# (status locked + LOCK on every monitor) within 3 s, or if the foreign locker does not exit.
+foreign_release_and_wait() { # <step>
+  local t0 now first="" s
+  t0=${EPOCHREALTIME/./}
+  echo "foreign unlock -> $(foreign_ipc unlock)"
+  for _ in $(seq 1 60); do
+    if compositor_locked; then
+      now=${EPOCHREALTIME/./}
+      first=$(((now - t0) / 1000))
+      break
+    fi
+    sleep 0.05
+  done
+  if [[ -n $first ]]; then echo "unlocked window: <= ${first} ms (foreign release -> Hyprland reports LOCK again)"; fi
+  if [[ -n $first ]] && s=$(wait_status locked 3); then pass "$1: locked again by Grassfield after the foreign release (status $s)"; else fail "$1: not re-locked after the foreign release (status ${s:-?}, compositor $(compositor_lock))"; fi
+  foreign_wait_exit "$1"
+  echo "compositor: $(compositor_lock)"
+  grep "grassfield-lock: the session is unlocked although" "$dev/shell.log" | tail -n 1
+}
+
+step_foreign_takeover() {
+  local s
+  s=$(ipc lock status)
+  [[ $s == locked ]] || { fail "foreign-takeover: precondition: status $s (run the lock step first)"; return; }
+  foreign_start foreign-takeover
+  if s=$(wait_status locked 1); then pass "foreign-takeover: status while the foreign locker holds the lock: $s"; else fail "foreign-takeover: status $s"; fi
+  if compositor_locked; then pass "foreign-takeover: Hyprland reports the session locked"; else fail "foreign-takeover: compositor $(compositor_lock)"; fi
+  shot foreign-takeover-held
+  no_leak heldforeign "foreign-takeover (foreign locker holds the lock)"
+  foreign_release_and_wait foreign-takeover
+  shot foreign-takeover-relocked
+  no_leak afterforeign "foreign-takeover (after the foreign release)"
+}
+
+step_foreign_restart() {
+  local s
+  foreign_start foreign-restart
+  printf 'unlocked\n' >"$marker"
+  echo "marker forged: $(cat "$marker")"
+  "$root/scripts/dev/shell-run.sh"
+  if s=$(wait_status locked 15); then pass "foreign-restart: restarted shell status $s (took the foreign-held lock over)"; else fail "foreign-restart: restarted shell status $s"; fi
+  grep "this shell did not take" "$dev/shell.log" | tail -n 1
+  echo "foreign locker: $(foreign_ipc status)"
+  no_leak restartforeign "foreign-restart (foreign locker present, shell restarted)"
+  foreign_release_and_wait foreign-restart
+  echo "marker: $(cat "$marker" 2>/dev/null || echo '<missing>')"
+  shot foreign-restart-relocked
+  no_leak afterrestart "foreign-restart (after the foreign release)"
+}
+
+# Holds the pre-fix desync on purpose (positive control): the periodic ownership check is paused
+# (dev hook, 10 s), the foreign locker takes the live lock over and releases it. Hyprland then
+# reports the session unlocked while the shell still says "locked". Nothing is typed meanwhile.
+desync_from=0
+make_desync() { # <step>
+  foreign_start "$1"
+  echo "lock devPauseOwnershipCheck -> $(ipc lock devPauseOwnershipCheck)"
+  desync_from=$(wc -l <"$dev/shell.log")
+  echo "foreign unlock -> $(foreign_ipc unlock)"
+  foreign_wait_exit "$1"
+  sleep 0.3
+  local s
+  s=$(ipc lock status)
+  if ! compositor_locked && [[ $s == locked ]]; then
+    pass "$1: desync held (control): Hyprland reports the session unlocked, shell status $s"
+  else
+    fail "$1: desync not reproduced (status $s, compositor $(compositor_lock))"
+  fi
+}
+
+# The fresh lock must be triggered by <request> (logged before the re-lock), not by the paused check.
+check_triggered_by() { # <step> <request log pattern>
+  local order
+  order=$(tail -n +"$((desync_from + 1))" "$dev/shell.log" | grep -o -E "$2|taking a fresh lock" | head -n 2 | tr '\n' '|')
+  if [[ $order == *"|taking a fresh lock|" && $order != "taking a fresh lock|"* ]]; then
+    pass "$1: the fresh lock followed the request ($order)"
+  else
+    fail "$1: order '$order'"
+  fi
+}
+
+step_lock_desync() {
+  local s answer
+  make_desync lock-desync
+  answer=$(ipc lock lock)
+  echo "lock lock during the desync -> $answer"
+  for _ in $(seq 1 60); do compositor_locked && break; sleep 0.05; done
+  if compositor_locked && s=$(wait_status locked 3); then pass "lock-desync: real lock after lock lock (status $s, compositor $(compositor_lock))"; else fail "lock-desync: status ${s:-?}, compositor $(compositor_lock)"; fi
+  check_triggered_by lock-desync "lock requested \(ipc\) while locked"
+  tail -n +"$((desync_from + 1))" "$dev/shell.log" | grep -E "grassfield-lock"
+  shot lock-desync
+  no_leak afterdesync "lock-desync"
+}
+
+# Before-sleep path (dev hook `idle devSleep`; no logind, no real inhibitor in nested): the sleep
+# delay may only end on a confirmed lock. Control (really locked), then right after a desync, where
+# "ready for sleep" must follow the fresh lock's "locking -> locked (acquired)".
+sleep_new=""
+sleep_wait() { # <name> <shell.log line count before>: sets sleep_new (log lines since), checks the ready line
+  local ready=""
+  for _ in $(seq 1 40); do
+    sleep_new=$(tail -n +"$(($2 + 1))" "$dev/shell.log")
+    ready=$(grep -m1 "grassfield-idle: ready for sleep" <<<"$sleep_new")
+    [[ -n $ready ]] && break
+    sleep 0.1
+  done
+  grep -E "grassfield-lock|grassfield-idle" <<<"$sleep_new"
+  echo "idle devSleep after -> $(ipc idle devSleep after)"
+  if [[ $ready == *"(locked, lock confirmed)"* ]]; then pass "$1: the sleep delay ended on a confirmed lock"; else fail "$1: '${ready:-no ready line}'"; fi
+}
+
+step_sleep_desync() {
+  local from order
+  from=$(wc -l <"$dev/shell.log")
+  echo "idle devSleep before -> $(ipc idle devSleep before)"
+  sleep_wait sleep-control "$from"
+  make_desync sleep-desync
+  echo "idle devSleep before -> $(ipc idle devSleep before)"
+  sleep_wait sleep-desync "$desync_from"
+  check_triggered_by sleep-desync "lock requested \(sleep\) while locked"
+  order=$(grep -o -E "taking a fresh lock|locking -> locked \(acquired\)|ready for sleep" <<<"$sleep_new" | head -n 3 | tr '\n' '|')
+  if [[ $order == "taking a fresh lock|locking -> locked (acquired)|ready for sleep|" ]]; then
+    pass "sleep-desync: the sleep delay ended only after the fresh lock was acquired"
+  else
+    fail "sleep-desync: order '$order'"
+  fi
+  if compositor_locked; then pass "sleep-desync: Hyprland reports the session locked"; else fail "sleep-desync: compositor $(compositor_lock)"; fi
+  no_leak aftersleep "sleep-desync"
+}
+
 # Leave nothing behind but the (locked) nested session.
 step_cleanup() {
   echo "typed into foot: $(tr -c '[:alnum:]' ' ' <"$typed" 2>/dev/null)"
@@ -158,10 +343,15 @@ step_cleanup() {
     kill -- "-$(<"$dev/reload-foot.pid")" 2>/dev/null || kill "$(<"$dev/reload-foot.pid")" 2>/dev/null || true
     rm -f "$dev/reload-foot.pid"
   fi
+  # A foreign locker still running (failed step): stop it; Hyprland keeps the session locked.
+  if [[ -s $dev/foreign-locker.pid ]]; then
+    kill -- "-$(<"$dev/foreign-locker.pid")" 2>/dev/null || kill "$(<"$dev/foreign-locker.pid")" 2>/dev/null || true
+    rm -f "$dev/foreign-locker.pid"
+  fi
 }
 
 steps=("$@")
-[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock marker-missing marker-unlocked l1 forged-crash cleanup)
+[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync cleanup)
 for s in "${steps[@]}"; do
   echo "== $s"
   declare -F "step_${s//-/_}" >/dev/null || { echo "reload_locked: unknown step $s" >&2; exit 2; }
