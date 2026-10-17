@@ -21,6 +21,8 @@ Item {
     // "default" is the click action, never a button. Dead and restored entries have none.
     readonly property var buttons: live ? JSON.parse(actionsJson).filter(a => a.id !== "default" && a.id !== "") : []
     property bool moreOpen: false
+    // Space kept free at the right of the title row (the Center's remove button).
+    property real trailingReserve: 0
 
     signal actionTriggered(string actionId)
 
@@ -74,6 +76,7 @@ Item {
                 textFormat: Text.PlainText
                 id: stamp
                 anchors.right: parent.right
+                anchors.rightMargin: root.trailingReserve
                 text: root.timeText
                 color: Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily
@@ -83,7 +86,7 @@ Item {
 
             Text {
                 id: title
-                width: parent.width - stamp.implicitWidth - Tokens.spacingSm
+                width: parent.width - stamp.implicitWidth - Tokens.spacingSm - root.trailingReserve
                 text: root.summary !== "" ? root.summary : root.appName
                 textFormat: Text.PlainText
                 color: root.urgency === 2 ? Appearance.colors.danger : Appearance.colors.text
@@ -124,6 +127,7 @@ Item {
         id: actionRow
 
         Flow {
+            id: actions
             width: root.width - iconTile.width - Tokens.spacingSm
             spacing: Tokens.spacingSm
             topPadding: Tokens.spacingXs
@@ -133,6 +137,7 @@ Item {
 
                 delegate: Button {
                     required property var modelData
+                    width: Math.min(implicitWidth, actions.width)
                     text: modelData.text
                     onClicked: root.actionTriggered(modelData.id)
                 }

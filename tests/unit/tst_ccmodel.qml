@@ -88,4 +88,14 @@ TestCase {
         compare(Model.stepIndex(0, 3, -1), 0);
         compare(Model.stepIndex(0, 0, 1), -1);
     }
+
+    function test_failReasonKey() {
+        compare(Model.failReasonKey(1), "noSecrets");
+        compare(Model.failReasonKey(2), "disconnected");
+        compare(Model.failReasonKey(3), "failed");
+        compare(Model.failReasonKey(4), "timeout");
+        compare(Model.failReasonKey(5), "lost");
+        compare(Model.failReasonKey(0), "unknown");
+        compare(Model.failReasonKey(99), "unknown");
+    }
 }

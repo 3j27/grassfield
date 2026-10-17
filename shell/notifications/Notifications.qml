@@ -88,6 +88,10 @@ Singleton {
     // UI falls back to the bell tile without asking Qt for a missing icon.
     function iconSource(image: string, appIcon: string): string {
         if (image) {
+            // An absolute local path (image://icon//abs/path or a plain path) loads as given.
+            const local = History.absoluteImage(image);
+            if (local !== "")
+                return local;
             // Quickshell reports a themed app_icon name as image://icon/<name>.
             const themed = "image://icon/";
             if (image.startsWith(themed) && image.indexOf("?") < 0) {
@@ -194,8 +198,10 @@ Singleton {
     // Banner timed out: hide it only.
     function expireBanner(key: string): void {
         const i = indexOfKey(bannerStore, key);
-        if (i >= 0)
+        if (i >= 0) {
             bannerStore.remove(i);
+            bannerKeys.splice(i, 1);
+        }
         delete heldKeys[key];
         dropTimer(key);
         syncBannerTimers();
@@ -275,6 +281,10 @@ Singleton {
     // ---- models ----
 
     function indexOfKey(model: var, key: string): int {
+        if (model === centerStore)
+            return centerKeys.indexOf(key);
+        if (model === bannerStore)
+            return bannerKeys.indexOf(key);
         for (let i = 0; i < model.count; i++) {
             if (model.get(i).key === key)
                 return i;
@@ -298,65 +308,100 @@ Singleton {
         };
     }
 
+    // JS mirrors of centerStore (row i = centerKeys[i], centerApps[i]) so that inserts and removals
+    // never read the ListModel row by row (ListModel.get() is slow; the Notify call waits for this).
+    property var centerKeys: []
+    property var centerApps: []
+    // Same for bannerStore (keys, newest first).
+    property var bannerKeys: []
+
     // rank = position inside the app group, groupCount = group size (Center rows are grouped
-    // by app, newest group first, so the delegates need no grouping logic).
-    function renumber(): void {
-        const totals = {};
-        for (let i = 0; i < centerStore.count; i++) {
-            const app = centerStore.get(i).appName;
-            totals[app] = (totals[app] || 0) + 1;
-        }
-        const seen = {};
-        for (let i = 0; i < centerStore.count; i++) {
-            const row = centerStore.get(i);
-            const rank = seen[row.appName] || 0;
-            seen[row.appName] = rank + 1;
-            if (row.rank !== rank || row.groupCount !== totals[row.appName])
-                centerStore.set(i, {rank: rank, groupCount: totals[row.appName]});
-        }
+    // by app, newest group first, so the delegates need no grouping logic). Only the block of
+    // one app is numbered; its rows are contiguous.
+    function renumberGroup(app: string): void {
+        const start = centerApps.indexOf(app);
+        if (start < 0)
+            return;
+        let end = start;
+        while (end < centerApps.length && centerApps[end] === app)
+            end++;
+        const total = end - start;
+        for (let i = start; i < end; i++)
+            centerStore.set(i, {rank: i - start, groupCount: total});
     }
 
-    // New (newest) entry: on top, followed by the rest of its group.
+    // New (newest) entry: on top, followed by the rest of its group (one move for the block).
     function addToCenter(e: var): void {
-        centerStore.insert(0, Object.assign(rowOf(e), {rank: 0, groupCount: 1}));
-        let target = 1;
-        for (let i = 1; i < centerStore.count; i++) {
-            if (centerStore.get(i).appName === e.appName) {
-                if (i !== target)
-                    centerStore.move(i, target, 1);
-                target++;
-            }
+        const start = centerApps.indexOf(e.appName);
+        let size = 0;
+        if (start >= 0) {
+            while (start + size < centerApps.length && centerApps[start + size] === e.appName)
+                size++;
         }
-        renumber();
+        const at = start >= 0 ? start : 0;
+        centerStore.insert(at, Object.assign(rowOf(e), {rank: 0, groupCount: 1}));
+        centerKeys.splice(at, 0, e.key);
+        centerApps.splice(at, 0, e.appName);
+        if (at > 0) {
+            centerStore.move(at, 0, size + 1);
+            centerKeys.unshift(...centerKeys.splice(at, size + 1));
+            centerApps.unshift(...centerApps.splice(at, size + 1));
+        }
+        renumberGroup(e.appName);
     }
 
     // Drops model rows whose entry left the history (removal, pruning).
-    function syncRemovals(): void {
+    // Returns the number of rows dropped (0 takes the fast path: no work when the sizes agree).
+    // `pending` entries of history are not in the model yet (the caller inserts them next) and
+    // `deferApp`'s group is renumbered by that insert, so it is skipped here.
+    function syncRemovals(pending: int, deferApp: string): int {
+        if (centerKeys.length + pending === history.length)
+            return 0;
+        let dropped = 0;
         const alive = {};
         history.forEach(e => alive[e.key] = true);
-        for (let i = centerStore.count - 1; i >= 0; i--) {
-            if (!alive[centerStore.get(i).key])
+        const touched = {};
+        for (let i = centerKeys.length - 1; i >= 0; i--) {
+            if (!alive[centerKeys[i]]) {
+                touched[centerApps[i]] = true;
                 centerStore.remove(i);
+                centerKeys.splice(i, 1);
+                centerApps.splice(i, 1);
+                dropped++;
+            }
         }
-        renumber();
+        Object.keys(touched).forEach(app => {
+            if (app !== deferApp)
+                renumberGroup(app);
+        });
+        return dropped;
+    }
+
+    function clearCenter(): void {
+        centerStore.clear();
+        centerKeys = [];
+        centerApps = [];
     }
 
     function rebuildCenter(): void {
-        centerStore.clear();
+        clearCenter();
         for (const g of History.group(history)) {
-            for (const e of g.items)
-                centerStore.append(Object.assign(rowOf(e), {rank: 0, groupCount: 1}));
+            g.items.forEach((e, rank) => {
+                centerStore.append(Object.assign(rowOf(e), {rank: rank, groupCount: g.items.length}));
+                centerKeys.push(e.key);
+                centerApps.push(e.appName);
+            });
         }
-        renumber();
     }
 
     function addEntry(entry: var): void {
         history = History.prune([entry].concat(history), Date.now());
         count = history.length;
         saveTimer.restart();
+        const dropped = syncRemovals(1, entry.appName);
         addToCenter(entry);
-        syncRemovals();
-        pruneLive();
+        if (dropped > 0)
+            pruneLive();
     }
 
     function updateEntry(key: string, entry: var): void {
@@ -387,19 +432,22 @@ Singleton {
         count = list.length;
         saveTimer.restart();
         if (list.length === 0)
-            centerStore.clear();
+            clearCenter();
         else
-            syncRemovals();
+            syncRemovals(0, "");
     }
 
     // ---- banners ----
 
     function showBanner(entry: var, timeoutMs: int): void {
         const old = indexOfKey(bannerStore, entry.key);
-        if (old >= 0)
+        if (old >= 0) {
             bannerStore.remove(old);
+            bannerKeys.splice(old, 1);
+        }
         dropTimer(entry.key);
         bannerStore.insert(0, Object.assign(rowOf(entry), {timeout: timeoutMs}));
+        bannerKeys.unshift(entry.key);
         syncBannerTimers();
     }
 
@@ -497,8 +545,10 @@ Singleton {
 
     // Live notifications whose entry was pruned must not leak.
     function pruneLive(): void {
+        const kept = {};
+        history.forEach(e => kept[e.key] = true);
         for (const k in liveByKey) {
-            if (!entryFor(k)) {
+            if (!kept[k]) {
                 const n = liveByKey[k];
                 delete liveByKey[k];
                 n.dismiss();

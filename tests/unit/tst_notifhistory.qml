@@ -95,4 +95,13 @@ TestCase {
         compare(History.bannerTimeout(1, -1, 5000), 5000);
         compare(History.bannerTimeout(0, -1, 5000), 5000);
     }
+
+    function test_absoluteImage() {
+        const u = "image://icon//usr/share/icons/hicolor/48x48/apps/btop.png";
+        compare(History.absoluteImage(u), u);
+        compare(History.absoluteImage("/tmp/a.png"), "/tmp/a.png");
+        compare(History.absoluteImage("image://icon/firefox"), "");
+        compare(History.absoluteImage("data:image/png;base64,AA"), "");
+        compare(History.absoluteImage(""), "");
+    }
 }

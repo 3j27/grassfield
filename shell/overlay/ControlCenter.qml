@@ -118,7 +118,7 @@ FocusScope {
 
                 Column {
                     width: parent.width
-                    spacing: (connectivity.height - 2 * connectivity.padding - 3 * Tokens.panelCcIconButton) / 2
+                    spacing: visibleChildren.length > 1 ? (connectivity.height - 2 * connectivity.padding - visibleChildren.length * Tokens.panelCcIconButton) / (visibleChildren.length - 1) : 0
 
                     RadioRow {
                         iconName: Connectivity.wifiEnabled ? Connectivity.iconName === "wifi-off" ? "wifi-3" : Connectivity.iconName : "wifi-off"
@@ -233,6 +233,8 @@ FocusScope {
         }
 
         Tile {
+            visible: Audio.ready
+
             Caption {
                 text: qsTr("Sound")
             }

@@ -46,6 +46,9 @@ Item {
         textFormat: Text.PlainText
         id: label
         anchors.centerIn: parent
+        width: Math.min(implicitWidth, root.width - 2 * Tokens.spacingSm)
+        elide: Text.ElideRight
+        horizontalAlignment: Text.AlignHCenter
         text: root.text
         color: root.primary ? Appearance.colors.accentText : (root.destructive ? Appearance.colors.danger : Appearance.colors.text)
         font.family: Appearance.fontFamily

@@ -370,6 +370,7 @@ Variants {
                                         urgency: item.urgency
                                         actionsJson: item.actionsJson
                                         live: row.live
+                                        trailingReserve: Tokens.notificationCloseSize + Tokens.spacingXs
                                         body: Notifications.bodyFor(item.bodyHtml)
                                         timeText: Notifications.timeFor(item.time)
                                         iconSource: Notifications.iconSource(item.image, item.appIcon)

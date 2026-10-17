@@ -90,10 +90,17 @@ TestCase {
         const many = [];
         for (let i = 0; i < 300; i++)
             many.push({id: "app" + i, name: "Application Number " + i, genericName: "Tool", comment: "A long description for entry " + i, keywords: ["alpha", "beta", "gamma"]});
-        const t0 = Date.now();
-        for (let i = 0; i < 20; i++)
-            Ranking.rank(many, "appnum", Ranking.newUsage());
-        verify((Date.now() - t0) / 20 < 150); // generous bound: catches regressions, tolerates load
+        // P4: at most 50 ms per keystroke. The minimum over 5 repetitions (20 keystrokes each) is
+        // robust against machine load: a slow repetition does not fail the test, a slow ranker does.
+        let best = Infinity;
+        for (let rep = 0; rep < 5; rep++) {
+            const t0 = Date.now();
+            for (let i = 0; i < 20; i++)
+                Ranking.rank(many, "appnum", Ranking.newUsage());
+            best = Math.min(best, (Date.now() - t0) / 20);
+        }
+        console.log("rank 300 entries: best " + best + " ms per keystroke");
+        verify(best <= 50, "rank took " + best + " ms per keystroke (limit 50)");
     }
 
     function test_filesParsing() {
