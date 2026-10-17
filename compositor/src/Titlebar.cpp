@@ -503,8 +503,10 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e, E
         // button is down. Otherwise cancel it here.
         if (buttonEventRoutesToTitlebar())
             input.presses.expectTitlebarRelease(e.button);
-        else
+        else {
+            gf::log(Log::DEBUG, "titlebar release {:#x} cancelled on the event bus (pointer not over a titlebar)", e.button);
             info.cancelled = true;
+        }
     });
 }
 
