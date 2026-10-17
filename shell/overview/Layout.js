@@ -103,8 +103,10 @@ function relax(list, area, gap) {
 }
 
 // Row packing in reading order (top to bottom, then left to right) at scale s, or null when
-// it does not fit.
-function packRows(rects, area, s, gap) {
+// it does not fit. With rowCount the windows are split into that many rows of equal count
+// (greedy fill otherwise).
+function packRows(rects, area, s, gap, rowCount) {
+    const perRow = rowCount > 0 ? Math.ceil(rects.length / rowCount) : Infinity;
     const order = rects.map((r, i) => i).sort((p, q) => {
         const a = rects[p];
         const b = rects[q];
@@ -118,7 +120,7 @@ function packRows(rects, area, s, gap) {
         const h = rects[i].h * s;
         if (w > area.w + 1e-6)
             return null;
-        if (!row || row.w + gap + w > area.w + 1e-6) {
+        if (!row || row.items.length >= perRow || row.w + gap + w > area.w + 1e-6) {
             row = {items: [], w: -gap, h: 0};
             rows.push(row);
         }
@@ -167,20 +169,22 @@ function layout(rects, area, opts) {
     // 2. Row packing in reading order: also the fallback, and preferred when it gives clearly
     // larger windows (e.g. windows stacked on top of each other relax into one thin column).
     let packedResult = null;
-    let ps = maxScale;
-    for (let step = 0; step < 200; step++, ps *= 0.95) {
-        const packed = packRows(valid, area, ps, gap);
-        if (packed) {
-            packedResult = {scale: ps, rects: packed};
-            break;
+    for (let rows = 1; rows <= valid.length; rows++) {
+        let ps = maxScale;
+        for (let step = 0; step < 200; step++, ps *= 0.95) {
+            const packed = packRows(valid, area, ps, gap, rows);
+            if (packed) {
+                if (!packedResult || ps > packedResult.scale * 1.001)
+                    packedResult = {scale: ps, rects: packed};
+                break;
+            }
         }
     }
     if (relaxed && (!packedResult || packedResult.scale <= relaxed.scale * 1.3))
         return relaxed;
     if (packedResult)
         return packedResult;
-    s = ps;
-    return {scale: s, rects: scaled(valid, area, s)};
+    return {scale: 0.01, rects: scaled(valid, area, 0.01)};
 }
 
 // Spatial keyboard navigation: index of the rectangle nearest to rects[from] in direction

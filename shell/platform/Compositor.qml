@@ -84,6 +84,15 @@ Singleton {
     // Bumped on Hyprland events that change windows or workspaces, so that bindings calling
     // spacesOn()/windowsOn() with it as an argument re-evaluate.
     property int topologyRevision: 0
+    // While true, window/workspace events trigger a debounced re-read of Hyprland's data (new
+    // windows only carry geometry after a refresh). Overview sets it while open.
+    property bool refreshOnEvents: false
+
+    Timer {
+        id: refreshTimer
+        interval: 60
+        onTriggered: root.refreshSpaces()
+    }
 
     Connections {
         target: Hyprland
@@ -100,6 +109,8 @@ Singleton {
             case "changefloatingmode":
             case "fullscreen":
                 root.topologyRevision++;
+                if (root.refreshOnEvents)
+                    refreshTimer.restart();
             }
         }
     }

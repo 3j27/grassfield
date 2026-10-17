@@ -33,7 +33,7 @@ Variants {
 
         readonly property string screenName: modelData.name
         readonly property bool shown: root.controller.open
-        readonly property bool holdsKeyboard: shown && (root.controller.keyScreen === "" || root.controller.keyScreen === screenName)
+        readonly property bool holdsKeyboard: shown && !root.controller.releasing && (root.controller.keyScreen === "" || root.controller.keyScreen === screenName)
 
         // 0 = windows at their real place, 1 = fully laid out.
         property real progress: shown ? 1 : 0
@@ -159,13 +159,13 @@ Variants {
         function activateWindow(key: string): void {
             const info = byKey[key];
             if (info)
-                Compositor.activate(info.toplevel);
-            root.controller.hide();
+                root.controller.closeAnd(() => Compositor.activate(info.toplevel));
+            else
+                root.controller.hide();
         }
 
         function switchSpace(id: int): void {
-            Compositor.focusSpace(id);
-            root.controller.hide();
+            root.controller.closeAnd(() => Compositor.focusSpace(id));
         }
 
         function addSpace(): void {

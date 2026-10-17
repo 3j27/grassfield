@@ -26,6 +26,12 @@ Scope {
     // the same as full); reduced takes one snapshot per window when opening.
     readonly property bool liveCapture: profile !== "reduced"
 
+    Binding {
+        target: Compositor
+        property: "refreshOnEvents"
+        value: root.open
+    }
+
     function show(): void {
         if (open)
             return;
@@ -35,7 +41,33 @@ Scope {
     }
 
     function hide(): void {
+        releasing = false;
         open = false;
+    }
+
+    // True between releasing the exclusive keyboard grab and the pending action.
+    property bool releasing: false
+    property var pending: null
+
+    // Close Overview and focus something. While the overlay holds the keyboard exclusively the
+    // compositor refocuses the previous window (and its workspace) when the overlay goes away,
+    // undoing the action; so the grab is released first and the action runs shortly after.
+    function closeAnd(action: var): void {
+        pending = action;
+        releasing = true;
+        releaseTimer.restart();
+    }
+
+    Timer {
+        id: releaseTimer
+        interval: 80
+        onTriggered: {
+            const action = root.pending;
+            root.pending = null;
+            if (action)
+                action();
+            root.hide();
+        }
     }
 
     function toggle(): void {
