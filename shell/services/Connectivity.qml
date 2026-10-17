@@ -117,7 +117,7 @@ Singleton {
                 row.net.connect();
         } else if (action === "editor") {
             if (!guarded("nm-connection-editor"))
-                Quickshell.execDetached(["nm-connection-editor"]);
+                Apps.openDetached(["nm-connection-editor"]);
         }
         return action;
     }

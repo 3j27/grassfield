@@ -12,8 +12,8 @@ TestCase {
         compare(env.XDG_CONFIG_HOME, "/w/.dev/apps-home/config");
         compare(env.XDG_CACHE_HOME, "/w/.dev/apps-home/cache");
         compare(env.XDG_STATE_HOME, "/w/.dev/apps-home/state");
-        // The data dirs keep resolving desktop entries and icons.
-        verify(!("XDG_DATA_HOME" in env));
+        compare(env.XDG_DATA_HOME, "/w/.dev/apps-home/data");
+        // The system data dirs keep resolving desktop entries and icons.
         verify(!("XDG_DATA_DIRS" in env));
     }
 

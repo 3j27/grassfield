@@ -98,7 +98,7 @@ Singleton {
     // ---- launching ------------------------------------------------------------------------------
 
     // A GRASSFIELD_DEV session (nested, on the owner's machine) must never start an app with the
-    // owner's profiles: apps launched by the shell get their own XDG config, cache and state homes
+    // owner's profiles: apps launched by the shell get their own XDG config, cache, state and data homes
     // (docs/specs/dock.md, dev notes). Production launches are untouched.
     readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
     readonly property string appsHome: AppLaunch.appsHomeFor(Quickshell.env("GRASSFIELD_STATE_HOME"), Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")

@@ -3,12 +3,13 @@
 // Launch helpers of Apps.qml (docs/specs/dock.md, "Dev notes: isolated app launches"). Pure functions.
 
 // Environment that isolates the config, cache and state of every app launched from a GRASSFIELD_DEV session
-// (XDG_DATA_HOME / XDG_DATA_DIRS stay: desktop entries and icons must still resolve).
+// (XDG_DATA_DIRS stays: system desktop entries and icons must still resolve; XDG_DATA_HOME is isolated too).
 function isolatedEnvironment(appsHome) {
     return {
         "XDG_CONFIG_HOME": appsHome + "/config",
         "XDG_CACHE_HOME": appsHome + "/cache",
-        "XDG_STATE_HOME": appsHome + "/state"
+        "XDG_STATE_HOME": appsHome + "/state",
+        "XDG_DATA_HOME": appsHome + "/data"
     };
 }
 
