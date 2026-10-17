@@ -112,7 +112,7 @@ shell_sees_new_window() { # <label>
   local f addr shown="" i app
   probes=$((probes + 1))
   app=gf-event-flood-$probes
-  WAYLAND_DISPLAY=$sock setsid foot --app-id "$app" --title "event-flood $1" >/dev/null 2>&1 </dev/null &
+  WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" --name event-flood foot --app-id "$app" --title "event-flood $1" >/dev/null 2>&1 </dev/null &
   f=$!
   pids+=("$f")
   addr=$(wait_address "$f" 50)
@@ -173,7 +173,7 @@ done
 # ---- 2 Lua flood ----------------------------------------------------------------------------------------------------
 say ""
 say "[Lua flood: one dispatch with 1000 hello() and 1000 appmenu(<window>) calls]"
-WAYLAND_DISPLAY=$sock setsid foot --title "event-flood target" >/dev/null 2>&1 </dev/null &
+WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" --name event-flood foot --title "event-flood target" >/dev/null 2>&1 </dev/null &
 target=$!
 pids+=("$target")
 taddr=$(wait_address "$target" 50)
