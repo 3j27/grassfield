@@ -32,9 +32,53 @@ Design: ADR-0010. Rules: master-prompt R12, §5.9. Gates: §10 L1–L5.
 ## Known limitations
 - Successful-unlock tests need the owner's password: the agent only verifies failure paths (L2 owner check).
 - L3 cannot be verified in nested.
-- UNKNOWN (to verify first): polkit agents register per logind session. The nested shell shares the owner's
-  session, where omarchy-shell already owns the agent, so registration in nested is expected to fail with
-  "agent already exists". The module must handle that (log + no dialog, never auto-approve). If confirmed,
-  L5 functional checks move to L2 (owner); L1 covers only the refusal path and unit tests of the dialog model.
+- VERIFIED 2026-10-17 (nested): polkit agents register per logind session. The nested shell shares the owner's
+  session, where omarchy-shell already owns the agent, so registration in nested fails with "An authentication
+  agent already exists for the given subject" (confirmed). The module logs it once, shows no dialog and approves
+  nothing. L5 functional checks move to L2 (owner); L1 covers the refusal path and unit tests of the dialog model.
 - Nested runs must not take a real logind sleep inhibitor (it would delay the owner's real suspend): the
   inhibitor code path is disabled when `GRASSFIELD_DEV=1` and verified in L2.
+
+## Implementation (M2)
+| Path | Role |
+|---|---|
+| `shell/security/LockMachine.js` | Pure state machine `next(state, event)` and helpers (marker, initials, Caps Lock inference, clock pattern) |
+| `shell/security/LockController.qml` | Auth controller over an injected PAM backend: one prompt answered, 30 s timeout, secret dropped on every outcome |
+| `shell/security/PasswordField.qml` | Shared password entry (Password echo, sensitive-data hints, plain-text placeholder, return arrow) |
+| `shell/security/lock/Lock.qml` | Singleton: `WlSessionLock`, `PamContext` (password; fingerprint only if its PAM file exists), crash marker, IPC `lock` |
+| `shell/security/lock/LockView.qml` | Lock surface: blurred + dimmed `WallpaperArt`, date and clock, avatar/initials, name, field, one hint line |
+| `shell/security/polkit/` | `AuthAgent` (PolkitAgent + overlay window, IPC `polkit status`), `AuthDialog`, `AuthDialogModel` |
+| `shell/security/idle/` | `Idle` (IdleMonitor, dim layer, idle lock, IPC `idle status`), `SleepInhibitor`, `IdleModel.js` |
+
+IPC (all on the shell instance): `lock lock` → `ok` / `already-locked` / `refused: missing-pam`; `lock status` →
+`unlocked|locking|locked|authenticating` (test hook); `polkit status` → `registered|unregistered`; `idle status` → JSON.
+
+States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> unlocked`;
+`failure|error|timeout|abort` → `locked`; a lock dropped by the compositor → `locking` (re-acquired every 500 ms);
+fingerprint success unlocks from `locked`. Unknown states/events never unlock (exhaustive test).
+
+Decisions:
+- Crash recovery marker: `$XDG_RUNTIME_DIR/grassfield-lock-<HYPRLAND_INSTANCE_SIGNATURE>` holds `locked`/`unlocked`
+  (atomic, blocking write before `WlSessionLock.locked = true`, after unlock). A starting shell re-locks unless it
+  reads exactly `unlocked`. Chosen over parsing `hyprctl monitors` (Omarchy's `solitaryBlockedBy` heuristic).
+- `PamContext.user` is left unset: PAM authenticates the uid running the shell, not `$USER`.
+- Prompts are counted per `pamMessage` (one answer, a second prompt aborts): `responseRequired` stays true after
+  `respond()` until PAM's next message (found in nested L2).
+- Missing `/etc/pam.d/omarchy-lock-password`: new locks are refused (`refused: missing-pam`, logged); a lock being
+  restored proceeds with a persistent "Authentication service unavailable" message (never fail open).
+- Lock before sleep: Quickshell 0.3.1 has no D-Bus/logind API, so `systemd-inhibit --what=sleep --mode=delay … cat`
+  (stdin pipe: the inhibitor dies with the shell) plus `gdbus monitor` on `/org/freedesktop/login1` for
+  `PrepareForSleep`. Released once the lock is `secure`, or after 4 s; re-taken on resume. Skipped when
+  `GRASSFIELD_DEV=1` (log `grassfield-idle: inhibitor skipped (dev)`). Lid close locks through logind's
+  `HandleLidSwitch=suspend` → `PrepareForSleep`; no separate lid binding.
+- Idle: `IdleMonitor { respectInhibitors: true }`, dim at T−10 s, lock at T; Quickshell 0.3.1 keeps the timeout an
+  `IdleMonitor` was enabled with, so the monitor is re-enabled on every timeout change (verified in nested).
+- Untrusted strings (PAM messages, polkit message/action ID/prompt/identities, user name) use `Text.PlainText`.
+
+`grassfield.json`: `lock.idleMinutes` (integer 0–240, default 5, 0 = never) is read through `Settings.lockIdleMinutes`
+(clamped); invalid values fall back to 5 in `IdleModel.timings`.
+
+Known gaps (M2): polkit `details` (program, command line) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec puts
+the program in `message`, which is shown. Caps Lock is inferred from typed letters (no lock-key state in Quickshell).
+Display power-off after the lock (T+60 s) and D-Bus `org.freedesktop.ScreenSaver` inhibitors are not handled.
+The marker file of a dead compositor instance stays in `$XDG_RUNTIME_DIR` until logout (a few bytes).
