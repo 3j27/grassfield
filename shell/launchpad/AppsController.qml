@@ -43,8 +43,6 @@ Scope {
     property var layout: []
     property var items: []
     property var usage: Ranking.newUsage()
-    // Desktop entry ids hidden by OnlyShowIn / NotShowIn for $XDG_CURRENT_DESKTOP.
-    property var hiddenIds: ({})
     // Stable display items: every app item and folder item, keyed by item key. The grid keeps one
     // cell per entry of `allItems` ({key, state}) and only moves it: `state.slot` is the index of
     // the item in `items`, or -1 when it is not shown or is outside the window of the current
@@ -209,8 +207,8 @@ Scope {
         const map = {};
         const cache = {};
         for (const e of DesktopEntries.applications.values) {
-            // DesktopEntry exposes NoDisplay only; OnlyShowIn / NotShowIn come from `hiddenIds`.
-            if (e.noDisplay || Model.isHidden(root.hiddenIds, e.id))
+            // NoDisplay, OnlyShowIn and NotShowIn: the shared list in the Apps service.
+            if (!Apps.isListed(e))
                 continue;
             const rec = {id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
                 keywords: Array.from(e.keywords), icon: e.icon, entry: e};
@@ -408,17 +406,6 @@ Scope {
         }
     }
 
-    Process {
-        id: showIn
-        command: ["sh", Quickshell.shellPath("launchpad/hidden-entries.sh")]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.hiddenIds = Model.parseHidden(text);
-                root.rebuildApps();
-            }
-        }
-    }
-
     // ---- persistence (0600, like the search usage file) ----------------------------------
 
     Process {
@@ -450,9 +437,9 @@ Scope {
     }
 
     Connections {
-        target: DesktopEntries
+        target: Apps
 
-        function onApplicationsChanged(): void {
+        function onListChanged(): void {
             root.rebuildApps();
         }
     }
@@ -494,9 +481,10 @@ Scope {
     }
 
     Component.onCompleted: {
-        rebuildApps();
+        // Before the first hidden-list run the Apps service emits listChanged by itself.
+        if (Apps.hiddenReady)
+            rebuildApps();
         prepare.running = true;
-        showIn.running = true;
     }
 
     AppsWindow {

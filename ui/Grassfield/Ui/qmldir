@@ -10,3 +10,4 @@ Slider 1.0 Slider.qml
 Toggle 1.0 Toggle.qml
 Tooltip 1.0 Tooltip.qml
 Button 1.0 Button.qml
+JsonSafety 1.0 JsonSafety.js

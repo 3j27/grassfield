@@ -150,7 +150,13 @@ TestCase {
             '{"version":1,"x":-12345678901234567}',
             '{"version":1,"appearance":"dark","appearance":"light"}',
             '{"version":1,"a":{"k":1,"k":2}}',
-            '{"version":1,"7":true}'
+            '{"version":1,"7":true}',
+            '{"version":1,"x":9007199254740993.0}',
+            '{"version":1,"x":9.007199254740993e15}',
+            '{"version":1,"x":-9007199254740993E0}',
+            '{"version":1,"x":90071992547409930e-1}',
+            '{"version":1,"__proto__":1,"__proto__":2}',
+            '{"version":1,"a":{"__proto__":{},"__proto__":{}}}'
         ];
         for (const bad of cases) {
             const r = Store.setValue(bad, "appearance", "light");
@@ -161,7 +167,10 @@ TestCase {
         for (const good of [
             '{"version":1,"s":"9007199254740993 \\" {\\"k\\":1,\\"k\\":2}"}',
             '{"version":1,"a":{"k":1},"b":{"k":2}}',
-            '{"version":1,"x":9007199254740991,"y":1.5e30}'
+            '{"version":1,"x":9007199254740991,"y":1.5e30}',
+            '{"version":1,"x":9007199254740991.0,"y":9.007199254740991e15,"z":1e3,"w":0.0}',
+            '{"version":1,"__proto__":{"a":1}}',
+            '{"version":1,"a":{"__proto__":1},"b":{"__proto__":2}}'
         ])
             verify(Store.setValue(good, "appearance", "light").ok, good);
     }

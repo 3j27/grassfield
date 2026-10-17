@@ -9,6 +9,7 @@ import qs.store
 // "settings-roundtrip: PASS" and exits 0, or prints the failures and exits 1.
 // Phases: (1) defaults, clamping, write and read back; (2) a write keeps every schema key;
 // (3) a malformed file is never overwritten; (4) out-of-range loaded values are clamped;
+// (6) a file with an integer beyond 2^53 is never rewritten;
 // (5) an external edit made right before a setter survives it, and unknown keys are preserved.
 // Files live under $GRASSFIELD_TEST_TMP (test.sh removes it); the test also removes its own dir.
 ShellRoot {
@@ -25,6 +26,8 @@ ShellRoot {
     readonly property string dirMerge: base + "/merge"
     readonly property string mergeText: '{"version":1,"appearance":"dark","lock":{"idleMinutes":3},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
     readonly property string mergeEdited: '{"version":1,"appearance":"light","lock":{"idleMinutes":42},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
+    readonly property string dirUnsafe: base + "/unsafe"
+    readonly property string unsafeText: '{"version":1,"appearance":"dark","big":9007199254740993.0}'
     property var failures: []
 
     function check(name: string, ok: bool): void {
@@ -232,6 +235,49 @@ ShellRoot {
                 root.check("merge external idle", !!o.lock && o.lock.idleMinutes === 42);
                 root.check("merge unknown key", !!o.futureKey && o.futureKey.a.join(",") === "1,2");
                 root.check("merge unknown nested key", !!o.notifications && o.notifications.extra === "keep");
+                unsafeSetup.running = true;
+            }
+        }
+    }
+
+    // Phase 6: a file JSON.parse cannot round-trip (integer beyond 2^53) is never rewritten.
+    Process {
+        id: unsafeSetup
+        command: ["sh", "-c", 'mkdir -p "$1" && printf "%s" "$2" > "$1/grassfield.json"', "sh", root.dirUnsafe, root.unsafeText]
+        onRunningChanged: {
+            if (!running)
+                unsafe.configDir = root.dirUnsafe;
+        }
+    }
+
+    SettingsStore {
+        id: unsafe
+        saveDelay: 10
+        property bool done: false
+        onLoadedFile: {
+            if (done)
+                return;
+            done = true;
+            root.check("unsafe blocked", unsafe.writeBlocked);
+            unsafe.setAppearance("light");
+            root.check("unsafe keeps memory", unsafe.data.appearance === "light");
+            unsafe.flush();
+            unsafeWait.start();
+        }
+    }
+
+    Timer {
+        id: unsafeWait
+        interval: 400
+        onTriggered: readUnsafe.running = true
+    }
+
+    Process {
+        id: readUnsafe
+        command: ["cat", root.dirUnsafe + "/grassfield.json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.check("unsafe untouched", text === root.unsafeText);
                 root.finish();
             }
         }

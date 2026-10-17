@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Grassfield.Ui
 
 // grassfield.json (contract version 1): schema, defaults, persistence. Not a singleton so that
 // tests can create independent instances; the shell uses it through the Settings singleton.
@@ -11,8 +12,10 @@ import Quickshell.Io
 // are merges: each setter records its dotted key in `dirty`; before writing, the file is re-read
 // and only the dirty keys are replaced, so external edits (Settings app, by hand) and keys this
 // shell does not know (not allowed by the schema, but never dropped) survive. The result is
-// written atomically. A file that exists but is not valid JSON is never overwritten
-// (`writeBlocked`); the user fixes it.
+// written atomically. A file that exists but is not valid JSON, or that JSON.parse cannot
+// round-trip (integers beyond 2^53, duplicate keys; JsonSafety.js, same rule as the Settings app),
+// is never overwritten (`writeBlocked`, logged once); the in-memory changes stay and the user
+// fixes the file.
 Scope {
     id: root
 
@@ -201,6 +204,10 @@ Scope {
             checkText(text);
             return;
         }
+        if (JsonSafety.unsafeReason(text) !== "") {
+            checkText(text);
+            return;
+        }
         for (const path in dirty) {
             const parts = path.split(".");
             let target = obj;
@@ -237,8 +244,16 @@ Scope {
         } catch (e) {
             ok = false;
         }
+        let why = "is not valid JSON";
+        if (ok) {
+            const unsafe = JsonSafety.unsafeReason(text);
+            if (unsafe !== "") {
+                ok = false;
+                why = "cannot be rewritten safely: " + unsafe;
+            }
+        }
         if (!ok && !writeBlocked)
-            console.warn("settings: " + file.path + " is not valid JSON; keeping the file untouched, changes will not be saved until it is fixed");
+            console.warn("settings: " + file.path + " " + why + "; keeping the file untouched, changes will not be saved until it is fixed");
         writeBlocked = !ok;
         if (!ok)
             saveTimer.stop();
