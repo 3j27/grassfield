@@ -463,7 +463,7 @@ Singleton {
 
     function focusSpace(id: int): void {
         if (id > 0)
-            Hyprland.dispatch("hl.dsp.focus({ workspace = \"" + Math.floor(id) + "\" })");
+            dispatchRequest(Minimized.focusRequest(Math.floor(id)));
     }
 
     // Move a window to a Space without following it (the address is validated by moveRequest).

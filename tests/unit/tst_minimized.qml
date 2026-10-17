@@ -77,6 +77,21 @@ TestCase {
         compare(Minimized.moveRequest("55ab", "3\", x = 1"), "");
         compare(Minimized.moveRequest("55ab", ""), "");
         compare(Minimized.moveRequest("", "3"), "");
+        compare(Minimized.moveRequest("55ab", "undefined"), "");
+        compare(Minimized.moveRequest("55ab", undefined), "");
+        compare(Minimized.moveRequest("55ab", "foo"), "");
+        compare(Minimized.moveRequest("55ab", "0"), "");
+        compare(Minimized.moveRequest("55ab", 4).indexOf("workspace = \"4\"") > 0, true);
+    }
+
+    function test_focusRequestValidates() {
+        compare(Minimized.focusRequest(3), "hl.dsp.focus({ workspace = \"3\" })");
+        compare(Minimized.focusRequest("12"), "hl.dsp.focus({ workspace = \"12\" })");
+        compare(Minimized.focusRequest(0), "");
+        compare(Minimized.focusRequest(-1), "");
+        compare(Minimized.focusRequest(1.5), "");
+        compare(Minimized.focusRequest(undefined), "");
+        compare(Minimized.focusRequest("3\", x = 1"), "");
     }
 
     function test_fullscreenRequest() {
