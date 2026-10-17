@@ -48,6 +48,8 @@ fi
 
 work=$dev/input-consistency
 mkdir -p "$work"
+# Capture files of earlier runs (possibly with more rounds) must not be read as this run's.
+rm -f "$work"/*.cap
 log=$work/run-$(date +%Y%m%d-%H%M%S).log
 hyprlog=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/hyprland.log
 

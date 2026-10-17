@@ -45,6 +45,9 @@ namespace {
         CGrassfieldTitlebar*      deco = nullptr; // checked against state().titlebars before use
         std::optional<tb::Button> button;         // pressed button, activated on release over the same button
         bool                      dragging = false;
+        bool                      moved    = false; // the pointer passed kDragThreshold: the window follows it
+        bool                      unzoom   = false; // pressed on a maximized window: un-zoom it when the move starts
+        CBox                      zoomedSurface;    // surface box of that maximized window at the press
         PHLWINDOWREF              window;   // window being moved
         Vector2D                  pressPos; // pointer at press (global logical)
         CBox                      startBox; // window layout box at press
@@ -106,6 +109,14 @@ namespace {
             gf::log(Log::WARN, "titlebar {} failed: {}", action, result.error().message);
     }
 
+    // The minimize path, shared by the minimize button and a double-click set to "minimize": the shell owns
+    // the Dock tile rectangle, so it is asked to minimize (it answers with hl.plugin.grassfield.minimize, or
+    // parks the window on special:minimized itself when the plugin lacks the feature).
+    void requestMinimize(const PHLWINDOW& w) {
+        gf::ipc::postEvent(gf::gfc::minimizeRequestJson(std::format("{:x}", reinterpret_cast<uintptr_t>(w.get()))));
+    }
+
+    // The one zoom toggle, shared by the zoom button and the double-click on the drag area.
     void toggleZoom(const PHLWINDOW& w) {
         auto& fs = Fullscreen::controller();
         if (!fs)
@@ -115,21 +126,50 @@ namespace {
         fs->setFullscreenMode(w, target, target, false);
     }
 
+    Fullscreen::eFullscreenMode fullscreenMode(const PHLWINDOW& w) {
+        const auto& fs = Fullscreen::controller();
+        return fs ? fs->getFullscreenModes(w).internal : Fullscreen::FSMODE_NONE;
+    }
+
+    // A move that starts on a maximized window: leave the maximized mode first (the layout gives the window
+    // back its floating size), then place that size under the pointer (macOS). Moving the maximized box
+    // itself would write it into the floating geometry the zoom toggle restores (FR8 regression, 2026-10-17).
+    // Measured in 0.56.2: a floating window's layout box is its surface box, a maximized one's is the work
+    // area (decorations included), hence the surface box recorded at the press as the reference.
+    void unzoomUnderPointer(SPointerGrab& grab, const PHLWINDOW& w, const SP<Layout::ITarget>& target, const Vector2D& pointer) {
+        if (fullscreenMode(w) == Fullscreen::FSMODE_MAXIMIZED)
+            toggleZoom(w);
+        const CBox  restored = target->position();
+        const CBox& zoomed   = grab.zoomedSurface;
+        const auto  box      = tb::unzoomedDragBox(tb::Rect{zoomed.x, zoomed.y, zoomed.w, zoomed.h}, restored.w, restored.h, grab.pressPos.x, grab.pressPos.y, pointer.x, pointer.y);
+        gf::log(Log::DEBUG, "titlebar drag un-zooms: restored {:.0f}x{:.0f} at {:.0f},{:.0f}", box.w, box.h, box.x, box.y);
+        grab.startBox = CBox{box.x, box.y, box.w, box.h};
+        grab.pressPos = pointer;
+        grab.unzoom   = false;
+    }
+
     // Interactive move driven by the plugin: the window follows the pointer from the press point.
     // S2 history: with CLayoutManager::beginDragTarget and CKeybindManager::changeMouseBindMode the window
     // jumped by (window middle - press point). The cause was most likely Config::Actions::focus() warping
     // the cursor to the window middle before the drag started (found afterwards, now avoided in
     // focusAndRaise). Hyprland's own drag (with snapping) should be re-evaluated in M1; this move has no snapping.
-    void updateMove(const SPointerGrab& grab) {
+    // Nothing moves until the pointer has passed kDragThreshold: a click (or the first click of a
+    // double-click) never writes the window geometry.
+    void updateMove(SPointerGrab& grab) {
         const auto w = grab.window.lock();
         if (!w || !g_layoutManager || !g_pInputManager)
             return;
         const auto target = w->layoutTarget();
         if (!target)
             return;
-        const Vector2D delta = g_pInputManager->getMouseCoordsInternal() - grab.pressPos;
-        CBox           box   = grab.startBox;
-        box.translate(delta);
+        const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
+        if (!grab.moved && !tb::exceedsDragThreshold(pointer.x - grab.pressPos.x, pointer.y - grab.pressPos.y))
+            return;
+        grab.moved = true;
+        if (grab.unzoom)
+            unzoomUnderPointer(grab, w, target, pointer);
+        CBox box = grab.startBox;
+        box.translate(pointer - grab.pressPos);
         g_layoutManager->setTargetGeom(box, target);
     }
 
@@ -402,11 +442,28 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         return true;
     }
 
-    // Drag area: double-click zooms, otherwise start an interactive move.
+    // Drag area: a double-click does what Settings say (windows.titlebarDoubleClick, pushed by the shell with
+    // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, or nothing (the
+    // press is then a single press). Otherwise the press starts an interactive move.
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
-        gf::log(Log::DEBUG, "titlebar double-click -> toggle zoom");
-        toggleZoom(w);
-        input.presses.claim(e.button, false); // acts now; its release is still the titlebar's
+        switch (gf::state().doubleClickAction) {
+            case gf::gfc::DoubleClickAction::Zoom:
+                gf::log(Log::DEBUG, "titlebar double-click -> toggle zoom");
+                toggleZoom(w);
+                input.presses.claim(e.button, false); // acts now; its release is still the titlebar's
+                return true;
+            case gf::gfc::DoubleClickAction::Minimize:
+                gf::log(Log::DEBUG, "titlebar double-click -> minimize");
+                requestMinimize(w);
+                input.presses.claim(e.button, false);
+                return true;
+            case gf::gfc::DoubleClickAction::None: break;
+        }
+    }
+
+    const auto mode = fullscreenMode(w);
+    if (mode != Fullscreen::FSMODE_NONE && mode != Fullscreen::FSMODE_MAXIMIZED) {
+        input.presses.claim(e.button, false); // focus and raise only; the release is still the titlebar's
         return true;
     }
 
@@ -415,6 +472,9 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         input.grab          = {};
         input.grab.deco     = this;
         input.grab.dragging = true;
+        input.grab.unzoom   = mode == Fullscreen::FSMODE_MAXIMIZED;
+        if (input.grab.unzoom)
+            input.grab.zoomedSurface = w->geometricBox(Desktop::View::IGeometric::GEOMETRIC_GOAL);
         input.grab.window   = w;
         input.grab.pressPos = coords;
         input.grab.startBox = target->position();
@@ -435,12 +495,7 @@ void CGrassfieldTitlebar::activate(tb::Button button) {
             logIfFailed("close", Config::Actions::closeWindow(w));
             break;
         case tb::Button::Zoom: gf::log(Log::DEBUG, "titlebar zoom"); toggleZoom(w); break;
-        case tb::Button::Minimize:
-            // PLACEHOLDER (M2): real minimize (hidden state + animation to the Dock) is not implemented.
-            // The button only reports the request on the gfc/1 event stream; the window stays visible.
-            gf::log(Log::DEBUG, "titlebar minimize (placeholder: event only)");
-            gf::ipc::postEvent(gf::gfc::minimizeRequestJson(std::format("{:x}", reinterpret_cast<uintptr_t>(w.get()))));
-            break;
+        case tb::Button::Minimize: gf::log(Log::DEBUG, "titlebar minimize"); requestMinimize(w); break;
     }
 }
 
@@ -470,9 +525,9 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
         if (!release.owned || !release.endsGesture)
             return; // a client's press (or an immediate action): nothing to finish here
 
-        const SPointerGrab grab = std::exchange(input.grab, {});
+        SPointerGrab grab = std::exchange(input.grab, {});
         if (grab.dragging)
-            updateMove(grab); // final position at the release point
+            updateMove(grab); // final position at the release point (none for a click)
 
         if (grab.button && isLive(grab.deco) && g_pInputManager) {
             const auto pos = g_pInputManager->getMouseCoordsInternal();

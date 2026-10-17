@@ -8,9 +8,9 @@ cd "$(dirname "$0")"
 mkdir -p build
 what=${1:-all}
 
-core_srcs=(src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp)
-plugin_srcs=(src/main.cpp src/Titlebar.cpp src/Ipc.cpp "${core_srcs[@]}")
-test_srcs=(tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp)
+core_srcs=(src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp)
+plugin_srcs=(src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp "${core_srcs[@]}")
+test_srcs=(tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp)
 
 # Lua symbols are resolved at load time from Hyprland's own liblua (5.5): only Lua's headers are needed.
 # shellcheck disable=SC2207
@@ -39,12 +39,12 @@ if [[ $what == compdb || $what == all || $what == tidy ]]; then
     printf '%s\n' g++ "$@" -c "$src" | jq -R . | jq -s --arg d "$PWD" --arg f "$PWD/$src" '{directory: $d, file: $f, arguments: .}'
   }
   {
-    for src in src/main.cpp src/Titlebar.cpp src/Ipc.cpp "${core_srcs[@]}"; do entry "$src" "${plugin_flags[@]}"; done
+    for src in src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp "${core_srcs[@]}"; do entry "$src" "${plugin_flags[@]}"; done
     for src in "${test_srcs[@]}"; do entry "$src" "${test_flags[@]}"; done
   } | jq -s . > build/compile_commands.json
 fi
 
 # Gate Q1: clang-tidy over the glue and the core (config: .clang-tidy; analyzer findings are errors).
 if [[ $what == tidy ]]; then
-  clang-tidy -p build --quiet src/main.cpp src/Titlebar.cpp src/Ipc.cpp "${core_srcs[@]}" "${test_srcs[@]}"
+  clang-tidy -p build --quiet src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp "${core_srcs[@]}" "${test_srcs[@]}"
 fi

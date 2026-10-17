@@ -42,6 +42,10 @@ namespace gf::theme {
     // ---- Interaction ----
     inline constexpr uint32_t kDoubleClickMs   = 400; // max delay between the two presses
     inline constexpr double   kDoubleClickSlop = 4.0; // max pointer travel between the two presses
+    // Pointer travel from the press point before a titlebar press moves the window. Below it the press is
+    // a click: the window geometry is never touched (a maximized window's box must not become its
+    // floating geometry, which the zoom toggle restores).
+    inline constexpr double kDragThreshold = 4.0;
 
     // ---- Colors ----
     inline constexpr Rgba kCloseColor    = fromHex(0xE5534B);

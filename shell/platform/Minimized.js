@@ -4,14 +4,46 @@
 // minimized: Hyprland has no minimized state, so the record is the source of truth for the Dock.
 // Record: {toplevel, address, appId, title}.
 
-// Validated lowercase hex of a Hyprland window address ("0x" prefix optional), "" if invalid.
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "overview", "theme"];
+var pluginVerbs = ["hello", "minimize", "restore", "overview", "theme", "config"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
 }
 
+// Lua function body calling a plugin verb only when the plugin registered it (a missing plugin is a
+// no-op), built from already validated pieces. Quickshell sends it as `return hl.dispatch(<body>)`.
+function guardedPluginCall(verb, args) {
+    return "function() local p = hl.plugin and hl.plugin.grassfield; if p and p." + verb + " then p." + verb + "(" + args.join(", ") + ") end end";
+}
+
+// hl.plugin.grassfield.minimize / restore(address, x, y, w, h) (gfc/1, ADR-0007). The address is
+// validated hex, the rectangle (layout coordinates, the Dock tile) finite numbers rounded to integers;
+// "" when anything is invalid (callers must not dispatch it).
+function windowCall(verb, address, rect) {
+    const hex = normalizeAddress(address);
+    const r = finiteRect(rect);
+    if ((verb !== "minimize" && verb !== "restore") || hex === "" || !r)
+        return "";
+    const args = ["\"0x" + hex + "\""];
+    [r.x, r.y, r.w, r.h].forEach(n => args.push(String(Math.round(n))));
+    return guardedPluginCall(verb, args);
+}
+
+// Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
+var pluginConfig = {
+    titlebarDoubleClick: ["zoom", "minimize", "none"]
+};
+
+function configCall(key, value) {
+    if (typeof key !== "string" || !Object.prototype.hasOwnProperty.call(pluginConfig, key))
+        return "";
+    if (typeof value !== "string" || pluginConfig[key].indexOf(value) < 0)
+        return "";
+    return guardedPluginCall("config", ["\"" + key + "\"", "\"" + value + "\""]);
+}
+
+// Validated lowercase hex of a Hyprland window address ("0x" prefix optional), "" if invalid.
 function normalizeAddress(address) {
     const m = /^(?:0x)?([0-9a-fA-F]{1,16})$/.exec(String(address));
     return m ? m[1].toLowerCase() : "";
@@ -85,6 +117,19 @@ function prune(list, live) {
 function forApp(list, appId) {
     const wanted = String(appId).toLowerCase();
     return list.filter(r => String(r.appId).toLowerCase() === wanted);
+}
+
+// Parses Hyprland's `movewindowv2` event data "<address>,<workspace id>,<workspace name>" (the
+// name may itself contain commas): {address (validated hex), workspace (name)} or null.
+function parseMoveWindowV2(data) {
+    const text = String(data);
+    const first = text.indexOf(",");
+    const second = first < 0 ? -1 : text.indexOf(",", first + 1);
+    if (second < 0)
+        return null;
+    const address = normalizeAddress(text.slice(0, first));
+    const workspace = text.slice(second + 1);
+    return address !== "" && workspace !== "" ? {address: address, workspace: workspace} : null;
 }
 
 // Parses a `grassfield` raw event payload; returns the validated address of a minimize-request, or "".

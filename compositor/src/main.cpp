@@ -5,6 +5,7 @@
 // its degraded mode because no `grassfield` capabilities event is ever posted.
 
 #include "Ipc.hpp"
+#include "Minimize.hpp"
 #include "Plugin.hpp"
 #include "Titlebar.hpp"
 
@@ -152,6 +153,7 @@ namespace {
     void teardown() {
         auto& s = state();
         s.listeners.clear();
+        gf::minimizer::stop(); // before the Lua entry points go: animations complete, snapshots dropped
         gf::ipc::unregisterAll();
         removeAllTitlebars();
         s.active = false;
@@ -185,6 +187,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     const bool ok = gf::guarded("PLUGIN_INIT", [&] {
         registerListeners();
+        if (!gf::minimizer::start())
+            gf::log(Log::WARN, "minimize render hooks failed to register; minimize not advertised");
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");
 

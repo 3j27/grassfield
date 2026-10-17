@@ -60,13 +60,48 @@ namespace gf::gfc {
         return out;
     }
 
+    namespace {
+        std::string windowEventJson(std::string_view type, std::string_view windowAddress) {
+            std::string out;
+            appendHeader(out, type);
+            out += R"(,"address":")";
+            out += jsonEscape(windowAddress);
+            out += "\"}";
+            return out;
+        }
+    } // namespace
+
     std::string minimizeRequestJson(std::string_view windowAddress) {
-        std::string out;
-        appendHeader(out, "minimize-request");
-        out += R"(,"address":")";
-        out += jsonEscape(windowAddress);
-        out += "\"}";
+        return windowEventJson("minimize-request", windowAddress);
+    }
+
+    std::string minimizedJson(std::string_view windowAddress) {
+        return windowEventJson("minimized", windowAddress);
+    }
+
+    std::string restoredJson(std::string_view windowAddress) {
+        return windowEventJson("restored", windowAddress);
+    }
+
+    std::vector<std::string_view> features(bool minimize, bool config) {
+        std::vector<std::string_view> out{kFeatureDecorations};
+        if (minimize)
+            out.push_back(kFeatureMinimize);
+        if (config)
+            out.push_back(kFeatureConfig);
         return out;
+    }
+
+    std::optional<DoubleClickAction> parseDoubleClickAction(std::string_view key, std::string_view value) {
+        if (key != kConfigTitlebarDoubleClick)
+            return std::nullopt;
+        if (value == "zoom")
+            return DoubleClickAction::Zoom;
+        if (value == "minimize")
+            return DoubleClickAction::Minimize;
+        if (value == "none")
+            return DoubleClickAction::None;
+        return std::nullopt;
     }
 
     std::string luaDispatchRequest(std::string_view verb) {
