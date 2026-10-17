@@ -29,6 +29,7 @@ FocusScope {
         spacing: Tokens.spacingXs
 
         Text {
+            textFormat: Text.PlainText
             x: Tokens.menuItemPadding
             text: qsTr("Sound")
             color: Appearance.colors.text
@@ -95,6 +96,7 @@ FocusScope {
         }
 
         Text {
+            textFormat: Text.PlainText
             x: Tokens.menuItemPadding
             visible: root.devices.length > 0
             text: qsTr("Output")

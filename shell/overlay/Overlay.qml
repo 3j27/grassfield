@@ -106,7 +106,7 @@ Variants {
                 case "above":
                     return Popups.anchorY - height;
                 case "center":
-                    return (win.height - height) / 2 - win.height * 0.08;
+                    return (win.height - height) / 2 - win.height * Tokens.panelDialogRaise;
                 }
                 return Popups.anchorY;
             }

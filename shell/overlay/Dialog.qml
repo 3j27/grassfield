@@ -39,6 +39,7 @@ FocusScope {
         spacing: Tokens.spacingMd
 
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: root.title
             visible: text !== ""
@@ -50,6 +51,7 @@ FocusScope {
         }
 
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: root.message
             visible: text !== ""

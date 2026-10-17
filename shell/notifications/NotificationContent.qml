@@ -68,6 +68,7 @@ Item {
             height: title.implicitHeight
 
             Text {
+                textFormat: Text.PlainText
                 id: stamp
                 anchors.right: parent.right
                 text: root.timeText
@@ -97,7 +98,7 @@ Item {
             text: root.body
             textFormat: Text.StyledText
             color: Appearance.colors.text
-            opacity: 0.85
+            opacity: Tokens.materialBodyOpacity
             wrapMode: Text.Wrap
             maximumLineCount: root.maxBodyLines
             elide: Text.ElideRight

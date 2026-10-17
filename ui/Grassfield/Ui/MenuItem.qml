@@ -60,6 +60,7 @@ Item {
         }
 
         Text {
+            textFormat: Text.PlainText
             id: label
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
@@ -76,6 +77,7 @@ Item {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: root.shortcut !== ""
             anchors.verticalCenter: parent.verticalCenter
             text: root.shortcut
