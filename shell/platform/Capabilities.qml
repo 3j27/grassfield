@@ -5,7 +5,8 @@ import Quickshell
 import Quickshell.Hyprland
 
 // Capability detection for grassfield-compositor (contract gfc/1).
-// Sends `grassfield:hello` once and waits for a Hyprland raw event named `grassfield` whose
+// Sends the hello every helloRetryMs (the first ones can predate Quickshell's event socket, so
+// the reply would be missed) and waits for a Hyprland raw event named `grassfield` whose
 // data is JSON {"v":"gfc/1","type":"capabilities","features":[...]}. No reply within
 // helloTimeoutMs means degraded mode (pluginPresent = false).
 Singleton {
@@ -13,6 +14,7 @@ Singleton {
 
     readonly property string protocol: "gfc/1"
     readonly property int helloTimeoutMs: 1500
+    readonly property int helloRetryMs: 250
 
     property bool pluginPresent: false
     // False until the hello reply arrived or the timeout elapsed.
@@ -43,6 +45,8 @@ Singleton {
         pluginPresent = true;
         settled = true;
         timeout.stop();
+        retry.stop();
+        console.info("grassfield: compositor plugin present, features:", features.join(","));
     }
 
     Connections {
@@ -58,14 +62,25 @@ Singleton {
         id: timeout
         interval: root.helloTimeoutMs
         onTriggered: {
+            retry.stop();
             if (!root.pluginPresent)
                 console.info("grassfield: no compositor plugin reply, running in degraded mode");
             root.settled = true;
         }
     }
 
+    // Resends the hello until a reply arrives or the timeout elapses. A plugin loaded later
+    // is still accepted: the capabilities event is handled at any time.
+    Timer {
+        id: retry
+        interval: root.helloRetryMs
+        repeat: true
+        onTriggered: Hyprland.dispatch(root.helloRequest)
+    }
+
     Component.onCompleted: {
         timeout.start();
+        retry.start();
         Hyprland.dispatch(root.helloRequest);
     }
 }

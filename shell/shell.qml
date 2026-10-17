@@ -40,6 +40,16 @@ ShellRoot {
         value: Settings.reduceMotion
     }
 
+    // One degraded-mode notice when the compositor extension never answered.
+    Connections {
+        target: Capabilities
+
+        function onSettledChanged(): void {
+            if (Capabilities.settled && !Capabilities.pluginPresent)
+                Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
+        }
+    }
+
     Wallpaper {}
     MenuBar {}
     Dock {}

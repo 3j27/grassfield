@@ -14,15 +14,15 @@ Singleton {
     readonly property var toplevels: ToplevelManager.toplevels
     readonly property var focusedToplevel: ToplevelManager.activeToplevel
     readonly property string focusedAppId: focusedToplevel ? focusedToplevel.appId : ""
-    readonly property string focusedClass: focusedAppId
-    readonly property string focusedTitle: focusedToplevel ? focusedToplevel.title : ""
 
-    readonly property var workspaces: Hyprland.workspaces
     readonly property var focusedWorkspace: Hyprland.focusedWorkspace
+    // Output with keyboard/pointer focus ("" when unknown): target of keyboard-driven shell UI.
+    readonly property string focusedScreenName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
 
-    // Hyprland dispatcher request (shell actions that have no protocol equivalent).
-    function dispatch(request: string): void {
-        Hyprland.dispatch(request);
+    // Re-reads Hyprland's window list (pid and other IPC data are only fetched for windows that
+    // existed at shell start or on this request). Call before showing data that needs the pid.
+    function refreshToplevels(): void {
+        Hyprland.refreshToplevels();
     }
 
     // Hyprland-side object of a foreign-toplevel handle (address, pid, workspace), or null.
@@ -35,7 +35,8 @@ Singleton {
         return null;
     }
 
-    // Client PID of a toplevel (from Hyprland's window data), 0 if unknown.
+    // Client PID of a toplevel (from Hyprland's window data), 0 if unknown. Reactive: bindings
+    // re-evaluate when refreshToplevels() delivers new data.
     function pidOf(toplevel: var): int {
         const top = hyprlandToplevel(toplevel);
         const data = top ? top.lastIpcObject : null;
