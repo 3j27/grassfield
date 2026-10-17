@@ -29,7 +29,8 @@ Variants {
 
         // Keyboard focus state machine (KeyboardFocus.js): None by default, OnDemand only after a
         // pointer press on this surface, Exclusive briefly to take the keyboard without pointer motion
-        // and while the icon menu is open. Hovering never changes it.
+        // (also when the icon menu closes). While the menu is open the menu window holds the keyboard and
+        // this surface is None. Hovering never changes it.
         property var kb: Focus.initial()
         readonly property string kbMode: kb.mode
         // Frames swapped since "take" started (its Exclusive commit is out after two).
@@ -153,6 +154,7 @@ Variants {
             anchors.fill: parent
             screen: win.modelData
             holdsKeys: Focus.holdsKeys(win.kb)
+            menuLingers: Focus.menuLingers(win.kb)
             onFocusEvent: event => win.feed(event)
         }
 

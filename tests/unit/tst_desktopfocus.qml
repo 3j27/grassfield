@@ -26,7 +26,7 @@ TestCase {
 
     // A state with the pointer on the desktop unless `extra` says otherwise.
     function st(mode, extra) {
-        return Object.assign({mode: mode, away: false, lent: "", lendNext: false, reclaim: false}, extra || {});
+        return Object.assign({mode: mode, away: false, lent: "", lendNext: false, reclaim: false, menu: false, active: ""}, extra || {});
     }
 
     function openWin(address, ws, focused, returnsFocus) {
@@ -47,7 +47,8 @@ TestCase {
         compare(Focus.interactivity(st("none")), "none");
         compare(Focus.interactivity(st("hold")), "onDemand");
         compare(Focus.interactivity(st("take")), "exclusive");
-        compare(Focus.interactivity(st("menu")), "exclusive");
+        // The menu window holds the keyboard while the menu is open, never the desktop.
+        compare(Focus.interactivity(st("menu")), "none");
         verify(Focus.holdsKeys(st("hold")));
         verify(Focus.holdsKeys(st("take")));
         verify(Focus.holdsKeys(st("menu")));
@@ -145,7 +146,7 @@ TestCase {
     function test_takeOrMenuEndsReleasedWhenAway() {
         compare(run([{type: "keys", hasKeys: true}], st("take", {away: true})).state.mode, "none");
         compare(run([{type: "committed"}], st("take", {away: true})).state.mode, "none");
-        compare(run([{type: "menuClosed"}], st("menu", {away: true})).state.mode, "none");
+        compare(run([{type: "committed"}], run([{type: "menuClosed"}], st("menu", {away: true})).state).state.mode, "none");
     }
 
     function test_pressMeansThePointerIsBack() {
@@ -154,13 +155,39 @@ TestCase {
 
     // ---- menu and rename handoffs ----------------------------------------------------------------
 
-    function test_menuOpensExclusiveAndClosesToHold() {
-        let s = run([{type: "press"}, {type: "menuOpened"}]).state;
+    function test_menuOpenGivesTheKeyboardToTheMenuWindow() {
+        // Hyprland routes the pointer only to an Exclusive layer: the desktop must not be one.
+        const s = run([{type: "press"}, {type: "menuOpened"}]).state;
         compare(s.mode, "menu");
-        compare(Focus.interactivity(s), "exclusive");
+        compare(Focus.interactivity(s), "none");
+        verify(!Focus.menuLingers(s));
+    }
+
+    function test_menuCloseTakesTheKeyboardBackBeforeTheMenuUnmaps() {
+        let s = run([{type: "press"}, {type: "menuOpened"}]).state;
         s = run([{type: "menuClosed"}], s).state;
-        compare(s.mode, "hold");
-        compare(Focus.interactivity(s), "onDemand");
+        // The desktop is Exclusive while the menu window is still mapped.
+        compare(s.mode, "take");
+        compare(Focus.interactivity(s), "exclusive");
+        verify(Focus.menuLingers(s));
+        // Keyboard arrived (or the commit went out): the menu may unmap, the desktop holds.
+        let a = run([{type: "keys", hasKeys: true}], s).state;
+        compare(a.mode, "hold");
+        verify(!Focus.menuLingers(a));
+        a = run([{type: "committed"}], s).state;
+        compare(a.mode, "hold");
+        verify(!Focus.menuLingers(a));
+        // A press meanwhile (on the lingering menu window) keeps the handoff.
+        verify(Focus.menuLingers(run([{type: "press"}], s).state));
+        // Pointer away: released once it is done.
+        compare(run([{type: "pointer", away: true}, {type: "committed"}], s).state.mode, "none");
+    }
+
+    function test_menuCloseKeepsTheMenuMappedEvenWhenAway() {
+        const s = run([{type: "menuClosed"}], st("menu", {away: true})).state;
+        compare(s.mode, "take");
+        verify(Focus.menuLingers(s));
+        compare(run([{type: "committed"}], s).state.mode, "none");
     }
 
     function test_menuClosedOutsideMenuIsIgnored() {
@@ -170,7 +197,7 @@ TestCase {
 
     function test_menuThenRenameKeepsTheKeyboard() {
         // Menu -> Rename: the rename opens while the desktop holds the keyboard.
-        const s = run([{type: "press"}, {type: "menuOpened"}, {type: "menuClosed"}, {type: "renameOpened"}]).state;
+        const s = run([{type: "press"}, {type: "menuOpened"}, {type: "menuClosed"}, {type: "renameOpened"}, {type: "keys", hasKeys: true}]).state;
         compare(s.mode, "hold");
     }
 
@@ -262,6 +289,39 @@ TestCase {
         compare(run([{type: "closeWindow", address: ""}], st("hold", {lent: ""})).state.mode, "hold");
     }
 
+    function test_activeWindowIsTracked() {
+        compare(run([{type: "activeWindow", address: "0x" + a1.toUpperCase()}]).state.active, a1);
+        compare(run([{type: "activeWindow", address: ""}], st("hold", {active: a1})).state.active, "");
+        // Kept across the desktop's own transitions.
+        compare(run([{type: "press"}, {type: "release", hasKeys: true}], st("none", {active: a1})).state.active, a1);
+    }
+
+    function test_activeWindowClosingWhileHoldingRetakesTheKeyboard() {
+        // Scenario B2: foot1 is Hyprland's active window, the desktop is clicked, foot1 closes by itself.
+        let r = run([{type: "activeWindow", address: a1}, {type: "press"}, {type: "release", hasKeys: true}]);
+        compare(r.state.mode, "hold");
+        r = run([{type: "closeWindow", address: a1}], r.state);
+        compare(r.state.mode, "take");
+        compare(r.state.reclaim, true);
+        compare(r.focus, []);
+        // Hyprland's fallback focus (foot2) does not release the desktop.
+        r = run([{type: "activeWindow", address: a2}], r.state);
+        compare(r.state.mode, "take");
+        compare(r.state.active, a2);
+        r = run([{type: "keys", hasKeys: true}], r.state);
+        compare(r.state.mode, "hold");
+        compare(r.state.active, a2);
+        // And foot2 closing later does the same.
+        compare(run([{type: "closeWindow", address: a2}], r.state).state.mode, "take");
+    }
+
+    function test_activeWindowClosingWhileAwayOrReleasedIsHyprlandsChoice() {
+        compare(run([{type: "closeWindow", address: a1}], st("none", {active: a1})).state.mode, "none");
+        compare(run([{type: "closeWindow", address: a1}], st("take", {active: a1, away: true})).state.reclaim, false);
+        // Another window closing never retakes.
+        compare(run([{type: "closeWindow", address: a2}], st("hold", {active: a1})).state.mode, "hold");
+    }
+
     // ---- Glance round trip (scenario H) ----------------------------------------------------------
 
     function test_glanceGetsTheKeyboardAndGivesItBack() {
@@ -285,7 +345,7 @@ TestCase {
         r = run([{type: "activeWindow", address: a2}], r.state);
         compare(r.state.mode, "take");
         r = run([{type: "keys", hasKeys: true}], r.state);
-        compare(r.state, st("hold"));
+        compare(r.state, st("hold", {active: a2}));
     }
 
     function test_glanceMappingWhileHoldingIsFocusedAndLent() {

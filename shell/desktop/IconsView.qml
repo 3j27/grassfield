@@ -21,6 +21,9 @@ FocusScope {
     // The host's keyboard state machine says the desktop owns the keyboard (KeyboardFocus.holdsKeys):
     // only then does a finished rename or menu hand focus back to the key sink.
     property bool holdsKeys: false
+    // The desktop is taking the keyboard back after the menu closed: the menu window stays mapped
+    // until it has it (KeyboardFocus.menuLingers), so Hyprland never falls back to another window.
+    property bool menuLingers: false
     // An icon drag (real drag-and-drop) is in progress.
     property bool dragging: false
 
@@ -186,13 +189,25 @@ FocusScope {
 
     readonly property bool menuOpen: menuKind !== ""
 
-    // The menu window is hidden synchronously by its binding, before the host's next commit.
-    onMenuOpenChanged: focusEvent({
-        type: menuOpen ? "menuOpened" : "menuClosed"
-    })
+    onMenuOpenChanged: {
+        if (menuOpen)
+            focusEvent({
+                type: "menuOpened"
+            });
+    }
+
+    // Closes the menu: the host is told first (the desktop starts taking the keyboard back and keeps
+    // the menu window mapped, see menuLingers), then the menu goes away.
+    function endMenu(): void {
+        if (menuOpen)
+            focusEvent({
+                type: "menuClosed"
+            });
+        menuKind = "";
+    }
 
     function closeMenu(): void {
-        menuKind = "";
+        endMenu();
         restoreFocus();
     }
 
@@ -200,7 +215,7 @@ FocusScope {
         const names = selectedNames;
         const paths = selectedPaths;
         const kind = menuKind;
-        menuKind = "";
+        endMenu();
         restoreFocus();
         if (kind === "desktop") {
             if (action === "newFolder")
@@ -325,10 +340,7 @@ FocusScope {
 
     // ---- keyboard --------------------------------------------------------------------------------
 
-    // While the icon menu is open the desktop holds the keyboard for it: keys go to the menu, and
-    // nothing reaches the desktop actions below.
-    Keys.forwardTo: root.menuOpen && menuLoader.item ? [menuLoader.item] : []
-
+    // While the menu is open its own window holds the keyboard; nothing reaches the desktop actions below.
     Keys.onPressed: event => {
         if (root.menuOpen) {
             event.accepted = true;
@@ -532,16 +544,18 @@ FocusScope {
     }
 
     // Context menu window: an Overlay window (the desktop surface cannot show a menu above windows);
-    // clicking anywhere else dismisses it. It never takes the keyboard: the desktop surface holds it
-    // (Exclusive) while the menu is open and forwards keys to it, so closing the menu cannot hand the
-    // keyboard to another window (Hyprland refocuses the last window when a focused layer unmaps).
+    // clicking anywhere else dismisses it. While the menu is open this window holds the keyboard
+    // (Exclusive: Hyprland routes the pointer only to an Exclusive layer, so the desktop surface cannot
+    // hold it, or the menu would get no hover or click) and the desktop is None. On close the desktop
+    // takes the keyboard back first and this window unmaps afterwards (menuLingers), because Hyprland
+    // refocuses the last window when a focused layer unmaps.
     // qmllint disable uncreatable-type
     PanelWindow {
         // qmllint enable uncreatable-type
         id: menuWin
 
         screen: root.screen
-        visible: root.menuKind !== ""
+        visible: root.menuKind !== "" || root.menuLingers
         anchors {
             top: true
             bottom: true
@@ -551,7 +565,7 @@ FocusScope {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.menuKind !== "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-icons-menu"
 
         MouseArea {
