@@ -144,6 +144,28 @@ TestCase {
         verify(!Store.setValue('{"appearance":"dark"}', "appearance", "light").ok, "missing version in a non-empty file");
     }
 
+    function test_unsafeFileIsRefused() {
+        const cases = [
+            '{"version":1,"x":9007199254740993}',
+            '{"version":1,"x":-12345678901234567}',
+            '{"version":1,"appearance":"dark","appearance":"light"}',
+            '{"version":1,"a":{"k":1,"k":2}}',
+            '{"version":1,"7":true}'
+        ];
+        for (const bad of cases) {
+            const r = Store.setValue(bad, "appearance", "light");
+            verify(!r.ok, bad);
+            verify(r.error.indexOf("cannot be edited safely") >= 0, bad);
+        }
+        // Safe look-alikes: big numbers and repeated keys inside strings, same key in sibling objects, 2^53-1.
+        for (const good of [
+            '{"version":1,"s":"9007199254740993 \\" {\\"k\\":1,\\"k\\":2}"}',
+            '{"version":1,"a":{"k":1},"b":{"k":2}}',
+            '{"version":1,"x":9007199254740991,"y":1.5e30}'
+        ])
+            verify(Store.setValue(good, "appearance", "light").ok, good);
+    }
+
     function test_invalidValueIsRefused() {
         const r = Store.setValue('{"version":1}', "material.transparency", 7);
         verify(!r.ok);

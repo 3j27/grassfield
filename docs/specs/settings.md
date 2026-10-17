@@ -44,7 +44,7 @@ wallpaper, user accounts, editing shortcuts.
 - `qml/`: `Main.qml` (window, sidebar, search, banner), `ConfigStore.qml` (state, `value(key)`, `set(key, v)`), `Store.js` (pure validation and merge), `Bindings.js`, `SysInfo.js`, pages `*Page.qml`, components `SettingsPage/Group/Row`, `Segmented`, `Picker` (PopupMenu from `Grassfield.Ui` on a window-wide layer).
 - Build: `apps/settings/build-direct.sh` (g++, `moc`, pkg-config Qt6Gui/Qml/Quick) writes `.dev/build/grassfield-settings`; `CMakeLists.txt` is provided for when cmake is installed.
 - Dev run: `WAYLAND_DISPLAY=$(cat .dev/nested.wayland) QML_IMPORT_PATH=$PWD/ui GRASSFIELD_CONFIG_HOME=$PWD/.dev/config .dev/build/grassfield-settings`.
-- Desktop entry: `org.grassfield.Settings.desktop` (Name "Grassfield Settings", Icon `gear`, Categories Settings). The icon name needs an icon theme entry once packaging installs `branding/icons`.
+- Desktop entry: `org.grassfield.Settings.desktop` (Name "Grassfield Settings", Icon `preferences-system` (a stock theme icon, so it resolves without the Grassfield icon set), Categories Settings).
 
 ## Known limitations
 - No Wi-Fi, Bluetooth, Sound or Displays pages: those controls live in the Control Center.
@@ -54,5 +54,7 @@ wallpaper, user accounts, editing shortcuts.
 - About runs `pacman -Q` and `lspci` once when the page opens (synchronously, 3 s timeout each); on systems without them the value reads "Unknown". The Grassfield version is the Settings app version (the shell's own version string is not exposed).
 - Slider drags write the file on every step (atomic, small); the shell applies each step.
 - The nested dev session has no titlebars (compositor plugin not loaded), so the window is borderless there.
-- The desktop entry icon `gear` resolves only after the icon set is installed into an icon theme.
+- The desktop entry uses the stock `preferences-system` icon; swap to the Grassfield `gear` once the icon set is installed into an icon theme.
+- Concurrent writers: the shell (`SettingsStore`) writes by merge. Setters record dirty keys, the file is re-read right before the write and only those keys are replaced, atomically; external edits made within the save delay survive, and keys outside the schema are preserved (the schema forbids them, but a writer never drops what it does not own). A fresh or empty file is created from the full defaults.
+- The Settings app edits by parse and re-serialize (`Store.js`), which cannot keep integers beyond 2^53, duplicate keys or integer-like object keys. A file containing any of them is treated like a malformed file: read-only with a "cannot be edited safely" banner, file untouched. The schema has no such values, so only hand-made files are affected.
 - Without the AT-SPI bus the Qt accessibility tree is not published (Accessible properties are set but only verified by code review, not by a screen reader).

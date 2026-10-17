@@ -23,7 +23,7 @@ Item {
     implicitWidth: row.implicitWidth
     implicitHeight: Tokens.menuItemHeight + Tokens.spacingSm
     activeFocusOnTab: true
-    Accessible.role: Accessible.RadioButton
+    Accessible.role: Accessible.Grouping
     Accessible.name: root.accessibleName
     Accessible.description: root.currentIndex >= 0 ? root.model[root.currentIndex].text : ""
     Accessible.focusable: true
