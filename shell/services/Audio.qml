@@ -57,7 +57,20 @@ Singleton {
             v = Model.devVolume(devBaseline, v, 0.05);
         }
         sink.audio.volume = v;
+        if (devSession)
+            devRestoreTimer.restart();
     }
+
+    // The +-5 percent clamp applies to every caller (Control Center, volume menu, menu bar scroll);
+    // the volume goes back to the baseline when it has been left alone for a while, and when the
+    // shell exits (best effort: a killed shell cannot restore, the drift is at most 5 percent).
+    Timer {
+        id: devRestoreTimer
+        interval: 5000
+        onTriggered: root.devRestore()
+    }
+
+    Component.onDestruction: devRestore()
 
     function devRestore(): void {
         if (devSession && devBaseline >= 0 && ready)

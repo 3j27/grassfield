@@ -1,9 +1,9 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Quickshell.Networking
 import Grassfield.Ui
 import qs.services
 import qs.overlay.controlcenter
+import "Model.js" as Model
 
 // Expanded Wi-Fi section (CC1): scan results sorted by strength, connect to known/open networks,
 // inline password for new WPA/WPA2/WPA3 personal networks (Quickshell connectWithPsk), and
@@ -13,10 +13,13 @@ Column {
 
     // The network waiting for a password (name; the row objects are rebuilt on every scan update).
     property string pendingName: ""
+    // The network of the last join attempt: kept after submit so a late failure still reaches us.
+    property string watchName: ""
     property string failure: ""
-    readonly property var pendingNet: {
+    readonly property var watchNet: {
+        const name = root.watchName !== "" ? root.watchName : root.pendingName;
         for (let i = 0; i < Connectivity.networks.length; i++) {
-            if (Connectivity.networks[i].name === pendingName)
+            if (Connectivity.networks[i].name === name)
                 return Connectivity.networks[i].net;
         }
         return null;
@@ -25,25 +28,70 @@ Column {
     width: parent ? parent.width : implicitWidth
     spacing: Tokens.spacingXs
 
+    // Collapsing the section or closing the panel drops the typed password and the attempt.
+    onVisibleChanged: if (!visible)
+        root.reset()
+
+    Component.onDestruction: password.text = ""
+
+    function reset(): void {
+        password.text = "";
+        root.pendingName = "";
+        root.watchName = "";
+        root.failure = "";
+    }
+
+    function failureText(reason: int): string {
+        switch (Model.failReasonKey(reason)) {
+        case "noSecrets":
+            return qsTr("a password is required");
+        case "disconnected":
+            return qsTr("the connection was dropped");
+        case "failed":
+            return qsTr("wrong password or the network refused the connection");
+        case "timeout":
+            return qsTr("the network did not answer in time");
+        case "lost":
+            return qsTr("the network is out of range");
+        default:
+            return qsTr("unknown error");
+        }
+    }
+
     Connections {
-        target: root.pendingNet
+        target: root.watchNet
         function onConnectionFailed(reason) {
-            root.failure = ConnectionFailReason.toString(reason);
+            root.failure = root.failureText(reason);
         }
     }
 
     function activateRow(row: var): void {
         root.failure = "";
+        root.watchName = "";
+        password.text = "";
         const action = Connectivity.activate(row);
         root.pendingName = action === "password" ? row.name : "";
         if (action === "password")
             password.forceActiveFocus();
     }
 
+    function cancelPassword(): void {
+        root.pendingName = "";
+        password.text = "";
+        const prev = password.nextItemInFocusChain(false);
+        if (prev && prev !== password)
+            prev.forceActiveFocus();
+        else
+            password.focus = false;
+    }
+
     function submit(): void {
-        if (password.text === "" || root.pendingNet === null)
+        if (password.text === "" || root.watchNet === null)
             return;
         const row = Connectivity.networks.find(r => r.name === root.pendingName);
+        if (!row)
+            return;
+        root.watchName = root.pendingName;
         Connectivity.connectWithPassword(row, password.text);
         password.text = "";
         root.pendingName = "";
@@ -110,8 +158,7 @@ Column {
                 Accessible.role: Accessible.EditableText
                 onAccepted: root.submit()
                 Keys.onEscapePressed: event => {
-                    root.pendingName = "";
-                    password.text = "";
+                    root.cancelPassword();
                     event.accepted = true;
                 }
             }

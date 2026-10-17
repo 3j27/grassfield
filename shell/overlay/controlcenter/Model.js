@@ -79,3 +79,16 @@ function stepIndex(current, count, delta) {
         return delta > 0 ? 0 : count - 1;
     return Math.max(0, Math.min(count - 1, current + delta));
 }
+
+// Quickshell ConnectionFailReason (enum order: Unknown, NoSecrets, WifiClientDisconnected,
+// WifiClientFailed, WifiAuthTimeout, WifiNetworkLost) -> a stable key the UI translates.
+function failReasonKey(reason) {
+    switch (reason) {
+    case 1: return "noSecrets";
+    case 2: return "disconnected";
+    case 3: return "failed";
+    case 4: return "timeout";
+    case 5: return "lost";
+    default: return "unknown";
+    }
+}

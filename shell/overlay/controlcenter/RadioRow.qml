@@ -13,7 +13,7 @@ NavItem {
     property bool on: false
     property bool expandable: false
     property bool expanded: false
-    // False: the row is shown dimmed and does nothing (no hardware or service).
+    // False: the row is hidden (and so out of the Tab order): no hardware or service.
     property bool available: true
 
     signal toggled
@@ -25,7 +25,7 @@ NavItem {
     checked: on
     accessibleName: subtitle !== "" ? title + ", " + subtitle : title
     ringRadius: height / 2
-    opacity: available ? 1 : 0.5
+    visible: available
     onActivated: if (available) toggled()
     onArrow: direction => {
         if (expandable && available && (direction > 0) !== expanded)
