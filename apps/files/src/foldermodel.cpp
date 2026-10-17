@@ -48,14 +48,19 @@ QString resolvedIconName(const KFileItem &item)
     return resolved;
 }
 
-FileLogic::SortEntry sortEntry(const KFileItem &item)
+// Only the fields the active key compares: lessThan runs O(n log n) times while a folder is listed,
+// and the MIME comment is a database lookup.
+FileLogic::SortEntry sortEntry(const KFileItem &item, FileLogic::SortKey key)
 {
     FileLogic::SortEntry e;
     e.name = item.text();
     e.isDir = item.isDir();
-    e.kind = item.mimeComment();
-    e.modified = item.time(KFileItem::ModificationTime);
-    e.size = e.isDir ? -1 : qint64(item.size());
+    if (key == FileLogic::SortKey::Kind)
+        e.kind = item.mimeComment();
+    else if (key == FileLogic::SortKey::Date)
+        e.modified = item.time(KFileItem::ModificationTime);
+    else if (key == FileLogic::SortKey::Size)
+        e.size = e.isDir ? -1 : qint64(item.size());
     return e;
 }
 
@@ -347,7 +352,8 @@ bool FolderModel::lessThan(const QModelIndex &left, const QModelIndex &right) co
 {
     const KFileItem a = m_dirModel->itemForIndex(left);
     const KFileItem b = m_dirModel->itemForIndex(right);
-    return FileLogic::compareEntries(sortEntry(a), sortEntry(b), FileLogic::SortKey(m_sortKey), m_descending, m_foldersFirst, m_collator) < 0;
+    const auto key = FileLogic::SortKey(m_sortKey);
+    return FileLogic::compareEntries(sortEntry(a, key), sortEntry(b, key), key, m_descending, m_foldersFirst, m_collator) < 0;
 }
 
 bool FolderModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
