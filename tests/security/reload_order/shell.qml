@@ -11,8 +11,8 @@ import "probe"
 //      handed-over lock); one declared after it is restored too late (negative control);
 //   2. Component.onCompleted of the new instance runs before the reload pass;
 //   3. `settings.watchFiles: false` is applied again after a reload (Quickshell resets it to true);
-//   4. shell/security/lock/Lock.qml declares its PersistentProperties before its WlSessionLock and
-//      binds `locked` to the persisted intent.
+//   4. shell/security/lock/Lock.qml declares its PersistentProperties before its WlSessionLock,
+//      binds `locked` to the persisted intent and never lets the restored intent downgrade a lock.
 // Run by scripts/dev/test.sh offscreen (`qs -p tests/security/reload_order`): prints
 // "reload-order: PASS" and exits 0, or "reload-order: FAIL <checks>" and exits 1.
 ShellRoot {
@@ -64,6 +64,8 @@ ShellRoot {
         check("Lock.qml-readable", text.length > 0);
         check("Lock.qml-persist-before-WlSessionLock", persistAt !== -1 && lockAt !== -1 && persistAt < lockAt);
         check("Lock.qml-locked-bound-to-intent", /WlSessionLock \{[^}]*locked: persist\.intent/.test(text));
+        // The restored old intent must not downgrade a lock taken in Component.onCompleted (R12 re-review).
+        check("Lock.qml-intent-never-downgraded", /onLoaded: \{\s*intent = intent \|\| controller\.locked;/.test(text));
         report();
     }
 

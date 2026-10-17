@@ -66,7 +66,12 @@ TestCase {
         verify(Machine.markerSaysLocked("locked\n"));
         verify(Machine.markerSaysLocked("garbage"));
         verify(!Machine.markerSaysLocked("unlocked\n"));
-        verify(!Machine.markerSaysLocked(""));
+        verify(!Machine.markerSaysLocked("  unlocked  "));
+        verify(Machine.markerSaysLocked("unlocked locked"));
+        // Existing but empty or unreadable (markerRead gives ""): not exactly "unlocked" -> lock.
+        verify(Machine.markerSaysLocked(""));
+        // Missing (markerRead gives null): the first start of this compositor instance.
+        verify(!Machine.markerSaysLocked(null));
         verify(!Machine.markerSaysLocked(undefined));
         compare(Machine.markerName("abc_123_4", "wayland-1"), "grassfield-lock-abc_123_4");
         compare(Machine.markerName("", "/run/user/1000/wayland-1"), "grassfield-lock-_run_user_1000_wayland-1");
@@ -85,10 +90,56 @@ TestCase {
         // No XDG_RUNTIME_DIR: nothing can prove the session unlocked.
         verify(Machine.restoreAtStart(false, false, ""));
         verify(Machine.restoreAtStart(false, undefined, "unlocked\n"));
+        // Unreadable marker (mode 000, a directory, I/O error): proves nothing -> lock (R12 re-review).
+        verify(Machine.restoreAtStart(false, true, Machine.markerRead(false, true, "")));
+        verify(Machine.restoreAtStart(false, true, ""));
         // After an explicit unlock (intent cleared, marker "unlocked") and on a fresh session.
         verify(!Machine.restoreAtStart(false, true, "unlocked\n"));
-        verify(!Machine.restoreAtStart(false, true, ""));
+        verify(!Machine.restoreAtStart(false, true, Machine.markerRead(true, true, "")));
+        verify(!Machine.restoreAtStart(false, true, null));
         verify(!Machine.restoreAtStart(undefined, true, undefined));
+    }
+
+    // FileView result -> marker content: only FileNotFound is "missing"; any other failure is "".
+    function test_markerRead() {
+        compare(Machine.markerRead(true, true, ""), null);
+        compare(Machine.markerRead(false, false, "unlocked\n"), "unlocked\n");
+        compare(Machine.markerRead(false, false, "locked\n"), "locked\n");
+        // Permission denied / not a file / unknown error: the text is never trusted.
+        compare(Machine.markerRead(false, true, ""), "");
+        compare(Machine.markerRead(false, true, "unlocked\n"), "");
+        compare(Machine.markerRead(false, undefined, "unlocked\n"), "");
+        compare(Machine.markerRead(undefined, undefined, "unlocked\n"), "");
+        compare(Machine.markerRead(false, false, null), "");
+        verify(Machine.markerSaysLocked(Machine.markerRead(false, true, "unlocked\n")));
+        verify(!Machine.markerSaysLocked(Machine.markerRead(false, false, "unlocked\n")));
+        verify(!Machine.markerSaysLocked(Machine.markerRead(true, true, "")));
+    }
+
+    // Lock watchdog (R12 re-review): a session found unlocked under a lock still reported secure is
+    // re-locked after a confirming answer; a locked session (ours or a foreign locker's) is left alone.
+    function test_ownershipAction() {
+        compare(Machine.ownershipAction("locked", 0), "ok");
+        compare(Machine.ownershipAction("locked", 5), "ok");
+        compare(Machine.ownershipAction("unlocked", 0), "confirm");
+        compare(Machine.ownershipAction("unlocked", 1), "relock");
+        compare(Machine.ownershipAction("unlocked", 3), "relock");
+        compare(Machine.ownershipAction("unknown", 0), "unknown");
+        compare(Machine.ownershipAction("unknown", 2), "unknown");
+        compare(Machine.ownershipAction(undefined, 1), "unknown");
+        // Never "relock" without an "unlocked" answer; never anything that unlocks.
+        const states = ["locked", "unlocked", "unknown", "", null];
+        for (let i = 0; i < states.length; i++) {
+            for (let n = 0; n < 3; n++) {
+                const a = Machine.ownershipAction(states[i], n);
+                verify(["ok", "unknown", "confirm", "relock"].indexOf(a) !== -1, a);
+                if (a === "relock")
+                    verify(states[i] === "unlocked" && n >= 1, states[i] + " " + n);
+            }
+        }
+        // Answers as Hyprland 0.56 gives them, before and after a foreign locker released the session.
+        compare(Machine.ownershipAction(Machine.compositorLockState([{solitaryBlockedBy: ["LOCK", "WINDOWED", "CANDIDATE"]}]), 0), "ok");
+        compare(Machine.ownershipAction(Machine.compositorLockState([{solitaryBlockedBy: ["WINDOWED", "CANDIDATE"]}]), 1), "relock");
     }
 
     // Hyprland 0.56 `hyprctl -j monitors` shapes (verified in nested: LOCK stays after the lock

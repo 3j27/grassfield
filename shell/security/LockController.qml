@@ -56,8 +56,9 @@ QtObject {
         const before = priv.state;
         const after = Machine.next(before, event);
         if (after !== before) {
-            priv.state = after;
+            // Logged first: the assignment runs every binding and handler that depends on the state.
             console.info("grassfield-lock: " + before + " -> " + after + " (" + event + ")");
+            priv.state = after;
         }
         return after;
     }

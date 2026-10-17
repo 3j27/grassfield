@@ -6,7 +6,8 @@
 //   unlocked -request-> locking -acquired-> locked -submit-> authenticating
 //   authenticating -success-> unlocked
 //   authenticating -failure|error|timeout|abort-> locked
-//   locking|locked|authenticating -lost-> locking        (compositor dropped the lock: re-acquire)
+//   locking|locked|authenticating -lost-> locking        (lock dropped, or the session found unlocked
+//                                                         under a lock still reported secure: re-acquire)
 //   locked|authenticating -fingerprint-> unlocked        (PAM success of omarchy-lock-fingerprint)
 //
 // Only a PAM success ("success", "fingerprint") ever leads to "unlocked". Unknown events and
@@ -49,20 +50,34 @@ function isLocked(state) {
     return state !== UNLOCKED;
 }
 
-// Crash-recovery marker ($XDG_RUNTIME_DIR, one per compositor instance). Anything but an exact
-// "unlocked" in an existing, non-empty marker means the session was locked: re-lock.
+// Crash-recovery marker ($XDG_RUNTIME_DIR, one per compositor instance), as returned by markerRead:
+// null when the file does not exist, else its content. Anything but an exact "unlocked" means the
+// session was (or may have been) locked: re-lock. That includes an empty or unreadable marker.
 function markerSaysLocked(text) {
-    var t = String(text === undefined || text === null ? "" : text).trim();
-    return t !== "" && t !== "unlocked";
+    if (text === null || text === undefined)
+        return false; // missing: the first start of this compositor instance
+    return String(text).trim() !== "unlocked";
+}
+
+// Meaning of a marker read, from FileView's result: null when the file does not exist (FileNotFound);
+// "" when it exists but could not be read (permission denied, not a file, I/O error), which locks like
+// any other content that is not exactly "unlocked"; else the file's text. `failed` must be exactly
+// false for the text to be used (fail closed).
+function markerRead(missing, failed, text) {
+    if (missing === true)
+        return null;
+    if (failed !== false)
+        return "";
+    return String(text === undefined || text === null ? "" : text);
 }
 
 // Lock to restore when a shell instance starts (crash restart, reload or session start), from
 // what it can read synchronously. Fail closed:
 //   - intent: the previous instance's lock intent carried over a soft reload (PersistentProperties);
 //   - markerAvailable false (XDG_RUNTIME_DIR unset): no marker can prove the session unlocked;
-//   - otherwise the marker decides (markerSaysLocked). A missing marker is the first start of this
-//     compositor instance; if it was removed while locked, the compositor still holds the dead
-//     client's lock (ext-session-lock) and compositorLockState() finds it.
+//   - otherwise the marker decides (markerSaysLocked on a markerRead result). A missing marker (null)
+//     is the first start of this compositor instance; if it was removed while locked, the compositor
+//     still holds the dead client's lock (ext-session-lock) and compositorLockState() finds it.
 function restoreAtStart(intent, markerAvailable, markerText) {
     return intent === true || markerAvailable !== true || markerSaysLocked(markerText);
 }
@@ -88,6 +103,26 @@ function compositorLockState(monitors) {
             readable = true;
     }
     return readable ? "unlocked" : "unknown";
+}
+
+// Lock watchdog decision while this shell holds a lock the compositor confirmed (locked or
+// authenticating, WlSessionLock secure), from a fresh compositorLockState() answer and the number of
+// consecutive "unlocked" answers just before it. Hyprland 0.56 with misc.allow_session_lock_restore
+// hands a live session lock to the next client that asks and tells the previous holder nothing; when
+// either client then releases it, the session is unlocked although the other one's lock object still
+// reports secure. Returns:
+//   "ok"      the compositor reports the session locked (by this shell, or by a foreign locker that
+//             took it over: coexist, the session is locked);
+//   "unknown" no complete monitor list (not Hyprland, outputs coming up): rely on WlSessionLock;
+//   "confirm" first "unlocked" answer: ask once more, so that an answer to a request sent before this
+//             lock existed can never trigger a re-lock;
+//   "relock"  confirmed unlocked: drop the stale lock object and take a fresh lock (fail closed).
+function ownershipAction(compositorState, unlockedBefore) {
+    if (compositorState === "locked")
+        return "ok";
+    if (compositorState !== "unlocked")
+        return "unknown";
+    return unlockedBefore >= 1 ? "relock" : "confirm";
 }
 
 // File name of the marker; the instance id is reduced to safe file-name characters.

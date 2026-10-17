@@ -128,5 +128,20 @@ Scope {
                 sleepInhibitor: sleepInhibitor.inhibiting
             });
         }
+
+        // Dev-only test hook (GRASSFIELD_DEV=1, nested): run the before-sleep ("before") or
+        // after-resume ("after") path without logind (tests/security/reload_locked.sh). The dev
+        // shell never holds a real inhibitor, so nothing is delayed. Refused otherwise.
+        function devSleep(phase: string): string {
+            if (Quickshell.env("GRASSFIELD_DEV") !== "1")
+                return "refused";
+            if (phase === "before")
+                sleepInhibitor.beforeSleep();
+            else if (phase === "after")
+                sleepInhibitor.afterResume();
+            else
+                return "unknown phase";
+            return "ok";
+        }
     }
 }
