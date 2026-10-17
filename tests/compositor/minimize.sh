@@ -54,6 +54,14 @@ command -v socat >/dev/null || { echo "minimize: socat is needed to read the plu
 query() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j "$1"; } # read-only queries only
 query grassfield | jq -e '.features | index("minimize")' >/dev/null 2>&1 \
   || { echo "minimize: the loaded plugin does not advertise \"minimize\"" >&2; exit 2; }
+# The shell must have finished the gfc/1 handshake, otherwise its first minimize takes the fallback path
+# (special workspace) and no "minimized" event is posted.
+for _ in $(seq 1 50); do
+  grep -q "grassfield: compositor plugin present" "$dev/shell.log" 2>/dev/null && break
+  sleep 0.1
+done
+grep -q "grassfield: compositor plugin present" "$dev/shell.log" 2>/dev/null \
+  || { echo "minimize: the shell has not seen the plugin's capabilities (see .dev/shell.log)" >&2; exit 2; }
 
 run=$dev/minimize/run-$(date +%Y%m%d-%H%M%S)
 mkdir -p "$run"
@@ -145,7 +153,7 @@ else
     for d in "${XDG_DATA_HOME:-$HOME/.local/share}" /usr/local/share /usr/share; do
       if [[ -f $d/applications/$id.desktop ]]; then apps=$((apps + 1)); pinned+="${id,,} "; break; fi
     done
-  done < <(jq -r '.dock.pinned[]' "$config")
+  done < <(jq -r --slurpfile d "$root/config/defaults/grassfield.json" '(.dock.pinned // $d[0].dock.pinned)[]' "$config")
   # Plus one tile per running app that is not pinned (window class = Wayland app id), e.g. a crash dialog.
   while read -r class; do
     [[ -n $class && $pinned != *" ${class,,} "* ]] && apps=$((apps + 1))

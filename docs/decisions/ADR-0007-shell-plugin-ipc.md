@@ -39,6 +39,13 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   `minimize-request`, `minimized`, `restored`, `appmenu` `{address, service, path, pid}` (additive field `pid` =
   the Wayland client's pid from `wl_client_get_credentials`; the menu bridge checks it against
   `GetConnectionUnixProcessID(service)` to stop one app pointing its window at another app's menu).
+- Delivery (2026-10-17, after the global menus review: an unbounded `appmenu` stream overflowed the shell's socket2
+  connection and Hyprland dropped it): every plugin → shell event goes through `compositor/src/core/EventThrottle`,
+  keyed by window (`minimized`/`restored` share one key, as do an appmenu clear and set), latest value wins, at most
+  one post per key per 100 ms with an event-loop timer posting the final state after a burst; global cap 32 events
+  burst, then 50/s. Events are coalesced, never required one by one: the shell rebuilds minimize state from
+  `movewindowv2` and can ask for a window's registration again with `appmenu(address)`. Client-triggerable log lines
+  share one budget (titlebar debug lines still to be moved under it).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
