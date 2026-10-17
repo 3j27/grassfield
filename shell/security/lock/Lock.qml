@@ -218,8 +218,13 @@ Singleton {
         // The previous instance was locking, locked or authenticating.
         property bool intent: false
 
-        // Runs inside the reload pass of every instance (no old instance: intent stays false).
-        onLoaded: root.restore(intent, "reload")
+        // Runs inside the reload pass of every instance (no old instance: intent stays false). The
+        // old value just restored must not downgrade a lock taken in Component.onCompleted: only
+        // release() (PAM success) ever clears the intent.
+        onLoaded: {
+            intent = intent || controller.locked;
+            root.restore(intent, "reload");
+        }
     }
 
     WlSessionLock {
