@@ -28,6 +28,7 @@ namespace gf::gfc {
     inline constexpr std::string_view kLuaMinimize    = "minimize";   // hl.plugin.grassfield.minimize(address, x, y, w, h)
     inline constexpr std::string_view kLuaRestore     = "restore";    // hl.plugin.grassfield.restore(address, x, y, w, h)
     inline constexpr std::string_view kLuaConfig      = "config";     // hl.plugin.grassfield.config(key, value)
+    inline constexpr std::string_view kLuaAppmenu     = "appmenu";    // hl.plugin.grassfield.appmenu(address): re-posts its appmenu event
 
     // What a shell sends through Hyprland.dispatch() to call a plugin verb.
     std::string luaDispatchRequest(std::string_view verb);
@@ -37,10 +38,11 @@ namespace gf::gfc {
     inline constexpr std::string_view kFeatureDecorations = "decorations";
     inline constexpr std::string_view kFeatureMinimize    = "minimize";
     inline constexpr std::string_view kFeatureConfig      = "config";
+    inline constexpr std::string_view kFeatureAppmenu     = "appmenu"; // org_kde_kwin_appmenu_manager global + appmenu events
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
-    // The advertised list, in a stable order: decorations, then minimize, then config.
-    std::vector<std::string_view> features(bool minimize, bool config);
+    // The advertised list, in a stable order: decorations, then minimize, config, appmenu.
+    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key only.
     inline constexpr std::string_view kConfigTitlebarDoubleClick = "titlebarDoubleClick";
@@ -70,6 +72,11 @@ namespace gf::gfc {
     // {"v":"gfc/1","type":"minimized","address":"<hex>"} / {"v":"gfc/1","type":"restored","address":"<hex>"}
     std::string minimizedJson(std::string_view windowAddress);
     std::string restoredJson(std::string_view windowAddress);
+
+    // A window's DBusMenu address, from org_kde_kwin_appmenu.set_address (validated by core/Appmenu); empty
+    // service and path when the window has no (more) registration.
+    // {"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}
+    std::string appmenuJson(std::string_view windowAddress, std::string_view service, std::string_view path);
 
     // The line a socket2 subscriber receives for a given payload (without the trailing newline).
     std::string socket2Line(std::string_view json);
