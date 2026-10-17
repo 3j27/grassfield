@@ -66,22 +66,24 @@ function scaled(rects, area, s) {
 }
 
 // Push conflicting rectangles apart along the axis of least penetration, inside the area.
-function relax(list, area, gap) {
-    for (let iter = 0; iter < 300; iter++) {
+// Capped at maxPasses; stops early when a pass moves nothing. True when no conflict is left.
+function relax(list, area, gap, maxPasses) {
+    for (let iter = 0; iter < maxPasses; iter++) {
         let moved = false;
         for (let i = 0; i < list.length; i++) {
             for (let j = i + 1; j < list.length; j++) {
                 const a = list[i];
                 const b = list[j];
-                if (!conflicts(a, b, gap))
-                    continue;
                 const acx = a.x + a.w / 2;
                 const acy = a.y + a.h / 2;
                 const bcx = b.x + b.w / 2;
                 const bcy = b.y + b.h / 2;
-                // Penetration (positive) along each axis, including the gap.
+                // Penetration (positive) along each axis, including the gap; a conflict needs
+                // both positive (inlined: this is the hot loop).
                 const px = (a.w + b.w) / 2 + gap - Math.abs(acx - bcx);
                 const py = (a.h + b.h) / 2 + gap - Math.abs(acy - bcy);
+                if (px <= 1e-6 || py <= 1e-6)
+                    continue;
                 if (px <= py) {
                     const d = (px / 2 + 0.01) * (acx <= bcx ? -1 : 1);
                     a.x += d;
@@ -102,47 +104,85 @@ function relax(list, area, gap) {
     return !anyConflict(list, gap);
 }
 
-// Row packing in reading order (top to bottom, then left to right) at scale s, or null when
-// it does not fit. With rowCount the windows are split into that many rows of equal count
-// (greedy fill otherwise).
-function packRows(rects, area, s, gap, rowCount) {
-    const perRow = rowCount > 0 ? Math.ceil(rects.length / rowCount) : Infinity;
-    const order = rects.map((r, i) => i).sort((p, q) => {
+// Windows in reading order (top to bottom, then left to right): indices into rects.
+function readingOrder(rects) {
+    return rects.map((r, i) => i).sort((p, q) => {
         const a = rects[p];
         const b = rects[q];
         const dy = (a.y + a.h / 2) - (b.y + b.h / 2);
         return dy !== 0 ? dy : (a.x + a.w / 2) - (b.x + b.w / 2);
     });
+}
+
+// Row packing in reading order with `rowCount` rows of equal count, computed directly: the
+// largest scale (<= maxScale) at which every row fits the width and the rows fit the height
+// (gaps are not scaled, so each bound is linear in the scale). Null when no positive scale fits.
+function packRows(rects, order, area, gap, rowCount, maxScale) {
+    const perRow = Math.ceil(rects.length / rowCount);
     const rows = [];
-    let row = null;
-    for (const i of order) {
-        const w = rects[i].w * s;
-        const h = rects[i].h * s;
-        if (w > area.w + 1e-6)
-            return null;
-        if (!row || row.items.length >= perRow || row.w + gap + w > area.w + 1e-6) {
-            row = {items: [], w: -gap, h: 0};
-            rows.push(row);
+    for (let k = 0; k < order.length; k += perRow)
+        rows.push(order.slice(k, k + perRow));
+    let s = maxScale;
+    let sumH = 0;
+    for (const row of rows) {
+        let sw = 0;
+        let mh = 0;
+        for (const i of row) {
+            sw += rects[i].w;
+            mh = Math.max(mh, rects[i].h);
         }
-        row.items.push({i: i, w: w, h: h});
-        row.w += gap + w;
-        row.h = Math.max(row.h, h);
+        s = Math.min(s, (area.w - gap * (row.length - 1)) / sw);
+        sumH += mh;
     }
-    let total = -gap;
-    for (const r of rows)
-        total += gap + r.h;
-    if (total > area.h + 1e-6)
+    s = Math.min(s, (area.h - gap * (rows.length - 1)) / sumH);
+    if (!(s > 0))
         return null;
+    s *= 0.9999;
+    const heights = [];
+    for (const row of rows) {
+        let mh = 0;
+        for (const i of row)
+            mh = Math.max(mh, rects[i].h * s);
+        heights.push(mh);
+    }
+    let total = gap * (rows.length - 1);
+    for (const h of heights)
+        total += h;
     const out = new Array(rects.length);
     let y = area.y + (area.h - total) / 2;
-    for (const r of rows) {
-        let x = area.x + (area.w - r.w) / 2;
-        for (const it of r.items) {
-            out[it.i] = {id: rects[it.i].id, x: x, y: y + (r.h - it.h) / 2, w: it.w, h: it.h};
-            x += it.w + gap;
+    rows.forEach((row, ri) => {
+        let rw = gap * (row.length - 1);
+        for (const i of row)
+            rw += rects[i].w * s;
+        let x = area.x + (area.w - rw) / 2;
+        for (const i of row) {
+            const w = rects[i].w * s;
+            const h = rects[i].h * s;
+            out[i] = {id: rects[i].id, x: x, y: y + (heights[ri] - h) / 2, w: w, h: h};
+            x += w + gap;
         }
-        y += r.h + gap;
-    }
+        y += heights[ri] + gap;
+    });
+    return {scale: s, rects: out};
+}
+
+// Relative positions kept, overlaps relaxed (capped), at scale s; null when it does not fit.
+function tryRelaxed(valid, area, gap, s) {
+    const list = scaled(valid, area, s);
+    for (const r of list)
+        clampInto(r, area);
+    if (!inside(list, area))
+        return null;
+    if (anyConflict(list, gap) && !relax(list, area, gap, 12))
+        return null;
+    return inside(list, area) && !anyConflict(list, gap) ? {scale: s, rects: list} : null;
+}
+
+// Cheap signature of the layout inputs, to skip recomputation when nothing changed.
+function signature(rects, area) {
+    let out = Math.round(area.x) + "," + Math.round(area.y) + "," + Math.round(area.w) + "," + Math.round(area.h);
+    for (const r of rects)
+        out += "|" + r.id + ":" + Math.round(r.x) + "," + Math.round(r.y) + "," + Math.round(r.w) + "," + Math.round(r.h);
     return out;
 }
 
@@ -153,30 +193,39 @@ function layout(rects, area, opts) {
         return {scale: maxScale, rects: []};
     const valid = rects.map(r => ({id: r.id, x: r.x, y: r.y, w: Math.max(1, r.w), h: Math.max(1, r.h)}));
     const b = bounds(valid);
-    let s = Math.min(maxScale, area.w / b.w, area.h / b.h);
+    const top = Math.min(maxScale, area.w / b.w, area.h / b.h);
 
-    // 1. Relative positions kept, overlaps relaxed, scale reduced until it fits.
-    let relaxed = null;
-    for (let step = 0; step < 60; step++, s *= 0.94) {
-        const list = scaled(valid, area, s);
-        for (const r of list)
-            clampInto(r, area);
-        if (inside(list, area) && (!anyConflict(list, gap) || relax(list, area, gap)) && inside(list, area) && !anyConflict(list, gap)) {
-            relaxed = {scale: s, rects: list};
-            break;
-        }
-    }
-    // 2. Row packing in reading order: also the fallback, and preferred when it gives clearly
-    // larger windows (e.g. windows stacked on top of each other relax into one thin column).
+    // 1. Row packing in reading order (cheap, direct): the fallback, and the yardstick for the
+    // relaxed layout, which is kept whenever it is not clearly smaller (a stack of windows on
+    // top of each other relaxes into one thin column).
+    const order = readingOrder(valid);
+    const rowLimit = Math.min(valid.length, Math.ceil(Math.sqrt(valid.length)) + 1);
     let packedResult = null;
     for (let rows = 1; rows <= valid.length; rows++) {
-        let ps = maxScale;
-        for (let step = 0; step < 200; step++, ps *= 0.95) {
-            const packed = packRows(valid, area, ps, gap, rows);
-            if (packed) {
-                if (!packedResult || ps > packedResult.scale * 1.001)
-                    packedResult = {scale: ps, rects: packed};
-                break;
+        if (rows > rowLimit && packedResult)
+            break;
+        const packed = packRows(valid, order, area, gap, rows, maxScale);
+        if (packed && (!packedResult || packed.scale > packedResult.scale * 1.001))
+            packedResult = packed;
+    }
+    // 2. Relative positions kept, overlaps relaxed: binary search (<= 5 steps) on the scale in
+    // [floor, top], where floor is the smallest scale still preferred over the packed layout.
+    let relaxed = tryRelaxed(valid, area, gap, top);
+    if (!relaxed) {
+        let lo = packedResult ? Math.min(top, packedResult.scale / 1.3) : top * 0.02;
+        let hi = top;
+        const first = tryRelaxed(valid, area, gap, lo);
+        if (first) {
+            relaxed = first;
+            for (let step = 0; step < 5 && hi - lo > top * 0.04; step++) {
+                const mid = (lo + hi) / 2;
+                const res = tryRelaxed(valid, area, gap, mid);
+                if (res) {
+                    relaxed = res;
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
             }
         }
     }
@@ -226,11 +275,4 @@ function neighbor(rects, from, dir) {
         }
     }
     return best;
-}
-
-// A Hyprland window address is hex, with or without the 0x prefix. Returns it without the
-// prefix, or "" when it is not valid hex (untrusted data is never interpolated into Lua).
-function hexAddress(address) {
-    const m = /^(?:0x)?([0-9a-fA-F]{1,16})$/.exec(String(address));
-    return m ? m[1].toLowerCase() : "";
 }
