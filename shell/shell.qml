@@ -7,6 +7,9 @@ import qs.dock
 import qs.menubar
 import qs.overlay
 import qs.platform
+import qs.security.idle
+import qs.security.lock
+import qs.security.polkit
 import qs.services
 
 // grassfield-shell root. Settings feed the design-system Appearance singleton; surfaces
@@ -42,7 +45,10 @@ ShellRoot {
     MenuBar {}
     Dock {}
     Overlay {}
+    AuthAgent {}
+    Idle {}
 
-    // Referencing Capabilities instantiates it, which sends the plugin hello.
-    Component.onCompleted: console.info("grassfield-shell: started, plugin protocol", Capabilities.protocol)
+    // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
+    // instantiates the session lock (IPC target "lock", crash-recovery restore).
+    Component.onCompleted: console.info("grassfield-shell: started, plugin protocol", Capabilities.protocol, "lock", Lock.lockState)
 }
