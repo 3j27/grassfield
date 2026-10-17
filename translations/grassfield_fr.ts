@@ -2537,7 +2537,7 @@
         <translation>%1&#xa0;%</translation>
     </message>
     <message>
-        <source>...</source>
+        <source>…</source>
         <translation>…</translation>
     </message>
     <message>

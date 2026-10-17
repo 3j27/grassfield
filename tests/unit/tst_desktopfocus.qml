@@ -146,7 +146,8 @@ TestCase {
     function test_takeOrMenuEndsReleasedWhenAway() {
         compare(run([{type: "keys", hasKeys: true}], st("take", {away: true})).state.mode, "none");
         compare(run([{type: "committed"}], st("take", {away: true})).state.mode, "none");
-        compare(run([{type: "committed"}], run([{type: "menuClosed"}], st("menu", {away: true})).state).state.mode, "none");
+        // The menu window covers the desktop meanwhile: a pointer reported away then does not release it.
+        compare(run([{type: "committed"}], run([{type: "menuClosed"}], st("menu", {away: true})).state).state.mode, "hold");
     }
 
     function test_pressMeansThePointerIsBack() {
@@ -179,15 +180,88 @@ TestCase {
         verify(!Focus.menuLingers(a));
         // A press meanwhile (on the lingering menu window) keeps the handoff.
         verify(Focus.menuLingers(run([{type: "press"}], s).state));
-        // Pointer away: released once it is done.
-        compare(run([{type: "pointer", away: true}, {type: "committed"}], s).state.mode, "none");
+        // The pointer reported away (the lingering menu window covers the desktop) does not release it.
+        compare(run([{type: "pointer", away: true}, {type: "committed"}], s).state.mode, "hold");
     }
 
     function test_menuCloseKeepsTheMenuMappedEvenWhenAway() {
         const s = run([{type: "menuClosed"}], st("menu", {away: true})).state;
         compare(s.mode, "take");
         verify(Focus.menuLingers(s));
-        compare(run([{type: "committed"}], s).state.mode, "none");
+        const a = run([{type: "committed"}], s).state;
+        compare(a.mode, "hold");
+        compare(a.away, false);
+        verify(!Focus.menuLingers(a));
+    }
+
+    // Regression (review FAIL, HIGH 1): closing the menu sent the keyboard to the app window. With an
+    // app window on screen, Hyprland reports `activewindowv2` for it when the desktop hands the keyboard
+    // to the menu window; that report used to drop the state to "none", so the close never took the
+    // keyboard back. Order on close: the desktop is Exclusive (take) while the menu window is still
+    // mapped and keyboard-owning; the menu unmaps only once the desktop is back at "hold".
+    function menuOpenWithAppWindow() {
+        return run([{type: "activeWindow", address: a1}, {type: "press"}, {type: "release", hasKeys: true},
+                    {type: "menuOpened"}, {type: "activeWindow", address: a1}, {type: "activeWindow", address: ""},
+                    {type: "activeWindow", address: a1}]);
+    }
+
+    function checkClosedMenuReturnsTheKeyboard(s) {
+        compare(s.mode, "take");
+        compare(Focus.interactivity(s), "exclusive");
+        verify(Focus.menuLingers(s));
+        // Never a moment in which no surface of ours wants the keyboard: still the lingering menu window
+        // (Exclusive until unmapped) and the Exclusive desktop.
+        verify(Focus.holdsKeys(s));
+        const done = run([{type: "keys", hasKeys: true}], s).state;
+        compare(done.mode, "hold");
+        verify(!Focus.menuLingers(done));
+        compare(Focus.interactivity(done), "onDemand");
+    }
+
+    function test_menuWithAppWindowStaysInMenuMode() {
+        const r = menuOpenWithAppWindow();
+        compare(r.state.mode, "menu");
+        compare(r.state.active, a1);
+        compare(r.focus, []);
+    }
+
+    function test_escapeOnMenuTakesTheKeyboardBackWithAnAppWindow() {
+        checkClosedMenuReturnsTheKeyboard(run([{type: "menuClosed"}], menuOpenWithAppWindow().state).state);
+    }
+
+    function test_itemActivationOnMenuTakesTheKeyboardBackWithAnAppWindow() {
+        // Menu > Rename: the host closes the menu, then opens the rename field (menu close first).
+        let r = run([{type: "menuClosed"}], menuOpenWithAppWindow().state);
+        checkClosedMenuReturnsTheKeyboard(r.state);
+        r = run([{type: "renameOpened"}], r.state);
+        compare(r.state.mode, "take");
+        verify(Focus.holdsKeys(r.state));
+        compare(run([{type: "keys", hasKeys: true}], r.state).state.mode, "hold");
+    }
+
+    function test_clickOutsideTheMenuTakesTheKeyboardBackWithAnAppWindow() {
+        // The click lands on the menu window (the desktop sees no pointer): closing goes the same way,
+        // and the pointer reported away meanwhile does not release the keyboard.
+        const r = run([{type: "menuClosed"}, {type: "pointer", away: true}], menuOpenWithAppWindow().state);
+        checkClosedMenuReturnsTheKeyboard(r.state);
+        compare(run([{type: "committed"}], r.state).state.mode, "hold");
+    }
+
+    function test_openedItemAfterMenuStillReleases() {
+        // Menu > Open: the desktop lets go of the keyboard so Hyprland focuses the opened window.
+        let r = run([{type: "menuClosed"}, {type: "itemOpened"}], menuOpenWithAppWindow().state);
+        compare(r.state.mode, "none");
+        verify(!Focus.menuLingers(r.state));
+        r = run([openWin(a2, "1", "1")], r.state);
+        compare(r.focus, []);
+    }
+
+    function test_activeWindowWhileTheMenuLingersOnlyRecordsIt() {
+        const s = run([{type: "menuClosed"}], st("menu")).state;
+        const r = run([{type: "activeWindow", address: a2}], s);
+        compare(r.state.mode, "take");
+        compare(r.state.active, a2);
+        verify(Focus.menuLingers(r.state));
     }
 
     function test_menuClosedOutsideMenuIsIgnored() {
@@ -236,8 +310,10 @@ TestCase {
     }
 
     function test_activeWindowReleases() {
-        for (const m of ["hold", "take", "menu"])
+        for (const m of ["hold", "take"])
             compare(run([{type: "activeWindow", address: a1}], st(m)).state.mode, "none");
+        // While the menu window holds the keyboard it is only remembered (see the close-order tests).
+        compare(run([{type: "activeWindow", address: a1}], st("menu")).state.mode, "menu");
     }
 
     function test_activeWindowEmptyIsIgnored() {

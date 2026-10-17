@@ -40,6 +40,12 @@ for dir in tests/shell/*/ tests/security/*/; do
   echo "$out" | grep -E "PASS|FAIL" || { echo "$out"; status=1; }
   if grep -q "FAIL" <<<"$out"; then status=1; fi
 done
+# The CMake build of ui/i18n (packaging/arch/PKGBUILD) installs a loadable plugin: i18n_live runs against it.
+if command -v cmake >/dev/null && command -v ninja >/dev/null; then
+  scripts/dev/i18n-cmake-check.sh || { echo "FAIL: scripts/dev/i18n-cmake-check.sh"; status=1; }
+else
+  echo "SKIP: i18n CMake check (cmake/ninja not installed)"
+fi
 # Plain shell tests: tests/shell/*.sh print PASS/FAIL and exit non-zero on failure.
 for script in tests/shell/*.sh; do
   [[ -f $script ]] || continue

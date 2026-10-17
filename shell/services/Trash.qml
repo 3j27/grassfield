@@ -25,7 +25,7 @@ Singleton {
 
     // Open the trash in the default file manager (gio resolves trash:/// itself).
     function open(): void {
-        Quickshell.execDetached(["gio", "open", "trash:///"]);
+        Apps.openDetached(["gio", "open", "trash:///"]);
     }
 
     Component.onCompleted: refresh()

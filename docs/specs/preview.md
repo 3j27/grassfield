@@ -32,7 +32,9 @@ single instance.
    Enter next, Shift+Enter previous, Esc closes). Encrypted documents show a notice ("not supported yet").
 5. P5 Text and code (`TextView.qml`): read only, monospace, always `PlainText` (never markup), selectable; zoom
    scales the font. Files over 2 MiB show "This file is too large to preview"; files with NUL bytes in the first 8 KB
-   show "This file is not text". Decoded as UTF-8.
+   show "This file is not text". Decoded as UTF-8. Playlists (M3U, PLS, XSPF, WPL, every ASX suffix: asx, wax, wvx,
+   wmx) are text, never handed to the player and never followed or fetched: decided by the canonical MIME type,
+   its aliases and ancestors, the suffix, and the first 512 bytes (extensionless files).
 6. P6 Audio and video (`MediaView.qml`): QtMultimedia `MediaPlayer`, only the local `file:` URL of a validated file;
    play/pause (button, Space in the viewer), a position slider, elapsed and total time. Glance starts playing at
    once. A decode failure shows the player's message.

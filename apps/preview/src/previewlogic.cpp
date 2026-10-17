@@ -1,6 +1,7 @@
 #include "previewlogic.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QMimeDatabase>
 #include <QRegularExpression>
@@ -34,6 +35,57 @@ QString localPathFromArgument(const QString &arg, const QString &cwd, QString *e
     return QDir::cleanPath(QDir(cwd).absoluteFilePath(arg));
 }
 
+// Playlist formats can reference network URLs: they are shown as text, never handed to the player and
+// never followed or fetched. Decided from the file's start (extensionless files), the canonical MIME
+// type, its aliases and parents, and the suffix.
+static bool looksLikePlaylist(const QString &path)
+{
+    QFile file(path);
+    if (!QFileInfo(path).isFile() || !file.open(QIODevice::ReadOnly))
+        return false;
+    QByteArray head = file.read(512);
+    // UTF-8 BOM, then leading white space.
+    if (head.startsWith("\xEF\xBB\xBF"))
+        head.remove(0, 3);
+    head = head.trimmed().toLower();
+    if (head.startsWith("#extm3u") || head.startsWith("[playlist]") || head.startsWith("<asx") || head.startsWith("<?wpl"))
+        return true;
+    // XML playlists (ASX with a declaration, WPL, XSPF): the root element follows the declaration.
+    if (head.startsWith("<?xml") || head.startsWith("<")) {
+        static const QByteArrayList roots = {"<asx", "<smil", "<playlist"};
+        for (const QByteArray &root : roots)
+            if (head.contains(root))
+                return true;
+    }
+    return false;
+}
+
+static bool isPlaylist(const QMimeType &mime, const QString &path)
+{
+    static const QStringList playlistTypes = {
+        QStringLiteral("audio/x-mpegurl"), QStringLiteral("audio/mpegurl"), QStringLiteral("application/vnd.apple.mpegurl"),
+        QStringLiteral("application/x-mpegurl"), QStringLiteral("application/mpegurl"), QStringLiteral("video/vnd.mpegurl"),
+        QStringLiteral("audio/x-scpls"), QStringLiteral("audio/scpls"), QStringLiteral("application/pls"),
+        QStringLiteral("application/xspf+xml"), QStringLiteral("application/x-xspf+xml"),
+        QStringLiteral("application/vnd.apple.mpegurl.audio"), QStringLiteral("application/vnd.ms-wpl"),
+        QStringLiteral("application/x-ms-asx"), QStringLiteral("audio/x-ms-asx"),
+        QStringLiteral("video/x-ms-wax"), QStringLiteral("video/x-ms-wmx"), QStringLiteral("video/x-ms-wvx"),
+        QStringLiteral("application/smil"), QStringLiteral("application/smil+xml")};
+    // Suffixes decide where the MIME type is a media container (a real .asf stays a video).
+    static const QStringList playlistSuffixes = {QStringLiteral("m3u"), QStringLiteral("m3u8"), QStringLiteral("pls"),
+                                                 QStringLiteral("vlc"), QStringLiteral("xspf"), QStringLiteral("asx"),
+                                                 QStringLiteral("wax"), QStringLiteral("wvx"), QStringLiteral("wmx"),
+                                                 QStringLiteral("wpl")};
+    QStringList names = mime.aliases();
+    names << mime.name() << mime.allAncestors();
+    for (const QString &n : names)
+        if (playlistTypes.contains(n))
+            return true;
+    if (playlistSuffixes.contains(QFileInfo(path).suffix().toLower()))
+        return true;
+    return looksLikePlaylist(path);
+}
+
 Kind classify(const QString &path)
 {
     const QMimeDatabase db;
@@ -41,16 +93,7 @@ Kind classify(const QString &path)
     const QString name = mime.name();
     if (name == QLatin1String("application/pdf"))
         return Kind::Pdf;
-    // Playlists can reference network URLs: show them as text, never hand them to the player.
-    static const QStringList playlistTypes = {
-        QStringLiteral("audio/x-mpegurl"), QStringLiteral("audio/mpegurl"), QStringLiteral("application/vnd.apple.mpegurl"),
-        QStringLiteral("application/x-mpegurl"), QStringLiteral("application/mpegurl"), QStringLiteral("video/vnd.mpegurl"),
-        QStringLiteral("audio/x-scpls"), QStringLiteral("application/xspf+xml"), QStringLiteral("application/vnd.apple.mpegurl.audio"),
-        QStringLiteral("application/vnd.ms-wpl"), QStringLiteral("video/x-ms-asf-plugin"), QStringLiteral("application/x-ms-asx")};
-    // .asx (and .wpl) are playlists of video/x-ms-asf (a real .asf video stays a video): decided by suffix.
-    static const QStringList playlistSuffixes = {QStringLiteral("m3u"), QStringLiteral("m3u8"), QStringLiteral("pls"),
-                                                 QStringLiteral("vlc"), QStringLiteral("xspf"), QStringLiteral("asx"), QStringLiteral("wpl")};
-    if (playlistTypes.contains(name) || playlistSuffixes.contains(QFileInfo(path).suffix().toLower()))
+    if (isPlaylist(mime, path))
         return Kind::Text;
     if (name.startsWith(QLatin1String("image/")))
         return Kind::Image;
