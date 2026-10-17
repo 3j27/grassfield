@@ -16,7 +16,7 @@ If Hyprland or Quickshell changed: rebuild the plugin and run the C2 degradation
 | Compilers | gcc 16.2.1, clang 22.1.8 | 2026-10-17 | `pacman -Q` |
 | Mesa | 26.2.2 | 2026-10-17 | `pacman -Q mesa` |
 | Kernel | 7.2.5-3-omarchy | 2026-10-17 | `uname -r` |
-| grassfield-compositor built for | — (not built yet) | — | — |
+| grassfield-compositor built for | Hyprland 0.56.2 (ABI efb50993…_aq_0.15_hu_0.14_hg_0.5_hc_0.1_hlg_0.6), via `compositor/build-direct.sh` | 2026-10-17 | plugin log "ABI hash match" in nested |
 
 ## Known upstream issues (observed, not caused by Grassfield)
 | Component | Issue | Evidence | Impact / mitigation |
