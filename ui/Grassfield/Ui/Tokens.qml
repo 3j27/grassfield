@@ -533,4 +533,105 @@ QtObject {
     readonly property int settingsPickerWidth: 150
     // estimate: Settings app (docs/specs/settings.md)
     readonly property int settingsShortcutKeyMinWidth: 28
+
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesWindowWidth: 920
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesWindowHeight: 560
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesWindowMinWidth: 600
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesWindowMinHeight: 360
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesSidebarWidth: 184
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesSidebarItemHeight: 26
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesSidebarIconSize: 16
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesSidebarHeaderHeight: 28
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesToolbarHeight: 52
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesToolbarButtonSize: 28
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesToolbarIconSize: 16
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesSearchWidth: 180
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesTabHeight: 28
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesPathBarHeight: 26
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesStatusBarHeight: 22
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesIconSize: 64
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesIconCellWidth: 104
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesIconCellHeight: 108
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesIconLabelLines: 2
+    // estimate: grey backdrop around a selected icon
+    readonly property int filesIconBackdropPadding: 4
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesListRowHeight: 24
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesListIconSize: 16
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesListHeaderHeight: 26
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesListDateWidth: 180
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesListSizeWidth: 90
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesListKindWidth: 150
+    // estimate: alternating list row backgrounds
+    readonly property real filesStripeOpacity: 0.04
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesColumnWidth: 230
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesPreviewWidth: 260
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesPreviewIconSize: 128
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesInfoWindowWidth: 320
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesInfoWindowHeight: 500
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesInfoIconSize: 64
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesInfoLabelWidth: 100
+    // estimate: Go to Folder and confirmation sheets
+    readonly property int filesSheetWidth: 420
+    // estimate: pause that starts a new type-to-select search
+    readonly property int filesTypeaheadResetMs: 1000
+    // estimate: error banner lifetime in ms
+    readonly property int filesBannerTimeout: 6000
+    // estimate: transient status notice in ms
+    readonly property int filesNoticeTimeout: 3000
+    // estimate: px before a press becomes a drag
+    readonly property int filesDragThreshold: 6
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesEmblemSize: 16
+    // estimate: Files app (docs/specs/files.md)
+    readonly property int filesChevronSize: 10
+    // estimate: drop target outline
+    readonly property int filesDropBorder: 2
+    // estimate: selection rectangle fill
+    readonly property real filesRubberBandOpacity: 0.2
+    // estimate: thumbnail pixels per icon point (sharp on HiDPI)
+    readonly property int filesThumbnailOversample: 2
+    // estimate: hidden files are drawn dimmed when shown
+    readonly property real filesHiddenOpacity: 0.55
+    // estimate: overlay scroll bar thumb
+    readonly property int filesScrollbarWidth: 6
+    // estimate: shortest scroll bar thumb
+    readonly property int filesScrollbarMinLength: 24
+    // estimate: scroll bar while the view is still
+    readonly property real filesScrollbarIdleOpacity: 0.5
+    // estimate: scroll bar thumb (text color alpha)
+    readonly property real filesScrollbarThumbOpacity: 0.3
+    // estimate: dragged scroll bar thumb
+    readonly property real filesScrollbarPressedOpacity: 0.55
 }
