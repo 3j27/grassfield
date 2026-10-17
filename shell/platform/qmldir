@@ -1,3 +1,4 @@
 module qs.platform
 singleton Compositor 1.0 Compositor.qml
 singleton Capabilities 1.0 Capabilities.qml
+singleton MenuBridge 1.0 MenuBridge.qml

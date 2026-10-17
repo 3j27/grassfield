@@ -2,3 +2,4 @@ module qs.menubar
 MenuBar 1.0 MenuBar.qml
 BarButton 1.0 BarButton.qml
 singleton AppMenus 1.0 AppMenus.qml
+BridgeMenu 1.0 BridgeMenu.qml
