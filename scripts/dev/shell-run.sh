@@ -131,6 +131,17 @@ timing=()
 # GRASSFIELD_DESKTOP_DIR wins.
 desktop_dir=${GRASSFIELD_DESKTOP_DIR:-$dev/desktop-sandbox}
 
+# Dev sessions never idle-lock (only the owner's password unlocks the nested lock screen): seed
+# lock.idleMinutes: 0 ("never", shell/security/idle/IdleModel.js) in the DEV config when the key is absent.
+# An existing value is kept. The shell's defaults and production code are untouched.
+cfg=$dev/config/grassfield.json
+mkdir -p "$dev/config"
+if [[ ! -s $cfg ]]; then
+  printf '{\n  "version": 1,\n  "lock": {\n    "idleMinutes": 0\n  }\n}\n' >"$cfg"
+elif jq -e '.lock.idleMinutes == null' "$cfg" >/dev/null 2>&1; then
+  jq '.lock.idleMinutes = 0' "$cfg" >"$cfg.new" && mv "$cfg.new" "$cfg"
+fi
+
 env "${timing[@]}" "${bus_env[@]}" GRASSFIELD_MENU_BRIDGE_SOCKET="$bridge_sock" \
   GRASSFIELD_DESKTOP_DIR="$desktop_dir" WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
