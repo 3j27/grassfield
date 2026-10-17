@@ -6,6 +6,8 @@
 #       View > Theme > Dark clicked with the (virtual) pointer run the app's own actions (action log);
 #     - Chromium (T2, --ozone-platform=wayland, temporary profile): focused -> its menus; File > New window clicked
 #       with the pointer opens a second browser window (counted with scripts/nestctl clients -j);
+#     - Qt Linguist (qt6-tools, a third-party Qt app, started through scripts/dev/isolated.sh): its own menus; Help >
+#       About Qt clicked with the pointer opens the dialog window, closed again with Escape (keys.sh);
 #     - a GTK4 app (nautilus when installed and linked to GTK 4, else foot): no DBusMenu -> T0 menus (File/Window).
 #   Phase B (GRASSFIELD_NO_PLUGIN, nested-up --no-plugin): the bridge stays in standby, no registrar is owned, and a
 #     Qt app keeps its in-window menu bar.
@@ -117,6 +119,7 @@ address_of() { # <pid> -> hex address (no 0x) of its most recently focused windo
 }
 
 has_window() { [[ $(windows_of "$1") -ge ${2:-1} ]]; }
+windows_at_most() { [[ $(windows_of "$1") -le $2 ]]; }
 
 menus_are() { # <address> <jq expression over .menus, true when as wanted>
   local s
@@ -251,6 +254,33 @@ click_row '^New [Ww]indow$'
 check "pointer click on File > New window opened a window ($before -> 2)" wait_for 10 has_window "$cr_pid" 2
 say "  Chromium windows now: $(windows_of "$cr_pid")"
 say "  bridge resources (ADR-0008 budget: <= 20 MB RSS): $(ps -o rss=,time= -p "$(cat "$dev/menu-bridge.pid")" | awk '{printf "RSS %d kB, CPU time %s", $1, $2}')"
+
+# ---- Qt Linguist: a third-party Qt app (qt6-tools), master-prompt §12 ----
+say ""
+linguist=/usr/lib/qt6/bin/linguist
+if [[ -x $linguist ]]; then
+  say "[T1b] Qt Linguist (third-party Qt app, started through scripts/dev/isolated.sh)"
+  start_app linguist "$root/scripts/dev/isolated.sh" --name gm-linguist -- "$linguist"
+  li_pid=$last_pid
+  check "Linguist window mapped" wait_for 30 has_window "$li_pid"
+  li_addr=$(address_of "$li_pid")
+  check "menu bar shows Linguist's own menus (File, Edit ... Help)" wait_for 20 menus_are "$li_addr" '(.menus | index("File")) != null and (.menus | index("Help")) != null and (.menus | length) >= 5'
+  say "  bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .kind end]')"
+  say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-linguist "$output")"
+  click_title Help
+  check "Linguist Help menu open with About Qt" wait_for 5 row_present '^About Qt$'
+  say "  Help rows: $(state | jq -c '[.popup[].text]')"
+  li_before=$(windows_of "$li_pid")
+  click_row '^About Qt$'
+  check "pointer click on Help > About Qt opened the dialog window ($li_before -> $((li_before + 1)))" wait_for 10 has_window "$li_pid" $((li_before + 1))
+  say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-linguist-about "$output")"
+  # The dialog has the keyboard focus: Escape closes it (nested only, through keys.sh); the process is stopped by cleanup_apps.
+  "$root/scripts/dev/keys.sh" -k Escape
+  check "About Qt dialog closed (back to $li_before window)" wait_for 10 windows_at_most "$li_pid" "$li_before"
+  cleanup_apps
+else
+  say "[T1b] SKIP Qt Linguist: $linguist not installed (qt6-tools)"
+fi
 
 # ---- GTK4 (no DBusMenu): T0 ----
 say ""
