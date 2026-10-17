@@ -5,7 +5,9 @@ import qs.security
 
 // Authorization sheet for one polkit request: lock icon, the request message, action ID,
 // identity, password field, Cancel / Allow (default). Every string that comes from the
-// requester or polkit is rendered as plain text (no rich text, no remote images). Esc cancels.
+// requester or polkit is rendered as plain text (no rich text, no remote images), flattened to
+// one line by the model and capped in rendered lines here, so the sheet has a bounded height and
+// the action ID and the buttons always stay visible. Esc cancels.
 FocusScope {
     id: root
 
@@ -13,6 +15,10 @@ FocusScope {
 
     readonly property real cornerRadius: Tokens.radiusDialog
     readonly property Item surface: material
+    // Rendered line caps of untrusted text (elided past them) and visible identity rows.
+    readonly property int messageLines: 4
+    readonly property int detailLines: 2
+    readonly property int identityRows: 4
 
     width: Tokens.panelDialogWidth
     height: column.implicitHeight + 2 * Tokens.spacingLg
@@ -71,6 +77,8 @@ FocusScope {
             font.pixelSize: Tokens.typographyTitleSize
             font.weight: Tokens.typographyMenuBoldWeight
             wrapMode: Text.Wrap
+            maximumLineCount: root.messageLines
+            elide: Text.ElideRight
             Accessible.role: Accessible.StaticText
             Accessible.name: text
         }
@@ -98,6 +106,8 @@ FocusScope {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
             wrapMode: Text.WrapAnywhere
+            maximumLineCount: root.detailLines
+            elide: Text.ElideRight
             Accessible.role: Accessible.StaticText
             Accessible.name: text
         }
@@ -117,69 +127,86 @@ FocusScope {
             Accessible.name: text
         }
 
-        // Identity names come from polkit/passwd: plain-text rows, not rich-text buttons.
-        Column {
+        // Identity names come from polkit/passwd: plain-text rows, not rich-text buttons. At most
+        // identityRows are visible; more scroll.
+        Flickable {
+            id: identityList
             width: parent.width
+            height: Math.min(identityColumn.implicitHeight, root.identityRows * Tokens.menuItemHeight)
             visible: root.model.identities.length > 1
+            clip: true
+            contentHeight: identityColumn.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentHeight > height
 
-            Repeater {
-                model: root.model.identities.length > 1 ? root.model.identities : []
+            Column {
+                id: identityColumn
+                width: identityList.width
 
-                Item {
-                    id: identityRow
+                Repeater {
+                    model: root.model.identities.length > 1 ? root.model.identities : []
 
-                    required property var modelData
-                    readonly property bool selected: modelData === root.model.selectedIdentity
+                    Item {
+                        id: identityRow
 
-                    width: parent.width
-                    height: Tokens.menuItemHeight
-                    activeFocusOnTab: true
-                    Accessible.role: Accessible.RadioButton
-                    Accessible.name: qsTr("Authenticate as %1").arg(identityName.text)
-                    Accessible.checkable: true
-                    Accessible.checked: selected
-                    Accessible.onPressAction: root.model.selectIdentity(modelData)
-                    Keys.onSpacePressed: root.model.selectIdentity(modelData)
+                        required property var modelData
+                        readonly property bool selected: modelData === root.model.selectedIdentity
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: Tokens.radiusControl
-                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                        visible: identityRow.selected
-                        border.width: identityRow.activeFocus ? Tokens.controlFocusRing : 0
-                        border.color: Appearance.colors.accent
-                    }
-
-                    Icon {
-                        id: check
-                        x: Tokens.spacingSm
-                        anchors.verticalCenter: parent.verticalCenter
-                        name: "checkmark"
-                        size: Tokens.menuIconSize
-                        color: Appearance.colors.text
-                        visible: identityRow.selected
-                    }
-
-                    Text {
-                        id: identityName
-                        anchors {
-                            left: check.right
-                            leftMargin: Tokens.spacingSm
-                            right: parent.right
-                            rightMargin: Tokens.spacingSm
-                            verticalCenter: parent.verticalCenter
+                        width: parent.width
+                        height: Tokens.menuItemHeight
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.name: qsTr("Authenticate as %1").arg(identityName.text)
+                        Accessible.checkable: true
+                        Accessible.checked: selected
+                        Accessible.onPressAction: root.model.selectIdentity(modelData)
+                        Keys.onSpacePressed: root.model.selectIdentity(modelData)
+                        // Keep the focused row inside the visible rows.
+                        onActiveFocusChanged: {
+                            if (activeFocus)
+                                identityList.contentY = Math.max(0, Math.min(y, identityList.contentHeight - identityList.height));
                         }
-                        textFormat: Text.PlainText
-                        text: root.model.identityLabel(identityRow.modelData)
-                        color: Appearance.colors.text
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyBodySize
-                        elide: Text.ElideMiddle
-                    }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: root.model.selectIdentity(identityRow.modelData)
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: Tokens.radiusControl
+                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                            visible: identityRow.selected
+                            border.width: identityRow.activeFocus ? Tokens.controlFocusRing : 0
+                            border.color: Appearance.colors.accent
+                        }
+
+                        Icon {
+                            id: check
+                            x: Tokens.spacingSm
+                            anchors.verticalCenter: parent.verticalCenter
+                            name: "checkmark"
+                            size: Tokens.menuIconSize
+                            color: Appearance.colors.text
+                            visible: identityRow.selected
+                        }
+
+                        Text {
+                            id: identityName
+                            anchors {
+                                left: check.right
+                                leftMargin: Tokens.spacingSm
+                                right: parent.right
+                                rightMargin: Tokens.spacingSm
+                                verticalCenter: parent.verticalCenter
+                            }
+                            textFormat: Text.PlainText
+                            text: root.model.identityLabel(identityRow.modelData)
+                            color: Appearance.colors.text
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyBodySize
+                            elide: Text.ElideMiddle
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: root.model.selectIdentity(identityRow.modelData)
+                        }
                     }
                 }
             }
@@ -237,6 +264,8 @@ FocusScope {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
             wrapMode: Text.Wrap
+            maximumLineCount: root.detailLines
+            elide: Text.ElideRight
             Accessible.role: Accessible.AlertMessage
             Accessible.name: text
         }
