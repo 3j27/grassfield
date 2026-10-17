@@ -27,7 +27,7 @@ Dialog {
         }
         Text {
             textFormat: Text.PlainText
-            width: line.width - 100 - Tokens.spacingMd
+            width: line.width - Tokens.panelAboutLabelWidth - Tokens.spacingMd
             text: line.value
             color: Appearance.colors.text
             font.family: Appearance.fontFamily

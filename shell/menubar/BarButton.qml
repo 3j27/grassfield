@@ -51,8 +51,8 @@ Item {
     Rectangle {
         anchors {
             fill: parent
-            topMargin: 1
-            bottomMargin: 2
+            topMargin: Tokens.menubarHoverInsetTop
+            bottomMargin: Tokens.menubarHoverInsetBottom
         }
         radius: Tokens.radiusControl
         color: "transparent"

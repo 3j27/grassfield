@@ -44,13 +44,22 @@ ShellRoot {
         value: Settings.reduceMotion
     }
 
-    // One degraded-mode notice when the compositor extension never answered.
+    // One degraded-mode notice when the compositor extension never answered; withdrawn if it loads later.
+    property string degradedNoticeKey: ""
+
     Connections {
         target: Capabilities
 
         function onSettledChanged(): void {
-            if (Capabilities.settled && !Capabilities.pluginPresent)
-                Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
+            if (Capabilities.settled && !Capabilities.pluginPresent && root.degradedNoticeKey === "")
+                root.degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
+        }
+
+        function onPluginPresentChanged(): void {
+            if (Capabilities.pluginPresent && root.degradedNoticeKey !== "") {
+                Notifications.clear(root.degradedNoticeKey);
+                root.degradedNoticeKey = "";
+            }
         }
     }
 

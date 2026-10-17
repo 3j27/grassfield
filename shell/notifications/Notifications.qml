@@ -95,7 +95,8 @@ Singleton {
 
     // Shell-originated notice (no D-Bus involved, works with the server disabled): a transient,
     // non-actionable entry plus a banner. Normal urgency, so Do Not Disturb silences it.
-    function postInternal(summary: string, body: string): void {
+    // Posts a shell-originated, non-D-Bus banner; returns its key (for clear()).
+    function postInternal(summary: string, body: string): string {
         counter++;
         const key = Date.now() + "-" + counter;
         const entry = {
@@ -116,6 +117,7 @@ Singleton {
         setHistory(History.prune([entry].concat(history), Date.now()).slice());
         if (!dnd)
             banners = [{key: key}].concat(banners);
+        return key;
     }
 
     function toggleCenter(screen: string): void {

@@ -17,3 +17,4 @@ ln -s "$root/shell" "$tmp/qs"
 
 /usr/lib/qt6/bin/qmllint -I ui -I "$tmp" -I /usr/lib/qt6/qml --max-warnings 0 "${files[@]}"
 echo "qmllint: ${#files[@]} files, 0 warnings"
+python3 -I "$root/scripts/dev/check-textformat.py"
