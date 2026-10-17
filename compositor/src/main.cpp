@@ -152,10 +152,21 @@ namespace {
 
     void teardown() {
         auto& s = state();
-        s.listeners.clear();
-        gf::minimizer::stop(); // before the Lua entry points go: animations complete, snapshots dropped
-        gf::ipc::unregisterAll();
-        removeAllTitlebars();
+        // Each step on its own: a failure in one must not skip the others (a Lua function registered
+        // after unload would point into the unloaded library).
+        const auto step = [](const char* what, auto&& fn) {
+            try {
+                fn();
+            } catch (const std::exception& e) {
+                gf::log(Log::ERR, "teardown: {} failed: {}", what, e.what());
+            } catch (...) {
+                gf::log(Log::ERR, "teardown: {} failed with an unknown exception", what);
+            }
+        };
+        step("listeners", [&] { s.listeners.clear(); });
+        step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
+        step("ipc", [] { gf::ipc::unregisterAll(); });
+        step("titlebars", [] { removeAllTitlebars(); });
         s.active = false;
     }
 
