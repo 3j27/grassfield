@@ -6,7 +6,7 @@ import Grassfield.Ui
 
 // Dev-only hooks for deterministic screenshots and the contrast measurement (tests/visual).
 //
-// Fixtures: active only with GRASSFIELD_DEV=1 AND GRASSFIELD_VISUAL_FIXTURES=1. Connectivity, Bluetooth, the
+// Fixtures: active only with GRASSFIELD_DEV=1 AND GRASSFIELD_VISUAL_FIXTURES=1 AND GRASSFIELD_SESSION != 1. Connectivity, Bluetooth, the
 // user name and the battery then report fixed fake values instead of the owner's machine. Actions stay behind
 // their dev guards. Inert otherwise.
 //
@@ -17,7 +17,9 @@ import Grassfield.Ui
 Singleton {
     id: root
 
-    readonly property bool dev: Quickshell.env("GRASSFIELD_DEV") === "1"
+    // Never in a packaged session: GRASSFIELD_SESSION=1 (config/hypr/session.lua) turns every hook off, fixtures and
+    // glyph mask alike, even when GRASSFIELD_DEV=1 leaks into the environment. scripts/dev/shell-run.sh unsets it.
+    readonly property bool dev: Quickshell.env("GRASSFIELD_DEV") === "1" && Quickshell.env("GRASSFIELD_SESSION") !== "1"
     readonly property bool active: dev && Quickshell.env("GRASSFIELD_VISUAL_FIXTURES") === "1"
     readonly property string network: "Grassfield"
     readonly property string user: "grassfield"

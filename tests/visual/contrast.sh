@@ -46,6 +46,54 @@ cap() {
   vs_ipc visual glyphs normal >/dev/null
 }
 
+# fail MSG: stop the run (the cleanup trap still tears the session down). A surface that is not open is never measured.
+fail() { echo "contrast: $*" >&2; exit 1; }
+
+# need_json TARGET FIELD WANT: poll `ipc TARGET status` (JSON) until FIELD equals WANT (5 s), else fail.
+need_json() {
+  local target=$1 field=$2 want=$3 i got=""
+  for i in $(seq 1 25); do
+    got=$(vs_ipc "$target" status 2>/dev/null | jq -r "$field" 2>/dev/null || true)
+    [[ $got == "$want" ]] && return 0
+    sleep 0.2
+  done
+  fail "$target is not $field=$want before the capture (got '$got')"
+}
+
+# notif_state KEY: value of KEY in `notifications status` (server= history= banners= dnd= center=).
+notif_state() { vs_ipc notifications status 2>/dev/null | tr ' ' '\n' | sed -n "s/^$1=//p"; }
+
+# need_notif KEY WANT [SECONDS]: wait until the notification state KEY equals WANT, else fail.
+need_notif() {
+  local key=$1 want=$2 i got=""
+  for i in $(seq 1 $(( ${3:-5} * 5 ))); do
+    got=$(notif_state "$key")
+    [[ $got == "$want" ]] && return 0
+    sleep 0.2
+  done
+  fail "notifications $key is '$got', expected '$want'"
+}
+
+# center open|closed: the Notification Center is toggled by a click on the menu bar clock (the same path as a user) and
+# its state is read back through IPC; up to three clicks, then fail.
+center() {
+  local want=false n
+  [[ $1 == open ]] && want=true
+  for n in 1 2 3; do
+    [[ $(notif_state center) == "$want" ]] && return 0
+    vs_pointer abs 1850 12 sleep 300 click >/dev/null
+    sleep 0.8
+  done
+  [[ $(notif_state center) == "$want" ]] || fail "the Notification Center did not become $1"
+}
+
+# differs REF IMG MIN: capture check that IMG shows something REF (the bare desktop of the same combination) does not.
+differs() {
+  local n
+  n=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1 || true)
+  [[ $n =~ ^[0-9]+ ]] && (( ${n%% *} >= $3 )) || fail "$(basename "$2") looks like $(basename "$1") (differs in '$n' px, need $3): the surface did not open"
+}
+
 if (( ! measure_only )); then
   rm -rf "$out"; mkdir -p "$out"
   python3 -I "$VS_HERE/contrast.py" gen "$wp"
@@ -63,17 +111,26 @@ if (( ! measure_only )); then
         vs_ipc controlcenter transparency "$tr" >/dev/null
         vs_sleep 1.5
         cap desktop
+        need_notif center false
         vs_ipc menubar open system GF-REF >/dev/null; cap systemmenu; vs_ipc menubar close >/dev/null
+        differs "$dir/desktop.png" "$dir/systemmenu.png" 2000
         vs_ipc menubar open controlcenter GF-REF >/dev/null; cap controlcenter; vs_ipc menubar close >/dev/null
-        vs_ipc search open files >/dev/null; vs_sleep 1; cap search; vs_ipc search close >/dev/null
-        vs_ipc apps open >/dev/null; vs_sleep 1; cap apps; vs_ipc apps close >/dev/null
+        differs "$dir/desktop.png" "$dir/controlcenter.png" 2000
+        vs_ipc search open files >/dev/null; need_json search .open true; vs_sleep 1; cap search; vs_ipc search close >/dev/null
+        need_json search .open false
+        vs_ipc apps open >/dev/null; need_json apps .open true; vs_sleep 1; cap apps; vs_ipc apps close >/dev/null
+        need_json apps .open false
         # Banners stay up for the four captures (about 6 s), then expire before the Notification Center is opened.
         DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Mail" -t 14000 "Anna Martin" "Are we still on for lunch tomorrow?"
         DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 14000 "Design review" "Starts in 10 minutes in Room 4."
+        need_notif banners 2
         vs_sleep 1.5; cap banners 0.5
-        vs_sleep 9
-        vs_pointer abs 1850 12 sleep 300 click >/dev/null; vs_sleep 1; cap notificationcenter
-        vs_pointer abs 1850 12 sleep 300 click >/dev/null
+        differs "$dir/desktop.png" "$dir/banners.png" 2000
+        # The banners expire (14 s) before the Notification Center is opened; both are checked, not assumed.
+        need_notif banners 0 30
+        center open; vs_sleep 1; cap notificationcenter
+        differs "$dir/desktop.png" "$dir/notificationcenter.png" 2000
+        center closed
         vs_park
       done
     done

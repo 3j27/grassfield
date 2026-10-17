@@ -15,12 +15,15 @@ Method: glyph mask (docs/testing/visual.md). Each surface is captured in four gl
   <surface>.black.png    glyphs pure black (K)
 Per pixel and channel, with coverage alpha: W = alpha*255 + (1-alpha)*B and K = (1-alpha)*B, so W - K = alpha*255
 recovers the coverage exactly, whatever the backdrop (objects that do not follow the glyph colour have W = K and
-alpha 0). Glyph pixels are the
-pixels with alpha >= 0.5. The glyph colour is c = (A - (1-alpha)*B) / alpha. For each glyph pixel the WCAG ratio
-of the glyph colour against the local backdrop (mean linear luminance of B in the 5x5 window around the pixel:
-the eye averages a high-frequency texture) is computed; the cell value is the 5th percentile of those ratios (the
-worst case, not a median of extremes). A box with no glyph pixel yields "n/a" (box misplaced or
-image icon) and is reported, never counted as a pass.
+alpha 0). The coverage includes any opacity of the Text item itself (an item at opacity 0.85 never reaches alpha 1).
+The glyph colour is the colour that is actually RENDERED: the pixel of the normal capture (A) in the core of the glyph mask,
+the pixels whose coverage is at least CORE of the box's reference coverage (its 95th percentile): fully covered pixels, so no
+blend with the backdrop and the item's opacity included. Declared colours are never used. A glyph too thin to have such
+pixels falls back to the pixels above half the reference coverage (still the rendered pixel, so the blend only lowers the
+ratio: conservative). For each of those pixels the WCAG ratio of the rendered colour against the local backdrop (mean linear
+luminance of B in the 5x5 window around the pixel: the eye averages a high-frequency texture) is computed; the cell value is the
+5th percentile of those ratios (the worst case, not a median of extremes). A box without a glyph yields None ("NO GLYPH": box
+misplaced, surface not open) and FAILS the run; a missing capture fails the run too.
 Thresholds: kind "text" >= 4.5, kind "large" (large text) and "icon" >= 3.0.
 """
 import argparse
@@ -39,7 +42,10 @@ WALLPAPERS = ["white", "black", "gray", "noise", "checker"]
 # Saturated yellow/green noise wallpaper: the four colours a pixel is drawn from (also the token calculation's bounds).
 NOISE_PALETTE = [(255, 235, 0), (0, 200, 40), (200, 255, 0), (0, 150, 0)]
 MODES = ("", ".hidden", ".white", ".black")  # file suffixes: A, B, W, K
-GLYPH_ALPHA = 0.5
+GLYPH_ALPHA = 0.5   # fraction of the reference coverage below which a pixel is not a glyph pixel (fallback)
+CORE = 0.9          # fraction of the reference coverage of a core pixel
+MIN_COVERAGE = 0.2  # a reference coverage below this is no glyph (an invisible or absent item)
+MIN_CORE_PIXELS = 4
 PERCENTILE = 0.05
 LOCAL = 2  # local backdrop window radius: 5x5 pixels
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -145,17 +151,21 @@ def local_luminance(ctx, x, y):
 
 
 def glyph_ratios(a_px, b_px, w_px, k_px, bw, bh, ctx=None):
-    """WCAG ratio of the glyph colour against the local backdrop (5x5 mean of the hidden capture), for every glyph
-    pixel (coverage >= 0.5) of a box of bw x bh pixels. ctx: wider hidden capture, default the box itself."""
+    """WCAG ratio of the RENDERED glyph colour (pixel of the normal capture, core of the glyph mask) against the local
+    backdrop (5x5 mean of the hidden capture) for a box of bw x bh pixels. ctx: wider hidden capture, default the box
+    itself. Empty when the box holds no glyph (reference coverage below MIN_COVERAGE)."""
     ctx = ctx or (b_px, bw, bh, 0, 0)
-    out = []
-    for i, (a, b, w, k) in enumerate(zip(a_px, b_px, w_px, k_px)):
-        alpha = coverage(w, k)
-        if alpha < GLYPH_ALPHA:
-            continue
-        c = tuple(min(255.0, max(0.0, (a[j] - (1 - alpha) * b[j]) / alpha)) for j in range(3))
-        out.append(ratio(luminance(c), local_luminance(ctx, i % bw, i // bw)))
-    return out
+    alphas = [coverage(w, k) for w, k in zip(w_px, k_px)]
+    seen = sorted(a for a in alphas if a > 0.05)
+    if not seen:
+        return []
+    ref = seen[min(len(seen) - 1, int(0.95 * len(seen)))]
+    if ref < MIN_COVERAGE:
+        return []
+    core = [i for i, a in enumerate(alphas) if a >= CORE * ref]
+    if len(core) < MIN_CORE_PIXELS:
+        core = [i for i, a in enumerate(alphas) if a >= GLYPH_ALPHA * ref]
+    return [ratio(luminance(a_px[i]), local_luminance(ctx, i % bw, i // bw)) for i in core]
 
 
 def percentile(values, p):
@@ -170,7 +180,7 @@ def score(a_px, b_px, w_px, k_px, bw, bh, ctx=None):
 
 
 def measure_surface(root_dir, surface, regions):
-    """{region name: score or None} for one surface directory; raises when a capture mode is missing."""
+    """{region name: score or None} for one surface directory; None when the surface was not captured at all."""
     bufs = []
     for suffix in MODES:
         path = os.path.join(root_dir, surface + suffix + ".png")
@@ -204,10 +214,13 @@ def measure(root, regions_file):
         sys.exit("contrast: no <wallpaper>__<appearance>__<transparency> directories in " + root)
     short = lambda c: "%s.%s.%s" % (c.split("__")[0][:2], c.split("__")[1][0], c.split("__")[2].replace("0.", ""))
     results = {}  # (surface, region, combo) -> value
+    missing = []  # (surface, combo): a capture mode is absent (the surface was never captured): FAIL
     for surface, regions in spec["surfaces"].items():
         for c in combos:
             res = measure_surface(os.path.join(root, c), surface, regions)
-            if res is not None:
+            if res is None:
+                missing.append((surface, c))
+            else:
                 for name, v in res.items():
                     results[(surface, name, c)] = v
     rows, fails, nomask, skipped = [], [], [], 0
@@ -251,8 +264,8 @@ def measure(root, regions_file):
     total = sum(1 for r in rows for v in r[4] if isinstance(v, float))
     print("\n'*' = below threshold (text 4.5, large/icon 3.0); '-' = no capture; 'skip' = image icon (not colour-driven)."
           " Columns: wallpaper(2 letters).appearance(l/d).transparency(25/6).")
-    print("cells: %d, FAIL: %d, PASS: %d, no glyph pixel found: %d, skipped (image icons): %d"
-          % (total, len(fails), total - len(fails), len(nomask), skipped))
+    print("cells: %d, FAIL: %d, PASS: %d, no glyph found (FAIL): %d, missing captures (FAIL): %d, skipped (image icons): %d"
+          % (total, len(fails), total - len(fails), len(nomask), len(missing), skipped))
     by_region = {}
     for s, n, c, v, t in fails:
         by_region.setdefault((s, n), []).append((c, v))
@@ -261,7 +274,9 @@ def measure(root, regions_file):
         print("  %-40s %2d cells, min %.2f" % (s + "/" + n, len(items), min(v for _, v in items)))
     for s, n, c in nomask:
         print("NO GLYPH %s/%s in %s" % (s, n, c))
-    return 1 if fails or nomask else 0
+    for s, c in missing:
+        print("MISSING CAPTURE %s in %s" % (s, c))
+    return 1 if fails or nomask or missing else 0
 
 
 def main():

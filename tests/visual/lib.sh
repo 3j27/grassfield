@@ -26,7 +26,8 @@ VS_PARK_X=24
 VS_PARK_Y=540
 
 # Files sandbox folder: under this worktree's .dev/visual (never /tmp: fixed and shared between worktrees). The
-# breadcrumb and the Search subtitle show the absolute path; those pixels are masked (VS_MASK), see docs/testing/visual.md.
+# breadcrumb (and the Search file subtitle) show the absolute path; those pixels are masked (VS_MASK) in the scenarios
+# files.sh and search.sh, see docs/testing/visual.md. The contrast run does not mask (it measures that subtitle).
 VS_FILES=$VS_STATE/files-sandbox
 
 mkdir -p "$VS_STATE" "$VS_SHOTS"
@@ -69,6 +70,17 @@ vs_fixtures() {
   touch -d "2026-10-01 12:00:00" "$f"/readme.txt "$f"/table.csv "$f"/script.sh "$f"/Documents "$f"/Pictures "$f"/Music
 }
 
+# Wait (at most 30 s) until the nested compositor has the reference output GF-REF; fail otherwise.
+vs_wait_output() {
+  local i
+  for i in $(seq 1 60); do
+    "$VS_ROOT/scripts/nestctl" monitors -j 2>/dev/null | jq -e --arg n "$VS_OUTPUT" 'any(.[]; .name == $n)' >/dev/null 2>&1 && return 0
+    sleep 0.5
+  done
+  echo "visual: output $VS_OUTPUT did not appear in the nested compositor" >&2
+  return 1
+}
+
 # Make sure a nested session with the shell in language $1 (default $VS_LANG) is up. Idempotent.
 vs_session() {
   local lang=${1:-$VS_LANG} cur=""
@@ -83,6 +95,11 @@ vs_session() {
   [[ -f $VS_STATE/session.lang ]] && cur=$(<"$VS_STATE/session.lang")
   if ! vs_nested_running; then
     "$VS_ROOT/scripts/dev/nested-up.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop"
+    # nested-up starts the shell at once, before the headless GF-REF output exists (Hyprland creates it from its start
+    # callback): the shell then logs "Layershell screen does not correspond to a real screen" and the desktop icons and
+    # the other GF-REF surfaces are missing. Wait for GF-REF, then (re)start the shell on it.
+    vs_wait_output || return 1
+    "$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop"
     printf '%s\n' "$lang" > "$VS_STATE/session.lang"
   elif [[ -z ${VS_REUSE:-} || $cur != "$lang" ]] || ! vs_ipc lock status >/dev/null 2>&1; then
     # A fresh shell per scenario: no banner, popup or notification history leaks between scenarios.
