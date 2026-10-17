@@ -369,7 +369,9 @@ Window {
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideMiddle
                     textFormat: Text.PlainText
-                    text: row.modelData.name
+                    maximumLineCount: 1
+                    // A file name may contain line breaks: keep one line, shown as the return symbol.
+                    text: row.modelData.name.replace(/[\r\n]+/g, "\u23CE")
                     color: row.index === win.current ? Appearance.colors.accentText : Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyMenuSize

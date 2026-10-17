@@ -94,6 +94,9 @@ TEST(PreviewLogic, RoutesByType)
     EXPECT_EQ(classify(QStringLiteral("/x/a.m3u8")), Kind::Text);
     EXPECT_EQ(classify(QStringLiteral("/x/a.pls")), Kind::Text);
     EXPECT_EQ(classify(QStringLiteral("/x/a.xspf")), Kind::Text);
+    EXPECT_EQ(classify(QStringLiteral("/x/a.asx")), Kind::Text);
+    EXPECT_EQ(classify(QStringLiteral("/x/a.ASX")), Kind::Text);
+    EXPECT_EQ(classify(QStringLiteral("/x/a.wpl")), Kind::Text);
     EXPECT_EQ(classify(QStringLiteral("/x/a.vlc")), Kind::Text);
     EXPECT_EQ(kindName(Kind::Pdf), QStringLiteral("pdf"));
     EXPECT_EQ(kindName(Kind::Unsupported), QStringLiteral("unsupported"));
