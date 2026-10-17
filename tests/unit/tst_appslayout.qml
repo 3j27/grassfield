@@ -119,4 +119,23 @@ TestCase {
         compare(Model.step(0, "end", 7, 35, 50), 49);
         compare(Model.step(0, "left", 7, 35, 50), 0);
     }
+
+    function test_hiddenIdsMatchEntryIds() {
+        // hidden-entries.sh prints ids without the suffix; tolerate a suffix or CRLF anyway.
+        const set = Model.parseHidden("rvhide-kde\nsub-nested.desktop\r\n\nplain\n");
+        verify(Model.isHidden(set, "rvhide-kde"));
+        verify(Model.isHidden(set, "rvhide-kde.desktop"));
+        verify(Model.isHidden(set, "sub-nested"));
+        verify(Model.isHidden(set, "plain"));
+        verify(!Model.isHidden(set, "rvhide"));
+        verify(!Model.isHidden(Model.parseHidden(""), "plain"));
+    }
+
+    function test_folderStepTitle() {
+        compare(Model.stepFolder(1, "up", 3, 7), -1);
+        compare(Model.stepFolder(4, "up", 3, 7), 1);
+        compare(Model.stepFolder(-1, "down", 3, 7), 0);
+        compare(Model.stepFolder(-1, "up", 3, 7), -1);
+        compare(Model.stepFolder(2, "down", 3, 7), 5);
+    }
 }

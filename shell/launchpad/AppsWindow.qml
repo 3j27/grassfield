@@ -92,7 +92,7 @@ Variants {
                 if (start === 0)
                     return;
                 root.controller.searchStartMs = 0;
-                if (Date.now() - start > 50)
+                if (root.controller.trace || Date.now() - start > 50)
                     console.info("grassfield-shell: apps search->frame", Date.now() - start, "ms,", root.controller.items.length, "items");
             }
         }
@@ -117,7 +117,6 @@ Variants {
             property string dragKey: ""
             property var dragInfo: null
             property bool dragFromFolder: false
-            property int dragPage: -1
             property real dragX: 0
             property real dragY: 0
             property int hoverIndex: -1
@@ -132,7 +131,7 @@ Variants {
                 dragInfo = info;
                 dragKey = info.key;
                 dragFromFolder = fromFolder;
-                dragPage = root.controller.page;
+                root.controller.pinnedKey = info.key;
                 dragX = x;
                 dragY = y;
                 dragging = true;
@@ -172,7 +171,7 @@ Variants {
                 dragging = false;
                 dragKey = "";
                 dragInfo = null;
-                dragPage = -1;
+                root.controller.pinnedKey = "";
                 hoverIndex = -1;
                 hoverMerge = false;
             }
@@ -617,6 +616,19 @@ Variants {
                             root.controller.renameFolder = false;
                         }
                     }
+                }
+
+                Rectangle {
+                    // Keyboard focus ring of the title (Up from the first row; Return renames).
+                    visible: root.controller.folderSelected < 0 && root.controller.keyNav && !nameField.activeFocus
+                    x: nameField.x - Tokens.spacingSm
+                    y: nameField.y
+                    width: nameField.width + 2 * Tokens.spacingSm
+                    height: nameField.height
+                    radius: Tokens.radiusControl
+                    color: "transparent"
+                    border.width: Tokens.appsSelectionWidth
+                    border.color: Appearance.colors.accent
                 }
 
                 Connections {

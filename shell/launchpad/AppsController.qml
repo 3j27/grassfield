@@ -34,6 +34,8 @@ Scope {
     property real openStartMs: 0
     // Latency log: timestamp of the last query change (AppsWindow logs it at the next frame).
     property real searchStartMs: 0
+    // GRASSFIELD_APPS_TRACE=1 logs every keystroke latency (dev measurements); otherwise only slow ones.
+    readonly property bool trace: Quickshell.env("GRASSFIELD_APPS_TRACE") === "1"
 
     property var records: []
     property var byId: ({})
@@ -45,18 +47,25 @@ Scope {
     property var hiddenIds: ({})
     // Stable display items: every app item and folder item, keyed by item key. The grid keeps one
     // cell per entry of `allItems` ({key, state}) and only moves it: `state.slot` is the index of
-    // the item in `items` (-1 when not shown) and changes only for items that moved, so a search
-    // keystroke never rebuilds cells nor re-evaluates the cells that stay put.
+    // the item in `items`, or -1 when it is not shown or is outside the window of the current
+    // page and its neighbours (see windowed()). A cell outside the window never re-evaluates its
+    // bindings, so a search keystroke only touches the cells that are or become visible.
     property var appItems: ({})
     property var itemByKey: ({})
+    property var folderItems: ({})
     property var allItems: []
     property var states: ({})
+    // Item key -> index in `items` (-1 not shown): the source of every state's windowed slot.
+    property var slotOf: ({})
+    // Key of the item being dragged: its cell stays shown (it owns the pointer grab).
+    property string pinnedKey: ""
 
     Component {
         id: stateComponent
 
         QtObject {
             property int slot: -1
+            property bool selected: false
         }
     }
 
@@ -148,13 +157,50 @@ Scope {
         page = 0;
         rebuildItems(false);
         selected = searching && items.length > 0 ? 0 : -1;
-        if (Date.now() - t0 > 16)
+        if (trace || Date.now() - t0 > 16)
             console.info("grassfield-shell: apps search", Date.now() - t0, "ms,", items.length, "items");
     }
 
     function setPage(p: int): void {
         page = Model.clampPage(p, items.length, grid.perPage);
     }
+
+    // The focus ring is a flag on the selected item's cell state, so moving the selection touches
+    // two cells instead of re-evaluating a binding in every cell.
+    property string selectedKey: ""
+
+    function syncSelected(): void {
+        const key = selected >= 0 && selected < items.length ? items[selected].key : "";
+        if (key === selectedKey)
+            return;
+        if (selectedKey !== "" && states[selectedKey])
+            states[selectedKey].selected = false;
+        selectedKey = key;
+        if (key !== "" && states[key])
+            states[key].selected = true;
+    }
+
+    onSelectedChanged: syncSelected()
+
+    // Slot of a cell inside the window (current page and its neighbours, plus the dragged item).
+    function windowed(slot: int, key: string): int {
+        const per = grid.perPage;
+        const lo = (page - 1) * per;
+        const hi = (page + 2) * per;
+        return (slot >= lo && slot < hi) || key === pinnedKey ? slot : -1;
+    }
+
+    function refreshWindow(): void {
+        for (const key of Object.keys(slotOf)) {
+            const st = states[key];
+            if (st)
+                st.slot = windowed(slotOf[key], key);
+        }
+    }
+
+    onPageChanged: refreshWindow()
+    onPinnedKeyChanged: refreshWindow()
+    onGridChanged: refreshWindow()
 
     // ---- items ---------------------------------------------------------------------------
 
@@ -164,7 +210,7 @@ Scope {
         const cache = {};
         for (const e of DesktopEntries.applications.values) {
             // DesktopEntry exposes NoDisplay only; OnlyShowIn / NotShowIn come from `hiddenIds`.
-            if (e.noDisplay || root.hiddenIds[e.id] === true)
+            if (e.noDisplay || Model.isHidden(root.hiddenIds, e.id))
                 continue;
             const rec = {id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
                 keywords: Array.from(e.keywords), icon: e.icon, entry: e};
@@ -186,31 +232,35 @@ Scope {
     function rebuildItems(relayout: bool): void {
         if (relayout)
             layout = Model.reconcile(saved, records.map(r => ({id: r.id, name: r.name})));
+        if (relayout && selectedKey !== "") {
+            if (states[selectedKey])
+                states[selectedKey].selected = false;
+            selectedKey = "";
+        }
         let list = [];
-        // Folder items are rebuilt only when the layout shows (a search keystroke skips this).
-        const folders = {};
-        if (relayout || !searching) {
+        // Folder items and the cell states are rebuilt with the layout only (a keystroke skips this).
+        if (relayout) {
+            const folders = {};
             for (const it of layout) {
                 if (it.t === "folder")
                     folders[it.key] = {kind: "folder", key: it.key, id: it.key, name: it.name, apps: it.apps.map(id => appItem(byId[id]))};
             }
+            folderItems = folders;
             itemByKey = Object.assign({}, appItems, folders);
-            if (relayout) {
-                const keep = {};
-                allItems = Object.keys(itemByKey).map(k => {
-                    let st = states[k];
-                    if (!st) {
-                        st = stateComponent.createObject(root);
-                        states[k] = st;
-                    }
-                    keep[k] = true;
-                    return {key: k, state: st};
-                });
-                for (const k of Object.keys(states)) {
-                    if (!keep[k]) {
-                        states[k].destroy();
-                        delete states[k];
-                    }
+            const keep = {};
+            allItems = Object.keys(itemByKey).map(k => {
+                let st = states[k];
+                if (!st) {
+                    st = stateComponent.createObject(root);
+                    states[k] = st;
+                }
+                keep[k] = true;
+                return {key: k, state: st};
+            });
+            for (const k of Object.keys(states)) {
+                if (!keep[k]) {
+                    states[k].destroy();
+                    delete states[k];
                 }
             }
         }
@@ -222,20 +272,22 @@ Scope {
                 if (it.t === "app") {
                     list.push(appItem(byId[it.id]));
                 } else {
-                    list.push(folders[it.key]);
+                    list.push(folderItems[it.key]);
                 }
             }
         }
-        const shown = {};
+        const next = {};
         for (let i = 0; i < list.length; i++) {
-            shown[list[i].key] = true;
-            states[list[i].key].slot = i;
+            next[list[i].key] = i;
+            states[list[i].key].slot = windowed(i, list[i].key);
         }
         for (const it of items) {
-            if (!shown[it.key] && states[it.key])
+            if (next[it.key] === undefined && states[it.key])
                 states[it.key].slot = -1;
         }
+        slotOf = next;
         items = list;
+        syncSelected();
         if (page >= pageCount)
             page = pageCount - 1;
         if (selected >= items.length)
@@ -337,7 +389,8 @@ Scope {
         keyNav = true;
         if (folder) {
             const cols = Math.min(Tokens.appsFolderPanelCols, folder.apps.length);
-            folderSelected = Model.step(folderSelected, key, cols, 1000000, folder.apps.length);
+            // Up from the first row moves to the folder title (Return there renames the folder).
+            folderSelected = Model.stepFolder(folderSelected, key, cols, folder.apps.length);
             return;
         }
         selected = Model.step(selected, key, grid.cols, grid.perPage, items.length);
@@ -360,12 +413,7 @@ Scope {
         command: ["sh", Quickshell.shellPath("launchpad/hidden-entries.sh")]
         stdout: StdioCollector {
             onStreamFinished: {
-                const map = {};
-                for (const line of text.split("\n")) {
-                    if (line !== "")
-                        map[line] = true;
-                }
-                root.hiddenIds = map;
+                root.hiddenIds = Model.parseHidden(text);
                 root.rebuildApps();
             }
         }

@@ -56,8 +56,8 @@ Item {
                 cellH: root.g.cellH
                 iconSize: root.g.icon
                 dragEnabled: !root.controller.searching
-                selected: root.controller.selected === slot
-                shown: slot >= 0 && (Math.abs(pageIndex - root.controller.page) <= 1 || pageIndex === root.host.dragPage) && (pageIndex === root.controller.page || !Appearance.reduceMotion || opacity > 0.01)
+                selected: modelData.state.selected
+                shown: slot >= 0 && (pageIndex === root.controller.page || !Appearance.reduceMotion || opacity > 0.01)
                 opacity: Appearance.reduceMotion ? (pageIndex === root.controller.page ? 1 : 0) : 1
                 x: (Appearance.reduceMotion ? 0 : pageIndex * root.host.width) + (slot % root.g.perPage % root.g.cols) * root.g.cellW
                 y: Math.floor(slot % root.g.perPage / root.g.cols) * root.g.cellH

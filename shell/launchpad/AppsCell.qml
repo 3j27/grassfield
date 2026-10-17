@@ -81,7 +81,7 @@ Item {
         y: root.iconTop
         size: root.iconSize
         info: root.info
-        opacity: root.beingDragged ? 0.3 : 1
+        opacity: root.beingDragged ? Tokens.appsDragSourceOpacity : 1
     }
 
     Text {
@@ -97,7 +97,7 @@ Item {
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.appsLabelSize
         font.weight: Tokens.typographyMenuWeight
-        opacity: root.beingDragged ? 0.3 : 1
+        opacity: root.beingDragged ? Tokens.appsDragSourceOpacity : 1
     }
 
     MouseArea {

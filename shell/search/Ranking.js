@@ -73,6 +73,18 @@ function usageFor(usage, id) {
     return usage && id in usage ? usage[id] : null;
 }
 
+// 32-bit set of the (hashed) characters of the strings: every query character must occur in a field
+// for any match kind (prefix, substring, fuzzy, comment), so a query whose set is not contained in
+// the app's set cannot match. Hash collisions only let more apps through to the exact scoring.
+function charMask(strings) {
+    let m = 0;
+    for (const t of strings) {
+        for (let i = 0; i < t.length; i++)
+            m |= 1 << (t.charCodeAt(i) & 31);
+    }
+    return m;
+}
+
 // Normalized fields of an app, cached by content (a keystroke ranks every app). Keyed by a string, not by the
 // app object: a WeakMap keyed by QObject wrappers (DesktopEntry) crashed the QML engine (V4 sameValueZero,
 // review 2026-10-17). The cache is bounded and rebuilt when it grows past MAX_PREPARED.
@@ -94,17 +106,24 @@ function prep(app) {
             name: norm(app.name),
             keywords: (app.keywords || []).map(norm),
             generic: norm(app.genericName),
-            comment: norm(app.comment)
+            comment: norm(app.comment),
+            mask: 0
         };
+        p.mask = charMask([p.name, p.generic, p.comment].concat(p.keywords));
         prepared.set(key, p);
     }
     return p;
 }
 
 // Score for an already normalized, trimmed, non-empty query.
-function scoreNormalized(app, query, usage) {
+function scoreNormalized(app, query, usage, queryMask) {
     const p = prep(app);
+    if (queryMask !== undefined && (queryMask & ~p.mask) !== 0)
+        return 0;
     let s = textScore(p.name, query);
+    if (s >= 50)
+        // Keywords, generic name and comment score at most 45, 40 and 15.
+        return s + usageBoost(usageFor(usage, app.id));
     let kw = 0;
     for (const k of p.keywords)
         kw = Math.max(kw, textScore(k, query) * 0.45);
@@ -131,8 +150,9 @@ function rank(apps, query, usage, limit) {
     const q = norm(query).trim();
     if (q === "")
         return out;
+    const qm = charMask([q]);
     for (const app of apps) {
-        const s = scoreNormalized(app, q, usage);
+        const s = scoreNormalized(app, q, usage, qm);
         if (s > 0)
             out.push({app: app, score: s, name: prep(app).name});
     }
