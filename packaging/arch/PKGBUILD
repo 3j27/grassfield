@@ -27,6 +27,9 @@ build() {
   cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/files-build"
+  cmake -S "$(_root)/apps/preview" -B "$srcdir/preview-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/preview-build"
 }
 
 check() {
@@ -35,7 +38,7 @@ check() {
 
 package_grassfield-desktop() {
   pkgdesc+=" — shell, design system, session"
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font libnotify kio solid kcoreaddons kservice)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font libnotify kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
     'brightnessctl: display brightness OSD and Control Center slider'
@@ -73,6 +76,8 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/settings-build"
   # Grassfield Files (M4, KIO).
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
+  # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/preview-build"
 
   install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
   install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"
