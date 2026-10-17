@@ -9,7 +9,6 @@
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
-#include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
@@ -156,23 +155,6 @@ namespace {
         });
     }
 
-    // Whether Hyprland will hand a button event at the pointer to one of our titlebars. It routes
-    // button events to the decorations of the window under the pointer: CInputManager::processMouseDownNormal
-    // picks it with CViewHitTester::windowAt(pos, RESERVED_EXTENTS | INPUT_EXTENTS | ALLOW_FLOATING), then
-    // CWindow::checkInputOnDecos skips decorations when a popup is under the pointer and otherwise offers
-    // the event to each decoration whose box contains the point (0.56.2 binary).
-    bool buttonEventRoutesToTitlebar() {
-        const auto& views = Desktop::viewState();
-        if (!g_pInputManager || !views)
-            return false;
-        const Vector2D pos   = g_pInputManager->getMouseCoordsInternal();
-        const auto     props = static_cast<uint16_t>(Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
-        const auto     w     = views->hitTest().windowAt(pos, props);
-        if (!w || w->hasPopupAt(pos))
-            return false;
-        return std::ranges::any_of(gf::state().titlebars, [&](const CGrassfieldTitlebar* deco) { return deco->window() == w && deco->receivesPointerAt(pos); });
-    }
-
     // Focus without Config::Actions::focus(): that action warps the cursor to the window middle when the
     // pointer is outside the client surface (measured in S2), which breaks clicks and drags on the bar.
     void focusAndRaise(const PHLWINDOW& w) {
@@ -194,7 +176,8 @@ CGrassfieldTitlebar::~CGrassfieldTitlebar() {
         auto& input = pointerInput();
         if (input.grab.deco == this) {
             // The window is going away: drop the gesture. The press ownership stays, so the release that
-            // will still arrive is kept from the client under the pointer, which never saw the press.
+            // will still arrive is not mistaken for a client's (another titlebar under the pointer
+            // consumes it; elsewhere the seat drops it, as the client never saw the press).
             input.grab = {};
             input.presses.dropGesture();
         }
@@ -276,10 +259,6 @@ void CGrassfieldTitlebar::onTitleChanged() {
         return;
     m_title.texture.reset(); // rebuilt lazily in draw()
     damageEntire();
-}
-
-bool CGrassfieldTitlebar::receivesPointerAt(const Vector2D& pos) const {
-    return shouldShow() && layoutBox().containsPoint(pos);
 }
 
 CBox CGrassfieldTitlebar::layoutBox() const {
@@ -387,9 +366,9 @@ bool CGrassfieldTitlebar::onInputOnDeco(const eInputType type, const Vector2D& c
         if (!e)
             return;
         if (e->state == WL_POINTER_BUTTON_STATE_RELEASED) {
-            // Only the release of a press a titlebar consumed, prepared by onGlobalMouseButton.
-            // Consuming it here (instead of cancelling it on the event bus) keeps Hyprland's
-            // held-button bookkeeping intact.
+            // Only the release of a press a titlebar consumed (offered by onGlobalMouseButton). Hyprland
+            // has already cleared its held button when it routes the release here. The release of a
+            // press that went to a client is left to Hyprland, which sends it to that client.
             consumed = pointerInput().presses.takeTitlebarRelease(e->button);
             return;
         }
@@ -427,7 +406,7 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
         gf::log(Log::DEBUG, "titlebar double-click -> toggle zoom");
         toggleZoom(w);
-        input.presses.claim(e.button, false); // acts now; only its release remains to be kept from clients
+        input.presses.claim(e.button, false); // acts now; its release is still the titlebar's
         return true;
     }
 
@@ -465,7 +444,7 @@ void CGrassfieldTitlebar::activate(tb::Button button) {
     }
 }
 
-void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e, Event::SCallbackInfo& info) {
+void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
     gf::guarded("titlebar onGlobalMouseButton", [&] {
         auto& input = pointerInput();
         if (e.state == WL_POINTER_BUTTON_STATE_PRESSED) {
@@ -479,33 +458,27 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e, E
             return;
         }
 
+        // The release is never cancelled. Hyprland 0.56.2 records every press as held, also one a titlebar
+        // consumes (CInputManager::onMouseButton adds the button to m_currentlyHeldButtons before
+        // processMouseDownNormal offers the press to the decorations), and while a button is held it keeps
+        // pointer focus on the surface that has it. A cancelled release returns before the button is
+        // removed: pointer focus then stayed on the dragged window, and the next click on another window
+        // went to it. Processed normally, an owned release is consumed by a titlebar under the pointer
+        // (onInputOnDeco); elsewhere it reaches the seat, which drops it for a client that never got the
+        // press (CWLPointerResource::sendButton).
         const auto release = input.presses.onRelease(e.button);
-        if (!release.owned)
-            return; // the press went to a client (or nowhere): so does its release
+        if (!release.owned || !release.endsGesture)
+            return; // a client's press (or an immediate action): nothing to finish here
 
-        if (release.endsGesture) {
-            const SPointerGrab grab = std::exchange(input.grab, {});
-            if (grab.dragging)
-                updateMove(grab); // final position at the release point
+        const SPointerGrab grab = std::exchange(input.grab, {});
+        if (grab.dragging)
+            updateMove(grab); // final position at the release point
 
-            if (grab.button && isLive(grab.deco) && g_pInputManager) {
-                const auto pos = g_pInputManager->getMouseCoordsInternal();
-                const CBox bar = grab.deco->layoutBox();
-                if (tb::buttonForHit(tb::hitTest(pos.x - bar.x, pos.y - bar.y, bar.w)) == grab.button)
-                    grab.deco->activate(*grab.button);
-            }
-        }
-
-        // A titlebar consumed the press, so no client saw it: keep the release away from clients too.
-        // When Hyprland will route it to a titlebar, let it go there and be consumed (onInputOnDeco):
-        // cancelling it here also skips Hyprland's held-button bookkeeping (CInputManager::onMouseButton
-        // returns before updating m_currentlyHeldButtons), which drives its pointer-focus hold while a
-        // button is down. Otherwise cancel it here.
-        if (buttonEventRoutesToTitlebar())
-            input.presses.expectTitlebarRelease(e.button);
-        else {
-            gf::log(Log::DEBUG, "titlebar release {:#x} cancelled on the event bus (pointer not over a titlebar)", e.button);
-            info.cancelled = true;
+        if (grab.button && isLive(grab.deco) && g_pInputManager) {
+            const auto pos = g_pInputManager->getMouseCoordsInternal();
+            const CBox bar = grab.deco->layoutBox();
+            if (tb::buttonForHit(tb::hitTest(pos.x - bar.x, pos.y - bar.y, bar.w)) == grab.button)
+                grab.deco->activate(*grab.button);
         }
     });
 }

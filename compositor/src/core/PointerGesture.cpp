@@ -5,7 +5,7 @@
 namespace gf::input {
 
     bool CPointerGestureTracker::onPress(uint32_t button) {
-        m_expectedRelease.reset();
+        m_offeredRelease.reset();
         releaseOwnership(button); // an older press of this button never got its release
 
         if (!m_gesture)
@@ -25,9 +25,11 @@ namespace gf::input {
     }
 
     CPointerGestureTracker::SRelease CPointerGestureTracker::onRelease(uint32_t button) {
-        m_expectedRelease.reset();
+        m_offeredRelease.reset();
         SRelease result;
         result.owned = releaseOwnership(button);
+        if (result.owned)
+            m_offeredRelease = button; // a titlebar under the pointer consumes it; elsewhere the seat drops it
         if (m_gesture == button) {
             result.endsGesture = true;
             m_gesture.reset();
@@ -48,14 +50,10 @@ namespace gf::input {
         m_gesture.reset();
     }
 
-    void CPointerGestureTracker::expectTitlebarRelease(uint32_t button) {
-        m_expectedRelease = button;
-    }
-
     bool CPointerGestureTracker::takeTitlebarRelease(uint32_t button) {
-        if (m_expectedRelease != button)
+        if (m_offeredRelease != button)
             return false;
-        m_expectedRelease.reset();
+        m_offeredRelease.reset();
         return true;
     }
 
@@ -70,7 +68,7 @@ namespace gf::input {
     void CPointerGestureTracker::reset() {
         m_owned.clear();
         m_gesture.reset();
-        m_expectedRelease.reset();
+        m_offeredRelease.reset();
     }
 
     bool CPointerGestureTracker::releaseOwnership(uint32_t button) {

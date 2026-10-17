@@ -118,26 +118,58 @@ TEST(PointerGesture, DropGestureKeepsOwnership) {
     EXPECT_FALSE(r.endsGesture);
 }
 
-TEST(PointerGesture, TitlebarReleaseExpectationIsOneShot) {
+TEST(PointerGesture, OwnedReleaseIsOfferedToTheTitlebarOnce) {
+    // Regression (counter-review finding): the release of a press a titlebar consumed is never cancelled
+    // (Hyprland must see it to clear its held button); a titlebar under the pointer consumes it, once.
     CPointerGestureTracker t;
     t.onPress(kLeft);
     t.claim(kLeft, true);
     ASSERT_TRUE(t.onRelease(kLeft).owned);
-    t.expectTitlebarRelease(kLeft);
     EXPECT_FALSE(t.takeTitlebarRelease(kRight));
     EXPECT_TRUE(t.takeTitlebarRelease(kLeft));
     EXPECT_FALSE(t.takeTitlebarRelease(kLeft));
 }
 
-TEST(PointerGesture, TitlebarReleaseExpectationExpiresOnTheNextButtonEvent) {
+TEST(PointerGesture, ImmediateActionReleaseIsOfferedToTheTitlebar) {
     CPointerGestureTracker t;
-    t.expectTitlebarRelease(kLeft);
+    t.onPress(kLeft);
+    t.claim(kLeft, false); // double-click zoom
+    ASSERT_TRUE(t.onRelease(kLeft).owned);
+    EXPECT_TRUE(t.takeTitlebarRelease(kLeft));
+}
+
+TEST(PointerGesture, ClientPressReleaseIsNeverTakenByATitlebar) {
+    // A press that went to a client, released over a titlebar: the release must reach that client.
+    CPointerGestureTracker t;
+    t.onPress(kLeft);
+    ASSERT_FALSE(t.onRelease(kLeft).owned);
+    EXPECT_FALSE(t.takeTitlebarRelease(kLeft));
+}
+
+TEST(PointerGesture, CancelledGestureReleaseIsNotTakenByATitlebar) {
+    // The gesture ended on a motion without held buttons: a late release is not the titlebar's.
+    CPointerGestureTracker t;
+    t.onPress(kLeft);
+    t.claim(kLeft, true);
+    ASSERT_TRUE(t.onMotion(false, true));
+    ASSERT_FALSE(t.onRelease(kLeft).owned);
+    EXPECT_FALSE(t.takeTitlebarRelease(kLeft));
+}
+
+TEST(PointerGesture, OfferedReleaseExpiresOnTheNextButtonEvent) {
+    CPointerGestureTracker t;
+    t.onPress(kLeft);
+    t.claim(kLeft, true);
+    ASSERT_TRUE(t.onRelease(kLeft).owned); // not routed to a titlebar: went to the seat
     t.onPress(kRight);
     EXPECT_FALSE(t.takeTitlebarRelease(kLeft));
 
-    t.expectTitlebarRelease(kLeft);
-    t.onRelease(kRight);
+    t.onPress(kLeft);
+    t.claim(kLeft, true);
+    ASSERT_TRUE(t.onRelease(kLeft).owned);
+    EXPECT_FALSE(t.onRelease(kRight).owned);
     EXPECT_FALSE(t.takeTitlebarRelease(kLeft));
+    EXPECT_FALSE(t.takeTitlebarRelease(kRight));
 }
 
 TEST(PointerGesture, ResetForgetsEverything) {
@@ -145,10 +177,10 @@ TEST(PointerGesture, ResetForgetsEverything) {
     t.onPress(kLeft);
     t.claim(kLeft, true);
     t.claim(kRight, false);
-    t.expectTitlebarRelease(kLeft);
+    ASSERT_TRUE(t.onRelease(kRight).owned); // offered to the titlebars
     t.reset();
     EXPECT_FALSE(t.owns(kLeft));
-    EXPECT_FALSE(t.owns(kRight));
     EXPECT_FALSE(t.gestureButton());
-    EXPECT_FALSE(t.takeTitlebarRelease(kLeft));
+    EXPECT_FALSE(t.takeTitlebarRelease(kRight));
+    EXPECT_FALSE(t.onRelease(kLeft).owned);
 }

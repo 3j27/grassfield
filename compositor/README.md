@@ -99,16 +99,22 @@ zoom, close and cancelled clicks through the virtual pointer. PASS (exit 0) = ne
 `coredumpctl list Hyprland` entry for its PID since the start (dumps of other Hyprland instances, e.g. other
 worktrees' nested sessions, are listed but not counted), no grassfield exception in the nested log.
 
+Input consistency (FR13 regression, nested only): `tests/compositor/input_consistency.sh [rounds]` — fast
+titlebar drags and close-button cancels on one mouse-reporting foot window, each followed by a click inside
+another; PASS (exit 0) = every click reached the clicked window and none reached the dragged one.
+
 ## Pointer input
 
 A titlebar consumes left presses on its bar. Press ownership and gesture lifetime are pure logic
 (`src/core/PointerGesture.*`, unit-tested); `Titlebar.cpp` feeds it Hyprland's events:
 
-- only the release of a press a titlebar consumed is kept from clients; a release whose press went to a
-  client (or nowhere) is never touched;
-- that release is consumed by the titlebar when Hyprland routes it there (pointer over the bar), so
-  Hyprland's held-button bookkeeping stays right; otherwise it is cancelled on the event bus (logged;
-  Hyprland then keeps that button as held until its next release, see the spec's known limitations);
+- no button event is cancelled on the event bus: Hyprland records every press as held, also one a
+  titlebar consumes, and only a release it processes clears it (a stale held button pins pointer focus,
+  so the next click on another window went to the dragged one);
+- the release of a press a titlebar consumed is consumed by a titlebar when Hyprland routes it there
+  (pointer over a bar); elsewhere it reaches the seat, which drops it because the client never got the
+  press (Hyprland logs `sendButton release on a non-pressed button`). A release whose press went to a
+  client is never consumed, even over a bar;
 - a drag or armed button ends on its release, on any new press (the release was lost), or on a motion
   when Hyprland reports no held button or a pointer device present at the press has disappeared
   (Hyprland 0.56.2 does not release the buttons of a removed pointer device).
@@ -145,4 +151,5 @@ There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dis
   end), `Protocol.*` (gfc/1 JSON).
 - `src/` — Hyprland glue: `main.cpp` (entry points, ABI check, event bus listeners, unload), `Titlebar.*`
   (decoration, drawing, input), `Ipc.*` (socket2 events, Lua function, hyprctl command).
-- `tests/` — GoogleTest unit tests for `src/core/`. Soak script: `tests/compositor/soak.sh` (repository root).
+- `tests/` — GoogleTest unit tests for `src/core/`. Nested scenarios (repository root):
+  `tests/compositor/soak.sh`, `tests/compositor/input_consistency.sh`.

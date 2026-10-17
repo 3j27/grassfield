@@ -82,7 +82,9 @@ namespace {
             });
         }));
         l.push_back(ev.input.mouse.move.listen([](Vector2D /*pos*/, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onGlobalMouseMove(); }));
-        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& info) { CGrassfieldTitlebar::onGlobalMouseButton(e, info); }));
+        // Button events are observed, never cancelled (FR13): Hyprland must process every release to keep
+        // its held-button state, which pins pointer focus while a button is down.
+        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onGlobalMouseButton(e); }));
     }
 
     // The window whose m_windowDecorations owns `deco` (normally deco->window(); scanned as a fallback).

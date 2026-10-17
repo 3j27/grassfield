@@ -46,15 +46,11 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // Window title changed: the cached title texture is rebuilt on the next draw.
     void onTitleChanged();
 
-    // True when Hyprland routes button events at `pos` (global logical) to this titlebar: shown and
-    // its box contains the point.
-    bool receivesPointerAt(const Vector2D& pos) const;
-
     // Global pointer button listener (Event::bus()->m_events.input.mouse.button), called before any
-    // titlebar or client sees the event. Tracks press ownership, ends gestures (drag, armed button)
-    // on their release or on a new press, and keeps from clients the releases of presses a titlebar
-    // consumed.
-    static void onGlobalMouseButton(const IPointer::SButtonEvent& e, Event::SCallbackInfo& info);
+    // titlebar or client sees the event; it never cancels it. Tracks press ownership (so a titlebar
+    // consumes only the releases of presses a titlebar consumed) and ends gestures (drag, armed button)
+    // on their release or on a new press.
+    static void onGlobalMouseButton(const IPointer::SButtonEvent& e);
 
     // Global pointer motion listener (Event::bus()->m_events.input.mouse.move): moves a dragged window,
     // or cancels the gesture when no button is held any more or the pressing device may be gone.
