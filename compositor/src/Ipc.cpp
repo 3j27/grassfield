@@ -7,23 +7,121 @@
 #include "core/Protocol.hpp"
 
 #include <hyprland/src/managers/EventManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 
 #include <lua.hpp>
 
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace gf::ipc {
 
-    void postEvent(const std::string& json) {
-        if (!g_pEventManager) {
-            log(Log::WARN, "event manager unavailable, dropped event {}", json);
+    namespace {
+        struct SEvents {
+            events::CEventThrottle           throttle;
+            SP<CEventLoopTimer>              timer;    // CEventLoopManager keeps only a weak reference
+            std::optional<events::TimePoint> armedFor; // when the timer fires, if armed
+            bool                             running       = false;
+            uint64_t                         seenCoalesced = 0;
+        };
+
+        // Constructed on first use inside a guarded call (R13); stopEvents() removes the timer before dlclose.
+        SEvents& evs() {
+            static SEvents s;
+            return s;
+        }
+
+        void postNow(const std::string& json) {
+            if (!g_pEventManager)
+                return; // shutting down: nobody listens
+            g_pEventManager->postEvent(SHyprIPCEvent{.event = std::string{gfc::kEventName}, .data = json});
+        }
+
+        void postAll(const std::vector<std::string>& payloads) {
+            for (const auto& p : payloads)
+                postNow(p);
+        }
+
+        // One line per power of ten (1, 10, 100, ...): a flood shows in the log without flooding it.
+        void noteCoalesced() {
+            auto&          s = evs();
+            const uint64_t c = s.throttle.coalesced();
+            if (c == s.seenCoalesced)
+                return;
+            s.seenCoalesced = c;
+            if (events::isLogMilestone(c))
+                log(Log::INFO, "events: {} superseded by a newer event of the same window before posting (coalesced, at most one per window per 100 ms)", c);
+        }
+
+        void schedule(events::TimePoint now);
+
+        void onTimer() {
+            guarded("event throttle timer", [] {
+                auto& s = evs();
+                s.armedFor.reset(); // CEventLoopTimer::call() disarms the timer before calling back
+                if (!s.running)
+                    return;
+                const auto now = events::Clock::now();
+                postAll(s.throttle.due(now));
+                schedule(now);
+            });
+        }
+
+        // Arms the timer for the next waiting event (only when that is earlier than what it is armed for).
+        void schedule(events::TimePoint now) {
+            auto&      s    = evs();
+            const auto next = s.throttle.nextDue(now);
+            if (!next || (s.armedFor && *s.armedFor <= *next))
+                return;
+            if (!g_pEventLoopManager) {
+                postAll(s.throttle.drain()); // no event loop (should not happen): no coalescing, nothing lost
+                return;
+            }
+            if (!s.timer) {
+                s.timer = makeShared<CEventLoopTimer>(std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { onTimer(); }, nullptr);
+                g_pEventLoopManager->addTimer(s.timer);
+            }
+            s.timer->updateTimeout(std::max<events::Duration>(*next - now, std::chrono::milliseconds(1)));
+            s.armedFor = *next;
+        }
+    } // namespace
+
+    void postEvent(events::Key key, std::string json) {
+        auto& s = evs();
+        if (!s.running) {
+            postNow(json); // before startEvents() or while unloading: no timer may be created
             return;
         }
-        g_pEventManager->postEvent(SHyprIPCEvent{.event = std::string{gfc::kEventName}, .data = json});
+        const auto now = events::Clock::now();
+        postAll(s.throttle.submit(key, std::move(json), now));
+        noteCoalesced();
+        schedule(now);
+    }
+
+    void startEvents() {
+        evs().running = true;
+    }
+
+    void stopEvents() {
+        auto& s   = evs();
+        s.running = false;
+        if (s.timer) {
+            if (g_pEventLoopManager)
+                g_pEventLoopManager->removeTimer(s.timer);
+            s.timer.reset();
+        }
+        s.armedFor.reset();
+        postAll(s.throttle.drain()); // the final state of every key still reaches the shell
     }
 
     bool minimizeAvailable() {
@@ -43,7 +141,7 @@ namespace gf::ipc {
     } // namespace
 
     void postCapabilities() {
-        postEvent(currentCapabilities());
+        postEvent(events::Key{.channel = events::Channel::Capabilities, .id = 0}, currentCapabilities());
     }
 
     namespace {

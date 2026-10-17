@@ -167,6 +167,7 @@ namespace {
         step("listeners", [&] { s.listeners.clear(); });
         step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
         step("appmenu", [] { gf::appmenuServer::stop(); }); // no wl_resource may point into this library after dlclose
+        step("events", [] { gf::ipc::stopEvents(); });      // after the appmenu clears: waiting events posted, timer removed
         step("ipc", [] { gf::ipc::unregisterAll(); });
         step("titlebars", [] { removeAllTitlebars(); });
         s.active = false;
@@ -199,6 +200,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     }
 
     const bool ok = gf::guarded("PLUGIN_INIT", [&] {
+        gf::ipc::startEvents(); // before anything can post (spec FR24)
         registerListeners();
         if (!gf::minimizer::start())
             gf::log(Log::WARN, "minimize render hooks failed to register; minimize not advertised");

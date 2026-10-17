@@ -86,10 +86,13 @@ namespace {
         return std::format("{:x}", address);
     }
 
+    // Coalesced per window (spec FR24): a client can send set_address by the thousand, the shell gets the latest
+    // registration at most every 100 ms.
     void post(const am::Announcement& a) {
         if (!st().ready)
             return;
-        gf::ipc::postEvent(gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path, a.registration.pid));
+        gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::Appmenu, .id = a.window},
+                           gf::gfc::appmenuJson(hexAddress(a.window), a.registration.service, a.registration.path, a.registration.pid));
     }
 
     void post(const std::optional<am::Announcement>& a) {
