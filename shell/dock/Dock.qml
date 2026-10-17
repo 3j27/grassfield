@@ -254,13 +254,19 @@ Scope {
                 radius: shelf.radius
             }
 
-            // Rectangle (global compositor coordinates) of the first slot right of the separator:
-            // where a minimized window lands. The plugin's minimize animation targets it.
-            readonly property var minimizeTarget: {
+            // Rectangle (global layout coordinates) of the minimized tile `index` (0 = first right of the
+            // separator): where that window lands (minimize, `adding`: the tile does not exist yet and is
+            // appended before the Trash) or leaves from (restore). Called by Compositor for this screen.
+            function tileRect(index: int, adding: bool): var {
                 const sep = root.items.findIndex(it => it.kind === "separator");
-                const slot = baseCenters[sep >= 0 ? sep + 1 : root.items.length - 1];
                 const mon = Compositor.monitorByName(win.screen.name);
-                if (slot === undefined || !mon)
+                if (sep < 0 || !mon || index < 0)
+                    return null;
+                const w = widths.slice();
+                if (adding)
+                    w.splice(sep + 1 + index, 0, iconSize);
+                const slot = Magnify.centersFor(w, Tokens.dockSpacing, (width - Magnify.totalWidth(w, Tokens.dockSpacing)) / 2)[sep + 1 + index];
+                if (slot === undefined)
                     return null;
                 return {
                     x: mon.x + slot - iconSize / 2,
@@ -270,12 +276,8 @@ Scope {
                 };
             }
 
-            Binding {
-                target: Compositor
-                property: "dockTarget"
-                value: win.minimizeTarget
-                when: win.modelData === Quickshell.screens[0]
-            }
+            Component.onCompleted: Compositor.registerDock(win.modelData.name, win)
+            Component.onDestruction: Compositor.unregisterDock(win.modelData.name, win)
 
             Behavior on influence {
                 NumberAnimation {

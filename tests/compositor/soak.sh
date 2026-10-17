@@ -95,8 +95,21 @@ resident=() # long-lived windows (whole run)
 spawned=0 short=0 drags=0 abandoned=0 zooms=0 closes=0 cancels=0 minimizes=0 round=0
 cleanup() {
   for p in "${pool[@]}" "${resident[@]}"; do kill "$p" 2>/dev/null; done
+  [[ -n ${events_pid:-} ]] && kill "$events_pid" 2>/dev/null
 }
 trap cleanup EXIT
+
+# Minimize accounting: "minimized" events (socket2, read-only, socat) and the plugin's log line for a
+# rejected Dock rectangle (the window is then hidden without animation).
+events=$dev/soak-events-$start_epoch.log
+events_pid=
+rejected_before=0
+if (( minimize_rounds )); then
+  command -v socat >/dev/null || { echo "soak: socat is needed to count minimizes" >&2; exit 2; }
+  [[ -r $hyprlog ]] && rejected_before=$(grep -c 'minimize [0-9a-f]*: no valid Dock rectangle' "$hyprlog")
+  socat -u UNIX-CONNECT:"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/.socket2.sock" STDOUT </dev/null >"$events" 2>>"$log" &
+  events_pid=$!
+fi
 
 say "soak: start $start_human, duration ${duration}s, nested pid $hypr_pid, instance $sig, output $out ${out_w}x${out_h}"
 say "soak: Hyprland RSS at start: $(rss_kb) kB"
@@ -203,6 +216,17 @@ if [[ -r $hyprlog ]]; then
   (( exceptions == 0 )) || fail=1
 else
   say "check: nested log $hyprlog not readable (exceptions NOT checked)"
+fi
+
+if (( minimize_rounds )); then
+  total=$(grep -c 'grassfield>>{"v":"gfc/1","type":"minimized"' "$events" 2>/dev/null)
+  rejected=$(( $(grep -c 'minimize [0-9a-f]*: no valid Dock rectangle' "$hyprlog" 2>/dev/null) - rejected_before ))
+  animated=$((total - rejected))
+  say "check: minimizes: $total total, $animated animated, $rejected rejected (no valid Dock rectangle)"
+  if (( animated <= 0 )); then
+    say "check: FAIL no minimize animated although the plugin advertises minimize"
+    fail=1
+  fi
 fi
 
 if (( fail == 0 )); then say "soak: PASS"; else say "soak: FAIL"; fi
