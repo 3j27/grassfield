@@ -35,7 +35,7 @@ Item {
         visible: root.isFolder
         radius: root.size * Tokens.appsFolderRadiusScale
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
-        border.width: 1
+        border.width: Tokens.appsBorderWidth
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
     }
 

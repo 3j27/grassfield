@@ -32,6 +32,8 @@ Scope {
 
     // Latency log (P3): timestamp of the IPC call.
     property real openStartMs: 0
+    // Latency log: timestamp of the last query change (AppsWindow logs it at the next frame).
+    property real searchStartMs: 0
 
     property var records: []
     property var byId: ({})
@@ -41,6 +43,22 @@ Scope {
     property var usage: Ranking.newUsage()
     // Desktop entry ids hidden by OnlyShowIn / NotShowIn for $XDG_CURRENT_DESKTOP.
     property var hiddenIds: ({})
+    // Stable display items: every app item and folder item, keyed by item key. The grid keeps one
+    // cell per entry of `allItems` ({key, state}) and only moves it: `state.slot` is the index of
+    // the item in `items` (-1 when not shown) and changes only for items that moved, so a search
+    // keystroke never rebuilds cells nor re-evaluates the cells that stay put.
+    property var appItems: ({})
+    property var itemByKey: ({})
+    property var allItems: []
+    property var states: ({})
+
+    Component {
+        id: stateComponent
+
+        QtObject {
+            property int slot: -1
+        }
+    }
 
     readonly property bool searching: query.trim() !== ""
     readonly property var grid: Model.grid(screenSize.width, screenSize.height, ({
@@ -123,11 +141,15 @@ Scope {
     function setQuery(text: string): void {
         if (text === query)
             return;
+        const t0 = Date.now();
+        searchStartMs = t0;
         query = text;
         folderKey = "";
         page = 0;
         rebuildItems(false);
         selected = searching && items.length > 0 ? 0 : -1;
+        if (Date.now() - t0 > 16)
+            console.info("grassfield-shell: apps search", Date.now() - t0, "ms,", items.length, "items");
     }
 
     function setPage(p: int): void {
@@ -139,6 +161,7 @@ Scope {
     function rebuildApps(): void {
         const out = [];
         const map = {};
+        const cache = {};
         for (const e of DesktopEntries.applications.values) {
             // DesktopEntry exposes NoDisplay only; OnlyShowIn / NotShowIn come from `hiddenIds`.
             if (e.noDisplay || root.hiddenIds[e.id] === true)
@@ -147,21 +170,50 @@ Scope {
                 keywords: Array.from(e.keywords), icon: e.icon, entry: e};
             out.push(rec);
             map[e.id] = rec;
+            cache["app:" + e.id] = {kind: "app", key: "app:" + e.id, id: e.id, name: e.name, rec: rec};
         }
+        appItems = cache;
         records = out;
         byId = map;
         rebuildItems(true);
     }
 
+    // Display items are created once per record, so a keystroke only picks from the cache.
     function appItem(rec: var): var {
-        return {kind: "app", key: "app:" + rec.id, id: rec.id, name: rec.name, rec: rec};
+        return appItems["app:" + rec.id];
     }
 
     function rebuildItems(relayout: bool): void {
         if (relayout)
             layout = Model.reconcile(saved, records.map(r => ({id: r.id, name: r.name})));
-        const t0 = Date.now();
         let list = [];
+        // Folder items are rebuilt only when the layout shows (a search keystroke skips this).
+        const folders = {};
+        if (relayout || !searching) {
+            for (const it of layout) {
+                if (it.t === "folder")
+                    folders[it.key] = {kind: "folder", key: it.key, id: it.key, name: it.name, apps: it.apps.map(id => appItem(byId[id]))};
+            }
+            itemByKey = Object.assign({}, appItems, folders);
+            if (relayout) {
+                const keep = {};
+                allItems = Object.keys(itemByKey).map(k => {
+                    let st = states[k];
+                    if (!st) {
+                        st = stateComponent.createObject(root);
+                        states[k] = st;
+                    }
+                    keep[k] = true;
+                    return {key: k, state: st};
+                });
+                for (const k of Object.keys(states)) {
+                    if (!keep[k]) {
+                        states[k].destroy();
+                        delete states[k];
+                    }
+                }
+            }
+        }
         if (searching) {
             for (const r of Ranking.rank(records, query, usage, 0))
                 list.push(appItem(r.app));
@@ -170,9 +222,18 @@ Scope {
                 if (it.t === "app") {
                     list.push(appItem(byId[it.id]));
                 } else {
-                    list.push({kind: "folder", key: it.key, id: it.key, name: it.name, apps: it.apps.map(id => appItem(byId[id]))});
+                    list.push(folders[it.key]);
                 }
             }
+        }
+        const shown = {};
+        for (let i = 0; i < list.length; i++) {
+            shown[list[i].key] = true;
+            states[list[i].key].slot = i;
+        }
+        for (const it of items) {
+            if (!shown[it.key] && states[it.key])
+                states[it.key].slot = -1;
         }
         items = list;
         if (page >= pageCount)
@@ -181,8 +242,6 @@ Scope {
             selected = items.length - 1;
         if (folderKey !== "" && !folder)
             folderKey = "";
-        if (open && Date.now() - t0 > 20)
-            console.info("grassfield-shell: apps rebuild", Date.now() - t0, "ms,", list.length, "items");
     }
 
     // ---- editing (layout persisted on every change) --------------------------------------

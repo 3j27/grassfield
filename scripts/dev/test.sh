@@ -31,6 +31,11 @@ for dir in tests/shell/*/ tests/security/*/; do
   echo "$out" | grep -E "PASS|FAIL" || { echo "$out"; status=1; }
   if grep -q "FAIL" <<<"$out"; then status=1; fi
 done
+# Plain shell tests: tests/shell/*.sh print PASS/FAIL and exit non-zero on failure.
+for script in tests/shell/*.sh; do
+  [[ -f $script ]] || continue
+  bash "$script" || { echo "FAIL: $script"; status=1; }
+done
 if [[ -x compositor/build/grassfield-compositor-tests ]]; then
   compositor/build/grassfield-compositor-tests || status=1
 fi

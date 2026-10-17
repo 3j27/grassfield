@@ -83,6 +83,20 @@ Variants {
             }
         }
 
+        // Logs query change -> next rendered frame when a keystroke takes more than three frames.
+        Connections {
+            target: win.shown && root.controller.searchStartMs > 0 ? host.Window.window : null
+
+            function onFrameSwapped(): void {
+                const start = root.controller.searchStartMs;
+                if (start === 0)
+                    return;
+                root.controller.searchStartMs = 0;
+                if (Date.now() - start > 50)
+                    console.info("grassfield-shell: apps search->frame", Date.now() - start, "ms,", root.controller.items.length, "items");
+            }
+        }
+
         Rectangle {
             id: backdrop
             anchors.fill: parent
@@ -220,6 +234,20 @@ Variants {
                 }
             }
 
+            // Focuses the open folder's name field with its text selected (typing renames it).
+            function startRename(): void {
+                if (!root.controller.folder)
+                    return;
+                nameField.forceActiveFocus();
+                nameField.selectAll();
+            }
+
+            // Closes the open folder, committing a rename in progress first.
+            function closeFolderCommitted(): void {
+                nameField.commit();
+                root.controller.closeFolder();
+            }
+
             function handleKey(event: var, inField: bool): void {
                 const c = root.controller;
                 if (nameField.activeFocus)
@@ -248,10 +276,16 @@ Variants {
                     return;
                 case Qt.Key_Return:
                 case Qt.Key_Enter:
-                    if (c.folder || c.selected >= 0)
+                    if (c.folder && c.folderSelected < 0)
+                        host.startRename();
+                    else if (c.folder || c.selected >= 0)
                         c.activateSelected();
-                    else if (c.items.length > 0)
+                    else if (c.searching && c.items.length > 0)
                         c.activate(c.items[0]);
+                    return;
+                case Qt.Key_F2:
+                    if (c.folder)
+                        host.startRename();
                     return;
                 case Qt.Key_Left:
                 case Qt.Key_Right:
@@ -328,7 +362,7 @@ Variants {
                     if (Math.abs(dx) >= Tokens.appsSwipeThreshold)
                         root.controller.flip(dx < 0 ? 1 : -1);
                     else if (root.controller.folder)
-                        root.controller.closeFolder();
+                        host.closeFolderCommitted();
                     else
                         root.controller.hide();
                 }
@@ -363,7 +397,7 @@ Variants {
                 height: Tokens.appsSearchHeight
                 radius: height / 2
                 color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
-                border.width: field.activeFocus ? Tokens.controlFocusRing : 1
+                border.width: field.activeFocus ? Tokens.controlFocusRing : Tokens.appsBorderWidth
                 border.color: field.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
                 Accessible.role: Accessible.Pane
                 Accessible.name: qsTr("Search")
@@ -479,7 +513,7 @@ Variants {
                 anchors.fill: parent
                 visible: root.controller.folder !== null
                 acceptedButtons: Qt.AllButtons
-                onClicked: root.controller.closeFolder()
+                onClicked: host.closeFolderCommitted()
 
                 Rectangle {
                     anchors.fill: parent
@@ -559,6 +593,8 @@ Variants {
                         const f = root.controller.folder;
                         if (!f)
                             return;
+                        if (text === f.name)
+                            return;
                         if (text.trim() !== "")
                             root.controller.renameFolderTo(f.key, text);
                         else
@@ -569,7 +605,11 @@ Variants {
                     Keys.onPressed: event => {
                         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Escape || event.key === Qt.Key_Tab) {
                             event.accepted = true;
-                            commit();
+                            // Escape cancels the rename and keeps the folder; the others commit.
+                            if (event.key === Qt.Key_Escape && root.controller.folder)
+                                text = root.controller.folder.name;
+                            else
+                                commit();
                             keys.forceActiveFocus();
                             root.controller.keyNav = true;
                             if (root.controller.folderSelected < 0)
@@ -582,21 +622,24 @@ Variants {
                 Connections {
                     target: root.controller
 
+                    // `folder` is derived from the items and is not yet set when folderKey changes, so
+                    // the name field follows `folder`: it takes the name and, for a folder just
+                    // created by a drop, the focus with the text selected.
                     function onFolderChanged(): void {
                         const f = root.controller.folder;
-                        if (f && nameField.text !== f.name && !nameField.activeFocus)
+                        if (!f || nameField.activeFocus)
+                            return;
+                        if (nameField.text !== f.name)
                             nameField.text = f.name;
+                        if (root.controller.renameFolder)
+                            Qt.callLater(host.startRename);
                     }
 
                     function onFolderKeyChanged(): void {
-                        const f = root.controller.folder;
-                        nameField.text = f ? f.name : "";
-                        if (f && root.controller.renameFolder) {
-                            nameField.forceActiveFocus();
-                            nameField.selectAll();
-                        } else {
+                        if (root.controller.folderKey === "")
+                            nameField.text = "";
+                        if (!root.controller.renameFolder)
                             keys.forceActiveFocus();
-                        }
                     }
                 }
 

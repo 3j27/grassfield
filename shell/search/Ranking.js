@@ -35,11 +35,16 @@ function fuzzy(text, query) {
     return Math.max(1, 25 - gaps * 2 - first);
 }
 
+// True when `query` starts a word of `text`; words are split at whitespace, "-", "_" and ".".
 function wordStart(text, query) {
-    const words = text.split(/[\s\-_.]+/);
-    for (const w of words) {
-        if (w.length > 0 && w.startsWith(query))
+    let i = text.indexOf(query);
+    while (i >= 0) {
+        if (i === 0)
             return true;
+        const c = text.charCodeAt(i - 1);
+        if (c === 45 || c === 46 || c === 95 || c === 32 || (c >= 9 && c <= 13) || c === 160)
+            return true;
+        i = text.indexOf(query, i + 1);
     }
     return false;
 }
@@ -50,12 +55,11 @@ function textScore(text, query) {
         return 0;
     if (text === query)
         return 100;
-    if (text.startsWith(query))
+    const at = text.indexOf(query);
+    if (at === 0)
         return 80;
-    if (wordStart(text, query))
-        return 65;
-    if (text.indexOf(query) >= 0)
-        return 50;
+    if (at > 0)
+        return wordStart(text, query) ? 65 : 50;
     return query.length >= 2 ? fuzzy(text, query) : 0;
 }
 
@@ -69,34 +73,60 @@ function usageFor(usage, id) {
     return usage && id in usage ? usage[id] : null;
 }
 
-// Score of one app for a (trimmed) query; 0 = no match. The usage boost only applies to matches.
-function score(app, rawQuery, usage) {
-    const query = norm(rawQuery).trim();
-    if (query === "")
-        return 0;
-    let s = textScore(norm(app.name), query);
+// Normalized fields of an app, computed once per app object (a keystroke ranks every app).
+const prepared = new WeakMap();
+
+function prep(app) {
+    let p = prepared.get(app);
+    if (p === undefined) {
+        p = {
+            name: norm(app.name),
+            keywords: (app.keywords || []).map(norm),
+            generic: norm(app.genericName),
+            comment: norm(app.comment)
+        };
+        prepared.set(app, p);
+    }
+    return p;
+}
+
+// Score for an already normalized, trimmed, non-empty query.
+function scoreNormalized(app, query, usage) {
+    const p = prep(app);
+    let s = textScore(p.name, query);
     let kw = 0;
-    for (const k of app.keywords || [])
-        kw = Math.max(kw, textScore(norm(k), query) * 0.45);
+    for (const k of p.keywords)
+        kw = Math.max(kw, textScore(k, query) * 0.45);
     s = Math.max(s, kw);
-    s = Math.max(s, textScore(norm(app.genericName), query) * 0.4);
-    const c = norm(app.comment);
-    if (c.length > 0 && query.length >= 3 && c.indexOf(query) >= 0)
+    s = Math.max(s, textScore(p.generic, query) * 0.4);
+    if (p.comment.length > 0 && query.length >= 3 && p.comment.indexOf(query) >= 0)
         s = Math.max(s, 15);
     if (s <= 0)
         return 0;
     return s + usageBoost(usageFor(usage, app.id));
 }
 
+// Score of one app for a (trimmed) query; 0 = no match. The usage boost only applies to matches.
+function score(app, rawQuery, usage) {
+    const query = norm(rawQuery).trim();
+    if (query === "")
+        return 0;
+    return scoreNormalized(app, query, usage);
+}
+
 // Sorted matches [{app, score}], best first; ties by name. `limit` caps the list.
 function rank(apps, query, usage, limit) {
     const out = [];
+    const q = norm(query).trim();
+    if (q === "")
+        return out;
     for (const app of apps) {
-        const s = score(app, query, usage);
+        const s = scoreNormalized(app, q, usage);
         if (s > 0)
-            out.push({app: app, score: s});
+            out.push({app: app, score: s, name: prep(app).name});
     }
-    out.sort((a, b) => b.score - a.score || norm(a.app.name).localeCompare(norm(b.app.name)));
+    // Ties by normalized name in code unit order (localeCompare costs several ms per sort).
+    out.sort((a, b) => b.score - a.score || (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)));
     return limit > 0 ? out.slice(0, limit) : out;
 }
 
