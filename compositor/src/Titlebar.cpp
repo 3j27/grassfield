@@ -2,12 +2,14 @@
 
 #include "Ipc.hpp"
 #include "Plugin.hpp"
+#include "core/PointerGesture.hpp"
 #include "core/Protocol.hpp"
 #include "core/Theme.hpp"
 
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
@@ -25,6 +27,9 @@
 #include <cstdint>
 #include <format>
 #include <optional>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace tb    = gf::titlebar;
 namespace theme = gf::theme;
@@ -35,7 +40,8 @@ namespace {
     // Measured in S2: at 10000 the bar was placed outside the border.
     constexpr uint32_t DECORATION_PRIORITY = 10005;
 
-    // The single pointer gesture started on a titlebar (there is one seat pointer).
+    // The single pointer gesture started on a titlebar (there is one seat pointer). Its lifetime and
+    // the ownership of pressed buttons are decided by the press tracker (core/PointerGesture.*).
     struct SPointerGrab {
         CGrassfieldTitlebar*      deco = nullptr; // checked against state().titlebars before use
         std::optional<tb::Button> button;         // pressed button, activated on release over the same button
@@ -43,8 +49,19 @@ namespace {
         PHLWINDOWREF              window;   // window being moved
         Vector2D                  pressPos; // pointer at press (global logical)
         CBox                      startBox; // window layout box at press
+        std::vector<WP<IPointer>> devices;  // pointer devices present at the press
     };
-    SPointerGrab g_grab;
+
+    struct SPointerInput {
+        SPointerGrab                      grab;
+        gf::input::CPointerGestureTracker presses;
+    };
+
+    // Constructed on first use, inside a guarded call, so a throwing constructor cannot escape (R13).
+    SPointerInput& pointerInput() {
+        static SPointerInput input;
+        return input;
+    }
 
     bool isLive(const CGrassfieldTitlebar* deco) {
         const auto& all = gf::state().titlebars;
@@ -85,6 +102,11 @@ namespace {
         return "?";
     }
 
+    void logIfFailed(std::string_view action, const Config::Actions::ActionResult& result) {
+        if (!result)
+            gf::log(Log::WARN, "titlebar {} failed: {}", action, result.error().message);
+    }
+
     void toggleZoom(const PHLWINDOW& w) {
         auto& fs = Fullscreen::controller();
         if (!fs)
@@ -99,17 +121,56 @@ namespace {
     // jumped by (window middle - press point). The cause was most likely Config::Actions::focus() warping
     // the cursor to the window middle before the drag started (found afterwards, now avoided in
     // focusAndRaise). Hyprland's own drag (with snapping) should be re-evaluated in M1; this move has no snapping.
-    void updateMove() {
-        const auto w = g_grab.window.lock();
+    void updateMove(const SPointerGrab& grab) {
+        const auto w = grab.window.lock();
         if (!w || !g_layoutManager || !g_pInputManager)
             return;
         const auto target = w->layoutTarget();
         if (!target)
             return;
-        const Vector2D delta = g_pInputManager->getMouseCoordsInternal() - g_grab.pressPos;
-        CBox           box   = g_grab.startBox;
+        const Vector2D delta = g_pInputManager->getMouseCoordsInternal() - grab.pressPos;
+        CBox           box   = grab.startBox;
         box.translate(delta);
         g_layoutManager->setTargetGeom(box, target);
+    }
+
+    std::vector<WP<IPointer>> pointerDevices() {
+        std::vector<WP<IPointer>> devices;
+        if (g_pInputManager) {
+            for (const auto& device : g_pInputManager->m_pointers)
+                devices.emplace_back(device);
+        }
+        return devices;
+    }
+
+    // Every pointer device present at the press still exists. Hyprland 0.56.2 does not release the
+    // buttons of a pointer device that goes away (CInputManager::destroyPointer), so a vanished device
+    // means the gesture's release may never arrive.
+    bool devicesIntact(const std::vector<WP<IPointer>>& devices) {
+        if (!g_pInputManager)
+            return false;
+        const auto& present = g_pInputManager->m_pointers;
+        return std::ranges::all_of(devices, [&present](const WP<IPointer>& device) {
+            const auto alive = device.lock();
+            return alive && std::ranges::find(present, alive) != present.end();
+        });
+    }
+
+    // Whether Hyprland will hand a button event at the pointer to one of our titlebars. It routes
+    // button events to the decorations of the window under the pointer: CInputManager::processMouseDownNormal
+    // picks it with CViewHitTester::windowAt(pos, RESERVED_EXTENTS | INPUT_EXTENTS | ALLOW_FLOATING), then
+    // CWindow::checkInputOnDecos skips decorations when a popup is under the pointer and otherwise offers
+    // the event to each decoration whose box contains the point (0.56.2 binary).
+    bool buttonEventRoutesToTitlebar() {
+        const auto& views = Desktop::viewState();
+        if (!g_pInputManager || !views)
+            return false;
+        const Vector2D pos   = g_pInputManager->getMouseCoordsInternal();
+        const auto     props = static_cast<uint16_t>(Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+        const auto     w     = views->hitTest().windowAt(pos, props);
+        if (!w || w->hasPopupAt(pos))
+            return false;
+        return std::ranges::any_of(gf::state().titlebars, [&](const CGrassfieldTitlebar* deco) { return deco->window() == w && deco->receivesPointerAt(pos); });
     }
 
     // Focus without Config::Actions::focus(): that action warps the cursor to the window middle when the
@@ -117,21 +178,26 @@ namespace {
     void focusAndRaise(const PHLWINDOW& w) {
         if (const auto focus = Desktop::focusState(); focus && !focus->isWindowActive(w))
             focus->fullWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
-        (void)Config::Actions::alterZOrder("top", w);
+        logIfFailed("raise", Config::Actions::alterZOrder("top", w));
     }
 } // namespace
 
-CGrassfieldTitlebar::CGrassfieldTitlebar(PHLWINDOW window) : IHyprWindowDecoration(window), m_owner(window) {
+CGrassfieldTitlebar::CGrassfieldTitlebar(const PHLWINDOW& window) : IHyprWindowDecoration(window), m_owner(window) {
     gf::state().titlebars.push_back(this);
     m_lastShown = shouldShow();
 }
 
 CGrassfieldTitlebar::~CGrassfieldTitlebar() {
     std::erase(gf::state().titlebars, this);
-    if (g_grab.deco == this) {
-        g_grab.deco = nullptr;
-        g_grab = {}; // the window is going away: drop the gesture
-    }
+    gf::guarded("titlebar destructor", [this] {
+        auto& input = pointerInput();
+        if (input.grab.deco == this) {
+            // The window is going away: drop the gesture. The press ownership stays, so the release that
+            // will still arrive is kept from the client under the pointer, which never saw the press.
+            input.grab = {};
+            input.presses.dropGesture();
+        }
+    });
 }
 
 PHLWINDOW CGrassfieldTitlebar::window() const {
@@ -209,6 +275,10 @@ void CGrassfieldTitlebar::onTitleChanged() {
         return;
     m_title.texture.reset(); // rebuilt lazily in draw()
     damageEntire();
+}
+
+bool CGrassfieldTitlebar::receivesPointerAt(const Vector2D& pos) const {
+    return shouldShow() && layoutBox().containsPoint(pos);
 }
 
 CBox CGrassfieldTitlebar::layoutBox() const {
@@ -310,12 +380,20 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
 bool CGrassfieldTitlebar::onInputOnDeco(const eInputType type, const Vector2D& coords, std::any data) {
     bool consumed = false;
     gf::guarded("titlebar onInputOnDeco", [&] {
-        if (type != INPUT_TYPE_BUTTON || !shouldShow())
+        if (type != INPUT_TYPE_BUTTON)
             return;
         const auto* e = std::any_cast<IPointer::SButtonEvent>(&data);
-        if (!e || e->state != WL_POINTER_BUTTON_STATE_PRESSED)
-            return; // releases are handled by onGlobalMouseButton
-        consumed = onButtonPress(coords, *e);
+        if (!e)
+            return;
+        if (e->state == WL_POINTER_BUTTON_STATE_RELEASED) {
+            // Only the release of a press a titlebar consumed, prepared by onGlobalMouseButton.
+            // Consuming it here (instead of cancelling it on the event bus) keeps Hyprland's
+            // held-button bookkeeping intact.
+            consumed = pointerInput().presses.takeTitlebarRelease(e->button);
+            return;
+        }
+        if (shouldShow())
+            consumed = onButtonPress(coords, *e);
     });
     return consumed;
 }
@@ -333,10 +411,13 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
 
     focusAndRaise(w);
 
+    auto& input = pointerInput();
     if (const auto button = tb::buttonForHit(hit)) {
-        g_grab        = {};
-        g_grab.deco   = this;
-        g_grab.button = button;
+        input.grab         = {};
+        input.grab.deco    = this;
+        input.grab.button  = button;
+        input.grab.devices = pointerDevices();
+        input.presses.claim(e.button, true);
         m_clicks.reset();
         return true;
     }
@@ -345,11 +426,21 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
         gf::log(Log::DEBUG, "titlebar double-click -> toggle zoom");
         toggleZoom(w);
+        input.presses.claim(e.button, false); // acts now; only its release remains to be kept from clients
         return true;
     }
 
-    if (const auto target = w->layoutTarget())
-        g_grab = SPointerGrab{.deco = this, .button = std::nullopt, .dragging = true, .window = w, .pressPos = coords, .startBox = target->position()};
+    const auto target = w->layoutTarget();
+    if (target) {
+        input.grab          = {};
+        input.grab.deco     = this;
+        input.grab.dragging = true;
+        input.grab.window   = w;
+        input.grab.pressPos = coords;
+        input.grab.startBox = target->position();
+        input.grab.devices  = pointerDevices();
+    }
+    input.presses.claim(e.button, target != nullptr);
     return true;
 }
 
@@ -359,7 +450,10 @@ void CGrassfieldTitlebar::activate(tb::Button button) {
         return;
 
     switch (button) {
-        case tb::Button::Close: gf::log(Log::DEBUG, "titlebar close"); (void)Config::Actions::closeWindow(w); break;
+        case tb::Button::Close:
+            gf::log(Log::DEBUG, "titlebar close");
+            logIfFailed("close", Config::Actions::closeWindow(w));
+            break;
         case tb::Button::Zoom: gf::log(Log::DEBUG, "titlebar zoom"); toggleZoom(w); break;
         case tb::Button::Minimize:
             // PLACEHOLDER (M2): real minimize (hidden state + animation to the Dock) is not implemented.
@@ -372,41 +466,69 @@ void CGrassfieldTitlebar::activate(tb::Button button) {
 
 void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e, Event::SCallbackInfo& info) {
     gf::guarded("titlebar onGlobalMouseButton", [&] {
-        if (e.button != BTN_LEFT || e.state != WL_POINTER_BUTTON_STATE_RELEASED)
+        auto& input = pointerInput();
+        if (e.state == WL_POINTER_BUTTON_STATE_PRESSED) {
+            // A press while a gesture is active: its release was lost (e.g. the pressing device went away)
+            // or another button was pressed. End the gesture where it is; this press goes wherever
+            // Hyprland sends it, and its release with it.
+            if (input.presses.onPress(e.button)) {
+                gf::log(Log::DEBUG, "titlebar gesture cancelled by a new press (button {:#x})", e.button);
+                input.grab = {};
+            }
             return;
-        if (!g_grab.dragging && !g_grab.button)
-            return;
-
-        const SPointerGrab grab = g_grab;
-        g_grab                  = {};
-
-        if (grab.dragging) {
-            g_grab = grab; // final position at the release point
-            updateMove();
-            g_grab = {};
         }
 
-        if (grab.button && isLive(grab.deco) && g_pInputManager) {
-            const auto pos = g_pInputManager->getMouseCoordsInternal();
-            const CBox bar = grab.deco->layoutBox();
-            if (tb::buttonForHit(tb::hitTest(pos.x - bar.x, pos.y - bar.y, bar.w)) == grab.button)
-                grab.deco->activate(*grab.button);
+        const auto release = input.presses.onRelease(e.button);
+        if (!release.owned)
+            return; // the press went to a client (or nowhere): so does its release
+
+        if (release.endsGesture) {
+            const SPointerGrab grab = std::exchange(input.grab, {});
+            if (grab.dragging)
+                updateMove(grab); // final position at the release point
+
+            if (grab.button && isLive(grab.deco) && g_pInputManager) {
+                const auto pos = g_pInputManager->getMouseCoordsInternal();
+                const CBox bar = grab.deco->layoutBox();
+                if (tb::buttonForHit(tb::hitTest(pos.x - bar.x, pos.y - bar.y, bar.w)) == grab.button)
+                    grab.deco->activate(*grab.button);
+            }
         }
 
-        // The press never reached the client (the titlebar consumed it); keep the release away too.
-        info.cancelled = true;
+        // A titlebar consumed the press, so no client saw it: keep the release away from clients too.
+        // When Hyprland will route it to a titlebar, let it go there and be consumed (onInputOnDeco):
+        // cancelling it here also skips Hyprland's held-button bookkeeping (CInputManager::onMouseButton
+        // returns before updating m_currentlyHeldButtons), which drives its pointer-focus hold while a
+        // button is down. Otherwise cancel it here.
+        if (buttonEventRoutesToTitlebar())
+            input.presses.expectTitlebarRelease(e.button);
+        else
+            info.cancelled = true;
     });
 }
 
 void CGrassfieldTitlebar::onGlobalMouseMove() {
     gf::guarded("titlebar onGlobalMouseMove", [] {
-        if (g_grab.dragging)
-            updateMove();
+        auto& input = pointerInput();
+        if (!input.presses.gestureButton())
+            return;
+        // Hyprland's held-button state and the pointer devices tell whether the gesture's button can
+        // still be down; if not, its release will never arrive and the gesture must not stick.
+        const bool held = g_pInputManager && g_pInputManager->hasHeldButtons();
+        if (input.presses.onMotion(held, devicesIntact(input.grab.devices))) {
+            gf::log(Log::DEBUG, "titlebar gesture cancelled: no button held or a pointer device went away");
+            input.grab = {};
+            return;
+        }
+        if (input.grab.dragging)
+            updateMove(input.grab);
     });
 }
 
 void CGrassfieldTitlebar::cancelPointerGrab() {
     gf::guarded("titlebar cancelPointerGrab", [] {
-        g_grab = {};
+        auto& input = pointerInput();
+        input.grab  = {};
+        input.presses.reset();
     });
 }
