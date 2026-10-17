@@ -12,6 +12,7 @@ set(MENU_BRIDGE_LOGIC
     src/Protocol.cpp src/Protocol.h
     src/Layout.cpp src/Layout.h
     src/Safety.cpp src/Safety.h
+    src/Penalties.cpp src/Penalties.h
     src/DBusObjects.cpp src/DBusObjects.h)
 
 add_executable(grassfield-menu-bridge

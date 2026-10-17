@@ -1,6 +1,7 @@
 #include "MenuClient.h"
 
 #include "Log.h"
+#include "Memory.h"
 
 #include <QDBusArgument>
 #include <QDBusPendingCallWatcher>
@@ -68,44 +69,45 @@ namespace gf::menubridge {
             m_again = true;
             return;
         }
-        m_fetching    = true;
-        auto* watcher = new QDBusPendingCallWatcher(m_bus.asyncCall(getLayoutCall(m_service, m_path), kCallTimeoutMs), this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            m_fetching            = false;
-            const QDBusMessage reply = w->reply();
+        m_fetching = true;
+        track(getLayoutCall(m_service, m_path), [this](const QDBusMessage& reply) {
+            m_fetching = false;
             if (m_gone || m_stopped)
                 return;
-            if (reply.type() != QDBusMessage::ReplyMessage || reply.signature() != QLatin1String("u(ia{sv}av)") || reply.arguments().size() != 2) {
-                const QString why = reply.type() == QDBusMessage::ErrorMessage ? reply.errorName() : QStringLiteral("unexpected reply signature %1").arg(reply.signature());
-                log(QStringLiteral("window %1: GetLayout on %2 %3 failed: %4").arg(m_window, m_service, m_path, why));
-                fail(QStringLiteral("layout-failed"), why);
-                return;
-            }
-            RawItem      root;
-            LayoutBudget readBudget;
-            if (!readLayout(qvariant_cast<QDBusArgument>(reply.arguments().at(1)), root, 0, readBudget)) {
-                fail(QStringLiteral("layout-failed"), QStringLiteral("malformed layout"));
-                return;
-            }
-            if (readBudget.truncated) {
-                // More items or levels than any real menu has: the application is not trusted any more, its menu is not
-                // shown and no further GetLayout is sent (the bridge remembers the refusal, see Bridge::refuse).
-                log(QStringLiteral("window %1: menu of %2 has more than %3 items or %4 levels: refused").arg(m_window, m_service).arg(limits::kItems).arg(limits::kDepth));
-                m_stopped = true;
-                m_refetch.stop();
-                emit failed(m_window, QStringLiteral("oversized"), QStringLiteral("the menu is larger than the supported limits"));
-                return;
-            }
-            m_failures = 0;
-            LayoutBudget mapBudget;
-            m_items = mapChildren(root, mapBudget);
-            m_index = indexItems(m_items);
-            m_ready = true;
-            emit menuChanged(m_window);
-            if (std::exchange(m_again, false))
-                fetch();
+            handleLayout(reply);
         });
+    }
+
+    void MenuClient::handleLayout(const QDBusMessage& reply) {
+        if (reply.type() != QDBusMessage::ReplyMessage || reply.signature() != QLatin1String("u(ia{sv}av)") || reply.arguments().size() != 2) {
+            const QString why = reply.type() == QDBusMessage::ErrorMessage ? reply.errorName() : QStringLiteral("unexpected reply signature %1").arg(reply.signature());
+            log(QStringLiteral("window %1: GetLayout on %2 %3 failed: %4").arg(m_window, m_service, m_path, why));
+            fail(QStringLiteral("layout-failed"), why);
+            return;
+        }
+        RawItem      root;
+        LayoutBudget readBudget;
+        if (!readLayout(qvariant_cast<QDBusArgument>(reply.arguments().at(1)), root, 0, readBudget)) {
+            fail(QStringLiteral("layout-failed"), QStringLiteral("malformed layout"));
+            return;
+        }
+        if (readBudget.truncated) {
+            // More items or levels than any real menu has: the application is not trusted any more, its menu is not
+            // shown and no further GetLayout is sent (the bridge remembers the refusal, see PenaltyBook).
+            log(QStringLiteral("window %1: menu of %2 has more than %3 items or %4 levels: refused").arg(m_window, m_service).arg(limits::kItems).arg(limits::kDepth));
+            m_stopped = true;
+            m_refetch.stop();
+            emit failed(m_window, QStringLiteral("oversized"), QStringLiteral("the menu is larger than the supported limits"));
+            return;
+        }
+        m_failures = 0;
+        LayoutBudget mapBudget;
+        m_items = mapChildren(root, mapBudget);
+        m_index = indexItems(m_items);
+        m_ready = true;
+        emit menuChanged(m_window);
+        if (std::exchange(m_again, false))
+            fetch();
     }
 
     void MenuClient::fail(const QString& code, const QString& why) {
@@ -118,13 +120,26 @@ namespace gf::menubridge {
         }
     }
 
+    void MenuClient::track(const QDBusMessage& message, std::function<void(const QDBusMessage&)> handler) {
+        ++m_outstanding;
+        emit callBegun();
+        auto* watcher = new QDBusPendingCallWatcher(m_bus.asyncCall(message, kCallTimeoutMs), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, handler = std::move(handler)](QDBusPendingCallWatcher* w) {
+            {
+                const QDBusMessage reply = w->reply();
+                w->deleteLater();
+                handler(reply);
+            }
+            --m_outstanding;
+            emit callEnded();
+            trimMemorySoon(); // the reply (possibly tens of MB) is released with the watcher
+        });
+    }
+
     bool MenuClient::aboutToShow(int id) {
         if (m_gone || !m_index.submenus.contains(id))
             return false;
-        auto* watcher = new QDBusPendingCallWatcher(m_bus.asyncCall(aboutToShowCall(m_service, m_path, id), kCallTimeoutMs), this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            const QDBusMessage reply = w->reply();
+        track(aboutToShowCall(m_service, m_path, id), [this](const QDBusMessage& reply) {
             // needUpdate = true: the application changed the submenu; read it again.
             if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() == 1 && reply.arguments().at(0).toBool())
                 scheduleRefetch();
@@ -135,10 +150,7 @@ namespace gf::menubridge {
     bool MenuClient::activate(int id) {
         if (m_gone || !m_index.activatable.contains(id))
             return false;
-        auto* watcher = new QDBusPendingCallWatcher(m_bus.asyncCall(eventCall(m_service, m_path, id), kCallTimeoutMs), this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, id](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            const QDBusMessage reply = w->reply();
+        track(eventCall(m_service, m_path, id), [this, id](const QDBusMessage& reply) {
             if (reply.type() == QDBusMessage::ErrorMessage)
                 log(QStringLiteral("window %1: Event(%2, clicked) failed: %3").arg(m_window).arg(id).arg(reply.errorName()));
         });

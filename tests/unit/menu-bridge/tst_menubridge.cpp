@@ -5,6 +5,7 @@
 #include "DBusObjects.h"
 #include "Layout.h"
 #include "MenuClient.h"
+#include "Penalties.h"
 #include "Protocol.h"
 #include "Safety.h"
 
@@ -19,6 +20,7 @@
 #include <QDBusVirtualObject>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -26,6 +28,10 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 using namespace gf::menubridge;
 
@@ -500,6 +506,268 @@ TEST(DBusMenuWire, NonLayoutArgumentsAreRefused) {
     RawItem      root;
     LayoutBudget budget;
     EXPECT_FALSE(readLayout(notAStruct, root, 0, budget));
+}
+
+// Every outbound call is announced (callBegun) before it is sent and ended (callEnded) when its reply was handled:
+// the crash attribution of the bridge relies on it (GetLayout, the re-read after LayoutUpdated, AboutToShow, Event).
+TEST(MenuClientCalls, EveryOutboundCallIsAnnouncedAndEnded) {
+    PeerMenu peer(QStringLiteral("menu-bridge-test-calls"));
+    if (!peer.ok())
+        GTEST_SKIP() << "cannot create a private D-Bus peer socket here";
+    peer.menu.layout = item(0, {{QStringLiteral("children-display"), QStringLiteral("submenu")}},
+                            {item(1, {{QStringLiteral("label"), QStringLiteral("File")}, {QStringLiteral("children-display"), QStringLiteral("submenu")}}, {item(2, {{QStringLiteral("label"), QStringLiteral("New")}})})});
+    MenuClient client(peer.client, QStringLiteral("3"), QString(), QStringLiteral("/MenuBar/1"));
+    int        begun = 0;
+    int        ended = 0;
+    int        seenAtSend = -1;
+    QObject::connect(&client, &MenuClient::callBegun, [&] {
+        ++begun;
+        seenAtSend = static_cast<int>(peer.menu.calls.size()); // nothing of this call has reached the application yet
+    });
+    QObject::connect(&client, &MenuClient::callEnded, [&] { ++ended; });
+    client.start();
+    EXPECT_EQ(begun, 1);
+    EXPECT_EQ(seenAtSend, 0);
+    QElapsedTimer timer;
+    timer.start();
+    while (ended < 1 && timer.elapsed() < 5000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    EXPECT_EQ(ended, 1);
+    EXPECT_EQ(client.outstanding(), 0);
+
+    // The re-read after a LayoutUpdated signal is announced as well (it used to be unmarked).
+    QMetaObject::invokeMethod(&client, "onMenuSignal", Q_ARG(QDBusMessage, QDBusMessage()));
+    timer.restart();
+    while (ended < 2 && timer.elapsed() < 5000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    EXPECT_EQ(begun, 2);
+    EXPECT_EQ(ended, 2);
+
+    ASSERT_TRUE(client.aboutToShow(1));
+    EXPECT_EQ(begun, 3);
+    EXPECT_EQ(client.outstanding(), 1);
+    ASSERT_TRUE(client.activate(2));
+    EXPECT_EQ(begun, 4);
+    EXPECT_EQ(client.outstanding(), 2);
+    timer.restart();
+    while (client.outstanding() > 0 && timer.elapsed() < 5000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    EXPECT_EQ(ended, 4);
+}
+
+// ---- penalties and the state file --------------------------------------------------------------------------------
+
+namespace {
+    struct Clock {
+        qint64 now = 1000;
+    };
+    PenaltyBook book(Clock& c) {
+        return PenaltyBook([&c] { return c.now; });
+    }
+    const QString kApp  = QStringLiteral("exe:/usr/bin/evil");
+    const QString kOther = QStringLiteral("exe:/usr/bin/calc");
+} // namespace
+
+TEST(Penalties, IdentityOfThisProcessSurvivesANewPid) {
+    const QString me = appIdentity(::getpid());
+    EXPECT_TRUE(me.startsWith(QStringLiteral("exe:/"))) << qPrintable(me);
+    EXPECT_TRUE(validIdentity(me));
+    // Another pid of the same executable (here: our own parent chain is not guaranteed, so fork).
+    const pid_t child = ::fork();
+    if (child == 0)
+        ::_exit(appIdentity(::getpid()) == appIdentity(::getppid()) ? 0 : 1);
+    ASSERT_GT(child, 0);
+    int status = 0;
+    ASSERT_EQ(::waitpid(child, &status, 0), child);
+    EXPECT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0) << "a forked child must have the parent's identity";
+    EXPECT_EQ(appIdentity(2147483000), QStringLiteral("pid:2147483000")); // no such process: the pid is all there is
+}
+
+TEST(Penalties, IdentityValidation) {
+    EXPECT_TRUE(validIdentity(QStringLiteral("exe:/usr/bin/foo bar")));
+    EXPECT_TRUE(validIdentity(QStringLiteral("pid:4242")));
+    EXPECT_FALSE(validIdentity(QString()));
+    EXPECT_FALSE(validIdentity(QStringLiteral("exe:relative")));
+    EXPECT_FALSE(validIdentity(QStringLiteral("exe:/a\nb")));
+    EXPECT_FALSE(validIdentity(QStringLiteral("pid:12x")));
+    EXPECT_FALSE(validIdentity(QStringLiteral("pid:")));
+    EXPECT_FALSE(validIdentity(QStringLiteral("exe:/") + QString(penalty::kMaxIdentity, u'a')));
+    EXPECT_FALSE(validIdentity(QStringLiteral("window 1")));
+}
+
+TEST(Penalties, CrashRefusesForTheBaseSpanThenDoubles) {
+    Clock      c;
+    PenaltyBook b = book(c);
+    QString    why;
+    EXPECT_FALSE(b.refused(kApp, &why));
+    b.record(kApp, Offence::Crash);
+    EXPECT_TRUE(b.refused(kApp, &why));
+    EXPECT_FALSE(b.refused(kOther, &why)) << "another application is not affected";
+    c.now += penalty::kDenyBaseSec - 1;
+    EXPECT_TRUE(b.refused(kApp, &why));
+    c.now += 1;
+    EXPECT_FALSE(b.refused(kApp, &why));
+    b.record(kApp, Offence::Crash); // second strike: twice as long
+    c.now += penalty::kDenyBaseSec * 2 - 1;
+    EXPECT_TRUE(b.refused(kApp, &why));
+    c.now += 1;
+    EXPECT_FALSE(b.refused(kApp, &why));
+    for (int i = 0; i < 20; ++i)
+        b.record(kApp, Offence::Oversized);
+    c.now += penalty::kDenyMaxSec - 1;
+    EXPECT_TRUE(b.refused(kApp, &why)) << "capped, never overflows";
+    c.now += 1;
+    EXPECT_FALSE(b.refused(kApp, &why));
+}
+
+TEST(Penalties, LayoutFailureBacksOffShortlyAndDeliveryEndsIt) {
+    Clock      c;
+    PenaltyBook b = book(c);
+    QString    why;
+    b.record(kApp, Offence::LayoutFailed);
+    EXPECT_TRUE(b.refused(kApp, &why));
+    c.now += 2;
+    EXPECT_FALSE(b.refused(kApp, &why));
+    for (int i = 0; i < 20; ++i)
+        b.record(kApp, Offence::LayoutFailed);
+    c.now += penalty::kLayoutMaxSec - 1;
+    EXPECT_TRUE(b.refused(kApp, &why));
+    c.now += 1;
+    EXPECT_FALSE(b.refused(kApp, &why));
+    b.record(kApp, Offence::LayoutFailed);
+    b.delivered(kApp);
+    EXPECT_FALSE(b.refused(kApp, &why));
+}
+
+TEST(Penalties, EntriesDecay) {
+    Clock      c;
+    PenaltyBook b = book(c);
+    QString    why;
+    b.record(kApp, Offence::Crash);
+    c.now += penalty::kDenyBaseSec;
+    EXPECT_FALSE(b.refused(kApp, &why));
+    EXPECT_TRUE(b.has(kApp)) << "the strike is remembered for the doubling";
+    // Leaving the bus in good standing forgives one strike.
+    b.leftCleanly(kApp);
+    EXPECT_FALSE(b.has(kApp));
+    // A refused application's exit does not clear its refusal.
+    b.record(kApp, Offence::Crash);
+    b.leftCleanly(kApp);
+    EXPECT_TRUE(b.refused(kApp, &why));
+    // Without a new strike for kForgiveSec the entry is dropped.
+    c.now += penalty::kForgiveSec;
+    EXPECT_FALSE(b.refused(kApp, &why));
+    EXPECT_FALSE(b.has(kApp));
+}
+
+TEST(Penalties, BoundedLruKeepsRefusalsAndForgetsTheOldest) {
+    Clock      c;
+    PenaltyBook b = book(c);
+    b.record(kApp, Offence::Crash); // refused: kept while others are evicted
+    for (int i = 0; i < penalty::kMaxEntries * 2; ++i)
+        b.record(QStringLiteral("pid:%1").arg(i + 1), Offence::LayoutFailed);
+    EXPECT_LE(b.size(), penalty::kMaxEntries);
+    EXPECT_TRUE(b.has(kApp));
+    EXPECT_TRUE(b.has(QStringLiteral("pid:%1").arg(penalty::kMaxEntries * 2)));
+    EXPECT_FALSE(b.has(QStringLiteral("pid:1")));
+}
+
+TEST(PenaltyState, InflightIdentitiesBecomeCrashRefusals) {
+    Clock      c;
+    PenaltyBook before = book(c);
+    const QByteArray data = before.serialize({kApp, QStringLiteral("exe:/opt/with space/app")}, QStringLiteral("boot-1"));
+    PenaltyBook after = book(c);
+    QString     why;
+    QStringList crashed;
+    ASSERT_TRUE(after.load(data, QStringLiteral("boot-1"), &why, &crashed)) << qPrintable(why);
+    EXPECT_EQ(crashed, (QStringList{kApp, QStringLiteral("exe:/opt/with space/app")}));
+    EXPECT_TRUE(after.refused(kApp, &why));
+    EXPECT_FALSE(after.refused(kOther, &why));
+    // A refusal is carried over the next restart too (and keeps its strike count).
+    const QByteArray again = after.serialize({}, QStringLiteral("boot-1"));
+    PenaltyBook third = book(c);
+    ASSERT_TRUE(third.load(again, QStringLiteral("boot-1"), &why, nullptr)) << qPrintable(why);
+    EXPECT_TRUE(third.refused(kApp, &why));
+    c.now += penalty::kDenyBaseSec;
+    EXPECT_FALSE(third.refused(kApp, &why));
+    third.record(kApp, Offence::Crash);
+    c.now += penalty::kDenyBaseSec * 2 - 1;
+    EXPECT_TRUE(third.refused(kApp, &why)) << "the second strike doubled";
+}
+
+TEST(PenaltyState, ForgedOrDamagedContentIsRefusedWhole) {
+    Clock      c;
+    QString    why;
+    const QString boot = QStringLiteral("boot-1");
+    const auto valid = [&](const QByteArray& body) {
+        PenaltyBook b = book(c);
+        return b.load(QByteArray("grassfield-menu-bridge-state 1\nboot boot-1\n") + body, boot, &why, nullptr);
+    };
+    EXPECT_TRUE(valid("inflight exe:/usr/bin/x\n"));
+    EXPECT_FALSE(valid("inflight exe:relative\n"));
+    EXPECT_FALSE(valid("inflight exe:/a%0Ab\n")) << "control characters";
+    EXPECT_FALSE(valid("inflight pid:1x\n"));
+    EXPECT_FALSE(valid("inflight a b\n"));
+    EXPECT_FALSE(valid("deny 0 1 1 exe:/x\n")) << "zero strikes";
+    EXPECT_FALSE(valid("deny 1 99999999999 1 exe:/x\n")) << "deny far in the future";
+    EXPECT_FALSE(valid("deny 1 5 99999 exe:/x\n")) << "last strike in the future";
+    EXPECT_FALSE(valid("deny 1 5 5 exe:/x extra\n"));
+    EXPECT_FALSE(valid("unknown line\n"));
+    {
+        PenaltyBook b = book(c);
+        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 2\nboot boot-1\n", boot, &why, nullptr));
+        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 1\nboot other\n", boot, &why, nullptr)) << "another boot";
+        EXPECT_FALSE(b.load("", boot, &why, nullptr));
+        EXPECT_EQ(b.size(), 0) << "nothing merged from a refused file";
+    }
+    QByteArray many;
+    for (int i = 0; i < penalty::kMaxEntries * 2 + 1; ++i)
+        many += "inflight pid:" + QByteArray::number(i + 1) + "\n";
+    EXPECT_FALSE(valid(many)) << "entry count is bounded";
+    // One bad line among good ones: nothing at all is merged (an attacker cannot smuggle entries in).
+    PenaltyBook b = book(c);
+    EXPECT_FALSE(b.load("grassfield-menu-bridge-state 1\nboot boot-1\ninflight exe:/usr/bin/x\ninflight bad\n", boot, &why, nullptr));
+    EXPECT_FALSE(b.has(QStringLiteral("exe:/usr/bin/x")));
+}
+
+TEST(PenaltyState, FileIsReadWithoutFollowingSymlinksAndBounded) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString path = dir.path() + QStringLiteral("/s.state");
+    QByteArray    data;
+    QString       why;
+    EXPECT_FALSE(readStateFile(path, &data, &why));
+    EXPECT_TRUE(why.isEmpty()) << "a missing file is not an error";
+
+    ASSERT_TRUE(writeStateFile(path, QByteArray("hello\n")));
+    EXPECT_TRUE(readStateFile(path, &data, &why));
+    EXPECT_EQ(data, QByteArray("hello\n"));
+    EXPECT_EQ(QFile::permissions(path) & (QFile::ReadGroup | QFile::WriteGroup | QFile::ReadOther | QFile::WriteOther), QFile::Permissions());
+
+    // A symlink (even to a valid file) is refused.
+    const QString link = dir.path() + QStringLiteral("/l.state");
+    ASSERT_TRUE(QFile::link(path, link));
+    EXPECT_FALSE(readStateFile(link, &data, &why));
+    EXPECT_FALSE(why.isEmpty());
+
+    // Writing over a symlink replaces the link, it does not write through it.
+    ASSERT_TRUE(writeStateFile(link, QByteArray("replaced\n")));
+    EXPECT_FALSE(QFileInfo(link).isSymLink());
+    ASSERT_TRUE(readStateFile(path, &data, &why));
+    EXPECT_EQ(data, QByteArray("hello\n")) << "the symlink's target was not written";
+
+    // Oversized files are refused.
+    QFile big(dir.path() + QStringLiteral("/big.state"));
+    ASSERT_TRUE(big.open(QIODevice::WriteOnly));
+    big.write(QByteArray(penalty::kMaxStateBytes + 1, 'x'));
+    big.close();
+    EXPECT_FALSE(readStateFile(big.fileName(), &data, &why));
+    EXPECT_FALSE(why.isEmpty());
+    // A FIFO is not a regular file (and must not block the bridge).
+    const QString fifo = dir.path() + QStringLiteral("/f.state");
+    ASSERT_EQ(::mkfifo(QFile::encodeName(fifo).constData(), 0600), 0);
+    EXPECT_FALSE(readStateFile(fifo, &data, &why));
+    EXPECT_FALSE(why.isEmpty());
 }
 
 // ---- start-up guards -------------------------------------------------------------------------------------------

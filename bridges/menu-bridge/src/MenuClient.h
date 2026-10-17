@@ -19,6 +19,8 @@
 #include <QString>
 #include <QTimer>
 
+#include <functional>
+
 namespace gf::menubridge {
 
     class MenuClient : public QObject {
@@ -55,9 +57,18 @@ namespace gf::menubridge {
         bool ready() const {
             return m_ready;
         }
+        // Calls sent to the application whose reply has not been handled yet.
+        int outstanding() const {
+            return m_outstanding;
+        }
 
       signals:
         void menuChanged(const QString& window);
+        // Every outbound call (GetLayout, AboutToShow, Event) is announced before it is sent and when its reply (or
+        // timeout) has been handled: the application's reply is the one thing that can make the bridge allocate, so the
+        // bridge records the calls in flight to blame the application if it dies meanwhile.
+        void callBegun();
+        void callEnded();
         // code: "gone", "layout-failed" or "oversized". After it the client sends nothing more.
         void failed(const QString& window, const QString& code, const QString& message);
 
@@ -68,6 +79,9 @@ namespace gf::menubridge {
         void fetch();
         void scheduleRefetch();
         void fail(const QString& code, const QString& why);
+        void handleLayout(const QDBusMessage& reply);
+        // Sends `message`, announces it and runs `handler` with the reply.
+        void track(const QDBusMessage& message, std::function<void(const QDBusMessage&)> handler);
 
         QDBusConnection     m_bus;
         QString             m_window;
@@ -83,6 +97,7 @@ namespace gf::menubridge {
         bool                m_gone     = false;
         bool                m_stopped  = false; // gave up (failure or oversized layout): no further GetLayout
         int                 m_failures = 0;     // consecutive failed re-reads
+        int                 m_outstanding = 0;
     };
 
 } // namespace gf::menubridge
