@@ -62,8 +62,10 @@ Variants {
             if (win.catchReleasing) {
                 win.pendingKb = n;
                 if (Focus.catchersMapped(n)) {
-                    win.catchReleasing = false;
-                    win.kb = n;
+                    for (const step of Focus.releaseEnd(n)) {
+                        win.kb = step.kb;
+                        win.catchReleasing = step.releasing;
+                    }
                 }
                 return;
             }
@@ -114,8 +116,11 @@ Variants {
             function onFrameSwapped(): void {
                 win.releaseFrames++;
                 if (win.releaseFrames >= 2) {
-                    win.catchReleasing = false;
-                    win.kb = win.pendingKb;
+                    // Atomic end (KeyboardFocus.releaseEnd): the final state first, then the flag.
+                    for (const step of Focus.releaseEnd(win.pendingKb)) {
+                        win.kb = step.kb;
+                        win.catchReleasing = step.releasing;
+                    }
                 } else {
                     win.commitSoon();
                 }
@@ -155,7 +160,7 @@ Variants {
         // pointer returns. The catchers unmap when the state is idle again. The click is consumed, like a
         // click outside on this output. No pointer polling.
         Variants {
-            model: Focus.catchersMapped(win.kb) && !win.catchReleasing ? win.catcherScreens : []
+            model: Focus.catchersShown(win.kb, win.catchReleasing) ? win.catcherScreens : []
 
             // qmllint disable uncreatable-type
             PanelWindow {

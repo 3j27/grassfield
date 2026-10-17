@@ -26,9 +26,11 @@ Singleton {
             monitor.running = true;
     }
 
-    // Open the trash in the default file manager (gio resolves trash:/// itself).
+    // Open the trash in the default file manager (gio resolves trash:/// itself). A dev session never opens
+    // trash:///: it is served by the owner's session and would show (and empty) the real trash. It opens the
+    // isolated trash folder as a plain directory instead (ADR-0011).
     function open(): void {
-        Apps.openDetached(["gio", "open", "trash:///"]);
+        Apps.openDetached(["gio", "open", Apps.devSession ? root.filesPath : "trash:///"]);
     }
 
     Component.onCompleted: refresh()

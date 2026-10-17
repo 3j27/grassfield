@@ -319,4 +319,44 @@ TestCase {
         verify(!Focus.menuHoldsKeys(s));
         verify(!Focus.catchersMapped(s));
     }
+
+    // ---- release phase: a catcher never comes back ---------------------------------------------------
+
+    // Every snapshot the surface walks through while the release ends: the catcher model must stay empty
+    // whenever the final state is idle (a catcher coming back takes the keyboard, is destroyed, and leaves
+    // Hyprland with nothing to refocus: the keyboard is lost).
+    function test_noCatcherComesBackWhileTheMenuReleaseEnds() {
+        const open = run([{type: "menuOpened"}]);
+        const pending = Focus.next(open, {type: "menuClosed"});
+        verify(!Focus.catchersMapped(pending));
+        // Release started: catchers unmapped while the old state is still in place.
+        verify(!Focus.catchersShown(open, true));
+        for (const step of Focus.releaseEnd(pending))
+            verify(!Focus.catchersShown(step.kb, step.releasing), "releasing=" + step.releasing);
+    }
+
+    function test_noCatcherComesBackWhileARenameReleaseEnds() {
+        const open = run([{type: "renameOpened"}]);
+        const pending = Focus.next(open, {type: "renameClosed"});
+        for (const step of Focus.releaseEnd(pending))
+            verify(!Focus.catchersShown(step.kb, step.releasing), "releasing=" + step.releasing);
+    }
+
+    function test_theReleaseEndsInTheFinalStateWithNoFlag() {
+        const pending = Focus.initial();
+        const steps = Focus.releaseEnd(pending);
+        compare(steps[steps.length - 1].releasing, false);
+        compare(steps[steps.length - 1].kb, pending);
+        // The old order (flag first, state after) would have shown the catchers for a moment.
+        verify(Focus.catchersShown(run([{type: "menuOpened"}]), false));
+    }
+
+    function test_aMenuOpenedDuringTheReleaseGetsItsCatchersBackOnlyAtTheEnd() {
+        const open = run([{type: "menuOpened"}]);
+        const reopened = Focus.next(Focus.initial(), {type: "menuOpened"});
+        verify(!Focus.catchersShown(open, true));
+        const steps = Focus.releaseEnd(reopened);
+        verify(!Focus.catchersShown(steps[0].kb, steps[0].releasing));
+        verify(Focus.catchersShown(steps[1].kb, steps[1].releasing));
+    }
 }

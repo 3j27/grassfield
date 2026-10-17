@@ -527,10 +527,12 @@ FocusScope {
         onReleased: {
             banding = false;
             root.band = null;
+            root.swallow = false;
         }
         onCanceled: {
             banding = false;
             root.band = null;
+            root.swallow = false;
         }
     }
 
@@ -566,7 +568,11 @@ FocusScope {
             blocked: root.swallow
             onPressedIcon: (modifiers, right) => root.press(modelData.name, modifiers, right)
             onTappedIcon: modifiers => root.tap(modelData.name, modifiers)
-            onDragActiveChanged: root.dragging = icon.dragActive
+            onDragActiveChanged: {
+                root.dragging = icon.dragActive;
+                if (!icon.dragActive)
+                    root.swallow = false;
+            }
             onActivated: root.openNames([modelData.name])
             onMenuRequested: (px, py) => {
                 root.menuAt = Qt.point(px, py);

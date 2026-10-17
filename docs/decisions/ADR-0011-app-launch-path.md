@@ -39,3 +39,8 @@ non-app helpers (`cp`, `wl-copy`, `systemctl`, `kill`, `gio trash`) and shell-in
 - New launch call sites must use the service; reviewers check `Quickshell.execDetached` additions against the
   allowed list above.
 - Dev sessions never share app profiles with the owner; app state for dev runs lives in `.dev/apps-home`.
+- The real trash is never reachable from a dev session. The Dock Trash tile opens the isolated folder
+  `.dev/apps-home/data/Trash/files` as a plain directory (`gio open <path>`), never `trash:///` (served by the
+  owner's gvfsd-trash). Grassfield Files (which inherits `GRASSFIELD_DEV=1`) hides its Trash sidebar entry, does not
+  open the KIO `trash:/` listing and makes Empty Trash a no-op in dev (simplest safe option; no isolated Trash
+  location in Files). Real sessions keep `trash:///` and the Trash place unchanged.
