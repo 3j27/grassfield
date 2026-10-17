@@ -13,3 +13,4 @@ singleton Media 1.0 Media.qml
 singleton PointerTracker 1.0 PointerTracker.qml
 singleton SettingsApp 1.0 SettingsApp.qml
 singleton GlanceApp 1.0 GlanceApp.qml
+singleton FixedTime 1.0 FixedTime.qml
