@@ -71,6 +71,33 @@ top-level menus (Left/Right).
   hidden items left out, separators collapsed, a submenu the app has not filled shown disabled. Choosing an item sends
   `activate` and closes the menu. Without a T1/T2 menu (GTK4, Electron, no plugin, no bridge, refused or failed menu)
   the T0 menus stay: nothing is hidden.
+- **MB14 Hostile applications and crash attribution.** A reply is the one thing an application can make the bridge
+  allocate for (a 30 MB reply cost 115 MB at its peak). Defences, all in `bridges/menu-bridge/src/{Penalties,Bridge,
+  MenuClient}.*`:
+  - Caps while reading (MB7); a layout over a cap is `oversized`: no menu, no further `GetLayout` to that application.
+    Labels are cut to 2048 characters while the layout is read. After a reply the bridge calls `malloc_trim(0)` (300 ms
+    later, coalesced): RssAnon returns to about its idle size, measured by the integration test.
+  - **Identity.** After MB5's pid check the bridge resolves `/proc/<pid>/exe` (` (deleted)` stripped) to `exe:<path>`
+    (`pid:<pid>` when the link is unreadable). Refusals are keyed by that identity, not by the pid: a new process of the
+    same executable is the same application. Applications that share an executable (interpreters) share their fate.
+  - **In-flight marking.** EVERY call to an application (`GetLayout` including the re-reads after `LayoutUpdated` /
+    `AboutToShow needUpdate`, `AboutToShow`, `Event`) is recorded in `<socket>.state` before it is sent and cleared once
+    its reply was handled (or 4 s after the window was closed with the reply still outstanding). A clean stop leaves
+    nothing in flight. A bridge that dies meanwhile (OOM kill, crash) finds the identity in the file at its next start,
+    logs `a previous run died while a call to "<identity>" was in flight: refused` and refuses it.
+  - **Refusals.** `oversized` and a crash: 15 min, doubling per strike up to 6 h (`backoff` error to the shell).
+    `layout-failed` on open: 2^n s up to 64 s. So an application that kills the bridge costs **at most N = 1
+    restart** per refusal period (`penalty::kRestartsBeforeRefusal`); one crash per 15 min at worst afterwards, then one
+    per 30 min, and so on. Decay: leaving the bus while in good standing forgives one strike; an entry without a new
+    strike for 24 h is dropped. At most 128 identities are kept (least recently used first out, refused ones last);
+    the refusals survive restarts through the state file.
+  - **State file.** `<socket>.state` (socket directory, mode 0700, file 0600, written with `QSaveFile`, i.e. atomically).
+    Read with `O_NOFOLLOW`, regular file of this user, at most 32 KiB, header and boot id checked, every line validated
+    (identity grammar, number ranges, at most 256 lines); one invalid line discards the whole file, which is then
+    replaced. It is read only after the singleton probe (a second instance that finds the live bridge exits without
+    touching it). Only code running as the same user can write the directory; such code can equally kill the bridge, so
+    a forged entry can at most refuse one executable for 15 min: the bridge never writes an identity it did not itself
+    resolve from a pid that passed MB5, and never reads one that fails the grammar.
 - **MB13 Development.** `scripts/dev/nested-up.sh --private-bus` → `shell-run.sh` starts one private `dbus-daemon`
   (session configuration, socket in /tmp) per nested session, reused across shell restarts, and (re)starts the
   bridge on it before the shell and any test app (`.dev/run/menu-bridge.sock`, `.dev/menu-bridge.log`,
@@ -79,10 +106,11 @@ top-level menus (Left/Right).
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 | Req | Test | Level | Status |
 |---|---|---|---|
-| MB4, MB7, MB10 (logic), MB9 XML | `tests/unit/menu-bridge/tst_menubridge.cpp` (gtest, 23 cases; the wire case runs over a peer-to-peer D-Bus connection and skips where Unix sockets are forbidden) | L0 | 2026-10-17: 23/23 PASS outside the sandbox, 22 + 1 skipped inside |
+| MB4, MB7, MB10 (logic), MB9 XML | `tests/unit/menu-bridge/tst_menubridge.cpp` (gtest, 35 cases incl. identity, penalties, state file, call marking; the wire and MenuClient cases run over a peer-to-peer D-Bus connection and skip where Unix sockets are forbidden) | L0 | see STATE.md (run outside the sandbox) |
 | MB11, MB12 (models) | `tests/unit/tst_menubridge.qml` (event parsing, menu/1 lines, sanitizing, caps, popup model, shortcut text) | L0 | 2026-10-17: 8/8 PASS |
 | gfc/1 `pid` | `compositor/tests` `Protocol.AppmenuJson*`, `AppmenuRegistry.PidTravels…` | L0 | 2026-10-17: 92/92 PASS |
 | M3 exit (MB1, MB5, MB6, MB11, MB12, MB13) | `tests/integration/global_menus.sh` (nested, private bus, virtual pointer) | L1 | 2026-10-17: PASS twice in a row (runs `.dev/global-menus/run-20261017-133714`, `run-20261017-133805`); bridge RSS 19.4–19.5 MiB (shared Qt libraries included), CPU time 0 s |
+| MB14 | `tests/integration/menu_bridge_memory.sh` (private bus, hostile fixture; cases B A C D E F: memory incl. RssAnon, oversized, kill on first fetch, kill on a re-read with new pids, forged state files, second instance) | L1 | see STATE.md |
 | MB5 refusal, MB4 errors, MB3 cleanup | throwaway private bus, `open` naming the bridge's own name with a wrong pid → `pid-mismatch`; right pid → accepted; invalid lines → `bad-request`; SIGTERM removes the socket | L1 | 2026-10-17 verified manually (session log) |
 | MB10 | bridge started with `GRASSFIELD_DEV=1` and the owner's bus address, no address, no session variables, no socket → exit 3 before connecting | L0 | 2026-10-17 verified |
 | Unit hardening | `systemd-analyze --user verify packaging/systemd/grassfield-menu-bridge.service` | L0 | only finding: `/usr/bin/grassfield-menu-bridge` not installed; runtime under systemd NOT VERIFIED (owner L2) |
@@ -94,7 +122,9 @@ top-level menus (Left/Right).
   `{"type":"status","v":"menu/1","state":…,"registrar":bool}` (after connect and each hello),
   `{"type":"menu","window":…,"revision":N,"items":[…]}`, `{"type":"error","window":…|"","code":…,"message":…}` with
   codes `bad-request`, `busy`, `registrar-busy`, `no-owner`, `pid-mismatch`, `layout-failed`, `gone`,
-  `unknown-item`. Item: `{"id","type":"standard"|"separator","label","enabled","visible",
+  `unknown-item`, `oversized` (the application's layout exceeds the caps, also when found on a re-read) and `backoff`
+  (the application is refused for now, see MB14). After `pid-mismatch`, `no-owner`, `gone`, `layout-failed`, `oversized`
+  and `backoff` the window has no bridge menu: the shell clears its T1/T2 menus and shows T0 (log line only). Item: `{"id","type":"standard"|"separator","label","enabled","visible",
   "toggle-type":""|"checkmark"|"radio","toggle-state":-1|0|1,"shortcut":[[keys…]…],"icon-name","submenu",
   "children":[…]}`.
 - **gfc/1 `appmenu`** gains the additive field `"pid":N` (0 for clears; consumers that ignore it are unaffected).
@@ -116,8 +146,9 @@ grassfield-compositor (feature `appmenu`). Verified clients: Qt 6.11.2 (`tests/f
   soon as the bridge is back (the shell re-sends `open`).
 - Shell restart: the bridge releases the registrar on disconnect and takes it again on the new `hello`; the shell
   re-queries the plugin and the focused app's menus come back (verified in the exit test).
-- A refused (`pid-mismatch`, `no-owner`) or unreadable (`layout-failed`) menu, or an app that leaves the bus
-  (`gone`): that window shows T0.
+- A refused (`pid-mismatch`, `no-owner`, `backoff`), oversized (`oversized`) or unreadable (`layout-failed`) menu, or
+  an app that leaves the bus (`gone`): that window shows T0, also when the refusal answers a re-read of a menu that
+  was on screen (the shell clears it).
 
 ## Automated tests · Manual verification steps
 `scripts/dev/test.sh` (QML + gtest), `tests/integration/global_menus.sh` (run outside the Claude Code sandbox; it
@@ -128,7 +159,7 @@ org.grassfield.MenuBridge1 --object-path /org/grassfield/MenuBridge1 --method or
 
 ## Performance (gates affected) · Accessibility · i18n
 Event-driven: no timer runs while idle (one coalescing timer per menu signal burst). RSS measured by the exit test
-(see its summary; ADR-0008 budget ≤ 20 MB, unit cap `MemoryMax=64M`). Menu titles are `BarButton`s with
+(see its summary; ADR-0008 budget ≤ 20 MB; unit: `MemoryHigh=64M` throttles, `MemoryMax=256M` kills, see MB14). Menu titles are `BarButton`s with
 `Accessible.name` "<title> menu"; items reuse `PopupMenu`/`MenuItem` roles. Application labels are shown as the
 application localized them; Grassfield strings use `qsTr()`.
 
@@ -144,3 +175,9 @@ application localized them; Grassfield strings use `qsTr()`.
   in-window menus until restarted (by design: nothing hidden).
 - The T0 File menu is replaced by the app's menus; desktop entry actions stay reachable in the Dock menu only.
 - `RuntimeDirectory=grassfield` and the hardening of the systemd unit are not runtime-verified (owner L2 session).
+- A reply over ~60 MB can still take the bridge over `MemoryMax` once: the D-Bus daemon's `max_message_size` is 1 GB
+  and libdbus holds the message several times. The restarted bridge refuses that application (MB14) and the shell shows T0
+  meanwhile, but the one restart cannot be prevented from the bridge's side.
+- Any process of the user's can kill the bridge (same uid), or write its state file: MB14 bounds what that achieves
+  (refusing one executable for 15 min); it is not a security boundary against the user's own code.
+- Applications sharing an executable (interpreters such as `python3`) are one identity for the refusals of MB14.
