@@ -44,10 +44,10 @@ PopupMenu {
         case "open":
         case "new":
             if (data.entry)
-                data.entry.execute();
+                Apps.launch(data.entry);
             break;
         case "action":
-            data.entry.actions[item.index].execute();
+            Apps.launch(data.entry.actions[item.index]);
             break;
         case "pin":
             Settings.setDockPinned(DockModel.pin(Settings.dockPinned, data.key));

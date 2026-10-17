@@ -360,7 +360,7 @@ Scope {
         if (!rec)
             return;
         hide();
-        rec.entry.execute();
+        Apps.launch(rec.entry);
     }
 
     function activate(item: var): void {

@@ -333,7 +333,7 @@ Scope {
         case "app":
             bumpUsage(item.appId);
             hide();
-            item.entry.execute();
+            Apps.launch(item.entry);
             return;
         case "calc":
             hide();
@@ -347,9 +347,9 @@ Scope {
         case "recent":
             hide();
             if (reveal)
-                Quickshell.execDetached(["gio", "open", Files.dirName(item.path)]);
+                Apps.openDetached(["gio", "open", Files.dirName(item.path)]);
             else
-                Quickshell.execDetached(["xdg-open", item.path]);
+                Apps.openDetached(["xdg-open", item.path]);
             return;
         }
     }

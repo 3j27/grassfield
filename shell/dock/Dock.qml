@@ -66,7 +66,7 @@ Scope {
         }
         if (item.windows.length === 0) {
             if (item.entry)
-                item.entry.execute();
+                Apps.launch(item.entry);
             return;
         }
         // Minimized windows take part only when the app has nothing else (then the click restores one).
