@@ -85,6 +85,8 @@ QtObject {
     readonly property int radiusTooltip: 6
     // spec notifications.md: about 16 pt
     readonly property int radiusBanner: 16
+    // spec search.md: rounded about 26 pt
+    readonly property int radiusSearch: 26
 
     // estimate, pending F1 measurement from design/reference
     readonly property int shadowBlur: 18
@@ -241,4 +243,27 @@ QtObject {
     readonly property int osdGap: 8
     // estimate
     readonly property int osdHideDelay: 1600
+
+    // spec search.md: about 680 pt
+    readonly property int searchWidth: 680
+    // spec search.md: about 1/4 from the top
+    readonly property real searchTopFraction: 0.22
+    // estimate
+    readonly property int searchFieldHeight: 60
+    // spec search.md: about 22 pt
+    readonly property int searchFieldSize: 22
+    // estimate
+    readonly property int searchFieldIconSize: 22
+    // estimate
+    readonly property int searchRowHeight: 44
+    // estimate
+    readonly property int searchRowIconSize: 28
+    // estimate
+    readonly property int searchHeaderHeight: 28
+    // task: results at most 60 percent of the screen
+    readonly property real searchMaxHeightFraction: 0.6
+    // spec S5
+    readonly property int searchMaxFiles: 20
+    // estimate: recent documents shown for an empty query
+    readonly property int searchRecentCount: 5
 }

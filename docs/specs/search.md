@@ -30,3 +30,18 @@ Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit co
 
 ## Known limitations
 - File results depend on localsearch indexing settings of the user.
+
+## Implementation notes (v1, `shell/search/`)
+- Files: `Calc.js`, `Units.js`, `Ranking.js`, `Files.js` (pure, unit-tested in `tests/unit/tst_search*.qml`), `Search.qml` (state, providers, activation, IPC), `SearchPanel.qml` (layer-shell window `grassfield-search`, keyboard exclusive, blur region, one per screen, shown on the focused screen).
+- IPC target `search`: `toggle()`, `open(text)`, `close()`, `query(text)` (sets the query without opening), `status()` (JSON of visible groups).
+- Groups: Top Hit (best app, else command, else document; absent when an inline answer exists), Calculator, Conversion, Applications, Commands, Documents, Recent. Recent documents are also shown for an empty query.
+- Calculator never uses eval/Function: own tokenizer and recursive-descent parser, depth limit 250, input limit 200 chars, function/constant lookup by `switch`.
+- Files: `localsearch search -f -l 20 -- term`, then `plocate -i -b` when localsearch returns nothing or is unusable (on the dev machine `localsearch status` reports 0 files indexed, so plocate answers). Results are limited to `$HOME` and exclude hidden path segments. argv arrays only, wrapped in `timeout 2`, stale queries ignored by sequence number. Dev knobs: `GRASSFIELD_SEARCH_ROOT`, `GRASSFIELD_SEARCH_PLOCATE_DB`.
+- Usage boost: `$GRASSFIELD_STATE_HOME` or `$XDG_STATE_HOME/grassfield/search-usage.json`, mode 0600, directory 0700, at most 500 entries.
+- Commands: Sleep, Restart, Shut Down, Log Out reuse `Power` and the confirmation dialogs; Lock Screen stays hidden until a lock IPC target exists (`Search.lockAvailable`).
+- Latency is logged by the shell: `search open->visible N ms` (IPC call to first frame) and `search keystroke->results N ms`.
+
+## Limitations (v1)
+- Ctrl+Return reveals with `gio open <parent folder>` (default file manager) until Grassfield Files exists (M4).
+- localsearch output parsing (`file://` URIs per line) could not be verified against real results: nothing is indexed on the dev machine.
+- System Settings pages provider is not included (no Settings app yet).

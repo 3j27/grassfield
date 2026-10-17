@@ -1,0 +1,219 @@
+.pragma library
+
+// Safe calculator (pure, unit-tested). Own tokenizer and recursive-descent parser: the input is
+// never passed to eval, Function or any dynamic lookup. Identifiers resolve through explicit
+// switch statements, so names like `constructor` or `__proto__` are plain unknown identifiers.
+//
+// Grammar: expr = term (("+"|"-") term)* ; term = unary (("*"|"/"|"%") unary)* ;
+//          unary = "-" unary | "+" unary | power ; power = atom ("^" unary)? ;
+//          atom = number | const | func "(" expr ")" | "(" expr ")" ; postfix "%" after an atom = /100.
+
+const MAX_LENGTH = 200;
+const MAX_DEPTH = 250;
+
+function constant(name) {
+    switch (name) {
+    case "pi":
+        return Math.PI;
+    case "e":
+        return Math.E;
+    }
+    return undefined;
+}
+
+function callFunction(name, x) {
+    switch (name) {
+    case "sqrt":
+        return Math.sqrt(x);
+    case "sin":
+        return Math.sin(x);
+    case "cos":
+        return Math.cos(x);
+    case "tan":
+        return Math.tan(x);
+    case "ln":
+        return Math.log(x);
+    case "log":
+        return Math.log10(x);
+    }
+    return undefined;
+}
+
+function isFunctionName(name) {
+    return ["sqrt", "sin", "cos", "tan", "ln", "log"].indexOf(name) !== -1;
+}
+
+function tokenize(text) {
+    const tokens = [];
+    let i = 0;
+    while (i < text.length) {
+        const c = text[i];
+        if (c === " " || c === "\t") {
+            i++;
+        } else if ((c >= "0" && c <= "9") || c === ".") {
+            const m = /^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?/.exec(text.slice(i));
+            if (!m)
+                return null;
+            tokens.push({t: "num", v: Number(m[0])});
+            i += m[0].length;
+        } else if (c >= "a" && c <= "z") {
+            let j = i;
+            while (j < text.length && text[j] >= "a" && text[j] <= "z")
+                j++;
+            tokens.push({t: "id", v: text.slice(i, j)});
+            i = j;
+        } else if ("+-*/%^()".indexOf(c) !== -1) {
+            tokens.push({t: c});
+            i++;
+        } else if (c === "×") {
+            tokens.push({t: "*"});
+            i++;
+        } else if (c === "÷") {
+            tokens.push({t: "/"});
+            i++;
+        } else {
+            return null;
+        }
+    }
+    return tokens;
+}
+
+// Returns {ok: true, value} or {ok: false}. Never throws.
+function evaluate(input) {
+    if (typeof input !== "string" || input.length === 0 || input.length > MAX_LENGTH)
+        return {ok: false};
+    const tokens = tokenize(input.toLowerCase());
+    if (!tokens || tokens.length === 0)
+        return {ok: false};
+    let pos = 0;
+    let failed = false;
+
+    function peek() {
+        return pos < tokens.length ? tokens[pos].t : "";
+    }
+
+    function fail() {
+        failed = true;
+        return 0;
+    }
+
+    function isPostfixPercent() {
+        return peek() === "%" && (pos + 1 >= tokens.length || tokens[pos + 1].t === ")");
+    }
+
+    function expr(depth) {
+        if (depth > MAX_DEPTH)
+            return fail();
+        let v = term(depth + 1);
+        while (!failed && (peek() === "+" || peek() === "-")) {
+            const op = tokens[pos++].t;
+            const r = term(depth + 1);
+            v = op === "+" ? v + r : v - r;
+        }
+        return v;
+    }
+
+    function term(depth) {
+        if (depth > MAX_DEPTH)
+            return fail();
+        let v = unary(depth + 1);
+        while (!failed && (peek() === "*" || peek() === "/" || peek() === "%") && !isPostfixPercent()) {
+            const op = tokens[pos++].t;
+            const r = unary(depth + 1);
+            v = op === "*" ? v * r : (op === "/" ? v / r : v % r);
+        }
+        return v;
+    }
+
+    function unary(depth) {
+        if (depth > MAX_DEPTH)
+            return fail();
+        if (peek() === "-") {
+            pos++;
+            return -unary(depth + 1);
+        }
+        if (peek() === "+") {
+            pos++;
+            return unary(depth + 1);
+        }
+        return power(depth + 1);
+    }
+
+    function power(depth) {
+        if (depth > MAX_DEPTH)
+            return fail();
+        const base = atom(depth + 1);
+        if (!failed && peek() === "^") {
+            pos++;
+            return Math.pow(base, unary(depth + 1));
+        }
+        return base;
+    }
+
+    function atom(depth) {
+        if (depth > MAX_DEPTH || pos >= tokens.length)
+            return fail();
+        const tok = tokens[pos++];
+        let v = 0;
+        if (tok.t === "num") {
+            v = tok.v;
+        } else if (tok.t === "(") {
+            v = expr(depth + 1);
+            if (failed || peek() !== ")")
+                return fail();
+            pos++;
+        } else if (tok.t === "id") {
+            if (isFunctionName(tok.v)) {
+                if (peek() !== "(")
+                    return fail();
+                pos++;
+                const arg = expr(depth + 1);
+                if (failed || peek() !== ")")
+                    return fail();
+                pos++;
+                v = callFunction(tok.v, arg);
+            } else {
+                v = constant(tok.v);
+            }
+            if (v === undefined)
+                return fail();
+        } else {
+            return fail();
+        }
+        while (!failed && isPostfixPercent()) {
+            pos++;
+            v = v / 100;
+        }
+        return v;
+    }
+
+    const value = expr(0);
+    if (failed || pos !== tokens.length || typeof value !== "number" || !isFinite(value))
+        return {ok: false};
+    return {ok: true, value: value};
+}
+
+// True when the input is more than a bare number (an operator, function or constant).
+function isExpression(input) {
+    if (/^\s*[\d.]+(e[+-]?\d+)?\s*$/i.test(input))
+        return false;
+    return /[a-z+\-*/%^()×÷]/i.test(input);
+}
+
+// Display text: 12 significant digits, no trailing zeros.
+function format(value) {
+    if (value === 0)
+        return "0";
+    const abs = Math.abs(value);
+    if (abs >= 1e15 || abs < 1e-9)
+        return value.toExponential(8).replace(/\.?0+e/, "e");
+    return Number(value.toPrecision(12)).toString();
+}
+
+// Provider entry point: {text, value} or null.
+function answer(input) {
+    if (typeof input !== "string" || !isExpression(input))
+        return null;
+    const r = evaluate(input);
+    return r.ok ? {value: r.value, text: format(r.value)} : null;
+}

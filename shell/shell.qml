@@ -9,6 +9,7 @@ import qs.notifications
 import qs.osd
 import qs.overlay
 import qs.platform
+import qs.search
 import qs.services
 
 // grassfield-shell root. Settings feed the design-system Appearance singleton; surfaces
@@ -47,6 +48,7 @@ ShellRoot {
     Banners {}
     NotificationCenter {}
     OsdWindow {}
+    Search {}
 
     // Referencing Capabilities instantiates it, which sends the plugin hello.
     Component.onCompleted: console.info("grassfield-shell: started, plugin protocol", Capabilities.protocol)

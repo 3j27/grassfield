@@ -1,0 +1,485 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import Grassfield.Ui
+import qs.platform
+import qs.services
+import "Calc.js" as Calc
+import "Files.js" as Files
+import "Ranking.js" as Ranking
+import "Units.js" as Units
+
+// Search (spec docs/specs/search.md): a centered floating field with grouped results.
+// This Scope owns the state and all providers; SearchPanel renders it, one overlay window per
+// screen, shown on the focused screen only.
+//
+// Providers: apps (DesktopEntries + Ranking.js), calculator (Calc.js), conversion (Units.js),
+// commands (Power service), files (`localsearch search`, falling back to `plocate`, argv only,
+// asynchronous, stale queries ignored) and recent documents (recently-used.xbel, read only).
+// Untrusted strings (desktop entries, file names) are only ever rendered as plain text.
+Scope {
+    id: root
+
+    property bool open: false
+    property string query: ""
+    property string screenName: ""
+    // Groups [{id, title, items}], the flat rows for the list ({header, title} | {item, itemIndex})
+    // and the flat items (actionable entries). `selected` indexes `items`.
+    property var groups: []
+    property var rows: []
+    property var items: []
+    property int selected: -1
+    property var fileHits: []
+
+    // Lock Screen is offered only when the shell exposes a lock IPC target. The lock module
+    // (shell/security) does not ship one yet, so the command stays hidden.
+    readonly property bool lockAvailable: false
+
+    // Latency log (P4): timestamps taken at the IPC call and at the keystroke.
+    property real openStartMs: 0
+    property real keyStartMs: 0
+
+    property var appRecords: []
+    property var usage: Ranking.newUsage()
+    property var recentList: []
+
+    readonly property string home: Quickshell.env("HOME")
+    // Dev/test knobs: file results are limited to this root (default $HOME) and plocate can use
+    // another database, so tests do not depend on the owner's index.
+    readonly property string filesRoot: Quickshell.env("GRASSFIELD_SEARCH_ROOT") || home
+    readonly property string plocateDb: Quickshell.env("GRASSFIELD_SEARCH_PLOCATE_DB")
+    readonly property string dataHome: {
+        const xdg = Quickshell.env("XDG_DATA_HOME");
+        return xdg ? xdg : home + "/.local/share";
+    }
+    // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
+    readonly property string stateDir: {
+        const dev = Quickshell.env("GRASSFIELD_STATE_HOME");
+        if (dev)
+            return dev;
+        const xdg = Quickshell.env("XDG_STATE_HOME");
+        return (xdg ? xdg : home + "/.local/state") + "/grassfield";
+    }
+    readonly property string usagePath: stateDir + "/search-usage.json"
+
+    // ---- state changes -------------------------------------------------------------------
+
+    function focusedScreenName(): string {
+        const ws = Compositor.focusedWorkspace;
+        const name = ws && ws.monitor ? ws.monitor.name : "";
+        for (const s of Quickshell.screens) {
+            if (s.name === name)
+                return name;
+        }
+        return Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "";
+    }
+
+    function show(text: string): void {
+        openStartMs = Date.now();
+        if (Popups.active)
+            Popups.close();
+        screenName = focusedScreenName();
+        recentFile.reload();
+        setQuery(text);
+        open = true;
+    }
+
+    function hide(): void {
+        open = false;
+        fileTimer.stop();
+        cancelFiles();
+        fileHits = [];
+    }
+
+    function toggle(): void {
+        if (open)
+            hide();
+        else
+            show("");
+    }
+
+    function setQuery(text: string): void {
+        if (text === query && groups.length > 0)
+            return;
+        query = text;
+        fileHits = [];
+        cancelFiles();
+        compute();
+        const q = text.trim();
+        if (q.length >= 2 && !q.startsWith("-"))
+            fileTimer.restart();
+        else
+            fileTimer.stop();
+    }
+
+    // ---- providers -----------------------------------------------------------------------
+
+    function rebuildApps(): void {
+        const out = [];
+        const list = DesktopEntries.applications.values;
+        for (const e of list) {
+            if (e.noDisplay)
+                continue;
+            out.push({id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
+                keywords: Array.from(e.keywords), icon: e.icon, entry: e});
+        }
+        appRecords = out;
+    }
+
+    function commandList(): var {
+        const list = [];
+        if (lockAvailable)
+            list.push({id: "lock", title: qsTr("Lock Screen"), words: [qsTr("lock")], glyph: "lock"});
+        list.push({id: "sleep", title: qsTr("Sleep"), words: [qsTr("suspend")], glyph: "moon"});
+        list.push({id: "restart", title: qsTr("Restart"), words: [qsTr("reboot")], glyph: "power"});
+        list.push({id: "shutdown", title: qsTr("Shut Down"), words: [qsTr("power off"), qsTr("poweroff")], glyph: "power"});
+        list.push({id: "logout", title: qsTr("Log Out"), words: [qsTr("sign out"), qsTr("log off")], glyph: "person"});
+        return list;
+    }
+
+    function commandScore(cmd: var, q: string): real {
+        let s = Ranking.textScore(cmd.title.toLowerCase(), q);
+        for (const w of cmd.words)
+            s = Math.max(s, Ranking.textScore(w.toLowerCase(), q) * 0.8);
+        return s >= 50 ? s : 0;
+    }
+
+    function mkApp(r: var): var {
+        return {kind: "app", key: "app:" + r.app.id, title: r.app.name, subtitle: r.app.genericName !== "" ? r.app.genericName : qsTr("Application"),
+            iconSource: Quickshell.iconPath(r.app.icon, "application-x-executable"), entry: r.app.entry, appId: r.app.id};
+    }
+
+    function mkCommand(c: var): var {
+        return {kind: "command", key: "cmd:" + c.id, title: c.title, subtitle: qsTr("System command"), glyph: c.glyph, command: c.id};
+    }
+
+    function mkPath(kind: string, path: string): var {
+        return {kind: kind, key: kind + ":" + path, title: Files.baseName(path), subtitle: Files.tildePath(Files.dirName(path), filesRoot),
+            iconSource: Quickshell.iconPath("text-x-generic", true), path: path};
+    }
+
+    function compute(): void {
+        const q = query.trim();
+        const calc = q !== "" ? Calc.answer(q) : null;
+        const unit = q !== "" ? Units.answer(q) : null;
+        const lq = q.toLowerCase();
+
+        let apps = q !== "" ? Ranking.rank(appRecords, q, usage, 8) : [];
+        let cmds = [];
+        if (q !== "") {
+            for (const c of commandList()) {
+                const s = commandScore(c, lq);
+                if (s > 0)
+                    cmds.push({cmd: c, score: s});
+            }
+            cmds.sort((a, b) => b.score - a.score);
+        }
+        const seen = {};
+        let docs = [];
+        for (const p of fileHits) {
+            seen[p] = true;
+            docs.push(mkPath("file", p));
+        }
+        let recents = [];
+        for (const r of recentList) {
+            if (recents.length >= Tokens.searchRecentCount)
+                break;
+            if (seen[r.path])
+                continue;
+            if (lq === "" || Files.baseName(r.path).toLowerCase().indexOf(lq) >= 0)
+                recents.push(mkPath("recent", r.path));
+        }
+        if (lq !== "")
+            recents = recents.filter(r => docs.every(d => d.path !== r.path));
+
+        // Top Hit: best app or command, else a document. Never when an inline answer exists.
+        let top = null;
+        if (q !== "" && !calc && !unit) {
+            const appScore = apps.length > 0 ? apps[0].score : 0;
+            const cmdScore = cmds.length > 0 ? cmds[0].score : 0;
+            if (appScore > 0 && appScore >= cmdScore) {
+                top = mkApp(apps[0]);
+                apps = apps.slice(1);
+            } else if (cmdScore > 0) {
+                top = mkCommand(cmds[0].cmd);
+                cmds = cmds.slice(1);
+            } else if (recents.length > 0) {
+                top = recents[0];
+                recents = recents.slice(1);
+            } else if (docs.length > 0) {
+                top = docs[0];
+                docs = docs.slice(1);
+            }
+        }
+
+        const g = [];
+        if (calc)
+            g.push({id: "calc", title: qsTr("Calculator"), items: [{kind: "calc", key: "calc", title: calc.text, subtitle: q + " " + qsTr("(Return copies the result)"), badge: "=", text: calc.text}]});
+        if (unit)
+            g.push({id: "units", title: qsTr("Conversion"), items: [{kind: "calc", key: "unit", title: unit.text, subtitle: q + " " + qsTr("(Return copies the result)"), badge: "↔", text: unit.text}]});
+        if (top)
+            g.push({id: "top", title: qsTr("Top Hit"), items: [top]});
+        if (apps.length > 0)
+            g.push({id: "apps", title: qsTr("Applications"), items: apps.map(r => mkApp(r))});
+        if (cmds.length > 0)
+            g.push({id: "commands", title: qsTr("Commands"), items: cmds.map(c => mkCommand(c.cmd))});
+        if (docs.length > 0)
+            g.push({id: "files", title: qsTr("Documents"), items: docs});
+        if (recents.length > 0)
+            g.push({id: "recent", title: qsTr("Recent"), items: recents});
+
+        const flat = [];
+        const rowList = [];
+        let sel = -1;
+        const prevKey = selected >= 0 && selected < items.length ? items[selected].key : "";
+        for (const grp of g) {
+            rowList.push({header: true, title: grp.title, groupId: grp.id});
+            for (const it of grp.items) {
+                if (prevKey !== "" && it.key === prevKey && fileHitsOnly)
+                    sel = flat.length;
+                rowList.push({header: false, item: it, itemIndex: flat.length, groupId: grp.id});
+                flat.push(Object.assign({groupId: grp.id}, it));
+            }
+        }
+        groups = g;
+        items = flat;
+        rows = rowList;
+        selected = flat.length === 0 ? -1 : (sel >= 0 ? sel : 0);
+        if (keyStartMs > 0)
+            console.info("grassfield-shell: search keystroke->results", Date.now() - keyStartMs, "ms,", flat.length, "results");
+    }
+
+    // True while only async file results changed: keep the user's selection.
+    property bool fileHitsOnly: false
+
+    // ---- files (localsearch, plocate fallback) -------------------------------------------
+
+    property int fileSeq: 0
+    property var liveSearches: []
+
+    Timer {
+        id: fileTimer
+        interval: 100
+        onTriggered: root.startFiles()
+    }
+
+    Component {
+        id: searchProc
+
+        Process {
+            id: proc
+            // `localsearch` first, then `plocate` when it yields nothing or is unusable.
+            property int seq: 0
+            property string term: ""
+            property string stage: "localsearch"
+            stdout: StdioCollector {
+                onStreamFinished: root.filesFinished(proc, text)
+            }
+        }
+    }
+
+    function spawnSearch(seq: int, term: string, stage: string): void {
+        const argv = stage === "localsearch"
+            ? ["timeout", "2", "localsearch", "search", "-f", "-l", String(Tokens.searchMaxFiles), "--", term]
+            : ["timeout", "2", "plocate", "-i", "-b", "-l", "1500"].concat(plocateDb !== "" ? ["-d", plocateDb] : [], ["--", term]);
+        const p = searchProc.createObject(root, {seq: seq, term: term, stage: stage, command: argv});
+        liveSearches.push(p);
+        p.running = true;
+    }
+
+    function startFiles(): void {
+        const term = query.trim();
+        if (term.length < 2 || term.startsWith("-"))
+            return;
+        fileSeq++;
+        spawnSearch(fileSeq, term, "localsearch");
+    }
+
+    function cancelFiles(): void {
+        fileSeq++;
+        for (const p of liveSearches) {
+            if (p && p.running)
+                p.running = false;
+        }
+        liveSearches = [];
+    }
+
+    function filesFinished(proc: var, text: string): void {
+        liveSearches = liveSearches.filter(p => p !== proc);
+        proc.destroy(200);
+        if (proc.seq !== fileSeq)
+            return;
+        const limit = Tokens.searchMaxFiles;
+        const paths = proc.stage === "localsearch" ? Files.parseLocalsearch(text, filesRoot, limit) : Files.parsePlocate(text, proc.term, filesRoot, limit);
+        if (paths.length === 0 && proc.stage === "localsearch") {
+            spawnSearch(proc.seq, proc.term, "plocate");
+            return;
+        }
+        fileHits = paths;
+        const t0 = Date.now();
+        fileHitsOnly = true;
+        compute();
+        fileHitsOnly = false;
+        console.info("grassfield-shell: search files via", proc.stage, paths.length, "results, merge", Date.now() - t0, "ms");
+    }
+
+    // ---- activation ----------------------------------------------------------------------
+
+    function activate(item: var, reveal: bool): void {
+        if (!item)
+            return;
+        switch (item.kind) {
+        case "app":
+            bumpUsage(item.appId);
+            hide();
+            item.entry.execute();
+            return;
+        case "calc":
+            hide();
+            Quickshell.execDetached(["wl-copy", "--", item.text]);
+            return;
+        case "command":
+            hide();
+            runCommand(item.command);
+            return;
+        case "file":
+        case "recent":
+            hide();
+            if (reveal)
+                Quickshell.execDetached(["gio", "open", Files.dirName(item.path)]);
+            else
+                Quickshell.execDetached(["xdg-open", item.path]);
+            return;
+        }
+    }
+
+    function activateSelected(reveal: bool): void {
+        if (selected >= 0 && selected < items.length)
+            activate(items[selected], reveal);
+    }
+
+    function runCommand(id: string): void {
+        switch (id) {
+        case "sleep":
+            Power.sleepNow();
+            return;
+        case "restart":
+            Popups.confirm(qsTr("Are you sure you want to restart your computer now?"), qsTr("Open applications will be closed."), qsTr("Restart"), "restart", {}, true);
+            return;
+        case "shutdown":
+            Popups.confirm(qsTr("Are you sure you want to shut down your computer now?"), qsTr("Open applications will be closed."), qsTr("Shut Down"), "shutdown", {}, true);
+            return;
+        case "logout":
+            Popups.confirm(qsTr("Are you sure you want to quit all applications and log out %1?").arg(SystemInfo.user), qsTr("Open applications will be closed."), qsTr("Log Out"), "logout", {}, true);
+            return;
+        }
+    }
+
+    function move(delta: int): void {
+        if (items.length === 0)
+            return;
+        selected = (selected + delta + items.length) % items.length;
+    }
+
+    // Tab / Shift+Tab: first item of the next / previous group.
+    function moveGroup(delta: int): void {
+        if (items.length === 0 || groups.length === 0)
+            return;
+        const current = selected >= 0 ? items[selected].groupId : groups[0].id;
+        let gi = groups.findIndex(g => g.id === current);
+        gi = (gi + delta + groups.length) % groups.length;
+        const target = groups[gi].id;
+        selected = items.findIndex(it => it.groupId === target);
+    }
+
+    // ---- usage boost persistence (0600, like the notification history) -------------------
+
+    function bumpUsage(id: string): void {
+        Ranking.bumpUsage(usage, id, Date.now());
+        if (usageFile.path !== "")
+            usageFile.setText(Ranking.serializeUsage(usage));
+    }
+
+    Process {
+        id: prepare
+        command: ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\"; [ -e \"$2\" ] || install -m 600 /dev/null \"$2\"; chmod 600 \"$2\"", "sh", root.stateDir, root.usagePath]
+        onRunningChanged: {
+            if (!running)
+                usageFile.path = root.usagePath;
+        }
+    }
+
+    FileView {
+        id: usageFile
+        printErrors: false
+        atomicWrites: true
+        onLoaded: root.usage = Ranking.parseUsage(usageFile.text())
+    }
+
+    // Recent documents, read only.
+    FileView {
+        id: recentFile
+        path: root.dataHome + "/recently-used.xbel"
+        printErrors: false
+        onLoaded: {
+            root.recentList = Files.parseXbel(recentFile.text());
+            if (root.open)
+                root.compute();
+        }
+    }
+
+    Connections {
+        target: DesktopEntries
+
+        function onApplicationsChanged(): void {
+            root.rebuildApps();
+            if (root.open)
+                root.compute();
+        }
+    }
+
+    // Test hooks: qs ipc call search <toggle|open|close|query|status>.
+    IpcHandler {
+        target: "search"
+
+        function toggle(): void {
+            root.toggle();
+        }
+
+        function open(text: string): void {
+            root.show(text);
+        }
+
+        function close(): void {
+            root.hide();
+        }
+
+        // Sets the query without opening the window (provider tests).
+        function query(text: string): void {
+            root.keyStartMs = Date.now();
+            root.setQuery(text);
+            root.keyStartMs = 0;
+        }
+
+        // JSON of the visible groups.
+        function status(): string {
+            return JSON.stringify({
+                open: root.open,
+                query: root.query,
+                screen: root.screenName,
+                selected: root.selected,
+                groups: root.groups.map(g => ({id: g.id, title: g.title, items: g.items.map(i => ({kind: i.kind, title: i.title, subtitle: i.subtitle}))}))
+            });
+        }
+    }
+
+    Component.onCompleted: {
+        rebuildApps();
+        prepare.running = true;
+    }
+
+    SearchPanel {
+        controller: root
+    }
+}
