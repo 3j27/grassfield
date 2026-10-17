@@ -92,6 +92,12 @@ namespace gf::titlebar {
         return std::hypot(dx, dy) > threshold;
     }
 
+    Rect unzoomedDragBox(const Rect& zoomed, double restoredW, double restoredH, double pressX, double pressY, double pointerX, double pointerY) {
+        const double fraction = zoomed.w > 0 ? std::clamp((pressX - zoomed.x) / zoomed.w, 0.0, 1.0) : 0.5;
+        const double offsetY  = std::min(pressY - zoomed.y, std::max(0.0, restoredH)); // never below the restored window
+        return Rect{pointerX - (fraction * restoredW), pointerY - offsetY, restoredW, restoredH};
+    }
+
     bool CClickTracker::press(uint32_t timeMs, double x, double y) {
         if (m_hasPrevious) {
             const uint32_t elapsed = timeMs - m_prevTimeMs; // unsigned: correct across 32-bit wrap-around

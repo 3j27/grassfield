@@ -78,6 +78,13 @@ namespace gf::titlebar {
     // threshold) to move the window; until then it is a click.
     bool exceedsDragThreshold(double dx, double dy, double threshold = theme::kDragThreshold);
 
+    // Dragging a maximized window un-zooms it under the pointer (macOS): the window gets back its floating
+    // size (restoredW x restoredH) and is placed so that the pointer keeps its horizontal fraction of the
+    // window and its vertical offset from the surface's top edge (negative on the titlebar, which sits above
+    // the surface). `zoomed` is the maximized surface box (layout coordinates), (pressX, pressY) the press
+    // point, (pointerX, pointerY) the pointer now. Returns the new surface box.
+    Rect unzoomedDragBox(const Rect& zoomed, double restoredW, double restoredH, double pressX, double pressY, double pointerX, double pointerY);
+
     // Detects a double-click from consecutive presses on the drag area.
     class CClickTracker {
       public:

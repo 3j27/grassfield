@@ -46,6 +46,8 @@ namespace {
         std::optional<tb::Button> button;         // pressed button, activated on release over the same button
         bool                      dragging = false;
         bool                      moved    = false; // the pointer passed kDragThreshold: the window follows it
+        bool                      unzoom   = false; // pressed on a maximized window: un-zoom it when the move starts
+        CBox                      zoomedSurface;    // surface box of that maximized window at the press
         PHLWINDOWREF              window;   // window being moved
         Vector2D                  pressPos; // pointer at press (global logical)
         CBox                      startBox; // window layout box at press
@@ -117,11 +119,26 @@ namespace {
         fs->setFullscreenMode(w, target, target, false);
     }
 
-    // Maximized or full screen: the layout owns the window's box. A titlebar move would write that box
-    // into the floating geometry the zoom toggle restores (FR8 regression, 2026-10-17).
-    bool inFullscreenMode(const PHLWINDOW& w) {
+    Fullscreen::eFullscreenMode fullscreenMode(const PHLWINDOW& w) {
         const auto& fs = Fullscreen::controller();
-        return fs && fs->getFullscreenModes(w).internal != Fullscreen::FSMODE_NONE;
+        return fs ? fs->getFullscreenModes(w).internal : Fullscreen::FSMODE_NONE;
+    }
+
+    // A move that starts on a maximized window: leave the maximized mode first (the layout gives the window
+    // back its floating size), then place that size under the pointer (macOS). Moving the maximized box
+    // itself would write it into the floating geometry the zoom toggle restores (FR8 regression, 2026-10-17).
+    // Measured in 0.56.2: a floating window's layout box is its surface box, a maximized one's is the work
+    // area (decorations included), hence the surface box recorded at the press as the reference.
+    void unzoomUnderPointer(SPointerGrab& grab, const PHLWINDOW& w, const SP<Layout::ITarget>& target, const Vector2D& pointer) {
+        if (fullscreenMode(w) == Fullscreen::FSMODE_MAXIMIZED)
+            toggleZoom(w);
+        const CBox  restored = target->position();
+        const CBox& zoomed   = grab.zoomedSurface;
+        const auto  box      = tb::unzoomedDragBox(tb::Rect{zoomed.x, zoomed.y, zoomed.w, zoomed.h}, restored.w, restored.h, grab.pressPos.x, grab.pressPos.y, pointer.x, pointer.y);
+        gf::log(Log::DEBUG, "titlebar drag un-zooms: restored {:.0f}x{:.0f} at {:.0f},{:.0f}", box.w, box.h, box.x, box.y);
+        grab.startBox = CBox{box.x, box.y, box.w, box.h};
+        grab.pressPos = pointer;
+        grab.unzoom   = false;
     }
 
     // Interactive move driven by the plugin: the window follows the pointer from the press point.
@@ -138,12 +155,14 @@ namespace {
         const auto target = w->layoutTarget();
         if (!target)
             return;
-        const Vector2D delta = g_pInputManager->getMouseCoordsInternal() - grab.pressPos;
-        if (!grab.moved && !tb::exceedsDragThreshold(delta.x, delta.y))
+        const Vector2D pointer = g_pInputManager->getMouseCoordsInternal();
+        if (!grab.moved && !tb::exceedsDragThreshold(pointer.x - grab.pressPos.x, pointer.y - grab.pressPos.y))
             return;
         grab.moved = true;
-        CBox box   = grab.startBox;
-        box.translate(delta);
+        if (grab.unzoom)
+            unzoomUnderPointer(grab, w, target, pointer);
+        CBox box = grab.startBox;
+        box.translate(pointer - grab.pressPos);
         g_layoutManager->setTargetGeom(box, target);
     }
 
@@ -425,7 +444,8 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         return true;
     }
 
-    if (inFullscreenMode(w)) {
+    const auto mode = fullscreenMode(w);
+    if (mode != Fullscreen::FSMODE_NONE && mode != Fullscreen::FSMODE_MAXIMIZED) {
         input.presses.claim(e.button, false); // focus and raise only; the release is still the titlebar's
         return true;
     }
@@ -435,6 +455,9 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         input.grab          = {};
         input.grab.deco     = this;
         input.grab.dragging = true;
+        input.grab.unzoom   = mode == Fullscreen::FSMODE_MAXIMIZED;
+        if (input.grab.unzoom)
+            input.grab.zoomedSurface = w->geometricBox(Desktop::View::IGeometric::GEOMETRIC_GOAL);
         input.grab.window   = w;
         input.grab.pressPos = coords;
         input.grab.startBox = target->position();

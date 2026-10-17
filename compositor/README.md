@@ -103,6 +103,10 @@ Input consistency (FR13 regression, nested only): `tests/compositor/input_consis
 titlebar drags and close-button cancels on one mouse-reporting foot window, each followed by a click inside
 another; PASS (exit 0) = every click reached the clicked window and none reached the dragged one.
 
+Zoom restore (FR8 regression, nested only): `tests/compositor/zoom_restore.sh` — double-click, click + zoom
+button and a drag on a maximized titlebar; PASS (exit 0) = the zoom toggle always restores the floating
+geometry and a drag un-zooms the window under the pointer.
+
 ## Pointer input
 
 A titlebar consumes left presses on its bar. Press ownership and gesture lifetime are pure logic
@@ -152,4 +156,4 @@ There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dis
 - `src/` — Hyprland glue: `main.cpp` (entry points, ABI check, event bus listeners, unload), `Titlebar.*`
   (decoration, drawing, input), `Ipc.*` (socket2 events, Lua function, hyprctl command).
 - `tests/` — GoogleTest unit tests for `src/core/`. Nested scenarios (repository root):
-  `tests/compositor/soak.sh`, `tests/compositor/input_consistency.sh`.
+  `tests/compositor/soak.sh`, `tests/compositor/input_consistency.sh`, `tests/compositor/zoom_restore.sh`.

@@ -47,8 +47,9 @@ per-Settings double-click action, tiled windows, CSD negotiation, appmenu protoc
   leaves the window following the pointer.
 - **FR8** Two presses on the drag area within 400 ms and 4 px toggle maximized through the zoom button's
   toggle (no move). A press moves the window only after the pointer travelled more than 4 px
-  (`kDragThreshold`); a click never writes the window geometry. A maximized or full-screen window is not
-  moved by a titlebar drag (the press only focuses and raises it).
+  (`kDragThreshold`); a click never writes the window geometry. A drag that starts on a maximized window
+  first leaves the maximized mode and places the restored floating size under the pointer (same horizontal
+  fraction of the window, same offset on the titlebar), then follows the pointer (macOS).
 - **FR9** At load and on `hl.plugin.grassfield.hello()` the plugin posts the socket2 event
   `grassfield>>{"v":"gfc/1","type":"capabilities","features":["decorations"]}`.
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
@@ -74,7 +75,7 @@ per-Settings double-click action, tiled windows, CSD negotiation, appmenu protoc
 | FR5 | unit `TitlebarLayout.Title*`; screenshot with long and short titles | L0 / L1 | verified |
 | FR6 | nested: virtual pointer clicks on close / zoom / minimize; press on close + release elsewhere | L1 | verified (close closed the window; zoom toggled `fullscreen` 0↔1; minimize posted `minimize-request`; cancel kept the window) |
 | FR7 | nested: virtual pointer drag, window position before/after; abandoned drag (pointer tool exits after `down drag`, its device is destroyed) then move and click elsewhere with a new pointer | L1 | verified: press (500,186) → release (600,286) moved the window (370,200) → (470,300), cursor not warped. Abandoned drag (2026-10-17): before the fix the window followed the unpressed pointer and jumped to the next click; after it the window stays where the drag left it, the next click lands on the desktop, log `titlebar gesture cancelled: no button held or a pointer device went away` |
-| FR8 | unit `ClickTracker.*`, `DragThreshold.*`; nested double-click | L0 / L1 | verified: `fullscreen` 0 → 1, titlebar kept on the maximized window. Restore by double-click on the maximized bar (2026-10-17): before the fix `fullscreen` 1 → 0 but the window kept the maximized box (1920×980 at the work-area origin) because the first click started a titlebar move whose release wrote the maximized box into the floating geometry (a single click on the maximized bar followed by the zoom button did the same); after the fix (no geometry write below the drag threshold, no titlebar move of a maximized window) double-click restores 700×500 at (2050,264), the original place; click + zoom button and a drag on the maximized bar leave the geometry intact; a normal drag moves by exactly (+100,+150) |
+| FR8 | unit `ClickTracker.*`, `DragThreshold.*`, `UnzoomedDragBox.*`; nested `tests/compositor/zoom_restore.sh` | L0 / L1 | verified: `fullscreen` 0 → 1, titlebar kept on the maximized window. Restore by double-click on the maximized bar (2026-10-17): before the fix `fullscreen` 1 → 0 but the window kept the maximized box (1920×980 at the work-area origin) because the first click started a titlebar move whose release wrote the maximized box into the floating geometry (a single click on the maximized bar followed by the zoom button did the same); after the fix (no geometry write below the drag threshold; a drag on a maximized window un-zooms it under the pointer) double-click restores 700×500 at (2050,264), the original place; click + zoom button restores it too; a drag on the maximized bar from 25 % of its width to (1000,400) on GF-REF un-zoomed the window to 700×500 with its surface at (2265,414): pointer at 25 % of the width, 14 px above the surface (on the titlebar); a normal drag moves by exactly (+100,+150). Scenario: `tests/compositor/zoom_restore.sh` |
 | FR9 | spike `spikes/s2-ipc/shell.qml` (Quickshell `rawEvent`) | L1 | verified for `hello`; load-time event not observable |
 | FR10 | `hyprctl grassfield` against the nested instance | L1 | verified |
 | FR11 | code review; `clang-tidy` (Q1); C1 soak `tests/compositor/soak.sh` | L0 / L1 | see "Performance (gates affected)" |
@@ -233,8 +234,6 @@ Manual (L1, nested only):
 - Appearance is fixed to dark; light colors exist in `Theme.hpp` but are not switchable yet.
 - Double-click always zooms (no Settings choice yet).
 - Titlebar drags don't snap to screen edges or other windows (SUPER+drag still does).
-- A maximized (zoomed) window cannot be dragged by its titlebar; macOS lets a zoomed window be moved.
-  Un-zoom it first (zoom button or double-click).
 - Client-side-decorated apps that ignore the server-side decoration request get a second titlebar.
 - Long titles are clamped to the available width by Hyprland's text renderer; ellipsis behaviour depends on it.
 - The content's rounded top corners are filled with the titlebar color; with `rounding_power` 2.6 a small
