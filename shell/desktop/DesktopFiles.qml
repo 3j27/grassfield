@@ -44,6 +44,8 @@ Scope {
     property string lastError: ""
 
     signal renameWanted(string name)
+    // An accepted rename that the file system refused (the view shows it inline).
+    signal renameFailed(string name, string reason)
 
     // ---- desktop folder ------------------------------------------------------------------------
 
@@ -104,9 +106,13 @@ Scope {
         positions = Logic.renamed(positions, name, next);
         scheduleSave();
         markBusy(next);
-        run(["gio", "rename", path(name), next], "rename", ok => {
-            if (!ok)
+        // gio move (not gio rename) so that a name starting with "-" is not an option.
+        run(["gio", "move", "--no-target-directory", "--", path(name), path(next)], "rename", ok => {
+            if (!ok) {
                 positions = Logic.renamed(positions, next, name);
+                lastError = qsTr("Could not rename \"%1\".").arg(name);
+                renameFailed(name, lastError);
+            }
             unmarkBusy(next);
             scheduleSave();
         });

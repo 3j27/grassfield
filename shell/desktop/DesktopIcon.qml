@@ -141,6 +141,8 @@ Item {
         TextInput {
             id: field
             visible: root.renaming
+            // Disabled outside a rename: a hidden field can never hold focus or commit.
+            enabled: root.renaming
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
             anchors.topMargin: Tokens.spacingXs / 2
@@ -155,21 +157,62 @@ Item {
             font.pixelSize: Tokens.desktopIconLabelSize
             font.weight: Tokens.typographyMenuWeight
             Accessible.name: qsTr("Rename %1").arg(root.label)
-            onAccepted: root.renameAccepted(text)
-            Keys.onEscapePressed: root.renameCancelled()
+            onAccepted: if (root.renaming && visible)
+                root.renameAccepted(text)
+            Keys.onEscapePressed: if (root.renaming)
+                root.renameCancelled()
+        }
+    }
+
+    // Inline reason under the field when a rename was refused (validation or the file system).
+    Text {
+        visible: root.renaming && root.renameError !== ""
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: labelBox.bottom
+        anchors.topMargin: Tokens.spacingXs / 2
+        width: root.width
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        textFormat: Text.PlainText
+        color: Appearance.colors.danger
+        font.family: Appearance.fontFamily
+        font.pixelSize: Tokens.desktopIconLabelSize
+        style: Text.Outline
+        styleColor: Appearance.withAlpha(Appearance.colors.shadow, Tokens.desktopIconSelectionOpacity)
+        text: {
+            switch (root.renameError) {
+            case "empty":
+                return qsTr("Name is empty");
+            case "slash":
+            case "dots":
+            case "control":
+                return qsTr("Invalid name");
+            case "long":
+                return qsTr("Name too long");
+            case "exists":
+                return qsTr("Already exists");
+            default:
+                return qsTr("Rename failed");
+            }
         }
     }
 
     // Starts editing: the base name (without extension) is selected, as in a file manager.
     function beginRename(): void {
+        if (!root.renaming)
+            return;
         field.text = root.name;
         field.forceActiveFocus();
         const ext = Logic.splitExt(root.name).ext;
         field.select(0, ext !== "" && !root.isDir ? root.name.length - ext.length : root.name.length);
     }
 
-    onRenamingChanged: if (renaming)
-        Qt.callLater(beginRename)
+    onRenamingChanged: {
+        if (renaming)
+            Qt.callLater(beginRename);
+        else
+            field.focus = false;
+    }
 
     // Focus leaving the field commits nothing: the rename ends.
     Connections {
