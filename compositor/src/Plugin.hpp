@@ -2,6 +2,7 @@
 
 // Shared plugin state and safety helpers (R13: no exception may escape into Hyprland).
 
+#include "core/EventThrottle.hpp"
 #include "core/Protocol.hpp"
 
 #include <hyprland/src/debug/log/Logger.hpp>
@@ -9,8 +10,10 @@
 #include <hyprland/src/helpers/signal/Signal.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
+#include <chrono>
 #include <exception>
 #include <format>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -39,6 +42,9 @@ namespace gf {
 
         // Live titlebars. Owned by their windows; each removes itself in its destructor.
         std::vector<CGrassfieldTitlebar*> titlebars;
+
+        // Log lines that requests trigger (see logRequest).
+        events::CLogLimiter requestLog{20, std::chrono::seconds(1)};
     };
 
     SPluginState& state();
@@ -53,6 +59,24 @@ namespace gf {
     void log(Hyprutils::CLI::eLogLevel level, std::format_string<Args...> fmt, Args&&... args) {
         try {
             Log::logger->log(level, std::string{"[grassfield] "} + std::format(fmt, std::forward<Args>(args)...));
+        } catch (...) {
+            // logging must never throw into Hyprland
+        }
+    }
+
+    // For log lines that requests can trigger at will (Wayland clients, Lua verbs over the hyprctl socket): at most 20
+    // at once, then one per second, one budget for all of them (spec FR24). The next written line says how many were
+    // held back.
+    template <typename... Args>
+    void logRequest(Hyprutils::CLI::eLogLevel level, std::format_string<Args...> fmt, Args&&... args) {
+        try {
+            const auto held = state().requestLog.admit(events::Clock::now());
+            if (!held)
+                return;
+            std::string line = std::string{"[grassfield] "} + std::format(fmt, std::forward<Args>(args)...);
+            if (*held > 0)
+                line += std::format(" ({} similar line(s) held back)", *held);
+            Log::logger->log(level, line);
         } catch (...) {
             // logging must never throw into Hyprland
         }

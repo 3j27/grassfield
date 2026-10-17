@@ -204,14 +204,14 @@ namespace gf::ipc {
             guarded(isMinimize ? "hl.plugin.grassfield.minimize" : "hl.plugin.grassfield.restore", [&] {
                 const auto address = call.address.ok ? minimize::parseAddress(call.address.view()) : std::nullopt;
                 if (!address) {
-                    log(Log::WARN, "{}: rejected: invalid window address", isMinimize ? "minimize" : "restore");
+                    logRequest(Log::WARN, "{}: rejected: invalid window address", isMinimize ? "minimize" : "restore");
                     return;
                 }
                 std::optional<minimize::Box> target;
                 if (call.rectOk)
                     target = minimizer::validTarget(minimize::Box{call.rect[0], call.rect[1], call.rect[2], call.rect[3]});
                 if (!target)
-                    log(Log::INFO, "{} {:x}: no valid Dock rectangle, no animation", isMinimize ? "minimize" : "restore", *address);
+                    logRequest(Log::INFO, "{} {:x}: no valid Dock rectangle, no animation", isMinimize ? "minimize" : "restore", *address);
                 if (isMinimize)
                     minimizer::minimize(*address, target);
                 else
@@ -223,11 +223,11 @@ namespace gf::ipc {
             guarded("hl.plugin.grassfield.config", [&] {
                 const auto action = key.ok && value.ok ? gfc::parseDoubleClickAction(key.view(), value.view()) : std::nullopt;
                 if (!action) {
-                    log(Log::WARN, "config: rejected (only {} = zoom|minimize|none is accepted)", gfc::kConfigTitlebarDoubleClick);
+                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none is accepted)", gfc::kConfigTitlebarDoubleClick);
                     return;
                 }
                 state().doubleClickAction = *action;
-                log(Log::INFO, "config: {} = {}", gfc::kConfigTitlebarDoubleClick, value.view());
+                logRequest(Log::INFO, "config: {} = {}", gfc::kConfigTitlebarDoubleClick, value.view());
             });
         }
 
@@ -239,11 +239,11 @@ namespace gf::ipc {
             guarded("hl.plugin.grassfield.appmenu", [&] {
                 const auto window = address.ok ? minimize::parseAddress(address.view()) : std::nullopt;
                 if (!window) {
-                    log(Log::WARN, "appmenu: rejected: invalid window address");
+                    logRequest(Log::WARN, "appmenu: rejected: invalid window address");
                     return;
                 }
                 if (!appmenuServer::announce(*window))
-                    log(Log::WARN, "appmenu: no mapped window {:x} (or appmenu inactive)", *window);
+                    logRequest(Log::WARN, "appmenu: no mapped window {:x} (or appmenu inactive)", *window);
             });
         }
 

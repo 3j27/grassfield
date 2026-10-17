@@ -382,11 +382,11 @@ namespace gf::minimizer {
     void minimize(uint64_t address, std::optional<mz::Box> target) {
         const auto w = windowByAddress(address);
         if (!w || !w->m_isMapped) {
-            gf::log(Log::WARN, "minimize: no mapped window {:x}", address);
+            gf::logRequest(Log::WARN, "minimize: no mapped window {:x}", address);
             return;
         }
         if (onMinimizedWorkspace(w)) {
-            gf::log(Log::DEBUG, "minimize: window {:x} is already minimized", address);
+            gf::logRequest(Log::DEBUG, "minimize: window {:x} is already minimized", address);
             return;
         }
 
@@ -433,13 +433,13 @@ namespace gf::minimizer {
     void restore(uint64_t address, std::optional<mz::Box> target) {
         const auto w = windowByAddress(address);
         if (!w || !w->m_isMapped) {
-            gf::log(Log::WARN, "restore: no mapped window {:x}", address);
+            gf::logRequest(Log::WARN, "restore: no mapped window {:x}", address);
             return;
         }
         if (auto running = takeAnimation(w))
             complete(*running, true);
         if (!onMinimizedWorkspace(w)) {
-            gf::log(Log::DEBUG, "restore: window {:x} is not minimized", address);
+            gf::logRequest(Log::DEBUG, "restore: window {:x} is not minimized", address);
             return;
         }
 
