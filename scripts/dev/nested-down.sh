@@ -11,10 +11,15 @@ stop_pid() { # <pidfile> <name>
   local pid
   pid=$(<"$1")
   if kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null
+    # Processes were started with setsid, so the PID is also the process group: stopping the group
+    # also stops helpers (private dbus-run-session bus, activated portals, gio monitors).
+    # Only signal a group this script's setsid created (group id == PID); otherwise just the PID.
+    local target=$pid
+    [[ $(ps -o pgid= -p "$pid" | tr -d ' ') == "$pid" ]] && target=-$pid
+    kill -- "$target" 2>/dev/null
     for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
-    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
-    echo "nested-down: stopped $2 (pid $pid)"
+    kill -0 "$pid" 2>/dev/null && kill -9 -- "$target" 2>/dev/null
+    echo "nested-down: stopped $2 (process group $pid)"
   fi
   rm -f "$1"
 }
