@@ -423,6 +423,8 @@ Variants {
                     font.pixelSize: Tokens.typographyBodySize
                     clip: true
                     focus: true
+                    // No blinking caret in the visual fixture: a captured frame must not depend on the blink phase.
+                    cursorVisible: activeFocus && !VisualFixtures.active
                     Accessible.role: Accessible.EditableText
                     Accessible.name: qsTr("Search")
                     Accessible.description: qsTr("Type to filter applications")

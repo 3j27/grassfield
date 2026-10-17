@@ -16,14 +16,15 @@ Method: glyph mask (docs/testing/visual.md). Each surface is captured in four gl
 Per pixel and channel, with coverage alpha: W = alpha*255 + (1-alpha)*B and K = (1-alpha)*B, so W - K = alpha*255
 recovers the coverage exactly, whatever the backdrop (objects that do not follow the glyph colour have W = K and
 alpha 0). The coverage includes any opacity of the Text item itself (an item at opacity 0.85 never reaches alpha 1).
-The glyph colour is the colour that is actually RENDERED: the pixel of the normal capture (A) in the core of the glyph mask,
-the pixels whose coverage is at least CORE of the box's reference coverage (its 95th percentile): fully covered pixels, so no
-blend with the backdrop and the item's opacity included. Declared colours are never used. A glyph too thin to have such
-pixels falls back to the pixels above half the reference coverage (still the rendered pixel, so the blend only lowers the
-ratio: conservative). For each of those pixels the WCAG ratio of the rendered colour against the local backdrop (mean linear
-luminance of B in the 5x5 window around the pixel: the eye averages a high-frequency texture) is computed; the cell value is the
-5th percentile of those ratios (the worst case, not a median of extremes). A box without a glyph yields None ("NO GLYPH": box
-misplaced, surface not open) and FAILS the run; a missing capture fails the run too.
+The glyph colour is the colour that is actually RENDERED, never a declared one. The item's own opacity o is the largest coverage
+found in the box (a fully covered pixel shows the item at its opacity). For a glyph pixel (covered at least 0.85 o in every
+channel) the colour a full-coverage pixel would have is e = B + o * (A - B) / alpha per channel: it includes the opacity (an item
+at opacity 0.85 reads as the faded colour it shows) and uses nearly fully covered pixels only (0.85 o, relaxed for thin text), so
+antialiased edges and sub-pixel colour fringes do not count. For each
+glyph pixel the WCAG ratio of e against the local backdrop (mean linear luminance of B in the 5x5 window around the pixel: the
+eye averages a high-frequency texture) is computed; the cell value is the 5th percentile of those ratios (the worst case, not
+a median of extremes). A box without a glyph yields None ("NO GLYPH": box misplaced, surface not open) and FAILS the run; a
+missing capture fails the run too.
 Thresholds: kind "text" >= 4.5, kind "large" (large text) and "icon" >= 3.0.
 """
 import argparse
@@ -42,10 +43,9 @@ WALLPAPERS = ["white", "black", "gray", "noise", "checker"]
 # Saturated yellow/green noise wallpaper: the four colours a pixel is drawn from (also the token calculation's bounds).
 NOISE_PALETTE = [(255, 235, 0), (0, 200, 40), (200, 255, 0), (0, 150, 0)]
 MODES = ("", ".hidden", ".white", ".black")  # file suffixes: A, B, W, K
-GLYPH_ALPHA = 0.5   # fraction of the reference coverage below which a pixel is not a glyph pixel (fallback)
-CORE = 0.9          # fraction of the reference coverage of a core pixel
-MIN_COVERAGE = 0.2  # a reference coverage below this is no glyph (an invisible or absent item)
-MIN_CORE_PIXELS = 4
+GLYPH_ALPHA = (0.85, 0.7, 0.5)  # a glyph pixel is covered at least this fraction of the item's opacity in every channel
+MIN_PIXELS = 4      # the strictest fraction that leaves this many pixels is used (thin text has few fully covered pixels)
+MIN_COVERAGE = 0.2  # an item opacity (largest coverage in the box) below this is no glyph: absent or invisible
 PERCENTILE = 0.05
 LOCAL = 2  # local backdrop window radius: 5x5 pixels
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -151,21 +151,30 @@ def local_luminance(ctx, x, y):
 
 
 def glyph_ratios(a_px, b_px, w_px, k_px, bw, bh, ctx=None):
-    """WCAG ratio of the RENDERED glyph colour (pixel of the normal capture, core of the glyph mask) against the local
-    backdrop (5x5 mean of the hidden capture) for a box of bw x bh pixels. ctx: wider hidden capture, default the box
-    itself. Empty when the box holds no glyph (reference coverage below MIN_COVERAGE)."""
+    """WCAG ratio of the RENDERED glyph colour against the local backdrop (5x5 mean of the hidden capture) for every glyph
+    pixel of a box of bw x bh pixels. ctx: wider hidden capture, default the box itself. Empty when the box holds no glyph.
+
+    Per channel i the coverage is a_i = (W_i - K_i) / d_i. The item's own opacity o is the largest coverage found in the box (a
+    fully covered pixel shows the item at its opacity): measured from the pixels, never read from a declaration. A glyph pixel is
+    one covered at least 0.85 o in every channel (0.7 or 0.5 o when thin text has fewer than MIN_PIXELS such pixels): the text
+    renderer's gamma makes a half covered edge pixel unreliable, a nearly covered one exact. Its rendered full-coverage colour is
+    e_i = B_i + o * (A_i - B_i) / a_i, including the opacity."""
     ctx = ctx or (b_px, bw, bh, 0, 0)
-    alphas = [coverage(w, k) for w, k in zip(w_px, k_px)]
-    seen = sorted(a for a in alphas if a > 0.05)
-    if not seen:
+    dens = (255.0, 255.0, 253.0)
+    cov = [tuple(min(1.0, max(0.0, (w[i] - k[i]) / dens[i])) for i in range(3)) for w, k in zip(w_px, k_px)]
+    o = max((max(c) for c in cov), default=0.0)
+    if o < MIN_COVERAGE:
         return []
-    ref = seen[min(len(seen) - 1, int(0.95 * len(seen)))]
-    if ref < MIN_COVERAGE:
-        return []
-    core = [i for i, a in enumerate(alphas) if a >= CORE * ref]
-    if len(core) < MIN_CORE_PIXELS:
-        core = [i for i, a in enumerate(alphas) if a >= GLYPH_ALPHA * ref]
-    return [ratio(luminance(a_px[i]), local_luminance(ctx, i % bw, i // bw)) for i in core]
+    for frac in GLYPH_ALPHA:
+        pick = [i for i, c in enumerate(cov) if min(c) >= frac * o]
+        if len(pick) >= MIN_PIXELS or frac == GLYPH_ALPHA[-1]:
+            break
+    out = []
+    for idx in pick:
+        a, b, c = a_px[idx], b_px[idx], cov[idx]
+        e = tuple(min(255.0, max(0.0, b[i] + o * (a[i] - b[i]) / c[i])) for i in range(3))
+        out.append(ratio(luminance(e), local_luminance(ctx, idx % bw, idx // bw)))
+    return out
 
 
 def percentile(values, p):
@@ -204,9 +213,11 @@ def measure_surface(root_dir, surface, regions):
     return out
 
 
-def measure(root, regions_file):
+def measure(root, regions_file, only=None):
     with open(regions_file) as f:
         spec = json.load(f)
+    if only:
+        spec["surfaces"] = {k: v for k, v in spec["surfaces"].items() if k in only}
     combos = sorted(d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d)) and "__" in d)
     order = [f"{wp}__{ap}__{tr}" for wp in WALLPAPERS for ap in ("light", "dark") for tr in ("0.25", "0.6")]
     combos = [c for c in order if c in combos] + [c for c in combos if c not in order]
@@ -287,11 +298,12 @@ def main():
     m = sub.add_parser("measure")
     m.add_argument("dir")
     m.add_argument("--regions", default=os.path.join(HERE, "contrast-regions.json"))
+    m.add_argument("--surfaces", default="", help="comma list: measure only these surfaces")
     a = ap.parse_args()
     if a.cmd == "gen":
         gen(a.dir)
         return 0
-    return measure(a.dir, a.regions)
+    return measure(a.dir, a.regions, [x for x in a.surfaces.split(",") if x] or None)
 
 
 if __name__ == "__main__":

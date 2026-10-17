@@ -122,29 +122,23 @@ Item {
         color: root.renaming ? Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.desktopIconRenameFillOpacity) : (root.selected ? Appearance.colors.accent : "transparent")
         border.width: root.renaming ? Tokens.controlFocusRing : 0
         border.color: root.renameError !== "" ? Appearance.darkColors.danger : Appearance.colors.accent
+        // Second pass of the drop shadow: the shadow of the text and its own shadow, a denser soft halo (gate A2: white text
+        // must stay legible on a white wallpaper). Off on the accent highlight and while renaming.
+        layer.enabled: !root.selected && !root.renaming
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Appearance.darkColors.shadow
+            shadowOpacity: Tokens.desktopIconLabelShadowOpacity
+            shadowBlur: Tokens.desktopIconLabelShadowBlur
+            shadowVerticalOffset: Tokens.desktopIconLabelShadowOffsetY
+        }
 
-        Text {
-            id: labelText
+        // Pass 2 of the drop shadow (pass 1 is the layer of the text itself, pass 3 the layer of labelBox): each pass casts the
+        // shadow of the previous result, so the halo gets denser without a harder edge (gate A2 on a white wallpaper).
+        Item {
+            id: labelFx
+            anchors.fill: parent
             visible: !root.renaming
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: Tokens.spacingXs / 2
-            width: root.width - 2 * Tokens.spacingXs - Tokens.spacingXs
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-            maximumLineCount: Tokens.desktopIconLabelMaxLines
-            elide: Text.ElideRight
-            text: root.label
-            textFormat: Text.PlainText
-            // White text with a soft dark drop shadow whatever the appearance (a desktop label sits on the wallpaper, not
-            // on material); the selected label is drawn on the accent highlight with the accent text colour (gate A2).
-            color: root.selected ? Appearance.colors.accentText : Appearance.darkColors.text
-            font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.desktopIconLabelSize
-            font.weight: Tokens.typographyMenuWeight
-            // The core of the shadow is a one pixel outline at labelShadowOpacity, softened by the blurred copy below.
-            style: root.selected ? Text.Normal : Text.Outline
-            styleColor: Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.desktopIconLabelShadowOpacity)
             layer.enabled: !root.selected
             layer.effect: MultiEffect {
                 shadowEnabled: true
@@ -152,6 +146,38 @@ Item {
                 shadowOpacity: Tokens.desktopIconLabelShadowOpacity
                 shadowBlur: Tokens.desktopIconLabelShadowBlur
                 shadowVerticalOffset: Tokens.desktopIconLabelShadowOffsetY
+            }
+
+            Text {
+                id: labelText
+                visible: !root.renaming
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: Tokens.spacingXs / 2
+                width: root.width - 2 * Tokens.spacingXs - Tokens.spacingXs
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                maximumLineCount: Tokens.desktopIconLabelMaxLines
+                elide: Text.ElideRight
+                text: root.label
+                textFormat: Text.PlainText
+                // White text with a soft dark drop shadow whatever the appearance (a desktop label sits on the wallpaper, not
+                // on material); the selected label is drawn on the accent highlight with the accent text colour (gate A2).
+                color: root.selected ? Appearance.colors.accentText : Appearance.darkColors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.desktopIconLabelSize
+                font.weight: Tokens.typographyMenuWeight
+                // The core of the shadow is a one pixel outline at labelShadowOpacity, softened by the blurred copy below.
+                style: root.selected ? Text.Normal : Text.Outline
+                styleColor: Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.desktopIconLabelShadowOpacity)
+                layer.enabled: !root.selected
+                layer.effect: MultiEffect {
+                    shadowEnabled: true
+                    shadowColor: Appearance.darkColors.shadow
+                    shadowOpacity: Tokens.desktopIconLabelShadowOpacity
+                    shadowBlur: Tokens.desktopIconLabelShadowBlur
+                    shadowVerticalOffset: Tokens.desktopIconLabelShadowOffsetY
+                }
             }
         }
 

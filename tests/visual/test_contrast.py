@@ -135,6 +135,21 @@ class Score(unittest.TestCase):
         a, b, wh, k = (paint(c) for c in ((0, 0, 0), None, (255, 255, 254), (0, 0, 1)))
         self.assertAlmostEqual(contrast.score(a, b, wh, k, *self.SIZE), 21.0, delta=0.1)
 
+    def test_subpixel_fringe_is_read_exactly(self):
+        # LCD antialiasing: a pixel covered (1, 0.6, 0.2) per channel by white text on gray 102 renders (255, 194, 132), but the
+        # glyph is white: the full-coverage colour is read, so the fringe does not lower the score (5.2:1, as the core).
+        bg = 102.0
+        cov = (1.0, 0.6, 0.2)
+        a = [(255, 255, 255)] * 3 + [tuple(round(bg + c * (255 - bg)) for c in cov)]
+        b = [(102, 102, 102)] * 4
+        w = [(255, 255, 254)] * 3 + [tuple(round(c * 255 + (1 - c) * bg) for c in cov)]
+        k = [(0, 0, 1)] * 3 + [tuple(round((1 - c) * bg) for c in cov)]
+        got = contrast.glyph_ratios(a, b, w, k, 4, 1)
+        expect = contrast.ratio(contrast.luminance((255, 255, 255)), contrast.luminance((102, 102, 102)))
+        self.assertEqual(len(got), 3)  # the 0.2 channel is below half of the opacity: that pixel is not read
+        for r in got:
+            self.assertAlmostEqual(r, expect, delta=0.05)
+
     def test_low_coverage_is_no_glyph(self):
         a, b, w, k = self.render(solid((255, 255, 255)), (0, 0, 0), alpha=0.1)
         self.assertIsNone(contrast.score(a, b, w, k, *self.SIZE))

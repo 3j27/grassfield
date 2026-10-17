@@ -593,12 +593,12 @@ QtObject {
     readonly property int desktopIconSelectionRadius: 6
     // estimate: desktop icons v1, icon selection tint alpha
     readonly property real desktopIconSelectionOpacity: 0.35
-    // A2: core alpha of the label drop shadow; white label text over the shadow is tested over white and black wallpapers
-    readonly property real desktopIconLabelShadowOpacity: 0.8
-    // estimate: MultiEffect shadowBlur (0..1) of the label drop shadow, soft but tight
-    readonly property real desktopIconLabelShadowBlur: 0.35
-    // estimate: px the label shadow is pushed down
-    readonly property int desktopIconLabelShadowOffsetY: 1
+    // A2: alpha of the label drop shadow (three stacked passes); white label text over the shadow core is tested over white and black wallpapers, and measured on the nested screenshots (4.8:1 on white)
+    readonly property real desktopIconLabelShadowOpacity: 1.0
+    // A2: MultiEffect shadowBlur (0..1) of each label shadow pass; 0.06 to 0.35 measured on the white wallpaper, 0.22 is the best
+    readonly property real desktopIconLabelShadowBlur: 0.22
+    // A2: px the label shadow is pushed down; 0 measured better than 1 on the white wallpaper
+    readonly property int desktopIconLabelShadowOffsetY: 0
     // estimate: backing of the inline rename field (was materialBodyOpacity)
     readonly property real desktopIconRenameFillOpacity: 0.85
     // estimate: desktop icons v1, rubber band fill alpha

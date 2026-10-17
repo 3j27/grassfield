@@ -2,7 +2,7 @@
 # Gate A2 driver: captures the contrast surfaces on 5 worst-case wallpapers x light/dark x transparency
 # 0.25/0.6 in the nested session, each in four glyph modes (normal, hidden, white, black: the glyph mask method of
 # docs/testing/visual.md), then runs contrast.py. Run as a BARE command (reference machine only).
-#   tests/visual/contrast.sh [--measure-only] [--wallpapers white,black,...] [--transparency 0.25,0.6]
+#   tests/visual/contrast.sh [--measure-only] [--wallpapers white,black,...] [--transparency 0.25,0.6] [--surfaces desktop,search,...]
 # Output: .dev/visual/contrast/<wallpaper>__<appearance>__<transparency>/<surface>[.hidden|.white|.black].png and
 # contrast.csv. The nested session this script starts is torn down on exit (also on failure or interruption).
 # Exit status: contrast.py's (1 when a cell is below its threshold).
@@ -11,11 +11,13 @@ source "$(dirname "$0")/lib.sh"
 measure_only=0
 wallpapers="white black gray noise checker"
 transparencies="0.25 0.6"
+surfaces=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --measure-only) measure_only=1 ;;
     --wallpapers) wallpapers=${2//,/ }; shift ;;
     --transparency) transparencies=${2//,/ }; shift ;;
+    --surfaces) surfaces=${2//,/ }; shift ;;
     *) echo "contrast: unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -45,6 +47,9 @@ cap() {
   done
   vs_ipc visual glyphs normal >/dev/null
 }
+
+# want SURFACE: true when the surface is selected (--surfaces; all by default).
+want() { [[ -z $surfaces || " $surfaces " == *" $1 "* ]]; }
 
 # fail MSG: stop the run (the cleanup trap still tears the session down). A surface that is not open is never measured.
 fail() { echo "contrast: $*" >&2; exit 1; }
@@ -91,7 +96,8 @@ center() {
 differs() {
   local n
   n=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1 || true)
-  [[ $n =~ ^[0-9]+ ]] && (( ${n%% *} >= $3 )) || fail "$(basename "$2") looks like $(basename "$1") (differs in '$n' px, need $3): the surface did not open"
+  # compare prints "4394.01 (0.0021)" with a fuzz: keep the integer part.
+  [[ $n =~ ^[0-9]+ ]] && (( ${BASH_REMATCH[0]} >= $3 )) || fail "$(basename "$2") looks like $(basename "$1") (differs in '$n' px, need $3): the surface did not open"
 }
 
 if (( ! measure_only )); then
@@ -110,31 +116,45 @@ if (( ! measure_only )); then
         vs_ipc controlcenter appearance "$appearance" >/dev/null
         vs_ipc controlcenter transparency "$tr" >/dev/null
         vs_sleep 1.5
-        cap desktop
+        want desktop && cap desktop
         need_notif center false
-        vs_ipc menubar open system GF-REF >/dev/null; cap systemmenu; vs_ipc menubar close >/dev/null
-        differs "$dir/desktop.png" "$dir/systemmenu.png" 2000
-        vs_ipc menubar open controlcenter GF-REF >/dev/null; cap controlcenter; vs_ipc menubar close >/dev/null
-        differs "$dir/desktop.png" "$dir/controlcenter.png" 2000
-        vs_ipc search open files >/dev/null; need_json search .open true; vs_sleep 1; cap search; vs_ipc search close >/dev/null
-        need_json search .open false
-        vs_ipc apps open >/dev/null; need_json apps .open true; vs_sleep 1; cap apps; vs_ipc apps close >/dev/null
-        need_json apps .open false
-        # Banners stay up for the four captures (about 6 s), then expire before the Notification Center is opened.
-        DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Mail" -t 14000 "Anna Martin" "Are we still on for lunch tomorrow?"
-        DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 14000 "Design review" "Starts in 10 minutes in Room 4."
-        need_notif banners 2
-        vs_sleep 1.5; cap banners 0.5
-        differs "$dir/desktop.png" "$dir/banners.png" 2000
-        # The banners expire (14 s) before the Notification Center is opened; both are checked, not assumed.
-        need_notif banners 0 30
-        center open; vs_sleep 1; cap notificationcenter
-        differs "$dir/desktop.png" "$dir/notificationcenter.png" 2000
-        center closed
+        if want systemmenu; then
+          vs_ipc menubar open system GF-REF >/dev/null; cap systemmenu; vs_ipc menubar close >/dev/null
+          differs "$dir/desktop.png" "$dir/systemmenu.png" 2000
+        fi
+        if want controlcenter; then
+          vs_ipc menubar open controlcenter GF-REF >/dev/null; cap controlcenter; vs_ipc menubar close >/dev/null
+          differs "$dir/desktop.png" "$dir/controlcenter.png" 2000
+        fi
+        if want search; then
+          vs_ipc search open files >/dev/null; need_json search .open true; vs_sleep 1; cap search; vs_ipc search close >/dev/null
+          need_json search .open false
+        fi
+        if want apps; then
+          vs_ipc apps open >/dev/null; need_json apps .open true; vs_sleep 1; cap apps; vs_ipc apps close >/dev/null
+          need_json apps .open false
+        fi
+        if want banners || want notificationcenter; then
+          # Banners stay up for the four captures (about 6 s), then expire before the Notification Center is opened.
+          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Mail" -t 14000 "Anna Martin" "Are we still on for lunch tomorrow?"
+          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 14000 "Design review" "Starts in 10 minutes in Room 4."
+          need_notif banners 2
+          if want banners; then
+            vs_sleep 1.5; cap banners 0.5
+            differs "$dir/desktop.png" "$dir/banners.png" 2000
+          fi
+          # The banners expire (14 s) before the Notification Center is opened; both are checked, not assumed.
+          need_notif banners 0 30
+          if want notificationcenter; then
+            center open; vs_sleep 1; cap notificationcenter
+            differs "$dir/desktop.png" "$dir/notificationcenter.png" 2000
+            center closed
+          fi
+        fi
         vs_park
       done
     done
   done
 fi
 
-python3 -I "$VS_HERE/contrast.py" measure "$out"
+python3 -I "$VS_HERE/contrast.py" measure "$out" --surfaces "${surfaces// /,}"
