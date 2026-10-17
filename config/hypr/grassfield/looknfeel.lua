@@ -85,6 +85,8 @@ hl.config({
 
   cursor = {
     hide_on_key_press = false,
+    -- The shell focuses windows explicitly (desktop keyboard handoff); never warp the pointer to them.
+    no_warps = true,
   },
 })
 
