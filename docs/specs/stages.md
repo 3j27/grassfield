@@ -1,5 +1,7 @@
 # Stages spec (stage manager equivalent) · compositor-engineer (plugin) + shell-engineer (strip) · M5
 
+UI naming (renamed 2026-10-18, owner decision): "Space" in older notes is shown to the user as "Desktop" (fr « Bureau »).
+
 Status: spike positive; plugin prototype behind a feature flag (plugin 0.6.0-stages, 2026-10-18, nested only); shell strip
 NOT implemented (contract below). Decision: `docs/decisions/ADR-0013-stages.md` (Proposed). UI name **Stages** (§14);
 the Apple name is never used in the UI. Code: `compositor/src/core/Stages.*` (model, validation, geometry, events; unit
@@ -18,8 +20,8 @@ tests `compositor/tests/StagesTest.cpp`), `compositor/src/Stages.*` (Hyprland gl
 - Opening a window of another app starts a new stage (the previous one goes to the strip); activating an app another way
   (Dock, app switcher) brings its stage forward.
 - The strip hides when a window overlaps it and reappears when the pointer reaches that edge.
-- Each display and each Space has its own stages. Full-screen apps are Spaces of their own.
-- Off by default; turned on in Control Center (and System Settings).
+- Each display and each Desktop has its own stages. Full-screen apps are Desktops of their own.
+- Off by default; turned on in Quick Settings (and Settings).
 
 ## Purpose and non-goals
 Purpose (M5, master-prompt §5.6 item 6, §12): "Stage Manager (plugin layout + shell strip), behind a feature flag",
@@ -36,7 +38,7 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
   `titlebarDoubleClick` (exact strings; anything else is rejected and logged, no change). Off at every plugin load.
   Turning it off ends Stages at once (every window shown normally).
 - **ST2** Capabilities: `stages-available` whenever the Stages listeners, `hl.plugin.grassfield.stages` and `config`
-  registered (the shell shows the Control Center toggle); `stages` only while the flag is on (always together with
+  registered (the shell shows the Quick Settings toggle); `stages` only while the flag is on (always together with
   `stages-available`). A change of the flag re-posts the capabilities.
 - **ST3** `op:on` (flag on, strip surface present, ST17) groups the managed windows of every workspace by app (window
   class): one stage per app; the stage of the focused window (else of the front window) is active; the others form the
@@ -94,7 +96,7 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
 - **ST22** Workspaces: stages are per workspace; a workspace that is not shown on any monitor keeps its windows as they
   are drawn (blocked and in their tiles), so switching back (and Hyprland's workspace slide) finds them in place.
 - **ST21** Degradation: without the plugin (or with an ABI mismatch, or with `stages-available` missing) Stages does not
-  exist: no verb, no capability, Control Center hides the toggle; nothing in the shell depends on it.
+  exist: no verb, no capability, Quick Settings hides the toggle; nothing in the shell depends on it.
 
 ## Acceptance criteria
 | ID | Test | Level | Result (2026-10-18, nested Hyprland 0.56.2) |
@@ -118,7 +120,7 @@ Run: `.dev/stages/run-20261018-141943-check` (**40/40 PASS**, plugin 0.6.0-stage
 `.dev/stages/run-20261018-125334-perf`.
 
 ## Shell ↔ plugin contract (gfc/1, additive; for the shell-engineer — the shell side is not implemented)
-1. **Detection.** `Capabilities.has("stages-available")` → show the Stages toggle in Control Center (off by default,
+1. **Detection.** `Capabilities.has("stages-available")` → show the Stages toggle in Quick Settings (off by default,
    persisted by the shell, e.g. `stages.enabled`). Without it (no plugin, mismatch, hooks failed, after the unload event
    with an empty list) hide the toggle and the strip. Push the setting after every capabilities event and on change:
    `hl.plugin.grassfield.config("stagesEnabled", "true"|"false")` (add the key to the config allowlist in
@@ -241,5 +243,5 @@ when the overview opens: prototype limit); desktop focus is unaffected (a press 
   until it sends `op:on` again; a plugin reload starts with the flag off.
 - Multiple outputs, fractional scales and rotated outputs are not verified; the strip of a monitor whose workspace shows
   a full-screen window is hidden.
-- The shell strip, Control Center toggle and Settings entry are not implemented (shell-engineer); F1 visual fidelity not
+- The shell strip, Quick Settings toggle and Settings entry are not implemented (shell-engineer); F1 visual fidelity not
   assessed (no strip UI).

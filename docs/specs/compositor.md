@@ -31,7 +31,7 @@ tile rectangle the shell sends (ADR-0002), and the user's double-click setting.
 
 Non-goals: the "Genie" warp (the animation is the "Scale" effect: uniform shrink + move; a genie would need a
 mesh-deformed texture draw, which Hyprland's pass elements do not offer), hover glyphs and inactive-state
-buttons, appearance switching, tiled windows, CSD negotiation; for the overview: the layout, labels, Spaces bar and
+buttons, appearance switching, tiled windows, CSD negotiation; for the overview: the layout, labels, Desktops bar and
 input (the shell), transforming popups; for appmenu: reading or
 rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B, ADR-0008), the
 `com.canonical.AppMenu.Registrar` service, X11 (XWayland) menus.
@@ -165,7 +165,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   (FR24).
 - **FR26** For `on:true` each listed window is transformed only if it is mapped, not hidden, not pinned, on the active,
   non-special workspace of its monitor, not full screen and not on a workspace that shows a full-screen window
-  (`FSMODE_FULLSCREEN`; maximized is allowed; decision 2026-10-18: on macOS a full-screen app is a Space of its own, and
+  (`FSMODE_FULLSCREEN`; maximized is allowed; decision 2026-10-18: on macOS a full-screen app is a Desktop of its own, and
   Hyprland draws only the full-screen window on its workspace) and its rect lies inside that monitor (1 px tolerance);
   other entries are ignored (logged). If windows were listed and none qualifies, nothing changes and the current state is
   posted with `"reason":"no-windows"`. Windows are transformed only while the shell's chrome covers them (R13 fix, relaxed
