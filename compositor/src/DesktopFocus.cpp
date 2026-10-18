@@ -1,6 +1,7 @@
 #include "DesktopFocus.hpp"
 
 #include "Plugin.hpp"
+#include "Surfaces.hpp"
 #include "Titlebar.hpp"
 #include "core/DesktopFocus.hpp"
 
@@ -8,17 +9,14 @@
 #include <hyprland/src/desktop/state/LayerState.hpp>
 #include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
-#include <hyprland/src/desktop/view/Popup.hpp>
-#include <hyprland/src/desktop/view/WLSurface.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
-#include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/protocols/LayerShell.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
-#include <hyprland/src/protocols/core/Subcompositor.hpp>
 
 #include <linux/input-event-codes.h>
 
@@ -58,62 +56,29 @@ namespace {
         return mon ? mon->m_name : std::string{"?"};
     }
 
-    // What a wl_surface is, with the window or layer surface it belongs to.
+    // What a wl_surface is for the policy, with the window or layer surface it belongs to.
     struct SResolved {
         df::SurfaceKind kind = df::SurfaceKind::None;
         PHLWINDOW       window;
         PHLLS           layer;
     };
 
-    // Subsurfaces are climbed to their top-level parent (a window, a popup or a layer surface), at most 16 levels.
-    SP<CWLSurfaceResource> topLevelOf(SP<CWLSurfaceResource> surface) {
-        for (int depth = 0; surface && depth < 16; ++depth) {
-            if (!surface->m_role || surface->m_role->role() != SURFACE_ROLE_SUBSURFACE)
-                return surface;
-            // role() said subsurface: the role object is a CSubsurfaceRole (single, non-virtual inheritance).
-            const auto* role = static_cast<const CSubsurfaceRole*>(surface->m_role.get());
-            const auto  sub  = role->m_subsurface.lock();
-            surface          = sub ? sub->m_parent.lock() : nullptr;
-        }
-        return nullptr;
-    }
-
     SResolved resolve(const SP<CWLSurfaceResource>& surface) {
         if (!surface)
             return {};
-        const auto top = topLevelOf(surface);
-        if (!top)
-            return {.kind = df::SurfaceKind::Other, .window = nullptr, .layer = nullptr};
-        const auto hl   = Desktop::View::CWLSurface::fromResource(top);
-        const auto view = hl ? hl->view() : nullptr;
-        if (!view)
-            return {.kind = df::SurfaceKind::Other, .window = nullptr, .layer = nullptr};
-        switch (view->type()) {
-            case Desktop::View::VIEW_TYPE_WINDOW: {
-                const auto w = Desktop::View::CWindow::fromView(view);
-                return {.kind = w ? df::SurfaceKind::Window : df::SurfaceKind::Other, .window = w, .layer = nullptr};
-            }
-            case Desktop::View::VIEW_TYPE_LAYER_SURFACE: {
-                const auto ls = Desktop::View::CLayerSurface::fromView(view);
-                if (!ls)
-                    return {.kind = df::SurfaceKind::Other, .window = nullptr, .layer = nullptr};
-                return {.kind = df::classifyLayer(ls->m_namespace, false), .window = nullptr, .layer = ls};
-            }
-            case Desktop::View::VIEW_TYPE_POPUP: {
-                const auto popup = Desktop::View::CPopup::fromView(view);
-                const auto owner = popup ? popup->layerOwner() : nullptr;
-                if (owner)
-                    return {.kind = df::classifyLayer(owner->m_namespace, true), .window = nullptr, .layer = owner};
-                return {.kind = popup ? df::SurfaceKind::WindowPopup : df::SurfaceKind::Other, .window = nullptr, .layer = nullptr};
-            }
-            case Desktop::View::VIEW_TYPE_SUBSURFACE:
-            case Desktop::View::VIEW_TYPE_LOCK_SCREEN: break;
+        const auto owner = gf::surfaces::ownerOf(surface);
+        if (owner.layer)
+            return {.kind = df::classifyLayer(owner.layer->m_namespace, owner.popup), .window = nullptr, .layer = owner.layer};
+        if (owner.window) {
+            if (owner.popup)
+                return {.kind = df::SurfaceKind::WindowPopup, .window = owner.window, .layer = nullptr};
+            return {.kind = df::SurfaceKind::Window, .window = owner.window, .layer = nullptr};
         }
         return {.kind = df::SurfaceKind::Other, .window = nullptr, .layer = nullptr};
     }
 
     SP<CWLSurfaceResource> keyboardSurface() {
-        return g_pSeatManager ? g_pSeatManager->m_state.keyboardFocus.lock() : nullptr;
+        return gf::surfaces::keyboardFocus();
     }
 
     df::Seat seatNow(const SResolved& keyboard) {
@@ -127,8 +92,7 @@ namespace {
     }
 
     df::Interactivity interactivityOf(const PHLLS& ls) {
-        const auto resource = ls ? ls->m_layerSurface.lock() : nullptr;
-        return resource ? df::interactivityFromProtocol(static_cast<uint32_t>(resource->m_current.interactivity)) : df::Interactivity::None;
+        return df::interactivityFromProtocol(gf::surfaces::interactivity(ls));
     }
 
     bool windowFocusable(const PHLWINDOW& w) {

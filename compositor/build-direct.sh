@@ -10,7 +10,7 @@ what=${1:-all}
 
 core_srcs=(src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp
   src/core/EventThrottle.cpp src/core/Overview.cpp src/core/DesktopFocus.cpp)
-glue_srcs=(src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp)
+glue_srcs=(src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp)
 plugin_srcs=("${glue_srcs[@]}" "${core_srcs[@]}")
 test_srcs=(tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp
   tests/EventThrottleTest.cpp tests/OverviewTest.cpp tests/DesktopFocusTest.cpp)

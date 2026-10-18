@@ -94,10 +94,42 @@ namespace gf::overview {
         Invalid,     // the request failed validation
         NoWindows,   // windows were listed but none of them can be transformed
         Unavailable, // the plugin is unloading
-        Interrupted, // a window got focus, the workspace changed, the shell's overview surface went away, a monitor changed
+        Interrupted, // a window got focus, the keyboard left the shell's chrome, the chrome went away, the workspace or a monitor changed
+        NoChrome,    // refused: the shell's chrome surface is not mapped on a target monitor, not Exclusive, or does not hold the keyboard
+        Fullscreen,  // a window went full screen while shown: the windows of its workspace left the overview (state unchanged)
     };
 
     std::string_view reasonName(Reason reason);
+
+    // Why Hyprland focused a window while an overview is shown (the glue maps Hyprland's focus reasons).
+    enum class FocusCause : uint8_t {
+        UserOrOther,  // a click, a key binding, a dispatch, anything not listed below
+        WindowClosed, // the focused window closed or unmapped and Hyprland picked the next one
+        WindowOpened, // a new window took focus when it mapped
+    };
+
+    // A window getting focus ends the overview (macOS: the chosen window becomes key and Mission Control zooms back),
+    // except when Hyprland only moved focus because a window closed or opened: the overview then stays and the shell
+    // retargets (spec: "on:true again while open (a window opened or closed …) retargets").
+    bool focusEndsOverview(FocusCause cause);
+
+    // The shell's chrome surface (layer namespace grassfield-overview) as the glue sees it on one monitor.
+    struct ChromeSurface {
+        uint64_t monitor   = 0; // opaque monitor id
+        bool     mapped    = false;
+        bool     exclusive = false; // keyboard interactivity Exclusive
+    };
+
+    // An on:true request may transform windows only while the shell covers them: every target monitor has a mapped
+    // chrome surface with Exclusive keyboard interactivity, and the keyboard is on a chrome surface. Otherwise input could
+    // reach a window drawn elsewhere (R13 review of f12f610).
+    bool chromeCovers(const std::vector<uint64_t>& targetMonitors, const std::vector<ChromeSurface>& chromes, bool keyboardOnChrome);
+
+    // Boxes to damage when a window's drawn box goes from `previous` (the last damaged box; empty at first) to `current`:
+    // `previous` when it differs and has an area, then `current` when it has an area. The caller then stores `current` as
+    // the last damaged box, so a box drawn once is always damaged again when the window leaves it (a resized surface leaves
+    // no stale pixels, and the box detached at close is the one drawn last).
+    std::vector<Box> damageStep(const Box& previous, const Box& current);
 
     // {"v":"gfc/1","type":"overview","state":"<phase>","windows":N} (N = windows transformed in that state), plus
     // "reason":"<reason>" when a request was refused (the state is then the unchanged current one) or the overview was

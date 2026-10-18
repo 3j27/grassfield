@@ -3,8 +3,10 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <format>
 #include <string>
+#include <vector>
 
 using namespace gf::overview;
 
@@ -262,4 +264,71 @@ TEST(OverviewEvents, Json) {
     EXPECT_EQ(eventJson(Phase::Open, 3, Reason::NoWindows), R"({"v":"gfc/1","type":"overview","state":"open","windows":3,"reason":"no-windows"})");
     EXPECT_EQ(eventJson(Phase::Closed, 0, Reason::Unavailable), R"({"v":"gfc/1","type":"overview","state":"closed","windows":0,"reason":"unavailable"})");
     EXPECT_EQ(eventJson(Phase::Closing, 2, Reason::Interrupted), R"({"v":"gfc/1","type":"overview","state":"closing","windows":2,"reason":"interrupted"})");
+}
+
+TEST(OverviewEvents, NewReasons) {
+    EXPECT_EQ(eventJson(Phase::Closed, 0, Reason::NoChrome), R"({"v":"gfc/1","type":"overview","state":"closed","windows":0,"reason":"no-chrome"})");
+    EXPECT_EQ(eventJson(Phase::Open, 2, Reason::Fullscreen), R"({"v":"gfc/1","type":"overview","state":"open","windows":2,"reason":"fullscreen"})");
+    EXPECT_EQ(reasonName(Reason::NoChrome), "no-chrome");
+    EXPECT_EQ(reasonName(Reason::Fullscreen), "fullscreen");
+}
+
+// R13 review: closing the active window while open must retarget, not end the overview.
+TEST(OverviewFocus, OnlyAChosenWindowEndsTheOverview) {
+    EXPECT_TRUE(focusEndsOverview(FocusCause::UserOrOther));
+    EXPECT_FALSE(focusEndsOverview(FocusCause::WindowClosed));
+    EXPECT_FALSE(focusEndsOverview(FocusCause::WindowOpened));
+}
+
+// R13 review (major): no transform without the shell's chrome covering every target monitor and holding the keyboard.
+TEST(OverviewChrome, CoversEveryTargetMonitor) {
+    const std::vector<ChromeSurface> both{{.monitor = 1, .mapped = true, .exclusive = true}, {.monitor = 2, .mapped = true, .exclusive = true}};
+    EXPECT_TRUE(chromeCovers({1}, both, true));
+    EXPECT_TRUE(chromeCovers({1, 2}, both, true));
+    EXPECT_FALSE(chromeCovers({1, 2}, both, false)) << "the keyboard is not on the chrome";
+    EXPECT_FALSE(chromeCovers({1, 3}, both, true)) << "no chrome on monitor 3";
+    EXPECT_FALSE(chromeCovers({}, both, true)) << "nothing to cover is not a valid open";
+    EXPECT_FALSE(chromeCovers({1}, {}, true));
+}
+
+TEST(OverviewChrome, MustBeMappedAndExclusive) {
+    EXPECT_FALSE(chromeCovers({1}, {{.monitor = 1, .mapped = false, .exclusive = true}}, true));
+    EXPECT_FALSE(chromeCovers({1}, {{.monitor = 1, .mapped = true, .exclusive = false}}, true));
+    EXPECT_TRUE(chromeCovers({1}, {{.monitor = 1, .mapped = true, .exclusive = false}, {.monitor = 1, .mapped = true, .exclusive = true}}, true));
+}
+
+// R13 review: a surface resized while open must leave no stale pixels; every drawn box is damaged again when left.
+TEST(OverviewDamage, EveryDrawnBoxIsDamagedWhenLeft) {
+    const Box open{100, 100, 400, 286}; // 700x500 fitted into a 400x400 rect
+    const Box tall{180, 100, 240, 400}; // after a resize to 300x500: taller than the open box
+    const Box back{100, 100, 400, 286}; // resized back
+    Box       last{};                   // nothing damaged yet
+
+    auto steps = damageStep(last, open);
+    ASSERT_EQ(steps.size(), 1U);
+    expectBox(steps[0], open);
+    last = open;
+
+    steps = damageStep(last, tall);
+    ASSERT_EQ(steps.size(), 2U);
+    expectBox(steps[0], open);
+    expectBox(steps[1], tall);
+    last = tall;
+
+    steps = damageStep(last, back);
+    ASSERT_EQ(steps.size(), 2U) << "the tall box (outside the open one) must be damaged when the window leaves it";
+    expectBox(steps[0], tall);
+    expectBox(steps[1], back);
+}
+
+TEST(OverviewDamage, UnchangedOrEmptyBoxes) {
+    const Box b{10, 10, 100, 100};
+    auto      steps = damageStep(b, b);
+    ASSERT_EQ(steps.size(), 1U);
+    expectBox(steps[0], b);
+    EXPECT_TRUE(damageStep({}, {}).empty());
+    steps = damageStep(b, {});
+    ASSERT_EQ(steps.size(), 1U) << "the last drawn box is damaged when the window is no longer drawn";
+    expectBox(steps[0], b);
+    EXPECT_TRUE(damageStep({0, 0, std::nan(""), 10}, {}).empty());
 }

@@ -2,10 +2,13 @@
 
 #include "Ipc.hpp"
 #include "Plugin.hpp"
+#include "Surfaces.hpp"
 #include "core/EventThrottle.hpp"
 #include "core/Minimize.hpp"
 
 #include <hyprland/src/desktop/Workspace.hpp>
+#include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/state/LayerState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
@@ -53,6 +56,7 @@ namespace {
         ov::Box               rect;                  // layout rect the surface box is fitted into, at the last tick
         ov::Box               damaged;               // last damaged visual box (layout, with every decoration)
         bool                  kept = false;          // retarget bookkeeping
+        Time::steady_tp       boxChangedAt{};        // last change of the drawn box while open (resized surface)
     };
 
     struct SOverviewState {
@@ -101,9 +105,16 @@ namespace {
         return nullptr;
     }
 
+    // The workspace shows a full-screen window (FSMODE_FULLSCREEN; maximized does not count). On macOS a full-screen app
+    // is a Space of its own, and Hyprland draws only the full-screen window there: such a workspace is not overviewed.
+    bool showsFullscreen(const PHLWORKSPACE& ws) {
+        const auto& fullscreen = Fullscreen::controller();
+        return !fullscreen || (ws && fullscreen->getFullscreenModes(ws).internal == Fullscreen::FSMODE_FULLSCREEN);
+    }
+
     // Windows of the current workspace of their monitor, drawn by Hyprland's normal window pass: mapped, visible, not
     // pinned (pinned windows are drawn on every workspace), not on a special workspace (minimized windows live on
-    // special:minimized), not full screen (maximized windows are fine).
+    // special:minimized), not full screen and not on a workspace that shows a full-screen window (maximized is fine).
     bool eligible(const PHLWINDOW& w) {
         if (!w || !w->m_isMapped || w->isHidden() || w->m_pinned)
             return false;
@@ -112,7 +123,44 @@ namespace {
         if (!ws || ws->m_isSpecialWorkspace || !mon || mon->m_activeWorkspace != ws)
             return false;
         const auto& fullscreen = Fullscreen::controller();
-        return fullscreen && fullscreen->getFullscreenModes(w).internal != Fullscreen::FSMODE_FULLSCREEN;
+        return fullscreen && fullscreen->getFullscreenModes(w).internal != Fullscreen::FSMODE_FULLSCREEN && !showsFullscreen(ws);
+    }
+
+    bool isChrome(const PHLLS& ls) {
+        return ls && ls->m_namespace == OVERVIEW_LAYER_NAMESPACE;
+    }
+
+    uint64_t monitorId(const PHLMONITOR& mon) {
+        return reinterpret_cast<uintptr_t>(mon.get());
+    }
+
+    // The keyboard is on the shell's chrome (the surface, a subsurface or one of its popups).
+    bool keyboardOnChrome() {
+        return isChrome(gf::surfaces::ownerOf(gf::surfaces::keyboardFocus()).layer);
+    }
+
+    std::vector<ov::ChromeSurface> chromeSurfaces() {
+        std::vector<ov::ChromeSurface> out;
+        if (!Desktop::layerState())
+            return out;
+        for (const auto& ls : Desktop::layerState()->layers()) {
+            if (!isChrome(ls))
+                continue;
+            out.push_back(ov::ChromeSurface{.monitor   = monitorId(ls->m_monitor.lock()),
+                                            .mapped    = ls->m_mapped,
+                                            .exclusive = gf::surfaces::interactivity(ls) == 1 /* ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE */});
+        }
+        return out;
+    }
+
+    ov::FocusCause causeOf(Desktop::eFocusReason reason) {
+        switch (reason) {
+            case Desktop::FOCUS_REASON_UNMAP_WINDOW_TILING:
+            case Desktop::FOCUS_REASON_UNMAP_WINDOW_FLOATING:
+            case Desktop::FOCUS_REASON_UNMAP_GROUPED_WINDOW: return ov::FocusCause::WindowClosed;
+            case Desktop::FOCUS_REASON_NEW_WINDOW: return ov::FocusCause::WindowOpened;
+            default: return ov::FocusCause::UserOrOther;
+        }
     }
 
     ov::Box monitorBox(const PHLMONITOR& mon) {
@@ -153,9 +201,8 @@ namespace {
         if (!g_pHyprRenderer)
             return;
         const ov::Box box = visualBox(e, w);
-        if (hasArea(e.damaged) && !(e.damaged == box))
-            g_pHyprRenderer->damageBox(toCBox(e.damaged));
-        g_pHyprRenderer->damageBox(toCBox(box));
+        for (const auto& b : ov::damageStep(e.damaged, box))
+            g_pHyprRenderer->damageBox(toCBox(b));
         e.damaged = box;
     }
 
@@ -250,6 +297,8 @@ namespace {
     // content changed) that Hyprland does not know is drawn elsewhere: the layout boxes of this monitor are added to
     // the frame's damage before it is computed (render.pre comes after Hyprland's animation tick and before
     // beginRender reads the damage ring). Frames without damage are not touched, so an idle overview costs nothing.
+    // The box drawn now becomes the last damaged box: a surface resized while open (the box changes without an animation
+    // tick) has every box it was drawn in damaged again when it leaves it, so no stale pixels stay behind, also at close.
     void onRenderPre(const PHLMONITOR& mon) {
         auto& s = st();
         if (s.phase == ov::Phase::Closed || !mon || !mon->m_damage.hasChanged())
@@ -260,10 +309,20 @@ namespace {
             const auto w = e.window.lock();
             if (!w)
                 continue;
-            for (const auto& box : {e.damaged, visualBox(e, w)}) {
-                if (hasArea(box))
-                    mon->m_damage.damage(toCBox(box).translate(-mon->m_position).scale(mon->m_scale).round());
+            const ov::Box box = visualBox(e, w);
+            const auto    boxes = ov::damageStep(e.damaged, box);
+            for (const auto& b : boxes)
+                mon->m_damage.damage(toCBox(b).translate(-mon->m_position).scale(mon->m_scale).round());
+            if (s.phase == ov::Phase::Open && boxes.size() == 2) {
+                // The drawn box changed without an animation tick (a resized surface): logged at the first frame of each
+                // burst only (a client resize animates over many frames).
+                const auto now = Time::steadyNow();
+                if (now - e.boxChangedAt > std::chrono::milliseconds(250))
+                    gf::logRequest(Log::DEBUG, "overview: window {:x} drawn box changed while open: damaged {:.0f},{:.0f} {:.0f}x{:.0f} and {:.0f},{:.0f} {:.0f}x{:.0f}",
+                                   e.address, boxes[0].x, boxes[0].y, boxes[0].w, boxes[0].h, boxes[1].x, boxes[1].y, boxes[1].w, boxes[1].h);
+                e.boxChangedAt = now;
             }
+            e.damaged = box;
         }
     }
 
@@ -301,8 +360,12 @@ namespace {
     }
 
     // A window that closes, unmaps or leaves its workspace goes back to normal rendering at once.
+    // The overview stays (the shell retargets); the window count of the current state changed, so it is posted again
+    // (coalesced like every overview event).
     void dropWindow(const PHLWINDOW& w) {
-        auto& all = st().entries;
+        auto&        s       = st();
+        auto&        all     = s.entries;
+        const size_t before  = all.size();
         for (auto it = all.begin(); it != all.end();) {
             const auto ew = it->window.lock();
             if (!ew || ew == w) {
@@ -311,11 +374,40 @@ namespace {
             } else
                 ++it;
         }
+        if (all.size() != before && s.phase != ov::Phase::Closed)
+            post(s.phase, all.size());
     }
 
     bool animatingOrOpen() {
         const auto phase = st().phase;
         return phase == ov::Phase::Opening || phase == ov::Phase::Open;
+    }
+
+    // A window went full screen while the overview is shown: Hyprland now draws only that window on its workspace, so
+    // every window of that workspace leaves the overview at once (back to normal rendering) and the shell is told with
+    // reason "fullscreen" (the state is unchanged; it retargets or closes).
+    void onFullscreen(const PHLWINDOW& w) {
+        auto& s = st();
+        if (s.phase == ov::Phase::Closed || !w)
+            return;
+        const auto ws = w->m_workspace;
+        if (!showsFullscreen(ws)) {
+            if (!eligible(w))
+                dropWindow(w);
+            return;
+        }
+        size_t dropped = 0;
+        for (auto it = s.entries.begin(); it != s.entries.end();) {
+            const auto ew = it->window.lock();
+            if (!ew || ew->m_workspace == ws) {
+                detach(*it);
+                it = s.entries.erase(it);
+                ++dropped;
+            } else
+                ++it;
+        }
+        gf::logRequest(Log::INFO, "overview: window {:x} went full screen: {} window(s) of its workspace left the overview", reinterpret_cast<uintptr_t>(w.get()), dropped);
+        post(s.phase, s.entries.size(), ov::Reason::Fullscreen);
     }
 
     // Hyprland leaves the render damage at the window's own box once it has rendered the window into the work buffer
@@ -417,28 +509,51 @@ namespace gf::overviewer {
         l.push_back(ev.window.close.listen([](const PHLWINDOW& w) { gf::guarded("overview window.close", [&] { dropWindow(w); }); }));
         l.push_back(ev.window.destroy.listen([](const PHLWINDOWREF& /*w*/) { gf::guarded("overview window.destroy", [] { dropWindow(nullptr); }); }));
         l.push_back(ev.window.moveToWorkspace.listen([](const PHLWINDOW& w, const PHLWORKSPACE& /*ws*/) { gf::guarded("overview window.moveToWorkspace", [&] { dropWindow(w); }); }));
-        // A window that becomes full screen or pinned is drawn by other render paths: back to normal at once.
-        const auto dropIfIneligible = [](const PHLWINDOW& w) {
-            gf::guarded("overview window state", [&] {
+        // A window that becomes pinned is drawn by other render paths: back to normal at once. A window that becomes full
+        // screen takes its whole workspace out of the overview (onFullscreen).
+        l.push_back(ev.window.pin.listen([](const PHLWINDOW& w) {
+            gf::guarded("overview window.pin", [&] {
                 if (w && !eligible(w))
                     dropWindow(w);
             });
-        };
-        l.push_back(ev.window.fullscreen.listen(dropIfIneligible));
-        l.push_back(ev.window.pin.listen(dropIfIneligible));
-        // Failsafes: a window that gets the keyboard ends the overview (macOS: the clicked window becomes key and the
-        // overview zooms back), and so does the end of the shell's overview surface; a workspace switch or a monitor
-        // change puts every window back at once.
-        l.push_back(ev.window.active.listen([](const PHLWINDOW& w, Desktop::eFocusReason /*reason*/) {
+        }));
+        l.push_back(ev.window.fullscreen.listen([](const PHLWINDOW& w) { gf::guarded("overview window.fullscreen", [&] { onFullscreen(w); }); }));
+        // Failsafes: a window chosen by the user getting focus ends the overview (macOS: the clicked window becomes key and
+        // the overview zooms back); Hyprland moving focus because a window closed or opened does not (the shell retargets).
+        // Hyprland 0.56.2 also emits this for a window that is closing, with reason "other", while it refuses the keyboard
+        // to the next window because the chrome is Exclusive (measured): only a mapped window that took the keyboard away
+        // from the chrome counts.
+        l.push_back(ev.window.active.listen([](const PHLWINDOW& w, Desktop::eFocusReason reason) {
             gf::guarded("overview window.active", [&] {
-                if (w && animatingOrOpen())
+                if (!w || !animatingOrOpen())
+                    return;
+                const bool ends = w->m_isMapped && !keyboardOnChrome() && ov::focusEndsOverview(causeOf(reason));
+                gf::logRequest(Log::DEBUG, "overview: window {:x} focused (reason {}): {}", reinterpret_cast<uintptr_t>(w.get()), static_cast<int>(reason),
+                               ends ? "the overview ends" : "the overview stays");
+                if (ends)
                     startClosing(st().durationMs, st().curve, ov::Reason::Interrupted);
             });
         }));
+        // The keyboard leaving the shell's chrome (to a window, another surface or nothing) ends it too: the overview is
+        // shown only while the chrome holds the keyboard.
+        l.push_back(ev.input.keyboard.focus.listen([](const SP<CWLSurfaceResource>& surface) {
+            gf::guarded("overview keyboard.focus", [&] {
+                if (!animatingOrOpen() || isChrome(gf::surfaces::ownerOf(surface).layer))
+                    return;
+                gf::logRequest(Log::INFO, "overview: the keyboard left the shell's chrome: the overview ends");
+                startClosing(st().durationMs, st().curve, ov::Reason::Interrupted);
+            });
+        }));
+        // The chrome going away while windows are shown elsewhere ends the overview at once (no closing animation: nothing
+        // covers the windows' real places any more), also when the keyboard leaving it just started an interrupted closing.
+        // A closing animation the shell asked for (on:false) runs to its end.
         l.push_back(ev.layer.closed.listen([](const PHLLS& ls) {
             gf::guarded("overview layer.closed", [&] {
-                if (ls && ls->m_namespace == OVERVIEW_LAYER_NAMESPACE && animatingOrOpen())
-                    startClosing(st().durationMs, st().curve, ov::Reason::Interrupted);
+                const auto& s = st();
+                if (!isChrome(ls) || !(animatingOrOpen() || (s.phase == ov::Phase::Closing && s.closeReason != ov::Reason::None)))
+                    return;
+                gf::logRequest(Log::INFO, "overview: the shell's chrome went away: the overview ends at once");
+                finishClosed(ov::Reason::Interrupted);
             });
         }));
         l.push_back(ev.workspace.active.listen([](const PHLWORKSPACE& /*ws*/) {
@@ -520,7 +635,7 @@ namespace gf::overviewer {
                                target.rect.y, target.rect.w, target.rect.h, mon->m_name);
                 continue;
             }
-            SEntry e{.window = w, .address = target.address, .monitor = mon, .transformer = nullptr, .from = std::nullopt, .to = target.rect, .rect = {}, .damaged = {}};
+            SEntry e{.window = w, .address = target.address, .monitor = mon, .transformer = nullptr, .from = std::nullopt, .to = target.rect, .rect = {}, .damaged = {}, .kept = false, .boxChangedAt = {}};
             // A window already in the overview continues from where it is drawn now.
             const auto old = std::ranges::find_if(s.entries, [&w](const SEntry& o) { return !o.kept && o.window.lock() == w; });
             if (old != s.entries.end()) {
@@ -534,6 +649,20 @@ namespace gf::overviewer {
         if (!r.windows.empty() && next.empty()) {
             gf::logRequest(Log::WARN, "overview: rejected: none of the {} listed window(s) can be transformed", r.windows.size());
             refuse(ov::Reason::NoWindows);
+            return;
+        }
+        // Input safety does not depend on the shell's good behaviour: windows are drawn away from their real places only
+        // while the shell's chrome covers every monitor involved and holds the keyboard (R13 review of f12f610).
+        std::vector<uint64_t> monitors;
+        for (const auto& e : next) {
+            const uint64_t id = monitorId(e.monitor.lock());
+            if (std::ranges::find(monitors, id) == monitors.end())
+                monitors.push_back(id);
+        }
+        if (!next.empty() && !ov::chromeCovers(monitors, chromeSurfaces(), keyboardOnChrome())) {
+            gf::logRequest(Log::WARN, "overview: rejected: the shell's chrome (layer {}, mapped, keyboard Exclusive) must cover each window's monitor and hold the keyboard",
+                           OVERVIEW_LAYER_NAMESPACE);
+            refuse(ov::Reason::NoChrome);
             return;
         }
         for (auto& old : s.entries) {
