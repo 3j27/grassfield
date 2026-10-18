@@ -110,6 +110,7 @@ kill -0 "$app" 2>/dev/null || { echo "FAIL: app exited"; cat "$log"; exit 1; }
 # Focus the window: click on empty space inside it (below the two icons).
 "$pointer" output "$output" abs 1050 600 sleep 200 click >/dev/null
 sleep 0.5
+"$root/scripts/nestctl" activewindow -j 2>/dev/null | jq -c "{class, title, focus: .focusHistoryID}" | sed "s/^/files_sandbox: active window: /"
 
 # 1. Copy alpha.txt (type-to-select, Ctrl+C), go up (Ctrl+Up), open dest (type-to-select, Return), paste.
 type_keys alpha
