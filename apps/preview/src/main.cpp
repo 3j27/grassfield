@@ -7,6 +7,7 @@
 #include <QUrl>
 
 #include "translationloader.h"
+#include "globalmenu.h"
 #include "previewapp.h"
 #include "previewlogic.h"
 
@@ -62,7 +63,12 @@ int main(int argc, char *argv[])
     if (qmlDir.isEmpty())
         qmlDir = QStringLiteral(GRASSFIELD_PREVIEW_QML_DIR);
 
-    engine.setInitialProperties({{QStringLiteral("backend"), QVariant::fromValue(&backend)}});
+    QVariantMap initial{{QStringLiteral("backend"), QVariant::fromValue(&backend)}};
+    // Global menu (T1): the viewer exports its menus only when the registrar is there (globalmenu.h). A Glance is a
+    // panel without menus of its own.
+    if (!glance)
+        initial.insert(QStringLiteral("globalMenu"), grassfield::apps::globalMenuAvailable());
+    engine.setInitialProperties(initial);
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(glance ? QStringLiteral("Glance.qml") : QStringLiteral("Viewer.qml"))));

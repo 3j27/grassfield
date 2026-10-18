@@ -5,6 +5,7 @@
 
 #include "translationloader.h"
 #include "backend.h"
+#include "globalmenu.h"
 
 #ifndef GRASSFIELD_SETTINGS_QML_DIR
 #define GRASSFIELD_SETTINGS_QML_DIR "/usr/share/grassfield/settings/qml"
@@ -36,7 +37,8 @@ int main(int argc, char *argv[])
     if (qmlDir.isEmpty())
         qmlDir = QStringLiteral(GRASSFIELD_SETTINGS_QML_DIR);
 
-    engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)}});
+    // Global menu (T1): the window exports its menus only when the registrar is there (globalmenu.h).
+    engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)}, {"globalMenu", grassfield::apps::globalMenuAvailable()}});
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },

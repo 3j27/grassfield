@@ -9,6 +9,9 @@ Window {
 
     // Set by the launcher (src/main.cpp).
     required property var backend
+    // The registrar is there: the window exports its menus to the global menu bar (GlobalMenu.qml).
+    required property bool globalMenu
+    readonly property alias searchField: search
 
     readonly property var sections: [
         {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion")},
@@ -70,6 +73,31 @@ Window {
 
     function select(id: string): void {
         root.selectedId = id;
+    }
+
+    function focusSearch(): void {
+        search.forceActiveFocus();
+        search.selectAll();
+    }
+
+    // Global menu (T1). Its shortcuts duplicate the two below; see GlobalMenu.qml for the single dispatch.
+    Loader {
+        active: root.globalMenu
+        sourceComponent: GlobalMenu {
+            win: root
+        }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+F"
+        onActivated: root.focusSearch()
+        onActivatedAmbiguously: root.focusSearch()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+W"
+        onActivated: root.close()
+        onActivatedAmbiguously: root.close()
     }
 
     function stepSection(direction: int): void {
