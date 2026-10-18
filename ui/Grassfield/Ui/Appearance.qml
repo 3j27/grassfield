@@ -51,9 +51,16 @@ QtObject {
         return Math.max(0, Math.min(1, v));
     }
 
-    // Tint opacity of the material: 1 at transparency 0, tintAlphaMin at transparency 1.
+    // Tint opacity of the material: 1 at transparency 0, tintAlphaMin at transparency 1, linear in between, except that the
+    // A2 clamp keeps it at or above tintAlphaClamp up to transparency tintClampUntil (the default 0.25 is above it, so the
+    // frosted default is unclamped). Past tintClampUntil it falls linearly from the clamp value to tintAlphaMin.
     function tintAlpha(t: real): real {
-        return 1 - clamp01(t) * (1 - Tokens.materialTintAlphaMin);
+        const x = clamp01(t);
+        const linear = 1 - x * (1 - Tokens.materialTintAlphaMin);
+        const until = Tokens.materialTintClampUntil;
+        if (x <= until)
+            return Math.max(linear, Tokens.materialTintAlphaClamp);
+        return Tokens.materialTintAlphaClamp + (Tokens.materialTintAlphaMin - Tokens.materialTintAlphaClamp) * (x - until) / (1 - until);
     }
 
     // Animation duration: Reduce Motion caps every animation at reducedMax (crossfade).
