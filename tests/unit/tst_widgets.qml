@@ -143,10 +143,11 @@ TestCase {
     function test_moveDesktopAvoidsOverlap() {
         let s = Placements.addDesktop(Placements.empty(), "clock", "small", "A", 11, 6);
         s = Placements.addDesktop(s, "system", "small", "A", 11, 6);
-        compare(s.desktop[0].col, 10, "first widget goes to the right edge");
+        compare(s.desktop[0].col, 0, "first widget goes to the left edge, top row");
+        compare(s.desktop[0].row, 0);
         compare(s.desktop[1].row, 1);
-        s = Placements.moveDesktop(s, "system-1", {col: 10, row: 0}, 11, 6);
-        verify(!(s.desktop[1].col === 10 && s.desktop[1].row === 0));
+        s = Placements.moveDesktop(s, "system-1", {col: 0, row: 0}, 11, 6);
+        verify(!(s.desktop[1].col === 0 && s.desktop[1].row === 0));
         s = Placements.moveDesktop(s, "system-1", {col: 3, row: 3}, 11, 6);
         compare(s.desktop[1].col, 3);
         compare(s.desktop[1].row, 3);

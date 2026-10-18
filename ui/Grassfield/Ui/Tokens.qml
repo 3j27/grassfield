@@ -309,8 +309,8 @@ QtObject {
 
     // spec notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344
-    // spec notifications.md: 8 pt gaps
-    readonly property int notificationBannerGap: 8
+    // F1 gap 7: gap between stacked cards 6 +-1 (value only)
+    readonly property int notificationBannerGap: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int notificationBannerIconSize: 36
     // spec N2: default 5 s
@@ -355,20 +355,20 @@ QtObject {
     // estimate
     readonly property int osdHideDelay: 1600
 
-    // spec search.md: about 680 pt
-    readonly property int searchWidth: 680
+    // F1 gap 8: panel width with results 639 +-1
+    readonly property int searchWidth: 640
     // spec search.md: about 1/4 from the top
     readonly property real searchTopFraction: 0.22
-    // estimate
-    readonly property int searchFieldHeight: 60
-    // spec search.md: about 22 pt
-    readonly property int searchFieldSize: 22
+    // F1 gap 8: field row 56 +-1
+    readonly property int searchFieldHeight: 56
+    // F1 gap 8: query text ~26 +-1.5
+    readonly property int searchFieldSize: 26
     // estimate
     readonly property int searchFieldIconSize: 22
-    // estimate
-    readonly property int searchRowHeight: 44
-    // estimate
-    readonly property int searchRowIconSize: 28
+    // F1 gap 8: result row 56 +-1
+    readonly property int searchRowHeight: 56
+    // F1 gap 8: result icon ~32
+    readonly property int searchRowIconSize: 32
     // estimate
     readonly property int searchHeaderHeight: 28
     // estimate: glyph size relative to the row icon tile
@@ -618,14 +618,14 @@ QtObject {
     // estimate: Sound pane, width of the percentage next to a slider
     readonly property int settingsVolumeValueWidth: 44
 
-    // estimate: widgets v1 (docs/specs/widgets.md), px side of a small widget on the desktop grid
-    readonly property int widgetCell: 158
+    // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap)
+    readonly property int widgetCell: 164
     // estimate: widgets v1, px between widgets
     readonly property int widgetGap: 16
-    // estimate: widgets v1, tile corner radius
-    readonly property int widgetRadius: 20
-    // estimate: widgets v1, px from the screen edges to the desktop grid
-    readonly property int widgetDesktopMargin: 24
+    // F1 gap 16: widget radius ~26 +-2
+    readonly property int widgetRadius: 26
+    // F1 gap 16: 16 +-1 from the left, top aligned with the notification column
+    readonly property int widgetDesktopMargin: 16
     // estimate: widgets v1, saturation shift while a window has focus
     readonly property real widgetDimSaturation: -0.75
     // estimate: widgets v1, brightness shift while a window has focus
