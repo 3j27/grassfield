@@ -14,6 +14,8 @@ import Grassfield.Ui
 // renders every text and icon colour transparent, white or black (Appearance.devGlyphMode). The contrast run
 // captures a surface in all four modes: hidden is the exact backdrop, white and black give the exact glyph
 // coverage per pixel whatever the backdrop (tests/visual/contrast.py).
+//
+// Wallpaper override: see wallpaperFile (dev only).
 Singleton {
     id: root
 
@@ -27,6 +29,13 @@ Singleton {
     readonly property string hostname: "grassfield"
 
     property string glyphMode: ""
+
+    // Wallpaper override of the contrast run (tests/visual/contrast.sh): validated and set by the desktop wallpaper
+    // (shell/desktop/Wallpaper.qml: GRASSFIELD_WALLPAPER_FILE at start, `qs ipc call wallpaper set <path>`), drawn by the
+    // desktop wallpaper and, blurred, by the lock screen backdrop (shell/security/lock/LockView.qml), so that both are
+    // measured over the same worst-case images. wallpaperFile is always "" outside dev, whatever wallpaperOverride holds.
+    property string wallpaperOverride: Quickshell.env("GRASSFIELD_WALLPAPER_FILE")
+    readonly property string wallpaperFile: dev ? wallpaperOverride : ""
 
     Binding {
         target: Appearance
