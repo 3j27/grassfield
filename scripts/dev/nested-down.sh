@@ -1,51 +1,41 @@
 #!/usr/bin/env bash
 # Stop the nested shell, menu bridge, private bus and compositor started by nested-up.sh / shell-run.sh and
-# remove their records.
+# remove their records. Only processes whose record still matches are signalled (scripts/dev/pidfile.sh), never the
+# owner's compositor, its group or session.
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
+# shellcheck source=pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
 
-# Inside a PID namespace (the Claude Code sandbox) the session's processes are invisible: `kill -0` fails and the
-# records would be dropped while Hyprland, the shell and the bus keep running unseen. Refuse instead.
-if compgen -G "$dev/*.pid" >/dev/null && [[ $(cat /proc/1/comm 2>/dev/null) != systemd ]]; then
-  echo "nested-down: cannot see the session's processes (PID 1 is not systemd: sandboxed?); run it outside the sandbox. Records kept." >&2
-  exit 3
-fi
+# Inside a PID namespace (the Claude Code sandbox) the session's processes are invisible or named by other PIDs:
+# refuse, records kept.
+dev_require_host nested-down
 
-stop_pid() { # <pidfile> <name>
-  [[ -s $1 ]] || return 0
-  local pid
-  pid=$(<"$1")
-  if kill -0 "$pid" 2>/dev/null; then
-    # Processes were started with setsid, so the PID is also the process group: stopping the group
-    # also stops helpers (private dbus-run-session bus, activated portals, gio monitors).
-    # Only signal a group this script's setsid created (group id == PID); otherwise just the PID.
-    local target=$pid
-    [[ $(ps -o pgid= -p "$pid" | tr -d ' ') == "$pid" ]] && target=-$pid
-    kill -- "$target" 2>/dev/null
-    for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
-    kill -0 "$pid" 2>/dev/null && kill -9 -- "$target" 2>/dev/null
-    echo "nested-down: stopped $2 (process group $pid)"
-  fi
-  rm -f "$1"
-}
-
-# Safety: never signal the owner's compositor even if the records were tampered with.
-if [[ -s $dev/nested.pid ]]; then
-  pid=$(<"$dev/nested.pid")
-  owner_pid=$(hyprctl instances -j 2>/dev/null | jq -r --arg s "$main" '.[] | select(.instance == $s) | .pid')
-  if [[ -n $owner_pid && $pid == "$owner_pid" ]]; then
-    echo "nested-down: refusing: recorded PID is the owner's compositor" >&2
+# The nested compositor must be this tree's: started with its dev config, and not the owner's instance.
+nested=$(dev_live_pid "$dev/nested.pid" || true)
+if [[ -n $nested ]]; then
+  cmdline=$(tr '\0' ' ' <"/proc/$nested/cmdline" 2>/dev/null)
+  owner_pids=$(hyprctl instances -j 2>/dev/null | jq -r --arg m "$main" --arg e "${HYPRLAND_INSTANCE_SIGNATURE:-}" \
+    '.[] | select(.instance == $m or .instance == $e) | .pid')
+  if [[ $cmdline != *"--config $root/config/hypr/dev.lua"* ]] || grep -qx "$nested" <<<"$owner_pids"; then
+    echo "nested-down: refusing: recorded PID $nested is not this tree's nested Hyprland ($cmdline)" >&2
     exit 1
   fi
 fi
 
-stop_pid "$dev/shell.pid" grassfield-shell
+status=0
+dev_stop "$dev/shell.pid" grassfield-shell || status=1
 # The menu bridge releases com.canonical.AppMenu.Registrar on SIGTERM, then the private bus goes (shell-run.sh).
-stop_pid "$dev/menu-bridge.pid" grassfield-menu-bridge
-stop_pid "$dev/bus.pid" "private D-Bus bus"
+dev_stop "$dev/menu-bridge.pid" grassfield-menu-bridge || status=1
+dev_stop "$dev/bus.pid" "private D-Bus bus" || status=1
 rm -f "$dev/bus.address" "$dev/run/menu-bridge.sock"
-stop_pid "$dev/nested.pid" "nested Hyprland"
+if [[ -n $nested ]]; then
+  dev_stop "$dev/nested.pid" "nested Hyprland" "$nested" || status=1
+else
+  dev_stop "$dev/nested.pid" "nested Hyprland" || status=1
+fi
 rm -f "$dev/nested.instance" "$dev/nested.wayland"
+exit "$status"
