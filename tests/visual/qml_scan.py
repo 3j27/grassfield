@@ -13,6 +13,12 @@ Finds every place where the contrast of a text colour can change, so that the ro
              whose own opacity or an ancestor's opacity in the file is a literal below 1
   opacity-dynamic  the same with a computed value (a fade driven by state: its steady value cannot be read from the source)
 
+Inside shell/security/ (the lock screen and the authorization dialog sit on their own backdrops, so every colour read there must
+be accounted for), every other palette read counts too, whatever the palette spelling (root.colors.x, colors.x, an alias,
+Appearance.darkColors.x, Tokens.colorDark.x, brackets):
+  primary    a read of a primary text token (text, accentText, fieldText) outside a derived colour (those are `alpha`)
+  backdrop   a read of any other token (shadow, fill, accent, materialTint, ...): a scrim, fill, ring or shadow the text sits on
+
 Comments are removed and string literals blanked before objects and aliases are looked for; objects are found by braces (not by
 indentation), so one-line items (Text { text: x; opacity: 0.5 }), `opacity :` and nested ancestors are seen. Limits: an opacity
 set from another file (a component instance given an opacity by its user) counts only when the component contains a Text-like item
@@ -24,6 +30,9 @@ import re
 TEXT_TYPES = {"Text", "TextInput", "TextEdit", "TextField", "Label"}
 PALETTE = r"(?:Appearance\.(?:dark|base)?[cC]olors|Tokens\.color(?:Dark|Light))"
 TEXT_TOKENS = ("text", "accentText", "textSecondary", "danger")
+PRIMARY_TOKENS = ("text", "accentText", "fieldText")
+# Files whose every palette read is classified (primary/backdrop), not only the secondary/danger/derived ones.
+ALL_READS_DIRS = ("shell/security/",)
 DERIVE = re.compile(r"\b(?:withAlpha|Qt\.(?:alpha|darker|lighter|tint|rgba|hsla|hsva))\s*\(")
 OBJECT = re.compile(r"(?<![\w.])([A-Z][\w.]*)\s*\{")
 OPACITY = re.compile(r"(?:^|[;{}\s])opacity\s*:\s*([^;\n}]*)")
@@ -79,13 +88,23 @@ def palette_aliases(code):
     return names
 
 
-def token_reads(aliases):
-    """({token: regex reading it from a palette}, regex of a palette read with a computed key). A palette is Appearance.colors,
-    Tokens.colorDark/Light, any identifier ending in colors/Colors, or a resolved alias."""
+def palette_regex(aliases):
+    """Regex source of a palette: Appearance.colors, Tokens.colorDark/Light, any identifier ending in colors/Colors, or a
+    resolved alias."""
     alt = [PALETTE, r"\b\w*[cC]olors"] + [r"(?<![\w.])" + re.escape(a) for a in sorted(aliases)]
-    pal = "(?:" + "|".join(alt) + ")"
+    return "(?:" + "|".join(alt) + ")"
+
+
+def token_reads(aliases):
+    """({token: regex reading it from a palette}, regex of a palette read with a computed key)."""
+    pal = palette_regex(aliases)
     reads = {t: re.compile(r"%s\s*(?:\.\s*%s\b|\[\s*[\"']%s[\"']\s*\])" % (pal, t, t)) for t in TEXT_TOKENS}
     return reads, re.compile(r"%s\s*\[\s*[^\"'\s\]]" % pal)
+
+
+def any_reads(aliases):
+    """Regex of a palette read of any token by name (`pal.token` or `pal["token"]`); the token is group 1 or 2."""
+    return re.compile(r"%s\s*(?:\.\s*(\w+)\b|\[\s*[\"'](\w+)[\"']\s*\])" % palette_regex(aliases))
 
 
 def balanced(code, start):
@@ -182,7 +201,9 @@ def scan_source(src, rel, components=frozenset()):
         return found
     code = strip(src, True)
     raw = strip(src, False)
-    reads, dynamic = token_reads(palette_aliases(code))
+    aliases = palette_aliases(code)
+    reads, dynamic = token_reads(aliases)
+
     def live(m):
         # A match whose first character is code, not the content of a string literal (blanked to spaces in `code`).
         return code[m.start()] == raw[m.start()] and not raw[m.start()].isspace()
@@ -194,9 +215,25 @@ def scan_source(src, rel, components=frozenset()):
     n = sum(1 for m in dynamic.finditer(raw) if live(m))
     if n:
         add("dynamic", n)
+    derived = []  # (start, end) of every live derived-colour call
     for m in DERIVE.finditer(raw):
-        if live(m) and any(r.search(balanced(raw, m.end() - 1)) for r in reads.values()):
+        if not live(m):
+            continue
+        call = balanced(raw, m.end() - 1)
+        derived.append((m.end() - 1, m.end() - 1 + len(call)))
+        if any(r.search(call) for r in reads.values()):
             add("alpha")
+    if rel.replace(os.sep, "/").startswith(ALL_READS_DIRS):
+        for m in any_reads(aliases).finditer(raw):
+            if not live(m):
+                continue
+            token = m.group(1) or m.group(2)
+            if token in ("textSecondary", "danger"):
+                continue  # counted above (secondary, danger)
+            inside = any(a <= m.start() < b for a, b in derived)
+            if token in TEXT_TOKENS and inside:
+                continue  # counted above (alpha)
+            add("primary" if token in PRIMARY_TOKENS else "backdrop")
     for o in parse_objects(code):
         base = o.type.split(".")[-1]
         if base not in TEXT_TYPES and base not in components:

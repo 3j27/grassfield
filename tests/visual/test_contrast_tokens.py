@@ -19,9 +19,17 @@ sRGB, as Qt does. Backdrops:
                  shadow taken as fully opaque behind the glyph. That is the BEST case (19:1), a ceiling that only proves the token
                  colours still contrast; the rendered contrast of the labels over a white wallpaper (blurred shadow, 4.8:1) is
                  measured by tests/visual/contrast.sh --surfaces desktop, which is the evidence for that surface.
+  lock           the lock screen: the shadow-colour scrim at lock.dimOpacity over the (blurred) wallpaper; the lock always uses the
+                 dark palette and no material, so both appearances and every transparency give the same values
+  lock-field     lock + the dark password field fill (shadow colour at lock.fieldFillOpacity)
+  lock-avatar    lock + the light avatar disc (dark-palette fill at lock.avatarFillOpacity)
+  lock-submit    lock-field + the return arrow disc (text colour at material.highlightOpacity, and x2 when hovered: worst of the two)
+                 The lock model is checked against LockView.qml and PasswordField.qml (test_lock_model_matches_the_qml); the text
+                 shadow is decoration and not counted.
 The role table is cross-checked against the QML (tests/visual/qml_scan.py, a structural scan: palette aliases, colors["textSecondary"],
 opacity on any ancestor, one-line items, Qt.darker/lighter/alpha/tint/rgba, `opacity :`): a new secondary-text, danger-colour, derived
-text-colour (alpha), computed-palette-key (dynamic) or text-opacity use without a role fails.
+text-colour (alpha), computed-palette-key (dynamic) or text-opacity use without a role fails. Inside shell/security/ every palette
+read counts (primary text and backdrop colours: the lock and the authorization dialog draw their own backdrops).
 Tint alpha: material.tintAlphaMin at transparency 1, linear in between, clamped to material.tintAlphaClamp up to transparency
 material.tintClampUntil (ui/Grassfield/Ui/Appearance.qml tintAlpha()); at the default 0.25 the tint is 0.85, unclamped.
 """
@@ -41,6 +49,7 @@ contrast = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(contrast)
 
 TRANSPARENCIES = (0.0, 0.25, 0.4, 0.6)
+LOCK_BACKDROPS = ("lock", "lock-field", "lock-avatar", "lock-submit")
 APPEARANCES = ("dark", "light")
 THRESHOLD = {"text": 4.5, "large": 3.0, "icon": 3.0}
 # Flat worst-case backdrops: black, white, mid-grey, saturated red and blue, the noise palette (yellow/greens). The checker (black/white
@@ -126,6 +135,19 @@ def backdrops(tok, role, appearance, t, wallpaper):
         return [over(tok.color("colors", appearance, "fieldFill"), tok.path("desktopIcon.renameFillOpacity"), wallpaper)]
     if kind == "desktop-label":
         return [over(tok.color("darkColors", appearance, "shadow"), tok.path("desktopIcon.labelShadowOpacity"), wallpaper)]
+    if kind in LOCK_BACKDROPS:
+        shadow = tok.color("darkColors", appearance, "shadow")
+        base = over(shadow, tok.path("lock.dimOpacity"), wallpaper)
+        if kind == "lock":
+            return [base]
+        if kind == "lock-avatar":
+            return [over(tok.color("darkColors", appearance, "fill"), tok.path("lock.avatarFillOpacity"), base)]
+        field = over(shadow, tok.path("lock.fieldFillOpacity"), base)
+        if kind == "lock-field":
+            return [field]
+        text = tok.color("darkColors", appearance, "text")
+        hl = tok.path("material.highlightOpacity")
+        return [over(text, hl, field), over(text, 2 * hl, field)]
     raise ValueError("unknown backdrop " + kind)
 
 
@@ -214,6 +236,19 @@ SELFTEST_SAMPLES = {
     "opacity with a space before the colon": 'Text {\n  text: "x"\n  opacity : 0.5\n}\n',
     "computed palette key": 'Item {\n  property string key: "text"\n  Text { color: Appearance.colors[key] }\n}\n',
     "withAlpha on a multi-line call": 'Text {\n  color: Appearance.withAlpha(\n    Appearance.colors.text, 0.5)\n}\n',
+}
+# Forms only classified inside shell/security/ (every palette read there counts: primary and backdrop). Each must FAIL the
+# cross-check when undeclared there, and none may be flagged outside shell/security/.
+SECURITY_SAMPLES = {
+    "primary text through root.colors": 'Item {\n  id: root\n  readonly property var colors: Appearance.darkColors\n'
+                                        '  Text { color: root.colors.text }\n}\n',
+    "primary text through a bare alias": 'Item {\n  property var colors: Tokens.colorDark\n  Text { color: colors.text }\n}\n',
+    "primary text with brackets": "Text { color: Tokens.colorDark['text'] }\n",
+    "scrim through root.colors": 'Item {\n  id: root\n  readonly property var colors: Appearance.darkColors\n'
+                                 '  Rectangle { color: root.colors.shadow; opacity: 0.6 }\n}\n',
+    "field fill through withAlpha": 'Item {\n  readonly property var colors: Appearance.darkColors\n'
+                                    '  Rectangle { color: Appearance.withAlpha(colors.shadow, 0.45) }\n}\n',
+    "surface colour from Tokens": 'Rectangle { color: Tokens.colorDark.shadow }\n',
 }
 SELFTEST_CLEAN = {
     "opacity 1": 'Item {\n  opacity: 1\n  Text { text: "x"; opacity: 1.0 }\n}\n',
@@ -311,6 +346,59 @@ class ContrastTokens(unittest.TestCase):
         for name, src in SELFTEST_CLEAN.items():
             self.assertEqual(qml_scan.scan_source(src, "shell/Sample.qml", frozenset()), {}, "false positive: " + name)
 
+    def test_cross_check_selftest_security_reads(self):
+        # Inside shell/security/ every palette read (primary text, scrim, fill, ...) must be declared; outside it they are not
+        # classified (primary text on material is the default "text on material" role).
+        for name, src in SECURITY_SAMPLES.items():
+            scan = qml_scan.scan_source(src, "shell/security/lock/Sample.qml", frozenset())
+            self.assertNotEqual(cross_check(scan, {}), [], "security form not detected: " + name)
+            self.assertEqual(cross_check(scan, dict(scan)), [], name)
+            self.assertEqual(qml_scan.scan_source(src, "shell/overlay/Sample.qml", frozenset()), {}, "outside shell/security: " + name)
+        # A derived text colour stays one `alpha` site (not also primary); textSecondary stays `secondary`.
+        src = ('Item {\n  id: root\n  readonly property var colors: Appearance.darkColors\n'
+               '  Rectangle { border.color: Appearance.withAlpha(root.colors.text, 0.7) }\n  Text { color: root.colors.textSecondary }\n}\n')
+        self.assertEqual(qml_scan.scan_source(src, "shell/security/Sample.qml", frozenset()),
+                         {("shell/security/Sample.qml", "alpha"): 1, ("shell/security/Sample.qml", "secondary"): 1})
+
+    def test_lock_roles_are_asserted(self):
+        # The lock screen is inside gate A2: its roles exist, none is exempt, and each meets its threshold over every wallpaper colour.
+        lock = [r for r in self.roles if r["id"].startswith("lock ")]
+        self.assertGreaterEqual(len(lock), 6)
+        for role in lock:
+            self.assertNotIn("exempt", role, role["id"])
+            self.assertIn(role["backdrop"], LOCK_BACKDROPS, role["id"])
+            lo = min(r for r, _ in self.table[role["id"]].values())
+            self.assertGreaterEqual(lo, THRESHOLD[role["kind"]], role["id"])
+        self.assertEqual({r["backdrop"] for r in lock}, set(LOCK_BACKDROPS))
+        # The lock does not follow the appearance or the transparency: every column of a lock role is the same.
+        for role in lock:
+            values = {round(r, 9) for r, _ in self.table[role["id"]].values()}
+            self.assertEqual(len(values), 1, role["id"])
+
+    def test_lock_model_matches_the_qml(self):
+        # The lock backdrops above mirror these lines; a change in the QML must change the model (and this test) too.
+        with open(os.path.join(ROOT, "shell", "security", "lock", "LockView.qml")) as f:
+            view = f.read()
+        with open(os.path.join(ROOT, "shell", "security", "PasswordField.qml")) as f:
+            field = f.read()
+        for line in ("readonly property var colors: Appearance.darkColors",
+                     "color: root.colors.shadow\n        opacity: Tokens.lockDimOpacity",
+                     "color: Appearance.withAlpha(root.colors.fill, Tokens.lockAvatarFillOpacity)",
+                     "textColor: root.colors.text",
+                     "placeholderColor: root.colors.textSecondary",
+                     "fillColor: Appearance.withAlpha(root.colors.shadow, Tokens.lockFieldFillOpacity)",
+                     "focusColor: Appearance.withAlpha(root.colors.text, Tokens.lockFocusRingOpacity)"):
+            self.assertIn(line, view)
+        for line in ("color: Appearance.withAlpha(root.textColor, submitMouse.containsMouse ? Tokens.materialHighlightOpacity * 2"
+                     " : Tokens.materialHighlightOpacity)",
+                     "color: root.textColor\n        selectionColor: root.focusColor",
+                     "color: root.placeholderColor",
+                     "color: root.fillColor",
+                     "border.color: root.focusColor"):
+            self.assertIn(line, field)
+        # Every text item on the scrim and the disc uses the primary text colour: date, clock, initials, name, error, notice.
+        self.assertEqual(view.count("color: root.colors.text\n"), 6)
+
     def test_cross_check_selftest_component_instance_with_opacity(self):
         # An instance of a component that contains text, given an opacity, is a text item with that opacity.
         src = 'Item {\n  Button { opacity: 0.5 }\n}\n'
@@ -322,9 +410,10 @@ class ContrastTokens(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for r in self.roles:
             self.assertIn(r["kind"], THRESHOLD)
-            self.assertIn(r["backdrop"], ("material", "accent", "apps", "apps-field", "rename-field", "desktop-label"))
+            self.assertIn(r["backdrop"], ("material", "accent", "apps", "apps-field", "rename-field", "desktop-label") + LOCK_BACKDROPS)
             for site in r["sites"]:
-                self.assertIn(site["class"], ("secondary", "danger", "alpha", "dynamic", "opacity", "opacity-dynamic"))
+                self.assertIn(site["class"], ("secondary", "danger", "alpha", "dynamic", "opacity", "opacity-dynamic", "primary",
+                                              "backdrop"))
             self.assertRegex(r["fg"], r"^(colors|darkColors)\.\w+$")
 
     def test_desktop_label_survives_white_and_black(self):

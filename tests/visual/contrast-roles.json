@@ -5,16 +5,27 @@
   "text alpha (numbers or token paths such as search.selectedSubtitleOpacity). backdrop: material (tint at 1 - t*(1-tintAlphaMin) over a",
   "flat wallpaper colour, with and without a fill overlay), accent (solid accent), apps (black dim over the wallpaper), apps-field",
   "(dim + the Apps search field fill), rename-field (colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
-  "the drop shadow). kind: text >= 4.5, large|icon >= 3.0. exempt: reason, the role is listed but not asserted (a disabled control, or a",
+  "the drop shadow), lock (lock screen: dark shadow-colour scrim at lock.dimOpacity over the blurred wallpaper, the same in both appearances and at",
+  "every transparency), lock-field (lock + the dark password field fill at lock.fieldFillOpacity), lock-avatar (lock + the light avatar disc at",
+  "lock.avatarFillOpacity), lock-submit (lock-field + the return arrow disc: text colour at material.highlightOpacity, x2 when hovered).",
+  "kind: text >= 4.5, large|icon >= 3.0. exempt: reason, the role is listed but not asserted (a disabled control, or a",
   "surface outside the A2 scope that is tracked as a known limitation in the module spec, docs/specs/<module>.md).",
   "sites: where the role is used in QML. A file x class count is cross-checked against shell/ and ui/Grassfield/ by a structural scan",
   "(tests/visual/qml_scan.py), so a new use without a role fails. classes: secondary (any read of textSecondary: palette alias, colors[\"textSecondary\"]),",
   "danger (any read of the danger colour, text or graphic), alpha (a colour derived from a text token: withAlpha, Qt.alpha/darker/lighter/tint/rgba),",
   "dynamic (a palette read with a computed key), opacity (a Text-like item or text component whose own or an ancestor's opacity is a literal below 1),",
-  "opacity-dynamic (the same with a computed value: a fade, drag ghost or disabled state; the steady state cannot be read from the source)."
+  "opacity-dynamic (the same with a computed value: a fade, drag ghost or disabled state; the steady state cannot be read from the source).",
+  "Inside shell/security/ every palette read counts (root.colors.x, colors.x, aliases, Tokens.colorDark.x): primary (text, accentText, fieldText",
+  "outside a derived colour) and backdrop (any other token: scrim, fill, ring, shadow), listed under the role whose rendering they are part of."
  ],
  "roles": [
-  {"id": "text on material", "fg": "colors.text", "backdrop": "material", "kind": "text", "sites": []},
+  {"id": "text on material", "fg": "colors.text", "backdrop": "material", "kind": "text", "sites": [
+   {"file": "shell/security/PasswordField.qml", "class": "primary", "count": 1},
+   {"file": "shell/security/PasswordField.qml", "class": "backdrop", "count": 2},
+   {"file": "shell/security/polkit/AuthDialog.qml", "class": "primary", "count": 5},
+   {"file": "shell/security/polkit/AuthDialog.qml", "class": "backdrop", "count": 2},
+   {"file": "shell/security/polkit/AuthAgent.qml", "class": "backdrop", "count": 1}
+  ]},
   {"id": "secondary on material", "fg": "colors.textSecondary", "backdrop": "material", "kind": "text", "sites": [
    {"file": "shell/notifications/NotificationContent.qml", "class": "secondary", "count": 1},
    {"file": "shell/notifications/NotificationCenter.qml", "class": "secondary", "count": 2},
@@ -74,9 +85,29 @@
     {"file": "shell/search/SearchPanel.qml", "class": "opacity-dynamic", "count": 6},
     {"file": "ui/Grassfield/Ui/Tooltip.qml", "class": "opacity-dynamic", "count": 1}
   ]},
-  {"id": "lock screen field placeholder and focus ring", "fg": "darkColors.text", "backdrop": "material", "kind": "text",
-   "exempt": "the lock screen is outside this pass (shell/security gets its own security and contrast review); the sites are listed so that a change is seen",
-   "sites": [{"file": "shell/security/lock/LockView.qml", "class": "alpha", "count": 2}]},
+  {"id": "lock text on the scrim (date, clock, name, error and notice lines)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text", "sites": [
+   {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 5},
+   {"file": "shell/security/lock/LockView.qml", "class": "backdrop", "count": 2},
+   {"file": "shell/security/lock/Lock.qml", "class": "backdrop", "count": 1}
+  ]},
+  {"id": "lock avatar initials on the disc", "fg": "darkColors.text", "backdrop": "lock-avatar", "kind": "large", "sites": [
+   {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 1},
+   {"file": "shell/security/lock/LockView.qml", "class": "backdrop", "count": 1}
+  ]},
+  {"id": "lock password placeholder", "fg": "darkColors.textSecondary", "backdrop": "lock-field", "kind": "text", "sites": [
+   {"file": "shell/security/lock/LockView.qml", "class": "secondary", "count": 1},
+   {"file": "shell/security/lock/LockView.qml", "class": "backdrop", "count": 1}
+  ]},
+  {"id": "lock typed dots and caret", "fg": "darkColors.text", "backdrop": "lock-field", "kind": "text", "sites": [
+   {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 1}
+  ]},
+  {"id": "lock return arrow (rest and hover)", "fg": "darkColors.text", "backdrop": "lock-submit", "kind": "icon", "sites": []},
+  {"id": "lock password field focus ring", "fg": "darkColors.text", "opacity": ["lock.focusRingOpacity"], "backdrop": "lock", "kind": "icon", "sites": [
+   {"file": "shell/security/lock/LockView.qml", "class": "alpha", "count": 1}
+  ]},
+  {"id": "idle dim layer (no text)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text",
+   "exempt": "the idle dim fades the session to the shadow colour for the last seconds before the lock and draws no text of its own",
+   "sites": [{"file": "shell/security/idle/Idle.qml", "class": "backdrop", "count": 1}]},
   {"id": "overview captions (dim over wallpaper)", "fg": "colors.textSecondary", "backdrop": "material", "kind": "text",
    "exempt": "Overview Spaces strip sits on a black dim over the wallpaper, not on material: outside the A2 scope of this pass, known limitation in docs/specs/overview.md",
    "sites": [{"file": "shell/overview/OverviewWindow.qml", "class": "secondary", "count": 1}]},
