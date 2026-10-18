@@ -92,3 +92,51 @@ Residual limits (measured, not fixed):
 - Ctrl/Meta+O (open) was not exercised in the nested session (it would start an application).
 
 Dev: `scripts/dev/shell-run.sh` seeds `lock.idleMinutes: 0` in the dev config when the key is absent, so nested sessions never idle-lock.
+
+## Compositor focus policy (capability `desktop-focus`, ADR-0012 amendment 2026-10-18)
+What the shell cannot do alone (review of 354cf71): Hyprland 0.56.2 ignores a click on the window it still counts as
+focused while the desktop holds the keyboard; it grants an OnDemand surface the keyboard only at the next pointer motion
+(hence the kicker); and the shell's pointer-leave drop sends keys to a window the user did not click. grassfield-compositor
+(plugin 0.5.0-df, `compositor/src/DesktopFocus.cpp`, decision logic `compositor/src/core/DesktopFocus.*`) enforces the
+macOS click-to-focus model instead. Contract (exact):
+
+1. **Detection.** The feature is present when the latest `capabilities` event lists `desktop-focus`
+   (`Capabilities.has("desktop-focus")`). The plugin posts a capabilities event with an empty list when it unloads
+   (`{"v":"gfc/1","type":"capabilities","features":[]}`): every feature is gone at that moment, the shell must react to
+   any capabilities event, not only to the first one.
+2. **Surface identity.** The plugin matches the layer namespace **`grassfield-desktop-icons`** exactly, on any output
+   and any layer. Do not rename it without changing `kDesktopNamespace` (plugin) in the same change. Its xdg_popups (the
+   context menu) are recognised as the desktop's popups.
+3. **What the shell keeps doing (with or without the plugin):** keyboard interactivity `None` while idle; `OnDemand` on a
+   left press on the desktop; back to `None` when the surface loses the keyboard (`Window.active` false after it was
+   true); the arm timeout (`Tokens.desktopIconFocusArmMs`) back to `None` if the keyboard was not granted; the context menu
+   as a `PopupWindow` with `grabFocus`; desktop keyboard actions only while `Window.active`.
+4. **What the shell drops when `desktop-focus` is present:** the kicker surface (`grassfield-desktop-kicker`) and the
+   drop to `None` on pointer leave (rule 3 of "Keyboard focus"). The outside-dismissed menu re-arm (rule 4) is not
+   needed either: after an outside click the keyboard is back on the desktop, and the next click on any window gives that
+   window the keyboard. `IconsView.fileKeyActions` (Return/F2 rename, Ctrl/Meta+O open, Ctrl+Backspace trash) may be
+   enabled. When the feature is absent or withdrawn: kicker and pointer-leave drop back on, `fileKeyActions` off.
+5. **What the plugin guarantees** (pointer button presses only; hover never moves the keyboard; button events are
+   observed, never cancelled):
+   - a press (any button) on a normal window (its surface, a subsurface or its Grassfield titlebar) while the desktop
+     surface (any output) holds the keyboard gives that window the keyboard, also when it is Hyprland's focused window;
+   - a left press on the desktop surface gives it the keyboard at once if it is `on_demand`, else on its first
+     `on_demand` commit within 1000 ms after the press (no pointer motion needed);
+   - presses on other Grassfield layers (Dock, menu bar, widgets, any `grassfield-*` namespace), on popups (the desktop's
+     menu included: the grab decides) and anything while a keyboard grab, an Exclusive layer or the session lock is active
+     change nothing.
+6. **Timing.** The grant happens on the shell's `on_demand` commit (one frame after the press). Keys typed before that
+   commit go to the previous holder; measured: keys sent right after the click (no motion) reached the desktop in 5/5
+   rounds (`tests/compositor/desktop_focus.sh`, case 2).
+
+Evidence (nested Hyprland 0.56.2, plugin 0.5.0-df, two outputs, stand-in desktop with the behaviour of item 3/4,
+`tests/compositor/desktop_focus.sh`): 21/21 checks PASS: (1) desktop focused, click the last active foot: the foot gets
+the keys; (2) click the desktop, type at once: the desktop 5/5; (3) hover the Dock, the menu bar, a window, presses on the
+Dock and the menu bar: the desktop keeps the keys; (4) the last active foot on the other output gets the keys; (6) the
+menu grab keeps keys, Esc returns them, an outside click is swallowed and the next click on that foot gives it the keys;
+(5) unload while the desktop is focused: Hyprland alive, empty capabilities posted, keys still reach the desktop, a click
+on another foot works, reload restores the policy. `desktop_focus.sh baseline` (same presses, plugin unloaded) reproduces
+the review defects: (1) and (4) keys reach the desktop, (2) 0/5 (keys reach the previous window).
+
+Limits: touch and tablet taps are not covered (pointer buttons only); a press on a window's border (outside its titlebar
+and surface) is left to Hyprland.

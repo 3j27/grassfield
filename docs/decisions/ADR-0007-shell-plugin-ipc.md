@@ -38,12 +38,19 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   additive: one JSON string `{"on":bool,"durationMs":int,"curve":[x1,y1,x2,y2]?,"windows":[{"address","x","y","w","h"}…]}`
   in layout coordinates, at most 64 windows and 16 KiB, validated strictly by the plugin; live window transforms for
   Mission Control v2, contract in `docs/specs/overview.md` "Shell contract"). Planned: `theme(json)`. Events:
-  `capabilities` (features: `decorations`, `minimize`, `config`, `appmenu`, `overview`), `minimize-request`,
+  `capabilities` (features: `decorations`, `minimize`, `config`, `appmenu`, `overview`, `desktop-focus`), `minimize-request`,
   `minimized`, `restored`, `appmenu` `{address, service, path, pid}` (additive field `pid` = the Wayland client's pid
   from `wl_client_get_credentials`; the menu bridge checks it against `GetConnectionUnixProcessID(service)` to stop one
   app pointing its window at another app's menu), `overview` `{state: opening|open|closing|closed, windows, reason?}`
-  (`reason`: `invalid` / `no-windows` for a refused request, which changes nothing; `unavailable` at unload;
-  `interrupted` when the overview ended without the shell's request).
+  (`reason`: `invalid` / `no-windows` / `no-chrome` for a refused request, which changes nothing; `unavailable` at unload;
+  `interrupted` when the overview ended without the shell's request; `fullscreen` when a window went full screen while
+  shown and its workspace's windows left the overview, the state otherwise unchanged).
+- Feature `desktop-focus` (2026-10-18, additive, no verb): the plugin enforces click-to-focus for the shell's desktop
+  surface (namespace `grassfield-desktop-icons`) on pointer presses (ADR-0012 amendment); contract in
+  `docs/specs/desktop.md` "Compositor focus policy". Advertised only when its listeners registered.
+- Withdrawal at unload (2026-10-18, additive): `PLUGIN_EXIT` posts `{"v":"gfc/1","type":"capabilities","features":[]}`
+  after removing every hook, so the shell drops each feature and returns to its fallbacks (desktop focus workarounds,
+  minimize parking, T0 menus, thumbnails). The shell must treat every capabilities event as the current truth.
 - Delivery (2026-10-17, after the global menus review: an unbounded `appmenu` stream overflowed the shell's socket2
   connection and Hyprland dropped it): every plugin → shell event goes through `compositor/src/core/EventThrottle`,
   keyed by window (`minimized`/`restored` share one key, as do an appmenu clear and set), latest value wins, at most

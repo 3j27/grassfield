@@ -21,7 +21,15 @@
 #   live        the ticker's layout rect changes between two frames while open; an idle one does not
 #   input       clicks at a window's real place and on a window's image, and a key, reach the fixture only
 #   restore     after on:false the output matches the frame before the overview (menu bar masked)
-#   failsafe    the fixture (namespace grassfield-overview) going away closes an open overview
+#   chrome      on:true is refused (no-chrome) without the fixture's chrome, and with a chrome that does not hold the
+#               keyboard (R13 review of f12f610)
+#   retarget    closing the active window while open: no closing, the state is posted with the new count
+#   fullscreen  a window going full screen while open takes its workspace out (reason fullscreen); a workspace showing a
+#               full-screen window is refused (no-windows)
+#   resize      a surface resized twice while open: the box drawn while taller is damaged again (plugin damage log,
+#               evaluated at the end: Hyprland writes its log late); the captured frame matches
+#   failsafe    the chrome unmapping (process alive) ends the overview at once; the keyboard leaving the chrome ends
+#               it; the chrome's process exiting ends it
 #   invalid     malformed payloads change nothing and report reason "invalid"
 #   flood       1000 overview calls in one Lua dispatch: a few coalesced events, socket2 kept, windows back
 #   unload      `scripts/nestctl plugin unload` during an open overview: Hyprland alive, windows normal, event
