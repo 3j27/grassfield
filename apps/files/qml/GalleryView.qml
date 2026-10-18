@@ -247,7 +247,7 @@ FocusScope {
         y: pager.height
         width: pager.width
         height: Tokens.appsBorderWidth
-        color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
     ListView {
@@ -400,7 +400,7 @@ FocusScope {
         Rectangle {
             width: Tokens.appsBorderWidth
             height: parent.height
-            color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
         Flickable {
@@ -449,7 +449,7 @@ FocusScope {
                 Rectangle {
                     width: parent.width
                     height: Tokens.appsBorderWidth
-                    color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                    color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                 }
 
                 Text {

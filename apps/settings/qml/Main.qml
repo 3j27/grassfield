@@ -131,7 +131,7 @@ Window {
             anchors.right: parent.right
             width: 1
             height: parent.height
-            color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
         Rectangle {

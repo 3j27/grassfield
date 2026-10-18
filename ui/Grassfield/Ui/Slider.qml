@@ -1,6 +1,6 @@
 import QtQuick
 
-// Horizontal slider with a pill track and a round knob. value is within [from, to].
+// Horizontal slider with a pill track and a pill knob. value is within [from, to].
 Item {
     id: root
 
@@ -10,6 +10,8 @@ Item {
     property real stepSize: 0.05
     property string accessibleName: ""
     property color fillColor: Appearance.colors.accent
+    // Track thickness; Quick Settings passes controlSliderTrackCompact.
+    property real trackHeight: Tokens.controlSliderTrack
 
     // Emitted when the user changes the value (not when it is set from outside).
     signal moved(real value)
@@ -21,7 +23,7 @@ Item {
     onValueChanged: local = NaN
 
     readonly property real position: to > from ? Math.max(0, Math.min(1, (shown - from) / (to - from))) : 0
-    readonly property real travel: Math.max(0, width - Tokens.controlSliderKnob)
+    readonly property real travel: Math.max(0, width - Tokens.controlSliderKnobWidth)
 
     implicitWidth: Tokens.controlSliderDefaultWidth
     implicitHeight: Tokens.controlSliderHeight
@@ -68,12 +70,12 @@ Item {
         id: track
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width
-        height: Tokens.controlSliderTrack
+        height: root.trackHeight
         radius: height / 2
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
         Rectangle {
-            width: Tokens.controlSliderKnob / 2 + root.position * root.travel
+            width: Tokens.controlSliderKnobWidth / 2 + root.position * root.travel
             height: parent.height
             radius: height / 2
             color: root.fillColor
@@ -82,9 +84,9 @@ Item {
 
     Rectangle {
         id: knob
-        width: Tokens.controlSliderKnob
+        width: Tokens.controlSliderKnobWidth
         height: Tokens.controlSliderKnob
-        radius: width / 2
+        radius: height / 2
         x: root.position * root.travel
         anchors.verticalCenter: parent.verticalCenter
         color: Appearance.colors.knob
@@ -97,7 +99,7 @@ Item {
         cursorShape: Qt.PointingHandCursor
         function at(mouseX: real): void {
             root.forceActiveFocus();
-            const t = root.travel > 0 ? (mouseX - Tokens.controlSliderKnob / 2) / root.travel : 0;
+            const t = root.travel > 0 ? (mouseX - Tokens.controlSliderKnobWidth / 2) / root.travel : 0;
             root.commit(root.from + Math.max(0, Math.min(1, t)) * (root.to - root.from));
         }
         onPressed: mouse => at(mouse.x)

@@ -15,7 +15,7 @@ Item {
     Rectangle {
         width: parent.width
         height: Tokens.appsBorderWidth
-        color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
     Flickable {

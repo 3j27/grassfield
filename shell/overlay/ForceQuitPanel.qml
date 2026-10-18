@@ -38,7 +38,7 @@ Dialog {
             radius: Tokens.radiusControl
             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity / 2)
             border.width: list.activeFocus ? Tokens.controlFocusRing : 1
-            border.color: list.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+            border.color: list.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
             ListView {
                 id: list

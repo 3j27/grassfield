@@ -41,7 +41,7 @@ Item {
         x: Tokens.spacingMd
         width: parent.width - 2 * Tokens.spacingMd
         height: 1
-        color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
     Rectangle {

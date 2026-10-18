@@ -404,7 +404,7 @@ Scope {
                                     anchors.bottomMargin: win.indicatorArea
                                     width: Tokens.dockSeparatorWidth
                                     height: win.iconSize
-                                    color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                                    color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                                 }
 
                                 // Application icon, growing upward from the shelf.

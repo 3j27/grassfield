@@ -44,7 +44,7 @@ Item {
             height: thumb.paintedHeight + 2 * Tokens.appsBorderWidth
             color: "transparent"
             border.width: Tokens.appsBorderWidth
-            border.color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+            border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
     }
 

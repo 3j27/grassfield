@@ -91,7 +91,7 @@ FocusScope {
                     width: Tokens.appsBorderWidth
                     height: parent.height - Tokens.spacingSm
                     anchors.verticalCenter: parent.verticalCenter
-                    color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                    color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                 }
 
                 Text {
@@ -134,7 +134,7 @@ FocusScope {
         anchors.top: header.bottom
         width: parent.width
         height: Tokens.appsBorderWidth
-        color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
     // Background --------------------------------------------------------------------------------

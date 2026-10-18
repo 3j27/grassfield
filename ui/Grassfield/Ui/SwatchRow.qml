@@ -86,7 +86,7 @@ FocusScope {
                     color: swatch.modelData.color
                     opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
                     border.width: Tokens.appsBorderWidth
-                    border.color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                    border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
                     Icon {
                         anchors.centerIn: parent

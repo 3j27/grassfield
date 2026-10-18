@@ -15,7 +15,7 @@ Column {
         property alias checked: toggle.checked
         signal toggled(bool checked)
         width: parent.width
-        height: Tokens.controlToggleHeight
+        height: Tokens.menuItemHeight
 
         Label {
             anchors.verticalCenter: parent.verticalCenter
@@ -111,6 +111,7 @@ Column {
         }
 
         Slider {
+            trackHeight: Tokens.controlSliderTrackCompact
             width: parent.width - transparencyLabel.width - percent.width - 2 * parent.spacing
             anchors.verticalCenter: parent.verticalCenter
             accessibleName: qsTr("Transparency")

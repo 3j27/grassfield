@@ -87,8 +87,8 @@ QtObject {
     readonly property int radiusDockIcon: 11
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusMenuBar: 0
-    // estimate, pending F1 measurement from design/reference
-    readonly property int radiusMenu: 10
+    // F1 gap 5: menu radius 12 +-1.5 (reference 2x captures)
+    readonly property int radiusMenu: 12
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusPanel: 18
     // estimate, pending F1 measurement from design/reference
@@ -140,6 +140,8 @@ QtObject {
     readonly property real materialDisabledOpacity: 0.38
     // estimate: hover opacity multiplier for an active menu bar item
     readonly property real materialHoverActiveFactor: 1.5
+    // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope
+    readonly property real materialSeparatorOpacityLight: 0.08
 
     // task spec / macOS convention, pending F1 measurement
     readonly property int menubarHeight: 24
@@ -188,16 +190,16 @@ QtObject {
     // estimate: px side of the corner trigger window
     readonly property int hotCornerSize: 2
 
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menuItemHeight: 22
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menuMinWidth: 220
+    // F1 gap 5: menu row height 24 +-0.5
+    readonly property int menuItemHeight: 24
+    // F1 gap 5: no real minimum, menus as narrow as ~151
+    readonly property int menuMinWidth: 150
     // estimate, pending F1 measurement from design/reference
     readonly property int menuPadding: 5
     // estimate, pending F1 measurement from design/reference
     readonly property int menuItemPadding: 10
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menuSeparatorHeight: 9
+    // F1 gap 5: separator block 5+1+5
+    readonly property int menuSeparatorHeight: 11
     // estimate, pending F1 measurement from design/reference
     readonly property int menuIconSize: 14
     // estimate, pending F1 measurement from design/reference
@@ -213,18 +215,16 @@ QtObject {
     // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1)
     readonly property string menuSwatchMark: "#1B1B1F"
 
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlSliderTrack: 4
-    // estimate, pending F1 measurement from design/reference
+    // F1 gap 18: slider track 6 (Settings reference)
+    readonly property int controlSliderTrack: 6
+    // F1 gap 18: pill knob height
     readonly property int controlSliderKnob: 16
     // estimate, pending F1 measurement from design/reference
     readonly property int controlSliderHeight: 22
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlToggleWidth: 38
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlToggleHeight: 22
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlToggleKnob: 18
+    // F1 gap 12: toggle track 36x16
+    readonly property int controlToggleWidth: 36
+    // F1 gap 12: toggle track 36x16
+    readonly property int controlToggleHeight: 16
     // estimate, pending F1 measurement from design/reference
     readonly property int controlFocusRing: 2
     // estimate, pending F1 measurement from design/reference
@@ -235,6 +235,14 @@ QtObject {
     readonly property int controlButtonMinWidth: 72
     // estimate
     readonly property int controlSliderDefaultWidth: 200
+    // F1 gap 12: pill knob 21x12
+    readonly property int controlToggleKnobWidth: 21
+    // F1 gap 12: pill knob 21x12
+    readonly property int controlToggleKnobHeight: 12
+    // F1 gap 18: pill knob about 21x16 +-2
+    readonly property int controlSliderKnobWidth: 21
+    // F1 gap 18: Quick Settings slider track stays 4
+    readonly property int controlSliderTrackCompact: 4
 
     // estimate, pending F1 measurement from design/reference
     readonly property int panelControlCenterWidth: 320

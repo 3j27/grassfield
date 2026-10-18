@@ -80,6 +80,7 @@ FocusScope {
             }
 
             Slider {
+                trackHeight: Tokens.controlSliderTrackCompact
                 id: slider
                 width: parent.width - muteButton.width - parent.spacing
                 anchors.verticalCenter: parent.verticalCenter

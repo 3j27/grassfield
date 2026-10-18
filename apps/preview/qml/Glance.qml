@@ -187,7 +187,7 @@ Window {
             anchors.bottom: parent.bottom
             width: parent.width
             height: 1
-            color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
         Text {
