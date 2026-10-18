@@ -40,7 +40,7 @@ plugin=${GRASSFIELD_PLUGIN:-$root/compositor/build/grassfield-compositor.so}
 [[ -f $plugin && -z ${GRASSFIELD_NO_PLUGIN:-} ]] || plugin=""
 
 # 2. Start Hyprland nested. Its children inherit the nested WAYLAND_DISPLAY/HYPRLAND_INSTANCE_SIGNATURE.
-env -u HYPRLAND_INSTANCE_SIGNATURE -u HYPRLAND_CMD \
+env -u HYPRLAND_INSTANCE_SIGNATURE -u HYPRLAND_CMD -u DISPLAY \
   GRASSFIELD_CONFIG_DIR="$root/config/hypr" \
   GRASSFIELD_SHELL_DIR="$root/shell" \
   GRASSFIELD_STATE_HOME="$dev/state" \

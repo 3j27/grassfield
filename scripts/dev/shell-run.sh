@@ -32,6 +32,9 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+# X11 clients started from a dev session (the shell, the private bus, apps) must never reach the owner's X server
+# (their Xwayland :0): no DISPLAY is passed on. X11-only apps do not start in dev sessions.
+unset DISPLAY
 dev=$root/.dev
 apps_home=$dev/apps-home
 sig=$(cat "$dev/nested.instance" 2>/dev/null || true)

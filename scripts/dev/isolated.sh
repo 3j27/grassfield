@@ -42,6 +42,6 @@ for d in "$config_home" "$state_home"; do
 done
 mkdir -p "$config_home" "$state_home"
 
-exec env XDG_CONFIG_HOME="$base/config" XDG_CACHE_HOME="$base/cache" XDG_STATE_HOME="$base/state" \
+exec env -u DISPLAY XDG_CONFIG_HOME="$base/config" XDG_CACHE_HOME="$base/cache" XDG_STATE_HOME="$base/state" \
   XDG_DATA_HOME="$base/data" GRASSFIELD_CONFIG_HOME="$config_home" GRASSFIELD_STATE_HOME="$state_home" \
   GRASSFIELD_ISOLATED=1 GRASSFIELD_DEV=1 "$@"

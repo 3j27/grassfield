@@ -285,12 +285,10 @@ fi
 
 # ---- GTK4 (no DBusMenu): T0 ----
 say ""
+# A client without DBusMenu. Never Nautilus or another D-Bus-activatable app: it could be activated outside the test's
+# isolation (dev open policy, ADR-0011).
 gtk_app=foot
 gtk_cmd=(/usr/bin/foot)  # isolation-ok: start_app runs it with HOME and XDG_* in a private home
-if [[ -x /usr/bin/nautilus ]] && ldd /usr/bin/nautilus 2>/dev/null | grep -q 'libgtk-4'; then
-  gtk_app=nautilus
-  gtk_cmd=(/usr/bin/nautilus --new-window)  # isolation-ok: start_app runs it with HOME and XDG_* in a private home
-fi
 say "[T0] $gtk_app (no DBusMenu export)"
 start_app "$gtk_app" "${gtk_cmd[@]}"
 gtk_pid=$last_pid
