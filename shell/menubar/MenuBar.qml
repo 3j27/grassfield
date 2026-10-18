@@ -131,7 +131,8 @@ Scope {
                 }
                 return false;
             }
-            readonly property string shownAppId: Compositor.focusedAppId !== "" ? Compositor.focusedAppId : (Popups.active && lastAppId !== "" && lastAppAlive ? lastAppId : "")
+            // The desktop holds the keyboard: Hyprland still reports the last window as active, the bar shows the desktop (Finder).
+            readonly property string shownAppId: DesktopState.holdsKeyboard ? "" : Compositor.focusedAppId !== "" ? Compositor.focusedAppId : (Popups.active && lastAppId !== "" && lastAppAlive ? lastAppId : "")
             readonly property string appName: {
                 if (shownAppId === "")
                     return qsTr("Desktop");

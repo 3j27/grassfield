@@ -5,7 +5,7 @@
 // Record: {toplevel, address, appId, title}.
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu"];
+var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -37,6 +37,50 @@ function windowCall(verb, address, rect) {
 function appmenuCall(address) {
     const hex = normalizeAddress(address);
     return hex === "" ? "" : guardedPluginCall("appmenu", ["\"0x" + hex + "\""]);
+}
+
+// hl.plugin.grassfield.overview(json) (gfc/1, docs/specs/overview.md "Shell contract" 3). `request`:
+// {on: bool, durationMs: integer 0..2000, curve?: 4 numbers, windows?: [{address, x, y, w, h}]} (layout coordinates).
+// The JSON is built from validated pieces only (hex address, finite numbers rounded to integers, w and h >= 1, at
+// most 64 windows, unique addresses) and quoted as a Lua string; "" when anything is invalid (callers must not
+// dispatch it). A rect outside the monitor or an ineligible window is the plugin's business (ignored there).
+function overviewCall(request) {
+    if (!request || typeof request.on !== "boolean")
+        return "";
+    const duration = Number(request.durationMs);
+    if (!Number.isFinite(duration) || duration < 0 || duration > 2000)
+        return "";
+    const body = {on: request.on, durationMs: Math.round(duration)};
+    const curve = request.curve;
+    if (curve !== undefined && curve !== null) {
+        if (!Array.isArray(curve) || curve.length !== 4)
+            return "";
+        const c = curve.map(Number);
+        if (!c.every(n => Number.isFinite(n)) || c[0] < 0 || c[0] > 1 || c[2] < 0 || c[2] > 1 || c[1] < -1 || c[1] > 2 || c[3] < -1 || c[3] > 2)
+            return "";
+        body.curve = c.map(n => Math.round(n * 1000) / 1000);
+    }
+    if (request.on) {
+        const list = request.windows;
+        if (!Array.isArray(list) || list.length === 0 || list.length > 64)
+            return "";
+        const seen = {};
+        body.windows = [];
+        for (const w of list) {
+            const hex = w ? normalizeAddress(w.address) : "";
+            const r = finiteRect(w);
+            if (hex === "" || !r || seen[hex])
+                return "";
+            seen[hex] = true;
+            body.windows.push({address: "0x" + hex, x: Math.round(r.x), y: Math.round(r.y), w: Math.max(1, Math.round(r.w)), h: Math.max(1, Math.round(r.h))});
+        }
+    }
+    const json = JSON.stringify(body);
+    if (json.length > 16384)
+        return "";
+    // The JSON text as a Lua string literal: only backslash and double quote need escaping (no control characters).
+    const lua = "\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"";
+    return guardedPluginCall("overview", [lua]);
 }
 
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.

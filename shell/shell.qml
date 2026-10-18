@@ -59,6 +59,16 @@ ShellRoot {
     // One degraded-mode notice when the compositor extension never answered; withdrawn if it loads later.
     property string degradedNoticeKey: ""
 
+    // The degraded notice is shown once while the compositor extension is absent and withdrawn when it is present.
+    function syncDegradedNotice(): void {
+        if (Capabilities.settled && !Capabilities.pluginPresent && degradedNoticeKey === "") {
+            degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
+        } else if (Capabilities.pluginPresent && degradedNoticeKey !== "") {
+            Notifications.clear(degradedNoticeKey);
+            degradedNoticeKey = "";
+        }
+    }
+
     Connections {
         target: SettingsApp
 
@@ -79,15 +89,12 @@ ShellRoot {
         target: Capabilities
 
         function onSettledChanged(): void {
-            if (Capabilities.settled && !Capabilities.pluginPresent && root.degradedNoticeKey === "")
-                root.degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
+            root.syncDegradedNotice();
         }
 
+        // Also when the plugin goes away later (unload: empty capabilities event).
         function onPluginPresentChanged(): void {
-            if (Capabilities.pluginPresent && root.degradedNoticeKey !== "") {
-                Notifications.clear(root.degradedNoticeKey);
-                root.degradedNoticeKey = "";
-            }
+            root.syncDegradedNotice();
         }
     }
 

@@ -140,3 +140,20 @@ the review defects: (1) and (4) keys reach the desktop, (2) 0/5 (keys reach the 
 
 Limits: touch and tablet taps are not covered (pointer buttons only); a press on a window's border (outside its titlebar
 and surface) is left to Hyprland.
+
+### Shell side of the policy (2026-10-18)
+`KeyboardFocus.js` takes the policy as an argument (`next(state, event, policy)`, `kicking`, `rearmAfter`, `fileKeyActions`);
+`DesktopIcons.qml` binds it to `Capabilities.has("desktop-focus")` live (kicker, pointer-leave drop and `fileKeyActions` follow;
+withdrawing it while the desktop holds the keyboard and the pointer is elsewhere drops to None at once). The menu bar shows the
+desktop's name ("Desktop", `DesktopState.holdsKeyboard`) while the desktop or its context menu holds the keyboard.
+Nested evidence (plugin loaded, GF-REF): menu opened on an icon, pointer moved onto foot, Esc, small pointer motion, click, typing
+and Return/Ctrl+Backspace reached foot only; click on the desktop then Ctrl+A at once selects all; hovering the Dock and the
+menu bar keeps the keys on the desktop; click on foot on the other output gets the keys; Ctrl+Backspace on a selected file moved
+it to `.dev/apps-home/data/Trash` (owner's `~/.local/share/Trash/info` mtime unchanged); after `just plugin-unload` the menu hints
+and file keys are off live. Limit found: a click with the pointer perfectly still after a popup grab ended (no motion since
+the grab) is classified "none" by the plugin and Hyprland, the keys stay on the desktop.
+
+Plugin unload (R13 review): an empty capabilities event now means the plugin is gone (`Capabilities.pluginPresent` false,
+`CapabilityEvent.js`, `tests/unit/tst_capabilities.qml`): the degraded notice is posted once (`shell.qml` `syncDegradedNotice`,
+screenshot after `just plugin-unload` and with `--no-plugin`: banner "Compositor extension not loaded" top right of the focused
+output), and desktop-focus / overview behaviour switch off live. No hello polling resumes after an unload.

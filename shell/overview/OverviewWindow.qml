@@ -8,10 +8,15 @@ import Grassfield.Ui
 import qs.platform
 import qs.services
 import "Layout.js" as Layout
+import "V2.js" as V2
 
 // Overview surface, one per screen: a full-screen layer-shell overlay below the menu bar with a
-// dimmed, blurred backdrop, a Spaces bar on top and the windows of the output's current
-// workspace laid out as live thumbnails (ScreencopyView of the toplevel).
+// Spaces bar on top and the windows of the output's current workspace laid out.
+// v1 (thumbnail mode): a dimmed, blurred backdrop and live thumbnails (ScreencopyView of the toplevel).
+// v2 (`!controller.thumbnailMode`): this surface is the transparent chrome of the compositor's overview
+// (namespace grassfield-overview, Overlay, keyboard Exclusive while open): the dim is OverviewBackdrop on the Bottom
+// layer, the real windows are transformed by the compositor, and the per-window items below are only the hit areas
+// (surface + titlebar band), the selection outline, the drag ghost and the label anchor.
 //
 // Spaces tiles (v1): window count and app icons, no capture of the workspace.
 // Zoom: thumbnails interpolate from the real window rectangle to the layout rectangle.
@@ -33,7 +38,9 @@ Variants {
 
         readonly property string screenName: modelData.name
         readonly property bool shown: root.controller.open
-        readonly property bool holdsKeyboard: shown && !root.controller.releasing && (root.controller.keyScreen === "" || root.controller.keyScreen === screenName)
+        // v2: every output's chrome is Exclusive (the plugin refuses on:true unless each output with windows has one).
+        readonly property bool v2: !root.controller.thumbnailMode
+        readonly property bool holdsKeyboard: shown && !root.controller.releasing && (v2 || root.controller.keyScreen === "" || root.controller.keyScreen === screenName)
 
         // 0 = windows at their real place, 1 = fully laid out.
         property real progress: shown ? 1 : 0
@@ -79,13 +86,9 @@ Variants {
             const a = area;
             if (!(a.w > 1 && a.h > 1))
                 return;
-            const input = wins.map(w => ({
-                        id: w.address,
-                        x: w.x,
-                        y: w.y - Tokens.menubarHeight,
-                        w: w.w,
-                        h: w.h
-                    }));
+            // v2: the layout includes the titlebar band the compositor draws above each window.
+            const band = v2 ? Tokens.overviewWindowTitlebarHeight : 0;
+            const input = wins.map(w => V2.layoutInput(w.address, w.x, w.y - Tokens.menubarHeight, w.w, w.h, band));
             const sig = Layout.signature(input, a);
             if (sig === layoutSignature)
                 return;
@@ -96,6 +99,30 @@ Variants {
             });
         }
         onAreaChanged: relayout()
+        onV2Changed: {
+            layoutSignature = "";
+            relayout();
+        }
+        onPlacementChanged: root.controller.layoutChanged()
+
+        // Where the compositor is asked to draw each window's surface (layout coordinates, Shell contract 3).
+        function v2Rects(): var {
+            const out = [];
+            for (const w of wins) {
+                const r = placedMap[w.address];
+                if (!r || w.fullscreen)
+                    continue;
+                const s = V2.surfaceRect(r, w.w, Tokens.overviewWindowTitlebarHeight, modelData.x, modelData.y, Tokens.menubarHeight);
+                out.push({
+                    address: w.address,
+                    x: s.x,
+                    y: s.y,
+                    w: s.w,
+                    h: s.h
+                });
+            }
+            return out;
+        }
         readonly property var placedMap: {
             const m = {};
             for (const r of placement.rects)
@@ -133,7 +160,7 @@ Variants {
         // The full-screen blur is re-computed by the compositor every frame while the surface
         // animates (swap up to 1 s); it is applied only once the zoom-in has finished and dropped
         // when the zoom-out starts. The dim animates on its own meanwhile.
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && shown && progress >= 1 ? blur : null
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && shown && progress >= 1 && !v2 ? blur : null
         // qmllint enable missing-type
 
         Region {
@@ -213,6 +240,8 @@ Variants {
         }
 
         function addSpace(): void {
+            // v2: the compositor ends its overview on a Space switch; the chrome stays on the new, empty Space.
+            root.controller.switchingSpace = true;
             Compositor.focusSpace(Compositor.nextSpaceId());
         }
 
@@ -282,6 +311,8 @@ Variants {
         function statusData(): var {
             return {
                 name: screenName,
+                v2: v2,
+                v2Rects: v2 ? v2Rects() : [],
                 width: width,
                 height: height,
                 progress: progress,
@@ -321,11 +352,16 @@ Variants {
             Accessible.role: Accessible.Pane
             Accessible.name: qsTr("Overview")
 
-            // Dimmed, blurred backdrop. A click on it closes Overview.
+            // The chrome holds the keyboard (wl_keyboard enter): the compositor accepts the layout from now on.
+            readonly property bool chromeActive: Window.active
+            onChromeActiveChanged: root.controller.onChromeChanged(win.screenName, chromeActive)
+
+            // Dimmed, blurred backdrop (v1; v2 draws it on its own Bottom-layer surface, this one is transparent but
+            // still takes the click). A click on it closes Overview.
             Rectangle {
                 id: backdrop
                 anchors.fill: parent
-                color: Appearance.withAlpha(Appearance.colors.shadow, Appearance.effectiveTransparency > 0 ? Tokens.overviewBackdropOpacity : Tokens.overviewBackdropOpacityOpaque)
+                color: win.v2 ? "transparent" : Appearance.withAlpha(Appearance.colors.shadow, Appearance.effectiveTransparency > 0 ? Tokens.overviewBackdropOpacity : Tokens.overviewBackdropOpacityOpaque)
                 opacity: win.progress
 
                 MouseArea {
@@ -492,9 +528,9 @@ Variants {
                 }
             }
 
-            // Window thumbnails.
+            // Window thumbnails (v1) or hit areas of the transformed real windows (v2).
             Repeater {
-                model: root.controller.thumbnailMode ? win.winKeys : []
+                model: win.winKeys
 
                 delegate: Item {
                     id: thumb
@@ -520,11 +556,13 @@ Variants {
                     readonly property real realW: info ? info.w : 1
                     readonly property real realH: info ? info.h : 1
 
+                    readonly property bool v2: win.v2
                     visible: valid
-                    x: realX + (tx - realX) * win.zoom + ox
-                    y: realY + (ty - realY) * win.zoom + oy
-                    width: Math.max(1, realW + (tw - realW) * win.zoom)
-                    height: Math.max(1, realH + (th - realH) * win.zoom)
+                    // v2: the compositor animates the real window; the item sits at its final rectangle.
+                    x: v2 ? tx + ox : realX + (tx - realX) * win.zoom + ox
+                    y: v2 ? ty + oy : realY + (ty - realY) * win.zoom + oy
+                    width: v2 ? Math.max(1, tw) : Math.max(1, realW + (tw - realW) * win.zoom)
+                    height: v2 ? Math.max(1, th) : Math.max(1, realH + (th - realH) * win.zoom)
                     z: dragging ? 100 : (isSelected ? 2 : 1)
                     opacity: (dragging ? Tokens.overviewDragOpacity : 1) * (Appearance.reduceMotion ? win.progress : 1)
                     Accessible.role: Accessible.Button
@@ -578,13 +616,14 @@ Variants {
                         anchors.fill: parent
                         radius: Tokens.overviewThumbRadius
                         visible: false
-                        layer.enabled: true
+                        layer.enabled: !thumb.v2
                     }
 
                     Item {
                         id: clipper
                         anchors.fill: parent
-                        layer.enabled: true
+                        visible: !thumb.v2
+                        layer.enabled: !thumb.v2
                         layer.effect: MultiEffect {
                             maskEnabled: true
                             maskSource: maskShape
@@ -598,7 +637,7 @@ Variants {
                         ScreencopyView {
                             id: view
                             anchors.fill: parent
-                            captureSource: thumb.info ? thumb.info.toplevel : null
+                            captureSource: thumb.info && !thumb.v2 ? thumb.info.toplevel : null
                             live: root.controller.profile === "full"
                             paintCursor: false
                             // A single frame can only be requested once the capture context knows
@@ -621,10 +660,20 @@ Variants {
                     Timer {
                         interval: Tokens.overviewBalancedIntervalMs
                         repeat: true
-                        running: root.controller.profile === "balanced" && win.shown && thumb.visible && view.ready
+                        running: root.controller.profile === "balanced" && win.shown && thumb.visible && view.ready && !thumb.v2
                         onTriggered: {
                             view.captureFrame();
                         }
+                    }
+
+                    // v2: the dragged window stays where the compositor draws it; this ghost follows the pointer.
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Tokens.overviewThumbRadius
+                        color: Appearance.withAlpha(Appearance.colors.accent, Tokens.materialFillOpacity)
+                        border.width: Tokens.overviewSelectionWidth
+                        border.color: Appearance.colors.accent
+                        visible: thumb.v2 && thumb.dragging
                     }
 
                     // Selection / hover outline.

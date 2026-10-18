@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import "CapabilityEvent.js" as CapabilityEvent
 
 // Capability detection for grassfield-compositor (contract gfc/1).
 // Sends the hello every helloRetryMs (the first ones can predate Quickshell's event socket, so
@@ -32,21 +33,19 @@ Singleton {
     }
 
     function handleEvent(data: string): void {
-        let msg = null;
-        try {
-            msg = JSON.parse(data);
-        } catch (e) {
-            console.warn("grassfield: ignoring malformed capabilities event");
+        const msg = CapabilityEvent.parse(data, root.protocol);
+        if (!msg) {
+            console.warn("grassfield: ignoring malformed or foreign capabilities event");
             return;
         }
-        if (!msg || msg.v !== root.protocol || msg.type !== "capabilities" || !Array.isArray(msg.features))
-            return;
         features = msg.features;
-        pluginPresent = true;
+        // An empty list is the plugin's unload: nothing is available any more, same as no plugin.
+        pluginPresent = msg.present;
         settled = true;
         timeout.stop();
+        // No polling after an unload: a plugin loaded later announces itself.
         retry.stop();
-        console.info("grassfield: compositor plugin present, features:", features.join(","));
+        console.info("grassfield: compositor plugin", msg.present ? "present, features:" : "gone (empty capabilities)", features.join(","));
     }
 
     Connections {

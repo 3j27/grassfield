@@ -38,6 +38,51 @@ TestCase {
         compare(Minimized.configCall("constructor", "zoom"), "");
     }
 
+    // ---- overview verb (docs/specs/overview.md "Shell contract" 3) ----
+
+    readonly property string ovHead: "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.overview then p.overview("
+    readonly property string ovTail: ") end end"
+
+    function test_overviewCallOpenIsAValidatedLuaString() {
+        const call = Minimized.overviewCall({on: true, durationMs: 350, curve: [0.2, 0, 0, 1], windows: [{address: "0x55AB", x: 10.4, y: 20.6, w: 300.2, h: 200.5}]});
+        compare(call, ovHead + "\"{\\\"on\\\":true,\\\"durationMs\\\":350,\\\"curve\\\":[0.2,0,0,1],\\\"windows\\\":[{\\\"address\\\":\\\"0x55ab\\\",\\\"x\\\":10,\\\"y\\\":21,\\\"w\\\":300,\\\"h\\\":201}]}\"" + ovTail);
+    }
+
+    function test_overviewCallCloseNeedsNoWindows() {
+        compare(Minimized.overviewCall({on: false, durationMs: 0}), ovHead + "\"{\\\"on\\\":false,\\\"durationMs\\\":0}\"" + ovTail);
+        verify(Minimized.overviewCall({on: false, durationMs: 350, curve: [0.2, 0, 0, 1]}) !== "");
+    }
+
+    function test_overviewCallRejectsEverythingInvalid() {
+        const w = [{address: "55ab", x: 0, y: 0, w: 10, h: 10}];
+        compare(Minimized.overviewCall(null), "");
+        compare(Minimized.overviewCall({on: "yes", durationMs: 0}), "");
+        compare(Minimized.overviewCall({durationMs: 0}), "");
+        compare(Minimized.overviewCall({on: false}), "");
+        compare(Minimized.overviewCall({on: false, durationMs: -1}), "");
+        compare(Minimized.overviewCall({on: false, durationMs: 2001}), "");
+        compare(Minimized.overviewCall({on: false, durationMs: NaN}), "");
+        compare(Minimized.overviewCall({on: true, durationMs: 100}), "", "on:true needs windows");
+        compare(Minimized.overviewCall({on: true, durationMs: 100, windows: []}), "");
+        compare(Minimized.overviewCall({on: true, durationMs: 100, windows: [{address: "55ab\"); os.exit() --", x: 0, y: 0, w: 1, h: 1}]}), "");
+        compare(Minimized.overviewCall({on: true, durationMs: 100, windows: [{address: "55ab", x: NaN, y: 0, w: 1, h: 1}]}), "");
+        compare(Minimized.overviewCall({on: true, durationMs: 100, windows: [{address: "55ab", x: Infinity, y: 0, w: 1, h: 1}]}), "");
+        compare(Minimized.overviewCall({on: true, durationMs: 100, windows: [w[0], w[0]]}), "", "duplicate addresses");
+        compare(Minimized.overviewCall({on: false, durationMs: 100, curve: [0.2, 0, 0]}), "");
+        compare(Minimized.overviewCall({on: false, durationMs: 100, curve: [2, 0, 0, 1]}), "");
+        compare(Minimized.overviewCall({on: false, durationMs: 100, curve: [0.2, 3, 0, 1]}), "");
+        const many = [];
+        for (let i = 0; i < 65; i++)
+            many.push({address: (i + 1).toString(16), x: 0, y: 0, w: 1, h: 1});
+        compare(Minimized.overviewCall({on: true, durationMs: 100, windows: many}), "", "more than 64 windows");
+        verify(Minimized.overviewCall({on: true, durationMs: 100, windows: many.slice(0, 64)}) !== "");
+    }
+
+    function test_overviewCallClampsTinyRectsToOnePixel() {
+        const call = Minimized.overviewCall({on: true, durationMs: 0, windows: [{address: "1", x: 5, y: 6, w: 0.2, h: 0}]});
+        verify(call.indexOf("\\\"w\\\":1,\\\"h\\\":1") >= 0, call);
+    }
+
     function test_moveWindowV2Parsing() {
         const m = Minimized.parseMoveWindowV2("55924770ce00,-98,special:minimized");
         compare(m.address, "55924770ce00");
@@ -56,11 +101,12 @@ TestCase {
     }
 
     function test_pluginVerbAllowlist() {
-        for (const v of ["hello", "minimize", "restore", "config"])
+        for (const v of ["hello", "minimize", "restore", "config", "appmenu"])
             verify(Minimized.isPluginVerb(v), v);
-        for (const v of ["overview", "theme"])
+        verify(Minimized.isPluginVerb("overview"));
+        for (const v of ["theme"])
             verify(!Minimized.isPluginVerb(v), v);
-        compare(Minimized.guardedPluginCall("overview", []), "");
+        compare(Minimized.guardedPluginCall("theme", []), "");
         compare(Minimized.guardedPluginCall("x end os.exit() --", []), "");
         for (const v of ["", "Minimize", "minimize ", "x end os.execute('id') --", "minimize(1) end; os.exit() --", "constructor", "__proto__", "length"])
             verify(!Minimized.isPluginVerb(v), v);
