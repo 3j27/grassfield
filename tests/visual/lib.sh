@@ -216,6 +216,9 @@ vs_capture() {
   local name=$1
   [[ -n ${VS_NOPARK:-} ]] || vs_park
   vs_sleep "${VS_SETTLE:-1}"
+  # Park again immediately before the capture (a window mapping under the pointer or a focus change during the settle
+  # can move the software cursor: files.fr differed by 84 px between two runs) and wait a few frames.
+  [[ -n ${VS_NOPARK:-} ]] || { vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null; vs_sleep 0.2; }
   "$VS_ROOT/scripts/dev/shot.sh" "visual-$name" "$VS_OUTPUT" >/dev/null
   cp "$VS_DEV/shots/visual-$name.png" "$VS_SHOTS/$name.$VS_LANG.png"
   # VS_MASK="x1,y1,x2,y2 ...": black out machine-dependent text (free disk space, ...).
