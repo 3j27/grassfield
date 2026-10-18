@@ -106,30 +106,41 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 16. F16 Tags (`src/taglogic.*`, `src/tagstore.*`, `src/tagsearch.*`):
     - Storage: the extended attribute `user.xdg.tags` (freedesktop Common Extended Attributes, as Dolphin, Baloo and
       KFileMetaData write it), UTF-8, tags separated by commas, read and written with `lgetxattr`/`lsetxattr`/
-      `lremovexattr` on local files and folders only; an empty list removes the attribute. Tags of other applications
-      are kept as they are. The seven colour tags are stored under fixed English keys (Red, Orange, Yellow, Green,
+      `lremovexattr` on local files and folders only; an empty value removes the attribute. Files edits the stored bytes,
+      not a parsed list (`TagLogic::applyTag`): it adds one entry at the end or removes the entries of one exact name,
+      and every other entry stays byte for byte and in order (spaces, duplicates, line breaks, invalid UTF-8, a foreign
+      lower-case `red`). Removing Red never removes another application's `red`; the row's checkmark and the toggle
+      count only entries Files owns (the exact key), while dots, sidebar and tag search stay case-insensitive. The seven colour tags are stored under fixed English keys (Red, Orange, Yellow, Green,
       Blue, Purple, Gray: the attribute does not depend on the UI language), matched case-insensitively, shown under
       translated names (context `Tags`) in the colours of tokens `files.tagRed` … `files.tagGray`. Symbolic links are
       never followed (Linux keeps no user attributes on links; tagging a link must not tag its target).
     - Setting: the item menu ends with a colour row (PopupMenu swatch row): each colour shows whether all, some or no
       selected item has it; a click adds it to every item, or removes it when all have it. The same row is in Get Info
       (with every tag name of the item) and File > Tags in the global menu. Items that can't carry tags (not local, in
-      the Trash, links, missing, on a filesystem without user extended attributes such as some network or FAT volumes)
-      get the row disabled; the reason shows as the row's caption and, in Get Info, as a tooltip. A write that the
-      filesystem or the permissions refuse shows in the error banner. Files' own writes refresh every window at once.
+      the Trash, links, missing, FIFOs and other special files, read-only items (no write permission, read-only mount),
+      on a filesystem without user extended attributes such as some network or FAT volumes) get the row disabled; the
+      reason shows as the row's caption and, in Get Info, as a tooltip. Symbolic links stay untaggable on purpose: a link
+      is never followed, so its target is never tagged by accident. A write that still fails (a race, a sticky folder)
+      shows in the error banner with the system's reason. Get Info lists the item's tag names live, also after tagging
+      from the window itself. Files' own writes refresh every window at once.
     - Showing: coloured dots (at most `files.tagDotsMax`, overlapping) before the name in the icon view, after it in the
       list view, before the chevron in the column view and in its preview column, on the gallery strip thumbnails and
       in the gallery info panel (roles `tags`, `tagColors`; one attribute read per shown item, cached).
     - Sidebar Tags section: the tags in use, colour tags first (a hollow ring for a tag without a colour). "In use"
       means seen on an item Files has shown, or set in Files; the list is kept across sessions (QSettings
-      `tags/known`, at most 64) and Remove from Sidebar (right click) forgets one (files keep it). A drop on a tag tags
+      `tags/known`, at most 64). Remove from Sidebar (right click) hides the tag for good, as in the macOS Finder: the
+      tag stays on the files and stays usable, but it is not listed again when a folder holding it is shown (QSettings
+      `tags/hidden`, at most 256). Setting that tag again from Files (colour row, drop) lists it again, as there is no
+      Tags settings pane to bring it back. A drop on a tag tags
       the dropped local items. Tags are not places of the Go menu.
     - Tag search: a click on a sidebar tag opens the location `grassfield-tag:/<tag>?in=<folder>` (Files-internal,
       never handed to KIO): the items tagged so in the folder shown at the click (a local folder; from a remote place or
       the Trash, the home folder) and below. TagSearch walks the tree on a worker thread without an index: breadth
       first, on the folder's filesystem only, never through symbolic links, hidden entries only with Show Hidden Files,
       bounded to 50,000 entries, 2,000 matches and 32 levels, cancelled when the tab navigates elsewhere or closes.
-      Matches arrive in batches; the status bar reads "Searching…" and tells when a bound stopped the search. The
+      Matches arrive in batches, each carrying its search's generation: `SearchRunner` forwards only the current one, so a
+      tag or folder switch or a reload never shows the old search's matches or its end (queued signals survive a
+      `disconnect`); the status bar reads "Searching…" and tells when a bound stopped the search. The
       results follow KIO's change notifications (KDirNotify: renamed, moved, removed, changed) and Files' tag writes (an
       item that loses the tag leaves, one under the folder that gets it joins). The path bar shows the folder then the
       tag; history, tabs and Back work as for folders. In the results, rename, cut, copy, Move to Trash and tags work;
@@ -142,7 +153,9 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 | F2 sort keys, sizes, dates, F10 path segments, F6 names, F5 hidden Network entry | `tests/unit/files/tst_filelogic.cpp` (gtest, 18 tests, run by `scripts/dev/test.sh`) | L0 |
 | F3/F10 keyboard moves, history, type-to-select, header sort, rubber band, column prefix; F4/F15 view modes (Ctrl+1..4, saved value fallback, tag results as a list), strip moves, initial gallery row | `tests/unit/tst_filesnav.qml` (15 cases) | L0 |
 | F15 gallery on a stand-in listing: first item shown, Left/Right/Home/End along the strip, Up/Down still, Space and Return reach the tab, large previews asked for on the way, info panel preference | `tests/unit/tst_filesgallery.qml` (5 cases) | L0 |
-| F16 tag parse/serialize, colour keys, selection states, search locations; `user.xdg.tags` write/read/remove, foreign tags, long values, links, folders on files under the test sandbox (`GRASSFIELD_TEST_TMP` in `.dev/`; skipped without user xattrs) | `tests/unit/files/tst_tags.cpp` (gtest, 13 tests) | L0 |
+| F16 tag parse/serialize, colour keys, selection states, search locations; byte-for-byte edits (`applyTag`, the reviewer's foreign value), sidebar hiding, `user.xdg.tags` write/read/remove, raw round trip, foreign tags, long values, links, FIFOs, read-only files, the probe cache, folders on files under the test sandbox (`GRASSFIELD_TEST_TMP` in `.dev/`; skipped without user xattrs) | `tests/unit/files/tst_tags.cpp` (gtest) | L0 |
+| F16 a superseded search's queued batches and done never arrive (switch, stop); done once | `tests/unit/files/tst_tagsearch.cpp` (gtest, 3 tests) | L0 |
+| F16 tag dots and swatch marks reach 3:1 (fill or darker edge) on the window colour | `tests/visual/test_contrast_tokens.py` | L0 |
 | F16 palette from tokens, swatch models, dots cap, swatch row states, pointer, keyboard, disabled reason; PopupMenu swatch rows | `tests/unit/tst_filestags.qml` (5 cases), `tst_popupmenu.qml`, `tst_menunav.qml` | L0 |
 | F6 copy/paste, F2 rename, new folder + inline rename, undo/redo, duplicate, trash + Put Back, Ctrl+W quit, no app launch, no QML errors, owner Trash untouched | `tests/apps/files_sandbox.sh` (nested compositor, own private D-Bus bus, app through `scripts/dev/isolated.sh`, refuses the owner's bus; keyboard + pointer, 19 checks) | L1 |
 | F15 | nested screenshot: gallery view with a thumbnail preview, the strip and the info panel; Right moves the preview | L1 |
@@ -159,7 +172,8 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
   (`GRASSFIELD_CONFIG_HOME` → `$XDG_CONFIG_HOME/grassfield` → `~/.config/grassfield`).
 - QSettings `~/.config/Grassfield/Files.conf`: `view/mode` (icons|list|columns|gallery, anything else reads as icons),
   `view/sortKey` (0 name, 1 kind, 2 date, 3 size), `view/sortDescending`, `view/foldersFirst`, `view/showHidden`,
-  `view/galleryInfo` (default true), `tags/known` (the sidebar's tags, stored names in display order, at most 64).
+  `view/galleryInfo` (default true), `tags/known` (the sidebar's tags, stored names in display order, at most 64),
+  `tags/hidden` (tags removed from the sidebar, at most 256).
 - Extended attribute `user.xdg.tags` (F16): UTF-8 tag names separated by commas, no escaping (a comma inside a tag
   becomes a space when Files writes it); colour tags under the keys Red, Orange, Yellow, Green, Blue, Purple, Gray.
 - Tag search location `grassfield-tag:/<tag>?in=<percent-encoded folder URL>` (Files-internal: history, tabs, the
@@ -209,7 +223,11 @@ installed (not built here).
 - The lister uses delayed MIME types: the Kind sort uses the extension/name guess (memoized) until an item's type is
   known, and rows a view displays refine their type from content once (never the whole folder on the GUI thread).
   Kind sort of 2000 extension-less files: 529 ms (was ~3100 ms).
-- Tags cost one `lgetxattr` per shown item (cached per URL); sorting and filtering never read them. The tag search runs
+- Tags cost one `lgetxattr` per shown item (cached per URL; 8-17 us each measured, so a screenful costs about 1 ms);
+  sorting and filtering never read them. The menus ask the tag state of the whole selection on every selection change:
+  measured with 1000 selected files, 41 ms (untagged) and 66 ms (tagged) per change before; now one probe pass
+  (lstat, access, one lgetxattr per file, 19-28 ms) the first time and 2-3 ms from the 3 s cache (`TagStore::Cache`,
+  dropped for the files Files writes; another application's change shows within 3 s; a write always reads afresh). The tag search runs
   off the GUI thread (one `readdir` per folder, one `lgetxattr` per entry, one `lstat` per subfolder) and hands
   matches over in batches (64 items or 100 ms). Gallery previews: at most 8 gallery-size thumbnails are kept (up to
   4 MB each at 1024 px). Not measured on the reference hardware (L2).
