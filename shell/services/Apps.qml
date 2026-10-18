@@ -127,19 +127,41 @@ Singleton {
         Quickshell.execDetached(context);
     }
 
-    // Runs a helper that opens files in an application (gio open, xdg-open, gtk-launch): same isolation.
+    // Dev open policy (ADR-0011, scripts/dev/open-policy.sh): folders open in Grassfield Files, files Preview can show
+    // in Grassfield Preview, both started directly with the isolated environment; everything else is refused. Set by
+    // scripts/dev/shell-run.sh. Without it a dev session opens nothing.
+    readonly property string openPolicy: Quickshell.env("GRASSFIELD_OPEN_POLICY") || ""
+
+    // Runs a helper command. Helpers that open a file in an application (gio open, xdg-open, gtk-launch) follow the
+    // dev open policy in a dev session: GIO never starts an app there (a D-Bus activatable default handler such as
+    // Nautilus would run in the owner's session with the owner's profile). Other helpers (gio trash) get the isolated
+    // environment. A real session runs the command unchanged.
     function openDetached(argv: var): void {
         if (!devSession) {
             Quickshell.execDetached(argv);
             return;
         }
+        const request = AppLaunch.openRequest(argv);
+        if (request === null) {
+            Quickshell.execDetached({
+                "command": argv,
+                "environment": AppLaunch.isolatedEnvironment(appsHome)
+            });
+            return;
+        }
+        if (request.refuse !== undefined || openPolicy === "") {
+            console.warn("open refused in dev: " + (request.refuse !== undefined ? request.refuse : "no open policy helper"));
+            return;
+        }
         Quickshell.execDetached({
-            "command": argv,
+            "command": [openPolicy].concat(request.targets),
             "environment": AppLaunch.isolatedEnvironment(appsHome)
         });
     }
 
-    // Environment of a Process that opens files in an application: the isolated homes in a dev session.
+    // Environment of a Process that runs a helper opening files (gio open, gio trash): the isolated homes in a dev
+    // session. Such a Process still resolves `gio` on the shell's own PATH, where scripts/dev/shell-run.sh puts the
+    // open shims first (a dev `gio open` follows the open policy even in code that does not call openDetached).
     function openEnvironment(): var {
         return devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({});
     }

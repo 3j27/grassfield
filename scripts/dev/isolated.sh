@@ -7,7 +7,8 @@
 # Sets XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_STATE_HOME, XDG_DATA_HOME, GRASSFIELD_CONFIG_HOME and
 # GRASSFIELD_STATE_HOME under .dev/isolated/<name>/ (default name "default"; --config-home/--state-home point the
 # two GRASSFIELD_* homes at another directory under .dev/, e.g. the nested shell's .dev/config and .dev/state so
-# that an app sees the settings the shell writes). Also exports GRASSFIELD_ISOLATED=1.
+# that an app sees the settings the shell writes). Also exports GRASSFIELD_ISOLATED=1 and
+# GRASSFIELD_DEV=1 (a dev session: Grassfield Files hides its Trash place and Empty Trash, ADR-0011).
 # Every test or dev script that starts grassfield-settings, grassfield-files, grassfield-preview or foot must go
 # through this helper (tests/tools/check-isolation.sh enforces it from `just check` and scripts/dev/test.sh).
 set -euo pipefail
@@ -43,4 +44,4 @@ mkdir -p "$config_home" "$state_home"
 
 exec env XDG_CONFIG_HOME="$base/config" XDG_CACHE_HOME="$base/cache" XDG_STATE_HOME="$base/state" \
   XDG_DATA_HOME="$base/data" GRASSFIELD_CONFIG_HOME="$config_home" GRASSFIELD_STATE_HOME="$state_home" \
-  GRASSFIELD_ISOLATED=1 "$@"
+  GRASSFIELD_ISOLATED=1 GRASSFIELD_DEV=1 "$@"

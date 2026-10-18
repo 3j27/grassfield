@@ -30,4 +30,22 @@ TestCase {
         compare(AppLaunch.stripFieldCodes([]), []);
         compare(AppLaunch.stripFieldCodes(["%U"]), []);
     }
+
+    // Dev open policy (ADR-0011): every helper that asks another application to open something is recognised.
+    function test_openRequests() {
+        compare(AppLaunch.openRequest(["gio", "open", "/a"]).targets, ["/a"]);
+        compare(AppLaunch.openRequest(["gio", "open", "/a", "/b"]).targets, ["/a", "/b"]);
+        compare(AppLaunch.openRequest(["/usr/bin/gio", "open", "trash:///"]).targets, ["trash:///"]);
+        compare(AppLaunch.openRequest(["xdg-open", "/a"]).targets, ["/a"]);
+        compare(AppLaunch.openRequest(["gtk-launch", "org.gnome.gedit", "/a"]).targets, ["/a"]);
+        compare(AppLaunch.openRequest(["gtk-launch", "org.gnome.gedit"]).refuse, "application launch");
+        compare(AppLaunch.openRequest(["gio", "launch", "x.desktop"]).refuse, "application launch");
+        compare(AppLaunch.openRequest(["gio", "open"]).refuse, "nothing to open");
+    }
+
+    function test_otherHelpersAreNotOpenRequests() {
+        compare(AppLaunch.openRequest(["gio", "trash", "--", "/a"]), null);
+        compare(AppLaunch.openRequest(["nm-connection-editor"]), null);
+        compare(AppLaunch.openRequest([]), null);
+    }
 }

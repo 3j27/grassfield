@@ -18,7 +18,8 @@ Singleton {
     id: root
 
     // Never in a packaged session: GRASSFIELD_SESSION=1 (config/hypr/session.lua) turns every hook off, fixtures and
-    // glyph mask alike, even when GRASSFIELD_DEV=1 leaks into the environment. scripts/dev/shell-run.sh unsets it.
+    // glyph mask alike, even when GRASSFIELD_DEV=1 leaks into the environment. The nested dev session never sets it (shell-run.sh
+    // leaves it alone; only the packaged session config sets it).
     readonly property bool dev: Quickshell.env("GRASSFIELD_DEV") === "1" && Quickshell.env("GRASSFIELD_SESSION") !== "1"
     readonly property bool active: dev && Quickshell.env("GRASSFIELD_VISUAL_FIXTURES") === "1"
     readonly property string network: "Grassfield"

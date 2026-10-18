@@ -28,7 +28,8 @@ Singleton {
 
     // Open the trash in the default file manager (gio resolves trash:/// itself). A dev session never opens
     // trash:///: it is served by the owner's session and would show (and empty) the real trash. It opens the
-    // isolated trash folder as a plain directory instead (ADR-0011).
+    // isolated trash folder as a plain directory instead, and the dev open policy starts Grassfield Files on it
+    // (Apps.openDetached; never the default handler, ADR-0011).
     function open(): void {
         Apps.openDetached(["gio", "open", Apps.devSession ? root.filesPath : "trash:///"]);
     }

@@ -504,7 +504,7 @@ void FilesApp::deletePermanently(const QList<QUrl> &urls)
 void FilesApp::emptyTrash()
 {
     // Dev sessions never touch the real trash (trash:/ is the owner's), even when reached by typing the URL.
-    if (qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1"))
+    if (devSession())
         return;
     KIO::EmptyTrashJob *job = KIO::emptyTrash();
     attachDelegate(job);

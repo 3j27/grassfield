@@ -44,3 +44,22 @@ non-app helpers (`cp`, `wl-copy`, `systemctl`, `kill`, `gio trash`) and shell-in
   owner's gvfsd-trash). Grassfield Files (which inherits `GRASSFIELD_DEV=1`) hides its Trash sidebar entry, does not
   open the KIO `trash:/` listing and makes Empty Trash a no-op in dev (simplest safe option; no isolated Trash
   location in Files). Real sessions keep `trash:///` and the Trash place unchanged.
+
+### Addendum: dev open policy and private bus default (counter-review fix)
+The first fix still let a dev session escape: `gio open <isolated trash folder>` runs the default folder handler, which
+is Nautilus (`DBusActivatable=true`); GIO starts it over D-Bus, dropping the isolated environment, in the owner's
+session, with the owner's real trash in its sidebar. Any D-Bus activatable handler does the same.
+- A dev session never asks GIO, xdg-open, `gtk-launch` or `gio launch` to start an application. `Apps.openDetached`
+  recognises those helpers (`AppLaunch.openRequest`) and runs `scripts/dev/open-policy.sh` instead: a folder opens in
+  Grassfield Files and a file Preview can show (images, PDF, text and code, audio, video) in Grassfield Preview, both by
+  direct exec through `isolated.sh` (isolated homes and `GRASSFIELD_DEV=1`); anything else is refused with one line
+  (`open refused in dev: <type>`, also in `.dev/open-policy.log`). Real sessions keep `gio open` unchanged.
+- Code that runs `gio open` itself in a `Process` (`shell/desktop/DesktopFiles.qml`, which another change owns) gets the
+  same policy: `shell-run.sh` puts `scripts/dev/open-shims` (`gio`, `xdg-open`, `gtk-launch`) first on the shell's PATH
+  (QProcess resolves a program on its parent's PATH, not on the PATH set in the Process environment); the shim applies
+  the policy to `open`/`launch` and runs the real `gio` for the other subcommands.
+- The private D-Bus session bus is the default for dev sessions (`nested-up.sh`, `shell-run.sh`; `--session-bus` is
+  the opt-out for the rare test that needs the owner's bus). Its dbus-daemon starts with the isolated `XDG_*` homes under
+  `.dev/apps-home` and `GRASSFIELD_DEV=1`, so a service the bus activates is isolated too.
+- `isolated.sh` exports `GRASSFIELD_DEV=1`, so Grassfield Files started through it hides its Trash place, and in a dev
+  session also the "Empty Trash" action (no confirmation that does nothing).
