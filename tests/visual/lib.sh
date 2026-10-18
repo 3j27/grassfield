@@ -112,7 +112,36 @@ vs_session() {
     sleep 0.5
   done
   vs_ipc lock status >/dev/null 2>&1 || { echo "visual: shell did not come up (see .dev/shell.log)" >&2; return 1; }
+  vs_wait_capabilities "$lang" || return 1
   sleep 2
+}
+
+# The shell decides v1/v2 Overview, titlebars and the desktop focus policy from the plugin's capabilities, which arrive
+# after the shell is up (hello reply). A capture taken before they arrive differs from one taken after, so wait for
+# `capabilities status` = "ready present ..." when the plugin is loaded in the nested session; "ready degraded" is
+# the expected state without it. A shell that settled degraded although the plugin is there (its hello retries ended
+# before the plugin answered) is restarted once.
+vs_plugin_expected() {
+  [[ -f ${GRASSFIELD_PLUGIN:-$VS_ROOT/compositor/build/grassfield-compositor.so} && -z ${GRASSFIELD_NO_PLUGIN:-} ]]
+}
+
+vs_wait_capabilities() {
+  local lang=$1 i st="" attempt
+  for attempt in 1 2; do
+    for i in $(seq 1 60); do
+      st=$(vs_ipc capabilities status 2>/dev/null || true)
+      case $st in
+        "ready present"*) return 0 ;;
+        "ready degraded") vs_plugin_expected || return 0; break ;;
+      esac
+      sleep 0.5
+    done
+    (( attempt == 1 )) || break
+    "$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop"
+    for i in $(seq 1 60); do vs_ipc lock status >/dev/null 2>&1 && break; sleep 0.5; done
+  done
+  echo "visual: capabilities not ready (last status: ${st:-none}); the compositor plugin did not answer" >&2
+  return 1
 }
 
 # PIDs of client processes started by scenarios (killed by vs_reset; never anything else).
