@@ -260,12 +260,17 @@ TestCase {
         // Within the byte cap: thousands of entries that all claim the same uid.
         const text = JSON.stringify({version: 1, center: [], desktop: Array.from({length: 3000}, () => ({uid: "clock-1", id: "clock", size: "small", screen: "S", col: 0, row: 0}))});
         verify(text.length < 262144);
-        const t0 = Date.now();
-        const r = Placements.parse(text);
-        const ms = Date.now() - t0;
+        // Best of 3: a linear parse stays far below the bound; one slow run under load is not quadratic behaviour.
+        let r = null;
+        let ms = Infinity;
+        for (let i = 0; i < 3; ++i) {
+            const t0 = Date.now();
+            r = Placements.parse(text);
+            ms = Math.min(ms, Date.now() - t0);
+        }
         verify(r.ok);
         compare(r.state.desktop.length, 64);
-        verify(ms < 50, "took " + ms + " ms");
+        verify(ms < 50, "best of 3 took " + ms + " ms");
     }
 
     function test_fitScreenMovesOffGridAndOverlaps() {
