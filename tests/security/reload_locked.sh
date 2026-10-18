@@ -97,11 +97,12 @@ wait_status() { # <expected> <seconds>
 
 # SAFETY (R12 review #3 MAJOR): every probe this script types is letters only. A Return/newline/Enter in a probe that
 # reaches the lock's password field submits it to PAM and counts a faillock failure against the owner's real account.
-# type_letters is the ONLY typing path; it refuses anything but [a-z], and the shell suppresses PAM in dev anyway
-# (GRASSFIELD_DEV without GRASSFIELD_DEV_ALLOW_PAM). press_key only allows keys that never submit (Escape).
+# type_letters is the ONLY typing path; it refuses anything but [a-z0-9] (letters and digits never submit; a step name
+# may carry a digit, e.g. "deadl1"), and the shell suppresses PAM in dev anyway (GRASSFIELD_DEV without
+# GRASSFIELD_DEV_ALLOW_PAM). press_key only allows keys that never submit (Escape).
 type_letters() { # <word> [extra wtype opts before the word]
   local word=${!#}
-  [[ $word =~ ^[a-z]+$ ]] || { echo "FATAL type_letters: refusing a probe that is not letters-only: '$word'" >&2; abort_run "a non-letter probe"; }
+  [[ $word =~ ^[a-z0-9]+$ ]] || { echo "FATAL type_letters: refusing a probe with a non-alphanumeric character: '$word'" >&2; abort_run "a non-alphanumeric probe"; }
   nested wtype "$@"
 }
 press_key() { # <keysym>
@@ -111,7 +112,7 @@ press_key() { # <keysym>
 # Types a letters-only word in the background (sets $typer). Validated synchronously first, so a bad probe aborts before
 # anything is typed.
 bg_type() { # <word>
-  [[ $1 =~ ^[a-z]+$ ]] || { echo "FATAL bg_type: refusing a probe that is not letters-only: '$1'" >&2; abort_run "a non-letter probe"; }
+  [[ $1 =~ ^[a-z0-9]+$ ]] || { echo "FATAL bg_type: refusing a probe with a non-alphanumeric character: '$1'" >&2; abort_run "a non-alphanumeric probe"; }
   nested wtype -d 4 "$1" &
   typer=$!
 }
