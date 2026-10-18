@@ -136,10 +136,28 @@ interpreters, non-dumpable processes, copies). Decisions:
   exe: one shared `unknown` bucket, 2 min at most, never doubling. Never a pid.
 - Unsolicited surface: only the registrar methods get an answer, other calls and signals on the bridge's objects are
   dropped, per-menu subscriptions are sender-specific. Idle identities are bounded (128) separately from refused ones
-  (64, never evicted before expiry); a clean exit does not reset the doubling inside the 24 h decay window; the state
+  (64, closest to expiry out past the cap); a clean exit does not reset the doubling inside the 24 h decay window; the state
   file is written with `openat(O_EXCL|O_NOFOLLOW)` + `renameat`.
 Consequences and residual risk: attribution stays a heuristic. A same-uid process can always OOM or kill the bridge;
-buffering cannot be prevented; a fresh single call coinciding with someone else's huge message is blamed wrongly once
-(15 min of T0 menus for that application); a hostile reply delayed beyond 1 s or sent from a copied binary is merely
-counted. The worst outcome of any of this is a bridge that stays down or degraded and a desktop showing T0 menus.
+buffering cannot be prevented; a fresh single call coinciding with someone else's huge message is blamed wrongly (15 min
+of T0 menus for that application; the wrongful blame can repeat and doubles each time); a hostile reply delayed beyond
+1 s is merely counted, and a copied binary is blamed and counted copy by copy. The worst outcome of any of this is a
+bridge that stays down or degraded and a desktop showing T0 menus.
 Details: `docs/specs/menu-bridge.md` MB14 and "Known limitations".
+
+## Amendment 2026-10-18 (final pass): every crash counts
+- Every crash counts toward the degradation budget, blamed or not: 5 within any sliding 60 minutes (crash times are
+  kept in the state file, header `state 3`). Attribution only adds a per-identity refusal on top, so rotating copies
+  of a binary can no longer crash-loop the bridge without ending degraded.
+- The scope instance is stripped for the real launcher formats (`-<digits>` and uwsm's `-<8 hex>`; the key keeps the
+  `\x2d` escape, logs show `-`). Interpreter options before the script are skipped when known; an unknown option puts
+  the peer in the shared `unknown` bucket instead of taking its value for the script.
+- Idle entries are never pushed out by refused ones, but the refused set is capped at 64 (`capRefused` drops the one
+  closest to expiry): a flood of fresh identities can push out old refusals.
+
+### Residual risks (accepted, 2026-10-18)
+The change is defense in depth against same-uid apps; failure is bounded (T0 menus).
+- Same-uid apps can kill or OOM the bridge, or force degraded mode for the session.
+- An honest slow app can be wrongly blamed when an attacker's huge message lands during its call.
+- Degraded mode does not recover until the session restarts.
+- Flatpak apps with registrar access can send big messages (not verified).
