@@ -5,6 +5,8 @@
 #   tests/visual/contrast.sh [--measure-only] [--wallpapers white,black,...] [--transparency 0.25,0.6] [--surfaces desktop,search,...]
 # Output: .dev/visual/contrast/<wallpaper>__<appearance>__<transparency>/<surface>[.hidden|.white|.black].png and
 # contrast.csv. The nested session this script starts is torn down on exit (also on failure or interruption).
+# The lock surface is captured last and locks the nested session (never typed into: only the owner's password could
+# unlock it), so the session is torn down after it even when it was already running.
 # Exit status: contrast.py's (1 when a cell is below its threshold).
 source "$(dirname "$0")/lib.sh"
 
@@ -26,11 +28,16 @@ done
 out=$VS_STATE/contrast
 wp=$out/wallpapers
 
-# Only tear down a session this run started.
+# Only tear down a session this run started, or one this run locked.
 was_running=0
+locked=0
 vs_nested_running && was_running=1
 cleanup() {
-  (( was_running )) || "$VS_ROOT/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
+  if (( ! was_running || locked )); then
+    "$VS_ROOT/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
+    if (( locked )); then rm -f "$VS_STATE/session.lang"; fi
+  fi
+  return 0
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
@@ -50,6 +57,14 @@ cap() {
 
 # want SURFACE: true when the surface is selected (--surfaces; all by default).
 want() { [[ -z $surfaces || " $surfaces " == *" $1 "* ]]; }
+
+# want_unlocked: true when a surface other than the lock is selected.
+want_unlocked() {
+  local s
+  [[ -z $surfaces ]] && return 0
+  for s in $surfaces; do [[ $s == lock ]] || return 0; done
+  return 1
+}
 
 # fail MSG: stop the run (the cleanup trap still tears the session down). A surface that is not open is never measured.
 fail() { echo "contrast: $*" >&2; exit 1; }
@@ -92,6 +107,17 @@ center() {
   [[ $(notif_state center) == "$want" ]] || fail "the Notification Center did not become $1"
 }
 
+# need_locked: poll `lock status` until the shell reports the session locked (10 s), else fail.
+need_locked() {
+  local i got=""
+  for i in $(seq 1 50); do
+    got=$(vs_ipc lock status 2>/dev/null || true)
+    [[ $got == locked ]] && return 0
+    sleep 0.2
+  done
+  fail "lock status is '$got', expected locked"
+}
+
 # differs REF IMG MIN: capture check that IMG shows something REF (the bare desktop of the same combination) does not.
 differs_q() {
   local n
@@ -131,7 +157,7 @@ if (( ! measure_only )); then
   vs_session en
   vs_reset dark 0.25
   bus=$(<"$VS_DEV/bus.address")
-  for w in $wallpapers; do
+  want_unlocked && for w in $wallpapers; do
     for appearance in light dark; do
       for tr in $transparencies; do
         dir=$out/${w}__${appearance}__${tr}
@@ -177,6 +203,33 @@ if (( ! measure_only )); then
       done
     done
   done
+
+  # The lock screen last: a locked nested session cannot be unlocked without the owner's password, which is never typed.
+  # It is locked once, through the same IPC as tests/visual/scenarios/lock.sh; each combination is then set through IPC
+  # (wallpaper, appearance and transparency reach the shell while it is locked) and captured. cleanup tears it down.
+  if want lock; then
+    locked=1
+    r=$(vs_ipc lock lock)
+    [[ $r == ok ]] || fail "lock lock answered '$r'"
+    need_locked
+    for w in $wallpapers; do
+      for appearance in light dark; do
+        for tr in $transparencies; do
+          dir=$out/${w}__${appearance}__${tr}
+          mkdir -p "$dir"
+          vs_wallpaper "$wp/$w.png"
+          vs_ipc controlcenter appearance "$appearance" >/dev/null
+          vs_ipc controlcenter transparency "$tr" >/dev/null
+          vs_sleep 1.5
+          cap lock
+          need_locked
+          if [[ -f $dir/desktop.png ]]; then
+            differs "$dir/desktop.png" "$dir/lock.png" 2000
+          fi
+        done
+      done
+    done
+  fi
 fi
 
 python3 -I "$VS_HERE/contrast.py" measure "$out" --surfaces "${surfaces// /,}"
