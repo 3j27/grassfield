@@ -17,6 +17,16 @@ Singleton {
     property string shownKey: ""
     property var queued: null
 
+    // Glance is showing (or starting).
+    readonly property bool open: launcher.running
+
+    // Closes Glance (Esc on the desktop: the desktop keeps the keyboard when Glance maps, so Glance cannot close itself).
+    function close(): void {
+        root.queued = null;
+        if (launcher.running)
+            launcher.signal(15);
+    }
+
     function toggle(paths: var): void {
         if (!paths || paths.length === 0)
             return;

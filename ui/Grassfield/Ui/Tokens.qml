@@ -18,6 +18,8 @@ QtObject {
         shadow: "#000000",  // estimate, pending F1 measurement from design/reference
         accentText: "#06240F",  // dark text on the bright green: contrast above 4.5:1 (gate A2, tested)
         knob: "#FFFFFF",  // estimate; slider and toggle knobs
+        fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field
+        fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
         separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         danger: "#FFB3AD"  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop, tested
@@ -36,6 +38,8 @@ QtObject {
         shadow: "#000000",  // estimate, pending F1 measurement from design/reference
         accentText: "#FFFFFF",  // white on the darker light-mode green: contrast above 4.5:1 (gate A2, tested)
         knob: "#FFFFFF",  // estimate; slider and toggle knobs
+        fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field
+        fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
         separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         danger: "#8F1E18"  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop, tested
@@ -609,6 +613,10 @@ QtObject {
     readonly property int desktopIconDragThreshold: 6
     // estimate: desktop icons v1, debounce of the positions file
     readonly property int desktopIconSaveMs: 300
+    // ADR-0012 spike: ms the 1x1 kicker surface is mapped (and unmapped) so Hyprland re-evaluates the keyboard focus without pointer motion; 60 measured, 30 untested
+    readonly property int desktopIconFocusKickMs: 60
+    // ADR-0012 spike: ms the desktop waits for the keyboard after a press before giving up and going back to None (grant measured at 60 to 120)
+    readonly property int desktopIconFocusArmMs: 400
 
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesWindowWidth: 920

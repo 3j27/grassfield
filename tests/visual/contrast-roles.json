@@ -4,7 +4,7 @@
   "fg: <palette>.<colour token> (palette colors = the current appearance, darkColors = always dark). opacity: factors applied to the",
   "text alpha (numbers or token paths such as search.selectedSubtitleOpacity). backdrop: material (tint at 1 - t*(1-tintAlphaMin) over a",
   "flat wallpaper colour, with and without a fill overlay), accent (solid accent), apps (black dim over the wallpaper), apps-field",
-  "(dim + the Apps search field fill), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
+  "(dim + the Apps search field fill), rename-field (colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
   "the drop shadow). kind: text >= 4.5, large|icon >= 3.0. exempt: reason, the role is listed but not asserted (a disabled control, or a",
   "surface outside the A2 scope that is tracked as an open finding in docs/testing/visual.md).",
   "sites: where the role is used in QML. A file x class count is cross-checked against shell/ and ui/Grassfield/ by the same test, so a new",
@@ -54,6 +54,7 @@
   {"id": "desktop label error (shadow)", "fg": "darkColors.danger", "backdrop": "desktop-label", "kind": "text", "sites": [
    {"file": "shell/desktop/DesktopIcon.qml", "class": "danger", "count": 2}
   ]},
+  {"id": "rename field text", "fg": "colors.fieldText", "backdrop": "rename-field", "kind": "text", "sites": []},
   {"id": "apps label", "fg": "darkColors.text", "backdrop": "apps", "kind": "text", "sites": []},
   {"id": "apps search field glyph and placeholder", "fg": "darkColors.textSecondary", "backdrop": "apps-field", "kind": "text", "sites": [
    {"file": "shell/launchpad/AppsWindow.qml", "class": "secondary", "count": 2}

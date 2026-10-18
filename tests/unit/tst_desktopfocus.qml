@@ -2,11 +2,10 @@ import QtQuick
 import QtTest
 import "../../shell/desktop/KeyboardFocus.js" as Focus
 
-// Keyboard SAFE MODE of the desktop icons surface (docs/specs/desktop.md, "Keyboard safe mode
-// (2026-10-17)"): the pure state machine behind it. The desktop surface never holds the keyboard on its
-// own (None), the context menu window holds it (Exclusive) while the menu is open, and a rename field
-// takes it (Exclusive) until it ends. Nobody re-takes the keyboard afterwards: Hyprland decides.
-// Test names state the user-visible rule.
+// Keyboard focus of the desktop icons surface, macOS model (docs/decisions/ADR-0012-desktop-focus-model.md,
+// docs/specs/desktop.md "Keyboard focus"): the pure state machine. The surface is click-to-focus: None until a
+// press, then OnDemand; back to None when it loses the keyboard, when the pointer leaves it or when the keyboard
+// is not granted. The context menu is a PopupWindow with a grab (mode "menu"). Test names state the user-visible rule.
 TestCase {
     id: testCase
     name: "DesktopFocus"
@@ -18,345 +17,179 @@ TestCase {
         return s;
     }
 
-    // Events that carry no keyboard meaning in safe mode (pointer, windows, workspaces, keys lost).
+    readonly property var press: ({type: "press"})
+    readonly property var granted: ({type: "keys", hasKeys: true})
+    readonly property var lost: ({type: "keys", hasKeys: false})
+    readonly property var leave: ({type: "pointerLeft"})
+
+    // Events with no keyboard meaning for the desktop (windows, workspaces, hover, other buttons).
     readonly property var noise: [
         {type: "hover"},
-        {type: "press"},
-        {type: "release", hasKeys: false},
-        {type: "pointer", away: true},
-        {type: "pointer", away: false},
-        {type: "keys", hasKeys: false},
-        {type: "keys", hasKeys: true},
         {type: "openWindow", address: "55d0c8a3b2f0", workspace: "1", focusedWorkspace: "1"},
         {type: "activeWindow", address: "55d0c8a3b2f0"},
         {type: "closeWindow", address: "55d0c8a3b2f0"},
         {type: "workspace"},
-        {type: "escape", hasSelection: false, renaming: false},
         {type: "unknown"}
     ]
 
-    // Somebody always holds the keyboard from the moment a rename starts from the menu: the menu
-    // window (Exclusive) or the rename surface (Exclusive), so no keystroke can fall through.
-    function holder(s) {
-        return Focus.menuHoldsKeys(s) || Focus.interactivity(s) === "exclusive";
-    }
-
-    // ---- the desktop never holds the keyboard on its own -------------------------------------------
+    // ---- hover never focuses, a press does ---------------------------------------------------------
 
     function test_desktopStartsWithoutKeyboardAfterShellRestart() {
         const s = Focus.initial();
         compare(s.mode, "idle");
         compare(Focus.interactivity(s), "none");
-        verify(!Focus.menuMapped(s));
-        verify(!Focus.menuHoldsKeys(s));
+        verify(!Focus.keysActive(s));
+        verify(!Focus.kicking(s));
     }
 
-    function test_firstClickAfterShellRestartDoesNotGiveTheDesktopTheKeyboard() {
-        // A press and a release on the desktop, the keyboard going to / from it: still nothing held.
-        const s = run([{type: "press"}, {type: "release", hasKeys: false}, {type: "keys", hasKeys: false}]);
+    function test_hoverAndWindowEventsNeverTakeTheKeyboard() {
+        const s = run(noise);
         compare(s.mode, "idle");
         compare(Focus.interactivity(s), "none");
-        verify(!Focus.menuMapped(s));
     }
 
-    function test_clickingTheDesktopOrHoveringItNeverTakesTheKeyboard() {
-        compare(run(noise).mode, "idle");
-        compare(Focus.interactivity(run(noise)), "none");
+    function test_pointerLeavingAnIdleDesktopChangesNothing() {
+        compare(run([leave, leave]).mode, "idle");
     }
 
-    function test_windowsOpeningClosingOrChangingWorkspaceNeverMakeTheDesktopTakeTheKeyboard() {
-        const s = run([
-            {type: "openWindow", address: "55d0c8a3b2f0", workspace: "1", focusedWorkspace: "1"},
-            {type: "activeWindow", address: "55d0c8a3b2f0"},
-            {type: "closeWindow", address: "55d0c8a3b2f0"},
-            {type: "workspace"}
-        ]);
+    function test_keyboardEventsOnAnIdleDesktopDoNotActivateIt() {
+        // Hyprland cannot give the keyboard to a None surface: a stray event must not enable the actions.
+        const s = run([granted, lost, granted]);
+        compare(s.mode, "idle");
+        verify(!Focus.keysActive(s));
+    }
+
+    function test_aPressAsksForTheKeyboardAndKicksHyprland() {
+        const s = run([press]);
+        compare(s.mode, "armed");
+        compare(Focus.interactivity(s), "ondemand");
+        verify(Focus.kicking(s));
+        verify(!Focus.keysActive(s), "the actions wait for the keyboard to be granted");
+    }
+
+    function test_actionsAreActiveOnlyOnceTheDesktopHoldsTheKeyboard() {
+        const s = run([press, granted]);
+        compare(s.mode, "held");
+        verify(Focus.keysActive(s));
+        verify(!Focus.kicking(s));
+        compare(Focus.interactivity(s), "ondemand");
+    }
+
+    function test_aSecondPressWhileHeldKeepsTheKeyboard() {
+        const s = run([press, granted, press]);
+        compare(s.mode, "held");
+    }
+
+    function test_keyboardNotGrantedInTimeGivesUpWithoutHoverFocusRisk() {
+        // The pointer is over a window: Hyprland never grants it. Back to None, so hover cannot focus the desktop later.
+        const s = run([press, {type: "armTimeout"}]);
+        compare(s.mode, "idle");
         compare(Focus.interactivity(s), "none");
-        verify(!holder(s));
     }
 
-    function test_pointerOnAnotherMonitorChangesNothingInAnyMode() {
-        // The pointer leaving / entering the desktop's monitor is not a keyboard event: the menu keeps
-        // the keyboard, the rename keeps it, the idle desktop stays without it.
-        const pointer = [{type: "pointer", away: true}, {type: "hover"}, {type: "pointer", away: false}, {type: "pointer", away: true}];
-        const menu = run([{type: "menuOpened"}]);
-        compare(run(pointer, menu), menu);
-        const renaming = run([{type: "renameOpened"}]);
-        compare(run(pointer, renaming), renaming);
-        compare(run(pointer).mode, "idle");
-        compare(Focus.interactivity(run(pointer)), "none");
+    function test_timeoutAfterTheKeyboardWasGrantedChangesNothing() {
+        compare(run([press, granted, {type: "armTimeout"}]).mode, "held");
     }
 
-    // ---- context menu -------------------------------------------------------------------------------
+    // ---- windows take the keyboard back --------------------------------------------------------------
 
-    function test_openMenuHoldsTheKeyboardInItsOwnWindowNotTheDesktop() {
-        const s = run([{type: "menuOpened"}]);
+    function test_clickOnAWindowReleasesTheDesktop() {
+        // Hyprland focused another window: the surface loses the keyboard and goes back to None.
+        const s = run([press, granted, lost]);
+        compare(s.mode, "idle");
+        compare(Focus.interactivity(s), "none");
+        verify(!Focus.keysActive(s));
+    }
+
+    function test_pointerLeavingToTheLastActiveWindowReleasesTheKeyboard() {
+        // Hyprland ignores a click on the window that is already its active one, so the desktop drops to None on
+        // leave: the keyboard returns to that window and the click works.
+        const s = run([press, granted, leave]);
+        compare(s.mode, "idle");
+        compare(Focus.interactivity(s), "none");
+    }
+
+    function test_pointerLeavingToAnotherOutputReleasesTheKeyboard() {
+        compare(run([press, leave]).mode, "idle");
+    }
+
+    function test_pressAgainAfterLosingTheKeyboardRetakesIt() {
+        compare(run([press, granted, lost, press]).mode, "armed");
+    }
+
+    // ---- context menu --------------------------------------------------------------------------------
+
+    function test_menuHoldsTheKeyboardAndTheDesktopActionsAreOff() {
+        const s = run([press, granted, {type: "menuOpened"}]);
         compare(s.mode, "menu");
-        verify(Focus.menuMapped(s));
-        verify(Focus.menuHoldsKeys(s));
-        compare(Focus.interactivity(s), "none");
+        verify(!Focus.keysActive(s), "arrows and Return go to the menu, not to the desktop");
+        compare(Focus.interactivity(s), "ondemand", "so that the keyboard is back on the desktop when it closes");
     }
 
-    function test_escOnTheMenuReleasesTheKeyboardAndTheDesktopDoesNotTakeItBack() {
-        const s = run([{type: "menuOpened"}, {type: "menuClosed"}]);
-        compare(s.mode, "idle");
-        verify(!Focus.menuMapped(s));
-        verify(!Focus.menuHoldsKeys(s));
-        compare(Focus.interactivity(s), "none");
-        // Nothing afterwards (focus changes by Hyprland, keys events) gives it back to the desktop.
-        compare(Focus.interactivity(run(noise, s)), "none");
-        verify(!holder(run(noise, s)));
+    function test_menuFromAnIdleDesktopAlsoReturnsTheKeyboardToTheDesktop() {
+        const s = run([{type: "menuOpened"}, {type: "menuClosed", how: "esc"}]);
+        compare(s.mode, "held");
+        verify(Focus.keysActive(s));
     }
 
-    function test_choosingAnItemOtherThanRenameReleasesTheKeyboardWithoutTakingItBack() {
-        // Open, Copy, Move to Trash, New Folder failing: the menu simply closes.
-        const s = run([{type: "menuOpened"}, {type: "menuClosed"}, {type: "menuClosed"}]);
-        compare(s.mode, "idle");
-        compare(Focus.interactivity(s), "none");
-        verify(!Focus.menuMapped(s));
-    }
-
-    function test_clickingOutsideTheMenuOnAnAppWindowLeavesTheKeyboardToHyprland() {
-        // The click closes the menu; Hyprland's focus events for the app window (the one it counts as
-        // active) do not make the desktop or the menu take the keyboard: the app window receives typing.
-        const s = run([
-            {type: "menuOpened"},
-            {type: "menuClosed"},
-            {type: "activeWindow", address: "55d0c8a3b2f0"},
-            {type: "press"},
-            {type: "release", hasKeys: false},
-            {type: "pointer", away: true}
-        ]);
-        compare(s.mode, "idle");
-        compare(Focus.interactivity(s), "none");
-        verify(!Focus.menuMapped(s));
-        verify(!Focus.menuHoldsKeys(s));
-    }
-
-    function test_menuWindowStaysAwayFromTheKeyboardOnceClosedEvenIfHyprlandReportsFocusMeanwhile() {
-        const s = run([{type: "menuOpened"}, {type: "activeWindow", address: "55d0c8a3b2f0"}]);
+    function test_pointerLeavingOntoTheMenuDoesNotReleaseIt() {
+        // The pointer enters the popup surface: the desktop sees a leave, the menu stays.
+        const s = run([press, granted, {type: "menuOpened"}, leave]);
         compare(s.mode, "menu");
-        verify(Focus.menuHoldsKeys(s));
+    }
+
+    function test_keyboardMovingToTheMenuIsNotALoss() {
+        const s = run([press, granted, {type: "menuOpened"}, lost, granted, lost]);
+        compare(s.mode, "menu");
+    }
+
+    function test_escOnTheMenuGivesTheKeyboardBackToTheDesktop() {
+        const s = run([press, granted, {type: "menuOpened"}, {type: "menuClosed", how: "esc"}]);
+        compare(s.mode, "held");
+        verify(Focus.keysActive(s));
+    }
+
+    function test_chosenItemGivesTheKeyboardBackToTheDesktop() {
+        const s = run([press, granted, {type: "menuOpened"}, {type: "menuClosed", how: "item"}]);
+        compare(s.mode, "held");
+    }
+
+    function test_clickOutsideTheMenuDismissesItAndDropsTheDesktopToNone() {
+        // The compositor swallowed the click: the keyboard went back to the desktop even when the pointer is over a
+        // window. None, then ask again (rearmAfter): granted only when the pointer is on the bare desktop.
+        const ev = {type: "menuClosed", how: "outside"};
+        const s = run([press, granted, {type: "menuOpened"}, ev]);
+        compare(s.mode, "idle");
         compare(Focus.interactivity(s), "none");
+        verify(Focus.rearmAfter(ev));
+        compare(run([press], s).mode, "armed");
     }
 
-    // ---- menu -> Rename hand-off ----------------------------------------------------------------------
-
-    function test_renameFromTheMenuTakesTheKeyboardBeforeTheMenuReleasesIt() {
-        let s = run([{type: "menuOpened"}, {type: "renameOpened"}]);
-        // The rename surface is Exclusive now and the menu window still holds the keyboard: the
-        // hand-off has no gap.
-        compare(s.mode, "rename");
-        compare(Focus.interactivity(s), "exclusive");
-        verify(Focus.menuHoldsKeys(s));
-        verify(Focus.menuMapped(s));
-        // The commit of the rename surface is out: the menu lets go but stays mapped.
-        s = run([{type: "committed"}], s);
-        verify(!Focus.menuHoldsKeys(s));
-        verify(Focus.menuMapped(s));
-        compare(Focus.interactivity(s), "exclusive");
-        // The rename surface has the keyboard: the menu window unmaps.
-        s = run([{type: "keys", hasKeys: true}], s);
-        verify(!Focus.menuMapped(s));
-        verify(!Focus.menuHoldsKeys(s));
-        compare(Focus.interactivity(s), "exclusive");
+    function test_onlyAnOutsideDismissalRearms() {
+        verify(!Focus.rearmAfter({type: "menuClosed", how: "esc"}));
+        verify(!Focus.rearmAfter({type: "menuClosed", how: "item"}));
+        verify(!Focus.rearmAfter(press));
     }
 
-    function test_noKeystrokeCanFallThroughDuringTheMenuToRenameHandOff() {
-        let s = Focus.initial();
-        for (const e of [{type: "menuOpened"}, {type: "renameOpened"}, {type: "menuClosed"}, {type: "committed"}, {type: "keys", hasKeys: true}]) {
-            s = Focus.next(s, e);
-            if (e.type !== "menuOpened")
-                verify(holder(s), e.type);
+    function test_menuCloseEventWithoutAnOpenMenuChangesNothing() {
+        compare(run([press, granted, {type: "menuClosed", how: "outside"}]).mode, "held");
+        compare(run([{type: "menuClosed", how: "esc"}]).mode, "idle");
+    }
+
+    function test_pressWhileTheMenuIsOpenIsIgnored() {
+        compare(run([{type: "menuOpened"}, press, {type: "armTimeout"}]).mode, "menu");
+    }
+
+    // ---- no stale state ------------------------------------------------------------------------------
+
+    function test_everyModeIsReachableAndConsistent() {
+        for (const mode of ["idle", "armed", "held", "menu"]) {
+            const s = {mode: mode};
+            const i = Focus.interactivity(s);
+            verify(i === "none" || i === "ondemand");
+            compare(i === "none", mode === "idle", "only idle is None");
+            compare(Focus.keysActive(s), mode === "held");
+            compare(Focus.kicking(s), mode === "armed");
         }
-    }
-
-    function test_theMenuClosingAfterItHandedOverToRenameDoesNotEndTheRename() {
-        // IconsView hands over to the rename first and then clears the menu: its menuClosed is a no-op.
-        const s = run([{type: "menuOpened"}, {type: "renameOpened"}, {type: "menuClosed"}]);
-        compare(s.mode, "rename");
-        compare(Focus.interactivity(s), "exclusive");
-        verify(Focus.menuHoldsKeys(s));
-    }
-
-    function test_theMenuWindowDoesNotStayMappedForeverIfTheKeyboardNeverArrives() {
-        // A locked session, no keyboard: the grace period ends the hand-off and the menu window unmaps.
-        const s = run([{type: "menuOpened"}, {type: "renameOpened"}, {type: "committed"}, {type: "settled"}]);
-        verify(!Focus.menuMapped(s));
-        compare(s.mode, "rename");
-    }
-
-    function test_newFolderKeepsTheMenuWindowHoldingTheKeyboardUntilItsRenameFieldOpens() {
-        // New Folder: the menu stays "menu" while the folder is created, then the rename takes over.
-        let s = run([{type: "menuOpened"}]);
-        verify(Focus.menuHoldsKeys(s));
-        s = run([{type: "renameOpened"}], s);
-        compare(s.mode, "rename");
-        verify(holder(s));
-        verify(Focus.menuHoldsKeys(s));
-    }
-
-    function test_newFolderThatFailsReleasesTheKeyboardToHyprland() {
-        const s = run([{type: "menuOpened"}, {type: "menuClosed"}]);
-        compare(s.mode, "idle");
-        verify(!Focus.menuMapped(s));
-        compare(Focus.interactivity(s), "none");
-    }
-
-    // ---- rename field --------------------------------------------------------------------------------
-
-    function test_renameOutsideTheMenuTakesTheKeyboardDirectlyWithoutAMenuWindow() {
-        const s = run([{type: "renameOpened"}]);
-        compare(s.mode, "rename");
-        compare(Focus.interactivity(s), "exclusive");
-        verify(!Focus.menuMapped(s));
-        verify(!Focus.menuHoldsKeys(s));
-    }
-
-    function test_renameKeepsTheKeyboardUntilItEnds() {
-        const s = run(noise, run([{type: "renameOpened"}]));
-        compare(s.mode, "rename");
-        compare(Focus.interactivity(s), "exclusive");
-    }
-
-    function test_returnCommitsTheRenameAndReleasesTheKeyboardToHyprland() {
-        const s = run([{type: "renameOpened"}, {type: "renameClosed"}]);
-        compare(s.mode, "idle");
-        compare(Focus.interactivity(s), "none");
-        verify(!holder(s));
-    }
-
-    function test_escCancelsTheRenameAndReleasesTheKeyboardToHyprland() {
-        const s = run([{type: "menuOpened"}, {type: "renameOpened"}, {type: "committed"}, {type: "keys", hasKeys: true}, {type: "renameClosed"}]);
-        compare(s.mode, "idle");
-        compare(Focus.interactivity(s), "none");
-        verify(!Focus.menuMapped(s));
-    }
-
-    function test_clickOutsideCancelsTheRenameAndTheDesktopDoesNotKeepTheKeyboard() {
-        // The click ends the rename (press on the desktop) and then the keyboard events and the
-        // pointer leaving give nothing back to the desktop.
-        const s = run([{type: "renameOpened"}, {type: "renameClosed"}, {type: "press"}, {type: "release", hasKeys: false}, {type: "activeWindow", address: "55d0c8a3b2f0"}]);
-        compare(s.mode, "idle");
-        compare(Focus.interactivity(s), "none");
-        verify(!holder(s));
-    }
-
-    function test_clickOutsideDuringTheHandOffCancelsTheRenameAndUnmapsTheMenuWindow() {
-        const s = run([{type: "menuOpened"}, {type: "renameOpened"}, {type: "renameClosed"}]);
-        compare(s.mode, "idle");
-        verify(!Focus.menuMapped(s));
-        verify(!holder(s));
-    }
-
-    function test_aRenameEndingTwiceOrWhileTheMenuIsOpenNeverTouchesTheMenu() {
-        const s = run([{type: "menuOpened"}, {type: "renameClosed"}]);
-        compare(s.mode, "menu");
-        verify(Focus.menuHoldsKeys(s));
-        compare(run([{type: "renameClosed"}, {type: "renameClosed"}]).mode, "idle");
-    }
-
-    function test_aRenameReopenedAfterAFileSystemFailureTakesTheKeyboardAgain() {
-        const s = run([{type: "renameOpened"}, {type: "renameClosed"}, {type: "renameOpened"}]);
-        compare(s.mode, "rename");
-        compare(Focus.interactivity(s), "exclusive");
-    }
-
-    function test_aSecondMenuOpensWithTheKeyboardAndReleasesItLikeTheFirst() {
-        const s = run([{type: "renameOpened"}, {type: "renameClosed"}, {type: "menuOpened"}, {type: "menuClosed"}]);
-        compare(s.mode, "idle");
-        compare(Focus.interactivity(s), "none");
-        verify(!Focus.menuMapped(s));
-    }
-
-    // ---- click catchers on the other outputs ---------------------------------------------------------
-
-    function test_noClickCatcherWhileTheDesktopIsIdle() {
-        verify(!Focus.catchersMapped(Focus.initial()));
-        verify(!Focus.catchersMapped(run(noise)));
-    }
-
-    function test_clickCatchersAreMappedWhileAMenuIsOpenAndUnmappedWhenItCloses() {
-        const open = run([{type: "menuOpened"}]);
-        verify(Focus.catchersMapped(open));
-        verify(!Focus.catchersMapped(run([{type: "menuClosed"}], open)));
-    }
-
-    function test_clickCatchersAreMappedDuringARenameAndUnmappedWhenItEnds() {
-        const renaming = run([{type: "renameOpened"}]);
-        verify(Focus.catchersMapped(renaming));
-        verify(!Focus.catchersMapped(run([{type: "renameClosed"}], renaming)));
-    }
-
-    function test_clickCatchersStayMappedAcrossTheMenuToRenameHandOff() {
-        let s = Focus.initial();
-        for (const e of [{type: "menuOpened"}, {type: "renameOpened"}, {type: "menuClosed"}, {type: "committed"}, {type: "keys", hasKeys: true}]) {
-            s = Focus.next(s, e);
-            verify(Focus.catchersMapped(s), e.type);
-        }
-    }
-
-    function test_aPressOnACatcherCancelsTheRenameAndReleasesTheKeyboard() {
-        // The catcher cancels through renameClosed: nothing holds the keyboard afterwards, the
-        // catchers go away.
-        const s = run([{type: "renameOpened"}, {type: "renameClosed"}, {type: "press"}]);
-        compare(s.mode, "idle");
-        compare(Focus.interactivity(s), "none");
-        verify(!holder(s));
-        verify(!Focus.catchersMapped(s));
-    }
-
-    function test_aPressOnACatcherDuringTheHandOffUnmapsTheMenuWindowToo() {
-        const s = run([{type: "menuOpened"}, {type: "renameOpened"}, {type: "committed"}, {type: "renameClosed"}, {type: "settled"}]);
-        compare(s.mode, "idle");
-        verify(!Focus.menuMapped(s));
-        verify(!Focus.catchersMapped(s));
-    }
-
-    function test_aPressOnACatcherClosesTheMenuWithoutChoosingAnItem() {
-        const s = run([{type: "menuOpened"}, {type: "menuClosed"}, {type: "press"}]);
-        compare(s.mode, "idle");
-        verify(!Focus.menuHoldsKeys(s));
-        verify(!Focus.catchersMapped(s));
-    }
-
-    // ---- release phase: a catcher never comes back ---------------------------------------------------
-
-    // Every snapshot the surface walks through while the release ends: the catcher model must stay empty
-    // whenever the final state is idle (a catcher coming back takes the keyboard, is destroyed, and leaves
-    // Hyprland with nothing to refocus: the keyboard is lost).
-    function test_noCatcherComesBackWhileTheMenuReleaseEnds() {
-        const open = run([{type: "menuOpened"}]);
-        const pending = Focus.next(open, {type: "menuClosed"});
-        verify(!Focus.catchersMapped(pending));
-        // Release started: catchers unmapped while the old state is still in place.
-        verify(!Focus.catchersShown(open, true));
-        for (const step of Focus.releaseEnd(pending))
-            verify(!Focus.catchersShown(step.kb, step.releasing), "releasing=" + step.releasing);
-    }
-
-    function test_noCatcherComesBackWhileARenameReleaseEnds() {
-        const open = run([{type: "renameOpened"}]);
-        const pending = Focus.next(open, {type: "renameClosed"});
-        for (const step of Focus.releaseEnd(pending))
-            verify(!Focus.catchersShown(step.kb, step.releasing), "releasing=" + step.releasing);
-    }
-
-    function test_theReleaseEndsInTheFinalStateWithNoFlag() {
-        const pending = Focus.initial();
-        const steps = Focus.releaseEnd(pending);
-        compare(steps[steps.length - 1].releasing, false);
-        compare(steps[steps.length - 1].kb, pending);
-        // The old order (flag first, state after) would have shown the catchers for a moment.
-        verify(Focus.catchersShown(run([{type: "menuOpened"}]), false));
-    }
-
-    function test_aMenuOpenedDuringTheReleaseGetsItsCatchersBackOnlyAtTheEnd() {
-        const open = run([{type: "menuOpened"}]);
-        const reopened = Focus.next(Focus.initial(), {type: "menuOpened"});
-        verify(!Focus.catchersShown(open, true));
-        const steps = Focus.releaseEnd(reopened);
-        verify(!Focus.catchersShown(steps[0].kb, steps[0].releasing));
-        verify(Focus.catchersShown(steps[1].kb, steps[1].releasing));
     }
 }

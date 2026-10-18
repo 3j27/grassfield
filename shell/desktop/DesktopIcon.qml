@@ -24,8 +24,6 @@ Item {
     property var dragPaths: []
     // Names carried with the internal-rearrange marker format (the selection).
     property var dragNames: []
-    // The current press only cancelled a menu / rename: no tap, drag or menu from it.
-    property bool blocked: false
 
     // Pointer events for the grid.
     signal pressedIcon(int modifiers, bool right)
@@ -35,7 +33,9 @@ Item {
     signal menuRequested(real x, real y)
     signal renameAccepted(string text)
     signal renameCancelled
-    // The rename field lost the active focus (the keyboard went elsewhere).
+    // The text of the rename field changed.
+    signal renameEdited(string text)
+    // The rename field lost the active focus (the keyboard went elsewhere): the grid commits it.
     signal renameFocusLost
     signal dragFinished
 
@@ -119,7 +119,7 @@ Item {
         width: root.renaming ? root.width - Tokens.spacingXs : Math.min(root.width - Tokens.spacingXs, labelText.implicitWidth + 2 * Tokens.spacingXs)
         height: (field.visible ? field.height : labelText.implicitHeight) + Tokens.spacingXs
         radius: Tokens.desktopIconSelectionRadius
-        color: root.renaming ? Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.desktopIconRenameFillOpacity) : (root.selected ? Appearance.colors.accent : "transparent")
+        color: root.renaming ? Appearance.withAlpha(Appearance.colors.fieldFill, Tokens.desktopIconRenameFillOpacity) : (root.selected ? Appearance.colors.accent : "transparent")
         border.width: root.renaming ? Tokens.controlFocusRing : 0
         border.color: root.renameError !== "" ? Appearance.darkColors.danger : Appearance.colors.accent
         // Second pass of the drop shadow: the shadow of the text and its own shadow, a denser soft halo (gate A2: white text
@@ -193,7 +193,7 @@ Item {
             horizontalAlignment: TextInput.AlignHCenter
             wrapMode: TextInput.WrapAnywhere
             selectByMouse: true
-            color: Appearance.colors.text
+            color: Appearance.colors.fieldText
             selectionColor: Appearance.colors.accent
             selectedTextColor: Appearance.colors.accentText
             font.family: Appearance.fontFamily
@@ -202,6 +202,19 @@ Item {
             Accessible.name: qsTr("Rename %1").arg(root.label)
             onAccepted: if (root.renaming && visible)
                 root.renameAccepted(text)
+            onTextChanged: if (root.renaming)
+                root.renameEdited(text)
+            // Return commits here and is consumed, so it cannot reach the grid's own Return handling.
+            Keys.onReturnPressed: event => {
+                event.accepted = true;
+                if (root.renaming && visible)
+                    root.renameAccepted(text);
+            }
+            Keys.onEnterPressed: event => {
+                event.accepted = true;
+                if (root.renaming && visible)
+                    root.renameAccepted(text);
+            }
             Keys.onEscapePressed: if (root.renaming)
                 root.renameCancelled()
         }
@@ -257,8 +270,7 @@ Item {
             field.focus = false;
     }
 
-    // Focus leaving the field commits nothing: the grid ends the rename (renameFocusLost), unless the
-    // keyboard only went to a click catcher of another output.
+    // Focus leaving the field: the grid commits the rename (renameFocusLost), as macOS does.
     Connections {
         target: field
 
@@ -273,7 +285,7 @@ Item {
     // A press selects at once (a drag of an unselected icon moves it alone); a double tap opens.
     TapHandler {
         acceptedButtons: Qt.LeftButton
-        enabled: !root.renaming && !root.blocked
+        enabled: !root.renaming
         onPressedChanged: if (pressed)
             root.pressedIcon(point.modifiers, false)
         // Release without drag: narrows a multi-selection to this icon.
@@ -283,7 +295,6 @@ Item {
 
     TapHandler {
         acceptedButtons: Qt.RightButton
-        enabled: !root.blocked
         onPressedChanged: if (pressed) {
             const p = root.mapToItem(null, point.position.x, point.position.y);
             root.pressedIcon(Qt.NoModifier, true);
@@ -296,7 +307,7 @@ Item {
     DragHandler {
         id: drag
         target: null
-        enabled: !root.renaming && !root.blocked
+        enabled: !root.renaming
         acceptedButtons: Qt.LeftButton
         dragThreshold: Tokens.desktopIconDragThreshold
         onActiveChanged: {
