@@ -26,6 +26,7 @@ struct Info {
     Support support = Support::Missing;
     QByteArray raw;
     QStringList tags;
+    qint64 changeStamp = 0; // ctime in ns at the probe (an attribute change moves it): the cache's change check
 };
 
 // lstat, access and one lgetxattr, nothing else.
@@ -57,6 +58,12 @@ private:
 // link is never followed, so its target is never tagged by accident, and Linux keeps no attributes on the link).
 // Reading tags is possible on read-only items; only writing is refused.
 Support support(const QString &path);
+
+// Like readRaw, but tells a failed read from "no tags": true with an empty `value` when the item has no tag attribute
+// (ENODATA), false with the system's reason in `error` for any other failure (permission, I/O error, a vanished file,
+// a value that changes or grows too much while it is read). A write that starts from a read must stop on false, or the
+// tags other applications stored would be replaced.
+bool readRawChecked(const QString &path, QByteArray *value, QString *error = nullptr);
 
 // The stored attribute value as it is (empty without one). Files edits this, not the parsed list, so what other
 // applications wrote survives (TagLogic::applyTag).

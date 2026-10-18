@@ -12,8 +12,6 @@ green noise palette, the black/white checker). Blur makes the backdrop a local a
 sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
   accent         the solid accent colour
-  apps           black dim (apps.backdropOpacity, apps.backdropOpacityOpaque at t = 0) over the wallpaper
-  apps-field     apps + the Apps search field fill
   rename-field   colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper (the inline rename field)
   desktop-label  the label shadow colour at its core alpha (desktopIcon.labelShadowOpacity) over the wallpaper: white text against the
                  shadow taken as fully opaque behind the glyph. That is the BEST case (19:1), a ceiling that only proves the token
@@ -127,12 +125,6 @@ def backdrops(tok, role, appearance, t, wallpaper):
         return [base, over(fill, tok.path("material.fillOpacity"), base)]
     if kind == "accent":
         return [tok.color(pal, appearance, "accent")]
-    if kind in ("apps", "apps-field"):
-        dim = tok.path("apps.backdropOpacity") if t > 0 else tok.path("apps.backdropOpacityOpaque")
-        base = over((0, 0, 0), dim, wallpaper)
-        if kind == "apps-field":
-            base = over(tok.color("darkColors", appearance, "shadow"), tok.path("apps.searchFillOpacity"), base)
-        return [base]
     if kind == "rename-field":
         return [over(tok.color("colors", appearance, "fieldFill"), tok.path("desktopIcon.renameFillOpacity"), wallpaper)]
     if kind == "desktop-label":
@@ -441,7 +433,7 @@ class ContrastTokens(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for r in self.roles:
             self.assertIn(r["kind"], THRESHOLD)
-            self.assertIn(r["backdrop"], ("material", "accent", "apps", "apps-field", "rename-field", "desktop-label") + LOCK_BACKDROPS)
+            self.assertIn(r["backdrop"], ("material", "accent", "rename-field", "desktop-label") + LOCK_BACKDROPS)
             for site in r["sites"]:
                 self.assertIn(site["class"], ("secondary", "danger", "alpha", "dynamic", "opacity", "opacity-dynamic", "primary",
                                               "backdrop"))

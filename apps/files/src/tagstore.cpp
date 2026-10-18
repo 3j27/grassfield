@@ -23,6 +23,11 @@ bool unsupported(int error)
 {
     return error == ENOTSUP || error == EOPNOTSUPP;
 }
+
+qint64 changeStampOf(const struct stat &st)
+{
+    return qint64(st.st_ctim.tv_sec) * 1000000000 + st.st_ctim.tv_nsec;
+}
 } // namespace
 
 Info probe(const QString &path)
@@ -32,6 +37,7 @@ Info probe(const QString &path)
     struct stat st;
     if (p.isEmpty() || ::lstat(p.constData(), &st) != 0)
         return info;
+    info.changeStamp = changeStampOf(st);
     if (S_ISLNK(st.st_mode)) {
         info.support = Support::Link;
         return info;
@@ -70,8 +76,14 @@ const Info &Cache::info(const QString &path)
 {
     const qint64 now = m_clock.elapsed();
     const auto it = m_entries.constFind(path);
-    if (it != m_entries.cend() && now - it->stamp < m_ttlMs)
-        return it->info;
+    if (it != m_entries.cend() && now - it->stamp < m_ttlMs) {
+        // Another application's write moves the ctime: probe again then (one lstat instead of a full probe).
+        struct stat st;
+        const QByteArray p = QFile::encodeName(path);
+        const bool gone = p.isEmpty() || ::lstat(p.constData(), &st) != 0;
+        if (gone ? it->info.support == Support::Missing : changeStampOf(st) == it->info.changeStamp)
+            return it->info;
+    }
     if (m_entries.size() >= m_maxEntries)
         m_entries.clear();
     Entry &entry = m_entries[path];
@@ -114,6 +126,43 @@ QByteArray readRaw(const QString &path)
             return {};
     }
     return {};
+}
+
+bool readRawChecked(const QString &path, QByteArray *value, QString *error)
+{
+    value->clear();
+    const QByteArray p = QFile::encodeName(path);
+    auto fail = [&](int e) {
+        if (error)
+            *error = QString::fromLocal8Bit(std::strerror(e));
+        return false;
+    };
+    if (p.isEmpty())
+        return fail(ENOENT);
+    // Ask for the size, then read it; the value may change in between (ERANGE): a few tries.
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const ssize_t size = ::lgetxattr(p.constData(), TagLogic::attributeName(), nullptr, 0);
+        if (size < 0) {
+            if (errno == ENODATA)
+                return true; // no tag attribute: no tags
+            return fail(errno);
+        }
+        if (size == 0)
+            return true;
+        if (size > kMaxValue)
+            return fail(E2BIG);
+        QByteArray data(int(size), Qt::Uninitialized);
+        const ssize_t n = ::lgetxattr(p.constData(), TagLogic::attributeName(), data.data(), size_t(data.size()));
+        if (n >= 0) {
+            *value = data.left(int(n));
+            return true;
+        }
+        if (errno == ENODATA) // removed in between
+            return true;
+        if (errno != ERANGE)
+            return fail(errno);
+    }
+    return fail(EAGAIN);
 }
 
 QStringList read(const QString &path)

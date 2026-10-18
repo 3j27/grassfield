@@ -1,215 +1,142 @@
 .pragma library
 
-// Apps layout model and paging math (pure, unit-tested).
-//
-// Layout items (top level, in display order):
-//   {t: "app", id}                        one desktop entry
-//   {t: "folder", key, name, apps: [id]}  a folder (key is session-local, never persisted)
-// Persisted form (apps-layout.json): {version: 1, items: ["app.desktop", {folder, apps}]}.
-// All edit functions return a new array and never mutate their input.
+// Apps panel model (pure, unit-tested): categories from .desktop Categories=, alphabetical order,
+// grid metrics and keyboard navigation, and the hidden-entry list shared with Search.
 
-const VERSION = 1;
+// ---- categories ----------------------------------------------------------------------
 
-function clone(items) {
-    return items.map(it => it.t === "folder" ? {t: "folder", key: it.key, name: it.name, apps: it.apps.slice()} : {t: "app", id: it.id});
-}
+// Chip identifiers in display order. "all" is every app; every app belongs to exactly one of the others.
+const CATEGORY_IDS = ["all", "productivity", "creativity", "utilities", "games", "other"];
 
-function nextKey(items) {
-    let n = 0;
-    for (const it of items) {
-        if (it.t === "folder" && /^f\d+$/.test(it.key))
-            n = Math.max(n, parseInt(it.key.slice(1), 10));
+// freedesktop.org Menu Specification category -> chip. An app takes the first chip, in the order
+// games, creativity, productivity, utilities, whose list holds one of its Categories= values (a game
+// that also lists Utility stays a game; a graphics tool that also lists Office is creative). Values
+// that match nothing (Network, WebBrowser, X-* extensions, Qt, GTK, ...) put the app in "other".
+const CATEGORY_MAP = {
+    games: ["Game", "ArcadeGame", "BoardGame", "BlocksGame", "CardGame", "LogicGame", "RolePlaying", "Shooter",
+        "Simulation", "SportsGame", "StrategyGame", "Emulator", "KidsGame", "ActionGame", "AdventureGame"],
+    creativity: ["Graphics", "2DGraphics", "3DGraphics", "VectorGraphics", "RasterGraphics", "Photography", "Scanning",
+        "OCR", "AudioVideo", "Audio", "Video", "Music", "Midi", "Mixer", "Sequencer", "Tuner", "Recorder",
+        "Player", "AudioVideoEditing", "Publishing"],
+    productivity: ["Office", "WordProcessor", "Spreadsheet", "Presentation", "Calendar", "ContactManagement", "Email",
+        "Database", "Dictionary", "Chart", "Finance", "FlowChart", "PDA", "ProjectManagement", "Development", "IDE",
+        "Debugger", "Building", "GUIDesigner", "RevisionControl", "Translation", "WebDevelopment", "Education",
+        "Science", "Math", "Engineering", "Literature", "Languages", "Maps"],
+    utilities: ["Utility", "System", "Settings", "DesktopSettings", "HardwareSettings", "PackageManager", "Monitor",
+        "Security", "TerminalEmulator", "FileManager", "FileTools", "Filesystem", "Archiving", "Compression",
+        "Accessibility", "TextEditor", "TextTools", "Calculator", "Clock", "Core"]
+};
+const CATEGORY_ORDER = ["games", "creativity", "productivity", "utilities"];
+
+const CATEGORY_LOOKUP = (function () {
+    const out = {};
+    for (const id of CATEGORY_ORDER) {
+        for (const c of CATEGORY_MAP[id])
+            out[c] = id;
     }
-    return "f" + (n + 1);
-}
+    return out;
+})();
 
-function serialize(items) {
-    const out = items.map(it => it.t === "folder" ? {folder: it.name, apps: it.apps.slice()} : it.id);
-    return JSON.stringify({version: VERSION, items: out}, null, 1) + "\n";
-}
-
-// Corrupt or foreign data yields an empty layout (every app is then appended by name).
-function parse(text) {
-    let data;
-    try {
-        data = JSON.parse(text);
-    } catch (e) {
-        return [];
-    }
-    if (!data || data.version !== VERSION || !Array.isArray(data.items))
-        return [];
-    const items = [];
-    let k = 0;
-    for (const raw of data.items.slice(0, 5000)) {
-        if (typeof raw === "string" && raw !== "") {
-            items.push({t: "app", id: raw});
-        } else if (raw && typeof raw === "object" && typeof raw.folder === "string" && Array.isArray(raw.apps)) {
-            const apps = raw.apps.filter(a => typeof a === "string" && a !== "").slice(0, 500);
-            items.push({t: "folder", key: "f" + (++k), name: raw.folder.slice(0, 120), apps: apps});
+// Chip of an app from its Categories= values (array or ";"-separated string); "other" when none matches.
+function categoryOf(categories) {
+    const list = typeof categories === "string" ? categories.split(";") : Array.from(categories ?? []);
+    let best = "other";
+    let bestRank = CATEGORY_ORDER.length;
+    for (const raw of list) {
+        const id = CATEGORY_LOOKUP[String(raw).trim()];
+        if (id === undefined)
+            continue;
+        const rank = CATEGORY_ORDER.indexOf(id);
+        if (rank < bestRank) {
+            best = id;
+            bestRank = rank;
         }
     }
-    return items;
+    return best;
 }
 
-// Prune apps that are not installed (or duplicated), drop empty folders, append new apps by name.
-// `installed`: [{id, name}].
-function reconcile(items, installed) {
-    const known = {};
-    for (const a of installed)
-        known[a.id] = true;
-    const seen = {};
-    const out = [];
-    for (const it of items) {
-        if (it.t === "app") {
-            if (known[it.id] === true && seen[it.id] !== true) {
-                seen[it.id] = true;
-                out.push({t: "app", id: it.id});
-            }
-        } else {
-            const apps = [];
-            for (const id of it.apps) {
-                if (known[id] === true && seen[id] !== true) {
-                    seen[id] = true;
-                    apps.push(id);
-                }
-            }
-            if (apps.length > 0)
-                out.push({t: "folder", key: it.key, name: it.name, apps: apps});
-        }
-    }
-    const fresh = installed.filter(a => seen[a.id] !== true);
-    fresh.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || (a.id < b.id ? -1 : 1));
-    for (const a of fresh)
-        out.push({t: "app", id: a.id});
-    return out;
+// ---- order and filtering -------------------------------------------------------------
+
+// Records ({id, name, ...}) in alphabetical order (case-insensitive, then by id); a new array.
+function sortApps(records) {
+    const keyed = records.map(r => ({r: r, k: String(r.name ?? "").toLowerCase()}));
+    keyed.sort((a, b) => a.k.localeCompare(b.k) || (a.r.id < b.r.id ? -1 : (a.r.id > b.r.id ? 1 : 0)));
+    return keyed.map(x => x.r);
 }
 
-// Move the item at `from` so that it ends up at index `to` of the result.
-function moveTo(items, from, to) {
-    if (from < 0 || from >= items.length || to < 0 || to >= items.length || from === to)
-        return clone(items);
-    const out = clone(items);
-    const [it] = out.splice(from, 1);
-    out.splice(to, 0, it);
-    return out;
-}
-
-// Drop app `src` onto app `dst`: a folder replaces `dst` and holds [dst, src].
-function createFolder(items, src, dst, name) {
-    if (src === dst || src < 0 || dst < 0 || src >= items.length || dst >= items.length)
-        return clone(items);
-    if (items[src].t !== "app" || items[dst].t !== "app")
-        return clone(items);
-    const out = clone(items);
-    const folder = {t: "folder", key: nextKey(out), name: name, apps: [out[dst].id, out[src].id]};
-    out[dst] = folder;
-    out.splice(src, 1);
-    return out;
-}
-
-// Drop app `src` onto folder `dst`.
-function addToFolder(items, src, dst) {
-    if (src === dst || src < 0 || dst < 0 || src >= items.length || dst >= items.length)
-        return clone(items);
-    if (items[src].t !== "app" || items[dst].t !== "folder")
-        return clone(items);
-    const out = clone(items);
-    out[dst].apps.push(out[src].id);
-    out.splice(src, 1);
-    return out;
-}
-
-// Take an app out of a folder and place it right after the folder; an empty folder disappears.
-function removeFromFolder(items, key, id) {
-    const out = clone(items);
-    const fi = out.findIndex(it => it.t === "folder" && it.key === key);
-    if (fi < 0)
-        return out;
-    const f = out[fi];
-    const ai = f.apps.indexOf(id);
-    if (ai < 0)
-        return out;
-    f.apps.splice(ai, 1);
-    out.splice(fi + 1, 0, {t: "app", id: id});
-    if (f.apps.length === 0)
-        out.splice(fi, 1);
-    return out;
-}
-
-function renameFolder(items, key, name) {
-    const out = clone(items);
-    for (const it of out) {
-        if (it.t === "folder" && it.key === key)
-            it.name = name.trim().slice(0, 120);
+// {id: [record]} for every chip: "all" holds every record, the others those whose `category` matches.
+// `records` must already be sorted; the order is kept.
+function groupByCategory(records) {
+    const out = {};
+    for (const id of CATEGORY_IDS)
+        out[id] = [];
+    for (const r of records) {
+        out.all.push(r);
+        out[r.category in out ? r.category : "other"].push(r);
     }
     return out;
 }
 
-// ---- paging math ---------------------------------------------------------------------
+// Chips shown: "all" always, then every category that has at least one app, in display order.
+function visibleCategories(groups) {
+    return CATEGORY_IDS.filter(id => id === "all" || (groups[id] ?? []).length > 0);
+}
+
+// ---- grid ----------------------------------------------------------------------------
 
 function clamp(v, lo, hi) {
     return Math.max(lo, Math.min(hi, v));
 }
 
-// Grid for a screen. o: {iconSize (at 1080p), widthFraction, heightFraction, cellWidthScale,
-// cellHeightScale, minCols, maxCols, minRows, maxRows}. Returns {cols, rows, perPage, cellW, cellH,
-// gridW, gridH, icon}.
-function grid(width, height, o) {
-    const icon = Math.round(o.iconSize * clamp(height / 1080, 0.7, 1.6));
-    const gridW = width * o.widthFraction;
-    const gridH = height * o.heightFraction;
-    const cols = clamp(Math.floor(gridW / (icon * o.cellWidthScale)), o.minCols, o.maxCols);
-    const rows = clamp(Math.floor(gridH / (icon * o.cellHeightScale)), o.minRows, o.maxRows);
-    return {cols: cols, rows: rows, perPage: cols * rows, cellW: gridW / cols, cellH: gridH / rows, gridW: gridW, gridH: gridH, icon: icon};
+// Panel size for an output. o: {width, widthMax, edgeMargin, heightFraction, minHeight, topFraction,
+// bottomClearance}. The height is a share of the output, at least minHeight, and never reaches
+// into the bottom clearance (Dock); a very short output wins over minHeight.
+function panelRect(screenW, screenH, o) {
+    const w = Math.min(o.width, Math.max(0, screenW - 2 * o.edgeMargin));
+    const top = Math.round(screenH * o.topFraction);
+    const room = Math.max(0, screenH - top - o.bottomClearance);
+    const h = Math.min(room, Math.max(o.minHeight, Math.round(screenH * o.heightFraction)));
+    return {x: Math.round((screenW - w) / 2), y: top, w: w, h: h};
 }
 
-function pageCount(n, perPage) {
-    return Math.max(1, Math.ceil(n / Math.max(1, perPage)));
+// Columns for the grid area `innerWidth` wide. o: {columns, minColumns, minCellWidth, cellHeight}.
+function grid(innerWidth, o) {
+    const cols = clamp(Math.floor(innerWidth / o.minCellWidth), o.minColumns, o.columns);
+    return {cols: cols, cellW: innerWidth / cols, cellH: o.cellHeight};
 }
 
-function pageOf(index, perPage) {
-    return index < 0 ? 0 : Math.floor(index / Math.max(1, perPage));
+// Rows fully or partly shown in a view `height` tall.
+function visibleRows(height, cellH) {
+    return Math.max(1, Math.floor(height / cellH));
 }
 
-function clampPage(page, n, perPage) {
-    return clamp(page, 0, pageCount(n, perPage) - 1);
-}
-
-// Global item index under a point of the grid area on `page`, or -1 outside the grid or past the
-// last item. `center` reports whether the point is inside the central `mergeFraction` of the cell.
-function cellAt(x, y, g, page, n, mergeFraction) {
-    if (x < 0 || y < 0 || x >= g.gridW || y >= g.gridH)
-        return {index: -1, center: false};
-    const c = Math.floor(x / g.cellW);
-    const r = Math.floor(y / g.cellH);
-    const index = page * g.perPage + r * g.cols + c;
-    if (index >= n)
-        return {index: -1, center: false};
-    const fx = (x - c * g.cellW) / g.cellW;
-    const fy = (y - r * g.cellH) / g.cellH;
-    const m = (1 - mergeFraction) / 2;
-    return {index: index, center: fx >= m && fx <= 1 - m && fy >= m && fy <= 1 - m};
-}
-
-// Keyboard selection. Left/Right walk the reading order across page edges; Up/Down stay in the
-// column (no-op at the first/last row of the page); Home/End jump. Returns the new index.
-function step(sel, key, cols, perPage, n) {
+// Keyboard selection in the grid (reading order, no pages). Left/Right walk the order, Up/Down move by a
+// row and stay put at the first/last row (the caller then moves the focus to the chips, or ignores it),
+// PageUp/PageDown move by `pageRows` rows, Home/End jump. Returns the new index.
+function step(sel, key, cols, n, pageRows) {
     if (n <= 0)
         return -1;
     if (sel < 0)
         return 0;
-    const pos = sel % perPage;
     switch (key) {
     case "left":
         return Math.max(0, sel - 1);
     case "right":
         return Math.min(n - 1, sel + 1);
     case "up":
-        return pos >= cols ? sel - cols : sel;
+        return sel >= cols ? sel - cols : sel;
     case "down":
-        if (pos + cols >= perPage)
+        // The last row may be short: Down from above it lands on the last item.
+        if (Math.floor(sel / cols) >= Math.floor((n - 1) / cols))
             return sel;
         return Math.min(n - 1, sel + cols);
+    case "pageup":
+        return Math.max(sel % cols, sel - cols * pageRows);
+    case "pagedown": {
+        const last = Math.floor((n - 1) / cols);
+        const row = Math.min(last, Math.floor(sel / cols) + pageRows);
+        return Math.min(n - 1, row * cols + sel % cols);
+    }
     case "home":
         return 0;
     case "end":
@@ -217,6 +144,13 @@ function step(sel, key, cols, perPage, n) {
     }
     return sel;
 }
+
+// True when Up from `sel` leaves the grid (first row).
+function atFirstRow(sel, cols) {
+    return sel < cols;
+}
+
+// ---- hidden entries ------------------------------------------------------------------
 
 // Set of hidden desktop entry ids from the output of hidden-entries.sh. Ids are normalized like
 // Quickshell's DesktopEntry.id (no ".desktop" suffix, no CR) so a lookup by entry id matches.
@@ -232,12 +166,4 @@ function parseHidden(text) {
 
 function isHidden(set, id) {
     return set[String(id).replace(/\.desktop$/, "")] === true;
-}
-
-// Keyboard selection inside an open folder: like step() on one page, plus Up from the first row
-// moves to the folder title (-1; Return there renames) and Down from the title returns to the grid.
-function stepFolder(sel, key, cols, n) {
-    if (key === "up" && sel < cols)
-        return -1;
-    return step(sel, key, cols, 1000000, n);
 }

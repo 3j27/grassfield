@@ -117,7 +117,7 @@ Light and dark for each item when possible:
 | `notifications` | one banner; Notification Center open with 3 notifications and widgets |
 | `search` | Spotlight empty; with a query and results |
 | `overview` | Mission Control with 4–6 windows and the Spaces bar |
-| `apps` | Launchpad (or the Apps view of macOS 27) |
+| `apps` | the Apps view (floating panel with category chips; macOS 26/27) |
 | `desktop` | desktop with 4 icons, one selected; `desktop-menu`: its context menu |
 | `widgets` | desktop widgets small/medium/large; the widget gallery |
 | `lock` | lock screen at rest (no password typed) |
