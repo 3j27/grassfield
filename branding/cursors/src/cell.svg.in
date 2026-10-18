@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Grassfield cursor: cell (thick plus). Original drawing, hotspot (16,16). -->
+  <defs><g id="s">
+    <rect x="13" y="5.5" width="6" height="21" rx="1.6"/>
+    <rect x="5.5" y="13" width="21" height="6" rx="1.6"/>
+  </g></defs>
+  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.4" stroke-linejoin="round"/>
+  <use href="#s" fill="{{FILL}}"/>
+</svg>

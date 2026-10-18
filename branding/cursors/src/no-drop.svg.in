@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Grassfield cursor: arrow with a prohibited badge. Original drawing, hotspot (5,3). -->
+  <defs>
+    <path id="a" d="M5 3 L5 24.2 L10.1 19.6 L13.5 27.2 L17.3 25.4 L13.9 18.1 L20.6 18.1 Z" transform="translate(5 3) scale(.86) translate(-5 -3)"/>
+    <circle id="b" cx="25" cy="25" r="6"/>
+  </defs>
+  <use href="#a" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.4" stroke-linejoin="round"/>
+  <use href="#b" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.2"/>
+  <use href="#a" fill="{{FILL}}"/>
+  <use href="#b" fill="{{FILL}}"/>
+  <circle cx="25" cy="25" r="3.6" fill="none" stroke="{{OUTLINE}}" stroke-width="1.5"/>
+  <path d="M22.5 27.5 L27.5 22.5" fill="none" stroke="{{OUTLINE}}" stroke-width="1.5" stroke-linecap="round"/>
+</svg>
