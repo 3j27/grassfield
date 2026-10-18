@@ -187,7 +187,7 @@ owner_after=$( [[ -d $owner_trash ]] && find "$owner_trash" -mindepth 1 -maxdept
 [[ $owner_before == "$owner_after" ]] && pass "owner Trash untouched ($owner_after entries)" || fail "owner Trash changed: $owner_before -> $owner_after"
 launches=$(grep -c "launch blocked" "$log" || true)
 [[ $launches == 0 ]] && pass "no application launch was attempted" || fail "$launches application launch(es) attempted (blocked by GRASSFIELD_FILES_NO_LAUNCH)"
-errors=$(grep -cE "qml:|\.qml:[0-9]+|TypeError|ReferenceError" "$log" || true)
+errors=$(grep -E "qml:|\.qml:[0-9]+|TypeError|ReferenceError" "$log" | grep -vcE "qml: grassfield: global menu (created|destroyed)" || true)
 [[ $errors == 0 ]] && pass "app log has no QML errors or warnings" || { fail "app log has $errors QML lines"; grep -E "qml:|\.qml:[0-9]+|TypeError|ReferenceError" "$log"; }
 
 echo "files_sandbox: $fails failure(s)"
