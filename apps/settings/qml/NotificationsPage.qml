@@ -11,7 +11,7 @@ SettingsPage {
     SettingsGroup {
         SettingsRow {
             title: qsTr("Do Not Disturb")
-            subtitle: qsTr("Silences banners except critical ones; notifications still collect in Notification Center.")
+            subtitle: qsTr("Silences banners except critical ones; notifications still collect in the Notifications panel.")
             Toggle {
                 accessibleName: qsTr("Do Not Disturb")
                 checked: root.store.value("notifications.dnd")

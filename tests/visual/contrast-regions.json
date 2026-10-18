@@ -14,7 +14,7 @@
   ],
   "systemmenu": [
    {"name": "About This Computer", "box": [44, 34, 130, 14], "kind": "text"},
-   {"name": "System Settings", "box": [44, 64, 100, 14], "kind": "text"},
+   {"name": "Settings", "box": [44, 64, 100, 14], "kind": "text"},
    {"name": "Force Quit", "box": [44, 95, 70, 14], "kind": "text"},
    {"name": "Sleep", "box": [44, 125, 40, 14], "kind": "text"},
    {"name": "Lock Screen", "box": [44, 201, 70, 14], "kind": "text"},

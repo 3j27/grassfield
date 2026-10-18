@@ -127,10 +127,10 @@ FocusScope {
 
                 Button {
                     text: qsTr("Add")
-                    Accessible.name: qsTr("Add %1 to Notification Center").arg(Registry.title(row.modelData.id))
+                    Accessible.name: qsTr("Add %1 to Notifications").arg(Registry.title(row.modelData.id))
                     onClicked: {
                         Widgets.addCenter(row.modelData.id, row.pickedSize);
-                        root.note = qsTr("%1 added to the Notification Center.").arg(Registry.title(row.modelData.id));
+                        root.note = qsTr("%1 added to Notifications.").arg(Registry.title(row.modelData.id));
                     }
                 }
 

@@ -32,7 +32,7 @@ SettingsPage {
                 required property var modelData
 
                 // The file's English description and key names, translated (Bindings.js lists them).
-                title: qsTranslate("Bindings", modelData.description)
+                title: qsTranslate("Bindings", Bindings.uiName(modelData.description))
                 valueText: Bindings.translateKeys(modelData.keys, k => qsTranslate("Bindings", k))
             }
         }

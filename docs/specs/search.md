@@ -3,7 +3,7 @@
 ## macOS reference behavior (described in words)
 - `Cmd+Space` opens a centered floating search field (~680 pt wide, ~1/4 from the top), large type
   (~22 pt), magnifier glyph, material background, rounded ~26 pt.
-- Typing shows grouped results below (Top Hit, Applications, Documents, Folders, System Settings,
+- Typing shows grouped results below (Top Hit, Applications, Documents, Folders, Settings,
   Calculator/Conversion inline answers). Arrow keys move, Return opens, Cmd+Return reveals in Files,
   Esc clears then closes. The top hit is preselected.
 
@@ -45,4 +45,4 @@ Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit co
 ## Limitations (v1)
 - Ctrl+Return reveals with `gio open <parent folder>` (default file manager) until Grassfield Files exists (M4).
 - localsearch output parsing (`file://` URIs per line) could not be verified against real results: nothing is indexed on the dev machine.
-- System Settings pages provider is not included (no Settings app yet).
+- Settings pages provider is not included (no Settings app yet).

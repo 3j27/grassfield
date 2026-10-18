@@ -31,7 +31,7 @@ FocusScope {
     width: Tokens.panelControlCenterWidth
     height: column.implicitHeight + 2 * Tokens.spacingMd
     Accessible.role: Accessible.Window
-    Accessible.name: qsTr("Control Center")
+    Accessible.name: qsTr("Quick Settings")
 
     Keys.onEscapePressed: Popups.close()
 
@@ -90,7 +90,7 @@ FocusScope {
             Label {
                 id: title
                 width: parent.width - note.width - Tokens.spacingSm
-                text: qsTr("Control Center")
+                text: qsTr("Quick Settings")
                 font.pixelSize: Tokens.typographyTitleSize
                 font.weight: Tokens.typographyMenuBoldWeight
             }
@@ -166,8 +166,8 @@ FocusScope {
 
                 RadioRow {
                     iconName: "moon"
-                    title: qsTr("Focus")
-                    subtitle: Notifications.dnd ? qsTr("Do Not Disturb") : qsTr("Off")
+                    title: qsTr("Do Not Disturb")
+                    subtitle: Notifications.dnd ? qsTr("On") : qsTr("Off")
                     on: Notifications.dnd
                     onToggled: Notifications.setDnd(!Notifications.dnd)
                 }

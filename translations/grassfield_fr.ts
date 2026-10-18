@@ -617,12 +617,16 @@
         <translation>Redimensionner la fenêtre</translation>
     </message>
     <message>
-        <source>Next Space</source>
+        <source>Next Desktop</source>
         <translation>Bureau suivant</translation>
     </message>
     <message>
-        <source>Previous Space</source>
+        <source>Previous Desktop</source>
         <translation>Bureau précédent</translation>
+    </message>
+    <message>
+        <source>Notifications</source>
+        <translation>Notifications</translation>
     </message>
     <message>
         <source>Overview</source>
@@ -631,10 +635,6 @@
     <message>
         <source>Search</source>
         <translation>Recherche</translation>
-    </message>
-    <message>
-        <source>Notification Center</source>
-        <translation>Centre de notifications</translation>
     </message>
     <message>
         <source>Lock screen</source>
@@ -698,6 +698,53 @@
     <message>
         <source>not connected</source>
         <translation>non connecté</translation>
+    </message>
+</context>
+<context>
+    <name>BluetoothPage</name>
+    <message>
+        <source>Bluetooth</source>
+        <translation>Bluetooth</translation>
+    </message>
+    <message>
+        <source>Disconnecting…</source>
+        <translation>Déconnexion…</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Not Connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>Bluetooth is not available: no adapter was found or the Bluetooth service is not running.</source>
+        <translation>Bluetooth n’est pas disponible&#xa0;: aucun adaptateur trouvé ou le service Bluetooth n’est pas lancé.</translation>
+    </message>
+    <message>
+        <source>My Devices</source>
+        <translation>Mes appareils</translation>
+    </message>
+    <message>
+        <source>No paired devices. Pair a device with your system&apos;s Bluetooth tools.</source>
+        <translation>Aucun appareil associé. Associez un appareil avec les outils Bluetooth du système.</translation>
+    </message>
+    <message>
+        <source>Devices are paired outside Settings for now.</source>
+        <translation>Les appareils sont associés en dehors des Réglages pour l’instant.</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Déconnecter</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Connecter</translation>
     </message>
 </context>
 <context>
@@ -1152,10 +1199,6 @@
 <context>
     <name>ControlCenter</name>
     <message>
-        <source>Control Center</source>
-        <translation>Centre de contrôle</translation>
-    </message>
-    <message>
         <source>dev: not applied</source>
         <translation>dév.&#xa0;: non appliqué</translation>
     </message>
@@ -1188,12 +1231,16 @@
         <translation>Wi-Fi et Bluetooth désactivés</translation>
     </message>
     <message>
-        <source>Focus</source>
-        <translation>Focus</translation>
+        <source>Quick Settings</source>
+        <translation>Réglages rapides</translation>
     </message>
     <message>
         <source>Do Not Disturb</source>
         <translation>Ne pas déranger</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Activé</translation>
     </message>
     <message>
         <source>Display</source>
@@ -1297,8 +1344,8 @@
         <translation>Vue d’ensemble</translation>
     </message>
     <message>
-        <source>Notification Center</source>
-        <translation>Centre de notifications</translation>
+        <source>Notifications</source>
+        <translation>Notifications</translation>
     </message>
     <message>
         <source>Apps</source>
@@ -1365,8 +1412,8 @@
         <translation>Ne rien faire</translation>
     </message>
     <message>
-        <source>Hot Corners</source>
-        <translation>Coins actifs</translation>
+        <source>Screen Corners</source>
+        <translation>Coins de l’écran</translation>
     </message>
     <message>
         <source>Move the pointer into a screen corner to run the action.</source>
@@ -1403,6 +1450,60 @@
     <message>
         <source>Bottom right corner</source>
         <translation>Coin inférieur droit</translation>
+    </message>
+</context>
+<context>
+    <name>DevNote</name>
+    <message>
+        <source>dev: not applied</source>
+        <translation>dév.&#xa0;: non appliqué</translation>
+    </message>
+</context>
+<context>
+    <name>DisplaysPage</name>
+    <message>
+        <source>Displays</source>
+        <translation>Moniteurs</translation>
+    </message>
+    <message>
+        <source>No display information is available.</source>
+        <translation>Aucune information sur les moniteurs n’est disponible.</translation>
+    </message>
+    <message>
+        <source>Arrangement</source>
+        <translation>Disposition</translation>
+    </message>
+    <message>
+        <source>Display arrangement</source>
+        <translation>Disposition des moniteurs</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation>%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Resolution, scale and arrangement cannot be changed from Settings yet. They come from your Hyprland monitor configuration.</source>
+        <translation>La résolution, l’échelle et la disposition ne peuvent pas encore être modifiées depuis les Réglages. Elles proviennent de la configuration des moniteurs de Hyprland.</translation>
+    </message>
+    <message>
+        <source>Resolution</source>
+        <translation>Résolution</translation>
+    </message>
+    <message>
+        <source>Refresh Rate</source>
+        <translation>Fréquence de rafraîchissement</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1&#xa0;Hz</translation>
+    </message>
+    <message>
+        <source>Scale</source>
+        <translation>Échelle</translation>
+    </message>
+    <message>
+        <source>%1%</source>
+        <translation>%1&#xa0;%</translation>
     </message>
 </context>
 <context>
@@ -2292,6 +2393,38 @@
 <context>
     <name>Main</name>
     <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>wireless network internet networkmanager</source>
+        <translation>sans fil réseau internet networkmanager</translation>
+    </message>
+    <message>
+        <source>Bluetooth</source>
+        <translation>Bluetooth</translation>
+    </message>
+    <message>
+        <source>devices headphones pair connect</source>
+        <translation>appareils casque associer connecter</translation>
+    </message>
+    <message>
+        <source>Sound</source>
+        <translation>Son</translation>
+    </message>
+    <message>
+        <source>volume output input speakers microphone mute audio</source>
+        <translation>volume sortie entrée haut-parleurs microphone muet audio</translation>
+    </message>
+    <message>
+        <source>Displays</source>
+        <translation>Moniteurs</translation>
+    </message>
+    <message>
+        <source>monitor screen resolution refresh scale arrangement</source>
+        <translation>moniteur écran résolution rafraîchissement échelle disposition</translation>
+    </message>
+    <message>
         <source>Appearance</source>
         <translation>Apparence</translation>
     </message>
@@ -2304,8 +2437,8 @@
         <translation>Bureau et Dock</translation>
     </message>
     <message>
-        <source>dock magnification autohide desktop icons items hot corners titlebar window</source>
-        <translation>dock agrandissement masquage automatique bureau icônes éléments coins actifs barre de titre fenêtre</translation>
+        <source>dock magnification autohide desktop icons items screen corners titlebar window</source>
+        <translation>dock agrandissement masquage automatique bureau icônes éléments coins de l’écran barre de titre fenêtre</translation>
     </message>
     <message>
         <source>Notifications</source>
@@ -2446,12 +2579,12 @@
         <translation>%1&#xa0;%</translation>
     </message>
     <message>
-        <source>Control Center</source>
-        <translation>Centre de contrôle</translation>
+        <source>Quick Settings</source>
+        <translation>Réglages rapides</translation>
     </message>
     <message>
-        <source>Date and time: %1. Open Notification Center</source>
-        <translation>Date et heure&#xa0;: %1. Ouvrir le Centre de notifications</translation>
+        <source>Date and time: %1. Open Notifications</source>
+        <translation>Date et heure&#xa0;: %1. Ouvrir les notifications</translation>
     </message>
     <message>
         <source>ddd d MMM</source>
@@ -2497,10 +2630,6 @@
 </context>
 <context>
     <name>NotificationCenter</name>
-    <message>
-        <source>Notification Center</source>
-        <translation>Centre de notifications</translation>
-    </message>
     <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
@@ -2579,8 +2708,8 @@
         <translation>Ne pas déranger</translation>
     </message>
     <message>
-        <source>Silences banners except critical ones; notifications still collect in Notification Center.</source>
-        <translation>Désactive les bannières sauf les critiques&#xa0;; les notifications continuent de s’accumuler dans le Centre de notifications.</translation>
+        <source>Silences banners except critical ones; notifications still collect in the Notifications panel.</source>
+        <translation>Désactive les bannières sauf les critiques&#xa0;; les notifications continuent de s’accumuler dans le panneau Notifications.</translation>
     </message>
     <message>
         <source>Never hides the text of notifications. Until the lock screen reports its state to the notification service, When Unlocked behaves like Always.</source>
@@ -2656,7 +2785,7 @@
         <translation>Vue d’ensemble</translation>
     </message>
     <message>
-        <source>Spaces</source>
+        <source>Desktops</source>
         <translation>Bureaux</translation>
     </message>
     <message>
@@ -3120,6 +3249,45 @@
     </message>
 </context>
 <context>
+    <name>SoundPage</name>
+    <message>
+        <source>Sound</source>
+        <translation>Son</translation>
+    </message>
+    <message>
+        <source>Sound is not available: PipeWire did not answer or no audio device was found.</source>
+        <translation>Le son n’est pas disponible&#xa0;: PipeWire n’a pas répondu ou aucun périphérique audio n’a été trouvé.</translation>
+    </message>
+    <message>
+        <source>Output</source>
+        <translation>Sortie</translation>
+    </message>
+    <message>
+        <source>Output volume</source>
+        <translation>Volume de sortie</translation>
+    </message>
+    <message>
+        <source>Mute</source>
+        <translation>Muet</translation>
+    </message>
+    <message>
+        <source>Mute output</source>
+        <translation>Couper la sortie</translation>
+    </message>
+    <message>
+        <source>Input</source>
+        <translation>Entrée</translation>
+    </message>
+    <message>
+        <source>Input volume</source>
+        <translation>Volume d’entrée</translation>
+    </message>
+    <message>
+        <source>Mute input</source>
+        <translation>Couper l’entrée</translation>
+    </message>
+</context>
+<context>
     <name>Store</name>
     <message>
         <source>the file is not valid JSON (%1)</source>
@@ -3195,8 +3363,8 @@
         <translation>À propos de cet ordinateur</translation>
     </message>
     <message>
-        <source>System Settings…</source>
-        <translation>Réglages Système…</translation>
+        <source>Settings…</source>
+        <translation>Réglages…</translation>
     </message>
     <message>
         <source>Force Quit…</source>
@@ -3395,6 +3563,13 @@
     </message>
 </context>
 <context>
+    <name>VolumeRow</name>
+    <message>
+        <source>%1%</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+</context>
+<context>
     <name>WidgetGallery</name>
     <message>
         <source>Widget gallery</source>
@@ -3413,12 +3588,12 @@
         <translation>Ajouter</translation>
     </message>
     <message>
-        <source>Add %1 to Notification Center</source>
-        <translation>Ajouter %1 au Centre de notifications</translation>
+        <source>Add %1 to Notifications</source>
+        <translation>Ajouter %1 aux notifications</translation>
     </message>
     <message>
-        <source>%1 added to the Notification Center.</source>
-        <translation>%1 ajouté au Centre de notifications.</translation>
+        <source>%1 added to Notifications.</source>
+        <translation>%1 ajouté aux notifications.</translation>
     </message>
     <message>
         <source>Add to Desktop</source>
@@ -3527,14 +3702,77 @@
     </message>
 </context>
 <context>
+    <name>WifiPage</name>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Needs a sign-in. Set it up in Quick Settings.</source>
+        <translation>Connexion requise. Configurez-la dans les Réglages rapides.</translation>
+    </message>
+    <message>
+        <source>Needs a password. Join it from Quick Settings.</source>
+        <translation>Mot de passe requis. Rejoignez-le depuis les Réglages rapides.</translation>
+    </message>
+    <message>
+        <source>Known network</source>
+        <translation>Réseau connu</translation>
+    </message>
+    <message>
+        <source>Wi-Fi is not available: NetworkManager did not answer.</source>
+        <translation>Le Wi-Fi n’est pas disponible&#xa0;: NetworkManager n’a pas répondu.</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>Networks</source>
+        <translation>Réseaux</translation>
+    </message>
+    <message>
+        <source>No networks found.</source>
+        <translation>Aucun réseau trouvé.</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Déconnecter</translation>
+    </message>
+    <message>
+        <source>Secured</source>
+        <translation>Sécurisé</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvert</translation>
+    </message>
+    <message>
+        <source>Signal %1 %</source>
+        <translation>Signal %1&#xa0;%</translation>
+    </message>
+</context>
+<context>
     <name>shell</name>
     <message>
         <source>Grassfield Settings is not installed</source>
         <translation>Réglages Grassfield n’est pas installé</translation>
     </message>
     <message>
-        <source>Install the grassfield-desktop package to open System Settings.</source>
-        <translation>Installez le paquet grassfield-desktop pour ouvrir les Réglages Système.</translation>
+        <source>Install the grassfield-desktop package to open Settings.</source>
+        <translation>Installez le paquet grassfield-desktop pour ouvrir les Réglages.</translation>
     </message>
     <message>
         <source>Glance is not available</source>

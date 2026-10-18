@@ -278,6 +278,11 @@ TestCase {
             }
         }
         compare(Bindings.translateKeys("Super + Shift + Q", k => k === "Shift" ? "Maj" : k), "Super + Maj + Q");
+        // Internal feature names of the file are shown under their UI names (renamed 2026-10-18).
+        compare(Bindings.uiName("Next Space"), "Next Desktop");
+        compare(Bindings.uiName("Previous Space"), "Previous Desktop");
+        compare(Bindings.uiName("Notification Center"), "Notifications");
+        compare(Bindings.uiName("Search"), "Search");
     }
 
     function test_sysInfo() {
