@@ -13,6 +13,9 @@ sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
   accent         the solid accent colour
   rename-field   colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper (the inline rename field)
+  bar-light-tone / bar-dark-tone  the adaptive menu bar (shell/services/BarTone.qml): the opaque wallpaper itself, only for the
+                 wallpaper colours the tone can be chosen for (light text up to menubar.toneDarkAbove, dark text from
+                 menubar.toneLightBelow); the faint shadow is decoration and not counted
   desktop-label  the label shadow colour at its core alpha (desktopIcon.labelShadowOpacity) over the wallpaper: white text against the
                  shadow taken as fully opaque behind the glyph. That is the BEST case (19:1), a ceiling that only proves the token
                  colours still contrast; the rendered contrast of the labels over a white wallpaper (blurred shadow, 4.8:1) is
@@ -48,6 +51,7 @@ spec.loader.exec_module(contrast)
 
 TRANSPARENCIES = (0.0, 0.25, 0.4, 0.6)
 LOCK_BACKDROPS = ("lock", "lock-field", "lock-avatar", "lock-submit")
+BAR_TONES = ("bar-light-tone", "bar-dark-tone")
 APPEARANCES = ("dark", "light")
 THRESHOLD = {"text": 4.5, "large": 3.0, "icon": 3.0}
 # Flat worst-case backdrops: black, white, mid-grey, saturated red and blue, the noise palette (yellow/greens). The checker (black/white
@@ -94,8 +98,9 @@ class Tokens:
         return node["value"]
 
     def color(self, palette, appearance, name):
-        # palette "colors" follows the appearance; "darkColors" is always the dark palette.
-        return hex_rgb(self.path("color.%s.%s" % ("dark" if palette == "darkColors" else appearance, name)))
+        # palette "colors" follows the appearance; "darkColors" / "lightColors" are always the dark / light palette.
+        fixed = {"darkColors": "dark", "lightColors": "light"}
+        return hex_rgb(self.path("color.%s.%s" % (fixed.get(palette, appearance), name)))
 
     def number(self, ref):
         return float(ref) if isinstance(ref, (int, float)) else float(self.path(ref))
@@ -116,6 +121,13 @@ def backdrops(tok, role, appearance, t, wallpaper):
     """Backdrop colours (opaque RGB) behind the text for one role/appearance/transparency/wallpaper colour."""
     kind = role["backdrop"]
     pal = "darkColors" if role["fg"].startswith("darkColors") else "colors"
+    if kind in BAR_TONES:
+        # The adaptive menu bar (BarTone): the wallpaper under the bare bar, for the wallpapers the tone can be chosen for. Light text
+        # is shown up to menubar.toneDarkAbove and dark text from menubar.toneLightBelow (the hysteresis band shows either).
+        l = lum(wallpaper)
+        if kind == "bar-light-tone":
+            return [wallpaper] if l <= tok.path("menubar.toneDarkAbove") else []
+        return [wallpaper] if l >= tok.path("menubar.toneLightBelow") else []
     if kind == "material":
         base = over(tok.color(pal, appearance, "materialTint"), tok.tint_alpha(t), wallpaper)
         fill = tok.color(pal, appearance, "fill")
@@ -150,7 +162,7 @@ def role_ratio(tok, role, appearance, t, wallpaper):
     alpha = 1.0
     for o in role.get("opacity", []):
         alpha *= tok.number(o)
-    worst = None
+    worst = None  # None: the role has no backdrop for this wallpaper (an adaptive bar tone is never chosen for it)
     for bg in backdrops(tok, role, appearance, t, wallpaper):
         r = wcag(over(fg, alpha, bg), bg)
         worst = r if worst is None else min(worst, r)
@@ -167,7 +179,7 @@ def role_table(tok, roles):
                 best = None
                 for wp in WALLPAPER_COLORS:
                     r = role_ratio(tok, role, ap, t, wp)
-                    if best is None or r < best[0]:
+                    if r is not None and (best is None or r < best[0]):
                         best = (r, wp)
                 cells[(ap, t)] = best
         table[role["id"]] = cells
@@ -409,11 +421,11 @@ class ContrastTokens(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for r in self.roles:
             self.assertIn(r["kind"], THRESHOLD)
-            self.assertIn(r["backdrop"], ("material", "accent", "rename-field", "desktop-label") + LOCK_BACKDROPS)
+            self.assertIn(r["backdrop"], ("material", "accent", "rename-field", "desktop-label") + BAR_TONES + LOCK_BACKDROPS)
             for site in r["sites"]:
                 self.assertIn(site["class"], ("secondary", "danger", "alpha", "dynamic", "opacity", "opacity-dynamic", "primary",
                                               "backdrop"))
-            self.assertRegex(r["fg"], r"^(colors|darkColors)\.\w+$")
+            self.assertRegex(r["fg"], r"^(colors|darkColors|lightColors)\.\w+$")
 
     def test_desktop_label_survives_white_and_black(self):
         # White label text over its shadow core on pure white and on black (and so over the checker, which is both).
@@ -422,6 +434,22 @@ class ContrastTokens(unittest.TestCase):
         for wp in ((255, 255, 255), (0, 0, 0)):
             for ap in APPEARANCES:
                 self.assertGreaterEqual(role_ratio(self.tok, label, ap, 0.25, wp), 4.5)
+
+    def test_menu_bar_tone_roles_are_asserted(self):
+        # The adaptive bar is inside gate A2: white text over every wallpaper colour that picks it, black text over every one that picks
+        # the dark foreground; neither is exempt, and every wallpaper colour is covered by at least one tone.
+        light = next(r for r in self.roles if r["backdrop"] == "bar-light-tone")
+        dark = next(r for r in self.roles if r["backdrop"] == "bar-dark-tone")
+        for role in (light, dark):
+            self.assertNotIn("exempt", role)
+            self.assertGreaterEqual(min(r for r, _ in self.table[role["id"]].values()), THRESHOLD[role["kind"]], role["id"])
+        self.assertLess(self.tok.path("menubar.toneLightBelow"), self.tok.path("menubar.toneDarkAbove"))
+        for wp in WALLPAPER_COLORS:
+            covered = [role_ratio(self.tok, r, "dark", 0.25, wp) for r in (light, dark)]
+            self.assertTrue(any(c is not None for c in covered), "no tone for wallpaper %s" % (wp,))
+        # Glyphs (icons) are held to the same ratio by the text roles; the thresholds follow from the pure foregrounds.
+        self.assertEqual(self.tok.color("darkColors", "dark", "barText"), (255, 255, 255))
+        self.assertEqual(self.tok.color("lightColors", "dark", "barText"), (0, 0, 0))
 
     def test_selection_highlight_text_both_appearances(self):
         accent = next(r for r in self.roles if r["id"] == "accent text on accent")
