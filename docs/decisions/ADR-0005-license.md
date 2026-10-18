@@ -3,8 +3,13 @@ Status: Proposed · Date: 2026-10-17 · Decider: owner · Needs legal review (§
 
 ## Context
 Grassfield reuses or links: Omarchy (MIT), Hyprland headers (BSD-3-Clause), Quickshell (LGPL-3.0-only,
-unmodified, used as a runtime), Qt (LGPL-3.0/GPL), KDE Frameworks KIO (LGPL-2.1+). The compositor plugin is
+unmodified, used as a runtime), Qt (LGPL-3.0/GPL), KDE Frameworks KIO (installed headers: LGPL-2.0-or-later, or "LGPL-2.0-only OR LGPL-3.0-only OR
+LicenseRef-KDE-Accepted-LGPL"; Solid: "LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL"). The compositor plugin is
 loaded into Hyprland's process. The repository stays private until the M5 legal review.
+
+Observed, not decided: `pacman -Qi omarchy` reports the URL `https://github.com/basecamp/omarchy`, while the
+master prompt and the Omarchy-derived file headers name `omacom/omarchy`. The installed package carries no
+licence file, so the upstream copyright line is unverified.
 
 ## Options
 1. **MIT for code** — matches Omarchy; maximal reuse; plugin compatible with BSD-3 Hyprland.
