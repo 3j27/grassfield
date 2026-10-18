@@ -3,8 +3,8 @@ import QtQuick
 import Qt.labs.platform as Platform
 
 // A browser window's menus in the global menu bar (T1: master-prompt 5.7, ADR-0008), exported by Qt through DBusMenu.
-// BrowserWindow.qml creates one per window, only when the registrar is there (src/main.cpp, apps/globalmenu.h); the
-// toolbar, context menus and Action menu stay either way. macOS structure: File, Edit, View, Go; the app menu and
+// BrowserWindow.qml creates one per window, only while the registrar is there, and a fresh one when the registrar
+// restarts (src/main.cpp, apps/globalmenu.h); the toolbar, context menus and Action menu stay either way. macOS structure: File, Edit, View, Go; the app menu and
 // Window are the shell's T0 menus (tab switching is under View). Every item runs the same BrowserTab action as the
 // window's own menus and shortcuts. A shortcut that an in-window Shortcut also registers is handled once: Qt hands an
 // ambiguous key to one of them per press and the window's Shortcut also acts on activatedAmbiguously.
