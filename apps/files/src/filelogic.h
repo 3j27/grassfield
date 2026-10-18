@@ -63,4 +63,8 @@ QString uniqueName(const QString &base, const std::function<bool(const QString &
 // Name of a duplicate: "report copy.txt", then "report copy 2.txt"... `copyWord` is the translated "copy".
 QString duplicateName(const QString &name, bool isDir, const QString &copyWord, const std::function<bool(const QString &)> &exists);
 
+// Entries of KIO's Network place (remote:/) that Files does not show: the kio-extras "afc:" link to Apple mobile
+// devices (an Apple trademark in its name, master-prompt §14). `item` is the entry's URL, `target` its link target.
+bool hiddenNetworkEntry(const QUrl &item, const QUrl &target);
+
 } // namespace FileLogic

@@ -226,3 +226,15 @@ TEST(FileNames, UniqueAndDuplicateNames)
     EXPECT_EQ(duplicateName("photos.2026", true, "copy", exists), "photos.2026 copy");
     EXPECT_EQ(duplicateName(".bashrc", false, "copy", exists), ".bashrc copy");
 }
+
+TEST(NetworkPlace, HidesTheAppleDevicesEntry)
+{
+    // kio-extras remoteview entries in remote:/ (afc-network.desktop links to afc:/).
+    EXPECT_TRUE(hiddenNetworkEntry(QUrl("remote:/afc-network"), QUrl("afc:/")));
+    EXPECT_TRUE(hiddenNetworkEntry(QUrl("remote:/afc-network.desktop"), QUrl()));
+    EXPECT_TRUE(hiddenNetworkEntry(QUrl("remote:/something"), QUrl("afc:/")));
+    EXPECT_FALSE(hiddenNetworkEntry(QUrl("remote:/smb-network"), QUrl("smb://")));
+    EXPECT_FALSE(hiddenNetworkEntry(QUrl("remote:/mtp-network"), QUrl("mtp:/")));
+    // Only the Network place: a local file of that name stays visible.
+    EXPECT_FALSE(hiddenNetworkEntry(QUrl::fromLocalFile("/tmp/afc-network.desktop"), QUrl::fromLocalFile("/tmp/afc-network.desktop")));
+}

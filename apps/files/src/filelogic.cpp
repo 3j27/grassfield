@@ -214,4 +214,13 @@ QString duplicateName(const QString &name, bool isDir, const QString &copyWord, 
     }
 }
 
+bool hiddenNetworkEntry(const QUrl &item, const QUrl &target)
+{
+    if (item.scheme() != QLatin1String("remote"))
+        return false;
+    // kio-extras' remoteview entry afc-network.desktop (URL=afc:/): matched by its target, or by its name when a
+    // listing does not carry the target.
+    return target.scheme() == QLatin1String("afc") || item.fileName().startsWith(QLatin1String("afc-network"));
+}
+
 } // namespace FileLogic
