@@ -49,7 +49,13 @@ sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
 sig=$(cat "$dev/nested.instance" 2>/dev/null || true)
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
 hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
-shell_pid=$(cat "$dev/shell.pid" 2>/dev/null || true)
+# Only this tree's live nested compositor (records verified by start time; scripts/dev/pidfile.sh): a stale record
+# may name another worktree's session.
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+dev_nested_target "$dev" || exit 2
+sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
+shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
 if [[ -z $sock || -z $sig || -z $hypr_pid ]] || ! kill -0 "$hypr_pid" 2>/dev/null; then
   echo "minimize: no nested instance (run scripts/dev/nested-up.sh)" >&2
   exit 2

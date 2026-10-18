@@ -57,6 +57,8 @@ mkdir -p "$out"
 . "$root/scripts/dev/pidfile.sh"
 # Records written inside the sandbox's PID namespace name other processes on the host (incident 2026-10-18).
 dev_require_host visual
+# Client records of an earlier, interrupted run are never acted on.
+rm -f "$out/pids"
 was_running=0
 dev_live_pid "$root/.dev/nested.pid" >/dev/null && was_running=1
 cleanup() {

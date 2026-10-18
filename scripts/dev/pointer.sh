@@ -10,11 +10,11 @@ dev=$root/.dev
 src=$root/tests/tools/vpointer
 bin=$dev/tools/vpointer
 
-sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
-main=$(cat "$dev/main.instance" 2>/dev/null || true)
-[[ -n $sock ]] || { echo "pointer: no nested instance (run: just nested-up)" >&2; exit 1; }
-[[ $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "pointer: refusing the main Wayland socket" >&2; exit 1; }
-[[ $(cat "$dev/nested.instance") != "$main" ]] || { echo "pointer: refusing the main instance" >&2; exit 1; }
+# shellcheck source=pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+# Only this tree's live nested compositor: a stale socket record may name another worktree's session or be reused.
+dev_nested_target "$dev" || exit 1
+sock=$DEV_NESTED_SOCK
 
 if [[ ! -x $bin || $src/vpointer.c -nt $bin ]]; then
   mkdir -p "$dev/tools"

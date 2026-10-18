@@ -18,12 +18,15 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
 out=$dev/ovt
 # scripts/dev/test.sh runs every tests/shell/*.sh: without a running nested session this test is skipped.
-if [[ ! -s $dev/nested.pid ]] || ! kill -0 "$(<"$dev/nested.pid")" 2>/dev/null || [[ ! -s $dev/shell.pid ]]; then
-  echo "SKIP overview_two_outputs: no nested session (just nested-up)"
+# Only this tree's live nested session (records verified by start time; scripts/dev/pidfile.sh); skipped in the sandbox.
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+if ! dev_nested_target "$dev" 2>/dev/null || ! dev_live_pid "$dev/shell.pid" >/dev/null; then
+  echo "SKIP overview_two_outputs: no nested session of this tree (just nested-up, as a bare command)"
   exit 0
 fi
 mkdir -p "$out"
-sock=$(<"$dev/nested.wayland")
+sock=$DEV_NESTED_SOCK
 bus=""
 [[ -f $dev/bus.address ]] && bus=$(<"$dev/bus.address")
 fails=0
