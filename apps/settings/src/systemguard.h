@@ -11,14 +11,19 @@ namespace grassfield::settings {
 // GRASSFIELD_DEV === "1", like Quickshell.env("GRASSFIELD_DEV") in the shell services.
 bool devSession();
 
-// Exactly the read-only queries the pages issue (qml/System.js builds the same argument vectors). Anything else,
-// also a variation of these, is not a query.
+// Exactly the read-only commands the pages issue (qml/System.js builds the same argument vectors; tst_settingssystem
+// checks that every System.QUERY entry is accepted here). Anything else, also a variation of these, is not a query:
+//   nmcli      4 fixed (radio, wifi list, connection list, device list) + 1 per saved profile (its SSID, by UUID)
+//   bluetoothctl 3 fixed (show, devices Paired, devices Connected)
+//   wpctl      1 fixed (status)                                     => 8 fixed + 1 parameterised, system sections
+//   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
+// Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
 
 // Programs the pages may run as actions in a real session. Anything else is refused.
 bool isActionProgram(const QString &program);
 
-// A device id of `wpctl` (digits) or one of its @DEFAULT_...@ names.
-bool isWpctlTarget(const QString &s);
+// A NetworkManager connection UUID.
+bool isUuid(const QString &s);
 
 } // namespace grassfield::settings

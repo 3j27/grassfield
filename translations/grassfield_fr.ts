@@ -1557,6 +1557,17 @@
     </message>
 </context>
 <context>
+    <name>ErrorNote</name>
+    <message>
+        <source>The action failed.</source>
+        <translation>L’action a échoué.</translation>
+    </message>
+    <message>
+        <source>The action failed: %1</source>
+        <translation>L’action a échoué&#xa0;: %1</translation>
+    </message>
+</context>
+<context>
     <name>FileList</name>
     <message>
         <source>Files</source>
