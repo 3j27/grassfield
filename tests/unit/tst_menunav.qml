@@ -63,4 +63,26 @@ TestCase {
         compare(r.index, 3);
         compare(r.action, "");
     }
+
+    // A swatch row is one row: Up/Down pass it like an item, Left/Right move between its swatches (wrapping),
+    // Return/Space choose the swatch; a disabled swatch row is skipped and Left/Right then do nothing.
+    function test_swatchRows() {
+        const swatches = [{id: "s0"}, {id: "s1"}, {id: "s2"}];
+        const menu = [{text: "Open"}, {id: "tags", swatches: swatches}, {id: "off", swatches: swatches, enabled: false}, {text: "Copy"}];
+        verify(MenuNav.hasSwatches(menu[1]));
+        verify(!MenuNav.hasSwatches(menu[0]));
+        verify(!MenuNav.hasSwatches({swatches: []}));
+        compare(MenuNav.handleKey(menu, 0, "down", false).index, 1);
+        compare(MenuNav.handleKey(menu, 1, "down", false).index, 3);
+        compare(MenuNav.handleKey(menu, 1, "right", false).action, "swatchNext");
+        compare(MenuNav.handleKey(menu, 1, "left", false).action, "swatchPrevious");
+        compare(MenuNav.handleKey(menu, 1, "left", true).action, "swatchPrevious", "Left on a swatch row of a submenu moves, it does not close");
+        compare(MenuNav.handleKey(menu, 1, "return", false).action, "activate");
+        compare(MenuNav.handleKey(menu, 2, "right", false).action, "");
+        compare(MenuNav.stepSwatch(menu[1], 0, 1), 1);
+        compare(MenuNav.stepSwatch(menu[1], 2, 1), 0);
+        compare(MenuNav.stepSwatch(menu[1], 0, -1), 2);
+        compare(MenuNav.stepSwatch(menu[1], -1, 1), 0);
+        compare(MenuNav.stepSwatch(menu[0], 0, 1), -1);
+    }
 }

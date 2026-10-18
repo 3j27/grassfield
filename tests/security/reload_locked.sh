@@ -35,6 +35,9 @@ set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+dev_require_host reload_locked
 sig=$(cat "$dev/nested.instance" 2>/dev/null || true)
 sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
@@ -86,7 +89,8 @@ no_leak() { # <word> <step>
   if grep -q "$1" "$typed" 2>/dev/null; then fail "$2: typed text reached the foot window ($1)"; else pass "$2: nothing reached the foot window"; fi
 }
 
-shell_pid() { cat "$dev/shell.pid" 2>/dev/null; }
+# Only a record that still matches its process (scripts/dev/pidfile.sh): a stale PID may name an owner process.
+shell_pid() { dev_live_pid "$dev/shell.pid"; }
 
 step_setup() {
   : >"$typed"
@@ -95,7 +99,7 @@ step_setup() {
   # Raw mode: every key reaches cat at once, no Return needed.
   env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
     setsid "$root/scripts/dev/isolated.sh" foot --app-id=gf-reload-probe -- sh -c 'stty raw -echo; exec cat >"$1"' sh "$typed" >/dev/null 2>&1 </dev/null &
-  echo $! >"$dev/reload-foot.pid"
+  dev_record_pid "$dev/reload-foot.pid" "$!"
   local geo=""
   for _ in $(seq 1 40); do
     geo=$(nested hyprctl -j clients 2>/dev/null | jq -r '.[] | select(.class == "gf-reload-probe") | "\(.monitor) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
@@ -187,7 +191,7 @@ foreign_start() { # <step>: start the foreign locker; it takes the session lock 
   # Nested socket and instance only (checked at the top); the fixture refuses anything else itself.
   env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" GRASSFIELD_FOREIGN_LOCKER=1 \
     setsid qs -p "$foreign" --no-color >"$dev/foreign-locker.log" 2>&1 </dev/null &
-  echo $! >"$dev/foreign-locker.pid"
+  dev_record_pid "$dev/foreign-locker.pid" "$!"
   local got=""
   for _ in $(seq 1 40); do
     got=$(foreign_ipc status)
@@ -198,10 +202,8 @@ foreign_start() { # <step>: start the foreign locker; it takes the session lock 
 }
 
 foreign_wait_exit() { # <step>: the foreign locker exits after its release
-  local pid
-  pid=$(cat "$dev/foreign-locker.pid" 2>/dev/null)
-  for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
-  if kill -0 "$pid" 2>/dev/null; then fail "$1: the foreign locker did not exit"; else pass "$1: the foreign locker exited"; rm -f "$dev/foreign-locker.pid"; fi
+  for _ in $(seq 1 20); do dev_live_pid "$dev/foreign-locker.pid" >/dev/null || break; sleep 0.1; done
+  if dev_live_pid "$dev/foreign-locker.pid" >/dev/null; then fail "$1: the foreign locker did not exit"; else pass "$1: the foreign locker exited"; rm -f "$dev/foreign-locker.pid" "$dev/foreign-locker.pid.start"; fi
 }
 
 # Releases the foreign lock, then measures how long Hyprland reports the session unlocked before the
@@ -339,15 +341,9 @@ step_sleep_desync() {
 # Leave nothing behind but the (locked) nested session.
 step_cleanup() {
   echo "typed into foot: $(tr -c '[:alnum:]' ' ' <"$typed" 2>/dev/null)"
-  if [[ -s $dev/reload-foot.pid ]]; then
-    kill -- "-$(<"$dev/reload-foot.pid")" 2>/dev/null || kill "$(<"$dev/reload-foot.pid")" 2>/dev/null || true
-    rm -f "$dev/reload-foot.pid"
-  fi
+  dev_stop "$dev/reload-foot.pid" "probe foot" >/dev/null || true
   # A foreign locker still running (failed step): stop it; Hyprland keeps the session locked.
-  if [[ -s $dev/foreign-locker.pid ]]; then
-    kill -- "-$(<"$dev/foreign-locker.pid")" 2>/dev/null || kill "$(<"$dev/foreign-locker.pid")" 2>/dev/null || true
-    rm -f "$dev/foreign-locker.pid"
-  fi
+  dev_stop "$dev/foreign-locker.pid" "foreign locker" >/dev/null || true
 }
 
 steps=("$@")

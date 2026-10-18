@@ -3,8 +3,8 @@ import QtQuick
 import Qt.labs.platform as Platform
 
 // The viewer's menus in the global menu bar (T1: master-prompt 5.7, ADR-0008), exported by Qt through DBusMenu.
-// Viewer.qml creates it only when the registrar is there (src/main.cpp, apps/globalmenu.h); the toolbar stays either
-// way. macOS structure: File, Edit, View, Go, Tools; the app menu and Window are the shell's T0 menus. Every item runs
+// Viewer.qml creates it only while the registrar is there, and a fresh one when the registrar restarts (src/main.cpp,
+// apps/globalmenu.h); the toolbar stays either way. macOS structure: File, Edit, View, Go, Tools; the app menu and Window are the shell's T0 menus. Every item runs
 // the same action as the toolbar and the window's shortcuts. A shortcut that an in-window Shortcut also registers is
 // handled once: Qt hands an ambiguous key to one of them per press and the window's Shortcut also acts on
 // activatedAmbiguously.

@@ -199,6 +199,7 @@ FocusScope {
             required property bool selected
             required property bool isDir
             required property bool hidden
+            required property var tagColors
 
             readonly property bool renaming: root.tab.isRenaming(root.model, row.url)
             readonly property bool emphasized: row.selected && list.activeFocus
@@ -236,17 +237,28 @@ FocusScope {
             }
 
             Text {
+                id: nameText
                 textFormat: Text.PlainText
                 visible: !row.renaming
                 anchors.left: icon.right
                 anchors.leftMargin: Tokens.spacingSm
                 anchors.verticalCenter: parent.verticalCenter
-                width: root.nameWidth - icon.x - icon.width - 2 * Tokens.spacingSm
+                width: root.nameWidth - icon.x - icon.width - 2 * Tokens.spacingSm - (rowDots.visible ? rowDots.width + Tokens.spacingSm : 0)
                 text: row.name.replace(/[\r\n]+/g, "\u23CE")
                 elide: Text.ElideMiddle
                 color: row.foreground
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
+            }
+
+            // Colour tags right after the name.
+            TagDots {
+                id: rowDots
+                visible: !row.renaming && colors.length > 0
+                colors: row.tagColors
+                x: nameText.x + nameText.paintedWidth + Tokens.spacingSm
+                anchors.verticalCenter: parent.verticalCenter
+                ringColor: row.emphasized ? Appearance.colors.accent : Appearance.colors.materialTint
             }
 
             Loader {

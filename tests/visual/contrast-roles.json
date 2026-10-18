@@ -47,7 +47,8 @@
    {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "secondary", "count": 2},
    {"file": "shell/widgets/builtin/system/System.qml", "class": "secondary", "count": 2},
    {"file": "shell/widgets/builtin/nowplaying/NowPlaying.qml", "class": "secondary", "count": 3},
-   {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "secondary", "count": 1}
+   {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "secondary", "count": 1},
+   {"file": "ui/Grassfield/Ui/SwatchRow.qml", "class": "secondary", "count": 1}
   ]},
   {"id": "danger text on material", "fg": "colors.danger", "backdrop": "material", "kind": "text", "sites": [
    {"file": "shell/notifications/NotificationContent.qml", "class": "danger", "count": 1},

@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
         qmlDir = QStringLiteral(GRASSFIELD_PREVIEW_QML_DIR);
 
     QVariantMap initial{{QStringLiteral("backend"), QVariant::fromValue(&backend)}};
-    // Global menu (T1): the viewer exports its menus only when the registrar is there (globalmenu.h). A Glance is a
+    // Global menu (T1): the viewer exports its menus only while the registrar is there (globalmenu.h). A Glance is a
     // panel without menus of its own.
     if (!glance)
         initial.insert(QStringLiteral("globalMenu"), grassfield::apps::globalMenuAvailable());
@@ -74,5 +74,8 @@ int main(int argc, char *argv[])
     engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(glance ? QStringLiteral("Glance.qml") : QStringLiteral("Viewer.qml"))));
     if (engine.rootObjects().isEmpty())
         return 1;
+    // The registrar may appear later (an app started before the bridge) or restart: the viewer's menus follow it.
+    if (!glance)
+        grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
     return app.exec();
 }

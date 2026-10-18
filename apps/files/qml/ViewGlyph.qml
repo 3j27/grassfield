@@ -3,7 +3,7 @@ import QtQuick
 import Grassfield.Ui
 
 // Small glyphs drawn from rectangles (Grassfield's own, no icon assets): "icons" (2x2 grid),
-// "list" (rows), "columns" (three panes), "more" (three dots), "plus".
+// "list" (rows), "columns" (three panes), "gallery" (a large pane over a strip), "more" (three dots), "plus".
 Item {
     id: root
 
@@ -88,6 +88,33 @@ Item {
                         height: columnsBox.height
                         color: root.color
                     }
+                }
+            }
+        }
+    }
+
+    // gallery: an outlined preview pane over a strip of three small squares
+    Column {
+        visible: root.kind === "gallery"
+        anchors.centerIn: parent
+        spacing: root.stroke
+        Rectangle {
+            width: root.size
+            height: root.size * 0.55
+            radius: root.stroke
+            color: "transparent"
+            border.width: root.stroke
+            border.color: root.color
+        }
+        Row {
+            spacing: root.stroke * 1.5
+            Repeater {
+                model: 3
+                Rectangle {
+                    width: (root.size - 2 * root.stroke * 1.5) / 3
+                    height: root.size * 0.25
+                    radius: root.stroke / 2
+                    color: root.color
                 }
             }
         }

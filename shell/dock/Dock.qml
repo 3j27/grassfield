@@ -175,8 +175,15 @@ Scope {
             readonly property int separatorWidth: Tokens.dockSpacing * 2 + Tokens.dockSeparatorWidth
             readonly property real maxScale: Settings.dockMagnificationEnabled ? Settings.dockMagnification : 1
             readonly property real pitch: iconSize + Tokens.dockSpacing
+            readonly property var dockMetrics: ({
+                    iconSize: Tokens.dockIconSize,
+                    padding: Tokens.dockPadding,
+                    indicatorSize: Tokens.dockIndicatorSize,
+                    spacing: Tokens.dockSpacing,
+                    bottomMargin: Tokens.dockBottomMargin
+                })
             readonly property int indicatorArea: Tokens.dockIndicatorSize + Tokens.dockSpacing
-            readonly property int shelfHeight: iconSize + 2 * Tokens.dockPadding + indicatorArea
+            readonly property int shelfHeight: DockModel.shelfHeight(dockMetrics)
             readonly property real overhang: Math.ceil((maxScale - 1) * iconSize)
             readonly property int tooltipArea: Tokens.dockTooltipArea
             readonly property bool autohide: Settings.dockAutohide
@@ -234,7 +241,7 @@ Scope {
                 right: true
             }
             implicitHeight: shelfHeight + Tokens.dockBottomMargin + overhang + tooltipArea
-            exclusiveZone: autohide ? 0 : shelfHeight + Tokens.dockBottomMargin
+            exclusiveZone: DockModel.reservedHeight(dockMetrics, autohide)
             color: "transparent"
             focusable: true
             WlrLayershell.layer: WlrLayer.Top

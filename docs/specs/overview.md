@@ -209,19 +209,22 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
      wallpaper and the desktop: the windows are above it). Same-layer surfaces stack in mapping order: map it when the
      overview opens so that it is above the desktop widgets (Bottom), or decide that they stay undimmed.
    - chrome, namespace **`grassfield-overview`**, `WlrLayer.Overlay`, transparent background (no dim or blur where
-     windows are drawn), Spaces bar, labels, selection, whole-surface input; keyboard `Exclusive` on the **focused
-     output's** chrome only, `None` on the others; every chrome drops to `None` before the close completes.
-     **Required by the plugin** (R13 fix 2026-10-18, relaxed 2026-10-18 after the shell integration review, main
-     23caeab): an `on:true` that would transform windows is refused with reason `no-chrome` unless every monitor of those
-     windows has a mapped chrome surface (any keyboard interactivity) and the keyboard is on a chrome surface (or one of its
-     popups) with `Exclusive` interactivity. The former rule (every chrome `Exclusive`) lost the keyboard after the close on
-     two outputs: Hyprland's `refocusLastWindow` is refused while another Exclusive layer exists. Pointer input on the
-     outputs whose chrome is `None` cannot reach a transformed window either: while an Exclusive layer exists Hyprland
-     sends pointer focus to Exclusive layers only (`CInputManager::mouseMoveUnified`, "forced above all"; checked in
-     `overview.sh`: a click at a window's real place on the second output reached nothing). While windows are shown, a
-     chrome unmapping (the keyboard-holding one included) ends the overview at once (`closed`/`interrupted`, no closing
-     animation) and the keyboard leaving the chrome ends it (`interrupted`). After sending `on:false` the shell may unmap
-     the chrome or drop its keyboard: the closing animation it asked for runs to its end.
+     windows are drawn), Spaces bar, labels, selection, whole-surface input. **Keyboard plan** (`V2.keyboardPlan`):
+     while the overview is open (opening/open) **every output's chrome is `Exclusive`**, because while an Exclusive
+     layer exists Hyprland sends pointer focus to Exclusive layers only (`CInputManager::mouseMoveUnified`, "forced
+     above all"): a `None` chrome would make hover, click, drag, the Spaces tiles and the backdrop click dead on its
+     output. Hyprland gives the keyboard to the chrome of the pointer's output; the shell handles keys on any chrome and
+     keeps `keyScreen` in sync with the chrome that has the keyboard (`Window.active`) and with key presses. On close
+     (Esc, a click on a window or the backdrop, IPC close/toggle, a Space switch, a fallback) the shell first sets
+     **every** chrome to keyboard `None` (the 80 ms release step), and only then sends `on:false`, activates the target
+     window and hides the chromes: no chrome may stay `Exclusive` once the release starts, else Hyprland's
+     `refocusLastWindow` is refused ("ignoring, exclusive LS present") and the keyboard is lost after the close.
+     **Required by the plugin** (relaxed 2026-10-18, main 46b3e9b): an `on:true` that would transform windows is
+     refused with reason `no-chrome` unless every monitor of those windows has a mapped chrome surface (any keyboard
+     interactivity) and the keyboard is on a chrome surface (or one of its popups) with `Exclusive` interactivity. While
+     windows are shown, a chrome unmapping ends the overview at once (`closed`/`interrupted`, no closing animation) and
+     the keyboard leaving the chrome ends it (`interrupted`). After sending `on:false` the shell may unmap the chrome or
+     drop its keyboard: the closing animation it asked for runs to its end.
 3. **Open / update.** Once the chrome holds the keyboard, send `hl.plugin.grassfield.overview("<json>")` through
    `Hyprland.dispatch`, guarded like the other verbs (add `overview` to `isPluginVerb` in `shell/platform/Minimized.js`),
    the JSON built only from validated pieces (hex address, finite rounded numbers) and quoted as a Lua string (escape
@@ -296,12 +299,12 @@ layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (
   (no capability, or a full-screen window on a shown Space) and set by a fallback (refusal `invalid`/`no-windows`, `no-chrome`
   after one retry, `unavailable`, `fullscreen`, chrome not holding the keyboard within `chromeWaitMs`). A fallback while
   windows are transformed first sends `{"on":false,"durationMs":0}`.
-- Open: every output's chrome is Exclusive (the plugin requires it per output with windows); once a chrome is `Window.active`
+- Open: every output's chrome is Exclusive (pointer input, see Surfaces); once a chrome is `Window.active`
   the layout of all outputs is sent (surface box = layout rect minus the 28 px band x scale, global coordinates).
   `durationMs` = `motion.slow` (350), 0 with Reduce Motion (the dim then crossfades in at most `motion.reducedMax`).
   A new layout while open (window opened/closed/moved) retargets with a new `on:true`.
-- Close: `on:false` is sent first, then the grab is released 80 ms before the focus action as in v1 (the plugin lets the
-  asked closing animation finish). Esc, a click on a window or on empty space, a Space tile all go through it.
+- Close: every chrome drops to keyboard None first; 80 ms later `on:false` is sent, then the focus action and the hide
+  (the plugin lets the asked closing animation finish). Esc, a click on a window or on empty space, a Space tile all go through it.
 - Input is the shell's own: per-window hit areas (surface + band), hover selects and shows the app label, arrows/Tab/Return,
   drag to a Space tile (a ghost follows the pointer; the real window stays drawn by the plugin; drop = `moveToSpace`).
 - "+": switches to the new Space; the plugin ends its overview on a Space switch, the shell keeps the chrome open on the

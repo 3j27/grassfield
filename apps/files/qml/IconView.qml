@@ -162,9 +162,12 @@ FocusScope {
             required property bool isDir
             required property bool canPreview
             required property bool hidden
+            required property var tagColors
 
             readonly property bool renaming: root.tab.isRenaming(root.model, cell.url)
             readonly property bool focused: grid.activeFocus
+            // Room taken by the tag dots left of the name.
+            readonly property real dotsRoom: dots.visible ? dots.width + Tokens.spacingXs : 0
 
             width: grid.cellWidth
             height: grid.cellHeight
@@ -213,14 +216,24 @@ FocusScope {
                 color: cell.focused ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
             }
 
+            // Colour tags: dots before the first line of the name; dots and name are centred together.
+            TagDots {
+                id: dots
+                visible: !cell.renaming && colors.length > 0
+                colors: cell.tagColors
+                x: label.x + (label.width - label.paintedWidth) / 2 - width - Tokens.spacingXs
+                y: label.y + (label.paintedHeight / Math.max(1, label.lineCount) - height) / 2
+            }
+
             Text {
                 id: label
                 textFormat: Text.PlainText
                 visible: !cell.renaming
                 anchors.horizontalCenter: parent.horizontalCenter
+                anchors.horizontalCenterOffset: cell.dotsRoom / 2
                 anchors.top: icon.bottom
                 anchors.topMargin: Tokens.spacingXs + Tokens.spacingXs / 2
-                width: cell.width - 2 * Tokens.spacingXs
+                width: cell.width - 2 * Tokens.spacingXs - cell.dotsRoom
                 horizontalAlignment: Text.AlignHCenter
                 text: cell.name.replace(/[\r\n]+/g, "\u23CE")
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere

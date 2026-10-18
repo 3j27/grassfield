@@ -154,6 +154,9 @@ Scope {
         const next = Object.assign({}, chromeActive);
         next[screenName] = active;
         chromeActive = next;
+        // Every chrome is Exclusive: keyScreen follows the one Hyprland gives the keyboard to.
+        if (active && open)
+            keyScreen = screenName;
     }
 
     onChromeHeldChanged: {
@@ -234,7 +237,7 @@ Scope {
 
     // True between releasing the exclusive keyboard grab and the pending action.
     property bool releasing: false
-    // Keyboard mode of every output's chrome (V2.keyboardPlan): one Exclusive while open, all None while releasing.
+    // Keyboard mode of every output's chrome (V2.keyboardPlan): all Exclusive while open, all None once releasing.
     readonly property var keyboardPlan: V2.keyboardPlan(Quickshell.screens.map(s => s.name), keyScreen, open && !releasing ? "open" : releasing ? "releasing" : "closed")
     property var pending: null
 
@@ -242,8 +245,8 @@ Scope {
     // compositor refocuses the previous window (and its workspace) when the overlay goes away,
     // undoing the action; so the grab is released first and the action runs shortly after.
     function closeAnd(action: var): void {
-        // v2: ask for the closing animation first; releasing the grab below would otherwise end it at once.
-        closeV2();
+        // Every chrome drops to keyboard None first (releaseTimer); only then on:false is sent, the target window is
+        // activated and the chromes hide, so no Exclusive layer remains when Hyprland refocuses.
         pending = action;
         releasing = true;
         releaseTimer.restart();
@@ -256,6 +259,7 @@ Scope {
             const action = root.pending;
             root.pending = null;
             try {
+                root.closeV2();
                 if (action)
                     action();
             } finally {

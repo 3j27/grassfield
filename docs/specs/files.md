@@ -8,7 +8,11 @@
 - Icon view shows large icons or thumbnails with names below; a selected item gets a grey rounded backdrop and an
   accent pill behind its name. List view has sortable columns (Name, Date Modified, Size, Kind), folders show "--"
   as size, dates read "Today at 14:05". Column view shows one column per folder level with a preview column for a
-  selected file.
+  selected file. Gallery view shows a large preview of the selected item above a strip of thumbnails, with an optional
+  preview pane on the right (name, kind, size, dates, tags); Left/Right walk the strip, Space opens the quick look.
+- Colour tags: the item menu ends with a row of seven colour dots; clicking one tags the selection (or removes the tag
+  when every item has it). Tagged items show small coloured dots next to their names in every view; the sidebar's
+  Tags section lists the tags in use, and clicking one shows the tagged items.
 - Tabs appear only from the second tab (Cmd+T). Get Info opens a small separate window per item. Space opens
   Glance. Type-to-select jumps to the first matching name. Drag and drop moves on the same volume and copies
   across volumes.
@@ -16,8 +20,9 @@
 ## Purpose and non-goals
 Browse and manage files on KDE Frameworks KIO (owner decision D6): the feature is called "Files" (code
 `grassfield-files`, app id `org.grassfield.Files`; never "Finder"). Trash, mounts, network protocols and thumbnailers
-are KIO/Solid's, never reimplemented. Non-goals for v1: gallery view, tags, recursive/indexed search (the shell
-Search covers files), Recents, sharing, Group By, a built-in viewer (Space
+are KIO/Solid's, never reimplemented. Non-goals for v1: an indexed search (the shell Search covers files; the tag
+search walks one folder tree, F16), named tags created in Files (only the colour tags are set here; tags of other
+applications are shown, kept and searchable), Recents, sharing, Group By, a built-in viewer (Space
 starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 
 ## Functional requirements
@@ -31,9 +36,12 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    kind default ascending, date and size descending); show hidden files; name filter (search field).
 3. F3 Selection: click, Shift (range), Ctrl (toggle), Ctrl+A, rubber band (icon view), keyboard arrows, Home/End,
    PageUp/PageDown, type-to-select (1 s reset). The selection is keyed by URL and survives re-sorting.
-4. F4 Views: Icon (thumbnails), List (sortable headers), Columns (miller columns + preview column); Ctrl+1/2/3 and
-   the toolbar switcher; the view, sort and hidden-files choices persist (QSettings `Grassfield/Files`).
-5. F5 Sidebar: Favorites = Home, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists;
+4. F4 Views: Icon (thumbnails), List (sortable headers), Columns (miller columns + preview column), Gallery (F15);
+   Ctrl+1/2/3/4, View As (item and background menus), the global View menu and the toolbar switcher; the view, sort,
+   hidden-files and gallery info panel choices persist (QSettings `Grassfield/Files`; view settings are global, there
+   is no per-folder view memory). Tag search results (F16) in the column mode show as a list.
+5. F5 Sidebar: Favorites = Home, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists; Tags
+   (F16);
    Locations = Computer (`/`), Solid storage volumes (not ignored, filesystem usage) with mount on click and eject
    (`Solid::StorageAccess::setup/teardown`), Network (`remote:/`) only when a KIO `smb` or `sftp` worker exists (its
    listing hides kio-extras' "Apple Devices" `afc:` entry, an Apple trademark in the UI, master-prompt §14:
@@ -69,23 +77,77 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 13. F13 Appearance: light/dark and Reduce Motion follow `grassfield.json` (read only, watched); app windows are
     opaque; tokens only (`files.*` group of `ui/tokens/tokens.json`). Error banners use the destructive colour.
 14. F14 Global menu (T1, master-prompt 5.7, ADR-0008): each browser window exports its menus through DBusMenu
-    (`qml/GlobalMenu.qml`, a `Qt.labs.platform` MenuBar) when `com.canonical.AppMenu.Registrar` is on the session bus
-    at start (`apps/globalmenu.h`); without it nothing is created and the bar keeps the T0 menus. File (New Window,
+    (`qml/GlobalMenu.qml`, a `Qt.labs.platform` MenuBar) while `com.canonical.AppMenu.Registrar` is on the session
+    bus: `apps/globalmenu.h` watches the name (QDBusServiceWatcher) for the life of the app, creates the MenuBar when it
+    appears (an app started before the bridge), destroys it when it goes away and recreates it on an owner change (a
+    bridge restart); without it the bar keeps the T0 menus and the in-window controls stay usable. File (New Window,
     New Folder, New Tab, Open, Open With for the selection, Close Tab/Window, Get Info, Rename, Duplicate, Glance,
-    Move to Trash or Put Back, Delete Immediately… and Empty Trash… in the Trash, Find), Edit (Undo, Redo, Cut, Copy,
-    Paste, Select All), View (as Icons/List/Columns, Sort By, Show Hidden Files, Show Previous/Next Tab, Reload),
-    Go (Back, Forward, Enclosing Folder, the sidebar places, Go to Folder…). The app menu and Window are the shell's
+    Tags (the seven colours, checked when every selected item has one), Move to Trash or Put Back, Delete Immediately…
+    and Empty Trash… in the Trash, Find), Edit (Undo, Redo, Cut, Copy, Paste, Select All), View (as
+    Icons/List/Columns/Gallery, Show Info Panel, Sort By, Show Hidden Files, Show Previous/Next Tab, Reload), Go (Back,
+    Forward, Enclosing Folder, the sidebar places without the tags, Go to Folder…). The app menu and Window are the shell's
     T0 menus. Items run the same BrowserTab actions as the window and show the window's shortcuts; a key registered
     by both a menu item and an in-window Shortcut runs once (the Shortcut also acts on `activatedAmbiguously`). An
     operation error shows in the window that was active last (a global menu action runs while the shell's menu holds
     the keyboard).
+15. F15 Gallery view (`qml/GalleryView.qml`): a large preview of the current item above a horizontal strip of
+    thumbnails, and an info panel on the right (name, kind and size, colour dots, Created, Modified, Last opened,
+    Where, Tags) shown or hidden with View > Show Info Panel (Ctrl+Shift+P, `view/galleryInfo`, on by default). The
+    preview is a KIO thumbnail at `files.galleryPreviewSize` x `files.thumbnailOversample` px (at most the 1024 px
+    xx-large cache size) from the same pipeline as the icon thumbnails: FolderModel runs two channels (icon size, role
+    `thumbnail`; gallery size, role `largeThumbnail`), each with its LIFO request queue, 32-item PreviewJobs and an LRU
+    cap (512 and 8). Each preview page asks for its thumbnail when created and drops the request when destroyed, so the
+    neighbours kept around the current page are ready before the arrows reach them; until then the icon-size
+    thumbnail, then the type icon, is shown (never enlarged past its pixels). The first item is selected once the
+    folder is listed. Keyboard: Left/Right move along the strip, Home/End, PageUp/PageDown by the visible thumbnails
+    (`Nav.stripMove`), Space opens Glance, Return opens, Ctrl+Up/Down as everywhere. In the strip a click selects (Shift
+    extends, Ctrl toggles), a double click opens, items drag out and folders accept drops; a right click opens the item
+    menu, on the empty area the folder menu. The name under the preview is also the inline rename field (F2).
+16. F16 Tags (`src/taglogic.*`, `src/tagstore.*`, `src/tagsearch.*`):
+    - Storage: the extended attribute `user.xdg.tags` (freedesktop Common Extended Attributes, as Dolphin, Baloo and
+      KFileMetaData write it), UTF-8, tags separated by commas, read and written with `lgetxattr`/`lsetxattr`/
+      `lremovexattr` on local files and folders only; an empty list removes the attribute. Tags of other applications
+      are kept as they are. The seven colour tags are stored under fixed English keys (Red, Orange, Yellow, Green,
+      Blue, Purple, Gray: the attribute does not depend on the UI language), matched case-insensitively, shown under
+      translated names (context `Tags`) in the colours of tokens `files.tagRed` … `files.tagGray`. Symbolic links are
+      never followed (Linux keeps no user attributes on links; tagging a link must not tag its target).
+    - Setting: the item menu ends with a colour row (PopupMenu swatch row): each colour shows whether all, some or no
+      selected item has it; a click adds it to every item, or removes it when all have it. The same row is in Get Info
+      (with every tag name of the item) and File > Tags in the global menu. Items that can't carry tags (not local, in
+      the Trash, links, missing, on a filesystem without user extended attributes such as some network or FAT volumes)
+      get the row disabled; the reason shows as the row's caption and, in Get Info, as a tooltip. A write that the
+      filesystem or the permissions refuse shows in the error banner. Files' own writes refresh every window at once.
+    - Showing: coloured dots (at most `files.tagDotsMax`, overlapping) before the name in the icon view, after it in the
+      list view, before the chevron in the column view and in its preview column, on the gallery strip thumbnails and
+      in the gallery info panel (roles `tags`, `tagColors`; one attribute read per shown item, cached).
+    - Sidebar Tags section: the tags in use, colour tags first (a hollow ring for a tag without a colour). "In use"
+      means seen on an item Files has shown, or set in Files; the list is kept across sessions (QSettings
+      `tags/known`, at most 64) and Remove from Sidebar (right click) forgets one (files keep it). A drop on a tag tags
+      the dropped local items. Tags are not places of the Go menu.
+    - Tag search: a click on a sidebar tag opens the location `grassfield-tag:/<tag>?in=<folder>` (Files-internal,
+      never handed to KIO): the items tagged so in the folder shown at the click (a local folder; from a remote place or
+      the Trash, the home folder) and below. TagSearch walks the tree on a worker thread without an index: breadth
+      first, on the folder's filesystem only, never through symbolic links, hidden entries only with Show Hidden Files,
+      bounded to 50,000 entries, 2,000 matches and 32 levels, cancelled when the tab navigates elsewhere or closes.
+      Matches arrive in batches; the status bar reads "Searching…" and tells when a bound stopped the search. The
+      results follow KIO's change notifications (KDirNotify: renamed, moved, removed, changed) and Files' tag writes (an
+      item that loses the tag leaves, one under the folder that gets it joins). The path bar shows the folder then the
+      tag; history, tabs and Back work as for folders. In the results, rename, cut, copy, Move to Trash and tags work;
+      nothing can be created (New Folder, Paste, Duplicate are off); Show in Enclosing Folder opens the item's folder
+      with the item selected; a drop on the results or on the tag's path segment tags the dropped items.
 
 ## Acceptance criteria
 | ID | Test | Level |
 |---|---|---|
 | F2 sort keys, sizes, dates, F10 path segments, F6 names, F5 hidden Network entry | `tests/unit/files/tst_filelogic.cpp` (gtest, 18 tests, run by `scripts/dev/test.sh`) | L0 |
-| F3/F10 keyboard moves, history, type-to-select, header sort, rubber band, column prefix | `tests/unit/tst_filesnav.qml` (9 cases) | L0 |
-| F6 copy/paste, F2 rename, new folder + inline rename, undo/redo, duplicate, trash + Put Back, Ctrl+W quit, no app launch, no QML errors, owner Trash untouched | `tests/apps/files_sandbox.sh` (nested, keyboard + pointer, 19 checks) | L1 |
+| F3/F10 keyboard moves, history, type-to-select, header sort, rubber band, column prefix; F4/F15 view modes (Ctrl+1..4, saved value fallback, tag results as a list), strip moves, initial gallery row | `tests/unit/tst_filesnav.qml` (15 cases) | L0 |
+| F15 gallery on a stand-in listing: first item shown, Left/Right/Home/End along the strip, Up/Down still, Space and Return reach the tab, large previews asked for on the way, info panel preference | `tests/unit/tst_filesgallery.qml` (5 cases) | L0 |
+| F16 tag parse/serialize, colour keys, selection states, search locations; `user.xdg.tags` write/read/remove, foreign tags, long values, links, folders on files under the test sandbox (`GRASSFIELD_TEST_TMP` in `.dev/`; skipped without user xattrs) | `tests/unit/files/tst_tags.cpp` (gtest, 13 tests) | L0 |
+| F16 palette from tokens, swatch models, dots cap, swatch row states, pointer, keyboard, disabled reason; PopupMenu swatch rows | `tests/unit/tst_filestags.qml` (5 cases), `tst_popupmenu.qml`, `tst_menunav.qml` | L0 |
+| F6 copy/paste, F2 rename, new folder + inline rename, undo/redo, duplicate, trash + Put Back, Ctrl+W quit, no app launch, no QML errors, owner Trash untouched | `tests/apps/files_sandbox.sh` (nested compositor, own private D-Bus bus, app through `scripts/dev/isolated.sh`, refuses the owner's bus; keyboard + pointer, 19 checks) | L1 |
+| F15 | nested screenshot: gallery view with a thumbnail preview, the strip and the info panel; Right moves the preview | L1 |
+| F16 | nested screenshots: item menu colour row, a tag set (sandbox file), dots in the icon, list, column and gallery views, Get Info tag row, sidebar Tags section and a tag search listing the tagged files of the sandbox tree | L1 |
+| F14 registrar | nested, private bus: Files started before the bridge gets its global menus once the bridge starts; after a bridge restart the bar shows Files' menus again | L1 |
 | F4/F5/F8/F9/F10/F13 | nested screenshots: icon view with thumbnails, list sorted by date, columns, Get Info, item menu, two tabs with Trash, light icon/list, search, hidden files | L1 |
 | F11 | nested: drag of a file onto a folder moved it (sandbox), Ctrl+Z moved it back | L1 |
 | F14 | nested, private bus with the bridge: File, Edit, View, Go in the bar; File > New Folder and Edit > Undo clicked with the pointer created and removed the folder (sandbox); Open With lists the selection's applications; `tests/integration/global_menus.sh` covers the same T1 path with Preview | L1 |
@@ -95,8 +157,13 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 ## Interfaces / contracts
 - `grassfield.json` version 1 (read only): `appearance`, `accessibility.reduceMotion`; location like the shell
   (`GRASSFIELD_CONFIG_HOME` → `$XDG_CONFIG_HOME/grassfield` → `~/.config/grassfield`).
-- QSettings `~/.config/Grassfield/Files.conf`: `view/mode` (icons|list|columns), `view/sortKey` (0 name, 1 kind,
-  2 date, 3 size), `view/sortDescending`, `view/foldersFirst`, `view/showHidden`.
+- QSettings `~/.config/Grassfield/Files.conf`: `view/mode` (icons|list|columns|gallery, anything else reads as icons),
+  `view/sortKey` (0 name, 1 kind, 2 date, 3 size), `view/sortDescending`, `view/foldersFirst`, `view/showHidden`,
+  `view/galleryInfo` (default true), `tags/known` (the sidebar's tags, stored names in display order, at most 64).
+- Extended attribute `user.xdg.tags` (F16): UTF-8 tag names separated by commas, no escaping (a comma inside a tag
+  becomes a space when Files writes it); colour tags under the keys Red, Orange, Yellow, Green, Blue, Purple, Gray.
+- Tag search location `grassfield-tag:/<tag>?in=<percent-encoded folder URL>` (Files-internal: history, tabs, the
+  path bar and Go to Folder; never passed to KIO).
 - Desktop entry `org.grassfield.Files.desktop`: `Exec=grassfield-files %U`, `Icon=system-file-manager`,
   `MimeType=inode/directory;`.
 - Environment: `GRASSFIELD_FILES_QML` (dev QML dir), `GRASSFIELD_FILES_NO_LAUNCH=1` (scripted tests: opening
@@ -121,8 +188,12 @@ installed (not built here).
 
 ## Automated tests · Manual verification steps
 - `scripts/dev/test.sh` (gtest + QML), `scripts/dev/qmllint.sh`, `tests/apps/files_sandbox.sh [output]` (needs
-  `scripts/dev/nested-up.sh` and `apps/files/build-direct.sh`; all files under `.dev/files-sandbox`, XDG dirs in
-  `.dev/files-sandbox/.scenario-env` so the Trash is a sandbox Trash).
+  `scripts/dev/nested-up.sh` and `apps/files/build-direct.sh`; all files under `.dev/files-sandbox`; the app runs
+  through `scripts/dev/isolated.sh` with its XDG homes in `.dev/isolated/files-sandbox`, so the Trash is a sandbox
+  Trash, on a private dbus-daemon started by the script with the same homes and the nested Wayland socket, so KIO's
+  D-Bus-activated helpers (kiod6, kpasswdserver6, kioexecd6) never run with the owner's environment; the script
+  refuses to run on the owner's session bus and stops the app's and the bus's process groups on exit).
+- Tags on real files: only under `.dev/` (the gtests use `GRASSFIELD_TEST_TMP`; nested evidence tags sandbox files).
 - Manual (L2, owner): plug a USB stick (mount on click, eject), open a text file and an image with the default app,
   drag files to and from another app, Empty Trash on a test item.
 
@@ -138,6 +209,10 @@ installed (not built here).
 - The lister uses delayed MIME types: the Kind sort uses the extension/name guess (memoized) until an item's type is
   known, and rows a view displays refine their type from content once (never the whole folder on the GUI thread).
   Kind sort of 2000 extension-less files: 529 ms (was ~3100 ms).
+- Tags cost one `lgetxattr` per shown item (cached per URL); sorting and filtering never read them. The tag search runs
+  off the GUI thread (one `readdir` per folder, one `lgetxattr` per entry, one `lstat` per subfolder) and hands
+  matches over in batches (64 items or 100 ms). Gallery previews: at most 8 gallery-size thumbnails are kept (up to
+  4 MB each at 1024 px). Not measured on the reference hardware (L2).
 - Names with line breaks show on one line with `⏎` in place of each break (display only).
 - Accessibility: `Accessible.role/name` on every control, list item, header, banner and dialog; full keyboard
   operation; untrusted text (file names, KIO messages) is `Text.PlainText`.
@@ -147,7 +222,17 @@ installed (not built here).
 - Thumbnails come from KIO's thumbnail plugins (kio-extras, installed 2026-10-17: images, PDF, video); a type without
   a plugin keeps its MIME icon. The Network place (kio-extras smb/sftp workers) lists MTP devices and SMB shares; the
   "Apple Devices" entry is hidden (§14).
-- No gallery view, tags, Recents, Group By, sharing; search filters the current folder by name only.
+- No Recents, Group By, sharing; search filters the current folder by name only.
+- Tags: only the seven colour tags can be set in Files (no "Tags…" editor for named tags; tags of other applications
+  are shown in Get Info and the gallery panel, kept, searchable from the sidebar and droppable onto). Tag changes are
+  not part of Undo. The sidebar lists the tags seen in use, not an index of the disk: a tag no longer used stays until
+  Remove from Sidebar. The tag search walks one folder tree with bounds (no global search, no live query: an item
+  tagged by another application while the results are open appears after Reload). A tag written by another
+  application shows once the folder is listed again (KIO's refresh does not always report attribute changes).
+  Symbolic links, items in the Trash, remote items and filesystems without user extended attributes cannot be tagged
+  (the row says why). Copies keep their tags (KIO copies extended attributes); a copy made by another tool may not.
+- Gallery view: the info panel exists in the gallery view only (macOS shows a preview pane in every view); no quick
+  actions (rotate, markup) in the panel; the preview changes in place without the macOS slide.
 - Space does not close a Glance from Files by itself; the Glance window has the focus and closes on Space/Esc.
 - KIO's own dialogs are QWidget dialogs, not Grassfield-styled: file-exists conflicts (paste/drop), the Open With
   chooser when no application is associated, and the undo confirmation for deleting copied files.

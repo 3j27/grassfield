@@ -304,17 +304,27 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+1"
-        onActivated: win.tab.setViewMode("icons")
+        onActivated: win.tab.setViewModeByNumber(1)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+2"
-        onActivated: win.tab.setViewMode("list")
+        onActivated: win.tab.setViewModeByNumber(2)
         onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+3"
-        onActivated: win.tab.setViewMode("columns")
+        onActivated: win.tab.setViewModeByNumber(3)
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+4"
+        onActivated: win.tab.setViewModeByNumber(4)
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+P"
+        onActivated: win.tab.toggleGalleryInfo()
         onActivatedAmbiguously: activated()
     }
 
@@ -406,7 +416,8 @@ Window {
                             model: [
                                 {mode: "icons", name: qsTr("as Icons")},
                                 {mode: "list", name: qsTr("as List")},
-                                {mode: "columns", name: qsTr("as Columns")}
+                                {mode: "columns", name: qsTr("as Columns")},
+                                {mode: "gallery", name: qsTr("as Gallery")}
                             ]
                             delegate: ToolButton {
                                 required property var modelData
@@ -694,9 +705,14 @@ Window {
                     if (!f)
                         return "";
                     if (f.loading && f.count === 0)
-                        return qsTr("Loading…");
+                        return f.isSearch ? qsTr("Searching…") : qsTr("Loading…");
                     const total = f.count === 1 ? qsTr("1 item") : qsTr("%1 items").arg(f.count);
                     const items = f.selectedCount > 0 ? qsTr("%1 of %2 selected").arg(f.selectedCount).arg(total) : total;
+                    // A tag search: still running, or stopped by its bounds (TagSearch) before the whole folder was seen.
+                    if (f.isSearch && f.loading)
+                        return qsTr("%1, searching…").arg(items);
+                    if (f.isSearch && f.searchLimited)
+                        return qsTr("%1 (the search stopped early: the folder holds too many items)").arg(items);
                     return f.freeSpace >= 0 ? qsTr("%1, %2 available").arg(items).arg(win.app.formatSize(f.freeSpace)) : items;
                 }
             }

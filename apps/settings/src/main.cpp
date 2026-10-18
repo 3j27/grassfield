@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
     if (qmlDir.isEmpty())
         qmlDir = QStringLiteral(GRASSFIELD_SETTINGS_QML_DIR);
 
-    // Global menu (T1): the window exports its menus only when the registrar is there (globalmenu.h).
+    // Global menu (T1): the window exports its menus only while the registrar is there (globalmenu.h).
     engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)}, {"globalMenu", grassfield::apps::globalMenuAvailable()}});
 
     QObject::connect(
@@ -46,5 +46,7 @@ int main(int argc, char *argv[])
     engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("Main.qml"))));
     if (engine.rootObjects().isEmpty())
         return 1;
+    // The registrar may appear later (an app started before the bridge) or restart: the menus follow it.
+    grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
     return app.exec();
 }

@@ -1,5 +1,5 @@
 # ADR-0005: License of Grassfield code and assets
-Status: Proposed · Date: 2026-10-17 · Decider: owner · Needs legal review (§14)
+Status: Accepted by the owner 2026-10-18 (MIT for Grassfield's own code; root LICENSE) · Date: 2026-10-17 · Decider: owner · Asset/trade-dress questions still need legal review (§14)
 
 ## Context
 Grassfield reuses or links: Omarchy (MIT), Hyprland headers (BSD-3-Clause), Quickshell (LGPL-3.0-only,

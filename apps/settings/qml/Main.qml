@@ -9,7 +9,7 @@ Window {
 
     // Set by the launcher (src/main.cpp).
     required property var backend
-    // The registrar is there: the window exports its menus to the global menu bar (GlobalMenu.qml).
+    // The registrar is there (kept up to date by src/main.cpp): the window exports its menus to the global menu bar.
     required property bool globalMenu
     readonly property alias searchField: search
 

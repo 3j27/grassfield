@@ -13,6 +13,8 @@ set -euo pipefail
 VS_HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VS_ROOT=$(cd "$VS_HERE/../.." && pwd)
 VS_DEV=$VS_ROOT/.dev
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$VS_ROOT/scripts/dev/pidfile.sh"
 VS_STATE=$VS_DEV/visual
 VS_SHOTS=${VISUAL_SHOTS:-$VS_STATE/shots}
 VS_LANG=${VISUAL_LANG:-en}
@@ -45,7 +47,7 @@ vs_park() {
 vs_nested_wayland() { cat "$VS_DEV/nested.wayland"; }
 
 vs_nested_running() {
-  [[ -s $VS_DEV/nested.pid ]] && kill -0 "$(<"$VS_DEV/nested.pid")" 2>/dev/null
+  dev_live_pid "$VS_DEV/nested.pid" >/dev/null
 }
 
 # Desktop fixture folder (never the owner's real desktop): fixed names, fixed content.
@@ -216,6 +218,9 @@ vs_capture() {
   local name=$1
   [[ -n ${VS_NOPARK:-} ]] || vs_park
   vs_sleep "${VS_SETTLE:-1}"
+  # Park again immediately before the capture (a window mapping under the pointer or a focus change during the settle
+  # can move the software cursor: files.fr differed by 84 px between two runs) and wait a few frames.
+  [[ -n ${VS_NOPARK:-} ]] || { vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null; vs_sleep 0.2; }
   "$VS_ROOT/scripts/dev/shot.sh" "visual-$name" "$VS_OUTPUT" >/dev/null
   cp "$VS_DEV/shots/visual-$name.png" "$VS_SHOTS/$name.$VS_LANG.png"
   # VS_MASK="x1,y1,x2,y2 ...": black out machine-dependent text (free disk space, ...).

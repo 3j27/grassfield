@@ -98,6 +98,34 @@ Determinism criterion (`--determinism`): run 1 vs run 2 differ by at most 50 px 
 the worst measured noise, 3x below the regression threshold). A compare error (size mismatch, unreadable file) is a
 failure, never a pass.
 
+## Reference screenshots (F1, owner-provided)
+
+The owner captures macOS 27 on a real Mac and drops the files in `design/reference/` (git-ignored: never committed,
+never packaged, never used as an asset; measurement data only). Default appearance settings (accent, text size,
+"Reduce transparency" off), a plain wallpaper, no third-party menu bar items. Name files
+`<surface>-<light|dark>[-<variant>].png` and add `design/reference/scale.txt` with the display's scale (e.g. `2`).
+Light and dark for each item when possible:
+
+| Surface | What to capture |
+|---|---|
+| `menubar` | menu bar at rest; `menubar-appmenu`: an app menu open; `menubar-system`: the Apple menu open |
+| `dock` | Dock with 6–8 apps, running indicators, one folder stack; `dock-hover`: magnification off, tooltip shown |
+| `titlebar` | a Finder window, active and inactive (`-inactive`), traffic lights at rest and hovered (`-hover`) |
+| `quicksettings` | Control Center open; `quicksettings-module`: one module expanded (Wi-Fi or Display) |
+| `notifications` | one banner; Notification Center open with 3 notifications and widgets |
+| `search` | Spotlight empty; with a query and results |
+| `overview` | Mission Control with 4–6 windows and the Spaces bar |
+| `apps` | Launchpad (or the Apps view of macOS 27) |
+| `desktop` | desktop with 4 icons, one selected; `desktop-menu`: its context menu |
+| `widgets` | desktop widgets small/medium/large; the widget gallery |
+| `lock` | lock screen at rest (no password typed) |
+| `stages` | Stage Manager with 3 stages |
+| `files` | Finder list, icon and gallery views; the sidebar with tags |
+| `glance` | Quick Look on an image and on a PDF |
+| `preview` | Preview with a PDF and the sidebar |
+| `settings` | System Settings: General, Wi-Fi, Bluetooth, Sound, Displays, Desktop & Dock, Notifications |
+| `osd` | volume and brightness indicators |
+
 ## Baseline approval (F1)
 
 Baselines are owner-approved and agents never commit them.

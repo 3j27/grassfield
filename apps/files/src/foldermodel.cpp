@@ -2,10 +2,16 @@
 
 #include "filelogic.h"
 #include "imageproviders.h"
+#include "taglogic.h"
+#include "tagsearch.h"
+#include "tagstore.h"
 
+#include <QAbstractListModel>
+#include <QDBusConnection>
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QLoggingCategory>
 #include <QIcon>
 #include <QMimeDatabase>
@@ -14,13 +20,91 @@
 
 #include <KDirLister>
 #include <KDirModel>
+#include <KDirNotify>
 #include <KIO/FileSystemFreeSpaceJob>
 #include <KIO/Job>
 #include <KIO/PreviewJob>
-#include <QMimeDatabase>
 
 // QT_LOGGING_RULES="grassfield.files.debug=true": listing times, selection and expectation traces.
 Q_LOGGING_CATEGORY(lcFiles, "grassfield.files", QtInfoMsg)
+
+// The matches of a tag search: a flat list of items (the proxy reads them through FolderModel::sourceItem).
+class ItemListModel : public QAbstractListModel
+{
+public:
+    using QAbstractListModel::QAbstractListModel;
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const override { return parent.isValid() ? 0 : int(m_items.size()); }
+    QVariant data(const QModelIndex &index, int role) const override
+    {
+        if (role != Qt::DisplayRole || index.row() < 0 || index.row() >= m_items.size())
+            return {};
+        return m_items.at(index.row()).text();
+    }
+
+    KFileItem item(int row) const { return row >= 0 && row < m_items.size() ? m_items.at(row) : KFileItem(); }
+    int rowOf(const QUrl &url) const { return m_rows.value(url, -1); }
+
+    void append(const KFileItemList &items)
+    {
+        KFileItemList fresh;
+        for (const KFileItem &item : items) {
+            if (!m_rows.contains(item.url()))
+                fresh.append(item);
+        }
+        if (fresh.isEmpty())
+            return;
+        const int first = int(m_items.size());
+        beginInsertRows(QModelIndex(), first, first + int(fresh.size()) - 1);
+        for (const KFileItem &item : std::as_const(fresh)) {
+            m_rows.insert(item.url(), int(m_items.size()));
+            m_items.append(item);
+        }
+        endInsertRows();
+    }
+
+    void remove(const QUrl &url)
+    {
+        const int row = rowOf(url);
+        if (row < 0)
+            return;
+        beginRemoveRows(QModelIndex(), row, row);
+        m_items.removeAt(row);
+        reindex();
+        endRemoveRows();
+    }
+
+    void replace(const QUrl &url, const KFileItem &item)
+    {
+        const int row = rowOf(url);
+        if (row < 0)
+            return;
+        m_items[row] = item;
+        reindex();
+        emit dataChanged(index(row), index(row));
+    }
+
+    void clear()
+    {
+        if (m_items.isEmpty())
+            return;
+        beginResetModel();
+        m_items.clear();
+        m_rows.clear();
+        endResetModel();
+    }
+
+private:
+    void reindex()
+    {
+        m_rows.clear();
+        for (int i = 0; i < m_items.size(); ++i)
+            m_rows.insert(m_items.at(i).url(), i);
+    }
+
+    KFileItemList m_items;
+    QHash<QUrl, int> m_rows;
+};
 
 namespace
 {
@@ -121,6 +205,7 @@ FolderModel::FolderModel(QObject *parent)
     m_lister = m_dirModel->dirLister();
     m_lister->setAutoErrorHandlingEnabled(false);
     m_lister->setDelayedMimeTypes(true);
+    m_results = new ItemListModel(this);
     setSourceModel(m_dirModel);
     setDynamicSortFilter(true);
 
@@ -151,18 +236,12 @@ FolderModel::FolderModel(QObject *parent)
     });
     connect(m_lister, &KCoreDirLister::itemsDeleted, this, &FolderModel::onItemsDeleted);
     connect(m_lister, &KCoreDirLister::refreshItems, this, [this](const QList<QPair<KFileItem, KFileItem>> &items) {
-        // Changed files get a fresh thumbnail.
+        // Changed files get a fresh thumbnail, and their tags are read again.
         for (const auto &pair : items) {
             const QUrl url = pair.second.url();
-            const QString key = m_thumbs.take(url);
-            if (!key.isEmpty())
-                ThumbnailStore::remove(key);
-            m_thumbLru.remove(url);
-            if (m_previews.asked(url)) {
-                m_previews.cancel(url);
-                m_previews.forget(url);
-                requestPreview(rowForUrl(url));
-            }
+            forgetThumbnail(m_small, url, true);
+            forgetThumbnail(m_large, url, true);
+            dropTags(url);
         }
     });
     connect(m_lister, &KCoreDirLister::jobError, this, [this](KIO::Job *job) {
@@ -205,20 +284,36 @@ FolderModel::FolderModel(QObject *parent)
     // A renamed item is refreshed in place (no insertion) and may move when re-sorted.
     connect(this, &QAbstractItemModel::dataChanged, this, queueCheck);
 
-    m_previewTimer.setSingleShot(true);
-    m_previewTimer.setInterval(kPreviewBatchDelayMs);
-    connect(&m_previewTimer, &QTimer::timeout, this, &FolderModel::startPreviews);
+    for (ThumbChannel *channel : {&m_small, &m_large}) {
+        channel->timer.setSingleShot(true);
+        channel->timer.setInterval(kPreviewBatchDelayMs);
+        connect(&channel->timer, &QTimer::timeout, this, [this, channel] { startPreviews(*channel); });
+    }
+
+    // Tags seen on shown rows are reported in one batch per event loop turn (data() is const and runs per delegate).
+    m_seenTimer.setSingleShot(true);
+    m_seenTimer.setInterval(0);
+    connect(&m_seenTimer, &QTimer::timeout, this, [this] {
+        const QStringList tags(m_seenPending.cbegin(), m_seenPending.cend());
+        m_seenPending.clear();
+        if (!tags.isEmpty())
+            emit tagsSeen(tags);
+    });
 }
 
 FolderModel::~FolderModel()
 {
-    clearPreviews();
+    stopSearch();
+    clearAllPreviews();
+    // The views go first; nothing may reach them while this object is half destroyed.
+    m_seenTimer.stop();
 }
 
 void FolderModel::setUrl(const QUrl &url)
 {
-    const QUrl clean = url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments);
-    if (clean == m_url && m_lister->url().isValid())
+    const bool search = TagLogic::isSearchUrl(url);
+    const QUrl clean = search ? url : url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments);
+    if (clean == m_url && (search || m_lister->url().isValid()))
         return;
     m_url = clean;
     applySelection({});
@@ -226,14 +321,33 @@ void FolderModel::setUrl(const QUrl &url)
     m_anchor.clear();
     m_expected.clear();
     m_renameUrl.clear();
-    clearPreviews();
+    clearAllPreviews();
+    m_tags.clear();
     setError(QString());
     m_freeSpace = -1;
     emit freeSpaceChanged();
-    m_dirModel->openUrl(m_url);
+    stopSearch();
+    if (search) {
+        // The folder listing stops; the matches of the search are the rows.
+        m_lister->stop();
+        m_results->clear();
+        if (sourceModel() != m_results)
+            setSourceModel(m_results);
+        startSearch();
+    } else {
+        if (sourceModel() != m_dirModel)
+            setSourceModel(m_dirModel);
+        m_results->clear();
+        m_dirModel->openUrl(m_url);
+    }
     emit urlChanged();
     emit rootChanged();
     emit currentRowChanged();
+}
+
+bool FolderModel::isSearch() const
+{
+    return TagLogic::isSearchUrl(m_url);
 }
 
 void FolderModel::setSortKey(int key)
@@ -298,7 +412,8 @@ int FolderModel::currentRow() const
 
 bool FolderModel::writable() const
 {
-    if (isTrash())
+    // Nothing can be created in a trash or a tag search (its items keep their own folders).
+    if (isTrash() || isSearch())
         return false;
     const KFileItem root = m_lister->rootItem();
     return !root.isNull() && root.isWritable();
@@ -306,6 +421,8 @@ bool FolderModel::writable() const
 
 QString FolderModel::title() const
 {
+    if (isSearch())
+        return TagLogic::displayName(TagLogic::searchTag(m_url));
     const QList<FileLogic::Segment> segments = FileLogic::pathSegments(m_url, QDir::homePath(), tr("Computer"), tr("Trash"));
     return segments.isEmpty() ? m_url.toDisplayString() : segments.last().label;
 }
@@ -313,13 +430,26 @@ QString FolderModel::title() const
 void FolderModel::setPreviewSize(int size)
 {
     size = qBound(32, size, 512);
-    if (size == m_previewSize)
+    if (size == m_small.size)
         return;
-    m_previewSize = size;
-    clearPreviews();
+    m_small.size = size;
+    clearPreviews(m_small);
     emit previewSizeChanged();
     if (rowCount() > 0)
         emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {ThumbnailRole});
+}
+
+void FolderModel::setLargePreviewSize(int size)
+{
+    // 1024 px is the largest freedesktop thumbnail cache size (xx-large).
+    size = qBound(128, size, 1024);
+    if (size == m_large.size)
+        return;
+    m_large.size = size;
+    clearPreviews(m_large);
+    emit previewSizeChanged();
+    if (rowCount() > 0)
+        emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {LargeThumbnailRole});
 }
 
 QHash<int, QByteArray> FolderModel::roleNames() const
@@ -339,6 +469,9 @@ QHash<int, QByteArray> FolderModel::roleNames() const
         {HiddenRole, "hidden"},
         {CanPreviewRole, "canPreview"},
         {EmblemRole, "emblem"},
+        {LargeThumbnailRole, "largeThumbnail"},
+        {TagsRole, "tags"},
+        {TagColorsRole, "tagColors"},
     };
 }
 
@@ -346,7 +479,7 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
 {
     if (role < NameRole)
         return QSortFilterProxyModel::data(index, role);
-    const KFileItem item = m_dirModel->itemForIndex(mapToSource(index));
+    const KFileItem item = sourceItem(mapToSource(index));
     if (item.isNull())
         return {};
     // Lazy refinement: the lister only guessed the type from the name (setDelayedMimeTypes). A row a
@@ -373,7 +506,9 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
     case KindRole:
         return item.mimeComment();
     case ThumbnailRole:
-        return thumbnailFor(item.url());
+        return thumbnailFor(m_small, item.url());
+    case LargeThumbnailRole:
+        return thumbnailFor(m_large, item.url());
     case SelectedRole:
         return m_selected.contains(item.url());
     case HiddenRole:
@@ -382,21 +517,110 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
         return previewSupported(item);
     case EmblemRole:
         return item.isLink() ? QStringLiteral("emblem-symbolic-link") : QString();
+    case TagsRole:
+        return TagLogic::displayOrder(tagsOf(item));
+    case TagColorsRole: {
+        QVariantList colors;
+        const QList<int> indices = TagLogic::colorIndices(tagsOf(item));
+        for (int c : indices)
+            colors.append(c);
+        return colors;
+    }
     }
     return {};
 }
 
+KFileItem FolderModel::sourceItem(const QModelIndex &source) const
+{
+    if (sourceModel() == m_results)
+        return m_results->item(source.row());
+    return m_dirModel->itemForIndex(source);
+}
+
+QModelIndex FolderModel::sourceIndexForUrl(const QUrl &url) const
+{
+    if (sourceModel() == m_results) {
+        const int row = m_results->rowOf(url);
+        return row < 0 ? QModelIndex() : m_results->index(row);
+    }
+    return m_dirModel->indexForUrl(url);
+}
+
+QStringList FolderModel::tagsOf(const KFileItem &item) const
+{
+    const QUrl url = item.url();
+    const auto it = m_tags.constFind(url);
+    if (it != m_tags.cend())
+        return *it;
+    // Local items only (trash items have a local path too); links carry no user attributes (TagStore).
+    const QString path = item.localPath();
+    const QStringList tags = path.isEmpty() || item.isLink() ? QStringList() : TagStore::read(path);
+    m_tags.insert(url, tags);
+    bool fresh = false;
+    for (const QString &tag : tags) {
+        if (!m_seenPending.contains(tag)) {
+            m_seenPending.insert(tag);
+            fresh = true;
+        }
+    }
+    if (fresh && !m_seenTimer.isActive())
+        m_seenTimer.start();
+    return tags;
+}
+
+void FolderModel::dropTags(const QUrl &url)
+{
+    if (m_tags.remove(url))
+        emitRowChanged(url, {TagsRole, TagColorsRole});
+}
+
+void FolderModel::emitRowChanged(const QUrl &url, const QList<int> &roles)
+{
+    const int r = rowForUrl(url);
+    if (r >= 0)
+        emit dataChanged(index(r, 0), index(r, 0), roles);
+}
+
+void FolderModel::tagsChanged(const QList<QUrl> &urls)
+{
+    const QString tag = TagLogic::searchTag(m_url);
+    const QUrl folder = TagLogic::searchFolder(m_url);
+    QList<QUrl> gone;
+    QStringList joined;
+    for (const QUrl &url : urls) {
+        m_tags.remove(url);
+        if (!isSearch()) {
+            emitRowChanged(url, {TagsRole, TagColorsRole});
+            continue;
+        }
+        // A tag search follows the changes made in Files: an item that lost the tag leaves it, a local item in the
+        // searched folder that got it joins it.
+        const bool listed = m_results->rowOf(url) >= 0;
+        const bool matches = url.isLocalFile() && TagLogic::hasTag(TagStore::read(url.toLocalFile()), tag);
+        if (listed && !matches)
+            gone.append(url);
+        else if (!listed && matches && (folder == url || folder.isParentOf(url)))
+            joined.append(url.toLocalFile());
+        else
+            emitRowChanged(url, {TagsRole, TagColorsRole});
+    }
+    if (!gone.isEmpty())
+        removeResults(gone);
+    if (!joined.isEmpty())
+        addResults(joined);
+}
+
 bool FolderModel::lessThan(const QModelIndex &left, const QModelIndex &right) const
 {
-    const KFileItem a = m_dirModel->itemForIndex(left);
-    const KFileItem b = m_dirModel->itemForIndex(right);
+    const KFileItem a = sourceItem(left);
+    const KFileItem b = sourceItem(right);
     const auto key = FileLogic::SortKey(m_sortKey);
     return FileLogic::compareEntries(sortEntry(a, key), sortEntry(b, key), key, m_descending, m_foldersFirst, m_collator) < 0;
 }
 
 bool FolderModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
-    const KFileItem item = m_dirModel->itemForIndex(m_dirModel->index(sourceRow, 0, sourceParent));
+    const KFileItem item = sourceItem(sourceModel()->index(sourceRow, 0, sourceParent));
     // Only remote:/ entries can be hidden; the target is looked up for those alone.
     if (item.url().scheme() == QLatin1String("remote") && FileLogic::hiddenNetworkEntry(item.url(), item.targetUrl()))
         return false;
@@ -521,11 +745,14 @@ KFileItem FolderModel::itemAt(int row) const
 {
     if (row < 0 || row >= rowCount())
         return KFileItem();
-    return m_dirModel->itemForIndex(mapToSource(index(row, 0)));
+    return sourceItem(mapToSource(index(row, 0)));
 }
 
 KFileItem FolderModel::rootItem() const
 {
+    // A tag search stands for its folder (Get Info without a selection).
+    if (isSearch())
+        return KFileItem(TagLogic::searchFolder(m_url));
     return m_lister->rootItem();
 }
 
@@ -551,7 +778,7 @@ int FolderModel::rowForUrl(const QUrl &url) const
 {
     if (url.isEmpty())
         return -1;
-    const QModelIndex source = m_dirModel->indexForUrl(url);
+    const QModelIndex source = sourceIndexForUrl(url);
     if (!source.isValid())
         return -1;
     const QModelIndex proxy = mapFromSource(source);
@@ -580,10 +807,11 @@ QVariantMap FolderModel::info(int row) const
         return m;
     const QDateTime now = QDateTime::currentDateTime();
     const qint64 size = item.isDir() ? -1 : qint64(item.size());
-    m[QStringLiteral("name")] = row < 0 ? title() : item.text();
+    // A folder's own info carries its title ("Computer", "Trash", the home folder's name); a tag search shows its folder.
+    m[QStringLiteral("name")] = row < 0 && !isSearch() ? title() : item.text();
     m[QStringLiteral("url")] = item.url();
     m[QStringLiteral("iconName")] = resolvedIconName(item);
-    m[QStringLiteral("thumbnail")] = thumbnailFor(item.url());
+    m[QStringLiteral("thumbnail")] = thumbnailFor(m_small, item.url());
     m[QStringLiteral("kind")] = item.mimeComment();
     m[QStringLiteral("mimeType")] = item.mimetype();
     m[QStringLiteral("isDir")] = item.isDir();
@@ -601,92 +829,123 @@ QVariantMap FolderModel::info(int row) const
     m[QStringLiteral("readable")] = item.isReadable();
     m[QStringLiteral("writable")] = item.isWritable();
     m[QStringLiteral("linkDest")] = item.isLink() ? item.linkDest() : QString();
+    // Tags in display order, by their shown names, and the colour dots.
+    const QStringList tags = TagLogic::displayOrder(tagsOf(item));
+    QStringList names;
+    for (const QString &tag : tags)
+        names.append(TagLogic::displayName(tag));
+    m[QStringLiteral("tags")] = names;
+    QVariantList colors;
+    const QList<int> indices = TagLogic::colorIndices(tags);
+    for (int c : indices)
+        colors.append(c);
+    m[QStringLiteral("tagColors")] = colors;
     return m;
 }
 
-void FolderModel::requestPreview(int row)
+void FolderModel::requestPreview(int row, bool large)
 {
     const KFileItem item = itemAt(row);
     if (item.isNull() || !previewSupported(item))
         return;
-    if (m_previews.request(item.url()) && !m_previewTimer.isActive())
-        m_previewTimer.start();
+    ThumbChannel &c = large ? m_large : m_small;
+    if (c.queue.request(item.url()) && !c.timer.isActive())
+        c.timer.start();
 }
 
-void FolderModel::cancelPreview(const QUrl &url)
+void FolderModel::cancelPreview(const QUrl &url, bool large)
 {
-    m_previews.cancel(url);
+    (large ? m_large : m_small).queue.cancel(url);
 }
 
-void FolderModel::startPreviews()
+void FolderModel::startPreviews(ThumbChannel &c)
 {
-    if (m_previewJob || m_previews.isEmpty())
+    if (c.job || c.queue.isEmpty())
         return;
     KFileItemList batch;
-    const QList<QUrl> urls = m_previews.takeBatch(kPreviewBatchSize);
+    const QList<QUrl> urls = c.queue.takeBatch(kPreviewBatchSize);
     for (const QUrl &url : urls) {
         const KFileItem item = itemAt(rowForUrl(url));
         if (item.isNull())
-            m_previews.forget(url);
+            c.queue.forget(url);
         else
             batch.append(item);
     }
+    ThumbChannel *channel = &c;
     if (batch.isEmpty()) {
-        if (!m_previews.isEmpty())
-            QTimer::singleShot(0, this, &FolderModel::startPreviews);
+        if (!c.queue.isEmpty())
+            QTimer::singleShot(0, this, [this, channel] { startPreviews(*channel); });
         return;
     }
-    auto *job = KIO::filePreview(batch, QSize(m_previewSize, m_previewSize), &previewPlugins());
-    m_previewJob = job;
-    connect(job, &KIO::PreviewJob::generated, this, [this](const KFileItem &item, const QImage &image) {
+    auto *job = KIO::filePreview(batch, QSize(c.size, c.size), &previewPlugins());
+    c.job = job;
+    connect(job, &KIO::PreviewJob::generated, this, [this, channel](const KFileItem &item, const QImage &image) {
         if (image.isNull())
             return;
+        ThumbChannel &c = *channel;
         const QUrl url = item.url();
-        qCDebug(lcFiles) << "thumbnail" << item.name() << "stored" << m_thumbs.size() + 1;
-        const QString old = m_thumbs.value(url);
+        qCDebug(lcFiles) << "thumbnail" << item.name() << c.size << "px, stored" << c.thumbs.size() + 1;
+        const QString old = c.thumbs.value(url);
         if (!old.isEmpty())
             ThumbnailStore::remove(old);
-        m_thumbs.insert(url, ThumbnailStore::insert(image));
+        c.thumbs.insert(url, ThumbnailStore::insert(image));
         const int r = rowForUrl(url);
         if (r >= 0)
-            emit dataChanged(index(r, 0), index(r, 0), {ThumbnailRole});
+            emit dataChanged(index(r, 0), index(r, 0), {c.role});
         // Least recently loaded thumbnails go first; they may be asked for again when shown.
-        const QList<QUrl> evicted = m_thumbLru.add(url);
-        for (const QUrl &gone : evicted) {
-            const QString key = m_thumbs.take(gone);
-            if (!key.isEmpty())
-                ThumbnailStore::remove(key);
-            m_previews.forget(gone);
-            const int gr = rowForUrl(gone);
-            if (gr >= 0)
-                emit dataChanged(index(gr, 0), index(gr, 0), {ThumbnailRole});
-        }
+        const QList<QUrl> evicted = c.lru.add(url);
+        for (const QUrl &gone : evicted)
+            forgetThumbnail(c, gone, false);
     });
-    connect(job, &KJob::result, this, [this] {
+    connect(job, &KJob::result, this, [this, channel] {
         // The finished job is only deleteLater()'d: release the slot now so the next batch can start.
-        m_previewJob.clear();
-        if (!m_previews.isEmpty())
-            QTimer::singleShot(0, this, &FolderModel::startPreviews);
+        channel->job.clear();
+        if (!channel->queue.isEmpty())
+            QTimer::singleShot(0, this, [this, channel] { startPreviews(*channel); });
     });
 }
 
-void FolderModel::clearPreviews()
+void FolderModel::forgetThumbnail(ThumbChannel &c, const QUrl &url, bool again)
 {
-    m_previewTimer.stop();
-    if (m_previewJob) {
-        m_previewJob->kill(KJob::Quietly);
-        m_previewJob.clear();
-    }
-    for (const QString &key : std::as_const(m_thumbs))
+    const QString key = c.thumbs.take(url);
+    if (!key.isEmpty())
         ThumbnailStore::remove(key);
-    m_thumbs.clear();
-    m_thumbLru.clear();
-    m_previews.clear();
+    c.lru.remove(url);
+    const bool wasAsked = c.queue.asked(url);
+    c.queue.cancel(url);
+    c.queue.forget(url);
+    const int r = rowForUrl(url);
+    if (again && wasAsked && r >= 0) {
+        // The delegate keeps showing the old picture until the new one replaces it (no flicker).
+        requestPreview(r, &c == &m_large);
+    } else if (r >= 0 && !key.isEmpty()) {
+        emit dataChanged(index(r, 0), index(r, 0), {c.role});
+    }
 }
 
-QString FolderModel::thumbnailFor(const QUrl &url) const
+void FolderModel::clearPreviews(ThumbChannel &c)
 {
-    const QString key = m_thumbs.value(url);
+    c.timer.stop();
+    if (c.job) {
+        c.job->kill(KJob::Quietly);
+        c.job.clear();
+    }
+    for (const QString &key : std::as_const(c.thumbs))
+        ThumbnailStore::remove(key);
+    c.thumbs.clear();
+    c.lru.clear();
+    c.queue.clear();
+}
+
+void FolderModel::clearAllPreviews()
+{
+    clearPreviews(m_small);
+    clearPreviews(m_large);
+}
+
+QString FolderModel::thumbnailFor(const ThumbChannel &c, const QUrl &url) const
+{
+    const QString key = c.thumbs.value(url);
     return key.isEmpty() ? QString() : QStringLiteral("image://thumbnail/") + key;
 }
 
@@ -711,8 +970,160 @@ bool FolderModel::previewSupported(const KFileItem &item) const
 
 void FolderModel::reload()
 {
-    clearPreviews();
+    m_tags.clear();
+    if (isSearch()) {
+        clearAllPreviews();
+        stopSearch();
+        applySelection({});
+        m_current.clear();
+        m_results->clear();
+        startSearch();
+        return;
+    }
+    // Thumbnails stay: KIO refreshes the rows of a listed folder in place (the delegates are not recreated and would
+    // not ask again), and refreshItems renews the thumbnails of the files that changed. Tags are read again.
+    if (rowCount() > 0)
+        emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {TagsRole, TagColorsRole});
     m_dirModel->openUrl(m_url, KDirModel::Reload);
+}
+
+void FolderModel::startSearch()
+{
+    const QString tag = TagLogic::searchTag(m_url);
+    const QUrl folder = TagLogic::searchFolder(m_url);
+    m_searchLimited = false;
+    if (!folder.isLocalFile()) {
+        // FilesApp only builds searches of local folders; a typed location may name anything.
+        setError(tr("Tags are only searched in local folders."));
+        m_loading = false;
+        emit loadingChanged();
+        return;
+    }
+    watchChanges();
+    auto *search = new TagSearch(folder.toLocalFile(), tag, showHidden());
+    m_search = search;
+    connect(search, &TagSearch::found, this, &FolderModel::addResults);
+    connect(search, &TagSearch::done, this, [this](bool limited, int visited) {
+        qCDebug(lcFiles) << "tag search" << m_url.toDisplayString() << rowCount() << "matches," << visited << "entries visited, limited" << limited << "in" << m_listTimer.elapsed() << "ms";
+        m_searchLimited = limited;
+        m_loading = false;
+        emit loadingChanged();
+    });
+    m_listTimer.start();
+    m_loading = true;
+    emit loadingChanged();
+    search->start(QThread::LowPriority);
+}
+
+void FolderModel::stopSearch()
+{
+    TagSearch *search = m_search.data();
+    m_search.clear();
+    if (!search)
+        return;
+    disconnect(search, nullptr, this, nullptr);
+    search->cancel();
+    // The walk checks the flag at every entry, so it ends at once; one stuck in a slow system call is left to finish
+    // and delete itself.
+    if (search->wait(200))
+        delete search;
+}
+
+void FolderModel::watchChanges()
+{
+    if (m_notify)
+        return;
+    // KIO announces every change made through it (this app's jobs and other KIO applications') on the session bus.
+    m_notify = new OrgKdeKDirNotifyInterface(QString(), QString(), QDBusConnection::sessionBus(), this);
+    connect(m_notify, &OrgKdeKDirNotifyInterface::FileRenamedWithLocalPath, this, [this](const QString &src, const QString &dst, const QString &) {
+        if (isSearch())
+            renameResult(QUrl(src), QUrl(dst));
+    });
+    connect(m_notify, &OrgKdeKDirNotifyInterface::FileRenamed, this, [this](const QString &src, const QString &dst) {
+        if (isSearch())
+            renameResult(QUrl(src), QUrl(dst));
+    });
+    connect(m_notify, &OrgKdeKDirNotifyInterface::FileMoved, this, [this](const QString &src, const QString &dst) {
+        if (isSearch())
+            renameResult(QUrl(src), QUrl(dst));
+    });
+    connect(m_notify, &OrgKdeKDirNotifyInterface::FilesRemoved, this, [this](const QStringList &files) {
+        if (!isSearch())
+            return;
+        QList<QUrl> urls;
+        for (const QString &f : files)
+            urls.append(QUrl(f));
+        removeResults(urls);
+    });
+    connect(m_notify, &OrgKdeKDirNotifyInterface::FilesChanged, this, [this](const QStringList &files) {
+        if (!isSearch())
+            return;
+        for (const QString &f : files) {
+            const QUrl url(f);
+            if (m_results->rowOf(url) < 0)
+                continue;
+            m_results->replace(url, KFileItem(url, KFileItem::SkipMimeTypeFromContent));
+            forgetThumbnail(m_small, url, true);
+            forgetThumbnail(m_large, url, true);
+            dropTags(url);
+        }
+    });
+}
+
+void FolderModel::addResults(const QStringList &paths)
+{
+    KFileItemList items;
+    items.reserve(paths.size());
+    for (const QString &path : paths) {
+        // The type is guessed from the name here; rows that are shown refine it from content (data()).
+        const KFileItem item(QUrl::fromLocalFile(path), KFileItem::SkipMimeTypeFromContent);
+        if (!item.isNull())
+            items.append(item);
+    }
+    m_results->append(items);
+}
+
+void FolderModel::removeResults(const QList<QUrl> &urls)
+{
+    bool selectionTouched = false;
+    for (const QUrl &url : urls) {
+        if (m_results->rowOf(url) < 0)
+            continue;
+        selectionTouched |= m_selected.remove(url);
+        if (url == m_current)
+            m_current.clear();
+        forgetThumbnail(m_small, url, false);
+        forgetThumbnail(m_large, url, false);
+        m_tags.remove(url);
+        m_results->remove(url);
+    }
+    if (selectionTouched)
+        emit selectionChanged();
+}
+
+void FolderModel::renameResult(const QUrl &from, const QUrl &to)
+{
+    if (m_results->rowOf(from) < 0)
+        return;
+    // Moved out of the searched folder (or to the Trash): it leaves the results.
+    const QUrl folder = TagLogic::searchFolder(m_url);
+    if (!to.isLocalFile() || !(folder == to || folder.isParentOf(to))) {
+        removeResults({from});
+        return;
+    }
+    const bool selected = m_selected.remove(from);
+    forgetThumbnail(m_small, from, false);
+    forgetThumbnail(m_large, from, false);
+    m_tags.remove(from);
+    m_results->replace(from, KFileItem(to, KFileItem::SkipMimeTypeFromContent));
+    if (selected)
+        m_selected.insert(to);
+    if (m_current == from)
+        m_current = to;
+    if (m_anchor == from)
+        m_anchor = to;
+    if (selected)
+        emit selectionChanged();
 }
 
 void FolderModel::refreshFreeSpace()
@@ -801,12 +1212,9 @@ void FolderModel::onItemsDeleted(const KFileItemList &items)
         selectionTouched |= m_selected.remove(url);
         if (url == m_current)
             m_current.clear();
-        const QString key = m_thumbs.take(url);
-        if (!key.isEmpty())
-            ThumbnailStore::remove(key);
-        m_thumbLru.remove(url);
-        m_previews.cancel(url);
-        m_previews.forget(url);
+        forgetThumbnail(m_small, url, false);
+        forgetThumbnail(m_large, url, false);
+        m_tags.remove(url);
     }
     if (selectionTouched)
         emit selectionChanged();

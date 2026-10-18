@@ -27,3 +27,18 @@ function isMalformedCapabilities(data, protocol) {
     }
     return !!msg && msg.v === protocol && msg.type === "capabilities" && !Array.isArray(msg.features);
 }
+
+// The protocol version of a capabilities event of another protocol ("gfc/2", "?" when it names none), "" for anything
+// else (this protocol, other event types, foreign payloads). parse() returns null for such an event, so the shell treats
+// a plugin it cannot speak to as no plugin; the caller only logs it.
+function otherProtocolCapabilities(data, protocol) {
+    let msg = null;
+    try {
+        msg = JSON.parse(data);
+    } catch (e) {
+        return "";
+    }
+    if (!msg || msg.type !== "capabilities" || msg.v === protocol)
+        return "";
+    return typeof msg.v === "string" && msg.v !== "" ? msg.v : "?";
+}

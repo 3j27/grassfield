@@ -4,12 +4,17 @@ import "MenuNav.js" as MenuNav
 
 // macOS-style menu on the frosted material. The host window supplies the blur region (see Material).
 // model: [{id, text, shortcut?, iconName?, enabled?, checked?, destructive?, separator?, submenu?: [...]}]
-// Keyboard: Up/Down/Home/End move, Return/Space activate, Right opens a submenu, Left closes it, Esc closes.
+// A row may also be a swatch row (SwatchRow): {id, swatches: [{id, color, name, state}], caption?, enabled?, accessibleName?};
+// choosing a swatch activates the swatch object itself (its own id).
+// Keyboard: Up/Down/Home/End move, Return/Space activate, Right opens a submenu, Left closes it, Esc closes; on a
+// swatch row Left/Right move between the swatches.
 FocusScope {
     id: root
 
     property var model: []
     property int currentIndex: -1
+    // The swatch under the keyboard cursor when the current row is a swatch row.
+    property int swatchIndex: 0
     property bool isSubmenu: false
     property string accessibleName: ""
     // Index of the row whose submenu is open, -1 if none.
@@ -66,9 +71,20 @@ FocusScope {
             return;
         if (MenuNav.hasSubmenu(item))
             openSubmenuAt(index, true);
+        else if (MenuNav.hasSwatches(item))
+            root.activateSwatch(index, root.swatchIndex);
         else
             root.activated(item);
     }
+
+    function activateSwatch(index: int, swatch: int): void {
+        const item = root.model[index];
+        if (MenuNav.selectable(item) && MenuNav.hasSwatches(item) && swatch >= 0 && swatch < item.swatches.length)
+            root.activated(item.swatches[swatch]);
+    }
+
+    // Entering a row with the keyboard starts on its first swatch.
+    onCurrentIndexChanged: root.swatchIndex = 0
 
     function keyName(key: int): string {
         switch (key) {
@@ -104,7 +120,16 @@ FocusScope {
         root.currentIndex = result.index;
         switch (result.action) {
         case "activate":
-            root.activated(root.model[root.currentIndex]);
+            if (MenuNav.hasSwatches(root.model[root.currentIndex]))
+                root.activateSwatch(root.currentIndex, root.swatchIndex);
+            else
+                root.activated(root.model[root.currentIndex]);
+            break;
+        case "swatchPrevious":
+            root.swatchIndex = MenuNav.stepSwatch(root.model[root.currentIndex], root.swatchIndex, -1);
+            break;
+        case "swatchNext":
+            root.swatchIndex = MenuNav.stepSwatch(root.model[root.currentIndex], root.swatchIndex, 1);
             break;
         case "openSubmenu":
             root.openSubmenuAt(root.currentIndex, true);
@@ -150,12 +175,30 @@ FocusScope {
                 Loader {
                     id: loader
                     width: row.width
-                    sourceComponent: row.modelData.separator ? separatorComponent : itemComponent
+                    sourceComponent: row.modelData.separator ? separatorComponent : MenuNav.hasSwatches(row.modelData) ? swatchComponent : itemComponent
                 }
 
                 Component {
                     id: separatorComponent
                     MenuSeparator {}
+                }
+
+                Component {
+                    id: swatchComponent
+                    SwatchRow {
+                        model: row.modelData.swatches
+                        enabled: row.modelData.enabled !== false
+                        caption: row.modelData.caption !== undefined ? row.modelData.caption : ""
+                        accessibleName: row.modelData.accessibleName !== undefined ? row.modelData.accessibleName : ""
+                        currentIndex: root.currentIndex === row.index ? root.swatchIndex : -1
+                        onHoveredSwatch: swatch => {
+                            if (root.openIndex !== -1)
+                                root.openIndex = -1;
+                            root.currentIndex = row.index;
+                            root.swatchIndex = swatch;
+                        }
+                        onChosen: swatch => root.activateSwatch(row.index, swatch)
+                    }
                 }
 
                 Component {
