@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Grassfield cursor: four-way move. Original drawing, hotspot (16,16). -->
+  <defs><g id="s">
+    <path d="M16 2.8 L20.4 8 H11.6 Z"/>
+    <path d="M16 29.2 L20.4 24 H11.6 Z"/>
+    <path d="M2.8 16 L8 11.6 V20.4 Z"/>
+    <path d="M29.2 16 L24 11.6 V20.4 Z"/>
+    <rect x="15" y="8" width="2" height="16"/>
+    <rect x="8" y="15" width="16" height="2"/>
+  </g></defs>
+  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.8" stroke-linejoin="round"/>
+  <use href="#s" fill="{{FILL}}"/>
+</svg>

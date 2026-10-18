@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Grassfield cursor: vertical double arrow. Original drawing, hotspot (16,16). -->
+  <defs><path id="s" d="M3 16 L10 9.5 V13.8 H22 V9.5 L29 16 L22 22.5 V18.2 H10 V22.5 Z" transform="rotate(90 16 16)"/></defs>
+  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.8" stroke-linejoin="round"/>
+  <use href="#s" fill="{{FILL}}"/>
+</svg>

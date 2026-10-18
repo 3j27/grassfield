@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# Build the Grassfield cursor theme (hyprcursor SVG theme + XCursor fallback) from branding/cursors/src.
+#
+#   build.sh [--out ICONS_DIR] [--name NAME] [--fill #RRGGBB] [--outline #RRGGBB] [--sizes "24 32 48 64 96"]
+#
+# Output: ICONS_DIR/NAME/{index.theme,manifest.hl,hyprcursors/*.hlc,cursors/*}  (written atomically).
+# Defaults: ICONS_DIR=<repo>/.dev/share/icons, NAME=grassfield-cursors, fill #000000, outline #FFFFFF.
+# The package build uses --out "$pkgdir/usr/share/icons"; the shell regenerates a custom accent/size with
+#   --name grassfield-cursors-custom --out "$XDG_DATA_HOME/icons" --fill ... --outline ... --sizes ...
+# Tools: hyprcursor-util and rsvg-convert (both come with hyprland's dependencies, librsvg via hyprcursor), python3.
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+root=$(cd "$here/../.." && pwd)
+out=$root/.dev/share/icons
+name=grassfield-cursors
+fill='#000000'
+outline='#FFFFFF'
+sizes='24 32 48 64 96'
+verbose=0
+stage() { ((verbose)) && printf 'cursors: %-12s t=%ss\n' "$1" "${EPOCHREALTIME:0:-3}" >&2 || true; }
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --out) out=${2:?--out needs a directory}; shift ;;
+    --name) name=${2:?--name needs a value}; shift ;;
+    --fill) fill=${2:?--fill needs a colour}; shift ;;
+    --outline) outline=${2:?--outline needs a colour}; shift ;;
+    --sizes) sizes=${2:?--sizes needs a list}; shift ;;
+    -v|--verbose) verbose=1 ;;
+    -h|--help) sed -n '2,11p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) echo "cursors: unknown option $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+hex_re='^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'
+[[ $fill =~ $hex_re && $outline =~ $hex_re ]] || { echo "cursors: --fill/--outline must be #RRGGBB or #RRGGBBAA" >&2; exit 2; }
+[[ $name =~ ^[A-Za-z0-9._-]+$ ]] || { echo "cursors: invalid theme name" >&2; exit 2; }
+[[ $sizes =~ ^[0-9]+( [0-9]+)*$ ]] || { echo "cursors: --sizes must be a space separated list of integers" >&2; exit 2; }
+for tool in hyprcursor-util rsvg-convert python3; do
+  command -v "$tool" >/dev/null || { echo "cursors: $tool not found" >&2; exit 1; }
+done
+
+mkdir -p "$out"
+work=$(mktemp -d "$out/.${name}.build.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+svgdir=$work/svg pngdir=$work/png hc=$work/hc theme=$work/theme
+mkdir -p "$svgdir" "$pngdir" "$hc/hyprcursors" "$theme/cursors"
+
+# frame_angle FRAME FRAMES -> rotation of the spinner template in degrees
+frame_angle() { echo $(( $1 * 360 / $2 )); }
+
+# 1. Render the templates: svg/<source>-<frame>.svg
+declare -a table=()
+while read -r source hx hy frames names; do
+  [[ -z $source || $source == \#* ]] && continue
+  table+=("$source $hx $hy $frames $names")
+  for ((f = 0; f < frames; f++)); do
+    sed -e "s|{{FILL}}|$fill|g" -e "s|{{OUTLINE}}|$outline|g" -e "s|{{ANGLE}}|$(frame_angle "$f" "$frames")|g" \
+      "$here/src/$source.svg.in" > "$svgdir/$source-$f.svg"
+  done
+done < "$here/cursors.tsv"
+
+# 2. hyprcursor source tree (SVG, size independent): one folder per source, canonical name = first name.
+{
+  echo "name = $name"
+  echo "description = Grassfield cursors (original, CC-BY-SA-4.0)"
+  echo "version = 1.0"
+  echo "cursors_directory = hyprcursors"
+} > "$hc/manifest.hl"
+# 3. PNG render jobs and the XCursor packer commands, one line each.
+: > "$work/png-jobs"
+: > "$work/pack-jobs"
+for row in "${table[@]}"; do
+  read -r source hx hy frames names <<<"$row"
+  canon=${names%%,*}
+  dir=$hc/hyprcursors/$canon
+  mkdir -p "$dir"
+  cp "$svgdir/$source"-*.svg "$dir/"
+  {
+    echo "resize_algorithm = none"
+    awk -v x="$hx" -v y="$hy" 'BEGIN { printf "hotspot_x = %.5f\nhotspot_y = %.5f\n", x / 32, y / 32 }'
+    echo "nominal_size = 1.0"
+    IFS=, read -ra all <<<"$names"
+    for alias in "${all[@]:1}"; do echo "define_override = $alias"; done
+    for ((f = 0; f < frames; f++)); do
+      if ((frames > 1)); then echo "define_size = 0, $source-$f.svg, 80"; else echo "define_size = 0, $source-$f.svg"; fi
+    done
+  } > "$dir/meta.hl"
+
+  args=()
+  for size in $sizes; do
+    for ((f = 0; f < frames; f++)); do
+      echo "-w $size -h $size -o $pngdir/$source-$f-$size.png $svgdir/$source-$f.svg" >> "$work/png-jobs"
+      args+=("$size:$pngdir/$source-$f-$size.png")
+    done
+  done
+  delay=0; ((frames > 1)) && delay=80
+  printf '%s\n' "$theme/cursors/$canon $hx $hy $delay ${args[*]}" >> "$work/pack-jobs"
+done
+
+stage render-svg
+par=$(nproc 2>/dev/null || echo 4)
+stage png
+xargs -P "$par" -L1 rsvg-convert < "$work/png-jobs"
+stage xcursor
+while read -r outfile hx hy delay frames_list; do
+  # shellcheck disable=SC2086
+  python3 -I "$here/xcursor-pack.py" "$outfile" --hotspot "$hx" "$hy" --delay "$delay" $frames_list &
+  while (($(jobs -rp | wc -l) >= par)); do wait -n; done
+done < "$work/pack-jobs"
+wait
+
+stage aliases
+# 4. Aliases: relative symlinks to the canonical file.
+for row in "${table[@]}"; do
+  read -r source hx hy frames names <<<"$row"
+  IFS=, read -ra all <<<"$names"
+  for alias in "${all[@]:1}"; do ln -sf "${all[0]}" "$theme/cursors/$alias"; done
+done
+
+# 5. hyprcursor theme (.hlc archives) next to the XCursor folder.
+stage hyprcursor
+mkdir -p "$work/hcout"
+hyprcursor-util --create "$hc" -o "$work/hcout" >"$work/hyprcursor-util.log" 2>&1 \
+  || { cat "$work/hyprcursor-util.log" >&2; echo "cursors: hyprcursor-util --create failed" >&2; exit 1; }
+built=$(find "$work/hcout" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+[[ -n $built && -f $built/manifest.hl ]] || { cat "$work/hyprcursor-util.log" >&2; echo "cursors: no hyprcursor theme produced" >&2; exit 1; }
+cp -a "$built/." "$theme/"
+cat > "$theme/index.theme" <<EOF
+[Icon Theme]
+Name=$name
+Comment=Grassfield cursors (original artwork, CC-BY-SA-4.0)
+EOF
+
+stage install
+# 6. Install atomically.
+rm -rf "$out/$name.old"
+[[ -e $out/$name ]] && mv "$out/$name" "$out/$name.old"
+mv "$theme" "$out/$name"
+rm -rf "$out/$name.old"
+echo "$out/$name"
