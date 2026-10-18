@@ -5,9 +5,10 @@
 //   - a transparent chrome on the Overlay layer (namespace grassfield-overview, like the shell's) with a Spaces bar
 //     placeholder and one label under each layout rect, holding the pointer (whole surface) and the keyboard
 //     (exclusive). Every press and key it receives is logged, so the script can check that clicks never reach the
-//     real (untransformed) windows.
+//     real (untransformed) windows. Key H unmaps the chrome (the process stays), key N drops its keyboard to None.
 // Input (validated, never trusted): GF_OVERVIEW_OUTPUT (output name), GF_OVERVIEW_TARGETS (JSON array of
-// {"x","y","w","h","label"} in layout coordinates), GF_OVERVIEW_DIM (0..1).
+// {"x","y","w","h","label"} in layout coordinates), GF_OVERVIEW_DIM (0..1), GF_OVERVIEW_KEYBOARD ("exclusive", the
+// default, or "none": the chrome maps without taking the keyboard).
 // Run: WAYLAND_DISPLAY=<nested> qs -p <this dir>
 pragma ComponentBehavior: Bound
 import QtQuick
@@ -18,6 +19,7 @@ ShellRoot {
     id: root
 
     readonly property string outputName: /^[A-Za-z0-9._-]{1,32}$/.test(Quickshell.env("GF_OVERVIEW_OUTPUT") ?? "") ? Quickshell.env("GF_OVERVIEW_OUTPUT") : "GF-REF"
+    readonly property string keyboardMode: Quickshell.env("GF_OVERVIEW_KEYBOARD") === "none" ? "none" : "exclusive"
     readonly property real dim: {
         const d = Number(Quickshell.env("GF_OVERVIEW_DIM") ?? "0.35");
         return isFinite(d) ? Math.max(0, Math.min(1, d)) : 0.35;
@@ -77,7 +79,10 @@ ShellRoot {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        property bool holdsKeyboard: root.keyboardMode === "exclusive"
+
+        visible: true
+        WlrLayershell.keyboardFocus: chrome.holdsKeyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-overview"
 
         Rectangle {
@@ -124,7 +129,13 @@ ShellRoot {
         Item {
             anchors.fill: parent
             focus: true
-            Keys.onPressed: event => console.log("[overview-fixture] key " + event.key)
+            Keys.onPressed: event => {
+                console.log("[overview-fixture] key " + event.key);
+                if (event.key === Qt.Key_H)
+                    chrome.visible = false;
+                else if (event.key === Qt.Key_N)
+                    chrome.holdsKeyboard = false;
+            }
         }
     }
 }

@@ -208,9 +208,14 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
      from tokens (near-opaque with Reduce Transparency), blur through `BackgroundEffect` if wanted (it only blurs the
      wallpaper and the desktop: the windows are above it). Same-layer surfaces stack in mapping order: map it when the
      overview opens so that it is above the desktop widgets (Bottom), or decide that they stay undimmed.
-   - chrome, namespace **`grassfield-overview`** (the plugin closes an open overview when a surface with this namespace
-     goes away), `WlrLayer.Overlay`, transparent background (no dim or blur where windows are drawn), Spaces bar,
-     labels, selection, whole-surface input, keyboard `Exclusive` while open (as v1).
+   - chrome, namespace **`grassfield-overview`**, `WlrLayer.Overlay`, transparent background (no dim or blur where
+     windows are drawn), Spaces bar, labels, selection, whole-surface input, keyboard `Exclusive` while open (as v1).
+     **Required by the plugin** (R13 fix 2026-10-18): an `on:true` that would transform windows is refused with reason
+     `no-chrome` unless every monitor of those windows has a mapped chrome surface with `Exclusive` keyboard
+     interactivity and the keyboard is on a chrome surface (or one of its popups). While windows are shown, the chrome
+     unmapping ends the overview at once (`closed`/`interrupted`, no closing animation) and the keyboard leaving the
+     chrome ends it (`interrupted`). After sending `on:false` the shell may unmap the chrome: the closing animation it
+     asked for runs to its end.
 3. **Open / update.** Once the chrome holds the keyboard, send `hl.plugin.grassfield.overview("<json>")` through
    `Hyprland.dispatch`, guarded like the other verbs (add `overview` to `isPluginVerb` in `shell/platform/Minimized.js`),
    the JSON built only from validated pieces (hex address, finite rounded numbers) and quoted as a Lua string (escape
@@ -228,19 +233,40 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
      animate from where they are drawn, windows left out go back to their place at once.
    - Use the same `durationMs` and curve for the shell's own label and chrome animation.
 4. **Close.** `{"on":false,"durationMs":350}` (curve optional), before or together with the focus action. The plugin
-   also closes on its own when a window gets the keyboard (v1 releases the grab, then activates the clicked window),
-   when the chrome goes away, and at once on a workspace switch or a monitor change.
+   also closes on its own when a window chosen by the user takes the keyboard from the chrome (v1 releases the grab,
+   then activates the clicked window), when the keyboard leaves the chrome, when the chrome goes away (at once), and at
+   once on a workspace switch or a monitor change. A window closing or opening while open does **not** end the
+   overview, also when it was the active window (Hyprland then moves focus; the chrome keeps the keyboard): the window
+   leaves the layout, the plugin posts the state with the new count, and the shell retargets with a new `on:true`.
 5. **Events** `grassfield>>{"v":"gfc/1","type":"overview","state":"opening|open|closing|closed","windows":N}`, plus
-   `"reason":"invalid|no-windows|unavailable|interrupted"` when relevant. They are coalesced (latest wins, at most one
-   per 100 ms): treat them as a state, not as a log. `invalid` / `no-windows`: the request was refused, the state is
-   unchanged: show thumbnails for this open. `unavailable`: the plugin is unloading: thumbnails from now on.
-   `interrupted`: the overview ended without the shell's `on:false`: close the chrome. `windows` smaller than the
-   number sent: some windows were not eligible (full screen, pinned, another workspace): leave them out or show
-   thumbnails for them.
+   `"reason":"invalid|no-windows|no-chrome|unavailable|interrupted|fullscreen"` when relevant. They are coalesced
+   (latest wins, at most one per 100 ms): treat them as a state, not as a log. `invalid` / `no-windows` / `no-chrome`:
+   the request was refused, the state is unchanged: show thumbnails for this open (`no-chrome`: the chrome was not
+   mapped, not Exclusive or did not hold the keyboard yet). `unavailable`: the plugin is unloading: thumbnails from now
+   on. `interrupted`: the overview ended without the shell's `on:false`: close the chrome. `fullscreen`: a window went
+   full screen while shown; the windows of its workspace went back to normal rendering (state unchanged): retarget
+   without them or close. `windows` smaller than the number sent: some windows were not eligible (full screen, on a
+   workspace showing a full-screen window, pinned, another workspace): leave them out or show thumbnails for them.
 6. **Input.** Clicks and keys go to the chrome; the shell maps them through its own rects. Hyprland's real window
    boxes are unchanged during the overview, so activation, drag to a Space and close act on the real window as in v1.
 7. **Restart.** After each `capabilities` event, if the shell has no overview open, send `{"on":false,"durationMs":0}`
    (idempotent: a closed overview answers `closed`).
 8. **Limits to show honestly:** popups (menus) of a window stay at its real place and are not scaled; full-screen
-   windows are not transformed; Spaces bar tiles of other workspaces still need captures (nothing of another
+   windows, and the other windows of a workspace that shows a full-screen window, are not transformed (decision
+   2026-10-18: on macOS a full-screen app is a Space of its own, shown as a Spaces bar tile, and Hyprland draws only the
+   full-screen window on such a workspace); Spaces bar tiles of other workspaces still need captures (nothing of another
    workspace is rendered); fractional scales and rotated outputs are not verified.
+
+### R13 fix pass (2026-10-18, plugin 0.5.0-df)
+Review of f12f610 (FAIL): major `on:true` accepted without the chrome; minors: active-window close ended the overview,
+full-screen windows ignored at workspace level, `render.pre` never updated the last damaged box, check count misstated.
+Fixes: chrome requirement and failsafes (contract items 2 and 4), retarget on close (item 4), full-screen decision (items
+5 and 8), damage (`core damageStep`: the box drawn in each frame becomes the last damaged box, so a surface resized while
+open has every box it was drawn in damaged again, also the box detached at close). Measured: Hyprland 0.56.2 emits
+`window.active` for the closing window itself (reason "other") while it refuses the keyboard to the next window because
+the chrome is Exclusive: the failsafe now requires a mapped window that took the keyboard away from the chrome.
+`tests/compositor/overview.sh check`: **29/29 checks PASS** (the run prints `PASS (n/N checks)`; the f12f610 version had
+20 checks, not 21 as reported). Screen captures cannot show stale pixels (a capture with the damage fix reverted showed
+none either; captures most likely repaint the whole output): the resize check reads the plugin's damage log instead, and
+it fails on the reverted build (`open box height 351, box damaged at the start of the shrink none`) and passes on the fix
+(`351 → 491`).

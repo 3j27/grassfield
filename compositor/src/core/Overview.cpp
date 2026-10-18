@@ -416,8 +416,37 @@ namespace gf::overview {
             case Reason::NoWindows: return "no-windows";
             case Reason::Unavailable: return "unavailable";
             case Reason::Interrupted: return "interrupted";
+            case Reason::NoChrome: return "no-chrome";
+            case Reason::Fullscreen: return "fullscreen";
         }
         return "";
+    }
+
+    bool focusEndsOverview(FocusCause cause) {
+        switch (cause) {
+            case FocusCause::UserOrOther: return true;
+            case FocusCause::WindowClosed:
+            case FocusCause::WindowOpened: return false;
+        }
+        return true;
+    }
+
+    bool chromeCovers(const std::vector<uint64_t>& targetMonitors, const std::vector<ChromeSurface>& chromes, bool keyboardOnChrome) {
+        if (!keyboardOnChrome || targetMonitors.empty())
+            return false;
+        return std::ranges::all_of(targetMonitors, [&chromes](uint64_t monitor) {
+            return std::ranges::any_of(chromes, [monitor](const ChromeSurface& c) { return c.monitor == monitor && c.mapped && c.exclusive; });
+        });
+    }
+
+    std::vector<Box> damageStep(const Box& previous, const Box& current) {
+        const auto hasArea = [](const Box& b) { return gf::minimize::isFinite(b) && b.w > 0 && b.h > 0; };
+        std::vector<Box> out;
+        if (hasArea(previous) && !(previous == current))
+            out.push_back(previous);
+        if (hasArea(current))
+            out.push_back(current);
+        return out;
     }
 
     std::string eventJson(Phase phase, size_t windows, Reason reason) {

@@ -310,6 +310,10 @@ CBox CGrassfieldTitlebar::layoutBox() const {
     return g_pDecorationPositioner->getWindowDecorationBox(const_cast<CGrassfieldTitlebar*>(this));
 }
 
+bool CGrassfieldTitlebar::barContains(const Vector2D& pos) const {
+    return shouldShow() && layoutBox().containsPoint(pos);
+}
+
 void CGrassfieldTitlebar::damageEntire() {
     gf::guarded("titlebar damageEntire", [this] {
         const auto w = window();

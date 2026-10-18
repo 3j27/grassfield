@@ -1,9 +1,10 @@
-# grassfield-compositor spec · compositor-engineer · M0 spike S2 → M1 decorations → M2 minimize → S5 appmenu → M3 overview v2
+# grassfield-compositor spec · compositor-engineer · M0 spike S2 → M1 decorations → M2 minimize → S5 appmenu → M3 overview v2 → desktop focus
 
 Status: titlebars, gfc/1 capabilities, minimize/restore with animation (M2), the `config` verb
-(double-click setting), the appmenu protocol server (feature 3, step A of global menus; spike S5) and the overview
-live transforms (feature 4, Mission Control v2: the plugin side; spike and shell contract in `docs/specs/overview.md`)
-implemented.
+(double-click setting), the appmenu protocol server (feature 3, step A of global menus; spike S5), the overview
+live transforms (feature 4, Mission Control v2: the plugin side; spike and shell contract in `docs/specs/overview.md`;
+R13 fixes 2026-10-18) and the desktop focus policy (feature `desktop-focus`, FR30-FR32, ADR-0012 amendment)
+implemented. Plugin 0.5.0-df.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -160,9 +161,14 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   current state with `"reason":"invalid"`. Always returns `hl.dsp.no_op()`. Log lines go through the request log budget
   (FR24).
 - **FR26** For `on:true` each listed window is transformed only if it is mapped, not hidden, not pinned, on the active,
-  non-special workspace of its monitor, not full screen (`FSMODE_FULLSCREEN`; maximized is allowed) and its rect lies
-  inside that monitor (1 px tolerance); other entries are ignored (logged). If windows were listed and none qualifies,
-  nothing changes and the current state is posted with `"reason":"no-windows"`. A transformed window gets a
+  non-special workspace of its monitor, not full screen and not on a workspace that shows a full-screen window
+  (`FSMODE_FULLSCREEN`; maximized is allowed; decision 2026-10-18: on macOS a full-screen app is a Space of its own, and
+  Hyprland draws only the full-screen window on its workspace) and its rect lies inside that monitor (1 px tolerance);
+  other entries are ignored (logged). If windows were listed and none qualifies, nothing changes and the current state is
+  posted with `"reason":"no-windows"`. Windows are transformed only while the shell's chrome covers them (R13 fix): every
+  monitor of the qualifying windows has a mapped layer surface with namespace `grassfield-overview` and `Exclusive`
+  keyboard interactivity, and the seat keyboard is on such a surface (or one of its popups); otherwise nothing changes and
+  the current state is posted with `"reason":"no-chrome"`. A transformed window gets a
   `Render::IWindowTransformer`; the window's main pass (surface, subsurfaces, decorations) is drawn, live, with its
   surface box fitted (uniform scale, centred) into its rect, decorations scaled with it. The client is never resized
   or configured and its window geometry never changes. Popups are not transformed. Snapshots (close / minimize
@@ -174,18 +180,43 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   end state. `on:true` while open, opening or closing retargets: listed windows continue from where they are drawn,
   windows no longer listed go back at once. Events (FR24 channel `overview`, one key):
   `{"v":"gfc/1","type":"overview","state":"opening|open|closing|closed","windows":N}` with `"reason"` when a request is
-  refused (`invalid`, `no-windows`), the plugin unloads (`unavailable`) or the overview is interrupted (`interrupted`).
+  refused (`invalid`, `no-windows`, `no-chrome`), the plugin unloads (`unavailable`), the overview is interrupted
+  (`interrupted`) or a window went full screen while shown (`fullscreen`, state unchanged). A window leaving the
+  overview while it is shown posts the current state again with the new count.
   A 150 ms watchdog after the expected end completes an animation when no monitor renders.
 - **FR28** Damage: each animation tick (`render.preChecks`) damages every window's previous and new visual box (with
   every decoration extent). While an overview is shown, every frame of a monitor that has damage also redraws that
-  monitor's layout boxes (added to its damage ring from `render.pre`); without damage no frame is rendered.
-- **FR29** Failsafes and cleanup: a window that closes, leaves its workspace, becomes full screen or pinned leaves the
-  overview at once; a window getting keyboard focus, or a layer surface with namespace `grassfield-overview` (the
-  shell's overview chrome) closing, starts the closing animation (`interrupted`); a workspace switch that hides a
+  monitor's layout boxes (added to its damage ring from `render.pre`); without damage no frame is rendered. The box
+  drawn in a frame becomes the window's last damaged box (`core damageStep`, R13 fix): a surface resized while open has
+  every box it was drawn in damaged again when it leaves it, and the box damaged at detach is the one drawn last. The
+  first frame of each such resize burst is logged at debug level (request log budget).
+- **FR29** Failsafes and cleanup: a window that closes, leaves its workspace or becomes pinned leaves the overview at
+  once; a window becoming full screen takes every window of its workspace out at once (`fullscreen`). A mapped window
+  that takes the keyboard from the chrome with a user or other focus reason, or the keyboard leaving the chrome, starts
+  the closing animation (`interrupted`); Hyprland moving focus because a window closed or opened does not (the overview
+  stays, the shell retargets; Hyprland 0.56.2 emits `window.active` for the closing window itself, reason "other", while
+  it refuses the keyboard to the next window because of the Exclusive chrome: measured). A layer surface with namespace
+  `grassfield-overview` closing while windows are shown (opening, open, or an interrupted closing) ends the overview at
+  once without animation (`interrupted`); a closing the shell asked for runs to its end. A workspace switch that hides a
   transformed window, a monitor removal or a monitor layout change puts every window back at once (`interrupted`).
   `PLUGIN_EXIT` removes every transformer it attached (none may outlive `dlclose`), damages their boxes and posts
   `closed` with `"reason":"unavailable"` before the event throttle stops. Feature `overview` is advertised only when the
   listeners and the Lua function registered.
+- **FR30** Desktop focus policy (feature `desktop-focus`, ADR-0012 amendment; contract `docs/specs/desktop.md`
+  "Compositor focus policy"): on a pointer button press (event bus `input.mouse.button`, observed, never cancelled,
+  FR13), with the press target = the seat's pointer focus resolved to its window or layer surface (subsurfaces climbed,
+  popups to their owner; a Grassfield titlebar under the pointer counts as its window): (a) a press on a normal window
+  while the seat keyboard is on a `grassfield-desktop-icons` layer surface (any output) gives that window the keyboard
+  (`Desktop::focusState()->fullWindowFocus(w, FOCUS_REASON_CLICK)`, then `rawSurfaceFocus` on its surface if the
+  keyboard did not move); (b) a left press on such a desktop surface gives it the keyboard at once when its committed
+  interactivity is `on_demand`, else on its first `on_demand` commit within 1000 ms (`CLayerShellResource` commit
+  listener per desktop surface; any later press cancels); (c) nothing else: no hover handling, presses on other
+  `grassfield-*` layers, on popups, during a keyboard grab, an Exclusive layer or the session lock change nothing.
+  Decision logic pure (`core/DesktopFocus.*`).
+- **FR31** `desktop-focus` is advertised only when its listeners registered. `PLUGIN_EXIT` removes the button, layer
+  and commit listeners and any pending grant before the other teardown steps; the keyboard stays where it is.
+- **FR32** Withdrawal: after every hook is removed, `PLUGIN_EXIT` posts `{"v":"gfc/1","type":"capabilities","features":[]}`
+  directly (not throttled), so the shell returns to its fallbacks for every feature.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -219,6 +250,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 | FR27 | unit `OverviewTiming.*`, `OverviewGeometry.Interpolation*`; nested `overview.sh` check "events", frames during the 900 ms animations | L0 / L1 | 2026-10-18 verified: `opening` (6) → `open` (6), `closing` (6) → `closed` (0); a frame 250 ms into opening differs from before (214400 px) and from open (64237 px) |
 | FR28 | nested `overview.sh perf 30` (9 windows) | L1 | 2026-10-18: open idle 0.3 % Hyprland CPU, open with one terminal printing 10 lines/s 6.4 % (3.7 % closed), continuous open/close 12.2 % (docs/specs/overview.md "v2 spike" (d)) |
 | FR29 | nested `overview.sh` check "failsafe", "restore", "unload" | L1 | 2026-10-18 verified: fixture surface closed → `closing`/`closed` `interrupted`; after `on:false` the output matched the frame before (0.35 px, menu bar masked); `scripts/nestctl plugin unload` during an open overview: rc 0, Hyprland alive, windows back at their place, `closed`/`unavailable` posted; `plugin load` again → features include `overview` |
+| FR26-FR29 (R13 fix) | unit `OverviewEvents.NewReasons`, `OverviewFocus.*`, `OverviewChrome.*`, `OverviewDamage.*`; nested `overview.sh` check (29 checks) | L0 / L1 | 2026-10-18, plugin 0.5.0-df, run `.dev/overview/run-20261018-085303`: **29/29 PASS** (the f12f610 script had 20 checks, not 21). On:true without the chrome → `no-chrome`, no `opening`; chrome mapped with keyboard None → `no-chrome`; closing the active window while open → no `closing`, `open`/6 posted, terminal grey at 6/6 remaining rects; a window going full screen → `open`/0 `fullscreen`, then on:true → `no-windows`; resize while open: damage log `open box height 351, box damaged at the start of the shrink 491` (with the fix reverted, run `run-20261018-084158`: `none`, FAIL; captures show no stale pixels either way); chrome unmapped (process alive) → `closed`/`interrupted` with no `closing`; chrome keyboard → None → `closed`/`interrupted`; process exit → `closed`/`interrupted`; flood and unload with the chrome mapped PASS |
+| FR30-FR32 | unit `DesktopFocusPolicy.*`, `DesktopFocusLayers.*`, `DesktopFocusGrant.*`, `Protocol.WithdrawnCapabilitiesHaveNoFeature`; nested `tests/compositor/desktop_focus.sh` (`check`, `baseline`) | L0 / L1 | 2026-10-18, plugin 0.5.0-df, run `.dev/desktop-focus/run-20261018-085225-check`: **21/21 PASS**: last active foot clicked while the desktop holds the keyboard gets the keys; click the desktop then type at once 5/5 to the desktop; hover Dock / menu bar / a window and presses on Dock / menu bar keep the keys on the desktop; last active foot on the other output gets the keys; menu grab untouched (keys to the menu, Esc back to the desktop, outside click swallowed, next click on that foot works); unload while the desktop is focused: rc 0, empty capabilities posted, keys still reach the desktop, a click on another foot works, reload advertises `desktop-focus` and the policy works. All 22 window grants worked with `fullWindowFocus` alone (the `rawSurfaceFocus` fallback was not needed), 0 "NOT granted". `baseline` (plugin unloaded, run `run-20261018-080056-baseline`): the three review defects reproduce (keys typed after clicking the last active foot reach the desktop, also across outputs; 0/5 keys reach the desktop when typed right after its click) |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -237,7 +270,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 | shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's appmenu event (FR22) |
 | client → plugin | Wayland global `org_kde_kwin_appmenu_manager` v2 (`create(new_id, wl_surface)`, `release` since 2); `org_kde_kwin_appmenu.set_address(s, s)`, `release` | FR18–FR21 |
 | shell → plugin | `hl.plugin.grassfield.overview("<json>")` | `{"on":bool,"durationMs":int,"curve":[x1,y1,x2,y2]?,"windows":[{"address":"0x<hex>","x","y","w","h"}…]}` (FR25-FR27) |
-| plugin → shell | socket2 event `grassfield` (overview state) | `{"v":"gfc/1","type":"overview","state":"opening\|open\|closing\|closed","windows":N}` (+ `"reason"`, FR27) |
+| plugin → shell | socket2 event `grassfield` (overview state) | `{"v":"gfc/1","type":"overview","state":"opening\|open\|closing\|closed","windows":N}` (+ `"reason"`: `invalid`, `no-windows`, `no-chrome`, `unavailable`, `interrupted`, `fullscreen`; FR27) |
+| plugin → shell | socket2 event `grassfield` at unload (FR32) | `{"v":"gfc/1","type":"capabilities","features":[]}` |
+| plugin (no verb) | feature `desktop-focus`: click-to-focus for the layer surface `grassfield-desktop-icons` on pointer presses | FR30; contract `docs/specs/desktop.md` "Compositor focus policy" |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 The shell sends every verb guarded (`local p = hl.plugin and hl.plugin.grassfield; if p and p.<verb> then
@@ -455,6 +490,19 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   WINDOW_ALPHA_MOVE_FROM_WORKSPACE), getWindowMainSurfaceBox, getWindowExtentsUnified, geometricBox(GOAL),
   positionAnimation, sizeAnimation}`, `CEventLoopTimer` with `g_pEventLoopManager->{addTimer, removeTimer}`,
   `Time::steadyNow`. Behavior read from the v0.56.2 sources (data, see "Minimize (M2): mechanism").
+  Desktop focus (FR30-FR32) and the overview R13 fixes, read from the 0.56.2 headers: `g_pSeatManager->{m_state.keyboardFocus,
+  m_state.pointerFocus, m_seatGrab->m_keyboard}`, `CWLSurfaceResource::m_role` with `SURFACE_ROLE_SUBSURFACE` /
+  `CSubsurfaceRole::m_subsurface` / `CWLSubsurfaceResource::m_parent`, `Desktop::View::CWLSurface::fromResource()->view()`,
+  `IView::type()`, `CWindow::fromView`, `CLayerSurface::{fromView, m_namespace, m_mapped, m_monitor, m_layerSurface}`,
+  `CPopup::{fromView, layerOwner, getT1Owner}`, `CLayerShellResource::{m_current.interactivity, m_events.commit}`,
+  `Desktop::layerState()->layers()`, `Desktop::viewState()->hitTest().windowAt`, `Desktop::focusState()->{fullWindowFocus,
+  rawSurfaceFocus}`, `g_pInputManager->{m_exclusiveLSes, getMouseCoordsInternal}`,
+  `g_pSessionLockManager->isSessionLocked()`, `Event::bus()->m_events.{layer.opened, layer.closed, input.keyboard.focus,
+  window.active (with eFocusReason)}`, `Fullscreen::controller()->getFullscreenModes(PHLWORKSPACE)`. Measured in nested
+  (not read from sources): Hyprland emits `window.active` for a closing window (reason `FOCUS_REASON_OTHER`) while it
+  refuses the keyboard to the next window because of an Exclusive layer ("Refusing a keyboard focus to a window because of
+  an exclusive ls"); `fullWindowFocus` moves the keyboard to a window Hyprland already counts as focused when a layer
+  surface holds it (22/22 presses in `desktop_focus.sh`).
 - Behavior read from the installed 0.56.2 binary (`objdump -d` of the exported symbols; member offsets
   checked with `static_assert(offsetof(...))` against the headers), relied on by FR7, FR12, FR13:
   - `CWindow::updateWindowDecos()` returns at once when `!m_isMapped` or `isHidden()`, so a removal queued by
@@ -520,8 +568,11 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   `com.canonical.AppMenu.Registrar` (the bridge, step B) must not own it then: Qt would hide its in-window menu
   bars with nowhere to show them (S5 finding 4).
 - Without the `overview` feature (plugin absent, mismatched, or its listeners failed): `hl.plugin.grassfield.overview`
-  does not exist and the shell keeps the v1 thumbnails. A refused request (`invalid`, `no-windows`) or an unload during
-  an overview (`unavailable`) is reported in the `overview` event, so the shell can fall back for that open.
+  does not exist and the shell keeps the v1 thumbnails. A refused request (`invalid`, `no-windows`, `no-chrome`) or an
+  unload during an overview (`unavailable`) is reported in the `overview` event, so the shell can fall back for that open.
+- Without the `desktop-focus` feature (plugin absent, mismatched, its listeners failed, or withdrawn at unload): Hyprland's
+  own focus handling only; the shell keeps its kicker surface and pointer-leave drop and no file-changing desktop keys
+  (ADR-0012 amendment). The unload posts a capabilities event with no feature (FR32) so the shell switches at once.
 
 ## Automated tests · Manual verification steps
 
@@ -539,7 +590,9 @@ Nested scenarios: `tests/compositor/minimize.sh [repeats]` (FR6, FR14–FR17), `
 (FR8), `tests/compositor/input_consistency.sh [rounds]` (FR13), `tests/compositor/appmenu.sh [variants]`
 (FR18–FR22, spike S5; fixtures `tests/fixtures/{menu-demo, fake-registrar, appmenu-client}`, built by
 `tests/fixtures/build.sh`), `tests/compositor/event_flood.sh [requests...]` (FR24; needs grassfield-shell),
-`tests/compositor/overview.sh [check | perf [seconds]]` (FR25-FR29; fixture `tests/compositor/overview-fixture`).
+`tests/compositor/overview.sh [check | perf [seconds]]` (FR25-FR29; fixture `tests/compositor/overview-fixture`),
+`tests/compositor/desktop_focus.sh [check | baseline]` (FR30-FR32; fixture `tests/compositor/desktop-focus-fixture`).
+Unit tests also cover the desktop focus policy (`DesktopFocus*`: decision table, layer classification, pending grant).
 
 Manual (L1, nested only):
 
@@ -589,6 +642,13 @@ Manual (L1, nested only):
   RSS 152.3 → 160.6 MB, no core dump, 0 exceptions), `minimize.sh` 20 rounds PASS, `input_consistency.sh` PASS,
   `appmenu.sh` PASS, `event_flood.sh` PASS, `tests/integration/global_menus.sh` 26/26 PASS (a first run failed
   1 check: transient shell QML warnings in phase B, which runs without the plugin).
+  Plugin 0.5.0-df (desktop focus + overview R13 fixes, 2026-10-18): `soak.sh 660` → PASS, exit 0 (log
+  `.dev/soak-20261018-085426.log`: 391 rounds, 97 drags, 49 abandoned, 98 zoom pairs, 49 cancels, 49 closes, 49 minimize
+  pairs all animated; RSS 152.3 → 160.6 MB, flat from round 100; no core dump; 0 grassfield exceptions; 224 seat
+  warnings as designed); then on a fresh instance `desktop_focus.sh` 21/21, `overview.sh check` 29/29,
+  `input_consistency.sh`, `minimize.sh`, `appmenu.sh`, `event_flood.sh` PASS, `tests/integration/global_menus.sh` 30/30
+  PASS (phase B without the plugin). C2: `nested-up.sh --no-plugin` → `hyprctl grassfield` unknown, shell log
+  "no compositor plugin reply, running in degraded mode".
   Title textures are cached per window and rebuilt only when the title, scale or available width changes;
   drawing adds 6 rect pass elements and 1 texture per decorated window.
 - Q1: `compositor/build-direct.sh tidy` must exit 0 with no diagnostics.
@@ -619,9 +679,16 @@ Manual (L1, nested only):
 - The titlebar sits above the client's requested position, so a centered window's titlebar extends 28 px
   above the centered area.
 - Fractional scaling: geometry is scaled by the monitor scale but only scale 1 was tested.
-- Runtime unload through `scripts/nestctl` was exercised once (2026-10-18, `tests/compositor/overview.sh`: unload during
-  an open overview, then load again: Hyprland alive, features back); the appmenu pinning path (FR23) is still not
-  verified with client objects alive.
+- Runtime unload through `scripts/nestctl` is exercised by `tests/compositor/overview.sh` (unload during an open
+  overview) and `tests/compositor/desktop_focus.sh` (unload while the desktop holds the keyboard), each followed by a
+  load (Hyprland alive, features back); the appmenu pinning path (FR23) is still not verified with client objects alive,
+  so a rebuilt plugin is tested on a fresh nested instance, not by unload + load.
+- Desktop focus (FR30): pointer button presses only (touch and tablet taps keep Hyprland's behaviour); a press on a
+  window border outside its titlebar and surface is left to Hyprland; keys typed between a desktop click and the shell's
+  `on_demand` commit (one frame) go to the previous holder.
+- Overview: screen captures showed no stale pixels even with the FR28 fix reverted (most likely a capture repaints the
+  whole output; not read from the sources), so the resize case is verified through the plugin's damage log and a unit
+  test, not pixels; stale pixels on a real scanout were not observed directly.
 - The release of a titlebar press that ends outside a titlebar (a button press moved away, a double-click
   zoom, and most fast drags, because the bar lags the pointer while the window's move animation runs) is
   processed by Hyprland like any release and reaches the seat, which drops it because the client never got

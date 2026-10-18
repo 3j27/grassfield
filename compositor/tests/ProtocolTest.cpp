@@ -36,6 +36,14 @@ TEST(Protocol, OnlyRegisteredFeaturesAreAdvertised) {
     EXPECT_EQ(capabilitiesJson(features(false, false, false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","overview"]})");
     EXPECT_EQ(capabilitiesJson(features(true, true, true, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, false, false, false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","desktop-focus"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus"]})");
+}
+
+TEST(Protocol, WithdrawnCapabilitiesHaveNoFeature) {
+    // Posted at unload: the shell drops every feature (desktop-focus included) and uses its fallbacks.
+    EXPECT_EQ(capabilitiesJson({}), R"({"v":"gfc/1","type":"capabilities","features":[]})");
 }
 
 TEST(Protocol, AppmenuJsonIsExactWireFormat) {
@@ -112,6 +120,8 @@ TEST(Protocol, NamesAreStable) {
     EXPECT_EQ(kFeatureMinimize, "minimize");
     EXPECT_EQ(kFeatureConfig, "config");
     EXPECT_EQ(kFeatureAppmenu, "appmenu");
+    EXPECT_EQ(kFeatureOverview, "overview");
+    EXPECT_EQ(kFeatureDesktopFocus, "desktop-focus");
     EXPECT_EQ(kConfigTitlebarDoubleClick, "titlebarDoubleClick");
 }
 

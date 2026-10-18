@@ -46,6 +46,9 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // Window title changed: the cached title texture is rebuilt on the next draw.
     void onTitleChanged();
 
+    // The titlebar is shown and its bar contains `pos` (global layout coordinates, the pointer's space).
+    bool barContains(const Vector2D& pos) const;
+
     // Global pointer button listener (Event::bus()->m_events.input.mouse.button), called before any
     // titlebar or client sees the event; it never cancels it. Tracks press ownership (so a titlebar
     // consumes only the releases of presses a titlebar consumed) and ends gestures (drag, armed button)

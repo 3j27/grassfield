@@ -24,6 +24,10 @@ namespace gf::ipc {
     // Posts the capabilities event (features computed from what registered: see gfc::features).
     void postCapabilities();
 
+    // Unload: posts a capabilities event with no feature at once (not throttled), so that the shell goes back to its
+    // fallbacks (desktop focus workarounds, minimize parking, T0 menus, thumbnails) as without the plugin.
+    void postWithdrawn();
+
     // The minimize / restore entry points and the minimize render hooks are all registered.
     bool minimizeAvailable();
 

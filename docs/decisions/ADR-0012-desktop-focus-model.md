@@ -1,5 +1,5 @@
 # ADR-0012: Desktop keyboard focus follows the macOS model
-Status: Accepted by owner decision 2026-10-17; spike PASS with three shell-side corrections (see Spike results, 2026-10-18); implemented, nested acceptance (a) to (h) PASS with and without the plugin · Date: 2026-10-17 · Decider: owner
+Status: Accepted by owner decision 2026-10-17; spike PASS with three shell-side corrections (see Spike results, 2026-10-18); implemented, nested acceptance (a) to (h) PASS with and without the plugin; amended 2026-10-18: the compositor enforces click-to-focus (see Amendment) · Date: 2026-10-17 · Decider: owner
 
 ## Context
 The desktop (icons on the wallpaper) is a full-screen layer surface per output; its context menu and rename field
@@ -114,6 +114,25 @@ was NOT needed: the keyboard returns to the parent by itself after Esc / item / 
 files unchanged, typing goes to foot (last window). (f) menu open + click foot on the other output: closed, no stale key; rename active + click foot on the other output: committed, keys to that foot.
 (g) Space opens Glance, Esc closes it. (h) 10x menu/Esc/type: 0 misdelivered; typed 50 ms after the Esc 10/10, typed at once 2 to 8 of 10 (rest dropped). Ctrl+Backspace on a sandbox file moved it to `.dev/apps-home/data/Trash`; the owner's `~/.local/share/Trash/info` mtime unchanged.
 The keyboard grant check uses `Window.active`, not `activeFocus` (found during acceptance: `forceActiveFocus` sets activeFocus on an inactive window).
+
+## Amendment (2026-10-18, integrator decision on the owner's behalf): the compositor enforces click-to-focus
+Review of 354cf71: the shell-side corrections cannot make the model safe. Hyprland ignores a click on its focused window
+while the desktop holds the keyboard (desktop keyboard actions then ran while the user believed the terminal had focus),
+the kicker grants the keyboard only after 60-180 ms (keys typed right after the click went to the previous window), and
+the pointer-leave drop sends keys to a window the user did not click (hovering the Dock or the menu bar, a swallowed
+outside click).
+
+Decision: grassfield-compositor enforces the policy on pointer button presses (capability `desktop-focus`, ADR-0007):
+a press on a window while the desktop holds the keyboard gives that window the keyboard; a left press on the desktop gives
+it the keyboard on its `on_demand` commit, with no motion; nothing else moves the keyboard (no hover focus; Dock, menu bar,
+widgets and popups keep it on the desktop, as Finder stays active on macOS; the menu's popup grab is untouched).
+- **With the capability** the shell removes the kicker and the pointer-leave drop and may enable the file-changing
+  desktop keys (`IconsView.fileKeyActions`).
+- **Without it** (no plugin, ABI mismatch, or withdrawn at unload by an empty capabilities event) the shell keeps the
+  kicker and the pointer-leave drop, and file-changing desktop keys stay off.
+Exact contract: `docs/specs/desktop.md` "Compositor focus policy". Evidence: `tests/compositor/desktop_focus.sh` 21/21
+PASS with the plugin; `baseline` (plugin unloaded) reproduces the three defects. Spike corrections 1 and 2 above become
+fallbacks for the plugin-less case; correction 3 is not needed with the plugin.
 
 ## Consequences
 - The safe mode and its catchers are temporary; this design replaces them after a spike PASS and a review.

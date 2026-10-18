@@ -99,7 +99,7 @@ namespace gf::gfc {
         return out;
     }
 
-    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview) {
+    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview, bool desktopFocus) {
         std::vector<std::string_view> out{kFeatureDecorations};
         if (minimize)
             out.push_back(kFeatureMinimize);
@@ -109,6 +109,8 @@ namespace gf::gfc {
             out.push_back(kFeatureAppmenu);
         if (overview)
             out.push_back(kFeatureOverview);
+        if (desktopFocus)
+            out.push_back(kFeatureDesktopFocus);
         return out;
     }
 

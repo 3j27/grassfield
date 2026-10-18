@@ -5,6 +5,7 @@
 // its degraded mode because no `grassfield` capabilities event is ever posted.
 
 #include "AppmenuServer.hpp"
+#include "DesktopFocus.hpp"
 #include "Ipc.hpp"
 #include "Minimize.hpp"
 #include "Overview.hpp"
@@ -166,12 +167,14 @@ namespace {
             }
         };
         step("listeners", [&] { s.listeners.clear(); });
+        step("desktop focus", [] { gf::desktopFocus::stop(); }); // no press or commit may reach the policy any more
         step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
         step("overview", [] { gf::overviewer::stop(); });   // every window back to normal rendering, transformers detached
         step("appmenu", [] { gf::appmenuServer::stop(); }); // no wl_resource may point into this library after dlclose
         step("events", [] { gf::ipc::stopEvents(); });      // after the appmenu clears: waiting events posted, timer removed
         step("ipc", [] { gf::ipc::unregisterAll(); });
         step("titlebars", [] { removeAllTitlebars(); });
+        step("withdraw", [] { gf::ipc::postWithdrawn(); }); // last: the shell drops every feature and uses its fallbacks
         s.active = false;
     }
 
@@ -189,7 +192,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     auto& s  = state();
     s.handle = handle;
 
-    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu, overview and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
+    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu, overview, desktop focus and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
 
     const std::string serverHash = __hyprland_api_get_hash();
     const std::string clientHash = __hyprland_api_get_client_hash();
@@ -219,6 +222,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         if (!appmenuOk) {
             gf::guarded("appmenu rollback", [] { gf::appmenuServer::stop(); });
             gf::log(Log::WARN, "appmenu global failed to start; appmenu not advertised");
+        }
+        // Optional feature: without it the shell keeps its own desktop focus workarounds and no file-changing desktop keys.
+        bool desktopFocusOk = false;
+        gf::guarded("desktop focus start", [&] { desktopFocusOk = gf::desktopFocus::start(); });
+        if (!desktopFocusOk) {
+            gf::guarded("desktop focus rollback", [] { gf::desktopFocus::stop(); });
+            gf::log(Log::WARN, "desktop focus listeners failed to register; desktop-focus not advertised");
         }
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");
