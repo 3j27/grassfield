@@ -147,7 +147,8 @@ the review defects: (1) and (4) keys reach the desktop, (2) 0/5 (keys reach the 
 Policy v2 (plugin 0.6.0, 2026-10-18): 26/26 PASS, adding (8) menu open, pointer onto the last active foot, Esc, click
 without motion: the foot gets the keys, and (7) a slow `on_demand` commit (700 ms) loses to a focus dispatch or a new
 window made in the meantime, and still grants the desktop without interference. The previous build (e066a19) fails (8)
-(keys to the desktop) and (7b) (the late commit took the keyboard from the new window).
+(keys to the desktop), (7a) (the late commit took the keyboard from the window a focus dispatch had just focused) and
+(7b) (it took it from a window that had just mapped); see ADR-0012.
 
 Limits: touch and tablet taps are not covered (pointer buttons only); a press on a window's border (outside its titlebar
 and surface) is left to Hyprland.

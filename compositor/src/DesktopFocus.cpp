@@ -102,11 +102,13 @@ namespace {
         return w && w->m_isMapped && !w->isHidden() && !w->m_X11ShouldntFocus;
     }
 
+    // A window whose input is blocked (a Stages strip window, or one of Hyprland's own reasons) is never live: Hyprland's
+    // hit test skips it, so it can only be the pointer focus because no pointer motion happened since it was blocked.
     df::PointerFocus pointerFocusState(const SP<CWLSurfaceResource>& surface) {
         if (!surface)
             return df::PointerFocus::None;
         const auto owner = gf::surfaces::ownerOf(surface);
-        return owner.known && owner.visible ? df::PointerFocus::Live : df::PointerFocus::Stale;
+        return df::classifyPointerFocus(true, owner.known, owner.visible, !owner.window || owner.window->acceptsInput());
     }
 
     // The window or layer surface under the cursor, looked up in the order Hyprland 0.56.2 uses for pointer focus

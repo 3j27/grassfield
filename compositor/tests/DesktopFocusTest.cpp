@@ -199,6 +199,17 @@ TEST(DesktopFocusTarget, MissingOrStalePointerFocusFallsBackToTheSurfaceUnderThe
     }
 }
 
+// R13 review of 46b3e9b: after a Stages swap without pointer motion, Hyprland's pointer focus is still the surface of a
+// window that went to the strip (input blocked). It must not count as live: the press target is what lies under the cursor.
+TEST(DesktopFocusTarget, PointerFocusOnABlockedWindowIsStale) {
+    EXPECT_EQ(classifyPointerFocus(true, true, true, true), PointerFocus::Live);
+    EXPECT_EQ(classifyPointerFocus(true, true, true, false), PointerFocus::Stale) << "a strip window (input blocked)";
+    EXPECT_EQ(classifyPointerFocus(true, true, false, true), PointerFocus::Stale) << "an unmapped or hidden view";
+    EXPECT_EQ(classifyPointerFocus(true, false, true, true), PointerFocus::Stale) << "a surface of no window or layer";
+    EXPECT_EQ(classifyPointerFocus(false, true, true, true), PointerFocus::None);
+    EXPECT_EQ(pressTargetSource(classifyPointerFocus(true, true, true, false)), TargetSource::UnderCursor);
+}
+
 TEST(DesktopFocusTarget, TheFallbackFeedsTheSameDecisionTable) {
     // The repro: the desktop holds the keyboard, the closed menu's popup is the stale pointer focus, a foot is under the cursor.
     Press p           = onWindow();

@@ -2,7 +2,7 @@
 # Minimize / restore scenario (master-prompt §5.6 feature 2): real pointer on the titlebar's minimize button,
 # restore through a click on the window's Dock tile, rapid repetition, windows closed mid-animation.
 #
-# Usage: tests/compositor/minimize.sh [repeats]          (default 20)
+# Usage: tests/compositor/minimize.sh [repeats] [stages]  (default 20; `stages`: the same run with Stages on)
 # NESTED only: needs scripts/dev/nested-up.sh with grassfield-compositor loaded (feature "minimize") and
 # grassfield-shell running (it answers the plugin's minimize-request with hl.plugin.grassfield.minimize and
 # draws the Dock). Pointer input goes through scripts/dev/pointer.sh, clients get the nested socket only,
@@ -18,6 +18,11 @@
 #     minimize animation is still running; A must end at its geometry;
 #   4 a window closed during its minimize animation, another one closed during its restore animation;
 #   5 nested Hyprland alive, no core dump of its PID, no grassfield exception in its log.
+# With `stages` (R13 review of 46b3e9b): the Stages flag on, the strip stand-in tests/compositor/stages-fixture mapped
+# on MZ_OUTPUT and op "on" sent (verbs through scripts/nestctl); a second foot window O (same app as A, so the Dock layout
+# is unchanged) opens first and is moved into a strip stage of its own, so that A is the only window of the active stage.
+# Step 1 then also checks the keyboard after the minimize: O's stage comes forward and O gets the typed keys (keys through
+# scripts/dev/keys.sh), A gets nothing. Stages is turned off and the fixture ended at the end of the run.
 # The Dock tile position is computed like shell/dock/Dock.qml does (tokens from ui/Grassfield/Ui/Tokens.qml,
 # one tile per pinned app with a desktop entry and per running unpinned app, a separator, the minimized
 # tiles, the Trash), centered on the output. MZ_DOCK_APPS overrides the number of app tiles.
@@ -30,8 +35,14 @@ set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
-repeats=${1:-20}
-[[ $repeats =~ ^[0-9]+$ ]] || { echo "usage: minimize.sh [repeats]" >&2; exit 2; }
+repeats=20
+stages_mode=0
+for arg in "$@"; do
+  case $arg in
+    stages) stages_mode=1 ;;
+    *) [[ $arg =~ ^[0-9]+$ ]] || { echo "usage: minimize.sh [repeats] [stages]" >&2; exit 2; }; repeats=$arg ;;
+  esac
+done
 out=${MZ_OUTPUT:-GF-REF}
 
 sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
@@ -54,6 +65,11 @@ command -v socat >/dev/null || { echo "minimize: socat is needed to read the plu
 query() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j "$1"; } # read-only queries only
 query grassfield | jq -e '.features | index("minimize")' >/dev/null 2>&1 \
   || { echo "minimize: the loaded plugin does not advertise \"minimize\"" >&2; exit 2; }
+if ((stages_mode)); then
+  query grassfield | jq -e '.features | index("stages-available")' >/dev/null 2>&1 \
+    || { echo "minimize: the loaded plugin does not advertise \"stages-available\"" >&2; exit 2; }
+  command -v qs >/dev/null || { echo "minimize: qs is needed for the Stages strip stand-in" >&2; exit 2; }
+fi
 # The shell must have finished the gfc/1 handshake, otherwise its first minimize takes the fallback path
 # (special workspace) and no "minimized" event is posted.
 for _ in $(seq 1 50); do
@@ -120,7 +136,14 @@ contact_sheet() { # <prefix> <out.png>: frames in capture order
 
 pids=()
 socat_pid=""
+fixture_pid=""
+nestctl() { timeout 10 "$root/scripts/nestctl" "$@"; } # verbs of the plugin (Stages mode only)
 cleanup() {
+  if ((stages_mode)); then
+    nestctl dispatch 'hl.plugin.grassfield.stages([[{"op":"off","durationMs":0}]])' >/dev/null 2>&1
+    nestctl dispatch 'hl.plugin.grassfield.config("stagesEnabled", "false")' >/dev/null 2>&1
+    [[ -n $fixture_pid ]] && kill "$fixture_pid" 2>/dev/null
+  fi
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
   [[ -n $socat_pid ]] && kill "$socat_pid" 2>/dev/null
 }
@@ -133,6 +156,35 @@ socat_pid=$!
 
 read -r mon_x mon_y mon_w mon_h < <(query monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
 [[ -n ${mon_w:-} ]] || { echo "minimize: output $out not found" >&2; exit 2; }
+
+# ---- Stages mode: the flag, the strip stand-in, op on, and window O (opened first, moved into a strip stage later) ----
+st_last() { grep -a 'grassfield>>{"v":"gfc/1","type":"stages"' "$events" | tail -n 1 | sed 's/^[0-9]* grassfield>>//'; }
+o_pid="" o_addr="" cap_o=""
+if ((stages_mode)); then
+  strip_json=$(jq -nc --argjson x "$mon_x" --argjson y "$mon_y" '{x: $x, y: ($y + 60), w: 220, h: 860}')
+  tiles_json=$(jq -nc --argjson x "$mon_x" --argjson y "$mon_y" '[range(0; 4) as $i | {x: ($x + 16), y: ($y + 100 + $i * 190), w: 188, h: 160}]')
+  fixlog=$run/stages-fixture.log
+  GF_STAGES_OUTPUT=$out GF_STAGES_STRIP=$strip_json GF_STAGES_TILES=$tiles_json WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
+    setsid "$root/scripts/dev/isolated.sh" --name stages-fixture qs -p "$root/tests/compositor/stages-fixture" --no-color >"$fixlog" 2>&1 </dev/null &
+  fixture_pid=$!
+  for _ in $(seq 1 50); do grep -q "\[stages-fixture\] output $out found" "$fixlog" 2>/dev/null && break; sleep 0.1; done
+  sleep 0.5
+  grep -q "\[stages-fixture\] output $out found" "$fixlog" || { echo "minimize: the Stages strip stand-in did not start ($fixlog)" >&2; exit 2; }
+  nestctl dispatch 'hl.plugin.grassfield.config("stagesEnabled", "true")' >/dev/null 2>&1
+  nestctl dispatch "hl.plugin.grassfield.stages([[$(jq -nc --arg o "$out" --argjson t "$tiles_json" '{op: "on", durationMs: 0, strips: [{monitor: $o, tiles: $t}]}')]])" >/dev/null 2>&1
+  sleep 0.5
+  [[ $(st_last | jq -r '.on') == true ]] || { echo "minimize: Stages did not turn on: $(st_last)" >&2; exit 2; }
+  # O: a foot that writes every typed byte to cap_o (raw tty), opened where A will open (both centred under the pointer).
+  cap_o=$run/capture-o.cap
+  : >"$cap_o"
+  pointer abs $((mon_w / 2)) $((mon_h / 3)) sleep 50
+  WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot -e sh -c 'stty raw -echo; exec cat -v >"$0"' "$cap_o" >/dev/null 2>&1 </dev/null &
+  o_pid=$!
+  pids+=("$o_pid")
+  sleep 1.5
+  o_addr=$(query clients | jq -r --argjson p "$o_pid" '[.[] | select(.pid == $p)][0].address // ""')
+  [[ -n $o_addr ]] || { echo "minimize: setup error: window O not found" >&2; exit 2; }
+fi
 
 # ---- Dock geometry (shell/dock/Dock.qml) ----
 token() { sed -n "s/.*readonly property int $1: \([0-9]*\).*/\1/p" "$root/ui/Grassfield/Ui/Tokens.qml" | head -n 1; }
@@ -219,6 +271,17 @@ hex=${addr#0x}
 min_x=$((x0 + 38)) # minimize button center: 38 px right of the surface's left edge, bar middle 14 px above it
 bar_y=$((y0 - 14))
 say "  setup: A $addr ${w0}x${h0} at ($x0,$y0) on workspace $ws0"
+if ((stages_mode)); then
+  # A joined O's stage (same app): O moves into a strip stage of its own, A stays alone in the active stage.
+  nestctl dispatch "hl.plugin.grassfield.stages([[{\"op\":\"move\",\"address\":\"$o_addr\",\"stage\":\"new\"}]])" >/dev/null 2>&1
+  sleep 0.5
+  a_alone=$(st_last | jq -r --arg a "$hex" '.monitors[0] as $m | [$m.stages[] | select(.id == $m.active)][0].windows | map(.address) == [$a]')
+  o_strip=$(st_last | jq -r --arg o "${o_addr#0x}" '[.monitors[0].stages[] | select(.slot >= 0) | .windows[].address] | index($o) != null')
+  say "  stages: on; O $o_addr in a strip stage: $o_strip; A alone in the active stage: $a_alone"
+  [[ $a_alone == true && $o_strip == true ]] || { say "minimize: setup error: Stages did not group A and O as expected: $(st_last)"; exit 2; }
+  nestctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null 2>&1
+  sleep 0.3
+fi
 
 # 1 minimize with the titlebar button
 say "1 minimize with the titlebar button"
@@ -237,6 +300,18 @@ wait "$bpid"
 read -r _ x y w h ws < <(client "$a_pid")
 [[ $ws == special:minimized ]]
 check "A hidden on special:minimized" $? "workspace $ws"
+if ((stages_mode)); then
+  # A was the only window of the active stage: O's stage comes forward and O takes the keyboard (never A).
+  sleep 0.3
+  aw=$(query activewindow | jq -r '.address // ""')
+  o0=$(stat -c %s "$cap_o")
+  timeout 10 "$root/scripts/dev/keys.sh" mz >>"$log" 2>&1
+  sleep 0.4
+  o_new=$(tail -c +"$((o0 + 1))" "$cap_o" | head -c 40)
+  o_active=$(st_last | jq -r --arg o "${o_addr#0x}" '.monitors[0] as $m | [$m.stages[] | select(.id == $m.active)][0].windows | map(.address) | index($o) != null')
+  [[ $aw == "$o_addr" && $o_new == *mz* && $o_active == true ]]
+  check "Stages: keyboard after minimizing the only window of the active stage" $? "active window $aw (O $o_addr), O got '$o_new', O's stage active: $o_active"
+fi
 sleep 0.3
 shot after-minimize
 WAYLAND_DISPLAY=$sock grim -t ppm "$run/after-all.ppm" 2>>"$log"

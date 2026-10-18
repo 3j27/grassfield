@@ -4,8 +4,12 @@
 //     it draws thumbnails), keyboard None, transparent (the plugin draws the windows' thumbnails under it, in the window
 //     layer), whole-surface input; tile outlines only, so screenshots show where the tiles are. Every press is logged in
 //     layout coordinates, so the script can map it to a tile as the shell would.
+//   - exclusive (GF_STAGES_ROLE=exclusive, a second instance): an Overlay-layer surface with Exclusive keyboard
+//     interactivity in the top-right corner (what the shell's overview chrome or Search is to Hyprland), logging every key
+//     it receives; the script ends it by killing the process (the surface unmaps).
 // Input (validated): GF_STAGES_OUTPUT (output name, required), GF_STAGES_TILES (JSON array of {x,y,w,h} in layout
-// coordinates, at most 8), GF_STAGES_STRIP (JSON {x,y,w,h}: the strip surface box in layout coordinates).
+// coordinates, at most 8), GF_STAGES_STRIP (JSON {x,y,w,h}: the strip surface box in layout coordinates), GF_STAGES_ROLE
+// ("strip", the default, or "exclusive").
 // Run: WAYLAND_DISPLAY=<nested> qs -p <this dir>
 pragma ComponentBehavior: Bound
 import QtQuick
@@ -36,15 +40,16 @@ ShellRoot {
         }
     }
     readonly property var screen: Quickshell.screens.find(s => s.name === root.outputName) ?? null
+    readonly property string role: (Quickshell.env("GF_STAGES_ROLE") ?? "") === "exclusive" ? "exclusive" : "strip"
 
-    Component.onCompleted: console.log("[stages-fixture] output " + (root.screen ? root.screen.name + " found" : root.outputName + " missing") + ", " + root.tiles.length + " tile(s)")
+    Component.onCompleted: console.log("[stages-fixture] output " + (root.screen ? root.screen.name + " found" : root.outputName + " missing") + ", " + root.tiles.length + " tile(s), role " + root.role)
 
     // qmllint disable uncreatable-type
     PanelWindow {
         // qmllint enable uncreatable-type
         id: stripWindow
 
-        visible: root.screen !== null && root.strip !== null
+        visible: root.role === "strip" && root.screen !== null && root.strip !== null
         screen: root.screen
         anchors {
             top: true
@@ -82,6 +87,38 @@ ShellRoot {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
             onPressed: mouse => console.log("[stages-fixture] press " + Math.round(root.strip.x + mouse.x) + " " + Math.round(root.strip.y + mouse.y))
+        }
+    }
+
+    // qmllint disable uncreatable-type
+    PanelWindow {
+        // qmllint enable uncreatable-type
+        id: exclusiveWindow
+
+        visible: root.role === "exclusive" && root.screen !== null
+        screen: root.screen
+        anchors {
+            top: true
+            right: true
+        }
+        // qmllint disable unqualified unresolved-type
+        margins.top: 60
+        margins.right: 40
+        // qmllint enable unqualified unresolved-type
+        implicitWidth: 360
+        implicitHeight: 120
+        exclusionMode: ExclusionMode.Ignore
+        color: Qt.rgba(0.2, 0.3, 0.6, 0.85)
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        WlrLayershell.namespace: "grassfield-stages-test-exclusive"
+        Component.onCompleted: if (visible) console.log("[stages-fixture] exclusive surface shown")
+        onVisibleChanged: if (visible) console.log("[stages-fixture] exclusive surface shown")
+
+        Item {
+            anchors.fill: parent
+            focus: true
+            Keys.onPressed: event => console.log("[stages-fixture] key " + event.text)
         }
     }
 }
