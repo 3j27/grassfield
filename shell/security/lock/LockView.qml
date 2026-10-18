@@ -244,6 +244,10 @@ Item {
                 placeholderColor: root.colors.textSecondary
                 fillColor: Appearance.withAlpha(root.colors.shadow, Tokens.lockFieldFillOpacity)
                 focusColor: Appearance.withAlpha(root.colors.text, Tokens.lockFocusRingOpacity)
+                // Selection: the dark palette's accent behind dark accent-text dots (was the focus ring colour behind
+                // white dots, 1.7-2.1:1).
+                selectionColor: root.colors.accent
+                selectedTextColor: root.colors.accentText
                 onSubmitted: password => root.submitted(password)
                 onEdited: root.edited()
             }
