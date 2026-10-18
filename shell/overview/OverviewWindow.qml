@@ -395,6 +395,11 @@ Variants {
                 Accessible.ignored: true
 
                 Keys.onPressed: event => {
+                    // Not open (releasing or closed): run nothing and let the key through.
+                    if (!V2.keysEnabled(root.controller.stage)) {
+                        event.accepted = false;
+                        return;
+                    }
                     const inSpaces = win.spaceFocus >= 0;
                     event.accepted = true;
                     root.controller.keyScreen = win.screenName;
