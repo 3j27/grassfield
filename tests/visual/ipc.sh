@@ -8,14 +8,12 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 dev=$root/.dev
-sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
-sig=$(cat "$dev/nested.instance" 2>/dev/null || true)
-main=$(cat "$dev/main.instance" 2>/dev/null || true)
-pid=$(cat "$dev/shell.pid" 2>/dev/null || true)
-[[ -n $sock && -n $sig ]] || { echo "ipc: no nested instance (run: just nested-up)" >&2; exit 1; }
-[[ $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "ipc: refusing the main Wayland socket" >&2; exit 1; }
-[[ $sig != "$main" && $sig != "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || { echo "ipc: refusing the main instance" >&2; exit 1; }
-[[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null || { echo "ipc: no running nested shell (.dev/shell.pid)" >&2; exit 1; }
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+# Only this tree's live nested compositor and shell (records verified by start time).
+dev_nested_target "$dev" || exit 1
+sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG
+pid=$(dev_live_pid "$dev/shell.pid") || { echo "ipc: no running nested shell (.dev/shell.pid)" >&2; exit 1; }
 [[ $# -ge 2 ]] || { echo "usage: ipc.sh <target> <function> [args...]" >&2; exit 2; }
 
 WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig exec qs ipc --pid "$pid" call "$@"

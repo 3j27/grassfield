@@ -166,14 +166,17 @@ vs_wait_capabilities() {
   return 1
 }
 
-# PIDs of client processes started by scenarios (killed by vs_reset; never anything else).
-vs_track() { printf '%s\n' "$1" >> "$VS_STATE/pids"; }
+# Client processes started by scenarios, as "PID start-time" (killed by vs_reset; never anything else: a line counts
+# only while the start time matches, and never a compositor or this script; scripts/dev/pidfile.sh).
+vs_track() { printf '%s %s\n' "$1" "$(dev_start_time "$1" || echo none)" >> "$VS_STATE/pids"; }
 
 vs_kill_clients() {
   [[ -f $VS_STATE/pids ]] || return 0
-  local p
-  while read -r p; do
-    [[ -n $p ]] && kill "$p" 2>/dev/null || true
+  local p s
+  while read -r p s; do
+    [[ $p =~ ^[0-9]+$ && $s =~ ^[0-9]+$ ]] || continue
+    [[ $(dev_start_time "$p") == "$s" ]] || continue
+    dev_may_signal "$p" && kill "$p" 2>/dev/null || true
   done < "$VS_STATE/pids"
   : > "$VS_STATE/pids"
   sleep 0.7

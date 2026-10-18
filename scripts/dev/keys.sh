@@ -6,12 +6,9 @@ set -euo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
-sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
-main=$(cat "$dev/main.instance" 2>/dev/null || true)
+# shellcheck source=pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+# Only this tree's live nested compositor: a stale socket record may name another worktree's session or be reused.
+dev_nested_target "$dev" || exit 1
 
-[[ -n $sock ]] || { echo "keys: no nested instance (run: just nested-up)" >&2; exit 1; }
-[[ $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "keys: refusing the main Wayland socket" >&2; exit 1; }
-[[ $(cat "$dev/nested.instance") != "$main" ]] || { echo "keys: refusing the main instance" >&2; exit 1; }
-[[ -S ${XDG_RUNTIME_DIR:?}/$sock ]] || { echo "keys: nested socket $sock is gone" >&2; exit 1; }
-
-WAYLAND_DISPLAY=$sock exec wtype "$@"
+WAYLAND_DISPLAY=$DEV_NESTED_SOCK exec wtype "$@"

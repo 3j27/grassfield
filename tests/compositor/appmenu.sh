@@ -44,7 +44,9 @@ self=$root/tests/compositor/appmenu.sh
 inner() {
   local v=$1 out=$2
   local sock sig
-  sock=$(cat "$dev/nested.wayland") sig=$(cat "$dev/nested.instance")
+  . "$root/scripts/dev/pidfile.sh"
+  dev_nested_target "$dev" || return 2
+  sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG
   if [[ -z ${DBUS_SESSION_BUS_ADDRESS:-} || $DBUS_SESSION_BUS_ADDRESS == "${GF_OUTER_BUS:-}" ]]; then
     echo "inner: not on a private bus; refusing" >&2
     return 2
@@ -193,6 +195,12 @@ sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
 sig=$(cat "$dev/nested.instance" 2>/dev/null || true)
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
 hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
+# Only this tree's live nested compositor (records verified by start time; scripts/dev/pidfile.sh): a stale record
+# may name another worktree's session.
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+dev_nested_target "$dev" || exit 2
+sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 if [[ -z $sock || -z $sig || -z $hypr_pid ]] || ! kill -0 "$hypr_pid" 2>/dev/null; then
   echo "appmenu: no nested instance (run scripts/dev/nested-up.sh)" >&2
   exit 2

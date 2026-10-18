@@ -47,7 +47,24 @@ else
   pass "PID 1 and garbage records are not live"
 fi
 
+# 3b. A record whose start time could not be read (empty) never counts, even for a live PID.
+printf '%s\n' "$victim" >"$tmp/empty.pid"
+printf '\n' >"$tmp/empty.pid.start"
+if dev_live_pid "$tmp/empty.pid" >/dev/null; then fail "empty start time counted as live"; else pass "empty start time is not live"; fi
+
+# 3c. Fails closed: without ps/pgrep on PATH nothing may be signalled.
+if (PATH=/nonexistent dev_may_signal "$victim"); then fail "signalling allowed without ps/pgrep"; else pass "no ps/pgrep: nothing may be signalled"; fi
+
 if dev_host_namespace; then
+  # 3d. A process named like a compositor is never signalled, whatever pgrep and hyprctl report.
+  cp /usr/bin/sleep "$tmp/Hyprland"
+  (setsid "$tmp/Hyprland" 60 </dev/null >/dev/null 2>&1 & echo $! >"$tmp/fake.raw")
+  fake=$(<"$tmp/fake.raw")
+  for _ in $(seq 1 20); do [[ $(cat "/proc/$fake/comm" 2>/dev/null) == Hyprland ]] && break; sleep 0.05; done
+  if dev_may_signal "$fake"; then fail "a process named Hyprland may be signalled"; else pass "a process named Hyprland is protected"; fi
+  # Only this test's own throwaway process, checked by name and start time first.
+  [[ $(cat "/proc/$fake/comm" 2>/dev/null) == Hyprland && $(tr '\0' ' ' <"/proc/$fake/cmdline") == "$tmp/Hyprland 60 " ]] && kill "$fake"
+
   # 4. A matching record of a setsid process: live; dev_stop stops its group. Started through a subshell so that it is
   #    not this script's child (a dead child stays a zombie that `kill -0` still sees).
   (setsid sleep 60 </dev/null >/dev/null 2>&1 & echo $! >"$tmp/own.raw")

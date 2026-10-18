@@ -8,8 +8,11 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
 name=${1:?usage: shot.sh <name> [output]}
 output=${2:-GF-REF}
-sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
-[[ -n $sock && $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "shot: no nested instance" >&2; exit 1; }
+# shellcheck source=pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+# Only this tree's live nested compositor (never the owner's output, never another worktree's session).
+dev_nested_target "$dev" || exit 1
+sock=$DEV_NESTED_SOCK
 
 mkdir -p "$dev/shots"
 out=$dev/shots/$name.png
