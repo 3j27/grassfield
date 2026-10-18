@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
-import Grassfield.Ui
 
 // The scrolling grid of the Apps panel: one AppsCell per item, virtualised (only the rows in view and a
 // small buffer exist, pooled and reused). `items` is a list of display items {key, id, name, rec}.
