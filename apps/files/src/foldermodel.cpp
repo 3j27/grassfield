@@ -970,9 +970,9 @@ bool FolderModel::previewSupported(const KFileItem &item) const
 
 void FolderModel::reload()
 {
-    clearAllPreviews();
     m_tags.clear();
     if (isSearch()) {
+        clearAllPreviews();
         stopSearch();
         applySelection({});
         m_current.clear();
@@ -980,6 +980,10 @@ void FolderModel::reload()
         startSearch();
         return;
     }
+    // Thumbnails stay: KIO refreshes the rows of a listed folder in place (the delegates are not recreated and would
+    // not ask again), and refreshItems renews the thumbnails of the files that changed. Tags are read again.
+    if (rowCount() > 0)
+        emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {TagsRole, TagColorsRole});
     m_dirModel->openUrl(m_url, KDirModel::Reload);
 }
 
