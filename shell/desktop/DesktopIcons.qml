@@ -31,8 +31,10 @@ Variants {
         required property ShellScreen modelData
 
         property var kb: Focus.initial()
-        // The compositor enforces click-to-focus (capability desktop-focus).
-        readonly property bool policy: Capabilities.has("desktop-focus")
+        // The compositor enforces click-to-focus. Requires "desktop-focus-v2": the first policy ("desktop-focus") misreads a
+        // click with a perfectly still pointer right after the desktop menu closes, which left file keys acting on the
+        // desktop (review of 9e76bd7). Until the plugin advertises v2 the shell keeps its safe mode (file keys off).
+        readonly property bool policy: Capabilities.has("desktop-focus-v2")
         // The transient kicker surface is mapped (two phases: mapped, unmapped).
         property bool kickOn: false
         // The surface has the keyboard (wl_keyboard enter): the window is active. activeFocus is not enough, forceActiveFocus sets it on an inactive window.
