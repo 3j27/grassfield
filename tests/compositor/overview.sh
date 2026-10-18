@@ -155,11 +155,11 @@ grid_json() { # <on> <durationMs> <addresses...>
        w: ($ww * $s | floor), h: ($wh * $s | floor)}]}' --args "$@"
 }
 
-start_fixture() { # <grid json>
+start_fixture() { # <grid json> [keyboard: exclusive (default) | none]
   local targets
   targets=$(jq -c '[.windows | to_entries[] | {x: .value.x, y: .value.y, w: .value.w, h: .value.h, label: "foot \(.key + 1)"}]' <<<"$1")
   : >"$run/fixture.log"
-  GF_OVERVIEW_OUTPUT=$out GF_OVERVIEW_TARGETS=$targets GF_OVERVIEW_DIM=0.35 WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
+  GF_OVERVIEW_OUTPUT=$out GF_OVERVIEW_TARGETS=$targets GF_OVERVIEW_DIM=0.35 GF_OVERVIEW_KEYBOARD=${2:-exclusive} WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
     setsid "$root/scripts/dev/isolated.sh" --name overview-fixture qs -p "$root/tests/compositor/overview-fixture" --no-color \
     >"$run/fixture.log" 2>&1 </dev/null &
   fixture_pid=$!
@@ -194,9 +194,27 @@ crop_diff() { # <a.png> <b.png> <geometry WxH+X+Y>
 }
 cpu_ticks() { awk '{print $14 + $15}' "/proc/$1/stat" 2>/dev/null || echo 0; }
 
-fail=0
+fail=0 passed=0 total=0
 check() { # <label> <status> [detail]
-  if [[ $2 == 0 ]]; then say "  PASS $1${3:+ ($3)}"; else say "  FAIL $1${3:+ ($3)}"; fail=1; fi
+  total=$((total + 1))
+  if [[ $2 == 0 ]]; then
+    passed=$((passed + 1))
+    say "  PASS $1${3:+ ($3)}"
+  else
+    say "  FAIL $1${3:+ ($3)}"
+    fail=1
+  fi
+}
+last_ov() { ov_events | tail -n 1 | sed 's/^[0-9]* //'; }
+# Terminal grey at the centre of each listed layout rect in <png>: count.
+grey_count() { # <png> <layout json> <first index> <count>
+  local n=0 i x y w h r g b
+  for ((i = $3; i < $3 + $4; i++)); do
+    read -r x y w h < <(jq -r --argjson i "$i" '.windows[$i] | "\(.x) \(.y) \(.w) \(.h)"' <<<"$2")
+    read -r r g b < <(mean_rgb "$1" $((x - mon_x + w / 2)) $((y - mon_y + h / 2 + h / 5)) 40 40)
+    is_terminal_grey "$r" "$g" "$b" && n=$((n + 1))
+  done
+  echo "$n"
 }
 
 say "overview $mode: run $run, nested pid $hypr_pid ($(nestctl -j version | jq -r .tag)), output $out ${mon_w}x${mon_h} at $mon_x,$mon_y, workspace $ws"
@@ -281,6 +299,21 @@ say "setup: windows ${addrs[*]} (ticker $ticker, capture $capture); layout $run/
 
 before_clients=$(clients_of "${addrs[*]}")
 shot before
+
+# 0. no transform without the shell's chrome covering the windows and holding the keyboard (R13 review of f12f610).
+n0=$(ov_count '"reason":"no-chrome"'); o0=$(ov_count '"state":"opening"')
+overview "$(jq -c '.durationMs = 0' <<<"$layout")"
+sleep 0.4
+(($(ov_count '"reason":"no-chrome"') > n0 && $(ov_count '"state":"opening"') == o0))
+check "on:true without the shell's chrome mapped: refused (no-chrome), nothing transformed" $? "$(last_ov)"
+start_fixture "$layout" none
+n0=$(ov_count '"reason":"no-chrome"'); o0=$(ov_count '"state":"opening"')
+overview "$(jq -c '.durationMs = 0' <<<"$layout")"
+sleep 0.4
+(($(ov_count '"reason":"no-chrome"') > n0 && $(ov_count '"state":"opening"') == o0))
+check "on:true with the chrome mapped but keyboard None: refused (no-chrome)" $? "$(last_ov)"
+stop_fixture
+sleep 0.3
 
 # 1. open, with the shell stand-in (backdrop + chrome) mapped first, as the shell would.
 start_fixture "$layout"
@@ -373,16 +406,123 @@ restore_diff=$(magick compare -metric AE -fuzz 3% "$run/before-masked.png" "$run
 awk -v d="${restore_diff:-999999}" 'BEGIN { exit !(d < 200) }'
 check "rendering back to normal: after == before (menu bar masked)" $? "$restore_diff px differ"
 
-# 6. failsafe: the shell's overview surface going away closes an open overview.
+open_now() { # <layout json>: on:true without animation, waits for "open"
+  local p0
+  p0=$(ov_count '"state":"open"')
+  overview "$(jq -c '.durationMs = 0' <<<"$1")"
+  wait_ov '"state":"open"' "$p0" 2000
+}
+close_now() { overview '{"on":false,"durationMs":0}'; sleep 0.3; }
+
+# 5b. closing the ACTIVE window while open retargets (spec): the overview stays, the other windows stay in the layout.
+p=$(foot_bg); pids+=("$p"); victim_pid=$p
+victim=$(address_of "$p")
+sleep 0.6
+layout7=$(grid_json true 0 "${addrs[@]}" "$victim")
+start_fixture "$layout7" >/dev/null
+active=$(nestctl -j activewindow | jq -r '.address // ""')
+open_now "$layout7"
+c0=$(ov_count '"state":"closing"'); cl0=$(ov_count '"state":"closed"'); s0=$(ov_count '"state":"open","windows":6')
+kill "$victim_pid" 2>/dev/null
+sleep 0.8
+shot open-after-active-close
+kept=$(grey_count "$run/open-after-active-close.png" "$layout7" 0 6)
+[[ -n $victim && $active == "$victim" ]] && (($(ov_count '"state":"closing"') == c0 && $(ov_count '"state":"closed"') == cl0 && $(ov_count '"state":"open","windows":6') > s0 && kept == 6))
+check "closing the active window while open retargets: no closing, open/6 posted, the 6 others stay in the layout" $? \
+  "active $active (closed: $victim), last: $(last_ov), terminal grey at $kept/6 remaining rects"
+close_now
+stop_fixture
+
+# 5c. a window going full screen while open: its workspace leaves the overview (event reason fullscreen); a workspace
+# showing a full-screen window is not overviewed (no-windows).
+fs() { nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", window = \"address:$1\" })" >>"$log" 2>&1; }
 start_fixture "$layout" >/dev/null
-p0=$(ov_count '"state":"open"')
+open_now "$layout"
+f0=$(ov_count '"reason":"fullscreen"')
+fs "${addrs[0]}"
+sleep 0.8
+fs_event=$(ov_events | grep '"reason":"fullscreen"' | tail -n 1 | sed 's/^[0-9]* //')
+(($(ov_count '"reason":"fullscreen"') > f0)) && [[ $fs_event == *'"windows":0'* ]]
+check "a window going full screen while open: its workspace leaves the overview (reason fullscreen, 0 windows left)" $? "$fs_event; last: $(last_ov)"
+close_now
+n0=$(ov_count '"reason":"no-windows"')
 overview "$(jq -c '.durationMs = 0' <<<"$layout")"
-wait_ov '"state":"open"' "$p0" 2000
+sleep 0.4
+(($(ov_count '"reason":"no-windows"') > n0))
+check "a workspace showing a full-screen window is not overviewed (no-windows)" $? "$(last_ov)"
+fs "${addrs[0]}" # back to floating
+sleep 0.8
+close_now
+stop_fixture
+fs_after=$(nestctl -j clients | jq -r --arg a "${addrs[0]}" '.[] | select(.address == $a) | .fullscreen')
+[[ $fs_after == 0 || $fs_after == false ]] || say "  note: ${addrs[0]} still full screen ($fs_after)"
+
+# 5d. a surface resized while open leaves no stale pixels (R13 review: damage of the last drawn box). A dedicated foot
+# (700x500) gets a square rect in the top-left part of the output, away from every window's real place (Hyprland damages
+# the real place itself); it is resized to 300x500 (drawn taller, filling the rect's height) and back while open. The band
+# at the top of the rect is drawn on by the tall state only: after the resize back it must match the frame before.
+p=$(foot_bg); pids+=("$p"); rs_pid=$p
+rs=$(address_of "$p")
+sleep 0.6
+sq=$(jq -nc --arg a "$rs" --argjson x $((mon_x + 60)) --argjson y $((mon_y + 140)) '{on: true, durationMs: 0, windows: [{address: $a, x: $x, y: $y, w: 400, h: 400}]}')
+start_fixture "$sq" >/dev/null
+open_now "$sq"
+sleep 0.4
+shot resize-open
+resize() { nestctl dispatch "hl.dsp.window.resize({ x = $2, y = $3, exact = true, window = \"address:$1\" })" >>"$log" 2>&1; }
+log0=$(grep -ac "" "$hyprlog")
+resize "$rs" 300 500
+sleep 1
+shot resize-tall
+resize "$rs" 700 500
+sleep 1
+shot resize-back
+# Screen captures repaint the whole output (a capture with the fix reverted showed no stale pixels either), so the proof
+# that the box drawn while taller is damaged again is the plugin's damage log: one line at the first frame of each burst,
+# "damaged <previous box> and <current box>". Growing (first burst): the previous box is the open box (height h0).
+# Shrinking back (second burst): the previous box must be the tall box (h1 > h0 + 50); without the fix the previous box
+# stays the open box (h1 = h0). Hyprland writes its log late: polled up to 3 s.
+damage_lines() { tail -n +"$((log0 + 1))" "$hyprlog" | grep -a "overview: window ${rs#0x} drawn box changed while open" | sed -n 's/.*damaged [-0-9.]*,[-0-9.]* [0-9.]*x\([0-9.]*\) and [-0-9.]*,[-0-9.]* [0-9.]*x\([0-9.]*\).*/\1 \2/p'; }
+# Band: 200x24 px at the rect's horizontal centre, 8..32 px below its top (output-local); mean colours compared.
+read -r r0 g0 b0 < <(mean_rgb "$run/resize-open.png" 260 160 200 24)
+read -r r1 g1 b1 < <(mean_rgb "$run/resize-tall.png" 260 160 200 24)
+read -r r2 g2 b2 < <(mean_rgb "$run/resize-back.png" 260 160 200 24)
+dist() { awk -v a="$1" -v b="$2" -v c="$3" -v d="$4" -v e="$5" -v f="$6" 'BEGIN { printf "%.1f", sqrt((a - d) ^ 2 + (b - e) ^ 2 + (c - f) ^ 2) }'; }
+tall_dist=$(dist "$r0" "$g0" "$b0" "$r1" "$g1" "$b1")
+back_dist=$(dist "$r0" "$g0" "$b0" "$r2" "$g2" "$b2")
+awk -v t="$tall_dist" -v b="$back_dist" 'BEGIN { exit !(t > 20 && b < 4) }'
+check "surface resized twice while open: the captured frame matches the frame before where the taller state was drawn" $? \
+  "band mean colour: open $r0,$g0,$b0; tall $r1,$g1,$b1 (distance $tall_dist); after the resize back $r2,$g2,$b2 (distance $back_dist)"
+close_now
+stop_fixture
+kill "$rs_pid" 2>/dev/null
+sleep 0.5
+
+# 6. failsafes: the chrome unmapping while open (the shell process alive) ends the overview at once, without a closing
+# animation; the chrome dropping the keyboard ends it; the chrome's process exiting ends it.
+start_fixture "$layout" >/dev/null
+open_now "$layout"
+c0=$(ov_count '"state":"closing"'); cl0=$(ov_count '"state":"closed"')
+keys h # the fixture unmaps its chrome
+wait_ov '"state":"closed"' "$cl0" 3000
+(($(ov_count '"state":"closing"') == c0)) && [[ $(last_ov) == *'"state":"closed"'*'"reason":"interrupted"'* ]]
+check "failsafe: the chrome unmapping while open ends the overview at once (closed/interrupted, no closing animation)" $? "$(last_ov)"
+stop_fixture
+start_fixture "$layout" >/dev/null
+open_now "$layout"
+cl0=$(ov_count '"state":"closed"')
+keys n # the fixture's chrome drops its keyboard to None
+wait_ov '"state":"closed"' "$cl0" 3000
+ov_events | tail -n 2 | grep -q '"reason":"interrupted"'
+check "failsafe: the keyboard leaving the chrome while open ends the overview (interrupted)" $? "$(ov_events | tail -n 2 | sed 's/^[0-9]* //' | tr '\n' ' ')"
+stop_fixture
+start_fixture "$layout" >/dev/null
+open_now "$layout"
 c0=$(ov_count '"state":"closed"')
 stop_fixture
 wait_ov '"state":"closed"' "$c0" 3000
 ov_events | tail -n 1 | grep -q '"reason":"interrupted"'
-check "failsafe: the overview surface going away closes the overview" $? "$(ov_events | tail -n 2 | sed 's/^[0-9]* //' | tr '\n' ' ')"
+check "failsafe: the chrome's process exiting closes the overview" $? "$(ov_events | tail -n 2 | sed 's/^[0-9]* //' | tr '\n' ' ')"
 sleep 0.5
 
 # 7. invalid payloads: nothing changes, reason "invalid".
@@ -404,6 +544,7 @@ sleep 0.3
 (($(ov_count '"reason":"no-windows"') > n0))
 check "out-of-monitor rect and unknown window ignored (no-windows)" $?
 
+start_fixture "$layout" >/dev/null # the chrome covers the windows for the flood and the unload below
 # 7b. flood (R11): one dispatch with 500 open/close pairs: events coalesced, socket2 subscriber connected, Hyprland
 # alive, the final state closed and every window back at its place.
 f0=$(ov_events | wc -l)
@@ -448,6 +589,19 @@ nestctl -j grassfield 2>/dev/null | jq -e '.features | index("overview")' >/dev/
 feat_rc=$?
 ((load_rc == 0 && feat_rc == 0)) && plugin_unloaded=0
 check "plugin loaded again and advertises overview" $((load_rc + feat_rc)) "$(nestctl -j grassfield 2>/dev/null | jq -c .features)"
+stop_fixture
+
+# 5d (end). damage log of the resize step (see 5d).
+h0="" h1=""
+for _ in $(seq 1 100); do # evaluated at the end of the run: Hyprland flushes its log late
+  h0=$(damage_lines | sed -n 1p | cut -d' ' -f1)
+  h1=$(damage_lines | sed -n 2p | cut -d' ' -f1)
+  [[ -n $h0 && -n $h1 ]] && break
+  sleep 0.1
+done
+awk -v a="${h0:-0}" -v b="${h1:-0}" 'BEGIN { exit !(a > 0 && b - a > 50) }'
+check "surface resized while open: the box drawn while taller is damaged again when it shrinks back (plugin damage log)" $? \
+  "open box height ${h0:-none}, box damaged at the start of the shrink ${h1:-none} ($(damage_lines | wc -l) burst line(s))"
 
 # 9. health.
 kill -0 "$hypr_pid" 2>/dev/null
@@ -460,6 +614,6 @@ exc=$(grep -ac '\[grassfield\] .*exception' "$hyprlog" 2>/dev/null)
 check "no grassfield exception in the nested log" $? "${exc:-0}"
 say "overview log lines in the nested log so far: $(grep -ac '\[grassfield\] overview' "$hyprlog" 2>/dev/null) (Hyprland buffers its log)"
 
-if ((fail == 0)); then say "overview: PASS"; else say "overview: FAIL"; fi
+if ((fail == 0)); then say "overview: PASS ($passed/$total checks)"; else say "overview: FAIL ($passed/$total checks passed)"; fi
 say "overview: log $log"
 exit "$fail"
