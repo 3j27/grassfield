@@ -88,8 +88,13 @@ namespace {
         }));
         l.push_back(ev.input.mouse.move.listen([](Vector2D /*pos*/, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onGlobalMouseMove(); }));
         // Button events are observed, never cancelled (FR13): Hyprland must process every release to keep
-        // its held-button state, which pins pointer focus while a button is down.
-        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onGlobalMouseButton(e); }));
+        // its held-button state, which pins pointer focus while a button is down. Stages first: a pointer focus
+        // left on a strip window (input blocked, no motion since) moves to the surface under the cursor before
+        // anything else sees the press (R13 review of 46b3e9b).
+        l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) {
+            gf::guarded("stages pointer guard", [&] { gf::stager::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
+            CGrassfieldTitlebar::onGlobalMouseButton(e);
+        }));
     }
 
     // The window whose m_windowDecorations owns `deco` (normally deco->window(); scanned as a fallback).

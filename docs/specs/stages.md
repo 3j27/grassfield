@@ -2,8 +2,8 @@
 
 UI naming (renamed 2026-10-18, owner decision): "Space" in older notes is shown to the user as "Desktop" (fr « Bureau »).
 
-Status: spike positive; plugin prototype behind a feature flag (plugin 0.6.0-stages, 2026-10-18, nested only); shell strip
-NOT implemented (contract below). Decision: `docs/decisions/ADR-0013-stages.md` (Proposed). UI name **Stages** (§14);
+Status: spike positive; plugin prototype behind a feature flag (plugin 0.6.1-stages, 2026-10-18, after the R13 fix pass
+of merge 46b3e9b, nested only); shell strip NOT implemented (contract below). Decision: `docs/decisions/ADR-0013-stages.md` (Proposed). UI name **Stages** (§14);
 the Apple name is never used in the UI. Code: `compositor/src/core/Stages.*` (model, validation, geometry, events; unit
 tests `compositor/tests/StagesTest.cpp`), `compositor/src/Stages.*` (Hyprland glue), `compositor/src/WindowTransform.*`
 (drawing shared with the overview), verb in `compositor/src/Ipc.cpp`. Nested scenario: `tests/compositor/stages.sh`
@@ -50,10 +50,30 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
   (`Render::IWindowTransformer`, as the overview): its surface box fitted with its 28 px titlebar band (uniform scale,
   never enlarged, centred) into its stack position; stacked windows of one stage step 8 px up-left (at most 3 distinct
   positions, the front window bottom-right). Stages beyond the tiles are drawn off the monitor (not visible). No client is
-  ever moved, resized or configured.
+  ever moved, resized or configured. A frame without a free pooled work buffer draws the window as nothing (never at its
+  real place).
 - **ST6** Strip windows take no input at their real places: the plugin sets its own input block reason
   (`CWindow::setInputBlocked`, bit `1 << 6`), so Hyprland's hit test skips them for pointer focus, clicks, hovers and
-  titlebar presses. Keyboard: a strip window focused by any other path brings its stage forward (ST10).
+  titlebar presses. Keyboard: a strip window focused by a user choice brings its stage forward (ST10). Hyprland 0.56.2
+  re-evaluates pointer focus only on pointer motion and delivers buttons, scrolls and keys to its current focus without
+  checking input blocks, so the plugin also keeps every event away from a strip window (R13 review of 46b3e9b):
+  - whenever a block changes (swap, new window, close, minimize, strip update, Stages off) it re-runs Hyprland's pointer
+    focus logic at the cursor (`CInputManager::simulateMouseMovement`, as a pointer motion would), so the surface
+    actually under the cursor gets the pointer; inside Hyprland's teardown paths (a layer surface unmapping, monitors
+    changing) this runs from the event loop;
+  - before a button press, a release or a scroll is delivered (the plugin's first button listener, and a scroll
+    listener), a pointer focus still on a strip window or one of its popups is refreshed the same way; while a held
+    button pins it there (Hyprland keeps the pressed surface), the pointer focus goes to nothing (the window gets
+    `wl_pointer.leave`, the event reaches no surface) and is refreshed after the release. Button events are never
+    cancelled: Hyprland's held-button state sees every press and release;
+  - before a key is delivered, a pending model change is applied first; a keyboard focus still on a strip window then
+    goes to the front window of its workspace's active stage, or to nothing. A popup grab of a strip window (a menu left
+    open when its window went to the strip) keeps its keys until it closes (Hyprland's grab refuses any other focus; any
+    click ends it);
+  - touch: a touch down goes through Hyprland's own refocus at the touch point, whose hit test skips strip windows; a
+    touch already held when its window goes to the strip keeps its target until it ends;
+  - the desktop focus policy counts a pointer focus on a window that does not take input as stale (its press target is
+    then the surface under the cursor).
 - **ST7** `op:activate` swaps a strip stage with the active one: the outgoing windows animate from their real places to
   their tiles, the incoming ones from their tiles to their real places, other strip stages move between tiles, over the
   `durationMs` and `curve` of the latest `op:on`, interpolated every frame by the plugin; the incoming front window is
@@ -61,11 +81,25 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
 - **ST8** A new window (or one restored or moved in from another workspace) joins the stage holding a window of the same
   app, which becomes active; otherwise it opens a new active stage and the previous active stage leads the strip.
 - **ST9** A window that closes, unmaps, moves away, becomes pinned or tiled leaves its stage at once (shown normally); an
-  emptied stage disappears; when the active stage empties, the most recent strip stage becomes active. When the closed
-  window held the keyboard, the active stage's front window takes it unless Hyprland gave it to a window of that stage.
+  emptied stage disappears; when the active stage empties, the most recent strip stage becomes active. When the window
+  that leaves held the keyboard, Hyprland's successor keeps it only if it may hold the keyboard (mapped, not hidden, on a
+  workspace shown on a monitor, taking input, or a window of the stage that just became active); otherwise the active
+  stage's front window takes it, or, with no stage left on that workspace, nothing does (keyboard focus cleared; the
+  desktop policy decides on the next press). The keyboard never stays on a minimized, hidden or strip window (R13 review
+  of 46b3e9b: Hyprland cannot pick a blocked successor and left the keyboard on a window it had just moved to
+  `special:minimized`).
 - **ST10** Hyprland focusing a strip window with a user reason (key binding, dispatch, Dock, activation request) brings
-  its stage forward; a strip window Hyprland picks after a close (reasons `UNMAP_*`) does not: the active stage keeps the
-  keyboard.
+  its stage forward; a strip window Hyprland picks itself does not: after a close (reasons `UNMAP_*`), or when it restores
+  its last window (reason `FFM`: an Exclusive layer released the keyboard, a popup grab ended; pointer motion never picks
+  a strip window). The active stage then keeps the keyboard (its front window takes it, ST9).
+  **Window cycling (decision, macOS model).** Hyprland's `cycle_next` (the session binds ALT+TAB to it until the
+  Grassfield app switcher exists) skips windows that do not take input, so it cycles among the active stage's windows (and
+  windows Stages does not manage) and never reaches a strip window. That is the macOS model: Cmd+` cycles the windows of
+  the current app, and with Stages the active stage holds the current app's windows; Cmd+Tab switches apps and brings the
+  chosen app's stage forward, which is Grassfield's activation path (Dock, Search, the coming app switcher: they focus
+  the app's window by dispatch, which brings its stage forward as above). A stage-aware ALT+TAB before the app switcher
+  would need either a function hook on `CWindowQuery::cycle` (rejected: fragile against Hyprland updates, as in the
+  overview spec) or a plugin verb bound in the session config (outside the plugin); it is left to the app switcher.
 - **ST11** `op:move` moves a window into a stage of its workspace (on top) or into a new strip stage (`"stage":"new"`;
   refused when the window is already alone); `op:merge` moves every window of a strip stage into the active stage.
   Requests naming an unknown stage or window change nothing (`reason:"unknown"`).
@@ -75,7 +109,9 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
   workspace) intersects the strip band (tiles + 8 px): the shell then hides the strip.
 - **ST14** Full screen: while the workspace shows a full-screen window its strip thumbnails are off the monitor; a strip
   window made full screen (dispatch by address) brings its stage forward.
-- **ST15** Minimize: a minimized window (on `special:minimized`) leaves its stage; restored, it joins (ST8).
+- **ST15** Minimize: a minimized window (on `special:minimized`) leaves its stage; restored, it joins (ST8). The keyboard
+  follows ST9: minimizing the only window of the active stage brings the most recent strip stage forward and its front
+  window takes the keyboard; nothing is ever typed into the minimized window.
 - **ST16** Overview: a window the overview transforms is drawn untransformed by Stages (the overview's transformer takes
   it from its real place); strip windows stay input-blocked under the overview's chrome.
 - **ST17** Strip surfaces: a strip is accepted for a monitor only when a mapped layer surface with namespace
@@ -97,6 +133,12 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
   are drawn (blocked and in their tiles), so switching back (and Hyprland's workspace slide) finds them in place.
 - **ST21** Degradation: without the plugin (or with an ABI mismatch, or with `stages-available` missing) Stages does not
   exist: no verb, no capability, Quick Settings hides the toggle; nothing in the shell depends on it.
+- **ST23** Exclusive layer: a swap requested while an Exclusive layer (overview chrome, Search) holds the keyboard is
+  applied and kept. Hyprland refuses to focus the incoming front window then; when the layer releases the keyboard (it
+  unmaps, or drops its keyboard interactivity) Hyprland restores its last window, by then a strip window, with reason
+  `FFM`, which is not a choice (ST10): the incoming stage's front window takes the keyboard. The swap is never undone
+  silently (R13 review of 46b3e9b: that restore used to bring the outgoing stage back). The session lock was not
+  exercised.
 
 ## Acceptance criteria
 | ID | Test | Level | Result (2026-10-18, nested Hyprland 0.56.2) |
@@ -104,6 +146,10 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
 | ST1-ST2 | unit `StagesFlag.ConfigAllowlist`, `Protocol.StagesFeaturesFollowAvailabilityAndTheFlag`; nested `stages.sh` checks 1-4 | L0 / L1 | PASS |
 | ST3-ST5 | unit `StagesModel.*`, `StagesGeometry.*`; nested: grouping, sizes unchanged, thumbnails in tiles (terminal grey 88 % / 83 % of tiles 0 / 1, 0 % of empty tile 2), live (ticker tile 188 px changed in 0.6 s, idle tile 0 px) | L0 / L1 | PASS |
 | ST6 | nested: click at b3's real place (covered by b3 only) → b3 gets nothing; keys go to the active stage | L1 | PASS |
+| ST6 input guards (R13 review of 46b3e9b) | unit `StagesInput.*`, `DesktopFocusTarget.PointerFocusOnABlockedWindowIsStale`; nested `stages.sh` 5b: pointer resting on b3 (centre), stage c activated, click without motion → c3 gets it at the centre cell (`[<0;59;19M`), b3 nothing; 7b: pointer resting on b3, a new window of another app opens elsewhere, click without motion → b3 nothing | L0 / L1 | PASS (0.6.1-stages); the pre-fix build fbacf15 fails 5b (the hidden strip window got the click) |
+| ST9 / ST15 keyboard after minimize | nested `stages.sh` 12b: e alone in the active stage, minimized → the next stage's front window (b3) is active and gets `m2`, e nothing; `minimize.sh stages` step 1: A alone in the active stage, minimized → O's stage active, O gets `mz` (then 20 minimize/restore rounds, mid-animation closes, all PASS) | L1 | PASS (0.6.1-stages); the pre-fix build types into the minimized window |
+| ST10 window cycling | nested `stages.sh` 12c: 4 × `cycle_next` visit 3 distinct windows, all of the active stage; stages unchanged | L1 | PASS |
+| ST23 Exclusive layer | nested `stages.sh` 8b: an Overlay Exclusive layer (fixture role `exclusive`) holds the keyboard (it got the keys), stage b activated, layer killed → b stays active, b3 gets `k8`, c3 (Hyprland's restored window) nothing | L1 | PASS (0.6.1-stages); the pre-fix build undid the swap (keys to the restored window) |
 | ST7 | nested: tile press reaches the strip surface; activate → b active, c to tile 0; frame mid-swap differs from before (58890 px) and after (80955 px); afterwards b3 takes clicks and keys; sizes unchanged | L1 | PASS |
 | ST8-ST11 | unit `StagesModel.*`; nested: move, merge, new stage, unknown stage, new window, close (keyboard back to b3), focus by dispatch | L0 / L1 | PASS |
 | ST12-ST13 | nested: hidden 0 % grey in tiles, shown 89 %; titlebar drag of b3 over the strip → `overlap` true, dragged back → false | L1 | PASS |
@@ -117,7 +163,13 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
 | Multi-output | per-workspace model and per-monitor strips; only GF-REF had a strip in the run (WAYLAND-1 had no Stages windows) | L1 | NOT VERIFIED |
 
 Run: `.dev/stages/run-20261018-141943-check` (**40/40 PASS**, plugin 0.6.0-stages, final build); perf
-`.dev/stages/run-20261018-125334-perf`.
+`.dev/stages/run-20261018-125334-perf`. Fix pass (plugin 0.6.1-stages, Hyprland v0.56.2 commit efb50993, 2026-10-18):
+`.dev/stages/run-20261018-200428-check` **45/45 PASS**. The same three review sequences in a scratch probe (5b click
+without motion after a swap, 8b swap under an Exclusive layer, 12b minimize the only window of the active stage):
+fixed build `.dev/discriminate/run-202317` 3/3 PASS; pre-fix build fbacf15 (0.6.0-stages, loaded through
+`scripts/nestctl plugin load` in the same nested session) `.dev/discriminate/run-202342` 3/3 FAIL (the strip window got
+the click `[<0;84;28M`; after the layer closed the outgoing stage was active again and got `k8`; the minimized window got
+`m2`). C1: `soak.sh 660 stages` PASS (below, "Fix pass").
 
 ## Shell ↔ plugin contract (gfc/1, additive; for the shell-engineer — the shell side is not implemented)
 1. **Detection.** `Capabilities.has("stages-available")` → show the Stages toggle in Quick Settings (off by default,
@@ -227,6 +279,27 @@ shown normally again lose their transformer at the end; a 150 ms watchdog comple
    windows would have animated back to their real places during the workspace slide and flown back on return. A
    workspace shown on no monitor now keeps its windows as they are drawn (ST22).
 
+4. (R13 review of 46b3e9b, fixed in 0.6.1-stages) A strip window still got clicks through Hyprland's stale pointer focus
+   (pointer focus changes on pointer motion only); minimizing the only window of the active stage left the keyboard on
+   the minimized window (Hyprland cannot pick a blocked successor); a swap made under an Exclusive layer was undone when
+   the layer closed (Hyprland restored its last window, a strip window by then, with reason `FFM`, which was read as a
+   user choice); the no-buffer fallback of the shared transform drew a strip window at its real place. Fixes: ST6 input
+   guards, ST9 keyboard rule, ST10 `FFM` not a choice, ST23, ST5 (nothing drawn without a work buffer).
+5. (nested harness, found during the fix pass) No pointer or keyboard device persists in the nested session between
+   `scripts/dev/pointer.sh` / `keys.sh` runs (each creates and destroys a virtual device): Hyprland then refuses pointer
+   focus changes ("BUG THIS: setPointerFocus without a valid mouse set"), so the refresh at swap time is skipped and the
+   guard before the next button does the work (seen in a run: "pointer press while the pointer focus was strip window
+   …: pointer focus refreshed first"). The guard's enter and motion get their own pointer frame (without it, foot read
+   the click at cell 1;1). With a real pointer device the refresh happens at swap time.
+
+**Fix pass** (2026-10-18, plugin 0.6.1-stages): `tests/compositor/soak.sh 660 stages` → PASS (log
+`.dev/soak-20261018-201156.log`: 372 rounds, 74 moves of a window into a new strip stage, 52 tile-0 activations, 1393
+stages events, 93 drags, 47 abandoned drags, 94 zoom pairs, 46 cancels, 46 closes, 46 minimize pairs all animated with 0
+skipped; RSS 152.5 → 160.8 MB, flat from round 100; no core dump; 0 grassfield exceptions; 226 seat warnings as designed).
+Every Dock click of the run landed on the minimized foot window's tile: the tile is clicked only after the window was
+seen moving to `special:minimized`, the Dock held one pinned app (foot) and the capture `.dev/soak-dock-1792347116.png`
+shows the clicked point (966,1035) on the minimized foot tile, between the separator and the Trash.
+
 **Interactions** (ST13-ST16): minimize, full screen, overlap and desktop focus checked in nested as above; the overview
 code path makes strip windows draw from their real places in an open overview (they jump from their tile to the centre
 when the overview opens: prototype limit); desktop focus is unaffected (a press on a thumbnail is a press on a
@@ -234,7 +307,11 @@ when the overview opens: prototype limit); desktop focus is unaffected (a press 
 
 ## Known limitations and risks
 - Popups of strip windows are not transformed: a menu open when its window goes to the strip stays drawn at its real place
-  (usually closed first by the click outside it). Not exercised.
+  (usually closed first by the click outside it), and its popup grab keeps the keys until it closes (ST6). Not exercised.
+- Touch: a touch held when its window goes to the strip keeps its target until it ends (ST6); touch is not exercised (no
+  touch device in the nested session).
+- ALT+TAB (Hyprland's `cycle_next`) does not reach strip stages until the Grassfield app switcher exists (ST10 decision).
+- The session lock during a swap is not exercised (ST23 covers Exclusive layers).
 - A strip revealed over an overlapping window draws its thumbnails under it (contract item 6).
 - The input block uses an unused bit of Hyprland's `eWindowInputBlockReason` (`1 << 6`): internal API, re-verify on every
   Hyprland update (the ABI hash check prevents running against another build).

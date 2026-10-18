@@ -584,6 +584,29 @@ namespace gf::stages {
         return out;
     }
 
+    // ---- input on strip windows ----
+
+    bool stripFocusBringsStage(FocusOrigin origin) {
+        return origin == FocusOrigin::UserChoice;
+    }
+
+    KeyboardTarget keyboardAfterLeave(const KeyboardHolder& holder, bool hasFront) {
+        if (holder.present && holder.eligible)
+            return KeyboardTarget::Keep;
+        if (hasFront)
+            return KeyboardTarget::FrontOfActive;
+        return KeyboardTarget::Nothing;
+    }
+
+    PointerAction beforePointerEvent(PointerEvent event, const PointerState& state) {
+        switch (event) {
+            case PointerEvent::Press: return state.onBlocked || (state.parked && !state.hasFocus) ? PointerAction::Refresh : PointerAction::None;
+            case PointerEvent::Release: return state.onBlocked ? PointerAction::Park : PointerAction::None;
+            case PointerEvent::Axis: return state.onBlocked ? PointerAction::Refresh : PointerAction::None;
+        }
+        return PointerAction::None;
+    }
+
     std::optional<bool> parseStagesEnabled(std::string_view key, std::string_view value) {
         if (key != kConfigStagesEnabled)
             return std::nullopt;

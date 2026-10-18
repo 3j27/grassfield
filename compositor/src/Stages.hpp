@@ -24,6 +24,11 @@ namespace gf::stager {
     // start() succeeded and stop() has not run.
     bool ready();
 
+    // Called from the plugin's first pointer button listener, before anything else of the plugin and before Hyprland
+    // delivers the button: a pointer focus left on a window Stages blocks (no motion since the block) is refreshed to the
+    // surface under the cursor, or the event reaches no surface. Never cancels the event. No-op unless ready().
+    void beforePointerButton(bool pressed);
+
     // The feature flag (config stagesEnabled, off by default). Turning it off ends Stages at once (no animation).
     bool enabled();
     void setEnabled(bool on);

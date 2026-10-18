@@ -3,6 +3,7 @@
 #include "Ipc.hpp"
 #include "Overview.hpp"
 #include "Plugin.hpp"
+#include "Surfaces.hpp"
 #include "WindowTransform.hpp"
 #include "core/EventThrottle.hpp"
 
@@ -13,7 +14,9 @@
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/output/Monitor.hpp>
@@ -103,6 +106,8 @@ namespace {
         std::optional<uint64_t>          syncLater; // doLater sequence of a pending sync (its callback is code of this library)
         std::optional<st::WorkspaceId>   refocusSpace; // after a close: the active stage of this workspace takes the keyboard
         PHLWINDOWREF                     focusLater;   // the window the latest activate / merge / move request made key
+        std::optional<uint64_t>          pointerLater; // doLater sequence of a pending pointer refresh (code of this library)
+        bool                             pointerParked  = false; // pointer focus cleared off a blocked window (held button)
         bool                             warnedNoBuffer = false;
     };
 
@@ -308,17 +313,109 @@ namespace {
         e.damaged     = {};
     }
 
-    void setBlocked(SWin& e, bool blocked) {
-        const auto w = e.window.lock();
-        if (w && e.blocked != blocked)
+    // True when the window's block changed.
+    bool setBlocked(SWin& e, bool blocked) {
+        const auto w      = e.window.lock();
+        const bool change = w && e.blocked != blocked;
+        if (change)
             w->setInputBlocked(INPUT_BLOCK_STAGES, blocked);
         e.blocked = blocked && w;
+        return change;
     }
 
     // Drops an entry now: shown normally, input unblocked.
     void release(SWin& e) {
         setBlocked(e, false);
         detach(e);
+    }
+
+    // ---- input on strip windows ----
+
+    bool blockedByStages(const PHLWINDOW& w) {
+        if (!w)
+            return false;
+        const auto* e = winOf(addressOf(w));
+        return e && e->blocked;
+    }
+
+    // The window Stages blocks that owns this surface (its main surface, a subsurface or one of its popups), if any.
+    PHLWINDOW blockedOwner(const SP<CWLSurfaceResource>& surface) {
+        if (!surface || S().wins.empty())
+            return nullptr;
+        const auto owner = gf::surfaces::ownerOf(surface);
+        return blockedByStages(owner.window) ? owner.window : nullptr;
+    }
+
+    SP<CWLSurfaceResource> pointerFocusSurface() {
+        return g_pSeatManager ? g_pSeatManager->m_state.pointerFocus.lock() : nullptr;
+    }
+
+    // Hyprland 0.56.2 changes the seat's pointer focus only while a pointer device exists (CSeatManager::setPointerFocus
+    // logs "BUG THIS" and returns otherwise; virtual pointers come and go). Without one no pointer event can be delivered
+    // either: the guard before the next button or scroll (whose device exists by then) does the refresh.
+    bool pointerDevice() {
+        return g_pInputManager && g_pSeatManager && !g_pSeatManager->m_mouse.expired();
+    }
+
+    // The pointer focus goes to nothing: the blocked window gets wl_pointer.leave, the event being delivered reaches no
+    // surface. The next press (or the end of the held buttons) refreshes it.
+    void parkPointer() {
+        if (!pointerDevice())
+            return;
+        g_pSeatManager->setPointerFocus(nullptr, {});
+        S().pointerParked = true;
+    }
+
+    // Hyprland's pointer focus logic runs again at the cursor, as after a pointer motion (CInputManager::
+    // simulateMouseMovement, Hyprland 0.56.2): its hit test skips blocked windows, so the surface actually under the cursor
+    // gets the pointer. The enter and motion get their own wl_pointer.frame (as CInputManager::onMouseMoved sends one), so
+    // a button delivered next arrives in a later frame at the new position. While a button is held Hyprland keeps the
+    // pressed surface; if that is a blocked window, the pointer is parked on nothing.
+    void refreshPointer() {
+        auto& s         = S();
+        s.pointerParked = false;
+        if (!pointerDevice())
+            return;
+        g_pInputManager->simulateMouseMovement();
+        g_pSeatManager->sendPointerFrame();
+        if (blockedOwner(pointerFocusSurface()))
+            parkPointer();
+    }
+
+    // From Hyprland code paths that tear something down (a layer surface unmapping, a monitor going away) and after a
+    // release: the refresh runs from the event loop, outside that code.
+    void schedulePointerRefresh() {
+        auto& s = S();
+        if (s.pointerLater || !g_pEventLoopManager)
+            return;
+        s.pointerLater = g_pEventLoopManager->doLater([] {
+            gf::guarded("stages pointer refresh", [] {
+                S().pointerLater.reset();
+                refreshPointer();
+            });
+        });
+    }
+
+    // The window may keep or take the keyboard: mapped, not hidden, on a workspace shown on a monitor, taking input. A
+    // window Stages blocks counts when the model now puts it in the active stage of a shown workspace (the pending
+    // retarget unblocks it) and nothing else blocks it.
+    bool mayHoldKeyboard(const PHLWINDOW& w) {
+        if (!w || !w->m_isMapped || w->isHidden() || !w->m_workspace || !w->m_workspace->isVisible())
+            return false;
+        if (!blockedByStages(w))
+            return w->acceptsInput();
+        const auto* sp = spaceHolding(addressOf(w));
+        return sp && sp->model.isActive(addressOf(w)) && shownOn(sp->id) && w->noInputBlockedReasonsBesides(INPUT_BLOCK_STAGES_BIT);
+    }
+
+    st::FocusOrigin originOf(Desktop::eFocusReason reason) {
+        switch (reason) {
+            case Desktop::FOCUS_REASON_UNMAP_WINDOW_TILING:
+            case Desktop::FOCUS_REASON_UNMAP_WINDOW_FLOATING:
+            case Desktop::FOCUS_REASON_UNMAP_GROUPED_WINDOW: return st::FocusOrigin::AfterClose;
+            case Desktop::FOCUS_REASON_FFM: return st::FocusOrigin::Restore;
+            default: return st::FocusOrigin::UserChoice;
+        }
     }
 
     void tick();
@@ -402,7 +499,9 @@ namespace {
     // Computes every managed window's target from the model and the strips, then applies it: live windows unblocked
     // first, `focus` focused, strip windows blocked and transformed, and one animation from where each window is drawn
     // now. The stacking order is Hyprland's (CWindowState::raise would also allow a window over full-screen ones).
-    void retarget(double durationMs, const PHLWINDOW& focus = nullptr) {
+    // Returns whether any window's input block changed: the caller then refreshes the pointer focus (refreshPointer, or
+    // schedulePointerRefresh inside Hyprland's teardown paths), so that no pointer focus stays on a blocked window.
+    [[nodiscard]] bool retarget(double durationMs, const PHLWINDOW& focus = nullptr) {
         auto& s = S();
         struct STarget {
             PHLWINDOW              w;
@@ -484,16 +583,17 @@ namespace {
         }
 
         // Unblock first, then focus, then block: blocking a focused window would make Hyprland clear the keyboard focus.
+        bool changed = false;
         for (auto& e : s.wins) {
             if (!e.inStrip)
-                setBlocked(e, false);
+                changed = setBlocked(e, false) || changed;
         }
         if (focus && focus->m_isMapped && Desktop::focusState())
             Desktop::focusState()->fullWindowFocus(focus, Desktop::FOCUS_REASON_OTHER);
         for (auto& e : s.wins) {
             if (!e.inStrip)
                 continue;
-            setBlocked(e, true);
+            changed = setBlocked(e, true) || changed;
             if (!e.transformer) {
                 if (const auto w = e.window.lock()) {
                     e.from        = std::nullopt; // from its live box
@@ -508,6 +608,7 @@ namespace {
         }
         startAnimation(durationMs);
         post();
+        return changed;
     }
 
     PHLWINDOW frontOfActive(const SSpace& sp) {
@@ -529,17 +630,43 @@ namespace {
         if (!s.on)
             return;
         PHLWINDOW focus = requested;
+        bool      clear = false;
         if (!focus && refocus) {
-            // A focused window closed: unless Hyprland already gave the keyboard to a window of the active stage, its front
-            // window takes it (Hyprland may have picked a strip window, or nothing).
-            const auto current = Desktop::focusState() ? Desktop::focusState()->window() : nullptr;
-            const auto* sp     = spaceOf(*refocus);
-            const bool  fine   = current && sp && sp->model.isActive(addressOf(current));
-            const bool  other  = current && !spaceHolding(addressOf(current)) && current->m_workspace && current->m_workspace->m_id != *refocus;
-            if (sp && !fine && !other)
-                focus = frontOfActive(*sp);
+            // The focused window left the active stage (closed, unmapped, minimized, moved away), or Hyprland focused a strip
+            // window without a user choice. Hyprland's pick stands only if that window may hold the keyboard; otherwise the
+            // active stage's front window takes it, or nothing does (never a minimized, hidden or strip window: Hyprland
+            // cannot pick a blocked successor and leaves the keyboard on the window it moved to special:minimized).
+            const auto  current = Desktop::focusState() ? Desktop::focusState()->window() : nullptr;
+            const auto* sp      = spaceOf(*refocus);
+            const auto  front   = sp ? frontOfActive(*sp) : nullptr;
+            switch (st::keyboardAfterLeave(st::KeyboardHolder{.present = current != nullptr, .eligible = mayHoldKeyboard(current)}, front != nullptr)) {
+                case st::KeyboardTarget::Keep: break;
+                case st::KeyboardTarget::FrontOfActive: focus = front; break;
+                case st::KeyboardTarget::Nothing: clear = current != nullptr; break;
+            }
         }
-        retarget(s.durationMs, focus);
+        const bool changed = retarget(s.durationMs, focus);
+        if (clear && Desktop::focusState()) {
+            const auto current = Desktop::focusState()->window();
+            if (current && !mayHoldKeyboard(current)) {
+                gf::logRequest(Log::DEBUG, "stages: window {:x} may not keep the keyboard and no stage is left: keyboard focus cleared", addressOf(current));
+                Desktop::focusState()->fullWindowFocus(nullptr, Desktop::FOCUS_REASON_OTHER);
+            }
+        }
+        if (changed)
+            refreshPointer();
+    }
+
+    // Applies a pending sync now (the keyboard guard: keys must not wait for the event loop while they would reach a
+    // window the pending sync unblocks or takes the keyboard from).
+    void flushSync() {
+        auto& s = S();
+        if (!s.syncLater)
+            return;
+        if (g_pEventLoopManager)
+            g_pEventLoopManager->removeDoLater(*s.syncLater);
+        s.syncLater.reset();
+        sync();
     }
 
     // `refocus`: after a close, the active stage of this workspace takes the keyboard unless Hyprland gave it to one of its
@@ -612,14 +739,11 @@ namespace {
             scheduleSync(); // e.g. full screen on its workspace: its strip goes away while it is shown
     }
 
-    bool closingReason(Desktop::eFocusReason reason) {
-        return reason == Desktop::FOCUS_REASON_UNMAP_WINDOW_TILING || reason == Desktop::FOCUS_REASON_UNMAP_WINDOW_FLOATING ||
-            reason == Desktop::FOCUS_REASON_UNMAP_GROUPED_WINDOW;
-    }
-
     // Hyprland focused a window. A strip window chosen by the user (a key binding, the Dock, an activation request)
-    // brings its stage forward (macOS: activating an app shows its stage). A strip window Hyprland picked after a close is
-    // not a choice: the keyboard goes to the active stage instead. A window of the active stage comes to its front.
+    // brings its stage forward (macOS: activating an app shows its stage). A strip window Hyprland picked itself is not a
+    // choice: after a close (UNMAP_*), or when it restores its last window (FFM: an Exclusive layer released the keyboard,
+    // which also happens after a swap made while that layer held the keyboard: the swap is kept, never undone). The
+    // keyboard then goes to the active stage instead. A window of the active stage comes to its front.
     void onActive(const PHLWINDOW& w, Desktop::eFocusReason reason) {
         auto& s = S();
         if (!s.on || !w)
@@ -632,8 +756,9 @@ namespace {
             sp->model.raise(address);
             return;
         }
-        if (closingReason(reason)) {
-            gf::logRequest(Log::DEBUG, "stages: Hyprland focused strip window {:x} after a close: the active stage takes the keyboard", address);
+        if (const auto origin = originOf(reason); !st::stripFocusBringsStage(origin)) {
+            gf::logRequest(Log::DEBUG, "stages: Hyprland focused strip window {:x} ({}): the active stage takes the keyboard", address,
+                           origin == st::FocusOrigin::AfterClose ? "after a close" : "restoring its last window");
             scheduleSync(sp->id);
             return;
         }
@@ -655,7 +780,8 @@ namespace {
         if (s.strips.size() == before || !s.on)
             return;
         gf::logRequest(Log::INFO, "stages: the shell's strip surface on {} went away: its windows are shown normally", mon ? mon->m_name : std::string{"?"});
-        retarget(0);
+        if (retarget(0))
+            schedulePointerRefresh(); // inside Hyprland's layer unmap: refreshed from the event loop
         post(st::Reason::Interrupted);
     }
 
@@ -664,8 +790,68 @@ namespace {
         if (!s.on)
             return;
         std::erase_if(s.strips, [](const SStrip& strip) { return !strip.mon.lock() || !monitorByName(strip.monitor); });
-        retarget(0); // tiles may lie outside a moved monitor: the shell sends new strips
+        if (retarget(0)) // tiles may lie outside a moved monitor: the shell sends new strips
+            schedulePointerRefresh();
         post(st::Reason::Interrupted);
+    }
+
+    // ---- input guards (Hyprland delivers to its current focus without checking input blocks) ----
+
+    // Before Hyprland delivers a key: the keyboard must not be on a window Stages blocks (a strip window Hyprland
+    // focused itself, e.g. a restore while a sync is pending). A pending sync is applied first (the window may be about to
+    // come forward); if the keyboard is still on a blocked window it goes to the front window of that workspace's active
+    // stage, or nowhere. A popup grab of a strip window (a menu left open) keeps its keys until it closes (Hyprland's grab
+    // refuses any other focus; a click anywhere ends it).
+    void beforeKey() {
+        auto& s = S();
+        if (!s.on || s.wins.empty())
+            return;
+        auto blocked = blockedOwner(gf::surfaces::keyboardFocus());
+        if (!blocked)
+            return;
+        if (gf::surfaces::ownerOf(gf::surfaces::keyboardFocus()).popup && g_pSeatManager && g_pSeatManager->m_seatGrab)
+            return;
+        flushSync();
+        blocked = blockedOwner(gf::surfaces::keyboardFocus());
+        if (!blocked || !Desktop::focusState())
+            return;
+        const auto* sp    = spaceHolding(addressOf(blocked));
+        const auto  front = sp ? frontOfActive(*sp) : nullptr;
+        if (front && mayHoldKeyboard(front))
+            Desktop::focusState()->fullWindowFocus(front, Desktop::FOCUS_REASON_OTHER);
+        if (blockedOwner(gf::surfaces::keyboardFocus())) {
+            Desktop::focusState()->fullWindowFocus(nullptr, Desktop::FOCUS_REASON_OTHER);
+            if (blockedOwner(gf::surfaces::keyboardFocus()))
+                Desktop::focusState()->rawSurfaceFocus(nullptr);
+        }
+        const auto now = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus()).window;
+        gf::logRequest(Log::INFO, "stages: a key arrived while the keyboard was on strip window {:x}: keyboard moved first to {:x} (0: nothing)", addressOf(blocked),
+                       now ? addressOf(now) : 0);
+    }
+
+    // Before Hyprland delivers a pointer button or scroll to its pointer focus (never cancelled: Hyprland's held-button
+    // state must see every press and release).
+    void beforePointer(st::PointerEvent event) {
+        auto& s = S();
+        if (!s.ready || (s.wins.empty() && !s.pointerParked))
+            return;
+        const auto focus   = pointerFocusSurface();
+        const auto blocked = blockedOwner(focus);
+        switch (st::beforePointerEvent(event, st::PointerState{.onBlocked = blocked != nullptr, .hasFocus = focus != nullptr, .parked = s.pointerParked})) {
+            case st::PointerAction::None: break;
+            case st::PointerAction::Refresh:
+                refreshPointer();
+                if (blocked)
+                    gf::logRequest(Log::INFO, "stages: pointer {} while the pointer focus was strip window {:x}: pointer focus refreshed first ({})",
+                                   event == st::PointerEvent::Axis ? "scroll" : "press", addressOf(blocked), S().pointerParked ? "parked: a held button" : "under the cursor");
+                break;
+            case st::PointerAction::Park:
+                parkPointer();
+                gf::logRequest(Log::INFO, "stages: release while the pointer focus was strip window {:x}: dropped (no surface)", blocked ? addressOf(blocked) : 0);
+                break;
+        }
+        if (event == st::PointerEvent::Release && s.pointerParked)
+            schedulePointerRefresh(); // after Hyprland processed the release
     }
 
     // While windows are drawn in a strip, a frame of this monitor may come from damage at a strip window's real place (its
@@ -748,7 +934,8 @@ namespace {
         s.syncLater.reset();
         s.refocusSpace.reset();
         s.focusLater.reset();
-        retarget(durationMs); // nothing is targeted any more: every window animates back to its live box
+        if (retarget(durationMs)) // nothing is targeted any more: every window animates back to its live box
+            refreshPointer();
         post(reason);
     }
 
@@ -820,8 +1007,15 @@ namespace gf::stager {
         s.spaces.clear();
         s.wins.clear();
         s.strips.clear();
-        auto& ev = bus->m_events;
-        auto& l  = S().listeners;
+        s.pointerLater.reset();
+        s.pointerParked = false;
+        auto& ev        = bus->m_events;
+        auto& l         = S().listeners;
+        // Input guards, observed and never cancelled (FR13): they move a stale focus off a blocked window before Hyprland
+        // delivers the event. Pointer buttons are guarded from the plugin's first button listener (main.cpp).
+        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent /*e*/, Event::SCallbackInfo& /*info*/) { gf::guarded("stages key guard", [] { beforeKey(); }); }));
+        l.push_back(ev.input.mouse.axis.listen(
+            [](IPointer::SAxisEvent /*e*/, Event::SCallbackInfo& /*info*/) { gf::guarded("stages scroll guard", [] { beforePointer(st::PointerEvent::Axis); }); }));
         l.push_back(ev.render.preChecks.listen([](const PHLMONITOR& /*monitor*/) { gf::guarded("stages tick", [] { tick(); }); }));
         l.push_back(ev.render.pre.listen([](const PHLMONITOR& monitor) { gf::guarded("stages render.pre", [&] { onRenderPre(monitor); }); }));
         l.push_back(ev.window.open.listen([](const PHLWINDOW& w) { gf::guarded("stages window.open", [&] { adopt(w); }); }));
@@ -859,6 +1053,9 @@ namespace gf::stager {
         if (s.syncLater && g_pEventLoopManager)
             g_pEventLoopManager->removeDoLater(*s.syncLater); // its callback is code of this library
         s.syncLater.reset();
+        if (s.pointerLater && g_pEventLoopManager)
+            g_pEventLoopManager->removeDoLater(*s.pointerLater); // likewise
+        s.pointerLater.reset();
         s.refocusSpace.reset();
         s.focusLater.reset();
         const bool wasOn = s.on || !s.wins.empty();
@@ -868,6 +1065,8 @@ namespace gf::stager {
         for (auto& e : s.wins)
             release(e); // no transformer of this library may outlive dlclose; no window may stay blocked
         s.wins.clear();
+        if (std::exchange(s.pointerParked, false) && g_pInputManager)
+            g_pInputManager->simulateMouseMovement(); // a parked pointer finds the surface under the cursor again
         s.spaces.clear();
         s.strips.clear();
         if (s.watchdog) {
@@ -881,6 +1080,10 @@ namespace gf::stager {
 
     bool ready() {
         return S().ready;
+    }
+
+    void beforePointerButton(bool pressed) {
+        beforePointer(pressed ? st::PointerEvent::Press : st::PointerEvent::Release);
     }
 
     bool enabled() {
@@ -934,7 +1137,8 @@ namespace gf::stager {
                 if (starting)
                     turnOn();
                 gf::logRequest(Log::INFO, "stages: {} with {} strip(s), {:.0f} ms", starting ? "on" : "strips updated", s.strips.size(), r.durationMs);
-                retarget(r.durationMs);
+                if (retarget(r.durationMs))
+                    refreshPointer();
                 return;
             }
             case st::Op::Activate:

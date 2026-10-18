@@ -39,8 +39,10 @@ namespace gf::transform {
     bool monitorFrame();
 
     // Draws `in` (the transformer's input) with the window's surface box fitted into `rect` on the monitor being rendered,
-    // into a pooled work buffer, and returns it; returns `in` when anything is missing (the window is then drawn at its
-    // place this frame; `warnedNoBuffer` limits the warning to one line). `address` is for that log line only.
+    // into a pooled work buffer, and returns it. Without a free work buffer the window is drawn as nothing this frame
+    // (never at its real place; `warnedNoBuffer` limits the warning to one line; `address` is for that line only).
+    // Without a monitor or an input texture it is drawn as nothing too where possible; `in` is returned unchanged only
+    // when the window, the renderer or the monitor being rendered is missing.
     SP<Render::IFramebuffer> drawFitted(const PHLWINDOW& w, const Box& rect, const SP<Render::IFramebuffer>& in, bool& warnedNoBuffer, uint64_t address);
 
     // Clears `in` (the bound work buffer): the window is drawn as nothing on the monitor being rendered.
