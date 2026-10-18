@@ -41,14 +41,11 @@ dev=$root/.dev
 # A record written inside the sandbox's PID namespace names another process on the host (incident 2026-10-18).
 dev_require_host shell-run
 apps_home=$dev/apps-home
-sig=$(cat "$dev/nested.instance" 2>/dev/null || true)
-sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
-main=$(cat "$dev/main.instance" 2>/dev/null || true)
-
-[[ -n $sig && -n $sock ]] || { echo "shell-run: no nested instance (run: just nested-up)" >&2; exit 1; }
-[[ $sig != "$main" && $sig != "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] \
-  || { echo "shell-run: refusing to target the main instance" >&2; exit 1; }
-[[ $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "shell-run: refusing the main Wayland socket" >&2; exit 1; }
+# Only this tree's live nested compositor: after a nested crash its socket name can be reused by another worktree's
+# session, and a shell started there would take a session lock only the owner's password releases.
+dev_nested_target "$dev" || exit 1
+sig=$DEV_NESTED_SIG
+sock=$DEV_NESTED_SOCK
 
 # The shell runs as a session leader (setsid): its whole group stops, so that no orphaned qs stays behind. Only a record
 # that still matches its process is signalled (scripts/dev/pidfile.sh).
