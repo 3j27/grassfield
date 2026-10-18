@@ -100,51 +100,58 @@ wait_status() { # <expected> <seconds>
 # type_letters is the ONLY typing path; it refuses anything but [a-z0-9] (letters and digits never submit; a step name
 # may carry a digit, e.g. "deadl1"), and the shell suppresses PAM in dev anyway (GRASSFIELD_DEV without
 # GRASSFIELD_DEV_ALLOW_PAM). press_key only allows keys that never submit (Escape).
-type_letters() { # <word> [extra wtype opts before the word]
-  local word=${!#}
-  [[ $word =~ ^[a-z0-9]+$ ]] || { echo "FATAL type_letters: refusing a probe with a non-alphanumeric character: '$word'" >&2; abort_run "a non-alphanumeric probe"; }
-  nested wtype "$@"
+type_letters() { # <delay ms> <word>: exactly two arguments, both validated; no option ever passes through
+  [[ $# -eq 2 && $1 =~ ^[0-9]{1,3}$ && $2 =~ ^[a-z0-9]+$ ]] \
+    || { echo "FATAL type_letters: refusing arguments '$*' (want: <delay ms> <[a-z0-9] word>)" >&2; abort_run "a refused probe"; }
+  nested wtype -d "$1" "$2"
 }
-press_key() { # <keysym>
-  [[ $1 == Escape ]] || { echo "FATAL press_key: refusing key '$1' (only Escape is allowed; it never submits)" >&2; abort_run "a disallowed key"; }
+press_key() { # Escape: exactly one argument, and only Escape
+  [[ $# -eq 1 && $1 == Escape ]] || { echo "FATAL press_key: refusing '$*' (only Escape is allowed; it never submits)" >&2; abort_run "a disallowed key"; }
   nested wtype -k Escape
 }
 # Types a letters-only word in the background (sets $typer). Validated synchronously first, so a bad probe aborts before
 # anything is typed.
-bg_type() { # <word>
-  [[ $1 =~ ^[a-z0-9]+$ ]] || { echo "FATAL bg_type: refusing a probe with a non-alphanumeric character: '$1'" >&2; abort_run "a non-alphanumeric probe"; }
+bg_type() { # <word>: exactly one [a-z0-9] argument
+  [[ $# -eq 1 && $1 =~ ^[a-z0-9]+$ ]] || { echo "FATAL bg_type: refusing arguments '$*' (want one [a-z0-9] word)" >&2; abort_run "a refused probe"; }
   nested wtype -d 4 "$1" &
   typer=$!
 }
 
-# All PAM attempts this run could ever cause: "(submit)" is a real PAM call (must never happen), "PAM submit suppressed"
-# means a probe reached the lock field (the shell blocked PAM, but it is still a test defect). Counted in the live shell
-# log; the per-instance audit at the end covers restarts.
-pam_submits() { grep -c "authenticating (submit)" "$dev/shell.log" 2>/dev/null || true; }
-pam_suppressed() { grep -c "dev: PAM submit suppressed" "$dev/shell.log" 2>/dev/null || true; }
+# All PAM attempts this run could ever cause, over EVERY instance log of this tree's shell (tests/security/pam_audit.sh:
+# restarts overwrite .dev/shell.log, so the per-instance Quickshell logs are the record). "(submit)" is a real PAM call
+# (must never happen); "PAM submit suppressed" means a key reached the lock field (the shell blocked PAM; still a
+# defect). Counted against a baseline taken when the run starts, so older attempts in exited instances are not re-counted.
+# shellcheck source=pam_audit.sh
+. "$root/tests/security/pam_audit.sh"
+read -r pam_base_instances pam_base_submits pam_base_suppressed < <(pam_counts)
+pam_new() { # "<new submits> <new suppressed>" since the run started
+  local n s x
+  read -r n s x < <(pam_counts)
+  echo "$((s - pam_base_submits)) $((x - pam_base_suppressed))"
+}
 
 # Stop the whole run the moment a probe could have touched PAM: stop the nested session and exit non-zero, loudly.
 abort_run() { # <why>
-  local s sup
-  s=$(pam_submits); sup=$(pam_suppressed)
+  local s x
+  read -r s x < <(pam_new)
   echo "" >&2
-  echo "ABORT ($1): PAM submits=$s, suppressed probes=$sup. A probe reached the lock password field; stopping the nested session." >&2
+  echo "ABORT ($1): new PAM submits=$s, new suppressed submits=$x since the run started. Stopping the nested session." >&2
   "$root/scripts/dev/nested-down.sh" >&2 2>&1 || true
   exit 4
 }
 
-# Called before the loop and after every step: fail closed on the first sign a probe reached the lock field.
+# Called before the loop and after every step: fail closed on the first sign a key reached the lock field.
 assert_no_pam() { # <when>
-  local s sup
-  s=$(pam_submits); sup=$(pam_suppressed)
-  if [[ ${s:-0} -gt 0 || ${sup:-0} -gt 0 ]]; then
+  local s x
+  read -r s x < <(pam_new)
+  if ((s > 0 || x > 0)); then
     abort_run "$1"
   fi
 }
 
 # Types a probe word (letters only, never Return) and checks that foot did not receive it.
 no_leak() { # <word> <step>
-  type_letters -d 15 "$1"
+  type_letters 15 "$1"
   sleep 0.7
   if grep -q "$1" "$typed" 2>/dev/null; then fail "$2: typed text reached the foot window ($1)"; else pass "$2: nothing reached the foot window"; fi
 }
@@ -173,7 +180,7 @@ step_setup() {
   # Focus it with a click (focus follows the pointer; no state-changing hyprctl).
   "$root/scripts/dev/pointer.sh" output "$name" abs $((x - mx + w / 2)) $((y - my + h / 2)) sleep 200 click >/dev/null
   sleep 0.5
-  type_letters -d 15 control
+  type_letters 15 control
   sleep 0.7
   if grep -q control "$typed"; then pass "setup: typing reaches the foot window on $name while unlocked (control)"; else fail "setup: control text did not reach foot; leak checks are meaningless"; fi
 }
@@ -571,18 +578,12 @@ step_cleanup() {
 # PAM attempt audit across EVERY shell instance this tree started (restarts overwrite $dev/shell.log, so read the
 # Quickshell per-instance logs too). Must be 0: a real submit would count a faillock failure on the owner's account.
 step_pam_audit() {
-  local base=/run/user/1000/quickshell/by-id total=0 sup=0 d s x
-  for d in "$base"/*/; do
-    [[ -f $d/instance.lock && -f $d/log.log ]] || continue
-    grep -qs "$root/shell/shell.qml" "$d/instance.lock" || continue
-    s=$(grep -c "authenticating (submit)" "$d/log.log" 2>/dev/null || echo 0)
-    x=$(grep -c "dev: PAM submit suppressed" "$d/log.log" 2>/dev/null || echo 0)
-    total=$((total + s)); sup=$((sup + x))
-    [[ $s -gt 0 || $x -gt 0 ]] && echo "  $(basename "$d"): PAM submits $s, suppressed probes $x"
-  done
-  echo "pam-audit: PAM submits across all this tree's shell instances: $total; suppressed probes (reached the field, blocked): $sup"
-  if [[ $total -eq 0 ]]; then pass "pam-audit: no password was ever submitted to PAM"; else fail "pam-audit: $total PAM submit(s) — a faillock failure may have been counted on the real account"; fi
-  [[ $sup -eq 0 ]] || fail "pam-audit: $sup probe(s) reached the lock field (blocked by the dev PAM suppression, but a test defect)"
+  local n s x new_s new_x
+  read -r n s x < <(pam_counts)
+  read -r new_s new_x < <(pam_new)
+  echo "pam-audit: this run: $((n - pam_base_instances)) new shell instance(s); PAM submits $new_s; suppressed submits $new_x (all $n instance logs of this tree: submits $s, suppressed $x)"
+  if ((new_s == 0)); then pass "pam-audit: no password was submitted to PAM during this run"; else fail "pam-audit: $new_s PAM submit(s) during this run: a faillock failure may have been counted on the real account"; fi
+  ((new_x == 0)) || fail "pam-audit: $new_x key sequence(s) submitted the lock field (blocked by the dev PAM suppression, still a test defect)"
 }
 
 steps=("$@")
