@@ -38,7 +38,15 @@ int main(int argc, char *argv[])
         qmlDir = QStringLiteral(GRASSFIELD_SETTINGS_QML_DIR);
 
     // Global menu (T1): the window exports its menus only while the registrar is there (globalmenu.h).
-    engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)}, {"globalMenu", grassfield::apps::globalMenuAvailable()}});
+    // --section=<id> opens that section first (screenshots, tests); unknown ids fall back to Appearance.
+    QString startSection;
+    for (const QString &arg : app.arguments().mid(1)) {
+        if (arg.startsWith(QLatin1String("--section=")))
+            startSection = arg.mid(10);
+    }
+    engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)},
+                                 {"globalMenu", grassfield::apps::globalMenuAvailable()},
+                                 {"startSection", startSection}});
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },

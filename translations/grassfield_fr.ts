@@ -701,6 +701,53 @@
     </message>
 </context>
 <context>
+    <name>BluetoothPage</name>
+    <message>
+        <source>Bluetooth</source>
+        <translation>Bluetooth</translation>
+    </message>
+    <message>
+        <source>Disconnecting…</source>
+        <translation>Déconnexion…</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Not Connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>Bluetooth is not available: no adapter was found or the Bluetooth service is not running.</source>
+        <translation>Bluetooth n’est pas disponible&#xa0;: aucun adaptateur trouvé ou le service Bluetooth n’est pas lancé.</translation>
+    </message>
+    <message>
+        <source>My Devices</source>
+        <translation>Mes appareils</translation>
+    </message>
+    <message>
+        <source>No paired devices. Pair a device with your system&apos;s Bluetooth tools.</source>
+        <translation>Aucun appareil associé. Associez un appareil avec les outils Bluetooth du système.</translation>
+    </message>
+    <message>
+        <source>Devices are paired outside Settings for now.</source>
+        <translation>Les appareils sont associés en dehors des Réglages pour l’instant.</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Déconnecter</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Connecter</translation>
+    </message>
+</context>
+<context>
     <name>BluetoothState</name>
     <message>
         <source>No adapter</source>
@@ -1403,6 +1450,60 @@
     <message>
         <source>Bottom right corner</source>
         <translation>Coin inférieur droit</translation>
+    </message>
+</context>
+<context>
+    <name>DevNote</name>
+    <message>
+        <source>dev: not applied</source>
+        <translation>dév.&#xa0;: non appliqué</translation>
+    </message>
+</context>
+<context>
+    <name>DisplaysPage</name>
+    <message>
+        <source>Displays</source>
+        <translation>Moniteurs</translation>
+    </message>
+    <message>
+        <source>No display information is available.</source>
+        <translation>Aucune information sur les moniteurs n’est disponible.</translation>
+    </message>
+    <message>
+        <source>Arrangement</source>
+        <translation>Disposition</translation>
+    </message>
+    <message>
+        <source>Display arrangement</source>
+        <translation>Disposition des moniteurs</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation>%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Resolution, scale and arrangement cannot be changed from Settings yet. They come from your Hyprland monitor configuration.</source>
+        <translation>La résolution, l’échelle et la disposition ne peuvent pas encore être modifiées depuis les Réglages. Elles proviennent de la configuration des moniteurs de Hyprland.</translation>
+    </message>
+    <message>
+        <source>Resolution</source>
+        <translation>Résolution</translation>
+    </message>
+    <message>
+        <source>Refresh Rate</source>
+        <translation>Fréquence de rafraîchissement</translation>
+    </message>
+    <message>
+        <source>%1 Hz</source>
+        <translation>%1&#xa0;Hz</translation>
+    </message>
+    <message>
+        <source>Scale</source>
+        <translation>Échelle</translation>
+    </message>
+    <message>
+        <source>%1%</source>
+        <translation>%1&#xa0;%</translation>
     </message>
 </context>
 <context>
@@ -2292,6 +2393,38 @@
 <context>
     <name>Main</name>
     <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>wireless network internet networkmanager</source>
+        <translation>sans fil réseau internet networkmanager</translation>
+    </message>
+    <message>
+        <source>Bluetooth</source>
+        <translation>Bluetooth</translation>
+    </message>
+    <message>
+        <source>devices headphones pair connect</source>
+        <translation>appareils casque associer connecter</translation>
+    </message>
+    <message>
+        <source>Sound</source>
+        <translation>Son</translation>
+    </message>
+    <message>
+        <source>volume output input speakers microphone mute audio</source>
+        <translation>volume sortie entrée haut-parleurs microphone muet audio</translation>
+    </message>
+    <message>
+        <source>Displays</source>
+        <translation>Moniteurs</translation>
+    </message>
+    <message>
+        <source>monitor screen resolution refresh scale arrangement</source>
+        <translation>moniteur écran résolution rafraîchissement échelle disposition</translation>
+    </message>
+    <message>
         <source>Appearance</source>
         <translation>Apparence</translation>
     </message>
@@ -3116,6 +3249,45 @@
     </message>
 </context>
 <context>
+    <name>SoundPage</name>
+    <message>
+        <source>Sound</source>
+        <translation>Son</translation>
+    </message>
+    <message>
+        <source>Sound is not available: PipeWire did not answer or no audio device was found.</source>
+        <translation>Le son n’est pas disponible&#xa0;: PipeWire n’a pas répondu ou aucun périphérique audio n’a été trouvé.</translation>
+    </message>
+    <message>
+        <source>Output</source>
+        <translation>Sortie</translation>
+    </message>
+    <message>
+        <source>Output volume</source>
+        <translation>Volume de sortie</translation>
+    </message>
+    <message>
+        <source>Mute</source>
+        <translation>Muet</translation>
+    </message>
+    <message>
+        <source>Mute output</source>
+        <translation>Couper la sortie</translation>
+    </message>
+    <message>
+        <source>Input</source>
+        <translation>Entrée</translation>
+    </message>
+    <message>
+        <source>Input volume</source>
+        <translation>Volume d’entrée</translation>
+    </message>
+    <message>
+        <source>Mute input</source>
+        <translation>Couper l’entrée</translation>
+    </message>
+</context>
+<context>
     <name>Store</name>
     <message>
         <source>the file is not valid JSON (%1)</source>
@@ -3391,6 +3563,13 @@
     </message>
 </context>
 <context>
+    <name>VolumeRow</name>
+    <message>
+        <source>%1%</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+</context>
+<context>
     <name>WidgetGallery</name>
     <message>
         <source>Widget gallery</source>
@@ -3520,6 +3699,69 @@
     <message>
         <source>Could not connect: %1</source>
         <translation>Connexion impossible&#xa0;: %1</translation>
+    </message>
+</context>
+<context>
+    <name>WifiPage</name>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>Connecting…</source>
+        <translation>Connexion…</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connecté</translation>
+    </message>
+    <message>
+        <source>Needs a sign-in. Set it up in Quick Settings.</source>
+        <translation>Connexion requise. Configurez-la dans les Réglages rapides.</translation>
+    </message>
+    <message>
+        <source>Needs a password. Join it from Quick Settings.</source>
+        <translation>Mot de passe requis. Rejoignez-le depuis les Réglages rapides.</translation>
+    </message>
+    <message>
+        <source>Known network</source>
+        <translation>Réseau connu</translation>
+    </message>
+    <message>
+        <source>Wi-Fi is not available: NetworkManager did not answer.</source>
+        <translation>Le Wi-Fi n’est pas disponible&#xa0;: NetworkManager n’a pas répondu.</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
+    </message>
+    <message>
+        <source>Not connected</source>
+        <translation>Non connecté</translation>
+    </message>
+    <message>
+        <source>Networks</source>
+        <translation>Réseaux</translation>
+    </message>
+    <message>
+        <source>No networks found.</source>
+        <translation>Aucun réseau trouvé.</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Déconnecter</translation>
+    </message>
+    <message>
+        <source>Secured</source>
+        <translation>Sécurisé</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvert</translation>
+    </message>
+    <message>
+        <source>Signal %1 %</source>
+        <translation>Signal %1&#xa0;%</translation>
     </message>
 </context>
 <context>

@@ -4,8 +4,13 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QProcess>
 #include <QSaveFile>
+#include <QScreen>
+#include <QTimer>
+
+#include "systemguard.h"
 
 #ifndef GRASSFIELD_DEV_BINDINGS
 #define GRASSFIELD_DEV_BINDINGS ""
@@ -46,9 +51,92 @@ Backend::Backend(QObject *parent)
     : QObject(parent)
     , m_configFile(resolveConfigFile())
     , m_bindingsFile(resolveBindingsFile())
+    , m_dev(grassfield::settings::devSession())
 {
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, &Backend::onPath);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &Backend::onPath);
+}
+
+Backend::~Backend()
+{
+    // Never destroy a running QProcess.
+    const auto procs = findChildren<QProcess *>(QString(), Qt::FindDirectChildrenOnly);
+    for (QProcess *p : procs) {
+        p->disconnect(this);
+        if (p->state() != QProcess::NotRunning) {
+            p->kill();
+            p->waitForFinished(1000);
+        }
+    }
+}
+
+void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
+{
+    auto *p = new QProcess(this);
+    auto *timer = new QTimer(p);
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, p, [p] { p->kill(); });
+    connect(p, &QProcess::errorOccurred, this, [this, p, tag](QProcess::ProcessError e) {
+        if (e == QProcess::FailedToStart) {
+            emit finished(tag, false, QString());
+            p->deleteLater();
+        }
+    });
+    connect(p, &QProcess::finished, this, [this, p, tag](int code, QProcess::ExitStatus status) {
+        emit finished(tag, status == QProcess::NormalExit && code == 0, QString::fromUtf8(p->readAllStandardOutput()));
+        p->deleteLater();
+    });
+    p->start(argv.first(), argv.mid(1), QIODevice::ReadOnly);
+    timer->start(timeoutMs);
+}
+
+void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs)
+{
+    if (argv.isEmpty() || (m_dev && !grassfield::settings::isReadOnlyQuery(argv))) {
+        if (!argv.isEmpty())
+            qWarning().noquote() << "dev guard: refused a command that is not a read-only query:" << argv.first();
+        emit finished(tag, false, QString());
+        return;
+    }
+    start(argv, tag, timeoutMs);
+}
+
+bool Backend::act(const QString &what, const QStringList &argv, const QString &tag, int timeoutMs)
+{
+    if (m_dev) {
+        qInfo().noquote() << "dev guard:" << what << "suppressed";
+        emit suppressed(what);
+        return false;
+    }
+    if (argv.isEmpty() || !grassfield::settings::isActionProgram(argv.first())) {
+        qWarning().noquote() << "refused an action with an unknown program:" << what;
+        return false;
+    }
+    start(argv, tag, timeoutMs);
+    return true;
+}
+
+QVariantList Backend::screens() const
+{
+    QVariantList out;
+    const QScreen *primary = QGuiApplication::primaryScreen();
+    for (const QScreen *s : QGuiApplication::screens()) {
+        const QRect g = s->geometry();
+        const qreal dpr = s->devicePixelRatio();
+        out.append(QVariantMap{{"name", s->name()},
+                               {"model", s->model()},
+                               {"manufacturer", s->manufacturer()},
+                               {"x", g.x()},
+                               {"y", g.y()},
+                               {"width", g.width()},
+                               {"height", g.height()},
+                               {"scale", dpr},
+                               {"pixelWidth", qRound(g.width() * dpr)},
+                               {"pixelHeight", qRound(g.height() * dpr)},
+                               {"refreshRate", s->refreshRate()},
+                               {"primary", s == primary}});
+    }
+    return out;
 }
 
 QString Backend::qtVersion() const
