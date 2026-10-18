@@ -642,6 +642,13 @@ Manual (L1, nested only):
   RSS 152.3 → 160.6 MB, no core dump, 0 exceptions), `minimize.sh` 20 rounds PASS, `input_consistency.sh` PASS,
   `appmenu.sh` PASS, `event_flood.sh` PASS, `tests/integration/global_menus.sh` 26/26 PASS (a first run failed
   1 check: transient shell QML warnings in phase B, which runs without the plugin).
+  Plugin 0.5.0-df (desktop focus + overview R13 fixes, 2026-10-18): `soak.sh 660` → PASS, exit 0 (log
+  `.dev/soak-20261018-085426.log`: 391 rounds, 97 drags, 49 abandoned, 98 zoom pairs, 49 cancels, 49 closes, 49 minimize
+  pairs all animated; RSS 152.3 → 160.6 MB, flat from round 100; no core dump; 0 grassfield exceptions; 224 seat
+  warnings as designed); then on a fresh instance `desktop_focus.sh` 21/21, `overview.sh check` 29/29,
+  `input_consistency.sh`, `minimize.sh`, `appmenu.sh`, `event_flood.sh` PASS, `tests/integration/global_menus.sh` 30/30
+  PASS (phase B without the plugin). C2: `nested-up.sh --no-plugin` → `hyprctl grassfield` unknown, shell log
+  "no compositor plugin reply, running in degraded mode".
   Title textures are cached per window and rebuilt only when the title, scale or available width changes;
   drawing adds 6 rect pass elements and 1 texture per decorated window.
 - Q1: `compositor/build-direct.sh tidy` must exit 0 with no diagnostics.
