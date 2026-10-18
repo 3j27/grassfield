@@ -85,7 +85,12 @@ Behavior now (`Lock.qml`, `LockMachine.ownershipAction`):
    keyboard focus proves nothing: a foreign locker taken over at start sits UNDER this lock and its release unlocks
    the session while a Grassfield surface keeps the keyboard (R12 counter-review of 620f08c, which ended it on focus
    and brought back the ~1 s window; `foreign-restart` now asserts release → fresh lock ≤ 150 ms). So a
-   crash-recovery lock keeps the 100 ms check for its whole life; its memory cost is measured by `probe-memory`.
+   crash-recovery lock keeps the 100 ms check for its whole life. Memory (`probe-memory`, 10 min each, nested): no leak,
+   but each answer's JS garbage made a GC sawtooth (the 452 → 477 MB rise the review saw): before, RSS 434–464 MB,
+   garbage 6.5 MB/min, post-collection floor +1.5 MB; after reading monitor maps lazily (`compositorLockStateLazy`:
+   one map per answer while locked instead of all), RSS 428–452 MB, garbage 4.5 MB/min (finer sampling), floor
+   −4.4 MB. The remaining per-answer cost is one `lastIpcObject` conversion, the only source of the lock state that
+   Quickshell.Hyprland offers.
    Also at once when a lock surface loses keyboard focus, and on every monitor answer anyone requested. Suspicion only
    ever speeds the check up; it never unlocks. Cost of the 100 ms check (nested, `probe-cost`, three runs): +1.2 to
    +1.9 % CPU in the shell (0.8–1.0 → 2.0–2.7 %), Hyprland +0 to +0.6 % (0.3–0.4 → 0.3–0.9 %).
@@ -189,7 +194,8 @@ Only wrong attempts are ever used for the L2 failure path, and only by the owner
 | `tests/security/reload_order/` | Offscreen `qs` test of the Quickshell reload contract the lock relies on (run by `scripts/dev/test.sh`) |
 | `tests/security/marker_read/` | Offscreen `qs` test: marker reads through the real FileView (missing, `unlocked`, empty, mode 000, directory) |
 | `tests/security/foreign_locker/` | Nested fixture: a foreign ext-session-lock client (Quickshell), released over IPC `foreign unlock`; refuses to lock without `GRASSFIELD_FOREIGN_LOCKER=1` or on the owner's instance (`.dev/main.instance`) |
-| `tests/security/reload_locked.sh` | Nested scenario: reload with marker missing/forged, `kill -9` (L1), forged marker + crash, file watcher off, foreign locker takeover/restart, `lock lock` and before-sleep during a desync, forced races `relock-confirm` and `foreign-gap`, `probe-cost` |
+| `tests/security/reload_locked.sh` | Nested scenario: reload with marker missing/forged, `kill -9` (L1), forged marker + crash, file watcher off, foreign locker takeover/restart (release → fresh lock ≤ 150 ms), `lock lock` and before-sleep during a desync, forced races `relock-confirm` and `foreign-gap`, `probe-cost`, `pam-audit`; `probe-memory` (10 min, explicit) |
+| `tests/security/pam_audit.sh` | Read-only PAM attempt audit over every Quickshell instance log of this tree (sourced by `reload_locked.sh`) |
 
 IPC (all on the shell instance): `lock lock` → `ok` / `already-locked` / `refused: missing-pam` (when already locked,
 the session lock is re-verified, see "Lock ownership"); `lock status` → `unlocked|locking|locked|authenticating`
