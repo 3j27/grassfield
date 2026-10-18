@@ -17,6 +17,11 @@ set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
 out=$dev/ovt
+# scripts/dev/test.sh runs every tests/shell/*.sh: without a running nested session this test is skipped.
+if [[ ! -s $dev/nested.pid ]] || ! kill -0 "$(<"$dev/nested.pid")" 2>/dev/null || [[ ! -s $dev/shell.pid ]]; then
+  echo "SKIP overview_two_outputs: no nested session (just nested-up)"
+  exit 0
+fi
 mkdir -p "$out"
 sock=$(<"$dev/nested.wayland")
 bus=""
