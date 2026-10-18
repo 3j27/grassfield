@@ -174,6 +174,11 @@ FocusScope {
                         font.weight: Tokens.typographyMenuBoldWeight
                     }
 
+                    TagDots {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        colors: root.previewInfo && root.previewInfo.tagColors ? root.previewInfo.tagColors : []
+                    }
+
                     Text {
                         textFormat: Text.PlainText
                         width: parent.width
@@ -318,6 +323,7 @@ FocusScope {
                 required property bool selected
                 required property bool isDir
                 required property bool hidden
+                required property var tagColors
 
                 readonly property bool renaming: root.tab.isRenaming(col.model, entry.url)
                 readonly property bool emphasized: entry.selected && col.active && lv.activeFocus
@@ -355,7 +361,7 @@ FocusScope {
                     visible: !entry.renaming
                     anchors.left: entryIcon.right
                     anchors.leftMargin: Tokens.spacingSm
-                    anchors.right: chevron.left
+                    anchors.right: entryDots.visible ? entryDots.left : chevron.left
                     anchors.rightMargin: Tokens.spacingXs
                     anchors.verticalCenter: parent.verticalCenter
                     text: entry.name.replace(/[\r\n]+/g, "\u23CE")
@@ -379,6 +385,17 @@ FocusScope {
                         onCommitted: name => root.tab.commitRename(name)
                         onCanceled: root.tab.cancelRename()
                     }
+                }
+
+                // Colour tags at the end of the row, before the folder chevron.
+                TagDots {
+                    id: entryDots
+                    visible: !entry.renaming && colors.length > 0
+                    colors: entry.tagColors
+                    anchors.right: chevron.left
+                    anchors.rightMargin: Tokens.spacingXs
+                    anchors.verticalCenter: parent.verticalCenter
+                    ringColor: entry.emphasized ? Appearance.colors.accent : Appearance.colors.materialTint
                 }
 
                 Icon {

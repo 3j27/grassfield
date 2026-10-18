@@ -8,6 +8,8 @@ TestCase {
     name: "PopupMenu"
     width: 400
     height: 400
+    // Shown, so that pointer events reach the menus (a TestCase item starts hidden).
+    visible: true
     when: windowShown
 
     Component {
@@ -19,6 +21,19 @@ TestCase {
                 {id: "b", text: "Beta", enabled: false},
                 {id: "c", text: "Gamma"},
                 {id: "d", text: "Delta", submenu: [{id: "d1", text: "Delta one"}, {id: "d2", text: "Delta two"}]}
+            ]
+        }
+    }
+
+    Component {
+        id: swatchMenuComponent
+        PopupMenu {
+            model: [
+                {id: "open", text: "Open"},
+                {id: "tags", swatches: [{id: "tag:0", color: Tokens.filesTagRed, name: "Red", state: 2}, {id: "tag:1", color: Tokens.filesTagOrange, name: "Orange", state: 1},
+                        {id: "tag:2", color: Tokens.filesTagYellow, name: "Yellow", state: 0}], accessibleName: "Tags"},
+                {id: "notags", swatches: [{id: "tag:0", color: Tokens.filesTagRed, name: "Red", state: 0}], enabled: false, caption: "This volume can’t store tags."},
+                {id: "copy", text: "Copy"}
             ]
         }
     }
@@ -89,6 +104,51 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "d2");
+    }
+
+    // Swatch rows (Files colour tags): the keyboard reaches the row, Left/Right pick a swatch, Return activates the
+    // swatch itself; a disabled row is skipped and shows its reason; a click on a swatch activates it.
+    function test_swatchRowKeyboard() {
+        const m = createTemporaryObject(swatchMenuComponent, testCase);
+        m.forceActiveFocus();
+        activatedSpy.target = m;
+        activatedSpy.clear();
+        keyClick(Qt.Key_Down);
+        keyClick(Qt.Key_Down);
+        compare(m.currentIndex, 1);
+        compare(m.swatchIndex, 0);
+        keyClick(Qt.Key_Right);
+        keyClick(Qt.Key_Right);
+        compare(m.swatchIndex, 2);
+        keyClick(Qt.Key_Right);
+        compare(m.swatchIndex, 0, "wraps");
+        keyClick(Qt.Key_Left);
+        compare(m.swatchIndex, 2);
+        keyClick(Qt.Key_Return);
+        compare(activatedSpy.count, 1);
+        compare(activatedSpy.signalArguments[0][0].id, "tag:2");
+        // Down skips the disabled row.
+        keyClick(Qt.Key_Down);
+        compare(m.currentIndex, 3);
+    }
+
+    function test_swatchRowPointer() {
+        const m = createTemporaryObject(swatchMenuComponent, testCase);
+        activatedSpy.target = m;
+        activatedSpy.clear();
+        waitForRendering(m);
+        // The second swatch of the tags row (row 1, under the one-line "Open" row): menu padding, the row's padding and
+        // the ring around each swatch.
+        const step = Tokens.menuSwatchSize + 2 * Tokens.menuSwatchRing + Tokens.menuSwatchGap;
+        const p = Qt.point(Tokens.menuPadding + Tokens.menuItemPadding + step + Tokens.menuSwatchRing + Tokens.menuSwatchSize / 2,
+                           Tokens.menuPadding + Tokens.menuItemHeight + Tokens.spacingXs + Tokens.menuSwatchRing + Tokens.menuSwatchSize / 2);
+        mouseMove(m, p.x - 1, p.y);
+        mouseMove(m, p.x, p.y);
+        compare(m.currentIndex, 1);
+        compare(m.swatchIndex, 1);
+        mouseClick(m, p.x, p.y);
+        compare(activatedSpy.count, 1);
+        compare(activatedSpy.signalArguments[0][0].id, "tag:1");
     }
 
     function test_leftClosesSubmenu() {

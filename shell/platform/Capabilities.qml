@@ -22,6 +22,8 @@ Singleton {
     // False until the hello reply arrived or the timeout elapsed.
     property bool settled: false
     property var features: []
+    // A capabilities event of another protocol version was logged (once per shell run).
+    property bool protocolWarned: false
 
     // Hello transport (ASSUMPTION until ADR-0007): Hyprland 0.56 is Lua-only, and Quickshell
     // wraps the request as `return hl.dispatch(<request>)`, so a Lua function is sent that
@@ -39,6 +41,12 @@ Singleton {
             // Other gfc/1 events (overview, ...) share the channel: only a malformed capabilities event is a problem.
             if (CapabilityEvent.isMalformedCapabilities(data, root.protocol))
                 console.warn("grassfield: ignoring malformed capabilities event");
+            // A plugin speaking another protocol version stays "no plugin" (degraded mode); say why, once.
+            const other = CapabilityEvent.otherProtocolCapabilities(data, root.protocol);
+            if (other !== "" && !root.protocolWarned) {
+                root.protocolWarned = true;
+                console.warn("grassfield: unsupported plugin protocol", other, "(expected " + root.protocol + "), running without the plugin");
+            }
             return;
         }
         features = msg.features;

@@ -69,6 +69,8 @@ Window {
         const target = win.sizeFor(s.width, s.height);
         if (target.width === win.width && target.height === win.height)
             return;
+        win.unlimitedWidth = win.maximumWidth;
+        win.unlimitedHeight = win.maximumHeight;
         win.minimumWidth = target.width;
         win.maximumWidth = target.width;
         win.minimumHeight = target.height;
@@ -78,15 +80,23 @@ Window {
         releaseTimer.restart();
     }
 
-    // Lets the user resize the window again once the compositor has applied the size (up to the screen size).
+    // Qt's own maximum size (no limit), read by fitToScreen before it fixes the size (it runs once).
+    property int unlimitedWidth: 0
+    property int unlimitedHeight: 0
+
+    // Lets the user resize the window again once the compositor has applied the size (up to the screen size). Without a
+    // screen (the output went away meanwhile) the maximum goes back to Qt's unlimited default rather than the current
+    // size, which would leave the window unable to grow.
     Timer {
         id: releaseTimer
         interval: Tokens.motionNormal
         onTriggered: {
+            const s = win.screen;
+            const known = s !== null && s.width > 0 && s.height > 0;
             win.minimumWidth = Tokens.previewGlanceMinWidth;
             win.minimumHeight = Tokens.previewGlanceMinHeight;
-            win.maximumWidth = Math.max(win.width, win.screen ? win.screen.width : win.width);
-            win.maximumHeight = Math.max(win.height, win.screen ? win.screen.height : win.height);
+            win.maximumWidth = known ? Math.max(win.width, s.width) : win.unlimitedWidth;
+            win.maximumHeight = known ? Math.max(win.height, s.height) : win.unlimitedHeight;
         }
     }
 

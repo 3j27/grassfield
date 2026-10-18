@@ -2,9 +2,10 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 import "Nav.js" as Nav
+import "TagColors.js" as TagColors
 
 // One tab of a browser window: location, history, view mode, search and every action on the selection.
-// The views (IconView, FileList, ColumnView) only draw and forward input here.
+// The views (IconView, FileList, ColumnView, GalleryView) only draw and forward input here.
 FocusScope {
     id: root
 
@@ -16,7 +17,7 @@ FocusScope {
     property url url
     property var history: []
     property int historyIndex: -1
-    property string viewMode: root.app.viewMode
+    property string viewMode: Nav.normalizeViewMode(root.app.viewMode)
     // FolderModel listing `url` (icon and list views; the column view keeps one per column).
     property var folder: null
     property string searchText: ""
@@ -51,6 +52,7 @@ FocusScope {
         m.foldersFirst = root.app.foldersFirst;
         m.showHidden = root.app.showHidden;
         m.previewSize = Tokens.filesIconSize * Tokens.filesThumbnailOversample;
+        m.largePreviewSize = Tokens.filesGalleryPreviewSize * Tokens.filesThumbnailOversample;
     }
 
     Connections {
@@ -59,7 +61,7 @@ FocusScope {
             root.applyPrefs(root.folder);
             if (root.view && root.view.applyPrefs)
                 root.view.applyPrefs();
-            root.viewMode = root.app.viewMode;
+            root.viewMode = Nav.normalizeViewMode(root.app.viewMode);
         }
     }
 
@@ -129,9 +131,23 @@ FocusScope {
     }
 
     function setViewMode(mode: string): void {
-        root.app.viewMode = mode;
-        root.viewMode = mode;
+        const m = Nav.normalizeViewMode(mode);
+        root.app.viewMode = m;
+        root.viewMode = m;
         Qt.callLater(root.focusView);
+    }
+
+    // Ctrl+1 .. Ctrl+4.
+    function setViewModeByNumber(number: int): void {
+        const m = Nav.viewModeForShortcut(number);
+        if (m !== "")
+            root.setViewMode(m);
+    }
+
+    // The gallery's info panel (Ctrl+Shift+P), only meaningful in the gallery view.
+    function toggleGalleryInfo(): void {
+        if (root.viewMode === "gallery")
+            root.app.galleryInfo = !root.app.galleryInfo;
     }
 
     function setSearch(text: string): void {
@@ -216,8 +232,14 @@ FocusScope {
 
     function copySelection(cut: bool): void {
         const urls = root.selection();
-        if (urls.length > 0 && !(cut && root.activeFolder.isTrash))
+        if (urls.length > 0 && !(cut && !root.itemsEditable(root.activeFolder)))
             root.app.copyToClipboard(urls, cut);
+    }
+
+    // Items can be renamed, cut and moved to the Trash in a writable folder, and in a tag search (each item stays in its
+    // own folder; KIO reports a refusal). Nothing can be created in a tag search (FolderModel.writable is false).
+    function itemsEditable(m: var): bool {
+        return m !== null && !m.isTrash && (m.writable || m.isSearch);
     }
 
     function paste(): void {
@@ -238,7 +260,34 @@ FocusScope {
 
     function canRename(): bool {
         const m = root.activeFolder;
-        return m !== null && m.selectedCount === 1 && m.writable && !m.isTrash;
+        return m !== null && m.selectedCount === 1 && root.itemsEditable(m);
+    }
+
+    // Tags ---------------------------------------------------------------------------------------
+
+    // Colour tag `index` on the selection: removed when every item has it, else added (FilesApp.toggleColorTag).
+    function toggleColorTag(index: int): void {
+        const urls = root.selection();
+        if (urls.length > 0)
+            root.app.toggleColorTag(urls, index);
+    }
+
+    // A sidebar tag: the items tagged `tag` in the shown folder and below (a tag search keeps its folder).
+    function showTag(tag: string): void {
+        root.navigate(root.app.tagSearchUrl(tag, root.url), true);
+    }
+
+    // The colour row of the item menu: the seven tags with the selection's state, or the reason it can't be tagged.
+    function tagRow(model: var): var {
+        const urls = model.selectedUrls();
+        const reason = root.app.tagsUnavailable(urls);
+        return {
+            id: "tags",
+            swatches: TagColors.swatches(Tokens, root.app.colorTagNames, reason === "" ? root.app.colorTagStates(urls) : []),
+            enabled: reason === "",
+            caption: reason !== "" ? reason : qsTr("Tags"),
+            accessibleName: qsTr("Tags")
+        };
     }
 
     function renameSelection(): void {
@@ -295,6 +344,11 @@ FocusScope {
             return;
         const target = urls[0];
         root.setSearch("");
+        // A tag search lists items of several folders: open the item's own folder, with the item selected.
+        if (root.folder.isSearch) {
+            const s = String(target);
+            root.navigate(Qt.url(s.substring(0, s.lastIndexOf("/"))), true);
+        }
         root.folder.expect(target, false);
     }
 
@@ -434,17 +488,21 @@ FocusScope {
         }
         if (count === 1 && model.isDirAt(first))
             items.push({id: "newTab", text: qsTr("Open in New Tab")});
+        const editable = root.itemsEditable(model);
         items.push({separator: true});
-        items.push({id: "trash", text: qsTr("Move to Trash"), shortcut: qsTr("Ctrl+Backspace"), enabled: model.writable});
+        items.push({id: "trash", text: qsTr("Move to Trash"), shortcut: qsTr("Ctrl+Backspace"), enabled: editable});
         items.push({separator: true});
         items.push({id: "info", text: qsTr("Get Info"), shortcut: qsTr("Ctrl+I")});
-        items.push({id: "rename", text: qsTr("Rename"), shortcut: qsTr("F2"), enabled: count === 1 && model.writable});
+        items.push({id: "rename", text: qsTr("Rename"), shortcut: qsTr("F2"), enabled: count === 1 && editable});
         items.push({id: "duplicate", text: qsTr("Duplicate"), shortcut: qsTr("Ctrl+D"), enabled: model.writable});
         items.push({id: "glance", text: count === 1 ? qsTr("Glance at “%1”").arg(name) : qsTr("Glance at %1 Items").arg(count), shortcut: qsTr("Space")});
         items.push({separator: true});
         items.push({id: "copy", text: count === 1 ? qsTr("Copy “%1”").arg(name) : qsTr("Copy %1 Items").arg(count), shortcut: qsTr("Ctrl+C")});
-        items.push({id: "cut", text: qsTr("Cut"), shortcut: qsTr("Ctrl+X"), enabled: model.writable});
-        if (root.searchText !== "") {
+        items.push({id: "cut", text: qsTr("Cut"), shortcut: qsTr("Ctrl+X"), enabled: editable});
+        // Colour tags (macOS: a row of colour dots under the edit items).
+        items.push({separator: true});
+        items.push(root.tagRow(model));
+        if (root.searchText !== "" || model.isSearch) {
             items.push({separator: true});
             items.push({id: "enclosing", text: qsTr("Show in Enclosing Folder")});
         }
@@ -471,6 +529,8 @@ FocusScope {
         items.push(root.viewSubmenu());
         items.push(root.sortSubmenu());
         items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+H"), checked: root.app.showHidden});
+        if (root.viewMode === "gallery")
+            items.push({id: "galleryInfo", text: qsTr("Show Info Panel"), shortcut: qsTr("Ctrl+Shift+P"), checked: root.app.galleryInfo});
         return items;
     }
 
@@ -478,7 +538,8 @@ FocusScope {
         return {id: "viewAs", text: qsTr("View As"), submenu: [
             {id: "view:icons", text: qsTr("Icons"), shortcut: qsTr("Ctrl+1"), checked: root.viewMode === "icons"},
             {id: "view:list", text: qsTr("List"), shortcut: qsTr("Ctrl+2"), checked: root.viewMode === "list"},
-            {id: "view:columns", text: qsTr("Columns"), shortcut: qsTr("Ctrl+3"), checked: root.viewMode === "columns"}
+            {id: "view:columns", text: qsTr("Columns"), shortcut: qsTr("Ctrl+3"), checked: root.viewMode === "columns"},
+            {id: "view:gallery", text: qsTr("Gallery"), shortcut: qsTr("Ctrl+4"), checked: root.viewMode === "gallery"}
         ]};
     }
 
@@ -508,6 +569,12 @@ FocusScope {
         }
         if (id.startsWith("view:")) {
             root.setViewMode(id.substring(5));
+            return;
+        }
+        if (id.startsWith("tag:")) {
+            const urls = model.selectedUrls();
+            if (urls.length > 0)
+                root.app.toggleColorTag(urls, parseInt(id.substring(4)));
             return;
         }
         if (id.startsWith("sort:")) {
@@ -563,6 +630,9 @@ FocusScope {
         case "hidden":
             root.app.showHidden = !root.app.showHidden;
             break;
+        case "galleryInfo":
+            root.toggleGalleryInfo();
+            break;
         case "sortDescending":
             root.app.sortDescending = !root.app.sortDescending;
             break;
@@ -578,7 +648,8 @@ FocusScope {
         id: viewLoader
         anchors.fill: parent
         focus: true
-        sourceComponent: root.viewMode === "list" ? listComponent : root.viewMode === "columns" ? columnComponent : iconComponent
+        readonly property string kind: Nav.effectiveView(root.viewMode, root.folder !== null && root.folder.isSearch)
+        sourceComponent: viewLoader.kind === "list" ? listComponent : viewLoader.kind === "columns" ? columnComponent : viewLoader.kind === "gallery" ? galleryComponent : iconComponent
         onLoaded: Qt.callLater(root.focusView)
     }
 
@@ -602,6 +673,14 @@ FocusScope {
         id: columnComponent
         ColumnView {
             tab: root
+        }
+    }
+
+    Component {
+        id: galleryComponent
+        GalleryView {
+            tab: root
+            model: root.folder
         }
     }
 }

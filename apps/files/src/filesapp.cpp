@@ -3,6 +3,8 @@
 #include "filelogic.h"
 #include "foldermodel.h"
 #include "placesmodel.h"
+#include "taglogic.h"
+#include "tagstore.h"
 
 #include <QClipboard>
 #include <QDir>
@@ -72,6 +74,9 @@ bool launchingBlocked()
 // Files handed to one Glance at most.
 constexpr int kMaxGlanceFiles = 50;
 
+// Tags listed in the sidebar's Tags section at most.
+constexpr int kMaxKnownTags = 64;
+
 // Singular/plural pair (no translation catalogs with numerus forms yet, like the Settings app).
 QString countText(const QString &one, const QString &many, qsizetype n)
 {
@@ -116,6 +121,10 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, reread);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, reread);
     readAppearance();
+
+    // The sidebar's Tags section: the tags seen in use (on shown items, set or searched in Files), kept across sessions.
+    m_knownTags = TagLogic::displayOrder(m_settings.value(QStringLiteral("tags/known")).toStringList()).mid(0, kMaxKnownTags);
+    publishKnownTags();
 }
 
 QString FilesApp::configFile() const
@@ -187,7 +196,7 @@ int FilesApp::clipboardCount() const
 QString FilesApp::viewMode() const
 {
     const QString mode = m_settings.value(QStringLiteral("view/mode"), QStringLiteral("icons")).toString();
-    return mode == QLatin1String("list") || mode == QLatin1String("columns") ? mode : QStringLiteral("icons");
+    return mode == QLatin1String("list") || mode == QLatin1String("columns") || mode == QLatin1String("gallery") ? mode : QStringLiteral("icons");
 }
 
 void FilesApp::setViewMode(const QString &mode)
@@ -250,17 +259,38 @@ void FilesApp::setShowHidden(bool on)
     emit prefsChanged();
 }
 
+bool FilesApp::galleryInfo() const
+{
+    return m_settings.value(QStringLiteral("view/galleryInfo"), true).toBool();
+}
+
+void FilesApp::setGalleryInfo(bool on)
+{
+    if (on == galleryInfo())
+        return;
+    m_settings.setValue(QStringLiteral("view/galleryInfo"), on);
+    emit prefsChanged();
+}
+
 QObject *FilesApp::createFolderModel(QObject *parent)
 {
-    return new FolderModel(parent ? parent : this);
+    auto *model = new FolderModel(parent ? parent : this);
+    connect(model, &FolderModel::tagsSeen, this, &FilesApp::noteTags);
+    connect(this, &FilesApp::tagsChanged, model, &FolderModel::tagsChanged);
+    return model;
 }
 
 QVariantList FilesApp::pathSegments(const QUrl &url) const
 {
     QVariantList out;
-    const QList<FileLogic::Segment> segments = FileLogic::pathSegments(url, QDir::homePath(), tr("Computer"), tr("Trash"));
+    // A tag search: the segments of its folder, then the tag.
+    const bool search = TagLogic::isSearchUrl(url);
+    const QUrl folder = search ? TagLogic::searchFolder(url) : url;
+    const QList<FileLogic::Segment> segments = FileLogic::pathSegments(folder, QDir::homePath(), tr("Computer"), tr("Trash"));
     for (const FileLogic::Segment &s : segments)
         out.append(QVariantMap{{QStringLiteral("label"), s.label}, {QStringLiteral("url"), s.url}});
+    if (search)
+        out.append(QVariantMap{{QStringLiteral("label"), TagLogic::displayName(TagLogic::searchTag(url))}, {QStringLiteral("url"), url}});
     return out;
 }
 
@@ -589,6 +619,11 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
         trash(urls);
         return;
     }
+    // A drop on a tag search (its background, its path segment) tags the items, like a drop on the sidebar tag.
+    if (TagLogic::isSearchUrl(destination)) {
+        addTag(urls, TagLogic::searchTag(destination));
+        return;
+    }
     const QUrl dest = destination.adjusted(QUrl::StripTrailingSlash);
     QList<QUrl> sources;
     for (const QUrl &u : urls) {
@@ -649,6 +684,167 @@ void FilesApp::directorySize(const QUrl &url, const QJSValue &callback)
         else
             cb.call({QJSValue(double(job->totalSize())), QJSValue(double(job->totalFiles())), QJSValue(double(job->totalSubdirs()))});
     });
+}
+
+QStringList FilesApp::colorTagNames() const
+{
+    QStringList names;
+    for (int i = 0; i < TagLogic::kColorCount; ++i)
+        names.append(TagLogic::displayName(TagLogic::colorKey(i)));
+    return names;
+}
+
+QString FilesApp::tagsUnavailable(const QList<QUrl> &urls) const
+{
+    for (const QUrl &url : urls) {
+        if (url.scheme() == QLatin1String("trash"))
+            return tr("Items in the Trash can’t be tagged.");
+        if (!url.isLocalFile())
+            return tr("Tags are available for files on this computer only.");
+        switch (TagStore::support(url.toLocalFile())) {
+        case TagStore::Support::Supported:
+            break;
+        case TagStore::Support::Missing:
+            return tr("“%1” is no longer there.").arg(url.fileName());
+        case TagStore::Support::Link:
+            return tr("Links can’t carry tags.");
+        case TagStore::Support::NoXattr:
+            return tr("This volume can’t store tags.");
+        }
+    }
+    return QString();
+}
+
+QVariantList FilesApp::colorTagStates(const QList<QUrl> &urls) const
+{
+    QList<QStringList> lists;
+    for (const QUrl &url : urls) {
+        if (url.isLocalFile())
+            lists.append(TagStore::read(url.toLocalFile()));
+    }
+    QVariantList out;
+    const QList<int> states = TagLogic::colorStates(lists);
+    for (int s : states)
+        out.append(s);
+    return out;
+}
+
+void FilesApp::toggleColorTag(const QList<QUrl> &urls, int index)
+{
+    const QString key = TagLogic::colorKey(index);
+    if (key.isEmpty() || urls.isEmpty())
+        return;
+    bool all = true;
+    for (const QUrl &url : urls)
+        all = all && url.isLocalFile() && TagLogic::hasTag(TagStore::read(url.toLocalFile()), key);
+    rewriteTags(urls, [key, all](const QStringList &tags) { return TagLogic::withTag(tags, key, !all); });
+}
+
+void FilesApp::addTag(const QList<QUrl> &urls, const QString &tag)
+{
+    if (tag.trimmed().isEmpty())
+        return;
+    rewriteTags(urls, [tag](const QStringList &tags) { return TagLogic::withTag(tags, tag, true); });
+}
+
+void FilesApp::rewriteTags(const QList<QUrl> &urls, const std::function<QStringList(const QStringList &)> &next)
+{
+    QList<QUrl> changed;
+    QStringList failed;
+    QString reason;
+    for (const QUrl &url : urls) {
+        const QString why = tagsUnavailable({url});
+        if (!why.isEmpty()) {
+            failed.append(url.fileName());
+            reason = why;
+            continue;
+        }
+        const QString path = url.toLocalFile();
+        const QStringList before = TagStore::read(path);
+        const QStringList after = next(before);
+        if (after == before)
+            continue;
+        QString error;
+        if (!TagStore::write(path, after, &error)) {
+            failed.append(url.fileName());
+            reason = error;
+            continue;
+        }
+        changed.append(url);
+        noteTags(after);
+    }
+    if (!changed.isEmpty()) {
+        ++m_tagRevision;
+        emit tagRevisionChanged();
+        emit tagsChanged(changed);
+    }
+    if (failed.size() == 1)
+        emit operationFailed(tr("The tags of “%1” couldn’t be changed: %2").arg(failed.first(), reason));
+    else if (failed.size() > 1)
+        emit operationFailed(tr("The tags of %1 items couldn’t be changed: %2").arg(failed.size()).arg(reason));
+}
+
+QString FilesApp::tagName(const QString &tag) const
+{
+    return TagLogic::displayName(tag);
+}
+
+int FilesApp::tagColor(const QString &tag) const
+{
+    return TagLogic::colorIndex(tag);
+}
+
+QUrl FilesApp::tagSearchUrl(const QString &tag, const QUrl &from) const
+{
+    QUrl folder;
+    if (TagLogic::isSearchUrl(from))
+        folder = TagLogic::searchFolder(from);
+    else if (from.isLocalFile() && QFileInfo(from.toLocalFile()).isDir())
+        folder = from;
+    else
+        folder = QUrl::fromLocalFile(QDir::homePath());
+    return TagLogic::searchUrl(tag, folder);
+}
+
+bool FilesApp::isTagSearch(const QUrl &url) const
+{
+    return TagLogic::isSearchUrl(url);
+}
+
+QString FilesApp::searchedTag(const QUrl &url) const
+{
+    return TagLogic::searchTag(url);
+}
+
+void FilesApp::noteTags(const QStringList &tags)
+{
+    bool added = false;
+    for (const QString &tag : tags) {
+        if (!TagLogic::hasTag(m_knownTags, tag)) {
+            m_knownTags = TagLogic::withTag(m_knownTags, tag, true);
+            added = true;
+        }
+    }
+    if (!added)
+        return;
+    m_knownTags = TagLogic::displayOrder(m_knownTags).mid(0, kMaxKnownTags);
+    m_settings.setValue(QStringLiteral("tags/known"), m_knownTags);
+    publishKnownTags();
+}
+
+void FilesApp::forgetTag(const QString &tag)
+{
+    const QStringList next = TagLogic::withTag(m_knownTags, tag, false);
+    if (next == m_knownTags)
+        return;
+    m_knownTags = next;
+    m_settings.setValue(QStringLiteral("tags/known"), m_knownTags);
+    publishKnownTags();
+}
+
+void FilesApp::publishKnownTags()
+{
+    m_places->setTags(m_knownTags);
 }
 
 void FilesApp::track(KJob *job, const QString &activity)

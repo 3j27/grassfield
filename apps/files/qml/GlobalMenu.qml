@@ -3,8 +3,8 @@ import QtQuick
 import Qt.labs.platform as Platform
 
 // A browser window's menus in the global menu bar (T1: master-prompt 5.7, ADR-0008), exported by Qt through DBusMenu.
-// BrowserWindow.qml creates one per window, only when the registrar is there (src/main.cpp, apps/globalmenu.h); the
-// toolbar, context menus and Action menu stay either way. macOS structure: File, Edit, View, Go; the app menu and
+// BrowserWindow.qml creates one per window, only while the registrar is there, and a fresh one when the registrar
+// restarts (src/main.cpp, apps/globalmenu.h); the toolbar, context menus and Action menu stay either way. macOS structure: File, Edit, View, Go; the app menu and
 // Window are the shell's T0 menus (tab switching is under View). Every item runs the same BrowserTab action as the
 // window's own menus and shortcuts. A shortcut that an in-window Shortcut also registers is handled once: Qt hands an
 // ambiguous key to one of them per press and the window's Shortcut also acts on activatedAmbiguously.
@@ -20,6 +20,19 @@ Platform.MenuBar {
     readonly property int count: bar.folder ? bar.folder.selectedCount : 0
     readonly property bool inTrash: bar.folder !== null && bar.folder.isTrash
     readonly property bool writable: bar.folder !== null && bar.folder.writable
+    // Items can be renamed, cut and trashed (BrowserTab.itemsEditable: a writable folder or a tag search).
+    readonly property bool editable: bar.folder !== null && !bar.inTrash && (bar.folder.writable || bar.folder.isSearch)
+    // Colour tags of the selection, read again on every selection change and every tag write.
+    readonly property string tagsReason: {
+        bar.app.tagRevision;
+        const f = bar.folder;
+        return f && f.selectedCount > 0 ? bar.app.tagsUnavailable(f.selectedUrls()) : "";
+    }
+    readonly property var tagStates: {
+        bar.app.tagRevision;
+        const f = bar.folder;
+        return f && f.selectedCount > 0 && bar.tagsReason === "" ? bar.app.colorTagStates(f.selectedUrls()) : [];
+    }
     // These read folder.selectedCount themselves: its NOTIFY (selectionChanged) fires on every selection change, while a
     // binding on `count` only re-runs when the number changes (selecting another single item kept the old name and
     // Open With list, and Open With then acted on the new selection: review of 72272e4).
@@ -102,7 +115,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Rename")
             shortcut: "F2"
-            enabled: bar.count === 1 && bar.writable && !bar.inTrash
+            enabled: bar.count === 1 && bar.editable
             onTriggered: bar.tab.renameSelection()
         }
         Platform.MenuItem {
@@ -116,11 +129,33 @@ Platform.MenuBar {
             enabled: bar.count > 0 && !bar.inTrash
             onTriggered: bar.tab.glance()
         }
+        // The colour tags of the selection (the window's item menu shows them as a row of colour dots).
+        Platform.Menu {
+            id: tagsMenu
+            title: qsTr("Tags")
+            enabled: bar.count > 0 && bar.tagsReason === ""
+
+            Instantiator {
+                model: bar.app.colorTagNames
+
+                delegate: MenuCheckItem {
+                    required property string modelData
+                    required property int index
+
+                    text: bar.label(modelData)
+                    on: bar.tagStates[index] === 2
+                    onChosen: bar.tab.toggleColorTag(index)
+                }
+
+                onObjectAdded: (index, object) => tagsMenu.insertItem(index, object as Platform.MenuItem)
+                onObjectRemoved: (index, object) => tagsMenu.removeItem(object as Platform.MenuItem)
+            }
+        }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: bar.inTrash ? qsTr("Put Back") : qsTr("Move to Trash")
             shortcut: "Ctrl+Backspace"
-            enabled: bar.count > 0 && (bar.inTrash || bar.writable)
+            enabled: bar.count > 0 && (bar.inTrash || bar.editable)
             onTriggered: bar.tab.trashSelection()
         }
         Platform.MenuItem {
@@ -163,7 +198,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Cut")
             shortcut: "Ctrl+X"
-            enabled: bar.count > 0 && bar.writable && !bar.inTrash
+            enabled: bar.count > 0 && bar.editable
             onTriggered: bar.tab.copySelection(true)
         }
         Platform.MenuItem {
@@ -206,6 +241,20 @@ Platform.MenuBar {
             shortcut: "Ctrl+3"
             on: bar.tab !== null && bar.tab.viewMode === "columns"
             onChosen: bar.tab.setViewMode("columns")
+        }
+        MenuCheckItem {
+            text: qsTr("as Gallery")
+            shortcut: "Ctrl+4"
+            on: bar.tab !== null && bar.tab.viewMode === "gallery"
+            onChosen: bar.tab.setViewMode("gallery")
+        }
+        Platform.MenuSeparator {}
+        MenuCheckItem {
+            text: qsTr("Show Info Panel")
+            shortcut: "Ctrl+Shift+P"
+            enabled: bar.tab !== null && bar.tab.viewMode === "gallery"
+            on: bar.app.galleryInfo
+            onChosen: bar.tab.toggleGalleryInfo()
         }
         Platform.MenuSeparator {}
         Platform.Menu {
@@ -295,6 +344,7 @@ Platform.MenuBar {
         }
         Platform.MenuSeparator {}
         // The sidebar places (Favorites, then Locations), opened like a sidebar click (an unmounted volume is mounted).
+        // The sidebar's tags are not places of the Go menu (as on macOS).
         Instantiator {
             model: bar.app.places
 
@@ -303,7 +353,9 @@ Platform.MenuBar {
                 required property string name
                 required property url url
                 required property bool mounted
+                required property string kind
 
+                visible: kind !== "tag"
                 text: bar.label(name)
                 shortcut: bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
                 onTriggered: bar.win.openPlace(index, url, mounted)

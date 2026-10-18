@@ -46,6 +46,59 @@ function listMove(current, key, count, pageRows) {
     return gridMove(current, key, 1, count, pageRows);
 }
 
+// Next index in the gallery view's thumbnail strip (one horizontal row): Left/Right move by one, Home/End to the
+// ends, PageUp/PageDown by `pageItems` (the thumbnails in view); Up/Down do not move. With no current item any move
+// selects the first item (End the last).
+function stripMove(current, key, count, pageItems) {
+    if (count <= 0)
+        return -1;
+    if (current < 0 || current >= count)
+        return key === "end" ? count - 1 : 0;
+    const page = Math.max(1, pageItems);
+    switch (key) {
+    case "left":
+        return Math.max(0, current - 1);
+    case "right":
+        return Math.min(count - 1, current + 1);
+    case "home":
+        return 0;
+    case "end":
+        return count - 1;
+    case "pageup":
+        return Math.max(0, current - page);
+    case "pagedown":
+        return Math.min(count - 1, current + page);
+    }
+    return current;
+}
+
+// View modes in toolbar, menu and shortcut order (Ctrl+1 .. Ctrl+4).
+const viewModes = ["icons", "list", "columns", "gallery"];
+
+// A saved or requested mode, or "icons" when it is not one of viewModes.
+function normalizeViewMode(mode) {
+    return viewModes.indexOf(String(mode)) >= 0 ? String(mode) : "icons";
+}
+
+// Mode of the Ctrl+<number> shortcut (1-based), "" for another number.
+function viewModeForShortcut(number) {
+    return number >= 1 && number <= viewModes.length ? viewModes[number - 1] : "";
+}
+
+// The view that draws a tab: its mode, except that tag search results (a flat list of files from several folders)
+// have no folder columns and show as a list in the column mode.
+function effectiveView(mode, isSearch) {
+    const m = normalizeViewMode(mode);
+    return isSearch && m === "columns" ? "list" : m;
+}
+
+// The gallery shows one item: when nothing is current yet (folder just listed), the first item is selected.
+function galleryInitialRow(currentRow, count) {
+    if (count <= 0)
+        return -1;
+    return currentRow >= 0 && currentRow < count ? currentRow : 0;
+}
+
 // Back/forward history. Returns {entries, index}. Navigating to the current entry changes nothing;
 // navigating elsewhere drops the forward entries.
 function pushHistory(entries, index, url) {

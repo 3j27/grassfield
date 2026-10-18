@@ -2,7 +2,7 @@
 # Direct build of grassfield-files with g++ (CMake is not installed yet; see CMakeLists.txt).
 # Output: .dev/build/grassfield-files. The dev binary reads the repository QML directory.
 # Usage: apps/files/build-direct.sh [--install-paths]   (--install-paths bakes /usr/share paths)
-#        apps/files/build-direct.sh --tests             (only the FileLogic unit tests: .dev/build/files-unit-tests)
+#        apps/files/build-direct.sh --tests             (only the logic unit tests: .dev/build/files-unit-tests)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(git -C "$here" rev-parse --show-toplevel)
@@ -17,7 +17,8 @@ kfdefs=(-DKF_DISABLE_DEPRECATED_BEFORE_AND_AT=0x061D00)
 if [[ ${1:-} == "--tests" ]]; then
   # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core) \
-    "$root/tests/unit/files/tst_filelogic.cpp" "$root/tests/unit/files/tst_previewqueue.cpp" "$here/src/filelogic.cpp" \
+    "$root/tests/unit/files/tst_filelogic.cpp" "$root/tests/unit/files/tst_previewqueue.cpp" "$root/tests/unit/files/tst_tags.cpp" \
+    "$here/src/filelogic.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" \
     $(pkg-config --libs Qt6Core) -lgtest -lgtest_main -pthread \
     -o "$out/files-unit-tests"
   echo "built $out/files-unit-tests"
@@ -41,7 +42,7 @@ kf_libs=(-lKF6KIOCore -lKF6KIOGui -lKF6KIOWidgets -lKF6CoreAddons -lKF6Service -
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
 mocs=()
-for h in foldermodel placesmodel filesapp; do
+for h in foldermodel placesmodel filesapp tagsearch; do
   "$moc" "${kf_includes[@]}" "$here/src/$h.h" -o "$out/moc_files_$h.cpp"
   mocs+=("$out/moc_files_$h.cpp")
 done
@@ -52,7 +53,8 @@ mkdir -p "$objdir"
 read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus)"
 read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus)"
 sources=("$here/src/main.cpp" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp"
-  "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "${mocs[@]}")
+  "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp"
+  "$here/src/tagsearch.cpp" "${mocs[@]}")
 pids=() objs=()
 for src in "${sources[@]}"; do
   obj=$objdir/$(basename "${src%.cpp}").o

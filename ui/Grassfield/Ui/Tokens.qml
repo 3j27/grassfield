@@ -204,6 +204,14 @@ QtObject {
     readonly property int menuShortcutGap: 24
     // estimate, pending F1 measurement from design/reference
     readonly property int menuSubmenuOverlap: 4
+    // estimate: colour swatch of a swatch row (Files tags), pending F1 measurement
+    readonly property int menuSwatchSize: 16
+    // estimate: space between swatches
+    readonly property int menuSwatchGap: 8
+    // estimate: ring around the hovered or keyboard-current swatch
+    readonly property int menuSwatchRing: 2
+    // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1)
+    readonly property string menuSwatchMark: "#1B1B1F"
 
     // estimate, pending F1 measurement from design/reference
     readonly property int controlSliderTrack: 4
@@ -740,6 +748,40 @@ QtObject {
     readonly property real filesScrollbarThumbOpacity: 0.3
     // estimate: dragged scroll bar thumb
     readonly property real filesScrollbarPressedOpacity: 0.55
+    // estimate: gallery view thumbnail strip under the preview
+    readonly property int filesGalleryStripHeight: 84
+    // estimate: one thumbnail of the gallery strip
+    readonly property int filesGalleryStripCellWidth: 64
+    // estimate: thumbnail size in the gallery strip
+    readonly property int filesGalleryStripIconSize: 48
+    // estimate: space around the gallery preview
+    readonly property int filesGalleryPreviewMargin: 24
+    // estimate: requested edge of the gallery preview thumbnail in points (x thumbnailOversample, at most the 1024 px xx-large cache)
+    readonly property int filesGalleryPreviewSize: 512
+    // estimate: type icon in the gallery preview when no thumbnail exists
+    readonly property int filesGalleryIconSize: 160
+    // estimate: gallery view info panel
+    readonly property int filesGalleryInfoWidth: 260
+    // estimate: colour tag dot next to a file name
+    readonly property int filesTagDotSize: 10
+    // estimate: overlap of stacked tag dots
+    readonly property int filesTagDotOverlap: 4
+    // estimate: tag dots shown per item (macOS shows a few, stacked)
+    readonly property int filesTagDotsMax: 3
+    // own value: colour tag Red (not copied)
+    readonly property string filesTagRed: "#E5484D"
+    // own value: colour tag Orange (not copied)
+    readonly property string filesTagOrange: "#F08A24"
+    // own value: colour tag Yellow (not copied)
+    readonly property string filesTagYellow: "#E8C02A"
+    // own value: colour tag Green (not copied)
+    readonly property string filesTagGreen: "#3DA35D"
+    // own value: colour tag Blue (not copied)
+    readonly property string filesTagBlue: "#3D7FE0"
+    // own value: colour tag Purple (not copied)
+    readonly property string filesTagPurple: "#9B5DE5"
+    // own value: colour tag Gray (not copied)
+    readonly property string filesTagGray: "#8B8D93"
 
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewWindowWidth: 860
