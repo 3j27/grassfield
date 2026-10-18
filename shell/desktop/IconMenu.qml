@@ -9,6 +9,8 @@ PopupMenu {
 
     property string kind: "desktop"
     property int count: 1
+    // Shortcut hints only when the matching desktop keyboard actions are enabled (IconsView.fileKeyActions).
+    property bool showKeyHints: false
     signal choose(string action)
 
     accessibleName: qsTr("Desktop menu")
@@ -18,12 +20,12 @@ PopupMenu {
         {
             id: "open",
             text: qsTr("Open"),
-            shortcut: "Ctrl+O"
+            shortcut: showKeyHints ? "Ctrl+O" : ""
         },
         {
             id: "rename",
             text: qsTr("Rename"),
-            shortcut: "Return",
+            shortcut: showKeyHints ? "Return" : "",
             enabled: count === 1
         },
         {
@@ -36,7 +38,7 @@ PopupMenu {
         {
             id: "trash",
             text: qsTr("Move to Trash"),
-            shortcut: "Ctrl+Backspace",
+            shortcut: showKeyHints ? "Ctrl+Backspace" : "",
             destructive: true
         }
     ] : [

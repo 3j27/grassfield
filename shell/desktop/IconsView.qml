@@ -354,6 +354,11 @@ FocusScope {
     // ---- keyboard --------------------------------------------------------------------------------
 
     // Active only while the desktop surface holds the keyboard (keysActive).
+    // Keyboard actions that change or open files (Return/F2 rename, Ctrl+O, Ctrl+Backspace) stay off until the
+    // compositor enforces the desktop focus policy (ADR-0012, "desktop-focus" capability): the review of 354cf71 showed
+    // the desktop can keep the keyboard after a click on Hyprland's active window, which the shell cannot observe.
+    // Arrows, Ctrl+A, Space (Glance) and Esc only change the selection or a preview.
+    readonly property bool fileKeyActions: false
     Keys.enabled: root.keysActive
     Keys.onPressed: event => {
         if (root.renaming !== "")
@@ -377,12 +382,12 @@ FocusScope {
         if (dir !== "") {
             root.selectOnly(Logic.navigate(root.lay, root.current, dir));
             event.accepted = true;
-        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !ctrl) {
+        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !ctrl && root.fileKeyActions) {
             // Return renames the selected file (macOS); opening is Ctrl+O or a double click.
             if (root.selectedNames.length === 1)
                 root.beginRename(root.selectedNames[0]);
             event.accepted = true;
-        } else if (ctrl && event.key === Qt.Key_O) {
+        } else if (ctrl && event.key === Qt.Key_O && root.fileKeyActions) {
             root.openNames(root.selectedNames);
             event.accepted = true;
         } else if (event.key === Qt.Key_Space && !ctrl) {
@@ -390,11 +395,11 @@ FocusScope {
             if (root.selectedPaths.length > 0)
                 GlanceApp.toggle(root.selectedPaths);
             event.accepted = true;
-        } else if (event.key === Qt.Key_F2) {
+        } else if (event.key === Qt.Key_F2 && root.fileKeyActions) {
             if (root.selectedNames.length === 1)
                 root.beginRename(root.selectedNames[0]);
             event.accepted = true;
-        } else if (ctrl && event.key === Qt.Key_Backspace) {
+        } else if (ctrl && event.key === Qt.Key_Backspace && root.fileKeyActions) {
             if (root.selectedPaths.length > 0)
                 files.trash(root.selectedPaths);
             event.accepted = true;
@@ -578,6 +583,7 @@ FocusScope {
             active: root.menuKind !== ""
             sourceComponent: IconMenu {
                 kind: root.menuKind
+                showKeyHints: root.fileKeyActions
                 count: root.selectedNames.length
                 onChoose: action => root.applyMenu(action)
                 onCloseRequested: root.closeMenu("esc")
