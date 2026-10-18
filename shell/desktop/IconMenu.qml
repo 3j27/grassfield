@@ -9,27 +9,21 @@ PopupMenu {
 
     property string kind: "desktop"
     property int count: 1
-    // Shortcut hints are shown only for actions that work: the desktop keyboard actions (F2,
-    // Ctrl+Backspace) are off in keyboard safe mode.
-    property bool shortcutsShown: false
-
     signal choose(string action)
 
     accessibleName: qsTr("Desktop menu")
     currentIndex: 0
 
-    // The menu window holds the keyboard while it is open: the menu takes the active focus.
-    Component.onCompleted: forceActiveFocus()
-
     model: kind === "icon" ? [
         {
             id: "open",
-            text: qsTr("Open")
+            text: qsTr("Open"),
+            shortcut: "Ctrl+O"
         },
         {
             id: "rename",
             text: qsTr("Rename"),
-            shortcut: shortcutsShown ? "F2" : "",
+            shortcut: "Return",
             enabled: count === 1
         },
         {
@@ -42,7 +36,7 @@ PopupMenu {
         {
             id: "trash",
             text: qsTr("Move to Trash"),
-            shortcut: shortcutsShown ? "Ctrl+Backspace" : "",
+            shortcut: "Ctrl+Backspace",
             destructive: true
         }
     ] : [

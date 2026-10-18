@@ -33,6 +33,7 @@ QtObject {
         c.text = m;
         c.textSecondary = m;
         c.accentText = m;
+        c.fieldText = m;
         return c;
     }
 

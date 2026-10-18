@@ -14,6 +14,7 @@ sRGB, as Qt does. Backdrops:
   accent         the solid accent colour
   apps           black dim (apps.backdropOpacity, apps.backdropOpacityOpaque at t = 0) over the wallpaper
   apps-field     apps + the Apps search field fill
+  rename-field   colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper (the inline rename field)
   desktop-label  the label shadow colour at its core alpha (desktopIcon.labelShadowOpacity) over the wallpaper: text against the shadow,
                  conservatively taken as fully opaque behind the glyph
 The role table is cross-checked against the QML: a new secondary-text, text-alpha, text-opacity or danger-colour use without a role fails.
@@ -107,6 +108,8 @@ def backdrops(tok, role, appearance, t, wallpaper):
         if kind == "apps-field":
             base = over(tok.color("darkColors", appearance, "shadow"), tok.path("apps.searchFillOpacity"), base)
         return [base]
+    if kind == "rename-field":
+        return [over(tok.color("colors", appearance, "fieldFill"), tok.path("desktopIcon.renameFillOpacity"), wallpaper)]
     if kind == "desktop-label":
         return [over(tok.color("darkColors", appearance, "shadow"), tok.path("desktopIcon.labelShadowOpacity"), wallpaper)]
     raise ValueError("unknown backdrop " + kind)
@@ -278,7 +281,7 @@ class ContrastTokens(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for r in self.roles:
             self.assertIn(r["kind"], THRESHOLD)
-            self.assertIn(r["backdrop"], ("material", "accent", "apps", "apps-field", "desktop-label"))
+            self.assertIn(r["backdrop"], ("material", "accent", "apps", "apps-field", "rename-field", "desktop-label"))
             self.assertRegex(r["fg"], r"^(colors|darkColors)\.\w+$")
 
     def test_desktop_label_survives_white_and_black(self):

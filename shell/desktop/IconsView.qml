@@ -16,25 +16,12 @@ import "IconsLogic.js" as Logic
 FocusScope {
     id: root
 
-    // Screen of the hosting window (the context menu window opens there).
+    // Screen and window of the hosting surface (the context menu is a PopupWindow anchored to it).
     required property ShellScreen screen
-    // KEYBOARD SAFE MODE (docs/specs/desktop.md, "Keyboard safe mode (2026-10-17)"): the desktop surface
-    // never holds the keyboard on its own, so none of the desktop keyboard actions below (arrows, Return,
-    // Space, F2, Ctrl+A, Ctrl+Backspace, Esc) can run. Off until the macOS-model redesign; the pointer
-    // (selection, double click, drag and drop, context menu) is unaffected. Setting it true alone
-    // does nothing: the host would also have to give the surface the keyboard.
-    readonly property bool desktopKeyboardNav: false
-    // The host's keyboard state machine (KeyboardFocus.js): the menu window stays mapped / Exclusive
-    // beyond the menu itself during the hand-off to the rename field.
-    property bool kbMenuMapped: false
-    property bool kbMenuHoldsKeys: false
-    // The click catchers of the other outputs are up (DesktopIcons.qml): the menu window may take the keyboard.
-    property bool kbGate: true
-    // A click catcher of another output has the keyboard (the pointer is on that output): a rename
-    // does not end for that, it only stops receiving keys until the pointer is back.
-    property bool kbCatcherHasKeys: false
-    // New Folder was chosen and its rename field is not open yet: the menu window keeps the keyboard.
-    property bool awaitingFolder: false
+    required property var hostWindow
+    // The desktop surface holds the keyboard (KeyboardFocus.js "held"): the desktop keyboard actions below
+    // (arrows, Return, Ctrl+O, Ctrl+Backspace, Ctrl+A, Space, Esc) run only then.
+    property bool keysActive: false
     // An icon drag (real drag-and-drop) is in progress.
     property bool dragging: false
 
@@ -42,6 +29,8 @@ FocusScope {
     property var selected: ({})
     property string current: ""
     property string renaming: ""
+    // The text typed in the rename field so far.
+    property string renameDraft: ""
     property string renameError: ""
     // Rubber band in item coordinates, or null.
     property var band: null
@@ -87,7 +76,7 @@ FocusScope {
     }
 
     // Keyboard focus events for the host's state machine (KeyboardFocus.js): {type: "menuOpened"},
-    // {type: "menuClosed"}, {type: "renameOpened"}, {type: "renameClosed"}.
+    // {type: "menuClosed", how: "esc" | "item"}.
     signal focusEvent(var event)
 
     // Dedicated key sink: the focus item of this scope whenever no rename field is open, so that a
@@ -164,34 +153,43 @@ FocusScope {
     function endRename(): void {
         renaming = "";
         renameError = "";
+        renameDraft = "";
         restoreFocus();
-        focusEvent({
-            type: "renameClosed"
-        });
     }
 
-    // The rename field lost the keyboard. Hyprland gives the keyboard to a click catcher while the pointer is on
-    // another output: that is not the end of the rename. The check is deferred so that the catcher's
-    // activation, delivered right after the desktop's deactivation, is seen.
+    // Commits the rename field. A refused name keeps the field open with the reason, unless `endOnError`
+    // (the field lost the keyboard and cannot stay open): then the rename is cancelled.
+    function commitRename(name: string, text: string, endOnError: bool): void {
+        if (root.renaming !== name)
+            return;
+        const why = files.rename(name, text);
+        if (why === "" || why === "same") {
+            root.endRename();
+            root.selectOnly(why === "" ? text : name);
+        } else if (endOnError) {
+            root.endRename();
+        } else {
+            root.renameError = why;
+        }
+    }
+
+    // The rename field lost the keyboard (a click elsewhere, the pointer left for a window): commit what was typed,
+    // as macOS does. Deferred one turn so that a rename ended by the same event is not committed twice.
     function renameFocusLost(name: string): void {
         Qt.callLater(() => {
-            if (root.renaming === name && !root.kbCatcherHasKeys)
-                root.endRename();
+            if (root.renaming === name)
+                root.commitRename(name, root.renameDraft, true);
         });
     }
 
-    // Opens the rename field: the rename surface takes the keyboard (the host's state machine; from the
-    // menu, before the menu window lets go of it).
+    // Opens the rename field of one icon.
     function beginRename(name: string): void {
         if (name === "" || lay[name] === undefined)
             return;
-        awaitingFolder = false;
         selectOnly(name);
         renameError = "";
+        renameDraft = name;
         renaming = name;
-        focusEvent({
-            type: "renameOpened"
-        });
     }
 
     function openNames(names: var): void {
@@ -199,62 +197,44 @@ FocusScope {
             files.open(n);
     }
 
+    // Context menu: a PopupWindow anchored to the desktop surface with a grab (ADR-0012). The compositor
+    // dismisses it on a click elsewhere and swallows that click.
     readonly property bool menuOpen: menuKind !== ""
 
-    onMenuOpenChanged: {
-        if (menuOpen)
-            focusEvent({
-                type: "menuOpened"
-            });
+    function openMenu(kind: string, x: real, y: real): void {
+        menuAt = Qt.point(x, y);
+        menuKind = kind;
+        menuPopup.visible = true;
+        focusEvent({
+            type: "menuOpened"
+        });
     }
 
-    // Closes the menu: the menu window lets go of the keyboard and nobody re-takes it (a no-op for the
-    // state machine when the menu already handed it to the rename field).
-    function endMenu(): void {
-        if (menuOpen || awaitingFolder)
-            focusEvent({
-                type: "menuClosed"
-            });
-        awaitingFolder = false;
+    // Closes the menu on the user's action ("esc" or "item"): the keyboard is back on the desktop.
+    function closeMenu(how: string): void {
+        if (!menuOpen)
+            return;
         menuKind = "";
-    }
-
-    // Layer state reaches the compositor with the next surface commit: render the menu window now.
-    function commitMenu(): void {
-        const w = menuLoader.Window.window;
-        if (w)
-            w.update();
-    }
-
-    function closeMenu(): void {
-        endMenu();
-        restoreFocus();
+        menuPopup.visible = false;
+        focusEvent({
+            type: "menuClosed",
+            how: how
+        });
     }
 
     function applyMenu(action: string): void {
         const names = selectedNames;
         const paths = selectedPaths;
         const kind = menuKind;
-        restoreFocus();
+        closeMenu("item");
         if (kind === "desktop") {
-            if (action === "newFolder") {
-                // The menu window keeps the keyboard until the new folder's rename field takes it.
-                awaitingFolder = true;
-                menuKind = "";
+            if (action === "newFolder")
                 files.newFolder();
-            } else {
-                endMenu();
-            }
             return;
         }
-        if (action === "rename" && names.length === 1) {
-            // The rename surface takes the keyboard before the menu window releases it.
+        if (action === "rename" && names.length === 1)
             beginRename(names[0]);
-            menuKind = "";
-            return;
-        }
-        endMenu();
-        if (action === "open")
+        else if (action === "open")
             openNames(names);
         else if (action === "copy")
             files.copy(paths);
@@ -262,45 +242,17 @@ FocusScope {
             files.trash(paths);
     }
 
-    // While a menu or a rename is active, a press on the desktop surface only cancels it: it never
-    // selects, opens or drags an icon, nor starts a rubber band. The press may come through a window
-    // that covers an icon (an Exclusive surface takes the pointer), so it says nothing about the desktop.
-    // `swallow` keeps the rest of that gesture (drag, release) inert until the pointer is up.
-    property bool swallow: false
-
-    // Returns whether the press was swallowed (a menu or rename was active, now cancelled).
-    function swallowPress(): bool {
-        if (!cancelInteraction())
-            return false;
-        swallow = true;
-        return true;
-    }
-
-    // Ends the open menu or the active rename (never commits, never renames, never trashes). Called by a
-    // press on the desktop surface and by the click catchers of the other outputs (DesktopIcons.qml).
-    // Returns whether there was anything to cancel.
-    function cancelInteraction(): bool {
-        const active = menuOpen || awaitingFolder || renaming !== "";
-        if (menuOpen || awaitingFolder)
-            closeMenu();
+    // A press elsewhere ends the rename: it commits (macOS). The press goes on with its own action.
+    function commitRenameOnPress(): void {
         if (renaming !== "")
-            endRename();
-        return active;
-    }
-
-    // The pointer is up again: the next press counts.
-    PointHandler {
-        acceptedButtons: Qt.AllButtons
-        onActiveChanged: if (!active)
-            root.swallow = false
+            commitRename(renaming, renameDraft, true);
     }
 
     // Select by press: Ctrl toggles, Shift adds, otherwise the icon alone (kept as is when it is
     // already part of the selection, so that a drag carries the whole selection).
     function press(name: string, modifiers: int, right: bool): void {
         root.restoreFocus();
-        if (swallowPress())
-            return;
+        commitRenameOnPress();
         if (modifiers & Qt.ControlModifier) {
             const next = Object.assign({}, selected);
             if (next[name])
@@ -401,17 +353,12 @@ FocusScope {
 
     // ---- keyboard --------------------------------------------------------------------------------
 
-    // Safe mode: off (Keys.enabled), see desktopKeyboardNav. The surface has no keyboard anyway.
-    // Gated off, kept for the macOS-model redesign: do not delete (Space / Glance, F2, Ctrl+Backspace ...).
-    Keys.enabled: root.desktopKeyboardNav
+    // Active only while the desktop surface holds the keyboard (keysActive).
+    Keys.enabled: root.keysActive
     Keys.onPressed: event => {
-        if (root.menuOpen) {
-            event.accepted = true;
-            return;
-        }
         if (root.renaming !== "")
             return;
-        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
+        const ctrl = (event.modifiers & (Qt.ControlModifier | Qt.MetaModifier)) !== 0;
         let dir = "";
         switch (event.key) {
         case Qt.Key_Left:
@@ -430,14 +377,18 @@ FocusScope {
         if (dir !== "") {
             root.selectOnly(Logic.navigate(root.lay, root.current, dir));
             event.accepted = true;
-        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !ctrl) {
+            // Return renames the selected file (macOS); opening is Ctrl+O or a double click.
+            if (root.selectedNames.length === 1)
+                root.beginRename(root.selectedNames[0]);
+            event.accepted = true;
+        } else if (ctrl && event.key === Qt.Key_O) {
             root.openNames(root.selectedNames);
             event.accepted = true;
         } else if (event.key === Qt.Key_Space && !ctrl) {
             // Glance at the selected files (Space again closes it; folders are skipped by Glance itself).
-            if (root.selectedPaths.length > 0) {
+            if (root.selectedPaths.length > 0)
                 GlanceApp.toggle(root.selectedPaths);
-            }
             event.accepted = true;
         } else if (event.key === Qt.Key_F2) {
             if (root.selectedNames.length === 1)
@@ -464,22 +415,11 @@ FocusScope {
 
         // New Folder (a user action) opens the rename field of the folder it created.
         function onRenameWanted(name: string): void {
-            Qt.callLater(() => {
-                root.beginRename(name);
-                if (root.renaming === "" && root.awaitingFolder)
-                    root.endMenu();
-            });
-        }
-
-        // The folder could not be created: the menu window lets go of the keyboard.
-        function onNewFolderFailed(): void {
-            if (root.awaitingFolder)
-                root.endMenu();
+            Qt.callLater(() => root.beginRename(name));
         }
 
         // The file system refused an accepted rename: reopen the field with the reason inline.
         function onRenameFailed(name: string, reason: string): void {
-            root.restoreFocus();
             root.beginRename(name);
             root.renameError = "failed";
         }
@@ -501,12 +441,10 @@ FocusScope {
                 return;
             }
             root.restoreFocus();
-            if (root.swallowPress())
-                return;
+            root.commitRenameOnPress();
             if (mouse.button === Qt.RightButton) {
                 root.clearSelection();
-                root.menuAt = root.mapToItem(null, mouse.x, mouse.y);
-                root.menuKind = "desktop";
+                root.openMenu("desktop", mouse.x, mouse.y);
                 return;
             }
             x0 = mouse.x;
@@ -517,7 +455,7 @@ FocusScope {
                 root.clearSelection();
         }
         onPositionChanged: mouse => {
-            if (!pressed || mouse.buttons !== Qt.LeftButton || root.swallow)
+            if (!pressed || mouse.buttons !== Qt.LeftButton)
                 return;
             if (!banding && Math.abs(mouse.x - x0) + Math.abs(mouse.y - y0) < Tokens.desktopIconDragThreshold)
                 return;
@@ -527,12 +465,10 @@ FocusScope {
         onReleased: {
             banding = false;
             root.band = null;
-            root.swallow = false;
         }
         onCanceled: {
             banding = false;
             root.band = null;
-            root.swallow = false;
         }
     }
 
@@ -565,30 +501,13 @@ FocusScope {
             renameError: root.renameError
             dragPaths: root.selectedPaths
             dragNames: root.selectedNames
-            blocked: root.swallow
             onPressedIcon: (modifiers, right) => root.press(modelData.name, modifiers, right)
             onTappedIcon: modifiers => root.tap(modelData.name, modifiers)
-            onDragActiveChanged: {
-                root.dragging = icon.dragActive;
-                if (!icon.dragActive)
-                    root.swallow = false;
-            }
+            onDragActiveChanged: root.dragging = icon.dragActive
             onActivated: root.openNames([modelData.name])
-            onMenuRequested: (px, py) => {
-                root.menuAt = Qt.point(px, py);
-                root.menuKind = "icon";
-            }
-            onRenameAccepted: text => {
-                if (root.renaming !== modelData.name)
-                    return;
-                const why = files.rename(modelData.name, text);
-                if (why === "" || why === "same") {
-                    root.endRename();
-                    root.selectOnly(why === "" ? text : modelData.name);
-                }
-                else
-                    root.renameError = why;
-            }
+            onMenuRequested: (px, py) => root.openMenu("icon", px, py)
+            onRenameEdited: text => root.renameDraft = text
+            onRenameAccepted: text => root.commitRename(modelData.name, text, false)
             onRenameCancelled: root.endRename()
             onRenameFocusLost: root.renameFocusLost(modelData.name)
         }
@@ -607,49 +526,60 @@ FocusScope {
         border.color: Appearance.withAlpha(Appearance.colors.accent, Tokens.desktopIconSelectionOpacity)
     }
 
-    // Context menu window: an Overlay window (the desktop surface cannot show a menu above windows);
-    // clicking anywhere else dismisses it. While the menu is open this window holds the keyboard
-    // (Exclusive) and the desktop is None. On close it goes back to None and unmaps, and the desktop does
-    // not take the keyboard: Hyprland decides (the last window). Handing over to a rename field, the
-    // rename surface is Exclusive first, then this window lets go and unmaps (KeyboardFocus.js, hand-off).
+    // Context menu: a PopupWindow with a grab, anchored to the desktop surface. It draws above windows and gets
+    // the keyboard; Esc and an item hand it back to the desktop, a click elsewhere dismisses it (swallowed).
     // qmllint disable uncreatable-type
-    PanelWindow {
+    PopupWindow {
         // qmllint enable uncreatable-type
-        id: menuWin
+        id: menuPopup
 
-        screen: root.screen
-        visible: (root.menuKind !== "" || root.kbMenuMapped) && root.kbGate
-        anchors {
-            top: true
-            bottom: true
-            left: true
-            right: true
-        }
-        exclusionMode: ExclusionMode.Ignore
+        // qmllint disable missing-type
+        anchor.window: root.hostWindow
+        anchor.rect: Qt.rect(root.menuAt.x, root.menuAt.y, 1, 1)
+        anchor.edges: Edges.Top | Edges.Left
+        anchor.gravity: Edges.Bottom | Edges.Right
+        anchor.adjustment: PopupAdjustment.All
+        // qmllint enable missing-type
+        implicitWidth: (menuLoader.item as Item)?.width ?? 1
+        implicitHeight: (menuLoader.item as Item)?.height ?? 1
         color: "transparent"
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: (root.menuKind !== "" || root.kbMenuHoldsKeys) && root.kbGate ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-        WlrLayershell.onKeyboardFocusChanged: root.commitMenu()
-        WlrLayershell.namespace: "grassfield-icons-menu"
+        grabFocus: true
+        // qmllint disable missing-type
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && visible ? menuBlur : null
+        // qmllint enable missing-type
 
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-            onPressed: root.closeMenu()
+        // Dismissed by the compositor (a click elsewhere): the grab ended, the click was swallowed.
+        onVisibleChanged: {
+            if (visible) {
+                (menuLoader.item as Item)?.forceActiveFocus();
+                return;
+            }
+            if (root.menuOpen) {
+                root.menuKind = "";
+                root.focusEvent({
+                    type: "menuClosed",
+                    how: "outside"
+                });
+            }
+        }
+
+        Region {
+            id: menuBlur
+            item: menuLoader
+            radius: Tokens.radiusMenu
         }
 
         Loader {
             id: menuLoader
             active: root.menuKind !== ""
-            x: Math.max(Tokens.spacingSm, Math.min(root.menuAt.x, menuWin.width - width - Tokens.spacingSm))
-            y: Math.max(Tokens.spacingSm, Math.min(root.menuAt.y, menuWin.height - height - Tokens.spacingSm))
             sourceComponent: IconMenu {
                 kind: root.menuKind
                 count: root.selectedNames.length
-                shortcutsShown: root.desktopKeyboardNav
                 onChoose: action => root.applyMenu(action)
-                onCloseRequested: root.closeMenu()
+                onCloseRequested: root.closeMenu("esc")
             }
+            onLoaded: (item as Item).forceActiveFocus()
         }
     }
+
 }
