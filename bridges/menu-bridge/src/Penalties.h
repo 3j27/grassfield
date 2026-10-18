@@ -4,23 +4,26 @@
 // state that survives a bridge restart (ADR-0008, docs/specs/menu-bridge.md MB14).
 //
 // Attribution is correct where possible and never blames an innocent application:
-//  - A crash is blamed on an identity ONLY when the previous run died with exactly one outbound call in flight, to
-//    one identity, and that call was fresh (kFreshCallMs). Anything else (several calls, none, a stale call: the
-//    crash came from unsolicited traffic or from someone else's message) is an "unattributed crash": it penalises
-//    nobody, it is only counted. kMaxUnattributed of them within kUnattributedWindowSec make the bridge give up
-//    (it stops owning the registrar, the shell shows T0 menus).
+//  - EVERY crash counts toward the degradation budget, blamed or not: kMaxCrashes within any sliding window of
+//    kCrashWindowSec make the bridge give up (it stops owning the registrar, the shell shows T0 menus).
+//  - A crash is additionally blamed on an identity ONLY when the previous run died with exactly one outbound call in
+//    flight, to one identity, and that call was fresh (kFreshCallMs). Anything else (several calls, none, a stale
+//    call: the crash came from unsolicited traffic or from someone else's message) is "unattributed": it only
+//    counts, it penalises nobody. Blame is a per-identity refusal on top of the count.
 //  - An application is identified by what the bridge observed after the pid check: the systemd app scope of the pid
 //    (instance suffix stripped, flatpak id included), the resolved /proc/<pid>/exe and, for interpreters, the script.
-//    An unreadable exe (non-dumpable process, other user) puts the peer into ONE shared bucket "unknown", which is
-//    refused only for kUnknownDenySec and never doubles, so innocents behind it recover. A pid is never a key.
+//    An unreadable exe (non-dumpable process, other user) or an interpreter command line the bridge cannot parse with
+//    certainty puts the peer into ONE shared bucket "unknown", which is refused only for kUnknownDenySec and never
+//    doubles, so innocents behind it recover. A pid is never a key.
 //
 // Offences: LayoutFailed (short back-off, 2^n s up to 64 s), Oversized and Crash (blamed as above): refused for
 // 15 min, doubling per strike up to 6 h. A clean exit does not clear the doubling inside the decay window: an entry is
-// dropped after 24 h without a new strike. Refused entries are never evicted before they expire; idle ones (not
-// refused) are bounded separately (least recently used first out).
+// dropped after 24 h without a new strike. Refused entries are not evicted by idle churn, but at most kMaxRefused are
+// kept: past that the refusal closest to its expiry goes (capRefused). Idle entries (not refused) are bounded
+// separately (least recently used first out).
 //
 // The state file `<socket>.state` mirrors whether the bridge is running ("run"), the calls in flight with their age
-// ("inflight"), the unattributed crash count and the refusals ("deny"). It lives in the socket's directory (mode 0700,
+// ("inflight"), the crash times ("crash") and the refusals ("deny"). It lives in the socket's directory (mode 0700,
 // owned by the user): only code running as the same user can write it, which can equally kill the bridge or pass the
 // pid check for its own processes. It is written atomically (openat O_EXCL|O_NOFOLLOW temp file + renameat in the
 // directory), read without following symlinks, size-bounded and fully validated.
@@ -50,9 +53,10 @@ namespace gf::menubridge {
         // when someone else's message kills the bridge is not blamed.
         inline constexpr qint64    kFreshCallMs    = 1000;
         inline constexpr int       kHeartbeatMs    = 250;
-        // Unattributed crashes (no single fresh call in flight) that make the bridge give up, and their window.
-        inline constexpr int       kMaxUnattributed       = 5;
-        inline constexpr qint64    kUnattributedWindowSec = 60 * 60;
+        // Crashes (blamed or not) that make the bridge give up within any sliding window; times kept in the state file.
+        inline constexpr int       kMaxCrashes     = 5;
+        inline constexpr qint64    kCrashWindowSec = 60 * 60;
+        inline constexpr int       kMaxCrashesKept = 64;
         // An application that kills the bridge with a fresh single call costs one restart: the next run refuses it.
         inline constexpr int       kRestartsBeforeRefusal = 1;
     } // namespace penalty
@@ -65,6 +69,9 @@ namespace gf::menubridge {
 
     // The one shared identity of every peer whose executable cannot be read.
     inline const QString kUnknownIdentity = QStringLiteral("unknown");
+    // scriptOf's answer for interpreter options it cannot tell from the script (never a real script: it has a
+    // control character, which real ones are stripped of). identityFrom turns it into kUnknownIdentity.
+    inline const QString kScriptUnknown = QStringLiteral("\x01");
 
     // What the bridge can read about a peer process.
     struct PeerFacts {
@@ -75,12 +82,15 @@ namespace gf::menubridge {
     // systemd app scope of a /proc/<pid>/cgroup text with the instance stripped ("app-flatpak-org.foo.Bar"), empty
     // when the process is not in an app scope or service.
     QString appScopeOf(const QString& cgroupText);
-    // Script path or module of an interpreter's command line ("python3 -I x.py" -> "x.py"), empty otherwise.
+    // Script path or module of an interpreter's command line ("python3 -I x.py" -> "x.py"), empty otherwise,
+    // kScriptUnknown when an option before the script is not known (it may take a value).
     QString scriptOf(const QString& exe, const QByteArray& cmdline);
     // "id:scope=<scope>|exe=<path>|script=<script>" (scope and script only when known), or kUnknownIdentity.
     QString identityFrom(const PeerFacts& facts);
     // Reads /proc/<pid>/{exe,cgroup,cmdline}: never a pid-based key.
     QString appIdentity(qint64 pid);
+    // An identity for logs only: systemd's "\x2d" escape shown as '-'. The key itself stays canonical.
+    QString displayIdentity(const QString& id);
     // True for strings identityFrom can produce: kUnknownIdentity, or "id:" + a part "exe=/…" (bounded, no control chars).
     bool    validIdentity(const QString& id);
 
@@ -95,7 +105,7 @@ namespace gf::menubridge {
     struct CrashOutcome {
         bool    crashed = false; // the previous run did not stop cleanly
         QString culprit;         // the identity blamed (a single fresh call in flight), empty when unattributed
-        int     unattributed = 0; // unattributed crashes within the window, including this one
+        int     crashes = 0;     // crashes (blamed or not) within the window, including this one
     };
 
     class PenaltyBook {
@@ -118,18 +128,18 @@ namespace gf::menubridge {
         }
         qsizetype refusedCount() const;
 
-        // Unattributed crashes within the window (decays), and the verdict "give up".
-        int  unattributed() const;
+        // Crashes within the sliding window (decays), and the verdict "give up".
+        int  crashes() const;
         bool degraded() const {
-            return unattributed() >= penalty::kMaxUnattributed;
+            return crashes() >= penalty::kMaxCrashes;
         }
-        void recordUnattributed();
+        void recordCrash();
 
-        // "grassfield-menu-bridge-state 2" text: header, boot id, "run 0|1", the calls in flight, the unattributed
-        // count and one "deny" per active refusal.
+        // "grassfield-menu-bridge-state 3" text: header, boot id, "run 0|1", the calls in flight, one "crash" per
+        // crash in the window and one "deny" per active refusal.
         QByteArray serialize(const QList<InflightCall>& inflight, const QString& boot, bool running) const;
         // Validates `data` and merges it. When the previous run was still "running" it is a crash: blamed on the
-        // single fresh call in flight, if there is exactly one, otherwise counted as unattributed (*out). False
+        // single fresh call in flight, if there is exactly one; it is counted either way (*out). False
         // (nothing merged, *why set) for a malformed file or one written in another boot.
         bool load(const QByteArray& data, const QString& boot, QString* why, CrashOutcome* out);
 
@@ -150,8 +160,7 @@ namespace gf::menubridge {
         std::function<qint64()> m_clock;
         QHash<QString, Entry>   m_entries;
         quint64                 m_touch          = 0;
-        int                     m_unattributed   = 0;
-        qint64                  m_unattributedAt = 0;
+        QList<qint64>           m_crashes;
     };
 
     // The state file. read: opens with O_NOFOLLOW, requires a regular file owned by this user, at most

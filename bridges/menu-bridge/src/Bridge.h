@@ -59,8 +59,8 @@ namespace gf::menubridge {
         // Hostile or broken applications (Penalties.h): refusals are keyed by the application's identity (app scope,
         // executable, script). Every call sent to an application is recorded as in flight in the state file until its
         // reply was handled (refreshed every penalty::kHeartbeatMs while one is open). A restarted bridge blames an
-        // application only for ONE fresh call in flight at the crash; any other crash is unattributed and only
-        // counted: after penalty::kMaxUnattributed of them the bridge gives up (degraded: no registrar, no menus).
+        // application only for ONE fresh call in flight at the crash; every crash, blamed or not, is counted: after
+        // penalty::kMaxCrashes within penalty::kCrashWindowSec the bridge gives up (degraded: no registrar, no menus).
         void    recordFailure(const QString& window, const QString& code);
         void    beginCall(const QString& id);
         void    endCall(const QString& id, int n = 1);

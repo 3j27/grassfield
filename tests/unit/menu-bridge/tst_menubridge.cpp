@@ -618,6 +618,16 @@ TEST(Identity, AppScopeOfCgroupSamples) {
     EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/"))), QString());
     EXPECT_EQ(appScopeOf(QString()), QString());
     EXPECT_EQ(appScopeOf(QStringLiteral("garbage")), QString());
+    // uwsm: app-<launcher>-<app>-<8 hex>.scope, '-' of the app name escaped as \x2d (as seen in /proc/<pid>/cgroup)
+    const QString uwsm = QStringLiteral("/user.slice/user-1000.slice/user@1000.service/app.slice/app-Hyprland-gtk\\x2dlaunch-2616d5ca.scope");
+    EXPECT_EQ(appScopeOf(cgroupOf(uwsm)), QStringLiteral("app-Hyprland-gtk\\x2dlaunch")) << "the canonical key keeps the escape";
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-Hyprland-gtk\\x2dlaunch-9f00ba17.scope"))), appScopeOf(cgroupOf(uwsm))) << "a relaunch is the same identity";
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-Hyprland-foot-0a1b2c3d.scope"))), QStringLiteral("app-Hyprland-foot"));
+    // uwsm with a numeric instance, and the other launchers' numeric suffixes
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-Hyprland-firefox-12345678.scope"))), QStringLiteral("app-Hyprland-firefox"));
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-kde-org.kde.dolphin-8123.scope"))), QStringLiteral("app-kde-org.kde.dolphin"));
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-gnome-org.gnome.Nautilus-3456.scope"))), QStringLiteral("app-gnome-org.gnome.Nautilus"));
+    EXPECT_EQ(displayIdentity(QStringLiteral("id:scope=app-Hyprland-gtk\\x2dlaunch|exe=/usr/bin/x")), QStringLiteral("id:scope=app-Hyprland-gtk-launch|exe=/usr/bin/x"));
     // a unit name carrying a separator or control character is not trusted
     EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-a|b-1.scope"))), QString());
 }
@@ -634,6 +644,17 @@ TEST(Identity, ScriptOfInterpreters) {
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/bash"), cmd({"bash", "/opt/run.sh"})), QStringLiteral("/opt/run.sh"));
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/node"), cmd({"node", "--inspect", "server.js"})), QStringLiteral("server.js"));
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/lib/jvm/default/bin/java"), cmd({"java", "-jar", "app.jar"})), QStringLiteral("app.jar"));
+    // an option's value is never the script
+    EXPECT_NE(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-W", "/usr/bin/victim-app", "evil.py"})), QStringLiteral("/usr/bin/victim-app"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-W", "/usr/bin/victim-app", "evil.py"})), QStringLiteral("evil.py"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-X", "dev", "a.py"})), QStringLiteral("a.py"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-X", "dev", "b.py"})), QStringLiteral("b.py"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/node"), cmd({"node", "-r", "preload.js", "server.js"})), QStringLiteral("server.js"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "--", "x.py"})), QStringLiteral("x.py"));
+    // an option we do not know might take a value: the shared bucket, not a guess
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "--made-up", "/usr/bin/victim-app", "evil.py"})), kScriptUnknown);
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/perl"), cmd({"perl", "-Z", "a.pl"})), kScriptUnknown);
+    EXPECT_EQ(identityFrom({QString(), QStringLiteral("/usr/bin/python3"), cmd({"python3", "--made-up", "a", "b.py"})}), kUnknownIdentity);
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-c", "print(1)"})), QString()) << "inline code is not a script identity";
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), QByteArray()), QString()) << "unreadable cmdline";
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/foot"), cmd({"foot", "something"})), QString()) << "not an interpreter";
@@ -730,7 +751,7 @@ TEST(Penalties, UnknownBucketIsRefusedBrieflyNeverDoublesNeverPermanent) {
     EXPECT_FALSE(b.refused(kUnknownIdentity, &why)) << "ten strikes, still only the short refusal";
     // A forged state file cannot make the bucket long-refused.
     PenaltyBook forged = book(c);
-    const QByteArray data = QByteArray("grassfield-menu-bridge-state 2\nboot boot-1\nrun 0\ndeny 5 ") + QByteArray::number(c.now + penalty::kDenyMaxSec) + " 0 unknown\n";
+    const QByteArray data = QByteArray("grassfield-menu-bridge-state 3\nboot boot-1\nrun 0\ndeny 5 ") + QByteArray::number(c.now + penalty::kDenyMaxSec) + " 0 unknown\n";
     ASSERT_TRUE(forged.load(data, kBoot, &why, nullptr)) << qPrintable(why);
     EXPECT_TRUE(forged.refused(kUnknownIdentity, &why));
     c.now += penalty::kUnknownDenySec;
@@ -831,10 +852,10 @@ TEST(Attribution, ExactlyOneFreshCallIsBlamed) {
     QString          why;
     EXPECT_TRUE(out.crashed);
     EXPECT_EQ(out.culprit, kApp);
-    EXPECT_EQ(out.unattributed, 0);
+    EXPECT_EQ(out.crashes, 1) << "a blamed crash counts toward the degradation budget too";
     EXPECT_TRUE(after.refused(kApp, &why));
     EXPECT_FALSE(after.refused(kOther, &why));
-    EXPECT_EQ(after.unattributed(), 0);
+    EXPECT_EQ(after.crashes(), 1);
 }
 
 TEST(Attribution, SeveralCallsInFlightBlameNobody) {
@@ -847,7 +868,7 @@ TEST(Attribution, SeveralCallsInFlightBlameNobody) {
         const CrashOutcome out = crashOutcome(c, after, previousRun(c, calls));
         EXPECT_TRUE(out.crashed);
         EXPECT_TRUE(out.culprit.isEmpty());
-        EXPECT_EQ(out.unattributed, 1);
+        EXPECT_EQ(out.crashes, 1);
         for (const InflightCall& ic : calls)
             EXPECT_FALSE(after.refused(ic.id, &why)) << "an innocent was refused: " << qPrintable(ic.id);
     }
@@ -859,7 +880,7 @@ TEST(Attribution, NothingInFlightIsAnUnattributedCrash) {
     const CrashOutcome out   = crashOutcome(c, after, previousRun(c, {}));
     EXPECT_TRUE(out.crashed);
     EXPECT_TRUE(out.culprit.isEmpty());
-    EXPECT_EQ(after.unattributed(), 1);
+    EXPECT_EQ(after.crashes(), 1);
     EXPECT_EQ(after.refusedCount(), 0);
 }
 
@@ -871,7 +892,7 @@ TEST(Attribution, AStaleSingleCallIsNotBlamed) {
     QString            why;
     EXPECT_TRUE(out.culprit.isEmpty());
     EXPECT_FALSE(after.refused(kApp, &why));
-    EXPECT_EQ(after.unattributed(), 1);
+    EXPECT_EQ(after.crashes(), 1);
     PenaltyBook edge = book(c);
     EXPECT_EQ(crashOutcome(c, edge, previousRun(c, {{kApp, 1, penalty::kFreshCallMs}})).culprit, kApp) << "exactly at the limit is still fresh";
 }
@@ -883,30 +904,71 @@ TEST(Attribution, ACleanStopIsNoCrashAndIgnoresStaleInflightLines) {
     QString            why;
     EXPECT_FALSE(out.crashed);
     EXPECT_FALSE(after.refused(kApp, &why));
-    EXPECT_EQ(after.unattributed(), 0);
+    EXPECT_EQ(after.crashes(), 0);
 }
 
-TEST(Attribution, UnattributedCrashesAreCountedPersistedAndMakeTheBridgeGiveUp) {
+TEST(Attribution, RotatingCopiesAreBlamedAndStillDegradeTheBridge) {
+    // Each run dies with one fresh call to a new identity (a copy of the binary): every copy is refused, and the
+    // crashes still add up to the budget.
+    Clock       c;
+    QByteArray  data = previousRun(c, {{QStringLiteral("id:exe=/tmp/copy-0"), 1, 10}});
+    PenaltyBook after = book(c);
+    for (int i = 1; i <= penalty::kMaxCrashes; ++i) {
+        after = book(c);
+        crashOutcome(c, after, data);
+        EXPECT_EQ(after.crashes(), i);
+        EXPECT_EQ(after.degraded(), i >= penalty::kMaxCrashes) << i;
+        data = after.serialize({{QStringLiteral("id:exe=/tmp/copy-%1").arg(i), 1, 10}}, kBoot, true);
+        c.now += 60;
+    }
+    QString why;
+    EXPECT_TRUE(after.refused(QStringLiteral("id:exe=/tmp/copy-0"), &why));
+}
+
+TEST(Attribution, TheCrashWindowSlides) {
+    // 5 crashes spread over 59 minutes still degrade (a window that restarts at its first crash would not).
+    Clock      c;
+    QByteArray data = previousRun(c, {});
+    PenaltyBook after = book(c);
+    for (int i = 1; i <= penalty::kMaxCrashes; ++i) {
+        if (i > 1)
+            c.now += (59 * 60) / (penalty::kMaxCrashes - 1) - 1;
+        after = book(c);
+        crashOutcome(c, after, data);
+        data = after.serialize({}, kBoot, true);
+    }
+    EXPECT_TRUE(after.degraded());
+    // The first crash (at 1000) leaves the window: four are left.
+    const QByteArray stopped = after.serialize({}, kBoot, false);
+    c.now                    = 1000 + penalty::kCrashWindowSec;
+    PenaltyBook reread       = book(c);
+    QString     why;
+    ASSERT_TRUE(reread.load(stopped, kBoot, &why, nullptr)) << qPrintable(why);
+    EXPECT_FALSE(reread.degraded());
+    EXPECT_EQ(reread.crashes(), penalty::kMaxCrashes - 1);
+}
+
+TEST(Attribution, EveryCrashIsCountedPersistedAndMakesTheBridgeGiveUp) {
     Clock c;
     QByteArray data = previousRun(c, {});
-    for (int i = 1; i <= penalty::kMaxUnattributed; ++i) {
+    for (int i = 1; i <= penalty::kMaxCrashes; ++i) {
         PenaltyBook after = book(c);
         crashOutcome(c, after, data);
-        EXPECT_EQ(after.unattributed(), i);
-        EXPECT_EQ(after.degraded(), i >= penalty::kMaxUnattributed) << i;
+        EXPECT_EQ(after.crashes(), i);
+        EXPECT_EQ(after.degraded(), i >= penalty::kMaxCrashes) << i;
         data = after.serialize({}, kBoot, true); // this run crashes too, unexplained
         c.now += 30;
     }
     // The count decays after the window: a bridge that restarts much later starts fresh.
-    c.now += penalty::kUnattributedWindowSec;
+    c.now += penalty::kCrashWindowSec;
     PenaltyBook later = book(c);
     crashOutcome(c, later, data);
-    EXPECT_EQ(later.unattributed(), 1);
+    EXPECT_EQ(later.crashes(), 1);
     EXPECT_FALSE(later.degraded());
     // A clean stop keeps the count (the file still says what happened) but is no new crash.
     PenaltyBook clean = book(c);
     crashOutcome(c, clean, later.serialize({}, kBoot, false));
-    EXPECT_EQ(clean.unattributed(), 1);
+    EXPECT_EQ(clean.crashes(), 1);
 }
 
 TEST(PenaltyState, RefusalsAndStrikesSurviveARestart) {
@@ -939,7 +1001,7 @@ TEST(PenaltyState, ForgedOrDamagedContentIsRefusedWhole) {
     const QString boot = kBoot;
     const auto    valid = [&](const QByteArray& body, const char* run = "run 1\n") {
         PenaltyBook b = book(c);
-        return b.load(QByteArray("grassfield-menu-bridge-state 2\nboot boot-1\n") + run + body, boot, &why, nullptr);
+        return b.load(QByteArray("grassfield-menu-bridge-state 3\nboot boot-1\n") + run + body, boot, &why, nullptr);
     };
     EXPECT_TRUE(valid("inflight 1 5 id:exe=/usr/bin/x\n"));
     EXPECT_TRUE(valid("inflight 1 5 unknown\n"));
@@ -949,8 +1011,11 @@ TEST(PenaltyState, ForgedOrDamagedContentIsRefusedWhole) {
     EXPECT_FALSE(valid("inflight 0 5 id:exe=/x\n")) << "zero calls";
     EXPECT_FALSE(valid("inflight 1 -5 id:exe=/x\n")) << "negative age";
     EXPECT_FALSE(valid("inflight a b\n"));
-    EXPECT_FALSE(valid("unattributed 0 5\n"));
-    EXPECT_FALSE(valid("unattributed 1 99999\n")) << "in the future";
+    EXPECT_TRUE(valid("crash 5\n"));
+    EXPECT_FALSE(valid("crash -5\n"));
+    EXPECT_FALSE(valid("crash 99999\n")) << "in the future";
+    EXPECT_FALSE(valid("crash 1 2\n"));
+    EXPECT_FALSE(valid("unattributed 1 5\n")) << "the old format";
     EXPECT_FALSE(valid("deny 0 1 1 id:exe=/x\n")) << "zero strikes";
     EXPECT_FALSE(valid("deny 1 99999999999 1 id:exe=/x\n")) << "deny far in the future";
     EXPECT_FALSE(valid("deny 1 5 99999 id:exe=/x\n")) << "last strike in the future";
@@ -961,8 +1026,8 @@ TEST(PenaltyState, ForgedOrDamagedContentIsRefusedWhole) {
     {
         PenaltyBook b = book(c);
         EXPECT_FALSE(b.load("grassfield-menu-bridge-state 1\nboot boot-1\nrun 0\n", boot, &why, nullptr)) << "old format";
-        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 2\nboot other\nrun 0\n", boot, &why, nullptr)) << "another boot";
-        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 2\nboot boot-1\n", boot, &why, nullptr)) << "no run line";
+        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 3\nboot other\nrun 0\n", boot, &why, nullptr)) << "another boot";
+        EXPECT_FALSE(b.load("grassfield-menu-bridge-state 3\nboot boot-1\n", boot, &why, nullptr)) << "no run line";
         EXPECT_FALSE(b.load("", boot, &why, nullptr));
         EXPECT_EQ(b.size(), 0) << "nothing merged from a refused file";
     }
@@ -972,7 +1037,7 @@ TEST(PenaltyState, ForgedOrDamagedContentIsRefusedWhole) {
     EXPECT_FALSE(valid(many)) << "entry count is bounded";
     // One bad line among good ones: nothing at all is merged (an attacker cannot smuggle entries in).
     PenaltyBook b = book(c);
-    EXPECT_FALSE(b.load("grassfield-menu-bridge-state 2\nboot boot-1\nrun 1\ndeny 1 5000 5 id:exe=/usr/bin/x\ndeny bad\n", boot, &why, nullptr));
+    EXPECT_FALSE(b.load("grassfield-menu-bridge-state 3\nboot boot-1\nrun 1\ndeny 1 5000 5 id:exe=/usr/bin/x\ndeny bad\n", boot, &why, nullptr));
     EXPECT_FALSE(b.has(QStringLiteral("id:exe=/usr/bin/x")));
 }
 

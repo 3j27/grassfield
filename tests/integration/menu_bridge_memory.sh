@@ -24,6 +24,8 @@
 #      flight: unattributed, the application is not refused and is served again by the restarted bridge.
 #   I  a victim's slow GetLayout (reply after 2.8 s) is in flight when an attacker's 100 MB message kills the bridge:
 #      the call is not fresh, so the crash is unattributed and the VICTIM (same executable, new process) is served.
+#   J  7 rotating COPIES of a binary, each killing the bridge with its first GetLayout: every copy is blamed (one
+#      refusal each), and every crash counts too: the bridge gives up after the 5th ("gave up", degraded).
 #
 # The memory limit is emulated by a watcher (never systemd-run --user): it SIGKILLs the
 # bridge as soon as its VmHWM exceeds 200 MB (a 100 MB message peaks at ~225 MB; the real unit allows 256 MB).
@@ -223,7 +225,7 @@ for variant in symlink garbage oversized other-boot; do
   : >"$log"
   start_bridge
   check "[$variant] bridge started and ignored the file" grep -q "ignored .*bridge.sock.state" "$log"
-  check "[$variant] the file was replaced by a valid state" grep -q '^grassfield-menu-bridge-state 2$' "$state"
+  check "[$variant] the file was replaced by a valid state" grep -q '^grassfield-menu-bridge-state 3$' "$state"
   check "[$variant] it is a regular file now, not a symlink" test ! -L "$state"
   [[ $variant != symlink ]] || check "[$variant] the link's target was not written through" test "$(wc -l <"$work/target")" -eq 2
 done
@@ -278,7 +280,7 @@ grep -E "previous run died|gave up|listening" "$log" | sed 's/^/      /'
 check "the bridge was killed by every message" test "$(grep -c 'went down' "$work/g1.out")" -eq 5
 check "every crash was unattributed (no call in flight)" test "$(logcount 'unattributed crash')" -ge 5
 check "nobody was blamed or refused" test "$(logcount 'previous run died while a call to')" -eq 0 -a "$(grep -c '^deny ' "$state")" -eq 0
-check "after the cap the bridge gave up (log)" grep -q "gave up: 5 unattributed crashes" "$log"
+check "after the cap the bridge gave up (log)" grep -q "gave up: 5 crashes" "$log"
 fixture g2 --items 3 --label-kb 0 --windows 1 --gap-ms 1500 --service org.grassfield.OtherG
 sed 's/^/    /' "$work/g2.out"
 check "the shell is told: state degraded, registrar false" grep -q 'status {"registrar":false,"state":"degraded"' "$work/g2.out"
@@ -329,6 +331,27 @@ check "the bridge was killed while the victim's call was open" test "$(wc -l <"$
 check "the victim's GetLayout reached it" test "$(getlayouts i1)" -ge 1
 check "the crash was unattributed (the call was not fresh), nobody blamed" test "$(logcount 'unattributed crash')" -ge 1 -a "$(logcount 'previous run died while a call to')" -eq 0
 check "the victim (same executable, new process) is served, not refused" test "$(replies i3 'reply menu')" -ge 1 -a "$(replies i3 backoff)" -eq 0
+
+say ""
+say "[J] rotating copies of a crashing binary: every copy is blamed, every crash counts, the bridge ends degraded"
+: >"$work/watcher.log"
+fresh_bridge || die "bridge did not restart"
+supervise
+copies=7
+for n in $(seq 1 $copies); do
+  cp "$dev/build/huge-menu" "$work/copy-$n"
+  wait_until 20 bridge_ready
+  FIXTURE_EXE=$work/copy-$n fixture "j$n" --items 1500 --label-kb 20 --windows 1 --gap-ms 1500 --kill-pid "$(cur_pid)" --service "org.grassfield.HugeMenuJ$n"
+  say "    copy $n: GetLayout=$(getlayouts "j$n") backoff=$(replies "j$n" 'backoff')"
+done
+wait_until 20 bridge_ready
+wait_until 10 grep -q "gave up" "$log"
+stop_supervisor
+grep -E "previous run died|gave up|listening" "$log" | cut -c1-160 | sed 's/^/      /'
+check "the crashes were blamed on the copies (refusals)" test "$(logcount 'previous run died while a call to')" -ge 4
+check "the bridge gave up after 5 crashes although every one was blamed (log)" grep -q "gave up: 5 crashes" "$log"
+check "the state file holds the crashes" test "$(grep -c '^crash ' "$state")" -ge 5
+check "the registrar name is not owned (degraded)" registrar_free
 
 say ""
 if ((fail)); then say "RESULT: FAIL"; exit 1; fi

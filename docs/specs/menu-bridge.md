@@ -79,14 +79,18 @@ top-level menus (Left/Right).
   - Caps while reading (MB7); a layout over a cap is `oversized`: no menu, no further `GetLayout` to that application.
     After a reply the bridge calls `malloc_trim(0)` (RssAnon returns to about idle, measured).
   - **Identity** (what a refusal is keyed by; a pid is NEVER a key). After MB5's pid check the bridge reads the peer's
-    systemd app scope from `/proc/<pid>/cgroup` (`app-<launcher>-<appid>-<instance>.scope` or
-    `app-flatpak-<id>-<n>.scope`, `app-…@<instance>.service`: the instance is stripped), the resolved
+    systemd app scope from `/proc/<pid>/cgroup` (`app-<launcher>-<appid>-<instance>.scope` where the instance is
+    `-<digits>` (flatpak, gnome, kde, ...) or `-<8 hex>` (uwsm: `app-Hyprland-gtk\x2dlaunch-2616d5ca.scope`);
+    `app-…@<instance>.service`: the instance is stripped; the key keeps systemd's `\x2d` escape, only logs show `-`), the resolved
     `/proc/<pid>/exe` (` (deleted)` stripped) and, for interpreters (python*, perl, ruby, node, bash/sh/dash/zsh, java),
-    the script or module from `/proc/<pid>/cmdline`: `id:scope=<scope>|exe=<path>|script=<script>`. Without an app
+    the script or module from `/proc/<pid>/cmdline` (known interpreter options and their values are skipped; an option
+    the bridge does not know might take a value, so the peer goes to `unknown` instead of a guessed script):
+    `id:scope=<scope>|exe=<path>|script=<script>`. Without an app
     scope the scope part is left out. An exe that cannot be read (non-dumpable process, another user's) puts the peer in
     ONE shared bucket `unknown`, which is refused only for 2 min per strike and never doubles, never permanently, so
     innocents behind it recover. Escapes that remain: a copy of the binary at another path, or a process outside the
-    app's scope, is another identity (not preventable from the bridge).
+    app's scope, is another identity (not preventable from the bridge): each copy is blamed once, and its crash
+    counts toward the degradation budget like every other.
   - **In-flight marking.** EVERY call to an application (`GetLayout` incl. re-reads, `AboutToShow`, `Event`) is
     recorded in `<socket>.state` before it is sent, with its age (the file is refreshed every 250 ms while a call is
     open), and cleared once its reply was handled (or 4 s after the window was closed with the reply outstanding).
@@ -96,23 +100,27 @@ top-level menus (Left/Right).
     last state write). The identity is refused 15 min, doubling per strike up to 6 h (`backoff` to the shell), so an
     application that kills the bridge with its own reply costs one restart. In every other case (nothing in flight,
     several calls, a call older than 1 s: unsolicited traffic, someone else's message) the crash is
-    **unattributed**: it penalises nobody and is only counted (log line, count in the state file).
-  - **Graceful degradation.** Five unattributed crashes within one hour (`penalty::kMaxUnattributed`) make the next
+    **unattributed**: it penalises nobody. EVERY crash, blamed or not, is counted (log line, `crash <time>` lines in
+    the state file); attribution only adds the per-identity refusal on top.
+  - **Graceful degradation.** Five crashes, blamed or not, within any sliding one-hour window (`penalty::kMaxCrashes`,
+    `kCrashWindowSec`) make the next
     bridge run give up: it logs one line (`gave up: …`), never owns `com.canonical.AppMenu.Registrar` (applications
     keep their in-window menus), reports `state: "degraded"` / `degraded: true` over menu/1 and in `Status()`, and
     answers every `open` with `backoff` so the shell shows T0. No notification is sent. The process stays up (nothing
-    for systemd to restart); the count decays after an hour without a crash, so a later start serves menus again.
+    for systemd to restart); crashes leave the window an hour after they happened, but a degraded bridge does not
+    recover by itself: it stays degraded until the session restarts it.
     systemd's `RestartSteps`/`RestartMaxDelaySec` (1 s growing to 30 s) pace the restarts meanwhile.
   - **Reduced unsolicited surface.** On the registrar path only the four registrar methods get an answer (a tiny
     stateless error: X11 clients would otherwise wait for a timeout); every other call, interface or signal on the
-    registrar and diagnostics objects is dropped without a reply or allocation. Per-menu signal subscriptions
+    registrar and diagnostics objects is dropped without a reply (the bridge allocates nothing for it, but QtDBus has
+    already read and buffered the whole message before the drop). Per-menu signal subscriptions
     (`LayoutUpdated`, `ItemsPropertiesUpdated`) are sender-specific match rules (verified unique name + object path),
     and `NameOwnerChanged` is watched per name. A peer with no registered window has no subscription and no object that
     does anything.
   - **Refusals and bounds.** `layout-failed` on open: 2^n s up to 64 s. Entries decay: no strike for 24 h drops an entry;
     a clean exit does not reset the doubling inside that window. Idle (not refused) identities: at most 128, least
-    recently used first out; refused identities are capped separately (64) and never evicted before they expire (when
-    the cap is hit the one closest to expiry goes), so cheap fresh identities cannot flush a refusal.
+    recently used first out; refused identities are capped separately (64): idle churn never evicts a refusal, but past
+    64 the one closest to expiry goes (`capRefused`), so a flood of cheap identities can push out old refusals.
   - **State file.** `<socket>.state` (socket directory 0700, file 0600). Written with `openat(O_CREAT|O_EXCL|O_NOFOLLOW)`
     of a temp name in the directory then `renameat` (atomic; replaces a symlink at the final name without following it;
     there is no check-then-write window). Read with `O_NOFOLLOW`, regular file of this user, at most 128 KiB, header
@@ -122,13 +130,20 @@ top-level menus (Left/Right).
   - **Guarantees.** (1) A crash is never blamed on an application unless it was the only one with a fresh call open.
     (2) A refusal never outlives 6 h and never covers the `unknown` bucket longer than 2 min. (3) An unexplained crash
     loop ends with a quiet, working desktop (T0 menus), not an endless restart. (4) A forged state file by the same
-    user can refuse at most 64 identities, with at most 64 strikes (6 h each), and count at most 1000 unattributed
-    crashes: it can switch menus off, nothing more; it cannot make the bridge write or execute anything.
+    user can refuse at most 64 identities, with at most 64 strikes (6 h each), and hold at most 64 crash times
+    (it can force the degraded mode): it can switch menus off, nothing more; it cannot make the bridge write or execute anything.
   - **Non-guarantees.** A same-uid process can always OOM or kill the bridge (as it can kill any process of the user),
     and the bridge cannot be made immune to a huge message: buffering happens inside libdbus before the bridge sees it.
     An application whose single call is fresh when an unrelated 100 MB message arrives within that first second is
-    blamed wrongly once (refused 15 min, T0 menus only). A hostile application that delays its huge reply past 1 s
-    escapes attribution (it is counted as unattributed instead and, repeated, degrades the bridge).
+    blamed wrongly once (refused 15 min, T0 menus only), and the wrongful blame can repeat, doubling each time. A
+    hostile application that delays its huge reply past 1 s escapes attribution (the crash is counted
+    as unattributed instead and, repeated, degrades the bridge).
+  - **Residual risks (accepted, 2026-10-18).** The failure is bounded (T0 menus); this is defense in depth against
+    same-uid apps, not a boundary.
+    - Same-uid apps can kill or OOM the bridge, or force degraded mode for the session.
+    - An honest slow app can be wrongly blamed when an attacker's huge message lands during its call.
+    - Degraded mode does not recover until the session restarts.
+    - Flatpak apps with registrar access can send big messages (not verified).
 - **MB13 Development.** `scripts/dev/nested-up.sh --private-bus` → `shell-run.sh` starts one private `dbus-daemon`
   (session configuration, socket in /tmp) per nested session, reused across shell restarts, and (re)starts the
   bridge on it before the shell and any test app (`.dev/run/menu-bridge.sock`, `.dev/menu-bridge.log`,
@@ -141,7 +156,7 @@ top-level menus (Left/Right).
 | MB11, MB12 (models) | `tests/unit/tst_menubridge.qml` (event parsing, menu/1 lines, sanitizing, caps, popup model, shortcut text) | L0 | 2026-10-17: 8/8 PASS |
 | gfc/1 `pid` | `compositor/tests` `Protocol.AppmenuJson*`, `AppmenuRegistry.PidTravels…` | L0 | 2026-10-17: 92/92 PASS |
 | M3 exit (MB1, MB5, MB6, MB11, MB12, MB13) | `tests/integration/global_menus.sh` (nested, private bus, virtual pointer) | L1 | 2026-10-17: PASS twice in a row (runs `.dev/global-menus/run-20261017-133714`, `run-20261017-133805`); bridge RSS 19.4–19.5 MiB (shared Qt libraries included), CPU time 0 s |
-| MB14 | `tests/integration/menu_bridge_memory.sh` (private bus, hostile fixture; cases B A C D E F G H I: memory incl. RssAnon, oversized, kill on first fetch, kill on a re-read with new pids, forged state files, second instance, unsolicited 100 MB message until the bridge gives up, huge LayoutUpdated, slow victim plus attacker; the memory limit is emulated by a watcher) | L1 | see STATE.md |
+| MB14 | `tests/integration/menu_bridge_memory.sh` (private bus, hostile fixture; cases B A C D E F G H I J: memory incl. RssAnon, oversized, kill on first fetch, kill on a re-read with new pids, forged state files, second instance, unsolicited 100 MB message until the bridge gives up, huge LayoutUpdated, slow victim plus attacker, 7 rotating copies ending degraded; the memory limit is emulated by a watcher) | L1 | see STATE.md |
 | MB5 refusal, MB4 errors, MB3 cleanup | throwaway private bus, `open` naming the bridge's own name with a wrong pid → `pid-mismatch`; right pid → accepted; invalid lines → `bad-request`; SIGTERM removes the socket | L1 | 2026-10-17 verified manually (session log) |
 | MB10 | bridge started with `GRASSFIELD_DEV=1` and the owner's bus address, no address, no session variables, no socket → exit 3 before connecting | L0 | 2026-10-17 verified |
 | Unit hardening | `systemd-analyze --user verify packaging/systemd/grassfield-menu-bridge.service` | L0 | only finding: `/usr/bin/grassfield-menu-bridge` not installed; runtime under systemd NOT VERIFIED (owner L2) |
@@ -172,7 +187,7 @@ grassfield-compositor (feature `appmenu`). Verified clients: Qt 6.11.2 (`tests/f
 ## Degraded behavior (plugin missing, service missing)
 - Plugin absent or without `appmenu`: the shell says `hello` with `false`; the bridge stays in standby, no registrar
   is owned, Qt apps keep their in-window menu bars, the bar shows T0 (verified, phase B of the exit test).
-- Bridge gave up (MB14: five unattributed crashes in an hour): state `degraded`, no registrar, every `open` answered
+- Bridge gave up (MB14: five crashes in an hour, blamed or not): state `degraded`, no registrar, every `open` answered
   `backoff`, T0 menus; one log line, no notification; it serves menus again when started after the hour has passed.
 - Bridge absent, crashed or restarting: the shell retries every 2 s, the bar shows T0; the registrar disappears with
   the bridge, so apps started meanwhile keep in-window menus. Apps that hid their menu bar earlier export it again as
@@ -211,9 +226,10 @@ application localized them; Grassfield strings use `qsTr()`.
 - A reply or any message over ~60-100 MB can still take the bridge over `MemoryMax` (the D-Bus daemon's
   `max_message_size` is 1 GB and libdbus buffers the message, ~2.2x its size at the peak, before the bridge sees it).
   That cannot be prevented from the bridge's side, and the sender cannot be known: MB14 blames an application only for
-  a single fresh call and otherwise counts an unattributed crash (the bridge gives up after five). A same-uid process
+  a single fresh call; every crash, blamed or not, counts (the bridge gives up after five in an hour). A same-uid process
   can always OOM or kill the bridge; the state file is not a security boundary against the user's own code.
-- A hostile application that answers its huge reply after more than 1 s, or from a copy of its binary, escapes
-  attribution (counted as unattributed); an innocent whose single fresh call coincides with someone else's huge message
-  is refused once for 15 min (T0 menus).
+- A hostile application that answers its huge reply after more than 1 s escapes attribution (counted as
+  unattributed). One running from copies of its binary is blamed and counted, copy by copy, and degrades the bridge.
+  An innocent whose single fresh call coincides with someone else's huge message is refused for 15 min (T0 menus); the
+  wrongful blame can repeat, doubling each time. See the residual risks in MB14.
 - Peers whose executable cannot be read share one `unknown` identity (refused 2 min at most).
