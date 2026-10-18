@@ -396,7 +396,7 @@ Variants {
                     }
 
                     // Scrolling grid, alphabetical (or ranked while searching).
-                    GridView {
+                    AppsGrid {
                         id: grid
 
                         x: Tokens.launcherPadding
@@ -409,35 +409,15 @@ Variants {
                         bottomMargin: Tokens.spacingMd
                         cellWidth: root.controller.grid.cellW
                         cellHeight: root.controller.grid.cellH
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-                        flickableDirection: Flickable.VerticalFlick
-                        keyNavigationEnabled: false
+                        items: root.controller.items
+                        selectedIndex: root.controller.selected
+                        ringVisible: root.controller.keyNav || root.controller.searching
+                        onActivated: item => root.controller.activate(item)
                         onContentYChanged: {
                             host.updateView();
                             scrollbar.poke();
                         }
                         onHeightChanged: host.updateView()
-                        Accessible.role: Accessible.List
-                        Accessible.name: qsTr("Applications")
-
-                        model: ScriptModel {
-                            values: root.controller.items
-                            objectProp: "key"
-                        }
-
-                        delegate: AppsCell {
-                            id: cell
-
-                            required property var modelData
-                            required property int index
-
-                            info: modelData
-                            cellW: grid.cellWidth
-                            cellH: grid.cellHeight
-                            selected: root.controller.selected === index && (root.controller.keyNav || root.controller.searching)
-                            onActivated: root.controller.activate(modelData)
-                        }
                     }
 
                     Text {

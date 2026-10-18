@@ -3,3 +3,4 @@ AppsController 1.0 AppsController.qml
 AppsWindow 1.0 AppsWindow.qml
 AppsCell 1.0 AppsCell.qml
 AppsChip 1.0 AppsChip.qml
+AppsGrid 1.0 AppsGrid.qml
