@@ -1380,6 +1380,18 @@
         <translation>Masquer automatiquement le Dock</translation>
     </message>
     <message>
+        <source>Menu Bar</source>
+        <translation>Barre des menus</translation>
+    </message>
+    <message>
+        <source>Show menu bar background</source>
+        <translation>Afficher l’arrière-plan de la barre des menus</translation>
+    </message>
+    <message>
+        <source>Off: the wallpaper shows through the menu bar. On: the bar is drawn on the frosted material.</source>
+        <translation>Désactivé : le fond d’écran apparaît à travers la barre des menus. Activé : la barre est dessinée sur la matière dépolie.</translation>
+    </message>
+    <message>
         <source>Desktop</source>
         <translation>Bureau</translation>
     </message>
@@ -2445,8 +2457,8 @@
         <translation>Bureau et Dock</translation>
     </message>
     <message>
-        <source>dock magnification autohide desktop icons items screen corners titlebar window</source>
-        <translation>dock agrandissement masquage automatique bureau icônes éléments coins de l’écran barre de titre fenêtre</translation>
+        <source>dock magnification autohide desktop icons items screen corners titlebar window menu bar background transparent</source>
+        <translation>dock agrandissement masquage automatique bureau icônes éléments coins de l’écran barre de titre fenêtre barre des menus arrière-plan transparente</translation>
     </message>
     <message>
         <source>Notifications</source>

@@ -57,8 +57,8 @@ QtObject {
     readonly property string typographyFallbackFamily: "Noto Sans"
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyMenuSize: 13
-    // estimate, pending F1 measurement from design/reference
-    readonly property int typographyMenuWeight: 500
+    // F1 gap 3: menu titles and clock are regular (reference); the app name keeps menuBoldWeight
+    readonly property int typographyMenuWeight: 400
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyMenuBoldWeight: 700
     // estimate, pending F1 measurement from design/reference
@@ -145,14 +145,26 @@ QtObject {
 
     // task spec / macOS convention, pending F1 measurement
     readonly property int menubarHeight: 24
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menubarItemPadding: 10
+    // F1 gap 3: 11 per side (titles 22 apart edge to edge, system mark to app name 22), now wired in BarButton
+    readonly property int menubarItemPadding: 11
     // estimate, pending F1 measurement from design/reference
     readonly property int menubarIconSize: 14
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menubarHoverInsetTop: 1
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menubarHoverInsetBottom: 2
+    // F1 gap 3: open-title capsule about 23 of 24
+    readonly property int menubarHoverInsetTop: 0
+    // F1 gap 3: open-title capsule about 23 of 24
+    readonly property int menubarHoverInsetBottom: 1
+    // F1 gap 3: status glyphs 19 apart (18.5-20)
+    readonly property real menubarStatusItemPadding: 9.5
+    // F1 gap 3: screen edge to the system mark
+    readonly property real menubarInsetLeft: 20.5
+    // F1 gap 3: clock end to the screen edge (18-19)
+    readonly property real menubarInsetRight: 18.5
+    // A2: alpha of the drop shadow under the bar text and glyphs while the bar background is off (same treatment as the desktop labels)
+    readonly property real menubarTextShadowOpacity: 1.0
+    // A2: MultiEffect shadowBlur of the bar text shadow pass
+    readonly property real menubarTextShadowBlur: 0.22
+    // A2: vertical offset of the bar text shadow
+    readonly property int menubarTextShadowOffsetY: 0
 
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIconSize: 48
