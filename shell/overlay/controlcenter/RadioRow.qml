@@ -75,6 +75,9 @@ NavItem {
             Label {
                 width: parent.width
                 text: root.title
+                // Long module titles wrap to a second line inside the tile (no font shrink).
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
             }
 
             Caption {
