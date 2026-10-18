@@ -31,7 +31,10 @@ Singleton {
         const cores = (text.match(/^processor\s*:/gm) || []).length;
         if (!name)
             return "";
-        return cores > 0 ? qsTr("%1 (%2 threads)").arg(name[1].trim()).arg(cores) : name[1].trim();
+        // Singular/plural pair (the catalogs carry no numerus forms; English is the source language).
+        if (cores === 1)
+            return qsTr("%1 (1 thread)").arg(name[1].trim());
+        return cores > 1 ? qsTr("%1 (%2 threads)").arg(name[1].trim()).arg(cores) : name[1].trim();
     }
 
     function parseMemory(text: string): string {

@@ -9,11 +9,11 @@
     </message>
     <message>
         <source>%1 (1 thread)</source>
-        <translation>%1 (1 thread)</translation>
+        <translation>%1 (1 processeur logique)</translation>
     </message>
     <message>
         <source>%1 (%2 threads)</source>
-        <translation>%1 (%2 threads)</translation>
+        <translation>%1 (%2 processeurs logiques)</translation>
     </message>
     <message>
         <source>Unknown</source>
@@ -3029,8 +3029,12 @@
 <context>
     <name>SystemInfo</name>
     <message>
+        <source>%1 (1 thread)</source>
+        <translation>%1 (1 processeur logique)</translation>
+    </message>
+    <message>
         <source>%1 (%2 threads)</source>
-        <translation>%1 (%2 threads)</translation>
+        <translation>%1 (%2 processeurs logiques)</translation>
     </message>
     <message>
         <source>%1 GB</source>
