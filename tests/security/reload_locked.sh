@@ -387,6 +387,11 @@ step_relock_confirm() {
     echo "run $i: lock lock -> $answer; compositor answers without LOCK: $unlocked; bytes that reached foot: $((after - before))"
   done
   nested wtype -k Escape # empty the lock field (Escape clears it; nothing is ever submitted)
+  # The last dev pause (10 s) ends before the next step relies on the periodic check.
+  for _ in $(seq 1 120); do
+    tail -n +"$((from + 1))" "$dev/shell.log" | grep -q "dev pause of the lock ownership check ended" && break
+    sleep 0.1
+  done
   echo "relock-confirm: $runs runs: relocks $relocks, runs with a key in foot $leaks, runs with an unlocked compositor answer $opened"
   if ((relocks == 0)); then pass "relock-confirm: no relock without a confirming answer ($runs runs)"; else fail "relock-confirm: relocked on an unconfirmed answer in $relocks of $runs runs"; fi
   if ((leaks == 0)); then pass "relock-confirm: nothing reached the foot window ($runs runs)"; else fail "relock-confirm: keys reached the foot window in $leaks of $runs runs"; fi

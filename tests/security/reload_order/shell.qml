@@ -66,6 +66,16 @@ ShellRoot {
         check("Lock.qml-locked-bound-to-intent", /WlSessionLock \{[^}]*locked: persist\.intent/.test(text));
         // The restored old intent must not downgrade a lock taken in Component.onCompleted (R12 re-review).
         check("Lock.qml-intent-never-downgraded", /onLoaded: \{\s*intent = intent \|\| controller\.locked;/.test(text));
+        // relock() releases the lock object before requesting a new one (not atomic): its only caller is
+        // checkOwnership() on Machine.ownershipAction "relock", i.e. a confirmed "unlocked" answer (R12 review #3: the
+        // lock() fast path relocked on one stale answer and keys reached a window).
+        const code = text.replace(/\/\/[^\n]*/g, "");
+        const calls = code.match(/[^\w.]relock\(/g) || [];
+        check("Lock.qml-relock-defined-once", (code.match(/function relock\(/g) || []).length === 1);
+        check("Lock.qml-relock-single-caller", calls.length === 2); // the definition and one call
+        check("Lock.qml-relock-only-on-confirmed-answer", /else if \(action === "relock"\)\s*relock\(/.test(code));
+        const lockFn = code.slice(code.indexOf("function lock(reason"), code.indexOf("function engage("));
+        check("Lock.qml-lock-never-relocks", lockFn.length > 0 && lockFn.indexOf("relock(") === -1);
         report();
     }
 

@@ -82,15 +82,13 @@ Singleton {
 
     // Engage the lock. reason: "ipc" | "menu" | "idle" | "sleep" | "restore". Returns "ok",
     // "already-locked" or "refused: missing-pam". When this shell already holds a lock, the
-    // compositor is asked again (verify()): a session found unlocked under it gets a fresh lock, at
-    // once if the last answer already said so (then "ok").
+    // compositor is asked again (verify()): a session found unlocked under it gets a fresh lock once
+    // a fresh answer confirms it (checkOwnership), never here on an earlier answer alone: relock()
+    // releases the lock object first, and releasing the lock the compositor still uses unlocks the
+    // session until the new lock arrives (R12 review #3: keys reached a window in forced runs).
     function lock(reason: string): string {
         if (controller.locked) {
             console.info("grassfield-lock: lock requested (" + reason + ") while " + controller.lockState + "; verifying the session lock");
-            if (holding && unlockedAnswers > 0) {
-                relock(reason);
-                return "ok";
-            }
             engage();
             verify();
             return "already-locked";
@@ -135,8 +133,10 @@ Singleton {
 
     // The session is unlocked under a lock object that still reports secure (another client took
     // the lock over and released it): drop that stale object and request a new lock in the same
-    // event-loop turn, so both requests reach the compositor together. Never unlocks anything that
-    // is not already unlocked; the carried intent and the marker stay "locked".
+    // event-loop turn. Never unlocks anything that is not already unlocked; the carried intent and
+    // the marker stay "locked". Not atomic (the release can reach Hyprland before the new request):
+    // called ONLY from checkOwnership() on a confirmed "unlocked" answer (Machine.ownershipAction),
+    // never on a single answer, which may be stale (tests/security/reload_order checks the callers).
     function relock(why: string): void {
         console.warn("grassfield-lock: the session is unlocked although this shell holds a lock (taken over and released by another client; " + why + "); taking a fresh lock");
         unlockedAnswers = 0;
