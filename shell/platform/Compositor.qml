@@ -515,7 +515,7 @@ Singleton {
     }
 
     // Mapped windows of an output on any regular workspace, monitor-relative geometry:
-    // [{address, toplevel, appId, title, x, y, w, h, workspaceId}]. `toplevel` is the
+    // [{address, toplevel, appId, title, x, y, w, h, workspaceId, fullscreen}]. `toplevel` is the
     // foreign-toplevel handle (null until matched), usable as a capture source.
     function windowsAcross(screenName: string): var {
         const out = [];
@@ -539,7 +539,8 @@ Singleton {
                 y: data.at[1] - mon.y,
                 w: data.size[0],
                 h: data.size[1],
-                workspaceId: data.workspace.id
+                workspaceId: data.workspace.id,
+                fullscreen: data.fullscreen === 2
             });
         }
         return out;
@@ -550,6 +551,12 @@ Singleton {
         const mon = monitorByName(screenName);
         const activeId = mon && mon.activeWorkspace ? mon.activeWorkspace.id : -1;
         return windowsAcross(screenName).filter(w => w.workspaceId === activeId);
+    }
+
+    // hl.plugin.grassfield.overview (feature "overview"): request {on, durationMs, curve?, windows?} in layout
+    // coordinates, validated and quoted by Minimized.overviewCall. False when the request is invalid.
+    function overview(request: var): bool {
+        return dispatchRequest(Minimized.overviewCall(request));
     }
 
     // Id for a new Space: one past the highest workspace id in use.

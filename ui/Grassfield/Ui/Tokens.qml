@@ -425,6 +425,12 @@ QtObject {
     readonly property real overviewDragOpacity: 0.8
     // estimate: balanced profile refreshes thumbnails at 4 fps (the capture API has no rate control)
     readonly property int overviewBalancedIntervalMs: 250
+    // grassfield-compositor kTitlebarHeight (docs/specs/overview.md Shell contract 3): band the plugin draws above a transformed window, kept free above each layout rect and part of its hit area
+    readonly property int overviewWindowTitlebarHeight: 28
+    // v2: how long the shell waits for the chrome surface to hold the keyboard before falling back to thumbnails (the plugin refuses on:true without it)
+    readonly property int overviewChromeWaitMs: 600
+    // v2: pause before the single retry of an on:true the plugin refused with no-chrome (the second output's Exclusive commit may lag)
+    readonly property int overviewChromeRetryMs: 120
 
     // task spec: about 96 px at 1080p; scaled by screen height
     readonly property int appsIconSize: 96
