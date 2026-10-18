@@ -464,7 +464,9 @@ step_foreign_gap() {
   echo "foreign-gap: $runs runs: worst release -> fresh lock request $worst ms (LOCK seen by polling within $polled ms, hyprctl and jq time included); bytes in foot during the windows $inGap, after them $late"
   if ((worst <= max)); then pass "foreign-gap: fresh lock requested <= $max ms after every foreign release (worst $worst ms)"; else fail "foreign-gap: fresh lock requested $worst ms after a foreign release (> $max ms)"; fi
   if ((polled <= 1500)); then pass "foreign-gap: Hyprland reported LOCK again within $polled ms of each release request"; else fail "foreign-gap: Hyprland reported LOCK again only after $polled ms"; fi
-  if ((late == 0)); then pass "foreign-gap: no key typed after the fresh lock reached foot"; else fail "foreign-gap: $late bytes reached foot after the fresh lock was reported"; fi
+  # Bytes counted after the LOCK poll can still be keys typed inside the window (the poll costs tens of ms and foot ->
+  # cat -> file adds lag): informational. The hard check is each run's probe typed after the fresh lock (no_leak above).
+  echo "foreign-gap: bytes counted after the LOCK poll: $late (keys typed inside the window can land late; see the per-run probes)"
   # Leak control: Hyprland refocuses the window under the pointer when a foreign locker releases; foot only receives keys
   # in the window when it is that window (true right after `setup`; shell restarts in earlier steps can change it).
   ((inGap > 0)) || echo "foreign-gap: NOTE no key reached foot during any window: foot did not get the focus Hyprland restores, so the in-window count proves nothing in this run (run setup lock foreign-gap)"
@@ -521,7 +523,7 @@ step_cleanup() {
 }
 
 steps=("$@")
-[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync relock-confirm foreign-gap probe-cost cleanup)
+[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock relock-confirm foreign-gap probe-cost marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync cleanup)
 for s in "${steps[@]}"; do
   echo "== $s"
   declare -F "step_${s//-/_}" >/dev/null || { echo "reload_locked: unknown step $s" >&2; exit 2; }
