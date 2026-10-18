@@ -40,6 +40,8 @@ dev=$root/.dev
 . "$root/scripts/dev/pidfile.sh"
 # A record written inside the sandbox's PID namespace names another process on the host (incident 2026-10-18).
 dev_require_host shell-run
+# shellcheck source=devenv.sh
+. "$root/scripts/dev/devenv.sh"
 apps_home=$dev/apps-home
 # Only this tree's live nested compositor: after a nested crash its socket name can be reused by another worktree's
 # session, and a shell started there would take a session lock only the owner's password releases.
