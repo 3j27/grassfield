@@ -136,8 +136,8 @@ namespace {
         // to the window's surface directly in that case.
         focus->fullWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
         bool direct = false;
-        if (!keyboardOnWindow(w)) {
-            focus->rawSurfaceFocus(w->resource(), w);
+        if (const auto surface = w->resource(); surface && !keyboardOnWindow(w)) { // never a null surface: it would clear the focus
+            focus->rawSurfaceFocus(surface, w);
             direct = true;
         }
         gf::logRequest(Log::DEBUG, "desktop-focus: press on window {:x}: keyboard to the window{} ({})", reinterpret_cast<uintptr_t>(w.get()),
@@ -145,10 +145,11 @@ namespace {
     }
 
     void focusDesktop(const PHLLS& ls, const char* when) {
-        const auto focus = Desktop::focusState();
-        if (!focus || !ls || !ls->m_mapped)
+        const auto focus   = Desktop::focusState();
+        const auto surface = ls ? ls->resource() : nullptr;
+        if (!focus || !surface || !ls->m_mapped)
             return;
-        focus->rawSurfaceFocus(ls->resource(), nullptr);
+        focus->rawSurfaceFocus(surface, nullptr);
         gf::logRequest(Log::DEBUG, "desktop-focus: desktop {:x} ({}): keyboard to the desktop {} ({})", idOf(ls), monitorName(ls),
                        when, keyboardOnLayer(ls) ? "granted" : "NOT granted");
     }
