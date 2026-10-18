@@ -81,6 +81,25 @@ vs_wait_output() {
   return 1
 }
 
+# Which monitor gets Space 1 depends on whether the nested window's output (WAYLAND-1) or the headless GF-REF is
+# created first, which races with the load of the owner's session: the Spaces bar then reads "Desktop 1" in one run
+# and "Desktop 2" in the next. The reference state is GF-REF on Space 2 (WAYLAND-1 on 1, as in a quiet session); any
+# other assignment restarts the nested session (at most 4 starts).
+vs_canonical_workspaces() {
+  local lang=$1 n i ws
+  for n in 1 2 3 4; do
+    sleep 2
+    ws=$("$VS_ROOT/scripts/nestctl" monitors -j 2>/dev/null | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | .activeWorkspace.id' 2>/dev/null || true)
+    [[ $ws == 2 ]] && return 0
+    echo "visual: $VS_OUTPUT is on Space '${ws:-?}', not 2: restarting the nested session ($n/4)" >&2
+    "$VS_ROOT/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
+    "$VS_ROOT/scripts/dev/nested-up.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop" || return 1
+    vs_wait_output || return 1
+  done
+  echo "visual: $VS_OUTPUT never got Space 2 in 4 nested starts" >&2
+  return 1
+}
+
 # Make sure a nested session with the shell in language $1 (default $VS_LANG) is up. Idempotent.
 vs_session() {
   local lang=${1:-$VS_LANG} cur=""
@@ -99,6 +118,7 @@ vs_session() {
     # callback): the shell then logs "Layershell screen does not correspond to a real screen" and the desktop icons and
     # the other GF-REF surfaces are missing. Wait for GF-REF, then (re)start the shell on it.
     vs_wait_output || return 1
+    vs_canonical_workspaces "$lang" || return 1
     "$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop"
     printf '%s\n' "$lang" > "$VS_STATE/session.lang"
   elif [[ -z ${VS_REUSE:-} || $cur != "$lang" ]] || ! vs_ipc lock status >/dev/null 2>&1; then
