@@ -375,8 +375,8 @@ namespace gf::menubridge {
         // A previous run that did not stop cleanly (killed by the memory limit, crashed) is attributed ONLY when
         // exactly one fresh call to one application was in flight: that application is refused (Penalties.h).
         // Otherwise the crash is unattributed (unsolicited traffic, several calls, a stale call): nobody is refused,
-        // it is counted, and after penalty::kMaxUnattributed of them the bridge gives up (degraded). The file is
-        // rewritten at once with the outcome.
+        // it is only counted. Every crash is counted, and after penalty::kMaxCrashes of them within
+        // penalty::kCrashWindowSec the bridge gives up (degraded). The file is rewritten at once with the outcome.
         QByteArray data;
         QString    why;
         if (readStateFile(stateFile(), &data, &why)) {
@@ -384,11 +384,14 @@ namespace gf::menubridge {
             if (!m_penalties.load(data, bootId(), &why, &outcome)) {
                 log(QStringLiteral("ignored %1: %2").arg(stateFile(), why));
             } else if (!outcome.culprit.isEmpty()) {
-                log(QStringLiteral("a previous run died while a call to \"%1\" was in flight: refused").arg(outcome.culprit));
+                log(QStringLiteral("a previous run died while a call to \"%1\" was in flight: refused (crash %2 of %3)")
+                        .arg(displayIdentity(outcome.culprit))
+                        .arg(outcome.crashes)
+                        .arg(penalty::kMaxCrashes));
             } else if (outcome.crashed) {
                 log(QStringLiteral("a previous run died without a single fresh call in flight: unattributed crash %1 of %2, nobody is refused")
-                        .arg(outcome.unattributed)
-                        .arg(penalty::kMaxUnattributed));
+                        .arg(outcome.crashes)
+                        .arg(penalty::kMaxCrashes));
             }
         } else if (!why.isEmpty()) {
             log(QStringLiteral("ignored %1: %2").arg(stateFile(), why));
@@ -396,7 +399,7 @@ namespace gf::menubridge {
         }
         if (m_penalties.degraded()) {
             m_degraded = true;
-            log(QStringLiteral("gave up: %1 unattributed crashes within the last hour; the registrar is not owned and no menu is served (T0 menus)").arg(m_penalties.unattributed()));
+            log(QStringLiteral("gave up: %1 crashes within the last hour; the registrar is not owned and no menu is served (T0 menus)").arg(m_penalties.crashes()));
         }
         m_stateOwned = true; // past the singleton probe (listen): this instance now owns the file
         saveState();

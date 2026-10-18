@@ -16,7 +16,7 @@
 namespace gf::menubridge {
 
     namespace {
-        constexpr const char* kHeader = "grassfield-menu-bridge-state 2";
+        constexpr const char* kHeader = "grassfield-menu-bridge-state 3";
 
         QByteArray encodeIdentity(const QString& id) {
             return id.toUtf8().toPercentEncoding(QByteArrayLiteral("/:"));
@@ -73,6 +73,13 @@ namespace gf::menubridge {
         return !hasControl(id);
     }
 
+    QString displayIdentity(const QString& id) {
+        // systemd escapes '-' as \x2d in unit names: readable in logs, never in the (canonical) key.
+        QString out = id;
+        out.replace(QLatin1String("\\x2d"), QLatin1String("-"));
+        return out;
+    }
+
     QString appScopeOf(const QString& cgroupText) {
         // cgroup v2 ("0::/path") when present, else the last hierarchy line.
         QString           path;
@@ -92,8 +99,10 @@ namespace gf::menubridge {
                 continue;
             if (unit.endsWith(QLatin1String(".scope"))) {
                 unit.chop(6);
-                // app-<launcher>-<appid>-<instance>: the instance is the trailing -<digits>.
-                static const QRegularExpression instance(QStringLiteral("-[0-9]+$"));
+                // app-<launcher>-<appid>-<instance>: the instance is the trailing -<digits> (flatpak, gnome, kde...)
+                // or -<8 hex digits> (uwsm: app-Hyprland-gtk\x2dlaunch-2616d5ca). Left in, every relaunch would be a
+                // new identity and escape its refusal.
+                static const QRegularExpression instance(QStringLiteral("-(?:[0-9]+|[0-9a-f]{8})$"));
                 unit.remove(instance);
             } else if (unit.endsWith(QLatin1String(".service"))) {
                 unit.chop(8);
@@ -111,22 +120,75 @@ namespace gf::menubridge {
         return {};
     }
 
+    namespace {
+        enum class Opt { Plain, WithValue, Unknown };
+
+        // How an interpreter option before the script is consumed. An unknown option might take a value, and taking
+        // that value for the script would hand the application someone else's identity: it is Unknown, not guessed.
+        Opt classifyOption(const QString& base, const QByteArray& a) {
+            const auto matches = [&a](const char* re) { return QRegularExpression(QLatin1String(re)).match(QString::fromLatin1(a)).hasMatch(); };
+            const auto in      = [&a](std::initializer_list<const char*> l) { return std::any_of(l.begin(), l.end(), [&a](const char* v) { return a == v; }); };
+            if (base.startsWith(QLatin1String("python"))) {
+                if (in({"-W", "-X", "-Q"}))
+                    return Opt::WithValue;
+                return matches("^-([BEIOPRSVbdiqsuvx]+|[WXQ].+)$") ? Opt::Plain : Opt::Unknown;
+            }
+            if (base.startsWith(QLatin1String("node"))) {
+                if (in({"-r", "--require", "--import", "--loader", "--experimental-loader", "--conditions", "-C", "--input-type", "--title"}))
+                    return Opt::WithValue;
+                return matches("^--([a-z0-9-]+=.*|inspect(-brk)?|no-[a-z-]+|trace-[a-z-]+|enable-source-maps|expose-gc|use-strict)$") ? Opt::Plain : Opt::Unknown;
+            }
+            if (base.startsWith(QLatin1String("perl"))) {
+                if (in({"-I", "-M", "-m", "-C"}))
+                    return Opt::WithValue;
+                return matches("^-([wWtTSsuUnpal]+|[IMmC].+)$") ? Opt::Plain : Opt::Unknown;
+            }
+            if (base.startsWith(QLatin1String("ruby"))) {
+                if (in({"-I", "-r", "-C", "-F"}))
+                    return Opt::WithValue;
+                return matches("^-([wvdscnpalSU]+|[IrCFK].+|W.*)$") ? Opt::Plain : Opt::Unknown;
+            }
+            if (base == QLatin1String("java")) {
+                if (in({"-cp", "-classpath", "--class-path", "-p", "--module-path", "--add-modules"}))
+                    return Opt::WithValue;
+                return matches("^-(D|X|ea|da|agentlib|agentpath|javaagent|verbose|server|client).*$") ? Opt::Plain : Opt::Unknown;
+            }
+            // shells
+            if (in({"-o", "-O", "--rcfile", "--init-file"}))
+                return Opt::WithValue;
+            return matches("^(-[xuliervBfhmnpt]+|--(norc|noprofile|login|posix|restricted))$") ? Opt::Plain : Opt::Unknown;
+        }
+    } // namespace
+
     QString scriptOf(const QString& exe, const QByteArray& cmdline) {
         const QString                  base = QFileInfo(exe).fileName().toLower();
         static const QRegularExpression interpreters(QStringLiteral("^(python[0-9.]*|perl[0-9.]*|ruby[0-9.]*|node(js)?|bash|sh|dash|zsh|java)$"));
         if (!interpreters.match(base).hasMatch() || cmdline.isEmpty())
             return {};
-        const QList<QByteArray> args = cmdline.left(4096).split('\0');
+        const QList<QByteArray> args    = cmdline.left(4096).split('\0');
+        bool                    endOpts = false;
         for (qsizetype i = 1; i < args.size(); ++i) {
             const QByteArray& a = args.at(i);
             if (a.isEmpty())
                 continue;
-            if (a == "-c" || a == "-e" || a == "-E")
-                return {}; // inline code: no script identity (the code itself would be a free-form key)
-            if (a == "-m" && i + 1 < args.size())
-                return QStringLiteral("-m ") + QString::fromUtf8(args.at(i + 1).left(128));
-            if (a.startsWith('-'))
-                continue;
+            if (!endOpts) {
+                if (a == "-c" || a == "-e" || a == "-E")
+                    return {}; // inline code: no script identity (the code itself would be a free-form key)
+                if (a == "-m" && i + 1 < args.size())
+                    return QStringLiteral("-m ") + QString::fromUtf8(args.at(i + 1).left(128));
+                if (a == "--" || (a == "-jar" && base == QLatin1String("java"))) {
+                    endOpts = true; // what follows is the script (or the jar)
+                    continue;
+                }
+                if (a.startsWith('-')) {
+                    const Opt kind = classifyOption(base, a);
+                    if (kind == Opt::Unknown)
+                        return kScriptUnknown; // might take a value: the safe bucket, not a guessed script
+                    if (kind == Opt::WithValue)
+                        ++i;
+                    continue;
+                }
+            }
             QString script = QString::fromUtf8(a.left(256));
             for (QChar& ch : script) {
                 if (ch.unicode() < 0x20 || ch.unicode() == 0x7F || ch == u'|')
@@ -147,7 +209,10 @@ namespace gf::menubridge {
         if (const QString scope = appScopeOf(facts.cgroup); !scope.isEmpty())
             id += QStringLiteral("scope=") + scope + u'|';
         id += QStringLiteral("exe=") + exe;
-        if (const QString script = scriptOf(exe, facts.cmdline); !script.isEmpty())
+        const QString script = scriptOf(exe, facts.cmdline);
+        if (script == kScriptUnknown)
+            return kUnknownIdentity; // options we cannot tell from the script: the shared bucket, never a guess
+        if (!script.isEmpty())
             id += QStringLiteral("|script=") + script;
         return validIdentity(id) ? id : kUnknownIdentity;
     }
@@ -239,15 +304,22 @@ namespace gf::menubridge {
         e.denyUntil = now + std::min(span, penalty::kDenyMaxSec);
     }
 
-    int PenaltyBook::unattributed() const {
-        if (m_unattributed > 0 && m_clock() - m_unattributedAt >= penalty::kUnattributedWindowSec)
-            return 0;
-        return m_unattributed;
+    int PenaltyBook::crashes() const {
+        const qint64 now = m_clock();
+        int          n   = 0;
+        for (const qint64 t : m_crashes)
+            n += now - t < penalty::kCrashWindowSec ? 1 : 0;
+        return n;
     }
 
-    void PenaltyBook::recordUnattributed() {
-        m_unattributed   = unattributed() + 1;
-        m_unattributedAt = m_clock();
+    // Every crash counts, blamed or not: rotating copies of a binary cannot crash-loop the bridge without ending in
+    // degraded mode. Sliding window: kMaxCrashes within any kCrashWindowSec.
+    void PenaltyBook::recordCrash() {
+        const qint64 now = m_clock();
+        m_crashes.removeIf([now](qint64 t) { return now - t >= penalty::kCrashWindowSec; });
+        m_crashes.append(now);
+        while (m_crashes.size() > penalty::kMaxCrashesKept)
+            m_crashes.removeFirst();
     }
 
     bool PenaltyBook::refused(const QString& id, QString* why) {
@@ -321,8 +393,10 @@ namespace gf::menubridge {
             if (validIdentity(c.id) && c.calls > 0)
                 out += "inflight " + QByteArray::number(c.calls) + ' ' + QByteArray::number(c.ageMs) + ' ' + encodeIdentity(c.id) + '\n';
         }
-        if (const int n = unattributed(); n > 0)
-            out += "unattributed " + QByteArray::number(n) + ' ' + QByteArray::number(m_unattributedAt) + '\n';
+        for (const qint64 t : m_crashes) {
+            if (m_clock() - t < penalty::kCrashWindowSec)
+                out += "crash " + QByteArray::number(t) + '\n';
+        }
         for (auto it = m_entries.cbegin(); it != m_entries.cend(); ++it) {
             if (it->strikes <= 0)
                 continue;
@@ -354,7 +428,7 @@ namespace gf::menubridge {
         QList<Deny>         denies;
         QList<InflightCall> inflight;
         int                 running = -1;
-        qint64              unattr = 0, unattrAt = 0;
+        QList<qint64>       crashTimes;
         const qint64        now = m_clock();
         for (qsizetype i = 2; i < lines.size(); ++i) {
             const QByteArray& line = lines.at(i);
@@ -375,11 +449,13 @@ namespace gf::menubridge {
                     return false;
                 }
                 inflight.append({id, static_cast<int>(calls), age});
-            } else if (f.at(0) == "unattributed" && f.size() == 3) {
-                if (!parseInt(f.at(1), 1, 1000, &unattr) || !parseInt(f.at(2), 0, now, &unattrAt)) {
-                    *why = QStringLiteral("invalid unattributed line");
+            } else if (f.at(0) == "crash" && f.size() == 2) {
+                qint64 t = 0;
+                if (crashTimes.size() >= penalty::kMaxCrashesKept || !parseInt(f.at(1), 0, now, &t)) {
+                    *why = QStringLiteral("invalid crash line");
                     return false;
                 }
+                crashTimes.append(t);
             } else if (f.at(0) == "deny" && f.size() == 5) {
                 qint64        strikes = 0, until = 0, last = 0;
                 const QString id = decodeIdentity(f.at(4));
@@ -408,27 +484,25 @@ namespace gf::menubridge {
             e.lastStrike = d.last;
             capRefused(d.id);
         }
-        if (unattr > 0) {
-            m_unattributed   = static_cast<int>(unattr);
-            m_unattributedAt = unattrAt;
-        }
+        for (const qint64 t : crashTimes)
+            m_crashes.append(t);
         if (out)
             *out = CrashOutcome{};
         if (running == 1) {
-            // The previous run did not stop cleanly. It is blamed on an identity only when the evidence is
-            // unambiguous: exactly one call in flight, to one identity, and a fresh one. Otherwise nobody is blamed.
+            // The previous run did not stop cleanly: it counts toward the degradation budget whoever is to blame.
+            // It is blamed on an identity only when the evidence is unambiguous: exactly one call in flight, to one
+            // identity, and a fresh one. Otherwise nobody is blamed.
             int total = 0;
             for (const InflightCall& c : inflight)
                 total += c.calls;
             CrashOutcome result;
             result.crashed = true;
+            recordCrash();
             if (inflight.size() == 1 && total == 1 && inflight.first().ageMs <= penalty::kFreshCallMs) {
                 result.culprit = inflight.first().id;
                 record(result.culprit, Offence::Crash);
-            } else {
-                recordUnattributed();
             }
-            result.unattributed = unattributed();
+            result.crashes = crashes();
             if (out)
                 *out = result;
         }
