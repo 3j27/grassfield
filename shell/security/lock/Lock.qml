@@ -175,7 +175,9 @@ Singleton {
             unlockedAnswers = 0;
             return;
         }
-        const state = Machine.compositorLockState(Hyprland.monitors.values.map(m => m.lastIpcObject));
+        // Lazy: each lastIpcObject read converts a whole monitor map to JS; while locked only the first one is read.
+        const monitors = Hyprland.monitors.values;
+        const state = Machine.compositorLockStateLazy(monitors.length, i => monitors[i].lastIpcObject);
         const action = Machine.ownershipAction(state, unlockedAnswers);
         unlockedAnswers = state === "unlocked" ? unlockedAnswers + 1 : 0;
         if (action === "confirm")

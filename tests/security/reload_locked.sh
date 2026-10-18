@@ -600,11 +600,12 @@ step_probe_cost() {
 rss_mb() { awk '/^VmRSS:/ { printf "%.1f", $2 / 1024 }' "/proc/$1/status" 2>/dev/null; }
 
 # Memory of the shell while the 100 ms ownership check runs (a foreign locker holds the lock over Grassfield's) for
-# PROBE_MEMORY_SECONDS (default 600): RSS every 30 s, and the growth over the second half (least squares, MB/min) after
-# the JS heap has warmed up. Fails above PROBE_MEMORY_MAX_SLOPE MB/min (default 0.5; R12 counter-review: 452 -> 477 MB
-# in ~5 min, i.e. ~5 MB/min). Not in the default sequence (10 min): run it explicitly.
+# PROBE_MEMORY_SECONDS (default 600), RSS every 15 s. The JS heap makes a sawtooth (garbage builds up, a collection drops
+# it), so two numbers: the garbage rate (sum of the rises, MB/min; what the per-probe allocation costs) and the retained
+# growth (lowest RSS of the last third minus lowest of the middle third: a leak raises the post-collection floor).
+# Fails when the retained growth reaches PROBE_MEMORY_MAX_RETAINED_MB (default 5). Not in the default sequence (10 min).
 step_probe_memory() {
-  local secs=${PROBE_MEMORY_SECONDS:-600} maxSlope=${PROBE_MEMORY_MAX_SLOPE:-0.5} shellPid s from t0 now series="" slope
+  local secs=${PROBE_MEMORY_SECONDS:-600} maxRetained=${PROBE_MEMORY_MAX_RETAINED_MB:-5} shellPid s from t0 now series="" stats rate retained
   shellPid=$(dev_live_pid "$dev/shell.pid") || { fail "probe-memory: no live shell record"; return; }
   s=$(wait_status locked 3) || { fail "probe-memory: precondition: status $s"; return; }
   from=$(wc -l <"$dev/shell.log")
@@ -617,15 +618,26 @@ step_probe_memory() {
   while ((SECONDS - t0 <= secs)); do
     now=$((SECONDS - t0))
     series+="$now $(rss_mb "$shellPid")"$'\n'
-    sleep 30
+    sleep 15
   done
   foreign_release_and_wait probe-memory
   echo "probe-memory: shell RSS (s MB):"
   printf '%s' "$series" | awk '{ printf "  %4d s  %7.1f MB\n", $1, $2 }'
-  slope=$(printf '%s' "$series" | awk -v half=$((secs / 2)) '$1 >= half { n++; sx += $1; sy += $2; sxx += $1 * $1; sxy += $1 * $2 }
-    END { if (n < 2) { print "nan"; exit } printf "%.2f", (n * sxy - sx * sy) / (n * sxx - sx * sx) * 60 }')
-  echo "probe-memory: growth over the second half: $slope MB/min (first $(printf '%s' "$series" | head -n 1 | cut -d' ' -f2) MB, last $(printf '%s' "$series" | tail -n 1 | cut -d' ' -f2) MB)"
-  if awk -v s="$slope" -v m="$maxSlope" 'BEGIN { exit !(s != "nan" && s < m) }'; then pass "probe-memory: no growth with the 100 ms check ($slope MB/min < $maxSlope)"; else fail "probe-memory: the shell grows $slope MB/min with the 100 ms check"; fi
+  stats=$(printf '%s' "$series" | awk -v secs="$secs" '
+    { t[NR] = $1; m[NR] = $2 }
+    END {
+      up = 0; mid = 1e9; last = 1e9; lo = 1e9; hi = 0
+      for (i = 1; i <= NR; i++) {
+        if (i > 1 && m[i] > m[i - 1]) up += m[i] - m[i - 1]
+        if (t[i] >= secs / 3 && t[i] < 2 * secs / 3 && m[i] < mid) mid = m[i]
+        if (t[i] >= 2 * secs / 3 && m[i] < last) last = m[i]
+        if (m[i] < lo) lo = m[i]; if (m[i] > hi) hi = m[i]
+      }
+      printf "%.1f %.1f %.1f %.1f", up / (t[NR] / 60), last - mid, lo, hi
+    }')
+  read -r rate retained lo hi <<<"$stats"
+  echo "probe-memory: over $secs s: garbage rate $rate MB/min (sum of rises), retained growth $retained MB (floor of the last third minus floor of the middle third), RSS $lo-$hi MB"
+  if awk -v r="$retained" -v m="$maxRetained" 'BEGIN { exit !(r < m) }'; then pass "probe-memory: no retained growth with the 100 ms check ($retained MB < $maxRetained)"; else fail "probe-memory: the post-collection floor grew $retained MB with the 100 ms check"; fi
 }
 
 # Leave nothing behind but the (locked) nested session.

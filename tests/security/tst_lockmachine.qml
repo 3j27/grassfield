@@ -176,6 +176,39 @@ TestCase {
         compare(Machine.compositorLockState([null, {}, {solitaryBlockedBy: "LOCK"}]), "unknown");
     }
 
+    // Lazy reading (R12 counter-review: per-probe garbage of the 100 ms check): same answers as compositorLockState for
+    // every shape, and while locked only the first monitor's IPC object is read.
+    function test_compositorLockStateLazy() {
+        const shapes = [
+            [{solitaryBlockedBy: ["LOCK", "WINDOWED", "CANDIDATE"]}],
+            [{solitaryBlockedBy: ["WORKSPACE"]}, {solitaryBlockedBy: ["WINDOWED", "LOCK"]}],
+            [{solitaryBlockedBy: ["WINDOWED", "CANDIDATE"]}],
+            [{solitaryBlockedBy: ["WORKSPACE"]}],
+            [{solitaryBlockedBy: ["WORKSPACE"]}, {solitaryBlockedBy: []}],
+            [],
+            [null, {}, {solitaryBlockedBy: "LOCK"}],
+            [{solitaryBlockedBy: ["WINDOWED"]}, {solitaryBlockedBy: ["LOCK"]}],
+            [{solitaryBlockedBy: ["LOCK"]}, {solitaryBlockedBy: ["WINDOWED"]}]
+        ];
+        for (let k = 0; k < shapes.length; k++) {
+            const list = shapes[k];
+            compare(Machine.compositorLockStateLazy(list.length, i => list[i]), Machine.compositorLockState(list), JSON.stringify(list));
+        }
+        // Locked on the first monitor: the second is never read.
+        let reads = [];
+        const locked = [{solitaryBlockedBy: ["LOCK"]}, {solitaryBlockedBy: ["LOCK"]}];
+        compare(Machine.compositorLockStateLazy(2, i => { reads.push(i); return locked[i]; }), "locked");
+        compare(reads, [0]);
+        // Unlocked: every monitor is read (a later LOCK would still win), each once, in order.
+        reads = [];
+        const unlocked = [{solitaryBlockedBy: ["WINDOWED"]}, {solitaryBlockedBy: ["CANDIDATE"]}];
+        compare(Machine.compositorLockStateLazy(2, i => { reads.push(i); return unlocked[i]; }), "unlocked");
+        compare(reads, [0, 1]);
+        // Bad counts read nothing and prove nothing.
+        compare(Machine.compositorLockStateLazy(undefined, i => locked[i]), "unknown");
+        compare(Machine.compositorLockStateLazy(0, i => locked[i]), "unknown");
+    }
+
     function test_displayNameAndInitials() {
         const passwd = "root:x:0:0::/root:/bin/bash\nada:x:1000:1000:Ada Lovelace,,,:/home/ada:/bin/bash\nbob:x:1001:1001::/home/bob:/bin/sh\n";
         compare(Machine.displayName(passwd, "ada"), "Ada Lovelace");
