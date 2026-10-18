@@ -14,7 +14,7 @@ PopupMenu {
     model: [
         {id: "about", text: qsTr("About This Computer")},
         {separator: true},
-        {id: "settings", text: qsTr("System Settings…")},
+        {id: "settings", text: qsTr("Settings…")},
         {separator: true},
         {id: "forcequit", text: qsTr("Force Quit…")},
         {separator: true},

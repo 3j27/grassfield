@@ -481,7 +481,7 @@ Scope {
 
                     BarButton {
                         id: ccButton
-                        accessibleName: qsTr("Control Center")
+                        accessibleName: qsTr("Quick Settings")
                         active: win.isOpen("controlcenter")
                         onActivated: win.popup("controlcenter")
 
@@ -493,7 +493,7 @@ Scope {
 
                     BarButton {
                         id: clockButton
-                        accessibleName: qsTr("Date and time: %1. Open Notification Center").arg(clockText.text)
+                        accessibleName: qsTr("Date and time: %1. Open Notifications").arg(clockText.text)
                         active: Notifications.centerOpen && Notifications.centerScreen === win.screen.name
                         onActivated: Notifications.toggleCenter(win.screen.name)
 
