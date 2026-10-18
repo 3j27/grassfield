@@ -33,8 +33,10 @@ public:
     Q_INVOKABLE QVariantMap readText(const QString &path) const;
     // Atomic replace (QSaveFile); creates the directory. Returns "" on success, else an error message.
     Q_INVOKABLE QString writeText(const QString &path, const QString &text) const;
-    // Run a program with an argument vector (no shell), 3 s timeout. Returns stdout, "" on any failure.
+    // Run one of the read-only queries of systemguard.h::isReadOnlyQuery synchronously (no shell, 3 s timeout, C locale).
+    // Returns stdout, "" on any failure and for any command outside that list, in dev and real sessions alike.
     Q_INVOKABLE QString run(const QStringList &argv) const;
+    // Every command (query, act, run) runs with LC_ALL=C and LANG=C (LANGUAGE unset): the parsers expect English output.
     // Read-only query without blocking the window: runs argv (no shell), emits finished(tag, ok, stdout). In a dev
     // session only the queries of systemguard.h::isReadOnlyQuery run; anything else is refused (logged, finished(false)).
     Q_INVOKABLE void query(const QStringList &argv, const QString &tag, int timeoutMs = 5000);
@@ -51,6 +53,9 @@ public:
 signals:
     void fileChanged(const QString &path);
     void finished(const QString &tag, bool ok, const QString &output);
+    // Emitted just before finished(tag, false, ...): a short single-line reason (stderr, else stdout, "timed out",
+    // or the start error), at most 160 characters. Plain text from a tool: show it as text only.
+    void failed(const QString &tag, const QString &reason);
     void suppressed(const QString &what);
 
 private:

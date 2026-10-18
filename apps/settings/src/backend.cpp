@@ -6,6 +6,8 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QProcess>
+#include <QProcessEnvironment>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QScreen>
 #include <QTimer>
@@ -19,6 +21,31 @@
 namespace {
 constexpr qint64 kMaxRead = 4 * 1024 * 1024;
 constexpr int kRunTimeoutMs = 3000;
+constexpr int kMaxReason = 160;
+
+// Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
+void forceCLocale(QProcess &p)
+{
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    env.insert(QStringLiteral("LANG"), QStringLiteral("C"));
+    env.remove(QStringLiteral("LANGUAGE"));
+    p.setProcessEnvironment(env);
+}
+
+// One short line explaining a failure: first non-empty line of stderr, else of stdout (bluetoothctl reports errors there).
+QString reasonOf(const QByteArray &err, const QByteArray &out)
+{
+    for (const QByteArray &src : {err, out}) {
+        for (const QString &line : QString::fromUtf8(src).split(QLatin1Char('\n'))) {
+            QString t = line.simplified();
+            t.remove(QRegularExpression(QStringLiteral("[\\x00-\\x1f\\x7f]")));
+            if (!t.isEmpty())
+                return t.left(kMaxReason);
+        }
+    }
+    return QString();
+}
 
 QString resolveConfigFile()
 {
@@ -73,17 +100,26 @@ Backend::~Backend()
 void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
 {
     auto *p = new QProcess(this);
+    forceCLocale(*p);
     auto *timer = new QTimer(p);
     timer->setSingleShot(true);
-    connect(timer, &QTimer::timeout, p, [p] { p->kill(); });
+    connect(timer, &QTimer::timeout, p, [p] {
+        p->setProperty("timedOut", true);
+        p->kill();
+    });
     connect(p, &QProcess::errorOccurred, this, [this, p, tag](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
+            emit failed(tag, p->errorString().left(kMaxReason));
             emit finished(tag, false, QString());
             p->deleteLater();
         }
     });
     connect(p, &QProcess::finished, this, [this, p, tag](int code, QProcess::ExitStatus status) {
-        emit finished(tag, status == QProcess::NormalExit && code == 0, QString::fromUtf8(p->readAllStandardOutput()));
+        const bool ok = status == QProcess::NormalExit && code == 0;
+        const QByteArray out = p->readAllStandardOutput();
+        if (!ok)
+            emit failed(tag, p->property("timedOut").toBool() ? QStringLiteral("timed out") : reasonOf(p->readAllStandardError(), out));
+        emit finished(tag, ok, QString::fromUtf8(out));
         p->deleteLater();
     });
     p->start(argv.first(), argv.mid(1), QIODevice::ReadOnly);
@@ -178,9 +214,14 @@ QString Backend::writeText(const QString &path, const QString &text) const
 
 QString Backend::run(const QStringList &argv) const
 {
-    if (argv.isEmpty())
+    // Same allow-list as query(), in every session: nothing else runs through this door.
+    if (argv.isEmpty() || !grassfield::settings::isReadOnlyQuery(argv)) {
+        if (!argv.isEmpty())
+            qWarning().noquote() << "refused run() of a command that is not a read-only query:" << argv.first();
         return QString();
+    }
     QProcess p;
+    forceCLocale(p);
     p.start(argv.first(), argv.mid(1), QIODevice::ReadOnly);
     if (!p.waitForFinished(kRunTimeoutMs) || p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
         // Never destroy a running QProcess: terminate, then kill, each with a bounded wait.

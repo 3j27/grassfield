@@ -16,6 +16,21 @@ SettingsPage {
     property bool answered: false
     property var audio: ({sinks: [], sources: []})
 
+    // The device rows, keyed by node id: a refresh updates, inserts and removes rows in place.
+    ListModel {
+        id: sinkModel
+    }
+
+    ListModel {
+        id: sourceModel
+    }
+
+    onAudioChanged: {
+        const rows = list => list.map(d => ({nodeId: d.id, name: d.name, isDefault: d.isDefault}));
+        System.syncModel(sinkModel, rows(root.audio.sinks), "nodeId");
+        System.syncModel(sourceModel, rows(root.audio.sources), "nodeId");
+    }
+
     readonly property var output: System.defaultOf(root.audio.sinks)
     readonly property var input: System.defaultOf(root.audio.sources)
     readonly property bool available: root.audio.sinks.length > 0 || root.audio.sources.length > 0
@@ -58,17 +73,19 @@ SettingsPage {
         caption: qsTr("Output")
 
         Repeater {
-            model: root.audio.sinks
+            model: sinkModel
 
             delegate: DeviceRow {
                 id: sinkRow
 
-                required property var modelData
+                required property int nodeId
+                required property string name
+                required property bool isDefault
 
-                title: sinkRow.modelData.name
+                title: sinkRow.name
                 leading: "volume-3"
-                checked: sinkRow.modelData.isDefault
-                onActivated: root.system.act("output device", System.setDefaultDevice(sinkRow.modelData.id), "audio.act")
+                checked: sinkRow.isDefault
+                onActivated: root.system.act("output device", System.setDefaultDevice(sinkRow.nodeId), "audio.act")
             }
         }
 
@@ -98,17 +115,19 @@ SettingsPage {
         caption: qsTr("Input")
 
         Repeater {
-            model: root.audio.sources
+            model: sourceModel
 
             delegate: DeviceRow {
                 id: sourceRow
 
-                required property var modelData
+                required property int nodeId
+                required property string name
+                required property bool isDefault
 
-                title: sourceRow.modelData.name
-                leading: "volume-1"
-                checked: sourceRow.modelData.isDefault
-                onActivated: root.system.act("input device", System.setDefaultDevice(sourceRow.modelData.id), "audio.act")
+                title: sourceRow.name
+                leading: "microphone"
+                checked: sourceRow.isDefault
+                onActivated: root.system.act("input device", System.setDefaultDevice(sourceRow.nodeId), "audio.act")
             }
         }
 
@@ -131,6 +150,11 @@ SettingsPage {
                 onToggled: c => root.system.act("mute", System.setMute(root.input ? root.input.id : -1, c), "audio.act")
             }
         }
+    }
+
+    ErrorNote {
+        system: root.system
+        tag: "audio.act"
     }
 
     DevNote {
