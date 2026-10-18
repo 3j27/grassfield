@@ -210,6 +210,8 @@ QtObject {
     readonly property int menuSwatchGap: 8
     // estimate: ring around the hovered or keyboard-current swatch
     readonly property int menuSwatchRing: 2
+    // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1)
+    readonly property string menuSwatchMark: "#1B1B1F"
 
     // estimate, pending F1 measurement from design/reference
     readonly property int controlSliderTrack: 4

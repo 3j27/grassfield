@@ -33,9 +33,29 @@ function hasSubmenu(item) {
     return item !== undefined && item !== null && item.submenu !== undefined && item.submenu.length > 0;
 }
 
+// A row of colour swatches ({swatches: [{id, color, name, state}], caption?, enabled?}): one menu row whose swatches
+// are chosen with Left/Right (wrapping) and Return/Space.
+function hasSwatches(item) {
+    return item !== undefined && item !== null && item.swatches !== undefined && item.swatches.length > 0;
+}
+
+// Next swatch of a swatch row from `swatchIndex` in direction dir (+1/-1), wrapping.
+function stepSwatch(item, swatchIndex, dir) {
+    const n = hasSwatches(item) ? item.swatches.length : 0;
+    if (n === 0)
+        return -1;
+    if (swatchIndex < 0)
+        return dir > 0 ? 0 : n - 1;
+    return (swatchIndex + dir + n) % n;
+}
+
 // Result of a key press: {index, action} with action one of
-// "", "activate", "close", "openSubmenu", "closeSubmenu".
+// "", "activate", "close", "openSubmenu", "closeSubmenu", "swatchPrevious", "swatchNext".
+// On a swatch row "activate" means: choose the swatch under the row's cursor.
 function handleKey(items, index, key, isSubmenu) {
+    const onSwatches = selectable(items[index]) && hasSwatches(items[index]);
+    if (onSwatches && (key === "left" || key === "right"))
+        return {index: index, action: key === "left" ? "swatchPrevious" : "swatchNext"};
     switch (key) {
     case "down":
         return {index: step(items, index, 1), action: ""};
