@@ -5,7 +5,7 @@ Status: titlebars, gfc/1 capabilities, minimize/restore with animation (M2), the
 live transforms (feature 4, Mission Control v2: the plugin side; spike and shell contract in `docs/specs/overview.md`;
 R13 fixes 2026-10-18) and the desktop focus policy (feature `desktop-focus`, FR30-FR32, ADR-0012 amendment; v2
 `desktop-focus-v2`) implemented; Stages prototype behind a feature flag (features `stages-available` / `stages`,
-FR33-FR37, ADR-0013, spec `docs/specs/stages.md`). Plugin 0.6.0-stages.
+FR33-FR38, ADR-0013, spec `docs/specs/stages.md`; input guards after the R13 review of 46b3e9b). Plugin 0.6.1-stages.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -252,9 +252,22 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `reason` as in FR34 plus `interrupted` (a strip surface went away or the monitors changed: that monitor's windows are
   shown normally at once) and `unavailable` (unload).
 - **FR37** Stages cleanup: `PLUGIN_EXIT` (and turning Stages off) removes every Stages transformer before `dlclose` and
-  lifts every input block, removes the pending `doLater` and the watchdog timer, and posts `on:false`/`unavailable` before
-  the event throttle stops; `start()` resets the flag and the model (the library may have stayed mapped since a previous
-  load, FR23).
+  lifts every input block, removes the pending `doLater` callbacks (model sync, pointer refresh) and the watchdog timer,
+  and posts `on:false`/`unavailable` before the event throttle stops; `start()` resets the flag and the model (the library
+  may have stayed mapped since a previous load, FR23).
+- **FR38** Stages input guards (ST6, ST9, ST10, ST23; R13 review of 46b3e9b): no pointer, scroll or key event reaches a
+  strip window. Whenever a block changes the plugin re-runs Hyprland's pointer focus logic at the cursor
+  (`CInputManager::simulateMouseMovement` plus a pointer frame; from the event loop inside layer-unmap and monitor paths;
+  skipped while no pointer device exists, since Hyprland then refuses any pointer focus change); its first pointer button
+  listener (`main.cpp`, before the titlebar and desktop focus code) and a scroll listener refresh a pointer focus still on
+  a strip window, or clear it while a held button pins it there; a key listener applies a pending sync and moves a
+  keyboard focus still on a strip window to the active stage's front window, or to nothing. Button events are never
+  cancelled. When the focused window leaves the active stage (close, minimize, move) Hyprland's successor keeps the
+  keyboard only if it may hold it; otherwise the active stage's front window, else nothing. Hyprland's `FFM` focus of a
+  strip window (restoring its last window) does not bring its stage forward. The desktop focus policy counts a pointer
+  focus on a window that does not take input as stale. Decision logic pure (`core/Stages.*`: `beforePointerEvent`,
+  `keyboardAfterLeave`, `stripFocusBringsStage`; `core/DesktopFocus.*`: `classifyPointerFocus`). A transformed window
+  without a free work buffer is drawn as nothing that frame (`WindowTransform.cpp`), never at its real place.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -294,7 +307,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 had just focused, 7a `desktopA=ka`, and from a new window, 7b `desktopA=kn`; 7c PASS. An earlier 7a used ALT+TAB, which is
 not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed build: `desktop_focus.sh check` **26/26 PASS** (runs `.dev/desktop-focus/run-20261018-121710-check`, `run-20261018-142147-check` on the final 0.6.0-stages build), `race` 4/4 (plugin log `cancelled (keyboard focus moved)`, `cancelled (window opened)`). The `rawSurfaceFocus` fallback is removed; `no_focus` windows are skipped by Hyprland's hit test, so the refusal path is reached only for rules applied while the pointer rests on a window (not exercised) |
 | FR26 (relaxed chrome rule) | unit `OverviewChrome.*`; nested `overview.sh` two-output case | L0 / L1 | 2026-10-18, plugin 0.6.0-stages, runs `.dev/overview/run-20261018-130541` and `run-20261018-142052` (final build): **32/32 PASS**: chrome Exclusive on GF-REF and None on WAYLAND-1 → opens with 7 windows; a click at the WAYLAND-1 window's real place reaches nothing; after the close the previously active window gets the keys |
-| FR33-FR37 | unit `Stages*`, `Protocol.StagesFeaturesFollowAvailabilityAndTheFlag`; nested `tests/compositor/stages.sh` (`check`, `perf`) | L0 / L1 | 2026-10-18, plugin 0.6.0-stages, run `.dev/stages/run-20261018-141943-check`: **40/40 PASS** (detail and CPU table in `docs/specs/stages.md`) |
+| FR33-FR37 | unit `Stages*`, `Protocol.StagesFeaturesFollowAvailabilityAndTheFlag`; nested `tests/compositor/stages.sh` (`check`, `perf`) | L0 / L1 | 2026-10-18, plugin 0.6.0-stages, run `.dev/stages/run-20261018-141943-check`: **40/40 PASS** (detail and CPU table in `docs/specs/stages.md`); plugin 0.6.1-stages run `.dev/stages/run-20261018-200428-check`: **45/45 PASS** |
+| FR38 (R13 review of 46b3e9b) | unit `StagesInput.*` (pointer guard decisions, keyboard after a leave, strip focus origin), `DesktopFocusTarget.PointerFocusOnABlockedWindowIsStale`; nested `stages.sh` 5b (click without motion after a swap), 7b (after a new window), 8b (swap under an Exclusive layer), 12b (minimize the only window of the active stage), 12c (`cycle_next` stays in the active stage); `minimize.sh stages`; `soak.sh 660 stages` | L0 / L1 | 2026-10-18, plugin 0.6.1-stages, Hyprland v0.56.2 (efb50993): stages.sh 45/45, `minimize.sh stages` PASS (O gets the keys after A, alone in the active stage, is minimized), soak PASS; the pre-fix build fbacf15 fails the 5b, 8b and 12b sequences (scratch probe, `docs/specs/stages.md` acceptance) |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -600,7 +614,12 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   Hyprland; the plugin uses `1 << 6`), `CViewHitTester::windowAt` (skips windows that do not accept input),
   `CLayerSurface::{m_layer, m_geometry, resource()}`, `SSurfaceState::{input, inputIsInfinite}`,
   `State::monitorState()->monitors()`, `CEventLoopManager::{doLater, removeDoLater}`, `Event::bus()->m_events.window.{open,
-  floating}`. Desktop focus v2: `CViewHitTester::{layerPopupSurfaceAt, layerSurfaceAt, windowSurfaceAt}`,
+  floating}`. Input guards (FR38, plugin 0.6.1-stages): `CInputManager::simulateMouseMovement` (exported; re-runs
+  `mouseMoveUnified` at the cursor), `CSeatManager::{m_state.pointerFocus, m_state.keyboardFocus, m_mouse, m_seatGrab,
+  setPointerFocus, sendPointerFrame}` (`setPointerFocus` refuses and logs "BUG THIS" without a pointer device),
+  `CWindow::{noInputBlockedReasonsBesides, isHidden}`, `CWorkspace::isVisible`, `CFocusState::{fullWindowFocus,
+  rawSurfaceFocus}`, `Event::bus()->m_events.input.{keyboard.key, mouse.axis}` (observed, never cancelled),
+  `Desktop::FOCUS_REASON_FFM` (what `CInputManager::refocusLastWindow` uses when a layer releases the keyboard). Desktop focus v2: `CViewHitTester::{layerPopupSurfaceAt, layerSurfaceAt, windowSurfaceAt}`,
   `CMonitor::m_layerSurfaceLayers`, `State::monitorState()->query().vec()`, `IView::aliveAndVisible`.
 - GCC 16.2.1, C++23. Lua 5.5 headers (Hyprland links `liblua.so.5.5`). GoogleTest 1.18.0 for tests.
 - Quickshell 0.3.1 for the IPC spike.
@@ -717,6 +736,15 @@ Manual (L1, nested only):
   `tests/integration/global_menus.sh` 31/31 PASS. C2: `nested-up.sh --no-plugin` → `hyprctl grassfield` "unknown request",
   `hl.plugin.grassfield` is nil (an unguarded call errors; the shell guards every verb), shell log "no compositor plugin
   reply, running in degraded mode".
+  Plugin 0.6.1-stages (Stages input guards, R13 review of 46b3e9b, 2026-10-18, Hyprland v0.56.2 commit efb50993):
+  `soak.sh 660 stages` → PASS with Stages on (log `.dev/soak-20261018-201156.log`: 372 rounds, 74 moves into new strip
+  stages, 52 swaps, 1393 stages events, 46 minimize pairs all animated, 0 Dock clicks skipped and every one on the
+  minimized foot tile; RSS 152.5 → 160.8 MB, flat from round 100; no core dump; 0 grassfield exceptions; 226 seat warnings
+  as designed); Stages off: `desktop_focus.sh` 26/26, `overview.sh check` 32/32, `input_consistency.sh`, `minimize.sh`,
+  `appmenu.sh`, `event_flood.sh` PASS; Stages on: `stages.sh` 45/45, `minimize.sh stages` PASS;
+  `tests/integration/global_menus.sh` PASS (41 checks). C2: `nested-up.sh --no-plugin` → `hyprctl grassfield` "unknown
+  request", `hl.plugin.grassfield.stages(...)` errors (nil `grassfield`), no `[grassfield]` line in the nested log, shell
+  log "no compositor plugin reply, running in degraded mode".
   Title textures are cached per window and rebuilt only when the title, scale or available width changes;
   drawing adds 6 rect pass elements and 1 texture per decorated window.
 - Q1: `compositor/build-direct.sh tidy` must exit 0 with no diagnostics.

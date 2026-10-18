@@ -143,7 +143,14 @@ pending desktop grant on any other focus change (keyboard focus, window activati
 (c) grants a window the keyboard through Hyprland's `fullWindowFocus` only (no forced surface focus that could bypass
 `no_focus` or a modal child). It advertises `desktop-focus-v2` together with `desktop-focus`; the shell enables its
 file-changing desktop keys only with `desktop-focus-v2` (shell main 23caeab). Evidence: `tests/compositor/desktop_focus.sh`
-26/26 with cases 7 (slow commit) and 8 (click without motion); the plugin build e066a19 fails both (`race`, `stale` modes).
+26/26 with cases 7 (slow commit) and 8 (click without motion). The previous plugin build e066a19 fails three of these
+cases, not only one per mode: `stale` fails case 8 (`desktopA=pf`: after menu, pointer onto the foot, Esc, the click left
+the keys on the desktop), and `race` passes only 1 of its 4 checks: case 7a fails (`desktopA=ka`: the late `on_demand`
+commit took the keyboard from the window a focus dispatch had just focused), case 7b fails (`desktopA=kn`: it took it
+from a window that had just mapped), the plugin-log check fails (that build cancels no pending grant), only the control
+7c passes (run `.dev/desktop-focus/run-20261018-135258-race`, recorded in
+`docs/specs/compositor.md` FR30; the plugin build e066a19 loaded with `nested-up.sh --no-plugin` + `scripts/nestctl plugin
+load`).
 
 ## Consequences
 - The safe mode and its catchers are temporary; this design replaces them after a spike PASS and a review.
