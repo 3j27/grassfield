@@ -45,6 +45,10 @@ their tiles, no input at strip windows' real places, animated swap, regrouping, 
 hidden strip, workspace switch, minimize, full screen, overlap, strip surface gone, invalid payloads, a 1000-request flood, unload during
 Stages); `stages.sh perf 30`: idle 0.1 % of one core, a ticker in a strip tile 4.4 % (3.2 % with Stages off), a swap per
 second 12.0 %; the special-workspace alternative ~0 % but frozen. Details: `docs/specs/stages.md` "Spike results".
+Fix pass after the R13 review of 46b3e9b (plugin 0.6.1-stages, nested Hyprland v0.56.2 commit efb50993): `stages.sh check`
+45/45 (adds a click without motion after a swap and after a new window, a swap under an Exclusive layer, minimizing the
+only window of the active stage, window cycling), `minimize.sh stages` PASS, `soak.sh 660 stages` PASS; the pre-fix build
+fails the three review sequences in the same session.
 
 ## Consequences
 - Depends on Hyprland internals: `CWindow::setInputBlocked` with an unused reason bit (`1 << 6`), `acceptsInput()` in the
@@ -52,6 +56,18 @@ second 12.0 %; the special-workspace alternative ~0 % but frozen. Details: `docs
   a mismatched build).
 - Requests are applied once per event loop pass: Hyprland's own `activewindow` events are not throttled, and a flood of
   per-request focus changes dropped the shell's socket2 connection in the spike.
+- The input block alone is not enough (R13 review of 46b3e9b): Hyprland updates pointer focus on pointer motion only and
+  delivers buttons, scrolls and keys to its current focus without checking blocks, and it cannot pick a blocked successor
+  for the keyboard. The plugin therefore re-runs Hyprland's pointer focus logic (`CInputManager::simulateMouseMovement`)
+  whenever a block changes, checks the pointer focus before every button and scroll and the keyboard focus before every
+  key (moving a stale focus off a blocked window, never cancelling button events), and gives the keyboard to the active
+  stage's front window, or to nothing, when Hyprland's successor may not hold it (minimize, close). Hyprland restoring its
+  last window (`FFM`, e.g. when an Exclusive layer releases the keyboard) is not a user choice, so a swap made under an
+  Exclusive layer is kept. Spec `docs/specs/stages.md` ST6, ST9, ST10, ST23.
+- Window cycling stays within the active stage (Hyprland's `cycle_next` skips windows that do not take input): the macOS
+  model keeps Cmd+` (windows of the current app) inside the stage, and app switching (Cmd+Tab: Dock, Search, the coming
+  app switcher) brings a stage forward through a focus by dispatch. A stage-aware ALT+TAB would need a function hook on
+  `CWindowQuery::cycle` (rejected as fragile) or a session binding to a plugin verb.
 - Popups of strip windows are not transformed; a strip revealed over an overlapping window draws under it; no persistence
   of stages across restarts; multiple outputs not verified yet.
 - The shell strip, Control Center toggle and Settings entry are the shell-engineer's next step (contract only here).
