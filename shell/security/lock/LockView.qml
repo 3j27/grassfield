@@ -76,10 +76,11 @@ Item {
         visible: false
 
         // Dev-only: the wallpaper override of the contrast run (VisualFixtures.wallpaperFile, always "" outside dev),
-        // so that the lock is measured over the same worst-case wallpapers as the desktop.
+        // so that the lock is measured over the same worst-case wallpapers as the desktop. No `visible` binding: under
+        // an invisible effect source, a child turned visible later is never redrawn (Qt only dirties it when its
+        // effective visibility changes); an empty source draws nothing.
         Image {
             anchors.fill: parent
-            visible: VisualFixtures.wallpaperFile !== ""
             source: VisualFixtures.wallpaperFile !== "" ? "file://" + VisualFixtures.wallpaperFile : ""
             fillMode: Image.Stretch
             sourceSize: Qt.size(width, height)
