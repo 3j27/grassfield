@@ -118,4 +118,41 @@ TestCase {
             verify(Math.abs(s.w / s.h - 700 / 500) < 1e-6, "aspect ratio of the window is kept");
         }
     }
+
+    // ---- keyboard plan of the chromes ----
+
+    function test_keyboardPlanOneExclusiveWhileOpen() {
+        const plan = V2.keyboardPlan(["WAYLAND-1", "GF-REF"], "GF-REF", "open");
+        compare(plan["GF-REF"], "exclusive");
+        compare(plan["WAYLAND-1"], "none");
+        compare(Object.keys(plan).length, 2);
+    }
+
+    function test_keyboardPlanEveryChromeNoneWhenReleasingAndClosed() {
+        for (const phase of ["releasing", "closed"]) {
+            const plan = V2.keyboardPlan(["a", "b", "c"], "b", phase);
+            for (const k of Object.keys(plan))
+                compare(plan[k], "none", phase + " " + k);
+        }
+    }
+
+    function test_keyboardPlanUnknownOrEmptyKeyScreenUsesTheFirstOutput() {
+        compare(V2.keyboardPlan(["a", "b"], "", "open").a, "exclusive");
+        compare(V2.keyboardPlan(["a", "b"], "gone", "open").a, "exclusive");
+        compare(V2.keyboardPlan(["a", "b"], "gone", "open").b, "none");
+    }
+
+    function test_keyboardPlanSingleOutputAndNoOutput() {
+        compare(V2.keyboardPlan(["a"], "a", "open").a, "exclusive");
+        compare(Object.keys(V2.keyboardPlan([], "a", "open")).length, 0);
+        compare(Object.keys(V2.keyboardPlan(null, "a", "open")).length, 0);
+    }
+
+    function test_keyboardPlanExactlyOneExclusiveForAnyKeyScreen() {
+        const screens = ["a", "b", "c"];
+        for (const key of screens.concat([""])) {
+            const plan = V2.keyboardPlan(screens, key, "open");
+            compare(screens.filter(n => plan[n] === "exclusive").length, 1, "key " + key);
+        }
+    }
 }

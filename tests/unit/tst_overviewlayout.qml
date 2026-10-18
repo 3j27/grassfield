@@ -163,4 +163,72 @@ TestCase {
         verify(Layout.signature(a, area) !== Layout.signature(moved, area));
         verify(Layout.signature(a, area) !== Layout.signature(a, {x: 0, y: 100, w: 1900, h: 900}));
     }
+
+    // ---- reserved areas (menu bar, Dock) ----
+
+    readonly property var reserve: ({menubar: 32, barBottom: 116, margin: 32, label: 34, dock: 0})
+
+    function test_freeAreaWithoutDock() {
+        const a = Layout.freeArea({w: 1920, h: 1080}, reserve);
+        compare(a.x, 32);
+        compare(a.y, 148);
+        compare(a.w, 1856);
+        compare(a.h, 1080 - 32 - 116 - 64 - 34);
+    }
+
+    function test_freeAreaReservesTheDockAtTheBottom() {
+        const free = Layout.freeArea({w: 1920, h: 1080}, reserve);
+        const withDock = Layout.freeArea({w: 1920, h: 1080}, Object.assign({}, reserve, {dock: 76}));
+        compare(withDock.h, free.h - 76);
+        compare(withDock.y, free.y);
+        compare(withDock.x, free.x);
+        compare(withDock.w, free.w);
+        verify(withDock.y + withDock.h + 34 + 76 <= 1080 - 32);
+    }
+
+    function test_layoutInsideTheDockReservedAreaKeepsWindowsAboveTheDock() {
+        const a = Layout.freeArea({w: 1920, h: 1080}, Object.assign({}, reserve, {dock: 76}));
+        const input = grid(9, 700, 500, false);
+        const res = Layout.layout(input, a, {maxScale: 0.8, gap: 24});
+        for (const r of res.rects)
+            verify(r.y + r.h <= a.y + a.h + 1e-6);
+    }
+
+    // ---- window labels ----
+
+    function overlapsAny(box, rects, skip) {
+        for (let i = 0; i < rects.length; i++) {
+            if (i !== skip && box.x < rects[i].x + rects[i].w && rects[i].x < box.x + box.w && box.y < rects[i].y + rects[i].h && rects[i].y < box.y + box.h)
+                return true;
+        }
+        return false;
+    }
+
+    function test_labelAwareGapLeavesRoomForTheLabel() {
+        compare(Layout.labelAwareGap(24, 34, 8), 50);
+        compare(Layout.labelAwareGap(80, 34, 8), 80);
+    }
+
+    function test_labelUnderTheWindowWhenFree() {
+        const rects = [{id: "a", x: 100, y: 100, w: 400, h: 300}, {id: "b", x: 100, y: 500, w: 400, h: 300}];
+        const box = Layout.labelRect(rects, 0, 200, 34, 8, {w: 1920, h: 1000});
+        compare(box.y, 408);
+        compare(box.x, 200);
+        verify(!overlapsAny(box, rects, 0));
+    }
+
+    function test_labelNeverCoversAnotherWindow() {
+        const rects = [{id: "a", x: 100, y: 100, w: 400, h: 300}, {id: "b", x: 100, y: 420, w: 400, h: 300}];
+        const box = Layout.labelRect(rects, 0, 200, 34, 8, {w: 1920, h: 1000});
+        verify(!overlapsAny(box, rects, 0), JSON.stringify(box));
+        const side = [{id: "a", x: 100, y: 100, w: 100, h: 100}, {id: "b", x: 220, y: 100, w: 300, h: 400}];
+        const box2 = Layout.labelRect(side, 0, 200, 34, 8, {w: 1920, h: 1000});
+        verify(!overlapsAny(box2, side, 0), JSON.stringify(box2));
+    }
+
+    function test_labelStaysInsideTheSurface() {
+        const rects = [{id: "a", x: 0, y: 900, w: 100, h: 80}];
+        const box = Layout.labelRect(rects, 0, 200, 34, 8, {w: 1920, h: 1000});
+        verify(box.x >= 8 && box.y + box.h <= 1000 - 8);
+    }
 }

@@ -234,6 +234,8 @@ Scope {
 
     // True between releasing the exclusive keyboard grab and the pending action.
     property bool releasing: false
+    // Keyboard mode of every output's chrome (V2.keyboardPlan): one Exclusive while open, all None while releasing.
+    readonly property var keyboardPlan: V2.keyboardPlan(Quickshell.screens.map(s => s.name), keyScreen, open && !releasing ? "open" : releasing ? "releasing" : "closed")
     property var pending: null
 
     // Close Overview and focus something. While the overlay holds the keyboard exclusively the
@@ -262,9 +264,15 @@ Scope {
         }
     }
 
+    // Close from outside (IPC, shortcut): same path as Esc, the keyboard is released before the close completes.
+    function requestClose(): void {
+        if (open && !releasing)
+            closeAnd(null);
+    }
+
     function toggle(): void {
         if (open)
-            hide();
+            requestClose();
         else
             show();
     }
@@ -282,7 +290,7 @@ Scope {
         }
 
         function close(): void {
-            root.hide();
+            root.requestClose();
         }
 
         // Test hook: JSON {open, thumbnailMode, profile, screens: [{name, windows: [{address,

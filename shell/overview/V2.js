@@ -87,3 +87,18 @@ function surfaceRect(rect, realWidth, band, screenX, screenY, offsetY) {
     const top = band * s;
     return {x: screenX + rect.x, y: screenY + offsetY + rect.y + top, w: rect.w, h: Math.max(1, rect.h - top)};
 }
+
+// Keyboard plan of the chrome surfaces (v1 and v2). `screens` are the output names, `keyScreen` the output chosen when
+// opening ("" or unknown: the first one), `phase` "open" | "releasing" | "closed". Returns {screenName: "exclusive" |
+// "none"}. Exactly one chrome is Exclusive while open (a second Exclusive surface would receive the keyboard when the
+// first goes away, and Hyprland's refocusLastWindow ignores the close while any exclusive layer is present); every
+// chrome is None while releasing (before the close completes) and when closed, so Hyprland refocuses the last window.
+// The other outputs' chromes keep their input region (clicks still map), only the keyboard differs.
+function keyboardPlan(screens, keyScreen, phase) {
+    const plan = {};
+    const list = screens || [];
+    const holder = list.indexOf(keyScreen) >= 0 ? keyScreen : (list.length > 0 ? list[0] : "");
+    for (const name of list)
+        plan[name] = phase === "open" && name === holder ? "exclusive" : "none";
+    return plan;
+}
