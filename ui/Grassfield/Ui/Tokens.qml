@@ -452,92 +452,8 @@ QtObject {
     // v2: pause before the single retry of an on:true the plugin refused with no-chrome (the second output's Exclusive commit may lag)
     readonly property int overviewChromeRetryMs: 120
 
-    // task spec: about 96 px at 1080p; scaled by screen height
-    readonly property int appsIconSize: 96
-    // estimate: grid width share of the screen
-    readonly property real appsWidthFraction: 0.8
-    // estimate: grid height share of the screen
-    readonly property real appsHeightFraction: 0.7
-    // estimate: cell width relative to the icon (7 columns at 1080p)
-    readonly property real appsCellWidthScale: 2.2
-    // estimate: cell height relative to the icon (5 rows at 1080p)
-    readonly property real appsCellHeightScale: 1.55
-    // estimate
-    readonly property int appsMinCols: 3
-    // estimate
-    readonly property int appsMaxCols: 10
-    // estimate
-    readonly property int appsMinRows: 2
-    // estimate
-    readonly property int appsMaxRows: 7
-    // A2: dim over the blurred wallpaper (was 0.5: white labels fell to 2.8:1 on a white wallpaper)
-    readonly property real appsBackdropOpacity: 0.6
-    // estimate: dim when blur is off (Reduce Transparency)
-    readonly property real appsBackdropOpacityOpaque: 0.94
-    // A2: the search field is a darker inset (shadow colour) on the dim, so its placeholder reaches 4.5:1
-    readonly property real appsSearchFillOpacity: 0.25
-    // estimate: search field at the top centre
-    readonly property int appsSearchWidth: 260
-    // estimate
-    readonly property int appsSearchHeight: 30
-    // estimate: gap below the screen top
-    readonly property int appsSearchTop: 28
-    // estimate: app name under the icon
-    readonly property int appsLabelSize: 12
-    // estimate: icon to label
-    readonly property int appsLabelGap: 8
-    // estimate: page indicator dot
-    readonly property int appsDotSize: 8
-    // estimate: gap between dots
-    readonly property int appsDotGap: 14
-    // estimate: dots above the screen bottom
-    readonly property int appsDotBottom: 44
-    // estimate: inactive page dot
-    readonly property real appsDotInactiveOpacity: 0.4
-    // estimate: px before a press becomes a drag
-    readonly property int appsDragThreshold: 8
-    // estimate: dragged icon
-    readonly property real appsDragOpacity: 0.9
-    // estimate: opacity of the cell an item is dragged from
-    readonly property real appsDragSourceOpacity: 0.3
-    // estimate: dragged icon scale
-    readonly property real appsDragScale: 1.1
-    // estimate: central share of a cell where a drop creates or fills a folder
-    readonly property real appsMergeFraction: 0.55
-    // estimate: px from the screen edge where a drag flips the page
-    readonly property int appsEdgeFlip: 56
-    // estimate: dwell in ms before the page flips
-    readonly property int appsEdgeFlipDelay: 650
-    // estimate: accumulated wheel delta that flips a page
-    readonly property int appsWheelThreshold: 120
-    // estimate: px of horizontal drag that flips a page
-    readonly property int appsSwipeThreshold: 80
-    // estimate: folder tile corner radius relative to the icon
-    readonly property real appsFolderRadiusScale: 0.22
-    // estimate: mini icons per row in a folder tile
-    readonly property int appsFolderMiniCols: 3
-    // estimate: folder tile inner padding relative to the icon
-    readonly property real appsFolderPadding: 0.12
-    // estimate: columns of the open folder panel
-    readonly property int appsFolderPanelCols: 4
-    // estimate
-    readonly property int appsFolderPanelPadding: 32
-    // estimate: editable folder name
-    readonly property int appsFolderNameSize: 22
-    // estimate
-    readonly property int appsFolderNameWidth: 280
-    // estimate: icons in the folder panel relative to the grid icon
-    readonly property real appsFolderPanelIconScale: 0.85
-    // estimate: keyboard focus ring
-    readonly property int appsSelectionWidth: 3
-    // estimate: label box height relative to the label size
-    readonly property real appsLabelLineHeight: 1.4
-    // estimate: reorder insertion bar offset from the cell edge
-    readonly property int appsDropBarInset: 2
-    // estimate: hairline border of the search field and folder tile
+    // estimate: hairline border; shared by the Files, Settings and Ui components (the Apps launcher itself uses the launcher.* tokens)
     readonly property int appsBorderWidth: 1
-    // estimate: grid scale at the start of the open animation
-    readonly property real appsOpenScale: 0.96
 
     // estimate: Settings app (docs/specs/settings.md)
     readonly property int settingsWindowWidth: 715
@@ -857,4 +773,59 @@ QtObject {
     readonly property int previewCodeFontSize: 12
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewControlsHeight: 40
+
+    // F1 reference (docs/testing/f1-reference-gaps.md, Apps launcher): panel 844 +-1 pt wide (2x capture)
+    readonly property int launcherPanelWidth: 844
+    // F1 reference: radius about 28 +-2
+    readonly property int launcherPanelRadius: 28
+    // estimate: smallest gap between the panel and the screen sides on narrow outputs
+    readonly property int launcherEdgeMargin: 24
+    // F1 reference: top about 190 pt on a 956-pt screen (0.2); 0.18 keeps the panel clear of the menu bar on short outputs
+    readonly property real launcherTopFraction: 0.18
+    // low confidence (not measured): panel height as a share of the output height; 670 px at 1080, about 5.5 rows so the scroll is visible
+    readonly property real launcherHeightFraction: 0.62
+    // estimate: smallest panel height (search field, chips and two rows)
+    readonly property int launcherMinHeight: 320
+    // estimate: space kept free at the bottom of the output for the Dock
+    readonly property int launcherBottomClearance: 96
+    // F1 reference: (844 - 7 x 114.7) / 2 is about 20 pt of side padding
+    readonly property int launcherPadding: 20
+    // F1 reference: 7 columns
+    readonly property int launcherColumns: 7
+    // estimate: fewest columns on a narrow output
+    readonly property int launcherMinColumns: 3
+    // estimate: narrowest cell before a column is dropped on a narrow output
+    readonly property int launcherMinCellWidth: 80
+    // F1 reference: cell 114.7 x 101.6 +-1
+    readonly property int launcherCellHeight: 102
+    // F1 reference: icon 62 visible
+    readonly property int launcherIconSize: 62
+    // F1 reference: label about 12
+    readonly property int launcherLabelSize: 12
+    // F1 reference: name under the icon, one or two lines
+    readonly property int launcherLabelLines: 2
+    // estimate: label line height relative to the label size
+    readonly property real launcherLabelLineHeight: 1.2
+    // estimate: icon to label
+    readonly property int launcherLabelGap: 6
+    // estimate: pill search field (Search uses a 48-pt field; F1 low confidence)
+    readonly property int launcherSearchHeight: 36
+    // F1 reference: category chips about 23-24 tall
+    readonly property int launcherChipHeight: 24
+    // F1 reference: chip gap about 7.6
+    readonly property int launcherChipGap: 8
+    // estimate: side padding inside a chip (F1: about 14 around the text)
+    readonly property int launcherChipPadding: 12
+    // estimate: keyboard focus ring (same as control.focusRing + 1, F1 reference ring about 3.5)
+    readonly property int launcherSelectionWidth: 3
+    // estimate: hover and focus ring corner radius relative to the icon
+    readonly property real launcherHighlightRadiusScale: 0.22
+    // estimate: overlay scroll indicator
+    readonly property int launcherScrollbarWidth: 4
+    // estimate: overlay scroll indicator, fill colour at this opacity
+    readonly property real launcherScrollbarOpacity: 0.5
+    // estimate: time the scroll indicator stays after the last scroll
+    readonly property int launcherScrollbarIdleMs: 800
+    // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
+    readonly property real launcherOpenScale: 0.96
 }

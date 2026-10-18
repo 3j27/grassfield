@@ -339,21 +339,45 @@
     </message>
 </context>
 <context>
-    <name>AppsCell</name>
+    <name>AppsController</name>
     <message>
-        <source>%1, folder</source>
-        <translation>%1, dossier</translation>
+        <source>All</source>
+        <translation>Tous</translation>
+    </message>
+    <message>
+        <source>Productivity</source>
+        <translation>Productivité</translation>
+    </message>
+    <message>
+        <source>Creativity</source>
+        <translation>Créativité</translation>
+    </message>
+    <message>
+        <source>Utilities</source>
+        <translation>Utilitaires</translation>
+    </message>
+    <message>
+        <source>Games</source>
+        <translation>Jeux</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autres</translation>
     </message>
 </context>
 <context>
-    <name>AppsController</name>
+    <name>AppsGrid</name>
     <message>
-        <source>Untitled</source>
-        <translation>Sans titre</translation>
+        <source>Applications</source>
+        <translation>Applications</translation>
     </message>
 </context>
 <context>
     <name>AppsWindow</name>
+    <message>
+        <source>Apps</source>
+        <translation>Apps</translation>
+    </message>
     <message>
         <source>Search</source>
         <translation>Recherche</translation>
@@ -363,24 +387,12 @@
         <translation>Saisissez pour filtrer les applications</translation>
     </message>
     <message>
+        <source>Categories</source>
+        <translation>Catégories</translation>
+    </message>
+    <message>
         <source>No results</source>
         <translation>Aucun résultat</translation>
-    </message>
-    <message>
-        <source>Pages</source>
-        <translation>Pages</translation>
-    </message>
-    <message>
-        <source>Page %1</source>
-        <translation>Page %1</translation>
-    </message>
-    <message>
-        <source>Folder %1</source>
-        <translation>Dossier %1</translation>
-    </message>
-    <message>
-        <source>Folder name</source>
-        <translation>Nom du dossier</translation>
     </message>
 </context>
 <context>

@@ -53,12 +53,12 @@
    {"name": "item body", "box": [1602, 162, 190, 12], "kind": "text"}
   ],
   "apps": [
-   {"name": "search placeholder", "box": [866, 36, 50, 12], "kind": "text"},
-   {"name": "label Aether", "box": [276, 282, 56, 12], "kind": "text"},
-   {"name": "label Chromium", "box": [1590, 282, 56, 12], "kind": "text"},
-   {"name": "label Disks", "box": [1160, 434, 40, 12], "kind": "text"},
-   {"name": "label Files", "box": [510, 584, 22, 12], "kind": "text"},
-   {"name": "page dots", "box": [940, 1028, 40, 14], "kind": "icon"}
+   {"name": "search placeholder", "box": [591, 226, 46, 13], "kind": "text"},
+   {"name": "chip All (accent text on accent)", "box": [569, 267, 18, 14], "kind": "text"},
+   {"name": "chip Productivity", "box": [617, 267, 76, 14], "kind": "text"},
+   {"name": "label Aether", "box": [595, 370, 42, 13], "kind": "text"},
+   {"name": "label Chromium", "box": [1274, 370, 62, 13], "kind": "text"},
+   {"name": "label Disks", "box": [1059, 472, 32, 13], "kind": "text"}
   ],
   "lock": [
    {"name": "date", "box": [850, 66, 222, 27], "kind": "text"},
