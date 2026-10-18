@@ -436,6 +436,28 @@ class ContrastTokens(unittest.TestCase):
         for ap in APPEARANCES:
             self.assertGreaterEqual(role_ratio(self.tok, accent, ap, 0.25, (255, 255, 255)), 4.5)
 
+    def test_files_tag_dots_are_identifiable(self):
+        # Graphics need 3:1 (WCAG 1.4.11). A tag dot is identifiable when its fill or its edge (the colour darkened by
+        # files.tagDotOutlineDarker, as Qt.darker does: HSV value divided by the factor) reaches 3:1 against the opaque
+        # Files window colour (TagDots.qml). Yellow, orange and green fills alone fail in the light appearance.
+        import colorsys
+        factor = self.tok.path("files.tagDotOutlineDarker")
+        for ap in APPEARANCES:
+            window = self.tok.color("colors", ap, "materialTint")
+            for name in ("Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"):
+                fill = hex_rgb(self.tok.path("files.tag" + name))
+                h, s, v = colorsys.rgb_to_hsv(*(c / 255 for c in fill))
+                edge = tuple(c * 255 for c in colorsys.hsv_to_rgb(h, s, v / factor))
+                best = max(wcag(fill, window), wcag(edge, window))
+                self.assertGreaterEqual(best, 3.0, "%s dot in the %s appearance: %.2f:1" % (name, ap, best))
+                if ap == "light":
+                    self.assertGreaterEqual(wcag(edge, window), 3.0, "%s edge on the light window" % name)
+
+    def test_swatch_mark_on_every_tag_colour(self):
+        mark = hex_rgb(self.tok.path("menu.swatchMark"))
+        for name in ("Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"):
+            self.assertGreaterEqual(wcag(mark, hex_rgb(self.tok.path("files.tag" + name))), 3.0, name)
+
 
 if __name__ == "__main__":
     _tok = Tokens(load_tokens())
