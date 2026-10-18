@@ -15,38 +15,89 @@ Window {
     property int current: 0
     readonly property int fileCount: win.backend.files.length
     readonly property var view: content.view
-    readonly property real maxWidth: Screen.width * Tokens.previewGlanceScreenFraction
-    readonly property real maxHeight: Screen.height * Tokens.previewGlanceScreenFraction
-    // The window is sized once, for the first file: a compositor does not follow later size changes of a
-    // floating toplevel reliably, so the other files of a multi-file Glance are fitted into this size.
+    // The window is sized for the content of the first file, like a quick look panel: an image at its native size,
+    // scaled down to fit Tokens.previewGlanceScreenFraction of its screen; PDF, text, video and audio at their token
+    // sizes (capped the same way). The header comes on top of the content. Later files of a multi-file Glance are
+    // fitted into that window.
     readonly property var firstInfo: win.backend.inspect(0)
-    // Content size (without the header) by kind.
-    readonly property size wanted: {
+    // The screen the size was computed for (see fitToScreen).
+    property string sizedFor: ""
+
+    // Window size for the first file on a screen of sw x sh pixels.
+    function sizeFor(sw: real, sh: real): size {
+        const maxW = sw * Tokens.previewGlanceScreenFraction;
+        const maxH = sh * Tokens.previewGlanceScreenFraction;
         const info = win.firstInfo;
-        if (info.ok !== true)
-            return Qt.size(Tokens.previewGlanceMediaWidth, Tokens.previewGlanceMediaHeight);
-        switch (info.kind) {
-        case "image": {
-            const w = info.width ?? 1;
-            const h = info.height ?? 1;
-            const room = Math.min(1, win.maxWidth / w, (win.maxHeight - Tokens.previewGlanceHeaderHeight) / h);
-            return Qt.size(w * room, h * room);
+        let c = Qt.size(Tokens.previewGlanceMediaWidth, Tokens.previewGlanceMediaHeight);
+        if (info.ok === true) {
+            switch (info.kind) {
+            case "image": {
+                const w = Math.max(1, info.width ?? 1);
+                const h = Math.max(1, info.height ?? 1);
+                const scale = Math.min(1, maxW / w, maxH / h);
+                c = Qt.size(w * scale, h * scale);
+                break;
+            }
+            case "pdf":
+                c = Qt.size(Tokens.previewGlancePdfWidth, Tokens.previewGlancePdfHeight);
+                break;
+            case "text":
+                c = Qt.size(Tokens.previewGlanceTextWidth, Tokens.previewGlanceTextHeight);
+                break;
+            case "video":
+                c = Qt.size(Tokens.previewGlanceVideoWidth, Tokens.previewGlanceVideoHeight);
+                break;
+            }
         }
-        case "pdf":
-            return Qt.size(Tokens.previewGlancePdfWidth, Tokens.previewGlancePdfHeight);
-        case "text":
-            return Qt.size(Tokens.previewGlanceTextWidth, Tokens.previewGlanceTextHeight);
-        case "video":
-            return Qt.size(Tokens.previewGlanceVideoWidth, Tokens.previewGlanceVideoHeight);
+        return Qt.size(Math.round(Math.max(Tokens.previewGlanceMinWidth, Math.min(maxW, c.width))),
+                       Math.round(Math.max(Tokens.previewGlanceMinHeight, Math.min(maxH, c.height) + Tokens.previewGlanceHeaderHeight)));
+    }
+
+    // A Wayland client cannot know the output the compositor will map it on: Qt starts with its primary screen and
+    // reports the real one once the surface has entered it. The window is sized for the first screen and again, once,
+    // for the screen it is really shown on. A floating toplevel does not get its own later buffer size from Hyprland,
+    // so the new size is requested as a fixed size (minimum = maximum, which the compositor applies to floating
+    // windows, keeping the window centred) and released on the next frame.
+    function fitToScreen(): void {
+        const s = win.screen;
+        if (!s || s.width <= 0 || s.height <= 0 || s.name === win.sizedFor)
+            return;
+        win.sizedFor = s.name;
+        const target = win.sizeFor(s.width, s.height);
+        if (target.width === win.width && target.height === win.height)
+            return;
+        win.minimumWidth = target.width;
+        win.maximumWidth = target.width;
+        win.minimumHeight = target.height;
+        win.maximumHeight = target.height;
+        win.width = target.width;
+        win.height = target.height;
+        releaseTimer.restart();
+    }
+
+    // Lets the user resize the window again once the compositor has applied the size (up to the screen size).
+    Timer {
+        id: releaseTimer
+        interval: Tokens.motionNormal
+        onTriggered: {
+            win.minimumWidth = Tokens.previewGlanceMinWidth;
+            win.minimumHeight = Tokens.previewGlanceMinHeight;
+            win.maximumWidth = Math.max(win.width, win.screen ? win.screen.width : win.width);
+            win.maximumHeight = Math.max(win.height, win.screen ? win.screen.height : win.height);
         }
-        return Qt.size(Tokens.previewGlanceMediaWidth, Tokens.previewGlanceMediaHeight);
     }
 
     title: content.info.name ? content.info.name.replace(/[\r\n]+/g, "\u23CE") : qsTr("Glance")
-    width: Math.max(Tokens.previewGlanceMinWidth, Math.min(win.maxWidth, win.wanted.width))
-    height: Math.max(Tokens.previewGlanceMinHeight, Math.min(win.maxHeight, win.wanted.height + Tokens.previewGlanceHeaderHeight))
+    // Initial size: Qt's first screen (the primary output); fitToScreen corrects it after the mapping.
+    width: win.sizeFor(Screen.width, Screen.height).width
+    height: win.sizeFor(Screen.width, Screen.height).height
+    minimumWidth: Tokens.previewGlanceMinWidth
+    minimumHeight: Tokens.previewGlanceMinHeight
     visible: true
     color: Appearance.colors.materialTint
+
+    onScreenChanged: win.fitToScreen()
+    Component.onCompleted: win.sizedFor = win.screen ? win.screen.name : ""
 
     Theme {
         backend: win.backend
