@@ -1,6 +1,6 @@
 # Grassfield
 
-A macOS-class desktop experience for Omarchy 4, delivered as **Grassfield Desktop**: an add-on Hyprland
+A polished, familiar desktop experience for Omarchy 4, delivered as **Grassfield Desktop**: an add-on Hyprland
 session installed on top of an unmodified Omarchy system ("built for Omarchy", "based on Arch Linux").
 **Grassfield OS** (ISO and installer) comes after the desktop beta.
 
