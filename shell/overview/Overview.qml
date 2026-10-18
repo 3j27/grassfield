@@ -18,8 +18,10 @@ Scope {
     // Output whose overlay holds the keyboard (focused output when opened).
     property string keyScreen: ""
 
-    // v2 branch point: false once the compositor extension transforms the real windows.
-    readonly property bool thumbnailMode: !Capabilities.has("overview")
+    // v2 branch point: false once the compositor extension transforms the real windows. The shell does not drive
+    // the plugin's `overview` verb yet (docs/specs/overview.md, shell contract), so it stays in thumbnail mode even
+    // when the capability is advertised; the shell v2 work replaces this with !Capabilities.has("overview").
+    readonly property bool thumbnailMode: true
     // Settings material.profile: full | balanced | reduced.
     readonly property string profile: Settings.materialProfile
     // full: live capture. balanced: ScreencopyView has no rate control, so single frames are
