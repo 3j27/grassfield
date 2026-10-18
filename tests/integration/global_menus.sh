@@ -8,9 +8,13 @@
 #       with the pointer opens a second browser window (counted with scripts/nestctl clients -j);
 #     - Qt Linguist (qt6-tools, a third-party Qt app, started through scripts/dev/isolated.sh): its own menus; Help >
 #       About Qt clicked with the pointer opens the dialog window, closed again with Escape (keys.sh);
+#     - Grassfield Preview (a Grassfield app, T1 through Qt.labs.platform, started through scripts/dev/isolated.sh) on two
+#       text files: its menus (File, Edit, View, Go, Tools); Go > Next File clicked with the pointer shows the second file
+#       (window title), File > Close Window closes the window and the app exits; its log has no QML warning;
 #     - a GTK4 app (nautilus when installed and linked to GTK 4, else foot): no DBusMenu -> T0 menus (File/Window).
 #   Phase B (GRASSFIELD_NO_PLUGIN, nested-up --no-plugin): the bridge stays in standby, no registrar is owned, and a
-#     Qt app keeps its in-window menu bar.
+#     Qt app keeps its in-window menu bar; Grassfield Preview exports nothing (T0 menus) and logs no error (no widget
+#     menu fallback).
 #   Screenshots: .dev/shots/global-menus-*.png (scripts/dev/shot.sh).
 #
 # Usage: tests/integration/global_menus.sh        (restarts the nested session of this checkout; run it outside the
@@ -53,6 +57,8 @@ fi
 if [[ ! -x $dev/build/menu-demo ]]; then
   "$root/tests/fixtures/build.sh" menu-demo >/dev/null || die "menu-demo build failed"
 fi
+# Grassfield Preview (T1 case): always rebuilt, so the run checks the checkout's menus.
+"$root/apps/preview/build-direct.sh" >/dev/null || die "grassfield-preview build failed"
 
 # ---- helpers -----------------------------------------------------------------------------------------------------
 app_pids=()
@@ -121,6 +127,29 @@ address_of() { # <pid> -> hex address (no 0x) of its most recently focused windo
 
 has_window() { [[ $(windows_of "$1") -ge ${2:-1} ]]; }
 windows_at_most() { [[ $(windows_of "$1") -le $2 ]]; }
+
+title_is() { # <pid> <title>: the client's most recently focused window has that title
+  [[ $("$root/scripts/nestctl" clients -j 2>/dev/null | jq -r --argjson p "$1" '[.[] | select(.pid == $p)] | sort_by(.focusHistoryID) | .[0].title // ""') == "$2" ]]
+}
+
+exited() { # <pid>: gone, or a zombie not reaped yet (a background child of this script)
+  local stat
+  stat=$(ps -o stat= -p "$1" 2>/dev/null)
+  [[ -z $stat || $stat == Z* ]]
+}
+
+# A Grassfield app in the nested session, through scripts/dev/isolated.sh (start_app adds the private bus and the nested
+# socket): the repository's Grassfield.Ui and catalogs, English.
+start_grassfield_app() { # <name> <binary> [args...]
+  local name=$1
+  shift
+  start_app "$name" "$root/scripts/dev/isolated.sh" --name "gm-$name" -- \
+    env QML_IMPORT_PATH="$root/ui" GRASSFIELD_TRANSLATIONS_DIR="$dev/translations" GRASSFIELD_LANG=en QT_FORCE_STDERR_LOGGING=1 "$@"
+}
+
+app_log_issues() { # <log>: QML warnings and errors of an app (the dev portal registration line is environmental)
+  grep -h -E "\.qml:[0-9]+|\.js:[0-9]+|TypeError|ReferenceError|Binding loop|No native Menu|Qt Labs Platform" "$1" || true
+}
 
 menus_are() { # <address> <jq expression over .menus, true when as wanted>
   local s
@@ -283,6 +312,34 @@ else
   say "[T1b] SKIP Qt Linguist: $linguist not installed (qt6-tools)"
 fi
 
+# ---- Grassfield Preview: a Grassfield app (T1 through Qt.labs.platform, master-prompt §12 M4) ----
+say ""
+say "[T1c] Grassfield Preview (started through scripts/dev/isolated.sh)"
+samples=$run/preview-samples
+mkdir -p "$samples"
+printf 'first file\n' >"$samples/first.txt"
+printf 'second file\n' >"$samples/second.txt"
+start_grassfield_app preview "$dev/build/grassfield-preview" -- "$samples/first.txt" "$samples/second.txt"
+pv_pid=$last_pid
+check "Preview window mapped" wait_for 20 has_window "$pv_pid"
+pv_addr=$(address_of "$pv_pid")
+check "menu bar shows Preview's own menus (File, Edit, View, Go, Tools)" wait_for 20 menus_are "$pv_addr" '.menus == ["File","Edit","View","Go","Tools"]'
+say "  bar: $(state | jq -c '[.bar[] | if .kind == "bridge" then .title else .kind end]')"
+say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-preview "$output")"
+click_title Go
+check "Preview Go menu open with Next File" wait_for 5 row_present '^Next File$'
+say "  Go rows: $(state | jq -c '[.popup[] | {text, enabled}]')"
+say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-preview-go "$output")"
+click_row '^Next File$'
+check "pointer click on Go > Next File showed the second file (window title second.txt)" wait_for 5 title_is "$pv_pid" "second.txt"
+click_title File
+check "Preview File menu open with Close Window" wait_for 5 row_present '^Close Window$'
+click_row '^Close Window$'
+check "pointer click on File > Close Window closed the window and the app exited" wait_for 10 exited "$pv_pid"
+issues=$(app_log_issues "$run/preview.out")
+check "Preview log: no QML warning or error" test -z "$issues"
+[[ -n $issues ]] && say "$issues"
+
 # ---- GTK4 (no DBusMenu): T0 ----
 say ""
 # A client without DBusMenu. Never Nautilus or another D-Bus-activatable app: it could be activated outside the test's
@@ -327,6 +384,21 @@ check "Qt app keeps its in-window menu bar (platformMenuBar=0 menuBarVisible=1)"
 np_addr=$(address_of "$np_pid")
 check "menu bar shows T0 menus only" wait_for 10 menus_are "$np_addr" '.menus == [] and ([.bar[].kind] | index("bridge")) == null'
 say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-no-plugin "$output")"
+cleanup_apps
+# A Grassfield app without the registrar: no global menu bar is created (apps/globalmenu.h), the toolbar stays, the bar
+# shows T0 and the app logs nothing (no widget-menu fallback error).
+mkdir -p "$run/preview-samples"
+printf 'first file\n' >"$run/preview-samples/first.txt"
+start_grassfield_app preview-noplugin "$dev/build/grassfield-preview" -- "$run/preview-samples/first.txt"
+nb_pid=$last_pid
+check "Preview window mapped" wait_for 20 has_window "$nb_pid"
+nb_addr=$(address_of "$nb_pid")
+check "menu bar shows T0 menus for Preview (no bridge titles, Window present)" wait_for 10 menus_are "$nb_addr" '.menus == [] and ([.bar[].kind] | index("window")) != null and ([.bar[].kind] | index("bridge")) == null'
+say "  screenshot: $("$root/scripts/dev/shot.sh" global-menus-preview-no-plugin "$output")"
+sleep 1
+issues=$(app_log_issues "$run/preview-noplugin.out")
+check "Preview log without the registrar: no error or QML warning" test -z "$issues"
+[[ -n $issues ]] && say "$issues"
 cleanup_apps
 issues=$(shell_qml_issues)
 check "shell log: no QML warnings or errors in phase B" test -z "$issues"
