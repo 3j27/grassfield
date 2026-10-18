@@ -257,20 +257,32 @@ TestCase {
     }
 
     function test_manyDuplicateUidsAreLinear() {
-        // Within the byte cap: thousands of entries that all claim the same uid.
-        const text = JSON.stringify({version: 1, center: [], desktop: Array.from({length: 3000}, () => ({uid: "clock-1", id: "clock", size: "small", screen: "S", col: 0, row: 0}))});
-        verify(text.length < 262144);
-        // Best of 3: a linear parse stays far below the bound; one slow run under load is not quadratic behaviour.
-        let r = null;
-        let ms = Infinity;
-        for (let i = 0; i < 3; ++i) {
-            const t0 = Date.now();
-            r = Placements.parse(text);
-            ms = Math.min(ms, Date.now() - t0);
-        }
+        // Within the byte cap: thousands of entries that all claim the same uid. Linear work doubles with the input,
+        // quadratic work quadruples it: compare the best of several samples at n and 2n instead of an absolute
+        // budget (a loaded machine slows both sizes alike; one slow sample is dropped by the best-of).
+        const fileOf = n => JSON.stringify({version: 1, center: [], desktop: Array.from({length: n}, () => ({uid: "clock-1", id: "clock", size: "small", screen: "S", col: 0, row: 0}))});
+        const small = fileOf(1500);
+        const large = fileOf(3000);
+        verify(large.length < 262144);
+        const best = text => {
+            let ms = Infinity;
+            for (let i = 0; i < 7; ++i) {
+                const t0 = Date.now();
+                for (let k = 0; k < 4; ++k)
+                    Placements.parse(text);
+                ms = Math.min(ms, Date.now() - t0);
+            }
+            return ms;
+        };
+        best(small); // warm up the JIT
+        const tSmall = best(small);
+        const tLarge = best(large);
+        const r = Placements.parse(large);
         verify(r.ok);
         compare(r.state.desktop.length, 64);
-        verify(ms < 50, "best of 3 took " + ms + " ms");
+        // Linear: ~2. Quadratic: ~4. The floor keeps a sub-millisecond small run from inflating the ratio.
+        const ratio = tLarge / Math.max(tSmall, 20);
+        verify(ratio < 3.2, "3000 entries took " + tLarge + " ms, 1500 took " + tSmall + " ms (ratio " + ratio + ")");
     }
 
     function test_fitScreenMovesOffGridAndOverlaps() {

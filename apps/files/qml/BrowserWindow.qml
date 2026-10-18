@@ -162,6 +162,9 @@ Window {
         sourceComponent: GlobalMenu {
             win: win
         }
+        // One log line per change (tests/apps/files_registrar.sh reads them: the menu bar exists only while the
+        // registrar does).
+        onItemChanged: console.info("grassfield: global menu " + (item ? "created" : "destroyed"))
     }
 
     // Shortcuts ------------------------------------------------------------------------------

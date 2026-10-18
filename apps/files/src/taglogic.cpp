@@ -64,9 +64,57 @@ QByteArray serialize(const QStringList &tags)
     return out.join(QLatin1Char(',')).toUtf8();
 }
 
+namespace
+{
+// The stored bytes of `tag` (empty: nothing to add or remove).
+QByteArray storedName(const QString &tag)
+{
+    const QString t = clean(tag);
+    const int c = colorIndex(t);
+    return (c >= 0 ? colorKey(c) : t).toUtf8();
+}
+} // namespace
+
+QByteArray applyTag(const QByteArray &stored, const QString &tag, bool on)
+{
+    const QByteArray name = storedName(tag);
+    if (name.isEmpty())
+        return stored;
+    const QList<QByteArray> entries = stored.isEmpty() ? QList<QByteArray>() : stored.split(',');
+    QList<QByteArray> kept;
+    bool found = false;
+    for (const QByteArray &entry : entries) {
+        if (entry.trimmed() == name)
+            found = true;
+        else
+            kept.append(entry);
+    }
+    if (on) {
+        if (found)
+            return stored;
+        return stored.isEmpty() ? name : stored + ',' + name;
+    }
+    if (!found)
+        return stored;
+    return kept.join(',');
+}
+
+bool ownsTag(const QByteArray &stored, const QString &tag)
+{
+    const QByteArray name = storedName(tag);
+    if (name.isEmpty() || stored.isEmpty())
+        return false;
+    const QList<QByteArray> entries = stored.split(',');
+    for (const QByteArray &entry : entries) {
+        if (entry.trimmed() == name)
+            return true;
+    }
+    return false;
+}
+
 int colorIndex(const QString &tag)
 {
-    const QString t = tag.trimmed();
+    const QStringView t = QStringView(tag).trimmed();
     for (int i = 0; i < kColorCount; ++i) {
         if (t.compare(QLatin1String(kColorKeys[i]), Qt::CaseInsensitive) == 0)
             return i;
@@ -136,6 +184,16 @@ QStringList displayOrder(const QStringList &tags)
     return out;
 }
 
+QStringList mergeKnown(const QStringList &known, const QStringList &hidden, const QStringList &seen, int max)
+{
+    QStringList out = known;
+    for (const QString &tag : seen) {
+        if (!hasTag(out, tag) && !hasTag(hidden, tag))
+            out = withTag(out, tag, true);
+    }
+    return displayOrder(out).mid(0, max);
+}
+
 QList<int> colorIndices(const QStringList &tags)
 {
     bool present[kColorCount] = {};
@@ -157,14 +215,20 @@ QList<int> colorStates(const QList<QStringList> &tagLists)
     QList<int> states(kColorCount, 0);
     if (tagLists.isEmpty())
         return states;
-    for (int i = 0; i < kColorCount; ++i) {
-        int count = 0;
-        for (const QStringList &tags : tagLists) {
-            if (hasTag(tags, colorKey(i)))
-                ++count;
+    // One pass over every list (a selection of thousands is asked on each selection change).
+    int counts[kColorCount] = {};
+    for (const QStringList &tags : tagLists) {
+        bool present[kColorCount] = {};
+        for (const QString &t : tags) {
+            const int c = colorIndex(t);
+            if (c >= 0)
+                present[c] = true;
         }
-        states[i] = count == 0 ? 0 : count == tagLists.size() ? 2 : 1;
+        for (int i = 0; i < kColorCount; ++i)
+            counts[i] += present[i] ? 1 : 0;
     }
+    for (int i = 0; i < kColorCount; ++i)
+        states[i] = counts[i] == 0 ? 0 : counts[i] == tagLists.size() ? 2 : 1;
     return states;
 }
 

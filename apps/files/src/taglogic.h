@@ -28,6 +28,17 @@ QStringList parse(const QByteArray &value);
 // space trimmed, empty entries and duplicates dropped, joined with ",". Empty means: remove the attribute.
 QByteArray serialize(const QStringList &tags);
 
+// Edits the stored attribute value without touching what Files does not own. `tag` is added as one more entry at the
+// end (unless an entry of that name is there already), or every entry of that name is removed. Every other entry stays
+// exactly as stored, byte for byte and in order: surrounding spaces, duplicates, line breaks, invalid UTF-8, other
+// applications' tags that differ only in case ("red" is not the colour tag "Red"). An entry is `tag`'s when its bytes,
+// white space trimmed, equal the tag's stored name (a colour tag's fixed key, any other tag as given). The result is
+// empty when nothing is left: remove the attribute.
+QByteArray applyTag(const QByteArray &stored, const QString &tag, bool on);
+
+// Whether `stored` holds an entry that applyTag(..., tag, false) would remove (exact name).
+bool ownsTag(const QByteArray &stored, const QString &tag);
+
 // 0..6 for a colour tag (its key, case-insensitive), -1 for any other tag.
 int colorIndex(const QString &tag);
 
@@ -46,6 +57,10 @@ QStringList withTag(const QStringList &tags, const QString &tag, bool on);
 
 // Display order: colour tags in palette order (keys normalised), then the other tags in stored order.
 QStringList displayOrder(const QStringList &tags);
+
+// The sidebar's tags after Files saw `seen` on items: `known` plus every tag of `seen` that is neither known nor in
+// `hidden` (removed from the sidebar by the user), colour tags first, at most `max`.
+QStringList mergeKnown(const QStringList &known, const QStringList &hidden, const QStringList &seen, int max);
 
 // Palette indices of the colour tags among `tags`, in palette order.
 QList<int> colorIndices(const QStringList &tags);

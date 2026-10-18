@@ -19,7 +19,10 @@ import "V2.js" as V2
 Scope {
     id: root
 
-    property bool open: false
+    // Single lifecycle value (V2.keyboardPlan / V2.keysEnabled): "closed" | "open" | "releasing". `open` and
+    // `releasing` derive from it, so no state between releasing and closed can read as open.
+    property string stage: "closed"
+    readonly property bool open: stage !== "closed"
     // Output whose overlay holds the keyboard (focused output when opened).
     property string keyScreen: ""
 
@@ -62,7 +65,7 @@ Scope {
         // A full-screen window on a shown Space cannot be transformed (and stops the others of its Space being
         // transformed): thumbnails for this open.
         thumbsThisOpen = !Capabilities.has("overview") || fullscreenShown();
-        open = true;
+        stage = "open";
         if (!thumbsThisOpen)
             chromeWait.restart();
     }
@@ -71,8 +74,7 @@ Scope {
         closeV2();
         chromeWait.stop();
         retryTimer.stop();
-        releasing = false;
-        open = false;
+        stage = "closed";
     }
 
     function fullscreenShown(): bool {
@@ -236,9 +238,9 @@ Scope {
     }
 
     // True between releasing the exclusive keyboard grab and the pending action.
-    property bool releasing: false
+    readonly property bool releasing: stage === "releasing"
     // Keyboard mode of every output's chrome (V2.keyboardPlan): all Exclusive while open, all None once releasing.
-    readonly property var keyboardPlan: V2.keyboardPlan(Quickshell.screens.map(s => s.name), keyScreen, open && !releasing ? "open" : releasing ? "releasing" : "closed")
+    readonly property var keyboardPlan: V2.keyboardPlan(Quickshell.screens.map(s => s.name), stage)
     property var pending: null
 
     // Close Overview and focus something. While the overlay holds the keyboard exclusively the
@@ -247,8 +249,10 @@ Scope {
     function closeAnd(action: var): void {
         // Every chrome drops to keyboard None first (releaseTimer); only then on:false is sent, the target window is
         // activated and the chromes hide, so no Exclusive layer remains when Hyprland refocuses.
+        if (stage === "closed")
+            return;
         pending = action;
-        releasing = true;
+        stage = "releasing";
         releaseTimer.restart();
     }
 

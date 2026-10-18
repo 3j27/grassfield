@@ -88,15 +88,20 @@ function surfaceRect(rect, realWidth, band, screenX, screenY, offsetY) {
     return {x: screenX + rect.x, y: screenY + offsetY + rect.y + top, w: rect.w, h: Math.max(1, rect.h - top)};
 }
 
-// Keyboard plan of the chrome surfaces (v1 and v2). `screens` are the output names, `keyScreen` the output that has
-// the keyboard (unused: every output is treated alike), `phase` "open" | "releasing" | "closed". Returns
+// Keyboard plan of the chrome surfaces (v1 and v2). `screens` are the output names, `phase` "open" | "releasing" | "closed". Returns
 // {screenName: "exclusive" | "none"}. While open every chrome is Exclusive: Hyprland sends pointer input to Exclusive
 // layers only, so a None chrome would be dead to hover, click and drag. The keyboard goes to the chrome of the
 // pointer's output and the shell handles keys on any chrome. Every chrome is None while releasing (before the close
 // completes) and when closed, so no Exclusive layer remains and Hyprland refocuses the last window.
-function keyboardPlan(screens, keyScreen, phase) {
+function keyboardPlan(screens, phase) {
     const plan = {};
     for (const name of screens || [])
         plan[name] = phase === "open" ? "exclusive" : "none";
     return plan;
+}
+
+// Whether the chrome key handler may act: only while the overview is open and not releasing. During the release and
+// once closed a key reaching a chrome is neither handled nor swallowed (it belongs to the window being refocused).
+function keysEnabled(phase) {
+    return phase === "open";
 }

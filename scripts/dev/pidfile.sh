@@ -10,6 +10,8 @@
 # shows systemd, but there /proc/self names the host PID, not $BASHPID. Inside a Hyprland session its compositor must
 # also be visible under the PID in its hyprland.lock (the sandbox does not see it).
 dev_host_namespace() {
+  # The kernel's initial PID namespace always has inode 0xEFFFFFFC (PROC_PID_INIT_INO); a child namespace never does.
+  [[ $(readlink /proc/self/ns/pid 2>/dev/null) == "pid:[4026531836]" ]] || return 1
   [[ $(cat /proc/1/comm 2>/dev/null) == systemd ]] || return 1
   local self _ lock hpid
   read -r self _ </proc/self/stat 2>/dev/null || return 1

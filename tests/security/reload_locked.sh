@@ -172,6 +172,7 @@ crash_and_restart() { # <name> <wait seconds>
   local name=$1 pid s
   pid=$(shell_pid)
   [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null || { fail "$name: shell not running"; return; }
+  dev_may_signal "$pid" || { fail "$name: refusing to signal PID $pid"; return; }
   kill -9 "$pid"
   sleep 1.5
   echo "compositor after kill -9: $(compositor_lock)"

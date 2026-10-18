@@ -54,7 +54,7 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
 - Cost bounds: the area comes from the screen geometry (never the unconfigured layer-surface size) and the layout
   is recomputed only when the signature of window ids, rects and area changes. Row packing is a direct
   computation (rows 1..ceil(sqrt n)+1), the relaxed layout a <= 5-step binary search on the scale with <= 12
-  relaxation passes. Offscreen: 20 windows ~12 ms, 9 ~6 ms (tests allow 20 ms); in the nested shell one layout
+  relaxation passes. Offscreen: 20 windows ~12 ms, 9 ~6 ms (tests allow 40 ms, best of 20, for host load); in the nested shell one layout
   takes 2-3 ms and open -> fully zoomed is the animation itself (~360 ms). Esc, like every other action, releases
   the keyboard before closing (a Desktop just created with "+" is kept). The action always closes the overlay (try/finally).
 - Platform (`shell/platform/Compositor.qml`, new functions only): `spacesOn`, `windowsOn`, `nextSpaceId`,
