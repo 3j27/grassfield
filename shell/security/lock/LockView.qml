@@ -18,7 +18,8 @@ import "../LockMachine.js" as Machine
 // (lock.fieldFillOpacity). The scrim alone carries the contrast (the shadow is decoration): every role is computed
 // in tests/visual/test_contrast_tokens.py ("lock ..." roles) and measured by tests/visual/contrast.sh (surface lock).
 // A missing colour, scrim or shadow token, or a failed colour binding, only loses that colour or the shadow: the
-// password field's geometry, focus and input never depend on them, and the field has no layer or effect.
+// password field's geometry, focus and input never depend on them; the field and the error/notice lines have no layer or
+// effect (a failed effect would hide them).
 Item {
     id: root
 
@@ -294,8 +295,7 @@ Item {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
             font.weight: Tokens.typographyMenuWeight
-            layer.enabled: true
-            layer.effect: TextShadow {}
+            // No layer/effect: a failed shadow effect must never hide an error (R12 review); the scrim carries A2.
             Accessible.role: Accessible.AlertMessage
             Accessible.name: text
         }
@@ -311,8 +311,7 @@ Item {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
             font.weight: Tokens.typographyMenuWeight
-            layer.enabled: true
-            layer.effect: TextShadow {}
+            // No layer/effect: a failed shadow effect must never hide a notice such as "Crash recovery unavailable".
             Accessible.role: Accessible.AlertMessage
             Accessible.name: text
         }
