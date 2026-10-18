@@ -201,6 +201,60 @@ namespace gf::stages {
     // shell's request. Window rects are present only for windows drawn in a tile; numbers are rounded to 0.1 px.
     std::string eventJson(bool on, std::span<const EventMonitor> monitors, Reason reason = Reason::None);
 
+    // ---- input on strip windows ----
+    // A strip window keeps its real place and is input-blocked; Hyprland 0.56.2 updates pointer focus on pointer motion
+    // only and does not check the block when it delivers keys, buttons or scrolls to the current focus. These decisions
+    // keep every event away from a blocked window (R13 review of 46b3e9b).
+
+    // Why Hyprland focused a strip window (from its focus reason).
+    enum class FocusOrigin : uint8_t {
+        UserChoice, // a key binding, a dispatch (Dock, Search, activation request), a click: the user chose that window
+        AfterClose, // Hyprland's successor after a close or unmap (reasons UNMAP_*)
+        Restore,    // Hyprland restoring its last window (reason FFM: an Exclusive layer released the keyboard, a popup grab
+                    // ended); the hit test never picks a blocked window on pointer motion
+    };
+
+    // Only a user choice brings a strip window's stage forward (ST10); otherwise the active stage keeps the keyboard.
+    bool stripFocusBringsStage(FocusOrigin origin);
+
+    // Hyprland's focused window when the keyboard is checked again (the focused window left its workspace's active stage:
+    // closed, unmapped, minimized, moved away; or Hyprland focused a strip window without a user choice).
+    struct KeyboardHolder {
+        bool present  = false; // Hyprland has a focused window
+        bool eligible = false; // mapped, not hidden, on a workspace shown on a monitor, takes input (or is about to:
+                               // its stage is the active one)
+    };
+
+    enum class KeyboardTarget : uint8_t {
+        Keep,          // Hyprland's choice stands
+        FrontOfActive, // the front window of the workspace's active stage takes the keyboard
+        Nothing,       // no window keeps it (keyboard focus cleared; the desktop policy decides on the next press)
+    };
+
+    // The keyboard never stays on a minimized, hidden or strip window: an eligible holder keeps it, otherwise the active
+    // stage's front window takes it (`hasFront`), otherwise nothing holds it.
+    KeyboardTarget keyboardAfterLeave(const KeyboardHolder& holder, bool hasFront);
+
+    enum class PointerEvent : uint8_t { Press, Release, Axis };
+
+    struct PointerState {
+        bool onBlocked = false; // the seat's pointer focus belongs to a strip window (or one of its popups)
+        bool hasFocus  = false; // there is a pointer focus at all
+        bool parked    = false; // the plugin cleared the pointer focus while a button was held on a window being blocked
+    };
+
+    enum class PointerAction : uint8_t {
+        None,
+        Refresh, // run Hyprland's pointer focus logic again at the cursor first (as a pointer motion would); if a held button
+                 // still keeps a blocked surface, park the pointer
+        Park,    // clear the pointer focus: the event reaches no surface (the blocked window had its wl_pointer.leave)
+    };
+
+    // Before Hyprland delivers a pointer event to its pointer focus. A press on a stale blocked focus, or the first press
+    // after the pointer was parked, refreshes the focus; a release whose focus is blocked is dropped (parked); a scroll
+    // refreshes like a press. Button events are never cancelled (Hyprland's held-button state must see them all).
+    PointerAction beforePointerEvent(PointerEvent event, const PointerState& state);
+
     // ---- feature flag ----
 
     // hl.plugin.grassfield.config("stagesEnabled", "true" | "false").
