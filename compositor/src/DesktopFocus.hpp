@@ -2,8 +2,9 @@
 
 // Desktop focus policy (feature "desktop-focus"): Hyprland glue for core/DesktopFocus.* (the decision logic). Observes
 // pointer button presses on the event bus (never cancels them: cancelled button events break Hyprland's held-button
-// state, FR13) and the commits of the shell's desktop layer surfaces; moves the keyboard with Desktop::focusState().
-// Compositor thread only, nothing blocks. Contract: docs/specs/desktop.md "Compositor focus policy".
+// state, FR13), the commits of the shell's desktop layer surfaces and the keyboard, window and workspace focus events
+// (which drop a waiting desktop grant); moves the keyboard with Desktop::focusState(), through Hyprland's own focus rules
+// only. Compositor thread only, nothing blocks. Contract: docs/specs/desktop.md "Compositor focus policy".
 
 namespace gf::desktopFocus {
 

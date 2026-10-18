@@ -205,16 +205,26 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 - **FR30** Desktop focus policy (feature `desktop-focus`, ADR-0012 amendment; contract `docs/specs/desktop.md`
   "Compositor focus policy"): on a pointer button press (event bus `input.mouse.button`, observed, never cancelled,
   FR13), with the press target = the seat's pointer focus resolved to its window or layer surface (subsurfaces climbed,
-  popups to their owner; a Grassfield titlebar under the pointer counts as its window): (a) a press on a normal window
-  while the seat keyboard is on a `grassfield-desktop-icons` layer surface (any output) gives that window the keyboard
-  (`Desktop::focusState()->fullWindowFocus(w, FOCUS_REASON_CLICK)`, then `rawSurfaceFocus` on its surface if the
-  keyboard did not move); (b) a left press on such a desktop surface gives it the keyboard at once when its committed
-  interactivity is `on_demand`, else on its first `on_demand` commit within 1000 ms (`CLayerShellResource` commit
-  listener per desktop surface; any later press cancels); (c) nothing else: no hover handling, presses on other
+  popups to their owner; a Grassfield titlebar under the pointer counts as its window). When that pointer focus is
+  missing or stale (no surface, a destroyed surface, or one whose view is unmapped or invisible: Hyprland 0.56.2 updates
+  pointer focus on motion only, so a click right after a popup closed still finds the popup), the target is the surface
+  under the cursor, looked up in Hyprland's pointer focus order (layer popups, Overlay, Top, windows with their popups,
+  surfaces and titlebars, Bottom, Background; a window border outside its titlebar and surface counts as nothing; shell
+  integration finding, main 9e76bd7). (a) A press on a normal window while the seat keyboard is on a
+  `grassfield-desktop-icons` layer surface (any output) gives that window the keyboard through Hyprland's own click focus
+  only (`Desktop::focusState()->fullWindowFocus(w, FOCUS_REASON_CLICK)`, which applies `no_focus`, modal children, the
+  lock and Exclusive layers); a refusal leaves the keyboard where it is and is logged once (request log budget). The
+  surface focus is never forced (R13 review of 5706cbd: the former `rawSurfaceFocus` fallback could bypass such rules).
+  (b) A left press on such a desktop surface gives it the keyboard at once when its committed interactivity is
+  `on_demand`, else on its first `on_demand` commit within 1000 ms (`CLayerShellResource` commit listener per desktop
+  surface). The waiting grant is dropped by any later press and by any other focus change first: a keyboard focus change
+  (`input.keyboard.focus`), a window activation (`window.active`, any reason), a window mapping (`window.open`), a
+  workspace switch (`workspace.active`) (R13 review of 5706cbd: a late commit must not take the keyboard from what a key
+  binding, a dispatch, a new window or a workspace switch chose). (c) Nothing else: no hover handling, presses on other
   `grassfield-*` layers, on popups, during a keyboard grab, an Exclusive layer or the session lock change nothing.
-  Decision logic pure (`core/DesktopFocus.*`).
-- **FR31** `desktop-focus` is advertised only when its listeners registered. `PLUGIN_EXIT` removes the button, layer
-  and commit listeners and any pending grant before the other teardown steps; the keyboard stays where it is.
+  Decision logic pure (`core/DesktopFocus.*`: press table, target source, pending grant).
+- **FR31** `desktop-focus` is advertised only when its listeners registered. `PLUGIN_EXIT` removes the button, layer,
+  commit and focus listeners and any pending grant before the other teardown steps; the keyboard stays where it is.
 - **FR32** Withdrawal: after every hook is removed, `PLUGIN_EXIT` posts `{"v":"gfc/1","type":"capabilities","features":[]}`
   directly (not throttled), so the shell returns to its fallbacks for every feature.
 
@@ -252,6 +262,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 | FR29 | nested `overview.sh` check "failsafe", "restore", "unload" | L1 | 2026-10-18 verified: fixture surface closed → `closing`/`closed` `interrupted`; after `on:false` the output matched the frame before (0.35 px, menu bar masked); `scripts/nestctl plugin unload` during an open overview: rc 0, Hyprland alive, windows back at their place, `closed`/`unavailable` posted; `plugin load` again → features include `overview` |
 | FR26-FR29 (R13 fix) | unit `OverviewEvents.NewReasons`, `OverviewFocus.*`, `OverviewChrome.*`, `OverviewDamage.*`; nested `overview.sh` check (29 checks) | L0 / L1 | 2026-10-18, plugin 0.5.0-df, run `.dev/overview/run-20261018-085303`: **29/29 PASS** (the f12f610 script had 20 checks, not 21). On:true without the chrome → `no-chrome`, no `opening`; chrome mapped with keyboard None → `no-chrome`; closing the active window while open → no `closing`, `open`/6 posted, terminal grey at 6/6 remaining rects; a window going full screen → `open`/0 `fullscreen`, then on:true → `no-windows`; resize while open: damage log `open box height 351, box damaged at the start of the shrink 491` (with the fix reverted, run `run-20261018-084158`: `none`, FAIL; captures show no stale pixels either way); chrome unmapped (process alive) → `closed`/`interrupted` with no `closing`; chrome keyboard → None → `closed`/`interrupted`; process exit → `closed`/`interrupted`; flood and unload with the chrome mapped PASS |
 | FR30-FR32 | unit `DesktopFocusPolicy.*`, `DesktopFocusLayers.*`, `DesktopFocusGrant.*`, `Protocol.WithdrawnCapabilitiesHaveNoFeature`; nested `tests/compositor/desktop_focus.sh` (`check`, `baseline`) | L0 / L1 | 2026-10-18, plugin 0.5.0-df, run `.dev/desktop-focus/run-20261018-085225-check`: **21/21 PASS**: last active foot clicked while the desktop holds the keyboard gets the keys; click the desktop then type at once 5/5 to the desktop; hover Dock / menu bar / a window and presses on Dock / menu bar keep the keys on the desktop; last active foot on the other output gets the keys; menu grab untouched (keys to the menu, Esc back to the desktop, outside click swallowed, next click on that foot works); unload while the desktop is focused: rc 0, empty capabilities posted, keys still reach the desktop, a click on another foot works, reload advertises `desktop-focus` and the policy works. All 22 window grants worked with `fullWindowFocus` alone (the `rawSurfaceFocus` fallback was not needed), 0 "NOT granted". `baseline` (plugin unloaded, run `run-20261018-080056-baseline`): the three review defects reproduce (keys typed after clicking the last active foot reach the desktop, also across outputs; 0/5 keys reach the desktop when typed right after its click) |
+| FR30 (R13 minors + shell finding, 2026-10-18) | unit `DesktopFocusGrant.*` (focus events cancel or fulfil a waiting grant), `DesktopFocusTarget.*` (stale or missing pointer focus falls back to the surface under the cursor); nested `desktop_focus.sh` cases 7 and 8 (`check`, and `race` / `stale` against any loaded build) | L0 / L1 | Baseline plugin e066a19 (loaded with `nested-up.sh --no-plugin` + `scripts/nestctl plugin load`): `stale` FAIL (`desktopA=pf`: the click on the foot after menu → pointer onto the foot → Esc left the keys on the desktop), `race` 1/4 (7b: the late `on_demand` commit took the keyboard from the new window: `desktopA=kn`; 7c PASS; 7a was then
+an ALT+TAB, which is not bound for the virtual keyboard in nested (foot received `ESC TAB`), so it moved nothing and is
+replaced by a focus dispatch). Fixed build: `desktop_focus.sh check` **26/26 PASS** (run `.dev/desktop-focus/run-20261018-121710-check`), `race` 4/4 (plugin log `cancelled (keyboard focus moved)`, `cancelled (window opened)`). The `rawSurfaceFocus` fallback is removed; `no_focus` windows are skipped by Hyprland's hit test, so the refusal path is reached only for rules applied while the pointer rests on a window (not exercised) |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -591,7 +604,7 @@ Nested scenarios: `tests/compositor/minimize.sh [repeats]` (FR6, FR14–FR17), `
 (FR18–FR22, spike S5; fixtures `tests/fixtures/{menu-demo, fake-registrar, appmenu-client}`, built by
 `tests/fixtures/build.sh`), `tests/compositor/event_flood.sh [requests...]` (FR24; needs grassfield-shell),
 `tests/compositor/overview.sh [check | perf [seconds]]` (FR25-FR29; fixture `tests/compositor/overview-fixture`),
-`tests/compositor/desktop_focus.sh [check | baseline]` (FR30-FR32; fixture `tests/compositor/desktop-focus-fixture`).
+`tests/compositor/desktop_focus.sh [check | baseline | race | stale]` (FR30-FR32; fixture `tests/compositor/desktop-focus-fixture`).
 Unit tests also cover the desktop focus policy (`DesktopFocus*`: decision table, layer classification, pending grant).
 
 Manual (L1, nested only):

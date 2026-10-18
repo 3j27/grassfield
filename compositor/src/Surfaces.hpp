@@ -13,8 +13,9 @@ namespace gf::surfaces {
     struct SOwner {
         PHLWINDOW window;        // the window (main surface, subsurface or one of its popups)
         PHLLS     layer;         // the layer surface (itself, a subsurface or one of its popups)
-        bool      popup = false; // the surface is (in) an xdg_popup of that window or layer surface
-        bool      known = false; // false: no surface, or a surface without a window or layer (lock screen, cursor...)
+        bool      popup   = false; // the surface is (in) an xdg_popup of that window or layer surface
+        bool      known   = false; // false: no surface, or a surface without a window or layer (lock screen, cursor...)
+        bool      visible = false; // its view (window, layer surface or popup) is alive and visible (IView::aliveAndVisible)
     };
 
     // Subsurfaces are climbed to their top-level parent (at most 16 levels), popups to their window or layer owner.

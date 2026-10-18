@@ -34,6 +34,7 @@ namespace gf::surfaces {
         const auto view = hl ? hl->view() : nullptr;
         if (!view)
             return out;
+        out.visible = view->aliveAndVisible();
         switch (view->type()) {
             case Desktop::View::VIEW_TYPE_WINDOW: out.window = Desktop::View::CWindow::fromView(view); break;
             case Desktop::View::VIEW_TYPE_LAYER_SURFACE: out.layer = Desktop::View::CLayerSurface::fromView(view); break;

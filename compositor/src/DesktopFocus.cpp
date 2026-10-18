@@ -17,12 +17,15 @@
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/protocols/LayerShell.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
+#include <hyprland/src/state/MonitorState.hpp>
 
 #include <linux/input-event-codes.h>
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace df = gf::desktopfocus;
@@ -99,22 +102,67 @@ namespace {
         return w && w->m_isMapped && !w->isHidden() && !w->m_X11ShouldntFocus;
     }
 
-    // The surface the press lands on: Hyprland's pointer focus (it follows the pointer with follow_mouse 2). Over a
-    // Grassfield titlebar there is no pointer focus (decorations are not surfaces): the window whose shown titlebar
-    // contains the pointer then.
-    SResolved pressTarget() {
-        const auto pointer = g_pSeatManager ? g_pSeatManager->m_state.pointerFocus.lock() : nullptr;
-        if (pointer)
-            return resolve(pointer);
-        if (!g_pInputManager || !Desktop::viewState())
+    df::PointerFocus pointerFocusState(const SP<CWLSurfaceResource>& surface) {
+        if (!surface)
+            return df::PointerFocus::None;
+        const auto owner = gf::surfaces::ownerOf(surface);
+        return owner.known && owner.visible ? df::PointerFocus::Live : df::PointerFocus::Stale;
+    }
+
+    // The window or layer surface under the cursor, looked up in the order Hyprland 0.56.2 uses for pointer focus
+    // (CInputManager::mouseMoveUnified, source read as data): layer popups, the Overlay and Top layers, windows (their
+    // popups, surfaces and Grassfield titlebars), the Bottom and Background layers. A window's border outside its titlebar
+    // and surface counts as nothing (left to Hyprland: a press there resizes).
+    SResolved underCursor() {
+        if (!g_pInputManager || !Desktop::viewState() || !State::monitorState())
             return {};
         const Vector2D pos = g_pInputManager->getMouseCoordsInternal();
-        constexpr auto props = static_cast<uint16_t>(Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
-        const auto     w     = Desktop::viewState()->hitTest().windowAt(pos, props);
-        if (!w)
+        const auto     mon = State::monitorState()->query().vec(pos).run();
+        if (!mon)
             return {};
-        const bool onBar = std::ranges::any_of(gf::state().titlebars, [&](const CGrassfieldTitlebar* deco) { return deco->window() == w && deco->barContains(pos); });
-        return onBar ? SResolved{.kind = df::SurfaceKind::Window, .window = w, .layer = nullptr} : SResolved{};
+        Vector2D local;
+        PHLLS    layer;
+        auto     surface = Desktop::viewState()->hitTest().layerPopupSurfaceAt(pos, mon, &local, &layer);
+        for (const auto level : {ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, ZWLR_LAYER_SHELL_V1_LAYER_TOP}) {
+            if (!surface)
+                surface = Desktop::viewState()->hitTest().layerSurfaceAt(pos, &mon->m_layerSurfaceLayers[level], &local, &layer);
+        }
+        if (surface)
+            return resolve(surface);
+        constexpr auto props = static_cast<uint16_t>(Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+        if (const auto w = Desktop::viewState()->hitTest().windowAt(pos, props)) {
+            Vector2D windowLocal;
+            if (const auto ws = Desktop::viewState()->hitTest().windowSurfaceAt(pos, w, windowLocal))
+                return resolve(ws);
+            const bool onBar = std::ranges::any_of(gf::state().titlebars, [&](const CGrassfieldTitlebar* deco) { return deco->window() == w && deco->barContains(pos); });
+            return onBar ? SResolved{.kind = df::SurfaceKind::Window, .window = w, .layer = nullptr} : SResolved{};
+        }
+        for (const auto level : {ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM, ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND}) {
+            if (!surface)
+                surface = Desktop::viewState()->hitTest().layerSurfaceAt(pos, &mon->m_layerSurfaceLayers[level], &local, &layer);
+        }
+        return surface ? resolve(surface) : SResolved{};
+    }
+
+    // The surface the press lands on: Hyprland's pointer focus (it follows the pointer with follow_mouse 2) when it is a
+    // live surface; otherwise (none, or the destroyed or unmapped surface of a popup that closed since the last pointer
+    // motion) what lies under the cursor. Over a Grassfield titlebar there is no pointer focus (decorations are not
+    // surfaces): the lookup under the cursor then finds the window whose titlebar contains the pointer.
+    SResolved pressTarget(df::PointerFocus& focusState) {
+        const auto pointer = g_pSeatManager ? g_pSeatManager->m_state.pointerFocus.lock() : nullptr;
+        focusState         = pointerFocusState(pointer);
+        if (df::pressTargetSource(focusState) == df::TargetSource::PointerFocus)
+            return resolve(pointer);
+        return underCursor();
+    }
+
+    std::string_view pointerFocusName(df::PointerFocus focus) {
+        switch (focus) {
+            case df::PointerFocus::Live: return "pointer focus";
+            case df::PointerFocus::None: return "under the cursor, no pointer focus";
+            case df::PointerFocus::Stale: return "under the cursor, stale pointer focus";
+        }
+        return "?";
     }
 
     bool keyboardOnWindow(const PHLWINDOW& w) {
@@ -127,21 +175,36 @@ namespace {
         return k && ls && k == ls->resource();
     }
 
-    void focusWindow(const PHLWINDOW& w) {
+    // Hyprland's own click focus, with every rule Hyprland applies (no_focus window rule, a modal child, the session lock,
+    // an Exclusive layer, X11 windows that refuse focus); returns whether the window holds the keyboard afterwards.
+    // Hyprland's click path skips a window it still counts as focused (ADR-0012 spike row 2), but fullWindowFocus does
+    // not: CFocusState::rawWindowFocus returns early only when the requested surface is the focused surface, and the
+    // desktop holds it here (Hyprland 0.56.2 source, read as data; 22/22 grants in desktop_focus.sh). The surface focus is
+    // never forced (R13 review of 5706cbd): when Hyprland refuses, the keyboard stays where it is.
+    bool focusWindow(const PHLWINDOW& w) {
         const auto focus = Desktop::focusState();
-        if (!focus)
-            return;
-        // Hyprland's click focus. While a layer surface holds the keyboard Hyprland may still count `w` as its focused
-        // window, and then refocusing it changes nothing (Hyprland 0.56.2, ADR-0012 spike row 2): the keyboard is given
-        // to the window's surface directly in that case.
+        if (!focus || !w)
+            return false;
         focus->fullWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
-        bool direct = false;
-        if (const auto surface = w->resource(); surface && !keyboardOnWindow(w)) { // never a null surface: it would clear the focus
-            focus->rawSurfaceFocus(surface, w);
-            direct = true;
-        }
-        gf::logRequest(Log::DEBUG, "desktop-focus: press on window {:x}: keyboard to the window{} ({})", reinterpret_cast<uintptr_t>(w.get()),
-                       direct ? " (direct surface focus)" : "", keyboardOnWindow(w) ? "granted" : "NOT granted");
+        return keyboardOnWindow(w);
+    }
+
+    // The layer surface that holds the keyboard now, as a policy id (nullopt: a window, nothing, or another kind).
+    std::optional<uint64_t> keyboardLayerId(const SP<CWLSurfaceResource>& surface) {
+        const auto owner = gf::surfaces::ownerOf(surface);
+        if (!owner.layer || owner.popup)
+            return std::nullopt;
+        return idOf(owner.layer);
+    }
+
+    // Another path moved the keyboard (or changed what the user expects to type into) while a desktop grant waits: the
+    // grant is dropped, so the desktop's late on_demand commit cannot take the keyboard back (R13 review of 5706cbd).
+    void onFocusEvent(df::FocusEvent event, std::optional<uint64_t> keyboardLayer) {
+        auto&      s       = st();
+        const auto armed   = s.pending.surface();
+        const auto outcome = s.pending.onFocusEvent(event, keyboardLayer, df::Clock::now());
+        if (outcome != df::GrantUpdate::NotArmed && armed)
+            gf::logRequest(Log::DEBUG, "desktop-focus: pending grant for desktop {:x} {} ({})", *armed, df::grantUpdateName(outcome), df::focusEventName(event));
     }
 
     void focusDesktop(const PHLLS& ls, const char* when) {
@@ -160,9 +223,10 @@ namespace {
         auto& s = st();
         s.pending.cancel(); // any press decides afresh
 
-        const auto     keyboard = resolve(keyboardSurface());
-        const auto     target   = pressTarget();
-        const df::Seat seat     = seatNow(keyboard);
+        df::PointerFocus focusState = df::PointerFocus::Live;
+        const auto       keyboard   = resolve(keyboardSurface());
+        const auto       target     = pressTarget(focusState);
+        const df::Seat   seat       = seatNow(keyboard);
         df::Press      press;
         press.target  = target.kind;
         press.primary = e.button == BTN_LEFT;
@@ -175,12 +239,20 @@ namespace {
         }
 
         const auto action = df::onPress(seat, press);
+        if (action == df::Action::FocusWindow) {
+            // One line per grant, the refusal included (request log budget).
+            const bool granted = focusWindow(target.window);
+            gf::logRequest(granted ? Log::DEBUG : Log::INFO, "desktop-focus: press (button {:#x}) on window {:x} ({}) while the keyboard is on the desktop -> {}", e.button,
+                           reinterpret_cast<uintptr_t>(target.window.get()), pointerFocusName(focusState),
+                           granted ? "keyboard to the window" : "refused by Hyprland (no_focus rule, modal child or another focus rule): the keyboard stays where it is");
+            return;
+        }
         if (action != df::Action::None || keyboard.kind == df::SurfaceKind::Desktop)
-            gf::logRequest(Log::DEBUG, "desktop-focus: press (button {:#x}) on {} while the keyboard is on {} -> {}", e.button, df::kindName(target.kind),
-                           df::kindName(keyboard.kind), df::actionName(action));
+            gf::logRequest(Log::DEBUG, "desktop-focus: press (button {:#x}) on {} ({}) while the keyboard is on {} -> {}", e.button, df::kindName(target.kind),
+                           pointerFocusName(focusState), df::kindName(keyboard.kind), df::actionName(action));
         switch (action) {
-            case df::Action::None: break;
-            case df::Action::FocusWindow: focusWindow(target.window); break;
+            case df::Action::None:
+            case df::Action::FocusWindow: break;
             case df::Action::FocusDesktop: focusDesktop(target.layer, "at the press"); break;
             case df::Action::AwaitOnDemand: s.pending.arm(idOf(target.layer), df::Clock::now()); break;
         }
@@ -241,6 +313,19 @@ namespace gf::desktopFocus {
         l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) { gf::guarded("desktop-focus press", [&] { onPress(e); }); }));
         l.push_back(ev.layer.opened.listen([](const PHLLS& ls) { gf::guarded("desktop-focus layer.opened", [&] { attach(ls); }); }));
         l.push_back(ev.layer.closed.listen([](const PHLLS& ls) { gf::guarded("desktop-focus layer.closed", [&] { detach(ls); }); }));
+        // Any other path that moves the keyboard drops a waiting desktop grant (key bindings and dispatches, activation
+        // requests, a new window, a workspace switch, Hyprland's refocus after a close). The plugin's own grants run after
+        // the grant was consumed (or cancelled by the press), so they find nothing waiting.
+        l.push_back(ev.input.keyboard.focus.listen([](const SP<CWLSurfaceResource>& surface) {
+            gf::guarded("desktop-focus keyboard.focus", [&] { onFocusEvent(df::FocusEvent::KeyboardFocus, keyboardLayerId(surface)); });
+        }));
+        l.push_back(ev.window.active.listen([](const PHLWINDOW& /*w*/, Desktop::eFocusReason /*reason*/) {
+            gf::guarded("desktop-focus window.active", [] { onFocusEvent(df::FocusEvent::WindowActivated, std::nullopt); });
+        }));
+        l.push_back(ev.window.open.listen([](const PHLWINDOW& /*w*/) { gf::guarded("desktop-focus window.open", [] { onFocusEvent(df::FocusEvent::WindowOpened, std::nullopt); }); }));
+        l.push_back(ev.workspace.active.listen([](const PHLWORKSPACE& /*ws*/) {
+            gf::guarded("desktop-focus workspace.active", [] { onFocusEvent(df::FocusEvent::WorkspaceChanged, std::nullopt); });
+        }));
         for (const auto& ls : Desktop::layerState()->layers()) {
             if (ls && ls->m_mapped)
                 attach(ls);

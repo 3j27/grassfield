@@ -42,6 +42,14 @@ namespace gf::desktopfocus {
         return Action::None;
     }
 
+    TargetSource pressTargetSource(PointerFocus focus) {
+        return focus == PointerFocus::Live ? TargetSource::PointerFocus : TargetSource::UnderCursor;
+    }
+
+    SurfaceKind pressTargetKind(PointerFocus focus, SurfaceKind focusKind, SurfaceKind cursorKind) {
+        return pressTargetSource(focus) == TargetSource::PointerFocus ? focusKind : cursorKind;
+    }
+
     bool mayGrantDesktop(const Seat& seat, bool desktopHasKeyboard) {
         return !seatBusy(seat) && !desktopHasKeyboard;
     }
@@ -106,6 +114,37 @@ namespace gf::desktopfocus {
             return false;
         m_surface.reset();
         return true;
+    }
+
+    GrantUpdate CPendingGrant::onFocusEvent(FocusEvent event, std::optional<uint64_t> keyboardLayer, TimePoint now) {
+        if (!m_surface)
+            return GrantUpdate::NotArmed;
+        const uint64_t armedSurface = *m_surface;
+        m_surface.reset(); // every focus change ends the wait, whatever it did
+        if (now > m_deadline)
+            return GrantUpdate::NotArmed;
+        if (event == FocusEvent::KeyboardFocus && keyboardLayer == armedSurface)
+            return GrantUpdate::Fulfilled;
+        return GrantUpdate::Cancelled;
+    }
+
+    std::string_view focusEventName(FocusEvent event) {
+        switch (event) {
+            case FocusEvent::KeyboardFocus: return "keyboard focus moved";
+            case FocusEvent::WindowActivated: return "window activated";
+            case FocusEvent::WindowOpened: return "window opened";
+            case FocusEvent::WorkspaceChanged: return "workspace changed";
+        }
+        return "focus changed";
+    }
+
+    std::string_view grantUpdateName(GrantUpdate update) {
+        switch (update) {
+            case GrantUpdate::NotArmed: return "not-armed";
+            case GrantUpdate::Fulfilled: return "fulfilled";
+            case GrantUpdate::Cancelled: return "cancelled";
+        }
+        return "not-armed";
     }
 
     bool CPendingGrant::armed(TimePoint now) const {
