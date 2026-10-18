@@ -545,9 +545,8 @@ Window {
             visible: banner.text !== ""
             height: visible ? bannerLabel.implicitHeight + 2 * Tokens.spacingSm : 0
             radius: Tokens.radiusMenu
-            color: Appearance.withAlpha(Appearance.colors.danger, Tokens.materialFillOpacity)
-            border.width: Tokens.appsBorderWidth
-            border.color: Appearance.colors.danger
+            // Destructive colour, like the Settings refusal banner.
+            color: Appearance.colors.destructive
             Accessible.role: Accessible.AlertMessage
             Accessible.name: banner.text
 
@@ -560,7 +559,7 @@ Window {
                 anchors.margins: Tokens.spacingSm
                 text: banner.text
                 wrapMode: Text.Wrap
-                color: Appearance.colors.text
+                color: Appearance.colors.destructiveText
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }
@@ -570,6 +569,7 @@ Window {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "close-glyph"
+                tint: Appearance.colors.destructiveText
                 accessibleName: qsTr("Dismiss")
                 onClicked: win.bannerText = ""
             }

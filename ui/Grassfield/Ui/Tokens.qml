@@ -22,7 +22,9 @@ QtObject {
         fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
         separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        danger: "#FFD3CF"  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
+        danger: "#FFD3CF",  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
+        destructive: "#D13438",  // own value: solid fill of error and refusal banners in opaque app windows; 3.3:1 against materialTint, destructiveText on it 4.9:1 (WCAG AA, computed)
+        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (4.9:1, computed)
     })
 
     // color roles, light appearance
@@ -42,7 +44,9 @@ QtObject {
         fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
         separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        danger: "#7A1812"  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
+        danger: "#7A1812",  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
+        destructive: "#C42B1C",  // own value: solid fill of error and refusal banners in opaque app windows; 5.1:1 against materialTint, destructiveText on it 5.7:1 (WCAG AA, computed)
+        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (5.7:1, computed)
     })
 
     // generic family: code and plain text views (Preview)

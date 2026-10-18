@@ -26,9 +26,15 @@ Window {
             return root.sections;
         return root.sections.filter(s => s.title.toLowerCase().indexOf(q) >= 0 || s.keywords.toLowerCase().indexOf(q) >= 0);
     }
+    // The reasons are sentence fragments; a trailing full stop (a JavaScript engine message) is dropped so that the
+    // sentences around them never show two.
     readonly property string bannerText: cfg.blocked
-        ? qsTr("grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.").arg(cfg.error)
-        : cfg.writeError !== "" ? qsTr("The change could not be saved: %1").arg(cfg.writeError) : ""
+        ? qsTr("grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.").arg(root.fragment(cfg.error))
+        : cfg.writeError !== "" ? qsTr("The change could not be saved: %1.").arg(root.fragment(cfg.writeError)) : ""
+
+    function fragment(reason: string): string {
+        return reason.trim().replace(/[.\s]+$/, "");
+    }
 
     title: qsTr("Grassfield Settings")
     width: Tokens.settingsWindowWidth
@@ -266,9 +272,8 @@ Window {
             width: parent.width - 2 * Tokens.spacingLg
             height: visible ? bannerLabel.implicitHeight + 2 * Tokens.spacingMd : 0
             radius: Tokens.radiusMenu
-            color: Appearance.withAlpha(Appearance.colors.danger, Tokens.materialFillOpacity)
-            border.width: 1
-            border.color: Appearance.colors.danger
+            // Destructive colour: the file is refused (or a change failed), nothing is written.
+            color: Appearance.colors.destructive
             Accessible.role: Accessible.AlertMessage
             Accessible.name: root.bannerText
 
@@ -283,7 +288,7 @@ Window {
                 }
                 text: root.bannerText
                 wrapMode: Text.Wrap
-                color: Appearance.colors.text
+                color: Appearance.colors.destructiveText
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }
