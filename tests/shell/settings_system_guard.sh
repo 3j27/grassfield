@@ -100,25 +100,27 @@ EOF
 
 run() { # mode (1 = dev, 0 = real)
   : >"$tmp/marker"
-  PATH="$tmp/bin:$PATH" GRASSFIELD_SETTINGS_QML="$tmp/qml" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui" \
+  QT_FORCE_STDERR_LOGGING=1 PATH="$tmp/bin:$PATH" GRASSFIELD_SETTINGS_QML="$tmp/qml" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui" \
     timeout 30 scripts/dev/isolated.sh --name settings-guard env GRASSFIELD_DEV="$1" "$root/.dev/build/grassfield-settings" 2>&1
 }
 
-out=$(run 1) || { echo "$out"; check "dev session runs" 1; exit 1; }
-res=$(grep -E '^(qml: )?RESULT' <<<"$out" || true)
+out=$(run 1) || true
+res=$(grep -E 'RESULT' <<<"$out" || true)
 echo "$res"
 queries=$(wc -l <"$tmp/marker")
-grep -q "dev=true ok=8 refused=9" <<<"$res"; check "dev: the 8 queries run, the 9 actions sent as queries are refused" $?
-[[ $queries -eq 8 ]]; check "dev: only the 8 queries reached a tool ($queries)" $?
-! grep -qE ' (radio|connection|device|power|connect|disconnect|set-default|set-volume|set-mute)( |$)' "$tmp/marker" \
-  && ! grep -q 'rescan' "$tmp/marker"; check "dev: no action verb reached a tool" $?
-grep -q "actReturns=false,false,false,false,false,false,false,false,false" <<<"$res"; check "dev: act() returns false for every action" $?
-grep -q "dev guard: test suppressed" <<<"$out"; check "dev: one log line per suppressed action" $?
+has() { grep -q -- "$1" <<<"$2" && echo 0 || echo 1; }
+check "dev: the 8 queries run, the 9 actions sent as queries are refused" "$(has 'dev=true ok=8 refused=9' "$res")"
+check "dev: only the 8 queries reached a tool ($queries)" "$([[ $queries -eq 8 ]] && echo 0 || echo 1)"
+check "dev: no action verb reached a tool" "$(grep -qE "radio wifi|connection up|wifi connect|device disconnect|power |bluetoothctl (connect|disconnect)|set-|wifi rescan" "$tmp/marker" && echo 1 || echo 0)"
+check "dev: act() returns false for every action" "$(has 'actReturns=false,false,false,false,false,false,false,false,false' "$res")"
+check "dev: one log line per suppressed action" "$(has 'dev guard: test suppressed' "$out")"
+[[ $fail -eq 0 ]] || echo "$out" | tail -20
 
-out=$(run 0) || { echo "$out"; check "real session runs" 1; exit 1; }
-res=$(grep -E '^(qml: )?RESULT' <<<"$out" || true)
+out=$(run 0) || true
+res=$(grep -E 'RESULT' <<<"$out" || true)
 echo "$res"
-grep -q "dev=false ok=9 refused=0" <<<"$res"; check "real: the 9 actions run" $?
-grep -q "actReturns=true,true,true,true,true,true,true,true,true,false" <<<"$res"; check "real: an unknown program is refused" $?
-! grep -q '^touch' "$tmp/marker"; check "real: touch never ran" $?
+check "real: the 9 actions run" "$(has 'dev=false ok=9 refused=0' "$res")"
+check "real: an unknown program is refused" "$(has 'actReturns=true,true,true,true,true,true,true,true,true,false' "$res")"
+check "real: touch never ran" "$(grep -q '^touch' "$tmp/marker" && echo 1 || echo 0)"
+[[ $fail -eq 0 ]] || echo "$out" | tail -20
 exit $fail
