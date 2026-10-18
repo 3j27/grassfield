@@ -53,4 +53,17 @@ TestCase {
         verify(!CapabilityEvent.isMalformedCapabilities("null", "gfc/1"));
         verify(!CapabilityEvent.isMalformedCapabilities('{"v":"gfc/2","type":"capabilities"}', "gfc/1"));
     }
+
+    // A plugin of another protocol version is no plugin (parse() is null) and is reported by its version, so the shell
+    // can log why it runs degraded. Nothing else counts as another protocol.
+    function test_otherProtocolCapabilitiesAreReportedByVersion() {
+        const v2 = JSON.stringify({v: "gfc/2", type: "capabilities", features: ["overview"]});
+        compare(CapabilityEvent.parse(v2, "gfc/1"), null);
+        compare(CapabilityEvent.otherProtocolCapabilities(v2, "gfc/1"), "gfc/2");
+        compare(CapabilityEvent.otherProtocolCapabilities('{"type":"capabilities","features":[]}', "gfc/1"), "?");
+        compare(CapabilityEvent.otherProtocolCapabilities(ev(["overview"]), "gfc/1"), "");
+        compare(CapabilityEvent.otherProtocolCapabilities('{"v":"gfc/2","type":"overview","state":"open"}', "gfc/1"), "");
+        compare(CapabilityEvent.otherProtocolCapabilities("not json", "gfc/1"), "");
+        compare(CapabilityEvent.otherProtocolCapabilities("null", "gfc/1"), "");
+    }
 }
