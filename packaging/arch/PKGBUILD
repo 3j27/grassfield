@@ -11,7 +11,7 @@ pkgrel=1
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
-# Follows ADR-0005 (Proposed): the owner has not decided the project licence yet; no root LICENSE exists.
+# Grassfield's own code is MIT (ADR-0005, accepted by the owner 2026-10-18; root LICENSE, installed by both packages).
 # Third-party notices: THIRD_PARTY.md, installed under /usr/share/licenses/<package>/.
 license=(MIT)
 makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools)
@@ -99,6 +99,7 @@ package_grassfield-desktop() {
 
   install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
   install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"
+  install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/grassfield-desktop/LICENSE"
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-desktop/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/omarchy-MIT.txt" "$pkgdir/usr/share/licenses/grassfield-desktop/omarchy-MIT.txt"
 }
@@ -109,6 +110,7 @@ package_grassfield-compositor() {
   local root
   root=$(_root)
   install -Dm755 "$root/compositor/build/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
+  install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/grassfield-compositor/LICENSE"
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-compositor/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/hyprland-BSD-3-Clause.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/hyprland-BSD-3-Clause.txt"
   install -Dm644 "$root/packaging/licenses/appmenu-LGPL-2.1-or-later.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/appmenu-LGPL-2.1-or-later.txt"

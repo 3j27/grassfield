@@ -53,8 +53,12 @@ done
 mkdir -p "$out"
 
 # Tear the nested session down on any exit, but only when this run started it.
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+# Records written inside the sandbox's PID namespace name other processes on the host (incident 2026-10-18).
+dev_require_host visual
 was_running=0
-[[ -s $root/.dev/nested.pid ]] && kill -0 "$(<"$root/.dev/nested.pid")" 2>/dev/null && was_running=1
+dev_live_pid "$root/.dev/nested.pid" >/dev/null && was_running=1
 cleanup() {
   if (( ! keep && ! was_running )); then
     "$root/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
@@ -75,7 +79,7 @@ run_all() {
       fi
     done
     # Fresh shell per language (a lock scenario already tore the session down).
-    if [[ -f $root/.dev/nested.pid ]] && kill -0 "$(<"$root/.dev/nested.pid")" 2>/dev/null; then
+    if dev_live_pid "$root/.dev/nested.pid" >/dev/null; then
       "$root/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
       rm -f "$out/session.lang"
     fi

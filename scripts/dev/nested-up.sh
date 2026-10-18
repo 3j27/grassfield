@@ -22,10 +22,14 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 dev=$root/.dev
+# shellcheck source=pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+# A record written inside the sandbox's PID namespace names another process on the host (incident 2026-10-18).
+dev_require_host nested-up
 mkdir -p "$dev/state" "$dev/config" "$dev/shots"
 
-if [[ -s $dev/nested.pid ]] && kill -0 "$(<"$dev/nested.pid")" 2>/dev/null; then
-  echo "nested-up: already running (pid $(<"$dev/nested.pid"), instance $(<"$dev/nested.instance"))"
+if running=$(dev_live_pid "$dev/nested.pid"); then
+  echo "nested-up: already running (pid $running, instance $(<"$dev/nested.instance"))"
   exit 0
 fi
 
@@ -49,7 +53,7 @@ env -u HYPRLAND_INSTANCE_SIGNATURE -u HYPRLAND_CMD -u DISPLAY \
   GRASSFIELD_PLUGIN="$plugin" \
   setsid Hyprland --config "$root/config/hypr/dev.lua" >"$dev/hyprland.log" 2>&1 </dev/null &
 pid=$!
-printf '%s\n' "$pid" > "$dev/nested.pid"
+dev_record_pid "$dev/nested.pid" "$pid"
 
 # 3. Wait for the new instance (matched by PID) and record its signature and Wayland socket.
 sig="" sock=""
@@ -57,7 +61,7 @@ for _ in $(seq 1 100); do
   if ! kill -0 "$pid" 2>/dev/null; then
     echo "nested-up: Hyprland exited early; see .dev/hyprland.log" >&2
     tail -n 20 "$dev/hyprland.log" >&2 || true
-    rm -f "$dev/nested.pid"
+    rm -f "$dev/nested.pid" "$dev/nested.pid.start"
     exit 1
   fi
   line=$(hyprctl instances -j | jq -r --argjson p "$pid" '.[] | select(.pid == $p) | "\(.instance) \(.wl_socket)"')
