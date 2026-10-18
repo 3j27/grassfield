@@ -31,7 +31,7 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `notifications.dnd` | bool | false | Notifications (banners suppressed except critical), menu bar moon |
 | `notifications.previews` | `"always"` \| `"unlocked"` \| `"never"` | `"unlocked"` | Notifications (`never` hides bodies) |
 
-Location: `$GRASSFIELD_CONFIG_HOME/grassfield.json` (dev) else `$XDG_CONFIG_HOME/grassfield/grassfield.json`. The file is created on the first UI change (Control Center, Dock menu); setters clamp values, write atomically after 150 ms and the file is watched for external edits.
+Location: `$GRASSFIELD_CONFIG_HOME/grassfield.json` (dev) else `$XDG_CONFIG_HOME/grassfield/grassfield.json`. The file is created on the first UI change (Quick Settings, Dock menu); setters clamp values, write atomically after 150 ms and the file is watched for external edits.
 
 ## Acceptance criteria
 - A1 `gen-tokens.py --check` exit 0 (L0). A2 `tests/unit/tst_tokens.qml`, `tst_popupmenu.qml`, `tst_menunav.qml` pass (L0). A5 `tests/shell/settings_roundtrip` (real FileView) passes (L1). A3 `qmllint.sh` 0 warnings (L0). A4 nested screenshot shows blur at transparency 1 and an opaque surface at 0 (L2, manual scenario).

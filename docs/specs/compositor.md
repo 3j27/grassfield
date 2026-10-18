@@ -647,7 +647,7 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   own focus handling only; the shell keeps its kicker surface and pointer-leave drop and no file-changing desktop keys
   (ADR-0012 amendment). The unload posts a capabilities event with no feature (FR32) so the shell switches at once.
   Without `desktop-focus-v2` the shell keeps the file-changing desktop keys off (shell main 23caeab).
-- Without `stages-available` (plugin absent, mismatched, its listeners failed): no Stages at all; Control Center hides the
+- Without `stages-available` (plugin absent, mismatched, its listeners failed): no Stages at all; Quick Settings hides the
   toggle. With it but the flag off: `stages` is not advertised and the verb refuses (`disabled`). A monitor without the
   shell's strip surface: its windows are shown normally.
 
