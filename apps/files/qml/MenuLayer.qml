@@ -68,6 +68,8 @@ Item {
     PopupMenu {
         id: menu
         accessibleName: qsTr("Context menu")
+        // Submenus (Open With, View As, Sort By) flip or move to stay inside the window.
+        bounds: root
         onWidthChanged: if (root.visible) root.place()
         onHeightChanged: if (root.visible) root.place()
         onCloseRequested: root.close()

@@ -14,6 +14,9 @@ FocusScope {
     property string accessibleName: ""
     // Index of the row whose submenu is open, -1 if none.
     property int openIndex: -1
+    // Optional area that submenus stay inside (an app window's menu layer): a submenu that would cross its right edge
+    // opens to the left of the menu, and one that would cross its bottom edge moves up. null: no limit.
+    property Item bounds: null
 
     // A leaf item was chosen.
     signal activated(var item)
@@ -180,14 +183,37 @@ FocusScope {
         }
     }
 
+    // Submenu position: right of the menu, top aligned with its row; flipped and shifted to stay inside `bounds`.
+    function submenuX(width: real): real {
+        const right = root.width - Tokens.menuSubmenuOverlap;
+        if (!root.bounds)
+            return right;
+        const margin = Tokens.spacingSm;
+        const origin = root.mapToItem(root.bounds, 0, 0);
+        if (origin.x + right + width <= root.bounds.width - margin)
+            return right;
+        const left = Tokens.menuSubmenuOverlap - width;
+        // No room on either side: as far right as the area allows.
+        return origin.x + left >= margin ? left : Math.max(margin - origin.x, root.bounds.width - margin - origin.x - width);
+    }
+
+    function submenuY(rowY: real, height: real): real {
+        if (!root.bounds)
+            return rowY;
+        const margin = Tokens.spacingSm;
+        const origin = root.mapToItem(root.bounds, 0, 0);
+        return Math.max(margin - origin.y, Math.min(rowY, root.bounds.height - margin - origin.y - height));
+    }
+
     // Submenu. A Loader by URL: a component cannot instantiate its own type directly.
     Loader {
         id: submenuLoader
-        x: root.width - Tokens.menuSubmenuOverlap
-        y: {
+        readonly property real rowY: {
             const r = rows.itemAt(root.openIndex);
             return r ? r.y : 0;
         }
+        x: root.submenuX(submenuLoader.item ? (submenuLoader.item as Item).width : 0)
+        y: root.submenuY(submenuLoader.rowY, submenuLoader.item ? (submenuLoader.item as Item).height : 0)
     }
 
     Connections {
@@ -206,7 +232,7 @@ FocusScope {
     onOpenIndexChanged: {
         const item = root.model[root.openIndex];
         if (root.openIndex >= 0 && MenuNav.hasSubmenu(item))
-            submenuLoader.setSource("PopupMenu.qml", {model: item.submenu, isSubmenu: true, currentIndex: MenuNav.first(item.submenu)});
+            submenuLoader.setSource("PopupMenu.qml", {model: item.submenu, isSubmenu: true, currentIndex: MenuNav.first(item.submenu), bounds: root.bounds});
         else
             submenuLoader.source = "";
     }
