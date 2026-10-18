@@ -6,7 +6,7 @@ Text {
     required property var system
 
     textFormat: Text.PlainText
-    visible: system.suppressedNote
+    visible: system ? system.suppressedNote : false
     width: parent ? parent.width : implicitWidth
     height: visible ? implicitHeight : 0
     leftPadding: Tokens.spacingMd

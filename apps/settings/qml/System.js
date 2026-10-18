@@ -2,20 +2,73 @@
 
 // Pure logic of the system sections (Wi-Fi, Bluetooth, Sound, Displays): parsers of the backend tools' output,
 // argument vectors of the actions, display arrangement. No I/O here. The read-only queries and the action
-// programs must stay in step with apps/settings/src/systemguard.cpp (tests/unit/tst_settingssystem.qml checks it).
+// programs must stay in step with apps/settings/src/systemguard.cpp: tests/shell/settings_system_guard.sh runs every
+// QUERY entry (and a profile-SSID query) through the real guard and fails if one is refused.
+// Every tool runs in the C locale (Backend forces LC_ALL=C): the parsers read the English output.
 
 // ---- Read-only queries (the only commands a dev session may run; see systemguard.cpp) ----------------------------
 
 var QUERY = {
     wifiRadio: ["nmcli", "-t", "-f", "WIFI", "radio"],
-    wifiList: ["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "no"],
-    wifiProfiles: ["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"],
+    // SSID-HEX, not SSID: a network name may hold any byte (newline, ':', backslash); hex can never fake a row or a field.
+    wifiList: ["nmcli", "-t", "-f", "IN-USE,SSID-HEX,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "no"],
+    wifiProfiles: ["nmcli", "-t", "-f", "UUID,TYPE", "connection", "show"],
     wifiDevices: ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device"],
     btShow: ["bluetoothctl", "show"],
     btPaired: ["bluetoothctl", "devices", "Paired"],
     btConnected: ["bluetoothctl", "devices", "Connected"],
     audio: ["wpctl", "status"]
 };
+
+// SSID of one saved profile (a UUID of parseWifiProfiles); null for anything else.
+function wifiProfileSsidQuery(uuid) {
+    return validUuid(uuid) ? ["nmcli", "-t", "-f", "802-11-wireless.ssid", "connection", "show", "uuid", uuid] : null;
+}
+
+function validUuid(s) {
+    return typeof s === "string" && /^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/.test(s);
+}
+
+// ---- Stable-id models ----------------------------------------------------------------------------------------------
+
+// Make a ListModel hold exactly `items` (plain objects with scalar fields, in order), keyed by the field `keyName`:
+// rows of keys that vanished are removed, new keys are inserted, kept rows are moved only when the order changed and
+// updated only in the fields that differ. A kept row is never rebuilt, so its delegate keeps focus and selection.
+function syncModel(model, items, keyName) {
+    const wanted = {};
+    for (const it of items)
+        wanted[it[keyName]] = true;
+    for (let i = model.count - 1; i >= 0; i--) {
+        if (!wanted[model.get(i)[keyName]])
+            model.remove(i);
+    }
+    for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (i >= model.count) {
+            model.append(it);
+            continue;
+        }
+        if (model.get(i)[keyName] !== it[keyName]) {
+            let j = -1;
+            for (let k = i + 1; k < model.count; k++) {
+                if (model.get(k)[keyName] === it[keyName]) {
+                    j = k;
+                    break;
+                }
+            }
+            if (j < 0) {
+                model.insert(i, it);
+                continue;
+            }
+            model.move(j, i, 1);
+        }
+        const row = model.get(i);
+        for (const p of Object.keys(it)) {
+            if (row[p] !== it[p])
+                model.setProperty(i, p, it[p]);
+        }
+    }
+}
 
 // ---- nmcli -------------------------------------------------------------------------------------------------------
 
@@ -45,43 +98,141 @@ function parseWifiRadio(text) {
     return v === "enabled" ? true : v === "disabled" ? false : null;
 }
 
-// Visible networks, one per SSID (strongest access point; the connected one wins), connected first, then by signal.
-// [{ssid, signal (0-100), security, secured, enterprise, active}]. Hidden networks (empty SSID) are skipped.
+// Text of a hex string of UTF-8 bytes ("486F"): {text, valid}. Bad sequences become U+FFFD and valid is false; so is it
+// for malformed hex. Never throws.
+function hexToText(hex) {
+    const h = String(hex).trim();
+    if (h.length % 2 !== 0 || !/^[0-9A-Fa-f]*$/.test(h))
+        return {text: "", valid: false};
+    const b = [];
+    for (let i = 0; i < h.length; i += 2)
+        b.push(parseInt(h.substr(i, 2), 16));
+    let text = "";
+    let valid = true;
+    let i = 0;
+    while (i < b.length) {
+        const c = b[i];
+        if (c < 0x80) {
+            text += String.fromCharCode(c);
+            i++;
+            continue;
+        }
+        let n = 0;
+        let cp = 0;
+        if (c >= 0xC2 && c <= 0xDF) {
+            n = 1;
+            cp = c & 0x1F;
+        } else if (c >= 0xE0 && c <= 0xEF) {
+            n = 2;
+            cp = c & 0x0F;
+        } else if (c >= 0xF0 && c <= 0xF4) {
+            n = 3;
+            cp = c & 0x07;
+        }
+        let ok = n > 0;
+        for (let k = 1; ok && k <= n; k++) {
+            if (i + k >= b.length || (b[i + k] & 0xC0) !== 0x80)
+                ok = false;
+            else
+                cp = cp * 64 + (b[i + k] & 0x3F);
+        }
+        const min = n === 1 ? 0x80 : n === 2 ? 0x800 : 0x10000;
+        if (!ok || cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+            text += "\uFFFD";
+            valid = false;
+            i++;
+            continue;
+        }
+        text += String.fromCodePoint(cp);
+        i += n + 1;
+    }
+    return {text: text, valid: valid};
+}
+
+// Uppercase hex of the UTF-8 bytes of a string ("Home" -> "486F6D65").
+function textToHex(text) {
+    const s = unescape(encodeURIComponent(String(text)));
+    let out = "";
+    for (let i = 0; i < s.length; i++)
+        out += (s.charCodeAt(i) < 16 ? "0" : "") + s.charCodeAt(i).toString(16).toUpperCase();
+    return out;
+}
+
+// Control characters of a network name replaced by U+FFFD, so that a crafted name shows as one line of text.
+function printable(text) {
+    return String(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, "\uFFFD");
+}
+
+// Visible networks of `nmcli -t -f IN-USE,SSID-HEX,SIGNAL,SECURITY dev wifi list`: one per SSID and security (the
+// strongest access point; the connected one wins), connected first, then by signal. Flat objects with the stable id
+// `key` (SSID bytes + security): {key, hex, ssid, label, strength (0-100), security, secured, enterprise, active,
+// valid (the name can be passed to nmcli as it is)}. Hidden networks (empty SSID) are skipped.
 function parseWifiList(text) {
     const best = {};
     for (const line of String(text).split("\n")) {
         if (line.trim() === "")
             continue;
         const f = splitTerse(line);
-        if (f.length < 4 || f[1] === "")
+        if (f.length !== 4 || f[1].trim() === "")
+            continue;
+        const name = hexToText(f[1]);
+        if (name.text === "")
             continue;
         const security = f[3].trim() === "--" ? "" : f[3].trim();
+        const hex = f[1].trim().toUpperCase();
         const net = {
-            ssid: f[1],
-            signal: Math.max(0, Math.min(100, parseInt(f[2], 10) || 0)),
+            key: hex + "|" + security,
+            hex: hex,
+            ssid: name.text,
+            label: printable(name.text),
+            strength: Math.max(0, Math.min(100, parseInt(f[2], 10) || 0)),
             security: security,
             secured: security !== "",
             enterprise: security.indexOf("802.1X") >= 0,
-            active: f[0].trim() === "*"
+            active: f[0].trim() === "*",
+            valid: name.valid && plainName(name.text)
         };
-        const old = best[net.ssid];
-        if (!old || (net.active && !old.active) || (net.active === old.active && net.signal > old.signal))
-            best[net.ssid] = net;
+        const old = best[net.key];
+        if (!old || (net.active && !old.active) || (net.active === old.active && net.strength > old.strength))
+            best[net.key] = net;
     }
     const list = Object.keys(best).map(k => best[k]);
-    list.sort((a, b) => (a.active === b.active ? b.signal - a.signal || (a.ssid < b.ssid ? -1 : 1) : a.active ? -1 : 1));
+    list.sort((a, b) => (a.active === b.active ? b.strength - a.strength || (a.key < b.key ? -1 : 1) : a.active ? -1 : 1));
     return list;
 }
 
-// Names of the saved Wi-Fi profiles of `nmcli -t -f NAME,TYPE connection show`.
+// UUIDs of the saved Wi-Fi profiles of `nmcli -t -f UUID,TYPE connection show`.
 function parseWifiProfiles(text) {
     const out = [];
     for (const line of String(text).split("\n")) {
         const f = splitTerse(line);
-        if (f.length >= 2 && f[1] === "802-11-wireless" && f[0] !== "")
+        if (f.length === 2 && f[1] === "802-11-wireless" && validUuid(f[0]))
             out.push(f[0]);
     }
     return out;
+}
+
+// SSID, as uppercase hex of its UTF-8 bytes (comparable with a list row's `hex`), from the output of
+// `nmcli -t -f 802-11-wireless.ssid connection show uuid <uuid>`; "" when the output is not that. One field only, so
+// the whole rest of the output is the value: a name with a newline or a colon cannot be mistaken for anything else.
+function parseProfileSsid(text) {
+    const prefix = "802-11-wireless.ssid:";
+    let t = String(text);
+    if (t.indexOf(prefix) !== 0)
+        return "";
+    t = t.slice(prefix.length);
+    if (t.slice(-1) === "\n")
+        t = t.slice(0, -1);
+    let value = "";
+    for (let i = 0; i < t.length; i++) {
+        if (t[i] === "\\" && i + 1 < t.length) {
+            value += t[i + 1];
+            i++;
+        } else {
+            value += t[i];
+        }
+    }
+    return value === "" ? "" : textToHex(value);
 }
 
 // The first Wi-Fi interface of `nmcli -t -f DEVICE,TYPE,STATE device`: {name, connected}, null when there is none.
@@ -99,12 +250,13 @@ function wifiGlyph(signal) {
     return signal >= 67 ? "wifi-3" : signal >= 34 ? "wifi-2" : "wifi-1";
 }
 
-// What a click on a network does: "current" (already connected), "known" (saved profile), "open" (no password) or
+// What a click on a network does; `known` maps the SSID hex of each saved profile to its UUID.
+// "current" (already connected), "known" (saved profile with that SSID), "open" (no password) or
 // "password" (secured and new: the password flow lives in Quick Settings).
-function wifiClickKind(net, profiles) {
+function wifiClickKind(net, known) {
     if (net.active)
         return "current";
-    if (profiles.indexOf(net.ssid) >= 0)
+    if (known[net.hex] !== undefined)
         return "known";
     return net.secured ? "password" : "open";
 }
@@ -200,12 +352,12 @@ function wifiRadio(on) {
     return ["nmcli", "radio", "wifi", on ? "on" : "off"];
 }
 
-function wifiConnectKnown(profile) {
-    return plainName(profile) ? ["nmcli", "connection", "up", "id", profile] : null;
+function wifiConnectKnown(uuid) {
+    return validUuid(uuid) ? ["nmcli", "connection", "up", "uuid", uuid] : null;
 }
 
 function wifiConnectOpen(ssid) {
-    return plainName(ssid) ? ["nmcli", "device", "wifi", "connect", ssid] : null;
+    return plainName(ssid) && ssid.indexOf("\uFFFD") < 0 ? ["nmcli", "device", "wifi", "connect", ssid] : null;
 }
 
 function wifiDisconnect(device) {

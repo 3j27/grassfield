@@ -22,6 +22,13 @@ SettingsPage {
 
     readonly property var devices: System.bluetoothDevices(root.paired, root.connected)
 
+    // The rows of the list, keyed by MAC address: a refresh updates, inserts and removes rows in place.
+    ListModel {
+        id: deviceModel
+    }
+
+    onDevicesChanged: System.syncModel(deviceModel, root.devices, "mac")
+
     function refresh(): void {
         root.system.query(System.QUERY.btShow, "bt.show");
         root.system.query(System.QUERY.btPaired, "bt.paired");
@@ -93,21 +100,28 @@ SettingsPage {
         footnote: root.devices.length === 0 ? qsTr("No paired devices. Pair a device with your system's Bluetooth tools.") : qsTr("Devices are paired outside Settings for now.")
 
         Repeater {
-            model: root.devices
+            model: deviceModel
 
             delegate: DeviceRow {
                 id: row
 
-                required property var modelData
+                required property string mac
+                required property string name
+                required property bool connected
 
-                title: row.modelData.name
-                subtitle: root.subtitleOf(row.modelData)
+                title: row.name
+                subtitle: root.subtitleOf({mac: row.mac, connected: row.connected})
                 leading: "bluetooth"
-                checked: row.modelData.connected
-                actionText: row.modelData.connected ? qsTr("Disconnect") : qsTr("Connect")
-                onActivated: root.toggleDevice(row.modelData)
+                checked: row.connected
+                actionText: row.connected ? qsTr("Disconnect") : qsTr("Connect")
+                onActivated: root.toggleDevice({mac: row.mac, connected: row.connected})
             }
         }
+    }
+
+    ErrorNote {
+        system: root.system
+        tag: "bt.act"
     }
 
     DevNote {
