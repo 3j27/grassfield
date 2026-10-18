@@ -405,7 +405,11 @@ FocusScope {
             root.selected = all;
             event.accepted = true;
         } else if (event.key === Qt.Key_Escape) {
-            root.clearSelection();
+            // Esc closes Glance first (as Quick Look); the next one clears the selection.
+            if (GlanceApp.open)
+                GlanceApp.close();
+            else
+                root.clearSelection();
             event.accepted = true;
         }
     }

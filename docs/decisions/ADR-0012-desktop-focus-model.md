@@ -1,5 +1,5 @@
 # ADR-0012: Desktop keyboard focus follows the macOS model
-Status: Accepted by owner decision 2026-10-17; spike PASS with three shell-side corrections (see Spike results, 2026-10-18) · Date: 2026-10-17 · Decider: owner
+Status: Accepted by owner decision 2026-10-17; spike PASS with three shell-side corrections (see Spike results, 2026-10-18); implemented, nested acceptance (a) to (h) PASS with and without the plugin · Date: 2026-10-17 · Decider: owner
 
 ## Context
 The desktop (icons on the wallpaper) is a full-screen layer surface per output; its context menu and rename field
@@ -107,6 +107,13 @@ was NOT needed: the keyboard returns to the parent by itself after Esc / item / 
   from the desktop and back, or a click on another window, fixes it (a click on the last active window alone does not).
 - Pointer leave to any other surface (including the widgets layer) drops the desktop keyboard (see correction 2).
 - Keys sent during the ~20-80 ms between the menu closing and Hyprland returning the keyboard are dropped by the closing popup (measured, see desktop.md).
+
+### Implementation acceptance (2026-10-18, nested, `.dev/spike/acc.sh`; logs `.dev/spike/acc-plugin.txt`, `acc-noplugin.txt`) — VERIFIED
+(a) hover + type: foot gets the keys, 0 desktop keys. (b) click, Down, Down, Return, `zz`, Return: the second icon renamed in `.dev/desktop-sandbox`, foot got nothing.
+(c) click foot, type: foot. (d) right-click, Esc, Return, Esc, `dd`: desktop keys, foot nothing; then a click on foot: foot gets the keys. (e) menu open, click foot: menu closed, click swallowed,
+files unchanged, typing goes to foot (last window). (f) menu open + click foot on the other output: closed, no stale key; rename active + click foot on the other output: committed, keys to that foot.
+(g) Space opens Glance, Esc closes it. (h) 10x menu/Esc/type: 0 misdelivered; typed 50 ms after the Esc 10/10, typed at once 2 to 8 of 10 (rest dropped). Ctrl+Backspace on a sandbox file moved it to `.dev/apps-home/data/Trash`; the owner's `~/.local/share/Trash/info` mtime unchanged.
+The keyboard grant check uses `Window.active`, not `activeFocus` (found during acceptance: `forceActiveFocus` sets activeFocus on an inactive window).
 
 ## Consequences
 - The safe mode and its catchers are temporary; this design replaces them after a spike PASS and a review.

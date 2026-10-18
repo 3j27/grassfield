@@ -29,8 +29,8 @@ Variants {
         property var kb: Focus.initial()
         // The transient kicker surface is mapped (two phases: mapped, unmapped).
         property bool kickOn: false
-        // The surface has the keyboard (the focus chain of the view is active).
-        readonly property bool hasKeys: view.activeFocus
+        // The surface has the keyboard (wl_keyboard enter): the window is active. activeFocus is not enough, forceActiveFocus sets it on an inactive window.
+        readonly property bool hasKeys: view.Window.active
 
         function feed(event: var): void {
             win.kb = Focus.next(win.kb, event);
