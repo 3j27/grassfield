@@ -578,5 +578,18 @@ Singleton {
             devPause.restart();
             return "paused";
         }
+
+        // Dev-only test hook (GRASSFIELD_DEV=1, nested): count one "unlocked" answer Hyprland never gave, as a stale
+        // answer would, while the session is really locked (tests/security/reload_locked.sh `relock-confirm`). Only a
+        // relock can follow (never an unlock), and only once a fresh answer confirms it. Refused otherwise.
+        function devForgeUnlockedAnswer(): string {
+            if (Quickshell.env("GRASSFIELD_DEV") !== "1")
+                return "refused";
+            if (!root.holding)
+                return "not-holding";
+            console.warn("grassfield-lock: dev forged one unlocked answer");
+            root.unlockedAnswers = 1;
+            return "forged";
+        }
     }
 }

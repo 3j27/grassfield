@@ -20,6 +20,14 @@
 #                   -> a real lock, triggered by that request
 #   sleep-desync    before-sleep path (dev hook `idle devSleep`): the sleep delay ends only on a
 #                   confirmed lock; during a held desync, only after the fresh lock is acquired
+#   relock-confirm  forced race (R12 review #3): one stale "unlocked" answer forged by the dev hook
+#                   `lock devForgeUnlockedAnswer` while the session is really locked, then `lock lock`
+#                   while keys are typed -> no relock (it waits for a fresh answer, which says locked),
+#                   Hyprland reports LOCK throughout, nothing reaches foot; RELOCK_RUNS runs (default 12)
+#   foreign-gap     forced race (R12 review #3): FOREIGN_RUNS (default 5) foreign takeovers of the live
+#                   Grassfield lock, each released while keys are typed: prints the unlocked window and
+#                   the keys that reached foot during it; fails when the window exceeds GAP_MAX_MS
+#                   (default 300) or a key typed after the fresh lock reaches foot
 #   cleanup         close the foot probe window and any foreign locker (run after the default sequence)
 #
 # Foreign locker: tests/security/foreign_locker/ForeignLocker.qml (Quickshell WlSessionLock client,
@@ -338,6 +346,92 @@ step_sleep_desync() {
   no_leak aftersleep "sleep-desync"
 }
 
+# --- Forced races (R12 review #3) ---
+
+typed_bytes() { stat -c %s "$typed" 2>/dev/null || echo 0; }
+
+# Letters only (never Return), different for every run so that a leak can be attributed.
+probe_word() { # <prefix> <n>
+  local letters=abcdefghijklmnopqrstuvwxyz
+  printf '%s%s%s' "$1" "${letters:$(($2 % 26)):1}" "${letters:$(($2 / 26 % 26)):1}"
+}
+
+# A stale "unlocked" answer (forged by the dev hook while the session is really locked) followed by `lock lock`
+# must not relock: relock() releases the lock object first, and releasing the lock the compositor uses unlocks the
+# session until the new lock arrives. Keys are typed across the request (every 4 ms, about 0.5 s).
+step_relock_confirm() {
+  local runs=${RELOCK_RUNS:-12} i from before after answer word typer unlocked s relocks=0 leaks=0 opened=0
+  s=$(ipc lock status)
+  [[ $s == locked ]] || { fail "relock-confirm: precondition: status $s (run the lock step first)"; return; }
+  for i in $(seq 1 "$runs"); do
+    wait_status locked 3 >/dev/null || { fail "relock-confirm run $i: status $(ipc lock status)"; continue; }
+    sleep 0.6 # past the 500 ms grace of a lock just acquired
+    from=$(wc -l <"$dev/shell.log")
+    before=$(typed_bytes)
+    ipc lock devPauseOwnershipCheck >/dev/null
+    answer=$(ipc lock devForgeUnlockedAnswer)
+    [[ $answer == forged ]] || { fail "relock-confirm run $i: devForgeUnlockedAnswer -> '${answer:-no-answer}'"; continue; }
+    word=$(probe_word relock "$i")
+    nested wtype -d 4 "$word$word$word$word$word$word$word$word$word$word$word$word" &
+    typer=$!
+    sleep 0.05
+    answer=$(ipc lock lock)
+    unlocked=0
+    for _ in $(seq 1 10); do compositor_locked || unlocked=$((unlocked + 1)); sleep 0.03; done
+    wait "$typer"
+    sleep 0.4
+    after=$(typed_bytes)
+    if tail -n +"$((from + 1))" "$dev/shell.log" | grep -q "taking a fresh lock"; then relocks=$((relocks + 1)); fi
+    ((after > before)) && leaks=$((leaks + 1))
+    ((unlocked > 0)) && opened=$((opened + 1))
+    echo "run $i: lock lock -> $answer; compositor answers without LOCK: $unlocked; bytes that reached foot: $((after - before))"
+  done
+  nested wtype -k Escape # empty the lock field (Escape clears it; nothing is ever submitted)
+  echo "relock-confirm: $runs runs: relocks $relocks, runs with a key in foot $leaks, runs with an unlocked compositor answer $opened"
+  if ((relocks == 0)); then pass "relock-confirm: no relock without a confirming answer ($runs runs)"; else fail "relock-confirm: relocked on an unconfirmed answer in $relocks of $runs runs"; fi
+  if ((leaks == 0)); then pass "relock-confirm: nothing reached the foot window ($runs runs)"; else fail "relock-confirm: keys reached the foot window in $leaks of $runs runs"; fi
+  if ((opened == 0)) && compositor_locked; then pass "relock-confirm: Hyprland reported LOCK throughout"; else fail "relock-confirm: Hyprland reported the session unlocked in $opened runs"; fi
+}
+
+# A foreign locker takes the live Grassfield lock over and releases it while keys are typed (every 4 ms): measures the
+# unlocked window (foreign release -> Hyprland reports LOCK again) and the keys that reached foot during it.
+step_foreign_gap() {
+  local runs=${FOREIGN_RUNS:-5} max=${GAP_MAX_MS:-300} i s t0 t1 now lo hi before mid after word typer worst=0 inGap=0 late=0
+  for i in $(seq 1 "$runs"); do
+    s=$(wait_status locked 3) || { fail "foreign-gap run $i: precondition: status $s"; return; }
+    foreign_start "foreign-gap run $i"
+    sleep 1 # the takeover settles; past the 500 ms grace of the last Grassfield lock
+    before=$(typed_bytes)
+    word=$(probe_word gap "$i")
+    nested wtype -d 4 "$word$word$word$word$word$word$word$word$word$word$word$word$word$word$word$word" &
+    typer=$!
+    sleep 0.05
+    t0=${EPOCHREALTIME/./}
+    foreign_ipc unlock >/dev/null
+    t1=${EPOCHREALTIME/./}
+    lo="" hi=""
+    for _ in $(seq 1 300); do
+      if compositor_locked; then now=${EPOCHREALTIME/./}; lo=$(((now - t1) / 1000)); hi=$(((now - t0) / 1000)); break; fi
+      sleep 0.005
+    done
+    mid=$(typed_bytes)
+    wait "$typer"
+    sleep 0.3
+    after=$(typed_bytes)
+    foreign_wait_exit "foreign-gap run $i"
+    if [[ -z $hi ]]; then fail "foreign-gap run $i: Hyprland did not report LOCK again within 3 s"; continue; fi
+    ((hi > worst)) && worst=$hi
+    inGap=$((inGap + mid - before))
+    late=$((late + after - mid))
+    echo "run $i: unlocked window $lo-$hi ms (after/before the release request); bytes in foot: $((mid - before)) by the fresh lock, $((after - mid)) after it"
+    no_leak "after$(probe_word gap "$i")" "foreign-gap run $i (typed after the fresh lock)"
+  done
+  echo "foreign-gap: $runs runs: worst unlocked window $worst ms; bytes in foot during the windows $inGap, after them $late"
+  if ((worst <= max)); then pass "foreign-gap: unlocked window <= $max ms in every run (worst $worst ms)"; else fail "foreign-gap: unlocked window $worst ms > $max ms"; fi
+  if ((late == 0)); then pass "foreign-gap: no key typed after the fresh lock reached foot"; else fail "foreign-gap: $late bytes reached foot after the fresh lock was reported"; fi
+  nested wtype -k Escape
+}
+
 # Leave nothing behind but the (locked) nested session.
 step_cleanup() {
   echo "typed into foot: $(tr -c '[:alnum:]' ' ' <"$typed" 2>/dev/null)"
@@ -347,7 +441,7 @@ step_cleanup() {
 }
 
 steps=("$@")
-[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync cleanup)
+[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync relock-confirm foreign-gap cleanup)
 for s in "${steps[@]}"; do
   echo "== $s"
   declare -F "step_${s//-/_}" >/dev/null || { echo "reload_locked: unknown step $s" >&2; exit 2; }
