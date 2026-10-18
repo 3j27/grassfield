@@ -83,7 +83,7 @@ if HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null 
     for d in "${XDG_DATA_HOME:-$HOME/.local/share}" /usr/local/share /usr/share; do
       if [[ -f $d/applications/$id.desktop ]]; then apps=$((apps + 1)); break; fi
     done
-  done < <(jq -r '.dock.pinned[]' "$config")
+  done < <(jq -r --slurpfile d "$root/config/defaults/grassfield.json" '(.dock.pinned // $d[0].dock.pinned)[]' "$config")
   n=$((apps + 2)) # apps, one minimized tile, the Trash
   restore_x=$(((out_w - (n * icon + sep_w + n * dspacing)) / 2 + apps * (icon + dspacing) + sep_w + dspacing + icon / 2))
 fi

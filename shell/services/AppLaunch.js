@@ -9,7 +9,9 @@ function isolatedEnvironment(appsHome) {
         "XDG_CONFIG_HOME": appsHome + "/config",
         "XDG_CACHE_HOME": appsHome + "/cache",
         "XDG_STATE_HOME": appsHome + "/state",
-        "XDG_DATA_HOME": appsHome + "/data"
+        "XDG_DATA_HOME": appsHome + "/data",
+        // An app's HOME too: file managers, editors and shells otherwise open and write the owner's home.
+        "HOME": appsHome + "/home"
     };
 }
 

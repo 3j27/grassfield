@@ -84,8 +84,8 @@ if [[ ${GRASSFIELD_PRIVATE_BUS:-1} == 1 ]]; then
     # Same configuration as dbus-run-session (session bus, service activation, unix:tmpdir=/tmp); activated
     # services inherit the nested Wayland socket, never the owner's.
     # The isolated homes make every activated service isolated too (ADR-0011).
-    mkdir -p "$apps_home"/{config,cache,state,data}
-    env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" GRASSFIELD_DEV=1 \
+    mkdir -p "$apps_home"/{config,cache,state,data,home}
+    env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" GRASSFIELD_DEV=1 HOME="$apps_home/home" \
       XDG_CONFIG_HOME="$apps_home/config" XDG_CACHE_HOME="$apps_home/cache" XDG_STATE_HOME="$apps_home/state" \
       XDG_DATA_HOME="$apps_home/data" \
       setsid dbus-daemon --session --nofork --print-address=1 \
@@ -158,7 +158,7 @@ timing=()
 
 # The isolated trash of the dev session (shell/services/Trash.qml watches it; ADR-0011): the shell's "Move to Trash"
 # and the Dock's Trash drop put files here, never in the owner's ~/.local/share/Trash.
-mkdir -p "$dev/apps-home/data/Trash/files" "$dev/apps-home/data/Trash/info"
+mkdir -p "$dev/apps-home/data/Trash/files" "$dev/apps-home/data/Trash/info" "$dev/apps-home/home"
 
 # Desktop icons: the folder is a sandbox in dev (never the owner's real desktop); an exported
 # GRASSFIELD_DESKTOP_DIR wins.
@@ -173,6 +173,11 @@ if [[ ! -s $cfg ]]; then
   printf '{\n  "version": 1,\n  "lock": {\n    "idleMinutes": 0\n  }\n}\n' >"$cfg"
 elif jq -e '.lock.idleMinutes == null' "$cfg" >/dev/null 2>&1; then
   jq '.lock.idleMinutes = 0' "$cfg" >"$cfg.new" && mv "$cfg.new" "$cfg"
+fi
+# The dev Dock pins only foot (when dock.pinned is absent): a mis-click or a test's coordinate click on a pinned tile
+# then starts a terminal, never a browser or a file manager on the owner's profile/home (incidents 2026-10-17/18).
+if jq -e '.dock.pinned == null' "$cfg" >/dev/null 2>&1; then
+  jq '.dock.pinned = ["foot"]' "$cfg" >"$cfg.new" && mv "$cfg.new" "$cfg"
 fi
 
 # The open shims (gio, xdg-open, gtk-launch -> open-policy.sh) come first on the shell's PATH: QProcess resolves a program
