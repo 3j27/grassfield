@@ -68,10 +68,14 @@ Item {
         border.color: Appearance.colors.accent
     }
 
-    Row {
-        id: row
+    // Content with a soft drop shadow in three stacked passes (the row, its wrapper, the outer wrapper): each pass
+    // casts the shadow of the previous result, so the halo gets denser without a harder edge (gate A2, as the
+    // desktop labels). The passes are off while the bar has a material behind it.
+    Item {
+        id: pass3
         anchors.centerIn: parent
-        spacing: Tokens.spacingXs
+        width: row.implicitWidth
+        height: row.implicitHeight
         layer.enabled: root.shadowed
         layer.effect: MultiEffect {
             shadowEnabled: true
@@ -79,6 +83,33 @@ Item {
             shadowOpacity: Tokens.menubarTextShadowOpacity
             shadowBlur: Tokens.menubarTextShadowBlur
             shadowVerticalOffset: Tokens.menubarTextShadowOffsetY
+        }
+
+        Item {
+            id: pass2
+            anchors.fill: parent
+            layer.enabled: root.shadowed
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: Appearance.darkColors.shadow
+                shadowOpacity: Tokens.menubarTextShadowOpacity
+                shadowBlur: Tokens.menubarTextShadowBlur
+                shadowVerticalOffset: Tokens.menubarTextShadowOffsetY
+            }
+
+            Row {
+                id: row
+                anchors.centerIn: parent
+                spacing: Tokens.spacingXs
+                layer.enabled: root.shadowed
+                layer.effect: MultiEffect {
+                    shadowEnabled: true
+                    shadowColor: Appearance.darkColors.shadow
+                    shadowOpacity: Tokens.menubarTextShadowOpacity
+                    shadowBlur: Tokens.menubarTextShadowBlur
+                    shadowVerticalOffset: Tokens.menubarTextShadowOffsetY
+                }
+            }
         }
     }
 

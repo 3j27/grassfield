@@ -26,7 +26,8 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `accessibility.reduceMotion` | bool | false | Appearance |
 | `dock.pinned` | string[] (desktop entry ids) | `["foot","chromium","org.gnome.Nautilus"]` | Dock |
 | `dock.magnification` | number 1–2.5 | 1.6 | Dock |
-| `dock.magnificationEnabled` | bool | true | Dock |
+| `dock.magnificationEnabled` | bool | false | Dock |
+| `menubar.showBackground` | bool | false | Menu bar (transparent unless true) |
 | `dock.autohide` | bool | false | Dock |
 | `notifications.dnd` | bool | false | Notifications (banners suppressed except critical), menu bar moon |
 | `notifications.previews` | `"always"` \| `"unlocked"` \| `"never"` | `"unlocked"` | Notifications (`never` hides bodies) |
