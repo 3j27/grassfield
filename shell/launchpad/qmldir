@@ -1,6 +1,5 @@
 module qs.launchpad
 AppsController 1.0 AppsController.qml
 AppsWindow 1.0 AppsWindow.qml
-AppsGrid 1.0 AppsGrid.qml
 AppsCell 1.0 AppsCell.qml
-AppsIcon 1.0 AppsIcon.qml
+AppsChip 1.0 AppsChip.qml

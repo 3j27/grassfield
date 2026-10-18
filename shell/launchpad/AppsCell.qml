@@ -1,146 +1,95 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Quickshell
 import Grassfield.Ui
 
-// One cell of the Apps grid or of an open folder: icon, name under it, keyboard focus ring, drop
-// indicators and the pointer handling (click activates, a press moved past the drag threshold
-// starts a drag owned by `host`).
+// One cell of the Apps grid: the application icon, its name under it (one or two lines, elided), a hover
+// highlight and the keyboard focus ring. A click activates.
 Item {
     id: root
 
+    // Display item {key, id, name, rec}.
     required property var info
-    // The AppsWindow root item: owns the drag state (see beginDrag / dragMove / endDrag).
-    required property var host
-    required property int itemIndex
-    property real cellW: Tokens.appsIconSize * Tokens.appsCellWidthScale
-    property real cellH: Tokens.appsIconSize * Tokens.appsCellHeightScale
-    property real iconSize: Tokens.appsIconSize
-    property bool inFolder: false
-    property bool dragEnabled: true
+    property real cellW: Tokens.launcherMinCellWidth
+    property real cellH: Tokens.launcherCellHeight
+    // True while the keyboard (or a search) owns the selection ring on this cell.
     property bool selected: false
-    // False when the item is not on a displayed page (the cell stays, hidden).
-    property bool shown: true
 
     signal activated
 
-    readonly property bool real: info.kind !== "none"
-    readonly property real labelHeight: Tokens.appsLabelSize * Tokens.appsLabelLineHeight
-    readonly property bool beingDragged: host.dragging && host.dragKey === info.key
-    readonly property bool dropMerge: !inFolder && host.dragging && host.hoverIndex === itemIndex && host.hoverMerge
-    readonly property bool dropBefore: !inFolder && host.dragging && host.hoverIndex === itemIndex && !host.hoverMerge
+    readonly property real labelHeight: Tokens.launcherLabelSize * Tokens.launcherLabelLineHeight * Tokens.launcherLabelLines
+    readonly property real iconTop: (cellH - Tokens.launcherIconSize - Tokens.launcherLabelGap - labelHeight) / 2
+    readonly property real highlightSize: Tokens.launcherIconSize + 2 * Tokens.spacingXs
 
     width: cellW
     height: cellH
-    visible: real && shown
     Accessible.role: Accessible.Button
-    Accessible.name: info.kind === "folder" ? qsTr("%1, folder").arg(info.name) : info.name
+    Accessible.name: info.name
     Accessible.focused: selected
     Accessible.onPressAction: root.activated()
 
-    readonly property real iconTop: (cellH - iconSize - Tokens.appsLabelGap - labelHeight) / 2
-
     Rectangle {
-        // Hover, merge target.
-        x: (root.cellW - root.iconSize) / 2 - Tokens.spacingSm
-        y: root.iconTop - Tokens.spacingSm
-        width: root.iconSize + 2 * Tokens.spacingSm
-        height: root.iconSize + 2 * Tokens.spacingSm
-        radius: root.iconSize * Tokens.appsFolderRadiusScale
-        visible: root.dropMerge || (area.containsMouse && !root.host.dragging)
-        color: Appearance.withAlpha(Appearance.colors.hover, root.dropMerge ? Tokens.materialHoverOpacity * 2 : Tokens.materialHoverOpacity)
-        border.width: root.dropMerge ? Tokens.appsSelectionWidth : 0
-        border.color: Appearance.colors.accent
-    }
-
-    Rectangle {
-        // Reorder indicator: insertion bar on the left edge of the target.
-        visible: root.dropBefore
-        x: Tokens.appsDropBarInset
-        y: root.iconTop
-        width: Tokens.appsSelectionWidth
-        height: root.iconSize
-        radius: width / 2
-        color: Appearance.colors.accent
+        // Hover highlight.
+        x: (root.cellW - width) / 2
+        y: root.iconTop - Tokens.spacingXs
+        width: root.highlightSize
+        height: root.highlightSize
+        radius: Tokens.launcherIconSize * Tokens.launcherHighlightRadiusScale
+        visible: area.containsMouse && !root.selected
+        color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity)
     }
 
     Rectangle {
         // Keyboard focus ring.
-        visible: root.selected && root.host.controller.keyNav || (root.selected && root.host.controller.searching)
-        x: (root.cellW - root.iconSize) / 2 - Tokens.spacingSm
-        y: root.iconTop - Tokens.spacingSm
-        width: root.iconSize + 2 * Tokens.spacingSm
-        height: root.iconSize + 2 * Tokens.spacingSm
-        radius: root.iconSize * Tokens.appsFolderRadiusScale
-        color: "transparent"
-        border.width: Tokens.appsSelectionWidth
+        visible: root.selected
+        x: (root.cellW - width) / 2
+        y: root.iconTop - Tokens.spacingXs
+        width: root.highlightSize
+        height: root.highlightSize
+        radius: Tokens.launcherIconSize * Tokens.launcherHighlightRadiusScale
+        color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity)
+        border.width: Tokens.launcherSelectionWidth
         border.color: Appearance.colors.accent
     }
 
-    AppsIcon {
-        x: (root.cellW - root.iconSize) / 2
+    Image {
+        x: (root.cellW - width) / 2
         y: root.iconTop
-        size: root.iconSize
-        info: root.info
-        opacity: root.beingDragged ? Tokens.appsDragSourceOpacity : 1
+        width: Tokens.launcherIconSize
+        height: Tokens.launcherIconSize
+        source: Quickshell.iconPath(root.info.rec.icon, "application-x-executable")
+        sourceSize: Qt.size(Tokens.launcherIconSize * 2, Tokens.launcherIconSize * 2)
+        fillMode: Image.PreserveAspectFit
+        asynchronous: true
+        smooth: true
+        mipmap: true
     }
 
     Text {
         x: Tokens.spacingXs
-        y: root.iconTop + root.iconSize + Tokens.appsLabelGap
+        y: root.iconTop + Tokens.launcherIconSize + Tokens.launcherLabelGap
         width: root.cellW - 2 * Tokens.spacingXs
         height: root.labelHeight
-        text: root.info.name ?? ""
+        text: root.info.name
         textFormat: Text.PlainText
+        wrapMode: Text.Wrap
+        maximumLineCount: Tokens.launcherLabelLines
+        lineHeightMode: Text.FixedHeight
+        lineHeight: Tokens.launcherLabelSize * Tokens.launcherLabelLineHeight
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
-        color: Appearance.darkColors.text
+        verticalAlignment: Text.AlignTop
+        color: Appearance.colors.text
         font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.appsLabelSize
+        font.pixelSize: Tokens.launcherLabelSize
         font.weight: Tokens.typographyMenuWeight
-        opacity: root.beingDragged ? Tokens.appsDragSourceOpacity : 1
     }
 
     MouseArea {
         id: area
-
-        property point pressPoint
-        property bool moved: false
-
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
-
-        onPressed: mouse => {
-            pressPoint = mapToItem(root.host, mouse.x, mouse.y);
-            moved = false;
-        }
-
-        onPositionChanged: mouse => {
-            if (!pressed)
-                return;
-            const p = mapToItem(root.host, mouse.x, mouse.y);
-            if (!moved && root.dragEnabled && Math.hypot(p.x - pressPoint.x, p.y - pressPoint.y) >= Tokens.appsDragThreshold) {
-                moved = true;
-                root.host.beginDrag(root.info, p.x, p.y, root.inFolder);
-            }
-            if (moved)
-                root.host.dragMove(p.x, p.y);
-        }
-
-        onReleased: mouse => {
-            if (moved) {
-                moved = false;
-                root.host.endDrag();
-            } else if (containsMouse) {
-                root.activated();
-            }
-        }
-
-        onCanceled: {
-            if (moved) {
-                moved = false;
-                root.host.cancelDrag();
-            }
-        }
+        onClicked: root.activated()
     }
 }
