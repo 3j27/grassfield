@@ -569,6 +569,20 @@ QtObject {
     readonly property int settingsPickerWidth: 150
     // estimate: Settings app (docs/specs/settings.md)
     readonly property int settingsShortcutKeyMinWidth: 28
+    // estimate: Settings system sections re-read the tools' state while a pane is open
+    readonly property int settingsSystemRefreshMs: 4000
+    // estimate: Displays pane, height of the arrangement preview
+    readonly property int settingsDisplayPreviewHeight: 150
+    // estimate: Displays pane, smallest edge of an output rectangle in the preview
+    readonly property int settingsDisplayMinSide: 24
+    // estimate: Displays pane, corner radius of an output rectangle
+    readonly property int settingsDisplayRadius: 4
+    // estimate: Settings device and network rows, leading glyph
+    readonly property int settingsListIconSize: 18
+    // estimate: Sound pane, minimum gap between two volume writes while a slider is dragged
+    readonly property int settingsVolumeApplyMs: 120
+    // estimate: Sound pane, width of the percentage next to a slider
+    readonly property int settingsVolumeValueWidth: 44
 
     // estimate: widgets v1 (docs/specs/widgets.md), px side of a small widget on the desktop grid
     readonly property int widgetCell: 158

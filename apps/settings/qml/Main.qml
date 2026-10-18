@@ -11,9 +11,15 @@ Window {
     required property var backend
     // The registrar is there (kept up to date by src/main.cpp): the window exports its menus to the global menu bar.
     required property bool globalMenu
+    // Section to open first (--section=<id> on the command line); "" opens Appearance.
+    property string startSection: ""
     readonly property alias searchField: search
 
     readonly property var sections: [
+        {id: "wifi", title: qsTr("Wi-Fi"), icon: "wifi-3", keywords: qsTr("wireless network internet networkmanager")},
+        {id: "bluetooth", title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
+        {id: "sound", title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
+        {id: "displays", title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
         {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion")},
         {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items hot corners titlebar window")},
         {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
@@ -21,7 +27,7 @@ Window {
         {id: "keyboard", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
         {id: "about", title: qsTr("About"), icon: "grassfield-logo", keywords: qsTr("version system hardware processor memory")}
     ]
-    property string selectedId: "appearance"
+    property string selectedId: root.startSection !== "" ? root.startSection : "appearance"
     property string query: ""
     readonly property var filtered: {
         const q = root.query.trim().toLowerCase();
@@ -49,6 +55,11 @@ Window {
 
     ConfigStore {
         id: cfg
+        backend: root.backend
+    }
+
+    SystemService {
+        id: sys
         backend: root.backend
     }
 
@@ -337,6 +348,14 @@ Window {
             opacity: cfg.blocked ? Tokens.materialDisabledOpacity : 1
             sourceComponent: {
                 switch (root.selectedId) {
+                case "wifi":
+                    return wifiPage;
+                case "bluetooth":
+                    return bluetoothPage;
+                case "sound":
+                    return soundPage;
+                case "displays":
+                    return displaysPage;
                 case "desktop":
                     return desktopPage;
                 case "notifications":
@@ -350,6 +369,37 @@ Window {
                 }
                 return appearancePage;
             }
+        }
+    }
+
+    Component {
+        id: wifiPage
+        WifiPage {
+            backend: root.backend
+            system: sys
+        }
+    }
+
+    Component {
+        id: bluetoothPage
+        BluetoothPage {
+            backend: root.backend
+            system: sys
+        }
+    }
+
+    Component {
+        id: soundPage
+        SoundPage {
+            backend: root.backend
+            system: sys
+        }
+    }
+
+    Component {
+        id: displaysPage
+        DisplaysPage {
+            backend: root.backend
         }
     }
 
