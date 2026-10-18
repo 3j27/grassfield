@@ -82,8 +82,8 @@ Behavior now (`Lock.qml`, `LockMachine.ownershipAction`):
    keyboard (another client's lock surface took it, or a window did after an unlock under this lock), or the lock was
    requested by a restore at start (it may be a live foreign locker's lock taken over, whose release sends no event).
    Also at once when a lock surface loses keyboard focus, and on every monitor answer anyone requested. Suspicion only
-   ever speeds the check up; it never unlocks. Cost of the 100 ms check (nested, `probe-cost`): +1.5 % CPU in the shell
-   (1.0 → 2.6 %), Hyprland unchanged (0.4 → 0.3 %).
+   ever speeds the check up; it never unlocks. Cost of the 100 ms check (nested, `probe-cost`, three runs): +1.2 to
+   +1.9 % CPU in the shell (0.8–1.0 → 2.0–2.7 %), Hyprland +0 to +0.6 % (0.3–0.4 → 0.3–0.9 %).
 2. An answer reporting the session unlocked is confirmed by a second, fresh answer (answers in the first 500 ms after
    the lock was confirmed are ignored), then the shell takes a fresh lock: `lockLost()` (→ `locking`, PAM aborted,
    secret dropped), the stale lock object is released (the session is already unlocked) and a new lock is requested in
@@ -113,8 +113,10 @@ and `sleep-desync` (dev hook `idle devSleep`), with the fixture `tests/security/
 (R12 review #3): `relock-confirm` (one stale "unlocked" answer forged by the dev hook `lock devForgeUnlockedAnswer`
 while the session is locked, then `lock lock` while keys are typed every 4 ms: 12 runs, no relock, nothing reached the
 probe window; the same step on the previous code relocked in 12 of 12 runs and keys reached the window in 12 of 12),
-`foreign-gap` (foreign takeover then release while keys are typed: release → fresh lock request 93–101 ms over five
-runs, previously 250–1123 ms) and `probe-cost`. Keys typed after the fresh lock never reached the probe window.
+`foreign-gap` (foreign takeover then release while keys are typed: release → fresh lock request 9–101 ms over 15 runs
+in three sessions, previously 250–1123 ms) and `probe-cost`. Keys typed after the fresh lock never reached the probe
+window. The default step order runs the forced races right after `lock`: the crash steps restart the shell, which can
+change the window Hyprland refocuses, and the in-window key count needs it to be the probe window.
 
 File watching is disabled in `shell.qml` (`settings.watchFiles: false`, re-applied after every reload since
 Quickshell resets it), so only an explicit `Quickshell.reload()` reloads the shell (none in production code; the dev
@@ -132,11 +134,11 @@ hook `lock devReload` needs `GRASSFIELD_DEV=1`). Development restarts the shell 
 - Lock restore on Hyprland 0.56.2 (`misc.allow_session_lock_restore = true`, needed for crash recovery) does NOT wait
   for a live locker to exit: any client of the session can take a live lock over at once and, by releasing it, unlock
   the session (a Hyprland behavior no shell can prevent). Grassfield re-locks when the next ownership check sees the
-  session unlocked: about 0.1 s later while a takeover is suspected (measured 93–101 ms from the release to the fresh
+  session unlocked: about 0.1 s later while a takeover is suspected (measured 9–101 ms from the release to the fresh
   lock request, `foreign-gap` and `foreign-restart`), up to ~1 s otherwise, during which the session is unlocked and
   `lock status` may still say `locked`. When Grassfield holds the lock, keyboard focus stays on its lock surface
   until something refocuses; when a foreign locker held it, Hyprland refocuses a window at once and keys typed within
-  that ~0.1 s reach it (`foreign-gap`, keys forced with a 4 ms key delay: 11–17 bytes per run, previously 16–49 with the 1 s
+  that ~0.1 s reach it (`foreign-gap`, keys forced with a 4 ms key delay: 3–18 bytes per run, previously 16–49 with the 1 s
   check; at human typing speed about one key). The fresh lock itself is not atomic when the stale lock object is the
   one Hyprland uses (release, then new request). Not done, on purpose: retaking the lock as soon as a foreign locker
   takes it over (it would fight the foreign locker, policy rule 5; its own release unlocks the session for an instant;
