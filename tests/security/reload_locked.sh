@@ -277,8 +277,22 @@ foreign_wait_exit() { # <step>: the foreign locker exits after its release
 # Releases the foreign lock, then measures how long Hyprland reports the session unlocked before the
 # shell's fresh lock: prints "unlocked window". Fails if the session is not locked by Grassfield
 # (status locked + LOCK on every monitor) within 3 s, or if the foreign locker does not exit.
+# Release -> fresh lock request (ms) from the fixture's release epoch and the first "taking a fresh lock" in the shell
+# log after line <from>; empty when either is missing.
+relock_reaction_ms() { # <shell.log line count before the release>
+  local released relocked
+  released=$(grep -o "unlocking on request at [0-9]*" "$dev/foreign-locker.log" | tail -n 1 | grep -o "[0-9]*$")
+  relocked=$(tail -n +"$(($1 + 1))" "$dev/shell.log" | grep -m1 "taking a fresh lock" | cut -c1-23)
+  [[ -n $released && -n $relocked ]] && echo $(($(date -d "$relocked" +%s%3N) - released))
+}
+
+# The shell is in the suspected state now (100 ms check): its last suspicion line says so.
+suspected_now() { grep -E "takeover suspected \(|no takeover suspected" "$dev/shell.log" | tail -n 1 | grep -q "takeover suspected ("; }
+
+last_react=""
 foreign_release_and_wait() { # <step>
-  local t0 now first="" s
+  local t0 now first="" s from
+  from=$(wc -l <"$dev/shell.log")
   t0=${EPOCHREALTIME/./}
   echo "foreign unlock -> $(foreign_ipc unlock)"
   for _ in $(seq 1 60); do
@@ -294,6 +308,13 @@ foreign_release_and_wait() { # <step>
   foreign_wait_exit "$1"
   echo "compositor: $(compositor_lock)"
   grep "grassfield-lock: the session is unlocked although" "$dev/shell.log" | tail -n 1
+  last_react=$(relock_reaction_ms "$from")
+  echo "$1: foreign release -> fresh lock request ${last_react:-?} ms (fixture and shell logs)"
+}
+
+# Fails when the last foreign release took more than <max> ms to get a fresh lock (the 100 ms check must catch it).
+assert_react() { # <step> <max ms>
+  if [[ -n $last_react ]] && ((last_react <= $2)); then pass "$1: fresh lock requested $last_react ms after the foreign release (<= $2)"; else fail "$1: fresh lock requested ${last_react:-?} ms after the foreign release (> $2 ms or not measured)"; fi
 }
 
 step_foreign_takeover() {
@@ -306,6 +327,7 @@ step_foreign_takeover() {
   shot foreign-takeover-held
   no_leak heldforeign "foreign-takeover (foreign locker holds the lock)"
   foreign_release_and_wait foreign-takeover
+  assert_react foreign-takeover "${FOREIGN_MAX_MS:-150}"
   shot foreign-takeover-relocked
   no_leak afterforeign "foreign-takeover (after the foreign release)"
 }
@@ -321,6 +343,9 @@ step_foreign_restart() {
   echo "foreign locker: $(foreign_ipc status)"
   no_leak restartforeign "foreign-restart (foreign locker present, shell restarted)"
   foreign_release_and_wait foreign-restart
+  # The inherited lock keeps the 100 ms check even when a Grassfield surface holds the keyboard (R12 counter-review of
+  # 620f08c: ending it on keyboard focus brought back the ~1 s window): the fresh lock must follow within 150 ms.
+  assert_react foreign-restart "${FOREIGN_MAX_MS:-150}"
   echo "marker: $(cat "$marker" 2>/dev/null || echo '<missing>')"
   shot foreign-restart-relocked
   no_leak afterrestart "foreign-restart (after the foreign release)"
@@ -555,16 +580,21 @@ step_probe_cost() {
   shellPid=$(dev_live_pid "$dev/shell.pid") && hyprPid=$(dev_live_pid "$dev/nested.pid") || { fail "probe-cost: no live shell or compositor record"; return; }
   s=$(wait_status locked 3) || { fail "probe-cost: precondition: status $s"; return; }
   sleep 1.5
+  # A lock inherited at start (or one whose surface has no keyboard) already runs the 100 ms check: then there is no
+  # 1 s baseline to compare with, and the comparison is informational (not a failure).
+  local plainState="check every 1 s"
+  suspected_now && plainState="already suspected: check every 100 ms (no 1 s baseline)"
   plain=$(cpu_percent "$secs" "$shellPid" "$hyprPid")
-  from=$(wc -l <"$dev/shell.log")
   foreign_start probe-cost
   sleep 1
-  if tail -n +"$((from + 1))" "$dev/shell.log" | grep -q "takeover suspected (no lock surface has the keyboard)"; then pass "probe-cost: takeover suspected while the foreign locker holds the lock"; else fail "probe-cost: no takeover suspected after the foreign takeover"; fi
+  if suspected_now; then pass "probe-cost: takeover suspected while the foreign locker holds the lock"; else fail "probe-cost: no takeover suspected after the foreign takeover"; fi
   held=$(cpu_percent "$secs" "$shellPid" "$hyprPid")
   foreign_release_and_wait probe-cost
-  echo "probe-cost: CPU % over $secs s (shell nested-Hyprland): plain lock, check every 1 s: $plain; foreign locker holding, check every 100 ms: $held"
+  echo "probe-cost: CPU % over $secs s (shell nested-Hyprland): plain lock ($plainState): $plain; foreign locker holding, check every 100 ms: $held"
   extra=$(awk -v a="$plain" -v b="$held" 'BEGIN { split(a, x, " "); split(b, y, " "); printf "%.1f", (y[1] + y[2]) - (x[1] + x[2]) }')
   if awk -v e="$extra" 'BEGIN { exit !(e < 5) }'; then pass "probe-cost: the suspected-takeover check adds $extra % CPU (< 5)"; else fail "probe-cost: the suspected-takeover check adds $extra % CPU"; fi
+  # Absolute bound, whatever the baseline was: shell + nested Hyprland under 10 % CPU with the 100 ms check.
+  if awk -v b="$held" 'BEGIN { split(b, y, " "); exit !(y[1] + y[2] < 10) }'; then pass "probe-cost: shell + Hyprland stay under 10 % CPU with the 100 ms check ($held)"; else fail "probe-cost: shell + Hyprland at $held % CPU with the 100 ms check"; fi
 }
 
 rss_mb() { awk '/^VmRSS:/ { printf "%.1f", $2 / 1024 }' "/proc/$1/status" 2>/dev/null; }

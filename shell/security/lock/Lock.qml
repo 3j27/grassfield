@@ -394,7 +394,13 @@ Singleton {
                 authenticating: controller.authenticating
                 inputEnabled: controller.pamAvailable
                 message: controller.pamAvailable ? controller.message : qsTr("Authentication service unavailable. The session stays locked.")
-                notice: root.recoveryDegraded ? qsTr("Crash recovery unavailable: the lock state could not be saved.") : ""
+                // In dev, a visible hint that password checks are off (PAM suppressed), so a GRASSFIELD_DEV value that
+                // leaked into a real session is obvious; the lock still fails closed.
+                notice: {
+                    const recovery = root.recoveryDegraded ? qsTr("Crash recovery unavailable: the lock state could not be saved.") : "";
+                    const dev = controller.pamSuppressed ? qsTr("dev: password checks disabled") : "";
+                    return recovery !== "" && dev !== "" ? qsTr("%1 · %2").arg(dev).arg(recovery) : recovery + dev;
+                }
                 onSubmitted: password => controller.submit(password)
                 onEdited: controller.clearMessage()
             }
