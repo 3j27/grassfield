@@ -59,6 +59,13 @@
    {"name": "label Disks", "box": [1160, 434, 40, 12], "kind": "text"},
    {"name": "label Files", "box": [510, 584, 22, 12], "kind": "text"},
    {"name": "page dots", "box": [940, 1028, 40, 14], "kind": "icon"}
+  ],
+  "lock": [
+   {"name": "date", "box": [850, 66, 222, 27], "kind": "text"},
+   {"name": "clock", "box": [856, 110, 206, 88], "kind": "large"},
+   {"name": "avatar initials", "box": [946, 832, 28, 30], "kind": "large"},
+   {"name": "user name", "box": [920, 887, 81, 21], "kind": "text"},
+   {"name": "password placeholder (right of the caret, inside the focus ring)", "box": [868, 924, 90, 12], "kind": "text"}
   ]
  }
 }

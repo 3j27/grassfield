@@ -14,9 +14,9 @@ Scope {
     // `qs ipc call wallpaper set <path>` covers the artwork with that image; an empty path restores the artwork.
     // The IPC path must be absolute, end in .png/.jpg/.jpeg and name an existing regular file of at most
     // maxBytes (checked with stat before it is used; `wallpaper status` reports the outcome in plain text).
-    // Inert outside dev: every call is refused.
+    // Inert outside dev: every call is refused. The accepted path is kept in VisualFixtures (wallpaperOverride; read
+    // back as wallpaperFile, "" outside dev), which the lock screen backdrop draws too.
     readonly property bool dev: Quickshell.env("GRASSFIELD_DEV") === "1"
-    property string overrideFile: dev ? Quickshell.env("GRASSFIELD_WALLPAPER_FILE") : ""
     readonly property real maxBytes: 64 * 1024 * 1024
     property string pendingFile: ""
     property string outcome: "idle"
@@ -52,7 +52,7 @@ Scope {
                 if (why !== "") {
                     root.outcome = "refused: " + why;
                 } else {
-                    root.overrideFile = root.pendingFile;
+                    VisualFixtures.wallpaperOverride = root.pendingFile;
                     root.outcome = "applied";
                 }
             }
@@ -66,7 +66,7 @@ Scope {
             if (!root.dev)
                 return "refused";
             if (path === "") {
-                root.overrideFile = "";
+                VisualFixtures.wallpaperOverride = "";
                 root.outcome = "idle";
                 return "ok";
             }
@@ -125,8 +125,8 @@ Scope {
 
             Image {
                 anchors.fill: parent
-                visible: root.overrideFile !== ""
-                source: root.overrideFile !== "" ? "file://" + root.overrideFile : ""
+                visible: VisualFixtures.wallpaperFile !== ""
+                source: VisualFixtures.wallpaperFile !== "" ? "file://" + VisualFixtures.wallpaperFile : ""
                 fillMode: Image.Stretch
                 sourceSize: Qt.size(win.width, win.height)
                 cache: false
