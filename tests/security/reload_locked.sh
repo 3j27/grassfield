@@ -26,8 +26,11 @@
 #                   Hyprland reports LOCK throughout, nothing reaches foot; RELOCK_RUNS runs (default 12)
 #   foreign-gap     forced race (R12 review #3): FOREIGN_RUNS (default 5) foreign takeovers of the live
 #                   Grassfield lock, each released while keys are typed: prints the unlocked window and
-#                   the keys that reached foot during it; fails when the window exceeds GAP_MAX_MS
-#                   (default 300) or a key typed after the fresh lock reaches foot
+#                   the keys that reached foot during it; fails when the fresh lock is requested more than
+#                   GAP_MAX_MS (default 200) after the release (fixture and shell log times), when Hyprland
+#                   does not report LOCK within 1.5 s, or when a key typed after the fresh lock reaches foot.
+#                   The in-window key count needs foot to be the window Hyprland refocuses: run it right
+#                   after `setup lock` (shell restarts in other steps can change that; the step says so)
 #   probe-cost      CPU of the shell and the nested Hyprland with the 1 s check (plain lock) and the 100 ms
 #                   check (a foreign locker holding the lock over Grassfield's); fails above +5 % CPU
 #   cleanup         close the foot probe window and any foreign locker (run after the default sequence)
@@ -352,6 +355,15 @@ step_sleep_desync() {
 
 typed_bytes() { stat -c %s "$typed" 2>/dev/null || echo 0; }
 
+# "locked" (every monitor lists LOCK), "unlocked" (a valid answer where one does not) or "unknown: <answer>" (hyprctl
+# failed or answered no monitor: proves nothing either way).
+compositor_state() {
+  local out
+  out=$(nested hyprctl -j monitors 2>/dev/null)
+  jq -er 'if type == "array" and length > 0 then (if all(.[]; (.solitaryBlockedBy // []) | index("LOCK") != null) then "locked" else "unlocked: " + tojson end) else "unknown" end' <<<"$out" 2>/dev/null \
+    || echo "unknown: ${out:0:80}"
+}
+
 # Letters only (never Return), different for every run so that a leak can be attributed.
 probe_word() { # <prefix> <n>
   local letters=abcdefghijklmnopqrstuvwxyz
@@ -362,7 +374,7 @@ probe_word() { # <prefix> <n>
 # must not relock: relock() releases the lock object first, and releasing the lock the compositor uses unlocks the
 # session until the new lock arrives. Keys are typed across the request (every 4 ms, about 0.5 s).
 step_relock_confirm() {
-  local runs=${RELOCK_RUNS:-12} i from before after answer word typer unlocked s relocks=0 leaks=0 opened=0
+  local runs=${RELOCK_RUNS:-12} i from before after answer word typer unlocked unknown state s relocks=0 leaks=0 opened=0
   s=$(ipc lock status)
   [[ $s == locked ]] || { fail "relock-confirm: precondition: status $s (run the lock step first)"; return; }
   for i in $(seq 1 "$runs"); do
@@ -378,15 +390,23 @@ step_relock_confirm() {
     typer=$!
     sleep 0.05
     answer=$(ipc lock lock)
-    unlocked=0
-    for _ in $(seq 1 10); do compositor_locked || unlocked=$((unlocked + 1)); sleep 0.03; done
+    unlocked=0 unknown=0
+    for _ in $(seq 1 10); do
+      state=$(compositor_state)
+      case $state in
+        locked) ;;
+        unlocked*) unlocked=$((unlocked + 1)); echo "  $state" ;;
+        *) unknown=$((unknown + 1)); echo "  $state" ;;
+      esac
+      sleep 0.03
+    done
     wait "$typer"
     sleep 0.4
     after=$(typed_bytes)
     if tail -n +"$((from + 1))" "$dev/shell.log" | grep -q "taking a fresh lock"; then relocks=$((relocks + 1)); fi
     ((after > before)) && leaks=$((leaks + 1))
     ((unlocked > 0)) && opened=$((opened + 1))
-    echo "run $i: lock lock -> $answer; compositor answers without LOCK: $unlocked; bytes that reached foot: $((after - before))"
+    echo "run $i: lock lock -> $answer; compositor answers without LOCK: $unlocked (no valid answer: $unknown); bytes that reached foot: $((after - before))"
   done
   nested wtype -k Escape # empty the lock field (Escape clears it; nothing is ever submitted)
   # The last dev pause (10 s) ends before the next step relies on the periodic check.
@@ -403,7 +423,7 @@ step_relock_confirm() {
 # A foreign locker takes the live Grassfield lock over and releases it while keys are typed (every 4 ms): measures the
 # unlocked window (foreign release -> Hyprland reports LOCK again) and the keys that reached foot during it.
 step_foreign_gap() {
-  local runs=${FOREIGN_RUNS:-5} max=${GAP_MAX_MS:-300} i s t0 t1 now lo hi before mid after word typer from released relocked react worst=0 inGap=0 late=0
+  local runs=${FOREIGN_RUNS:-5} max=${GAP_MAX_MS:-200} i s t0 t1 now lo hi before mid after word typer from released relocked react worst=0 polled=0 inGap=0 late=0
   for i in $(seq 1 "$runs"); do
     s=$(wait_status locked 3) || { fail "foreign-gap run $i: precondition: status $s"; return; }
     foreign_start "foreign-gap run $i"
@@ -433,16 +453,21 @@ step_foreign_gap() {
     released=$(grep -o "unlocking on request at [0-9]*" "$dev/foreign-locker.log" | tail -n 1 | grep -o "[0-9]*$")
     relocked=$(tail -n +"$((from + 1))" "$dev/shell.log" | grep -m1 "taking a fresh lock" | cut -c1-23)
     [[ -n $released && -n $relocked ]] && react=$(($(date -d "$relocked" +%s%3N) - released))
-    [[ -n $react ]] && ((react > worst)) && worst=$react
-    ((lo > worst)) && worst=$lo
+    if [[ -z $react ]]; then fail "foreign-gap run $i: no release time or no fresh lock in the logs"; continue; fi
+    ((react > worst)) && worst=$react
+    ((lo > polled)) && polled=$lo
     inGap=$((inGap + mid - before))
     late=$((late + after - mid))
     echo "run $i: foreign release -> fresh lock request ${react:-?} ms (shell log); -> LOCK seen by polling $lo ms after the release request returned ($hi ms before it was sent); bytes in foot: $((mid - before)) by then, $((after - mid)) after"
     no_leak "after$(probe_word gap "$i")" "foreign-gap run $i (typed after the fresh lock)"
   done
-  echo "foreign-gap: $runs runs: worst unlocked window $worst ms; bytes in foot during the windows $inGap, after them $late"
-  if ((worst <= max)); then pass "foreign-gap: unlocked window <= $max ms in every run (worst $worst ms)"; else fail "foreign-gap: unlocked window $worst ms > $max ms"; fi
+  echo "foreign-gap: $runs runs: worst release -> fresh lock request $worst ms (LOCK seen by polling within $polled ms, hyprctl and jq time included); bytes in foot during the windows $inGap, after them $late"
+  if ((worst <= max)); then pass "foreign-gap: fresh lock requested <= $max ms after every foreign release (worst $worst ms)"; else fail "foreign-gap: fresh lock requested $worst ms after a foreign release (> $max ms)"; fi
+  if ((polled <= 1500)); then pass "foreign-gap: Hyprland reported LOCK again within $polled ms of each release request"; else fail "foreign-gap: Hyprland reported LOCK again only after $polled ms"; fi
   if ((late == 0)); then pass "foreign-gap: no key typed after the fresh lock reached foot"; else fail "foreign-gap: $late bytes reached foot after the fresh lock was reported"; fi
+  # Leak control: Hyprland refocuses the window under the pointer when a foreign locker releases; foot only receives keys
+  # in the window when it is that window (true right after `setup`; shell restarts in earlier steps can change it).
+  ((inGap > 0)) || echo "foreign-gap: NOTE no key reached foot during any window: foot did not get the focus Hyprland restores, so the in-window count proves nothing in this run (run setup lock foreign-gap)"
   nested wtype -k Escape
 }
 
