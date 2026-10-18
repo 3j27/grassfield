@@ -33,11 +33,11 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Raise window"),
     QT_TRANSLATE_NOOP("Bindings", "Move window"),
     QT_TRANSLATE_NOOP("Bindings", "Resize window"),
-    QT_TRANSLATE_NOOP("Bindings", "Next Space"),
-    QT_TRANSLATE_NOOP("Bindings", "Previous Space"),
+    "Next Space",
+    "Previous Space",
     QT_TRANSLATE_NOOP("Bindings", "Overview"),
     QT_TRANSLATE_NOOP("Bindings", "Search"),
-    QT_TRANSLATE_NOOP("Bindings", "Notification Center"),
+    "Notification Center",
     QT_TRANSLATE_NOOP("Bindings", "Lock screen"),
     QT_TRANSLATE_NOOP("Bindings", "Force Quit Applications"),
     QT_TRANSLATE_NOOP("Bindings", "Focus the menu bar"),
@@ -48,6 +48,18 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Brightness up"),
     QT_TRANSLATE_NOOP("Bindings", "Brightness down")
 ];
+
+// Descriptions of the bindings file that carry an internal feature name (Space, Notification Center) are shown under
+// their UI name (renamed 2026-10-18); the file itself keeps the internal wording.
+const UI_NAMES = {
+    "Next Space": QT_TRANSLATE_NOOP("Bindings", "Next Desktop"),
+    "Previous Space": QT_TRANSLATE_NOOP("Bindings", "Previous Desktop"),
+    "Notification Center": QT_TRANSLATE_NOOP("Bindings", "Notifications")
+};
+
+function uiName(description) {
+    return UI_NAMES[description] !== undefined ? UI_NAMES[description] : description;
+}
 
 function unescapeLua(s) {
     return s.replace(/\\(["\\])/g, "$1");

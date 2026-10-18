@@ -1,4 +1,6 @@
 # Notifications spec · shell-engineer · M2
+
+UI naming (renamed 2026-10-18, owner decision): the internal "Notification Center" (`NotificationCenter.qml`, IPC `toggleCenter`) is shown to the user as "Notifications" (fr « Notifications »); the do-not-disturb mode is "Do Not Disturb" (fr « Ne pas déranger »), not "Focus".
 Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belongs to the lock module.
 
 ## macOS reference behavior (described in words)
@@ -7,14 +9,14 @@ Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belong
   (alerts stay until acted on), hovering pauses dismissal, a swipe/drag to the right dismisses, a close (×)
   button appears on hover at the top-left corner.
 - Multiple banners stack vertically with 8 pt gaps; same-app notifications group with a count in the
-  Notification Center.
-- Notification Center opens from the clock in the menu bar (click) as a full-height panel on the right;
+  Notifications panel.
+- Notifications panel opens from the clock in the menu bar (click) as a full-height panel on the right;
   it shows grouped notifications (newest first) and widgets below; "Clear" per group; Esc or click outside closes.
-- Focus / Do Not Disturb (from Control Center) silences banners; the menu bar shows a moon icon.
+- Do Not Disturb (from Quick Settings) silences banners; the menu bar shows a moon icon.
 
 ## Purpose and non-goals
 Single `org.freedesktop.Notifications` server for the session (Quickshell `Quickshell.Services.Notifications`),
-banners, history (ADR-0004), Notification Center panel, DND. Non-goals: notification sounds beyond one
+banners, history (ADR-0004), Notifications panel, DND. Non-goals: notification sounds beyond one
 Grassfield sound (later), cross-device sync.
 
 ## Functional requirements
@@ -25,8 +27,8 @@ Grassfield sound (later), cross-device sync.
 4. N4 Clicking the banner invokes the `default` action if present and focuses the sender window if known.
 5. N5 Actions render as buttons (max 3 visible, rest in a "More" menu); each invokes the real action.
 6. N6 History persisted per ADR-0004 (0600, ≤ 200 entries, ≤ 7 days, transient not stored).
-7. N7 Notification Center: opens from the clock or `SUPER+N`; grouped by app; per-group Clear; "Clear all".
-8. N8 DND: toggle (Control Center); suppresses banners except critical; menu bar moon indicator.
+7. N7 Notifications panel: opens from the clock or `SUPER+N`; grouped by app; per-group Clear; "Clear all".
+8. N8 DND: toggle (Quick Settings); suppresses banners except critical; menu bar moon indicator.
 9. N9 Markup is sanitized (allow b, i, u, a href shown as text); images limited to 256 px.
 10. N10 Never shown on the lock screen by default (L4).
 
@@ -60,7 +62,7 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   click clears the entry unless `resident`. Max 5 banners visible; older ones wait in the queue.
 - Actions: first 3 non-default actions are buttons, the rest appear after "More" (inline expansion, not a menu).
 - Click on a banner/row runs `default` and focuses a window of `desktop-entry` when one is open.
-- Notification Center: separate full-screen transparent window (Esc and click outside close, the menu bar strip stays clickable so the
+- Notifications panel: separate full-screen transparent window (Esc and click outside close, the menu bar strip stays clickable so the
   clock toggles it). Groups by app name, newest first, 3 rows per group then "Show All". No widgets area in M2 (omitted, not stubbed).
   Opening a menu/popup closes the Center.
   The Center list shows only the DISPLAYED rows: `Notifications.centerModel` (keyed ListModel) holds the first 3 rows of each app
@@ -78,7 +80,7 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   open (history 200, `notifications toggleCenter`): median 35-37 ms against 28-33 ms closed (60 / 40 sends, 2026-10-17).
 - Body markup: `Sanitizer.sanitize` keeps only b, i, u and br (balanced); links render as "label (url)" text and are not clickable;
   images are dropped (alt kept); everything else is stripped; 4000 characters max. Images in hints are loaded at <= 256 px.
-- DND: `notifications.dnd` in grassfield.json; Control Center "Focus > Do Not Disturb" toggle; moon icon in the menu bar (click turns it off).
+- DND: `notifications.dnd` in grassfield.json; Quick Settings "Do Not Disturb" tile; moon icon in the menu bar (click turns it off).
   Critical notifications still show; history is kept. `notifications.previews = never` hides bodies (banners and Center).
 - History (ADR-0004): `$GRASSFIELD_STATE_HOME/notifications.json` (dev) else `$XDG_STATE_HOME/grassfield/notifications.json`
   (default `~/.local/state/grassfield`). FileView cannot set a mode, so a one-shot `sh -c` Process creates the directory (`mkdir -m 700`)

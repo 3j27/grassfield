@@ -145,7 +145,7 @@ Variants {
                 width: Tokens.notificationCenterWidth
                 height: host.height - y - margin
                 Accessible.role: Accessible.Window
-                Accessible.name: qsTr("Notification Center")
+                Accessible.name: qsTr("Notifications")
                 Keys.onEscapePressed: Notifications.closeCenter()
 
                 Behavior on x {

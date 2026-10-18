@@ -1,15 +1,17 @@
 # Overview spec (Mission Control equivalent) · shell-engineer + compositor-engineer · M2 (v1), M3 (v2)
 
+UI naming (renamed 2026-10-18, owner decision): internally "Space" (workspace, IPC and code); the user sees "Desktops" and "Desktop N" (fr « Bureaux », « Bureau N »). The desktop icon surface keeps the word "desktop" in prose; "Desktop N" always carries a number.
+
 ## macOS reference behavior (described in words)
-- Ctrl+Up or a 3/4-finger swipe up zooms out: all windows of the current Space spread without overlap,
+- Ctrl+Up or a 3/4-finger swipe up zooms out: all windows of the current Desktop spread without overlap,
   scaled, keeping relative positions, with app name labels under hovered windows; the desktop dims slightly.
-- A Spaces bar at the top shows thumbnails of each Space (labelled "Desktop 1", …) and a "+" to add a Space;
-  dragging a window onto a Space moves it.
+- A Desktops bar at the top shows thumbnails of each Desktop (labelled "Desktop 1", …) and a "+" to add a Desktop;
+  dragging a window onto a Desktop moves it.
 - Click a window to focus it and zoom back in; Esc or Ctrl+Up again exits. Animations ~300 ms, spring-like.
 
 ## Purpose and non-goals
 v1 (M2): shell surface with ScreencopyView thumbnails of toplevels (Quickshell `ScreencopyView` with
-Hyprland toplevel capture), layout algorithm, Spaces bar, keyboard nav, drag to Space.
+Hyprland toplevel capture), layout algorithm, Desktops bar, keyboard nav, drag to Desktop.
 v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.grassfield.overview(json)`, feature
 `overview`) when the capability is present (compositor and shell side shipped 2026-10-18, see "v2 implementation" and
 "v2 shell side"). Non-goal: capturing protected surfaces.
@@ -18,8 +20,8 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
 1. O1 Toggle via IPC `overview toggle` (CTRL+UP) and gesture (owner config, L2).
 2. O2 Layout: non-overlapping grid preserving relative positions, max scale 0.8, min gap 24 px; unit-tested.
 3. O3 Thumbnails live-update (Full profile) or snapshot once (Reduced profile).
-4. O4 Spaces bar: one tile per workspace on the monitor + "+" creates the next workspace.
-5. O5 Drag a window thumbnail onto a Space tile → `movetoworkspacesilent`.
+4. O4 Desktops bar: one tile per workspace on the monitor + "+" creates the next workspace.
+5. O5 Drag a window thumbnail onto a Desktop tile → `movetoworkspacesilent`.
 6. O6 Keyboard: arrows move selection, Return focuses, Esc exits.
 7. O7 Minimized windows appear in a separate strip (M2 with minimize).
 
@@ -33,7 +35,7 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
 | v2 spike | live transforms: mechanism, layering, input, CPU, cleanup (`tests/compositor/overview.sh check`, `perf`) | L1 |
 
 ## Known limitations
-- Contrast (A2, open finding): the Spaces bar captions use `textSecondary` on the black dim over the wallpaper, not on
+- Contrast (A2, open finding): the Desktops bar captions use `textSecondary` on the black dim over the wallpaper, not on
   Material, so the exact token calculation (`tests/visual/test_contrast_tokens.py`) lists them as an exempt role
   ("overview captions") and `contrast.sh` has no Overview surface. Their ratio is not measured; fix by measuring the
   Overview surface with the glyph mask, or by moving the captions to the primary text colour.
@@ -54,16 +56,16 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
   computation (rows 1..ceil(sqrt n)+1), the relaxed layout a <= 5-step binary search on the scale with <= 12
   relaxation passes. Offscreen: 20 windows ~12 ms, 9 ~6 ms (tests allow 20 ms); in the nested shell one layout
   takes 2-3 ms and open -> fully zoomed is the animation itself (~360 ms). Esc, like every other action, releases
-  the keyboard before closing (a Space just created with "+" is kept). The action always closes the overlay (try/finally).
+  the keyboard before closing (a Desktop just created with "+" is kept). The action always closes the overlay (try/finally).
 - Platform (`shell/platform/Compositor.qml`, new functions only): `spacesOn`, `windowsOn`, `nextSpaceId`,
   `focusSpace`, `moveToSpace` (address validated by `Minimized.moveRequest`, the single validator, Lua `hl.dsp.window.move({... follow = false ...})`),
   `refreshSpaces`, `topologyRevision`/`refreshOnEvents`.
-- Spaces bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
+- Desktops bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
   tile thumbnails need v2). Click a tile: switch and close. "+": focus the next workspace id, Overview stays open.
 - Click a window: activate and close. The keyboard grab is released 80 ms before the focus action, otherwise Hyprland
   refocuses the previous window (and workspace) when the exclusive layer goes away and undoes the switch.
-- Keyboard: arrows (spatial), Return, Tab/Shift+Tab cycle windows -> each Space tile -> "+", Esc. Up from the top
-  row of windows enters the Spaces bar.
+- Keyboard: arrows (spatial), Return, Tab/Shift+Tab cycle windows -> each Desktop tile -> "+", Esc. Up from the top
+  row of windows enters the Desktops bar.
 - Profiles (`material.profile`): full = live `ScreencopyView`; balanced = single frames every
   `overview.balancedIntervalMs` (250 ms; the API has no rate control, so `captureFrame()` on a timer); reduced = one
   snapshot per window when opening.
@@ -76,7 +78,7 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
   zoom-out starts; the dim animates on its own. The overlay window is persistent (one per screen, always mapped,
   empty input mask and hidden content between opens). Nested, 3 open/close cycles: max swap 717-1110 ms ->
   107 ms.
-- Close (Esc, backdrop click) releases the keyboard grab, then re-focuses the Space that was active on that
+- Close (Esc, backdrop click) releases the keyboard grab, then re-focuses the Desktop that was active on that
   output when closing started, so Hyprland's refocus of its last window cannot jump back after "+".
 
 ## S4 results (spike: ScreencopyView cost of 9 toplevels)
@@ -157,10 +159,10 @@ Answers:
 - **(b) Layering.** The windows stay in Hyprland's normal window pass, between the Bottom and the Top layers. Chosen:
   the shell splits its overview in two surfaces: the backdrop (dim, and blur through `BackgroundEffect` if wanted) on
   the **Bottom** layer, above the wallpaper and the desktop icons (Background) and below the windows, and the chrome
-  (Spaces bar, labels, selection, input) on the **Overlay** layer with a transparent background. No holes, no second
+  (Desktops bar, labels, selection, input) on the **Overlay** layer with a transparent background. No holes, no second
   animation to keep in step, notifications, OSD and the cursor keep their place, and the Dock (Top) stays above the
   windows as on macOS. Verified with the stand-in `tests/compositor/overview-fixture` (screenshot `open.png` of the
-  check run: dimmed wallpaper, crisp windows, labels and Spaces bar on top). Rejected: windows above the Overlay layer
+  check run: dimmed wallpaper, crisp windows, labels and Desktops bar on top). Rejected: windows above the Overlay layer
   (see `redirectPass` above); the shell layer on Top with a transparent area (its dim still covers the windows unless
   it punches holes); holes (the shell would have to animate them in step with the plugin's per-frame boxes: one or two
   frames of offset at ~3 px/ms leave a 50-100 px band of dim on moving windows).
@@ -209,13 +211,13 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
      wallpaper and the desktop: the windows are above it). Same-layer surfaces stack in mapping order: map it when the
      overview opens so that it is above the desktop widgets (Bottom), or decide that they stay undimmed.
    - chrome, namespace **`grassfield-overview`**, `WlrLayer.Overlay`, transparent background (no dim or blur where
-     windows are drawn), Spaces bar, labels, selection, whole-surface input. **Keyboard plan** (`V2.keyboardPlan`):
+     windows are drawn), Desktops bar, labels, selection, whole-surface input. **Keyboard plan** (`V2.keyboardPlan`):
      while the overview is open (opening/open) **every output's chrome is `Exclusive`**, because while an Exclusive
      layer exists Hyprland sends pointer focus to Exclusive layers only (`CInputManager::mouseMoveUnified`, "forced
-     above all"): a `None` chrome would make hover, click, drag, the Spaces tiles and the backdrop click dead on its
+     above all"): a `None` chrome would make hover, click, drag, the Desktops tiles and the backdrop click dead on its
      output. Hyprland gives the keyboard to the chrome of the pointer's output; the shell handles keys on any chrome and
      keeps `keyScreen` in sync with the chrome that has the keyboard (`Window.active`) and with key presses. On close
-     (Esc, a click on a window or the backdrop, IPC close/toggle, a Space switch, a fallback) the shell first sets
+     (Esc, a click on a window or the backdrop, IPC close/toggle, a Desktop switch, a fallback) the shell first sets
      **every** chrome to keyboard `None` (the 80 ms release step), and only then sends `on:false`, activates the target
      window and hides the chromes: no chrome may stay `Exclusive` once the release starts, else Hyprland's
      `refocusLastWindow` is refused ("ignoring, exclusive LS present") and the keyboard is lost after the close.
@@ -238,7 +240,7 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
      0..2000) required; `windows` required when `on` is true, at most 64 entries, unique addresses, finite numbers,
      `w` and `h` ≥ 1; `curve` 4 numbers, x in [0, 1], y in [-1, 2]. Ignored per window (not refused): an unknown or
      ineligible window (see (a)), a rect not inside the window's monitor (1 px tolerance).
-   - `on:true` again while open (a window opened or closed, a window dragged to a Space) retargets: listed windows
+   - `on:true` again while open (a window opened or closed, a window dragged to a Desktop) retargets: listed windows
      animate from where they are drawn, windows left out go back to their place at once.
    - Use the same `durationMs` and curve for the shell's own label and chrome animation.
 4. **Close.** `{"on":false,"durationMs":350}` (curve optional), before or together with the focus action. The plugin
@@ -257,13 +259,13 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
    without them or close. `windows` smaller than the number sent: some windows were not eligible (full screen, on a
    workspace showing a full-screen window, pinned, another workspace): leave them out or show thumbnails for them.
 6. **Input.** Clicks and keys go to the chrome; the shell maps them through its own rects. Hyprland's real window
-   boxes are unchanged during the overview, so activation, drag to a Space and close act on the real window as in v1.
+   boxes are unchanged during the overview, so activation, drag to a Desktop and close act on the real window as in v1.
 7. **Restart.** After each `capabilities` event, if the shell has no overview open, send `{"on":false,"durationMs":0}`
    (idempotent: a closed overview answers `closed`).
 8. **Limits to show honestly:** popups (menus) of a window stay at its real place and are not scaled; full-screen
    windows, and the other windows of a workspace that shows a full-screen window, are not transformed (decision
-   2026-10-18: on macOS a full-screen app is a Space of its own, shown as a Spaces bar tile, and Hyprland draws only the
-   full-screen window on such a workspace); Spaces bar tiles of other workspaces still need captures (nothing of another
+   2026-10-18: on macOS a full-screen app is a Desktop of its own, shown as a Desktops bar tile, and Hyprland draws only the
+   full-screen window on such a workspace); Desktops bar tiles of other workspaces still need captures (nothing of another
    workspace is rendered); fractional scales and rotated outputs are not verified.
 
 ### Two outputs and shared drawing (2026-10-18, plugin 0.6.0-stages)
@@ -296,7 +298,7 @@ Code: `shell/overview/Overview.qml` (controller, conversation with the plugin), 
 layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (the one validator/Lua quoter,
 `tst_minimized.qml`), `Compositor.overview()`. Tokens: `overview.windowTitlebarHeight` 28, `chromeWaitMs`, `chromeRetryMs`.
 - Selection: `thumbnailMode = thumbsThisOpen || !Capabilities.has("overview")`; `thumbsThisOpen` is decided at each open
-  (no capability, or a full-screen window on a shown Space) and set by a fallback (refusal `invalid`/`no-windows`, `no-chrome`
+  (no capability, or a full-screen window on a shown Desktop) and set by a fallback (refusal `invalid`/`no-windows`, `no-chrome`
   after one retry, `unavailable`, `fullscreen`, chrome not holding the keyboard within `chromeWaitMs`). A fallback while
   windows are transformed first sends `{"on":false,"durationMs":0}`.
 - Open: every output's chrome is Exclusive (pointer input, see Surfaces); once a chrome is `Window.active`
@@ -304,11 +306,11 @@ layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (
   `durationMs` = `motion.slow` (350), 0 with Reduce Motion (the dim then crossfades in at most `motion.reducedMax`).
   A new layout while open (window opened/closed/moved) retargets with a new `on:true`.
 - Close: every chrome drops to keyboard None first; 80 ms later `on:false` is sent, then the focus action and the hide
-  (the plugin lets the asked closing animation finish). Esc, a click on a window or on empty space, a Space tile all go through it.
+  (the plugin lets the asked closing animation finish). Esc, a click on a window or on empty space, a Desktop tile all go through it.
 - Input is the shell's own: per-window hit areas (surface + band), hover selects and shows the app label, arrows/Tab/Return,
-  drag to a Space tile (a ghost follows the pointer; the real window stays drawn by the plugin; drop = `moveToSpace`).
-- "+": switches to the new Space; the plugin ends its overview on a Space switch, the shell keeps the chrome open on the
-  empty Space (no layout is sent for zero windows).
+  drag to a Desktop tile (a ghost follows the pointer; the real window stays drawn by the plugin; drop = `moveToSpace`).
+- "+": switches to the new Desktop; the plugin ends its overview on a Desktop switch, the shell keeps the chrome open on the
+  empty Desktop (no layout is sent for zero windows).
 - Restart: after every `capabilities` event with no overview open, `{"on":false,"durationMs":0}` is sent.
 - Evidence (nested Hyprland 0.56.2, plugin 0.5.0-df, GF-REF, 6 foot windows + 1 on WAYLAND-1): open via IPC shows real windows
   scaled with live content (`.dev/shots/ov3-hover.png`), `hyprctl clients` at/size identical before/during/after, click on a
@@ -317,5 +319,5 @@ layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (
   balanced 0.3 % / 1.3 %). `--no-plugin`: thumbnails as before.
 - Residual limits: popups (menus) of a window are not scaled; the parts of a window outside its output are not drawn
   (the plugin renders into a monitor-sized buffer); fractional scales and rotated outputs are not verified; when the plugin
-  reports fewer windows than sent (ineligible ones) their hit areas still sit at the layout rect; Spaces bar tiles of other
-  Spaces have no capture; Ctrl+Up is the owner's binding (not in the dev config: IPC `overview toggle` was used).
+  reports fewer windows than sent (ineligible ones) their hit areas still sit at the layout rect; Desktops bar tiles of other
+  Desktops have no capture; Ctrl+Up is the owner's binding (not in the dev config: IPC `overview toggle` was used).

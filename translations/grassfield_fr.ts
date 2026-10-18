@@ -617,12 +617,16 @@
         <translation>Redimensionner la fenêtre</translation>
     </message>
     <message>
-        <source>Next Space</source>
+        <source>Next Desktop</source>
         <translation>Bureau suivant</translation>
     </message>
     <message>
-        <source>Previous Space</source>
+        <source>Previous Desktop</source>
         <translation>Bureau précédent</translation>
+    </message>
+    <message>
+        <source>Notifications</source>
+        <translation>Notifications</translation>
     </message>
     <message>
         <source>Overview</source>
@@ -631,10 +635,6 @@
     <message>
         <source>Search</source>
         <translation>Recherche</translation>
-    </message>
-    <message>
-        <source>Notification Center</source>
-        <translation>Centre de notifications</translation>
     </message>
     <message>
         <source>Lock screen</source>
@@ -1152,10 +1152,6 @@
 <context>
     <name>ControlCenter</name>
     <message>
-        <source>Control Center</source>
-        <translation>Centre de contrôle</translation>
-    </message>
-    <message>
         <source>dev: not applied</source>
         <translation>dév.&#xa0;: non appliqué</translation>
     </message>
@@ -1188,12 +1184,16 @@
         <translation>Wi-Fi et Bluetooth désactivés</translation>
     </message>
     <message>
-        <source>Focus</source>
-        <translation>Focus</translation>
+        <source>Quick Settings</source>
+        <translation>Réglages rapides</translation>
     </message>
     <message>
         <source>Do Not Disturb</source>
         <translation>Ne pas déranger</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Activé</translation>
     </message>
     <message>
         <source>Display</source>
@@ -1297,8 +1297,8 @@
         <translation>Vue d’ensemble</translation>
     </message>
     <message>
-        <source>Notification Center</source>
-        <translation>Centre de notifications</translation>
+        <source>Notifications</source>
+        <translation>Notifications</translation>
     </message>
     <message>
         <source>Apps</source>
@@ -1365,8 +1365,8 @@
         <translation>Ne rien faire</translation>
     </message>
     <message>
-        <source>Hot Corners</source>
-        <translation>Coins actifs</translation>
+        <source>Screen Corners</source>
+        <translation>Coins de l’écran</translation>
     </message>
     <message>
         <source>Move the pointer into a screen corner to run the action.</source>
@@ -2304,8 +2304,8 @@
         <translation>Bureau et Dock</translation>
     </message>
     <message>
-        <source>dock magnification autohide desktop icons items hot corners titlebar window</source>
-        <translation>dock agrandissement masquage automatique bureau icônes éléments coins actifs barre de titre fenêtre</translation>
+        <source>dock magnification autohide desktop icons items screen corners titlebar window</source>
+        <translation>dock agrandissement masquage automatique bureau icônes éléments coins de l’écran barre de titre fenêtre</translation>
     </message>
     <message>
         <source>Notifications</source>
@@ -2446,12 +2446,12 @@
         <translation>%1&#xa0;%</translation>
     </message>
     <message>
-        <source>Control Center</source>
-        <translation>Centre de contrôle</translation>
+        <source>Quick Settings</source>
+        <translation>Réglages rapides</translation>
     </message>
     <message>
-        <source>Date and time: %1. Open Notification Center</source>
-        <translation>Date et heure&#xa0;: %1. Ouvrir le Centre de notifications</translation>
+        <source>Date and time: %1. Open Notifications</source>
+        <translation>Date et heure&#xa0;: %1. Ouvrir les notifications</translation>
     </message>
     <message>
         <source>ddd d MMM</source>
@@ -2497,10 +2497,6 @@
 </context>
 <context>
     <name>NotificationCenter</name>
-    <message>
-        <source>Notification Center</source>
-        <translation>Centre de notifications</translation>
-    </message>
     <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
@@ -2579,8 +2575,8 @@
         <translation>Ne pas déranger</translation>
     </message>
     <message>
-        <source>Silences banners except critical ones; notifications still collect in Notification Center.</source>
-        <translation>Désactive les bannières sauf les critiques&#xa0;; les notifications continuent de s’accumuler dans le Centre de notifications.</translation>
+        <source>Silences banners except critical ones; notifications still collect in the Notifications panel.</source>
+        <translation>Désactive les bannières sauf les critiques&#xa0;; les notifications continuent de s’accumuler dans le panneau Notifications.</translation>
     </message>
     <message>
         <source>Never hides the text of notifications. Until the lock screen reports its state to the notification service, When Unlocked behaves like Always.</source>
@@ -2656,7 +2652,7 @@
         <translation>Vue d’ensemble</translation>
     </message>
     <message>
-        <source>Spaces</source>
+        <source>Desktops</source>
         <translation>Bureaux</translation>
     </message>
     <message>
@@ -3195,8 +3191,8 @@
         <translation>À propos de cet ordinateur</translation>
     </message>
     <message>
-        <source>System Settings…</source>
-        <translation>Réglages Système…</translation>
+        <source>Settings…</source>
+        <translation>Réglages…</translation>
     </message>
     <message>
         <source>Force Quit…</source>
@@ -3413,12 +3409,12 @@
         <translation>Ajouter</translation>
     </message>
     <message>
-        <source>Add %1 to Notification Center</source>
-        <translation>Ajouter %1 au Centre de notifications</translation>
+        <source>Add %1 to Notifications</source>
+        <translation>Ajouter %1 aux notifications</translation>
     </message>
     <message>
-        <source>%1 added to the Notification Center.</source>
-        <translation>%1 ajouté au Centre de notifications.</translation>
+        <source>%1 added to Notifications.</source>
+        <translation>%1 ajouté aux notifications.</translation>
     </message>
     <message>
         <source>Add to Desktop</source>
@@ -3533,8 +3529,8 @@
         <translation>Réglages Grassfield n’est pas installé</translation>
     </message>
     <message>
-        <source>Install the grassfield-desktop package to open System Settings.</source>
-        <translation>Installez le paquet grassfield-desktop pour ouvrir les Réglages Système.</translation>
+        <source>Install the grassfield-desktop package to open Settings.</source>
+        <translation>Installez le paquet grassfield-desktop pour ouvrir les Réglages.</translation>
     </message>
     <message>
         <source>Glance is not available</source>
