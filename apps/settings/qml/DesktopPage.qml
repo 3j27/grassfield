@@ -65,6 +65,20 @@ SettingsPage {
     }
 
     SettingsGroup {
+        caption: qsTr("Desktop")
+
+        SettingsRow {
+            title: qsTr("Show items on the desktop")
+            subtitle: qsTr("Files and folders of the Desktop folder appear on the wallpaper.")
+            Toggle {
+                accessibleName: qsTr("Show items on the desktop")
+                checked: root.store.value("desktop.showIcons")
+                onToggled: c => root.store.set("desktop.showIcons", c)
+            }
+        }
+    }
+
+    SettingsGroup {
         caption: qsTr("Windows")
 
         SettingsRow {
