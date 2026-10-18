@@ -7,6 +7,13 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
 
+# Inside a PID namespace (the Claude Code sandbox) the session's processes are invisible: `kill -0` fails and the
+# records would be dropped while Hyprland, the shell and the bus keep running unseen. Refuse instead.
+if compgen -G "$dev/*.pid" >/dev/null && [[ $(cat /proc/1/comm 2>/dev/null) != systemd ]]; then
+  echo "nested-down: cannot see the session's processes (PID 1 is not systemd: sandboxed?); run it outside the sandbox. Records kept." >&2
+  exit 3
+fi
+
 stop_pid() { # <pidfile> <name>
   [[ -s $1 ]] || return 0
   local pid
