@@ -30,6 +30,11 @@ set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
+# Only this tree's live nested session (records verified by start time; scripts/dev/pidfile.sh).
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+dev_require_host global_menus
+nested_sock() { dev_nested_target "$dev" && echo "$DEV_NESTED_SOCK"; }
 run=$dev/global-menus/run-$(date +%Y%m%d-%H%M%S)
 mkdir -p "$run"
 summary=$run/summary.txt
@@ -90,7 +95,9 @@ registrar_owned() {
 }
 
 state() { # menu bar test hook (JSON)
-  timeout 5 qs ipc --pid "$(cat "$dev/shell.pid")" call menubar bridgeState "$output" 2>/dev/null
+  local pid
+  pid=$(dev_live_pid "$dev/shell.pid") || return 1
+  timeout 5 qs ipc --pid "$pid" call menubar bridgeState "$output" 2>/dev/null
 }
 
 wait_for() { # <seconds> <command...>
@@ -104,13 +111,14 @@ wait_for() { # <seconds> <command...>
 }
 
 start_app() { # <name> <command...>
-  local name=$1 home=$run/home
+  local name=$1 home=$run/home sock
   shift
+  sock=$(nested_sock) || return 1
   mkdir -p "$home/.config" "$home/.cache" "$home/.local/share" "$home/.local/state"
   env -u QT_QPA_PLATFORMTHEME -u KDE_SESSION_VERSION -u KDE_FULL_SESSION -u GTK_MODULES \
     HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" XDG_DATA_HOME="$home/.local/share" \
     XDG_STATE_HOME="$home/.local/state" GRASSFIELD_CONFIG_HOME="$home/.config/grassfield" GRASSFIELD_STATE_HOME="$home/.local/state/grassfield" \
-    WAYLAND_DISPLAY="$(cat "$dev/nested.wayland")" DBUS_SESSION_BUS_ADDRESS="$(private_bus)" \
+    WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="$(private_bus)" \
     QT_QPA_PLATFORM=wayland GDK_BACKEND=wayland \
     setsid "$@" >"$run/$name.out" 2>&1 </dev/null &
   app_pids+=("$!")
