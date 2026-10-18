@@ -36,8 +36,10 @@ fi
 [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} && -n ${WAYLAND_DISPLAY:-} ]] \
   || { echo "nested-up: must run inside a Hyprland session (HYPRLAND_INSTANCE_SIGNATURE/WAYLAND_DISPLAY unset)" >&2; exit 1; }
 
-# 1. Record the owner's main instance.
+# 1. Record the owner's main instance. The previous run's instance/socket records go first: they are written again only
+#    once Hyprland lists the new instance, so no failed start can leave them next to a new process record.
 printf '%s\n' "$HYPRLAND_INSTANCE_SIGNATURE" > "$dev/main.instance"
+rm -f "$dev/nested.instance" "$dev/nested.wayland"
 
 # Plugin to load at startup (C2: GRASSFIELD_NO_PLUGIN=1 starts without it).
 plugin=${GRASSFIELD_PLUGIN:-$root/compositor/build/grassfield-compositor.so}
