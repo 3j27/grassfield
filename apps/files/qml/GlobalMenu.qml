@@ -20,11 +20,14 @@ Platform.MenuBar {
     readonly property int count: bar.folder ? bar.folder.selectedCount : 0
     readonly property bool inTrash: bar.folder !== null && bar.folder.isTrash
     readonly property bool writable: bar.folder !== null && bar.folder.writable
-    readonly property string firstName: bar.count === 1 ? bar.label(bar.folder.nameAt(bar.folder.selectedRows()[0])) : ""
+    // These read folder.selectedCount themselves: its NOTIFY (selectionChanged) fires on every selection change, while a
+    // binding on `count` only re-runs when the number changes (selecting another single item kept the old name and
+    // Open With list, and Open With then acted on the new selection: review of 72272e4).
+    readonly property string firstName: bar.folder && bar.folder.selectedCount === 1 ? bar.label(bar.folder.nameAt(bar.folder.selectedRows()[0])) : ""
     // Open With: the applications for a selection of files (re-read when the selection changes).
     readonly property var openWithApps: {
         const f = bar.folder;
-        if (!f || bar.count === 0 || f.isTrash)
+        if (!f || f.selectedCount === 0 || f.isTrash)
             return [];
         const rows = f.selectedRows();
         if (!rows.every(r => !f.isDirAt(r)))
