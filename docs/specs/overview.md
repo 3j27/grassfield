@@ -209,13 +209,19 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
      wallpaper and the desktop: the windows are above it). Same-layer surfaces stack in mapping order: map it when the
      overview opens so that it is above the desktop widgets (Bottom), or decide that they stay undimmed.
    - chrome, namespace **`grassfield-overview`**, `WlrLayer.Overlay`, transparent background (no dim or blur where
-     windows are drawn), Spaces bar, labels, selection, whole-surface input, keyboard `Exclusive` while open (as v1).
-     **Required by the plugin** (R13 fix 2026-10-18): an `on:true` that would transform windows is refused with reason
-     `no-chrome` unless every monitor of those windows has a mapped chrome surface with `Exclusive` keyboard
-     interactivity and the keyboard is on a chrome surface (or one of its popups). While windows are shown, the chrome
-     unmapping ends the overview at once (`closed`/`interrupted`, no closing animation) and the keyboard leaving the
-     chrome ends it (`interrupted`). After sending `on:false` the shell may unmap the chrome: the closing animation it
-     asked for runs to its end.
+     windows are drawn), Spaces bar, labels, selection, whole-surface input; keyboard `Exclusive` on the **focused
+     output's** chrome only, `None` on the others; every chrome drops to `None` before the close completes.
+     **Required by the plugin** (R13 fix 2026-10-18, relaxed 2026-10-18 after the shell integration review, main
+     23caeab): an `on:true` that would transform windows is refused with reason `no-chrome` unless every monitor of those
+     windows has a mapped chrome surface (any keyboard interactivity) and the keyboard is on a chrome surface (or one of its
+     popups) with `Exclusive` interactivity. The former rule (every chrome `Exclusive`) lost the keyboard after the close on
+     two outputs: Hyprland's `refocusLastWindow` is refused while another Exclusive layer exists. Pointer input on the
+     outputs whose chrome is `None` cannot reach a transformed window either: while an Exclusive layer exists Hyprland
+     sends pointer focus to Exclusive layers only (`CInputManager::mouseMoveUnified`, "forced above all"; checked in
+     `overview.sh`: a click at a window's real place on the second output reached nothing). While windows are shown, a
+     chrome unmapping (the keyboard-holding one included) ends the overview at once (`closed`/`interrupted`, no closing
+     animation) and the keyboard leaving the chrome ends it (`interrupted`). After sending `on:false` the shell may unmap
+     the chrome or drop its keyboard: the closing animation it asked for runs to its end.
 3. **Open / update.** Once the chrome holds the keyboard, send `hl.plugin.grassfield.overview("<json>")` through
    `Hyprland.dispatch`, guarded like the other verbs (add `overview` to `isPluginVerb` in `shell/platform/Minimized.js`),
    the JSON built only from validated pieces (hex address, finite rounded numbers) and quoted as a Lua string (escape
@@ -256,6 +262,16 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
    2026-10-18: on macOS a full-screen app is a Space of its own, shown as a Spaces bar tile, and Hyprland draws only the
    full-screen window on such a workspace); Spaces bar tiles of other workspaces still need captures (nothing of another
    workspace is rendered); fractional scales and rotated outputs are not verified.
+
+### Two outputs and shared drawing (2026-10-18, plugin 0.6.0-stages)
+The chrome rule is relaxed (contract item 2): one Exclusive chrome holding the keyboard, a mapped chrome on every target
+monitor. The drawing code moved to `compositor/src/WindowTransform.*` (shared with Stages, unchanged) and the JSON reader to
+`compositor/src/core/Json.*`. `tests/compositor/overview.sh check` **32/32 PASS** (runs `.dev/overview/run-20261018-130541`, `run-20261018-142052`),
+new two-output case: chrome Exclusive on GF-REF and keyboard None on WAYLAND-1, `on:true` with windows on both outputs
+opens with 7 windows; a click at the WAYLAND-1 window's real place reaches nothing while open; after `on:false` and the
+chrome dropping its keyboard, the previously active window gets the keys. "No chrome on the second output" cannot be staged
+with the shell running (its persistent overview surfaces are mapped on every output between opens): unit
+`OverviewChrome.*`.
 
 ### R13 fix pass (2026-10-18, plugin 0.5.0-df)
 Review of f12f610 (FAIL): major `on:true` accepted without the chrome; minors: active-window close ended the overview,
