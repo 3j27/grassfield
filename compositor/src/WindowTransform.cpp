@@ -81,16 +81,18 @@ namespace gf::transform {
         const auto mon = g_pHyprRenderer->m_renderData.pMonitor.lock();
         const auto tex = in->getTexture();
         if (!mon || !tex)
-            return in;
+            return drawNothing(in); // as nothing where possible (drawNothing needs the monitor), never at its real place
         // resources() is a weak reference to a unique pointer: it must not be lock()ed (hyprutils aborts), only checked and
         // dereferenced, as Hyprland's own drawTransformedWindow does.
         const auto resources = mon->resources();
         auto       out       = resources && !resources.expired() ? resources->getUnusedWorkBuffer() : nullptr;
         if (!out) {
+            // Never at its real place: a Stages strip window is hidden there (and input-blocked), an overview window is
+            // laid out elsewhere. It is drawn as nothing for this frame.
             if (!warnedNoBuffer)
-                gf::log(Log::WARN, "window transform: no free work buffer; window {:x} drawn at its place this frame", address);
+                gf::log(Log::WARN, "window transform: no free work buffer; window {:x} not drawn this frame", address);
             warnedNoBuffer = true;
-            return in;
+            return drawNothing(in);
         }
 
         // The whole buffer is drawn scaled and moved so that the window's surface box lands on its rect (same math as the

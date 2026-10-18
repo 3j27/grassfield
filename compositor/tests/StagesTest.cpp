@@ -367,3 +367,46 @@ TEST(StagesFlag, ConfigAllowlist) {
     EXPECT_FALSE(parseStagesEnabled("stagesenabled", "true"));
     EXPECT_FALSE(parseStagesEnabled("titlebarDoubleClick", "true"));
 }
+
+// R13 review of 46b3e9b, HIGH 2 and the Exclusive-layer minor: only a user choice brings a strip stage forward; Hyprland's
+// own successor after a close and its restore of the last window (an Exclusive layer released the keyboard) do not, so a
+// swap made under an Exclusive layer is kept.
+TEST(StagesInput, OnlyAUserChoiceBringsAStripStageForward) {
+    EXPECT_TRUE(stripFocusBringsStage(FocusOrigin::UserChoice));
+    EXPECT_FALSE(stripFocusBringsStage(FocusOrigin::AfterClose));
+    EXPECT_FALSE(stripFocusBringsStage(FocusOrigin::Restore));
+}
+
+// HIGH 2: minimizing the only window of the active stage left the keyboard on it (special:minimized).
+TEST(StagesInput, TheKeyboardNeverStaysOnAnIneligibleWindow) {
+    EXPECT_EQ(keyboardAfterLeave({.present = true, .eligible = true}, true), KeyboardTarget::Keep) << "Hyprland picked a usable window";
+    EXPECT_EQ(keyboardAfterLeave({.present = true, .eligible = true}, false), KeyboardTarget::Keep);
+    EXPECT_EQ(keyboardAfterLeave({.present = true, .eligible = false}, true), KeyboardTarget::FrontOfActive) << "minimized or strip window";
+    EXPECT_EQ(keyboardAfterLeave({.present = false, .eligible = false}, true), KeyboardTarget::FrontOfActive) << "nothing focused";
+    EXPECT_EQ(keyboardAfterLeave({.present = true, .eligible = false}, false), KeyboardTarget::Nothing) << "no stage left: nothing";
+    EXPECT_EQ(keyboardAfterLeave({.present = false, .eligible = false}, false), KeyboardTarget::Nothing);
+}
+
+// HIGH 1: a click without motion after a swap went to the hidden strip window that was still Hyprland's pointer focus.
+TEST(StagesInput, APressOnAStaleBlockedFocusRefreshesItFirst) {
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Press, {.onBlocked = true, .hasFocus = true, .parked = false}), PointerAction::Refresh);
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Press, {.onBlocked = false, .hasFocus = true, .parked = false}), PointerAction::None);
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Press, {.onBlocked = false, .hasFocus = false, .parked = false}), PointerAction::None)
+        << "no focus and not parked: Hyprland's own case (nothing under the pointer)";
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Press, {.onBlocked = false, .hasFocus = false, .parked = true}), PointerAction::Refresh)
+        << "the first press after the plugin parked the pointer";
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Press, {.onBlocked = false, .hasFocus = true, .parked = true}), PointerAction::None)
+        << "a motion already found a surface";
+}
+
+TEST(StagesInput, AReleaseOnABlockedFocusIsDroppedNeverCancelled) {
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Release, {.onBlocked = true, .hasFocus = true, .parked = false}), PointerAction::Park);
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Release, {.onBlocked = false, .hasFocus = true, .parked = false}), PointerAction::None);
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Release, {.onBlocked = false, .hasFocus = false, .parked = true}), PointerAction::None)
+        << "already parked: the release reaches no surface";
+}
+
+TEST(StagesInput, AScrollOnABlockedFocusRefreshesIt) {
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Axis, {.onBlocked = true, .hasFocus = true, .parked = false}), PointerAction::Refresh);
+    EXPECT_EQ(beforePointerEvent(PointerEvent::Axis, {.onBlocked = false, .hasFocus = true, .parked = false}), PointerAction::None);
+}

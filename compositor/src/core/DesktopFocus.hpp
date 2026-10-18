@@ -81,10 +81,16 @@ namespace gf::desktopfocus {
 
     // What the seat's pointer focus says when a press arrives.
     enum class PointerFocus : uint8_t {
-        Live,  // a mapped, visible surface of a window or layer surface
+        Live,  // a mapped, visible surface of a window or layer surface (a window that takes input)
         None,  // no pointer focus (nothing under the pointer, or its surface was destroyed: the weak reference expired)
-        Stale, // a surface that is unmapped, invisible, or no longer part of any window or layer (a closed popup)
+        Stale, // a surface that is unmapped, invisible, no longer part of any window or layer (a closed popup), or of a
+               // window whose input is blocked (a Stages strip window: Hyprland's hit test skips it)
     };
+
+    // Classifies the seat's pointer focus: `present` a surface is focused; `known` it belongs to a window or layer surface;
+    // `visible` that view is alive and visible; `takesInput` it is not a window whose input is blocked (always true for
+    // layer surfaces).
+    PointerFocus classifyPointerFocus(bool present, bool known, bool visible, bool takesInput);
 
     // Hyprland 0.56.2 updates pointer focus on pointer motion only: after a popup closes, a press without any motion still
     // finds the popup's (destroyed or unmapped) surface, or nothing, as pointer focus. The press target is then what lies
