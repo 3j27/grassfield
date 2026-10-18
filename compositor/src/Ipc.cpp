@@ -1,6 +1,7 @@
 #include "Ipc.hpp"
 
 #include "AppmenuServer.hpp"
+#include "DesktopFocus.hpp"
 #include "Minimize.hpp"
 #include "Overview.hpp"
 #include "Plugin.hpp"
@@ -141,13 +142,17 @@ namespace gf::ipc {
 
     namespace {
         std::string currentCapabilities() {
-            const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable());
+            const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
 
     void postCapabilities() {
         postEvent(events::Key{.channel = events::Channel::Capabilities, .id = 0}, currentCapabilities());
+    }
+
+    void postWithdrawn() {
+        postNow(gfc::capabilitiesJson({}));
     }
 
     namespace {

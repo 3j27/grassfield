@@ -41,10 +41,11 @@ namespace gf::gfc {
     inline constexpr std::string_view kFeatureConfig      = "config";
     inline constexpr std::string_view kFeatureAppmenu     = "appmenu"; // org_kde_kwin_appmenu_manager global + appmenu events
     inline constexpr std::string_view kFeatureOverview    = "overview"; // hl.plugin.grassfield.overview + window transformers + overview events
+    inline constexpr std::string_view kFeatureDesktopFocus = "desktop-focus"; // click-to-focus policy for the desktop surface (ADR-0012)
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
-    // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview.
-    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false);
+    // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus.
+    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key only.
     inline constexpr std::string_view kConfigTitlebarDoubleClick = "titlebarDoubleClick";
@@ -62,7 +63,8 @@ namespace gf::gfc {
     // JSON string escaping (RFC 8259): quotes, backslash and control characters.
     std::string jsonEscape(std::string_view in);
 
-    // {"v":"gfc/1","type":"capabilities","features":[...]}
+    // {"v":"gfc/1","type":"capabilities","features":[...]}. At unload the plugin posts it with an empty list: no feature
+    // is available any more (the shell goes back to its fallbacks, as without the plugin).
     std::string capabilitiesJson(std::span<const std::string_view> features = kFeatures);
 
     // The minimize button (or a double-click set to minimize) asks the shell, which owns the Dock tile
