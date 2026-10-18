@@ -9,12 +9,13 @@ import qs.platform
 import qs.services
 import "Layout.js" as Layout
 import "V2.js" as V2
+import "../dock/DockModel.js" as DockModel
 
 // Overview surface, one per screen: a full-screen layer-shell overlay below the menu bar with a
 // Spaces bar on top and the windows of the output's current workspace laid out.
 // v1 (thumbnail mode): a dimmed, blurred backdrop and live thumbnails (ScreencopyView of the toplevel).
 // v2 (`!controller.thumbnailMode`): this surface is the transparent chrome of the compositor's overview
-// (namespace grassfield-overview, Overlay, keyboard Exclusive while open): the dim is OverviewBackdrop on the Bottom
+// (namespace grassfield-overview, Overlay, keyboard Exclusive on every output while open): the dim is OverviewBackdrop on the Bottom
 // layer, the real windows are transformed by the compositor, and the per-window items below are only the hit areas
 // (surface + titlebar band), the selection outline, the drag ghost and the label anchor.
 //
@@ -39,8 +40,8 @@ Variants {
         readonly property string screenName: modelData.name
         readonly property bool shown: root.controller.open
         readonly property bool v2: !root.controller.thumbnailMode
-        // Only the key screen's chrome is Exclusive while open; the others are None (their input region still maps
-        // clicks) and every chrome is None while releasing, so Hyprland refocuses the last window (V2.keyboardPlan).
+        // Every chrome is Exclusive while open (Hyprland sends pointer input to Exclusive layers only) and every chrome
+        // is None once the close starts, so Hyprland refocuses the last window (V2.keyboardPlan).
         readonly property bool holdsKeyboard: root.controller.keyboardPlan[screenName] === "exclusive"
 
         // 0 = windows at their real place, 1 = fully laid out.
@@ -69,7 +70,13 @@ Variants {
         // from the screen, never from the window size, which is 0 until the compositor configures
         // the layer surface.
         // The Dock's area (when it takes space) is reserved, as is the menu bar's (the surface starts below it).
-        readonly property int dockReserve: Settings.dockAutohide ? 0 : Tokens.dockIconSize + 2 * Tokens.dockPadding + Tokens.dockIndicatorSize + Tokens.dockSpacing + Tokens.dockBottomMargin
+        readonly property int dockReserve: DockModel.reservedHeight({
+            iconSize: Tokens.dockIconSize,
+            padding: Tokens.dockPadding,
+            indicatorSize: Tokens.dockIndicatorSize,
+            spacing: Tokens.dockSpacing,
+            bottomMargin: Tokens.dockBottomMargin
+        }, Settings.dockAutohide)
         readonly property var area: Layout.freeArea({
             w: modelData.width,
             h: modelData.height
@@ -390,6 +397,7 @@ Variants {
                 Keys.onPressed: event => {
                     const inSpaces = win.spaceFocus >= 0;
                     event.accepted = true;
+                    root.controller.keyScreen = win.screenName;
                     switch (event.key) {
                     case Qt.Key_Escape:
                         // Release-then-act as for the other actions: staying on a Space just
