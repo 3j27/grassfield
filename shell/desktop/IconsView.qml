@@ -355,7 +355,7 @@ FocusScope {
 
     // Active only while the desktop surface holds the keyboard (keysActive).
     // Keyboard actions that change or open files (Return/F2 rename, Ctrl+O, Ctrl+Backspace) are on only while the
-    // compositor enforces the desktop focus policy (ADR-0012, "desktop-focus" capability), set by the host: without
+    // compositor enforces the desktop focus policy (ADR-0012, "desktop-focus-v2" capability), set by the host: without
     // it the desktop can keep the keyboard after a click on Hyprland's active window, which the shell cannot observe.
     // Arrows, Ctrl+A, Space (Glance) and Esc only change the selection or a preview.
     property bool fileKeyActions: false

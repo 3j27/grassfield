@@ -180,7 +180,7 @@ TestCase {
         compare(run([{type: "menuOpened"}, press, {type: "armTimeout"}]).mode, "menu");
     }
 
-    // ---- compositor policy (capability desktop-focus) -----------------------------------------------
+    // ---- compositor policy (capability desktop-focus-v2) -----------------------------------------------
     // The plugin gives the keyboard to the clicked window or desktop; the desktop keeps it until another click.
 
     function runP(events, from) {

@@ -15,3 +15,15 @@ function parse(data, protocol) {
     const features = msg.features.filter(f => typeof f === "string");
     return {features: features, present: features.length > 0};
 }
+
+// True when `data` claims to be a capabilities event of this protocol but cannot be parsed as one (features missing or
+// not a list). Events of other types (overview, ...) and foreign payloads are not malformed capabilities events.
+function isMalformedCapabilities(data, protocol) {
+    let msg = null;
+    try {
+        msg = JSON.parse(data);
+    } catch (e) {
+        return false;
+    }
+    return !!msg && msg.v === protocol && msg.type === "capabilities" && !Array.isArray(msg.features);
+}

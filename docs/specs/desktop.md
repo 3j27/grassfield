@@ -93,15 +93,17 @@ Residual limits (measured, not fixed):
 
 Dev: `scripts/dev/shell-run.sh` seeds `lock.idleMinutes: 0` in the dev config when the key is absent, so nested sessions never idle-lock.
 
-## Compositor focus policy (capability `desktop-focus`, ADR-0012 amendment 2026-10-18)
+## Compositor focus policy (capability `desktop-focus-v2`, ADR-0012 amendment 2026-10-18)
 What the shell cannot do alone (review of 354cf71): Hyprland 0.56.2 ignores a click on the window it still counts as
 focused while the desktop holds the keyboard; it grants an OnDemand surface the keyboard only at the next pointer motion
 (hence the kicker); and the shell's pointer-leave drop sends keys to a window the user did not click. grassfield-compositor
 (plugin 0.5.0-df, `compositor/src/DesktopFocus.cpp`, decision logic `compositor/src/core/DesktopFocus.*`) enforces the
 macOS click-to-focus model instead. Contract (exact):
 
-1. **Detection.** The feature is present when the latest `capabilities` event lists `desktop-focus`
-   (`Capabilities.has("desktop-focus")`). The plugin posts a capabilities event with an empty list when it unloads
+1. **Detection.** The feature is present when the latest `capabilities` event lists `desktop-focus-v2`
+   (`Capabilities.has("desktop-focus-v2")`). The first policy (`desktop-focus`) is not enough: it misreads a click with a
+   perfectly still pointer right after the desktop menu closes (review of 9e76bd7), so the shell ignores it and keeps its
+   safe mode (file keys off) until the plugin advertises v2. The plugin posts a capabilities event with an empty list when it unloads
    (`{"v":"gfc/1","type":"capabilities","features":[]}`): every feature is gone at that moment, the shell must react to
    any capabilities event, not only to the first one.
 2. **Surface identity.** The plugin matches the layer namespace **`grassfield-desktop-icons`** exactly, on any output
@@ -111,7 +113,7 @@ macOS click-to-focus model instead. Contract (exact):
    left press on the desktop; back to `None` when the surface loses the keyboard (`Window.active` false after it was
    true); the arm timeout (`Tokens.desktopIconFocusArmMs`) back to `None` if the keyboard was not granted; the context menu
    as a `PopupWindow` with `grabFocus`; desktop keyboard actions only while `Window.active`.
-4. **What the shell drops when `desktop-focus` is present:** the kicker surface (`grassfield-desktop-kicker`) and the
+4. **What the shell drops when `desktop-focus-v2` is present:** the kicker surface (`grassfield-desktop-kicker`) and the
    drop to `None` on pointer leave (rule 3 of "Keyboard focus"). The outside-dismissed menu re-arm (rule 4) is not
    needed either: after an outside click the keyboard is back on the desktop, and the next click on any window gives that
    window the keyboard. `IconsView.fileKeyActions` (Return/F2 rename, Ctrl/Meta+O open, Ctrl+Backspace trash) may be
@@ -143,7 +145,7 @@ and surface) is left to Hyprland.
 
 ### Shell side of the policy (2026-10-18)
 `KeyboardFocus.js` takes the policy as an argument (`next(state, event, policy)`, `kicking`, `rearmAfter`, `fileKeyActions`);
-`DesktopIcons.qml` binds it to `Capabilities.has("desktop-focus")` live (kicker, pointer-leave drop and `fileKeyActions` follow;
+`DesktopIcons.qml` binds it to `Capabilities.has("desktop-focus-v2")` live (kicker, pointer-leave drop and `fileKeyActions` follow;
 withdrawing it while the desktop holds the keyboard and the pointer is elsewhere drops to None at once). The menu bar shows the
 desktop's name ("Desktop", `DesktopState.holdsKeyboard`) while the desktop or its context menu holds the keyboard.
 Nested evidence (plugin loaded, GF-REF): menu opened on an icon, pointer moved onto foot, Esc, small pointer motion, click, typing
@@ -156,4 +158,4 @@ the grab) is classified "none" by the plugin and Hyprland, the keys stay on the 
 Plugin unload (R13 review): an empty capabilities event now means the plugin is gone (`Capabilities.pluginPresent` false,
 `CapabilityEvent.js`, `tests/unit/tst_capabilities.qml`): the degraded notice is posted once (`shell.qml` `syncDegradedNotice`,
 screenshot after `just plugin-unload` and with `--no-plugin`: banner "Compositor extension not loaded" top right of the focused
-output), and desktop-focus / overview behaviour switch off live. No hello polling resumes after an unload.
+output), and desktop-focus-v2 / overview behaviour switch off live. No hello polling resumes after an unload.
