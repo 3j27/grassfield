@@ -79,6 +79,25 @@ Singleton {
     property double securedAt: 0
     // Consecutive Hyprland answers reporting the session unlocked while holding (see checkOwnership).
     property int unlockedAnswers: 0
+    // The lock surface (one per screen) whose window has the keyboard, else null: none of this shell's lock
+    // surfaces has it (another client's lock surface took it, or a window did after the session was unlocked
+    // under this lock). Only ever speeds the ownership check up.
+    property var focusedSurface: null
+    // The lock this shell holds was requested by restore() or checkStranded() (reason "restore"): it may be a lock
+    // taken over from a live foreign locker, whose release unlocks the session without any event. Cleared by
+    // relock() (the session was found unlocked: that release happened) and release().
+    property bool inheritedLock: false
+    // Another client may hold or have held the session lock (Machine.takeoverSuspected): the ownership check then
+    // runs every Machine.PROBE_SUSPECTED_MS instead of every second (R12 review #3: the session stayed unlocked up
+    // to ~1.1 s after a foreign locker released a lock it had taken over).
+    readonly property bool takeoverSuspected: holding && hyprland && Machine.takeoverSuspected(focusedSurface !== null, inheritedLock)
+
+    onTakeoverSuspectedChanged: {
+        if (takeoverSuspected)
+            console.info("grassfield-lock: takeover suspected (" + (focusedSurface === null ? "no lock surface has the keyboard" : "lock inherited at start") + "); ownership check every " + Machine.PROBE_SUSPECTED_MS + " ms");
+        else if (holding)
+            console.info("grassfield-lock: no takeover suspected; ownership check every " + Machine.PROBE_INTERVAL_MS + " ms");
+    }
 
     // Engage the lock. reason: "ipc" | "menu" | "idle" | "sleep" | "restore". Returns "ok",
     // "already-locked" or "refused: missing-pam". When this shell already holds a lock, the
@@ -101,6 +120,7 @@ Singleton {
         }
         strandedProbe.stop();
         console.info("grassfield-lock: lock requested (" + reason + ")");
+        inheritedLock = reason === "restore";
         Popups.close();
         writeMarker("locked");
         controller.requestLock();
@@ -141,6 +161,7 @@ Singleton {
         console.warn("grassfield-lock: the session is unlocked although this shell holds a lock (taken over and released by another client; " + why + "); taking a fresh lock");
         unlockedAnswers = 0;
         verified = false;
+        inheritedLock = false;
         controller.lockLost();
         sessionLock.locked = false;
         engage();
@@ -174,6 +195,7 @@ Singleton {
             fingerprintPam.abort();
         verified = false;
         unlockedAnswers = 0;
+        inheritedLock = false;
         persist.intent = false;
         sessionLock.locked = false;
         writeMarker("unlocked");
@@ -340,11 +362,23 @@ Singleton {
 
             // Keyboard focus left this lock surface: on Hyprland that also happens when another
             // client takes the session lock over or the session is unlocked under it. Ask now
-            // rather than at the next ownershipProbe tick (moving between outputs only costs a query).
+            // rather than at the next ownershipProbe tick (moving between outputs only costs a query),
+            // and track whether any lock surface has the keyboard (takeoverSuspected).
             Item {
+                id: keyboardProbe
+
                 Window.onActiveChanged: {
-                    if (!Window.active)
+                    if (Window.active) {
+                        root.focusedSurface = keyboardProbe;
+                    } else {
+                        if (root.focusedSurface === keyboardProbe)
+                            root.focusedSurface = null;
                         root.verify();
+                    }
+                }
+                Component.onDestruction: {
+                    if (root.focusedSurface === keyboardProbe)
+                        root.focusedSurface = null;
                 }
             }
 
@@ -430,17 +464,18 @@ Singleton {
     }
 
     // Lock ownership check, only while holding a lock on Hyprland: one monitor query
-    // (Quickshell.Hyprland IPC request, no hyprctl process) per second. Hyprland 0.56.2 emits no
-    // event when a session lock is taken over or released (verified on its event socket), so a
-    // low-frequency query is the only way to notice that the session was unlocked under this lock.
-    // The answer is handled by checkOwnership() (monitorAnswers), as are answers to anyone's query.
+    // (Quickshell.Hyprland IPC request, no hyprctl process) per second, every 100 ms while a takeover
+    // is suspected (takeoverSuspected). Hyprland 0.56.2 emits no event when a session lock is taken
+    // over or released (verified on its event socket), so a query is the only way to notice that the
+    // session was unlocked under this lock. The answer is handled by checkOwnership() (monitorAnswers),
+    // as are answers to anyone's query. A changed interval restarts the timer.
     Timer {
         id: ownershipProbe
 
         // Answers this soon after the compositor confirmed the lock are not trusted (see checkOwnership).
         readonly property int verifyGraceMs: 500
 
-        interval: 1000
+        interval: Machine.probeInterval(root.takeoverSuspected)
         repeat: true
         running: root.holding && root.hyprland && !devPause.running
         onTriggered: Hyprland.refreshMonitors()

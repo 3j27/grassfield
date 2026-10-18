@@ -125,6 +125,27 @@ function ownershipAction(compositorState, unlockedBefore) {
     return unlockedBefore >= 1 ? "relock" : "confirm";
 }
 
+// Lock ownership probe intervals (ms) while this shell holds a lock on Hyprland (Lock.qml ownershipProbe): one
+// monitor query per tick. The interval bounds how long the session can stay unlocked after another client releases
+// a lock it took over, so it is short while such a release is possible.
+var PROBE_INTERVAL_MS = 1000;
+var PROBE_SUSPECTED_MS = 100;
+
+// A takeover is suspected, i.e. another client may hold or have held the session lock, so that its release can unlock
+// the session under this shell's lock, while
+//   - no lock surface of this shell has the keyboard (another client's lock surface took it, or the session was
+//     unlocked under this lock and a window took it), or
+//   - the lock this shell holds was requested at start or after a reload ("restore"): it may be a lock this shell
+//     took over from a live foreign locker, whose release unlocks the session without any event.
+// Anything but exact booleans counts as suspected: probing faster never unlocks anything (fail closed).
+function takeoverSuspected(surfaceFocused, inheritedLock) {
+    return !(surfaceFocused === true && inheritedLock === false);
+}
+
+function probeInterval(suspected) {
+    return suspected === false ? PROBE_INTERVAL_MS : PROBE_SUSPECTED_MS;
+}
+
 // File name of the marker; the instance id is reduced to safe file-name characters.
 function markerName(instance, display) {
     var id = String(instance || display || "default").replace(/[^A-Za-z0-9_.-]/g, "_");

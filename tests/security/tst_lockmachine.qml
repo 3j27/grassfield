@@ -142,6 +142,26 @@ TestCase {
         compare(Machine.ownershipAction(Machine.compositorLockState([{solitaryBlockedBy: ["WINDOWED", "CANDIDATE"]}]), 1), "relock");
     }
 
+    // Suspected takeover (R12 review #3): the probe runs every 100 ms while no lock surface of this
+    // shell has the keyboard or the lock was inherited at start; 1 s only when both are known false.
+    function test_takeoverSuspected() {
+        compare(Machine.takeoverSuspected(true, false), false);
+        verify(Machine.takeoverSuspected(false, false));
+        verify(Machine.takeoverSuspected(true, true));
+        verify(Machine.takeoverSuspected(false, true));
+        // Unknown inputs never slow the probe down.
+        verify(Machine.takeoverSuspected(undefined, false));
+        verify(Machine.takeoverSuspected(true, undefined));
+        verify(Machine.takeoverSuspected(1, false));
+        verify(Machine.takeoverSuspected(null, null));
+        compare(Machine.probeInterval(false), 1000);
+        compare(Machine.probeInterval(true), 100);
+        compare(Machine.probeInterval(undefined), 100);
+        compare(Machine.probeInterval(0), 100);
+        verify(Machine.PROBE_SUSPECTED_MS < Machine.PROBE_INTERVAL_MS);
+        verify(Machine.PROBE_SUSPECTED_MS <= 100);
+    }
+
     // Hyprland 0.56 `hyprctl -j monitors` shapes (verified in nested: LOCK stays after the lock
     // client is killed).
     function test_compositorLockState() {
