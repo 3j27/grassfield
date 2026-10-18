@@ -29,9 +29,11 @@ pointer=$root/scripts/dev/pointer.sh
 log=$dev/files-scenario.log
 
 [[ -x $bin ]] || { echo "FAIL: $bin missing (run apps/files/build-direct.sh)"; exit 1; }
-[[ -s $dev/nested.wayland ]] || { echo "FAIL: no nested instance (run scripts/dev/nested-up.sh)"; exit 1; }
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+dev_nested_target "$dev" || { echo "FAIL: no verified nested instance of this tree (run scripts/dev/nested-up.sh as a bare command)"; exit 1; }
 command -v dbus-daemon >/dev/null || { echo "FAIL: dbus-daemon not found"; exit 1; }
-sock=$(<"$dev/nested.wayland")
+sock=$DEV_NESTED_SOCK
 [[ $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "FAIL: refusing the main Wayland socket"; exit 1; }
 
 # Fresh sandbox and isolated homes (paths are checked to stay inside .dev).
