@@ -35,7 +35,9 @@ Singleton {
     function handleEvent(data: string): void {
         const msg = CapabilityEvent.parse(data, root.protocol);
         if (!msg) {
-            console.warn("grassfield: ignoring malformed or foreign capabilities event");
+            // Other gfc/1 event types (appmenu, overview...) are not for this handler: no warning for them.
+            if (CapabilityEvent.claimsCapabilities(data, root.protocol))
+                console.warn("grassfield: ignoring malformed or foreign capabilities event");
             return;
         }
         features = msg.features;

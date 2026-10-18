@@ -15,3 +15,16 @@ function parse(data, protocol) {
     const features = msg.features.filter(f => typeof f === "string");
     return {features: features, present: features.length > 0};
 }
+
+// True when the payload is not JSON or says it is a capabilities event of `protocol` (a malformed one is worth a
+// warning). The other gfc/1 events (appmenu, overview, desktop focus...) share the `grassfield` raw event name and are
+// not capabilities events at all.
+function claimsCapabilities(data, protocol) {
+    let msg = null;
+    try {
+        msg = JSON.parse(data);
+    } catch (e) {
+        return true;
+    }
+    return !msg || typeof msg !== "object" || (msg.v === protocol && msg.type === "capabilities");
+}
