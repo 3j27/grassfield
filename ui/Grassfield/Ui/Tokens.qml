@@ -81,8 +81,8 @@ QtObject {
 
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusControl: 6
-    // estimate, pending F1 measurement from design/reference
-    readonly property int radiusDock: 20
+    // F1 gap 4: Dock radius ~24 +-3
+    readonly property int radiusDock: 24
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusDockIcon: 11
     // estimate, pending F1 measurement from design/reference
@@ -93,12 +93,14 @@ QtObject {
     readonly property int radiusPanel: 18
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusDialog: 14
-    // estimate, pending F1 measurement from design/reference
-    readonly property int radiusTooltip: 6
     // spec notifications.md: about 16 pt
     readonly property int radiusBanner: 16
     // spec search.md: rounded about 26 pt
     readonly property int radiusSearch: 26
+    // F1 gap 13: alert radius ~24 +-3 (Dialog frame: confirm, notice, About, Force Quit)
+    readonly property int radiusAlert: 24
+    // F1 gap 13: sheet radius 26 +-1.5
+    readonly property int radiusSheet: 26
 
     // estimate, pending F1 measurement from design/reference
     readonly property int shadowBlur: 18
@@ -168,8 +170,8 @@ QtObject {
 
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIconSize: 48
-    // estimate, pending F1 measurement from design/reference
-    readonly property int dockPadding: 7
+    // F1 gap 4: vertical padding ~9.5 and end margin ~10 (integer for crisp tiles)
+    readonly property int dockPadding: 10
     // estimate, pending F1 measurement from design/reference
     readonly property int dockSpacing: 4
     // estimate, pending F1 measurement from design/reference
@@ -186,8 +188,8 @@ QtObject {
     readonly property int dockHideDelay: 450
     // estimate, pending F1 measurement from design/reference
     readonly property int dockSeparatorWidth: 1
-    // estimate, pending F1 measurement from design/reference
-    readonly property int dockSeparatorHeight: 40
+    // F1 gap 4: shelf height minus 18 for a 48 tile with 9.5 padding
+    readonly property int dockSeparatorHeight: 49
     // estimate, pending F1 measurement from design/reference
     readonly property int dockTooltipGap: 8
     // estimate: height reserved above the shelf for the label
@@ -239,12 +241,10 @@ QtObject {
     readonly property int controlToggleHeight: 16
     // estimate, pending F1 measurement from design/reference
     readonly property int controlFocusRing: 2
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlTooltipPadding: 6
     // estimate
     readonly property int controlTooltipDelay: 500
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlButtonMinWidth: 72
+    // F1 gap 13: push button minimum width ~64
+    readonly property int controlButtonMinWidth: 64
     // estimate
     readonly property int controlSliderDefaultWidth: 200
     // F1 gap 12: pill knob 21x12
@@ -255,6 +255,18 @@ QtObject {
     readonly property int controlSliderKnobWidth: 21
     // F1 gap 18: Quick Settings slider track stays 4
     readonly property int controlSliderTrackCompact: 4
+    // F1 gap 13: alert capsule buttons 110x28
+    readonly property int controlAlertButtonHeight: 28
+    // F1 gap 13: gap between alert buttons
+    readonly property int controlAlertButtonGap: 8
+    // F1 gap 4: capsule side padding ~13.5
+    readonly property int controlTooltipPaddingX: 13
+    // F1 gap 4: capsule 24.4 tall with 13 pt text
+    readonly property int controlTooltipPaddingY: 4
+    // F1 gap 4: tail 12.6 wide
+    readonly property int controlTooltipTailWidth: 13
+    // F1 gap 4: tail 7.3 high
+    readonly property int controlTooltipTailHeight: 7
 
     // estimate, pending F1 measurement from design/reference
     readonly property int panelControlCenterWidth: 320
@@ -292,6 +304,8 @@ QtObject {
     readonly property int panelPercentWidth: 36
     // estimate: centred dialogs sit this fraction of the screen height above centre
     readonly property real panelDialogRaise: 0.08
+    // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages)
+    readonly property int panelAlertWidth: 260
 
     // spec notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344

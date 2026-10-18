@@ -67,7 +67,7 @@ Item {
     Material {
         id: panelBack
         anchors.fill: panel
-        radius: Tokens.radiusDialog
+        radius: Tokens.radiusSheet
     }
 
     FocusScope {

@@ -8,13 +8,13 @@ FocusScope {
 
     property string title: ""
     property string message: ""
-    property int panelWidth: Tokens.panelDialogWidth
+    property int panelWidth: Tokens.panelAlertWidth
     property alias content: contentColumn.data
     property alias buttons: buttonRow.data
 
     signal rejected
 
-    readonly property real cornerRadius: Tokens.radiusDialog
+    readonly property real cornerRadius: Tokens.radiusAlert
     readonly property Item surface: material
 
     width: panelWidth
@@ -68,10 +68,35 @@ FocusScope {
             spacing: Tokens.spacingSm
         }
 
+        // Alert buttons: capsules of one width, filling the row (two of them are half each), never narrower than the widest label.
         Row {
             id: buttonRow
             anchors.right: parent.right
-            spacing: Tokens.spacingSm
+            spacing: Tokens.controlAlertButtonGap
+
+            function equalize(): void {
+                const kids = buttonRow.children;
+                let widest = 0;
+                let count = 0;
+                for (let i = 0; i < kids.length; i++) {
+                    if (!("capsule" in kids[i]))
+                        continue;
+                    kids[i]["capsule"] = true;
+                    widest = Math.max(widest, kids[i].implicitWidth);
+                    count++;
+                }
+                if (count === 0)
+                    return;
+                const fill = (column.width - (count - 1) * buttonRow.spacing) / count;
+                const wanted = Math.max(widest, fill);
+                for (let i = 0; i < kids.length; i++) {
+                    if ("capsule" in kids[i])
+                        kids[i].width = wanted;
+                }
+            }
+
+            Component.onCompleted: equalize()
+            onChildrenChanged: Qt.callLater(equalize)
         }
     }
 }
