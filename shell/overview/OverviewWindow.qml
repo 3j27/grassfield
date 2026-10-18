@@ -448,7 +448,7 @@ Variants {
                 y: Tokens.overviewBarTopMargin - (Appearance.reduceMotion ? 0 : (1 - win.progress) * (Tokens.overviewTileHeight + Tokens.overviewBarTopMargin))
                 opacity: win.progress
                 Accessible.role: Accessible.List
-                Accessible.name: qsTr("Spaces")
+                Accessible.name: qsTr("Desktops")
 
                 Repeater {
                     id: tileRepeater

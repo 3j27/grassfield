@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Gui Qml Quick DBus)
 
-add_executable(grassfield-settings src/main.cpp src/backend.cpp src/backend.h)
+add_executable(grassfield-settings src/main.cpp src/backend.cpp src/backend.h src/systemguard.cpp src/systemguard.h)
 target_link_libraries(grassfield-settings PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus)
 target_compile_definitions(grassfield-settings PRIVATE
     GRASSFIELD_SETTINGS_VERSION="${PROJECT_VERSION}"

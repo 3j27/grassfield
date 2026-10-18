@@ -11,7 +11,7 @@ SettingsPage {
     readonly property var cornerActions: [
         {id: "none", text: qsTr("None")},
         {id: "overview", text: qsTr("Overview")},
-        {id: "notifications", text: qsTr("Notification Center")},
+        {id: "notifications", text: qsTr("Notifications")},
         {id: "apps", text: qsTr("Apps")},
         {id: "lock", text: qsTr("Lock Screen")}
     ]
@@ -93,7 +93,7 @@ SettingsPage {
     }
 
     SettingsGroup {
-        caption: qsTr("Hot Corners")
+        caption: qsTr("Screen Corners")
         footnote: qsTr("Move the pointer into a screen corner to run the action.")
 
         SettingsRow {

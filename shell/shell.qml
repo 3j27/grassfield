@@ -73,7 +73,7 @@ ShellRoot {
         target: SettingsApp
 
         function onMissing(): void {
-            Notifications.postInternal(qsTr("Grassfield Settings is not installed"), qsTr("Install the grassfield-desktop package to open System Settings."));
+            Notifications.postInternal(qsTr("Grassfield Settings is not installed"), qsTr("Install the grassfield-desktop package to open Settings."));
         }
     }
 

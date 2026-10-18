@@ -31,7 +31,7 @@ tile rectangle the shell sends (ADR-0002), and the user's double-click setting.
 
 Non-goals: the "Genie" warp (the animation is the "Scale" effect: uniform shrink + move; a genie would need a
 mesh-deformed texture draw, which Hyprland's pass elements do not offer), hover glyphs and inactive-state
-buttons, appearance switching, tiled windows, CSD negotiation; for the overview: the layout, labels, Spaces bar and
+buttons, appearance switching, tiled windows, CSD negotiation; for the overview: the layout, labels, Desktops bar and
 input (the shell), transforming popups; for appmenu: reading or
 rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B, ADR-0008), the
 `com.canonical.AppMenu.Registrar` service, X11 (XWayland) menus.
@@ -165,7 +165,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   (FR24).
 - **FR26** For `on:true` each listed window is transformed only if it is mapped, not hidden, not pinned, on the active,
   non-special workspace of its monitor, not full screen and not on a workspace that shows a full-screen window
-  (`FSMODE_FULLSCREEN`; maximized is allowed; decision 2026-10-18: on macOS a full-screen app is a Space of its own, and
+  (`FSMODE_FULLSCREEN`; maximized is allowed; decision 2026-10-18: on macOS a full-screen app is a Desktop of its own, and
   Hyprland draws only the full-screen window on its workspace) and its rect lies inside that monitor (1 px tolerance);
   other entries are ignored (logged). If windows were listed and none qualifies, nothing changes and the current state is
   posted with `"reason":"no-windows"`. Windows are transformed only while the shell's chrome covers them (R13 fix, relaxed
@@ -647,7 +647,7 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   own focus handling only; the shell keeps its kicker surface and pointer-leave drop and no file-changing desktop keys
   (ADR-0012 amendment). The unload posts a capabilities event with no feature (FR32) so the shell switches at once.
   Without `desktop-focus-v2` the shell keeps the file-changing desktop keys off (shell main 23caeab).
-- Without `stages-available` (plugin absent, mismatched, its listeners failed): no Stages at all; Control Center hides the
+- Without `stages-available` (plugin absent, mismatched, its listeners failed): no Stages at all; Quick Settings hides the
   toggle. With it but the flag off: `stages` is not advertised and the verb refuses (`disabled`). A monitor without the
   shell's strip surface: its windows are shown normally.
 
