@@ -39,8 +39,12 @@ single instance.
    play/pause (button, Space in the viewer), a position slider, elapsed and total time. Glance starts playing at
    once. A decode failure shows the player's message.
 7. P7 Glance (`qml/Glance.qml`): same binary with `--glance`. A normal toplevel with app id
-   `org.grassfield.Preview.Glance`, sized for the content of the first file (image: native size capped at 70 % of the
-   screen; PDF, text, video and audio fixed token sizes), header with the file name, "n of N" and "Open with Preview".
+   `org.grassfield.Preview.Glance`, sized for the content of the first file on the screen it is shown on (image:
+   native size scaled down to fit `preview.glanceScreenFraction` of the screen for the content area; PDF, text, video
+   and audio their token sizes, capped the same way; the header comes on top), header with the file name, "n of N" and
+   "Open with Preview". Qt only learns the output after mapping: the window is sized for Qt's first screen, then once
+   for the screen it entered, requested as a fixed size (minimum = maximum, which Hyprland applies to floating windows,
+   centred) and released after `motion.normal` (1200x800 PNG on 1920x1080: 1134x796).
    Space, Esc and Ctrl+W close it; Left/Right move through the files (wrapping, fitted into the same window);
    + / - / 0 zoom; Ctrl+O or the button opens the full viewer (`grassfield-preview -- <files>`, detached) and quits.
    The Hyprland rule `gf-glance` (`config/hypr/grassfield/windows.lua`) floats and centers it and sets
@@ -54,6 +58,12 @@ single instance.
    `Image`/`AnimatedImage`); images over 16384 px per side or 256 MiB at 4 bytes per pixel are refused before decoding
    with a notice; PNG headers are sniffed so that a huge image gets the right message; the file is never opened for
    writing and never executed; no network access; text is `PlainText`.
+10. P10 Global menu (T1, master-prompt 5.7, ADR-0008): the viewer (not a Glance) exports File (Close Window), Edit
+    (Copy and Select All of a text file, Find…, Find Next Ctrl+G, Find Previous Ctrl+Shift+G), View (Show/Hide
+    Sidebar, Actual Size, Zoom to Fit, Zoom In, Zoom Out), Go (pages, previous/next file) and Tools (Rotate Left/Right)
+    through DBusMenu (`qml/GlobalMenu.qml`) when `com.canonical.AppMenu.Registrar` is on the session bus at start
+    (`apps/globalmenu.h`); otherwise nothing is created and the bar keeps T0. The toolbar stays. The file view is
+    clipped (PDF pages never draw over the toolbar).
 
 ## Acceptance criteria
 | ID | Test | Level |
@@ -63,6 +73,8 @@ single instance.
 | config | `Hyprland --verify-config` for `dev.lua` and `session.lua` with `GRASSFIELD_CONFIG_DIR` | L0 |
 | P2-P7 | nested screenshots: image + zoom, multi-page TIFF, GIF, PDF with thumbnails, text, binary and 3 MB text notices, video, audio, Glance from Files and from a desktop icon, multi-file Glance, light and dark | L1 |
 | P9 | nested: 50000 x 50000 PNG header shows the "too large" notice (RSS stays near 160 MB), `http://` and `file://host/` arguments refused | L1 |
+| P7 sizing | nested GF-REF 1920x1080 (`scripts/nestctl clients`): 1200x800 PNG 1134x796, PDF 620x796, text 720x560, video 800x520 | L1 |
+| P10 | `tests/integration/global_menus.sh` T1c: menus in the bar, Go > Next File and File > Close Window clicked with the pointer; phase B (no registrar): T0, clean log | L1 |
 | Encrypted PDF, HEIC, real audio output, compositor titlebar skip (`decorate = false`) | not testable here (no encrypted sample, no HEIC plugin, plugin not loaded in nested) | L2 (owner) |
 
 ## Interfaces / contracts
@@ -83,7 +95,8 @@ is not installed).
 - Read only: no Export, annotations, page editing or printing.
 - Toolbar buttons are text (no zoom/rotate icons in the design system yet).
 - The PDF page view does not scroll by arrow keys (it is a TableView): arrows turn pages, wheel scrolls.
-- A Glance is sized once, for its first file; later files of a multi-file Glance are fitted into that window.
+- A Glance is sized for its first file; later files of a multi-file Glance are fitted into that window. Moving it
+  to another output keeps its size.
 - Glance opened from the desktop (OFF in desktop keyboard safe mode, back with the macOS-model redesign) does not
   take the keyboard focus (layer-shell on-demand focus): Space on the desktop closes it; click it before using
   the arrow keys.

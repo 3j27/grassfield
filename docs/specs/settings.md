@@ -17,19 +17,20 @@ wallpaper, user accounts, editing shortcuts.
 1. S1 Native launcher (`apps/settings/src/main.cpp`): `QGuiApplication`, `setDesktopFileName("org.grassfield.Settings")`, name and version, `QQmlApplicationEngine` with `/usr/lib/qt6/qml` (plus `QML_IMPORT_PATH` in dev) so `import Grassfield.Ui` resolves; loads `Main.qml` from `GRASSFIELD_SETTINGS_QML` or the baked-in directory (installed: `/usr/share/grassfield/settings/qml`).
 2. S2 Sections, real settings only, each writing the schema keys (nothing else):
    - Appearance: `appearance` (Light/Dark; `auto` is not offered because the shell renders it dark), `material.transparency` (0-1), `accessibility.reduceTransparency`, `material.profile` (full/balanced/reduced), `accessibility.reduceMotion`.
-   - Desktop & Dock: `dock.magnificationEnabled`, `dock.magnification` (1-2.5), `dock.autohide`, `windows.titlebarDoubleClick`, `hotCorners.{topLeft,topRight,bottomLeft,bottomRight}` (none/overview/notifications/apps/lock).
+   - Desktop & Dock: `dock.magnificationEnabled`, `dock.magnification` (1-2.5), `dock.autohide`, `desktop.showIcons` (Desktop group: "Show items on the desktop"), `windows.titlebarDoubleClick`, `hotCorners.{topLeft,topRight,bottomLeft,bottomRight}` (none/overview/notifications/apps/lock).
    - Notifications: `notifications.dnd`, `notifications.previews` (always/unlocked/never).
    - Lock Screen: `lock.idleMinutes` (Never = 0, 1, 2, 5, 10, 15, 30, 60; a hand-edited other value stays selectable).
-   - Keyboard: read-only list (description + keys) parsed from the bindings file.
-   - About: read-only: Grassfield (app) version, Omarchy NAME + VERSION_ID (`/etc/os-release`), Hyprland and Quickshell (`pacman -Q`, argv, no shell), Qt (`qVersion()`), CPU model and threads, memory, graphics (`lspci`).
+   - Keyboard: read-only list (description + keys) parsed from the bindings file; descriptions and key names are shown in the UI language (`Bindings.js` lists them for translation, context `Bindings`; a unit test checks the real file).
+   - About: read-only: Grassfield (app) version, Omarchy NAME + VERSION_ID (`/etc/os-release`), Hyprland and Quickshell (`pacman -Q`, argv, no shell), Qt (`qVersion()`), CPU model and threads, memory (binary units with the UI locale: "31.0 GiB", "31,0 Gio"), graphics (`lspci`).
 3. S3 Writes: the file is re-read before every change and the one key is set, so every other key (also unknown ones, `dock.pinned`) is preserved. Values are validated against rules that mirror the schema (`qml/Store.js`; a unit test checks parity with `config/schema/grassfield.schema.json`). A missing or empty file is created as `{"version": 1, ...}`. Atomic replace through `QSaveFile`.
-4. S4 A file that is not valid JSON, not an object, has `version` other than 1, or cannot be read is never overwritten: a red banner shows the reason, the detail pane is inert, nothing is written. Fixing the file re-enables the pane (file watcher).
+4. S4 A file that is not valid JSON, not an object, has `version` other than 1, or cannot be read is never overwritten: a banner in the destructive colour (tokens `destructive` / `destructiveText`) shows the reason, a translated sentence fragment, the detail pane is inert, nothing is written. Fixing the file re-enables the pane (file watcher).
 5. S5 Live effect: the shell watches `grassfield.json`; changes apply immediately (transparency, appearance, hot corners, Dock). The app also follows external edits of the file.
 6. S6 Config location: `GRASSFIELD_CONFIG_HOME` (dev) else `$XDG_CONFIG_HOME/grassfield` else `~/.config/grassfield`, same as the shell.
 7. S7 Bindings file: `/usr/share/grassfield/hypr/grassfield/bindings.lua` when installed, else `$GRASSFIELD_CONFIG_DIR/grassfield/bindings.lua` (set in the dev session), else the repository copy baked in by `build-direct.sh`. Only literal `bind("KEYS", "Description", ...)` lines are listed (loops and computed keys, e.g. the Space switchers, are skipped).
 8. S8 Shell integration: Grassfield menu > "System Settings…" runs `grassfield-settings` (dev: `GRASSFIELD_SETTINGS_CMD`, split on spaces, no shell).
 9. S9 Accessibility and input: `qsTr` for all strings, `Accessible` names and roles on controls, rows and the banner; Up/Down/Home/End in the sidebar, Down or Return in the search field moves to the list, Tab enters the pane, Space/Return activate controls, Left/Right change a segmented choice or slider, Esc clears the search or closes a pop-up menu. Untrusted text (file contents, system strings) is `Text.PlainText`.
 10. S10 Opaque window (master-prompt 5.5): tokens only (`settings.*` group of `ui/tokens/tokens.json`); the shared PopupMenu is drawn with transparency forced to 0 inside the app.
+11. S11 Global menu (T1, master-prompt 5.7, ADR-0008): when `com.canonical.AppMenu.Registrar` is on the session bus at start (`apps/globalmenu.h`), the window exports File (Close Window, Ctrl+W), Edit (Undo, Redo, Cut, Copy, Paste, Select All on the search field; Find, Ctrl+F) and View (the sections) through DBusMenu (`qml/GlobalMenu.qml`, `Qt.labs.platform`); the app menu and Window are the shell's T0 menus. Without the registrar nothing is created and the bar keeps T0. Ctrl+F and Ctrl+W also work in the window itself.
 
 ## Acceptance criteria
 | ID | Test | Level |
@@ -37,6 +38,7 @@ wallpaper, user accounts, editing shortcuts.
 | S3/S4 | `tests/unit/tst_settingsstore.qml`: merge preserves keys, nested creation, fresh file, malformed/invalid refusal (no write), schema parity, ConfigStore with a fake backend (external change, blocked state) | L0 |
 | S7/S2 | same file: bindings parser (including the real file), os-release/cpu/memory/lspci/pacman parsers | L0 |
 | S1-S10 | nested: launch, screenshots of every section in light and dark, picker and slider with real pointer, keyboard navigation with wtype, hot corner effect, transparency effect on menu bar and Dock, malformed file refusal (`cmp`), menu item launch | L1 |
+| S11 | nested, private bus with the bridge: File, Edit, View in the bar; View > Keyboard clicked with the pointer shows the Keyboard section | L1 |
 | lint | `scripts/dev/qmllint.sh` (covers `apps/**/*.qml`) and `check-textformat.py` | L0 |
 
 ## Implementation notes (v1, `apps/settings/`)
