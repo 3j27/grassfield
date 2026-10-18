@@ -160,15 +160,18 @@ labels on the checker. The measurement now separates glyphs from backdrop exactl
 2. Coverage per pixel: `W = a*255 + (1-a)*B` and `K = (1-a)*B`, so `a = (W - K) / 255` exactly, whatever the backdrop
    (an object that does not follow the glyph colour has `W = K` and `a = 0`). Glyph pixels are those with `a >= 0.5`.
    An invisible glyph (white on white) is still found, because W and K differ.
-3. The true glyph colour of a pixel is `c = (A - (1-a)*B) / a`. Its WCAG ratio is taken against the local backdrop:
-   the mean linear luminance of B in the 5x5 window around the pixel (the eye averages a 2 px texture).
-4. The cell value is the 5th percentile of the ratios of the box's glyph pixels: the worst case, not a median. A box
-   with no glyph pixel is reported as `NO GLYPH` (box misplaced) and fails the run; image icons (the desktop file-type
-   icons, marked `"image": true`) are not colour-driven and are skipped, listed in the summary.
+3. The item's own opacity `o` is the largest coverage found in the box (measured, never declared). Glyph pixels are those
+   covered at least 0.85 `o` in every colour channel (0.7 or 0.5 when thin text has fewer than 4 such pixels: the text
+   renderer's gamma makes half covered edge pixels unreliable). The colour a fully covered pixel has is
+   `e = B + o * (A - B) / a` per channel (rendered pixels A and B only, opacity included). Its WCAG ratio is taken against
+   the local backdrop: the mean linear luminance of B in the 5x5 window around the pixel.
+4. The cell value is the 5th percentile of the ratios of the box's glyph pixels: the worst case, not a median. A box with no
+   glyph is reported as `NO GLYPH` and fails the run; image icons (the desktop file-type icons, `"image": true`) are not
+   colour-driven and are skipped, listed in the summary. `contrast.sh --surfaces desktop,search` limits a run.
 
 `tests/visual/test_contrast.py` checks the tooling on synthetic images: raw-RGB reading gives exactly w x h pixels for an
 80x13 box (the old txt parser counted every non-named pixel twice, n=1514 instead of 1040), black text on white
-scores 21, 60 % covered black on white still scores 21 (true glyph colour), gray 118 on white scores 4.54, white on
+scores 21, a Text item at opacity 0.6 scores its rendered gray 102 (about 5.7), gray 118 at opacity 0.5 scores about 1.9 where its declared colour scored 4.54, a sub-pixel fringe is read exactly, gray 118 on white scores 4.54, white on
 white scores 1, white text on a 1 px checker scores about 1.9 (the old method read about 21).
 
 ## Results (reference machine, 2026-10-17)
@@ -177,27 +180,21 @@ Determinism, two full runs (26 shots, `just visual --determinism`): PASS. Every 
 at fuzz 0 the shots differ by 0-18 px (sparse gradient/caret noise; the first scenario of a fresh session is the
 noisiest). Limit 50 px.
 
-A2 (`just contrast`, glyph-mask method, exit 1): 900 cells = 45 regions x 20 combinations; 860 measured, 40 skipped
-(2 image icons x 20), 0 boxes without glyph; **677 PASS, 183 FAIL**. These are findings, not tool errors. Failing cells
-by region (of 20, minimum ratio):
+A2, screenshots (`tests/visual/contrast.sh`, exit 0, after the token pass): 860 cells measured (45 regions x 20
+combinations, less 40 skipped image icons), **860 PASS, 0 FAIL, 0 boxes without a glyph, 0 missing captures**. Per-region
+minimum over the 20 combinations: desktop icon labels 4.8-5.2 (white wallpaper is the worst case), menu bar and system menu
+11.1-12.0 (status icons 10.8), Control Center 5.5 ("Display" label, "Appearance" value) to 12.6, Search 4.8 (selected row
+subtitle) to 11.5, Search section headers 6.4-6.5, banners 6.6 (time) to 12.5, Notification Center 7.9 ("Clear All") to 12.4,
+Apps labels 5.0-5.1, Apps placeholder 4.7, page dots 6.2. Before the pass the same run had 183 FAIL (min 1.02). The first
+full run after the fixes found 7 "no glyph" cells (Search not shown on GF-REF in the very first combination): the run now
+retries the open, checks the state and the pixels, and fails otherwise.
 
-- Search selected row subtitle (dark text on the accent green): 20/20 at 3.9-4.2.
-- Control Center "Display" label 14/20 (min 1.74) and "Appearance" value 13/20 (min 1.73); "Airplane Mode" 3/20 (min 3.17).
-- Apps search placeholder 14/20 (min 1.32); Apps icon labels (always white text, backdrop dimmed by a fixed
-  `appsBackdropOpacity`): Chromium 8, Disks 8, Aether 4, Files 4 of 20 (min 2.76-3.25), on white and noise wallpapers.
-- Desktop icon labels directly on the wallpaper (text colour follows the appearance; the outline is faint): 12/20 each,
-  min 1.02: white text on the white or light-gray wallpaper in dark appearance, black on black in light appearance,
-  and both on the noise and checker wallpapers.
-- Search section headers "Top Hit" 8, "Applications" 6, Neovim subtitle 8 (min 1.94-2.07); query 2; Neovim title 1.
-- Banner time label 5/20 (min 2.73); Notification Center "Clear All" 2/20 (min 3.40), group/item text 1/20 each (3.3-4.2).
-- Menu bar app name, clock, system menu items and Control Center labels fail only in the white/dark/0.6 corner
-  (3.2-4.5), banner titles/body 1/20 (3.9-4.0).
-- Menu bar status icons (min 4.5), page dots (min 4.3), the selected-row title and the Control Center title pass.
-
-Compared with the first (median/extremes) method the desktop labels on the checker no longer show false passes of
-12.7-17.2: they read 1.6-1.9 (white text on the checker) in dark appearance. The full matrix is
-`.dev/visual/contrast/contrast.csv`. Tiny boxes (9 px sublabels) are the least reliable cells. No UI colour was changed
-for this report; the fixes come with a later pass.
+Method change of the third fix: the glyph colour is measured from the rendered pixels (see "Method" below), so the opacity of
+a Text item counts (the banner body at opacity 0.85 used to pass by its declared colour). Surfaces are asserted open before
+they are measured: `search`/`apps` by IPC state and a pixel difference from the bare desktop (up to three attempts), banners
+and the Notification Center by `notifications status` (the center is toggled by a clock click and read back, three attempts),
+the system menu and Control Center by a pixel difference. The shell is restarted once GF-REF exists (`vs_wait_output` in
+`lib.sh`), so the desktop icons are always there. A box without a glyph, or a surface without captures, fails the run.
 
 ## Limitations
 

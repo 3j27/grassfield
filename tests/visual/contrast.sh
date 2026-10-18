@@ -97,7 +97,8 @@ differs_q() {
   local n
   n=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1 || true)
   # compare prints "4394.01 (0.0021)" with a fuzz: keep the integer part.
-  [[ $n =~ ^[0-9]+ ]] && (( ${BASH_REMATCH[0]} >= $3 ))
+  # (large counts come as "1.77e+06 (0.85)": awk reads the number)
+  awk -v n="${n%% *}" -v min="$3" 'BEGIN { exit !(n + 0 >= min + 0) }'
 }
 differs() { differs_q "$@" || fail "$(basename "$2") looks like $(basename "$1"): the surface did not open (fewer than $3 px differ)"; }
 
