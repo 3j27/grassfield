@@ -149,11 +149,15 @@ Scope {
             readonly property bool menuOpen: Popups.active && Popups.screenName === win.screen.name
             // Transparent by default (like macOS 26/27); `menubar.showBackground` restores the frosted band.
             readonly property bool showBackground: Settings.menubarShowBackground
-            // Without a background the bar sits on the wallpaper: light glyphs with a soft shadow whatever the appearance
-            // (the same treatment as the desktop labels, gate A2); on the material they follow the appearance.
-            readonly property color barText: showBackground ? Appearance.colors.text : Appearance.darkColors.text
-            readonly property color barTextDisabled: Appearance.withAlpha(showBackground ? Appearance.colors.text : Appearance.darkColors.text, Tokens.materialDisabledOpacity)
-            readonly property color barTint: showBackground ? Appearance.colors.hover : Appearance.darkColors.hover
+            // Without a background the bar sits on the wallpaper and its foreground adapts to the wallpaper strip under this
+            // output's bar (BarTone, the macOS model): white text over a dark wallpaper, black over a light one, with a faint
+            // shadow of the opposite colour (gate A2). On the material it is the appearance's text colour.
+            readonly property bool darkTone: BarTone.toneOf(win.screen.name) === "dark"
+            readonly property var barPalette: darkTone ? Appearance.lightColors : Appearance.darkColors
+            readonly property color barText: showBackground ? Appearance.colors.text : barPalette.barText
+            readonly property color barTextDisabled: Appearance.withAlpha(showBackground ? Appearance.colors.text : barPalette.barText, Tokens.materialDisabledOpacity)
+            readonly property color barTint: showBackground ? Appearance.colors.hover : barPalette.hover
+            readonly property color barShadow: darkTone ? barPalette.materialHighlight : barPalette.shadow
             readonly property var battery: UPower.displayDevice
             readonly property bool hasBattery: !VisualFixtures.active && battery !== null && battery.isPresent && battery.isLaptopBattery
 
@@ -337,6 +341,7 @@ Scope {
                             id: systemButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             accessibleName: qsTr("Grassfield menu")
                             active: win.isOpen("system")
                             onActivated: win.popup("system")
@@ -352,6 +357,7 @@ Scope {
                             id: appButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             objectName: "menubar-app"
                             accessibleName: qsTr("Application menu: %1").arg(win.appName)
                             active: win.isOpen("app")
@@ -376,6 +382,7 @@ Scope {
                                 id: bridgeButton
                                 tint: win.barTint
                                 shadowed: !win.showBackground
+                            shadowColor: win.barShadow
 
                                 required property var modelData
 
@@ -399,6 +406,7 @@ Scope {
                             id: fileButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             objectName: "menubar-file"
                             visible: win.hasFileMenu
                             accessibleName: qsTr("File menu")
@@ -419,6 +427,7 @@ Scope {
                             id: windowButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             objectName: "menubar-window"
                             visible: win.hasApp
                             accessibleName: qsTr("Window menu")
@@ -449,6 +458,7 @@ Scope {
                             id: dndButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             padding: Tokens.menubarStatusItemPadding
                             visible: Notifications.dnd
                             accessibleName: qsTr("Do Not Disturb is on")
@@ -465,6 +475,7 @@ Scope {
                             id: networkButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             padding: Tokens.menubarStatusItemPadding
                             accessibleName: qsTr("Network: %1").arg(Connectivity.description)
                             active: win.isOpen("network")
@@ -481,6 +492,7 @@ Scope {
                             id: volumeButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             padding: Tokens.menubarStatusItemPadding
                             accessibleName: qsTr("Volume: %1%").arg(Math.round(Audio.volume * 100))
                             active: win.isOpen("volume")
@@ -498,6 +510,7 @@ Scope {
                             id: batteryButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             padding: Tokens.menubarStatusItemPadding
                             visible: win.hasBattery
                             accessibleName: qsTr("Battery %1%").arg(win.battery ? Math.round(win.battery.percentage * 100) : 0)
@@ -524,6 +537,7 @@ Scope {
                             id: ccButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             padding: Tokens.menubarStatusItemPadding
                             accessibleName: qsTr("Quick Settings")
                             active: win.isOpen("controlcenter")
@@ -540,6 +554,7 @@ Scope {
                             id: clockButton
                             tint: win.barTint
                             shadowed: !win.showBackground
+                            shadowColor: win.barShadow
                             accessibleName: qsTr("Date and time: %1. Open Notifications").arg(clockText.text)
                             active: Notifications.centerOpen && Notifications.centerScreen === win.screen.name
                             onActivated: Notifications.toggleCenter(win.screen.name)

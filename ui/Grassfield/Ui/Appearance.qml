@@ -19,6 +19,8 @@ QtObject {
     readonly property var baseColors: dark ? Tokens.colorDark : Tokens.colorLight
     // The dark palette for surfaces that are always dark (Apps), hooked like `colors`.
     readonly property var darkColors: devGlyphMode !== "" ? glyphColors(Tokens.colorDark) : Tokens.colorDark
+    // The light palette for surfaces that are always light (the menu bar's dark foreground over a light wallpaper), hooked like `colors`.
+    readonly property var lightColors: devGlyphMode !== "" ? glyphColors(Tokens.colorLight) : Tokens.colorLight
 
     // Dev-only hook for tests/visual (contrast glyph mask; set by the shell's `visual glyphs <mode>` IPC, which is
     // refused outside GRASSFIELD_DEV; always "" in production). Every text and icon colour (text, textSecondary,
@@ -36,6 +38,7 @@ QtObject {
         c.textSecondary = m;
         c.accentText = m;
         c.fieldText = m;
+        c.barText = m;
         return c;
     }
 
