@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.platform
 import qs.services
 import "KeyboardFocus.js" as Focus
 
@@ -16,6 +17,9 @@ import "KeyboardFocus.js" as Focus
 // Keyboard focus (ADR-0012, KeyboardFocus.js): the desktop is click-to-focus. Keyboard interactivity is None
 // until a press on the desktop, then OnDemand; it goes back to None when the pointer leaves the surface or the
 // keyboard is not granted. Hyprland decides who holds the keyboard; nothing here guesses.
+// With the compositor capability "desktop-focus" the plugin gives the keyboard to the clicked window or desktop: the
+// kicker and the drop on pointer leave go away and the desktop keeps the keyboard until another click (macOS Finder);
+// the file keys are enabled. Live: the capability can be withdrawn (plugin unload) at any time.
 Variants {
     model: Quickshell.screens.filter(s => s.name === (Quickshell.env("GRASSFIELD_DESKTOP_SCREEN") || Quickshell.screens[0].name))
 
@@ -27,14 +31,16 @@ Variants {
         required property ShellScreen modelData
 
         property var kb: Focus.initial()
+        // The compositor enforces click-to-focus (capability desktop-focus).
+        readonly property bool policy: Capabilities.has("desktop-focus")
         // The transient kicker surface is mapped (two phases: mapped, unmapped).
         property bool kickOn: false
         // The surface has the keyboard (wl_keyboard enter): the window is active. activeFocus is not enough, forceActiveFocus sets it on an inactive window.
         readonly property bool hasKeys: view.Window.active
 
         function feed(event: var): void {
-            win.kb = Focus.next(win.kb, event);
-            if (Focus.rearmAfter(event))
+            win.kb = Focus.next(win.kb, event, win.policy);
+            if (Focus.rearmAfter(event, win.policy))
                 rearmTimer.restart();
         }
 
@@ -52,25 +58,48 @@ Variants {
         WlrLayershell.keyboardFocus: Focus.interactivity(win.kb) === "ondemand" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-desktop-icons"
 
-        onHasKeysChanged: win.feed({
-            type: "keys",
-            hasKeys: win.hasKeys
-        })
+        onHasKeysChanged: {
+            win.feed({
+                type: "keys",
+                hasKeys: win.hasKeys
+            });
+        }
         onVisibleChanged: win.kb = Focus.initial()
+
+        // The menu bar shows the desktop's name while the desktop (or its context menu) holds the keyboard.
+        readonly property bool holding: win.visible && (win.hasKeys || win.kb.mode === "menu")
+        onHoldingChanged: DesktopState.holdsKeyboard = win.holding
+
+        // The policy was withdrawn (plugin unloaded) while the desktop holds the keyboard: the pointer-leave drop
+        // is back, and the pointer may already be elsewhere.
+        onPolicyChanged: {
+            if (!win.policy && !hover.hovered)
+                win.feed({
+                    type: "pointerLeft"
+                });
+        }
 
         // Hyprland grants the keyboard to an OnDemand surface only at the next pointer motion (measured: ADR-0012,
         // spike). Mapping and unmapping a transparent 1x1 layer surface makes it re-run its pointer focus logic, so
         // the keyboard arrives without any motion. If it is not granted (the pointer is over a window), give up.
-        onKbChanged: {
-            if (Focus.kicking(win.kb)) {
+        readonly property bool kicking: Focus.kicking(win.kb, win.policy)
+        onKickingChanged: {
+            if (win.kicking) {
                 if (!kickTimer.running && !win.kickOn)
                     kickTimer.restart();
-                armTimer.restart();
             } else {
                 kickTimer.stop();
-                armTimer.stop();
                 win.kickOn = false;
             }
+        }
+
+        // Armed (a press asked for the keyboard): give up when it is not granted in time.
+        readonly property bool armed: win.kb.mode === "armed"
+        onArmedChanged: {
+            if (win.armed)
+                armTimer.restart();
+            else
+                armTimer.stop();
         }
 
         Timer {
@@ -127,6 +156,7 @@ Variants {
             screen: win.modelData
             hostWindow: win
             keysActive: Focus.keysActive(win.kb)
+            fileKeyActions: Focus.fileKeyActions(win.policy)
             onFocusEvent: event => win.feed(event)
         }
 

@@ -180,6 +180,74 @@ TestCase {
         compare(run([{type: "menuOpened"}, press, {type: "armTimeout"}]).mode, "menu");
     }
 
+    // ---- compositor policy (capability desktop-focus) -----------------------------------------------
+    // The plugin gives the keyboard to the clicked window or desktop; the desktop keeps it until another click.
+
+    function runP(events, from) {
+        let s = from || Focus.initial();
+        for (const e of events)
+            s = Focus.next(s, e, true);
+        return s;
+    }
+
+    function test_policyKeepsTheKeyboardWhenThePointerLeaves() {
+        const s = runP([press, granted, leave]);
+        compare(s.mode, "held");
+        verify(Focus.keysActive(s));
+    }
+
+    function test_policyKeepsTheKeyboardAfterLeavingToTheDockAndTheMenuBar() {
+        compare(runP([press, granted, leave, leave, {type: "hover"}]).mode, "held");
+    }
+
+    function test_policyStillReleasesWhenTheCompositorMovesTheKeyboardToAWindow() {
+        const s = runP([press, granted, lost]);
+        compare(s.mode, "idle");
+        compare(Focus.interactivity(s), "none");
+    }
+
+    function test_policyNeedsNoKicker() {
+        const s = runP([press]);
+        compare(s.mode, "armed");
+        verify(!Focus.kicking(s, true));
+        verify(Focus.kicking(s, false));
+        verify(Focus.kicking(s), "no policy argument means no policy");
+    }
+
+    function test_policyStillGivesUpWhenTheKeyboardIsNotGranted() {
+        compare(runP([press, {type: "armTimeout"}]).mode, "idle");
+    }
+
+    function test_policyOutsideDismissalKeepsTheDesktopAndNeverRearms() {
+        const ev = {type: "menuClosed", how: "outside"};
+        const s = runP([press, granted, {type: "menuOpened"}, ev]);
+        compare(s.mode, "held");
+        verify(!Focus.rearmAfter(ev, true));
+        verify(Focus.rearmAfter(ev, false));
+    }
+
+    function test_fileKeysAreEnabledOnlyWithThePolicy() {
+        verify(Focus.fileKeyActions(true));
+        verify(!Focus.fileKeyActions(false));
+        verify(!Focus.fileKeyActions(undefined));
+        verify(!Focus.fileKeyActions());
+    }
+
+    function test_withdrawingThePolicyRestoresTheSafeBehaviourLive() {
+        // Held under the policy, then the plugin unloads: the next leave drops to None again, no kicker on a new press.
+        let s = runP([press, granted, leave]);
+        compare(s.mode, "held");
+        s = Focus.next(s, leave, false);
+        compare(s.mode, "idle");
+        verify(Focus.kicking(Focus.next(s, press, false), false));
+    }
+
+    function test_policyChangesNothingForTheMenuModes() {
+        const s = runP([press, granted, {type: "menuOpened"}, leave]);
+        compare(s.mode, "menu");
+        verify(!Focus.keysActive(s));
+    }
+
     // ---- no stale state ------------------------------------------------------------------------------
 
     function test_everyModeIsReachableAndConsistent() {
