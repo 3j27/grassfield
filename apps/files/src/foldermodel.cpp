@@ -299,6 +299,16 @@ FolderModel::FolderModel(QObject *parent)
         if (!tags.isEmpty())
             emit tagsSeen(tags);
     });
+
+    // The tag search of a search location; the runner drops every batch of a superseded search.
+    m_search = new SearchRunner(this);
+    connect(m_search, &SearchRunner::found, this, &FolderModel::addResults);
+    connect(m_search, &SearchRunner::done, this, [this](bool limited, int visited) {
+        qCDebug(lcFiles) << "tag search" << m_url.toDisplayString() << rowCount() << "matches," << visited << "entries visited, limited" << limited << "in" << m_listTimer.elapsed() << "ms";
+        m_searchLimited = limited;
+        m_loading = false;
+        emit loadingChanged();
+    });
 }
 
 FolderModel::~FolderModel()
@@ -1000,33 +1010,15 @@ void FolderModel::startSearch()
         return;
     }
     watchChanges();
-    auto *search = new TagSearch(folder.toLocalFile(), tag, showHidden());
-    m_search = search;
-    connect(search, &TagSearch::found, this, &FolderModel::addResults);
-    connect(search, &TagSearch::done, this, [this](bool limited, int visited) {
-        qCDebug(lcFiles) << "tag search" << m_url.toDisplayString() << rowCount() << "matches," << visited << "entries visited, limited" << limited << "in" << m_listTimer.elapsed() << "ms";
-        m_searchLimited = limited;
-        m_loading = false;
-        emit loadingChanged();
-    });
     m_listTimer.start();
     m_loading = true;
     emit loadingChanged();
-    search->start(QThread::LowPriority);
+    m_search->start(folder.toLocalFile(), tag, showHidden());
 }
 
 void FolderModel::stopSearch()
 {
-    TagSearch *search = m_search.data();
-    m_search.clear();
-    if (!search)
-        return;
-    disconnect(search, nullptr, this, nullptr);
-    search->cancel();
-    // The walk checks the flag at every entry, so it ends at once; one stuck in a slow system call is left to finish
-    // and delete itself.
-    if (search->wait(200))
-        delete search;
+    m_search->stop();
 }
 
 void FolderModel::watchChanges()

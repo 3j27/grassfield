@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QByteArray>
+#include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 #include <QThread>
@@ -22,14 +24,15 @@ public:
     static constexpr int kMaxResults = 2000;
     static constexpr int kMaxDepth = 32;
 
-    TagSearch(const QString &root, const QString &tag, bool showHidden);
+    TagSearch(quint64 generation, const QString &root, const QString &tag, bool showHidden);
 
     void cancel() { m_cancel.store(true); }
     bool cancelled() const { return m_cancel.load(); }
 
 signals:
-    void found(const QStringList &paths);
-    void done(bool limited, int visited);
+    // Every signal carries the generation the search was started with (SearchRunner drops superseded ones).
+    void found(quint64 generation, const QStringList &paths);
+    void done(quint64 generation, bool limited, int visited);
 
 protected:
     void run() override;
@@ -37,8 +40,37 @@ protected:
 private:
     bool tagged(const QByteArray &path) const;
 
+    const quint64 m_generation;
     const QByteArray m_root;
     const QString m_tag;
     const bool m_showHidden;
     std::atomic_bool m_cancel{false};
+};
+
+// One tag search at a time for a view. start() supersedes the running search (cancelling it) and stop() drops it; once
+// either has returned, nothing of the old search reaches found() or done(): disconnecting a signal does not cancel
+// calls already queued from the worker thread, so every batch carries a generation number and only the current
+// generation passes. done() comes once per start() that was not superseded.
+class SearchRunner : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit SearchRunner(QObject *parent = nullptr);
+    ~SearchRunner() override;
+
+    void start(const QString &root, const QString &tag, bool showHidden);
+    void stop();
+    bool running() const { return !m_search.isNull(); }
+
+signals:
+    void found(const QStringList &paths);
+    void done(bool limited, int visited);
+
+private:
+    void onFound(quint64 generation, const QStringList &paths);
+    void onDone(quint64 generation, bool limited, int visited);
+
+    QPointer<TagSearch> m_search;
+    quint64 m_generation = 0;
 };

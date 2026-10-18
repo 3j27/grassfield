@@ -16,9 +16,13 @@ kfdefs=(-DKF_DISABLE_DEPRECATED_BEFORE_AND_AT=0x061D00)
 
 if [[ ${1:-} == "--tests" ]]; then
   # shellcheck disable=SC2046
+  moc=/usr/lib/qt6/moc
+  [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
+  "$moc" "$here/src/tagsearch.h" -o "$out/moc_tests_tagsearch.cpp"
   g++ "${cxxflags[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core) \
     "$root/tests/unit/files/tst_filelogic.cpp" "$root/tests/unit/files/tst_previewqueue.cpp" "$root/tests/unit/files/tst_tags.cpp" \
-    "$here/src/filelogic.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" \
+    "$root/tests/unit/files/tst_tagsearch.cpp" \
+    "$here/src/filelogic.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$out/moc_tests_tagsearch.cpp" \
     $(pkg-config --libs Qt6Core) -lgtest -lgtest_main -pthread \
     -o "$out/files-unit-tests"
   echo "built $out/files-unit-tests"
