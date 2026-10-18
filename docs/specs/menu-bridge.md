@@ -80,11 +80,13 @@ top-level menus (Left/Right).
     After a reply the bridge calls `malloc_trim(0)` (RssAnon returns to about idle, measured).
   - **Identity** (what a refusal is keyed by; a pid is NEVER a key). After MB5's pid check the bridge reads the peer's
     systemd app scope from `/proc/<pid>/cgroup` (`app-<launcher>-<appid>-<instance>.scope` where the instance is
-    `-<digits>` (flatpak, gnome, kde, ...) or `-<8 hex>` (uwsm: `app-Hyprland-gtk\x2dlaunch-2616d5ca.scope`);
+    `-<digits>` (flatpak, gnome, ...), `-<8 hex>` (uwsm: `app-Hyprland-gtk\x2dlaunch-2616d5ca.scope`) or `-<32 hex>`
+    (KIO launches, e.g. from Grassfield Files: `app-<name>-<QUuid Id128>.scope`);
     `app-…@<instance>.service`: the instance is stripped; the key keeps systemd's `\x2d` escape, only logs show `-`), the resolved
     `/proc/<pid>/exe` (` (deleted)` stripped) and, for interpreters (python*, perl, ruby, node, bash/sh/dash/zsh, java),
-    the script or module from `/proc/<pid>/cmdline` (known interpreter options and their values are skipped; an option
-    the bridge does not know might take a value, so the peer goes to `unknown` instead of a guessed script):
+    the script from `/proc/<pid>/cmdline` when it is the first argument (only `--` and java's `-jar` may precede it); ANY
+    interpreter option before the script (`-c`/`-e` inline code, `-m`, options with separate or attached values) puts the
+    peer in `unknown`, because an option's value taken for the script would hand out another application's identity:
     `id:scope=<scope>|exe=<path>|script=<script>`. Without an app
     scope the scope part is left out. An exe that cannot be read (non-dumpable process, another user's) puts the peer in
     ONE shared bucket `unknown`, which is refused only for 2 min per strike and never doubles, never permanently, so

@@ -626,6 +626,10 @@ TEST(Identity, AppScopeOfCgroupSamples) {
     // uwsm with a numeric instance, and the other launchers' numeric suffixes
     EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-Hyprland-firefox-12345678.scope"))), QStringLiteral("app-Hyprland-firefox"));
     EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-kde-org.kde.dolphin-8123.scope"))), QStringLiteral("app-kde-org.kde.dolphin"));
+    // KIO (KF6 6.29, ApplicationLauncherJob): app-<name>-<QUuid::toString(Id128)>.scope, 32 hex digits.
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-org.kde.dolphin-0f8e2b7c4d1a4e5f9a6b3c2d1e0f9a8b.scope"))), QStringLiteral("app-org.kde.dolphin"));
+    EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-org.kde.dolphin-5e6f7a8b9c0d4e1f8a2b3c4d5e6f7a8b.scope"))),
+              appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-org.kde.dolphin-0f8e2b7c4d1a4e5f9a6b3c2d1e0f9a8b.scope")))) << "a KIO relaunch is the same identity";
     EXPECT_EQ(appScopeOf(cgroupOf(QStringLiteral("/app.slice/app-gnome-org.gnome.Nautilus-3456.scope"))), QStringLiteral("app-gnome-org.gnome.Nautilus"));
     EXPECT_EQ(displayIdentity(QStringLiteral("id:scope=app-Hyprland-gtk\\x2dlaunch|exe=/usr/bin/x")), QStringLiteral("id:scope=app-Hyprland-gtk-launch|exe=/usr/bin/x"));
     // a unit name carrying a separator or control character is not trusted
@@ -639,23 +643,21 @@ TEST(Identity, ScriptOfInterpreters) {
             out += QByteArray(a) + '\0';
         return out;
     };
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3.14"), cmd({"python3", "-I", "/home/u/app.py", "--x"})), QStringLiteral("/home/u/app.py"));
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-m", "http.server"})), QStringLiteral("-m http.server"));
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3.14"), cmd({"python3", "/home/u/app.py", "--x"})), QStringLiteral("/home/u/app.py"));
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/bash"), cmd({"bash", "/opt/run.sh"})), QStringLiteral("/opt/run.sh"));
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/node"), cmd({"node", "--inspect", "server.js"})), QStringLiteral("server.js"));
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/lib/jvm/default/bin/java"), cmd({"java", "-jar", "app.jar"})), QStringLiteral("app.jar"));
-    // an option's value is never the script
-    EXPECT_NE(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-W", "/usr/bin/victim-app", "evil.py"})), QStringLiteral("/usr/bin/victim-app"));
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-W", "/usr/bin/victim-app", "evil.py"})), QStringLiteral("evil.py"));
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-X", "dev", "a.py"})), QStringLiteral("a.py"));
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-X", "dev", "b.py"})), QStringLiteral("b.py"));
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/node"), cmd({"node", "-r", "preload.js", "server.js"})), QStringLiteral("server.js"));
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "--", "x.py"})), QStringLiteral("x.py"));
-    // an option we do not know might take a value: the shared bucket, not a guess
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "--made-up", "/usr/bin/victim-app", "evil.py"})), kScriptUnknown);
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/perl"), cmd({"perl", "-Z", "a.pl"})), kScriptUnknown);
+    // Any interpreter option before the script goes to the shared bucket: an option's value is never taken for the
+    // script (review cases: python -W/-X, node --trace-event-categories, perl -C / ruby -F attached values, -m, -c/-e).
+    for (const auto& c : {cmd({"python3", "-W", "/usr/bin/victim-app", "evil.py"}), cmd({"python3", "-X", "dev", "a.py"}),
+                          cmd({"python3", "-I", "/home/u/app.py"}), cmd({"python3", "-m", "http.server"}), cmd({"python3", "-c", "print(1)"})})
+        EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), c), kScriptUnknown);
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/node"), cmd({"node", "--trace-event-categories", "/opt/victim/app.js", "hostile.js"})), kScriptUnknown);
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/node"), cmd({"node", "--inspect", "server.js"})), kScriptUnknown);
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/perl"), cmd({"perl", "-C", "x.pl", "arg1"})), kScriptUnknown);
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/ruby"), cmd({"ruby", "-F", "x.rb", "arg1"})), kScriptUnknown);
+    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/perl"), cmd({"perl", "-m", "strict", "a.pl"})), kScriptUnknown);
     EXPECT_EQ(identityFrom({QString(), QStringLiteral("/usr/bin/python3"), cmd({"python3", "--made-up", "a", "b.py"})}), kUnknownIdentity);
-    EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "-c", "print(1)"})), QString()) << "inline code is not a script identity";
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), QByteArray()), QString()) << "unreadable cmdline";
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/foot"), cmd({"foot", "something"})), QString()) << "not an interpreter";
     EXPECT_EQ(scriptOf(QStringLiteral("/usr/bin/python3"), cmd({"python3", "a|b\x01.py"})), QStringLiteral("a?b?.py"));

@@ -149,7 +149,7 @@ Details: `docs/specs/menu-bridge.md` MB14 and "Known limitations".
 - Every crash counts toward the degradation budget, blamed or not: 5 within any sliding 60 minutes (crash times are
   kept in the state file, header `state 3`). Attribution only adds a per-identity refusal on top, so rotating copies
   of a binary can no longer crash-loop the bridge without ending degraded.
-- The scope instance is stripped for the real launcher formats (`-<digits>` and uwsm's `-<8 hex>`; the key keeps the
+- The scope instance is stripped for the real launcher formats (`-<digits>`, uwsm's `-<8 hex>`, KIO's `-<32 hex>`; the key keeps the
   `\x2d` escape, logs show `-`). Interpreter options before the script are skipped when known; an unknown option puts
   the peer in the shared `unknown` bucket instead of taking its value for the script.
 - Idle entries are never pushed out by refused ones, but the refused set is capped at 64 (`capRefused` drops the one
@@ -161,3 +161,6 @@ The change is defense in depth against same-uid apps; failure is bounded (T0 men
 - An honest slow app can be wrongly blamed when an attacker's huge message lands during its call.
 - Degraded mode does not recover until the session restarts.
 - Flatpak apps with registrar access can send big messages (not verified).
+- 2026-10-18 (integrator, closing the attribution work): any interpreter option before the script sends the peer to the
+  shared `unknown` bucket (no per-interpreter option table: values were mistaken for scripts in review); KIO's 32-hex
+  scope instance is stripped. Further attribution hardening is out of scope (residual risks accepted above).

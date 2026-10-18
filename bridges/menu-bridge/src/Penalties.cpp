@@ -99,10 +99,10 @@ namespace gf::menubridge {
                 continue;
             if (unit.endsWith(QLatin1String(".scope"))) {
                 unit.chop(6);
-                // app-<launcher>-<appid>-<instance>: the instance is the trailing -<digits> (flatpak, gnome, kde...)
-                // or -<8 hex digits> (uwsm: app-Hyprland-gtk\x2dlaunch-2616d5ca). Left in, every relaunch would be a
-                // new identity and escape its refusal.
-                static const QRegularExpression instance(QStringLiteral("-(?:[0-9]+|[0-9a-f]{8})$"));
+                // app-<launcher>-<appid>-<instance>: the instance is the trailing -<digits> (flatpak, gnome...),
+                // -<8 hex digits> (uwsm: app-Hyprland-gtk\x2dlaunch-2616d5ca) or -<32 hex digits> (KIO:
+                // app-<name>-<QUuid Id128>.scope). Left in, every relaunch would be a new identity and escape its refusal.
+                static const QRegularExpression instance(QStringLiteral("-(?:[0-9]+|[0-9a-f]{8}|[0-9a-f]{32})$"));
                 unit.remove(instance);
             } else if (unit.endsWith(QLatin1String(".service"))) {
                 unit.chop(8);
@@ -120,46 +120,6 @@ namespace gf::menubridge {
         return {};
     }
 
-    namespace {
-        enum class Opt { Plain, WithValue, Unknown };
-
-        // How an interpreter option before the script is consumed. An unknown option might take a value, and taking
-        // that value for the script would hand the application someone else's identity: it is Unknown, not guessed.
-        Opt classifyOption(const QString& base, const QByteArray& a) {
-            const auto matches = [&a](const char* re) { return QRegularExpression(QLatin1String(re)).match(QString::fromLatin1(a)).hasMatch(); };
-            const auto in      = [&a](std::initializer_list<const char*> l) { return std::any_of(l.begin(), l.end(), [&a](const char* v) { return a == v; }); };
-            if (base.startsWith(QLatin1String("python"))) {
-                if (in({"-W", "-X", "-Q"}))
-                    return Opt::WithValue;
-                return matches("^-([BEIOPRSVbdiqsuvx]+|[WXQ].+)$") ? Opt::Plain : Opt::Unknown;
-            }
-            if (base.startsWith(QLatin1String("node"))) {
-                if (in({"-r", "--require", "--import", "--loader", "--experimental-loader", "--conditions", "-C", "--input-type", "--title"}))
-                    return Opt::WithValue;
-                return matches("^--([a-z0-9-]+=.*|inspect(-brk)?|no-[a-z-]+|trace-[a-z-]+|enable-source-maps|expose-gc|use-strict)$") ? Opt::Plain : Opt::Unknown;
-            }
-            if (base.startsWith(QLatin1String("perl"))) {
-                if (in({"-I", "-M", "-m", "-C"}))
-                    return Opt::WithValue;
-                return matches("^-([wWtTSsuUnpal]+|[IMmC].+)$") ? Opt::Plain : Opt::Unknown;
-            }
-            if (base.startsWith(QLatin1String("ruby"))) {
-                if (in({"-I", "-r", "-C", "-F"}))
-                    return Opt::WithValue;
-                return matches("^-([wvdscnpalSU]+|[IrCFK].+|W.*)$") ? Opt::Plain : Opt::Unknown;
-            }
-            if (base == QLatin1String("java")) {
-                if (in({"-cp", "-classpath", "--class-path", "-p", "--module-path", "--add-modules"}))
-                    return Opt::WithValue;
-                return matches("^-(D|X|ea|da|agentlib|agentpath|javaagent|verbose|server|client).*$") ? Opt::Plain : Opt::Unknown;
-            }
-            // shells
-            if (in({"-o", "-O", "--rcfile", "--init-file"}))
-                return Opt::WithValue;
-            return matches("^(-[xuliervBfhmnpt]+|--(norc|noprofile|login|posix|restricted))$") ? Opt::Plain : Opt::Unknown;
-        }
-    } // namespace
-
     QString scriptOf(const QString& exe, const QByteArray& cmdline) {
         const QString                  base = QFileInfo(exe).fileName().toLower();
         static const QRegularExpression interpreters(QStringLiteral("^(python[0-9.]*|perl[0-9.]*|ruby[0-9.]*|node(js)?|bash|sh|dash|zsh|java)$"));
@@ -172,22 +132,15 @@ namespace gf::menubridge {
             if (a.isEmpty())
                 continue;
             if (!endOpts) {
-                if (a == "-c" || a == "-e" || a == "-E")
-                    return {}; // inline code: no script identity (the code itself would be a free-form key)
-                if (a == "-m" && i + 1 < args.size())
-                    return QStringLiteral("-m ") + QString::fromUtf8(args.at(i + 1).left(128));
                 if (a == "--" || (a == "-jar" && base == QLatin1String("java"))) {
                     endOpts = true; // what follows is the script (or the jar)
                     continue;
                 }
-                if (a.startsWith('-')) {
-                    const Opt kind = classifyOption(base, a);
-                    if (kind == Opt::Unknown)
-                        return kScriptUnknown; // might take a value: the safe bucket, not a guessed script
-                    if (kind == Opt::WithValue)
-                        ++i;
-                    continue;
-                }
+                // Any interpreter option before the script (-c/-e inline code, -m, -W value, --trace-* value, attached or
+                // separate values...) goes to the shared bucket: telling an option's value from the script per
+                // interpreter version proved error-prone (a value taken for the script hands out another app's identity).
+                if (a.startsWith('-'))
+                    return kScriptUnknown;
             }
             QString script = QString::fromUtf8(a.left(256));
             for (QChar& ch : script) {
