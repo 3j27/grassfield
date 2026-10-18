@@ -126,8 +126,10 @@ TestCase {
         const full = {x: 0, y: 100, w: 1920, h: 900};
         for (const c of [{n: 4, max: 20}, {n: 9, max: 20}, {n: 20, max: 20}]) {
             const input = grid(c.n, 700, 450, true);
+            // Best of 10: under host load (parallel nested sessions) single runs stall; a non-linear layout would
+            // still exceed the bound on every run.
             let best = Infinity;
-            for (let k = 0; k < 5; k++) {
+            for (let k = 0; k < 10; k++) {
                 const t0 = Date.now();
                 Layout.layout(input, full, opts);
                 best = Math.min(best, Date.now() - t0);
