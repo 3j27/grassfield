@@ -122,25 +122,38 @@ TestCase {
     // ---- keyboard plan of the chromes ----
 
     function test_keyboardPlanEveryChromeExclusiveWhileOpen() {
-        for (const key of ["WAYLAND-1", "GF-REF", "", "gone"]) {
-            const plan = V2.keyboardPlan(["WAYLAND-1", "GF-REF"], key, "open");
-            compare(plan["GF-REF"], "exclusive");
-            compare(plan["WAYLAND-1"], "exclusive");
-            compare(Object.keys(plan).length, 2);
-        }
+        const plan = V2.keyboardPlan(["WAYLAND-1", "GF-REF"], "open");
+        compare(plan["GF-REF"], "exclusive");
+        compare(plan["WAYLAND-1"], "exclusive");
+        compare(Object.keys(plan).length, 2);
     }
 
     function test_keyboardPlanEveryChromeNoneWhenReleasingAndClosed() {
         for (const phase of ["releasing", "closing", "closed"]) {
-            const plan = V2.keyboardPlan(["a", "b", "c"], "b", phase);
+            const plan = V2.keyboardPlan(["a", "b", "c"], phase);
             for (const k of Object.keys(plan))
                 compare(plan[k], "none", phase + " " + k);
         }
     }
 
     function test_keyboardPlanSingleOutputAndNoOutput() {
-        compare(V2.keyboardPlan(["a"], "a", "open").a, "exclusive");
-        compare(Object.keys(V2.keyboardPlan([], "a", "open")).length, 0);
-        compare(Object.keys(V2.keyboardPlan(null, "a", "open")).length, 0);
+        compare(V2.keyboardPlan(["a"], "open").a, "exclusive");
+        compare(Object.keys(V2.keyboardPlan([], "open")).length, 0);
+        compare(Object.keys(V2.keyboardPlan(null, "open")).length, 0);
+    }
+
+    // The controller holds one stage value: open -> releasing -> closed. No stage after the release started may give an
+    // exclusive plan (it would make every chrome take the keyboard back just before it goes away).
+    function test_stageSequenceNeverExclusiveAfterReleaseStarts() {
+        const seq = ["closed", "open", "releasing", "closed"];
+        const exclusive = seq.map(st => V2.keyboardPlan(["a", "b"], st).a === "exclusive");
+        compare(exclusive, [false, true, false, false]);
+    }
+
+    function test_keysEnabledOnlyWhileOpen() {
+        compare(V2.keysEnabled("open"), true);
+        compare(V2.keysEnabled("releasing"), false);
+        compare(V2.keysEnabled("closed"), false);
+        compare(V2.keysEnabled(undefined), false);
     }
 }
