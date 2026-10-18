@@ -18,7 +18,9 @@ for app in files preview; do
 done
 mkdir -p "$tmp/dir with space" "$tmp/d"
 printf 'hello\n' >"$tmp/note.txt"
-head -c 64 /dev/urandom >"$tmp/blob.bin"
+# Fixed bytes that `file` reports as application/octet-stream (random bytes were detected as audio/mpeg, text/plain or
+# x-dosexec in ~3 % of runs, which made the refusal checks flaky).
+printf '\x00\xff\x13\x37\x00\xfe\x80\x81%.0s' {1..8} >"$tmp/blob.bin"
 log=$tmp/refusals.log
 export GRASSFIELD_FILES_CMD=$tmp/fake-files GRASSFIELD_PREVIEW_CMD=$tmp/fake-preview GRASSFIELD_OPEN_LOG=$log
 wait_for() { for _ in $(seq 1 30); do [[ -s $1 ]] && return 0; sleep 0.1; done; return 1; }
@@ -29,14 +31,15 @@ wait_for "$tmp/files.calls"; [[ $(<"$tmp/files.calls") == "$tmp/d" ]]; check "fo
 "$policy" "file://$tmp/note.txt" 2>/dev/null
 wait_for "$tmp/preview.calls"; [[ $(<"$tmp/preview.calls") == "$tmp/note.txt" ]]; check "text file URL opens in Preview" $?
 
-: >"$log"
-"$policy" "$tmp/blob.bin" 2>/dev/null && rc=0 || rc=$?
-[[ $rc == 1 && $(wc -l <"$log") == 1 && $(<"$log") == "open refused in dev: application/octet-stream" ]]
+# A log of its own: a detached open from an earlier step may still append to $log under load.
+refuse_log=$tmp/refuse.log
+GRASSFIELD_OPEN_LOG=$refuse_log "$policy" "$tmp/blob.bin" 2>/dev/null && rc=0 || rc=$?
+[[ $rc == 1 && $(wc -l <"$refuse_log") == 1 && $(<"$refuse_log") == "open refused in dev: application/octet-stream" ]]
 check "unsupported file refused with one line" $?
 
-: >"$log"
-"$policy" "trash:///" 2>/dev/null && rc=0 || rc=$?
-[[ $rc == 1 && $(<"$log") == "open refused in dev: url (trash)" ]]; check "trash:/// refused" $?
+trash_log=$tmp/trash.log
+GRASSFIELD_OPEN_LOG=$trash_log "$policy" "trash:///" 2>/dev/null && rc=0 || rc=$?
+[[ $rc == 1 && $(<"$trash_log") == "open refused in dev: url (trash)" ]]; check "trash:/// refused" $?
 
 # The shim: gio open follows the policy, gio launch is refused, other subcommands reach the real gio.
 export GRASSFIELD_OPEN_POLICY=$policy

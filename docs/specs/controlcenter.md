@@ -1,6 +1,6 @@
 # Quick Settings spec · shell-engineer · M2
 
-UI naming (renamed 2026-10-18, owner decision): internally `controlcenter` / `ControlCenter.qml`; the user sees "Quick Settings" (fr « Réglages rapides »). The Focus tile is "Do Not Disturb" (fr « Ne pas déranger »), subtitle On/Off.
+UI naming (renamed 2026-10-18, owner decision): internally `controlcenter` / `ControlCenter.qml`; the user sees "Quick Settings" (fr « Réglages rapides »). The Focus tile is "Do Not Disturb" (fr « Ne pas déranger »), subtitle On/Off. A long module title wraps to a second line inside its tile (two lines at most, then an ellipsis; no font shrink), as macOS does; the accessible name stays "title, state".
 
 ## macOS reference behavior (described in words)
 - Opens from the Quick Settings icon (two toggles) at the right of the menu bar as a ~320 pt wide material
