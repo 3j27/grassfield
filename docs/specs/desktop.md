@@ -101,7 +101,9 @@ focused while the desktop holds the keyboard; it grants an OnDemand surface the 
 macOS click-to-focus model instead. Contract (exact):
 
 1. **Detection.** The feature is present when the latest `capabilities` event lists `desktop-focus`
-   (`Capabilities.has("desktop-focus")`). The plugin posts a capabilities event with an empty list when it unloads
+   (`Capabilities.has("desktop-focus")`). Policy v2 (plugin 0.6.0, 2026-10-18) is advertised as `desktop-focus-v2`,
+   always together with `desktop-focus`: the file-changing desktop keys need `desktop-focus-v2` (shell main 23caeab;
+   the first policy misread a click without motion after the menu closed). The plugin posts a capabilities event with an empty list when it unloads
    (`{"v":"gfc/1","type":"capabilities","features":[]}`): every feature is gone at that moment, the shell must react to
    any capabilities event, not only to the first one.
 2. **Surface identity.** The plugin matches the layer namespace **`grassfield-desktop-icons`** exactly, on any output
@@ -119,9 +121,14 @@ macOS click-to-focus model instead. Contract (exact):
 5. **What the plugin guarantees** (pointer button presses only; hover never moves the keyboard; button events are
    observed, never cancelled):
    - a press (any button) on a normal window (its surface, a subsurface or its Grassfield titlebar) while the desktop
-     surface (any output) holds the keyboard gives that window the keyboard, also when it is Hyprland's focused window;
+     surface (any output) holds the keyboard gives that window the keyboard, also when it is Hyprland's focused window,
+     through Hyprland's own focus rules only (v2: a window Hyprland refuses, e.g. a `no_focus` rule or a modal child, does
+     not get it: the keyboard stays where it is);
+   - v2: the press target is what lies under the cursor when Hyprland's pointer focus is missing or stale (a click
+     without pointer motion right after the menu closed, while the pointer rests on a window);
    - a left press on the desktop surface gives it the keyboard at once if it is `on_demand`, else on its first
-     `on_demand` commit within 1000 ms after the press (no pointer motion needed);
+     `on_demand` commit within 1000 ms after the press (no pointer motion needed); v2: that pending grant is dropped when
+     anything else moves the keyboard first (a key binding or dispatch, a new window, a workspace switch);
    - presses on other Grassfield layers (Dock, menu bar, widgets, any `grassfield-*` namespace), on popups (the desktop's
      menu included: the grab decides) and anything while a keyboard grab, an Exclusive layer or the session lock is active
      change nothing.
@@ -137,6 +144,10 @@ menu grab keeps keys, Esc returns them, an outside click is swallowed and the ne
 (5) unload while the desktop is focused: Hyprland alive, empty capabilities posted, keys still reach the desktop, a click
 on another foot works, reload restores the policy. `desktop_focus.sh baseline` (same presses, plugin unloaded) reproduces
 the review defects: (1) and (4) keys reach the desktop, (2) 0/5 (keys reach the previous window).
+Policy v2 (plugin 0.6.0, 2026-10-18): 26/26 PASS, adding (8) menu open, pointer onto the last active foot, Esc, click
+without motion: the foot gets the keys, and (7) a slow `on_demand` commit (700 ms) loses to a focus dispatch or a new
+window made in the meantime, and still grants the desktop without interference. The previous build (e066a19) fails (8)
+(keys to the desktop) and (7b) (the late commit took the keyboard from the new window).
 
 Limits: touch and tablet taps are not covered (pointer buttons only); a press on a window's border (outside its titlebar
 and surface) is left to Hyprland.

@@ -9,7 +9,9 @@
 //     namespace on any layer.
 //   - Dock and menu bar: Top-layer surfaces with keyboard None, namespaces grassfield-dock / grassfield-menubar.
 // Every key, press and keyboard enter/leave is logged with the output name, so the script can tell who got each key.
-// Input (validated): GF_DF_OUTPUTS (comma-separated output names; default: every output).
+// Input (validated): GF_DF_OUTPUTS (comma-separated output names; default: every output); GF_DF_ARM_DELAY_MS (0..900,
+// default 0): the desktop switches to OnDemand that long after the left press instead of at once (a slow shell frame:
+// the plugin's pending grant then waits for that commit).
 // Run: WAYLAND_DISPLAY=<nested> qs -p <this dir>
 pragma ComponentBehavior: Bound
 import QtQuick
@@ -24,8 +26,13 @@ ShellRoot {
         return raw.split(",").filter(n => /^[A-Za-z0-9._-]{1,32}$/.test(n));
     }
     readonly property var screensUsed: Quickshell.screens.filter(s => root.outputNames.length === 0 || root.outputNames.indexOf(s.name) !== -1)
+    readonly property int armDelayMs: {
+        const raw = Quickshell.env("GF_DF_ARM_DELAY_MS") ?? "";
+        const n = /^[0-9]{1,3}$/.test(raw) ? parseInt(raw, 10) : 0;
+        return Math.min(n, 900);
+    }
 
-    Component.onCompleted: console.log("[df-fixture] outputs " + root.screensUsed.map(s => s.name).join(","))
+    Component.onCompleted: console.log("[df-fixture] outputs " + root.screensUsed.map(s => s.name).join(",") + " arm-delay " + root.armDelayMs)
 
     Variants {
         model: root.screensUsed
@@ -78,6 +85,15 @@ ShellRoot {
                         desktop.armed = false
                 }
 
+                Timer {
+                    id: armLater
+                    interval: Math.max(1, root.armDelayMs)
+                    onTriggered: {
+                        desktop.armed = true;
+                        armTimeout.restart();
+                    }
+                }
+
                 Item {
                     id: desktopItem
                     anchors.fill: parent
@@ -93,7 +109,9 @@ ShellRoot {
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     onPressed: mouse => {
                         console.log("[df-fixture] desktop-press " + perScreen.modelData.name + " " + (mouse.button === Qt.RightButton ? "right" : "left"));
-                        if (mouse.button === Qt.LeftButton) {
+                        if (mouse.button === Qt.LeftButton && root.armDelayMs > 0) {
+                            armLater.restart();
+                        } else if (mouse.button === Qt.LeftButton) {
                             desktop.armed = true;
                             armTimeout.restart();
                         } else {

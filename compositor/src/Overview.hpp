@@ -14,6 +14,8 @@
 
 #include "core/Overview.hpp"
 
+#include <hyprland/src/desktop/DesktopTypes.hpp>
+
 namespace gf::overviewer {
 
     // Registers the render, window, workspace, layer and monitor listeners. False if any failed (then the overview
@@ -32,5 +34,8 @@ namespace gf::overviewer {
 
     // A request that failed parsing: nothing changes; the current state is posted with reason "invalid".
     void refuse(gf::overview::Reason reason);
+
+    // The overview draws this window now (it has an overview transformer): Stages then leaves it untransformed.
+    bool transforms(const PHLWINDOW& window);
 
 } // namespace gf::overviewer

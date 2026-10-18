@@ -30,6 +30,7 @@ namespace gf::gfc {
     inline constexpr std::string_view kLuaConfig      = "config";     // hl.plugin.grassfield.config(key, value)
     inline constexpr std::string_view kLuaAppmenu     = "appmenu";    // hl.plugin.grassfield.appmenu(address): re-posts its appmenu event
     inline constexpr std::string_view kLuaOverview    = "overview";   // hl.plugin.grassfield.overview(json): live window transforms
+    inline constexpr std::string_view kLuaStages      = "stages";     // hl.plugin.grassfield.stages(json): Stages (behind config stagesEnabled)
 
     // What a shell sends through Hyprland.dispatch() to call a plugin verb.
     std::string luaDispatchRequest(std::string_view verb);
@@ -42,10 +43,20 @@ namespace gf::gfc {
     inline constexpr std::string_view kFeatureAppmenu     = "appmenu"; // org_kde_kwin_appmenu_manager global + appmenu events
     inline constexpr std::string_view kFeatureOverview    = "overview"; // hl.plugin.grassfield.overview + window transformers + overview events
     inline constexpr std::string_view kFeatureDesktopFocus = "desktop-focus"; // click-to-focus policy for the desktop surface (ADR-0012)
+    // Same policy, with the press target taken from under the cursor when the pointer focus is stale (a click without
+    // motion after a popup closed) and late grants dropped on any other focus change. Always advertised together with
+    // desktop-focus; the shell enables its file-changing desktop keys only with this one (shell main 23caeab).
+    inline constexpr std::string_view kFeatureDesktopFocusV2 = "desktop-focus-v2";
+    // Stages (ADR-0013): "stages-available" when the hooks and hl.plugin.grassfield.stages registered (the shell shows the
+    // Control Center toggle); "stages" only while the feature flag config stagesEnabled is true (the shell shows its strip).
+    inline constexpr std::string_view kFeatureStagesAvailable = "stages-available";
+    inline constexpr std::string_view kFeatureStages          = "stages";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
-    // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus.
-    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false);
+    // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
+    // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available).
+    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
+                                           bool stagesEnabled = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key only.
     inline constexpr std::string_view kConfigTitlebarDoubleClick = "titlebarDoubleClick";

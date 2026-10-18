@@ -37,6 +37,9 @@ namespace gf::ipc {
     // The overview render hooks are registered and hl.plugin.grassfield.overview is registered.
     bool overviewAvailable();
 
+    // The Stages listeners, hl.plugin.grassfield.stages and hl.plugin.grassfield.config are registered (whatever the flag).
+    bool stagesAvailable();
+
     // Registers the Lua function(s) (hl.plugin.grassfield.*) and the hyprctl command. Returns false if any failed.
     bool registerAll();
 

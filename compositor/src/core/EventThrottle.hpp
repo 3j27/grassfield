@@ -30,6 +30,7 @@ namespace gf::events {
         MinimizeState,   // id: window address (minimized / restored: two values of one state)
         Appmenu,         // id: window address
         Overview,        // id 0 (one overview state)
+        Stages,          // id 0 (one Stages state)
     };
 
     struct Key {

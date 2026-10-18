@@ -6,6 +6,9 @@
 #        tests/compositor/desktop_focus.sh baseline    the same presses with the plugin unloaded: shows the Hyprland
 #                                                      0.56.2 behaviour the policy fixes (cases 1, 2 and 4 expected to
 #                                                      fail there); the plugin is loaded again at the end
+#        tests/compositor/desktop_focus.sh race        case 7 only, against whatever plugin build is loaded (no unload):
+#                                                      shows the late-commit race on a build without the fix
+#        tests/compositor/desktop_focus.sh stale       case 8 only, against whatever plugin build is loaded (no unload)
 # NESTED only: needs scripts/dev/nested-up.sh with grassfield-compositor loaded and two outputs (WAYLAND-1 and the
 # headless GF-REF). The shell's desktop is stood in for by tests/compositor/desktop-focus-fixture (desktop surface
 # namespace grassfield-desktop-icons on every output, behaving as the shell does with the capability: OnDemand on a
@@ -21,6 +24,11 @@
 #   4 desktop focused on GF-REF, click the last active foot on WAYLAND-1: that foot gets the keys
 #   6 the desktop's popup menu keeps its grab: keys go to the menu, Esc gives them back to the desktop; an outside click
 #     on a foot is swallowed (the grab's), and the next click on that foot gives it the keys
+#   8 menu open, the pointer moves onto the last active foot, Esc, then a click without any pointer motion (Hyprland's
+#     pointer focus is still the closed popup's surface): the foot gets the keys (shell integration finding, main 9e76bd7)
+#   7 slow desktop commit (the fixture switches to OnDemand 700 ms after the press): a focus dispatch (what a key binding
+#     runs) or a new window within that time keeps the keyboard and the late commit does not take it back (plugin log: the pending
+#     grant was cancelled); without interference the late commit still gives the desktop the keys (R13 review of 5706cbd)
 #   5 unload the plugin while the desktop holds the keyboard: Hyprland alive, capabilities withdrawn (empty list), keys
 #     still delivered (to the desktop), a click on another foot works; loaded again: "desktop-focus" back, policy works
 #   health: Hyprland alive, no core dump of its PID, no grassfield exception in the nested log
@@ -31,8 +39,8 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
 mode=${1:-check}
 case $mode in
-  check | baseline) ;;
-  *) echo "usage: desktop_focus.sh [check|baseline]" >&2; exit 2 ;;
+  check | baseline | race | stale) ;;
+  *) echo "usage: desktop_focus.sh [check|baseline|race|stale]" >&2; exit 2 ;;
 esac
 
 out_a=GF-REF
@@ -95,18 +103,31 @@ read -r bx by bw bh < <(mon "$out_b")
 [[ -n ${aw:-} && -n ${bw:-} ]] || { echo "desktop_focus: outputs $out_a and $out_b are needed" >&2; exit 2; }
 
 # ---- fixture and probes ----
+# The fixture log is appended to across restarts (the key accounting counts lines from a mark).
 : >"$fixlog"
-GF_DF_OUTPUTS="$out_a,$out_b" WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
-  setsid "$root/scripts/dev/isolated.sh" --name desktop-focus-fixture qs -p "$root/tests/compositor/desktop-focus-fixture" --no-color \
-  >"$fixlog" 2>&1 </dev/null &
-fixture_pid=$!
-for _ in $(seq 1 50); do
-  grep -q "\[df-fixture\] outputs" "$fixlog" 2>/dev/null && break
-  sleep 0.1
-done
-sleep 0.8
-grep -q "\[df-fixture\] outputs .*$out_a" "$fixlog" && grep -q "\[df-fixture\] outputs .*$out_b" "$fixlog" \
-  || { say "setup error: fixture did not map on both outputs (see $fixlog)"; exit 2; }
+start_fixture() { # [arm delay ms]: 0 = OnDemand at the press, as the shell
+  local starts last
+  starts=$(grep -c "\[df-fixture\] outputs" "$fixlog")
+  GF_DF_OUTPUTS="$out_a,$out_b" GF_DF_ARM_DELAY_MS=${1:-0} WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
+    setsid "$root/scripts/dev/isolated.sh" --name desktop-focus-fixture qs -p "$root/tests/compositor/desktop-focus-fixture" --no-color \
+    >>"$fixlog" 2>&1 </dev/null &
+  fixture_pid=$!
+  for _ in $(seq 1 50); do
+    (($(grep -c "\[df-fixture\] outputs" "$fixlog") > starts)) && break
+    sleep 0.1
+  done
+  sleep 0.8
+  last=$(grep "\[df-fixture\] outputs" "$fixlog" | tail -n 1)
+  [[ $last == *"$out_a"* && $last == *"$out_b"* ]]
+}
+stop_fixture() {
+  [[ -n $fixture_pid ]] || return 0
+  kill "$fixture_pid" 2>/dev/null
+  wait "$fixture_pid" 2>/dev/null
+  fixture_pid=""
+  sleep 0.3
+}
+start_fixture 0 || { say "setup error: fixture did not map on both outputs (see $fixlog)"; exit 2; }
 
 foot_probe() { # <capture> -> pid; every typed byte goes to <capture> (raw tty, no echo)
   : >"$1"
@@ -201,6 +222,103 @@ check() { # <label> <status> [detail]
     fail=1
   fi
 }
+
+# ---- 7. a waiting desktop grant loses to any other focus path (R13 review of 5706cbd) ----
+race_log0=0
+race_cases() {
+  local dx dy r p p2 cap_c cap_a2 win_c win_a2
+  say "case 7: slow desktop commit (OnDemand 700 ms after the press): other focus paths within that time keep the keyboard"
+  stop_fixture
+  start_fixture 700 || { say "  setup error: the delayed fixture did not start"; return 1; }
+  read -r dx dy <<<"$desk_a"
+  # A second window on foot A's workspace (it opens over foot A), the target of the focus dispatch below.
+  cap_a2=$run/foot-a2.cap
+  pointer output "$out_a" abs $((aw / 2)) $((ah / 2)) sleep 50
+  p2=$(foot_probe "$cap_a2"); pids+=("$p2")
+  win_a2=$(address_of "$p2")
+  sleep 0.8
+  race_log0=$(grep -ac "" "$hyprlog")
+  # 7a a focus dispatch right after the desktop click (what a key binding runs; ALT+TAB itself is not bound for the
+  # virtual keyboard in the nested session: foot received ESC TAB).
+  click "$out_b" "$b_cx" "$b_cy"; sleep 0.3 # the keyboard starts on foot B, on the other output
+  click "$out_a" "$dx" "$dy"
+  nestctl dispatch "hl.dsp.focus({ window = \"address:$win_a2\" })" >>"$log" 2>&1
+  sleep 1.2 # the delayed on_demand commit (700 ms) is over
+  r=$(type_now "ka")
+  r="$r footA2=$(cap_new "$cap_a2" 0)"
+  [[ -n $win_a2 && $r == *"desktopA= "* && $r == *"footA2=ka"* ]]
+  check "7a a focus dispatch right after a desktop click: that window keeps the keys, the late desktop commit does not take them" $? "$r"
+  kill "$p2" 2>/dev/null
+  sleep 0.5
+  # 7b a new window maps right after the desktop click (it takes the keyboard before the desktop commits).
+  click "$out_a" "$a_cx" "$a_cy"; sleep 0.3
+  cap_c=$run/foot-c.cap
+  click "$out_a" "$dx" $((dy + 20))
+  p=$(foot_probe "$cap_c"); pids+=("$p")
+  win_c=$(address_of "$p")
+  sleep 1.2
+  r=$(type_now "kn")
+  r="$r footC=$(cap_new "$cap_c" 0)"
+  [[ -n $win_c && $r == *"desktopA= "* && $r == *"footC=kn"* ]]
+  check "7b a window mapping right after a desktop click keeps the keys, the late desktop commit does not take them" $? "$r"
+  kill "$p" 2>/dev/null
+  sleep 0.5
+  # 7c control: without interference the late commit (inside the 1000 ms grant window) still gives the desktop the keys.
+  click "$out_a" "$a_cx" "$a_cy"; sleep 0.3
+  click "$out_a" "$dx" $((dy + 40))
+  sleep 1.2
+  r=$(type_now "kc")
+  [[ $r == *"desktopA=kc "* && $r == *"footA= "* ]]
+  check "7c without interference the late on_demand commit still gives the desktop the keys" $? "$r"
+  stop_fixture
+  start_fixture 0 || { say "  setup error: the fixture did not restart"; return 1; }
+}
+# The plugin's log lines for case 7 (Hyprland writes its log late: polled at the end of the run).
+race_log_check() {
+  local lines="" n=0
+  for _ in $(seq 1 100); do
+    lines=$(tail -n +"$((race_log0 + 1))" "$hyprlog" | grep -a "desktop-focus: pending grant for desktop .* cancelled" | sed 's/.* cancelled/cancelled/')
+    n=$(grep -c . <<<"$lines")
+    ((n >= 2)) && break
+    sleep 0.1
+  done
+  ((n >= 2))
+  check "7 plugin log: the waiting grants of 7a and 7b were cancelled by the focus change" $? "$(tr '\n' ';' <<<"$lines")"
+}
+
+# ---- 8. (function) a click without pointer motion after the menu closed ----
+stale_case() {
+  local dx dy r
+  say "case 8: menu open, pointer onto foot A, Esc, click without motion"
+  read -r dx dy <<<"$desk_a"
+  click "$out_a" "$a_cx" "$a_cy"; sleep 0.3 # foot A becomes Hyprland's focused window
+  focus_desktop
+  pointer output "$out_a" abs "$dx" $((dy - 150)) sleep 150 rclick sleep 400
+  pointer output "$out_a" abs "$a_cx" "$a_cy" sleep 250 # onto the foot, menu still open, no click
+  keys -k Escape
+  sleep 0.4
+  r=$(type_now "e8"); say "  after Esc (pointer resting on foot A): $r"
+  pointer output "$out_a" click # buttons only: no motion event since the popup closed
+  sleep 0.3
+  r=$(type_now "pf")
+  [[ $r == *"footA=pf"* && $r == *"desktopA= "* ]]
+  check "8 click on the foot without motion after the menu closed: the foot gets the keys" $? "$r"
+}
+
+if [[ $mode == stale ]]; then
+  stale_case
+  if ((fail == 0)); then say "desktop_focus stale: PASS ($passed/$total checks)"; else say "desktop_focus stale: FAIL ($passed/$total checks passed)"; fi
+  say "desktop_focus: log $log"
+  exit "$fail"
+fi
+
+if [[ $mode == race ]]; then
+  race_cases
+  race_log_check
+  if ((fail == 0)); then say "desktop_focus race: PASS ($passed/$total checks)"; else say "desktop_focus race: FAIL ($passed/$total checks passed)"; fi
+  say "desktop_focus: log $log"
+  exit "$fail"
+fi
 
 if [[ $mode == baseline ]]; then
   plugin_unloaded=1
@@ -305,6 +423,14 @@ check "6c an outside click on a foot closes the menu and is swallowed (the foot 
 click "$out_a" "$a_cx" "$a_cy"; sleep 0.3
 r=$(type_now "fc"); [[ $r == *"footA=fc"* ]]; check "6d the next click on that foot gives it the keys" $? "$r"
 
+# ---- 8. a click without pointer motion after the menu closed (shell integration, main 9e76bd7) ----
+# Foot A is Hyprland's focused window (clicked just above) while the desktop takes the keyboard; the menu opens away from
+# the foot, the pointer moves onto the foot while the menu is open, Esc closes the menu, and the click comes with no motion
+# in between: Hyprland's pointer focus is then still the closed popup's surface (or nothing).
+stale_case
+
+race_cases
+
 # ---- 5. unload while the desktop holds the keyboard, then load again ----
 say "case 5: unload the plugin while the desktop holds the keyboard"
 focus_desktop
@@ -332,6 +458,8 @@ check "5d plugin loaded again and advertises desktop-focus" $((load_rc + feat_rc
 focus_desktop
 click "$out_b" "$b_cx" "$b_cy"; sleep 0.3
 r=$(type_now "uz"); [[ $r == *"footB=uz"* && $r == *"desktopA= "* ]]; check "5e after the reload the policy works again (last active foot after the desktop)" $? "$r"
+
+race_log_check
 
 # ---- health ----
 kill -0 "$hypr_pid" 2>/dev/null

@@ -37,8 +37,13 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   zoom|minimize|none), `appmenu(address)` (re-posts that window's registration), `overview(json)` (2026-10-18,
   additive: one JSON string `{"on":bool,"durationMs":int,"curve":[x1,y1,x2,y2]?,"windows":[{"address","x","y","w","h"}…]}`
   in layout coordinates, at most 64 windows and 16 KiB, validated strictly by the plugin; live window transforms for
-  Mission Control v2, contract in `docs/specs/overview.md` "Shell contract"). Planned: `theme(json)`. Events:
-  `capabilities` (features: `decorations`, `minimize`, `config`, `appmenu`, `overview`, `desktop-focus`), `minimize-request`,
+  Mission Control v2, contract in `docs/specs/overview.md` "Shell contract"), `stages(json)` (2026-10-18, additive, only
+  while the flag `config("stagesEnabled", "true")` is on: ops `on` / `off` / `activate` / `move` / `merge`, at most 8 KiB,
+  validated strictly; contract in `docs/specs/stages.md`, ADR-0013). `config` allowlist: `titlebarDoubleClick` ∈
+  zoom|minimize|none, `stagesEnabled` ∈ true|false (off at every load). Planned: `theme(json)`. Events:
+  `capabilities` (features: `decorations`, `minimize`, `config`, `appmenu`, `overview`, `desktop-focus`, `desktop-focus-v2`,
+  `stages-available`, `stages`), `stages` `{on, monitors:[{monitor, workspace, active, hidden, overlap, stages:[{id, slot,
+  windows:[{address, x?, y?, w?, h?}]}]}], reason?}` (coalesced state), `minimize-request`,
   `minimized`, `restored`, `appmenu` `{address, service, path, pid}` (additive field `pid` = the Wayland client's pid
   from `wl_client_get_credentials`; the menu bridge checks it against `GetConnectionUnixProcessID(service)` to stop one
   app pointing its window at another app's menu), `overview` `{state: opening|open|closing|closed, windows, reason?}`
@@ -48,6 +53,16 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
 - Feature `desktop-focus` (2026-10-18, additive, no verb): the plugin enforces click-to-focus for the shell's desktop
   surface (namespace `grassfield-desktop-icons`) on pointer presses (ADR-0012 amendment); contract in
   `docs/specs/desktop.md` "Compositor focus policy". Advertised only when its listeners registered.
+- Feature `desktop-focus-v2` (2026-10-18, additive, always together with `desktop-focus`): the same policy with the press
+  target taken from under the cursor when the pointer focus is stale (a click without motion after a popup closed), late
+  desktop grants dropped on any other focus change, and the window grant through Hyprland's focus rules only. The shell
+  enables its file-changing desktop keys only with `desktop-focus-v2` (shell main 23caeab).
+- Overview chrome rule (2026-10-18, relaxed): `overview` `on:true` needs a mapped `grassfield-overview` surface on every
+  target monitor and the keyboard on one of them with Exclusive interactivity (the focused output's); the others may be
+  keyboard None (`no-chrome` otherwise). Earlier every chrome had to be Exclusive, which made Hyprland refuse to give the
+  keyboard back after the close on two outputs.
+- Feature `stages-available` / `stages` (2026-10-18, additive, ADR-0013): `stages-available` when the Stages listeners
+  and verb registered (Control Center shows the toggle); `stages` only while the flag is on.
 - Withdrawal at unload (2026-10-18, additive): `PLUGIN_EXIT` posts `{"v":"gfc/1","type":"capabilities","features":[]}`
   after removing every hook, so the shell drops each feature and returns to its fallbacks (desktop focus workarounds,
   minimize parking, T0 menus, thumbnails). The shell must treat every capabilities event as the current truth.
@@ -55,7 +70,7 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   connection and Hyprland dropped it): every plugin → shell event goes through `compositor/src/core/EventThrottle`,
   keyed by window (`minimized`/`restored` share one key, as do an appmenu clear and set), latest value wins, at most
   one post per key per 100 ms with an event-loop timer posting the final state after a burst; global cap 32 events
-  burst, then 50/s; `overview` has one key of its own (the latest state wins). Events are coalesced, never required one by one: the shell rebuilds minimize state from
+  burst, then 50/s; `overview` and `stages` have one key each (the latest state wins). Events are coalesced, never required one by one: the shell rebuilds minimize state from
   `movewindowv2` and can ask for a window's registration again with `appmenu(address)`. Client-triggerable log lines
   share one budget, titlebar pointer actions included.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.

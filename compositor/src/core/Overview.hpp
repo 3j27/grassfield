@@ -118,12 +118,16 @@ namespace gf::overview {
         uint64_t monitor   = 0; // opaque monitor id
         bool     mapped    = false;
         bool     exclusive = false; // keyboard interactivity Exclusive
+        bool     keyboard  = false; // the seat keyboard is on it (the surface, a subsurface or one of its popups)
     };
 
     // An on:true request may transform windows only while the shell covers them: every target monitor has a mapped
-    // chrome surface with Exclusive keyboard interactivity, and the keyboard is on a chrome surface. Otherwise input could
-    // reach a window drawn elsewhere (R13 review of f12f610).
-    bool chromeCovers(const std::vector<uint64_t>& targetMonitors, const std::vector<ChromeSurface>& chromes, bool keyboardOnChrome);
+    // chrome surface (any keyboard interactivity: its whole-surface input takes the pointer), and the keyboard is held by a
+    // mapped chrome surface with Exclusive interactivity (the focused output's). Otherwise input could reach a window drawn
+    // elsewhere (R13 review of f12f610). Only one chrome needs to be Exclusive (shell integration review, main 23caeab:
+    // with every output's chrome Exclusive, Hyprland's refocusLastWindow is refused while another Exclusive chrome remains,
+    // and the keyboard was lost after the close on two outputs).
+    bool chromeCovers(const std::vector<uint64_t>& targetMonitors, const std::vector<ChromeSurface>& chromes);
 
     // Boxes to damage when a window's drawn box goes from `previous` (the last damaged box; empty at first) to `current`:
     // `previous` when it differs and has an area, then `current` when it has an area. The caller then stores `current` as

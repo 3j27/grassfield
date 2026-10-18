@@ -4,6 +4,8 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
+#include <optional>
 
 using namespace gf::desktopfocus;
 
@@ -180,7 +182,98 @@ TEST(DesktopFocusGrant, CancelAndRearm) {
     EXPECT_TRUE(g.onCommit(9, Interactivity::OnDemand, t0 + std::chrono::milliseconds(130)));
 }
 
+// Shell integration (main 9e76bd7): menu open, pointer moved onto a foot, Esc, click without motion. The pointer focus is
+// the closed popup's surface (destroyed: none; unmapped: stale); the press must count as a press on the foot under the cursor.
+TEST(DesktopFocusTarget, LivePointerFocusIsWhereThePressGoes) {
+    EXPECT_EQ(pressTargetSource(PointerFocus::Live), TargetSource::PointerFocus);
+    EXPECT_EQ(pressTargetKind(PointerFocus::Live, SurfaceKind::WindowPopup, SurfaceKind::Window), SurfaceKind::WindowPopup);
+    EXPECT_EQ(pressTargetKind(PointerFocus::Live, SurfaceKind::Desktop, SurfaceKind::Window), SurfaceKind::Desktop);
+}
+
+TEST(DesktopFocusTarget, MissingOrStalePointerFocusFallsBackToTheSurfaceUnderTheCursor) {
+    for (const auto focus : {PointerFocus::None, PointerFocus::Stale}) {
+        EXPECT_EQ(pressTargetSource(focus), TargetSource::UnderCursor);
+        EXPECT_EQ(pressTargetKind(focus, SurfaceKind::DesktopPopup, SurfaceKind::Window), SurfaceKind::Window);
+        EXPECT_EQ(pressTargetKind(focus, SurfaceKind::None, SurfaceKind::Desktop), SurfaceKind::Desktop);
+        EXPECT_EQ(pressTargetKind(focus, SurfaceKind::Other, SurfaceKind::None), SurfaceKind::None) << "nothing under the cursor either";
+    }
+}
+
+TEST(DesktopFocusTarget, TheFallbackFeedsTheSameDecisionTable) {
+    // The repro: the desktop holds the keyboard, the closed menu's popup is the stale pointer focus, a foot is under the cursor.
+    Press p           = onWindow();
+    p.target          = pressTargetKind(PointerFocus::Stale, SurfaceKind::DesktopPopup, SurfaceKind::Window);
+    EXPECT_EQ(onPress(keyboardOn(SurfaceKind::Desktop), p), Action::FocusWindow);
+    // Without the fallback the stale popup would have been the target, and nothing would have moved the keyboard.
+    EXPECT_EQ(onPress(keyboardOn(SurfaceKind::Desktop), on(SurfaceKind::DesktopPopup)), Action::None);
+    EXPECT_EQ(onPress(keyboardOn(SurfaceKind::Desktop), on(SurfaceKind::None)), Action::None);
+}
+
+// R13 review of 5706cbd: a key binding, a new window or a workspace switch within the grant window must win over the
+// desktop's late on_demand commit.
+TEST(DesktopFocusGrant, KeyboardMovedElsewhereCancelsTheGrant) {
+    using namespace std::chrono_literals;
+    const auto t0 = Clock::now();
+    for (const auto holder : {std::optional<uint64_t>{}, std::optional<uint64_t>{9}}) { // a window / nothing, or another layer
+        CPendingGrant g;
+        g.arm(7, t0);
+        EXPECT_EQ(g.onFocusEvent(FocusEvent::KeyboardFocus, holder, t0 + 20ms), GrantUpdate::Cancelled);
+        EXPECT_FALSE(g.armed(t0 + 20ms));
+        EXPECT_FALSE(g.onCommit(7, Interactivity::OnDemand, t0 + 30ms)) << "the late on_demand commit does not take the keyboard back";
+    }
+}
+
+TEST(DesktopFocusGrant, WindowWorkspaceAndActivationChangesCancelTheGrant) {
+    using namespace std::chrono_literals;
+    const auto t0 = Clock::now();
+    for (const auto event : {FocusEvent::WindowActivated, FocusEvent::WindowOpened, FocusEvent::WorkspaceChanged}) {
+        CPendingGrant g;
+        g.arm(7, t0);
+        // Even with the armed desktop named: only a keyboard move onto it fulfils the grant.
+        EXPECT_EQ(g.onFocusEvent(event, std::optional<uint64_t>{7}, t0 + 500ms), GrantUpdate::Cancelled) << focusEventName(event);
+        EXPECT_FALSE(g.onCommit(7, Interactivity::OnDemand, t0 + 510ms)) << focusEventName(event);
+    }
+}
+
+TEST(DesktopFocusGrant, KeyboardReachingTheArmedDesktopFulfilsTheGrant) {
+    using namespace std::chrono_literals;
+    const auto    t0 = Clock::now();
+    CPendingGrant g;
+    g.arm(7, t0);
+    EXPECT_EQ(g.onFocusEvent(FocusEvent::KeyboardFocus, std::optional<uint64_t>{7}, t0 + 10ms), GrantUpdate::Fulfilled);
+    EXPECT_FALSE(g.surface().has_value()) << "nothing left to do";
+    EXPECT_FALSE(g.onCommit(7, Interactivity::OnDemand, t0 + 20ms));
+}
+
+TEST(DesktopFocusGrant, FocusEventsWithoutAWaitingGrantChangeNothing) {
+    using namespace std::chrono_literals;
+    const auto    t0 = Clock::now();
+    CPendingGrant g;
+    EXPECT_EQ(g.onFocusEvent(FocusEvent::KeyboardFocus, std::nullopt, t0), GrantUpdate::NotArmed);
+    g.arm(7, t0);
+    EXPECT_TRUE(g.onCommit(7, Interactivity::OnDemand, t0 + 16ms)); // granted (consumed) ...
+    EXPECT_EQ(g.onFocusEvent(FocusEvent::KeyboardFocus, std::optional<uint64_t>{7}, t0 + 17ms), GrantUpdate::NotArmed)
+        << "... and the keyboard event of that grant itself finds nothing waiting";
+    g.arm(7, t0);
+    EXPECT_EQ(g.onFocusEvent(FocusEvent::WindowOpened, std::nullopt, t0 + kGrantWindow + 1ms), GrantUpdate::NotArmed) << "expired: dropped silently";
+    EXPECT_FALSE(g.surface().has_value());
+}
+
+TEST(DesktopFocusGrant, ANewPressAfterACancelArmsAgain) {
+    using namespace std::chrono_literals;
+    const auto    t0 = Clock::now();
+    CPendingGrant g;
+    g.arm(7, t0);
+    EXPECT_EQ(g.onFocusEvent(FocusEvent::WorkspaceChanged, std::nullopt, t0 + 5ms), GrantUpdate::Cancelled);
+    g.arm(7, t0 + 100ms);
+    EXPECT_TRUE(g.onCommit(7, Interactivity::OnDemand, t0 + 116ms));
+}
+
 TEST(DesktopFocusNames, AreStable) {
+    EXPECT_EQ(grantUpdateName(GrantUpdate::Cancelled), "cancelled");
+    EXPECT_EQ(grantUpdateName(GrantUpdate::Fulfilled), "fulfilled");
+    EXPECT_EQ(grantUpdateName(GrantUpdate::NotArmed), "not-armed");
+    EXPECT_EQ(focusEventName(FocusEvent::WorkspaceChanged), "workspace changed");
     EXPECT_EQ(actionName(Action::FocusWindow), "focus-window");
     EXPECT_EQ(actionName(Action::FocusDesktop), "focus-desktop");
     EXPECT_EQ(actionName(Action::AwaitOnDemand), "await-on-demand");

@@ -8,7 +8,8 @@
 //     real (untransformed) windows. Key H unmaps the chrome (the process stays), key N drops its keyboard to None.
 // Input (validated, never trusted): GF_OVERVIEW_OUTPUT (output name), GF_OVERVIEW_TARGETS (JSON array of
 // {"x","y","w","h","label"} in layout coordinates), GF_OVERVIEW_DIM (0..1), GF_OVERVIEW_KEYBOARD ("exclusive", the
-// default, or "none": the chrome maps without taking the keyboard).
+// default, or "none": the chrome maps without taking the keyboard), GF_OVERVIEW_SECOND_OUTPUT (optional output name: a
+// second chrome there, keyboard None, as the shell maps on the outputs that are not focused).
 // Run: WAYLAND_DISPLAY=<nested> qs -p <this dir>
 pragma ComponentBehavior: Bound
 import QtQuick
@@ -41,8 +42,37 @@ ShellRoot {
         }
     }
     readonly property var outputScreen: Quickshell.screens.find(s => s.name === root.outputName) ?? null
+    readonly property string secondOutput: /^[A-Za-z0-9._-]{1,32}$/.test(Quickshell.env("GF_OVERVIEW_SECOND_OUTPUT") ?? "") ? Quickshell.env("GF_OVERVIEW_SECOND_OUTPUT") : ""
+    readonly property var secondScreen: root.secondOutput !== "" ? (Quickshell.screens.find(s => s.name === root.secondOutput) ?? null) : null
 
-    Component.onCompleted: console.log("[overview-fixture] output " + root.outputName + (root.outputScreen ? " found" : " NOT FOUND") + ", " + root.targets.length + " target(s)")
+    Component.onCompleted: console.log("[overview-fixture] output " + root.outputName + (root.outputScreen ? " found" : " NOT FOUND") + ", " + root.targets.length + " target(s)"
+        + (root.secondOutput !== "" ? ", second chrome on " + root.secondOutput + (root.secondScreen ? " found" : " NOT FOUND") : ""))
+
+    // The chrome of an output that is not focused: mapped, whole-surface input, keyboard None.
+    // qmllint disable uncreatable-type
+    PanelWindow {
+        // qmllint enable uncreatable-type
+        id: secondChrome
+
+        visible: root.secondScreen !== null
+        screen: root.secondScreen
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        exclusionMode: ExclusionMode.Ignore
+        color: Qt.rgba(0, 0, 0, root.dim)
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        WlrLayershell.namespace: "grassfield-overview"
+
+        MouseArea {
+            anchors.fill: parent
+            onPressed: mouse => console.log("[overview-fixture] second-press " + Math.round(mouse.x) + " " + Math.round(mouse.y))
+        }
+    }
 
     // Quickshell qmltypes mark PanelWindow uncreatable (metadata quirk, as in shell/overview); suppress just this.
     // qmllint disable uncreatable-type

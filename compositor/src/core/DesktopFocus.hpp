@@ -9,7 +9,11 @@
 //   - a press on a normal window while the desktop holds the keyboard gives that window the keyboard, also when Hyprland
 //     still counts it as its focused window (Hyprland 0.56.2 then ignores the click and the desktop kept the keys);
 //   - a left press on the desktop surface gives it the keyboard at once when it is on_demand, or as soon as it commits
-//     on_demand after the press (the shell switches None -> OnDemand on that press), without any pointer motion;
+//     on_demand after the press (the shell switches None -> OnDemand on that press), without any pointer motion; that
+//     pending grant is dropped when anything else moves the keyboard first (a key binding, a new window, a workspace
+//     switch, Hyprland's own refocus), so a late commit never takes the keyboard back;
+//   - the window's grant goes through Hyprland's own click focus only: when Hyprland refuses it (no_focus window rule, a
+//     modal child, ...), the keyboard stays where it is;
 //   - presses on other Grassfield layers (Dock, menu bar, widgets), on popups (the desktop's context menu included) and
 //     anything while a keyboard grab, an Exclusive layer or the session lock is active change nothing.
 
@@ -75,6 +79,26 @@ namespace gf::desktopfocus {
     // The policy for one button press.
     Action onPress(const Seat& seat, const Press& press);
 
+    // What the seat's pointer focus says when a press arrives.
+    enum class PointerFocus : uint8_t {
+        Live,  // a mapped, visible surface of a window or layer surface
+        None,  // no pointer focus (nothing under the pointer, or its surface was destroyed: the weak reference expired)
+        Stale, // a surface that is unmapped, invisible, or no longer part of any window or layer (a closed popup)
+    };
+
+    // Hyprland 0.56.2 updates pointer focus on pointer motion only: after a popup closes, a press without any motion still
+    // finds the popup's (destroyed or unmapped) surface, or nothing, as pointer focus. The press target is then what lies
+    // under the cursor (looked up by the glue in Hyprland's pointer focus order) instead.
+    enum class TargetSource : uint8_t {
+        PointerFocus, // the seat's pointer focus (where Hyprland delivers the press)
+        UnderCursor,  // the window or layer surface under the cursor position
+    };
+    TargetSource pressTargetSource(PointerFocus focus);
+
+    // The kind of the press target: `focusKind` (the seat's pointer focus, classified) when it is live, otherwise
+    // `cursorKind` (the surface under the cursor, classified).
+    SurfaceKind pressTargetKind(PointerFocus focus, SurfaceKind focusKind, SurfaceKind cursorKind);
+
     // A pending desktop grant may be carried out now (no lock, grab or Exclusive layer; the desktop does not hold the
     // keyboard already).
     bool mayGrantDesktop(const Seat& seat, bool desktopHasKeyboard);
@@ -89,8 +113,29 @@ namespace gf::desktopfocus {
     std::string_view actionName(Action action);
     std::string_view kindName(SurfaceKind kind);
 
+    // Something other than the pending grant moved the keyboard, or changed what the user expects to type into, while a
+    // grant waits for its on_demand commit (the glue maps Hyprland's event bus onto these).
+    enum class FocusEvent : uint8_t {
+        KeyboardFocus,    // the seat keyboard moved (to another surface, to nothing, or to the armed desktop itself)
+        WindowActivated,  // Hyprland focused a window or cleared its window focus, for any reason (key binding, dispatch,
+                          // activation request, a closing window's successor)
+        WindowOpened,     // a window mapped
+        WorkspaceChanged, // a workspace became active on a monitor
+    };
+
+    // What a FocusEvent did to the pending grant.
+    enum class GrantUpdate : uint8_t {
+        NotArmed,  // nothing was waiting (an expired grant is dropped silently)
+        Fulfilled, // the keyboard reached the armed desktop by another path: nothing is left to do
+        Cancelled, // the keyboard went elsewhere, or a window or workspace change superseded the press
+    };
+
+    std::string_view focusEventName(FocusEvent event);
+    std::string_view grantUpdateName(GrantUpdate update);
+
     // The desktop surface that a press armed (AwaitOnDemand), until it commits on_demand, another press arrives, the
-    // surface goes away or kGrantWindow elapses. Surfaces are opaque ids (compared, never dereferenced).
+    // keyboard focus changes by any other path, the surface goes away or kGrantWindow elapses. Surfaces are opaque ids
+    // (compared, never dereferenced).
     class CPendingGrant {
       public:
         void arm(uint64_t surface, TimePoint now);
@@ -100,6 +145,13 @@ namespace gf::desktopfocus {
         // is consumed). A commit of another surface, or one still without on_demand, keeps the grant waiting; an
         // expired grant is dropped.
         bool onCommit(uint64_t surface, Interactivity interactivity, TimePoint now);
+
+        // `event` happened at `now`; `keyboardLayer`: for KeyboardFocus, the id of the layer surface that holds the
+        // keyboard now (nullopt: a window, nothing, or anything that is not a layer surface). Any focus change drops a
+        // waiting grant: it is Fulfilled when the keyboard moved to the armed surface itself, otherwise Cancelled, so the
+        // desktop's late on_demand commit can never take the keyboard from what a key binding, a new window or a
+        // workspace switch chose.
+        GrantUpdate onFocusEvent(FocusEvent event, std::optional<uint64_t> keyboardLayer, TimePoint now);
 
         // Armed and not expired at `now`.
         bool armed(TimePoint now) const;

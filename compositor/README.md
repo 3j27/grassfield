@@ -11,13 +11,17 @@ Hyprland plugin for the Grassfield session (master-prompt §5.6):
 - overview v2 (feature 4, Mission Control): the real windows of the current workspace drawn live, scaled and moved
   into the layout the shell sends, through Hyprland's window transformers (`Render::IWindowTransformer`); the clients
   are never resized (`docs/specs/overview.md` "v2 spike" and "Shell contract"); only while the shell's chrome
-  (`grassfield-overview`, Exclusive) covers their monitors and holds the keyboard;
-- desktop focus policy (feature `desktop-focus`, ADR-0012 amendment): click-to-focus for the shell's desktop surface
-  (`grassfield-desktop-icons`) on pointer presses: a click on a window while the desktop holds the keyboard gives that
-  window the keyboard, a left click on the desktop gives it the keyboard on its `on_demand` commit, nothing on hover
-  (`docs/specs/desktop.md` "Compositor focus policy");
+  (`grassfield-overview`) is mapped on their monitors and one Exclusive chrome holds the keyboard;
+- desktop focus policy (features `desktop-focus` and `desktop-focus-v2`, ADR-0012): click-to-focus for the shell's
+  desktop surface (`grassfield-desktop-icons`) on pointer presses: a click on a window while the desktop holds the
+  keyboard gives that window the keyboard (Hyprland's focus rules apply), a left click on the desktop gives it the keyboard
+  on its `on_demand` commit unless something else moved the keyboard first, nothing on hover; a click without motion
+  after a popup closed is classified by what is under the cursor (`docs/specs/desktop.md` "Compositor focus policy");
+- Stages (M5 prototype, behind the flag `config("stagesEnabled", "true")`, features `stages-available` / `stages`,
+  ADR-0013): strip stages' windows stay mapped and live, drawn into the shell's strip tiles, their input blocked; swaps
+  animated (`docs/specs/stages.md`);
 - shell IPC `gfc/1`: capabilities event on Hyprland's socket2, `hl.plugin.grassfield.{hello, minimize,
-  restore, config, appmenu, overview}()`, `hyprctl grassfield`.
+  restore, config, appmenu, overview, stages}()`, `hyprctl grassfield`.
 
 Spec: [`docs/specs/compositor.md`](../docs/specs/compositor.md).
 
@@ -106,7 +110,7 @@ scripts/dev/pointer.sh output GF-REF abs 960 250 down drag 700 400 up   # drag a
 ```
 
 Startup log line (in `$XDG_RUNTIME_DIR/hypr/<nested instance>/hyprland.log`):
-`[grassfield] grassfield-compositor 0.5.0-df initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+`[grassfield] grassfield-compositor 0.6.0-stages initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
 Hyprland buffers this log file: later lines can take a long time to appear.
 
 ## Soak (gate C1, nested only)
@@ -159,8 +163,17 @@ Desktop focus (nested only, FR30-FR32): `tests/compositor/desktop_focus.sh` — 
 does with the capability; Dock and menu bar with keyboard None; a right-press menu with a popup grab) and two probe foot
 windows (typed bytes captured); cases: click on the last active foot while the desktop holds the keyboard, click the
 desktop and type at once, hover and presses on the Dock / menu bar, the last active foot on the other output, popup grab
-untouched, unload while the desktop is focused and load again (21 checks). `desktop_focus.sh baseline` runs the same
-presses with the plugin unloaded (the Hyprland behaviour the policy fixes) and loads it again.
+untouched, a click without motion after the menu closed, a slow `on_demand` commit losing to a focus dispatch or a new
+window, unload while the desktop is focused and load again (26 checks). `desktop_focus.sh baseline` runs the same
+presses with the plugin unloaded (the Hyprland behaviour the policy fixes) and loads it again; `race` and `stale` run
+cases 7 and 8 alone against whatever build is loaded.
+
+Stages (nested only, FR33-FR37): `tests/compositor/stages.sh` — 9 foot windows of three app ids, the strip stand-in
+`tests/compositor/stages-fixture` (transparent Top-layer `grassfield-stages` surface over four tiles), the flag, grouping,
+live thumbnails, input blocking at real places, an animated swap, regrouping, new / closed windows, focus by dispatch,
+hidden strip, workspace switch, minimize, full screen, overlap, strip surface gone, invalid payloads, a 1000-request flood,
+unload and reload. `stages.sh perf [seconds]` measures Hyprland's CPU with 3 stages × 3 windows and the
+special-workspace alternative.
 
 Zoom restore (FR8 regression, nested only): `tests/compositor/zoom_restore.sh` — double-click, click + zoom
 button and a drag on a maximized titlebar; PASS (exit 0) = the zoom toggle always restores the floating

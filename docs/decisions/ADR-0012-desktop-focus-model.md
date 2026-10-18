@@ -134,6 +134,17 @@ Exact contract: `docs/specs/desktop.md` "Compositor focus policy". Evidence: `te
 PASS with the plugin; `baseline` (plugin unloaded) reproduces the three defects. Spike corrections 1 and 2 above become
 fallbacks for the plugin-less case; correction 3 is not needed with the plugin.
 
+### Policy v2 (2026-10-18, capability `desktop-focus-v2`)
+The shell integration review found that the first policy misread a click made without pointer motion right after the
+context menu closed (Hyprland's pointer focus was still the closed popup's surface; the keys stayed on the desktop, and a
+sandbox file was trashed by Ctrl+Backspace); the R13 review of 5706cbd found two minors. The plugin now (a) takes the
+press target from under the cursor (Hyprland's pointer focus order) when the pointer focus is missing or stale, (b) drops a
+pending desktop grant on any other focus change (keyboard focus, window activation, window mapping, workspace switch),
+(c) grants a window the keyboard through Hyprland's `fullWindowFocus` only (no forced surface focus that could bypass
+`no_focus` or a modal child). It advertises `desktop-focus-v2` together with `desktop-focus`; the shell enables its
+file-changing desktop keys only with `desktop-focus-v2` (shell main 23caeab). Evidence: `tests/compositor/desktop_focus.sh`
+26/26 with cases 7 (slow commit) and 8 (click without motion); the plugin build e066a19 fails both (`race`, `stale` modes).
+
 ## Consequences
 - The safe mode and its catchers are temporary; this design replaces them after a spike PASS and a review.
 - Grassfield depends on `hyprland_focus_grab_v1` / xdg_popup grab semantics of Hyprland; re-verify on Hyprland
