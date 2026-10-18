@@ -23,7 +23,7 @@ class IHyprWindowDecoration;
 namespace gf {
 
     inline constexpr const char* kPluginName    = "grassfield-compositor";
-    inline constexpr const char* kPluginVersion = "0.3.0-s5";
+    inline constexpr const char* kPluginVersion = "0.4.0-ov2";
 
     struct SPluginState {
         HANDLE                             handle = nullptr;
@@ -36,6 +36,7 @@ namespace gf {
         bool                               luaRestoreRegistered  = false;
         bool                               luaConfigRegistered   = false;
         bool                               luaAppmenuRegistered  = false;
+        bool                               luaOverviewRegistered = false;
 
         // Settings pushed by the shell (hl.plugin.grassfield.config).
         gfc::DoubleClickAction doubleClickAction = gfc::DoubleClickAction::Zoom;

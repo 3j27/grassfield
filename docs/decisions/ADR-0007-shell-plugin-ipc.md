@@ -34,18 +34,23 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   `{"v":"gfc/1","type":"capabilities","features":[...]}`. No reply within 1500 ms → degraded mode (§5.6).
 - Verbs implemented (2026-10-17): `hello()`, `minimize(address, x, y, w, h)`, `restore(address, x, y, w, h)`
   (target rect = the Dock tile in layout coordinates), `config(key, value)` (allowlist: `titlebarDoubleClick` ∈
-  zoom|minimize|none), `appmenu(address)` (re-posts that window's registration). Planned: `overview(on)`,
-  `theme(json)`. Events: `capabilities` (features: `decorations`, `minimize`, `config`, `appmenu`),
-  `minimize-request`, `minimized`, `restored`, `appmenu` `{address, service, path, pid}` (additive field `pid` =
-  the Wayland client's pid from `wl_client_get_credentials`; the menu bridge checks it against
-  `GetConnectionUnixProcessID(service)` to stop one app pointing its window at another app's menu).
+  zoom|minimize|none), `appmenu(address)` (re-posts that window's registration), `overview(json)` (2026-10-18,
+  additive: one JSON string `{"on":bool,"durationMs":int,"curve":[x1,y1,x2,y2]?,"windows":[{"address","x","y","w","h"}…]}`
+  in layout coordinates, at most 64 windows and 16 KiB, validated strictly by the plugin; live window transforms for
+  Mission Control v2, contract in `docs/specs/overview.md` "Shell contract"). Planned: `theme(json)`. Events:
+  `capabilities` (features: `decorations`, `minimize`, `config`, `appmenu`, `overview`), `minimize-request`,
+  `minimized`, `restored`, `appmenu` `{address, service, path, pid}` (additive field `pid` = the Wayland client's pid
+  from `wl_client_get_credentials`; the menu bridge checks it against `GetConnectionUnixProcessID(service)` to stop one
+  app pointing its window at another app's menu), `overview` `{state: opening|open|closing|closed, windows, reason?}`
+  (`reason`: `invalid` / `no-windows` for a refused request, which changes nothing; `unavailable` at unload;
+  `interrupted` when the overview ended without the shell's request).
 - Delivery (2026-10-17, after the global menus review: an unbounded `appmenu` stream overflowed the shell's socket2
   connection and Hyprland dropped it): every plugin → shell event goes through `compositor/src/core/EventThrottle`,
   keyed by window (`minimized`/`restored` share one key, as do an appmenu clear and set), latest value wins, at most
   one post per key per 100 ms with an event-loop timer posting the final state after a burst; global cap 32 events
-  burst, then 50/s. Events are coalesced, never required one by one: the shell rebuilds minimize state from
+  burst, then 50/s; `overview` has one key of its own (the latest state wins). Events are coalesced, never required one by one: the shell rebuilds minimize state from
   `movewindowv2` and can ask for a window's registration again with `appmenu(address)`. Client-triggerable log lines
-  share one budget (titlebar debug lines still to be moved under it).
+  share one budget, titlebar pointer actions included.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.

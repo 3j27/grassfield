@@ -33,6 +33,9 @@ TEST(Protocol, OnlyRegisteredFeaturesAreAdvertised) {
     EXPECT_EQ(capabilitiesJson(features(true, true, false)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config"]})");
     EXPECT_EQ(capabilitiesJson(features(false, false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","appmenu"]})");
     EXPECT_EQ(capabilitiesJson(features(true, true, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, false, false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","overview"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, true, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview"]})");
 }
 
 TEST(Protocol, AppmenuJsonIsExactWireFormat) {

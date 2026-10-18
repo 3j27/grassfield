@@ -29,6 +29,7 @@ namespace gf::gfc {
     inline constexpr std::string_view kLuaRestore     = "restore";    // hl.plugin.grassfield.restore(address, x, y, w, h)
     inline constexpr std::string_view kLuaConfig      = "config";     // hl.plugin.grassfield.config(key, value)
     inline constexpr std::string_view kLuaAppmenu     = "appmenu";    // hl.plugin.grassfield.appmenu(address): re-posts its appmenu event
+    inline constexpr std::string_view kLuaOverview    = "overview";   // hl.plugin.grassfield.overview(json): live window transforms
 
     // What a shell sends through Hyprland.dispatch() to call a plugin verb.
     std::string luaDispatchRequest(std::string_view verb);
@@ -39,10 +40,11 @@ namespace gf::gfc {
     inline constexpr std::string_view kFeatureMinimize    = "minimize";
     inline constexpr std::string_view kFeatureConfig      = "config";
     inline constexpr std::string_view kFeatureAppmenu     = "appmenu"; // org_kde_kwin_appmenu_manager global + appmenu events
+    inline constexpr std::string_view kFeatureOverview    = "overview"; // hl.plugin.grassfield.overview + window transformers + overview events
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
-    // The advertised list, in a stable order: decorations, then minimize, config, appmenu.
-    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu);
+    // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview.
+    std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key only.
     inline constexpr std::string_view kConfigTitlebarDoubleClick = "titlebarDoubleClick";

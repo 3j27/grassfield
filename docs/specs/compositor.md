@@ -1,7 +1,9 @@
-# grassfield-compositor spec · compositor-engineer · M0 spike S2 → M1 decorations → M2 minimize → S5 appmenu
+# grassfield-compositor spec · compositor-engineer · M0 spike S2 → M1 decorations → M2 minimize → S5 appmenu → M3 overview v2
 
 Status: titlebars, gfc/1 capabilities, minimize/restore with animation (M2), the `config` verb
-(double-click setting) and the appmenu protocol server (feature 3, step A of global menus; spike S5) implemented.
+(double-click setting), the appmenu protocol server (feature 3, step A of global menus; spike S5) and the overview
+live transforms (feature 4, Mission Control v2: the plugin side; spike and shell contract in `docs/specs/overview.md`)
+implemented.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -27,7 +29,8 @@ tile rectangle the shell sends (ADR-0002), and the user's double-click setting.
 
 Non-goals: the "Genie" warp (the animation is the "Scale" effect: uniform shrink + move; a genie would need a
 mesh-deformed texture draw, which Hyprland's pass elements do not offer), hover glyphs and inactive-state
-buttons, appearance switching, tiled windows, CSD negotiation, overview transforms; for appmenu: reading or
+buttons, appearance switching, tiled windows, CSD negotiation; for the overview: the layout, labels, Spaces bar and
+input (the shell), transforming popups; for appmenu: reading or
 rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B, ADR-0008), the
 `com.canonical.AppMenu.Registrar` service, X11 (XWayland) menus.
 
@@ -66,7 +69,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 - **FR9** At load and on `hl.plugin.grassfield.hello()` the plugin posts the socket2 event
   `grassfield>>{"v":"gfc/1","type":"capabilities","features":[...]}`: `decorations` always; `minimize` only
   when the `minimize`/`restore` Lua functions and the minimize render hooks registered; `config` only when the
-  `config` Lua function registered (`["decorations","minimize","config"]` when everything works).
+  `config` Lua function registered; `appmenu` (FR18) and `overview` (FR29) likewise
+  (`["decorations","minimize","config","appmenu","overview"]` when everything works).
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
@@ -144,9 +148,44 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   one key are ≥ 100 ms apart); all keys together 32 at once, then 50 per second (token bucket; waiting events keep
   their latest-submission order, so a key that keeps changing goes behind keys that changed once). Unload posts
   every waiting event, then removes the timer. Log lines that requests trigger (appmenu bind/create/set_address,
-  rejected Lua verb arguments, `config`) share one budget of 20 lines, then 1 per second, and the next written line
+  rejected Lua verb arguments, `config`, titlebar presses and actions from any pointer) share one budget of 20 lines, then 1 per second, and the next written line
   reports how many were held back; set_address is logged at the 1st, 10th, 100th, ... request of an object, never
   per request.
+- **FR25** `hl.plugin.grassfield.overview(json)`: one Lua string of at most 16 KiB, copied out of Lua with non-raising
+  calls, parsed by a strict JSON reader (`core/Overview.*`): an object with `on` (bool) and `durationMs` (integer
+  0..2000) required, `windows` (array of at most 64 objects `{"address","x","y","w","h"}`: address as in FR14, finite
+  numbers, w and h ≥ 1, no address twice) required when `on` is true, optional `curve` (4 finite numbers, x in [0, 1],
+  y in [-1, 2]); unknown keys are skipped, a key given twice, nesting deeper than 16, strings over 256 bytes, NaN /
+  Infinity / out-of-range numbers and trailing characters are refused. A refused request changes nothing and posts the
+  current state with `"reason":"invalid"`. Always returns `hl.dsp.no_op()`. Log lines go through the request log budget
+  (FR24).
+- **FR26** For `on:true` each listed window is transformed only if it is mapped, not hidden, not pinned, on the active,
+  non-special workspace of its monitor, not full screen (`FSMODE_FULLSCREEN`; maximized is allowed) and its rect lies
+  inside that monitor (1 px tolerance); other entries are ignored (logged). If windows were listed and none qualifies,
+  nothing changes and the current state is posted with `"reason":"no-windows"`. A transformed window gets a
+  `Render::IWindowTransformer`; the window's main pass (surface, subsurfaces, decorations) is drawn, live, with its
+  surface box fitted (uniform scale, centred) into its rect, decorations scaled with it. The client is never resized
+  or configured and its window geometry never changes. Popups are not transformed. Snapshots (close / minimize
+  animations) and window captures (`RPT_EXPORT`) show the window untransformed; on another monitor a spanning window
+  is not drawn.
+- **FR27** Windows animate from their live box to their rect (opening) and back from where they are drawn to their
+  live box (closing) over `durationMs` with the cubic-bezier `curve` (default 0.2, 0, 0, 1 = the shell's
+  `Tokens.motionCurveStandard`), interpolated every frame by the plugin (no per-frame IPC); `durationMs` 0 jumps to the
+  end state. `on:true` while open, opening or closing retargets: listed windows continue from where they are drawn,
+  windows no longer listed go back at once. Events (FR24 channel `overview`, one key):
+  `{"v":"gfc/1","type":"overview","state":"opening|open|closing|closed","windows":N}` with `"reason"` when a request is
+  refused (`invalid`, `no-windows`), the plugin unloads (`unavailable`) or the overview is interrupted (`interrupted`).
+  A 150 ms watchdog after the expected end completes an animation when no monitor renders.
+- **FR28** Damage: each animation tick (`render.preChecks`) damages every window's previous and new visual box (with
+  every decoration extent). While an overview is shown, every frame of a monitor that has damage also redraws that
+  monitor's layout boxes (added to its damage ring from `render.pre`); without damage no frame is rendered.
+- **FR29** Failsafes and cleanup: a window that closes, leaves its workspace, becomes full screen or pinned leaves the
+  overview at once; a window getting keyboard focus, or a layer surface with namespace `grassfield-overview` (the
+  shell's overview chrome) closing, starts the closing animation (`interrupted`); a workspace switch that hides a
+  transformed window, a monitor removal or a monitor layout change puts every window back at once (`interrupted`).
+  `PLUGIN_EXIT` removes every transformer it attached (none may outlive `dlclose`), damages their boxes and posts
+  `closed` with `"reason":"unavailable"` before the event throttle stops. Feature `overview` is advertised only when the
+  listeners and the Lua function registered.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -175,6 +214,11 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 | FR22 | nested `appmenu.sh qt-registrar` (Quickshell `Hyprland.dispatch`, `tests/compositor/appmenu-reemit/`) | L1 | 2026-10-17 verified: three calls (the window, `"0xnot-hex"`, `"0x1"`) → exactly one event, for the window; log `appmenu: rejected: invalid window address`, `appmenu: no mapped window 1 (or appmenu inactive)` |
 | FR23 | nested shutdown with live appmenu clients (`scripts/dev/nested-down.sh`); code review | L1 | 2026-10-17 shutdown verified: `appmenu: global and 5 client object(s) destroyed (shutdown)`, `Hyprland has reached the end.`, no core dump; runtime unload NOT VERIFIED (no `scripts/nestctl`) |
 | FR24 | unit `TokenBucket.*`, `EventThrottle.*`, `LogLimiter.*`, `LogMilestone.*` (timer simulated, time injected); nested `tests/compositor/event_flood.sh` (`appmenu-client --spam N`: a mapped window, N valid set_address on one object in one burst, last path `/MenuBar/final`; one Lua dispatch with 1000 `hello()` + 1000 `appmenu(<window>)`; after each flood a foot window with its own app id must become the menu bar's window, `qs ipc call menubar bridgeState`) | L0 / L1 | 2026-10-17. Before the fix (plugin at 6791eea, run `.dev/event-flood/run-20261017-174942`, exit 1): 200 requests → 200 `appmenu` events; the Lua flood → 491 `capabilities` + 490 `appmenu` events (and 491 `config` pushes back from the shell), `Socket2 fd 52 overflowed event queue, removing` (the shell) and `fd 87` (the test's socat), the shell's menu bar stuck on an old window, 202 plugin log lines. After (run `.dev/event-flood/run-20261017-185707`, exit 0): 200 requests → 2 events (`/MenuBar/1`, then `/MenuBar/final`), 25000 requests (sent in 83 ms) → 3 events ending with `/MenuBar/final`; Lua flood → 2 `capabilities` + 2 `appmenu`; no overflow line, no shell event socket error, the shell showed each new foot window; 14 plugin log lines for 25200 requests + 2000 Lua calls |
+| FR25 | unit `OverviewRequest.*`, `OverviewEvents.Json`; nested `overview.sh` check "invalid" | L0 / L1 | 2026-10-18 verified: 6 malformed payloads (missing fields, bad address, duration 99999, not JSON, 1e999, a number instead of a string) → `"reason":"invalid"`, state unchanged (`closed`), Hyprland alive; one Lua dispatch with 500 open/close pairs → 2 overview events posted, socket2 subscriber still connected, final state `closed`, windows at their place (run `run-20261018-003207`) |
+| FR26 | unit `OverviewBounds.*`, `OverviewGeometry.*`; nested `overview.sh` check "sizes", "layout", "live", "invalid" (rect outside the monitor + unknown window → `no-windows`) | L0 / L1 | 2026-10-18 verified (run `.dev/overview/run-20261018-001222`): at/size of 6 windows identical before / during / after; terminal colour at 6/6 rect centres while open (1/6 before); the ticker's rect changed by 2233 px between two open frames, an idle window's by 0 px |
+| FR27 | unit `OverviewTiming.*`, `OverviewGeometry.Interpolation*`; nested `overview.sh` check "events", frames during the 900 ms animations | L0 / L1 | 2026-10-18 verified: `opening` (6) → `open` (6), `closing` (6) → `closed` (0); a frame 250 ms into opening differs from before (214400 px) and from open (64237 px) |
+| FR28 | nested `overview.sh perf 30` (9 windows) | L1 | 2026-10-18: open idle 0.3 % Hyprland CPU, open with one terminal printing 10 lines/s 6.4 % (3.7 % closed), continuous open/close 12.2 % (docs/specs/overview.md "v2 spike" (d)) |
+| FR29 | nested `overview.sh` check "failsafe", "restore", "unload" | L1 | 2026-10-18 verified: fixture surface closed → `closing`/`closed` `interrupted`; after `on:false` the output matched the frame before (0.35 px, menu bar masked); `scripts/nestctl plugin unload` during an open overview: rc 0, Hyprland alive, windows back at their place, `closed`/`unavailable` posted; `plugin load` again → features include `overview` |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -192,6 +236,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 | plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}`; `"service":"","path":""` = no menu (FR20–FR22) |
 | shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's appmenu event (FR22) |
 | client → plugin | Wayland global `org_kde_kwin_appmenu_manager` v2 (`create(new_id, wl_surface)`, `release` since 2); `org_kde_kwin_appmenu.set_address(s, s)`, `release` | FR18–FR21 |
+| shell → plugin | `hl.plugin.grassfield.overview("<json>")` | `{"on":bool,"durationMs":int,"curve":[x1,y1,x2,y2]?,"windows":[{"address":"0x<hex>","x","y","w","h"}…]}` (FR25-FR27) |
+| plugin → shell | socket2 event `grassfield` (overview state) | `{"v":"gfc/1","type":"overview","state":"opening\|open\|closing\|closed","windows":N}` (+ `"reason"`, FR27) |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 The shell sends every verb guarded (`local p = hl.plugin and hl.plugin.grassfield; if p and p.<verb> then
@@ -445,6 +491,15 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   `Desktop::View::IView::resource()`, `Event::bus()->m_events.window.{open, close, destroy, active}`, glibc
   `dladdr`, `dlopen(RTLD_NOW | RTLD_NOLOAD | RTLD_NODELETE)`. Code generator: hyprwayland-scanner 0.4.6
   (`compositor/protocols/appmenu.xml`). Test fixtures: Qt 6.11.2 Widgets/DBus, wayland-scanner 1.26.0, gdbus.
+- Overview (M3, read from the 0.56.2 headers; behavior read from the v0.56.2 sources as data, see
+  `docs/specs/overview.md` "v2 spike"): `Render::IWindowTransformer` (`transform`), `CWindow::m_transformers`,
+  `IHyprRenderer::{m_bRenderingSnapshot, m_renderData.{pMonitor, projectionType, damage}, bindTempFB, draw(CClearPassElement::SClearData),
+  draw(CTexPassElement::SRenderData, CRegion), damageBox, damageWindow}`, `Render::RPT_MONITOR`,
+  `CMonitor::{resources()->getUnusedWorkBuffer(), m_damage.{hasChanged, damage}, m_transformedSize}` (`resources()` is a
+  weak pointer over a unique pointer: never `lock()`ed), `Fullscreen::controller()->getFullscreenModes`,
+  `CWorkspace::{m_renderOffset, m_isSpecialWorkspace}`, `CWindow::{m_floatingOffset, m_pinned, getWindowMainSurfaceBox}`,
+  `CLayerSurface::m_namespace`, `Event::bus()->m_events.{render.{preChecks, pre}, window.{close, destroy, moveToWorkspace,
+  fullscreen, pin, active}, layer.closed, workspace.active, monitor.{removed, layoutChanged}}`.
 - GCC 16.2.1, C++23. Lua 5.5 headers (Hyprland links `liblua.so.5.5`). GoogleTest 1.18.0 for tests.
 - Quickshell 0.3.1 for the IPC spike.
 
@@ -464,6 +519,9 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   `org_kde_kwin_appmenu_manager` global, no `appmenu` events; the shell keeps T0 menus. Whoever owns
   `com.canonical.AppMenu.Registrar` (the bridge, step B) must not own it then: Qt would hide its in-window menu
   bars with nowhere to show them (S5 finding 4).
+- Without the `overview` feature (plugin absent, mismatched, or its listeners failed): `hl.plugin.grassfield.overview`
+  does not exist and the shell keeps the v1 thumbnails. A refused request (`invalid`, `no-windows`) or an unload during
+  an overview (`unavailable`) is reported in the `overview` event, so the shell can fall back for that open.
 
 ## Automated tests · Manual verification steps
 
@@ -473,13 +531,15 @@ drag threshold and un-zoom box, theme values, pointer press ownership and gestur
 minimize logic (`Minimize*`: address parsing, target validation, aspect fit, Bézier easing, frames,
 snapshot texture box on the same and on another monitor), appmenu logic (`Appmenu*`: bus name and object path
 validation, registrations and their announcements; `Protocol.Appmenu*`: event JSON), event and log rate limits
-(`TokenBucket.*`, `EventThrottle.*`, `LogLimiter.*`, `LogMilestone.*`, FR24). Shell side: `tests/unit/tst_minimized.qml`
+(`TokenBucket.*`, `EventThrottle.*`, `LogLimiter.*`, `LogMilestone.*`, FR24), overview logic (`Overview*`: payload
+parsing and validation, bounds, timing, interpolation, texture box, event JSON, FR25-FR28). Shell side: `tests/unit/tst_minimized.qml`
 (request builders, config allowlist, `movewindowv2` parsing). Lint (Q1): `compositor/build-direct.sh tidy`
 (`compositor/.clang-tidy`). Soak (C1): `tests/compositor/soak.sh [seconds]` (see `compositor/README.md`).
 Nested scenarios: `tests/compositor/minimize.sh [repeats]` (FR6, FR14–FR17), `tests/compositor/double_click_setting.sh` (FR8, FR16), `tests/compositor/zoom_restore.sh`
 (FR8), `tests/compositor/input_consistency.sh [rounds]` (FR13), `tests/compositor/appmenu.sh [variants]`
 (FR18–FR22, spike S5; fixtures `tests/fixtures/{menu-demo, fake-registrar, appmenu-client}`, built by
-`tests/fixtures/build.sh`), `tests/compositor/event_flood.sh [requests...]` (FR24; needs grassfield-shell).
+`tests/fixtures/build.sh`), `tests/compositor/event_flood.sh [requests...]` (FR24; needs grassfield-shell),
+`tests/compositor/overview.sh [check | perf [seconds]]` (FR25-FR29; fixture `tests/compositor/overview-fixture`).
 
 Manual (L1, nested only):
 
@@ -559,8 +619,9 @@ Manual (L1, nested only):
 - The titlebar sits above the client's requested position, so a centered window's titlebar extends 28 px
   above the centered area.
 - Fractional scaling: geometry is scaled by the monitor scale but only scale 1 was tested.
-- Runtime unload (`hyprctl plugin unload`, needs `scripts/nestctl`) is untested; unload at compositor exit
-  is tested.
+- Runtime unload through `scripts/nestctl` was exercised once (2026-10-18, `tests/compositor/overview.sh`: unload during
+  an open overview, then load again: Hyprland alive, features back); the appmenu pinning path (FR23) is still not
+  verified with client objects alive.
 - The release of a titlebar press that ends outside a titlebar (a button press moved away, a double-click
   zoom, and most fast drags, because the bar lags the pointer while the window's move animation runs) is
   processed by Hyprland like any release and reaches the seat, which drops it because the client never got

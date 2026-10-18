@@ -106,7 +106,7 @@ namespace {
 
     void logIfFailed(std::string_view action, const Config::Actions::ActionResult& result) {
         if (!result)
-            gf::log(Log::WARN, "titlebar {} failed: {}", action, result.error().message);
+            gf::logRequest(Log::WARN, "titlebar {} failed: {}", action, result.error().message);
     }
 
     // The minimize path, shared by the minimize button and a double-click set to "minimize": the shell owns
@@ -144,7 +144,7 @@ namespace {
         const CBox  restored = target->position();
         const CBox& zoomed   = grab.zoomedSurface;
         const auto  box      = tb::unzoomedDragBox(tb::Rect{zoomed.x, zoomed.y, zoomed.w, zoomed.h}, restored.w, restored.h, grab.pressPos.x, grab.pressPos.y, pointer.x, pointer.y);
-        gf::log(Log::DEBUG, "titlebar drag un-zooms: restored {:.0f}x{:.0f} at {:.0f},{:.0f}", box.w, box.h, box.x, box.y);
+        gf::logRequest(Log::DEBUG, "titlebar drag un-zooms: restored {:.0f}x{:.0f} at {:.0f},{:.0f}", box.w, box.h, box.x, box.y);
         grab.startBox = CBox{box.x, box.y, box.w, box.h};
         grab.pressPos = pointer;
         grab.unzoom   = false;
@@ -427,7 +427,7 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
 
     const CBox bar = layoutBox();
     const auto hit = tb::hitTest(coords.x - bar.x, coords.y - bar.y, bar.w);
-    gf::log(Log::DEBUG, "titlebar press at {:.1f},{:.1f} bar {:.1f},{:.1f} {:.0f}x{:.0f} -> {}", coords.x, coords.y, bar.x, bar.y, bar.w, bar.h, hitName(hit));
+    gf::logRequest(Log::DEBUG, "titlebar press at {:.1f},{:.1f} bar {:.1f},{:.1f} {:.0f}x{:.0f} -> {}", coords.x, coords.y, bar.x, bar.y, bar.w, bar.h, hitName(hit));
     if (hit == tb::HitTarget::None)
         return false;
 
@@ -450,12 +450,12 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
         switch (gf::state().doubleClickAction) {
             case gf::gfc::DoubleClickAction::Zoom:
-                gf::log(Log::DEBUG, "titlebar double-click -> toggle zoom");
+                gf::logRequest(Log::DEBUG, "titlebar double-click -> toggle zoom");
                 toggleZoom(w);
                 input.presses.claim(e.button, false); // acts now; its release is still the titlebar's
                 return true;
             case gf::gfc::DoubleClickAction::Minimize:
-                gf::log(Log::DEBUG, "titlebar double-click -> minimize");
+                gf::logRequest(Log::DEBUG, "titlebar double-click -> minimize");
                 requestMinimize(w);
                 input.presses.claim(e.button, false);
                 return true;
@@ -493,11 +493,11 @@ void CGrassfieldTitlebar::activate(tb::Button button) {
 
     switch (button) {
         case tb::Button::Close:
-            gf::log(Log::DEBUG, "titlebar close");
+            gf::logRequest(Log::DEBUG, "titlebar close");
             logIfFailed("close", Config::Actions::closeWindow(w));
             break;
-        case tb::Button::Zoom: gf::log(Log::DEBUG, "titlebar zoom"); toggleZoom(w); break;
-        case tb::Button::Minimize: gf::log(Log::DEBUG, "titlebar minimize"); requestMinimize(w); break;
+        case tb::Button::Zoom: gf::logRequest(Log::DEBUG, "titlebar zoom"); toggleZoom(w); break;
+        case tb::Button::Minimize: gf::logRequest(Log::DEBUG, "titlebar minimize"); requestMinimize(w); break;
     }
 }
 
@@ -509,7 +509,7 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
             // or another button was pressed. End the gesture where it is; this press goes wherever
             // Hyprland sends it, and its release with it.
             if (input.presses.onPress(e.button)) {
-                gf::log(Log::DEBUG, "titlebar gesture cancelled by a new press (button {:#x})", e.button);
+                gf::logRequest(Log::DEBUG, "titlebar gesture cancelled by a new press (button {:#x})", e.button);
                 input.grab = {};
             }
             return;
@@ -549,7 +549,7 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
         // still be down; if not, its release will never arrive and the gesture must not stick.
         const bool held = g_pInputManager && g_pInputManager->hasHeldButtons();
         if (input.presses.onMotion(held, devicesIntact(input.grab.devices))) {
-            gf::log(Log::DEBUG, "titlebar gesture cancelled: no button held or a pointer device went away");
+            gf::logRequest(Log::DEBUG, "titlebar gesture cancelled: no button held or a pointer device went away");
             input.grab = {};
             return;
         }
