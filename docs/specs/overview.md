@@ -11,8 +11,8 @@
 v1 (M2): shell surface with ScreencopyView thumbnails of toplevels (Quickshell `ScreencopyView` with
 Hyprland toplevel capture), layout algorithm, Spaces bar, keyboard nav, drag to Space.
 v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.grassfield.overview(json)`, feature
-`overview`) when the capability is present (compositor side done 2026-10-18, see "v2 implementation"; shell side
-pending). Non-goal: capturing protected surfaces.
+`overview`) when the capability is present (compositor and shell side shipped 2026-10-18, see "v2 implementation" and
+"v2 shell side"). Non-goal: capturing protected surfaces.
 
 ## Functional requirements
 1. O1 Toggle via IPC `overview toggle` (CTRL+UP) and gesture (owner config, L2).
@@ -201,7 +201,7 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
 `compositor/src/Ipc.cpp`. Plugin requirements: `docs/specs/compositor.md` FR25-FR29. Nested scenario:
 `tests/compositor/overview.sh` (`check`, `perf`) with the stand-in `tests/compositor/overview-fixture/shell.qml`.
 
-### Shell contract (for the shell-engineer; the shell side is not implemented yet)
+### Shell contract
 1. **Capability.** `Capabilities.has("overview")` selects v2 (`Overview.thumbnailMode` false); otherwise v1.
 2. **Surfaces** (per output):
    - backdrop, namespace `grassfield-overview-backdrop`, `WlrLayer.Bottom`, full screen, no input (empty mask), dim
@@ -270,3 +270,33 @@ the chrome is Exclusive: the failsafe now requires a mapped window that took the
 none either; captures most likely repaint the whole output): the resize check reads the plugin's damage log instead, and
 it fails on the reverted build (`open box height 351, box damaged at the start of the shrink none`) and passes on the fix
 (`351 → 491`).
+
+## v2 shell side (shipped 2026-10-18)
+Code: `shell/overview/Overview.qml` (controller, conversation with the plugin), `OverviewWindow.qml` (chrome, one per output),
+`OverviewBackdrop.qml` (Bottom-layer dim, namespace `grassfield-overview-backdrop`), `V2.js` (event parsing, decisions,
+layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (the one validator/Lua quoter,
+`tst_minimized.qml`), `Compositor.overview()`. Tokens: `overview.windowTitlebarHeight` 28, `chromeWaitMs`, `chromeRetryMs`.
+- Selection: `thumbnailMode = thumbsThisOpen || !Capabilities.has("overview")`; `thumbsThisOpen` is decided at each open
+  (no capability, or a full-screen window on a shown Space) and set by a fallback (refusal `invalid`/`no-windows`, `no-chrome`
+  after one retry, `unavailable`, `fullscreen`, chrome not holding the keyboard within `chromeWaitMs`). A fallback while
+  windows are transformed first sends `{"on":false,"durationMs":0}`.
+- Open: every output's chrome is Exclusive (the plugin requires it per output with windows); once a chrome is `Window.active`
+  the layout of all outputs is sent (surface box = layout rect minus the 28 px band x scale, global coordinates).
+  `durationMs` = `motion.slow` (350), 0 with Reduce Motion (the dim then crossfades in at most `motion.reducedMax`).
+  A new layout while open (window opened/closed/moved) retargets with a new `on:true`.
+- Close: `on:false` is sent first, then the grab is released 80 ms before the focus action as in v1 (the plugin lets the
+  asked closing animation finish). Esc, a click on a window or on empty space, a Space tile all go through it.
+- Input is the shell's own: per-window hit areas (surface + band), hover selects and shows the app label, arrows/Tab/Return,
+  drag to a Space tile (a ghost follows the pointer; the real window stays drawn by the plugin; drop = `moveToSpace`).
+- "+": switches to the new Space; the plugin ends its overview on a Space switch, the shell keeps the chrome open on the
+  empty Space (no layout is sent for zero windows).
+- Restart: after every `capabilities` event with no overview open, `{"on":false,"durationMs":0}` is sent.
+- Evidence (nested Hyprland 0.56.2, plugin 0.5.0-df, GF-REF, 6 foot windows + 1 on WAYLAND-1): open via IPC shows real windows
+  scaled with live content (`.dev/shots/ov3-hover.png`), `hyprctl clients` at/size identical before/during/after, click on a
+  window focuses it and closes, Esc closes, "+" adds Desktop 3, drag to a tile moves the window (ws2 6 -> 7 windows), CPU
+  with 6 idle windows: closed Hyprland 0.0 % / shell 0.1 %, open Hyprland 0.4 % / shell 1.2 % (v1 live: 43.1 % / 104.8 %,
+  balanced 0.3 % / 1.3 %). `--no-plugin`: thumbnails as before.
+- Residual limits: popups (menus) of a window are not scaled; the parts of a window outside its output are not drawn
+  (the plugin renders into a monitor-sized buffer); fractional scales and rotated outputs are not verified; when the plugin
+  reports fewer windows than sent (ineligible ones) their hit areas still sit at the layout rect; Spaces bar tiles of other
+  Spaces have no capture; Ctrl+Up is the owner's binding (not in the dev config: IPC `overview toggle` was used).
