@@ -268,34 +268,30 @@ QtObject {
     // F1 gap 4: tail 7.3 high
     readonly property int controlTooltipTailHeight: 7
 
-    // estimate, pending F1 measurement from design/reference
-    readonly property int panelControlCenterWidth: 320
+    // F1 gap 6: Quick Settings column 291 +-1 (4 x 63 cells + 3 x 13 gaps)
+    readonly property int panelControlCenterWidth: 291
     // estimate, pending F1 measurement from design/reference
     readonly property int panelDialogWidth: 380
     // estimate, pending F1 measurement from design/reference
     readonly property int panelAboutWidth: 340
     // estimate, pending F1 measurement from design/reference
     readonly property int panelForceQuitWidth: 380
-    // estimate, pending F1 measurement from design/reference
-    readonly property int panelTileHeight: 56
+    // F1 gap 6: 2x1 module height 63
+    readonly property int panelTileHeight: 63
     // estimate, pending F1 measurement from design/reference
     readonly property int panelPopupMargin: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int panelStatusPopupWidth: 260
     // estimate
     readonly property int panelAboutLabelWidth: 100
-    // estimate: round icon button of a Control Center row
-    readonly property int panelCcIconButton: 30
+    // F1 gap 6: 36-pt icon disk of a 2x1 module
+    readonly property int panelCcIconButton: 36
     // estimate: list row in an expanded Control Center section
     readonly property int panelCcRowHeight: 34
-    // estimate: height of the top tile grid
-    readonly property int panelCcGridHeight: 156
-    // estimate: width share of the connectivity tile
-    readonly property real panelCcLeftFraction: 0.56
     // estimate: chevron glyph size
     readonly property int panelCcChevron: 12
-    // estimate: Now Playing artwork
-    readonly property int panelCcArtSize: 34
+    // estimate: Now Playing artwork in the 2x2 module
+    readonly property int panelCcArtSize: 40
     // estimate: visible rows before a list scrolls
     readonly property int panelCcListMaxRows: 6
     // estimate: dev-guard note lifetime in ms
@@ -306,6 +302,33 @@ QtObject {
     readonly property real panelDialogRaise: 0.08
     // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages)
     readonly property int panelAlertWidth: 260
+
+    // F1 gap 6: grid cell 63 (1x1 circle, 2x1 capsule 139 x 63)
+    readonly property int quicksettingsCell: 63
+    // F1 gap 6: gap between modules 12.5-13.3
+    readonly property int quicksettingsGap: 13
+    // F1 gap 6: 14 +-1 from the right edge of the screen
+    readonly property int quicksettingsEdgeMargin: 14
+    // F1 gap 6: about 13 below the menu bar
+    readonly property int quicksettingsTopGap: 13
+    // F1 gap 6: 36-pt icon disk of a 2x1 module
+    readonly property int quicksettingsIconDisk: 36
+    // F1 gap 6: 2x2 module radius 30 +-3
+    readonly property int quicksettingsRadiusTile: 30
+    // F1 gap 6: slider module radius 20 +-3
+    readonly property int quicksettingsRadiusSlider: 20
+    // estimate: opened detail module (same radius as a slider module)
+    readonly property int quicksettingsRadiusDetail: 20
+    // F1 gap 6: slider module 62.5, rounded to the cell so rows align
+    readonly property int quicksettingsSliderModuleHeight: 63
+    // F1 gap 6: inset of the content in a module (13.5)
+    readonly property int quicksettingsPadding: 14
+    // estimate: bold title of a slider module
+    readonly property int quicksettingsTitleSize: 13
+    // estimate: back button of an opened detail module
+    readonly property int quicksettingsBackSize: 28
+    // estimate: dev-guard note capsule
+    readonly property int quicksettingsNoteHeight: 26
 
     // spec notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344
@@ -335,8 +358,18 @@ QtObject {
     readonly property int notificationMaxActions: 3
     // spec N9
     readonly property int notificationImageMax: 256
-    // estimate, pending F1 measurement from design/reference
-    readonly property int notificationCenterWidth: 380
+    // F1 gap 7: the Notifications column has the width of a banner, 344
+    readonly property int notificationCenterWidth: 344
+    // F1 gap 7: right inset and offset below the bar 15 +-1 (same as the banners)
+    readonly property int notificationCenterInset: 16
+    // estimate: title capsule of the Notifications column
+    readonly property int notificationCenterHeaderHeight: 36
+    // F1 gap 7: edit-widgets pill 87 x 23
+    readonly property int notificationCenterPillWidth: 87
+    // F1 gap 7: edit-widgets pill 87 x 23
+    readonly property int notificationCenterPillHeight: 23
+    // F1 gap 7: 24-pt close circle of the footer
+    readonly property int notificationCenterCloseDisk: 24
     // estimate: entries per group before Show all
     readonly property int notificationCenterGroupCollapsed: 3
     // estimate: pixels of rows kept alive beyond the viewport (keyboard reach)

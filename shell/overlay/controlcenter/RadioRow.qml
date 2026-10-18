@@ -15,6 +15,8 @@ NavItem {
     property bool expanded: false
     // False: the row is hidden (and so out of the Tab order): no hardware or service.
     property bool available: true
+    // Left and right inset inside a 2x1 module (the row fills the whole capsule, so its focus ring does too).
+    property real inset: 0
 
     signal toggled
     signal expandToggled
@@ -30,10 +32,18 @@ NavItem {
     onArrow: direction => {
         if (expandable && available && (direction > 0) !== expanded)
             expandToggled();
+        else if (!expandable)
+            root.moveFocus(direction > 0);
+    }
+
+    HoverHandler {
+        id: hover
     }
 
     Rectangle {
         id: circle
+        x: root.inset
+        anchors.verticalCenter: parent.verticalCenter
         width: Tokens.panelCcIconButton
         height: width
         radius: width / 2
@@ -64,12 +74,12 @@ NavItem {
         anchors.left: circle.right
         anchors.leftMargin: Tokens.spacingSm
         anchors.right: parent.right
+        anchors.rightMargin: root.inset > 0 ? Tokens.spacingXs : 0
         height: parent.height
 
         Column {
             anchors.left: parent.left
-            anchors.right: chevron.visible ? chevron.left : parent.right
-            anchors.rightMargin: chevron.visible ? Tokens.spacingXs : 0
+            anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
 
             Label {
@@ -87,9 +97,10 @@ NavItem {
             }
         }
 
+        // The chevron only shows while the row is hovered or focused (a 139-pt capsule has no room for it).
         Icon {
             id: chevron
-            visible: root.expandable
+            visible: root.expandable && (hover.hovered || root.activeFocus || root.expanded)
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             size: Tokens.panelCcChevron
@@ -99,9 +110,9 @@ NavItem {
 
         MouseArea {
             anchors.fill: parent
-            enabled: root.expandable && root.available
+            enabled: root.available
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.expandToggled()
+            onClicked: root.expandable ? root.expandToggled() : root.toggled()
         }
     }
 }

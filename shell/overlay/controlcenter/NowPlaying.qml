@@ -4,55 +4,58 @@ import qs.services
 import qs.overlay.controlcenter
 import "../../widgets/ArtUrl.js" as ArtUrl
 
-// Now Playing tile (CC7): artwork, title, artist and transport controls of the active MPRIS player.
-// Hidden by the host when Media.available is false.
-Tile {
+// Now Playing module (CC7, 2x2): artwork, title, artist and transport controls of the active MPRIS
+// player. Hidden by the host when Media.available is false.
+Module {
     id: root
 
-    padding: Tokens.spacingSm + Tokens.spacingXs
+    readonly property real pad: Tokens.quicksettingsPadding
+
+    cols: 2
+    rows: 2
     Accessible.role: Accessible.Grouping
     Accessible.name: qsTr("Now Playing")
 
-    Row {
-        width: parent.width
-        spacing: Tokens.spacingSm
+    Rectangle {
+        id: art
+        x: root.pad
+        y: root.pad
+        width: Tokens.panelCcArtSize
+        height: width
+        radius: Tokens.radiusControl
+        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        clip: true
 
-        Rectangle {
-            width: Tokens.panelCcArtSize
-            height: width
-            radius: Tokens.radiusControl
-            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-            clip: true
+        Image {
+            anchors.fill: parent
+            source: ArtUrl.safe(Media.artUrl)
+            sourceSize: Qt.size(Tokens.panelCcArtSize * 2, Tokens.panelCcArtSize * 2)
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+        }
+    }
 
-            Image {
-                anchors.fill: parent
-                source: ArtUrl.safe(Media.artUrl)
-                sourceSize: Qt.size(Tokens.panelCcArtSize * 2, Tokens.panelCcArtSize * 2)
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-            }
+    Column {
+        x: root.pad
+        y: art.y + art.height + Tokens.spacingXs
+        width: root.width - 2 * root.pad
+
+        Label {
+            width: parent.width
+            text: Media.title !== "" ? Media.title : qsTr("Not playing")
         }
 
-        Column {
-            width: parent.width - Tokens.panelCcArtSize - parent.spacing
-            anchors.verticalCenter: parent.verticalCenter
-
-            Label {
-                width: parent.width
-                text: Media.title !== "" ? Media.title : qsTr("Not playing")
-            }
-
-            Caption {
-                width: parent.width
-                visible: text !== ""
-                text: Media.artist
-            }
+        Caption {
+            width: parent.width
+            visible: text !== ""
+            text: Media.artist
         }
     }
 
     Row {
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Tokens.spacingSm
+        y: root.height - height - Tokens.spacingSm
+        spacing: Tokens.spacingXs
 
         Repeater {
             model: [

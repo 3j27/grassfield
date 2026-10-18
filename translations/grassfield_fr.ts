@@ -1263,6 +1263,10 @@
         <translation>Luminosité de l’écran</translation>
     </message>
     <message>
+        <source>Back</source>
+        <translation>Retour</translation>
+    </message>
+    <message>
         <source>Sound</source>
         <translation>Son</translation>
     </message>
@@ -2686,6 +2690,14 @@
         <translation>Notifications</translation>
     </message>
     <message>
+        <source>Notifications, Do Not Disturb on</source>
+        <translation>Notifications, Ne pas déranger activé</translation>
+    </message>
+    <message>
+        <source>Do Not Disturb</source>
+        <translation>Ne pas déranger</translation>
+    </message>
+    <message>
         <source>Clear All</source>
         <translation>Tout effacer</translation>
     </message>
@@ -2698,6 +2710,10 @@
         <translation>Effacer</translation>
     </message>
     <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
         <source>Clear notification</source>
         <translation>Effacer la notification</translation>
     </message>
@@ -2708,10 +2724,6 @@
     <message>
         <source>Show All (%1)</source>
         <translation>Tout afficher (%1)</translation>
-    </message>
-    <message>
-        <source>Widgets</source>
-        <translation>Widgets</translation>
     </message>
     <message>
         <source>Edit Widgets</source>
