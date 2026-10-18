@@ -13,6 +13,8 @@ set -euo pipefail
 VS_HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VS_ROOT=$(cd "$VS_HERE/../.." && pwd)
 VS_DEV=$VS_ROOT/.dev
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$VS_ROOT/scripts/dev/pidfile.sh"
 VS_STATE=$VS_DEV/visual
 VS_SHOTS=${VISUAL_SHOTS:-$VS_STATE/shots}
 VS_LANG=${VISUAL_LANG:-en}
@@ -45,7 +47,7 @@ vs_park() {
 vs_nested_wayland() { cat "$VS_DEV/nested.wayland"; }
 
 vs_nested_running() {
-  [[ -s $VS_DEV/nested.pid ]] && kill -0 "$(<"$VS_DEV/nested.pid")" 2>/dev/null
+  dev_live_pid "$VS_DEV/nested.pid" >/dev/null
 }
 
 # Desktop fixture folder (never the owner's real desktop): fixed names, fixed content.
