@@ -302,9 +302,7 @@ def wanted(path):
 
 # Known violations in files this checker's owner may not edit: reported as WARNING (never silent), do not fail the run. Remove an
 # entry when its file is fixed.
-KNOWN = {
-    "tests/compositor/appmenu.sh": "chromium started with --user-data-dir only (no XDG_* isolation): open finding for the compositor-engineer",
-}
+KNOWN: dict[str, str] = {}
 
 
 # One sample per launch form. Each is a tiny script.

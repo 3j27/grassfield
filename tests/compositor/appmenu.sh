@@ -93,7 +93,7 @@ inner() {
   if [[ $v == chromium* ]]; then
     # The browser binary itself, not the /usr/bin launcher (which adds the owner's chromium-flags.conf).
     # Only the browser process talks to Wayland; its WAYLAND_DEBUG output is filtered after the run.
-    WAYLAND_DISPLAY=$sock WAYLAND_DEBUG=1 setsid /usr/lib/chromium/chromium --ozone-platform=wayland --user-data-dir="$out/profile" \
+    WAYLAND_DISPLAY=$sock WAYLAND_DEBUG=1 setsid "$root/scripts/dev/isolated.sh" --name appmenu-chromium /usr/lib/chromium/chromium --ozone-platform=wayland --user-data-dir="$out/profile" \
       --no-first-run --no-default-browser-check --password-store=basic --disable-sync about:blank \
       >"$out/app.out" 2>"$out/wayland-debug.full" </dev/null &
     app_pid=$!
