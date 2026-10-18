@@ -567,6 +567,37 @@ step_probe_cost() {
   if awk -v e="$extra" 'BEGIN { exit !(e < 5) }'; then pass "probe-cost: the suspected-takeover check adds $extra % CPU (< 5)"; else fail "probe-cost: the suspected-takeover check adds $extra % CPU"; fi
 }
 
+rss_mb() { awk '/^VmRSS:/ { printf "%.1f", $2 / 1024 }' "/proc/$1/status" 2>/dev/null; }
+
+# Memory of the shell while the 100 ms ownership check runs (a foreign locker holds the lock over Grassfield's) for
+# PROBE_MEMORY_SECONDS (default 600): RSS every 30 s, and the growth over the second half (least squares, MB/min) after
+# the JS heap has warmed up. Fails above PROBE_MEMORY_MAX_SLOPE MB/min (default 0.5; R12 counter-review: 452 -> 477 MB
+# in ~5 min, i.e. ~5 MB/min). Not in the default sequence (10 min): run it explicitly.
+step_probe_memory() {
+  local secs=${PROBE_MEMORY_SECONDS:-600} maxSlope=${PROBE_MEMORY_MAX_SLOPE:-0.5} shellPid s from t0 now series="" slope
+  shellPid=$(dev_live_pid "$dev/shell.pid") || { fail "probe-memory: no live shell record"; return; }
+  s=$(wait_status locked 3) || { fail "probe-memory: precondition: status $s"; return; }
+  from=$(wc -l <"$dev/shell.log")
+  foreign_start probe-memory
+  sleep 1
+  if ! tail -n +"$((from + 1))" "$dev/shell.log" | grep -q "takeover suspected"; then
+    [[ $(ipc lock status) == locked ]] && echo "probe-memory: (the shell was already in the suspected state)"
+  fi
+  t0=$SECONDS
+  while ((SECONDS - t0 <= secs)); do
+    now=$((SECONDS - t0))
+    series+="$now $(rss_mb "$shellPid")"$'\n'
+    sleep 30
+  done
+  foreign_release_and_wait probe-memory
+  echo "probe-memory: shell RSS (s MB):"
+  printf '%s' "$series" | awk '{ printf "  %4d s  %7.1f MB\n", $1, $2 }'
+  slope=$(printf '%s' "$series" | awk -v half=$((secs / 2)) '$1 >= half { n++; sx += $1; sy += $2; sxx += $1 * $1; sxy += $1 * $2 }
+    END { if (n < 2) { print "nan"; exit } printf "%.2f", (n * sxy - sx * sy) / (n * sxx - sx * sx) * 60 }')
+  echo "probe-memory: growth over the second half: $slope MB/min (first $(printf '%s' "$series" | head -n 1 | cut -d' ' -f2) MB, last $(printf '%s' "$series" | tail -n 1 | cut -d' ' -f2) MB)"
+  if awk -v s="$slope" -v m="$maxSlope" 'BEGIN { exit !(s != "nan" && s < m) }'; then pass "probe-memory: no growth with the 100 ms check ($slope MB/min < $maxSlope)"; else fail "probe-memory: the shell grows $slope MB/min with the 100 ms check"; fi
+}
+
 # Leave nothing behind but the (locked) nested session.
 step_cleanup() {
   echo "typed into foot: $(tr -c '[:alnum:]' ' ' <"$typed" 2>/dev/null)"

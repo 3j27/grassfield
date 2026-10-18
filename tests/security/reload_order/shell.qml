@@ -78,8 +78,13 @@ ShellRoot {
         check("Lock.qml-lock-never-relocks", lockFn.length > 0 && lockFn.indexOf("relock(") === -1);
         // Defence in depth (R12 review #3 MAJOR): PAM is suppressed in a dev session unless GRASSFIELD_DEV_ALLOW_PAM=1.
         check("Lock.qml-dev-pam-suppressed", /controller\.pamSuppressed = Quickshell\.env\("GRASSFIELD_DEV"\) === "1" && Quickshell\.env\("GRASSFIELD_DEV_ALLOW_PAM"\) !== "1";/.test(code));
-        // Minor: a lock inherited at start stops forcing the 100 ms probe once our lock surface holds the keyboard.
-        check("Lock.qml-inherited-lock-cleared-on-focus", /Window\.active\)\s*\{\s*root\.focusedSurface = keyboardProbe;\s*[^]*?root\.inheritedLock = false;/.test(code));
+        // A lock inherited at start keeps the 100 ms check until relock() or release(): a foreign locker under this lock
+        // can release it while this surface keeps the keyboard (R12 counter-review of 620f08c), so keyboard focus must not
+        // end the suspicion. inheritedLock = false appears exactly in relock() and release().
+        const clears = code.match(/inheritedLock = false;/g) || [];
+        const relockFn = code.slice(code.indexOf("function relock("), code.indexOf("function checkOwnership("));
+        const releaseFn = code.slice(code.indexOf("function release("), code.indexOf("function writeMarker("));
+        check("Lock.qml-inherited-lock-cleared-only-by-relock-and-release", clears.length === 2 && relockFn.indexOf("inheritedLock = false;") !== -1 && releaseFn.indexOf("inheritedLock = false;") !== -1);
         report();
     }
 

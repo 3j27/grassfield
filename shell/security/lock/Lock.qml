@@ -369,11 +369,11 @@ Singleton {
 
                 Window.onActiveChanged: {
                     if (Window.active) {
+                        // Keyboard focus says nothing about a lock inherited at start: a live foreign locker that held the
+                        // session lock sits UNDER this lock, and its release unlocks the session while this surface keeps
+                        // the keyboard (R12 counter-review of 620f08c). inheritedLock is cleared only by relock() (that
+                        // release happened) and release().
                         root.focusedSurface = keyboardProbe;
-                        // Our lock surface now holds the keyboard: no foreign locker sits on top, so a lock inherited at
-                        // start is confirmed ours. End the inherited-lock suspicion (the probe falls back to 1 s unless
-                        // the keyboard later leaves), so a restored lock does not keep the 100 ms check for its lifetime.
-                        root.inheritedLock = false;
                     } else {
                         if (root.focusedSurface === keyboardProbe)
                             root.focusedSurface = null;
