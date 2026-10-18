@@ -81,6 +81,25 @@ vs_wait_output() {
   return 1
 }
 
+# Which monitor gets Space 1 depends on whether the nested window's output (WAYLAND-1) or the headless GF-REF is
+# created first, which races with the load of the owner's session: the Spaces bar then reads "Desktop 1" in one run
+# and "Desktop 2" in the next. The reference state is GF-REF on Space 2 (WAYLAND-1 on 1, as in a quiet session); any
+# other assignment restarts the nested session (at most 4 starts).
+vs_canonical_workspaces() {
+  local lang=$1 n i ws
+  for n in 1 2 3 4; do
+    sleep 2
+    ws=$("$VS_ROOT/scripts/nestctl" monitors -j 2>/dev/null | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | .activeWorkspace.id' 2>/dev/null || true)
+    [[ $ws == 2 ]] && return 0
+    echo "visual: $VS_OUTPUT is on Space '${ws:-?}', not 2: restarting the nested session ($n/4)" >&2
+    "$VS_ROOT/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
+    "$VS_ROOT/scripts/dev/nested-up.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop" || return 1
+    vs_wait_output || return 1
+  done
+  echo "visual: $VS_OUTPUT never got Space 2 in 4 nested starts" >&2
+  return 1
+}
+
 # Make sure a nested session with the shell in language $1 (default $VS_LANG) is up. Idempotent.
 vs_session() {
   local lang=${1:-$VS_LANG} cur=""
@@ -99,6 +118,7 @@ vs_session() {
     # callback): the shell then logs "Layershell screen does not correspond to a real screen" and the desktop icons and
     # the other GF-REF surfaces are missing. Wait for GF-REF, then (re)start the shell on it.
     vs_wait_output || return 1
+    vs_canonical_workspaces "$lang" || return 1
     "$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop"
     printf '%s\n' "$lang" > "$VS_STATE/session.lang"
   elif [[ -z ${VS_REUSE:-} || $cur != "$lang" ]] || ! vs_ipc lock status >/dev/null 2>&1; then
@@ -112,7 +132,36 @@ vs_session() {
     sleep 0.5
   done
   vs_ipc lock status >/dev/null 2>&1 || { echo "visual: shell did not come up (see .dev/shell.log)" >&2; return 1; }
+  vs_wait_capabilities "$lang" || return 1
   sleep 2
+}
+
+# The shell decides v1/v2 Overview, titlebars and the desktop focus policy from the plugin's capabilities, which arrive
+# after the shell is up (hello reply). A capture taken before they arrive differs from one taken after, so wait for
+# `capabilities status` = "ready present ..." when the plugin is loaded in the nested session; "ready degraded" is
+# the expected state without it. A shell that settled degraded although the plugin is there (its hello retries ended
+# before the plugin answered) is restarted once.
+vs_plugin_expected() {
+  [[ -f ${GRASSFIELD_PLUGIN:-$VS_ROOT/compositor/build/grassfield-compositor.so} && -z ${GRASSFIELD_NO_PLUGIN:-} ]]
+}
+
+vs_wait_capabilities() {
+  local lang=$1 i st="" attempt
+  for attempt in 1 2; do
+    for i in $(seq 1 60); do
+      st=$(vs_ipc capabilities status 2>/dev/null || true)
+      case $st in
+        "ready present"*) return 0 ;;
+        "ready degraded") vs_plugin_expected || return 0; break ;;
+      esac
+      sleep 0.5
+    done
+    (( attempt == 1 )) || break
+    "$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$lang" --desktop-dir "$VS_STATE/desktop"
+    for i in $(seq 1 60); do vs_ipc lock status >/dev/null 2>&1 && break; sleep 0.5; done
+  done
+  echo "visual: capabilities not ready (last status: ${st:-none}); the compositor plugin did not answer" >&2
+  return 1
 }
 
 # PIDs of client processes started by scenarios (killed by vs_reset; never anything else).

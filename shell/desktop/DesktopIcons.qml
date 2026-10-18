@@ -17,7 +17,7 @@ import "KeyboardFocus.js" as Focus
 // Keyboard focus (ADR-0012, KeyboardFocus.js): the desktop is click-to-focus. Keyboard interactivity is None
 // until a press on the desktop, then OnDemand; it goes back to None when the pointer leaves the surface or the
 // keyboard is not granted. Hyprland decides who holds the keyboard; nothing here guesses.
-// With the compositor capability "desktop-focus" the plugin gives the keyboard to the clicked window or desktop: the
+// With the compositor capability "desktop-focus-v2" the plugin gives the keyboard to the clicked window or desktop: the
 // kicker and the drop on pointer leave go away and the desktop keeps the keyboard until another click (macOS Finder);
 // the file keys are enabled. Live: the capability can be withdrawn (plugin unload) at any time.
 Variants {
@@ -71,6 +71,11 @@ Variants {
         // The menu bar shows the desktop's name while the desktop (or its context menu) holds the keyboard.
         readonly property bool holding: win.visible && (win.hasKeys || win.kb.mode === "menu")
         onHoldingChanged: DesktopState.holdsKeyboard = win.holding
+        // The output went away while this desktop held the keyboard: the flag must not stay true.
+        Component.onDestruction: {
+            if (win.holding)
+                DesktopState.holdsKeyboard = false;
+        }
 
         // The policy was withdrawn (plugin unloaded) while the desktop holds the keyboard: the pointer-leave drop
         // is back, and the pointer may already be elsewhere.

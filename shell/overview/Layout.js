@@ -236,6 +236,58 @@ function layout(rects, area, opts) {
     return {scale: 0.01, rects: scaled(valid, area, 0.01)};
 }
 
+// Free region of one output's chrome surface (surface coordinates, the surface starts below the menu bar): below the
+// Spaces bar, above the Dock (when it takes space) and above the strip for the window label under the bottom row.
+// size {w, h} is the output size; r {menubar, barBottom, margin, label, dock}, dock = 0 for an auto-hidden Dock.
+function freeArea(size, r) {
+    return {
+        x: r.margin,
+        y: r.barBottom + r.margin,
+        w: size.w - 2 * r.margin,
+        h: size.h - r.menubar - r.barBottom - 2 * r.margin - r.label - r.dock
+    };
+}
+
+function intersects(a, b) {
+    return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+// Position {x, y, w, h} of a window's name label (w x h, `pad` from edges): under rects[index], centered, shifted
+// sideways or, as the last resort, drawn inside the window at its bottom, so that it never covers another window's
+// rectangle (the title band of the window in the next row belongs to that rectangle). `bounds` {w, h} is the surface.
+function labelRect(rects, index, w, h, pad, bounds) {
+    const r = rects[index];
+    const maxX = bounds.w - w - pad;
+    const clampX = x => Math.max(pad, Math.min(maxX, x));
+    const y = Math.min(bounds.h - h - pad, r.y + r.h + pad);
+    const candidates = [
+        {x: clampX(r.x + (r.w - w) / 2), y: y},
+        {x: clampX(r.x), y: y},
+        {x: clampX(r.x + r.w - w), y: y},
+        {x: clampX(r.x + (r.w - w) / 2), y: Math.max(r.y, r.y + r.h - h - pad)}
+    ];
+    for (const c of candidates) {
+        const box = {x: c.x, y: c.y, w: w, h: h};
+        let clear = true;
+        for (let i = 0; i < rects.length; i++) {
+            if (i !== index && intersects(box, rects[i])) {
+                clear = false;
+                break;
+            }
+        }
+        if (clear)
+            return box;
+    }
+    const last = candidates[3];
+    return {x: last.x, y: last.y, w: w, h: h};
+}
+
+// Gap between windows that leaves room for the name label under a window (label height plus the padding above and
+// below it), never below the spec minimum.
+function labelAwareGap(minGap, labelHeight, pad) {
+    return Math.max(minGap, labelHeight + 2 * pad);
+}
+
 // Spatial keyboard navigation: index of the rectangle nearest to rects[from] in direction
 // dir ("left"|"right"|"up"|"down"), or -1. Candidates must lie on that side of the current
 // center; off-axis distance is weighted double.

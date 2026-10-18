@@ -16,15 +16,14 @@ function parse(data, protocol) {
     return {features: features, present: features.length > 0};
 }
 
-// True when the payload is not JSON or says it is a capabilities event of `protocol` (a malformed one is worth a
-// warning). The other gfc/1 events (appmenu, overview, desktop focus...) share the `grassfield` raw event name and are
-// not capabilities events at all.
-function claimsCapabilities(data, protocol) {
+// True when `data` claims to be a capabilities event of this protocol but cannot be parsed as one (features missing or
+// not a list). Events of other types (overview, ...) and foreign payloads are not malformed capabilities events.
+function isMalformedCapabilities(data, protocol) {
     let msg = null;
     try {
         msg = JSON.parse(data);
     } catch (e) {
-        return true;
+        return false;
     }
-    return !msg || typeof msg !== "object" || (msg.v === protocol && msg.type === "capabilities");
+    return !!msg && msg.v === protocol && msg.type === "capabilities" && !Array.isArray(msg.features);
 }

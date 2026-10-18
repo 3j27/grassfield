@@ -38,9 +38,10 @@ Variants {
 
         readonly property string screenName: modelData.name
         readonly property bool shown: root.controller.open
-        // v2: every output's chrome is Exclusive (the plugin refuses on:true unless each output with windows has one).
         readonly property bool v2: !root.controller.thumbnailMode
-        readonly property bool holdsKeyboard: shown && !root.controller.releasing && (v2 || root.controller.keyScreen === "" || root.controller.keyScreen === screenName)
+        // Only the key screen's chrome is Exclusive while open; the others are None (their input region still maps
+        // clicks) and every chrome is None while releasing, so Hyprland refocuses the last window (V2.keyboardPlan).
+        readonly property bool holdsKeyboard: root.controller.keyboardPlan[screenName] === "exclusive"
 
         // 0 = windows at their real place, 1 = fully laid out.
         property real progress: shown ? 1 : 0
@@ -67,12 +68,18 @@ Variants {
         // Free region in this window's coordinates (the overlay starts below the menu bar). Taken
         // from the screen, never from the window size, which is 0 until the compositor configures
         // the layer surface.
-        readonly property var area: ({
-                x: Tokens.overviewAreaMargin,
-                y: barBottom + Tokens.overviewAreaMargin,
-                w: modelData.width - 2 * Tokens.overviewAreaMargin,
-                h: modelData.height - Tokens.menubarHeight - barBottom - 2 * Tokens.overviewAreaMargin - Tokens.overviewLabelHeight
-            })
+        // The Dock's area (when it takes space) is reserved, as is the menu bar's (the surface starts below it).
+        readonly property int dockReserve: Settings.dockAutohide ? 0 : Tokens.dockIconSize + 2 * Tokens.dockPadding + Tokens.dockIndicatorSize + Tokens.dockSpacing + Tokens.dockBottomMargin
+        readonly property var area: Layout.freeArea({
+            w: modelData.width,
+            h: modelData.height
+        }, {
+            menubar: Tokens.menubarHeight,
+            barBottom: barBottom,
+            margin: Tokens.overviewAreaMargin,
+            label: Tokens.overviewLabelHeight,
+            dock: dockReserve
+        })
         // Layout of `wins`, recomputed only when the inputs change (see relayout()).
         property var placement: ({
                 scale: Tokens.overviewMaxScale,
@@ -95,7 +102,7 @@ Variants {
             layoutSignature = sig;
             placement = Layout.layout(input, a, {
                 maxScale: Tokens.overviewMaxScale,
-                gap: Tokens.overviewMinGap
+                gap: Layout.labelAwareGap(Tokens.overviewMinGap, Tokens.overviewLabelHeight, Tokens.spacingSm)
             });
         }
         onAreaChanged: relayout()
@@ -762,8 +769,13 @@ Variants {
                 shadowEnabled: false
                 width: Math.min(Tokens.overviewLabelMaxWidth, labelRow.implicitWidth + 2 * Tokens.spacingMd)
                 height: Tokens.overviewLabelHeight
-                x: rect ? Math.max(Tokens.spacingSm, Math.min(win.width - width - Tokens.spacingSm, rect.x + (rect.w - width) / 2)) : 0
-                y: rect ? Math.min(win.height - height - Tokens.spacingSm, rect.y + rect.h + Tokens.spacingSm) : 0
+                // Never over another window's rectangle (Layout.labelRect).
+                readonly property var box: rect ? Layout.labelRect(win.placement.rects, win.placement.rects.indexOf(rect), width, height, Tokens.spacingSm, {
+                    w: win.width,
+                    h: win.height
+                }) : null
+                x: box ? box.x : 0
+                y: box ? box.y : 0
                 z: 50
                 Accessible.role: Accessible.StaticText
                 Accessible.name: appName

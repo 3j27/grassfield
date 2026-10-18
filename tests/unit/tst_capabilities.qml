@@ -11,7 +11,7 @@ TestCase {
     }
 
     function test_listedFeaturesMeanPresent() {
-        const m = CapabilityEvent.parse(ev(["decorations", "overview", "desktop-focus"]), "gfc/1");
+        const m = CapabilityEvent.parse(ev(["decorations", "overview", "desktop-focus-v2"]), "gfc/1");
         verify(m.present);
         compare(m.features.length, 3);
     }
@@ -31,13 +31,10 @@ TestCase {
         compare(CapabilityEvent.parse("null", "gfc/1"), null);
     }
 
-    // Only a broken capabilities event is warned about; the plugin's other events share the raw event name.
+    // The plugin's other events share the raw event name and are never reported as broken capabilities events.
     function test_otherEventTypesAreNotCapabilities() {
-        verify(!CapabilityEvent.claimsCapabilities('{"v":"gfc/1","type":"appmenu","address":"ab","service":"","path":""}', "gfc/1"));
-        verify(!CapabilityEvent.claimsCapabilities('{"v":"gfc/1","type":"overview","state":"open"}', "gfc/1"));
-        verify(CapabilityEvent.claimsCapabilities('{"v":"gfc/1","type":"capabilities","features":"overview"}', "gfc/1"));
-        verify(CapabilityEvent.claimsCapabilities("not json", "gfc/1"));
-        verify(CapabilityEvent.claimsCapabilities("null", "gfc/1"));
+        verify(!CapabilityEvent.isMalformedCapabilities('{"v":"gfc/1","type":"appmenu","address":"ab","service":"","path":""}', "gfc/1"));
+        verify(!CapabilityEvent.isMalformedCapabilities('{"v":"gfc/1","type":"desktop-focus","state":"granted"}', "gfc/1"));
     }
 
     function test_nonStringFeaturesAreDropped() {
@@ -45,5 +42,15 @@ TestCase {
         compare(m.features.length, 1);
         compare(m.features[0], "overview");
         verify(!CapabilityEvent.parse(ev([1, null]), "gfc/1").present);
+    }
+
+    function test_onlyMalformedCapabilitiesEventsAreReported() {
+        verify(CapabilityEvent.isMalformedCapabilities('{"v":"gfc/1","type":"capabilities","features":"overview"}', "gfc/1"));
+        verify(CapabilityEvent.isMalformedCapabilities('{"v":"gfc/1","type":"capabilities"}', "gfc/1"));
+        verify(!CapabilityEvent.isMalformedCapabilities('{"v":"gfc/1","type":"overview","state":"open"}', "gfc/1"));
+        verify(!CapabilityEvent.isMalformedCapabilities(ev(["overview"]), "gfc/1"));
+        verify(!CapabilityEvent.isMalformedCapabilities("not json", "gfc/1"));
+        verify(!CapabilityEvent.isMalformedCapabilities("null", "gfc/1"));
+        verify(!CapabilityEvent.isMalformedCapabilities('{"v":"gfc/2","type":"capabilities"}', "gfc/1"));
     }
 }

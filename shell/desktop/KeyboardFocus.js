@@ -22,7 +22,7 @@
 //                         or "outside" (dismissed by a click elsewhere: swallowed by the compositor)
 // Anything else changes nothing.
 //
-// Compositor policy (capability "desktop-focus", docs/specs/desktop.md "Compositor focus policy"): when `policy` is
+// Compositor policy (capability "desktop-focus-v2", docs/specs/desktop.md "Compositor focus policy"): when `policy` is
 // true the compositor itself gives the keyboard to a clicked window and to the clicked desktop. The desktop then
 // keeps it until the user clicks something else (macOS Finder): no kicker, no drop on pointer leave, no re-arm after
 // an outside dismissal of the menu. Without it (no plugin, or withdrawn) the safe behaviour above applies.

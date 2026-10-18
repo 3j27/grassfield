@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Hyprland
 import "CapabilityEvent.js" as CapabilityEvent
 
@@ -35,9 +36,9 @@ Singleton {
     function handleEvent(data: string): void {
         const msg = CapabilityEvent.parse(data, root.protocol);
         if (!msg) {
-            // Other gfc/1 event types (appmenu, overview...) are not for this handler: no warning for them.
-            if (CapabilityEvent.claimsCapabilities(data, root.protocol))
-                console.warn("grassfield: ignoring malformed or foreign capabilities event");
+            // Other gfc/1 events (overview, ...) share the channel: only a malformed capabilities event is a problem.
+            if (CapabilityEvent.isMalformedCapabilities(data, root.protocol))
+                console.warn("grassfield: ignoring malformed capabilities event");
             return;
         }
         features = msg.features;
@@ -48,6 +49,18 @@ Singleton {
         // No polling after an unload: a plugin loaded later announces itself.
         retry.stop();
         console.info("grassfield: compositor plugin", msg.present ? "present, features:" : "gone (empty capabilities)", features.join(","));
+    }
+
+    // Test hook (tests/visual waits on it before capturing): `qs ipc call capabilities status` is "pending" until the
+    // hello reply arrived or timed out, then "ready present <features>" or "ready degraded".
+    IpcHandler {
+        target: "capabilities"
+
+        function status(): string {
+            if (!root.settled)
+                return "pending";
+            return root.pluginPresent ? "ready present " + root.features.join(",") : "ready degraded";
+        }
     }
 
     Connections {
