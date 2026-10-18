@@ -19,6 +19,12 @@ QtObject {
     // False when /etc/pam.d/omarchy-lock-password is missing: no attempt is possible and the
     // session stays locked (never fail open).
     property bool pamAvailable: true
+    // Defence in depth for dev/test sessions (set by Lock.qml from GRASSFIELD_DEV without
+    // GRASSFIELD_DEV_ALLOW_PAM): a submitted password is NEVER handed to PAM, so a stray key that
+    // reaches the lock field in a nested test can never count a failure against the real account
+    // (faillock). The field is cleared and the session stays LOCKED (fail closed). Always false in a
+    // real session, so authentication is unchanged there.
+    property bool pamSuppressed: false
 
     readonly property string lockState: priv.state
     readonly property bool locked: priv.state !== Machine.UNLOCKED
@@ -87,6 +93,14 @@ QtObject {
     function submit(password: string): bool {
         if (!canSubmit || password.length === 0)
             return false;
+        if (pamSuppressed) {
+            // Dev/test only: swallow the attempt without touching PAM; stay locked (fail closed).
+            console.warn("grassfield-lock: dev: PAM submit suppressed (set GRASSFIELD_DEV_ALLOW_PAM=1 to allow the L2 failure-path test)");
+            priv.pending = "";
+            priv.message = "";
+            clearRequested();
+            return true;
+        }
         dispatch("submit");
         priv.message = "";
         priv.pamError = "";

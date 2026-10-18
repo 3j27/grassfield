@@ -76,6 +76,10 @@ ShellRoot {
         check("Lock.qml-relock-only-on-confirmed-answer", /else if \(action === "relock"\)\s*relock\(/.test(code));
         const lockFn = code.slice(code.indexOf("function lock(reason"), code.indexOf("function engage("));
         check("Lock.qml-lock-never-relocks", lockFn.length > 0 && lockFn.indexOf("relock(") === -1);
+        // Defence in depth (R12 review #3 MAJOR): PAM is suppressed in a dev session unless GRASSFIELD_DEV_ALLOW_PAM=1.
+        check("Lock.qml-dev-pam-suppressed", /controller\.pamSuppressed = Quickshell\.env\("GRASSFIELD_DEV"\) === "1" && Quickshell\.env\("GRASSFIELD_DEV_ALLOW_PAM"\) !== "1";/.test(code));
+        // Minor: a lock inherited at start stops forcing the 100 ms probe once our lock surface holds the keyboard.
+        check("Lock.qml-inherited-lock-cleared-on-focus", /Window\.active\)\s*\{\s*root\.focusedSurface = keyboardProbe;\s*[^]*?root\.inheritedLock = false;/.test(code));
         report();
     }
 

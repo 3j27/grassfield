@@ -370,6 +370,10 @@ Singleton {
                 Window.onActiveChanged: {
                     if (Window.active) {
                         root.focusedSurface = keyboardProbe;
+                        // Our lock surface now holds the keyboard: no foreign locker sits on top, so a lock inherited at
+                        // start is confirmed ours. End the inherited-lock suspicion (the probe falls back to 1 s unless
+                        // the keyboard later leaves), so a restored lock does not keep the 100 ms check for its lifetime.
+                        root.inheritedLock = false;
                     } else {
                         if (root.focusedSurface === keyboardProbe)
                             root.focusedSurface = null;
@@ -576,6 +580,11 @@ Singleton {
     // XDG_RUNTIME_DIR, restores the lock even if the carried intent were lost.
     Component.onCompleted: {
         controller.pamAvailable = pamServiceInstalled();
+        // Defence in depth: in a dev/test session, never hand a password to PAM unless the L2 test opts in.
+        // A stray key reaching the lock field in nested then cannot count a faillock failure on the real account.
+        controller.pamSuppressed = Quickshell.env("GRASSFIELD_DEV") === "1" && Quickshell.env("GRASSFIELD_DEV_ALLOW_PAM") !== "1";
+        if (controller.pamSuppressed)
+            console.warn("grassfield-lock: dev: PAM is suppressed on the lock (no real authentication; set GRASSFIELD_DEV_ALLOW_PAM=1 for the L2 failure-path test)");
         restore(false, "start");
         if (!controller.locked && root.hyprland)
             strandedProbe.start();

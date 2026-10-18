@@ -81,7 +81,10 @@ Behavior now (`Lock.qml`, `LockMachine.ownershipAction`):
    a takeover is suspected (`LockMachine.takeoverSuspected`, R12 review #3): no lock surface of this shell has the
    keyboard (another client's lock surface took it, or a window did after an unlock under this lock), or the lock was
    requested by a restore at start (it may be a live foreign locker's lock taken over, whose release sends no event).
-   Also at once when a lock surface loses keyboard focus, and on every monitor answer anyone requested. Suspicion only
+   The restore ("inherited lock") suspicion ends once one of our lock surfaces gains the keyboard (no foreign locker
+   then sits on top), so a normal crash-recovery lock does not keep the 100 ms probe for its whole life (it was seen
+   holding the memory up as the probe ran; R12 review #3 minor). Also at once when a lock surface loses keyboard
+   focus, and on every monitor answer anyone requested. Suspicion only
    ever speeds the check up; it never unlocks. Cost of the 100 ms check (nested, `probe-cost`, three runs): +1.2 to
    +1.9 % CPU in the shell (0.8–1.0 → 2.0–2.7 %), Hyprland +0 to +0.6 % (0.3–0.4 → 0.3–0.9 %).
 2. An answer reporting the session unlocked is confirmed by a second, fresh answer (answers in the first 500 ms after
@@ -121,6 +124,22 @@ change the window Hyprland refocuses, and the in-window key count needs it to be
 File watching is disabled in `shell.qml` (`settings.watchFiles: false`, re-applied after every reload since
 Quickshell resets it), so only an explicit `Quickshell.reload()` reloads the shell (none in production code; the dev
 hook `lock devReload` needs `GRASSFIELD_DEV=1`). Development restarts the shell with `scripts/dev/shell-run.sh`.
+
+## Test safety: never submit to PAM in nested
+A password submitted on the lock screen is checked against the owner's real account (`omarchy-lock-password`), and a
+wrong one counts a `faillock` failure shared with sudo (deny=10 → a 120 s lockout). The nested lock tests must never
+cause one. Two independent guards (both added after R12 review #3, which found 22 real submits from probe keys that
+reached the held lock field):
+- The shell suppresses PAM in dev (see "Dev PAM suppression"): without `GRASSFIELD_DEV_ALLOW_PAM=1`, a submit is
+  swallowed and logged, never reaching PAM.
+- `tests/security/reload_locked.sh` types through `type_letters`/`bg_type` (refuse anything but `[a-z]`) and
+  `press_key` (only Escape); it scans the shell log for `authenticating (submit)` (a real PAM call) and
+  `dev: PAM submit suppressed` (a probe reached the field) before the run and after every step, and on the first hit
+  it stops the nested session (`nested-down.sh`) and exits 4, loudly. The `pam-audit` step counts attempts across
+  every shell instance the run started (per-instance Quickshell logs, since restarts overwrite `.dev/shell.log`) and
+  must report 0.
+Only wrong attempts are ever used for the L2 failure path, and only by the owner with `GRASSFIELD_DEV_ALLOW_PAM=1`
+(at most 3 per run; faillock deny=10).
 
 ## Known limitations
 - Successful-unlock tests need the owner's password: the agent only verifies failure paths (L2 owner check).
@@ -186,6 +205,14 @@ Decisions:
   `respond()` until PAM's next message (found in nested L2).
 - Missing `/etc/pam.d/omarchy-lock-password`: new locks are refused (`refused: missing-pam`, logged); a lock being
   restored proceeds with a persistent "Authentication service unavailable" message (never fail open).
+- Dev PAM suppression (defence in depth, R12 review #3 MAJOR): in a dev session (`GRASSFIELD_DEV=1`) the lock never
+  hands a password to PAM unless `GRASSFIELD_DEV_ALLOW_PAM=1` is also set (the opt-in for the L2 failure-path test).
+  `Lock.qml` sets `LockController.pamSuppressed` from these at start; a suppressed `submit()` logs
+  `grassfield-lock: dev: PAM submit suppressed`, clears the field and stays LOCKED (fail closed, never unlocks). This
+  stops a stray key that reaches the lock field in a nested test from counting a `faillock` failure against the
+  owner's real account (faillock is shared with sudo). Real sessions (`GRASSFIELD_DEV` unset) are unchanged:
+  `pamSuppressed` is false and authentication is normal. Unit-tested both ways (`tst_lockcontroller.qml`), structure
+  checked by `tests/security/reload_order`.
 - Lock before sleep: Quickshell 0.3.1 has no D-Bus/logind API, so `systemd-inhibit --what=sleep --mode=delay … cat`
   (stdin pipe: the inhibitor dies with the shell) plus `gdbus monitor` on `/org/freedesktop/login1` for
   `PrepareForSleep`. Both run under `setpriv --pdeathsig TERM --` (util-linux), so a shell crash (even SIGKILL) leaves

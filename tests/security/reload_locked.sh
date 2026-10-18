@@ -95,9 +95,55 @@ wait_status() { # <expected> <seconds>
   return 1
 }
 
+# SAFETY (R12 review #3 MAJOR): every probe this script types is letters only. A Return/newline/Enter in a probe that
+# reaches the lock's password field submits it to PAM and counts a faillock failure against the owner's real account.
+# type_letters is the ONLY typing path; it refuses anything but [a-z], and the shell suppresses PAM in dev anyway
+# (GRASSFIELD_DEV without GRASSFIELD_DEV_ALLOW_PAM). press_key only allows keys that never submit (Escape).
+type_letters() { # <word> [extra wtype opts before the word]
+  local word=${!#}
+  [[ $word =~ ^[a-z]+$ ]] || { echo "FATAL type_letters: refusing a probe that is not letters-only: '$word'" >&2; abort_run "a non-letter probe"; }
+  nested wtype "$@"
+}
+press_key() { # <keysym>
+  [[ $1 == Escape ]] || { echo "FATAL press_key: refusing key '$1' (only Escape is allowed; it never submits)" >&2; abort_run "a disallowed key"; }
+  nested wtype -k Escape
+}
+# Types a letters-only word in the background (sets $typer). Validated synchronously first, so a bad probe aborts before
+# anything is typed.
+bg_type() { # <word>
+  [[ $1 =~ ^[a-z]+$ ]] || { echo "FATAL bg_type: refusing a probe that is not letters-only: '$1'" >&2; abort_run "a non-letter probe"; }
+  nested wtype -d 4 "$1" &
+  typer=$!
+}
+
+# All PAM attempts this run could ever cause: "(submit)" is a real PAM call (must never happen), "PAM submit suppressed"
+# means a probe reached the lock field (the shell blocked PAM, but it is still a test defect). Counted in the live shell
+# log; the per-instance audit at the end covers restarts.
+pam_submits() { grep -c "authenticating (submit)" "$dev/shell.log" 2>/dev/null || true; }
+pam_suppressed() { grep -c "dev: PAM submit suppressed" "$dev/shell.log" 2>/dev/null || true; }
+
+# Stop the whole run the moment a probe could have touched PAM: stop the nested session and exit non-zero, loudly.
+abort_run() { # <why>
+  local s sup
+  s=$(pam_submits); sup=$(pam_suppressed)
+  echo "" >&2
+  echo "ABORT ($1): PAM submits=$s, suppressed probes=$sup. A probe reached the lock password field; stopping the nested session." >&2
+  "$root/scripts/dev/nested-down.sh" >&2 2>&1 || true
+  exit 4
+}
+
+# Called before the loop and after every step: fail closed on the first sign a probe reached the lock field.
+assert_no_pam() { # <when>
+  local s sup
+  s=$(pam_submits); sup=$(pam_suppressed)
+  if [[ ${s:-0} -gt 0 || ${sup:-0} -gt 0 ]]; then
+    abort_run "$1"
+  fi
+}
+
 # Types a probe word (letters only, never Return) and checks that foot did not receive it.
 no_leak() { # <word> <step>
-  nested wtype -d 15 "$1"
+  type_letters -d 15 "$1"
   sleep 0.7
   if grep -q "$1" "$typed" 2>/dev/null; then fail "$2: typed text reached the foot window ($1)"; else pass "$2: nothing reached the foot window"; fi
 }
@@ -126,7 +172,7 @@ step_setup() {
   # Focus it with a click (focus follows the pointer; no state-changing hyprctl).
   "$root/scripts/dev/pointer.sh" output "$name" abs $((x - mx + w / 2)) $((y - my + h / 2)) sleep 200 click >/dev/null
   sleep 0.5
-  nested wtype -d 15 control
+  type_letters -d 15 control
   sleep 0.7
   if grep -q control "$typed"; then pass "setup: typing reaches the foot window on $name while unlocked (control)"; else fail "setup: control text did not reach foot; leak checks are meaningless"; fi
 }
@@ -387,8 +433,7 @@ step_relock_confirm() {
     answer=$(ipc lock devForgeUnlockedAnswer)
     [[ $answer == forged ]] || { fail "relock-confirm run $i: devForgeUnlockedAnswer -> '${answer:-no-answer}'"; continue; }
     word=$(probe_word relock "$i")
-    nested wtype -d 4 "$word$word$word$word$word$word$word$word$word$word$word$word" &
-    typer=$!
+    bg_type "$word$word$word$word$word$word$word$word$word$word$word$word"
     sleep 0.05
     answer=$(ipc lock lock)
     unlocked=0 unknown=0
@@ -409,7 +454,7 @@ step_relock_confirm() {
     ((unlocked > 0)) && opened=$((opened + 1))
     echo "run $i: lock lock -> $answer; compositor answers without LOCK: $unlocked (no valid answer: $unknown); bytes that reached foot: $((after - before))"
   done
-  nested wtype -k Escape # empty the lock field (Escape clears it; nothing is ever submitted)
+  press_key Escape # empty the lock field (Escape clears it; nothing is ever submitted)
   # The last dev pause (10 s) ends before the next step relies on the periodic check.
   for _ in $(seq 1 120); do
     tail -n +"$((from + 1))" "$dev/shell.log" | grep -q "dev pause of the lock ownership check ended" && break
@@ -431,8 +476,7 @@ step_foreign_gap() {
     sleep 1 # the takeover settles; past the 500 ms grace of the last Grassfield lock
     before=$(typed_bytes)
     word=$(probe_word gap "$i")
-    nested wtype -d 4 "$word$word$word$word$word$word$word$word$word$word$word$word$word$word$word$word" &
-    typer=$!
+    bg_type "$word$word$word$word$word$word$word$word$word$word$word$word$word$word$word$word"
     sleep 0.05
     from=$(wc -l <"$dev/shell.log")
     t0=${EPOCHREALTIME/./}
@@ -471,7 +515,7 @@ step_foreign_gap() {
   # Leak control: Hyprland refocuses the window under the pointer when a foreign locker releases; foot only receives keys
   # in the window when it is that window (true right after `setup`; shell restarts in earlier steps can change it).
   ((inGap > 0)) || echo "foreign-gap: NOTE no key reached foot during any window: foot did not get the focus Hyprland restores, so the in-window count proves nothing in this run (run setup lock foreign-gap)"
-  nested wtype -k Escape
+  press_key Escape
 }
 
 # CPU time of a process in clock ticks (utime + stime: /proc/<pid>/stat fields 14 and 15; field 2 may hold spaces).
@@ -523,11 +567,30 @@ step_cleanup() {
   dev_stop "$dev/foreign-locker.pid" "foreign locker" >/dev/null || true
 }
 
+# PAM attempt audit across EVERY shell instance this tree started (restarts overwrite $dev/shell.log, so read the
+# Quickshell per-instance logs too). Must be 0: a real submit would count a faillock failure on the owner's account.
+step_pam_audit() {
+  local base=/run/user/1000/quickshell/by-id total=0 sup=0 d s x
+  for d in "$base"/*/; do
+    [[ -f $d/instance.lock && -f $d/log.log ]] || continue
+    grep -qs "$root/shell/shell.qml" "$d/instance.lock" || continue
+    s=$(grep -c "authenticating (submit)" "$d/log.log" 2>/dev/null || echo 0)
+    x=$(grep -c "dev: PAM submit suppressed" "$d/log.log" 2>/dev/null || echo 0)
+    total=$((total + s)); sup=$((sup + x))
+    [[ $s -gt 0 || $x -gt 0 ]] && echo "  $(basename "$d"): PAM submits $s, suppressed probes $x"
+  done
+  echo "pam-audit: PAM submits across all this tree's shell instances: $total; suppressed probes (reached the field, blocked): $sup"
+  if [[ $total -eq 0 ]]; then pass "pam-audit: no password was ever submitted to PAM"; else fail "pam-audit: $total PAM submit(s) — a faillock failure may have been counted on the real account"; fi
+  [[ $sup -eq 0 ]] || fail "pam-audit: $sup probe(s) reached the lock field (blocked by the dev PAM suppression, but a test defect)"
+}
+
 steps=("$@")
-[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock relock-confirm foreign-gap probe-cost marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync cleanup)
+[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock relock-confirm foreign-gap probe-cost marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync cleanup pam-audit)
+assert_no_pam "before the run"
 for s in "${steps[@]}"; do
   echo "== $s"
   declare -F "step_${s//-/_}" >/dev/null || { echo "reload_locked: unknown step $s" >&2; exit 2; }
   "step_${s//-/_}"
+  [[ $s == pam-audit ]] || assert_no_pam "after step $s"
 done
 exit $status
