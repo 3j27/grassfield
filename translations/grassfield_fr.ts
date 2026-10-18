@@ -1725,6 +1725,14 @@
         <translation>«&#xa0;%1&#xa0;» ne peut pas être déplacé ou copié dans lui-même.</translation>
     </message>
     <message>
+        <source>Only files and folders can be tagged.</source>
+        <translation>Seuls les fichiers et les dossiers peuvent recevoir des étiquettes.</translation>
+    </message>
+    <message>
+        <source>Read-only items can’t be tagged.</source>
+        <translation>Les éléments en lecture seule ne peuvent pas recevoir d’étiquettes.</translation>
+    </message>
+    <message>
         <source>Items in the Trash can’t be tagged.</source>
         <translation>Les éléments de la corbeille ne peuvent pas recevoir de tags.</translation>
     </message>
