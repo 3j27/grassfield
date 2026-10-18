@@ -103,7 +103,8 @@ start_app() { # <name> <command...>
   mkdir -p "$home/.config" "$home/.cache" "$home/.local/share" "$home/.local/state"
   env -u QT_QPA_PLATFORMTHEME -u KDE_SESSION_VERSION -u KDE_FULL_SESSION -u GTK_MODULES \
     HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" XDG_DATA_HOME="$home/.local/share" \
-    XDG_STATE_HOME="$home/.local/state" WAYLAND_DISPLAY="$(cat "$dev/nested.wayland")" DBUS_SESSION_BUS_ADDRESS="$(private_bus)" \
+    XDG_STATE_HOME="$home/.local/state" GRASSFIELD_CONFIG_HOME="$home/.config/grassfield" GRASSFIELD_STATE_HOME="$home/.local/state/grassfield" \
+    WAYLAND_DISPLAY="$(cat "$dev/nested.wayland")" DBUS_SESSION_BUS_ADDRESS="$(private_bus)" \
     QT_QPA_PLATFORM=wayland GDK_BACKEND=wayland \
     setsid "$@" >"$run/$name.out" 2>&1 </dev/null &
   app_pids+=("$!")
