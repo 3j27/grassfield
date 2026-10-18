@@ -451,12 +451,12 @@ QtObject {
     readonly property real overviewBackdropOpacity: 0.45
     // estimate: dim when blur is off (Reduce Transparency)
     readonly property real overviewBackdropOpacityOpaque: 0.92
-    // estimate: Spaces bar tile
-    readonly property int overviewTileWidth: 168
-    // estimate: Spaces bar tile
-    readonly property int overviewTileHeight: 104
-    // estimate: gap between Spaces tiles
-    readonly property int overviewTileGap: 14
+    // F1 gap 15: Space thumbnail 138x90 +-1
+    readonly property int overviewTileWidth: 138
+    // F1 gap 15: Space thumbnail 138x90 +-1
+    readonly property int overviewTileHeight: 90
+    // F1 gap 15: thumbnail gap 32
+    readonly property int overviewTileGap: 32
     // estimate: Spaces bar below the menu bar
     readonly property int overviewBarTopMargin: 12
     // estimate: app icons in a Space tile
@@ -485,6 +485,8 @@ QtObject {
     readonly property int overviewChromeWaitMs: 600
     // v2: pause before the single retry of an on:true the plugin refused with no-chrome (the second output's Exclusive commit may lag)
     readonly property int overviewChromeRetryMs: 120
+    // F1 gap 15: add-space button is a 32 circle
+    readonly property int overviewAddSize: 32
 
     // task spec: about 96 px at 1080p; scaled by screen height
     readonly property int appsIconSize: 96
@@ -659,8 +661,8 @@ QtObject {
     // estimate: widgets v1, widgets.json larger than this is rejected
     readonly property int widgetMaxFileBytes: 262144
 
-    // estimate: desktop icons v1 (docs/specs/desktop.md), px width of a grid slot
-    readonly property int desktopIconCellWidth: 104
+    // F1 gap 17: desktop grid 112x112 +-1
+    readonly property int desktopIconCellWidth: 112
     // estimate: desktop icons v1, px height of a grid slot
     readonly property int desktopIconCellHeight: 112
     // estimate: desktop icons v1, px from the screen edges and the menu bar to the grid
@@ -728,16 +730,16 @@ QtObject {
     readonly property int filesStatusBarHeight: 22
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesIconSize: 64
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesIconCellWidth: 104
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesIconCellHeight: 108
+    // F1 gap 17: icon view cell 112x112 +-1
+    readonly property int filesIconCellWidth: 112
+    // F1 gap 17: icon view cell 112x112 +-1
+    readonly property int filesIconCellHeight: 112
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesIconLabelLines: 2
     // estimate: grey backdrop around a selected icon
     readonly property int filesIconBackdropPadding: 4
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesListRowHeight: 24
+    // F1 gap 17: list row 20 +-0.5
+    readonly property int filesListRowHeight: 20
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesListIconSize: 16
     // estimate: Files app (docs/specs/files.md)
@@ -750,14 +752,14 @@ QtObject {
     readonly property int filesListKindWidth: 150
     // estimate: alternating list row backgrounds
     readonly property real filesStripeOpacity: 0.04
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesColumnWidth: 230
+    // F1 gap 17: column view column 245 +-2
+    readonly property int filesColumnWidth: 245
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesPreviewWidth: 260
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesPreviewIconSize: 128
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesInfoWindowWidth: 320
+    // F1 gap 17: Get Info window 264 +-1.5
+    readonly property int filesInfoWindowWidth: 264
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesInfoWindowHeight: 500
     // estimate: Files app (docs/specs/files.md)
@@ -832,6 +834,10 @@ QtObject {
     readonly property string filesTagPurple: "#9B5DE5"
     // own value: colour tag Gray (not copied)
     readonly property string filesTagGray: "#8B8D93"
+    // F1 gap 17: column view rows 22
+    readonly property int filesColumnRowHeight: 22
+    // minimum width of the list Name column (was filesColumnWidth)
+    readonly property int filesListNameMinWidth: 230
 
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewWindowWidth: 860

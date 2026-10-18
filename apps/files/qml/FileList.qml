@@ -10,7 +10,7 @@ FocusScope {
     required property var tab
     required property var model
 
-    readonly property real nameWidth: Math.max(Tokens.filesColumnWidth, list.width - Tokens.filesListDateWidth - Tokens.filesListSizeWidth - Tokens.filesListKindWidth)
+    readonly property real nameWidth: Math.max(Tokens.filesListNameMinWidth, list.width - Tokens.filesListDateWidth - Tokens.filesListSizeWidth - Tokens.filesListKindWidth)
     readonly property int pageRows: Math.max(1, Math.floor(list.height / Tokens.filesListRowHeight))
 
     Accessible.role: Accessible.Table
