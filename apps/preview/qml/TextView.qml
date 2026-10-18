@@ -76,6 +76,8 @@ Item {
             width: flick.width - 2 * Tokens.spacingMd
             readOnly: true
             selectByMouse: true
+            // The selection survives the global menu taking the keyboard (Edit > Copy acts on it).
+            persistentSelection: true
             textFormat: TextEdit.PlainText
             wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
             text: root.info.text ?? ""

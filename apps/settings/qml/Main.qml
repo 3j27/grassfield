@@ -154,6 +154,8 @@ Window {
                 }
                 clip: true
                 activeFocusOnTab: true
+                // The selection survives the global menu taking the keyboard (Edit > Cut/Copy act on it).
+                persistentSelection: true
                 color: Appearance.colors.text
                 selectionColor: Appearance.colors.accent
                 selectedTextColor: Appearance.colors.accentText
