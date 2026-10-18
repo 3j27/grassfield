@@ -38,7 +38,7 @@ sock=$(<"$dev/nested.wayland")
 case $scenario in "$root"/.dev/files-sandbox/*) ;; *) echo "FAIL: unsafe sandbox path"; exit 1 ;; esac
 case $iso in "$root"/.dev/isolated/files-sandbox) ;; *) echo "FAIL: unsafe isolated path"; exit 1 ;; esac
 rm -rf -- "$scenario" "$busdir" "$iso" "$sandbox/.scenario-env"
-mkdir -p "$scenario/src" "$scenario/dest" "$busdir" "$iso"/{config,cache,state,data}
+mkdir -p "$scenario/src" "$scenario/dest" "$busdir" "$iso"/{home,config,cache,state,data}
 printf 'alpha\n' >"$scenario/src/alpha.txt"
 printf 'beta\n' >"$scenario/src/beta.txt"
 trash=$iso/data/Trash
@@ -46,7 +46,7 @@ trash=$iso/data/Trash
 # Private session bus (same configuration as dbus-run-session and scripts/dev/shell-run.sh: socket in /tmp, as libdbus
 # caps socket paths at 99 bytes). Activated services inherit this environment: isolated homes, nested Wayland socket,
 # GRASSFIELD_DEV=1, no DISPLAY and no owner bus address.
-env -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY="$sock" GRASSFIELD_DEV=1 \
+env -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY="$sock" GRASSFIELD_DEV=1 HOME="$iso/home" \
   XDG_CONFIG_HOME="$iso/config" XDG_CACHE_HOME="$iso/cache" XDG_STATE_HOME="$iso/state" XDG_DATA_HOME="$iso/data" \
   setsid dbus-daemon --session --nofork --print-address=1 >"$busdir/address" 2>"$busdir/log" </dev/null &
 bus_pid=$!

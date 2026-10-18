@@ -133,6 +133,9 @@ public:
     Q_INVOKABLE QString tagsUnavailable(const QList<QUrl> &urls) const;
     // Per colour (palette order): 0 no item has it, 1 some do, 2 all do.
     Q_INVOKABLE QVariantList colorTagStates(const QList<QUrl> &urls) const;
+    // The tags of one local item by their shown names, in display order (colour tags first); empty for anything else.
+    // Read now: callers depend on tagRevision to read again after Files' own writes.
+    Q_INVOKABLE QStringList tagNamesOf(const QUrl &url) const;
     // macOS behaviour: removes colour `index` from every item when all have it, else adds it to those without.
     Q_INVOKABLE void toggleColorTag(const QList<QUrl> &urls, int index);
     // Adds `tag` (a stored tag name) to the local items among `urls` (a drop on a sidebar tag).
@@ -146,7 +149,8 @@ public:
     Q_INVOKABLE QUrl tagSearchUrl(const QString &tag, const QUrl &from) const;
     Q_INVOKABLE bool isTagSearch(const QUrl &url) const;
     Q_INVOKABLE QString searchedTag(const QUrl &url) const;
-    // Removes a tag from the sidebar's Tags section (files keep it).
+    // Remove from Sidebar (macOS): hides the tag from the sidebar's Tags section for good (tags/hidden); files keep it
+    // and it stays usable. Setting that tag in Files again lists it again.
     Q_INVOKABLE void forgetTag(const QString &tag);
 
 signals:
@@ -164,8 +168,10 @@ private:
     void track(KJob *job, const QString &activity);
     void readAppearance();
     QString configFile() const;
-    // Writes `next(tags)` to each item; reports failures; announces the changed items.
-    void rewriteTags(const QList<QUrl> &urls, const std::function<QStringList(const QStringList &)> &next);
+    // Adds `tag` to, or removes it from, each item (TagLogic::applyTag keeps every other entry as stored); reports
+    // failures; announces the changed items.
+    void rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on);
+    void unhideTag(const QString &tag);
     // Tags in use, for the sidebar (kept across sessions, at most kMaxKnownTags).
     void noteTags(const QStringList &tags);
     void publishKnownTags();
@@ -180,5 +186,7 @@ private:
     int m_activityPercent = -1;
     QList<QPointer<KJob>> m_jobs;
     QStringList m_knownTags;
+    // Tags removed from the sidebar (not listed again when seen), persisted as tags/hidden.
+    QStringList m_hiddenTags;
     int m_tagRevision = 0;
 };

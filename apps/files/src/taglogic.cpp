@@ -64,6 +64,54 @@ QByteArray serialize(const QStringList &tags)
     return out.join(QLatin1Char(',')).toUtf8();
 }
 
+namespace
+{
+// The stored bytes of `tag` (empty: nothing to add or remove).
+QByteArray storedName(const QString &tag)
+{
+    const QString t = clean(tag);
+    const int c = colorIndex(t);
+    return (c >= 0 ? colorKey(c) : t).toUtf8();
+}
+} // namespace
+
+QByteArray applyTag(const QByteArray &stored, const QString &tag, bool on)
+{
+    const QByteArray name = storedName(tag);
+    if (name.isEmpty())
+        return stored;
+    const QList<QByteArray> entries = stored.isEmpty() ? QList<QByteArray>() : stored.split(',');
+    QList<QByteArray> kept;
+    bool found = false;
+    for (const QByteArray &entry : entries) {
+        if (entry.trimmed() == name)
+            found = true;
+        else
+            kept.append(entry);
+    }
+    if (on) {
+        if (found)
+            return stored;
+        return stored.isEmpty() ? name : stored + ',' + name;
+    }
+    if (!found)
+        return stored;
+    return kept.join(',');
+}
+
+bool ownsTag(const QByteArray &stored, const QString &tag)
+{
+    const QByteArray name = storedName(tag);
+    if (name.isEmpty() || stored.isEmpty())
+        return false;
+    const QList<QByteArray> entries = stored.split(',');
+    for (const QByteArray &entry : entries) {
+        if (entry.trimmed() == name)
+            return true;
+    }
+    return false;
+}
+
 int colorIndex(const QString &tag)
 {
     const QString t = tag.trimmed();
@@ -134,6 +182,16 @@ QStringList displayOrder(const QStringList &tags)
             out.append(t);
     }
     return out;
+}
+
+QStringList mergeKnown(const QStringList &known, const QStringList &hidden, const QStringList &seen, int max)
+{
+    QStringList out = known;
+    for (const QString &tag : seen) {
+        if (!hasTag(out, tag) && !hasTag(hidden, tag))
+            out = withTag(out, tag, true);
+    }
+    return displayOrder(out).mid(0, max);
 }
 
 QList<int> colorIndices(const QStringList &tags)

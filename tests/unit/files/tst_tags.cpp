@@ -11,6 +11,7 @@
 
 #include <cerrno>
 #include <memory>
+#include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
 
@@ -243,4 +244,103 @@ TEST(TagStore, FoldersCarryTagsToo)
         GTEST_SKIP() << "the filesystem of GRASSFIELD_TEST_TMP has no user extended attributes";
     ASSERT_TRUE(TagStore::write(folder, {QStringLiteral("Orange")}));
     EXPECT_EQ(TagStore::read(folder), QStringList{QStringLiteral("Orange")});
+}
+
+// --- Editing keeps what other applications wrote (review of 5bc1343) ------------------------------------------
+
+namespace
+{
+// The reviewer's value: spaces, duplicates, invalid UTF-8, a line break inside an entry, a lower-case colour name.
+const QByteArray kForeign = QByteArray(" Bar ,foo,foo,\xFF\xFE,two\x0Alines,red");
+} // namespace
+
+TEST(TagApply, AddingAppendsOneEntryAndKeepsEveryOtherByteAsStored)
+{
+    EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral("Blue"), true), kForeign + ",Blue");
+    EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral("blue"), true), kForeign + ",Blue"); // stored under its key
+    EXPECT_EQ(TagLogic::applyTag("", QStringLiteral("Red"), true), QByteArray("Red"));
+    EXPECT_EQ(TagLogic::applyTag("Work", QStringLiteral("Work"), true), QByteArray("Work")); // already there
+    EXPECT_EQ(TagLogic::applyTag(" Red ", QStringLiteral("Red"), true), QByteArray(" Red ")); // spaces do not make it another tag
+    // A foreign lower-case "red" is another entry: Red is added next to it.
+    EXPECT_EQ(TagLogic::applyTag("red", QStringLiteral("Red"), true), QByteArray("red,Red"));
+    EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral(" "), true), kForeign);
+}
+
+TEST(TagApply, RemovingTakesOutOnlyTheExactName)
+{
+    // "Red" must not remove the foreign "red".
+    EXPECT_EQ(TagLogic::applyTag(kForeign + ",Red", QStringLiteral("Red"), false), kForeign);
+    EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral("Red"), false), kForeign);
+    // Both entries of an exact duplicate go; the others keep their bytes and order.
+    EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral("foo"), false), QByteArray(" Bar ,\xFF\xFE,two\x0Alines,red"));
+    EXPECT_EQ(TagLogic::applyTag("a, Red ,b", QStringLiteral("Red"), false), QByteArray("a,b"));
+    EXPECT_TRUE(TagLogic::applyTag("Red", QStringLiteral("Red"), false).isEmpty());
+    EXPECT_EQ(TagLogic::applyTag("Work", QStringLiteral("work"), false), QByteArray("Work")); // free tags exactly
+}
+
+TEST(TagApply, OwnsTheExactEntryOnly)
+{
+    EXPECT_TRUE(TagLogic::ownsTag("a, Red ,b", QStringLiteral("Red")));
+    EXPECT_FALSE(TagLogic::ownsTag("red", QStringLiteral("Red")));
+    EXPECT_FALSE(TagLogic::ownsTag("", QStringLiteral("Red")));
+    EXPECT_TRUE(TagLogic::ownsTag("Work", QStringLiteral("Work")));
+    EXPECT_FALSE(TagLogic::ownsTag("Work", QStringLiteral("work")));
+}
+
+TEST(TagKnown, TagsRemovedFromTheSidebarStayOffIt)
+{
+    const QStringList hidden = {QStringLiteral("Work")};
+    const QStringList seen = {QStringLiteral("Work"), QStringLiteral("Blue"), QStringLiteral("Home")};
+    EXPECT_EQ(TagLogic::mergeKnown({}, hidden, seen, 64), (QStringList{QStringLiteral("Blue"), QStringLiteral("Home")}));
+    EXPECT_EQ(TagLogic::mergeKnown({}, {}, seen, 64), (QStringList{QStringLiteral("Blue"), QStringLiteral("Work"), QStringLiteral("Home")}));
+    EXPECT_EQ(TagLogic::mergeKnown({}, {QStringLiteral("red")}, {QStringLiteral("Red")}, 64), QStringList()); // a colour, any case
+    EXPECT_EQ(TagLogic::mergeKnown({}, {}, seen, 2).size(), 2);
+}
+
+TEST(TagStore, RawValueRoundTripsByteForByte)
+{
+    QString why;
+    const auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << qPrintable(why);
+    const QString file = makeFile(*dir, QStringLiteral("raw.txt"));
+    if (TagStore::support(file) == TagStore::Support::NoXattr)
+        GTEST_SKIP() << "the filesystem of GRASSFIELD_TEST_TMP has no user extended attributes";
+    ASSERT_TRUE(TagStore::writeRaw(file, kForeign));
+    EXPECT_EQ(TagStore::readRaw(file), kForeign);
+    // Add then remove a colour: the foreign bytes come back untouched.
+    ASSERT_TRUE(TagStore::writeRaw(file, TagLogic::applyTag(TagStore::readRaw(file), QStringLiteral("Red"), true)));
+    EXPECT_EQ(TagStore::readRaw(file), kForeign + ",Red");
+    ASSERT_TRUE(TagStore::writeRaw(file, TagLogic::applyTag(TagStore::readRaw(file), QStringLiteral("Red"), false)));
+    EXPECT_EQ(TagStore::readRaw(file), kForeign);
+    ASSERT_TRUE(TagStore::writeRaw(file, QByteArray()));
+    EXPECT_TRUE(TagStore::readRaw(file).isEmpty());
+}
+
+TEST(TagStore, ItemsThatCannotTakeAWriteAreNotTaggable)
+{
+    QString why;
+    const auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << qPrintable(why);
+    const QString file = makeFile(*dir, QStringLiteral("locked.txt"));
+    if (TagStore::support(file) == TagStore::Support::NoXattr)
+        GTEST_SKIP() << "the filesystem of GRASSFIELD_TEST_TMP has no user extended attributes";
+    // A FIFO takes no user attribute (EPERM): it is not offered.
+    const QString fifo = dir->filePath(QStringLiteral("pipe"));
+    ASSERT_EQ(::mkfifo(QFile::encodeName(fifo).constData(), 0600), 0);
+    EXPECT_EQ(TagStore::support(fifo), TagStore::Support::NotRegular);
+    QString error;
+    EXPECT_FALSE(TagStore::writeRaw(fifo, "Red", &error));
+    EXPECT_FALSE(error.isEmpty());
+    // A read-only file: the write would be refused (skipped for root, which is not bound by permissions).
+    if (::geteuid() != 0) {
+        ASSERT_EQ(::chmod(QFile::encodeName(file).constData(), 0444), 0);
+        EXPECT_EQ(TagStore::support(file), TagStore::Support::ReadOnly);
+        EXPECT_FALSE(TagStore::writeRaw(file, "Red", &error));
+        ASSERT_EQ(::chmod(QFile::encodeName(file).constData(), 0644), 0);
+        EXPECT_EQ(TagStore::support(file), TagStore::Support::Supported);
+    }
+    // Reading still works on a read-only file: its tags show.
+    EXPECT_TRUE(TagStore::read(file).isEmpty());
 }

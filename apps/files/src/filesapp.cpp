@@ -76,6 +76,7 @@ constexpr int kMaxGlanceFiles = 50;
 
 // Tags listed in the sidebar's Tags section at most.
 constexpr int kMaxKnownTags = 64;
+constexpr int kMaxHiddenTags = 256;
 
 // Singular/plural pair (no translation catalogs with numerus forms yet, like the Settings app).
 QString countText(const QString &one, const QString &many, qsizetype n)
@@ -124,6 +125,7 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
 
     // The sidebar's Tags section: the tags seen in use (on shown items, set or searched in Files), kept across sessions.
     m_knownTags = TagLogic::displayOrder(m_settings.value(QStringLiteral("tags/known")).toStringList()).mid(0, kMaxKnownTags);
+    m_hiddenTags = m_settings.value(QStringLiteral("tags/hidden")).toStringList().mid(0, kMaxHiddenTags);
     publishKnownTags();
 }
 
@@ -708,6 +710,10 @@ QString FilesApp::tagsUnavailable(const QList<QUrl> &urls) const
             return tr("“%1” is no longer there.").arg(url.fileName());
         case TagStore::Support::Link:
             return tr("Links can’t carry tags.");
+        case TagStore::Support::NotRegular:
+            return tr("Only files and folders can be tagged.");
+        case TagStore::Support::ReadOnly:
+            return tr("Read-only items can’t be tagged.");
         case TagStore::Support::NoXattr:
             return tr("This volume can’t store tags.");
         }
@@ -729,29 +735,42 @@ QVariantList FilesApp::colorTagStates(const QList<QUrl> &urls) const
     return out;
 }
 
+QStringList FilesApp::tagNamesOf(const QUrl &url) const
+{
+    QStringList names;
+    if (!url.isLocalFile())
+        return names;
+    const QStringList tags = TagLogic::displayOrder(TagStore::read(url.toLocalFile()));
+    for (const QString &tag : tags)
+        names.append(TagLogic::displayName(tag));
+    return names;
+}
+
 void FilesApp::toggleColorTag(const QList<QUrl> &urls, int index)
 {
     const QString key = TagLogic::colorKey(index);
     if (key.isEmpty() || urls.isEmpty())
         return;
+    // Only entries Files owns count (the exact key): another application's "red" is neither removed nor reused.
     bool all = true;
     for (const QUrl &url : urls)
-        all = all && url.isLocalFile() && TagLogic::hasTag(TagStore::read(url.toLocalFile()), key);
-    rewriteTags(urls, [key, all](const QStringList &tags) { return TagLogic::withTag(tags, key, !all); });
+        all = all && url.isLocalFile() && TagLogic::ownsTag(TagStore::readRaw(url.toLocalFile()), key);
+    rewriteTags(urls, key, !all);
 }
 
 void FilesApp::addTag(const QList<QUrl> &urls, const QString &tag)
 {
     if (tag.trimmed().isEmpty())
         return;
-    rewriteTags(urls, [tag](const QStringList &tags) { return TagLogic::withTag(tags, tag, true); });
+    rewriteTags(urls, tag, true);
 }
 
-void FilesApp::rewriteTags(const QList<QUrl> &urls, const std::function<QStringList(const QStringList &)> &next)
+void FilesApp::rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on)
 {
     QList<QUrl> changed;
     QStringList failed;
     QString reason;
+    QStringList written;
     for (const QUrl &url : urls) {
         const QString why = tagsUnavailable({url});
         if (!why.isEmpty()) {
@@ -760,20 +779,24 @@ void FilesApp::rewriteTags(const QList<QUrl> &urls, const std::function<QStringL
             continue;
         }
         const QString path = url.toLocalFile();
-        const QStringList before = TagStore::read(path);
-        const QStringList after = next(before);
+        const QByteArray before = TagStore::readRaw(path);
+        const QByteArray after = TagLogic::applyTag(before, tag, on);
         if (after == before)
             continue;
         QString error;
-        if (!TagStore::write(path, after, &error)) {
+        if (!TagStore::writeRaw(path, after, &error)) {
             failed.append(url.fileName());
             reason = error;
             continue;
         }
         changed.append(url);
-        noteTags(after);
+        written += TagLogic::parse(after);
     }
     if (!changed.isEmpty()) {
+        // Tagging again is the way back to the sidebar for a tag removed from it (there is no Tags settings pane).
+        if (on)
+            unhideTag(tag);
+        noteTags(written);
         ++m_tagRevision;
         emit tagRevisionChanged();
         emit tagsChanged(changed);
@@ -818,28 +841,40 @@ QString FilesApp::searchedTag(const QUrl &url) const
 
 void FilesApp::noteTags(const QStringList &tags)
 {
-    bool added = false;
-    for (const QString &tag : tags) {
-        if (!TagLogic::hasTag(m_knownTags, tag)) {
-            m_knownTags = TagLogic::withTag(m_knownTags, tag, true);
-            added = true;
-        }
-    }
-    if (!added)
+    // A tag removed from the sidebar stays off it (macOS: Remove from Sidebar hides it; files keep the tag).
+    const QStringList next = TagLogic::mergeKnown(m_knownTags, m_hiddenTags, tags, kMaxKnownTags);
+    if (next == m_knownTags)
         return;
-    m_knownTags = TagLogic::displayOrder(m_knownTags).mid(0, kMaxKnownTags);
+    m_knownTags = next;
     m_settings.setValue(QStringLiteral("tags/known"), m_knownTags);
     publishKnownTags();
 }
 
 void FilesApp::forgetTag(const QString &tag)
 {
+    if (tag.trimmed().isEmpty())
+        return;
+    if (!TagLogic::hasTag(m_hiddenTags, tag)) {
+        m_hiddenTags = TagLogic::withTag(m_hiddenTags, tag, true);
+        // The oldest entries go first when the list is full.
+        while (m_hiddenTags.size() > kMaxHiddenTags)
+            m_hiddenTags.removeFirst();
+        m_settings.setValue(QStringLiteral("tags/hidden"), m_hiddenTags);
+    }
     const QStringList next = TagLogic::withTag(m_knownTags, tag, false);
     if (next == m_knownTags)
         return;
     m_knownTags = next;
     m_settings.setValue(QStringLiteral("tags/known"), m_knownTags);
     publishKnownTags();
+}
+
+void FilesApp::unhideTag(const QString &tag)
+{
+    if (!TagLogic::hasTag(m_hiddenTags, tag))
+        return;
+    m_hiddenTags = TagLogic::withTag(m_hiddenTags, tag, false);
+    m_settings.setValue(QStringLiteral("tags/hidden"), m_hiddenTags);
 }
 
 void FilesApp::publishKnownTags()
