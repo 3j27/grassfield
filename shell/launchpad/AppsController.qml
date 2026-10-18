@@ -34,8 +34,11 @@ Scope {
 
     // Latency log (P3): timestamp of the IPC call.
     property real openStartMs: 0
-    // Latency log: timestamp of the last query change (AppsWindow logs it at the next frame).
-    property real searchStartMs: 0
+    // Latency log: timestamps of the query changes not yet followed by a rendered frame (AppsWindow logs each
+    // at the next frame).
+    property var pendingSearchMs: []
+    // True while the list is rebuilt because the installed apps changed (the view keeps its scroll position).
+    property bool listRefresh: false
     // GRASSFIELD_APPS_TRACE=1 logs every keystroke latency (dev measurements); otherwise only slow ones.
     readonly property bool trace: Quickshell.env("GRASSFIELD_APPS_TRACE") === "1"
 
@@ -119,6 +122,8 @@ Scope {
 
     function hide(): void {
         open = false;
+        viewFirst = -1;
+        viewLast = -1;
     }
 
     function toggle(): void {
@@ -132,7 +137,7 @@ Scope {
         if (text === query)
             return;
         const t0 = Date.now();
-        searchStartMs = t0;
+        pendingSearchMs = pendingSearchMs.concat([t0]);
         query = text;
         rebuildItems();
         selected = searching && items.length > 0 ? 0 : -1;
@@ -158,6 +163,8 @@ Scope {
         chipFocus = chips[Math.max(0, Math.min(chips.length - 1, i + delta))];
     }
 
+    // The selection ring is only ever visible on the selected item, so the selection always matches the ring:
+    // leaving the grid drops it (the field with a query selects the first result, as Return will launch it).
     function setZone(z: string): void {
         zone = z;
         if (z === "grid") {
@@ -166,6 +173,7 @@ Scope {
                 selected = 0;
         } else {
             keyNav = false;
+            selected = Model.selectionForZone(z, searching, items.length);
             if (z === "chips")
                 chipFocus = searching ? "all" : category;
         }
@@ -174,6 +182,8 @@ Scope {
     // ---- items ---------------------------------------------------------------------------
 
     function rebuildApps(): void {
+        // The selection follows its app, not its index; the view keeps its scroll position.
+        const keepId = selected >= 0 && selected < items.length ? items[selected].id : "";
         const recs = [];
         const cache = {};
         for (const e of DesktopEntries.applications.values) {
@@ -197,7 +207,12 @@ Scope {
             category = "all";
         if (chips.indexOf(chipFocus) < 0)
             chipFocus = category;
+        listRefresh = true;
         rebuildItems();
+        listRefresh = false;
+        selected = Model.indexOfId(items, keepId);
+        if (selected < 0 && zone === "search")
+            selected = Model.selectionForZone(zone, searching, items.length);
     }
 
     function rebuildItems(): void {
@@ -207,8 +222,7 @@ Scope {
         else
             list = groups[category] ?? [];
         items = list;
-        if (selected >= items.length)
-            selected = items.length - 1;
+        selected = -1;
     }
 
     // ---- activation and keyboard ---------------------------------------------------------
@@ -225,12 +239,12 @@ Scope {
             launch(item.rec);
     }
 
-    // Return: the selected app; in the field with a query and nothing selected, the first result.
+    // Return launches the item whose selection ring is visible, nothing otherwise (an invisible selection never
+    // launches). In the field with a query that is the first result (setZone selects it).
     function activateSelected(): void {
-        if (selected >= 0 && selected < items.length)
-            activate(items[selected]);
-        else if (searching && items.length > 0)
-            activate(items[0]);
+        const at = Model.launchIndex(zone, keyNav, searching, selected, items.length);
+        if (at >= 0)
+            activate(items[at]);
     }
 
     // Arrow navigation. Returns false when Up leaves the first row (the window then moves the focus).

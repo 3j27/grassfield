@@ -866,6 +866,10 @@ QtObject {
     readonly property real launcherScrollbarOpacity: 0.5
     // estimate: time the scroll indicator stays after the last scroll
     readonly property int launcherScrollbarIdleMs: 800
+    // estimate: shortest scroll indicator, in indicator widths
+    readonly property int launcherScrollbarMinLengthFactor: 4
+    // estimate: "No results" label, distance from the grid top as a fraction of the grid height
+    readonly property real launcherEmptyOffsetFraction: 0.33
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
 }

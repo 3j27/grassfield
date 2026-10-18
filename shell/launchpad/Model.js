@@ -40,6 +40,10 @@ const CATEGORY_LOOKUP = (function () {
 // Chip of an app from its Categories= values (array or ";"-separated string); "other" when none matches.
 function categoryOf(categories) {
     const list = typeof categories === "string" ? categories.split(";") : Array.from(categories ?? []);
+    const has = name => list.some(v => String(v).trim() === name);
+    // A document viewer (Office + Viewer, e.g. a PDF reader that also lists Graphics) is a productivity app.
+    if (has("Office") && has("Viewer") && !has("Game"))
+        return "productivity";
     let best = "other";
     let bestRank = CATEGORY_ORDER.length;
     for (const raw of list) {
@@ -148,6 +152,29 @@ function step(sel, key, cols, n, pageRows) {
 // True when Up from `sel` leaves the grid (first row).
 function atFirstRow(sel, cols) {
     return sel < cols;
+}
+
+// ---- selection and launch ------------------------------------------------------------
+
+// Selected index after the keyboard focus moves to `zone`: the field with a query selects the first result (Return
+// launches it); the chips and the field without a query select nothing. The grid is handled by the caller.
+function selectionForZone(zone, searching, count) {
+    return zone === "search" && searching && count > 0 ? 0 : -1;
+}
+
+// Index Return launches, -1 for nothing. Only an item whose selection ring is visible launches: the ring shows
+// while the keyboard owns the selection (`keyNav`) or a query is active, and never in the chips zone.
+function launchIndex(zone, keyNav, searching, selected, count) {
+    if (zone === "chips" || !(keyNav || searching))
+        return -1;
+    return selected >= 0 && selected < count ? selected : -1;
+}
+
+// Index of the item with `id` in `items` ({id, ...}), -1 when it is gone.
+function indexOfId(items, id) {
+    if (id === "")
+        return -1;
+    return items.findIndex(i => i.id === id);
 }
 
 // ---- hidden entries ------------------------------------------------------------------
