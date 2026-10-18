@@ -28,6 +28,8 @@
 #                   Grassfield lock, each released while keys are typed: prints the unlocked window and
 #                   the keys that reached foot during it; fails when the window exceeds GAP_MAX_MS
 #                   (default 300) or a key typed after the fresh lock reaches foot
+#   probe-cost      CPU of the shell and the nested Hyprland with the 1 s check (plain lock) and the 100 ms
+#                   check (a foreign locker holding the lock over Grassfield's); fails above +5 % CPU
 #   cleanup         close the foot probe window and any foreign locker (run after the default sequence)
 #
 # Foreign locker: tests/security/foreign_locker/ForeignLocker.qml (Quickshell WlSessionLock client,
@@ -401,7 +403,7 @@ step_relock_confirm() {
 # A foreign locker takes the live Grassfield lock over and releases it while keys are typed (every 4 ms): measures the
 # unlocked window (foreign release -> Hyprland reports LOCK again) and the keys that reached foot during it.
 step_foreign_gap() {
-  local runs=${FOREIGN_RUNS:-5} max=${GAP_MAX_MS:-300} i s t0 t1 now lo hi before mid after word typer worst=0 inGap=0 late=0
+  local runs=${FOREIGN_RUNS:-5} max=${GAP_MAX_MS:-300} i s t0 t1 now lo hi before mid after word typer from released relocked react worst=0 inGap=0 late=0
   for i in $(seq 1 "$runs"); do
     s=$(wait_status locked 3) || { fail "foreign-gap run $i: precondition: status $s"; return; }
     foreign_start "foreign-gap run $i"
@@ -411,6 +413,7 @@ step_foreign_gap() {
     nested wtype -d 4 "$word$word$word$word$word$word$word$word$word$word$word$word$word$word$word$word" &
     typer=$!
     sleep 0.05
+    from=$(wc -l <"$dev/shell.log")
     t0=${EPOCHREALTIME/./}
     foreign_ipc unlock >/dev/null
     t1=${EPOCHREALTIME/./}
@@ -425,16 +428,63 @@ step_foreign_gap() {
     after=$(typed_bytes)
     foreign_wait_exit "foreign-gap run $i"
     if [[ -z $hi ]]; then fail "foreign-gap run $i: Hyprland did not report LOCK again within 3 s"; continue; fi
-    ((hi > worst)) && worst=$hi
+    # Precise window: the fixture logs the epoch ms of its release, the shell log the time of its fresh lock request.
+    react=""
+    released=$(grep -o "unlocking on request at [0-9]*" "$dev/foreign-locker.log" | tail -n 1 | grep -o "[0-9]*$")
+    relocked=$(tail -n +"$((from + 1))" "$dev/shell.log" | grep -m1 "taking a fresh lock" | cut -c1-23)
+    [[ -n $released && -n $relocked ]] && react=$(($(date -d "$relocked" +%s%3N) - released))
+    [[ -n $react ]] && ((react > worst)) && worst=$react
+    ((lo > worst)) && worst=$lo
     inGap=$((inGap + mid - before))
     late=$((late + after - mid))
-    echo "run $i: unlocked window $lo-$hi ms (after/before the release request); bytes in foot: $((mid - before)) by the fresh lock, $((after - mid)) after it"
+    echo "run $i: foreign release -> fresh lock request ${react:-?} ms (shell log); -> LOCK seen by polling $lo ms after the release request returned ($hi ms before it was sent); bytes in foot: $((mid - before)) by then, $((after - mid)) after"
     no_leak "after$(probe_word gap "$i")" "foreign-gap run $i (typed after the fresh lock)"
   done
   echo "foreign-gap: $runs runs: worst unlocked window $worst ms; bytes in foot during the windows $inGap, after them $late"
   if ((worst <= max)); then pass "foreign-gap: unlocked window <= $max ms in every run (worst $worst ms)"; else fail "foreign-gap: unlocked window $worst ms > $max ms"; fi
   if ((late == 0)); then pass "foreign-gap: no key typed after the fresh lock reached foot"; else fail "foreign-gap: $late bytes reached foot after the fresh lock was reported"; fi
   nested wtype -k Escape
+}
+
+# CPU time of a process in clock ticks (utime + stime: /proc/<pid>/stat fields 14 and 15; field 2 may hold spaces).
+cpu_ticks() { # <pid>
+  local stat rest
+  stat=$(cat "/proc/$1/stat" 2>/dev/null) || { echo 0; return; }
+  rest=${stat##*) }
+  local -a f
+  read -ra f <<<"$rest"
+  echo $((f[11] + f[12]))
+}
+
+cpu_percent() { # <seconds> <pid>...: CPU % of each process over the interval, space separated
+  local secs=$1 hz i out=""
+  shift
+  local -a a=() b=()
+  hz=$(getconf CLK_TCK)
+  for i in "$@"; do a+=("$(cpu_ticks "$i")"); done
+  sleep "$secs"
+  for i in "$@"; do b+=("$(cpu_ticks "$i")"); done
+  for i in "${!a[@]}"; do out+=$(awk -v d=$((b[i] - a[i])) -v hz="$hz" -v s="$secs" 'BEGIN { printf " %.1f", 100 * d / hz / s }'); done
+  echo "${out# }"
+}
+
+# Cost of the 100 ms ownership check while a takeover is suspected (a foreign locker holds the lock over Grassfield's),
+# against the 1 s check of a plain lock: CPU of the shell and of the nested Hyprland over PROBE_COST_SECONDS (10).
+step_probe_cost() {
+  local secs=${PROBE_COST_SECONDS:-10} shellPid hyprPid plain held s from extra
+  shellPid=$(dev_live_pid "$dev/shell.pid") && hyprPid=$(dev_live_pid "$dev/nested.pid") || { fail "probe-cost: no live shell or compositor record"; return; }
+  s=$(wait_status locked 3) || { fail "probe-cost: precondition: status $s"; return; }
+  sleep 1.5
+  plain=$(cpu_percent "$secs" "$shellPid" "$hyprPid")
+  from=$(wc -l <"$dev/shell.log")
+  foreign_start probe-cost
+  sleep 1
+  if tail -n +"$((from + 1))" "$dev/shell.log" | grep -q "takeover suspected (no lock surface has the keyboard)"; then pass "probe-cost: takeover suspected while the foreign locker holds the lock"; else fail "probe-cost: no takeover suspected after the foreign takeover"; fi
+  held=$(cpu_percent "$secs" "$shellPid" "$hyprPid")
+  foreign_release_and_wait probe-cost
+  echo "probe-cost: CPU % over $secs s (shell nested-Hyprland): plain lock, check every 1 s: $plain; foreign locker holding, check every 100 ms: $held"
+  extra=$(awk -v a="$plain" -v b="$held" 'BEGIN { split(a, x, " "); split(b, y, " "); printf "%.1f", (y[1] + y[2]) - (x[1] + x[2]) }')
+  if awk -v e="$extra" 'BEGIN { exit !(e < 5) }'; then pass "probe-cost: the suspected-takeover check adds $extra % CPU (< 5)"; else fail "probe-cost: the suspected-takeover check adds $extra % CPU"; fi
 }
 
 # Leave nothing behind but the (locked) nested session.
@@ -446,7 +496,7 @@ step_cleanup() {
 }
 
 steps=("$@")
-[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync relock-confirm foreign-gap cleanup)
+[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync relock-confirm foreign-gap probe-cost cleanup)
 for s in "${steps[@]}"; do
   echo "== $s"
   declare -F "step_${s//-/_}" >/dev/null || { echo "reload_locked: unknown step $s" >&2; exit 2; }
