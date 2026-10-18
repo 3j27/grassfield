@@ -14,9 +14,15 @@ sRGB, as Qt does. Backdrops:
   accent         the solid accent colour
   apps           black dim (apps.backdropOpacity, apps.backdropOpacityOpaque at t = 0) over the wallpaper
   apps-field     apps + the Apps search field fill
-  desktop-label  the label shadow colour at its core alpha (desktopIcon.labelShadowOpacity) over the wallpaper: text against the shadow,
-                 conservatively taken as fully opaque behind the glyph
-The role table is cross-checked against the QML: a new secondary-text, text-alpha, text-opacity or danger-colour use without a role fails.
+  desktop-label  the label shadow colour at its core alpha (desktopIcon.labelShadowOpacity) over the wallpaper: white text against the
+                 shadow taken as fully opaque behind the glyph. That is the BEST case (19:1), a ceiling that only proves the token
+                 colours still contrast; the rendered contrast of the labels over a white wallpaper (blurred shadow, 4.8:1) is
+                 measured by tests/visual/contrast.sh --surfaces desktop, which is the evidence for that surface.
+The role table is cross-checked against the QML (tests/visual/qml_scan.py, a structural scan: palette aliases, colors["textSecondary"],
+opacity on any ancestor, one-line items, Qt.darker/lighter/alpha/tint/rgba, `opacity :`): a new secondary-text, danger-colour, derived
+text-colour (alpha), computed-palette-key (dynamic) or text-opacity use without a role fails.
+Tint alpha: material.tintAlphaMin at transparency 1, linear in between, clamped to material.tintAlphaClamp up to transparency
+material.tintClampUntil (ui/Grassfield/Ui/Appearance.qml tintAlpha()); at the default 0.25 the tint is 0.85, unclamped.
 """
 import importlib.util
 import json
@@ -87,7 +93,15 @@ class Tokens:
         return float(ref) if isinstance(ref, (int, float)) else float(self.path(ref))
 
     def tint_alpha(self, t):
-        return 1 - t * (1 - self.path("material.tintAlphaMin"))
+        """Mirror of Appearance.tintAlpha (checked against the QML source by test_tint_alpha_matches_appearance_qml)."""
+        mn = self.path("material.tintAlphaMin")
+        clamp = self.path("material.tintAlphaClamp")
+        until = self.path("material.tintClampUntil")
+        t = max(0.0, min(1.0, t))
+        linear = 1 - t * (1 - mn)
+        if t <= until:
+            return max(linear, clamp)
+        return clamp + (mn - clamp) * (t - until) / (1 - until)
 
 
 def backdrops(tok, role, appearance, t, wallpaper):
@@ -162,52 +176,49 @@ def print_table(tok, roles, table):
 
 # ---- QML cross-check ------------------------------------------------------------------------------------
 
-SCAN_DIRS = ("shell", "ui/Grassfield")
-TEXT_BLOCK = re.compile(r"\s*(?:Text|TextInput|TextEdit|TextField|Label)\s*\{")
-SECONDARY = re.compile(r"[cC]olors\.textSecondary")
-ALPHA = re.compile(r"withAlpha\(\s*Appearance\.(?:dark)?[cC]olors\.(?:text|accentText)\b")
-DANGER = re.compile(r"[cC]olors\.danger")
+_scan_spec = importlib.util.spec_from_file_location("qml_scan", os.path.join(HERE, "qml_scan.py"))
+qml_scan = importlib.util.module_from_spec(_scan_spec)
+_scan_spec.loader.exec_module(qml_scan)
 
 
 def scan_qml():
-    """{(relative file, class): count} of secondary-text, text-alpha, text-opacity and danger uses in the QML."""
-    found = {}
+    """{(relative file, class): count} of the contrast-relevant uses in shell/ and ui/Grassfield/ (see qml_scan.py)."""
+    return qml_scan.scan_tree(ROOT)
 
-    def add(key):
-        found[key] = found.get(key, 0) + 1
 
-    for sub in SCAN_DIRS:
-        for d, _, files in os.walk(os.path.join(ROOT, sub)):
-            for name in sorted(files):
-                if not name.endswith(".qml") or name == "Tokens.qml":
-                    continue
-                path = os.path.join(d, name)
-                rel = os.path.relpath(path, ROOT)
-                with open(path, encoding="utf-8") as f:
-                    lines = f.read().split("\n")
-                for line in lines:
-                    if line.lstrip().startswith("//"):
-                        continue
-                    for _ in SECONDARY.finditer(line):
-                        add((rel, "secondary"))
-                    for _ in ALPHA.finditer(line):
-                        add((rel, "alpha"))
-                    for _ in DANGER.finditer(line):
-                        add((rel, "danger"))
-                for i, line in enumerate(lines):
-                    if not TEXT_BLOCK.match(line):
-                        continue
-                    ind = len(line) - len(line.lstrip())
-                    for j in range(i + 1, len(lines)):
-                        lj = lines[j]
-                        if lj.strip() and len(lj) - len(lj.lstrip()) <= ind:
-                            break
-                        if len(lj) - len(lj.lstrip()) != ind + 4:
-                            continue
-                        s = lj.strip()
-                        if s.startswith("opacity:"):
-                            add((rel, "opacity"))
-    return found
+def cross_check(scan, declared):
+    """Problems of a scan against the declared sites: uses without a role (or with another count) and stale declarations."""
+    missing = sorted("%s [%s]: QML has %d, roles declare %d" % (k[0], k[1], scan[k], declared.get(k, 0))
+                     for k in scan if scan[k] != declared.get(k, 0))
+    stale = sorted("%s [%s]: roles declare %d, QML has none" % (k[0], k[1], declared[k]) for k in declared if k not in scan)
+    return missing + stale
+
+
+# One sample per form the scanner must catch (each makes the cross-check FAIL when no role declares it), and the forms it must not flag.
+SELFTEST_SAMPLES = {
+    "palette alias": 'Item {\n  readonly property var pal: Appearance.colors\n  Text { color: pal.textSecondary }\n}\n',
+    "palette alias in a ternary": 'Item {\n  readonly property var pal: Appearance.dark ? Tokens.colorDark : Tokens.colorLight\n'
+                                  '  Text { color: pal.danger }\n}\n',
+    "bracket access": 'Text { color: Appearance.colors["textSecondary"] }\n',
+    "bracket access, single quotes on an alias": "Item {\n  property var c: Appearance.darkColors\n  Text { color: c['danger'] }\n}\n",
+    "opacity on a parent": 'Item {\n  opacity: 0.6\n  Column {\n    Text { text: "x" }\n  }\n}\n',
+    "opacity on a grandparent, computed": 'Item {\n  opacity: shown ? 1 : 0.4\n  Row {\n    Item {\n      Text { text: "x" }\n    }\n  }\n}\n',
+    "one-line Text with opacity": 'Item {\n  Text { text: "x"; opacity: 0.5 }\n}\n',
+    "one-line Text, opacity first": 'Item { Text{opacity:0.5;text:"x"} }\n',
+    "Qt.darker": 'Text { color: Qt.darker(Appearance.colors.text, 1.4) }\n',
+    "Qt.lighter of an alias": 'Item {\n  property var pal: Appearance.colors\n  Text { color: Qt.lighter(pal.text) }\n}\n',
+    "Qt.alpha": 'Text { color: Qt.alpha(Appearance.colors.accentText, 0.7) }\n',
+    "opacity with a space before the colon": 'Text {\n  text: "x"\n  opacity : 0.5\n}\n',
+    "computed palette key": 'Item {\n  property string key: "text"\n  Text { color: Appearance.colors[key] }\n}\n',
+    "withAlpha on a multi-line call": 'Text {\n  color: Appearance.withAlpha(\n    Appearance.colors.text, 0.5)\n}\n',
+}
+SELFTEST_CLEAN = {
+    "opacity 1": 'Item {\n  opacity: 1\n  Text { text: "x"; opacity: 1.0 }\n}\n',
+    "commented use": '// Appearance.colors.textSecondary\nItem {\n  /* Text { opacity: 0.5 } */\n}\n',
+    "string mentioning the token": 'Item { property string s: "Appearance.colors.textSecondary" }\n',
+    "opacity on an item without text": 'Item {\n  opacity: 0.5\n  Rectangle { color: "red" }\n}\n',
+    "primary text": 'Text { color: Appearance.colors.text }\n',
+}
 
 
 def declared_sites(roles):
@@ -246,7 +257,22 @@ class ContrastTokens(unittest.TestCase):
         # Appearance.tintAlpha(t) = 1 - clamp01(t) * (1 - tintAlphaMin) (ui/Grassfield/Ui/Appearance.qml): same formula here.
         with open(os.path.join(ROOT, "ui", "Grassfield", "Ui", "Appearance.qml")) as f:
             qml = f.read()
-        self.assertIn("return 1 - clamp01(t) * (1 - Tokens.materialTintAlphaMin);", qml)
+        for line in ("const x = clamp01(t);",
+                     "const linear = 1 - x * (1 - Tokens.materialTintAlphaMin);",
+                     "return Math.max(linear, Tokens.materialTintAlphaClamp);",
+                     "return Tokens.materialTintAlphaClamp + (Tokens.materialTintAlphaMin - Tokens.materialTintAlphaClamp) * (x - until) / (1 - until);"):
+            self.assertIn(line, qml)
+        self.assertIn("const until = Tokens.materialTintClampUntil;", qml)
+
+    def test_frosted_default_and_clamp(self):
+        # The material reads as frosted at the default (tint <= 0.85) and the clamp only acts at high transparency.
+        self.assertLessEqual(self.tok.tint_alpha(0.25), 0.85 + 1e-9)
+        self.assertAlmostEqual(self.tok.tint_alpha(0.25), 1 - 0.25 * (1 - self.tok.path("material.tintAlphaMin")), places=9)
+        self.assertEqual(self.tok.tint_alpha(0.0), 1.0)
+        self.assertAlmostEqual(self.tok.tint_alpha(1.0), self.tok.path("material.tintAlphaMin"), places=9)
+        self.assertGreaterEqual(self.tok.tint_alpha(0.6), self.tok.path("material.tintAlphaClamp") - 1e-9)
+        for lo, hi in ((0.0, 0.25), (0.25, 0.4), (0.4, 0.6), (0.6, 1.0)):
+            self.assertGreaterEqual(self.tok.tint_alpha(lo), self.tok.tint_alpha(hi))
 
     def test_every_role_meets_its_threshold(self):
         bad = []
@@ -265,13 +291,28 @@ class ContrastTokens(unittest.TestCase):
                 self.assertGreater(len(role["exempt"]), 20, role["id"])
 
     def test_role_table_matches_the_qml(self):
-        scan = scan_qml()
-        declared = declared_sites(self.roles)
-        missing = sorted("%s [%s]: QML has %d, roles declare %d" % (k[0], k[1], scan[k], declared.get(k, 0))
-                         for k in scan if scan[k] != declared.get(k, 0))
-        stale = sorted("%s [%s]: roles declare %d, QML has none" % (k[0], k[1], declared[k]) for k in declared if k not in scan)
-        self.assertEqual(missing + stale, [],
-                         "\nadd or update the role in tests/visual/contrast-roles.json:\n" + "\n".join(missing + stale))
+        problems = cross_check(scan_qml(), declared_sites(self.roles))
+        self.assertEqual(problems, [], "\nadd or update the role in tests/visual/contrast-roles.json:\n" + "\n".join(problems))
+
+    def test_cross_check_selftest_each_form_fails(self):
+        # Every form of a contrast-relevant use the scanner must see makes the cross-check FAIL when no role declares it.
+        comps = frozenset({"Button"})
+        for name, src in SELFTEST_SAMPLES.items():
+            scan = qml_scan.scan_source(src, "shell/Sample.qml", comps)
+            self.assertNotEqual(cross_check(scan, {}), [], "form not detected: " + name)
+
+    def test_cross_check_selftest_declared_passes_and_clean_forms_do_not_trip(self):
+        for name, src in SELFTEST_SAMPLES.items():
+            scan = qml_scan.scan_source(src, "shell/Sample.qml", frozenset())
+            self.assertEqual(cross_check(scan, dict(scan)), [], name)
+        for name, src in SELFTEST_CLEAN.items():
+            self.assertEqual(qml_scan.scan_source(src, "shell/Sample.qml", frozenset()), {}, "false positive: " + name)
+
+    def test_cross_check_selftest_component_instance_with_opacity(self):
+        # An instance of a component that contains text, given an opacity, is a text item with that opacity.
+        src = 'Item {\n  Button { opacity: 0.5 }\n}\n'
+        self.assertNotEqual(cross_check(qml_scan.scan_source(src, "shell/Sample.qml", frozenset({"Button"})), {}), [])
+        self.assertEqual(qml_scan.scan_source(src, "shell/Sample.qml", frozenset()), {})
 
     def test_role_ids_unique_and_fields_valid(self):
         ids = [r["id"] for r in self.roles]
@@ -279,10 +320,13 @@ class ContrastTokens(unittest.TestCase):
         for r in self.roles:
             self.assertIn(r["kind"], THRESHOLD)
             self.assertIn(r["backdrop"], ("material", "accent", "apps", "apps-field", "desktop-label"))
+            for site in r["sites"]:
+                self.assertIn(site["class"], ("secondary", "danger", "alpha", "dynamic", "opacity", "opacity-dynamic"))
             self.assertRegex(r["fg"], r"^(colors|darkColors)\.\w+$")
 
     def test_desktop_label_survives_white_and_black(self):
         # White label text over its shadow core on pure white and on black (and so over the checker, which is both).
+        # Ceiling only (shadow core taken as opaque): the rendered contrast is measured by contrast.sh --surfaces desktop.
         label = next(r for r in self.roles if r["id"].startswith("desktop label ("))
         for wp in ((255, 255, 255), (0, 0, 0)):
             for ap in APPEARANCES:
