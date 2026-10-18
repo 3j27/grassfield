@@ -42,9 +42,14 @@ namespace gf::gfc {
     inline constexpr std::string_view kFeatureAppmenu     = "appmenu"; // org_kde_kwin_appmenu_manager global + appmenu events
     inline constexpr std::string_view kFeatureOverview    = "overview"; // hl.plugin.grassfield.overview + window transformers + overview events
     inline constexpr std::string_view kFeatureDesktopFocus = "desktop-focus"; // click-to-focus policy for the desktop surface (ADR-0012)
+    // Same policy, with the press target taken from under the cursor when the pointer focus is stale (a click without
+    // motion after a popup closed) and late grants dropped on any other focus change. Always advertised together with
+    // desktop-focus; the shell enables its file-changing desktop keys only with this one (shell main 23caeab).
+    inline constexpr std::string_view kFeatureDesktopFocusV2 = "desktop-focus-v2";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
-    // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus.
+    // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
+    // desktop-focus-v2 (together).
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key only.

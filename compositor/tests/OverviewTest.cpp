@@ -282,19 +282,24 @@ TEST(OverviewFocus, OnlyAChosenWindowEndsTheOverview) {
 
 // R13 review (major): no transform without the shell's chrome covering every target monitor and holding the keyboard.
 TEST(OverviewChrome, CoversEveryTargetMonitor) {
-    const std::vector<ChromeSurface> both{{.monitor = 1, .mapped = true, .exclusive = true}, {.monitor = 2, .mapped = true, .exclusive = true}};
-    EXPECT_TRUE(chromeCovers({1}, both, true));
-    EXPECT_TRUE(chromeCovers({1, 2}, both, true));
-    EXPECT_FALSE(chromeCovers({1, 2}, both, false)) << "the keyboard is not on the chrome";
-    EXPECT_FALSE(chromeCovers({1, 3}, both, true)) << "no chrome on monitor 3";
-    EXPECT_FALSE(chromeCovers({}, both, true)) << "nothing to cover is not a valid open";
-    EXPECT_FALSE(chromeCovers({1}, {}, true));
+    const std::vector<ChromeSurface> both{{.monitor = 1, .mapped = true, .exclusive = true, .keyboard = true}, {.monitor = 2, .mapped = true, .exclusive = false, .keyboard = false}};
+    EXPECT_TRUE(chromeCovers({1}, both));
+    EXPECT_TRUE(chromeCovers({1, 2}, both));
+    EXPECT_TRUE(chromeCovers({2}, both)) << "the keyboard-holding chrome may be on a monitor without windows";
+    EXPECT_FALSE(chromeCovers({1, 3}, both)) << "no chrome on monitor 3";
+    EXPECT_FALSE(chromeCovers({}, both)) << "nothing to cover is not a valid open";
+    EXPECT_FALSE(chromeCovers({1}, {}));
 }
 
-TEST(OverviewChrome, MustBeMappedAndExclusive) {
-    EXPECT_FALSE(chromeCovers({1}, {{.monitor = 1, .mapped = false, .exclusive = true}}, true));
-    EXPECT_FALSE(chromeCovers({1}, {{.monitor = 1, .mapped = true, .exclusive = false}}, true));
-    EXPECT_TRUE(chromeCovers({1}, {{.monitor = 1, .mapped = true, .exclusive = false}, {.monitor = 1, .mapped = true, .exclusive = true}}, true));
+// Shell integration review (main 23caeab): only the focused output's chrome is Exclusive; the others may be None.
+TEST(OverviewChrome, OneExclusiveChromeMustHoldTheKeyboard) {
+    const ChromeSurface held{.monitor = 1, .mapped = true, .exclusive = true, .keyboard = true};
+    const ChromeSurface other{.monitor = 2, .mapped = true, .exclusive = false, .keyboard = false};
+    EXPECT_TRUE(chromeCovers({1, 2}, {held, other}));
+    EXPECT_FALSE(chromeCovers({1, 2}, {{.monitor = 1, .mapped = true, .exclusive = true, .keyboard = false}, other})) << "the keyboard is not on the chrome";
+    EXPECT_FALSE(chromeCovers({1, 2}, {{.monitor = 1, .mapped = true, .exclusive = false, .keyboard = true}, other})) << "on the chrome but not Exclusive";
+    EXPECT_FALSE(chromeCovers({1, 2}, {{.monitor = 1, .mapped = false, .exclusive = true, .keyboard = true}, other})) << "not mapped";
+    EXPECT_FALSE(chromeCovers({1, 2}, {held, {.monitor = 2, .mapped = false, .exclusive = false, .keyboard = false}})) << "monitor 2's chrome is not mapped";
 }
 
 // R13 review: a surface resized while open must leave no stale pixels; every drawn box is damaged again when left.

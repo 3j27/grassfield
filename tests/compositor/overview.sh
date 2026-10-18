@@ -23,6 +23,8 @@
 #   restore     after on:false the output matches the frame before the overview (menu bar masked)
 #   chrome      on:true is refused (no-chrome) without the fixture's chrome, and with a chrome that does not hold the
 #               keyboard (R13 review of f12f610)
+#   two outputs windows on both outputs: opens with the focused output's chrome Exclusive and the other's keyboard None;
+#               after the close the previously active window gets the keys
 #   retarget    closing the active window while open: no closing, the state is posted with the new count
 #   fullscreen  a window going full screen while open takes its workspace out (reason fullscreen); a workspace showing a
 #               full-screen window is refused (no-windows)
@@ -163,11 +165,12 @@ grid_json() { # <on> <durationMs> <addresses...>
        w: ($ww * $s | floor), h: ($wh * $s | floor)}]}' --args "$@"
 }
 
-start_fixture() { # <grid json> [keyboard: exclusive (default) | none]
+start_fixture() { # <grid json> [keyboard: exclusive (default) | none] [second output: a chrome with keyboard None there]
   local targets
   targets=$(jq -c '[.windows | to_entries[] | {x: .value.x, y: .value.y, w: .value.w, h: .value.h, label: "foot \(.key + 1)"}]' <<<"$1")
   : >"$run/fixture.log"
-  GF_OVERVIEW_OUTPUT=$out GF_OVERVIEW_TARGETS=$targets GF_OVERVIEW_DIM=0.35 GF_OVERVIEW_KEYBOARD=${2:-exclusive} WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
+  GF_OVERVIEW_OUTPUT=$out GF_OVERVIEW_TARGETS=$targets GF_OVERVIEW_DIM=0.35 GF_OVERVIEW_KEYBOARD=${2:-exclusive} GF_OVERVIEW_SECOND_OUTPUT=${3:-} \
+    WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
     setsid "$root/scripts/dev/isolated.sh" --name overview-fixture qs -p "$root/tests/compositor/overview-fixture" --no-color \
     >"$run/fixture.log" 2>&1 </dev/null &
   fixture_pid=$!
@@ -505,6 +508,61 @@ close_now
 stop_fixture
 kill "$rs_pid" 2>/dev/null
 sleep 0.5
+
+# 5e. two outputs (shell integration review, main 23caeab): a chrome on each output, only the focused output's chrome
+# Exclusive, the other keyboard None. on:true with windows on both outputs opens (the former rule refused it: every chrome
+# had to be Exclusive, and the keyboard was lost after the close); after the close, once the chrome dropped its keyboard,
+# the previously active window gets the keys.
+other=WAYLAND-1
+read -r ox oy ow oh < <(nestctl -j monitors | jq -r --arg o "$other" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
+if [[ -z ${ow:-} ]]; then
+  check "two outputs: $other exists" 1 "no $other"
+else
+  timeout 20 "$root/scripts/dev/pointer.sh" output "$other" abs $((ow / 2)) $((oh / 2)) sleep 50 >>"$log" 2>&1
+  cap_w1=$run/capture-w1.cap
+  p=$(foot_capture "$cap_w1"); pids+=("$p"); w1_pid=$p
+  w1=$(address_of "$p")
+  pointer abs $((mon_w / 2)) $((mon_h - 160)) sleep 50
+  sleep 0.6
+  layout2=$(jq -c --arg a "$w1" --argjson x $((ox + 100)) --argjson y $((oy + 150)) '.durationMs = 0 | .windows += [{address: $a, x: $x, y: $y, w: 350, h: 250}]' <<<"$layout")
+  nestctl dispatch "hl.dsp.focus({ window = \"address:$capture\" })" >>"$log" 2>&1
+  sleep 0.3
+  c0=$(stat -c %s "$cap")
+  keys q
+  sleep 0.3
+  pre=$(tail -c +"$((c0 + 1))" "$cap" | cat -v)
+  # "No chrome on the second output" cannot be staged here: the running grassfield-shell keeps its own grassfield-overview
+  # surfaces mapped on every output between opens (empty input mask). Unit test OverviewChrome.CoversEveryTargetMonitor.
+  start_fixture "$layout2" exclusive "$other" >/dev/null
+  p0=$(ov_count '"state":"open"')
+  overview "$layout2"
+  wait_ov '"state":"open"' "$p0" 2000
+  rc=$?
+  ((rc == 0)) && [[ $(last_ov) == *'"windows":7'* ]]
+  check "two outputs, chrome Exclusive on $out and keyboard None on $other: on:true opens with the 7 windows" $? "$(last_ov)"
+  # Input on the output whose chrome has keyboard None: a click at that window's real place (outside its layout rect).
+  read -r wx wy ww wh < <(jq -r '.[] | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' <<<"$(clients_of "$w1")")
+  w0=$(stat -c %s "$cap_w1")
+  timeout 20 "$root/scripts/dev/pointer.sh" output "$other" abs $((wx + ww - 40 - ox)) $((wy + wh - 40 - oy)) sleep 150 click sleep 200 >>"$log" 2>&1
+  pointer abs $((mon_w / 2)) $((mon_h - 160)) sleep 50
+  w1_new=$(tail -c +"$((w0 + 1))" "$cap_w1" | cat -v | head -c 80)
+  [[ -z $w1_new ]]
+  check "two outputs: a click at the $other window's real place reaches nothing of it while open" $? "window got '$w1_new'"
+  cl0=$(ov_count '"state":"closed"')
+  overview '{"on":false,"durationMs":0}'
+  wait_ov '"state":"closed"' "$cl0" 2000
+  keys n # the chrome drops its keyboard (the shell drops every chrome to None before the close completes)
+  sleep 0.6
+  c0=$(stat -c %s "$cap")
+  keys z
+  sleep 0.4
+  post=$(tail -c +"$((c0 + 1))" "$cap" | cat -v)
+  [[ $pre == *q* && $post == *z* ]]
+  check "two outputs: after the close the previously active window gets the keys" $? "before the open '$pre', after the close '$post'"
+  stop_fixture
+  kill "$w1_pid" 2>/dev/null
+  sleep 0.5
+fi
 
 # 6. failsafes: the chrome unmapping while open (the shell process alive) ends the overview at once, without a closing
 # animation; the chrome dropping the keyboard ends it; the chrome's process exiting ends it.

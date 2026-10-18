@@ -109,8 +109,10 @@ namespace gf::gfc {
             out.push_back(kFeatureAppmenu);
         if (overview)
             out.push_back(kFeatureOverview);
-        if (desktopFocus)
+        if (desktopFocus) {
             out.push_back(kFeatureDesktopFocus);
+            out.push_back(kFeatureDesktopFocusV2);
+        }
         return out;
     }
 

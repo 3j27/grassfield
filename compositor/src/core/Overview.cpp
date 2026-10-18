@@ -431,12 +431,13 @@ namespace gf::overview {
         return true;
     }
 
-    bool chromeCovers(const std::vector<uint64_t>& targetMonitors, const std::vector<ChromeSurface>& chromes, bool keyboardOnChrome) {
-        if (!keyboardOnChrome || targetMonitors.empty())
+    bool chromeCovers(const std::vector<uint64_t>& targetMonitors, const std::vector<ChromeSurface>& chromes) {
+        if (targetMonitors.empty())
             return false;
-        return std::ranges::all_of(targetMonitors, [&chromes](uint64_t monitor) {
-            return std::ranges::any_of(chromes, [monitor](const ChromeSurface& c) { return c.monitor == monitor && c.mapped && c.exclusive; });
-        });
+        const bool keyboardHeld = std::ranges::any_of(chromes, [](const ChromeSurface& c) { return c.mapped && c.exclusive && c.keyboard; });
+        return keyboardHeld && std::ranges::all_of(targetMonitors, [&chromes](uint64_t monitor) {
+                   return std::ranges::any_of(chromes, [monitor](const ChromeSurface& c) { return c.monitor == monitor && c.mapped; });
+               });
     }
 
     std::vector<Box> damageStep(const Box& previous, const Box& current) {

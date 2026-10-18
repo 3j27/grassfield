@@ -143,12 +143,14 @@ namespace {
         std::vector<ov::ChromeSurface> out;
         if (!Desktop::layerState())
             return out;
+        const auto keyboardLayer = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus()).layer;
         for (const auto& ls : Desktop::layerState()->layers()) {
             if (!isChrome(ls))
                 continue;
             out.push_back(ov::ChromeSurface{.monitor   = monitorId(ls->m_monitor.lock()),
                                             .mapped    = ls->m_mapped,
-                                            .exclusive = gf::surfaces::interactivity(ls) == 1 /* ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE */});
+                                            .exclusive = gf::surfaces::interactivity(ls) == 1 /* ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE */,
+                                            .keyboard  = keyboardLayer == ls});
         }
         return out;
     }
@@ -652,15 +654,16 @@ namespace gf::overviewer {
             return;
         }
         // Input safety does not depend on the shell's good behaviour: windows are drawn away from their real places only
-        // while the shell's chrome covers every monitor involved and holds the keyboard (R13 review of f12f610).
+        // while the shell's chrome covers every monitor involved (mapped) and one Exclusive chrome holds the keyboard (R13
+        // review of f12f610; relaxed from "every chrome Exclusive" after the shell integration review, main 23caeab).
         std::vector<uint64_t> monitors;
         for (const auto& e : next) {
             const uint64_t id = monitorId(e.monitor.lock());
             if (std::ranges::find(monitors, id) == monitors.end())
                 monitors.push_back(id);
         }
-        if (!next.empty() && !ov::chromeCovers(monitors, chromeSurfaces(), keyboardOnChrome())) {
-            gf::logRequest(Log::WARN, "overview: rejected: the shell's chrome (layer {}, mapped, keyboard Exclusive) must cover each window's monitor and hold the keyboard",
+        if (!next.empty() && !ov::chromeCovers(monitors, chromeSurfaces())) {
+            gf::logRequest(Log::WARN, "overview: rejected: the shell's chrome (layer {}) must be mapped on each window's monitor, and one of them must hold the keyboard (Exclusive)",
                            OVERVIEW_LAYER_NAMESPACE);
             refuse(ov::Reason::NoChrome);
             return;

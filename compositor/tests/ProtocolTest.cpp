@@ -36,9 +36,9 @@ TEST(Protocol, OnlyRegisteredFeaturesAreAdvertised) {
     EXPECT_EQ(capabilitiesJson(features(false, false, false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","overview"]})");
     EXPECT_EQ(capabilitiesJson(features(true, true, true, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview"]})");
-    EXPECT_EQ(capabilitiesJson(features(false, false, false, false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","desktop-focus"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, false, false, false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","desktop-focus","desktop-focus-v2"]})");
     EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2"]})");
 }
 
 TEST(Protocol, WithdrawnCapabilitiesHaveNoFeature) {
@@ -122,6 +122,7 @@ TEST(Protocol, NamesAreStable) {
     EXPECT_EQ(kFeatureAppmenu, "appmenu");
     EXPECT_EQ(kFeatureOverview, "overview");
     EXPECT_EQ(kFeatureDesktopFocus, "desktop-focus");
+    EXPECT_EQ(kFeatureDesktopFocusV2, "desktop-focus-v2");
     EXPECT_EQ(kConfigTitlebarDoubleClick, "titlebarDoubleClick");
 }
 
