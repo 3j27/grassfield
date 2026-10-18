@@ -9,6 +9,8 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include "tagstore.h"
+
 #include <functional>
 
 class FolderModel;
@@ -172,6 +174,9 @@ private:
     // failures; announces the changed items.
     void rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on);
     void unhideTag(const QString &tag);
+    // Why `url` can't be tagged, "" when it can (`support`: what TagStore found).
+    QString tagsReason(const QUrl &url, TagStore::Support support) const;
+    QString schemeReason(const QUrl &url) const;
     // Tags in use, for the sidebar (kept across sessions, at most kMaxKnownTags).
     void noteTags(const QStringList &tags);
     void publishKnownTags();
@@ -188,5 +193,7 @@ private:
     QStringList m_knownTags;
     // Tags removed from the sidebar (not listed again when seen), persisted as tags/hidden.
     QStringList m_hiddenTags;
+    // Tag state of the items asked about by the menus (selection), probed once per few seconds.
+    mutable TagStore::Cache m_tagCache;
     int m_tagRevision = 0;
 };

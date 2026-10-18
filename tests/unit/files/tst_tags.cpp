@@ -317,6 +317,37 @@ TEST(TagStore, RawValueRoundTripsByteForByte)
     EXPECT_TRUE(TagStore::readRaw(file).isEmpty());
 }
 
+TEST(TagStore, CacheAnswersWithoutTouchingTheFileUntilInvalidatedOrExpired)
+{
+    QString why;
+    const auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << qPrintable(why);
+    const QString file = makeFile(*dir, QStringLiteral("cached.txt"));
+    if (TagStore::support(file) == TagStore::Support::NoXattr)
+        GTEST_SKIP() << "the filesystem of GRASSFIELD_TEST_TMP has no user extended attributes";
+    ASSERT_TRUE(TagStore::writeRaw(file, "Red,Work"));
+    TagStore::Cache cache(60000);
+    EXPECT_EQ(cache.info(file).support, TagStore::Support::Supported);
+    EXPECT_EQ(cache.info(file).tags, (QStringList{QStringLiteral("Red"), QStringLiteral("Work")}));
+    // Another application changes the file: the cache keeps answering until the entry is dropped.
+    ASSERT_TRUE(TagStore::writeRaw(file, "Blue"));
+    EXPECT_EQ(cache.info(file).tags.size(), 2);
+    cache.invalidate(file);
+    EXPECT_EQ(cache.info(file).tags, QStringList{QStringLiteral("Blue")});
+    EXPECT_EQ(cache.info(file).raw, QByteArray("Blue"));
+    // An entry older than the time to live is probed again.
+    TagStore::Cache expiring(0);
+    EXPECT_EQ(expiring.info(file).tags, QStringList{QStringLiteral("Blue")});
+    ASSERT_TRUE(TagStore::writeRaw(file, "Gray"));
+    EXPECT_EQ(expiring.info(file).tags, QStringList{QStringLiteral("Gray")});
+    // The cap clears the cache instead of growing without bound.
+    TagStore::Cache small(60000, 2);
+    for (int i = 0; i < 5; ++i)
+        small.info(dir->filePath(QStringLiteral("absent-%1").arg(i)));
+    EXPECT_EQ(small.info(file).support, TagStore::Support::Supported);
+}
+
 TEST(TagStore, ItemsThatCannotTakeAWriteAreNotTaggable)
 {
     QString why;

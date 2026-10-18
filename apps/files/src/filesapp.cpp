@@ -696,27 +696,44 @@ QStringList FilesApp::colorTagNames() const
     return names;
 }
 
+QString FilesApp::tagsReason(const QUrl &url, TagStore::Support support) const
+{
+    switch (support) {
+    case TagStore::Support::Supported:
+        break;
+    case TagStore::Support::Missing:
+        return tr("“%1” is no longer there.").arg(url.fileName());
+    case TagStore::Support::Link:
+        return tr("Links can’t carry tags.");
+    case TagStore::Support::NotRegular:
+        return tr("Only files and folders can be tagged.");
+    case TagStore::Support::ReadOnly:
+        return tr("Read-only items can’t be tagged.");
+    case TagStore::Support::NoXattr:
+        return tr("This volume can’t store tags.");
+    }
+    return QString();
+}
+
+QString FilesApp::schemeReason(const QUrl &url) const
+{
+    if (url.scheme() == QLatin1String("trash"))
+        return tr("Items in the Trash can’t be tagged.");
+    if (!url.isLocalFile())
+        return tr("Tags are available for files on this computer only.");
+    return QString();
+}
+
 QString FilesApp::tagsUnavailable(const QList<QUrl> &urls) const
 {
+    // Answered from the short-lived cache (the selection is asked on every selection change); a write decides afresh.
     for (const QUrl &url : urls) {
-        if (url.scheme() == QLatin1String("trash"))
-            return tr("Items in the Trash can’t be tagged.");
-        if (!url.isLocalFile())
-            return tr("Tags are available for files on this computer only.");
-        switch (TagStore::support(url.toLocalFile())) {
-        case TagStore::Support::Supported:
-            break;
-        case TagStore::Support::Missing:
-            return tr("“%1” is no longer there.").arg(url.fileName());
-        case TagStore::Support::Link:
-            return tr("Links can’t carry tags.");
-        case TagStore::Support::NotRegular:
-            return tr("Only files and folders can be tagged.");
-        case TagStore::Support::ReadOnly:
-            return tr("Read-only items can’t be tagged.");
-        case TagStore::Support::NoXattr:
-            return tr("This volume can’t store tags.");
-        }
+        const QString scheme = schemeReason(url);
+        if (!scheme.isEmpty())
+            return scheme;
+        const QString why = tagsReason(url, m_tagCache.info(url.toLocalFile()).support);
+        if (!why.isEmpty())
+            return why;
     }
     return QString();
 }
@@ -726,7 +743,7 @@ QVariantList FilesApp::colorTagStates(const QList<QUrl> &urls) const
     QList<QStringList> lists;
     for (const QUrl &url : urls) {
         if (url.isLocalFile())
-            lists.append(TagStore::read(url.toLocalFile()));
+            lists.append(m_tagCache.info(url.toLocalFile()).tags);
     }
     QVariantList out;
     const QList<int> states = TagLogic::colorStates(lists);
@@ -772,13 +789,16 @@ void FilesApp::rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on)
     QString reason;
     QStringList written;
     for (const QUrl &url : urls) {
-        const QString why = tagsUnavailable({url});
+        QString why = schemeReason(url);
+        if (why.isEmpty())
+            why = tagsReason(url, TagStore::support(url.toLocalFile()));
         if (!why.isEmpty()) {
             failed.append(url.fileName());
             reason = why;
             continue;
         }
         const QString path = url.toLocalFile();
+        m_tagCache.invalidate(path);
         const QByteArray before = TagStore::readRaw(path);
         const QByteArray after = TagLogic::applyTag(before, tag, on);
         if (after == before)
@@ -791,6 +811,7 @@ void FilesApp::rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on)
         }
         changed.append(url);
         written += TagLogic::parse(after);
+        m_tagCache.invalidate(path);
     }
     if (!changed.isEmpty()) {
         // Tagging again is the way back to the sidebar for a tag removed from it (there is no Tags settings pane).

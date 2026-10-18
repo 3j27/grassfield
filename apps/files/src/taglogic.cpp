@@ -114,7 +114,7 @@ bool ownsTag(const QByteArray &stored, const QString &tag)
 
 int colorIndex(const QString &tag)
 {
-    const QString t = tag.trimmed();
+    const QStringView t = QStringView(tag).trimmed();
     for (int i = 0; i < kColorCount; ++i) {
         if (t.compare(QLatin1String(kColorKeys[i]), Qt::CaseInsensitive) == 0)
             return i;
@@ -215,14 +215,20 @@ QList<int> colorStates(const QList<QStringList> &tagLists)
     QList<int> states(kColorCount, 0);
     if (tagLists.isEmpty())
         return states;
-    for (int i = 0; i < kColorCount; ++i) {
-        int count = 0;
-        for (const QStringList &tags : tagLists) {
-            if (hasTag(tags, colorKey(i)))
-                ++count;
+    // One pass over every list (a selection of thousands is asked on each selection change).
+    int counts[kColorCount] = {};
+    for (const QStringList &tags : tagLists) {
+        bool present[kColorCount] = {};
+        for (const QString &t : tags) {
+            const int c = colorIndex(t);
+            if (c >= 0)
+                present[c] = true;
         }
-        states[i] = count == 0 ? 0 : count == tagLists.size() ? 2 : 1;
+        for (int i = 0; i < kColorCount; ++i)
+            counts[i] += present[i] ? 1 : 0;
     }
+    for (int i = 0; i < kColorCount; ++i)
+        states[i] = counts[i] == 0 ? 0 : counts[i] == tagLists.size() ? 2 : 1;
     return states;
 }
 
