@@ -53,7 +53,7 @@ package_grassfield-desktop() {
   depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
-    'brightnessctl: display brightness OSD and Control Center slider'
+    'brightnessctl: display brightness OSD and Quick Settings slider'
     'localsearch: file results in Search'
     'kio-extras: network locations and image thumbnails in Files'
   )
