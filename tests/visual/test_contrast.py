@@ -102,14 +102,56 @@ class Score(unittest.TestCase):
         self.assertEqual(n_glyph, 50 * 9)
         self.assertAlmostEqual(contrast.score(a, b, w, k, *self.SIZE), 21.0, delta=0.1)
 
-    def test_antialiased_pixels_give_the_true_glyph_colour(self):
-        # 60 % covered black on white: the rendered pixel is gray 102, the glyph colour is still black (21:1).
+    def test_item_opacity_counts(self):
+        # Regression (counter-review MAJOR): a Text item with opacity 0.85 (or 0.6 here) is rendered as gray 102 over white, and the
+        # measurement must read the rendered colour, not the declared one (black, 21:1).
         a, b, w, k = self.render(solid((255, 255, 255)), (0, 0, 0), alpha=0.6)
         self.assertEqual(set(a) - set(b), {(102, 102, 102)})
-        self.assertAlmostEqual(contrast.score(a, b, w, k, *self.SIZE), 21.0, delta=0.5)
+        expect = contrast.ratio(contrast.luminance((102, 102, 102)), 1.0)
+        self.assertAlmostEqual(contrast.score(a, b, w, k, *self.SIZE), expect, delta=0.05)
+        self.assertLess(expect, 21.0)
 
-    def test_low_coverage_pixels_are_not_glyph_pixels(self):
-        a, b, w, k = self.render(solid((255, 255, 255)), (0, 0, 0), alpha=0.3)
+    def test_faded_gray_text_fails_where_the_declared_colour_passes(self):
+        # Gray 118 (4.54:1 declared) at item opacity 0.5 renders as 186: about 1.9:1. The old method read 4.54.
+        a, b, w, k = self.render(solid((255, 255, 255)), (118, 118, 118), alpha=0.5)
+        got = contrast.score(a, b, w, k, *self.SIZE)
+        self.assertLess(got, 2.1)
+        self.assertGreater(got, 1.7)
+
+    def test_antialiased_edges_do_not_lower_the_core(self):
+        # A fully covered core with a half covered 1 px ring: the score is the core's, not the ring's.
+        x, y, w, h = self.BOX
+        core = (x + 5, y + 3, w - 10, h - 6)
+
+        def paint(colour):
+            rows = [bytearray(r) for r in solid((255, 255, 255))]
+            for r in range(core[1] - 1, core[1] + core[3] + 1):
+                for c in range(core[0] - 1, core[0] + core[2] + 1):
+                    inside = core[0] <= c < core[0] + core[2] and core[1] <= r < core[1] + core[3]
+                    alpha = 1.0 if inside else 0.5
+                    bg = tuple(rows[r][c * 3:c * 3 + 3])
+                    rows[r][c * 3:c * 3 + 3] = bytes(blend(bg, colour, alpha) if colour is not None else bg)
+            return self.region([bytes(r) for r in rows])
+        a, b, wh, k = (paint(c) for c in ((0, 0, 0), None, (255, 255, 254), (0, 0, 1)))
+        self.assertAlmostEqual(contrast.score(a, b, wh, k, *self.SIZE), 21.0, delta=0.1)
+
+    def test_subpixel_fringe_is_read_exactly(self):
+        # LCD antialiasing: a pixel covered (1, 0.6, 0.2) per channel by white text on gray 102 renders (255, 194, 132), but the
+        # glyph is white: the full-coverage colour is read, so the fringe does not lower the score (5.2:1, as the core).
+        bg = 102.0
+        cov = (1.0, 0.6, 0.2)
+        a = [(255, 255, 255)] * 3 + [tuple(round(bg + c * (255 - bg)) for c in cov)]
+        b = [(102, 102, 102)] * 4
+        w = [(255, 255, 254)] * 3 + [tuple(round(c * 255 + (1 - c) * bg) for c in cov)]
+        k = [(0, 0, 1)] * 3 + [tuple(round((1 - c) * bg) for c in cov)]
+        got = contrast.glyph_ratios(a, b, w, k, 4, 1)
+        expect = contrast.ratio(contrast.luminance((255, 255, 255)), contrast.luminance((102, 102, 102)))
+        self.assertEqual(len(got), 3)  # the 0.2 channel is below half of the opacity: that pixel is not read
+        for r in got:
+            self.assertAlmostEqual(r, expect, delta=0.05)
+
+    def test_low_coverage_is_no_glyph(self):
+        a, b, w, k = self.render(solid((255, 255, 255)), (0, 0, 0), alpha=0.1)
         self.assertIsNone(contrast.score(a, b, w, k, *self.SIZE))
 
     def test_known_gray_text(self):
@@ -153,6 +195,58 @@ class Score(unittest.TestCase):
             self.assertIsNone(res["empty"])
             self.assertEqual(res["img"], "skip")
             self.assertIsNone(contrast.measure_surface(tmp, "missing", []))
+        finally:
+            shutil.rmtree(tmp)
+
+
+class Measure(unittest.TestCase):
+    """measure(): a box without a glyph and a surface that was never captured both FAIL the run."""
+
+    def make(self, tmp, with_glyph=True, captures=True):
+        import json
+        combo = os.path.join(tmp, "white__dark__0.25")
+        os.makedirs(combo)
+        if captures:
+            for suffix, colour in (("", (0, 0, 0)), (".hidden", None), (".white", (255, 255, 254)), (".black", (0, 0, 1))):
+                rows = solid((255, 255, 255))
+                if colour is not None and with_glyph:
+                    rows = with_rect(rows, (25, 12, 50, 9), colour)
+                contrast.write_png(os.path.join(combo, "s" + suffix + ".png"), rows, IW, IH)
+        regions = os.path.join(tmp, "r.json")
+        with open(regions, "w") as f:
+            json.dump({"surfaces": {"s": [{"name": "t", "box": [20, 10, 60, 13], "kind": "text"}]}}, f)
+        return regions
+
+    def run_measure(self, tmp, regions):
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = contrast.measure(tmp, regions)
+        return code, out.getvalue()
+
+    def test_passing_surface_exits_0(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            code, _ = self.run_measure(tmp, self.make(tmp))
+            self.assertEqual(code, 0)
+        finally:
+            shutil.rmtree(tmp)
+
+    def test_no_glyph_found_fails(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            code, out = self.run_measure(tmp, self.make(tmp, with_glyph=False))
+            self.assertEqual(code, 1)
+            self.assertIn("NO GLYPH s/t", out)
+        finally:
+            shutil.rmtree(tmp)
+
+    def test_missing_capture_fails(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            code, out = self.run_measure(tmp, self.make(tmp, captures=False))
+            self.assertEqual(code, 1)
+            self.assertIn("MISSING CAPTURE s", out)
         finally:
             shutil.rmtree(tmp)
 

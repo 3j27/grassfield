@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.services
 import "Model.js" as Model
 
 // Apps overlay, one per screen, mapped on the controller's screen only: a full-screen layer-shell
@@ -395,7 +396,7 @@ Variants {
                 width: Tokens.appsSearchWidth
                 height: Tokens.appsSearchHeight
                 radius: height / 2
-                color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+                color: Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.appsSearchFillOpacity)
                 border.width: field.activeFocus ? Tokens.controlFocusRing : Tokens.appsBorderWidth
                 border.color: field.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
                 Accessible.role: Accessible.Pane
@@ -423,6 +424,8 @@ Variants {
                     font.pixelSize: Tokens.typographyBodySize
                     clip: true
                     focus: true
+                    // No blinking caret in the visual fixture: a captured frame must not depend on the blink phase.
+                    cursorVisible: activeFocus && !VisualFixtures.active
                     Accessible.role: Accessible.EditableText
                     Accessible.name: qsTr("Search")
                     Accessible.description: qsTr("Type to filter applications")
@@ -459,7 +462,7 @@ Variants {
                 visible: root.controller.searching && root.controller.items.length === 0
                 text: qsTr("No results")
                 textFormat: Text.PlainText
-                color: Appearance.darkColors.textSecondary
+                color: Appearance.darkColors.text
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyTitleSize
             }

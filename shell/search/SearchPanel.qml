@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.services
 
 // Search window, one per screen, mapped only on the controller's screen while open. Full-screen
 // transparent layer-shell overlay (a click outside closes), keyboard exclusive while open.
@@ -148,6 +149,8 @@ Variants {
                 font.pixelSize: Tokens.searchFieldSize
                 clip: true
                 focus: true
+                // No blinking caret in the visual fixture: a captured frame must not depend on the blink phase.
+                cursorVisible: activeFocus && !VisualFixtures.active
                 Accessible.role: Accessible.EditableText
                 Accessible.name: qsTr("Search")
                 Accessible.description: qsTr("Type to search applications, files, calculations and commands")
@@ -308,7 +311,7 @@ Variants {
                             anchors.fill: parent
                             visible: !row.isHeader && row.info.badge !== undefined
                             radius: Tokens.radiusControl
-                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
                             Text {
                                 anchors.centerIn: parent

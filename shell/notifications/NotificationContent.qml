@@ -104,7 +104,6 @@ Item {
             text: root.body
             textFormat: Text.StyledText
             color: Appearance.colors.text
-            opacity: Tokens.materialBodyOpacity
             wrapMode: Text.Wrap
             maximumLineCount: root.maxBodyLines
             elide: Text.ElideRight
