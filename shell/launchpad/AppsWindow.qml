@@ -114,8 +114,12 @@ Variants {
             }
 
             function onSelectedChanged(): void {
-                if (root.controller.selected >= 0)
+                if (root.controller.selected >= 0) {
+                    const before = grid.contentY;
                     grid.positionViewAtIndex(root.controller.selected, GridView.Contain);
+                    if (grid.contentY !== before)
+                        scrollbar.poke();
+                }
             }
         }
 
@@ -413,9 +417,12 @@ Variants {
                         selectedIndex: root.controller.selected
                         ringVisible: root.controller.keyNav || root.controller.searching
                         onActivated: item => root.controller.activate(item)
-                        onContentYChanged: {
-                            host.updateView();
-                            scrollbar.poke();
+                        onContentYChanged: host.updateView()
+                        // The indicator shows while the user scrolls (it lingers after the movement) and when the keyboard
+                        // scrolls; not when a filter or an opening resets the view.
+                        onMovingChanged: {
+                            if (!moving)
+                                scrollbar.poke();
                         }
                         onHeightChanged: host.updateView()
                     }
