@@ -14,7 +14,8 @@ SF Pro and SF Symbols are Apple-licensed and must not be used or redistributed.
 
 ## Decision
 - **UI font**: Inter (text) with Inter Display for ≥ 20 px; fallback chain `Inter, Noto Sans, sans-serif`.
-  Monospace: JetBrains Mono (already used by Omarchy, OFL). Owner installs `inter-font`.
+  Monospace: the generic `monospace` family (`Tokens.typographyMonoFamily`); JetBrains Mono is not used
+  (not installed, no reference in the code). Owner installs `inter-font`.
 - **Icons**: Grassfield's own line icon set in `branding/icons/` (SVG, CC-BY-SA-4.0 or CC0 — decided in
   ADR-0005), style: rounded caps, 1.5 px stroke at 16 px, optical alignment like the macOS menu bar. App
   icons come from the user's icon theme; Grassfield ships no app icons that imitate Apple's.

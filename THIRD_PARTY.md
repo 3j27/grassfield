@@ -1,0 +1,135 @@
+# Third-party components
+
+Facts taken from local files (installed headers, `pacman -Qi`, `/usr/share/licenses`, headers of files in this
+repository), as of 2026-10-18. No legal conclusion is stated. Items marked **needs legal review** are open
+questions for counsel; details and evidence are in `docs/legal/licenses-audit.md`.
+
+Grassfield's own licence is not settled (ADR-0005 is Proposed; no root `LICENSE` yet). The package metadata says
+`license=(MIT)` following ADR-0005 pending the owner's decision.
+
+Licence texts shipped with the packages (`/usr/share/licenses/<package>/`):
+
+| File | Package | Content |
+|---|---|---|
+| `THIRD_PARTY.md` | both | this file |
+| `hyprland-BSD-3-Clause.txt` | grassfield-compositor | Hyprland BSD-3-Clause text, copied from `/usr/share/licenses/hyprland/LICENSE` |
+| `appmenu-LGPL-2.1-or-later.txt` | grassfield-compositor | notice of the KDE appmenu protocol and the LGPL-2.1-or-later text |
+| `BRANDING.md` | grassfield-desktop | `branding/LICENSES.md`, provenance of icons and wallpaper |
+| `omarchy-MIT.txt` | grassfield-desktop | MIT notice for Omarchy-derived QML |
+
+## 1. Built against, linked or generated from (grassfield-compositor)
+
+### Hyprland headers (and Hypr libraries)
+
+- Hyprland 0.56.2: BSD-3-Clause, "Copyright (c) 2022-2026, vaxerski" (`/usr/share/licenses/hyprland/LICENSE`).
+  The installed headers carry no per-file licence line (ADR-0009, section "Header licence check"). Full text:
+  `hyprland-BSD-3-Clause.txt`.
+- aquamarine, hyprutils, hyprlang, hyprgraphics, hyprcursor: BSD-3-Clause per `pacman -Qi` (aquamarine and
+  hyprutils: "Copyright (c) 2024, Hypr Development" per the audit). Headers are included and the shared
+  libraries are linked by the plugin.
+- hyprwayland-scanner 0.4.6: BSD-3-Clause, build tool that generated the appmenu server code.
+- The plugin is loaded into Hyprland's process and compiled from its C++ headers.
+  **Needs legal review:** whether the BSD-3 notice must accompany the binary plugin (it is shipped as a precaution),
+  and the licence status of scanner-generated code.
+
+### KDE appmenu protocol and generated code
+
+- `compositor/protocols/appmenu.xml`: KDE `org_kde_kwin_appmenu`, "SPDX-FileCopyrightText: 2017 David Edmundson",
+  "SPDX-License-Identifier: LGPL-2.1-or-later" (notice kept in the file). Grassfield's copy is version 2.
+- The server code generated from it by hyprwayland-scanner (`appmenu.hpp`/`.cpp`, copying the same notice) is
+  compiled into `grassfield-compositor.so`.
+- The same protocol ships with Qt (`/usr/share/qt6/wayland/protocols/appmenu/qt_attribution.json`: LGPL-2.1-or-later,
+  "Copyright 2017 David Edmundson"). Hyprland's `kde-server-decoration.hpp` carries LGPL-2.1-or-later in the same way.
+- Notice and licence text shipped: `appmenu-LGPL-2.1-or-later.txt`.
+  **Needs legal review:** obligations for the MIT plugin that compiles code generated from this XML.
+
+### DBusMenu and AppMenu Registrar interfaces
+
+The menu bridge calls `com.canonical.dbusmenu` and implements `com.canonical.AppMenu.Registrar` from interface names
+and method signatures (`bridges/menu-bridge/src/DBusObjects.cpp`). No upstream XML file is in the repository and no
+upstream licence text was available locally. **Needs legal review.**
+
+### Other libraries linked by the plugin (dynamic, unmodified, not shipped by Grassfield)
+
+cairo, libxkbcommon, libinput, wayland, libxcb, pixman, libdrm, libglvnd, libstdc++/libgcc, glibc. Licences per
+`pacman -Qi` are listed in `docs/legal/licenses-audit.md` section 4.1 row 5. They are installed by the distribution.
+
+## 2. Runtime dependencies (grassfield-desktop; dynamically linked or run, unmodified, not shipped)
+
+| Component | Use | Licence per local files |
+|---|---|---|
+| Quickshell 0.3.1 | host that runs the QML shell; `Grassfield.I18n` plugin loads into it | LGPL-3.0-only (`/usr/share/licenses/quickshell/LICENSE`) |
+| Qt 6.11.2 (base, declarative, wayland, svg, imageformats, tools) | linked and loaded | headers: "LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only" |
+| QtPdf, QtPdfQuick (package qt6-webengine) | Preview | as Qt; Chromium/PDFium notices in `/usr/share/licenses/qt6-webengine/LICENSE.chromium` |
+| QtMultimedia + FFmpeg backend | Preview | as Qt; ffmpeg 9.0.1 is GPL-3.0-only per pacman. **Needs legal review.** |
+| KF6 KIO, Solid, CoreAddons, Service 6.29.0 | linked by `grassfield-files` | headers: LGPL-2.0-or-later (`kio/job.h`, `kio/renamedialog.h`); "LGPL-2.0-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`kio/openurljob.h`); "LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`solid/device.h`) |
+| extra-cmake-modules (build) | CMake modules | pacman "LGPL"; module headers BSD-3-Clause/BSD-2-Clause |
+| uwsm | session launcher | MIT |
+
+Grassfield patches none of these. **Needs legal review:** obligations for MIT code and plugins running inside or
+linked to LGPL hosts, and for the GPL-3.0 ffmpeg loaded by Preview.
+
+## 3. Omarchy-derived code (MIT)
+
+Portions adapted from Omarchy (`pacman -Qi omarchy` 4.0.4: MIT, URL `https://github.com/basecamp/omarchy`; the
+Grassfield source headers name `omacom/omarchy`, branch quattro; both are recorded as observed, not decided):
+
+| Grassfield file | Adapted from | What |
+|---|---|---|
+| `shell/security/lock/Lock.qml` | `shell/plugins/lock/Service.qml` | PamContext wiring, WlSessionLock secure state, stranded-lock signal |
+| `shell/security/idle/Idle.qml` | `shell/plugins/services/idle/Service.qml` | IdleMonitor with respectInhibitors |
+| `shell/security/polkit/AuthAgent.qml` | `shell/plugins/polkit/PolkitAgent.qml` | PolkitAgent/AuthFlow wiring |
+
+These three files are security modules; their headers say "MIT License, Copyright (c) the Omarchy authors" and are
+left unchanged. The full notice, with that wording, follows (also shipped as `omarchy-MIT.txt`). The installed
+omarchy package has no licence file, so the exact upstream copyright line is unverified: **needs legal review**.
+
+```
+MIT License
+
+Copyright (c) the Omarchy authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+Run-time use without copying: `config/hypr/grassfield/omarchy.lua` requires Omarchy's Lua modules from
+`/usr/share/omarchy`; the lock uses the PAM service `omarchy-lock-password`. Trademark use of "Omarchy" in the UI:
+**needs legal review**.
+
+## 4. Fonts
+
+Inter 4.1 (package `inter-font`): SIL OFL 1.1, "Copyright (c) 2016 The Inter Project Authors
+(https://github.com/rsms/inter)" (`/usr/share/licenses/inter-font/LICENSE.txt`); pacman says `OFL-1.1-RFN`.
+Referenced by family name, not bundled or modified. Noto Sans is the fallback family (OFL-1.1-no-RFN per pacman).
+No font file is in this repository.
+
+## 5. Icons and wallpaper
+
+Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). 40 SVG icons are Grassfield's own
+(CC-BY-SA-4.0 proposed, ADR-0005); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
+No Apple asset is used. Authorship by an AI assistant and the licence choice: **needs legal review**.
+
+## 6. Test and build only (not shipped)
+
+- googletest 1.18.0: BSD-3-Clause, "Copyright 2008, Google Inc." (`/usr/share/licenses/gtest`). Used by unit tests
+  built in `check()`; no test binary is installed.
+- `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml`: reconstructed from the generated Hyprland header
+  `/usr/include/hyprland/protocols/wlr-virtual-pointer-unstable-v1.hpp`, which carries MIT, "Copyright © 2019 Josef
+  Gajdusek". Test tool, not packaged; the file itself has no notice yet (audit gap G11).
+- Lua 5.5.1 headers (MIT) at build time; CMake, Ninja, Qt tools (build tools).

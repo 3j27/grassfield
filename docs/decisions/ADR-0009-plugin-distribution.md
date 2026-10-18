@@ -25,6 +25,16 @@ Option 1, with option 3 as an opt-in setting:
   `/usr/src/grassfield-compositor` (requires `cmake`, `gcc`; listed as optdepends).
 - No `hyprland=` or `hyprland<` constraints in `depends`.
 
+## Header licence check (master-prompt §14)
+Checked 2026-10-18 against the installed Hyprland 0.56.2 (`pacman -Qi hyprland`: BSD-3-Clause;
+`/usr/share/licenses/hyprland/LICENSE`, "Copyright (c) 2022-2026, vaxerski"):
+`grep -rh "SPDX-License" /usr/include/hyprland | sort | uniq -c` → 1 line, `SPDX-License-Identifier:
+LGPL-2.1-or-later` (the generated `protocols/kde-server-decoration.hpp`, "SPDX-FileCopyrightText: 2015 Martin
+Gräßlin"). The other headers carry no per-file licence line. `grep -rl -i -E 'GPL|Lesser General|SPDX'` over
+`/usr/include/hyprland/src`, `/usr/include/aquamarine` and `/usr/include/hyprutils` found one false positive
+(`m_lastConfigPlugins`). Notices are listed in `THIRD_PARTY.md` and shipped by `grassfield-compositor`. Not a
+legal conclusion.
+
 ## Consequences
 - Release cadence must follow Omarchy's Hyprland updates; the rc build gives one cycle of warning.
 - Revisit if Hyprland gains a stable plugin ABI.
