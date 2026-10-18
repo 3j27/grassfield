@@ -263,15 +263,35 @@ TestCase {
         verify(list.some(b => b.keys === "Super + Space" && b.description === "Search"));
     }
 
+    // Every literal description and key name of the real bindings file is listed for translation (Keyboard page).
+    function test_bindingsTranslatable() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../config/hypr/grassfield/bindings.lua"), false);
+        xhr.send();
+        const list = Bindings.parse(xhr.responseText);
+        const names = Object.keys(Bindings.NAMES).map(k => Bindings.NAMES[k]);
+        for (const b of list) {
+            verify(Bindings.DESCRIPTIONS.indexOf(b.description) >= 0, "not listed in Bindings.DESCRIPTIONS: " + b.description);
+            for (const key of b.keys.split(" + ")) {
+                const named = names.indexOf(key) >= 0;
+                verify(named || /^([A-Z0-9]|F[0-9]+|XF86\w+|code:\d+)$/.test(key), "key without a translatable name: " + key);
+            }
+        }
+        compare(Bindings.translateKeys("Super + Shift + Q", k => k === "Shift" ? "Maj" : k), "Super + Maj + Q");
+    }
+
     function test_sysInfo() {
         const os = 'NAME="Omarchy"\nVERSION_ID="4.0.4"\nID=omarchy\n';
         compare(SysInfo.osReleaseValue(os, "ID"), "omarchy");
         compare(SysInfo.osLabel(os), "Omarchy 4.0.4");
         compare(SysInfo.osLabel(""), "");
-        compare(SysInfo.cpu("processor\t: 0\nmodel name\t: AMD  Ryzen 7\nprocessor\t: 1\nmodel name\t: AMD Ryzen 7\n"), "AMD Ryzen 7 (2 threads)");
-        compare(SysInfo.cpu(""), "");
-        compare(SysInfo.memory("MemTotal:       16384000 kB\nMemFree: 1 kB\n"), "15.6 GiB");
-        compare(SysInfo.memory(""), "");
+        compare(SysInfo.cpu("processor\t: 0\nmodel name\t: AMD  Ryzen 7\nprocessor\t: 1\nmodel name\t: AMD Ryzen 7\n"), {model: "AMD Ryzen 7", threads: 2});
+        compare(SysInfo.cpu(""), {model: "", threads: 0});
+        compare(SysInfo.memoryBytes("MemTotal:       16384000 kB\nMemFree: 1 kB\n"), 16384000 * 1024);
+        compare(SysInfo.memoryBytes(""), 0);
+        // The About page formats the bytes with the UI locale: localized digits and binary unit names.
+        compare(Qt.locale("fr_FR").formattedDataSize(SysInfo.memoryBytes("MemTotal: 32555000 kB\n"), 1, Locale.DataSizeIecFormat), "31,0 Gio");
+        compare(Qt.locale("en_US").formattedDataSize(SysInfo.memoryBytes("MemTotal: 32555000 kB\n"), 1, Locale.DataSizeIecFormat), "31.0 GiB");
         const pci = "00:02.0 VGA compatible controller: Intel Corporation Iris Xe (rev 0c)\n00:1f.3 Audio device: Intel Audio\n01:00.0 3D controller: NVIDIA Corp GA107\n";
         compare(SysInfo.gpus(pci), "Intel Corporation Iris Xe; NVIDIA Corp GA107");
         compare(SysInfo.gpus(""), "");

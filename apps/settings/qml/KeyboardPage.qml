@@ -31,8 +31,9 @@ SettingsPage {
             delegate: SettingsRow {
                 required property var modelData
 
-                title: modelData.description
-                valueText: modelData.keys
+                // The file's English description and key names, translated (Bindings.js lists them).
+                title: qsTranslate("Bindings", modelData.description)
+                valueText: Bindings.translateKeys(modelData.keys, k => qsTranslate("Bindings", k))
             }
         }
     }

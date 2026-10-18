@@ -17,7 +17,8 @@ function osLabel(text) {
     return (osReleaseValue(text, "NAME") + " " + osReleaseValue(text, "VERSION_ID")).trim();
 }
 
-// First "model name" of /proc/cpuinfo plus the logical CPU count.
+// First "model name" of /proc/cpuinfo and the logical CPU count: {model, threads} ("" and 0 when absent). The page
+// words it in the UI language.
 function cpu(text) {
     let model = "";
     let threads = 0;
@@ -27,15 +28,13 @@ function cpu(text) {
         else if (model === "" && /^model name\s*:/.test(line))
             model = line.slice(line.indexOf(":") + 1).trim().replace(/\s+/g, " ");
     }
-    if (model === "")
-        return "";
-    return threads > 0 ? model + " (" + threads + " threads)" : model;
+    return {model: model, threads: model === "" ? 0 : threads};
 }
 
-// MemTotal of /proc/meminfo as "15.3 GiB"; "" when absent.
-function memory(text) {
+// MemTotal of /proc/meminfo in bytes; 0 when absent. The page formats it with the UI locale (Qt.locale()).
+function memoryBytes(text) {
     const m = /^MemTotal:\s*(\d+)\s*kB/m.exec(String(text));
-    return m ? (Number(m[1]) / 1048576).toFixed(1) + " GiB" : "";
+    return m ? Number(m[1]) * 1024 : 0;
 }
 
 // Graphics adapters of `lspci` output (VGA / 3D / Display controller lines), joined with "; ".
