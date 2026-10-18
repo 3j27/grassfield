@@ -787,6 +787,8 @@ QtObject {
     readonly property int previewGlanceMediaHeight: 220
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewGlanceHeaderHeight: 40
+    // estimate: time after its creation during which a Glance follows the output it is mapped on (the compositor reports it within a frame or two); later output changes are user moves
+    readonly property int previewGlancePlacementMs: 1000
     // estimate: Preview app (docs/specs/preview.md)
     readonly property real previewZoomStep: 1.25
     // estimate: Preview app (docs/specs/preview.md)

@@ -20,8 +20,9 @@ Window {
     // sizes (capped the same way). The header comes on top of the content. Later files of a multi-file Glance are
     // fitted into that window.
     readonly property var firstInfo: win.backend.inspect(0)
-    // The screen the size was computed for (see fitToScreen).
+    // The screen the size was computed for, and whether the window may still be refitted (see fitToScreen).
     property string sizedFor: ""
+    property bool placing: true
 
     // Window size for the first file on a screen of sw x sh pixels.
     function sizeFor(sw: real, sh: real): size {
@@ -55,13 +56,15 @@ Window {
 
     // A Wayland client cannot know the output the compositor will map it on: Qt starts with its primary screen and
     // reports the real one once the surface has entered it. The window is sized for the first screen and again, once,
-    // for the screen it is really shown on. A floating toplevel does not get its own later buffer size from Hyprland,
-    // so the new size is requested as a fixed size (minimum = maximum, which the compositor applies to floating
-    // windows, keeping the window centred) and released on the next frame.
+    // for the screen it is really shown on (only while it is being placed: moving it to another output later keeps its
+    // size). A floating toplevel does not get its own later buffer size from Hyprland, so the new size is requested as
+    // a fixed size (minimum = maximum, which the compositor applies to floating windows, keeping the window centred)
+    // and released after Tokens.motionNormal.
     function fitToScreen(): void {
         const s = win.screen;
-        if (!s || s.width <= 0 || s.height <= 0 || s.name === win.sizedFor)
+        if (!win.placing || !s || s.width <= 0 || s.height <= 0 || s.name === win.sizedFor)
             return;
+        win.placing = false;
         win.sizedFor = s.name;
         const target = win.sizeFor(s.width, s.height);
         if (target.width === win.width && target.height === win.height)
@@ -97,7 +100,17 @@ Window {
     color: Appearance.colors.materialTint
 
     onScreenChanged: win.fitToScreen()
-    Component.onCompleted: win.sizedFor = win.screen ? win.screen.name : ""
+    Component.onCompleted: {
+        win.sizedFor = win.screen ? win.screen.name : "";
+        placingTimer.start();
+    }
+
+    // The compositor reports the output within this time after mapping; later screen changes are moves by the user.
+    Timer {
+        id: placingTimer
+        interval: Tokens.previewGlancePlacementMs
+        onTriggered: win.placing = false
+    }
 
     Theme {
         backend: win.backend
