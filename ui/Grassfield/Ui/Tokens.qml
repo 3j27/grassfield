@@ -609,6 +609,10 @@ QtObject {
     readonly property int desktopIconDragThreshold: 6
     // estimate: desktop icons v1, debounce of the positions file
     readonly property int desktopIconSaveMs: 300
+    // ADR-0012 spike: ms the 1x1 kicker surface is mapped (and unmapped) so Hyprland re-evaluates the keyboard focus without pointer motion; 60 measured, 30 untested
+    readonly property int desktopIconFocusKickMs: 60
+    // ADR-0012 spike: ms the desktop waits for the keyboard after a press before giving up and going back to None (grant measured at 60 to 120)
+    readonly property int desktopIconFocusArmMs: 400
 
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesWindowWidth: 920
