@@ -5,6 +5,6 @@
     <path d="M3.5 16 L9.5 10.6 V14 H13 V18 H9.5 V21.4 Z"/>
     <path d="M28.5 16 L22.5 10.6 V14 H19 V18 H22.5 V21.4 Z"/>
   </g></defs>
-  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.2" stroke-linejoin="round"/>
+  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.8" stroke-linejoin="round"/>
   <use href="#s" fill="{{FILL}}"/>
 </svg>

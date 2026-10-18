@@ -17,8 +17,8 @@
       <rect x="15" y="4" width="2" height="6.4" rx="1" opacity="0.14" transform="rotate(-330 16 16)"/>
     </g>
   </defs>
-  <use href="#a" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.4" stroke-linejoin="round"/>
-  <use href="#b" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="3.8" stroke-linejoin="round"/>
+  <use href="#a" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="3" stroke-linejoin="round"/>
+  <use href="#b" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="4.4" stroke-linejoin="round"/>
   <use href="#a" fill="{{FILL}}"/>
   <use href="#b" fill="{{FILL}}"/>
 </svg>

@@ -4,6 +4,6 @@
     <path fill-rule="evenodd" d="M16 5a11 11 0 1 0 0 22a11 11 0 1 0 0-22ZM16 8.4a7.6 7.6 0 1 1 0 15.2a7.6 7.6 0 1 1 0-15.2Z"/>
     <rect x="14.9" y="6" width="2.2" height="20" rx="1.1" transform="rotate(45 16 16)"/>
   </g></defs>
-  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.2" stroke-linejoin="round"/>
+  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.8" stroke-linejoin="round"/>
   <use href="#s" fill="{{FILL}}"/>
 </svg>

@@ -6,6 +6,6 @@
     <rect x="9.4" y="11.9" width="7.2" height="2.2" rx="1.1"/>
     <rect x="11.9" y="9.4" width="2.2" height="7.2" rx="1.1"/>
   </g></defs>
-  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.2" stroke-linejoin="round"/>
+  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.8" stroke-linejoin="round"/>
   <use href="#s" fill="{{FILL}}"/>
 </svg>

@@ -4,8 +4,8 @@
     <path id="a" d="M5 3 L5 24.2 L10.1 19.6 L13.5 27.2 L17.3 25.4 L13.9 18.1 L20.6 18.1 Z" transform="translate(5 3) scale(.86) translate(-5 -3)"/>
     <circle id="b" cx="25" cy="25" r="6"/>
   </defs>
-  <use href="#a" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.4" stroke-linejoin="round"/>
-  <use href="#b" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.2"/>
+  <use href="#a" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="3" stroke-linejoin="round"/>
+  <use href="#b" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="2.8"/>
   <use href="#a" fill="{{FILL}}"/>
   <use href="#b" fill="{{FILL}}"/>
   <rect x="23.9" y="21" width="2.2" height="8" rx="1.1" fill="{{OUTLINE}}"/>
