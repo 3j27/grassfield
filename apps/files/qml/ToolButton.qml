@@ -16,9 +16,12 @@ Item {
     property bool checked: false
     property bool checkable: false
 
+    // Glyph and label colour (a button on the destructive banner uses destructiveText).
+    property color tint: Appearance.colors.text
+
     signal clicked
 
-    readonly property color foreground: !enabled ? Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity) : Appearance.colors.text
+    readonly property color foreground: !enabled ? Appearance.withAlpha(root.tint, Tokens.materialDisabledOpacity) : root.tint
 
     implicitWidth: label !== "" ? labelText.implicitWidth + 2 * Tokens.spacingSm : Tokens.filesToolbarButtonSize
     implicitHeight: Tokens.filesToolbarButtonSize

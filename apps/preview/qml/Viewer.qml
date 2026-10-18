@@ -9,6 +9,8 @@ Window {
 
     // Set by the launcher (src/main.cpp).
     required property var backend
+    // The registrar is there: the window exports its menus to the global menu bar (GlobalMenu.qml).
+    required property bool globalMenu
 
     property int current: 0
     property bool sidebarOpen: true
@@ -56,10 +58,20 @@ Window {
             win.closeSearch();
     }
 
+    // Global menu (T1). Its shortcuts repeat some of the ones below: every Shortcut whose key is also a menu shortcut
+    // acts on activatedAmbiguously too (Qt hands such a key to one of the two per press, see GlobalMenu.qml).
+    Loader {
+        active: win.globalMenu
+        sourceComponent: GlobalMenu {
+            win: win
+        }
+    }
+
     // Keys: plain keys are ignored while the search field has the focus.
     Shortcut {
         sequence: "Ctrl+W"
         onActivated: win.close()
+        onActivatedAmbiguously: win.close()
     }
     Shortcut {
         sequence: "Ctrl+Q"
@@ -69,50 +81,72 @@ Window {
         sequence: "Ctrl+F"
         enabled: win.view?.canSearch ?? false
         onActivated: win.openSearch()
+        onActivatedAmbiguously: win.openSearch()
+    }
+    Shortcut {
+        sequence: "Ctrl+G"
+        enabled: (win.view?.canSearch ?? false) && win.searchOpen
+        onActivated: win.view.nextMatch()
+        onActivatedAmbiguously: win.view.nextMatch()
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+G"
+        enabled: (win.view?.canSearch ?? false) && win.searchOpen
+        onActivated: win.view.previousMatch()
+        onActivatedAmbiguously: win.view.previousMatch()
     }
     Shortcut {
         sequence: "Ctrl+Shift+S"
         onActivated: win.sidebarOpen = !win.sidebarOpen
+        onActivatedAmbiguously: win.sidebarOpen = !win.sidebarOpen
     }
     Shortcut {
         sequence: "Ctrl+R"
         enabled: win.view?.canRotate ?? false
         onActivated: win.view.rotate(1)
+        onActivatedAmbiguously: win.view.rotate(1)
     }
     Shortcut {
         sequence: "Ctrl+L"
         enabled: win.view?.canRotate ?? false
         onActivated: win.view.rotate(-1)
+        onActivatedAmbiguously: win.view.rotate(-1)
     }
     Shortcut {
         sequences: ["+", "=", "Ctrl++", "Ctrl+="]
         enabled: (win.view?.canZoom ?? false) && !searchInput.activeFocus
         onActivated: win.view.zoomIn()
+        onActivatedAmbiguously: win.view.zoomIn()
     }
     Shortcut {
         sequences: ["-", "Ctrl+-"]
         enabled: (win.view?.canZoom ?? false) && !searchInput.activeFocus
         onActivated: win.view.zoomOut()
+        onActivatedAmbiguously: win.view.zoomOut()
     }
     Shortcut {
         sequences: ["0", "Ctrl+0"]
         enabled: (win.view?.canZoom ?? false) && !searchInput.activeFocus
         onActivated: win.view.actualSize()
+        onActivatedAmbiguously: win.view.actualSize()
     }
     Shortcut {
         sequence: "Ctrl+9"
         enabled: win.view?.canZoom ?? false
         onActivated: win.view.fit()
+        onActivatedAmbiguously: win.view.fit()
     }
     Shortcut {
         sequence: "Left"
         enabled: win.fileCount > 1 && !searchInput.activeFocus
         onActivated: win.go(-1)
+        onActivatedAmbiguously: win.go(-1)
     }
     Shortcut {
         sequence: "Right"
         enabled: win.fileCount > 1 && !searchInput.activeFocus
         onActivated: win.go(1)
+        onActivatedAmbiguously: win.go(1)
     }
     Shortcut {
         sequence: "PgUp"

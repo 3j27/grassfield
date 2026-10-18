@@ -27,9 +27,23 @@ SettingsPage {
             hyprland: root.pacman(["hyprland"]),
             quickshell: root.pacman(["quickshell", "quickshell-git"]),
             cpu: SysInfo.cpu(root.backend.readText("/proc/cpuinfo").text),
-            memory: SysInfo.memory(root.backend.readText("/proc/meminfo").text),
+            memory: SysInfo.memoryBytes(root.backend.readText("/proc/meminfo").text),
             gpu: SysInfo.gpus(root.backend.run(["lspci"]))
         };
+    }
+
+    // "AMD Ryzen 7 (16 threads)", in the UI language.
+    function cpuText(cpu: var): string {
+        if (!cpu || cpu.model === "")
+            return "";
+        if (cpu.threads === 1)
+            return qsTr("%1 (1 thread)").arg(cpu.model);
+        return cpu.threads > 1 ? qsTr("%1 (%2 threads)").arg(cpu.model).arg(cpu.threads) : cpu.model;
+    }
+
+    // Binary units with the UI locale's digits and unit names ("31.0 GiB", "31,0 Gio").
+    function memoryText(bytes: real): string {
+        return bytes > 0 ? Qt.locale().formattedDataSize(bytes, 1, Locale.DataSizeIecFormat) : "";
     }
 
     Component.onCompleted: root.info = root.collect()
@@ -66,11 +80,11 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Processor")
-            valueText: root.info.cpu || root.unknown
+            valueText: root.cpuText(root.info.cpu) || root.unknown
         }
         SettingsRow {
             title: qsTr("Memory")
-            valueText: root.info.memory || root.unknown
+            valueText: root.memoryText(root.info.memory ?? 0) || root.unknown
         }
         SettingsRow {
             title: qsTr("Graphics")

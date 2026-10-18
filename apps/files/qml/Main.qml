@@ -9,6 +9,10 @@ QtObject {
 
     // Set by the launcher (src/main.cpp): a FilesApp.
     required property var app
+    // The registrar is there: each window exports its menus to the global menu bar (GlobalMenu.qml).
+    required property bool globalMenu
+    // The browser window that was active last (operation errors show there).
+    property var lastActiveWindow: null
 
     property list<QtObject> resources: [
         Binding {

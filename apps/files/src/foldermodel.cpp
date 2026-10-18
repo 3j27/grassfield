@@ -396,9 +396,12 @@ bool FolderModel::lessThan(const QModelIndex &left, const QModelIndex &right) co
 
 bool FolderModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
+    const KFileItem item = m_dirModel->itemForIndex(m_dirModel->index(sourceRow, 0, sourceParent));
+    // Only remote:/ entries can be hidden; the target is looked up for those alone.
+    if (item.url().scheme() == QLatin1String("remote") && FileLogic::hiddenNetworkEntry(item.url(), item.targetUrl()))
+        return false;
     if (m_filterText.isEmpty())
         return true;
-    const KFileItem item = m_dirModel->itemForIndex(m_dirModel->index(sourceRow, 0, sourceParent));
     return item.text().contains(m_filterText, Qt::CaseInsensitive);
 }
 

@@ -16,9 +16,19 @@ Item {
     readonly property int pageCount: 1
     property int currentPage: 0
     property real factor: 1
+    // Edit menu (GlobalMenu.qml): the selection of the text.
+    readonly property bool canCopy: edit.selectedText !== ""
+    readonly property bool canSelectAll: edit.length > 0
 
     Accessible.role: Accessible.Document
     Accessible.name: qsTr("Text %1").arg(root.info.name ?? "")
+
+    function copy(): void {
+        edit.copy();
+    }
+    function selectAll(): void {
+        edit.selectAll();
+    }
 
     function zoomIn(): void {
         root.factor = Math.min(Tokens.previewZoomMax, root.factor * Tokens.previewZoomStep);
@@ -66,6 +76,8 @@ Item {
             width: flick.width - 2 * Tokens.spacingMd
             readOnly: true
             selectByMouse: true
+            // The selection survives the global menu taking the keyboard (Edit > Copy acts on it).
+            persistentSelection: true
             textFormat: TextEdit.PlainText
             wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
             text: root.info.text ?? ""

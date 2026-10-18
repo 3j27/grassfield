@@ -20,6 +20,8 @@ Window {
     readonly property alias menuLayer: menuLayer
     property string notice: ""
     property string bannerText: ""
+    // The registrar is there: the window exports its menus to the global menu bar (GlobalMenu.qml).
+    readonly property bool globalMenu: win.manager.globalMenu
 
     title: win.tab ? win.tab.title : qsTr("Files")
     width: Tokens.filesWindowWidth
@@ -107,6 +109,15 @@ Window {
         goSheet.open();
     }
 
+    function focusSearch(): void {
+        search.forceActiveFocus();
+    }
+
+    // A place of the sidebar (Go menu): opened like a sidebar click.
+    function openPlace(row: int, url: url, mounted: bool): void {
+        sidebar.openRow(row, url, mounted);
+    }
+
     function showNotice(text: string): void {
         win.notice = text;
         noticeTimer.restart();
@@ -129,55 +140,83 @@ Window {
         onTriggered: win.bannerText = ""
     }
 
+    // App-wide errors show in the window the user last worked in: an action chosen in the global menu runs while the
+    // shell's menu holds the keyboard, so no window is active at that moment.
+    onActiveChanged: {
+        if (win.active)
+            win.manager.lastActiveWindow = win;
+    }
+
     Connections {
         target: win.app
         function onOperationFailed(message: string): void {
-            if (win.active)
+            if (win.active || win.manager.lastActiveWindow === win)
                 win.showBanner(message);
         }
     }
 
+    // Global menu (T1) ------------------------------------------------------------------------
+
+    Loader {
+        active: win.globalMenu
+        sourceComponent: GlobalMenu {
+            win: win
+        }
+    }
+
     // Shortcuts ------------------------------------------------------------------------------
+    // Every key here except Delete is also the shortcut of a global menu item (GlobalMenu.qml): Qt then hands each
+    // press to one of the two, so a Shortcut acts on activatedAmbiguously exactly as on activated.
 
     Shortcut {
         sequence: "Ctrl+T"
         onActivated: win.newTab(win.tab ? win.tab.url : win.startUrl)
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+W"
         onActivated: win.closeTab(win.currentIndex)
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+N"
         onActivated: win.manager.newWindow(win.tab ? win.tab.url : win.startUrl)
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Tab", "Ctrl+Shift+]"]
         onActivated: win.selectTab(win.currentIndex + 1)
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Shift+Tab", "Ctrl+Shift+["]
         onActivated: win.selectTab(win.currentIndex - 1)
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+[", "Alt+Left"]
         onActivated: win.tab.back()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+]", "Alt+Right"]
         onActivated: win.tab.forward()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Up", "Alt+Up"]
         onActivated: win.tab.up()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Down", "Alt+Down"]
         onActivated: win.tab.openSelection()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Backspace"
         onActivated: win.tab.trashSelection()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Delete"
@@ -189,76 +228,94 @@ Window {
     Shortcut {
         sequence: "F2"
         onActivated: win.tab.renameSelection()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+C"
         onActivated: win.tab.copySelection(false)
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+X"
         onActivated: win.tab.copySelection(true)
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+V"
         onActivated: win.tab.paste()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+A"
         onActivated: win.folder.selectAll()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+D"
         onActivated: win.tab.duplicateSelection()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+I"
         onActivated: win.tab.getInfo()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Shift+N"
         onActivated: win.tab.newFolder()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Z"
         enabled: win.app.canUndo
         onActivated: win.app.undo()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]
         enabled: win.app.canRedo
         onActivated: win.app.redo()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+F"
         onActivated: search.forceActiveFocus()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+H"
         onActivated: win.app.showHidden = !win.app.showHidden
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+Shift+G", "Ctrl+L"]
         onActivated: win.goToFolder()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+Shift+H"
         onActivated: win.tab.navigate(Qt.url("file://" + win.app.homePath), true)
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequences: ["Ctrl+R", "F5"]
         onActivated: win.tab.folder.reload()
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+1"
         onActivated: win.tab.setViewMode("icons")
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+2"
         onActivated: win.tab.setViewMode("list")
+        onActivatedAmbiguously: activated()
     }
     Shortcut {
         sequence: "Ctrl+3"
         onActivated: win.tab.setViewMode("columns")
+        onActivatedAmbiguously: activated()
     }
 
     // Layout ---------------------------------------------------------------------------------
@@ -545,9 +602,8 @@ Window {
             visible: banner.text !== ""
             height: visible ? bannerLabel.implicitHeight + 2 * Tokens.spacingSm : 0
             radius: Tokens.radiusMenu
-            color: Appearance.withAlpha(Appearance.colors.danger, Tokens.materialFillOpacity)
-            border.width: Tokens.appsBorderWidth
-            border.color: Appearance.colors.danger
+            // Destructive colour, like the Settings refusal banner.
+            color: Appearance.colors.destructive
             Accessible.role: Accessible.AlertMessage
             Accessible.name: banner.text
 
@@ -560,7 +616,7 @@ Window {
                 anchors.margins: Tokens.spacingSm
                 text: banner.text
                 wrapMode: Text.Wrap
-                color: Appearance.colors.text
+                color: Appearance.colors.destructiveText
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }
@@ -570,6 +626,7 @@ Window {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "close-glyph"
+                tint: Appearance.colors.destructiveText
                 accessibleName: qsTr("Dismiss")
                 onClicked: win.bannerText = ""
             }

@@ -6,6 +6,7 @@
 
 #include "translationloader.h"
 #include "filesapp.h"
+#include "globalmenu.h"
 #include "imageproviders.h"
 
 #ifndef GRASSFIELD_FILES_QML_DIR
@@ -42,6 +43,10 @@ int main(int argc, char *argv[])
             urls << url;
     }
 
+    // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the
+    // windows down still see it.
+    FilesApp files(urls);
+
     QQmlApplicationEngine engine;
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
@@ -52,8 +57,9 @@ int main(int argc, char *argv[])
     if (qmlDir.isEmpty())
         qmlDir = QStringLiteral(GRASSFIELD_FILES_QML_DIR);
 
-    FilesApp files(urls);
-    engine.setInitialProperties({{QStringLiteral("app"), QVariant::fromValue(&files)}});
+    // Global menu (T1): the windows export their menus only when the registrar is there (globalmenu.h).
+    engine.setInitialProperties({{QStringLiteral("app"), QVariant::fromValue(&files)},
+                                 {QStringLiteral("globalMenu"), grassfield::apps::globalMenuAvailable()}});
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("Main.qml"))));

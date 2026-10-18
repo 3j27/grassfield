@@ -5,6 +5,7 @@
 
 #include "translationloader.h"
 #include "backend.h"
+#include "globalmenu.h"
 
 #ifndef GRASSFIELD_SETTINGS_QML_DIR
 #define GRASSFIELD_SETTINGS_QML_DIR "/usr/share/grassfield/settings/qml"
@@ -23,6 +24,10 @@ int main(int argc, char *argv[])
     // Wayland app_id: matches org.grassfield.Settings.desktop.
     app.setDesktopFileName(QStringLiteral("org.grassfield.Settings"));
 
+    // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the
+    // window down still see it.
+    Backend backend;
+
     QQmlApplicationEngine engine;
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
@@ -32,8 +37,8 @@ int main(int argc, char *argv[])
     if (qmlDir.isEmpty())
         qmlDir = QStringLiteral(GRASSFIELD_SETTINGS_QML_DIR);
 
-    Backend backend;
-    engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)}});
+    // Global menu (T1): the window exports its menus only when the registrar is there (globalmenu.h).
+    engine.setInitialProperties({{"backend", QVariant::fromValue(&backend)}, {"globalMenu", grassfield::apps::globalMenuAvailable()}});
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },

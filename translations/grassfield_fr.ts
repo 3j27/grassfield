@@ -8,6 +8,14 @@
         <translation>À propos</translation>
     </message>
     <message>
+        <source>%1 (1 thread)</source>
+        <translation>%1 (1 thread)</translation>
+    </message>
+    <message>
+        <source>%1 (%2 threads)</source>
+        <translation>%1 (%2 threads)</translation>
+    </message>
+    <message>
         <source>Unknown</source>
         <translation>Inconnu</translation>
     </message>
@@ -503,6 +511,169 @@
     </message>
 </context>
 <context>
+    <name>Bindings</name>
+    <message>
+        <source>Super</source>
+        <translation>Super</translation>
+    </message>
+    <message>
+        <source>Ctrl</source>
+        <translation>Ctrl</translation>
+    </message>
+    <message>
+        <source>Alt</source>
+        <translation>Alt</translation>
+    </message>
+    <message>
+        <source>Shift</source>
+        <translation>Maj</translation>
+    </message>
+    <message>
+        <source>Return</source>
+        <translation>Entrée</translation>
+    </message>
+    <message>
+        <source>Space</source>
+        <translation>Espace</translation>
+    </message>
+    <message>
+        <source>Tab</source>
+        <translation>Tab</translation>
+    </message>
+    <message>
+        <source>Esc</source>
+        <translation>Échap</translation>
+    </message>
+    <message>
+        <source>Up</source>
+        <translation>Haut</translation>
+    </message>
+    <message>
+        <source>Down</source>
+        <translation>Bas</translation>
+    </message>
+    <message>
+        <source>Left</source>
+        <translation>Gauche</translation>
+    </message>
+    <message>
+        <source>Right</source>
+        <translation>Droite</translation>
+    </message>
+    <message>
+        <source>Left Mouse Button</source>
+        <translation>Bouton gauche de la souris</translation>
+    </message>
+    <message>
+        <source>Right Mouse Button</source>
+        <translation>Bouton droit de la souris</translation>
+    </message>
+    <message>
+        <source>Terminal</source>
+        <translation>Terminal</translation>
+    </message>
+    <message>
+        <source>Close window</source>
+        <translation>Fermer la fenêtre</translation>
+    </message>
+    <message>
+        <source>Toggle floating/tiling</source>
+        <translation>Basculer flottante/mosaïque</translation>
+    </message>
+    <message>
+        <source>Full screen</source>
+        <translation>Plein écran</translation>
+    </message>
+    <message>
+        <source>Zoom (fill the screen)</source>
+        <translation>Zoom (remplir l’écran)</translation>
+    </message>
+    <message>
+        <source>Minimize window</source>
+        <translation>Réduire la fenêtre</translation>
+    </message>
+    <message>
+        <source>Hide app</source>
+        <translation>Masquer l’app</translation>
+    </message>
+    <message>
+        <source>Next window</source>
+        <translation>Fenêtre suivante</translation>
+    </message>
+    <message>
+        <source>Previous window</source>
+        <translation>Fenêtre précédente</translation>
+    </message>
+    <message>
+        <source>Raise window</source>
+        <translation>Mettre la fenêtre au premier plan</translation>
+    </message>
+    <message>
+        <source>Move window</source>
+        <translation>Déplacer la fenêtre</translation>
+    </message>
+    <message>
+        <source>Resize window</source>
+        <translation>Redimensionner la fenêtre</translation>
+    </message>
+    <message>
+        <source>Next Space</source>
+        <translation>Bureau suivant</translation>
+    </message>
+    <message>
+        <source>Previous Space</source>
+        <translation>Bureau précédent</translation>
+    </message>
+    <message>
+        <source>Overview</source>
+        <translation>Vue d’ensemble</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>Notification Center</source>
+        <translation>Centre de notifications</translation>
+    </message>
+    <message>
+        <source>Lock screen</source>
+        <translation>Verrouiller l’écran</translation>
+    </message>
+    <message>
+        <source>Force Quit Applications</source>
+        <translation>Forcer à quitter des applications</translation>
+    </message>
+    <message>
+        <source>Focus the menu bar</source>
+        <translation>Activer la barre des menus</translation>
+    </message>
+    <message>
+        <source>Focus the Dock</source>
+        <translation>Activer le Dock</translation>
+    </message>
+    <message>
+        <source>Mute</source>
+        <translation>Couper le son</translation>
+    </message>
+    <message>
+        <source>Volume up</source>
+        <translation>Augmenter le volume</translation>
+    </message>
+    <message>
+        <source>Volume down</source>
+        <translation>Baisser le volume</translation>
+    </message>
+    <message>
+        <source>Brightness up</source>
+        <translation>Augmenter la luminosité</translation>
+    </message>
+    <message>
+        <source>Brightness down</source>
+        <translation>Baisser la luminosité</translation>
+    </message>
+</context>
+<context>
     <name>BluetoothList</name>
     <message>
         <source>No Bluetooth adapter</source>
@@ -897,12 +1068,12 @@
 <context>
     <name>ConfigStore</name>
     <message>
-        <source>The file cannot be read.</source>
-        <translation>Le fichier ne peut pas être lu.</translation>
+        <source>the file cannot be read</source>
+        <translation>le fichier ne peut pas être lu</translation>
     </message>
     <message>
-        <source>Unsupported contract version.</source>
-        <translation>Version de contrat non prise en charge.</translation>
+        <source>unsupported contract version</source>
+        <translation>version de contrat non prise en charge</translation>
     </message>
 </context>
 <context>
@@ -1124,6 +1295,18 @@
     <message>
         <source>Automatically hide the Dock</source>
         <translation>Masquer automatiquement le Dock</translation>
+    </message>
+    <message>
+        <source>Desktop</source>
+        <translation>Bureau</translation>
+    </message>
+    <message>
+        <source>Show items on the desktop</source>
+        <translation>Afficher les éléments sur le bureau</translation>
+    </message>
+    <message>
+        <source>Files and folders of the Desktop folder appear on the wallpaper.</source>
+        <translation>Les fichiers et dossiers du dossier Bureau apparaissent sur le fond d’écran.</translation>
     </message>
     <message>
         <source>Windows</source>
@@ -1463,6 +1646,277 @@
     </message>
 </context>
 <context>
+    <name>GlobalMenu</name>
+    <message>
+        <source>File</source>
+        <translation>Fichier</translation>
+    </message>
+    <message>
+        <source>New Window</source>
+        <translation>Nouvelle fenêtre</translation>
+    </message>
+    <message>
+        <source>New Folder</source>
+        <translation>Nouveau dossier</translation>
+    </message>
+    <message>
+        <source>New Tab</source>
+        <translation>Nouvel onglet</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvrir</translation>
+    </message>
+    <message>
+        <source>Open With</source>
+        <translation>Ouvrir avec</translation>
+    </message>
+    <message>
+        <source>Close Window</source>
+        <translation>Fermer la fenêtre</translation>
+    </message>
+    <message>
+        <source>Close Tab</source>
+        <translation>Fermer l’onglet</translation>
+    </message>
+    <message>
+        <source>Get Info</source>
+        <translation>Obtenir des informations</translation>
+    </message>
+    <message>
+        <source>Rename</source>
+        <translation>Renommer</translation>
+    </message>
+    <message>
+        <source>Duplicate</source>
+        <translation>Dupliquer</translation>
+    </message>
+    <message>
+        <source>Glance at %1 Items</source>
+        <translation>Survoler %1 éléments</translation>
+    </message>
+    <message>
+        <source>Glance at “%1”</source>
+        <translation>Survoler «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Glance</source>
+        <translation>Survol</translation>
+    </message>
+    <message>
+        <source>Put Back</source>
+        <translation>Remettre</translation>
+    </message>
+    <message>
+        <source>Move to Trash</source>
+        <translation>Placer dans la corbeille</translation>
+    </message>
+    <message>
+        <source>Delete Immediately…</source>
+        <translation>Supprimer immédiatement…</translation>
+    </message>
+    <message>
+        <source>Empty Trash…</source>
+        <translation>Vider la corbeille…</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>Édition</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>Copier</translation>
+    </message>
+    <message>
+        <source>Copy %1 Items</source>
+        <translation>Copier %1 éléments</translation>
+    </message>
+    <message>
+        <source>Copy “%1”</source>
+        <translation>Copier «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Paste %1 Items</source>
+        <translation>Coller %1 éléments</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>Tout sélectionner</translation>
+    </message>
+    <message>
+        <source>as Icons</source>
+        <translation>en icônes</translation>
+    </message>
+    <message>
+        <source>as List</source>
+        <translation>en liste</translation>
+    </message>
+    <message>
+        <source>as Columns</source>
+        <translation>en colonnes</translation>
+    </message>
+    <message>
+        <source>Sort By</source>
+        <translation>Trier par</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Date Modified</source>
+        <translation>Date de modification</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Descending</source>
+        <translation>Ordre décroissant</translation>
+    </message>
+    <message>
+        <source>Keep Folders on Top</source>
+        <translation>Garder les dossiers en haut</translation>
+    </message>
+    <message>
+        <source>Show Hidden Files</source>
+        <translation>Afficher les fichiers cachés</translation>
+    </message>
+    <message>
+        <source>Show Previous Tab</source>
+        <translation>Afficher l’onglet précédent</translation>
+    </message>
+    <message>
+        <source>Show Next Tab</source>
+        <translation>Afficher l’onglet suivant</translation>
+    </message>
+    <message>
+        <source>Reload</source>
+        <translation>Actualiser</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Enclosing Folder</source>
+        <translation>Dossier parent</translation>
+    </message>
+    <message>
+        <source>Go to Folder…</source>
+        <translation>Aller au dossier…</translation>
+    </message>
+    <message>
+        <source>Find…</source>
+        <translation>Rechercher…</translation>
+    </message>
+    <message>
+        <source>Find Next</source>
+        <translation>Rechercher le suivant</translation>
+    </message>
+    <message>
+        <source>Find Previous</source>
+        <translation>Rechercher le précédent</translation>
+    </message>
+    <message>
+        <source>View</source>
+        <translation>Présentation</translation>
+    </message>
+    <message>
+        <source>Hide Sidebar</source>
+        <translation>Masquer la barre latérale</translation>
+    </message>
+    <message>
+        <source>Show Sidebar</source>
+        <translation>Afficher la barre latérale</translation>
+    </message>
+    <message>
+        <source>Actual Size</source>
+        <translation>Taille réelle</translation>
+    </message>
+    <message>
+        <source>Zoom to Fit</source>
+        <translation>Ajuster à la fenêtre</translation>
+    </message>
+    <message>
+        <source>Zoom In</source>
+        <translation>Zoom avant</translation>
+    </message>
+    <message>
+        <source>Zoom Out</source>
+        <translation>Zoom arrière</translation>
+    </message>
+    <message>
+        <source>Go</source>
+        <translation>Aller</translation>
+    </message>
+    <message>
+        <source>Previous Page</source>
+        <translation>Page précédente</translation>
+    </message>
+    <message>
+        <source>Next Page</source>
+        <translation>Page suivante</translation>
+    </message>
+    <message>
+        <source>First Page</source>
+        <translation>Première page</translation>
+    </message>
+    <message>
+        <source>Last Page</source>
+        <translation>Dernière page</translation>
+    </message>
+    <message>
+        <source>Previous File</source>
+        <translation>Fichier précédent</translation>
+    </message>
+    <message>
+        <source>Next File</source>
+        <translation>Fichier suivant</translation>
+    </message>
+    <message>
+        <source>Tools</source>
+        <translation>Outils</translation>
+    </message>
+    <message>
+        <source>Rotate Left</source>
+        <translation>Pivoter à gauche</translation>
+    </message>
+    <message>
+        <source>Rotate Right</source>
+        <translation>Pivoter à droite</translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Redo</source>
+        <translation>Rétablir</translation>
+    </message>
+    <message>
+        <source>Cut</source>
+        <translation>Couper</translation>
+    </message>
+    <message>
+        <source>Paste</source>
+        <translation>Coller</translation>
+    </message>
+    <message>
+        <source>Find</source>
+        <translation>Rechercher</translation>
+    </message>
+</context>
+<context>
     <name>IconMenu</name>
     <message>
         <source>Desktop menu</source>
@@ -1715,8 +2169,8 @@
         <translation>Bureau et Dock</translation>
     </message>
     <message>
-        <source>dock magnification autohide hot corners titlebar window</source>
-        <translation>dock agrandissement masquage coins actifs barre de titre fenêtre bureau</translation>
+        <source>dock magnification autohide desktop icons items hot corners titlebar window</source>
+        <translation>dock agrandissement masquage automatique bureau icônes éléments coins actifs barre de titre fenêtre</translation>
     </message>
     <message>
         <source>Notifications</source>
@@ -1755,8 +2209,8 @@
         <translation>grassfield.json est inutilisable&#xa0;: %1. Les réglages sont en lecture seule jusqu’à la correction du fichier&#xa0;; le fichier n’a pas été modifié.</translation>
     </message>
     <message>
-        <source>The change could not be saved: %1</source>
-        <translation>La modification n’a pas pu être enregistrée&#xa0;: %1</translation>
+        <source>The change could not be saved: %1.</source>
+        <translation>La modification n’a pas pu être enregistrée&#xa0;: %1.</translation>
     </message>
     <message>
         <source>Grassfield Settings</source>
@@ -2520,6 +2974,25 @@
     <message>
         <source>Input: %1</source>
         <translation>Entrée&#xa0;: %1</translation>
+    </message>
+</context>
+<context>
+    <name>Store</name>
+    <message>
+        <source>the file is not valid JSON (%1)</source>
+        <translation>le fichier n’est pas un JSON valide (%1)</translation>
+    </message>
+    <message>
+        <source>the top level is not a JSON object</source>
+        <translation>le niveau supérieur n’est pas un objet JSON</translation>
+    </message>
+    <message>
+        <source>it cannot be edited safely: %1</source>
+        <translation>il ne peut pas être modifié sans risque&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>unsupported contract version: %1</source>
+        <translation>version de contrat non prise en charge&#xa0;: %1</translation>
     </message>
 </context>
 <context>

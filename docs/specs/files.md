@@ -17,7 +17,7 @@
 Browse and manage files on KDE Frameworks KIO (owner decision D6): the feature is called "Files" (code
 `grassfield-files`, app id `org.grassfield.Files`; never "Finder"). Trash, mounts, network protocols and thumbnailers
 are KIO/Solid's, never reimplemented. Non-goals for v1: gallery view, tags, recursive/indexed search (the shell
-Search covers files), Recents, sharing, Group By, exported global menus (menu bridge pending), a built-in viewer (Space
+Search covers files), Recents, sharing, Group By, a built-in viewer (Space
 starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 
 ## Functional requirements
@@ -35,7 +35,9 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
    the toolbar switcher; the view, sort and hidden-files choices persist (QSettings `Grassfield/Files`).
 5. F5 Sidebar: Favorites = Home, Desktop, Documents, Downloads, Pictures, Music, Videos when the folder exists;
    Locations = Computer (`/`), Solid storage volumes (not ignored, filesystem usage) with mount on click and eject
-   (`Solid::StorageAccess::setup/teardown`), Network (`remote:/`) only when a KIO `smb` or `sftp` worker exists,
+   (`Solid::StorageAccess::setup/teardown`), Network (`remote:/`) only when a KIO `smb` or `sftp` worker exists (its
+   listing hides kio-extras' "Apple Devices" `afc:` entry, an Apple trademark in the UI, master-prompt §14:
+   `FileLogic::hiddenNetworkEntry`),
    Trash (`trash:/`, full/empty icon from a KIO listing). Items accept drops.
 6. F6 Operations, all KIO jobs: copy/cut/paste (`KIO::paste`, `text/uri-list` + KDE cut flag + GNOME format),
    Move to Trash (`KIO::trash`), Put Back (`KIO::restoreFromTrash`), Delete Immediately (only in `trash:/`,
@@ -48,7 +50,8 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
 8. F8 Context menus (Grassfield `PopupMenu`): item menu (Open, Open With, Open in New Tab, Move to Trash, Get Info,
    Rename, Duplicate, Glance, Copy, Cut, Show in Enclosing Folder while searching), Trash item menu
    (Put Back, Delete Immediately…, Get Info, Copy), background menu (New Folder or Empty Trash…, Get Info, Paste,
-   View As, Sort By, Show Hidden Files). The toolbar Action menu offers the same items.
+   View As, Sort By, Show Hidden Files). The toolbar Action menu offers the same items. Submenus (Open With, View As,
+   Sort By) open to the left of the menu, or move up, when they would leave the window (`PopupMenu.bounds`).
 9. F9 Get Info window: icon/thumbnail, name, kind, size (folders: `KIO::directorySize`), where, created, modified,
    opened, link target, owner, group, permissions, access (read only).
 10. F10 Window: tabs (Ctrl+T, Ctrl+W, Ctrl+Tab, middle click), new window (Ctrl+N), back/forward (Ctrl+[ / ],
@@ -64,16 +67,28 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
     items are skipped, at most 50 files). The Glance window takes the focus; Space or Esc there closes it. Blocked by
     `GRASSFIELD_FILES_NO_LAUNCH=1` like every launch. A missing binary raises the usual failure banner.
 13. F13 Appearance: light/dark and Reduce Motion follow `grassfield.json` (read only, watched); app windows are
-    opaque; tokens only (`files.*` group of `ui/tokens/tokens.json`).
+    opaque; tokens only (`files.*` group of `ui/tokens/tokens.json`). Error banners use the destructive colour.
+14. F14 Global menu (T1, master-prompt 5.7, ADR-0008): each browser window exports its menus through DBusMenu
+    (`qml/GlobalMenu.qml`, a `Qt.labs.platform` MenuBar) when `com.canonical.AppMenu.Registrar` is on the session bus
+    at start (`apps/globalmenu.h`); without it nothing is created and the bar keeps the T0 menus. File (New Window,
+    New Folder, New Tab, Open, Open With for the selection, Close Tab/Window, Get Info, Rename, Duplicate, Glance,
+    Move to Trash or Put Back, Delete Immediately… and Empty Trash… in the Trash, Find), Edit (Undo, Redo, Cut, Copy,
+    Paste, Select All), View (as Icons/List/Columns, Sort By, Show Hidden Files, Show Previous/Next Tab, Reload),
+    Go (Back, Forward, Enclosing Folder, the sidebar places, Go to Folder…). The app menu and Window are the shell's
+    T0 menus. Items run the same BrowserTab actions as the window and show the window's shortcuts; a key registered
+    by both a menu item and an in-window Shortcut runs once (the Shortcut also acts on `activatedAmbiguously`). An
+    operation error shows in the window that was active last (a global menu action runs while the shell's menu holds
+    the keyboard).
 
 ## Acceptance criteria
 | ID | Test | Level |
 |---|---|---|
-| F2 sort keys, sizes, dates, F10 path segments, F6 names | `tests/unit/files/tst_filelogic.cpp` (gtest, 17 tests, run by `scripts/dev/test.sh`) | L0 |
+| F2 sort keys, sizes, dates, F10 path segments, F6 names, F5 hidden Network entry | `tests/unit/files/tst_filelogic.cpp` (gtest, 18 tests, run by `scripts/dev/test.sh`) | L0 |
 | F3/F10 keyboard moves, history, type-to-select, header sort, rubber band, column prefix | `tests/unit/tst_filesnav.qml` (9 cases) | L0 |
 | F6 copy/paste, F2 rename, new folder + inline rename, undo/redo, duplicate, trash + Put Back, Ctrl+W quit, no app launch, no QML errors, owner Trash untouched | `tests/apps/files_sandbox.sh` (nested, keyboard + pointer, 19 checks) | L1 |
 | F4/F5/F8/F9/F10/F13 | nested screenshots: icon view with thumbnails, list sorted by date, columns, Get Info, item menu, two tabs with Trash, light icon/list, search, hidden files | L1 |
 | F11 | nested: drag of a file onto a folder moved it (sandbox), Ctrl+Z moved it back | L1 |
+| F14 | nested, private bus with the bridge: File, Edit, View, Go in the bar; File > New Folder and Edit > Undo clicked with the pointer created and removed the folder (sandbox); Open With lists the selection's applications; `tests/integration/global_menus.sh` covers the same T1 path with Preview | L1 |
 | lint | `scripts/dev/qmllint.sh` (covers `apps/**`) and `check-textformat.py` | L0 |
 | F5 mount/eject, removable media | not testable without a removable device | L2 (owner) |
 
@@ -129,12 +144,9 @@ installed (not built here).
 - i18n: every visible string is `qsTr()` / `tr()`; plurals use singular/plural pairs (no catalogs with numerus forms).
 
 ## Known limitations (honest, user-visible gaps vs macOS)
-- **Image thumbnails do not appear on this system.** The only installed image thumbnailers are glycin's
-  freedesktop `.thumbnailer` entries; KIO 6.29 expands `%u` to a local path, and `glycin-thumbnailer` needs a URI
-  ("Failed to load file/stream: Operation not supported", exit 0, no output). PDF (evince) and video
-  (ffmpegthumbnailer) thumbnails work. Installing `kio-extras` (its image thumbnail plugin) would fix it (owner action;
-  not installed per brief).
-- No Network entry: `kio-extras` (smb/sftp workers) is not installed. Nothing is faked.
+- Thumbnails come from KIO's thumbnail plugins (kio-extras, installed 2026-10-17: images, PDF, video); a type without
+  a plugin keeps its MIME icon. The Network place (kio-extras smb/sftp workers) lists MTP devices and SMB shares; the
+  "Apple Devices" entry is hidden (§14).
 - No gallery view, tags, Recents, Group By, sharing; search filters the current folder by name only.
 - Space does not close a Glance from Files by itself; the Glance window has the focus and closes on Space/Esc.
 - KIO's own dialogs are QWidget dialogs, not Grassfield-styled: file-exists conflicts (paste/drop), the Open With
@@ -146,7 +158,8 @@ installed (not built here).
 - Mount, eject and removable media are implemented with Solid but not exercised (only ignored internal volumes here).
 - Empty Trash and Delete Immediately are implemented with confirmations but were never run by tests (the real Trash is
   never emptied); Put Back cannot be undone (KIO keeps no undo record for restores).
-- No exported app menus (menu bridge pending); every command is in the context/Action menus and shortcuts.
+- The global menu has no Help menu (there is no help content) and no Window menu of its own: tab switching is under
+  View, the window actions are the shell's T0 Window menu. Info windows export no menu (the bar shows T0 there).
 - Return opens (as specified), unlike macOS where Return renames; F2 renames.
 - View settings are global, not per folder; window size/position are not remembered; a new window opens exactly over
   the previous one (the compositor centres floating windows).
@@ -154,4 +167,4 @@ installed (not built here).
 - The path bar shows home-relative paths inside home, otherwise from `/` ("Computer"); long paths are clipped on the left.
 - The sidebar shows "Trash full" only if the icon theme has `user-trash-full-symbolic`.
 - Accessibility tree not verified with a screen reader (no AT-SPI bus in the nested session).
-- No translation catalogs yet (lupdate not installed): gate I1 not verified.
+- French catalog: `translations/grassfield_fr.ts` (gate I1, `just check-i18n`).

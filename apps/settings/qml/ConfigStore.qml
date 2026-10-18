@@ -29,12 +29,12 @@ Item {
     function reload(): void {
         const file = root.backend.readText(root.path);
         if (file.exists && !file.ok) {
-            root.error = qsTr("The file cannot be read.");
+            root.error = qsTr("the file cannot be read");
             root.config = {};
         } else {
             const parsed = Store.parse(file.text);
             const unsupported = parsed.ok && !parsed.fresh && parsed.data.version !== 1;
-            root.error = parsed.ok ? (unsupported ? qsTr("Unsupported contract version.") : "") : parsed.error;
+            root.error = parsed.ok ? (unsupported ? qsTr("unsupported contract version") : "") : parsed.error;
             root.config = parsed.ok ? parsed.data : {};
         }
         root.revision++;
@@ -44,7 +44,7 @@ Item {
     function set(key: string, newValue: var): bool {
         const file = root.backend.readText(root.path);
         if (file.exists && !file.ok) {
-            root.writeError = qsTr("The file cannot be read.");
+            root.writeError = qsTr("the file cannot be read");
             return false;
         }
         const result = Store.setValue(file.text, key, newValue);

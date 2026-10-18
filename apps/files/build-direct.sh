@@ -49,15 +49,15 @@ done
 # Compile the translation units in parallel (KIO headers are heavy), then link.
 objdir=$out/files-obj
 mkdir -p "$objdir"
-read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick)"
-read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick)"
+read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus)"
+read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus)"
 sources=("$here/src/main.cpp" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp"
   "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "${mocs[@]}")
 pids=() objs=()
 for src in "${sources[@]}"; do
   obj=$objdir/$(basename "${src%.cpp}").o
   objs+=("$obj")
-  g++ "${cxxflags[@]}" "${kfdefs[@]}" "${defs[@]}" -I"$here/src" -I"$root/ui/i18n" -I"$out" "${kf_includes[@]}" "${qt_cflags[@]}" \
+  g++ "${cxxflags[@]}" "${kfdefs[@]}" "${defs[@]}" -I"$here/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" "${kf_includes[@]}" "${qt_cflags[@]}" \
     -c "$src" -o "$obj" &
   pids+=($!)
 done

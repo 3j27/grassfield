@@ -5,11 +5,49 @@
 
 const BIND = /^\s*bind\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"/;
 
+// Key names in English; the Keyboard page shows each through qsTranslate("Bindings", name) (translateKeys).
 const NAMES = {
-    "SUPER": "Super", "CTRL": "Ctrl", "ALT": "Alt", "SHIFT": "Shift", "RETURN": "Return", "SPACE": "Space",
-    "TAB": "Tab", "ESCAPE": "Esc", "UP": "Up", "DOWN": "Down", "LEFT": "Left", "RIGHT": "Right",
-    "mouse:272": "Left Mouse Button", "mouse:273": "Right Mouse Button"
+    "SUPER": QT_TRANSLATE_NOOP("Bindings", "Super"), "CTRL": QT_TRANSLATE_NOOP("Bindings", "Ctrl"),
+    "ALT": QT_TRANSLATE_NOOP("Bindings", "Alt"), "SHIFT": QT_TRANSLATE_NOOP("Bindings", "Shift"),
+    "RETURN": QT_TRANSLATE_NOOP("Bindings", "Return"), "SPACE": QT_TRANSLATE_NOOP("Bindings", "Space"),
+    "TAB": QT_TRANSLATE_NOOP("Bindings", "Tab"), "ESCAPE": QT_TRANSLATE_NOOP("Bindings", "Esc"),
+    "UP": QT_TRANSLATE_NOOP("Bindings", "Up"), "DOWN": QT_TRANSLATE_NOOP("Bindings", "Down"),
+    "LEFT": QT_TRANSLATE_NOOP("Bindings", "Left"), "RIGHT": QT_TRANSLATE_NOOP("Bindings", "Right"),
+    "mouse:272": QT_TRANSLATE_NOOP("Bindings", "Left Mouse Button"),
+    "mouse:273": QT_TRANSLATE_NOOP("Bindings", "Right Mouse Button")
 };
+
+// The literal descriptions of config/hypr/grassfield/bindings.lua, listed for translation: the Keyboard page shows a
+// description through qsTranslate("Bindings", description) (an unlisted one stays in English).
+// tests/unit/tst_settingsstore.qml checks that every literal description of the real file is listed here.
+const DESCRIPTIONS = [
+    QT_TRANSLATE_NOOP("Bindings", "Terminal"),
+    QT_TRANSLATE_NOOP("Bindings", "Close window"),
+    QT_TRANSLATE_NOOP("Bindings", "Toggle floating/tiling"),
+    QT_TRANSLATE_NOOP("Bindings", "Full screen"),
+    QT_TRANSLATE_NOOP("Bindings", "Zoom (fill the screen)"),
+    QT_TRANSLATE_NOOP("Bindings", "Minimize window"),
+    QT_TRANSLATE_NOOP("Bindings", "Hide app"),
+    QT_TRANSLATE_NOOP("Bindings", "Next window"),
+    QT_TRANSLATE_NOOP("Bindings", "Previous window"),
+    QT_TRANSLATE_NOOP("Bindings", "Raise window"),
+    QT_TRANSLATE_NOOP("Bindings", "Move window"),
+    QT_TRANSLATE_NOOP("Bindings", "Resize window"),
+    QT_TRANSLATE_NOOP("Bindings", "Next Space"),
+    QT_TRANSLATE_NOOP("Bindings", "Previous Space"),
+    QT_TRANSLATE_NOOP("Bindings", "Overview"),
+    QT_TRANSLATE_NOOP("Bindings", "Search"),
+    QT_TRANSLATE_NOOP("Bindings", "Notification Center"),
+    QT_TRANSLATE_NOOP("Bindings", "Lock screen"),
+    QT_TRANSLATE_NOOP("Bindings", "Force Quit Applications"),
+    QT_TRANSLATE_NOOP("Bindings", "Focus the menu bar"),
+    QT_TRANSLATE_NOOP("Bindings", "Focus the Dock"),
+    QT_TRANSLATE_NOOP("Bindings", "Mute"),
+    QT_TRANSLATE_NOOP("Bindings", "Volume up"),
+    QT_TRANSLATE_NOOP("Bindings", "Volume down"),
+    QT_TRANSLATE_NOOP("Bindings", "Brightness up"),
+    QT_TRANSLATE_NOOP("Bindings", "Brightness down")
+];
 
 function unescapeLua(s) {
     return s.replace(/\\(["\\])/g, "$1");
@@ -24,6 +62,11 @@ function prettyKey(token) {
 
 function prettyKeys(keys) {
     return keys.split("+").map(prettyKey).join(" + ");
+}
+
+// "Super + Shift + Q" with each key name passed through tr (the page's qsTranslate); other keys stay as they are.
+function translateKeys(keys, tr) {
+    return String(keys).split(" + ").map(k => tr(k)).join(" + ");
 }
 
 // Returns [{keys, description}] in file order; duplicate (keys, description) pairs are dropped.

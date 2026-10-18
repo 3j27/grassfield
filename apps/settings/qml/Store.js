@@ -79,7 +79,8 @@ function unsafeReason(text) {
     return Ui.JsonSafety.unsafeReason(text);
 }
 
-// Parse the file text. Empty text is a fresh file ({}); anything that is not a JSON object is an error.
+// Parse the file text. Empty text is a fresh file ({}); anything that is not a JSON object is an error (a translated
+// sentence fragment, shown in the Settings banner).
 function parse(text) {
     if (text === null || text === undefined || String(text).trim() === "")
         return {ok: true, data: {}, fresh: true, error: ""};
@@ -87,13 +88,13 @@ function parse(text) {
     try {
         data = JSON.parse(text);
     } catch (e) {
-        return {ok: false, data: {}, fresh: false, error: String(e.message)};
+        return {ok: false, data: {}, fresh: false, error: qsTranslate("Store", "the file is not valid JSON (%1)").arg(String(e.message).replace(/[.\s]+$/, ""))};
     }
     if (data === null || typeof data !== "object" || Array.isArray(data))
-        return {ok: false, data: {}, fresh: false, error: "the top level is not a JSON object"};
+        return {ok: false, data: {}, fresh: false, error: qsTranslate("Store", "the top level is not a JSON object")};
     const unsafe = unsafeReason(String(text));
     if (unsafe !== "")
-        return {ok: false, data: {}, fresh: false, error: "it cannot be edited safely: " + unsafe};
+        return {ok: false, data: {}, fresh: false, error: qsTranslate("Store", "it cannot be edited safely: %1").arg(unsafe)};
     return {ok: true, data: data, fresh: false, error: ""};
 }
 
@@ -126,7 +127,7 @@ function setValue(text, path, value) {
     if (parsed.fresh)
         data.version = 1;
     else if (data.version !== 1)
-        return {ok: false, text: "", error: "unsupported contract version: " + JSON.stringify(data.version)};
+        return {ok: false, text: "", error: qsTranslate("Store", "unsupported contract version: %1").arg(JSON.stringify(data.version))};
     const parts = path.split(".");
     let node = data;
     for (let i = 0; i < parts.length - 1; i++) {

@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 
 set(KF_MIN_VERSION "6.17") # FileUndoManager::redo()
 find_package(ECM ${KF_MIN_VERSION} NO_MODULE)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Qml Quick DBus)
 # KDE Frameworks are separate CMake packages (there is no umbrella "KF6" package).
 find_package(KF6KIO ${KF_MIN_VERSION} REQUIRED)
 find_package(KF6CoreAddons ${KF_MIN_VERSION} REQUIRED)
@@ -21,9 +21,9 @@ add_executable(grassfield-files
     src/placesmodel.cpp src/placesmodel.h
     src/imageproviders.cpp src/imageproviders.h
     src/filelogic.cpp src/filelogic.h)
-target_include_directories(grassfield-files PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n)
+target_include_directories(grassfield-files PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(grassfield-files PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::DBus
     KF6::KIOCore KF6::KIOGui KF6::KIOWidgets KF6::CoreAddons KF6::Service KF6::Solid)
 target_compile_definitions(grassfield-files PRIVATE
     KF_DISABLE_DEPRECATED_BEFORE_AND_AT=0x061D00

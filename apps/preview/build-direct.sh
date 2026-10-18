@@ -36,9 +36,9 @@ moc=/usr/lib/qt6/moc
 
 # shellcheck disable=SC2046
 g++ "${cxxflags[@]}" "${defs[@]}" \
-  -I"$here/src" -I"$root/ui/i18n" -I"$out" \
-  $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick) \
+  -I"$here/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" \
+  $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick Qt6DBus) \
   "$here/src/main.cpp" "$here/src/previewapp.cpp" "$here/src/previewlogic.cpp" "$out/moc_previewapp.cpp" \
-  $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick) \
+  $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick Qt6DBus) \
   -o "$out/grassfield-preview"
 echo "built $out/grassfield-preview"

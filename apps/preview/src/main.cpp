@@ -7,6 +7,7 @@
 #include <QUrl>
 
 #include "translationloader.h"
+#include "globalmenu.h"
 #include "previewapp.h"
 #include "previewlogic.h"
 
@@ -49,18 +50,25 @@ int main(int argc, char *argv[])
     for (const QString &message : args.errors)
         err << "grassfield-preview: " << message << Qt::endl;
 
+    // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the
+    // windows down still see it (no TypeError on close).
+    PreviewApp backend(args.paths, args.errors, glance);
+
     QQmlApplicationEngine engine;
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
-
-    PreviewApp backend(args.paths, args.errors, glance);
     engine.addImageProvider(QStringLiteral("preview"), new PreviewImageProvider(&backend));
 
     QString qmlDir = qEnvironmentVariable("GRASSFIELD_PREVIEW_QML");
     if (qmlDir.isEmpty())
         qmlDir = QStringLiteral(GRASSFIELD_PREVIEW_QML_DIR);
 
-    engine.setInitialProperties({{QStringLiteral("backend"), QVariant::fromValue(&backend)}});
+    QVariantMap initial{{QStringLiteral("backend"), QVariant::fromValue(&backend)}};
+    // Global menu (T1): the viewer exports its menus only when the registrar is there (globalmenu.h). A Glance is a
+    // panel without menus of its own.
+    if (!glance)
+        initial.insert(QStringLiteral("globalMenu"), grassfield::apps::globalMenuAvailable());
+    engine.setInitialProperties(initial);
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(glance ? QStringLiteral("Glance.qml") : QStringLiteral("Viewer.qml"))));

@@ -9,10 +9,13 @@ Window {
 
     // Set by the launcher (src/main.cpp).
     required property var backend
+    // The registrar is there: the window exports its menus to the global menu bar (GlobalMenu.qml).
+    required property bool globalMenu
+    readonly property alias searchField: search
 
     readonly property var sections: [
         {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion")},
-        {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide hot corners titlebar window")},
+        {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items hot corners titlebar window")},
         {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
         {id: "lock", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
         {id: "keyboard", title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
@@ -26,9 +29,15 @@ Window {
             return root.sections;
         return root.sections.filter(s => s.title.toLowerCase().indexOf(q) >= 0 || s.keywords.toLowerCase().indexOf(q) >= 0);
     }
+    // The reasons are sentence fragments; a trailing full stop (a JavaScript engine message) is dropped so that the
+    // sentences around them never show two.
     readonly property string bannerText: cfg.blocked
-        ? qsTr("grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.").arg(cfg.error)
-        : cfg.writeError !== "" ? qsTr("The change could not be saved: %1").arg(cfg.writeError) : ""
+        ? qsTr("grassfield.json cannot be used: %1. Settings are read-only until the file is fixed; the file has not been changed.").arg(root.fragment(cfg.error))
+        : cfg.writeError !== "" ? qsTr("The change could not be saved: %1.").arg(root.fragment(cfg.writeError)) : ""
+
+    function fragment(reason: string): string {
+        return reason.trim().replace(/[.\s]+$/, "");
+    }
 
     title: qsTr("Grassfield Settings")
     width: Tokens.settingsWindowWidth
@@ -64,6 +73,31 @@ Window {
 
     function select(id: string): void {
         root.selectedId = id;
+    }
+
+    function focusSearch(): void {
+        search.forceActiveFocus();
+        search.selectAll();
+    }
+
+    // Global menu (T1). Its shortcuts duplicate the two below; see GlobalMenu.qml for the single dispatch.
+    Loader {
+        active: root.globalMenu
+        sourceComponent: GlobalMenu {
+            win: root
+        }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+F"
+        onActivated: root.focusSearch()
+        onActivatedAmbiguously: root.focusSearch()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+W"
+        onActivated: root.close()
+        onActivatedAmbiguously: root.close()
     }
 
     function stepSection(direction: int): void {
@@ -120,6 +154,8 @@ Window {
                 }
                 clip: true
                 activeFocusOnTab: true
+                // The selection survives the global menu taking the keyboard (Edit > Cut/Copy act on it).
+                persistentSelection: true
                 color: Appearance.colors.text
                 selectionColor: Appearance.colors.accent
                 selectedTextColor: Appearance.colors.accentText
@@ -266,9 +302,8 @@ Window {
             width: parent.width - 2 * Tokens.spacingLg
             height: visible ? bannerLabel.implicitHeight + 2 * Tokens.spacingMd : 0
             radius: Tokens.radiusMenu
-            color: Appearance.withAlpha(Appearance.colors.danger, Tokens.materialFillOpacity)
-            border.width: 1
-            border.color: Appearance.colors.danger
+            // Destructive colour: the file is refused (or a change failed), nothing is written.
+            color: Appearance.colors.destructive
             Accessible.role: Accessible.AlertMessage
             Accessible.name: root.bannerText
 
@@ -283,7 +318,7 @@ Window {
                 }
                 text: root.bannerText
                 wrapMode: Text.Wrap
-                color: Appearance.colors.text
+                color: Appearance.colors.destructiveText
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }

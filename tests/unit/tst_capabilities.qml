@@ -31,6 +31,15 @@ TestCase {
         compare(CapabilityEvent.parse("null", "gfc/1"), null);
     }
 
+    // Only a broken capabilities event is warned about; the plugin's other events share the raw event name.
+    function test_otherEventTypesAreNotCapabilities() {
+        verify(!CapabilityEvent.claimsCapabilities('{"v":"gfc/1","type":"appmenu","address":"ab","service":"","path":""}', "gfc/1"));
+        verify(!CapabilityEvent.claimsCapabilities('{"v":"gfc/1","type":"overview","state":"open"}', "gfc/1"));
+        verify(CapabilityEvent.claimsCapabilities('{"v":"gfc/1","type":"capabilities","features":"overview"}', "gfc/1"));
+        verify(CapabilityEvent.claimsCapabilities("not json", "gfc/1"));
+        verify(CapabilityEvent.claimsCapabilities("null", "gfc/1"));
+    }
+
     function test_nonStringFeaturesAreDropped() {
         const m = CapabilityEvent.parse(ev([1, null, "overview"]), "gfc/1");
         compare(m.features.length, 1);

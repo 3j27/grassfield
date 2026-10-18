@@ -20,9 +20,9 @@ moc=/usr/lib/qt6/moc
 
 # shellcheck disable=SC2046
 g++ -std=c++17 -O2 -Wall -Wextra -fPIC "${defs[@]}" \
-  -I"$here/src" -I"$root/ui/i18n" -I"$out" \
-  $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick) \
+  -I"$here/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" \
+  $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick Qt6DBus) \
   "$here/src/main.cpp" "$here/src/backend.cpp" "$out/moc_backend.cpp" \
-  $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick) \
+  $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick Qt6DBus) \
   -o "$out/grassfield-settings"
 echo "built $out/grassfield-settings"

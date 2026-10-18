@@ -14,6 +14,9 @@ Item {
     // The loaded viewer (common interface: canZoom, zoomLabel, pageCount, currentPage, zoomIn() ...).
     readonly property var view: loader.item
 
+    // The viewers scroll their content (PDF pages, zoomed images): nothing may be drawn over the toolbar.
+    clip: true
+
     function fileSource(kind: string): string {
         switch (kind) {
         case "image":
