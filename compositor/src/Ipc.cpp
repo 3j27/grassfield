@@ -5,9 +5,11 @@
 #include "Minimize.hpp"
 #include "Overview.hpp"
 #include "Plugin.hpp"
+#include "Stages.hpp"
 #include "core/Minimize.hpp"
 #include "core/Overview.hpp"
 #include "core/Protocol.hpp"
+#include "core/Stages.hpp"
 
 #include <hyprland/src/managers/EventManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
@@ -140,9 +142,14 @@ namespace gf::ipc {
         return state().luaOverviewRegistered && overviewer::ready();
     }
 
+    bool stagesAvailable() {
+        return state().luaStagesRegistered && state().luaConfigRegistered && stager::ready();
+    }
+
     namespace {
         std::string currentCapabilities() {
-            const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready());
+            const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
+                                                stagesAvailable(), stager::enabled());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -232,9 +239,23 @@ namespace gf::ipc {
 
         void configNoThrow(const SLuaString<64>& key, const SLuaString<16>& value) noexcept {
             guarded("hl.plugin.grassfield.config", [&] {
+                if (key.ok && value.ok && key.view() == gf::stages::kConfigStagesEnabled) {
+                    const auto on = gf::stages::parseStagesEnabled(key.view(), value.view());
+                    if (!on || !stagesAvailable()) {
+                        logRequest(Log::WARN, "config: rejected ({} = true|false, and only while Stages is available)", gf::stages::kConfigStagesEnabled);
+                        return;
+                    }
+                    const bool changed = stager::enabled() != *on;
+                    stager::setEnabled(*on);
+                    logRequest(Log::INFO, "config: {} = {}", gf::stages::kConfigStagesEnabled, value.view());
+                    if (changed)
+                        postCapabilities(); // "stages" appears or goes away
+                    return;
+                }
                 const auto action = key.ok && value.ok ? gfc::parseDoubleClickAction(key.view(), value.view()) : std::nullopt;
                 if (!action) {
-                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none is accepted)", gfc::kConfigTitlebarDoubleClick);
+                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none and {} = true|false are accepted)", gfc::kConfigTitlebarDoubleClick,
+                               gf::stages::kConfigStagesEnabled);
                     return;
                 }
                 state().doubleClickAction = *action;
@@ -276,6 +297,26 @@ namespace gf::ipc {
                     return;
                 }
                 overviewer::request(*request);
+            });
+        }
+
+        // Copied out of Lua like the overview payload (fixed-size, trivially destructible), one byte over the limit.
+        using SStagesPayload = SLuaString<gf::stages::kMaxPayloadBytes + 1>;
+
+        void stagesNoThrow(const SStagesPayload& payload) noexcept {
+            guarded("hl.plugin.grassfield.stages", [&] {
+                if (!payload.ok) {
+                    logRequest(Log::WARN, "stages: rejected: the argument must be a JSON string of at most {} bytes", gf::stages::kMaxPayloadBytes);
+                    stager::refuse(gf::stages::Reason::Invalid);
+                    return;
+                }
+                const auto request = gf::stages::parseRequest(payload.view());
+                if (!request) {
+                    logRequest(Log::WARN, "stages: rejected: {}", request.error());
+                    stager::refuse(gf::stages::Reason::Invalid);
+                    return;
+                }
+                stager::request(*request);
             });
         }
 
@@ -354,6 +395,15 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
+        // hl.plugin.grassfield.stages(json): Stages (docs/specs/stages.md "Shell contract"), only while the feature flag is
+        // on. Untrusted: parsed and validated strictly (core/Stages.*), monitors, windows and stages compared with the live
+        // ones, tiles checked against the shell's strip surface.
+        int luaStages(lua_State* L) {
+            const auto payload = readString<gf::stages::kMaxPayloadBytes + 1>(L, 1);
+            stagesNoThrow(payload);
+            return pushNoOpDispatcher(L);
+        }
+
         std::string hyprctlGrassfield(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             // Same JSON for both output formats: the payload is already machine-readable.
             std::string out;
@@ -391,6 +441,7 @@ namespace gf::ipc {
         s.luaConfigRegistered   = addLua(gfc::kLuaConfig, luaConfig);
         s.luaAppmenuRegistered  = appmenuServer::ready() && addLua(gfc::kLuaAppmenu, luaAppmenu); // only with the global
         s.luaOverviewRegistered = overviewer::ready() && addLua(gfc::kLuaOverview, luaOverview);  // only with the render hooks
+        s.luaStagesRegistered   = stager::ready() && addLua(gfc::kLuaStages, luaStages);          // only with its listeners
         bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
@@ -410,6 +461,7 @@ namespace gf::ipc {
         removeLua(s.luaConfigRegistered, gfc::kLuaConfig);
         removeLua(s.luaAppmenuRegistered, gfc::kLuaAppmenu);
         removeLua(s.luaOverviewRegistered, gfc::kLuaOverview);
+        removeLua(s.luaStagesRegistered, gfc::kLuaStages);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();

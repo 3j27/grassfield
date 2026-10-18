@@ -41,6 +41,19 @@ TEST(Protocol, OnlyRegisteredFeaturesAreAdvertised) {
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2"]})");
 }
 
+// Stages (ADR-0013): the toggle needs "stages-available"; "stages" follows the feature flag and never comes alone.
+TEST(Protocol, StagesFeaturesFollowAvailabilityAndTheFlag) {
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, true, false)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","stages-available"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","stages-available","stages"]})");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, true)), R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
+        << "flag on but the hooks failed: nothing advertised";
+    EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","stages"]})");
+    EXPECT_EQ(luaDispatchRequest(kLuaStages), "hl.plugin.grassfield.stages()");
+}
+
 TEST(Protocol, WithdrawnCapabilitiesHaveNoFeature) {
     // Posted at unload: the shell drops every feature (desktop-focus included) and uses its fallbacks.
     EXPECT_EQ(capabilitiesJson({}), R"({"v":"gfc/1","type":"capabilities","features":[]})");
@@ -123,6 +136,9 @@ TEST(Protocol, NamesAreStable) {
     EXPECT_EQ(kFeatureOverview, "overview");
     EXPECT_EQ(kFeatureDesktopFocus, "desktop-focus");
     EXPECT_EQ(kFeatureDesktopFocusV2, "desktop-focus-v2");
+    EXPECT_EQ(kFeatureStagesAvailable, "stages-available");
+    EXPECT_EQ(kFeatureStages, "stages");
+    EXPECT_EQ(kLuaStages, "stages");
     EXPECT_EQ(kConfigTitlebarDoubleClick, "titlebarDoubleClick");
 }
 

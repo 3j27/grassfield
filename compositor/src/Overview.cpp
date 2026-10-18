@@ -3,6 +3,7 @@
 #include "Ipc.hpp"
 #include "Plugin.hpp"
 #include "Surfaces.hpp"
+#include "WindowTransform.hpp"
 #include "core/EventThrottle.hpp"
 #include "core/Minimize.hpp"
 
@@ -17,7 +18,6 @@
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/output/Monitor.hpp>
-#include <hyprland/src/output/MonitorResources.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/transformer/Transformer.hpp>
 
@@ -78,17 +78,8 @@ namespace {
         return s;
     }
 
-    ov::Box toBox(const CBox& b) {
-        return ov::Box{b.x, b.y, b.w, b.h};
-    }
-
-    CBox toCBox(const ov::Box& b) {
-        return CBox{b.x, b.y, b.w, b.h};
-    }
-
-    bool hasArea(const ov::Box& b) {
-        return b.w > 0 && b.h > 0;
-    }
+    using gf::transform::hasArea;
+    using gf::transform::toCBox;
 
     void post(ov::Phase phase, size_t windows, ov::Reason reason = ov::Reason::None) {
         gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::Overview, .id = 0}, ov::eventJson(phase, windows, reason));
@@ -169,33 +160,11 @@ namespace {
         return ov::Box{mon->m_position.x, mon->m_position.y, mon->m_size.x, mon->m_size.y};
     }
 
-    ov::Box surfaceBox(const PHLWINDOW& w) {
-        return toBox(w->getWindowMainSurfaceBox());
-    }
-
-    // What Hyprland adds to a window's position when it renders it (workspace slide, floating offset).
-    Vector2D renderOffset(const PHLWINDOW& w) {
-        Vector2D off = w->m_floatingOffset;
-        if (!w->m_pinned && w->m_workspace && w->m_workspace->m_renderOffset)
-            off = off + w->m_workspace->m_renderOffset->value();
-        return off;
-    }
-
-    ov::Box translated(const ov::Box& b, const Vector2D& by) {
-        return ov::Box{b.x + by.x, b.y + by.y, b.w, b.h};
-    }
-
-    // The window's surface box with every decoration extent (titlebar, border, shadow), as drawn at its place.
-    ov::Box fullBox(const PHLWINDOW& w) {
-        CBox box = w->getWindowMainSurfaceBox();
-        box.addExtents(w->getWindowExtentsUnified(Desktop::View::FULL_EXTENTS | Desktop::View::RESERVED_EXTENTS));
-        return toBox(box.expand(2.0));
-    }
+    using gf::transform::surfaceBox;
 
     // Where the window and its decorations are drawn now (layout).
     ov::Box visualBox(const SEntry& e, const PHLWINDOW& w) {
-        const ov::Box surface = surfaceBox(w);
-        return translated(gf::minimize::mapBox(fullBox(w), surface, ov::drawBox(surface, e.rect)), renderOffset(w));
+        return gf::transform::visualBox(w, e.rect);
     }
 
     // Damages the previous and the current visual box (and so schedules frames on the monitors they touch).
@@ -412,30 +381,10 @@ namespace {
         post(s.phase, s.entries.size(), ov::Reason::Fullscreen);
     }
 
-    // Hyprland leaves the render damage at the window's own box once it has rendered the window into the work buffer
-    // (CRenderPass::render stores its damage). Clears and draws here must cover the whole buffer: a work buffer keeps
-    // the content of its previous use, and the composite samples all of it. The damage is restored afterwards.
-    class CWholeBufferDamage {
-      public:
-        explicit CWholeBufferDamage(const PHLMONITOR& mon) : m_saved(g_pHyprRenderer->m_renderData.damage.copy()) {
-            g_pHyprRenderer->m_renderData.damage = CRegion{0, 0, mon->m_transformedSize.x, mon->m_transformedSize.y};
-        }
-        ~CWholeBufferDamage() {
-            g_pHyprRenderer->m_renderData.damage = m_saved;
-        }
-        CWholeBufferDamage(const CWholeBufferDamage&)            = delete;
-        CWholeBufferDamage& operator=(const CWholeBufferDamage&) = delete;
-        CWholeBufferDamage(CWholeBufferDamage&&)                 = delete;
-        CWholeBufferDamage& operator=(CWholeBufferDamage&&)      = delete;
-
-      private:
-        CRegion m_saved;
-    };
-
     SP<Render::IFramebuffer> drawTransformed(const COverviewTransformer* self, const SP<Render::IFramebuffer>& in) {
         // Only the monitor frame: snapshots (close and minimize animations) and window captures (toplevel export,
         // RPT_EXPORT) show the window as it is.
-        if (!in || !g_pHyprRenderer || g_pHyprRenderer->m_bRenderingSnapshot || g_pHyprRenderer->m_renderData.projectionType != Render::RPT_MONITOR)
+        if (!in || !gf::transform::monitorFrame())
             return in;
         const auto& all = st().entries;
         const auto  it  = std::ranges::find_if(all, [self](const SEntry& e) { return e.transformer == self; });
@@ -445,50 +394,10 @@ namespace {
         const auto mon = g_pHyprRenderer->m_renderData.pMonitor.lock();
         if (!w || !mon)
             return in;
-        if (mon != it->monitor.lock()) {
-            // A window that spans monitors is shown only in the overview of its own monitor: here it is drawn as
-            // nothing (the work buffer `in` is the bound framebuffer).
-            const CWholeBufferDamage whole{mon};
-            g_pHyprRenderer->draw(CClearPassElement::SClearData{CHyprColor(0, 0, 0, 0)});
-            return in;
-        }
-        const auto tex = in->getTexture();
-        if (!tex)
-            return in;
-        // resources() is a weak reference to a unique pointer: it must not be lock()ed (hyprutils aborts), only
-        // checked and dereferenced, as Hyprland's own drawTransformedWindow does.
-        const auto resources = mon->resources();
-        auto       out       = resources && !resources.expired() ? resources->getUnusedWorkBuffer() : nullptr;
-        if (!out) {
-            if (!st().warnedNoBuffer)
-                gf::log(Log::WARN, "overview: no free work buffer; window {:x} drawn at its place this frame", it->address);
-            st().warnedNoBuffer = true;
-            return in;
-        }
-
-        // The whole buffer is drawn scaled and moved so that the window's surface box lands on its layout box (same
-        // math as the minimize snapshot, on the same monitor). Decorations and shadow scale with it.
-        const ov::Box surface = surfaceBox(w);
-        const auto    off     = renderOffset(w);
-        const ov::Box src     = translated(surface, off);
-        const ov::Box dst     = translated(ov::drawBox(surface, it->rect), off);
-        const gf::minimize::SSnapshotGeometry geometry{.visible      = src,
-                                                       .monitorX     = mon->m_position.x,
-                                                       .monitorY     = mon->m_position.y,
-                                                       .monitorScale = mon->m_scale,
-                                                       .texW         = mon->m_transformedSize.x,
-                                                       .texH         = mon->m_transformedSize.y};
-        const ov::Box texBox = gf::minimize::textureBox(geometry, dst, mon->m_position.x, mon->m_position.y, mon->m_scale);
-
-        const CWholeBufferDamage whole{mon};
-        const auto               guard = g_pHyprRenderer->bindTempFB(out);
-        g_pHyprRenderer->draw(CClearPassElement::SClearData{CHyprColor(0, 0, 0, 0)});
-        CTexPassElement::SRenderData data;
-        data.tex = tex;
-        data.box = toCBox(texBox);
-        data.a   = 1.F;
-        g_pHyprRenderer->draw(data, CRegion{0, 0, mon->m_transformedSize.x, mon->m_transformedSize.y});
-        return out;
+        // A window that spans monitors is shown only in the overview of its own monitor: here it is drawn as nothing.
+        if (mon != it->monitor.lock())
+            return gf::transform::drawNothing(in);
+        return gf::transform::drawFitted(w, it->rect, in, st().warnedNoBuffer, it->address);
     }
 
     SP<Render::IFramebuffer> COverviewTransformer::transform(SP<Render::IFramebuffer> in) {
@@ -603,6 +512,12 @@ namespace gf::overviewer {
 
     bool ready() {
         return st().ready;
+    }
+
+    bool transforms(const PHLWINDOW& window) {
+        const auto& s = st();
+        return window && s.phase != ov::Phase::Closed &&
+            std::ranges::any_of(s.entries, [&window](const SEntry& e) { return e.transformer && e.window.lock() == window; });
     }
 
     void refuse(ov::Reason reason) {
