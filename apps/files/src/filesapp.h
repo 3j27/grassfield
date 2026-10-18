@@ -40,6 +40,8 @@ class FilesApp : public QObject
     Q_PROPERTY(bool sortDescending READ sortDescending WRITE setSortDescending NOTIFY prefsChanged)
     Q_PROPERTY(bool foldersFirst READ foldersFirst WRITE setFoldersFirst NOTIFY prefsChanged)
     Q_PROPERTY(bool showHidden READ showHidden WRITE setShowHidden NOTIFY prefsChanged)
+    // The gallery view shows its info panel (name, kind, dates, tags of the shown item).
+    Q_PROPERTY(bool galleryInfo READ galleryInfo WRITE setGalleryInfo NOTIFY prefsChanged)
 
 public:
     explicit FilesApp(const QList<QUrl> &initialUrls, QObject *parent = nullptr);
@@ -70,6 +72,8 @@ public:
     void setFoldersFirst(bool on);
     bool showHidden() const;
     void setShowHidden(bool on);
+    bool galleryInfo() const;
+    void setGalleryInfo(bool on);
 
     // A new folder listing owned by `parent` (a QML item: the listing dies with its view).
     Q_INVOKABLE QObject *createFolderModel(QObject *parent);

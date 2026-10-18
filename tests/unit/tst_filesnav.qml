@@ -85,4 +85,61 @@ TestCase {
         compare(Nav.commonPrefix(["file:///h"], ["file:///h", "file:///h/x"]), 1);
         compare(Nav.commonPrefix([], ["file:///"]), 0);
     }
+
+    // Gallery strip: one row, Left/Right step, Home/End jump, pages of the visible thumbnails, Up/Down stay.
+    function test_stripMoves() {
+        compare(Nav.stripMove(3, "left", 10, 4), 2);
+        compare(Nav.stripMove(0, "left", 10, 4), 0);
+        compare(Nav.stripMove(3, "right", 10, 4), 4);
+        compare(Nav.stripMove(9, "right", 10, 4), 9);
+        compare(Nav.stripMove(3, "up", 10, 4), 3);
+        compare(Nav.stripMove(3, "down", 10, 4), 3);
+        compare(Nav.stripMove(6, "home", 10, 4), 0);
+        compare(Nav.stripMove(2, "end", 10, 4), 9);
+        compare(Nav.stripMove(2, "pagedown", 10, 4), 6);
+        compare(Nav.stripMove(8, "pagedown", 10, 4), 9);
+        compare(Nav.stripMove(5, "pageup", 10, 4), 1);
+        compare(Nav.stripMove(2, "pageup", 10, 4), 0);
+        // A page is never empty.
+        compare(Nav.stripMove(2, "pagedown", 10, 0), 3);
+    }
+
+    function test_stripWithoutCurrentOrItems() {
+        compare(Nav.stripMove(-1, "right", 10, 4), 0);
+        compare(Nav.stripMove(-1, "left", 10, 4), 0);
+        compare(Nav.stripMove(-1, "end", 10, 4), 9);
+        compare(Nav.stripMove(12, "left", 10, 4), 0);
+        compare(Nav.stripMove(-1, "right", 0, 4), -1);
+        compare(Nav.stripMove(3, "right", 0, 4), -1);
+    }
+
+    // View modes: four modes in toolbar/shortcut order, unknown saved values fall back to icons, Ctrl+N picks the
+    // Nth mode, tag results in the column mode draw as a list.
+    function test_viewModeSwitching() {
+        compare(Nav.viewModes, ["icons", "list", "columns", "gallery"]);
+        compare(Nav.normalizeViewMode("gallery"), "gallery");
+        compare(Nav.normalizeViewMode("columns"), "columns");
+        compare(Nav.normalizeViewMode("coverflow"), "icons");
+        compare(Nav.normalizeViewMode(""), "icons");
+        compare(Nav.normalizeViewMode(undefined), "icons");
+        compare(Nav.viewModeForShortcut(1), "icons");
+        compare(Nav.viewModeForShortcut(2), "list");
+        compare(Nav.viewModeForShortcut(3), "columns");
+        compare(Nav.viewModeForShortcut(4), "gallery");
+        compare(Nav.viewModeForShortcut(0), "");
+        compare(Nav.viewModeForShortcut(5), "");
+        compare(Nav.effectiveView("gallery", false), "gallery");
+        compare(Nav.effectiveView("columns", false), "columns");
+        compare(Nav.effectiveView("columns", true), "list");
+        compare(Nav.effectiveView("gallery", true), "gallery");
+        compare(Nav.effectiveView("bogus", true), "icons");
+    }
+
+    // The gallery always shows an item: the current one, else the first.
+    function test_galleryInitialRow() {
+        compare(Nav.galleryInitialRow(-1, 5), 0);
+        compare(Nav.galleryInitialRow(3, 5), 3);
+        compare(Nav.galleryInitialRow(7, 5), 0);
+        compare(Nav.galleryInitialRow(-1, 0), -1);
+    }
 }

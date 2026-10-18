@@ -187,7 +187,7 @@ int FilesApp::clipboardCount() const
 QString FilesApp::viewMode() const
 {
     const QString mode = m_settings.value(QStringLiteral("view/mode"), QStringLiteral("icons")).toString();
-    return mode == QLatin1String("list") || mode == QLatin1String("columns") ? mode : QStringLiteral("icons");
+    return mode == QLatin1String("list") || mode == QLatin1String("columns") || mode == QLatin1String("gallery") ? mode : QStringLiteral("icons");
 }
 
 void FilesApp::setViewMode(const QString &mode)
@@ -247,6 +247,19 @@ void FilesApp::setShowHidden(bool on)
     if (on == showHidden())
         return;
     m_settings.setValue(QStringLiteral("view/showHidden"), on);
+    emit prefsChanged();
+}
+
+bool FilesApp::galleryInfo() const
+{
+    return m_settings.value(QStringLiteral("view/galleryInfo"), true).toBool();
+}
+
+void FilesApp::setGalleryInfo(bool on)
+{
+    if (on == galleryInfo())
+        return;
+    m_settings.setValue(QStringLiteral("view/galleryInfo"), on);
     emit prefsChanged();
 }
 

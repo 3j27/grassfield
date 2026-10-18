@@ -4,7 +4,7 @@ import Grassfield.Ui
 import "Nav.js" as Nav
 
 // One tab of a browser window: location, history, view mode, search and every action on the selection.
-// The views (IconView, FileList, ColumnView) only draw and forward input here.
+// The views (IconView, FileList, ColumnView, GalleryView) only draw and forward input here.
 FocusScope {
     id: root
 
@@ -16,7 +16,7 @@ FocusScope {
     property url url
     property var history: []
     property int historyIndex: -1
-    property string viewMode: root.app.viewMode
+    property string viewMode: Nav.normalizeViewMode(root.app.viewMode)
     // FolderModel listing `url` (icon and list views; the column view keeps one per column).
     property var folder: null
     property string searchText: ""
@@ -51,6 +51,7 @@ FocusScope {
         m.foldersFirst = root.app.foldersFirst;
         m.showHidden = root.app.showHidden;
         m.previewSize = Tokens.filesIconSize * Tokens.filesThumbnailOversample;
+        m.largePreviewSize = Tokens.filesGalleryPreviewSize * Tokens.filesThumbnailOversample;
     }
 
     Connections {
@@ -59,7 +60,7 @@ FocusScope {
             root.applyPrefs(root.folder);
             if (root.view && root.view.applyPrefs)
                 root.view.applyPrefs();
-            root.viewMode = root.app.viewMode;
+            root.viewMode = Nav.normalizeViewMode(root.app.viewMode);
         }
     }
 
@@ -129,9 +130,23 @@ FocusScope {
     }
 
     function setViewMode(mode: string): void {
-        root.app.viewMode = mode;
-        root.viewMode = mode;
+        const m = Nav.normalizeViewMode(mode);
+        root.app.viewMode = m;
+        root.viewMode = m;
         Qt.callLater(root.focusView);
+    }
+
+    // Ctrl+1 .. Ctrl+4.
+    function setViewModeByNumber(number: int): void {
+        const m = Nav.viewModeForShortcut(number);
+        if (m !== "")
+            root.setViewMode(m);
+    }
+
+    // The gallery's info panel (Ctrl+Shift+P), only meaningful in the gallery view.
+    function toggleGalleryInfo(): void {
+        if (root.viewMode === "gallery")
+            root.app.galleryInfo = !root.app.galleryInfo;
     }
 
     function setSearch(text: string): void {
@@ -471,6 +486,8 @@ FocusScope {
         items.push(root.viewSubmenu());
         items.push(root.sortSubmenu());
         items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+H"), checked: root.app.showHidden});
+        if (root.viewMode === "gallery")
+            items.push({id: "galleryInfo", text: qsTr("Show Info Panel"), shortcut: qsTr("Ctrl+Shift+P"), checked: root.app.galleryInfo});
         return items;
     }
 
@@ -478,7 +495,8 @@ FocusScope {
         return {id: "viewAs", text: qsTr("View As"), submenu: [
             {id: "view:icons", text: qsTr("Icons"), shortcut: qsTr("Ctrl+1"), checked: root.viewMode === "icons"},
             {id: "view:list", text: qsTr("List"), shortcut: qsTr("Ctrl+2"), checked: root.viewMode === "list"},
-            {id: "view:columns", text: qsTr("Columns"), shortcut: qsTr("Ctrl+3"), checked: root.viewMode === "columns"}
+            {id: "view:columns", text: qsTr("Columns"), shortcut: qsTr("Ctrl+3"), checked: root.viewMode === "columns"},
+            {id: "view:gallery", text: qsTr("Gallery"), shortcut: qsTr("Ctrl+4"), checked: root.viewMode === "gallery"}
         ]};
     }
 
@@ -563,6 +581,9 @@ FocusScope {
         case "hidden":
             root.app.showHidden = !root.app.showHidden;
             break;
+        case "galleryInfo":
+            root.toggleGalleryInfo();
+            break;
         case "sortDescending":
             root.app.sortDescending = !root.app.sortDescending;
             break;
@@ -578,7 +599,8 @@ FocusScope {
         id: viewLoader
         anchors.fill: parent
         focus: true
-        sourceComponent: root.viewMode === "list" ? listComponent : root.viewMode === "columns" ? columnComponent : iconComponent
+        readonly property string kind: Nav.effectiveView(root.viewMode, false)
+        sourceComponent: viewLoader.kind === "list" ? listComponent : viewLoader.kind === "columns" ? columnComponent : viewLoader.kind === "gallery" ? galleryComponent : iconComponent
         onLoaded: Qt.callLater(root.focusView)
     }
 
@@ -602,6 +624,14 @@ FocusScope {
         id: columnComponent
         ColumnView {
             tab: root
+        }
+    }
+
+    Component {
+        id: galleryComponent
+        GalleryView {
+            tab: root
+            model: root.folder
         }
     }
 }

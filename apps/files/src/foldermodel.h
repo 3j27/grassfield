@@ -47,6 +47,8 @@ class FolderModel : public QSortFilterProxyModel
     Q_PROPERTY(bool writable READ writable NOTIFY rootChanged)
     Q_PROPERTY(QString title READ title NOTIFY rootChanged)
     Q_PROPERTY(int previewSize READ previewSize WRITE setPreviewSize NOTIFY previewSizeChanged)
+    // Edge of the large thumbnails (gallery view preview, role largeThumbnail), in pixels.
+    Q_PROPERTY(int largePreviewSize READ largePreviewSize WRITE setLargePreviewSize NOTIFY previewSizeChanged)
 
 public:
     enum Roles {
@@ -64,6 +66,7 @@ public:
         HiddenRole,
         CanPreviewRole,
         EmblemRole,
+        LargeThumbnailRole,
     };
     Q_ENUM(Roles)
 
@@ -91,8 +94,10 @@ public:
     bool isTrash() const { return m_url.scheme() == QLatin1String("trash"); }
     bool writable() const;
     QString title() const;
-    int previewSize() const { return m_previewSize; }
+    int previewSize() const { return m_small.size; }
     void setPreviewSize(int size);
+    int largePreviewSize() const { return m_large.size; }
+    void setLargePreviewSize(int size);
 
     QHash<int, QByteArray> roleNames() const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -115,10 +120,11 @@ public:
     Q_INVOKABLE int findPrefix(const QString &prefix, int from) const;
     // Get Info data of a row, or of the listed folder itself (row -1).
     Q_INVOKABLE QVariantMap info(int row) const;
-    // Ask for a thumbnail (icon view delegates call this when created); batched into one PreviewJob.
-    Q_INVOKABLE void requestPreview(int row);
+    // Ask for a thumbnail (delegates call this when created); batched into one PreviewJob. `large`: the gallery
+    // preview size (role largeThumbnail) instead of the icon size (role thumbnail).
+    Q_INVOKABLE void requestPreview(int row, bool large = false);
     // Delegates call this when destroyed: a queued request that is not started yet is dropped.
-    Q_INVOKABLE void cancelPreview(const QUrl &url);
+    Q_INVOKABLE void cancelPreview(const QUrl &url, bool large = false);
     Q_INVOKABLE void reload();
     Q_INVOKABLE void refreshFreeSpace();
     // Select `url` (and ask the view to start renaming it) once it appears in the listing. Successive calls
@@ -151,15 +157,37 @@ protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
 
 private:
+    // One thumbnail size: the requests of the delegates (newest first), the running job and the thumbnails kept
+    // (ThumbnailStore keys, least recently loaded evicted beyond the LRU capacity). The icon size and the gallery
+    // preview size share this pipeline.
+    struct ThumbChannel {
+        ThumbChannel(int role, int size, int capacity)
+            : role(role)
+            , size(size)
+            , lru(capacity)
+        {
+        }
+        const int role;
+        int size;
+        QHash<QUrl, QString> thumbs;
+        PreviewQueue queue;
+        ThumbnailLru lru;
+        QTimer timer;
+        QPointer<KIO::PreviewJob> job;
+    };
+
     void applySelection(const QSet<QUrl> &next);
     void setCurrent(const QUrl &url);
     void setError(const QString &error);
     void checkExpected();
     void dropExpiredExpectations();
     void onItemsDeleted(const KFileItemList &items);
-    void startPreviews();
-    void clearPreviews();
-    QString thumbnailFor(const QUrl &url) const;
+    void startPreviews(ThumbChannel &channel);
+    void clearPreviews(ThumbChannel &channel);
+    void clearAllPreviews();
+    // The file changed or is gone: its thumbnail is dropped; `again` asks for a fresh one when it was asked for.
+    void forgetThumbnail(ThumbChannel &channel, const QUrl &url, bool again);
+    QString thumbnailFor(const ThumbChannel &channel, const QUrl &url) const;
     bool previewSupported(const KFileItem &item) const;
 
     KDirLister *m_lister = nullptr;
@@ -181,15 +209,12 @@ private:
     bool m_expectFresh = true;
     bool m_checkingExpected = false;
     QUrl m_renameUrl;
-    int m_previewSize = 128;
 
-    // Thumbnails: url -> key in ThumbnailStore; urls already asked for (done or failed).
-    QHash<QUrl, QString> m_thumbs;
-    PreviewQueue m_previews;
-    ThumbnailLru m_thumbLru{512};
-    QTimer m_previewTimer;
+    // Thumbnails at the icon size (at most 512 kept, ~64 KB each at 128 px) and at the gallery preview size (a few,
+    // up to 4 MB each at 1024 px: the shown item and its neighbours).
+    ThumbChannel m_small{ThumbnailRole, 128, 512};
+    ThumbChannel m_large{LargeThumbnailRole, 1024, 8};
     QTimer m_expectTimer;
     QTimer m_structureTimer;
-    QPointer<KIO::PreviewJob> m_previewJob;
     QPointer<KJob> m_freeSpaceJob;
 };

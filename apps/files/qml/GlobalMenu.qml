@@ -207,6 +207,20 @@ Platform.MenuBar {
             on: bar.tab !== null && bar.tab.viewMode === "columns"
             onChosen: bar.tab.setViewMode("columns")
         }
+        MenuCheckItem {
+            text: qsTr("as Gallery")
+            shortcut: "Ctrl+4"
+            on: bar.tab !== null && bar.tab.viewMode === "gallery"
+            onChosen: bar.tab.setViewMode("gallery")
+        }
+        Platform.MenuSeparator {}
+        MenuCheckItem {
+            text: qsTr("Show Info Panel")
+            shortcut: "Ctrl+Shift+P"
+            enabled: bar.tab !== null && bar.tab.viewMode === "gallery"
+            on: bar.app.galleryInfo
+            onChosen: bar.tab.toggleGalleryInfo()
+        }
         Platform.MenuSeparator {}
         Platform.Menu {
             title: qsTr("Sort By")

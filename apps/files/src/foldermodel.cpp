@@ -154,15 +154,8 @@ FolderModel::FolderModel(QObject *parent)
         // Changed files get a fresh thumbnail.
         for (const auto &pair : items) {
             const QUrl url = pair.second.url();
-            const QString key = m_thumbs.take(url);
-            if (!key.isEmpty())
-                ThumbnailStore::remove(key);
-            m_thumbLru.remove(url);
-            if (m_previews.asked(url)) {
-                m_previews.cancel(url);
-                m_previews.forget(url);
-                requestPreview(rowForUrl(url));
-            }
+            forgetThumbnail(m_small, url, true);
+            forgetThumbnail(m_large, url, true);
         }
     });
     connect(m_lister, &KCoreDirLister::jobError, this, [this](KIO::Job *job) {
@@ -205,14 +198,16 @@ FolderModel::FolderModel(QObject *parent)
     // A renamed item is refreshed in place (no insertion) and may move when re-sorted.
     connect(this, &QAbstractItemModel::dataChanged, this, queueCheck);
 
-    m_previewTimer.setSingleShot(true);
-    m_previewTimer.setInterval(kPreviewBatchDelayMs);
-    connect(&m_previewTimer, &QTimer::timeout, this, &FolderModel::startPreviews);
+    for (ThumbChannel *channel : {&m_small, &m_large}) {
+        channel->timer.setSingleShot(true);
+        channel->timer.setInterval(kPreviewBatchDelayMs);
+        connect(&channel->timer, &QTimer::timeout, this, [this, channel] { startPreviews(*channel); });
+    }
 }
 
 FolderModel::~FolderModel()
 {
-    clearPreviews();
+    clearAllPreviews();
 }
 
 void FolderModel::setUrl(const QUrl &url)
@@ -226,7 +221,7 @@ void FolderModel::setUrl(const QUrl &url)
     m_anchor.clear();
     m_expected.clear();
     m_renameUrl.clear();
-    clearPreviews();
+    clearAllPreviews();
     setError(QString());
     m_freeSpace = -1;
     emit freeSpaceChanged();
@@ -313,13 +308,26 @@ QString FolderModel::title() const
 void FolderModel::setPreviewSize(int size)
 {
     size = qBound(32, size, 512);
-    if (size == m_previewSize)
+    if (size == m_small.size)
         return;
-    m_previewSize = size;
-    clearPreviews();
+    m_small.size = size;
+    clearPreviews(m_small);
     emit previewSizeChanged();
     if (rowCount() > 0)
         emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {ThumbnailRole});
+}
+
+void FolderModel::setLargePreviewSize(int size)
+{
+    // 1024 px is the largest freedesktop thumbnail cache size (xx-large).
+    size = qBound(128, size, 1024);
+    if (size == m_large.size)
+        return;
+    m_large.size = size;
+    clearPreviews(m_large);
+    emit previewSizeChanged();
+    if (rowCount() > 0)
+        emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {LargeThumbnailRole});
 }
 
 QHash<int, QByteArray> FolderModel::roleNames() const
@@ -339,6 +347,7 @@ QHash<int, QByteArray> FolderModel::roleNames() const
         {HiddenRole, "hidden"},
         {CanPreviewRole, "canPreview"},
         {EmblemRole, "emblem"},
+        {LargeThumbnailRole, "largeThumbnail"},
     };
 }
 
@@ -373,7 +382,9 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
     case KindRole:
         return item.mimeComment();
     case ThumbnailRole:
-        return thumbnailFor(item.url());
+        return thumbnailFor(m_small, item.url());
+    case LargeThumbnailRole:
+        return thumbnailFor(m_large, item.url());
     case SelectedRole:
         return m_selected.contains(item.url());
     case HiddenRole:
@@ -583,7 +594,7 @@ QVariantMap FolderModel::info(int row) const
     m[QStringLiteral("name")] = row < 0 ? title() : item.text();
     m[QStringLiteral("url")] = item.url();
     m[QStringLiteral("iconName")] = resolvedIconName(item);
-    m[QStringLiteral("thumbnail")] = thumbnailFor(item.url());
+    m[QStringLiteral("thumbnail")] = thumbnailFor(m_small, item.url());
     m[QStringLiteral("kind")] = item.mimeComment();
     m[QStringLiteral("mimeType")] = item.mimetype();
     m[QStringLiteral("isDir")] = item.isDir();
@@ -604,89 +615,109 @@ QVariantMap FolderModel::info(int row) const
     return m;
 }
 
-void FolderModel::requestPreview(int row)
+void FolderModel::requestPreview(int row, bool large)
 {
     const KFileItem item = itemAt(row);
     if (item.isNull() || !previewSupported(item))
         return;
-    if (m_previews.request(item.url()) && !m_previewTimer.isActive())
-        m_previewTimer.start();
+    ThumbChannel &c = large ? m_large : m_small;
+    if (c.queue.request(item.url()) && !c.timer.isActive())
+        c.timer.start();
 }
 
-void FolderModel::cancelPreview(const QUrl &url)
+void FolderModel::cancelPreview(const QUrl &url, bool large)
 {
-    m_previews.cancel(url);
+    (large ? m_large : m_small).queue.cancel(url);
 }
 
-void FolderModel::startPreviews()
+void FolderModel::startPreviews(ThumbChannel &c)
 {
-    if (m_previewJob || m_previews.isEmpty())
+    if (c.job || c.queue.isEmpty())
         return;
     KFileItemList batch;
-    const QList<QUrl> urls = m_previews.takeBatch(kPreviewBatchSize);
+    const QList<QUrl> urls = c.queue.takeBatch(kPreviewBatchSize);
     for (const QUrl &url : urls) {
         const KFileItem item = itemAt(rowForUrl(url));
         if (item.isNull())
-            m_previews.forget(url);
+            c.queue.forget(url);
         else
             batch.append(item);
     }
+    ThumbChannel *channel = &c;
     if (batch.isEmpty()) {
-        if (!m_previews.isEmpty())
-            QTimer::singleShot(0, this, &FolderModel::startPreviews);
+        if (!c.queue.isEmpty())
+            QTimer::singleShot(0, this, [this, channel] { startPreviews(*channel); });
         return;
     }
-    auto *job = KIO::filePreview(batch, QSize(m_previewSize, m_previewSize), &previewPlugins());
-    m_previewJob = job;
-    connect(job, &KIO::PreviewJob::generated, this, [this](const KFileItem &item, const QImage &image) {
+    auto *job = KIO::filePreview(batch, QSize(c.size, c.size), &previewPlugins());
+    c.job = job;
+    connect(job, &KIO::PreviewJob::generated, this, [this, channel](const KFileItem &item, const QImage &image) {
         if (image.isNull())
             return;
+        ThumbChannel &c = *channel;
         const QUrl url = item.url();
-        qCDebug(lcFiles) << "thumbnail" << item.name() << "stored" << m_thumbs.size() + 1;
-        const QString old = m_thumbs.value(url);
+        qCDebug(lcFiles) << "thumbnail" << item.name() << c.size << "px, stored" << c.thumbs.size() + 1;
+        const QString old = c.thumbs.value(url);
         if (!old.isEmpty())
             ThumbnailStore::remove(old);
-        m_thumbs.insert(url, ThumbnailStore::insert(image));
+        c.thumbs.insert(url, ThumbnailStore::insert(image));
         const int r = rowForUrl(url);
         if (r >= 0)
-            emit dataChanged(index(r, 0), index(r, 0), {ThumbnailRole});
+            emit dataChanged(index(r, 0), index(r, 0), {c.role});
         // Least recently loaded thumbnails go first; they may be asked for again when shown.
-        const QList<QUrl> evicted = m_thumbLru.add(url);
-        for (const QUrl &gone : evicted) {
-            const QString key = m_thumbs.take(gone);
-            if (!key.isEmpty())
-                ThumbnailStore::remove(key);
-            m_previews.forget(gone);
-            const int gr = rowForUrl(gone);
-            if (gr >= 0)
-                emit dataChanged(index(gr, 0), index(gr, 0), {ThumbnailRole});
-        }
+        const QList<QUrl> evicted = c.lru.add(url);
+        for (const QUrl &gone : evicted)
+            forgetThumbnail(c, gone, false);
     });
-    connect(job, &KJob::result, this, [this] {
+    connect(job, &KJob::result, this, [this, channel] {
         // The finished job is only deleteLater()'d: release the slot now so the next batch can start.
-        m_previewJob.clear();
-        if (!m_previews.isEmpty())
-            QTimer::singleShot(0, this, &FolderModel::startPreviews);
+        channel->job.clear();
+        if (!channel->queue.isEmpty())
+            QTimer::singleShot(0, this, [this, channel] { startPreviews(*channel); });
     });
 }
 
-void FolderModel::clearPreviews()
+void FolderModel::forgetThumbnail(ThumbChannel &c, const QUrl &url, bool again)
 {
-    m_previewTimer.stop();
-    if (m_previewJob) {
-        m_previewJob->kill(KJob::Quietly);
-        m_previewJob.clear();
-    }
-    for (const QString &key : std::as_const(m_thumbs))
+    const QString key = c.thumbs.take(url);
+    if (!key.isEmpty())
         ThumbnailStore::remove(key);
-    m_thumbs.clear();
-    m_thumbLru.clear();
-    m_previews.clear();
+    c.lru.remove(url);
+    const bool wasAsked = c.queue.asked(url);
+    c.queue.cancel(url);
+    c.queue.forget(url);
+    const int r = rowForUrl(url);
+    if (again && wasAsked && r >= 0) {
+        // The delegate keeps showing the old picture until the new one replaces it (no flicker).
+        requestPreview(r, &c == &m_large);
+    } else if (r >= 0 && !key.isEmpty()) {
+        emit dataChanged(index(r, 0), index(r, 0), {c.role});
+    }
 }
 
-QString FolderModel::thumbnailFor(const QUrl &url) const
+void FolderModel::clearPreviews(ThumbChannel &c)
 {
-    const QString key = m_thumbs.value(url);
+    c.timer.stop();
+    if (c.job) {
+        c.job->kill(KJob::Quietly);
+        c.job.clear();
+    }
+    for (const QString &key : std::as_const(c.thumbs))
+        ThumbnailStore::remove(key);
+    c.thumbs.clear();
+    c.lru.clear();
+    c.queue.clear();
+}
+
+void FolderModel::clearAllPreviews()
+{
+    clearPreviews(m_small);
+    clearPreviews(m_large);
+}
+
+QString FolderModel::thumbnailFor(const ThumbChannel &c, const QUrl &url) const
+{
+    const QString key = c.thumbs.value(url);
     return key.isEmpty() ? QString() : QStringLiteral("image://thumbnail/") + key;
 }
 
@@ -711,7 +742,7 @@ bool FolderModel::previewSupported(const KFileItem &item) const
 
 void FolderModel::reload()
 {
-    clearPreviews();
+    clearAllPreviews();
     m_dirModel->openUrl(m_url, KDirModel::Reload);
 }
 
@@ -801,12 +832,8 @@ void FolderModel::onItemsDeleted(const KFileItemList &items)
         selectionTouched |= m_selected.remove(url);
         if (url == m_current)
             m_current.clear();
-        const QString key = m_thumbs.take(url);
-        if (!key.isEmpty())
-            ThumbnailStore::remove(key);
-        m_thumbLru.remove(url);
-        m_previews.cancel(url);
-        m_previews.forget(url);
+        forgetThumbnail(m_small, url, false);
+        forgetThumbnail(m_large, url, false);
     }
     if (selectionTouched)
         emit selectionChanged();

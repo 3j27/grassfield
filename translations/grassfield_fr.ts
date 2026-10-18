@@ -877,6 +877,14 @@
         <translation>Ctrl+H</translation>
     </message>
     <message>
+        <source>Show Info Panel</source>
+        <translation>Afficher le panneau d’informations</translation>
+    </message>
+    <message>
+        <source>Ctrl+Shift+P</source>
+        <translation>Ctrl+Maj+P</translation>
+    </message>
+    <message>
         <source>View As</source>
         <translation>Présentation</translation>
     </message>
@@ -903,6 +911,14 @@
     <message>
         <source>Ctrl+3</source>
         <translation>Ctrl+3</translation>
+    </message>
+    <message>
+        <source>Gallery</source>
+        <translation>Galerie</translation>
+    </message>
+    <message>
+        <source>Ctrl+4</source>
+        <translation>Ctrl+4</translation>
     </message>
     <message>
         <source>Sort By</source>
@@ -966,6 +982,10 @@
     <message>
         <source>as Columns</source>
         <translation>en colonnes</translation>
+    </message>
+    <message>
+        <source>as Gallery</source>
+        <translation>en galerie</translation>
     </message>
     <message>
         <source>Action</source>
@@ -1631,6 +1651,49 @@
     </message>
 </context>
 <context>
+    <name>GalleryView</name>
+    <message>
+        <source>Gallery</source>
+        <translation>Galerie</translation>
+    </message>
+    <message>
+        <source>Info Panel</source>
+        <translation>Panneau d’informations</translation>
+    </message>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
+        <source>Information</source>
+        <translation>Informations</translation>
+    </message>
+    <message>
+        <source>Created</source>
+        <translation>Création</translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation>Modification</translation>
+    </message>
+    <message>
+        <source>Last opened</source>
+        <translation>Dernière ouverture</translation>
+    </message>
+    <message>
+        <source>Where</source>
+        <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>No Results</source>
+        <translation>Aucun résultat</translation>
+    </message>
+    <message>
+        <source>This folder is empty.</source>
+        <translation>Ce dossier est vide.</translation>
+    </message>
+</context>
+<context>
     <name>Glance</name>
     <message>
         <source>Glance</source>
@@ -1754,6 +1817,14 @@
     <message>
         <source>as Columns</source>
         <translation>en colonnes</translation>
+    </message>
+    <message>
+        <source>as Gallery</source>
+        <translation>en galerie</translation>
+    </message>
+    <message>
+        <source>Show Info Panel</source>
+        <translation>Afficher le panneau d’informations</translation>
     </message>
     <message>
         <source>Sort By</source>
