@@ -137,7 +137,7 @@ hook `lock devReload` needs `GRASSFIELD_DEV=1`). Development restarts the shell 
 | `shell/security/LockController.qml` | Auth controller over an injected PAM backend: one prompt answered, 30 s timeout, secret dropped on every outcome |
 | `shell/security/PasswordField.qml` | Shared password entry (Password echo, sensitive-data hints, plain-text placeholder, return arrow) |
 | `shell/security/lock/Lock.qml` | Singleton: `WlSessionLock`, `PamContext` (password; fingerprint only if its PAM file exists), crash marker, IPC `lock` |
-| `shell/security/lock/LockView.qml` | Lock surface: blurred + dimmed `WallpaperArt`, date and clock, avatar/initials, name, field, one hint line |
+| `shell/security/lock/LockView.qml` | Lock surface (display only): blurred `WallpaperArt` under a scrim, date and clock, avatar/initials, name, dark frosted field, one hint line (gate A2, see Decisions) |
 | `shell/security/polkit/` | `AuthAgent` (PolkitAgent + overlay window, IPC `polkit status`), `AuthDialog`, `AuthDialogModel` |
 | `shell/security/idle/` | `Idle` (IdleMonitor, dim layer, idle lock, IPC `idle status`), `SleepInhibitor`, `IdleModel.js` |
 | `tests/security/reload_order/` | Offscreen `qs` test of the Quickshell reload contract the lock relies on (run by `scripts/dev/test.sh`) |
@@ -176,6 +176,21 @@ Decisions:
   `HandleLidSwitch=suspend` → `PrepareForSleep`; no separate lid binding.
 - Idle: `IdleMonitor { respectInhibitors: true }`, dim at T−10 s, lock at T; Quickshell 0.3.1 keeps the timeout an
   `IdleMonitor` was enabled with, so the monitor is re-enabled on every timeout change (verified in nested).
+- Lock screen contrast (gate A2, both appearances, any wallpaper): as on macOS, white text (dark palette, both appearances)
+  with a soft shadow over the blurred wallpaper darkened by a shadow-colour scrim (`lock.dimOpacity` 0.6), and a dark frosted
+  password field (shadow colour at `lock.fieldFillOpacity` 0.45, `textSecondary` placeholder, white focus ring at
+  `lock.focusRingOpacity`). The scrim alone carries the contrast (the shadow is decoration). Minimum over 9 worst-case
+  wallpaper colours (`tests/visual/test_contrast_tokens.py`, "lock ..." roles): text 5.27, initials 3.41 (large), placeholder
+  8.59, dots and caret 10.75, return arrow 3.12 hovered, focus ring 3.51; rendered at rest by `tests/visual/contrast.sh`
+  (surface `lock`). Display only: no binding of the field's geometry, focus or input depends on these tokens or on an effect
+  (the field has no layer); a missing colour, scrim or shadow token only loses that colour or the shadow. Checked in nested
+  (2026-10-18) with the seven lock display tokens deleted from `Tokens.qml` in a throwaway copy of the tree (in `$TMPDIR`: a copy
+  under the worktree's `.dev/` exceeds the 108-byte Unix socket path limit of `shell-run.sh`): the lock was acquired
+  (`locking -> locked`), the scrim fell back to opaque black (opacity binding failed, default 1), the field fill, focus ring
+  and avatar disc became transparent, the shadow used MultiEffect defaults, and the field showed its placeholder and blinking
+  caret (focused). The palette is read through `Appearance.darkColors` (= `Tokens.colorDark`
+  outside dev) so that the dev-only glyph mask of the contrast run recolours it, and in dev the backdrop draws the contrast run's
+  wallpaper override (`VisualFixtures.wallpaperFile`, always empty outside dev).
 - Untrusted strings (PAM messages, polkit message/action ID/prompt/identities, user name) use `Text.PlainText`.
   Polkit strings are also flattened to one line by `AuthDialogModel.plainLine` (C0/C1 controls and line separators →
   space, bidi overrides/isolates/marks removed, length capped: message 400, others 200) and capped in rendered lines
@@ -190,6 +205,10 @@ Known gaps (M2): polkit `details` (program, command line) are not exposed by Qui
 the program in `message`, which is shown. Caps Lock is inferred from typed letters (no lock-key state in Quickshell).
 Display power-off after the lock (T+60 s) and D-Bus `org.freedesktop.ScreenSaver` inhibitors are not handled.
 The marker file of a dead compositor instance stays in `$XDG_RUNTIME_DIR` until logout (a few bytes).
+Lock screen contrast: a selection inside the password field (Shift+arrows, Ctrl+A) is drawn in the focus ring colour with
+white dots on it (`PasswordField` uses `focusColor` for the selection), 1.7-2.1:1; the lock's error, notice, Caps Lock,
+typed-dots, return-arrow and focus-ring states are proven by the token calculation only (the nested capture is at rest: nothing
+is ever typed into the nested lock). The date (22 px, weight 600) is treated as normal text (4.5:1), not large text.
 `Quickshell.reload(true)` (hard reload, never called by Grassfield) while locked makes Quickshell abort
 (`qFatal`: the old instance still holds the lock): the compositor keeps the session locked and the restarted shell
 re-acquires it (fail closed, not graceful). The stranded-lock check cannot tell a crashed instance's lock from a live

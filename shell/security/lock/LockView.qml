@@ -17,8 +17,8 @@ import "../LockMachine.js" as Machine
 // wallpaper darkened by a shadow-colour scrim (lock.dimOpacity), and a dark frosted password field
 // (lock.fieldFillOpacity). The scrim alone carries the contrast (the shadow is decoration): every role is computed
 // in tests/visual/test_contrast_tokens.py ("lock ..." roles) and measured by tests/visual/contrast.sh (surface lock).
-// A missing token or a failed binding only loses a colour or the shadow: the password field, its focus and its
-// input never depend on them.
+// A missing colour, scrim or shadow token, or a failed colour binding, only loses that colour or the shadow: the
+// password field's geometry, focus and input never depend on them, and the field has no layer or effect.
 Item {
     id: root
 
