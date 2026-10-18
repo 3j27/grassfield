@@ -352,8 +352,8 @@ QtObject {
     readonly property int lockClockWeight: 600
     // estimate, pending F1 measurement from design/reference
     readonly property int lockAvatarSize: 64
-    // estimate, pending F1 measurement from design/reference
-    readonly property real lockAvatarFillOpacity: 0.3
+    // A2: was 0.3 (initials 2.7:1 over a white wallpaper); light disc (dark-palette fill) over the lock scrim, white initials 3.4:1 or more over any wallpaper (large text), tested in tests/visual/test_contrast_tokens.py
+    readonly property real lockAvatarFillOpacity: 0.2
     // estimate, pending F1 measurement from design/reference
     readonly property int lockInitialsSize: 26
     // estimate, pending F1 measurement from design/reference
@@ -362,14 +362,22 @@ QtObject {
     readonly property int lockFieldWidth: 220
     // estimate, pending F1 measurement from design/reference
     readonly property int lockFieldHeight: 32
-    // estimate, pending F1 measurement from design/reference
-    readonly property real lockFieldFillOpacity: 0.22
+    // A2: was a white fill at 0.22 (placeholder 1.4:1 over a white wallpaper); the password field is a dark frosted inset (shadow colour) over the scrim: placeholder 8.6:1, typed dots and caret 10.7:1, return arrow 3.1:1 when hovered, over any wallpaper, tested
+    readonly property real lockFieldFillOpacity: 0.45
+    // A2: alpha of the white focus ring of the password field; 3.5:1 or more against the scrim over any wallpaper, tested
+    readonly property real lockFocusRingOpacity: 0.7
+    // estimate: soft drop shadow under the white lock text (decoration; contrast comes from the scrim alone)
+    readonly property real lockTextShadowOpacity: 0.4
+    // estimate: MultiEffect shadowBlur (0..1) of the lock text shadow
+    readonly property real lockTextShadowBlur: 0.5
+    // estimate: px the lock text shadow is pushed down
+    readonly property int lockTextShadowOffsetY: 1
     // estimate, pending F1 measurement from design/reference
     readonly property int lockSubmitSize: 22
     // estimate, pending F1 measurement from design/reference
     readonly property int lockBottomMargin: 112
-    // estimate: darkens the blurred wallpaper for text contrast (A2)
-    readonly property real lockDimOpacity: 0.28
+    // A2: was 0.28 (clock 1.8:1 over a white wallpaper); shadow-colour scrim over the blurred wallpaper, white text 5.3:1 or more over any wallpaper (white is the worst case), tested in tests/visual/test_contrast_tokens.py
+    readonly property real lockDimOpacity: 0.6
     // estimate, pending F1 measurement from design/reference
     readonly property int lockBlurMax: 64
     // estimate, pending F1 measurement from design/reference

@@ -11,7 +11,14 @@ import "../LockMachine.js" as Machine
 // Content of one lock surface (one per screen): blurred and dimmed wallpaper, date and clock at
 // the top centre, avatar, user name and password field near the bottom centre. Nothing else is
 // rendered here on purpose: no notifications, no window thumbnails, no media (gate L4).
-// Text on the wallpaper always uses the dark-appearance roles (light text on a dimmed image).
+// Display only: authentication, lock state and crash recovery live in Lock.qml and LockController.
+//
+// Contrast (gate A2, both appearances, any wallpaper): as on macOS, white text with a soft shadow over the blurred
+// wallpaper darkened by a shadow-colour scrim (lock.dimOpacity), and a dark frosted password field
+// (lock.fieldFillOpacity). The scrim alone carries the contrast (the shadow is decoration): every role is computed
+// in tests/visual/test_contrast_tokens.py ("lock ..." roles) and measured by tests/visual/contrast.sh (surface lock).
+// A missing token or a failed binding only loses a colour or the shadow: the password field, its focus and its
+// input never depend on them.
 Item {
     id: root
 
@@ -31,7 +38,9 @@ Item {
     // Typing started after an error: the error line gives way (e.g. to the Caps Lock hint).
     signal edited
 
-    readonly property var colors: Tokens.colorDark
+    // Always the dark palette (white text on the dimmed image, both appearances). Read through Appearance so that the
+    // dev-only glyph mask of the contrast run recolours the lock text too; outside dev it is Tokens.colorDark.
+    readonly property var colors: Appearance.darkColors
 
     function clear(): void {
         field.clear();
@@ -52,10 +61,32 @@ Item {
         precision: SystemClock.Minutes
     }
 
+    // Soft drop shadow under the white text (decoration only, see the header).
+    component TextShadow: MultiEffect {
+        shadowEnabled: true
+        shadowColor: Appearance.darkColors.shadow
+        shadowOpacity: Tokens.lockTextShadowOpacity
+        shadowBlur: Tokens.lockTextShadowBlur
+        shadowVerticalOffset: Tokens.lockTextShadowOffsetY
+    }
+
     WallpaperArt {
         id: wallpaper
         anchors.fill: parent
         visible: false
+
+        // Dev-only: the wallpaper override of the contrast run (VisualFixtures.wallpaperFile, always "" outside dev),
+        // so that the lock is measured over the same worst-case wallpapers as the desktop.
+        Image {
+            anchors.fill: parent
+            visible: VisualFixtures.wallpaperFile !== ""
+            source: VisualFixtures.wallpaperFile !== "" ? "file://" + VisualFixtures.wallpaperFile : ""
+            fillMode: Image.Stretch
+            sourceSize: Qt.size(width, height)
+            asynchronous: true
+            cache: false
+            smooth: false
+        }
     }
 
     MultiEffect {
@@ -82,6 +113,8 @@ Item {
     Column {
         anchors.horizontalCenter: parent.horizontalCenter
         y: Tokens.lockTopMargin
+        layer.enabled: true
+        layer.effect: TextShadow {}
 
         Text {
             textFormat: Text.PlainText
@@ -182,6 +215,8 @@ Item {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyTitleSize
             font.weight: Tokens.lockNameWeight
+            layer.enabled: true
+            layer.effect: TextShadow {}
             Accessible.role: Accessible.StaticText
             Accessible.name: text
         }
@@ -201,10 +236,12 @@ Item {
                 showSubmit: true
                 radius: height / 2
                 fontSize: Tokens.typographyBodySize
+                // Dark frosted inset: white dots and caret, secondary placeholder, white focus ring (no layer or
+                // effect on the field: it renders and takes input whatever happens to the decoration).
                 textColor: root.colors.text
-                placeholderColor: Appearance.withAlpha(root.colors.text, 1 - Tokens.lockFieldFillOpacity)
-                fillColor: Appearance.withAlpha(root.colors.fill, Tokens.lockFieldFillOpacity)
-                focusColor: Appearance.withAlpha(root.colors.text, Tokens.materialHighlightOpacity * 2)
+                placeholderColor: root.colors.textSecondary
+                fillColor: Appearance.withAlpha(root.colors.shadow, Tokens.lockFieldFillOpacity)
+                focusColor: Appearance.withAlpha(root.colors.text, Tokens.lockFocusRingOpacity)
                 onSubmitted: password => root.submitted(password)
                 onEdited: root.edited()
             }
@@ -256,6 +293,8 @@ Item {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
             font.weight: Tokens.typographyMenuWeight
+            layer.enabled: true
+            layer.effect: TextShadow {}
             Accessible.role: Accessible.AlertMessage
             Accessible.name: text
         }
@@ -271,6 +310,8 @@ Item {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
             font.weight: Tokens.typographyMenuWeight
+            layer.enabled: true
+            layer.effect: TextShadow {}
             Accessible.role: Accessible.AlertMessage
             Accessible.name: text
         }
