@@ -1753,6 +1753,10 @@
         <translation>Ce volume ne peut pas enregistrer de tags.</translation>
     </message>
     <message>
+        <source>The tags of “%1” couldn’t be read: %2</source>
+        <translation>Impossible de lire les tags de «&#xa0;%1&#xa0;»&#xa0;: %2</translation>
+    </message>
+    <message>
         <source>The tags of “%1” couldn’t be changed: %2</source>
         <translation>Impossible de modifier les tags de «&#xa0;%1&#xa0;»&#xa0;: %2</translation>
     </message>
@@ -2297,6 +2301,10 @@
     <message>
         <source>Tags:</source>
         <translation>Tags&#xa0;:</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation>%1 (%2)</translation>
     </message>
     <message>
         <source>Tags</source>
@@ -3193,6 +3201,10 @@
     <message>
         <source>Sidebar</source>
         <translation>Barre latérale</translation>
+    </message>
+    <message>
+        <source>Show Hidden Tag</source>
+        <translation>Afficher un tag masqué</translation>
     </message>
     <message>
         <source>Favorites</source>

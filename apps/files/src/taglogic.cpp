@@ -73,6 +73,14 @@ QByteArray storedName(const QString &tag)
     const int c = colorIndex(t);
     return (c >= 0 ? colorKey(c) : t).toUtf8();
 }
+
+// Whether a stored entry is `name`: a colour tag's key matches without regard to case (the menu shows a foreign "red"
+// as Red, so clicking Red acts on it), any other tag exactly.
+bool entryIs(const QByteArray &entry, const QByteArray &name, bool color)
+{
+    const QByteArray t = entry.trimmed();
+    return color ? t.compare(name, Qt::CaseInsensitive) == 0 : t == name;
+}
 } // namespace
 
 QByteArray applyTag(const QByteArray &stored, const QString &tag, bool on)
@@ -80,11 +88,12 @@ QByteArray applyTag(const QByteArray &stored, const QString &tag, bool on)
     const QByteArray name = storedName(tag);
     if (name.isEmpty())
         return stored;
+    const bool color = colorIndex(tag) >= 0;
     const QList<QByteArray> entries = stored.isEmpty() ? QList<QByteArray>() : stored.split(',');
     QList<QByteArray> kept;
     bool found = false;
     for (const QByteArray &entry : entries) {
-        if (entry.trimmed() == name)
+        if (entryIs(entry, name, color))
             found = true;
         else
             kept.append(entry);
@@ -104,9 +113,10 @@ bool ownsTag(const QByteArray &stored, const QString &tag)
     const QByteArray name = storedName(tag);
     if (name.isEmpty() || stored.isEmpty())
         return false;
+    const bool color = colorIndex(tag) >= 0;
     const QList<QByteArray> entries = stored.split(',');
     for (const QByteArray &entry : entries) {
-        if (entry.trimmed() == name)
+        if (entryIs(entry, name, color))
             return true;
     }
     return false;

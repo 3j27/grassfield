@@ -21,7 +21,8 @@ Window {
     }
     readonly property var tagStates: {
         root.app.tagRevision;
-        return root.tagsReason === "" ? root.app.colorTagStates([root.info.url]) : [];
+        // Also for a read-only item: its tags show (disabled swatches), only changing them is refused.
+        return root.app.colorTagStates([root.info.url]);
     }
     // Every tag of the item by name, those of other applications too (the swatches show the colour ones). Read live:
     // `info` is the snapshot taken when the window opened.
@@ -157,7 +158,7 @@ Window {
                     x: Tokens.filesInfoLabelWidth + Tokens.spacingSm - Tokens.menuItemPadding
                     width: parent.width - x
                     enabled: root.tagsReason === ""
-                    caption: root.tagsReason !== "" ? root.tagsReason : root.tagNames
+                    caption: root.tagsReason === "" ? root.tagNames : root.tagNames === "" ? root.tagsReason : qsTr("%1 (%2)").arg(root.tagNames).arg(root.tagsReason)
                     accessibleName: qsTr("Tags")
                     model: TagColors.swatches(Tokens, root.app.colorTagNames, root.tagStates)
                     onChosen: index => root.app.toggleColorTag([root.info.url], index)

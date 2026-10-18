@@ -107,10 +107,15 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
     - Storage: the extended attribute `user.xdg.tags` (freedesktop Common Extended Attributes, as Dolphin, Baloo and
       KFileMetaData write it), UTF-8, tags separated by commas, read and written with `lgetxattr`/`lsetxattr`/
       `lremovexattr` on local files and folders only; an empty value removes the attribute. Files edits the stored bytes,
-      not a parsed list (`TagLogic::applyTag`): it adds one entry at the end or removes the entries of one exact name,
-      and every other entry stays byte for byte and in order (spaces, duplicates, line breaks, invalid UTF-8, a foreign
-      lower-case `red`). Removing Red never removes another application's `red`; the row's checkmark and the toggle
-      count only entries Files owns (the exact key), while dots, sidebar and tag search stay case-insensitive. The seven colour tags are stored under fixed English keys (Red, Orange, Yellow, Green,
+      not a parsed list (`TagLogic::applyTag`): it adds one entry at the end or removes the entries of one name,
+      and every other entry stays byte for byte and in order (spaces, duplicates, line breaks, invalid UTF-8). Decided
+      (as macOS, which matches tag names without regard to case): a colour tag matches case-insensitively everywhere,
+      so a foreign `red` is Red: the row shows it checked, one click removes it (every spelling of it, the entry the
+      user removes); adding Red next to an existing `red` is a no-op; the menu, the toggle, dots, sidebar and tag search
+      all use that one rule. Other tags match exactly. Nothing is written from a failed read: only ENODATA means "no
+      tags"; any other error (permission, I/O, a vanished file) stops the change and shows the banner ("The tags of
+      … couldn't be read/changed"), so other applications' tags are never replaced by a guess
+      (`TagStore::readRawChecked`). The seven colour tags are stored under fixed English keys (Red, Orange, Yellow, Green,
       Blue, Purple, Gray: the attribute does not depend on the UI language), matched case-insensitively, shown under
       translated names (context `Tags`) in the colours of tokens `files.tagRed` … `files.tagGray`. Symbolic links are
       never followed (Linux keeps no user attributes on links; tagging a link must not tag its target).
@@ -122,7 +127,8 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
       reason shows as the row's caption and, in Get Info, as a tooltip. Symbolic links stay untaggable on purpose: a link
       is never followed, so its target is never tagged by accident. A write that still fails (a race, a sticky folder)
       shows in the error banner with the system's reason. Get Info lists the item's tag names live, also after tagging
-      from the window itself. Files' own writes refresh every window at once.
+      from the window itself; on a read-only item the swatches still show its tags (checked, disabled) and the caption
+      names the tags with the reason in brackets (the tooltip carries the reason). Files' own writes refresh every window at once.
     - Showing: coloured dots (at most `files.tagDotsMax`, overlapping) before the name in the icon view, after it in the
       list view, before the chevron in the column view and in its preview column, on the gallery strip thumbnails and
       in the gallery info panel (roles `tags`, `tagColors`; one attribute read per shown item, cached).
@@ -130,8 +136,9 @@ starts Glance of `grassfield-preview`, see `docs/specs/preview.md`).
       means seen on an item Files has shown, or set in Files; the list is kept across sessions (QSettings
       `tags/known`, at most 64). Remove from Sidebar (right click) hides the tag for good, as in the macOS Finder: the
       tag stays on the files and stays usable, but it is not listed again when a folder holding it is shown (QSettings
-      `tags/hidden`, at most 256). Setting that tag again from Files (colour row, drop) lists it again, as there is no
-      Tags settings pane to bring it back. A drop on a tag tags
+      `tags/hidden`, at most 256). Setting that tag again from Files (colour row, drop) lists it again, and so does the
+      Tags section's context menu (a right click on a tag or on the "Tags" header): "Show Hidden Tag" is a submenu of the
+      removed tags (shown by name); choosing one lists it at once. A drop on a tag tags
       the dropped local items. Tags are not places of the Go menu.
     - Tag search: a click on a sidebar tag opens the location `grassfield-tag:/<tag>?in=<folder>` (Files-internal,
       never handed to KIO): the items tagged so in the folder shown at the click (a local folder; from a remote place or
@@ -227,7 +234,7 @@ installed (not built here).
   sorting and filtering never read them. The menus ask the tag state of the whole selection on every selection change:
   measured with 1000 selected files, 41 ms (untagged) and 66 ms (tagged) per change before; now one probe pass
   (lstat, access, one lgetxattr per file, 19-28 ms) the first time and 2-3 ms from the 3 s cache (`TagStore::Cache`,
-  dropped for the files Files writes; another application's change shows within 3 s; a write always reads afresh). The tag search runs
+  dropped for the files Files writes; another application's change shows on the next lookup (one `lstat`, the ctime moves; two changes inside one kernel clock tick may be missed until the 3 s expire); a write always reads afresh). The tag search runs
   off the GUI thread (one `readdir` per folder, one `lgetxattr` per entry, one `lstat` per subfolder) and hands
   matches over in batches (64 items or 100 ms). Gallery previews: at most 8 gallery-size thumbnails are kept (up to
   4 MB each at 1024 px). Not measured on the reference hardware (L2).

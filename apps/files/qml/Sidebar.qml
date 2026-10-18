@@ -40,6 +40,30 @@ FocusScope {
         }
     }
 
+    // The Tags section's context menu (on a tag or on the header): Remove from Sidebar (a tag only) and, while some tags
+    // are removed, Show Hidden Tag > the tags to list again (the way back; the files keep their tags either way).
+    function openTagMenu(tag: string, x: real, y: real): void {
+        if (!root.tab)
+            return;
+        const items = [];
+        if (tag !== "")
+            items.push({id: "forget", text: qsTr("Remove from Sidebar")});
+        const hidden = root.app.hiddenTags;
+        if (hidden.length > 0) {
+            if (items.length > 0)
+                items.push({separator: true});
+            items.push({id: "showHidden", text: qsTr("Show Hidden Tag"), submenu: hidden.map(t => ({id: "show:" + t, text: root.app.tagName(t)}))});
+        }
+        if (items.length === 0)
+            return;
+        root.tab.win.menuLayer.open(items, x, y, id => {
+            if (id === "forget")
+                root.app.forgetTag(tag);
+            else if (id.startsWith("show:"))
+                root.app.showTag(id.substring(5));
+        }, list, false);
+    }
+
     Connections {
         target: root.places
         function onMounted(url: url): void {
@@ -99,6 +123,16 @@ FocusScope {
             required property string section
             width: ListView.view.width
             height: Tokens.filesSidebarHeaderHeight
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                enabled: header.section === "tags"
+                onClicked: event => {
+                    const p = mapToItem(null, event.x, event.y);
+                    root.openTagMenu("", p.x, p.y);
+                }
+            }
 
             Text {
                 textFormat: Text.PlainText
@@ -230,10 +264,9 @@ FocusScope {
                 root.keyRow = entry.index;
                 if (event.button === Qt.RightButton) {
                     // Tags only: the sidebar lists the tags in use; removing one leaves the files' tags alone.
-                    if (entry.isTag && root.tab) {
+                    if (entry.isTag) {
                         const p = mouse.mapToItem(null, event.x, event.y);
-                        root.tab.win.menuLayer.open([{id: "forget", text: qsTr("Remove from Sidebar")}], p.x, p.y,
-                                                    id => root.app.forgetTag(entry.tag), list, false);
+                        root.openTagMenu(entry.tag, p.x, p.y);
                     }
                     return;
                 }
