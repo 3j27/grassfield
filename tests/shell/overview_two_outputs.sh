@@ -224,6 +224,33 @@ t_loop() {
   done
 }
 
+# drop: Esc closes the overview, one character plus Return is typed D ms later into the active foot (10 tries per delay).
+# The character may land in A or B (the close returns to the last active window, which depends on the pointer): it counts
+# as arrived in either file. Reports how many arrived; it is a measurement of the close-to-keyboard window and fails only when the 200 ms row is not
+# complete (a key typed long after the close must always arrive).
+t_drop() {
+  local d i ok last act
+  focus A
+  for d in 0 30 60 100 200; do
+    ok=0 act=""
+    for i in $(seq 1 10); do
+      open_overview
+      : >"$out/A.txt"; : >"$out/B.txt"
+      "$root/scripts/dev/keys.sh" -k Escape
+      (( d > 0 )) && sleep "0.$(printf %03d "$d")"
+      "$root/scripts/dev/keys.sh" q -k Return
+      sleep 0.6
+      cat "$out/A.txt" "$out/B.txt" | grep -qx q && ok=$((ok + 1))
+      wait_for 3 overview_closed
+      sleep 0.5
+      act="$act$(active_title | head -c1)"
+    done
+    echo "drop: ${d} ms after Esc: $ok/10 arrived (active window after each close: $act)"
+    last=$ok
+  done
+  [[ $last == 10 ]]; check "drop: 200 ms after Esc every character arrives ($last/10)" $?
+}
+
 t_backdrop() {
   local o
   for o in GF-REF WAYLAND-1; do
@@ -244,8 +271,9 @@ case $mode in
   drag) t_drag ;;
   loop) t_loop ;;
   backdrop) t_backdrop ;;
+  drop) t_drop ;;
   shots) focus A; open_overview; for o in WAYLAND-1 GF-REF; do "$root/scripts/dev/shot.sh" "ovt-$o" "$o"; done; ipc overview close >/dev/null ;;
   all) t_click; t_hover; t_loop; t_backdrop; t_drag ;;   # drag last: it moves A and B to another Space
-  *) echo "usage: $0 [click|hover|drag|loop|backdrop|all]" >&2; exit 2 ;;
+  *) echo "usage: $0 [click|hover|drag|loop|backdrop|drop|all]" >&2; exit 2 ;;
 esac
 exit "$fails"
