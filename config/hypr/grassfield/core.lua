@@ -7,6 +7,7 @@ for module in pairs(package.loaded) do
   end
 end
 
+require("grassfield.cursor").apply()
 require("grassfield.looknfeel")
 require("grassfield.input")
 require("grassfield.windows")

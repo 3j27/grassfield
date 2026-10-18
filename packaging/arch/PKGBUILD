@@ -14,7 +14,7 @@ url="https://grassfield.invalid"
 # Grassfield's own code is MIT (ADR-0005, accepted by the owner 2026-10-18; root LICENSE, installed by both packages).
 # Third-party notices: THIRD_PARTY.md, installed under /usr/share/licenses/<package>/.
 license=(MIT)
-makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools)
+makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python)
 options=(!debug)
 
 _root() { realpath "$startdir/../.."; }
@@ -40,6 +40,8 @@ build() {
   cmake -S "$(_root)/bridges/menu-bridge" -B "$srcdir/menu-bridge-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DGRASSFIELD_BUILD_TESTS=ON
   cmake --build "$srcdir/menu-bridge-build"
+  # Grassfield cursors (ADR-0014): hyprcursor SVG theme + XCursor fallback from branding/cursors.
+  "$(_root)/branding/cursors/build.sh" --out "$srcdir/icons"
 }
 
 check() {
@@ -96,6 +98,16 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
   # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).
   DESTDIR="$pkgdir" cmake --install "$srcdir/preview-build"
+
+  # grassfield-cursors: /usr/share/icons/grassfield-cursors/{index.theme,manifest.hl,hyprcursors,cursors}
+  install -d "$pkgdir/usr/share/icons"
+  cp -a "$srcdir/icons/grassfield-cursors" "$pkgdir/usr/share/icons/grassfield-cursors"
+  install -Dm644 "$root/branding/cursors/build.sh" "$pkgdir/usr/share/grassfield/cursors/build.sh"
+  install -Dm644 "$root/branding/cursors/xcursor-pack.py" "$pkgdir/usr/share/grassfield/cursors/xcursor-pack.py"
+  install -Dm644 "$root/branding/cursors/cursors.tsv" "$pkgdir/usr/share/grassfield/cursors/cursors.tsv"
+  install -d "$pkgdir/usr/share/grassfield/cursors/src"
+  install -m644 "$root"/branding/cursors/src/*.svg.in "$pkgdir/usr/share/grassfield/cursors/src/"
+  chmod 755 "$pkgdir/usr/share/grassfield/cursors/build.sh"
 
   install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
   install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"

@@ -125,6 +125,13 @@ Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). 40 SVG i
 (CC-BY-SA-4.0 proposed, ADR-0005); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
 No Apple asset is used. Authorship by an AI assistant and the licence choice: **needs legal review**.
 
+Cursors (ADR-0014): the `grassfield-cursors` theme (hyprcursor SVG theme plus XCursor fallback, installed under
+`/usr/share/icons/grassfield-cursors`) is generated at package build time from Grassfield's own templates in
+`branding/cursors/` (CC-BY-SA-4.0 proposed, listed in `BRANDING.md`). No file of Adwaita, Yaru, WhiteSur or capitaine is
+used; only cursor names (a vocabulary shared by CSS and X11) were read from installed themes. The build uses
+`hyprcursor-util` (BSD-3-Clause), `rsvg-convert` (librsvg, LGPL-2.1-or-later) and Python as build tools; the XCursor
+writer is Grassfield's own stdlib script. Later runtime regeneration (custom accent or size) needs the same three tools.
+
 ## 6. Test and build only (not shipped)
 
 - googletest 1.18.0: BSD-3-Clause, "Copyright 2008, Google Inc." (`/usr/share/licenses/gtest`). Used by unit tests
