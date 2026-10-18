@@ -768,10 +768,22 @@ void FilesApp::toggleColorTag(const QList<QUrl> &urls, int index)
     const QString key = TagLogic::colorKey(index);
     if (key.isEmpty() || urls.isEmpty())
         return;
-    // Only entries Files owns count (the exact key): another application's "red" is neither removed nor reused.
+    // The same rule as the menu's checkmark (colour names match without regard to case: another application's "red" is
+    // Red), read afresh. A read that fails stops everything: nothing is written from a guess.
     bool all = true;
-    for (const QUrl &url : urls)
-        all = all && url.isLocalFile() && TagLogic::ownsTag(TagStore::readRaw(url.toLocalFile()), key);
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile()) {
+            all = false;
+            continue;
+        }
+        QByteArray stored;
+        QString error;
+        if (!TagStore::readRawChecked(url.toLocalFile(), &stored, &error)) {
+            emit operationFailed(tr("The tags of “%1” couldn’t be read: %2").arg(url.fileName(), error));
+            return;
+        }
+        all = all && TagLogic::ownsTag(stored, key);
+    }
     rewriteTags(urls, key, !all);
 }
 
@@ -799,7 +811,14 @@ void FilesApp::rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on)
         }
         const QString path = url.toLocalFile();
         m_tagCache.invalidate(path);
-        const QByteArray before = TagStore::readRaw(path);
+        // A failed read must not become "no tags": the write would replace what other applications stored.
+        QByteArray before;
+        QString readError;
+        if (!TagStore::readRawChecked(path, &before, &readError)) {
+            failed.append(url.fileName());
+            reason = readError;
+            continue;
+        }
         const QByteArray after = TagLogic::applyTag(before, tag, on);
         if (after == before)
             continue;
@@ -881,6 +900,7 @@ void FilesApp::forgetTag(const QString &tag)
         while (m_hiddenTags.size() > kMaxHiddenTags)
             m_hiddenTags.removeFirst();
         m_settings.setValue(QStringLiteral("tags/hidden"), m_hiddenTags);
+        emit hiddenTagsChanged();
     }
     const QStringList next = TagLogic::withTag(m_knownTags, tag, false);
     if (next == m_knownTags)
@@ -896,6 +916,14 @@ void FilesApp::unhideTag(const QString &tag)
         return;
     m_hiddenTags = TagLogic::withTag(m_hiddenTags, tag, false);
     m_settings.setValue(QStringLiteral("tags/hidden"), m_hiddenTags);
+    emit hiddenTagsChanged();
+}
+
+void FilesApp::showTag(const QString &tag)
+{
+    unhideTag(tag);
+    // Listed at once, not only when an item holding it is shown next.
+    noteTags({tag});
 }
 
 void FilesApp::publishKnownTags()

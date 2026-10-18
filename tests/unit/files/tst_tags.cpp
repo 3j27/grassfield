@@ -6,6 +6,7 @@
 #include "tagstore.h"
 
 #include <QDir>
+#include <QThread>
 #include <QFile>
 #include <QTemporaryDir>
 
@@ -261,16 +262,20 @@ TEST(TagApply, AddingAppendsOneEntryAndKeepsEveryOtherByteAsStored)
     EXPECT_EQ(TagLogic::applyTag("", QStringLiteral("Red"), true), QByteArray("Red"));
     EXPECT_EQ(TagLogic::applyTag("Work", QStringLiteral("Work"), true), QByteArray("Work")); // already there
     EXPECT_EQ(TagLogic::applyTag(" Red ", QStringLiteral("Red"), true), QByteArray(" Red ")); // spaces do not make it another tag
-    // A foreign lower-case "red" is another entry: Red is added next to it.
-    EXPECT_EQ(TagLogic::applyTag("red", QStringLiteral("Red"), true), QByteArray("red,Red"));
+    // A foreign lower-case "red" is the colour Red already (colour names match without regard to case): not added twice.
+    EXPECT_EQ(TagLogic::applyTag("red", QStringLiteral("Red"), true), QByteArray("red"));
+    EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral("Red"), true), kForeign);
     EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral(" "), true), kForeign);
 }
 
-TEST(TagApply, RemovingTakesOutOnlyTheExactName)
+TEST(TagApply, RemovingTakesOutTheNamedEntriesOnly)
 {
-    // "Red" must not remove the foreign "red".
-    EXPECT_EQ(TagLogic::applyTag(kForeign + ",Red", QStringLiteral("Red"), false), kForeign);
-    EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral("Red"), false), kForeign);
+    // Removing Red takes out every spelling of it (the user removes the colour); every other entry keeps its bytes.
+    const QByteArray rest(" Bar ,foo,foo,\xFF\xFE,two\x0Alines");
+    EXPECT_EQ(TagLogic::applyTag(kForeign + ",Red", QStringLiteral("Red"), false), rest);
+    EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral("Red"), false), rest);
+    EXPECT_EQ(TagLogic::applyTag("red", QStringLiteral("Red"), false), QByteArray());
+    EXPECT_EQ(TagLogic::applyTag("Projects,RED,Kept Thing", QStringLiteral("Red"), false), QByteArray("Projects,Kept Thing"));
     // Both entries of an exact duplicate go; the others keep their bytes and order.
     EXPECT_EQ(TagLogic::applyTag(kForeign, QStringLiteral("foo"), false), QByteArray(" Bar ,\xFF\xFE,two\x0Alines,red"));
     EXPECT_EQ(TagLogic::applyTag("a, Red ,b", QStringLiteral("Red"), false), QByteArray("a,b"));
@@ -278,10 +283,23 @@ TEST(TagApply, RemovingTakesOutOnlyTheExactName)
     EXPECT_EQ(TagLogic::applyTag("Work", QStringLiteral("work"), false), QByteArray("Work")); // free tags exactly
 }
 
-TEST(TagApply, OwnsTheExactEntryOnly)
+TEST(TagApply, MenuAndToggleUseOneRuleForColours)
+{
+    // The menu's check (colorStates) and the toggle (ownsTag then applyTag) agree on a foreign "red": Red shows checked,
+    // one click removes it, a second adds the key back.
+    const QByteArray stored = "red";
+    EXPECT_TRUE(TagLogic::ownsTag(stored, QStringLiteral("Red")));
+    EXPECT_EQ(TagLogic::colorStates({TagLogic::parse(stored)}).at(0), 2);
+    QByteArray next = TagLogic::applyTag(stored, QStringLiteral("Red"), false);
+    EXPECT_TRUE(next.isEmpty());
+    next = TagLogic::applyTag(next, QStringLiteral("Red"), true);
+    EXPECT_EQ(next, QByteArray("Red"));
+}
+
+TEST(TagApply, OwnsTheEntryByTheRuleOfItsKind)
 {
     EXPECT_TRUE(TagLogic::ownsTag("a, Red ,b", QStringLiteral("Red")));
-    EXPECT_FALSE(TagLogic::ownsTag("red", QStringLiteral("Red")));
+    EXPECT_TRUE(TagLogic::ownsTag("red", QStringLiteral("Red")));
     EXPECT_FALSE(TagLogic::ownsTag("", QStringLiteral("Red")));
     EXPECT_TRUE(TagLogic::ownsTag("Work", QStringLiteral("Work")));
     EXPECT_FALSE(TagLogic::ownsTag("Work", QStringLiteral("work")));
@@ -297,6 +315,79 @@ TEST(TagKnown, TagsRemovedFromTheSidebarStayOffIt)
     EXPECT_EQ(TagLogic::mergeKnown({}, {}, seen, 2).size(), 2);
 }
 
+TEST(TagKnown, AHiddenTagComesBackWhenShownAgain)
+{
+    const QStringList hidden = {QStringLiteral("Work"), QStringLiteral("Home")};
+    // Seen again while hidden: stays off the sidebar.
+    EXPECT_TRUE(TagLogic::mergeKnown({}, hidden, {QStringLiteral("Work")}, 64).isEmpty());
+    // Show Hidden Tag: leaves the hidden list (the others stay) and is listed at once.
+    const QStringList left = TagLogic::withTag(hidden, QStringLiteral("Work"), false);
+    EXPECT_EQ(left, QStringList{QStringLiteral("Home")});
+    EXPECT_EQ(TagLogic::mergeKnown({}, left, {QStringLiteral("Work")}, 64), QStringList{QStringLiteral("Work")});
+}
+
+TEST(TagStore, AFailedReadIsNotTakenForNoTags)
+{
+    QString why;
+    const auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << qPrintable(why);
+    const QString file = makeFile(*dir, QStringLiteral("unreadable.txt"));
+    if (TagStore::support(file) == TagStore::Support::NoXattr)
+        GTEST_SKIP() << "the filesystem of GRASSFIELD_TEST_TMP has no user extended attributes";
+    QByteArray value = "stale";
+    QString error;
+    // No attribute: ok, no tags.
+    EXPECT_TRUE(TagStore::readRawChecked(file, &value, &error));
+    EXPECT_TRUE(value.isEmpty());
+    ASSERT_TRUE(TagStore::writeRaw(file, "Projects,Blue,Kept Thing"));
+    ASSERT_TRUE(TagStore::readRawChecked(file, &value, &error));
+    EXPECT_EQ(value, QByteArray("Projects,Blue,Kept Thing"));
+    // Longer than a small buffer.
+    const QByteArray longValue = QByteArray("Tag,").repeated(600) + "End";
+    ASSERT_TRUE(TagStore::writeRaw(file, longValue));
+    ASSERT_TRUE(TagStore::readRawChecked(file, &value, &error));
+    EXPECT_EQ(value, longValue);
+    // Write-only file (0200): the attribute cannot be read: an error, not an empty value to build a write on.
+    if (::geteuid() != 0) {
+        ASSERT_TRUE(TagStore::writeRaw(file, "Projects,Blue,Kept Thing"));
+        ASSERT_EQ(::chmod(QFile::encodeName(file).constData(), 0200), 0);
+        error.clear();
+        EXPECT_FALSE(TagStore::readRawChecked(file, &value, &error));
+        EXPECT_FALSE(error.isEmpty());
+        EXPECT_TRUE(value.isEmpty());
+        ASSERT_EQ(::chmod(QFile::encodeName(file).constData(), 0644), 0);
+        EXPECT_EQ(TagStore::readRaw(file), QByteArray("Projects,Blue,Kept Thing")); // nothing was written
+    }
+    // A file that vanished is an error too.
+    EXPECT_FALSE(TagStore::readRawChecked(dir->filePath(QStringLiteral("absent")), &value, &error));
+}
+
+TEST(TagStore, CacheSeesAnotherApplicationsChangeInsideTheWindow)
+{
+    QString why;
+    const auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << qPrintable(why);
+    const QString file = makeFile(*dir, QStringLiteral("external.txt"));
+    if (TagStore::support(file) == TagStore::Support::NoXattr)
+        GTEST_SKIP() << "the filesystem of GRASSFIELD_TEST_TMP has no user extended attributes";
+    ASSERT_TRUE(TagStore::writeRaw(file, "Work"));
+    TagStore::Cache cache(600000);
+    EXPECT_EQ(cache.info(file).tags, QStringList{QStringLiteral("Work")});
+    // Another application sets Red (no invalidate): the very next lookup shows it. The kernel stamps ctime at a coarse
+    // tick, so wait past one.
+    QThread::msleep(30);
+    ASSERT_TRUE(TagStore::writeRaw(file, "Work,Red"));
+    EXPECT_EQ(cache.info(file).tags, (QStringList{QStringLiteral("Work"), QStringLiteral("Red")}));
+    EXPECT_EQ(TagLogic::colorStates({cache.info(file).tags}).at(0), 2);
+    // A file that appears where there was none shows too.
+    const QString later = dir->filePath(QStringLiteral("later.txt"));
+    EXPECT_EQ(cache.info(later).support, TagStore::Support::Missing);
+    makeFile(*dir, QStringLiteral("later.txt"));
+    EXPECT_NE(cache.info(later).support, TagStore::Support::Missing);
+}
+
 TEST(TagStore, RawValueRoundTripsByteForByte)
 {
     QString why;
@@ -308,10 +399,10 @@ TEST(TagStore, RawValueRoundTripsByteForByte)
         GTEST_SKIP() << "the filesystem of GRASSFIELD_TEST_TMP has no user extended attributes";
     ASSERT_TRUE(TagStore::writeRaw(file, kForeign));
     EXPECT_EQ(TagStore::readRaw(file), kForeign);
-    // Add then remove a colour: the foreign bytes come back untouched.
-    ASSERT_TRUE(TagStore::writeRaw(file, TagLogic::applyTag(TagStore::readRaw(file), QStringLiteral("Red"), true)));
-    EXPECT_EQ(TagStore::readRaw(file), kForeign + ",Red");
-    ASSERT_TRUE(TagStore::writeRaw(file, TagLogic::applyTag(TagStore::readRaw(file), QStringLiteral("Red"), false)));
+    // Add then remove a colour (the foreign value holds a "red" already, which is Red: use Blue): the foreign bytes come back untouched.
+    ASSERT_TRUE(TagStore::writeRaw(file, TagLogic::applyTag(TagStore::readRaw(file), QStringLiteral("Blue"), true)));
+    EXPECT_EQ(TagStore::readRaw(file), kForeign + ",Blue");
+    ASSERT_TRUE(TagStore::writeRaw(file, TagLogic::applyTag(TagStore::readRaw(file), QStringLiteral("Blue"), false)));
     EXPECT_EQ(TagStore::readRaw(file), kForeign);
     ASSERT_TRUE(TagStore::writeRaw(file, QByteArray()));
     EXPECT_TRUE(TagStore::readRaw(file).isEmpty());
@@ -330,9 +421,9 @@ TEST(TagStore, CacheAnswersWithoutTouchingTheFileUntilInvalidatedOrExpired)
     TagStore::Cache cache(60000);
     EXPECT_EQ(cache.info(file).support, TagStore::Support::Supported);
     EXPECT_EQ(cache.info(file).tags, (QStringList{QStringLiteral("Red"), QStringLiteral("Work")}));
-    // Another application changes the file: the cache keeps answering until the entry is dropped.
+    // An unchanged file is answered from the cache; a changed one is probed again (CacheSeesAnotherApplicationsChange...).
+    // Dropping the entry always probes again.
     ASSERT_TRUE(TagStore::writeRaw(file, "Blue"));
-    EXPECT_EQ(cache.info(file).tags.size(), 2);
     cache.invalidate(file);
     EXPECT_EQ(cache.info(file).tags, QStringList{QStringLiteral("Blue")});
     EXPECT_EQ(cache.info(file).raw, QByteArray("Blue"));

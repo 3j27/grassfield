@@ -50,6 +50,8 @@ class FilesApp : public QObject
     Q_PROPERTY(QStringList colorTagNames READ colorTagNames CONSTANT)
     // Changes whenever Files writes tags (bindings that show tag states re-read them).
     Q_PROPERTY(int tagRevision READ tagRevision NOTIFY tagRevisionChanged)
+    // Tags removed from the sidebar (stored names), for the Tags section's menu that lists them again.
+    Q_PROPERTY(QStringList hiddenTags READ hiddenTags NOTIFY hiddenTagsChanged)
 
 public:
     explicit FilesApp(const QList<QUrl> &initialUrls, QObject *parent = nullptr);
@@ -84,6 +86,7 @@ public:
     void setGalleryInfo(bool on);
     QStringList colorTagNames() const;
     int tagRevision() const { return m_tagRevision; }
+    QStringList hiddenTags() const { return m_hiddenTags; }
 
     // A new folder listing owned by `parent` (a QML item: the listing dies with its view).
     Q_INVOKABLE QObject *createFolderModel(QObject *parent);
@@ -154,6 +157,8 @@ public:
     // Remove from Sidebar (macOS): hides the tag from the sidebar's Tags section for good (tags/hidden); files keep it
     // and it stays usable. Setting that tag in Files again lists it again.
     Q_INVOKABLE void forgetTag(const QString &tag);
+    // The way back: lists a tag removed from the sidebar again (Tags section's menu).
+    Q_INVOKABLE void showTag(const QString &tag);
 
 signals:
     void appearanceChanged();
@@ -165,6 +170,7 @@ signals:
     // Files wrote the tags of `urls` (every listing reads them again).
     void tagsChanged(const QList<QUrl> &urls);
     void tagRevisionChanged();
+    void hiddenTagsChanged();
 
 private:
     void track(KJob *job, const QString &activity);
