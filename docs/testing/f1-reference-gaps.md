@@ -421,3 +421,22 @@ Ordered by how often the surface is seen, then by how cheap the change is. "Toke
 - **Colours.** Colours are sampled from JPEGs with unknown ICC handling, ±3-5 per channel.
 - **Low-confidence values:** titlebar-only chrome (titlebar ~32, radius ~13), Search collapsed field and mode buttons,
   Apps and Stage panel heights, slider knob, alert icon frame, compact menu rows, popover radii.
+
+## Fidelity pass 1 status (2026-10-19, branch worktree-agent-abfa6fd971166f537)
+
+Token-level and shape changes only. Values are within the stated uncertainty; `tests/unit/tst_tokens.qml`
+`test_referenceMetrics` pins them. Screens: "visual NOT verified" for the items marked so below (see the report).
+
+| Gap | Closed | Value now | Left |
+|---|---|---|---|
+| 3 Menu bar | insets 20.5 / 18.5, `itemPadding` 11 wired, `statusItemPadding` 9.5, `menuWeight` 400, capsule highlight 23 of 24, transparent by default + `menubar.showBackground` | see tokens `menubar.*` | status-item order, search glyph, notch height; legibility on a light wallpaper needs the contrast run (visual NOT verified after the three-pass shadow) |
+| 4 Dock | `radius.dock` 24, `dock.padding` 10, `dock.separatorHeight` 49, capsule tooltip with tail (`control.tooltipPaddingX/Y` 13 / 4, tail 13 x 7), magnification default off | | icon context menu tail, full-Dock shrink; tooltip not captured (pointer missed the tile) |
+| 5 Menus | `menu.itemHeight` 24, `separatorHeight` 11, `radius.menu` 12, `minWidth` 150 | | section-header style token |
+| 7 Banners | `notification.bannerGap` 6 | | radius, icon size, centre panel (other pass) |
+| 8 Search | width 640, field 56, query 26, row 56, icon 32 | | filter chips, empty state (other pass) |
+| 12 Toggle | track 36 x 16, knob 21 x 12 | | |
+| 13 Alerts, sheets | alert width 260 (`panel.alertWidth`), `radius.alert` 24, `radius.sheet` 26, equal-width capsule buttons 28 tall, `buttonMinWidth` 64 | | alert layout (icon, left aligned), sheet footer and 24-pt buttons, focus ring 3 (kept 2); Force Quit keeps its own 380 width; polkit untouched (security review) |
+| 15 Overview | tile 138 x 90, gap 32, round add button 32 | | names under thumbnails, full-width band, button 18 from the edge |
+| 16 Widgets | radius 26, margin 16, cell 164, placement from the top-left | | gallery anchored bottom-left |
+| 17 Grids | files and desktop cells 112, list rows 20, column rows 22, column 245, Get Info 264 | | |
+| 18 Controls | slider track 6 (Quick Settings 4), pill knob 21 x 16, light separators 0.08 | | push button height 24 |

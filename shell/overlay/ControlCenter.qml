@@ -220,6 +220,7 @@ FocusScope {
                 }
 
                 Slider {
+                    trackHeight: Tokens.controlSliderTrackCompact
                     width: parent.width - displayIcon.width - parent.spacing
                     anchors.verticalCenter: parent.verticalCenter
                     accessibleName: qsTr("Display brightness")
@@ -269,6 +270,7 @@ FocusScope {
                 }
 
                 Slider {
+                    trackHeight: Tokens.controlSliderTrackCompact
                     width: parent.width - mute.width - soundChevron.width - 2 * parent.spacing
                     anchors.verticalCenter: parent.verticalCenter
                     accessibleName: qsTr("Output volume")
@@ -333,6 +335,7 @@ FocusScope {
                 }
 
                 Slider {
+                    trackHeight: Tokens.controlSliderTrackCompact
                     width: parent.width - kbdIcon.width - parent.spacing
                     anchors.verticalCenter: parent.verticalCenter
                     accessibleName: qsTr("Keyboard brightness")

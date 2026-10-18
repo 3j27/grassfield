@@ -80,7 +80,7 @@ Scope {
     component DockConfig: JsonObject {
         property var pinned: ["foot", "chromium", "org.gnome.Nautilus"]
         property real magnification: 1.6
-        property bool magnificationEnabled: true
+        property bool magnificationEnabled: false
         property bool autohide: false
     }
 
@@ -101,6 +101,11 @@ Scope {
 
     component DesktopConfig: JsonObject {
         property bool showIcons: true
+    }
+
+    component MenubarConfig: JsonObject {
+        // false: the bar is transparent like macOS 26/27; true restores the frosted material band.
+        property bool showBackground: false
     }
 
     component NotificationsConfig: JsonObject {
@@ -147,6 +152,10 @@ Scope {
 
     function setDesktopShowIcons(value: bool): void {
         change("desktop.showIcons", value);
+    }
+
+    function setMenubarShowBackground(value: bool): void {
+        change("menubar.showBackground", value);
     }
 
     function setNotificationsDnd(value: bool): void {
@@ -302,6 +311,7 @@ Scope {
         property LockConfig lock: LockConfig {}
         property HotCornersConfig hotCorners: HotCornersConfig {}
         property DesktopConfig desktop: DesktopConfig {}
+        property MenubarConfig menubar: MenubarConfig {}
     }
 
     // Fresh read of the file for the merge (the watched FileView may lag behind an external write).

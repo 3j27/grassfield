@@ -57,8 +57,8 @@ QtObject {
     readonly property string typographyFallbackFamily: "Noto Sans"
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyMenuSize: 13
-    // estimate, pending F1 measurement from design/reference
-    readonly property int typographyMenuWeight: 500
+    // F1 gap 3: menu titles and clock are regular (reference); the app name keeps menuBoldWeight
+    readonly property int typographyMenuWeight: 400
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyMenuBoldWeight: 700
     // estimate, pending F1 measurement from design/reference
@@ -81,24 +81,26 @@ QtObject {
 
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusControl: 6
-    // estimate, pending F1 measurement from design/reference
-    readonly property int radiusDock: 20
+    // F1 gap 4: Dock radius ~24 +-3
+    readonly property int radiusDock: 24
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusDockIcon: 11
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusMenuBar: 0
-    // estimate, pending F1 measurement from design/reference
-    readonly property int radiusMenu: 10
+    // F1 gap 5: menu radius 12 +-1.5 (reference 2x captures)
+    readonly property int radiusMenu: 12
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusPanel: 18
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusDialog: 14
-    // estimate, pending F1 measurement from design/reference
-    readonly property int radiusTooltip: 6
     // spec notifications.md: about 16 pt
     readonly property int radiusBanner: 16
     // spec search.md: rounded about 26 pt
     readonly property int radiusSearch: 26
+    // F1 gap 13: alert radius ~24 +-3 (Dialog frame: confirm, notice, About, Force Quit)
+    readonly property int radiusAlert: 24
+    // F1 gap 13: sheet radius 26 +-1.5
+    readonly property int radiusSheet: 26
 
     // estimate, pending F1 measurement from design/reference
     readonly property int shadowBlur: 18
@@ -140,22 +142,36 @@ QtObject {
     readonly property real materialDisabledOpacity: 0.38
     // estimate: hover opacity multiplier for an active menu bar item
     readonly property real materialHoverActiveFactor: 1.5
+    // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope
+    readonly property real materialSeparatorOpacityLight: 0.08
 
     // task spec / macOS convention, pending F1 measurement
     readonly property int menubarHeight: 24
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menubarItemPadding: 10
+    // F1 gap 3: 11 per side (titles 22 apart edge to edge, system mark to app name 22), now wired in BarButton
+    readonly property int menubarItemPadding: 11
     // estimate, pending F1 measurement from design/reference
     readonly property int menubarIconSize: 14
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menubarHoverInsetTop: 1
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menubarHoverInsetBottom: 2
+    // F1 gap 3: open-title capsule about 23 of 24
+    readonly property int menubarHoverInsetTop: 0
+    // F1 gap 3: open-title capsule about 23 of 24
+    readonly property int menubarHoverInsetBottom: 1
+    // F1 gap 3: status glyphs 19 apart (18.5-20)
+    readonly property real menubarStatusItemPadding: 9.5
+    // F1 gap 3: screen edge to the system mark
+    readonly property real menubarInsetLeft: 20.5
+    // F1 gap 3: clock end to the screen edge (18-19)
+    readonly property real menubarInsetRight: 18.5
+    // A2: alpha of the drop shadow under the bar text and glyphs while the bar background is off (same treatment as the desktop labels)
+    readonly property real menubarTextShadowOpacity: 1.0
+    // A2: MultiEffect shadowBlur of the bar text shadow pass
+    readonly property real menubarTextShadowBlur: 0.22
+    // A2: vertical offset of the bar text shadow
+    readonly property int menubarTextShadowOffsetY: 0
 
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIconSize: 48
-    // estimate, pending F1 measurement from design/reference
-    readonly property int dockPadding: 7
+    // F1 gap 4: vertical padding ~9.5 and end margin ~10 (integer for crisp tiles)
+    readonly property int dockPadding: 10
     // estimate, pending F1 measurement from design/reference
     readonly property int dockSpacing: 4
     // estimate, pending F1 measurement from design/reference
@@ -172,8 +188,8 @@ QtObject {
     readonly property int dockHideDelay: 450
     // estimate, pending F1 measurement from design/reference
     readonly property int dockSeparatorWidth: 1
-    // estimate, pending F1 measurement from design/reference
-    readonly property int dockSeparatorHeight: 40
+    // F1 gap 4: shelf height minus 18 for a 48 tile with 9.5 padding
+    readonly property int dockSeparatorHeight: 49
     // estimate, pending F1 measurement from design/reference
     readonly property int dockTooltipGap: 8
     // estimate: height reserved above the shelf for the label
@@ -188,16 +204,16 @@ QtObject {
     // estimate: px side of the corner trigger window
     readonly property int hotCornerSize: 2
 
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menuItemHeight: 22
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menuMinWidth: 220
+    // F1 gap 5: menu row height 24 +-0.5
+    readonly property int menuItemHeight: 24
+    // F1 gap 5: no real minimum, menus as narrow as ~151
+    readonly property int menuMinWidth: 150
     // estimate, pending F1 measurement from design/reference
     readonly property int menuPadding: 5
     // estimate, pending F1 measurement from design/reference
     readonly property int menuItemPadding: 10
-    // estimate, pending F1 measurement from design/reference
-    readonly property int menuSeparatorHeight: 9
+    // F1 gap 5: separator block 5+1+5
+    readonly property int menuSeparatorHeight: 11
     // estimate, pending F1 measurement from design/reference
     readonly property int menuIconSize: 14
     // estimate, pending F1 measurement from design/reference
@@ -213,28 +229,44 @@ QtObject {
     // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1)
     readonly property string menuSwatchMark: "#1B1B1F"
 
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlSliderTrack: 4
-    // estimate, pending F1 measurement from design/reference
+    // F1 gap 18: slider track 6 (Settings reference)
+    readonly property int controlSliderTrack: 6
+    // F1 gap 18: pill knob height
     readonly property int controlSliderKnob: 16
     // estimate, pending F1 measurement from design/reference
     readonly property int controlSliderHeight: 22
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlToggleWidth: 38
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlToggleHeight: 22
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlToggleKnob: 18
+    // F1 gap 12: toggle track 36x16
+    readonly property int controlToggleWidth: 36
+    // F1 gap 12: toggle track 36x16
+    readonly property int controlToggleHeight: 16
     // estimate, pending F1 measurement from design/reference
     readonly property int controlFocusRing: 2
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlTooltipPadding: 6
     // estimate
     readonly property int controlTooltipDelay: 500
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlButtonMinWidth: 72
+    // F1 gap 13: push button minimum width ~64
+    readonly property int controlButtonMinWidth: 64
     // estimate
     readonly property int controlSliderDefaultWidth: 200
+    // F1 gap 12: pill knob 21x12
+    readonly property int controlToggleKnobWidth: 21
+    // F1 gap 12: pill knob 21x12
+    readonly property int controlToggleKnobHeight: 12
+    // F1 gap 18: pill knob about 21x16 +-2
+    readonly property int controlSliderKnobWidth: 21
+    // F1 gap 18: Quick Settings slider track stays 4
+    readonly property int controlSliderTrackCompact: 4
+    // F1 gap 13: alert capsule buttons 110x28
+    readonly property int controlAlertButtonHeight: 28
+    // F1 gap 13: gap between alert buttons
+    readonly property int controlAlertButtonGap: 8
+    // F1 gap 4: capsule side padding ~13.5
+    readonly property int controlTooltipPaddingX: 13
+    // F1 gap 4: capsule 24.4 tall with 13 pt text
+    readonly property int controlTooltipPaddingY: 4
+    // F1 gap 4: tail 12.6 wide
+    readonly property int controlTooltipTailWidth: 13
+    // F1 gap 4: tail 7.3 high
+    readonly property int controlTooltipTailHeight: 7
 
     // estimate, pending F1 measurement from design/reference
     readonly property int panelControlCenterWidth: 320
@@ -272,11 +304,13 @@ QtObject {
     readonly property int panelPercentWidth: 36
     // estimate: centred dialogs sit this fraction of the screen height above centre
     readonly property real panelDialogRaise: 0.08
+    // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages)
+    readonly property int panelAlertWidth: 260
 
     // spec notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344
-    // spec notifications.md: 8 pt gaps
-    readonly property int notificationBannerGap: 8
+    // F1 gap 7: gap between stacked cards 6 +-1 (value only)
+    readonly property int notificationBannerGap: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int notificationBannerIconSize: 36
     // spec N2: default 5 s
@@ -321,20 +355,20 @@ QtObject {
     // estimate
     readonly property int osdHideDelay: 1600
 
-    // spec search.md: about 680 pt
-    readonly property int searchWidth: 680
+    // F1 gap 8: panel width with results 639 +-1
+    readonly property int searchWidth: 640
     // spec search.md: about 1/4 from the top
     readonly property real searchTopFraction: 0.22
-    // estimate
-    readonly property int searchFieldHeight: 60
-    // spec search.md: about 22 pt
-    readonly property int searchFieldSize: 22
+    // F1 gap 8: field row 56 +-1
+    readonly property int searchFieldHeight: 56
+    // F1 gap 8: query text ~26 +-1.5
+    readonly property int searchFieldSize: 26
     // estimate
     readonly property int searchFieldIconSize: 22
-    // estimate
-    readonly property int searchRowHeight: 44
-    // estimate
-    readonly property int searchRowIconSize: 28
+    // F1 gap 8: result row 56 +-1
+    readonly property int searchRowHeight: 56
+    // F1 gap 8: result icon ~32
+    readonly property int searchRowIconSize: 32
     // estimate
     readonly property int searchHeaderHeight: 28
     // estimate: glyph size relative to the row icon tile
@@ -417,12 +451,12 @@ QtObject {
     readonly property real overviewBackdropOpacity: 0.45
     // estimate: dim when blur is off (Reduce Transparency)
     readonly property real overviewBackdropOpacityOpaque: 0.92
-    // estimate: Spaces bar tile
-    readonly property int overviewTileWidth: 168
-    // estimate: Spaces bar tile
-    readonly property int overviewTileHeight: 104
-    // estimate: gap between Spaces tiles
-    readonly property int overviewTileGap: 14
+    // F1 gap 15: Space thumbnail 138x90 +-1
+    readonly property int overviewTileWidth: 138
+    // F1 gap 15: Space thumbnail 138x90 +-1
+    readonly property int overviewTileHeight: 90
+    // F1 gap 15: thumbnail gap 32
+    readonly property int overviewTileGap: 32
     // estimate: Spaces bar below the menu bar
     readonly property int overviewBarTopMargin: 12
     // estimate: app icons in a Space tile
@@ -451,6 +485,8 @@ QtObject {
     readonly property int overviewChromeWaitMs: 600
     // v2: pause before the single retry of an on:true the plugin refused with no-chrome (the second output's Exclusive commit may lag)
     readonly property int overviewChromeRetryMs: 120
+    // F1 gap 15: add-space button is a 32 circle
+    readonly property int overviewAddSize: 32
 
     // estimate: hairline border; shared by the Files, Settings and Ui components (the Apps launcher itself uses the launcher.* tokens)
     readonly property int appsBorderWidth: 1
@@ -500,14 +536,14 @@ QtObject {
     // estimate: Sound pane, width of the percentage next to a slider
     readonly property int settingsVolumeValueWidth: 44
 
-    // estimate: widgets v1 (docs/specs/widgets.md), px side of a small widget on the desktop grid
-    readonly property int widgetCell: 158
+    // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap)
+    readonly property int widgetCell: 164
     // estimate: widgets v1, px between widgets
     readonly property int widgetGap: 16
-    // estimate: widgets v1, tile corner radius
-    readonly property int widgetRadius: 20
-    // estimate: widgets v1, px from the screen edges to the desktop grid
-    readonly property int widgetDesktopMargin: 24
+    // F1 gap 16: widget radius ~26 +-2
+    readonly property int widgetRadius: 26
+    // F1 gap 16: 16 +-1 from the left, top aligned with the notification column
+    readonly property int widgetDesktopMargin: 16
     // estimate: widgets v1, saturation shift while a window has focus
     readonly property real widgetDimSaturation: -0.75
     // estimate: widgets v1, brightness shift while a window has focus
@@ -541,8 +577,8 @@ QtObject {
     // estimate: widgets v1, widgets.json larger than this is rejected
     readonly property int widgetMaxFileBytes: 262144
 
-    // estimate: desktop icons v1 (docs/specs/desktop.md), px width of a grid slot
-    readonly property int desktopIconCellWidth: 104
+    // F1 gap 17: desktop grid 112x112 +-1
+    readonly property int desktopIconCellWidth: 112
     // estimate: desktop icons v1, px height of a grid slot
     readonly property int desktopIconCellHeight: 112
     // estimate: desktop icons v1, px from the screen edges and the menu bar to the grid
@@ -610,16 +646,16 @@ QtObject {
     readonly property int filesStatusBarHeight: 22
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesIconSize: 64
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesIconCellWidth: 104
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesIconCellHeight: 108
+    // F1 gap 17: icon view cell 112x112 +-1
+    readonly property int filesIconCellWidth: 112
+    // F1 gap 17: icon view cell 112x112 +-1
+    readonly property int filesIconCellHeight: 112
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesIconLabelLines: 2
     // estimate: grey backdrop around a selected icon
     readonly property int filesIconBackdropPadding: 4
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesListRowHeight: 24
+    // F1 gap 17: list row 20 +-0.5
+    readonly property int filesListRowHeight: 20
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesListIconSize: 16
     // estimate: Files app (docs/specs/files.md)
@@ -632,14 +668,14 @@ QtObject {
     readonly property int filesListKindWidth: 150
     // estimate: alternating list row backgrounds
     readonly property real filesStripeOpacity: 0.04
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesColumnWidth: 230
+    // F1 gap 17: column view column 245 +-2
+    readonly property int filesColumnWidth: 245
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesPreviewWidth: 260
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesPreviewIconSize: 128
-    // estimate: Files app (docs/specs/files.md)
-    readonly property int filesInfoWindowWidth: 320
+    // F1 gap 17: Get Info window 264 +-1.5
+    readonly property int filesInfoWindowWidth: 264
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesInfoWindowHeight: 500
     // estimate: Files app (docs/specs/files.md)
@@ -714,6 +750,10 @@ QtObject {
     readonly property string filesTagPurple: "#9B5DE5"
     // own value: colour tag Gray (not copied)
     readonly property string filesTagGray: "#8B8D93"
+    // F1 gap 17: column view rows 22
+    readonly property int filesColumnRowHeight: 22
+    // minimum width of the list Name column (was filesColumnWidth)
+    readonly property int filesListNameMinWidth: 230
 
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewWindowWidth: 860

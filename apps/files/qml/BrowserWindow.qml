@@ -540,7 +540,7 @@ Window {
                         anchors.fill: parent
                         color: tabItem.current ? "transparent" : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                         border.width: Tokens.appsBorderWidth
-                        border.color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                        border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                     }
 
                     Text {
@@ -602,7 +602,7 @@ Window {
             anchors.top: tabBar.bottom
             width: parent.width
             height: Tokens.appsBorderWidth
-            color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
         // Error banner
@@ -686,7 +686,7 @@ Window {
             Rectangle {
                 width: parent.width
                 height: Tokens.appsBorderWidth
-                color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 
             Text {

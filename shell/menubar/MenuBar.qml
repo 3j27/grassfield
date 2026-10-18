@@ -147,6 +147,13 @@ Scope {
             readonly property bool hasFileMenu: hasApp && bridgeMenus.length === 0 && AppMenus.model.hasFileMenu(AppMenus.context(shownAppId))
             // A menu of this bar is open: only then may the bar take the keyboard (never on hover or at start).
             readonly property bool menuOpen: Popups.active && Popups.screenName === win.screen.name
+            // Transparent by default (like macOS 26/27); `menubar.showBackground` restores the frosted band.
+            readonly property bool showBackground: Settings.menubarShowBackground
+            // Without a background the bar sits on the wallpaper: light glyphs with a soft shadow whatever the appearance
+            // (the same treatment as the desktop labels, gate A2); on the material they follow the appearance.
+            readonly property color barText: showBackground ? Appearance.colors.text : Appearance.darkColors.text
+            readonly property color barTextDisabled: Appearance.withAlpha(showBackground ? Appearance.colors.text : Appearance.darkColors.text, Tokens.materialDisabledOpacity)
+            readonly property color barTint: showBackground ? Appearance.colors.hover : Appearance.darkColors.hover
             readonly property var battery: UPower.displayDevice
             readonly property bool hasBattery: !VisualFixtures.active && battery !== null && battery.isPresent && battery.isLaptopBattery
 
@@ -272,7 +279,7 @@ Scope {
             WlrLayershell.namespace: "grassfield-menubar"
             // Quickshell qmltypes name this property's type PendingRegion/FileViewAdapter without exporting it (metadata quirk).
             // qmllint disable missing-type
-            BackgroundEffect.blurRegion: material.blurActive ? blurRegion : null
+            BackgroundEffect.blurRegion: win.showBackground && material.blurActive ? blurRegion : null
             // qmllint enable missing-type
 
             Region {
@@ -294,6 +301,7 @@ Scope {
             Material {
                 id: material
                 anchors.fill: parent
+                visible: win.showBackground
                 radius: Tokens.radiusMenuBar
                 shadowEnabled: false
                 highlightEnabled: false
@@ -309,64 +317,118 @@ Scope {
                     height: 1
                     color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
                 }
+            }
 
-                Row {
-                    id: leftRow
-                    anchors {
-                        left: parent.left
-                        leftMargin: Tokens.spacingXs
-                        verticalCenter: parent.verticalCenter
-                    }
-                    spacing: 0
+            // Content: drawn straight on the wallpaper unless the user turns the background on (Settings, Menu Bar).
+            Item {
+                id: barContent
+                anchors.fill: parent
 
-                    BarButton {
-                        id: systemButton
-                        accessibleName: qsTr("Grassfield menu")
-                        active: win.isOpen("system")
-                        onActivated: win.popup("system")
-
-                        Icon {
-                            size: Tokens.menubarIconSize
-                            name: "grassfield-logo"
+                    Row {
+                        id: leftRow
+                        anchors {
+                            left: parent.left
+                            leftMargin: Tokens.menubarInsetLeft - Tokens.menubarItemPadding
+                            verticalCenter: parent.verticalCenter
                         }
-                    }
+                        spacing: 0
 
-                    BarButton {
-                        id: appButton
-                        objectName: "menubar-app"
-                        accessibleName: qsTr("Application menu: %1").arg(win.appName)
-                        active: win.isOpen("app")
-                        onActivated: win.popup("app")
+                        BarButton {
+                            id: systemButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            accessibleName: qsTr("Grassfield menu")
+                            active: win.isOpen("system")
+                            onActivated: win.popup("system")
 
-                        Text {
-                            textFormat: Text.PlainText
-                            text: win.appName
-                            color: Appearance.colors.text
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyMenuSize
-                            font.weight: Tokens.typographyMenuBoldWeight
-                            elide: Text.ElideRight
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: "grassfield-logo"
+                            }
                         }
-                    }
 
-                    // The app's own menus (T1/T2), in the app's order.
-                    Repeater {
-                        model: win.bridgeMenus
-
-                        delegate: BarButton {
-                            id: bridgeButton
-
-                            required property var modelData
-
-                            objectName: "menubar-bridge:" + modelData.title
-                            accessibleName: qsTr("%1 menu").arg(modelData.title)
-                            active: win.isOpen("appbridge") && Popups.data.dbusId === modelData.dbusId
-                            onActivated: win.openBridge(bridgeButton, bridgeButton.modelData)
+                        BarButton {
+                            id: appButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            objectName: "menubar-app"
+                            accessibleName: qsTr("Application menu: %1").arg(win.appName)
+                            active: win.isOpen("app")
+                            onActivated: win.popup("app")
 
                             Text {
                                 textFormat: Text.PlainText
-                                text: bridgeButton.modelData.title
-                                color: bridgeButton.modelData.enabled ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
+                                text: win.appName
+                                color: win.barText
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyMenuSize
+                                font.weight: Tokens.typographyMenuBoldWeight
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        // The app's own menus (T1/T2), in the app's order.
+                        Repeater {
+                            model: win.bridgeMenus
+
+                            delegate: BarButton {
+                                id: bridgeButton
+                                tint: win.barTint
+                                shadowed: !win.showBackground
+
+                                required property var modelData
+
+                                objectName: "menubar-bridge:" + modelData.title
+                                accessibleName: qsTr("%1 menu").arg(modelData.title)
+                                active: win.isOpen("appbridge") && Popups.data.dbusId === modelData.dbusId
+                                onActivated: win.openBridge(bridgeButton, bridgeButton.modelData)
+
+                                Text {
+                                    textFormat: Text.PlainText
+                                    text: bridgeButton.modelData.title
+                                    color: bridgeButton.modelData.enabled ? win.barText : win.barTextDisabled
+                                    font.family: Appearance.fontFamily
+                                    font.pixelSize: Tokens.typographyMenuSize
+                                    font.weight: Tokens.typographyMenuWeight
+                                }
+                            }
+                        }
+
+                        BarButton {
+                            id: fileButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            objectName: "menubar-file"
+                            visible: win.hasFileMenu
+                            accessibleName: qsTr("File menu")
+                            active: win.isOpen("appfile")
+                            onActivated: win.popup("appfile")
+
+                            Text {
+                                textFormat: Text.PlainText
+                                text: qsTr("File")
+                                color: win.barText
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyMenuSize
+                                font.weight: Tokens.typographyMenuWeight
+                            }
+                        }
+
+                        BarButton {
+                            id: windowButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            objectName: "menubar-window"
+                            visible: win.hasApp
+                            accessibleName: qsTr("Window menu")
+                            active: win.isOpen("appwindow")
+                            onActivated: win.popup("appwindow")
+
+                            Text {
+                                textFormat: Text.PlainText
+                                text: qsTr("Window")
+                                color: win.barText
                                 font.family: Appearance.fontFamily
                                 font.pixelSize: Tokens.typographyMenuSize
                                 font.weight: Tokens.typographyMenuWeight
@@ -374,141 +436,126 @@ Scope {
                         }
                     }
 
-                    BarButton {
-                        id: fileButton
-                        objectName: "menubar-file"
-                        visible: win.hasFileMenu
-                        accessibleName: qsTr("File menu")
-                        active: win.isOpen("appfile")
-                        onActivated: win.popup("appfile")
-
-                        Text {
-                            textFormat: Text.PlainText
-                            text: qsTr("File")
-                            color: Appearance.colors.text
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyMenuSize
-                            font.weight: Tokens.typographyMenuWeight
+                    Row {
+                        anchors {
+                            right: parent.right
+                            rightMargin: Tokens.menubarInsetRight - Tokens.menubarItemPadding
+                            verticalCenter: parent.verticalCenter
                         }
-                    }
+                        spacing: 0
 
-                    BarButton {
-                        id: windowButton
-                        objectName: "menubar-window"
-                        visible: win.hasApp
-                        accessibleName: qsTr("Window menu")
-                        active: win.isOpen("appwindow")
-                        onActivated: win.popup("appwindow")
+                        // Do Not Disturb indicator; click turns it off.
+                        BarButton {
+                            id: dndButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: Notifications.dnd
+                            accessibleName: qsTr("Do Not Disturb is on")
+                            onActivated: Notifications.setDnd(false)
 
-                        Text {
-                            textFormat: Text.PlainText
-                            text: qsTr("Window")
-                            color: Appearance.colors.text
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyMenuSize
-                            font.weight: Tokens.typographyMenuWeight
-                        }
-                    }
-                }
-
-                Row {
-                    anchors {
-                        right: parent.right
-                        rightMargin: Tokens.spacingXs
-                        verticalCenter: parent.verticalCenter
-                    }
-                    spacing: 0
-
-                    // Do Not Disturb indicator; click turns it off.
-                    BarButton {
-                        id: dndButton
-                        visible: Notifications.dnd
-                        accessibleName: qsTr("Do Not Disturb is on")
-                        onActivated: Notifications.setDnd(false)
-
-                        Icon {
-                            size: Tokens.menubarIconSize
-                            name: "moon"
-                        }
-                    }
-
-                    BarButton {
-                        id: networkButton
-                        accessibleName: qsTr("Network: %1").arg(Connectivity.description)
-                        active: win.isOpen("network")
-                        onActivated: win.popup("network")
-
-                        Icon {
-                            size: Tokens.menubarIconSize
-                            name: Connectivity.iconName
-                        }
-                    }
-
-                    BarButton {
-                        id: volumeButton
-                        accessibleName: qsTr("Volume: %1%").arg(Math.round(Audio.volume * 100))
-                        active: win.isOpen("volume")
-                        onActivated: win.popup("volume")
-                        onScrolled: delta => Audio.adjust(delta > 0 ? 0.05 : -0.05)
-
-                        Icon {
-                            size: Tokens.menubarIconSize
-                            name: Audio.iconName
-                        }
-                    }
-
-                    BarButton {
-                        id: batteryButton
-                        visible: win.hasBattery
-                        accessibleName: qsTr("Battery %1%").arg(win.battery ? Math.round(win.battery.percentage * 100) : 0)
-                        active: win.isOpen("battery")
-                        onActivated: win.popup("battery")
-
-                        Icon {
-                            size: Tokens.menubarIconSize
-                            name: win.battery && win.battery.state === UPowerDeviceState.Charging ? "battery-charging" : "battery"
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: "moon"
+                            }
                         }
 
-                        Text {
-                            textFormat: Text.PlainText
-                            text: win.battery ? qsTr("%1%").arg(Math.round(win.battery.percentage * 100)) : ""
-                            color: Appearance.colors.text
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyMenuSize
-                            font.weight: Tokens.typographyMenuWeight
+                        BarButton {
+                            id: networkButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            padding: Tokens.menubarStatusItemPadding
+                            accessibleName: qsTr("Network: %1").arg(Connectivity.description)
+                            active: win.isOpen("network")
+                            onActivated: win.popup("network")
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: Connectivity.iconName
+                            }
+                        }
+
+                        BarButton {
+                            id: volumeButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            padding: Tokens.menubarStatusItemPadding
+                            accessibleName: qsTr("Volume: %1%").arg(Math.round(Audio.volume * 100))
+                            active: win.isOpen("volume")
+                            onActivated: win.popup("volume")
+                            onScrolled: delta => Audio.adjust(delta > 0 ? 0.05 : -0.05)
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: Audio.iconName
+                            }
+                        }
+
+                        BarButton {
+                            id: batteryButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: win.hasBattery
+                            accessibleName: qsTr("Battery %1%").arg(win.battery ? Math.round(win.battery.percentage * 100) : 0)
+                            active: win.isOpen("battery")
+                            onActivated: win.popup("battery")
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: win.battery && win.battery.state === UPowerDeviceState.Charging ? "battery-charging" : "battery"
+                            }
+
+                            Text {
+                                textFormat: Text.PlainText
+                                text: win.battery ? qsTr("%1%").arg(Math.round(win.battery.percentage * 100)) : ""
+                                color: win.barText
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyMenuSize
+                                font.weight: Tokens.typographyMenuWeight
+                            }
+                        }
+
+                        BarButton {
+                            id: ccButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            padding: Tokens.menubarStatusItemPadding
+                            accessibleName: qsTr("Quick Settings")
+                            active: win.isOpen("controlcenter")
+                            onActivated: win.popup("controlcenter")
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: "control-center"
+                            }
+                        }
+
+                        BarButton {
+                            id: clockButton
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            accessibleName: qsTr("Date and time: %1. Open Notifications").arg(clockText.text)
+                            active: Notifications.centerOpen && Notifications.centerScreen === win.screen.name
+                            onActivated: Notifications.toggleCenter(win.screen.name)
+
+                            Text {
+                                textFormat: Text.PlainText
+                                id: clockText
+                                text: Qt.locale().toString(FixedTime.date(clock.date), qsTr("ddd d MMM")) + " "
+                                    + Qt.formatTime(FixedTime.date(clock.date), Qt.locale().timeFormat(Locale.ShortFormat))
+                                color: win.barText
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyMenuSize
+                                font.weight: Tokens.typographyMenuWeight
+                            }
                         }
                     }
-
-                    BarButton {
-                        id: ccButton
-                        accessibleName: qsTr("Quick Settings")
-                        active: win.isOpen("controlcenter")
-                        onActivated: win.popup("controlcenter")
-
-                        Icon {
-                            size: Tokens.menubarIconSize
-                            name: "control-center"
-                        }
-                    }
-
-                    BarButton {
-                        id: clockButton
-                        accessibleName: qsTr("Date and time: %1. Open Notifications").arg(clockText.text)
-                        active: Notifications.centerOpen && Notifications.centerScreen === win.screen.name
-                        onActivated: Notifications.toggleCenter(win.screen.name)
-
-                        Text {
-                            textFormat: Text.PlainText
-                            id: clockText
-                            text: Qt.locale().toString(FixedTime.date(clock.date), qsTr("ddd d MMM")) + " "
-                                + Qt.formatTime(FixedTime.date(clock.date), Qt.locale().timeFormat(Locale.ShortFormat))
-                            color: Appearance.colors.text
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyMenuSize
-                            font.weight: Tokens.typographyMenuWeight
-                        }
-                    }
-                }
             }
         }
     }

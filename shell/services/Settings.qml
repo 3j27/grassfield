@@ -36,6 +36,7 @@ Singleton {
     readonly property int lockIdleMinutes: store.lockIdleMinutes
 
     readonly property bool desktopShowIcons: store.data.desktop.showIcons
+    readonly property bool menubarShowBackground: store.data.menubar.showBackground
     readonly property string hotCornerTopLeft: store.hotCornerTopLeft
     readonly property string hotCornerTopRight: store.hotCornerTopRight
     readonly property string hotCornerBottomLeft: store.hotCornerBottomLeft
@@ -47,6 +48,10 @@ Singleton {
 
     function setDesktopShowIcons(value: bool): void {
         store.setDesktopShowIcons(value);
+    }
+
+    function setMenubarShowBackground(value: bool): void {
+        store.setMenubarShowBackground(value);
     }
 
     function setAppearance(value: string): void {

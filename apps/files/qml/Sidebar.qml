@@ -81,7 +81,7 @@ FocusScope {
         anchors.right: parent.right
         width: Tokens.appsBorderWidth
         height: parent.height
-        color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
     ListView {

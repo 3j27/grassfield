@@ -36,7 +36,7 @@ Item {
         radius: Tokens.radiusMenu
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
         border.width: 1
-        border.color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+        border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
     Column {

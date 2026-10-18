@@ -470,9 +470,11 @@ Variants {
                         readonly property bool focused: win.spaceFocus === index
                         readonly property int shownIcons: isPlus ? 0 : Math.min(modelData.appIds.length, Tokens.overviewTileMaxIcons)
 
-                        width: Tokens.overviewTileWidth
-                        height: Tokens.overviewTileHeight
-                        radius: Tokens.radiusDialog
+                        // The add button is a round 32 button centred on the row, not a tile.
+                        width: isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
+                        height: isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight
+                        y: isPlus ? (Tokens.overviewTileHeight - Tokens.overviewAddSize) / 2 : 0
+                        radius: isPlus ? height / 2 : Tokens.radiusDialog
                         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
                         border.width: modelData.active || focused || dropTarget ? Tokens.overviewSelectionWidth : 1
                         border.color: modelData.active || focused || dropTarget ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
@@ -531,7 +533,7 @@ Variants {
                             textFormat: Text.PlainText
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyTitleSize * 2
+                            font.pixelSize: Tokens.typographyTitleSize * 1.5
                             font.weight: Tokens.typographySmallWeight
                         }
 

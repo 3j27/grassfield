@@ -65,6 +65,20 @@ SettingsPage {
     }
 
     SettingsGroup {
+        caption: qsTr("Menu Bar")
+
+        SettingsRow {
+            title: qsTr("Show menu bar background")
+            subtitle: qsTr("Off: the wallpaper shows through the menu bar. On: the bar is drawn on the frosted material.")
+            Toggle {
+                accessibleName: qsTr("Show menu bar background")
+                checked: root.store.value("menubar.showBackground")
+                onToggled: c => root.store.set("menubar.showBackground", c)
+            }
+        }
+    }
+
+    SettingsGroup {
         caption: qsTr("Desktop")
 
         SettingsRow {

@@ -42,10 +42,10 @@ Item {
     }
 
     Rectangle {
-        readonly property real inset: (Tokens.controlToggleHeight - Tokens.controlToggleKnob) / 2
-        width: Tokens.controlToggleKnob
-        height: Tokens.controlToggleKnob
-        radius: width / 2
+        readonly property real inset: (Tokens.controlToggleHeight - Tokens.controlToggleKnobHeight) / 2
+        width: Tokens.controlToggleKnobWidth
+        height: Tokens.controlToggleKnobHeight
+        radius: height / 2
         y: inset
         x: root.checked ? root.width - width - inset : inset
         color: Appearance.colors.knob

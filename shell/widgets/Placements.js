@@ -223,15 +223,16 @@ function nearestFree(others, size, want, cols, rows) {
     return best;
 }
 
-// Add to the desktop of `screen` at the first free cell, scanning columns from the right edge down
-// (like the macOS desktop). Without room the widget is not added.
+// Add to the desktop of `screen` at the first free cell, scanning columns from the left edge, each from the
+// top (widgets start top-left, the desktop icons take the right column: F1 gap 16). Without room the widget
+// is not added.
 function addDesktop(state, id, size, screen, cols, rows) {
     const s = clone(state);
     if (!validSize(id, size) || screen === "" || s.desktop.length >= MAX_ENTRIES)
         return s;
     const others = s.desktop.filter(e => e.screen === screen);
     const c = cells(size);
-    for (let col = cols - c.w; col >= 0; col--) {
+    for (let col = 0; col <= cols - c.w; col++) {
         for (let row = 0; row <= rows - c.h; row++) {
             if (isFree(others, size, {col: col, row: row}, cols, rows)) {
                 s.desktop.push({uid: nextUid(s, id), id: id, size: size, screen: screen, col: col, row: row});

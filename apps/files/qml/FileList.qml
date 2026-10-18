@@ -10,7 +10,7 @@ FocusScope {
     required property var tab
     required property var model
 
-    readonly property real nameWidth: Math.max(Tokens.filesColumnWidth, list.width - Tokens.filesListDateWidth - Tokens.filesListSizeWidth - Tokens.filesListKindWidth)
+    readonly property real nameWidth: Math.max(Tokens.filesListNameMinWidth, list.width - Tokens.filesListDateWidth - Tokens.filesListSizeWidth - Tokens.filesListKindWidth)
     readonly property int pageRows: Math.max(1, Math.floor(list.height / Tokens.filesListRowHeight))
 
     Accessible.role: Accessible.Table
@@ -91,7 +91,7 @@ FocusScope {
                     width: Tokens.appsBorderWidth
                     height: parent.height - Tokens.spacingSm
                     anchors.verticalCenter: parent.verticalCenter
-                    color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                    color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                 }
 
                 Text {
@@ -134,7 +134,7 @@ FocusScope {
         anchors.top: header.bottom
         width: parent.width
         height: Tokens.appsBorderWidth
-        color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
     // Background --------------------------------------------------------------------------------

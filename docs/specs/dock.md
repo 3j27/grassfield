@@ -22,7 +22,7 @@ Pinned and running apps, Trash, launch/focus/cycle, magnification, autohide, ite
 12. Minimize paths: titlebar button (the plugin posts `grassfield>>{"type":"minimize-request","address":"…"}`; the address is validated as hex and mapped to a toplevel), Window menu, IPC `windows minimize` (bound to SUPER+M). `Compositor.minimize()` uses `hl.plugin.grassfield.minimize(address, x, y, w, h)` with the rectangle of the window's own tile (`Compositor.dockRect`: the Dock of the window's monitor, slot = separator + 1 + the window's index in the minimized list, global layout coordinates; each per-screen Dock registers with `Compositor.registerDock` and unregisters on destruction) when `Capabilities.has("minimize")`; otherwise it moves the window to `special:minimized`. Both branches record the window in the shell. `unminimize()` calls the plugin `restore(address, x, y, w, h)` toward the window's current tile on the focused monitor's Dock, or moves the window to the focused workspace, then activates it.
 
 ## grassfield.json keys (contract version 1; the integrator adds the schema)
-`dock.pinned` (string array, default `["foot","chromium","org.gnome.Nautilus"]`), `dock.magnification` (number 1–2.5, default 1.6), `dock.magnificationEnabled` (bool, default true), `dock.autohide` (bool, default false).
+`dock.pinned` (string array, default `["foot","chromium","org.gnome.Nautilus"]`), `dock.magnification` (number 1–2.5, default 1.6), `dock.magnificationEnabled` (bool, default false, as macOS), `dock.autohide` (bool, default false).
 
 ## Acceptance criteria
 - Screenshots: magnified (hover simulated via IPC), autohide hidden/revealed, item menu (L2). `tests/unit/tst_magnify.qml`, `tst_dockmodel.qml` (L0). Settings round trip `tests/shell/settings_roundtrip` (L1).

@@ -213,7 +213,7 @@ Variants {
                 y: Tokens.searchFieldHeight - 1
                 width: panel.width - 2 * Tokens.spacingLg
                 height: 1
-                color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 
             ListView {

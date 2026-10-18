@@ -13,6 +13,8 @@ QtObject {
     // Derived values.
     // Reduce Transparency is equivalent to transparency 0 (opaque tinted surfaces).
     readonly property real effectiveTransparency: reduceTransparency ? 0 : clamp01(transparency)
+    // Hairline alpha: the light appearance uses a lighter line (F1 gap 18).
+    readonly property real separatorOpacity: dark ? Tokens.materialSeparatorOpacity : Tokens.materialSeparatorOpacityLight
     readonly property var colors: devGlyphMode !== "" ? glyphColors(baseColors) : baseColors
     readonly property var baseColors: dark ? Tokens.colorDark : Tokens.colorLight
     // The dark palette for surfaces that are always dark (Apps), hooked like `colors`.

@@ -85,6 +85,33 @@ TestCase {
         compare(Tokens.typographyFallbackFamily, "Noto Sans");
     }
 
+    // F1 fidelity pass 1 (docs/testing/f1-reference-gaps.md): measured macOS 26 values, in points.
+    function test_referenceMetrics() {
+        compare(Tokens.menuItemHeight, 24);
+        compare(Tokens.menuSeparatorHeight, 11);
+        compare(Tokens.radiusMenu, 12);
+        compare(Tokens.controlToggleWidth, 36);
+        compare(Tokens.controlToggleHeight, 16);
+        compare(Tokens.controlToggleKnobWidth, 21);
+        compare(Tokens.controlToggleKnobHeight, 12);
+        compare(Tokens.controlSliderTrack, 6);
+        compare(Tokens.menubarItemPadding, 11);
+        compare(Tokens.panelAlertWidth, 260);
+        compare(Tokens.searchWidth, 640);
+        compare(Tokens.searchRowHeight, 56);
+        compare(Tokens.widgetRadius, 26);
+        compare(Tokens.widgetDesktopMargin, 16);
+        compare(Tokens.overviewTileWidth, 138);
+        compare(Tokens.filesIconCellWidth, 112);
+        compare(Tokens.desktopIconCellWidth, 112);
+        compare(Tokens.filesInfoWindowWidth, 264);
+        fuzzyCompare(Tokens.materialSeparatorOpacityLight, 0.08, 1e-9);
+        Appearance.dark = false;
+        fuzzyCompare(Appearance.separatorOpacity, Tokens.materialSeparatorOpacityLight, 1e-9);
+        Appearance.dark = true;
+        fuzzyCompare(Appearance.separatorOpacity, Tokens.materialSeparatorOpacity, 1e-9);
+    }
+
     Component {
         id: materialComponent
         Material {

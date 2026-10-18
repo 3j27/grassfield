@@ -223,7 +223,7 @@ FocusScope {
         }
 
         function rowPosition(row: int): point {
-            return lv.mapToItem(null, Tokens.spacingLg, (Math.max(0, row) + 1) * Tokens.filesListRowHeight - lv.contentY + lv.originY);
+            return lv.mapToItem(null, Tokens.spacingLg, (Math.max(0, row) + 1) * Tokens.filesColumnRowHeight - lv.contentY + lv.originY);
         }
 
         Component.onCompleted: {
@@ -252,7 +252,7 @@ FocusScope {
             anchors.right: parent.right
             width: Tokens.appsBorderWidth
             height: parent.height
-            color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
         DropArea {
@@ -307,7 +307,7 @@ FocusScope {
                     return;
                 }
                 const before = col.model.currentRow;
-                root.tab.handleViewKey(event, col.model, key => Nav.listMove(col.model.currentRow, key, lv.count, Math.max(1, Math.floor(lv.height / Tokens.filesListRowHeight))));
+                root.tab.handleViewKey(event, col.model, key => Nav.listMove(col.model.currentRow, key, lv.count, Math.max(1, Math.floor(lv.height / Tokens.filesColumnRowHeight))));
                 if (col.model.currentRow !== before)
                     root.userSelected(col.index);
             }
@@ -329,7 +329,7 @@ FocusScope {
                 readonly property bool emphasized: entry.selected && col.active && lv.activeFocus
 
                 width: lv.width
-                height: Tokens.filesListRowHeight
+                height: Tokens.filesColumnRowHeight
                 opacity: entry.hidden ? Tokens.filesHiddenOpacity : 1
                 Accessible.role: Accessible.ListItem
                 Accessible.name: entry.name

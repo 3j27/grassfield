@@ -401,10 +401,10 @@ Scope {
                                     visible: tile.isSeparator
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    anchors.bottomMargin: win.indicatorArea - (height - win.iconSize) / 2
                                     width: Tokens.dockSeparatorWidth
-                                    height: win.iconSize
-                                    color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+                                    height: Tokens.dockSeparatorHeight
+                                    color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                                 }
 
                                 // Application icon, growing upward from the shelf.
@@ -509,6 +509,7 @@ Scope {
                                 Tooltip {
                                     id: tooltip
                                     z: 10
+                                    tail: true
                                     text: tile.label
                                     delay: 0
                                     shown: tile.label !== "" && (tileHover.hovered || tile.activeFocus) && !Popups.active

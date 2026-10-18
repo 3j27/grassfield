@@ -65,7 +65,7 @@ Variants {
                 case "confirm":
                 case "appabout":
                 case "notice":
-                    return Tokens.radiusDialog;
+                    return Tokens.radiusAlert;
                 }
                 return Tokens.radiusMenu;
             }
