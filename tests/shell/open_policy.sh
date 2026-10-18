@@ -29,14 +29,15 @@ wait_for "$tmp/files.calls"; [[ $(<"$tmp/files.calls") == "$tmp/d" ]]; check "fo
 "$policy" "file://$tmp/note.txt" 2>/dev/null
 wait_for "$tmp/preview.calls"; [[ $(<"$tmp/preview.calls") == "$tmp/note.txt" ]]; check "text file URL opens in Preview" $?
 
-: >"$log"
-"$policy" "$tmp/blob.bin" 2>/dev/null && rc=0 || rc=$?
-[[ $rc == 1 && $(wc -l <"$log") == 1 && $(<"$log") == "open refused in dev: application/octet-stream" ]]
+# A log of its own: a detached open from an earlier step may still append to $log under load.
+refuse_log=$tmp/refuse.log
+GRASSFIELD_OPEN_LOG=$refuse_log "$policy" "$tmp/blob.bin" 2>/dev/null && rc=0 || rc=$?
+[[ $rc == 1 && $(wc -l <"$refuse_log") == 1 && $(<"$refuse_log") == "open refused in dev: application/octet-stream" ]]
 check "unsupported file refused with one line" $?
 
-: >"$log"
-"$policy" "trash:///" 2>/dev/null && rc=0 || rc=$?
-[[ $rc == 1 && $(<"$log") == "open refused in dev: url (trash)" ]]; check "trash:/// refused" $?
+trash_log=$tmp/trash.log
+GRASSFIELD_OPEN_LOG=$trash_log "$policy" "trash:///" 2>/dev/null && rc=0 || rc=$?
+[[ $rc == 1 && $(<"$trash_log") == "open refused in dev: url (trash)" ]]; check "trash:/// refused" $?
 
 # The shim: gio open follows the policy, gio launch is refused, other subcommands reach the real gio.
 export GRASSFIELD_OPEN_POLICY=$policy
