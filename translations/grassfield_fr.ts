@@ -757,6 +757,10 @@
         <translation>Vider la corbeille</translation>
     </message>
     <message>
+        <source>Tags</source>
+        <translation>Tags</translation>
+    </message>
+    <message>
         <source>Put Back</source>
         <translation>Remettre</translation>
     </message>
@@ -1024,6 +1028,10 @@
         <translation>Chargement…</translation>
     </message>
     <message>
+        <source>Searching…</source>
+        <translation>Recherche…</translation>
+    </message>
+    <message>
         <source>1 item</source>
         <translation>1 élément</translation>
     </message>
@@ -1034,6 +1042,14 @@
     <message>
         <source>%1 of %2 selected</source>
         <translation>%1 sur %2 sélectionnés</translation>
+    </message>
+    <message>
+        <source>%1, searching…</source>
+        <translation>%1, recherche en cours…</translation>
+    </message>
+    <message>
+        <source>%1 (the search stopped early: the folder holds too many items)</source>
+        <translation>%1 (recherche interrompue&#xa0;: le dossier contient trop d’éléments)</translation>
     </message>
     <message>
         <source>%1, %2 available</source>
@@ -1607,6 +1623,34 @@
         <source>“%1” can’t be moved or copied into itself.</source>
         <translation>«&#xa0;%1&#xa0;» ne peut pas être déplacé ou copié dans lui-même.</translation>
     </message>
+    <message>
+        <source>Items in the Trash can’t be tagged.</source>
+        <translation>Les éléments de la corbeille ne peuvent pas recevoir de tags.</translation>
+    </message>
+    <message>
+        <source>Tags are available for files on this computer only.</source>
+        <translation>Les tags ne sont disponibles que pour les fichiers de cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>“%1” is no longer there.</source>
+        <translation>«&#xa0;%1&#xa0;» n’existe plus.</translation>
+    </message>
+    <message>
+        <source>Links can’t carry tags.</source>
+        <translation>Les liens ne peuvent pas recevoir de tags.</translation>
+    </message>
+    <message>
+        <source>This volume can’t store tags.</source>
+        <translation>Ce volume ne peut pas enregistrer de tags.</translation>
+    </message>
+    <message>
+        <source>The tags of “%1” couldn’t be changed: %2</source>
+        <translation>Impossible de modifier les tags de «&#xa0;%1&#xa0;»&#xa0;: %2</translation>
+    </message>
+    <message>
+        <source>The tags of %1 items couldn’t be changed: %2</source>
+        <translation>Impossible de modifier les tags de %1 éléments&#xa0;: %2</translation>
+    </message>
 </context>
 <context>
     <name>FolderModel</name>
@@ -1617,6 +1661,10 @@
     <message>
         <source>Trash</source>
         <translation>Corbeille</translation>
+    </message>
+    <message>
+        <source>Tags are only searched in local folders.</source>
+        <translation>Les tags ne sont recherchés que dans les dossiers locaux.</translation>
     </message>
 </context>
 <context>
@@ -1683,6 +1731,10 @@
     <message>
         <source>Where</source>
         <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation>Tags</translation>
     </message>
     <message>
         <source>No Results</source>
@@ -1765,6 +1817,10 @@
     <message>
         <source>Glance</source>
         <translation>Survol</translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation>Tags</translation>
     </message>
     <message>
         <source>Put Back</source>
@@ -2128,6 +2184,14 @@
     <message>
         <source>No Access</source>
         <translation>Aucun accès</translation>
+    </message>
+    <message>
+        <source>Tags:</source>
+        <translation>Tags&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation>Tags</translation>
     </message>
 </context>
 <context>
@@ -3002,8 +3066,16 @@
         <translation>Emplacements</translation>
     </message>
     <message>
+        <source>Tags</source>
+        <translation>Tags</translation>
+    </message>
+    <message>
         <source>Eject %1</source>
         <translation>Éjecter %1</translation>
+    </message>
+    <message>
+        <source>Remove from Sidebar</source>
+        <translation>Retirer de la barre latérale</translation>
     </message>
 </context>
 <context>

@@ -9,6 +9,8 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include <functional>
+
 class FolderModel;
 class KJob;
 class PlacesModel;
@@ -42,6 +44,10 @@ class FilesApp : public QObject
     Q_PROPERTY(bool showHidden READ showHidden WRITE setShowHidden NOTIFY prefsChanged)
     // The gallery view shows its info panel (name, kind, dates, tags of the shown item).
     Q_PROPERTY(bool galleryInfo READ galleryInfo WRITE setGalleryInfo NOTIFY prefsChanged)
+    // Translated names of the seven colour tags, in palette order (tokens files.tagRed ... files.tagGray).
+    Q_PROPERTY(QStringList colorTagNames READ colorTagNames CONSTANT)
+    // Changes whenever Files writes tags (bindings that show tag states re-read them).
+    Q_PROPERTY(int tagRevision READ tagRevision NOTIFY tagRevisionChanged)
 
 public:
     explicit FilesApp(const QList<QUrl> &initialUrls, QObject *parent = nullptr);
@@ -74,6 +80,8 @@ public:
     void setShowHidden(bool on);
     bool galleryInfo() const;
     void setGalleryInfo(bool on);
+    QStringList colorTagNames() const;
+    int tagRevision() const { return m_tagRevision; }
 
     // A new folder listing owned by `parent` (a QML item: the listing dies with its view).
     Q_INVOKABLE QObject *createFolderModel(QObject *parent);
@@ -119,6 +127,28 @@ public:
     // Recursive size through KIO::directorySize; callback(bytes, files, folders), bytes -1 on error.
     Q_INVOKABLE void directorySize(const QUrl &url, const QJSValue &callback);
 
+    // Tags (user.xdg.tags, TagLogic/TagStore). Only local files and folders on filesystems with user extended
+    // attributes carry tags; tagsUnavailable() is "" when every item of `urls` can be tagged, else the reason shown in
+    // place of the tag controls.
+    Q_INVOKABLE QString tagsUnavailable(const QList<QUrl> &urls) const;
+    // Per colour (palette order): 0 no item has it, 1 some do, 2 all do.
+    Q_INVOKABLE QVariantList colorTagStates(const QList<QUrl> &urls) const;
+    // macOS behaviour: removes colour `index` from every item when all have it, else adds it to those without.
+    Q_INVOKABLE void toggleColorTag(const QList<QUrl> &urls, int index);
+    // Adds `tag` (a stored tag name) to the local items among `urls` (a drop on a sidebar tag).
+    Q_INVOKABLE void addTag(const QList<QUrl> &urls, const QString &tag);
+    // A tag's shown name (colour tags translated).
+    Q_INVOKABLE QString tagName(const QString &tag) const;
+    // Palette index of a colour tag, -1 for other tags.
+    Q_INVOKABLE int tagColor(const QString &tag) const;
+    // The location listing the items tagged `tag` in the folder shown at `from` and below: `from` itself when it is a
+    // local folder, the folder of a tag search, else the home folder.
+    Q_INVOKABLE QUrl tagSearchUrl(const QString &tag, const QUrl &from) const;
+    Q_INVOKABLE bool isTagSearch(const QUrl &url) const;
+    Q_INVOKABLE QString searchedTag(const QUrl &url) const;
+    // Removes a tag from the sidebar's Tags section (files keep it).
+    Q_INVOKABLE void forgetTag(const QString &tag);
+
 signals:
     void appearanceChanged();
     void undoChanged();
@@ -126,11 +156,19 @@ signals:
     void prefsChanged();
     void activityChanged();
     void operationFailed(const QString &message);
+    // Files wrote the tags of `urls` (every listing reads them again).
+    void tagsChanged(const QList<QUrl> &urls);
+    void tagRevisionChanged();
 
 private:
     void track(KJob *job, const QString &activity);
     void readAppearance();
     QString configFile() const;
+    // Writes `next(tags)` to each item; reports failures; announces the changed items.
+    void rewriteTags(const QList<QUrl> &urls, const std::function<QStringList(const QStringList &)> &next);
+    // Tags in use, for the sidebar (kept across sessions, at most kMaxKnownTags).
+    void noteTags(const QStringList &tags);
+    void publishKnownTags();
 
     QList<QUrl> m_initialUrls;
     PlacesModel *m_places = nullptr;
@@ -141,4 +179,6 @@ private:
     QString m_activity;
     int m_activityPercent = -1;
     QList<QPointer<KJob>> m_jobs;
+    QStringList m_knownTags;
+    int m_tagRevision = 0;
 };

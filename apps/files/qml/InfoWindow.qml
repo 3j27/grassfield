@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "TagColors.js" as TagColors
 
 // Get Info: kind, size (folders are measured with KIO::directorySize), location, dates and the
 // owner, group and permissions (read only in v1).
@@ -12,6 +13,28 @@ Window {
     required property var info
 
     property string folderSize: ""
+
+    // Tags, read again whenever Files writes tags (FilesApp.tagRevision).
+    readonly property string tagsReason: {
+        root.app.tagRevision;
+        return root.app.tagsUnavailable([root.info.url]);
+    }
+    readonly property var tagStates: {
+        root.app.tagRevision;
+        return root.tagsReason === "" ? root.app.colorTagStates([root.info.url]) : [];
+    }
+    // Every tag of the item by name, those of other applications too (the swatches show the colour ones).
+    readonly property string tagNames: {
+        root.app.tagRevision;
+        const names = [];
+        const states = root.tagStates;
+        for (let i = 0; i < states.length; i++) {
+            if (states[i] === 2)
+                names.push(root.app.colorTagNames[i]);
+        }
+        const others = (root.info.tags || []).filter(t => root.app.colorTagNames.indexOf(t) < 0);
+        return names.concat(others).join(", ");
+    }
 
     title: qsTr("%1 Info").arg(root.info.name)
     width: Tokens.filesInfoWindowWidth
@@ -111,6 +134,52 @@ Window {
                 width: parent.width
                 height: Tokens.appsBorderWidth
                 color: Appearance.withAlpha(Appearance.colors.separator, Tokens.materialSeparatorOpacity)
+            }
+
+            // Colour tags of the item: a click adds or removes one (user.xdg.tags). Items that can't carry tags (remote,
+            // in the Trash, links, volumes without extended attributes) show the row disabled, the reason under it and
+            // in a tooltip.
+            Item {
+                id: tagLine
+                width: content.width
+                height: tagSwatches.implicitHeight
+                Accessible.role: Accessible.Grouping
+                Accessible.name: tagLabel.text
+
+                Text {
+                    id: tagLabel
+                    textFormat: Text.PlainText
+                    width: Tokens.filesInfoLabelWidth
+                    y: Tokens.spacingXs
+                    horizontalAlignment: Text.AlignRight
+                    text: qsTr("Tags:")
+                    color: Appearance.colors.textSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyCaptionSize
+                }
+
+                SwatchRow {
+                    id: tagSwatches
+                    x: Tokens.filesInfoLabelWidth + Tokens.spacingSm - Tokens.menuItemPadding
+                    width: parent.width - x
+                    enabled: root.tagsReason === ""
+                    caption: root.tagsReason !== "" ? root.tagsReason : root.info.tags && root.info.tags.length > 0 ? root.tagNames : ""
+                    accessibleName: qsTr("Tags")
+                    model: TagColors.swatches(Tokens, root.app.colorTagNames, root.tagStates)
+                    onChosen: index => root.app.toggleColorTag([root.info.url], index)
+                }
+
+                HoverHandler {
+                    id: tagHover
+                }
+
+                Tooltip {
+                    text: root.tagsReason
+                    shown: tagHover.hovered && root.tagsReason !== ""
+                    x: tagSwatches.x
+                    y: -height - Tokens.spacingXs
+                    z: 1
+                }
             }
 
             Repeater {

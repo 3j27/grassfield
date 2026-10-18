@@ -18,6 +18,9 @@
 class KDirLister;
 class KDirModel;
 class KJob;
+class ItemListModel;
+class OrgKdeKDirNotifyInterface;
+class TagSearch;
 
 namespace KIO
 {
@@ -26,8 +29,12 @@ class PreviewJob;
 
 // One folder listing for QML: KIO's KDirModel (fed by a KDirLister) behind a sort/filter proxy.
 // Adds flat roles for QML delegates, Finder-style sorting (FileLogic::compareEntries), a name filter,
-// a URL-keyed selection that survives re-sorting, thumbnails through KIO::PreviewJob and free space
-// through KIO::fileSystemFreeSpace. It never touches files: operations live in FilesApp.
+// a URL-keyed selection that survives re-sorting, thumbnails through KIO::PreviewJob, tags (user.xdg.tags,
+// TagStore) and free space through KIO::fileSystemFreeSpace. It never touches files: operations live in FilesApp.
+//
+// A tag search location (grassfield-tag:/<tag>?in=<folder>, TagLogic) lists the matches of a TagSearch instead of a
+// folder: the same roles, selection and thumbnails, over a flat list of items from several folders, kept up to date
+// with KIO's change notifications (KDirNotify: renamed, moved, removed, changed) and FilesApp's tag changes.
 class FolderModel : public QSortFilterProxyModel
 {
     Q_OBJECT
@@ -49,6 +56,9 @@ class FolderModel : public QSortFilterProxyModel
     Q_PROPERTY(int previewSize READ previewSize WRITE setPreviewSize NOTIFY previewSizeChanged)
     // Edge of the large thumbnails (gallery view preview, role largeThumbnail), in pixels.
     Q_PROPERTY(int largePreviewSize READ largePreviewSize WRITE setLargePreviewSize NOTIFY previewSizeChanged)
+    // A tag search location (see the class comment); searchLimited: a bound of TagSearch stopped it early.
+    Q_PROPERTY(bool isSearch READ isSearch NOTIFY urlChanged)
+    Q_PROPERTY(bool searchLimited READ searchLimited NOTIFY loadingChanged)
 
 public:
     enum Roles {
@@ -67,6 +77,9 @@ public:
         CanPreviewRole,
         EmblemRole,
         LargeThumbnailRole,
+        // Stored tags in display order (colour tags first), and the palette indices of the colour tags (the dots).
+        TagsRole,
+        TagColorsRole,
     };
     Q_ENUM(Roles)
 
@@ -98,6 +111,11 @@ public:
     void setPreviewSize(int size);
     int largePreviewSize() const { return m_large.size; }
     void setLargePreviewSize(int size);
+    bool isSearch() const;
+    bool searchLimited() const { return m_searchLimited; }
+
+    // FilesApp changed the tags of `urls`: their rows read them again (and leave a tag search they no longer match).
+    void tagsChanged(const QList<QUrl> &urls);
 
     QHash<int, QByteArray> roleNames() const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -151,6 +169,8 @@ signals:
     void revealRequested(int row, bool rename);
     // The listed folder was deleted or the listing redirected elsewhere.
     void redirected(const QUrl &url);
+    // Tags found on shown items (batched): FilesApp keeps the list of tags in use for the sidebar.
+    void tagsSeen(const QStringList &tags);
 
 protected:
     bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;
@@ -190,6 +210,23 @@ private:
     QString thumbnailFor(const ThumbChannel &channel, const QUrl &url) const;
     bool previewSupported(const KFileItem &item) const;
 
+    // The item behind a source index and the source index of a url, for whichever source is active (the folder's
+    // KDirModel or the search results).
+    KFileItem sourceItem(const QModelIndex &source) const;
+    QModelIndex sourceIndexForUrl(const QUrl &url) const;
+    // Tags of an item (cached per url; read from user.xdg.tags of its local path).
+    QStringList tagsOf(const KFileItem &item) const;
+    void dropTags(const QUrl &url);
+    void emitRowChanged(const QUrl &url, const QList<int> &roles);
+
+    // Tag search.
+    void startSearch();
+    void stopSearch();
+    void watchChanges();
+    void addResults(const QStringList &paths);
+    void removeResults(const QList<QUrl> &urls);
+    void renameResult(const QUrl &from, const QUrl &to);
+
     KDirLister *m_lister = nullptr;
     KDirModel *m_dirModel = nullptr;
     QUrl m_url;
@@ -217,4 +254,15 @@ private:
     QTimer m_expectTimer;
     QTimer m_structureTimer;
     QPointer<KJob> m_freeSpaceJob;
+
+    // Tags read for shown rows (url -> stored tags), and tags not yet reported through tagsSeen.
+    mutable QHash<QUrl, QStringList> m_tags;
+    mutable QSet<QString> m_seenPending;
+    mutable QTimer m_seenTimer;
+
+    // Tag search: the matches (source model while searching), the running search and KIO's change notifications.
+    ItemListModel *m_results = nullptr;
+    QPointer<TagSearch> m_search;
+    OrgKdeKDirNotifyInterface *m_notify = nullptr;
+    bool m_searchLimited = false;
 };

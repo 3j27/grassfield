@@ -1,9 +1,12 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "TagColors.js" as TagColors
 
-// Sidebar: Favorites (standard folders that exist) and Locations (system volume, Solid volumes with
-// eject, Network when a KIO network worker is installed, Trash). Items accept drops.
+// Sidebar: Favorites (standard folders that exist), Locations (system volume, Solid volumes with
+// eject, Network when a KIO network worker is installed, Trash) and Tags (the tags in use: a click lists the items
+// with that tag in the shown folder and below, a drop tags the dropped items, the context menu removes the tag from
+// the sidebar). Items accept drops.
 FocusScope {
     id: root
 
@@ -25,6 +28,16 @@ FocusScope {
             root.places.mount(row);
         else
             root.tab.navigate(url, true);
+    }
+
+    // A place or a tag row (a tag lists its items in the shown folder and below).
+    function openEntry(entry: PlaceRow): void {
+        if (entry.kind === "tag") {
+            if (root.tab)
+                root.tab.showTag(entry.tag);
+        } else {
+            root.openRow(entry.index, entry.url, entry.mounted);
+        }
     }
 
     Connections {
@@ -75,7 +88,7 @@ FocusScope {
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
                 const item = list.itemAtIndex(root.keyRow) as PlaceRow;
                 if (item)
-                    root.openRow(item.index, item.url, item.mounted);
+                    root.openEntry(item);
                 event.accepted = true;
             }
         }
@@ -93,7 +106,7 @@ FocusScope {
                 anchors.leftMargin: Tokens.spacingSm
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Tokens.spacingXs
-                text: header.section === "favorites" ? qsTr("Favorites") : qsTr("Locations")
+                text: header.section === "favorites" ? qsTr("Favorites") : header.section === "tags" ? qsTr("Tags") : qsTr("Locations")
                 color: Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
@@ -117,9 +130,12 @@ FocusScope {
         required property bool mounted
         required property bool ejectable
         required property bool busy
+        required property string tag
+        required property int tagColor
 
         readonly property bool current: entry.index === root.currentRow
         readonly property bool keyed: list.activeFocus && entry.index === root.keyRow
+        readonly property bool isTag: entry.kind === "tag"
 
         width: ListView.view.width
         height: Tokens.filesSidebarItemHeight
@@ -127,7 +143,7 @@ FocusScope {
         Accessible.name: entry.name
         Accessible.selectable: true
         Accessible.selected: entry.current
-        Accessible.onPressAction: root.openRow(entry.index, entry.url, entry.mounted)
+        Accessible.onPressAction: root.openEntry(entry)
 
         Rectangle {
             anchors.fill: parent
@@ -140,11 +156,24 @@ FocusScope {
 
         ThemeIcon {
             id: glyph
+            visible: !entry.isTag
             x: Tokens.spacingSm
             anchors.verticalCenter: parent.verticalCenter
             name: entry.iconName
             size: Tokens.filesSidebarIconSize
             color: Appearance.colors.accent
+        }
+
+        // A tag: its colour dot, or a hollow ring for a tag without a colour (from another application).
+        Rectangle {
+            visible: entry.isTag
+            anchors.centerIn: glyph
+            width: Tokens.filesTagDotSize + Tokens.spacingXs
+            height: width
+            radius: width / 2
+            color: entry.tagColor >= 0 ? TagColors.at(Tokens, entry.tagColor) : "transparent"
+            border.width: entry.tagColor >= 0 ? 0 : Tokens.appsBorderWidth * 2
+            border.color: Appearance.colors.textSecondary
         }
 
         Text {
@@ -180,10 +209,14 @@ FocusScope {
             enabled: entry.mounted && entry.kind !== "network"
             keys: ["text/uri-list"]
             onDropped: event => {
-                if (event.hasUrls && root.tab) {
+                if (!event.hasUrls || !root.tab)
+                    return;
+                // A drop on a tag tags the items (local files only; FilesApp reports the others).
+                if (entry.isTag)
+                    root.app.addTag(event.urls, entry.tag);
+                else
                     root.tab.dropUrls(event.urls, entry.url, null);
-                    event.accept(Qt.CopyAction);
-                }
+                event.accept(Qt.CopyAction);
             }
         }
 
@@ -192,9 +225,19 @@ FocusScope {
             anchors.fill: parent
             anchors.rightMargin: eject.visible ? eject.width : 0
             hoverEnabled: true
-            onClicked: {
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: event => {
                 root.keyRow = entry.index;
-                root.openRow(entry.index, entry.url, entry.mounted);
+                if (event.button === Qt.RightButton) {
+                    // Tags only: the sidebar lists the tags in use; removing one leaves the files' tags alone.
+                    if (entry.isTag && root.tab) {
+                        const p = mouse.mapToItem(null, event.x, event.y);
+                        root.tab.win.menuLayer.open([{id: "forget", text: qsTr("Remove from Sidebar")}], p.x, p.y,
+                                                    id => root.app.forgetTag(entry.tag), list, false);
+                    }
+                    return;
+                }
+                root.openEntry(entry);
             }
         }
     }

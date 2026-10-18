@@ -705,9 +705,14 @@ Window {
                     if (!f)
                         return "";
                     if (f.loading && f.count === 0)
-                        return qsTr("Loading…");
+                        return f.isSearch ? qsTr("Searching…") : qsTr("Loading…");
                     const total = f.count === 1 ? qsTr("1 item") : qsTr("%1 items").arg(f.count);
                     const items = f.selectedCount > 0 ? qsTr("%1 of %2 selected").arg(f.selectedCount).arg(total) : total;
+                    // A tag search: still running, or stopped by its bounds (TagSearch) before the whole folder was seen.
+                    if (f.isSearch && f.loading)
+                        return qsTr("%1, searching…").arg(items);
+                    if (f.isSearch && f.searchLimited)
+                        return qsTr("%1 (the search stopped early: the folder holds too many items)").arg(items);
                     return f.freeSpace >= 0 ? qsTr("%1, %2 available").arg(items).arg(win.app.formatSize(f.freeSpace)) : items;
                 }
             }

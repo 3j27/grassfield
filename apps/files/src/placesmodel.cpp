@@ -1,5 +1,7 @@
 #include "placesmodel.h"
 
+#include "taglogic.h"
+
 #include <QDir>
 #include <QIcon>
 #include <QStandardPaths>
@@ -137,6 +139,16 @@ void PlacesModel::rebuild()
         places.append(trash);
     }
 
+    for (const QString &tag : std::as_const(m_tags)) {
+        Place p;
+        p.section = QStringLiteral("tags");
+        p.name = TagLogic::displayName(tag);
+        p.kind = QStringLiteral("tag");
+        p.tag = tag;
+        p.tagColor = TagLogic::colorIndex(tag);
+        places.append(p);
+    }
+
     beginResetModel();
     m_places = places;
     endResetModel();
@@ -200,18 +212,41 @@ QVariant PlacesModel::data(const QModelIndex &index, int role) const
         return p.ejectable;
     case BusyRole:
         return p.busy;
+    case TagRole:
+        return p.tag;
+    case TagColorRole:
+        return p.tagColor;
     }
     return {};
 }
 
 QHash<int, QByteArray> PlacesModel::roleNames() const
 {
-    return {{SectionRole, "section"}, {NameRole, "name"},   {UrlRole, "url"},       {IconNameRole, "iconName"}, {KindRole, "kind"},
-            {UdiRole, "udi"},         {MountedRole, "mounted"}, {EjectableRole, "ejectable"}, {BusyRole, "busy"}};
+    return {{SectionRole, "section"}, {NameRole, "name"},       {UrlRole, "url"},
+            {IconNameRole, "iconName"}, {KindRole, "kind"},     {UdiRole, "udi"},
+            {MountedRole, "mounted"},   {EjectableRole, "ejectable"}, {BusyRole, "busy"},
+            {TagRole, "tag"},           {TagColorRole, "tagColor"}};
+}
+
+void PlacesModel::setTags(const QStringList &tags)
+{
+    if (tags == m_tags)
+        return;
+    m_tags = tags;
+    rebuild();
 }
 
 int PlacesModel::rowForUrl(const QUrl &url) const
 {
+    // A tag search highlights its tag.
+    if (TagLogic::isSearchUrl(url)) {
+        const QString tag = TagLogic::searchTag(url);
+        for (int i = 0; i < m_places.size(); ++i) {
+            if (m_places[i].kind == QLatin1String("tag") && TagLogic::sameTag(m_places[i].tag, tag))
+                return i;
+        }
+        return -1;
+    }
     const QUrl clean = url.adjusted(QUrl::StripTrailingSlash);
     for (int i = 0; i < m_places.size(); ++i) {
         if (m_places[i].url.isValid() && m_places[i].url.adjusted(QUrl::StripTrailingSlash) == clean)

@@ -42,11 +42,21 @@ TestCase {
             return listing.currentRow >= 0 ? [listing.get(listing.currentRow).url] : [];
         }
 
-        ListElement { name: "alpha.png"; url: "file:///sandbox/alpha.png"; iconName: ""; thumbnail: ""; largeThumbnail: ""; emblem: ""; selected: false; isDir: false; canPreview: true; hidden: false }
-        ListElement { name: "beta.txt"; url: "file:///sandbox/beta.txt"; iconName: ""; thumbnail: ""; largeThumbnail: ""; emblem: ""; selected: false; isDir: false; canPreview: false; hidden: false }
-        ListElement { name: "gamma"; url: "file:///sandbox/gamma"; iconName: ""; thumbnail: ""; largeThumbnail: ""; emblem: ""; selected: false; isDir: true; canPreview: false; hidden: false }
-        ListElement { name: "delta.pdf"; url: "file:///sandbox/delta.pdf"; iconName: ""; thumbnail: ""; largeThumbnail: ""; emblem: ""; selected: false; isDir: false; canPreview: true; hidden: false }
-        ListElement { name: "epsilon.md"; url: "file:///sandbox/epsilon.md"; iconName: ""; thumbnail: ""; largeThumbnail: ""; emblem: ""; selected: false; isDir: false; canPreview: false; hidden: false }
+        // Dynamic roles keep tagColors a plain list (as FolderModel's role), not a nested ListModel.
+        dynamicRoles: true
+
+        function row(name: string, isDir: bool, canPreview: bool, tagColors: var): var {
+            return {name: name, url: "file:///sandbox/" + name, iconName: "", thumbnail: "", largeThumbnail: "", emblem: "", selected: false, isDir: isDir,
+                    canPreview: canPreview, hidden: false, tagColors: tagColors};
+        }
+
+        Component.onCompleted: {
+            listing.append(listing.row("alpha.png", false, true, [0, 4]));
+            listing.append(listing.row("beta.txt", false, false, []));
+            listing.append(listing.row("gamma", true, false, [6]));
+            listing.append(listing.row("delta.pdf", false, true, []));
+            listing.append(listing.row("epsilon.md", false, false, [1, 2, 3, 5]));
+        }
     }
 
     // The BrowserTab API the gallery uses. handleViewKey keeps BrowserTab's mapping for the keys tested here.

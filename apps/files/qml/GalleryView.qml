@@ -291,6 +291,7 @@ FocusScope {
             required property bool isDir
             required property bool canPreview
             required property bool hidden
+            required property var tagColors
 
             width: Tokens.filesGalleryStripCellWidth
             height: strip.height
@@ -317,11 +318,19 @@ FocusScope {
             }
 
             FileIcon {
+                id: stripIcon
                 anchors.centerIn: parent
                 size: Tokens.filesGalleryStripIconSize
                 iconName: cell.iconName
                 thumbnail: cell.thumbnail
                 emblem: cell.emblem
+            }
+
+            // Colour tags at the thumbnail's bottom right corner.
+            TagDots {
+                colors: cell.tagColors
+                anchors.right: stripIcon.right
+                anchors.bottom: stripIcon.bottom
             }
 
             DropArea {
@@ -433,6 +442,10 @@ FocusScope {
                     font.pixelSize: Tokens.typographyCaptionSize
                 }
 
+                TagDots {
+                    colors: root.info && root.info.tagColors ? root.info.tagColors : []
+                }
+
                 Rectangle {
                     width: parent.width
                     height: Tokens.appsBorderWidth
@@ -455,7 +468,8 @@ FocusScope {
                         {label: qsTr("Created"), value: root.info.created},
                         {label: qsTr("Modified"), value: root.info.modified},
                         {label: qsTr("Last opened"), value: root.info.accessed},
-                        {label: qsTr("Where"), value: root.info.where}
+                        {label: qsTr("Where"), value: root.info.where},
+                        {label: qsTr("Tags"), value: root.info.tags ? root.info.tags.join(", ") : ""}
                     ] : []
 
                     delegate: Item {

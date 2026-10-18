@@ -20,7 +20,10 @@ add_executable(grassfield-files
     src/foldermodel.cpp src/foldermodel.h
     src/placesmodel.cpp src/placesmodel.h
     src/imageproviders.cpp src/imageproviders.h
-    src/filelogic.cpp src/filelogic.h)
+    src/filelogic.cpp src/filelogic.h
+    src/taglogic.cpp src/taglogic.h
+    src/tagstore.cpp src/tagstore.h
+    src/tagsearch.cpp src/tagsearch.h)
 target_include_directories(grassfield-files PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(grassfield-files PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::DBus

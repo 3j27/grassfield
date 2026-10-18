@@ -42,7 +42,7 @@ kf_libs=(-lKF6KIOCore -lKF6KIOGui -lKF6KIOWidgets -lKF6CoreAddons -lKF6Service -
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
 mocs=()
-for h in foldermodel placesmodel filesapp; do
+for h in foldermodel placesmodel filesapp tagsearch; do
   "$moc" "${kf_includes[@]}" "$here/src/$h.h" -o "$out/moc_files_$h.cpp"
   mocs+=("$out/moc_files_$h.cpp")
 done
@@ -53,7 +53,8 @@ mkdir -p "$objdir"
 read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus)"
 read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus)"
 sources=("$here/src/main.cpp" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp"
-  "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "${mocs[@]}")
+  "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp"
+  "$here/src/tagsearch.cpp" "${mocs[@]}")
 pids=() objs=()
 for src in "${sources[@]}"; do
   obj=$objdir/$(basename "${src%.cpp}").o

@@ -2,12 +2,14 @@
 
 #include <QAbstractListModel>
 #include <QList>
+#include <QStringList>
 #include <QUrl>
 
 class KCoreDirLister;
 
 // Sidebar entries: Favorites (standard user folders that exist), Locations (the system volume and
-// Solid storage volumes, Network only when a KIO smb/sftp worker is installed, Trash).
+// Solid storage volumes, Network only when a KIO smb/sftp worker is installed, Trash) and Tags (the tags in use,
+// FilesApp: colour tags first; a tag entry has no URL of its own, the sidebar searches it in the shown folder).
 // Mount and eject go through Solid::StorageAccess (udisks2 + polkit); nothing is mounted by hand.
 class PlacesModel : public QAbstractListModel
 {
@@ -16,7 +18,20 @@ class PlacesModel : public QAbstractListModel
     Q_PROPERTY(bool networkAvailable READ networkAvailable CONSTANT)
 
 public:
-    enum Roles { SectionRole = Qt::UserRole + 1, NameRole, UrlRole, IconNameRole, KindRole, UdiRole, MountedRole, EjectableRole, BusyRole };
+    enum Roles {
+        SectionRole = Qt::UserRole + 1,
+        NameRole,
+        UrlRole,
+        IconNameRole,
+        KindRole,
+        UdiRole,
+        MountedRole,
+        EjectableRole,
+        BusyRole,
+        // Tag entries: the stored tag and its palette index (-1 for a tag without a colour).
+        TagRole,
+        TagColorRole,
+    };
     Q_ENUM(Roles)
 
     explicit PlacesModel(QObject *parent = nullptr);
@@ -35,6 +50,9 @@ public:
     // Unmount (and eject when the drive supports it) a removable volume.
     Q_INVOKABLE void eject(int row);
 
+    // The Tags section (stored tag names, display order).
+    void setTags(const QStringList &tags);
+
 signals:
     void trashEmptyChanged();
     void mounted(const QUrl &url);
@@ -42,15 +60,17 @@ signals:
 
 private:
     struct Place {
-        QString section; // "favorites" | "locations"
+        QString section; // "favorites" | "locations" | "tags"
         QString name;
         QUrl url;
         QString iconName;
-        QString kind; // "folder" | "volume" | "network" | "trash"
+        QString kind; // "folder" | "volume" | "network" | "trash" | "tag"
         QString udi;
         bool mounted = true;
         bool ejectable = false;
         bool busy = false;
+        QString tag;
+        int tagColor = -1;
     };
 
     void rebuild();
@@ -58,6 +78,7 @@ private:
     QList<Place> devicePlaces();
 
     QList<Place> m_places;
+    QStringList m_tags;
     KCoreDirLister *m_trashLister = nullptr;
     bool m_trashEmpty = true;
 };
