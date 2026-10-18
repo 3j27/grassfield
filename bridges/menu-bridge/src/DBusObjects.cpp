@@ -30,9 +30,20 @@ namespace gf::menubridge {
 )XML");
     }
 
+    bool answersByDefault(const QString& interface) {
+        // Left to QtDBus (cheap, answers without any state): introspection and pings.
+        return interface == QLatin1String("org.freedesktop.DBus.Introspectable") || interface == QLatin1String("org.freedesktop.DBus.Peer");
+    }
+
     bool RegistrarObject::handleMessage(const QDBusMessage& message, const QDBusConnection& connection) {
-        if (message.interface() != QLatin1String(kRegistrarService))
+        if (message.type() != QDBusMessage::MethodCallMessage)
+            return true; // signals and replies are never for this object
+        if (answersByDefault(message.interface()))
             return false;
+        // Only the registrar methods get an answer; any other call on this path is dropped without a reply (the
+        // message is already buffered by libdbus, but nothing is built for it).
+        if (message.interface() != QLatin1String(kRegistrarService))
+            return true;
         const QString member = message.member();
         QString       error;
         QString       text;
@@ -46,7 +57,7 @@ namespace gf::menubridge {
             error = QStringLiteral("org.freedesktop.DBus.Error.NotSupported");
             text  = QStringLiteral("GetMenus is not implemented");
         } else
-            return false;
+            return true; // not a registrar method: dropped
         const QString key = message.service() + u' ' + member;
         if (!m_logged.contains(key) && m_logged.size() < 256) {
             m_logged.insert(key);
@@ -61,8 +72,13 @@ namespace gf::menubridge {
     }
 
     bool DiagnosticsObject::handleMessage(const QDBusMessage& message, const QDBusConnection& connection) {
-        if (message.interface() != QLatin1String(kDiagnosticsService) || !message.arguments().isEmpty())
+        if (message.type() != QDBusMessage::MethodCallMessage)
+            return true;
+        if (answersByDefault(message.interface()))
             return false;
+        if (message.interface() != QLatin1String(kDiagnosticsService) || !message.arguments().isEmpty())
+            return true; // dropped
+
         if (message.member() == QLatin1String("Version")) {
             connection.send(message.createReply(QStringLiteral("%1 %2").arg(QLatin1String(kBridgeVersion), QLatin1String(kProtocol))));
             return true;
@@ -71,7 +87,7 @@ namespace gf::menubridge {
             connection.send(message.createReply(QVariant(m_status())));
             return true;
         }
-        return false;
+        return true; // unknown member: dropped
     }
 
 } // namespace gf::menubridge

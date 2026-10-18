@@ -12,6 +12,12 @@
 // shell connection (org.grassfield.MenuBridge1.Status "shell" false), so a round never races the bridge's handling of
 // the previous disconnect.
 //
+// Hostile unsolicited traffic (the counter-review's scenarios): --spam-mb N sends the bridge a directed method call of
+// N MB (org.grassfield.MenuBridge1, a junk interface) --spam-times T times, each time once the bridge answers its
+// Status after a (re)start and waiting until the bridge died; --spam-after-ms delays the first one. --huge-update-mb N
+// sends a LayoutUpdated signal of N MB (the signal the bridge subscribed to) after the first GetLayout answer.
+// --reply-delay-ms D answers every GetLayout D ms late (a slow but honest application).
+//
 // Refuses to run unless DBUS_SESSION_BUS_ADDRESS is a private /tmp/dbus-* bus (never the owner's session bus).
 //
 // Build: tests/fixtures/build.sh huge-menu (g++ + pkg-config Qt6DBus, Qt6Network; no moc needed).
@@ -29,6 +35,7 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <csignal>
 #include <cstdio>
 #include <unistd.h>
@@ -40,6 +47,17 @@ namespace {
     pid_t gKillPid   = 0;
     int   gKillOn    = 1;
     bool  gEmitUpdates = false;
+    int   gSpamMb      = 0;
+    int   gSpamTimes   = 1;
+    int   gSpamAfterMs = 0;
+    int   gHugeUpdateMb = 0;
+    int   gReplyDelayMs = 0;
+
+    // libdbus caps one array at 64 MB: a message of `mb` MB carries several byte arrays of at most 32 MB.
+    void addPayload(QDBusMessage& msg, int mb) {
+        for (int left = mb; left > 0; left -= 32)
+            msg << QByteArray(static_cast<qsizetype>(std::min(left, 32)) * 1024 * 1024, 'x');
+    }
 
     class HugeMenu : public QDBusVirtualObject {
       public:
@@ -58,12 +76,19 @@ namespace {
                 ::kill(gKillPid, SIGKILL);
                 return true; // the caller is dead: no reply
             }
-            conn.send(msg.createReply(m_reply.toList()));
-            if (gEmitUpdates && gGetLayout == 1) {
+            const QDBusMessage reply = msg.createReply(m_reply.toList());
+            if (gReplyDelayMs > 0) {
                 const QDBusConnection c = conn;
-                QTimer::singleShot(150, [c] {
+                QTimer::singleShot(gReplyDelayMs, [c, reply] { c.send(reply); });
+            } else
+                conn.send(reply);
+            if ((gEmitUpdates || gHugeUpdateMb > 0) && gGetLayout == 1) {
+                const QDBusConnection c = conn;
+                QTimer::singleShot(150 + gReplyDelayMs, [c] {
                     QDBusMessage sig = QDBusMessage::createSignal(QStringLiteral("/MenuBar/1"), QStringLiteral("com.canonical.dbusmenu"), QStringLiteral("LayoutUpdated"));
                     sig << QVariant::fromValue<uint>(2) << QVariant::fromValue<int>(0);
+                    if (gHugeUpdateMb > 0)
+                        addPayload(sig, gHugeUpdateMb);
                     c.send(sig);
                 });
             }
@@ -135,7 +160,17 @@ int main(int argc, char** argv) {
             break;
         const QString& a = args.at(i);
         const QString& v = args.at(++i);
-        if (a == QLatin1String("--items"))
+        if (a == QLatin1String("--spam-mb"))
+            gSpamMb = v.toInt();
+        else if (a == QLatin1String("--spam-times"))
+            gSpamTimes = v.toInt();
+        else if (a == QLatin1String("--spam-after-ms"))
+            gSpamAfterMs = v.toInt();
+        else if (a == QLatin1String("--huge-update-mb"))
+            gHugeUpdateMb = v.toInt();
+        else if (a == QLatin1String("--reply-delay-ms"))
+            gReplyDelayMs = v.toInt();
+        else if (a == QLatin1String("--items"))
             gItems = v.toInt();
         else if (a == QLatin1String("--label-kb"))
             gLabelKb = v.toInt();
@@ -166,6 +201,28 @@ int main(int argc, char** argv) {
     }
     std::printf("huge-menu: serving %s /MenuBar/1 items=%d label=%d kB pid=%d\n", qPrintable(service), gItems, gLabelKb, static_cast<int>(::getpid()));
     std::fflush(stdout);
+
+    if (gSpamMb > 0) {
+        pump(gSpamAfterMs);
+        QDBusMessage junk = QDBusMessage::createMethodCall(QStringLiteral("org.grassfield.MenuBridge1"), QStringLiteral("/org/grassfield/MenuBridge1"), QStringLiteral("org.grassfield.Junk1"),
+                                                           QStringLiteral("Spam"));
+        addPayload(junk, gSpamMb);
+        for (int t = 1; t <= gSpamTimes; ++t) {
+            QElapsedTimer up;
+            up.start();
+            while (bridgeHasShell(conn) < 0 && up.elapsed() < 20000)
+                pump(100);
+            std::printf("huge-menu: spam #%d: %d MB call to the bridge\n", t, gSpamMb);
+            std::fflush(stdout);
+            conn.send(junk);
+            QElapsedTimer down;
+            down.start();
+            while (bridgeHasShell(conn) >= 0 && down.elapsed() < 10000)
+                pump(100);
+            std::printf("huge-menu: spam #%d: bridge %s\n", t, bridgeHasShell(conn) < 0 ? "went down" : "survived");
+            std::fflush(stdout);
+        }
+    }
 
     for (int round = 1; round <= windows; ++round) {
         if (round > 1) {
@@ -203,7 +260,9 @@ int main(int argc, char** argv) {
                 break; // refused or failed: nothing more to wait for
         }
         for (const QByteArray& line : buffer.split('\n')) {
-            if (!line.isEmpty() && line.contains("\"type\":\"error\""))
+            if (!line.isEmpty() && line.contains("\"type\":\"status\""))
+                std::printf("huge-menu: round %d: status %s\n", round, line.left(200).constData());
+            else if (!line.isEmpty() && line.contains("\"type\":\"error\""))
                 std::printf("huge-menu: round %d: reply %s\n", round, line.left(200).constData());
             else if (!line.isEmpty() && line.contains("\"type\":\"menu\""))
                 std::printf("huge-menu: round %d: reply menu (%lld bytes)\n", round, static_cast<long long>(line.size()));

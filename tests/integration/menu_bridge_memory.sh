@@ -17,6 +17,16 @@
 #      application (another executable) is unaffected.
 #   E  forged or damaged state files (symlink, garbage, oversized) are ignored and removed; the bridge starts.
 #   F  a second bridge instance exits without touching the live bridge's state file.
+#   G  UNSOLICITED 100 MB message from a windowless peer, five times (a watcher kills the bridge above MemoryMax, the
+#      supervisor restarts it): no call is in flight, so the crashes are unattributed: nobody is refused; after the
+#      cap (5) the restarted bridge gives up cleanly: state "degraded", registrar not owned, opens answered "backoff".
+#   H  a menu application answers a small layout, then sends a 100 MB LayoutUpdated: the bridge dies with no call in
+#      flight: unattributed, the application is not refused and is served again by the restarted bridge.
+#   I  a victim's slow GetLayout (reply after 2.8 s) is in flight when an attacker's 100 MB message kills the bridge:
+#      the call is not fresh, so the crash is unattributed and the VICTIM (same executable, new process) is served.
+#
+# The memory limit is emulated by a watcher (never systemd-run --user): it SIGKILLs the
+# bridge as soon as its VmHWM exceeds 200 MB (a 100 MB message peaks at ~225 MB; the real unit allows 256 MB).
 #
 # Needs no compositor: a private dbus-daemon (/tmp/dbus-* socket, never the owner's bus), the bridge, tests/fixtures/huge-menu.
 # Usage: tests/integration/menu_bridge_memory.sh      Exit: 0 PASS, 1 FAIL, 2 environment error.
@@ -26,6 +36,7 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
 max_kb=$((256 * 1024))
 idle_limit_kb=$((20 * 1024)) # ADR-0008 budget ~20 MB (RssAnon: the Qt libraries' file-backed pages are not counted)
+watch_kb=$((200 * 1024))  # stand-in threshold: a 100 MB message peaks at ~225 MB here (VmHWM), so 200 MB plays the role of MemoryMax
 max_restarts=1               # case D: bridge deaths an application may cause before it is refused
 fail=0
 say() { printf '%s\n' "$*"; }
@@ -190,7 +201,7 @@ say "    bridge deaths: $deaths (limit $max_restarts); log:"
 grep -E "previous run died|refused|listening" "$log" | sed 's/^/      /'
 check "the re-read was attempted once (first attempt got 2 GetLayout)" test "$(getlayouts d1)" -eq 2
 check "the bridge died at most $max_restarts time(s)" test "$deaths" -le "$max_restarts"
-check "the restarted bridge attributed the crash to the application's executable" grep -q 'previous run died while a call to "exe:.*huge-menu"' "$log"
+check "the restarted bridge attributed the crash to the application's identity" grep -q 'previous run died while a call to "id:.*exe=.*huge-menu"' "$log"
 for n in $(seq 2 $attempts); do
   check "attempt $n (new pid): refused with backoff, no GetLayout at all" test "$(replies "d$n" 'backoff')" -ge 1 -a "$(getlayouts "d$n")" -eq 0
 done
@@ -212,7 +223,7 @@ for variant in symlink garbage oversized other-boot; do
   : >"$log"
   start_bridge
   check "[$variant] bridge started and ignored the file" grep -q "ignored .*bridge.sock.state" "$log"
-  check "[$variant] the file was replaced by a valid state" grep -q '^grassfield-menu-bridge-state 1$' "$state"
+  check "[$variant] the file was replaced by a valid state" grep -q '^grassfield-menu-bridge-state 2$' "$state"
   check "[$variant] it is a regular file now, not a symlink" test ! -L "$state"
   [[ $variant != symlink ]] || check "[$variant] the link's target was not written through" test "$(wc -l <"$work/target")" -eq 2
 done
@@ -229,6 +240,95 @@ say "    second instance exit status $second_rc: $(tail -n 1 "$work/second.log")
 check "second instance refused to start" test "$second_rc" -ne 0
 check "the live bridge still runs and listens" bridge_up "$live"
 check "its state file is untouched" test "$(sha256sum <"$state")" = "$before" -a "$(stat -c %i "$state")" = "$inode_before"
+
+registrar_free() { ! registrar_owned; }
+registrar_owned() {
+  dbus-send --bus="$bus" --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.NameHasOwner string:com.canonical.AppMenu.Registrar 2>/dev/null | grep -q 'boolean true'
+}
+start_watcher() { # the MemoryMax stand-in: SIGKILL the current bridge above max_kb of VmRSS
+  rm -f "$work/stop-watcher"
+  (
+    while [[ ! -e $work/stop-watcher ]]; do
+      p=$(cur_pid)
+      rss=$(status_field VmHWM "$p")
+      if [[ -n $rss ]] && ((rss > watch_kb)); then kill -9 "$p" 2>/dev/null; echo "watcher: killed bridge $p at $rss kB" >>"$work/watcher.log"; sleep 0.3; fi
+      sleep 0.02
+    done
+  ) &
+  watcher=$!
+}
+stop_watcher() {
+  touch "$work/stop-watcher"
+  wait "$watcher" 2>/dev/null
+}
+bridge_ready() { [[ -S $sock ]] && alive "$(cur_pid)"; }
+
+say ""
+say "[G] unsolicited 100 MB message from a windowless peer, 5 times"
+: >"$work/watcher.log"
+fresh_bridge || die "bridge did not restart"
+supervise
+start_watcher
+fixture g1 --items 1 --label-kb 0 --windows 0 --spam-mb 100 --spam-times 5 --service org.grassfield.SpamG
+sed 's/^/    /' "$work/g1.out"
+wait_until 20 bridge_ready
+wait_until 10 grep -q "gave up" "$log"
+say "    watcher kills: $(wc -l <"$work/watcher.log"); log:"
+grep -E "previous run died|gave up|listening" "$log" | sed 's/^/      /'
+check "the bridge was killed by every message" test "$(grep -c 'went down' "$work/g1.out")" -eq 5
+check "every crash was unattributed (no call in flight)" test "$(logcount 'unattributed crash')" -ge 5
+check "nobody was blamed or refused" test "$(logcount 'previous run died while a call to')" -eq 0 -a "$(grep -c '^deny ' "$state")" -eq 0
+check "after the cap the bridge gave up (log)" grep -q "gave up: 5 unattributed crashes" "$log"
+fixture g2 --items 3 --label-kb 0 --windows 1 --gap-ms 1500 --service org.grassfield.OtherG
+sed 's/^/    /' "$work/g2.out"
+check "the shell is told: state degraded, registrar false" grep -q 'status {"registrar":false,"state":"degraded"' "$work/g2.out"
+check "the registrar name is not owned" registrar_free
+check "opens are answered backoff (shell shows T0)" test "$(replies g2 backoff)" -ge 1
+check "no GetLayout was sent to anyone" test "$(getlayouts g2)" -eq 0
+stop_supervisor
+stop_watcher
+
+say ""
+say "[H] a menu application sends a 100 MB LayoutUpdated after a small layout"
+: >"$work/watcher.log"
+fresh_bridge || die "bridge did not restart"
+supervise
+start_watcher
+for n in 1 2; do
+  fixture "h$n" --items 3 --label-kb 0 --windows 1 --gap-ms 6000 --huge-update-mb 100 --service "org.grassfield.HugeUpdateH$n"
+  say "    attempt $n: menu=$(replies "h$n" 'reply menu') backoff=$(replies "h$n" 'backoff') GetLayout=$(getlayouts "h$n")"
+  wait_until 20 bridge_ready
+done
+stop_supervisor
+stop_watcher
+grep -E "previous run died|listening" "$log" | sed 's/^/      /'
+check "the bridge was killed by the oversized signal" test "$(wc -l <"$work/watcher.log")" -ge 2
+check "the first attempt got its menu" test "$(replies h1 'reply menu')" -ge 1
+check "the crashes were unattributed (no call in flight), not blamed" test "$(logcount 'unattributed crash')" -ge 1 -a "$(logcount 'previous run died while a call to')" -eq 0
+check "the application is served again after the restart (not refused)" test "$(replies h2 'reply menu')" -ge 1 -a "$(replies h2 backoff)" -eq 0
+
+say ""
+say "[I] a victim's slow GetLayout in flight while an attacker's 100 MB message kills the bridge"
+: >"$work/watcher.log"
+fresh_bridge || die "bridge did not restart"
+supervise
+start_watcher
+fixture i1 --items 3 --label-kb 0 --windows 1 --gap-ms 7000 --reply-delay-ms 2800 --service org.grassfield.VictimI1 &
+victim=$!
+wait_until 15 grep -q 'GetLayout #' "$work/i1.out"
+fixture i2 --items 1 --label-kb 0 --windows 0 --spam-mb 100 --spam-times 1 --spam-after-ms 1500 --service org.grassfield.AttackerI
+wait "$victim" 2>/dev/null
+wait_until 20 bridge_ready
+sed 's/^/    /' "$work/i1.out" "$work/i2.out"
+fixture i3 --items 3 --label-kb 0 --windows 1 --gap-ms 2000 --service org.grassfield.VictimI3
+sed 's/^/    /' "$work/i3.out"
+stop_supervisor
+stop_watcher
+grep -E "previous run died|listening" "$log" | sed 's/^/      /'
+check "the bridge was killed while the victim's call was open" test "$(wc -l <"$work/watcher.log")" -ge 1
+check "the victim's GetLayout reached it" test "$(getlayouts i1)" -ge 1
+check "the crash was unattributed (the call was not fresh), nobody blamed" test "$(logcount 'unattributed crash')" -ge 1 -a "$(logcount 'previous run died while a call to')" -eq 0
+check "the victim (same executable, new process) is served, not refused" test "$(replies i3 'reply menu')" -ge 1 -a "$(replies i3 backoff)" -eq 0
 
 say ""
 if ((fail)); then say "RESULT: FAIL"; exit 1; fi

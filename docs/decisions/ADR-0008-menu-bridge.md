@@ -122,3 +122,24 @@ reply was handled; a restarted bridge refuses the application whose call was in 
 (`/proc/<pid>/exe`), not its pid, so a new process does not escape. At most one restart per refusal period (15 min,
 doubling to 6 h, decaying); bounded to 128 identities; the file is atomic, symlink-safe, size-bounded and validated.
 Details and residual risks: `docs/specs/menu-bridge.md` MB14 and "Known limitations".
+
+## Amendment 2026-10-18: attribution that never blames an innocent (fix pass of the counter-review)
+The first amendment keyed refusals by executable and blamed every in-flight call after a crash. A second review showed
+that this blames innocents (an unsolicited 100 MB message arriving while a victim's call is open), that incoming
+messages are buffered by libdbus before the bridge can mark anything, and that executables are a weak key (shared
+interpreters, non-dumpable processes, copies). Decisions:
+- A crash is blamed only on the one identity with exactly one FRESH (at most 1 s old) call in flight. Anything else is
+  an "unattributed crash": counted, nobody penalised. Five within an hour make the bridge give up (degraded: no
+  registrar, `backoff` to every `open`, T0 menus, one log line, no notification). The state file now carries `run 0|1`,
+  the age of calls in flight (refreshed every 250 ms), the unattributed count and the refusals.
+- Identity = systemd app scope without the instance (flatpak id included) + exe + script of interpreters. Unreadable
+  exe: one shared `unknown` bucket, 2 min at most, never doubling. Never a pid.
+- Unsolicited surface: only the registrar methods get an answer, other calls and signals on the bridge's objects are
+  dropped, per-menu subscriptions are sender-specific. Idle identities are bounded (128) separately from refused ones
+  (64, never evicted before expiry); a clean exit does not reset the doubling inside the 24 h decay window; the state
+  file is written with `openat(O_EXCL|O_NOFOLLOW)` + `renameat`.
+Consequences and residual risk: attribution stays a heuristic. A same-uid process can always OOM or kill the bridge;
+buffering cannot be prevented; a fresh single call coinciding with someone else's huge message is blamed wrongly once
+(15 min of T0 menus for that application); a hostile reply delayed beyond 1 s or sent from a copied binary is merely
+counted. The worst outcome of any of this is a bridge that stays down or degraded and a desktop showing T0 menus.
+Details: `docs/specs/menu-bridge.md` MB14 and "Known limitations".

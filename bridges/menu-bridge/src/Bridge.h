@@ -25,6 +25,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QStringList>
+#include <QTimer>
 #include <QVariantMap>
 
 class QLocalSocket;
@@ -55,13 +56,16 @@ namespace gf::menubridge {
         void    open(const ShellMessage& msg);
         void    verified(const ShellMessage& msg, quint64 token, const QString& owner);
         void    close(const QString& window);
-        // Hostile or broken applications (Penalties.h): refusals are keyed by the application's executable identity.
-        // Every call sent to an application is recorded as in flight in the state file until its reply was handled, so
-        // a bridge that dies meanwhile blames that application in its next run.
+        // Hostile or broken applications (Penalties.h): refusals are keyed by the application's identity (app scope,
+        // executable, script). Every call sent to an application is recorded as in flight in the state file until its
+        // reply was handled (refreshed every penalty::kHeartbeatMs while one is open). A restarted bridge blames an
+        // application only for ONE fresh call in flight at the crash; any other crash is unattributed and only
+        // counted: after penalty::kMaxUnattributed of them the bridge gives up (degraded: no registrar, no menus).
         void    recordFailure(const QString& window, const QString& code);
         void    beginCall(const QString& id);
         void    endCall(const QString& id, int n = 1);
         void    saveState();
+        void    heartbeat();
         void    loadState();
         void    dropAll();
         void    setRegistrar(bool wanted);
@@ -98,7 +102,14 @@ namespace gf::menubridge {
         bool                        m_stateOwned = false; // loadState ran: this instance is the one bridge that may write the state file
 
         PenaltyBook                 m_penalties;
-        QHash<QString, int>         m_calls;    // identity -> calls in flight (mirrored in the state file)
+        struct Calls {
+            int     count     = 0;
+            qint64  startedMs = 0; // monotonic clock, start of the oldest call in flight
+        };
+        QHash<QString, Calls>       m_calls;     // identity -> calls in flight (mirrored in the state file)
+        QTimer                      m_heartbeat; // rewrites the state while calls are in flight (their age)
+        bool                        m_running  = true;  // false after stop(): the state says "stopped cleanly"
+        bool                        m_degraded = false; // gave up after too many unattributed crashes
         QHash<QString, QString>     m_keyOf;    // window -> identity
     };
 
