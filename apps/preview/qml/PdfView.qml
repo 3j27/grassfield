@@ -53,8 +53,10 @@ FocusScope {
     PdfDocument {
         id: doc
         source: root.info.url ?? ""
-        onStatusChanged: if (status === PdfDocument.Ready)
-            Qt.callLater(root.fit)
+        onStatusChanged: () => {
+            if (doc.status === PdfDocument.Ready)
+                Qt.callLater(root.fit);
+        }
     }
 
     PdfMultiPageView {

@@ -42,6 +42,10 @@ int main(int argc, char *argv[])
             urls << url;
     }
 
+    // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the
+    // windows down still see it.
+    FilesApp files(urls);
+
     QQmlApplicationEngine engine;
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
@@ -52,7 +56,6 @@ int main(int argc, char *argv[])
     if (qmlDir.isEmpty())
         qmlDir = QStringLiteral(GRASSFIELD_FILES_QML_DIR);
 
-    FilesApp files(urls);
     engine.setInitialProperties({{QStringLiteral("app"), QVariant::fromValue(&files)}});
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);

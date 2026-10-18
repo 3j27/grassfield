@@ -49,11 +49,13 @@ int main(int argc, char *argv[])
     for (const QString &message : args.errors)
         err << "grassfield-preview: " << message << Qt::endl;
 
+    // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the
+    // windows down still see it (no TypeError on close).
+    PreviewApp backend(args.paths, args.errors, glance);
+
     QQmlApplicationEngine engine;
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
-
-    PreviewApp backend(args.paths, args.errors, glance);
     engine.addImageProvider(QStringLiteral("preview"), new PreviewImageProvider(&backend));
 
     QString qmlDir = qEnvironmentVariable("GRASSFIELD_PREVIEW_QML");
