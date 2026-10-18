@@ -398,6 +398,13 @@ class ContrastTokens(unittest.TestCase):
             self.assertIn(line, field)
         # Every text item on the scrim and the disc uses the primary text colour: date, clock, initials, name, error, notice.
         self.assertEqual(view.count("color: root.colors.text\n"), 6)
+        # The error and notice lines (the two AlertMessage items) carry no layer or effect: a failed effect would hide
+        # "Authentication service unavailable" / "Crash recovery unavailable" (R12 review of 0513f6e).
+        alerts = [i for i in range(len(view)) if view.startswith("Accessible.role: Accessible.AlertMessage", i)]
+        self.assertEqual(len(alerts), 2)
+        for at in alerts:
+            block = view[view.rfind("Text {", 0, at):at]
+            self.assertNotIn("layer.", block)
 
     def test_cross_check_selftest_component_instance_with_opacity(self):
         # An instance of a component that contains text, given an opacity, is a text item with that opacity.
