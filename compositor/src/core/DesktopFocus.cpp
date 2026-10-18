@@ -42,6 +42,12 @@ namespace gf::desktopfocus {
         return Action::None;
     }
 
+    PointerFocus classifyPointerFocus(bool present, bool known, bool visible, bool takesInput) {
+        if (!present)
+            return PointerFocus::None;
+        return known && visible && takesInput ? PointerFocus::Live : PointerFocus::Stale;
+    }
+
     TargetSource pressTargetSource(PointerFocus focus) {
         return focus == PointerFocus::Live ? TargetSource::PointerFocus : TargetSource::UnderCursor;
     }
