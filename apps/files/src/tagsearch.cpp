@@ -19,8 +19,9 @@ constexpr int kBatchMs = 100;
 constexpr int kBatchSize = 64;
 } // namespace
 
-TagSearch::TagSearch(const QString &root, const QString &tag, bool showHidden)
-    : m_root(QFile::encodeName(root))
+TagSearch::TagSearch(quint64 generation, const QString &root, const QString &tag, bool showHidden)
+    : m_generation(generation)
+    , m_root(QFile::encodeName(root))
     , m_tag(tag)
     , m_showHidden(showHidden)
 {
@@ -48,7 +49,7 @@ void TagSearch::run()
     struct stat rootStat;
     if (m_root.isEmpty() || ::lstat(m_root.constData(), &rootStat) != 0 || !S_ISDIR(rootStat.st_mode)) {
         if (!cancelled())
-            emit done(false, 0);
+            emit done(m_generation, false, 0);
         return;
     }
     struct Folder {
@@ -102,7 +103,7 @@ void TagSearch::run()
                     queue.push_back({path, folder.depth + 1});
             }
             if (!batch.isEmpty() && (batch.size() >= kBatchSize || sinceFlush.elapsed() >= kBatchMs)) {
-                emit found(batch);
+                emit found(m_generation, batch);
                 batch.clear();
                 sinceFlush.restart();
             }
@@ -114,6 +115,56 @@ void TagSearch::run()
     if (cancelled())
         return;
     if (!batch.isEmpty())
-        emit found(batch);
-    emit done(limited, std::min(visited, kMaxVisited));
+        emit found(m_generation, batch);
+    emit done(m_generation, limited, std::min(visited, kMaxVisited));
+}
+
+SearchRunner::SearchRunner(QObject *parent)
+    : QObject(parent)
+{
+}
+
+SearchRunner::~SearchRunner()
+{
+    stop();
+}
+
+void SearchRunner::start(const QString &root, const QString &tag, bool showHidden)
+{
+    stop();
+    auto *search = new TagSearch(m_generation, root, tag, showHidden);
+    m_search = search;
+    connect(search, &TagSearch::found, this, &SearchRunner::onFound);
+    connect(search, &TagSearch::done, this, &SearchRunner::onDone);
+    search->start(QThread::LowPriority);
+}
+
+void SearchRunner::stop()
+{
+    // A new generation first: calls from the old worker that are already queued carry the old number.
+    ++m_generation;
+    TagSearch *search = m_search.data();
+    m_search.clear();
+    if (!search)
+        return;
+    disconnect(search, nullptr, this, nullptr);
+    search->cancel();
+    // The walk checks the flag at every entry, so it ends at once; one stuck in a slow system call is left to finish
+    // and delete itself.
+    if (search->wait(200))
+        delete search;
+}
+
+void SearchRunner::onFound(quint64 generation, const QStringList &paths)
+{
+    if (generation == m_generation)
+        emit found(paths);
+}
+
+void SearchRunner::onDone(quint64 generation, bool limited, int visited)
+{
+    if (generation != m_generation)
+        return;
+    m_search.clear();
+    emit done(limited, visited);
 }

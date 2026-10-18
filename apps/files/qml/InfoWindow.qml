@@ -23,17 +23,11 @@ Window {
         root.app.tagRevision;
         return root.tagsReason === "" ? root.app.colorTagStates([root.info.url]) : [];
     }
-    // Every tag of the item by name, those of other applications too (the swatches show the colour ones).
+    // Every tag of the item by name, those of other applications too (the swatches show the colour ones). Read live:
+    // `info` is the snapshot taken when the window opened.
     readonly property string tagNames: {
         root.app.tagRevision;
-        const names = [];
-        const states = root.tagStates;
-        for (let i = 0; i < states.length; i++) {
-            if (states[i] === 2)
-                names.push(root.app.colorTagNames[i]);
-        }
-        const others = (root.info.tags || []).filter(t => root.app.colorTagNames.indexOf(t) < 0);
-        return names.concat(others).join(", ");
+        return root.app.tagNamesOf(root.info.url).join(", ");
     }
 
     title: qsTr("%1 Info").arg(root.info.name)
@@ -163,7 +157,7 @@ Window {
                     x: Tokens.filesInfoLabelWidth + Tokens.spacingSm - Tokens.menuItemPadding
                     width: parent.width - x
                     enabled: root.tagsReason === ""
-                    caption: root.tagsReason !== "" ? root.tagsReason : root.info.tags && root.info.tags.length > 0 ? root.tagNames : ""
+                    caption: root.tagsReason !== "" ? root.tagsReason : root.tagNames
                     accessibleName: qsTr("Tags")
                     model: TagColors.swatches(Tokens, root.app.colorTagNames, root.tagStates)
                     onChosen: index => root.app.toggleColorTag([root.info.url], index)

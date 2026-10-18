@@ -20,7 +20,7 @@ class KDirModel;
 class KJob;
 class ItemListModel;
 class OrgKdeKDirNotifyInterface;
-class TagSearch;
+class SearchRunner;
 
 namespace KIO
 {
@@ -262,7 +262,7 @@ private:
 
     // Tag search: the matches (source model while searching), the running search and KIO's change notifications.
     ItemListModel *m_results = nullptr;
-    QPointer<TagSearch> m_search;
+    SearchRunner *m_search = nullptr;
     OrgKdeKDirNotifyInterface *m_notify = nullptr;
     bool m_searchLimited = false;
 };

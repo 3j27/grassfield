@@ -29,16 +29,18 @@ pointer=$root/scripts/dev/pointer.sh
 log=$dev/files-scenario.log
 
 [[ -x $bin ]] || { echo "FAIL: $bin missing (run apps/files/build-direct.sh)"; exit 1; }
-[[ -s $dev/nested.wayland ]] || { echo "FAIL: no nested instance (run scripts/dev/nested-up.sh)"; exit 1; }
+# shellcheck source=../../scripts/dev/pidfile.sh
+. "$root/scripts/dev/pidfile.sh"
+dev_nested_target "$dev" || { echo "FAIL: no verified nested instance of this tree (run scripts/dev/nested-up.sh as a bare command)"; exit 1; }
 command -v dbus-daemon >/dev/null || { echo "FAIL: dbus-daemon not found"; exit 1; }
-sock=$(<"$dev/nested.wayland")
+sock=$DEV_NESTED_SOCK
 [[ $sock != "${WAYLAND_DISPLAY:-}" ]] || { echo "FAIL: refusing the main Wayland socket"; exit 1; }
 
 # Fresh sandbox and isolated homes (paths are checked to stay inside .dev).
 case $scenario in "$root"/.dev/files-sandbox/*) ;; *) echo "FAIL: unsafe sandbox path"; exit 1 ;; esac
 case $iso in "$root"/.dev/isolated/files-sandbox) ;; *) echo "FAIL: unsafe isolated path"; exit 1 ;; esac
 rm -rf -- "$scenario" "$busdir" "$iso" "$sandbox/.scenario-env"
-mkdir -p "$scenario/src" "$scenario/dest" "$busdir" "$iso"/{config,cache,state,data}
+mkdir -p "$scenario/src" "$scenario/dest" "$busdir" "$iso"/{home,config,cache,state,data}
 printf 'alpha\n' >"$scenario/src/alpha.txt"
 printf 'beta\n' >"$scenario/src/beta.txt"
 trash=$iso/data/Trash
@@ -46,7 +48,7 @@ trash=$iso/data/Trash
 # Private session bus (same configuration as dbus-run-session and scripts/dev/shell-run.sh: socket in /tmp, as libdbus
 # caps socket paths at 99 bytes). Activated services inherit this environment: isolated homes, nested Wayland socket,
 # GRASSFIELD_DEV=1, no DISPLAY and no owner bus address.
-env -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY="$sock" GRASSFIELD_DEV=1 \
+env -u DISPLAY -u DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY="$sock" GRASSFIELD_DEV=1 HOME="$iso/home" \
   XDG_CONFIG_HOME="$iso/config" XDG_CACHE_HOME="$iso/cache" XDG_STATE_HOME="$iso/state" XDG_DATA_HOME="$iso/data" \
   setsid dbus-daemon --session --nofork --print-address=1 >"$busdir/address" 2>"$busdir/log" </dev/null &
 bus_pid=$!
@@ -108,6 +110,7 @@ kill -0 "$app" 2>/dev/null || { echo "FAIL: app exited"; cat "$log"; exit 1; }
 # Focus the window: click on empty space inside it (below the two icons).
 "$pointer" output "$output" abs 1050 600 sleep 200 click >/dev/null
 sleep 0.5
+"$root/scripts/nestctl" activewindow -j 2>/dev/null | jq -c "{class, title, focus: .focusHistoryID}" | sed "s/^/files_sandbox: active window: /"
 
 # 1. Copy alpha.txt (type-to-select, Ctrl+C), go up (Ctrl+Up), open dest (type-to-select, Return), paste.
 type_keys alpha
@@ -185,7 +188,7 @@ owner_after=$( [[ -d $owner_trash ]] && find "$owner_trash" -mindepth 1 -maxdept
 [[ $owner_before == "$owner_after" ]] && pass "owner Trash untouched ($owner_after entries)" || fail "owner Trash changed: $owner_before -> $owner_after"
 launches=$(grep -c "launch blocked" "$log" || true)
 [[ $launches == 0 ]] && pass "no application launch was attempted" || fail "$launches application launch(es) attempted (blocked by GRASSFIELD_FILES_NO_LAUNCH)"
-errors=$(grep -cE "qml:|\.qml:[0-9]+|TypeError|ReferenceError" "$log" || true)
+errors=$(grep -E "qml:|\.qml:[0-9]+|TypeError|ReferenceError" "$log" | grep -vcE "qml: grassfield: global menu (created|destroyed)" || true)
 [[ $errors == 0 ]] && pass "app log has no QML errors or warnings" || { fail "app log has $errors QML lines"; grep -E "qml:|\.qml:[0-9]+|TypeError|ReferenceError" "$log"; }
 
 echo "files_sandbox: $fails failure(s)"

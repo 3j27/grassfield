@@ -9,6 +9,7 @@
 #include <cstring>
 #include <sys/stat.h>
 #include <sys/xattr.h>
+#include <unistd.h>
 
 namespace TagStore
 {
@@ -24,20 +25,72 @@ bool unsupported(int error)
 }
 } // namespace
 
-Support support(const QString &path)
+Info probe(const QString &path)
 {
+    Info info;
     const QByteArray p = QFile::encodeName(path);
     struct stat st;
     if (p.isEmpty() || ::lstat(p.constData(), &st) != 0)
-        return Support::Missing;
-    if (S_ISLNK(st.st_mode))
-        return Support::Link;
-    if (::lgetxattr(p.constData(), TagLogic::attributeName(), nullptr, 0) < 0 && unsupported(errno))
-        return Support::NoXattr;
-    return Support::Supported;
+        return info;
+    if (S_ISLNK(st.st_mode)) {
+        info.support = Support::Link;
+        return info;
+    }
+    if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode)) {
+        info.support = Support::NotRegular;
+        return info;
+    }
+    info.support = ::access(p.constData(), W_OK) != 0 ? Support::ReadOnly : Support::Supported;
+    char buffer[1024];
+    const ssize_t n = ::lgetxattr(p.constData(), TagLogic::attributeName(), buffer, sizeof buffer);
+    if (n >= 0) {
+        info.raw = QByteArray(buffer, int(n));
+    } else if (errno == ERANGE) {
+        info.raw = readRaw(path);
+    } else if (unsupported(errno) && info.support == Support::Supported) {
+        info.support = Support::NoXattr;
+    }
+    info.tags = TagLogic::parse(info.raw);
+    return info;
 }
 
-QStringList read(const QString &path)
+Support support(const QString &path)
+{
+    return probe(path).support;
+}
+
+Cache::Cache(qint64 ttlMs, int maxEntries)
+    : m_ttlMs(ttlMs)
+    , m_maxEntries(maxEntries)
+{
+    m_clock.start();
+}
+
+const Info &Cache::info(const QString &path)
+{
+    const qint64 now = m_clock.elapsed();
+    const auto it = m_entries.constFind(path);
+    if (it != m_entries.cend() && now - it->stamp < m_ttlMs)
+        return it->info;
+    if (m_entries.size() >= m_maxEntries)
+        m_entries.clear();
+    Entry &entry = m_entries[path];
+    entry.info = probe(path);
+    entry.stamp = now;
+    return entry.info;
+}
+
+void Cache::invalidate(const QString &path)
+{
+    m_entries.remove(path);
+}
+
+void Cache::clear()
+{
+    m_entries.clear();
+}
+
+QByteArray readRaw(const QString &path)
 {
     const QByteArray p = QFile::encodeName(path);
     if (p.isEmpty())
@@ -45,7 +98,7 @@ QStringList read(const QString &path)
     char small[1024];
     ssize_t n = ::lgetxattr(p.constData(), TagLogic::attributeName(), small, sizeof small);
     if (n >= 0)
-        return TagLogic::parse(QByteArray(small, int(n)));
+        return QByteArray(small, int(n));
     if (errno != ERANGE)
         return {};
     // Longer than the stack buffer: ask for the size (it may change in between: one retry).
@@ -56,17 +109,21 @@ QStringList read(const QString &path)
         QByteArray value(int(size), Qt::Uninitialized);
         n = ::lgetxattr(p.constData(), TagLogic::attributeName(), value.data(), size_t(value.size()));
         if (n >= 0)
-            return TagLogic::parse(value.left(int(n)));
+            return value.left(int(n));
         if (errno != ERANGE)
             return {};
     }
     return {};
 }
 
-bool write(const QString &path, const QStringList &tags, QString *error)
+QStringList read(const QString &path)
+{
+    return TagLogic::parse(readRaw(path));
+}
+
+bool writeRaw(const QString &path, const QByteArray &value, QString *error)
 {
     const QByteArray p = QFile::encodeName(path);
-    const QByteArray value = TagLogic::serialize(tags);
     int rc = 0;
     if (value.isEmpty()) {
         rc = ::lremovexattr(p.constData(), TagLogic::attributeName());
@@ -78,6 +135,11 @@ bool write(const QString &path, const QStringList &tags, QString *error)
     if (rc != 0 && error)
         *error = QString::fromLocal8Bit(std::strerror(errno));
     return rc == 0;
+}
+
+bool write(const QString &path, const QStringList &tags, QString *error)
+{
+    return writeRaw(path, TagLogic::serialize(tags), error);
 }
 
 } // namespace TagStore

@@ -782,6 +782,8 @@ QtObject {
     readonly property int filesTagDotOverlap: 4
     // estimate: tag dots shown per item (macOS shows a few, stacked)
     readonly property int filesTagDotsMax: 3
+    // own value: a tag dot's edge is its colour darkened by this factor (Qt.darker); Orange, Yellow and Green are under 3:1 against the light window (2.3, 1.6, 2.9), the edge is 3:1 or more on every tag colour in the light appearance (computed, WCAG 1.4.11, tests/visual/test_contrast_tokens.py)
+    readonly property real filesTagDotOutlineDarker: 1.6
     // own value: colour tag Red (not copied)
     readonly property string filesTagRed: "#E5484D"
     // own value: colour tag Orange (not copied)
