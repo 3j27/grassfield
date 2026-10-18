@@ -24,6 +24,7 @@ class FilesApp : public QObject
     Q_PROPERTY(QString homePath READ homePath CONSTANT)
     Q_PROPERTY(QList<QUrl> initialUrls READ initialUrls CONSTANT)
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
+    Q_PROPERTY(bool devSession READ devSession CONSTANT)
     Q_PROPERTY(bool reduceMotion READ reduceMotion NOTIFY appearanceChanged)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoChanged)
     Q_PROPERTY(QString undoText READ undoText NOTIFY undoChanged)
@@ -47,6 +48,8 @@ public:
     QString homePath() const;
     QList<QUrl> initialUrls() const { return m_initialUrls; }
     bool dark() const { return m_dark; }
+    // GRASSFIELD_DEV=1: never offers anything that touches the owner's real trash (ADR-0011).
+    bool devSession() const { return qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1"); }
     bool reduceMotion() const { return m_reduceMotion; }
     bool canUndo() const;
     QString undoText() const;

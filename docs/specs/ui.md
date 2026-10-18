@@ -9,7 +9,7 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 ## Functional requirements
 1. `ui/tokens/tokens.json` is the single source of truth; `ui/tools/gen-tokens.py` generates `Tokens.qml`; `--check` exits 1 when stale.
 2. `Appearance` exposes `dark` (default true), `transparency` (default 0.25), `reduceTransparency` (forces effective transparency 0), `reduceMotion` (durations capped at `motionReducedMax` = 100 ms).
-3. `Material` tint alpha = `1 - t * (1 - tintAlphaMin)`; adds top highlight, 1 px border and a gaussian shadow (`RectangularShadow`, QtQuick.Effects 6.9+, verified in Qt 6.11.2) masked so it never shows under the glass.
+3. `Material` tint alpha = `Appearance.tintAlpha(t)`: `1 - t * (1 - tintAlphaMin)` (0.85 at the default t = 0.25), clamped to `tintAlphaClamp` up to `tintClampUntil` (A2: 0.82 up to t = 0.6), then linear to `tintAlphaMin` at t = 1; adds top highlight, 1 px border and a gaussian shadow (`RectangularShadow`, QtQuick.Effects 6.9+, verified in Qt 6.11.2) masked so it never shows under the glass.
 4. `Material` never blurs. The window declares `BackgroundEffect.blurRegion: Region { item: material; radius: material.radius }` when `material.blurActive`.
 5. Font family Inter, fallback Noto Sans (first installed wins).
 6. `Icon { name, color, size }` draws `branding/icons/symbolic/<name>.svg` (monochrome black) recolored with `MultiEffect` colorization (brightness 1 + colorization 1). `directory` is overridable for installed layouts.

@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """Fail when a test or dev script starts an app without an isolating helper (the owner's home stays untouched).
 
+THIS IS A LINT (best effort), NOT A SECURITY BOUNDARY. It reads scripts as text and catches the usual ways to start an app;
+shell and Python are expressive enough that a determined or merely unusual script (indirection through data, `eval` of a built
+string, another language, a binary) gets past it. The real protection is elsewhere: scripts/dev/isolated.sh (every app a dev
+script starts runs through it), the shell's dev open policy (shell/services/Apps.qml, scripts/dev/open-policy.sh: a dev session
+never asks GIO, xdg-open or gtk-launch to start an app) and the private D-Bus bus with isolated XDG homes
+(scripts/dev/shell-run.sh), see docs/decisions/ADR-0011-app-launch-path.md.
+
   check-isolation.py            scan tests/ and scripts/dev/, exit 1 on a violation
   check-isolation.py --selftest check the checker on synthetic scripts (one sample per launch form)
 
@@ -11,16 +18,19 @@ Shell scripts are parsed structurally (shlex tokens, separators ; & | && || ( ) 
 BEFORE any safety test, so a comment that mentions isolated.sh excuses nothing). A launch is an app word in command position,
 reached through wrappers that are looked through, with their options: setsid (-f -w -c), exec (-a NAME -c -l), env (-i -0 -u NAME
 -C DIR, VAR=value), nohup, timeout (-k DUR -s SIG, then DURATION), sudo, command (not -v/-V), stdbuf (-i -o -e MODE), nice, ionice,
-dbus-run-session, systemd-run, sh/bash/dash/zsh -c "STRING" and eval (the string is parsed again). A command word that is a
-variable ("$bin", ${bin}) is a launch when the file assigns that variable a value naming an app.
+dbus-run-session, systemd-run, time (-p, -f FORMAT, -o FILE), env -S "STRING", sh/bash/dash/zsh -c "STRING" and eval (the string
+is parsed again), and functions of the file that run their arguments as a command (run() { "$@"; } makes `run foot` a launch).
+A command word that is a variable ("$bin", ${bin}, "${cmd[@]}") is a launch when the file assigns that variable (or array
+cmd=(setsid foot)) a value naming an app. `scripts/nestctl|hyprctl dispatch exec CMD` (also --batch) is a launch of CMD.
 A launch is accepted when:
   - the wrapped command is scripts/dev/isolated.sh itself, vs_spawn or vs_foot (tests/visual/lib.sh helpers that call it): those are
     command words, not apps, so they are never launches;
   - the same simple command (VAR=value words, env arguments) sets XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_STATE_HOME, XDG_DATA_HOME and
     GRASSFIELD_CONFIG_HOME together;
   - an `isolation-ok: reason` marker comment sits on the line or the line before (a wrapper that isolates internally).
-Python: a spawn call (subprocess.*, Popen, os.system/exec*/spawn*/popen) whose statement window holds a string naming an app and no
-isolated.sh string is a violation.
+Python: a spawn call (subprocess.*, Popen, os.system/exec*/spawn*/posix_spawn*/popen, pty.spawn, asyncio.create_subprocess_*,
+loop.subprocess_exec/shell, names imported from subprocess) whose statement window holds a string naming an app and no isolated.sh
+string is a violation.
 """
 import os
 import re
@@ -31,13 +41,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 SELF = os.path.abspath(__file__)
 APP_NAMES = ("grassfield-settings", "grassfield-files", "grassfield-preview", "foot", "kitty", "chromium", "nautilus", "dolphin", "kate")
 ENV_SET = ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "GRASSFIELD_CONFIG_HOME")
-SKIP_WORDS = {"!", "then", "do", "else", "elif", "if", "while", "until", "time", "{", "}"}
+SKIP_WORDS = {"!", "then", "do", "else", "elif", "if", "while", "until", "{", "}"}
 # wrapper -> (options taking a separate value, positional words to skip after the options)
 WRAPPERS = {
     "setsid": (set(), 0),
     "exec": ({"-a"}, 0),
     "env": ({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}, 0),
     "nohup": (set(), 0),
+    "time": ({"-f", "--format", "-o", "--output"}, 0),
     "timeout": ({"-k", "--kill-after", "-s", "--signal"}, 1),
     "sudo": ({"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-T", "-U"}, 0),
     "command": (set(), 0),
@@ -52,7 +63,12 @@ SHELLS = {"sh", "bash", "dash", "zsh", "ksh"}
 APP_RE = re.compile(r"^(?:.*/)?(?:%s)$" % "|".join(re.escape(a) for a in APP_NAMES))
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-VARWORD = re.compile(r"^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$")
+VARWORD = re.compile(r"^\$\{?([A-Za-z_][A-Za-z0-9_]*)(?:\[[@*0-9]+\])?\}?$")
+# A word that is the caller's argument: "$@", $@, "${@}", "$*", "$1", "${1}": a function that runs one forwards its arguments.
+ARGWORD = re.compile(r"^\$(?:[@*]|[1-9]|\{[@*1-9]\})$")
+FUNC_DEF = re.compile(r"^\s*(?:function\s+)?([A-Za-z_][A-Za-z0-9_-]*)\s*(?:\(\s*\))?\s*\{(.*)$")
+# Per-file context set by scan_shell: functions that run their arguments, and whether an argument word counts as a launch.
+CTX = {"fnwrap": {}, "fnenv": {}, "argmode": False}
 
 
 def strip_comment(line):
@@ -169,6 +185,11 @@ def app_vars(text):
         value = m.group(2).strip("\"'")
         if APP_RE.match(value.rstrip(")")):
             names.add(m.group(1))
+    # Arrays: cmd=(foot -e sh), cmd+=(setsid kitty): any element naming an app (also behind wrappers) makes "${cmd[@]}" a launch.
+    for m in re.finditer(r"(?:^|[\s;&|(])([A-Za-z_][A-Za-z0-9_]*)\+?=\(([^)]*)\)", text):
+        r = launched(tokens(m.group(2)), set())
+        if r and not isolated(r[1]):
+            names.add(m.group(1))
     return names
 
 
@@ -194,13 +215,25 @@ def launched(cmd, appvars, seen_env=None):
             return None
         if base == "eval":
             return scan_string(" ".join(cmd[i + 1:]), appvars, env)
-        if base in WRAPPERS:
-            opt_values, positional = WRAPPERS[base]
+        if base in ("nestctl", "hyprctl"):
+            return hypr_exec(cmd[i + 1:], appvars, env)
+        if base in WRAPPERS or word in CTX["fnwrap"]:
+            opt_values, positional = WRAPPERS.get(base, (set(), 0))
+            env |= CTX["fnwrap"].get(word, set())
             i += 1
             while i < len(cmd):
                 t = cmd[i]
                 if base == "command" and t in ("-v", "-V"):
                     return None
+                if base == "env" and (t in ("-S", "--split-string") or t.startswith("--split-string=") or (t.startswith("-S") and len(t) > 2)):
+                    # env -S "foot -e sh": the string is a command line of its own, followed by the remaining words.
+                    if t in ("-S", "--split-string"):
+                        value = cmd[i + 1] if i + 1 < len(cmd) else ""
+                        rest = cmd[i + 2:]
+                    else:
+                        value = t.split("=", 1)[1] if t.startswith("--") else t[2:]
+                        rest = cmd[i + 1:]
+                    return scan_string(" ".join([value] + rest), appvars, env)
                 if ASSIGN.match(t) and base == "env":
                     env.add(t.split("=", 1)[0])
                     i += 1
@@ -224,8 +257,55 @@ def launched(cmd, appvars, seen_env=None):
             return (word, env)
         if APP_RE.match(word):
             return (word, env)
+        if CTX["argmode"] and ARGWORD.match(word):
+            return (word, env)
         return None
     return None
+
+
+def hypr_exec(args, appvars, env):
+    """`nestctl|hyprctl dispatch exec CMD` (and --batch "dispatch exec CMD ; ...") launches CMD; a leading [rule] word is not the command."""
+    commands = []
+    for k, a in enumerate(args):
+        if a in ("--batch", "-b") and k + 1 < len(args):
+            commands += [part.split() for part in args[k + 1].split(";")]
+    commands.append(list(args))
+    for words in commands:
+        words = [w for w in words if not w.startswith("--")]
+        for k in range(len(words) - 1):
+            if words[k] == "dispatch" and words[k + 1] in ("exec", "execr"):
+                rest = " ".join(words[k + 2:])
+                rest = re.sub(r"^(?:\[[^\]]*\]\s*)+", "", rest)
+                r = scan_string(rest, appvars, env)
+                if r:
+                    return r
+    return None
+
+
+def function_wrappers(text):
+    """{name: isolation env names} of the functions of the file that run their arguments as a command (run() { "$@"; },
+    launch() { setsid "$1" & }): calling one with an app name is a launch, with the env the function sets itself."""
+    found = {}
+    lines = [(code) for _, code, _ in logical_lines(text)]
+    for i, code in enumerate(lines):
+        m = FUNC_DEF.match(code)
+        if not m:
+            continue
+        body, depth, j = m.group(2), 1 + m.group(2).count("{") - m.group(2).count("}"), i
+        while depth > 0 and j + 1 < len(lines):
+            j += 1
+            depth += lines[j].count("{") - lines[j].count("}")
+            body += " ; " + lines[j]
+        CTX["argmode"] = True
+        try:
+            for cmd in simple_commands(tokens(body)):
+                r = launched(cmd, set())
+                if r:
+                    found[m.group(1)] = r[1]
+                    break
+        finally:
+            CTX["argmode"] = False
+    return found
 
 
 def scan_string(string, appvars, env):
@@ -243,6 +323,8 @@ def isolated(env):
 def scan_shell(text):
     """[(line number, text)] of launches without isolation in a shell script."""
     appvars = app_vars("\n".join(code for _, code, _ in logical_lines(text)))
+    CTX["fnwrap"] = {}
+    CTX["fnwrap"] = function_wrappers(text)
     out = []
     prev_comment = ""
     for n, code, comment in logical_lines(text):
@@ -258,16 +340,22 @@ def scan_shell(text):
     return out
 
 
-SPAWN = re.compile(r"\b(?:subprocess\.\w+|Popen|os\.(?:system|exec\w*|spawn\w*|popen))\s*\(")
+SPAWN = re.compile(r"\b(?:subprocess\.\w+|Popen|os\.(?:system|exec\w*|spawn\w*|posix_spawn\w*|popen)|pty\.spawn"
+                   r"|asyncio\.create_subprocess_\w+|\w*\.?subprocess_(?:exec|shell))\s*\(")
+FROM_SUBPROCESS = re.compile(r"^\s*from\s+subprocess\s+import\s+(.+)$", re.M)
 PY_APP = re.compile(r"""["'](?:[^"'\s]*/)?(?:%s)["']""" % "|".join(re.escape(a) for a in APP_NAMES))
 
 
 def scan_python(text):
     lines = text.splitlines()
     out = []
+    spawn = SPAWN
+    imported = [n.strip().split(" as ")[-1] for m in FROM_SUBPROCESS.finditer(text) for n in m.group(1).split(",") if n.strip()]
+    if imported:
+        spawn = re.compile(SPAWN.pattern[:-len(r")\s*\(")] + "|" + "|".join(re.escape(n) for n in imported if n.isidentifier()) + r")\s*\(")
     for i, line in enumerate(lines):
         code = line.split("#")[0]
-        if not SPAWN.search(code):
+        if not spawn.search(code):
             continue
         window = "\n".join(l.split("#")[0] for l in lines[i:i + 4])
         marker = "isolation-ok:" in line or (i and "isolation-ok:" in lines[i - 1])
@@ -356,6 +444,28 @@ BAD = [
     'foot -e sh -c "echo # isolated.sh"',
     # the partial env set is not isolation
     "env XDG_CONFIG_HOME=a XDG_CACHE_HOME=b foot &",
+    # counter-review forms: env -S, time, array expansion, function wrappers, compositor exec, python spawners
+    'env -S "foot -e sh"',
+    "env -S 'setsid kitty' &",
+    "env --split-string='foot' &",
+    "env -i -S 'chromium --x' &",
+    "time -p foot",
+    "command time -p foot",
+    "/usr/bin/time -f %e foot",
+    "time foot",
+    'cmd=(foot -e sh)\n"${cmd[@]}" &',
+    'cmd=(setsid kitty)\nsetsid "${cmd[@]}" &',
+    'cmd=()\ncmd+=(foot)\n"${cmd[@]}"',
+    'cmd=(foot)\n"${cmd[0]}" &',
+    'run() { "$@"; }\nrun foot &',
+    'launch() {\n  setsid "$@" &\n}\nlaunch kitty',
+    'bg() { nohup "$1" >/dev/null 2>&1 & }\nbg chromium',
+    'function go { exec "$@"; }\ngo grassfield-files /tmp',
+    "scripts/nestctl dispatch exec foot",
+    'scripts/nestctl dispatch exec "[float] foot"',
+    "hyprctl dispatch exec kitty",
+    'scripts/nestctl --batch "dispatch exec chromium"',
+    'scripts/nestctl --batch "keyword a b ; dispatch exec foot"',
 ]
 GOOD = [
     'setsid "$root/scripts/dev/isolated.sh" foot &',
@@ -386,18 +496,47 @@ GOOD = [
     "tests=(foot kitty)",
     "systemd-run --user scripts/dev/isolated.sh foot",
     "exec scripts/dev/isolated.sh -- chromium",
+    # counter-review forms that are fine
+    'env -S "scripts/dev/isolated.sh foot"',
+    "env -S 'echo foot'",
+    "time -p echo foot",
+    "time -p scripts/dev/isolated.sh -- foot",
+    'cmd=(echo hi)\n"${cmd[@]}"',
+    'cmd=(scripts/dev/isolated.sh foot)\n"${cmd[@]}" &',
+    'run() { "$@"; }\nrun echo hi',
+    'run() { "$@"; }\nrun scripts/dev/isolated.sh -- foot',
+    'say() { echo "$@"; }\nsay foot',
+    'run() { XDG_CONFIG_HOME=a XDG_CACHE_HOME=b XDG_STATE_HOME=c XDG_DATA_HOME=d GRASSFIELD_CONFIG_HOME=e setsid "$@"; }\nrun foot &',
+    'iso() { scripts/dev/isolated.sh "$@"; }\niso foot &',
+    "scripts/nestctl dispatch exec scripts/dev/isolated.sh foot",
+    "scripts/nestctl clients -j",
+    "scripts/nestctl dispatch focuswindow foot",
+    'scripts/nestctl --batch "dispatch exec scripts/dev/isolated.sh kitty"',
 ]
 PY_BAD = [
     'import subprocess\nsubprocess.Popen(["foot", "-e", "sh"])',
     'subprocess.run(["/usr/bin/chromium", "--x"])',
     'os.system("setsid kitty")' if False else 'subprocess.call(["kitty"])',
     'p = subprocess.Popen(\n    ["grassfield-files", "x"],\n)',
+    # counter-review forms
+    'await asyncio.create_subprocess_exec("foot", "-e", "sh")',
+    'p = await asyncio.create_subprocess_shell("kitty")',
+    'os.posix_spawn("/usr/bin/foot", ["foot"], os.environ)',
+    'os.posix_spawnp("chromium", ["chromium"], os.environ)',
+    'pty.spawn(["foot"])',
+    'await loop.subprocess_exec(factory, "foot")',
+    'from subprocess import run\nrun(["foot"])',
+    'from subprocess import Popen as P, run as r\nr(["kitty"])',
 ]
 PY_GOOD = [
     'subprocess.run(["scripts/dev/isolated.sh", "--", "foot"])',
     'x = ["foot"]',
     'subprocess.run(["echo", "hi"])',
     'subprocess.Popen(["foot"])  # isolation-ok: wrapper isolates',
+    'await asyncio.create_subprocess_exec("scripts/dev/isolated.sh", "--", "foot")',
+    'pty.spawn(["scripts/dev/isolated.sh", "--", "foot"])',
+    'os.posix_spawn("/bin/echo", ["echo", "hi"], os.environ)',
+    'from subprocess import run\nrun(["echo", "hi"])',
 ]
 
 

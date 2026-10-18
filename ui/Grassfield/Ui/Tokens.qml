@@ -8,7 +8,7 @@ QtObject {
     // color roles, dark appearance
     readonly property var colorDark: ({
         text: "#F5F5F7",  // estimate, pending F1 measurement from design/reference
-        textSecondary: "#C4C4CC",  // A2: was #B8B8C0 (2.5:1 on a white wallpaper at transparency 0.6); 4.5:1 or more on every material backdrop, tested in tests/visual/test_contrast_tokens.py
+        textSecondary: "#DCDCE4",  // A2: was #B8B8C0; 4.5:1 or more on every material backdrop up to transparency 0.6 over a white wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#4FB36B",  // own Grassfield green, not copied
         indicator: "#E6E6EA",  // estimate, pending F1 measurement from design/reference
         hover: "#FFFFFF",  // estimate; drawn at hoverOpacity
@@ -22,13 +22,13 @@ QtObject {
         fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
         separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        danger: "#FFB3AD"  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop, tested
+        danger: "#FFD3CF"  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
     })
 
     // color roles, light appearance
     readonly property var colorLight: ({
         text: "#1B1B1F",  // estimate, pending F1 measurement from design/reference
-        textSecondary: "#4A4A52",  // A2: was #55555D (2.7:1 on a black wallpaper at transparency 0.6); 4.5:1 or more on every material backdrop, tested in tests/visual/test_contrast_tokens.py
+        textSecondary: "#3A3A42",  // A2: was #55555D; 4.5:1 or more on every material backdrop up to transparency 0.6 over a black wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#26763F",  // own Grassfield green, not copied
         indicator: "#2A2A30",  // estimate, pending F1 measurement from design/reference
         hover: "#000000",  // estimate; drawn at hoverOpacity
@@ -42,7 +42,7 @@ QtObject {
         fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
         separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        danger: "#8F1E18"  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop, tested
+        danger: "#7A1812"  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
     })
 
     // generic family: code and plain text views (Preview)
@@ -116,8 +116,12 @@ QtObject {
 
     // master-prompt 5.5 default, owner validates on screenshots
     readonly property real materialDefaultTransparency: 0.25
-    // A2 tint floor: tint alpha at transparency 1 (was 0.4: text fell to 2.5:1 over a white wallpaper at 0.6); every slider value up to 0.6 passes, tested
-    readonly property real materialTintAlphaMin: 0.85
+    // tint alpha at transparency 1 (frosted material); the A2 clamp below keeps it readable up to 0.6
+    readonly property real materialTintAlphaMin: 0.4
+    // A2 clamp: tint alpha never drops below this for transparency up to tintClampUntil (default 0.25 gives 0.85, unclamped); text and danger colours do the rest, tested in tests/visual/test_contrast_tokens.py
+    readonly property real materialTintAlphaClamp: 0.82
+    // A2: master-prompt 5.5, every slider value up to 0.6 must pass; beyond it the tint falls linearly from tintAlphaClamp to tintAlphaMin at 1
+    readonly property real materialTintClampUntil: 0.6
     // estimate, pending F1 measurement from design/reference
     readonly property real materialHighlightOpacity: 0.22
     // estimate, pending F1 measurement from design/reference

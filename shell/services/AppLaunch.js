@@ -35,3 +35,21 @@ function stripFieldCodes(command) {
     }
     return out;
 }
+
+// What an "open this in an application" helper command asks for (dev open policy, ADR-0011).
+//   gio open T...   xdg-open T   gtk-launch APP [T...]  -> { targets: [T...] }
+//   gio launch ...  gtk-launch APP (no target)          -> { refuse: "application launch" }
+//   any other command (gio trash, nm-connection-editor)  -> null: not an open request, runs as given.
+function openRequest(argv) {
+    const a = Array.from(argv || []).map(String);
+    const name = a.length > 0 ? a[0].replace(/^.*\//, "") : "";
+    if (name === "gio" && a[1] === "open")
+        return a.length > 2 ? {"targets": a.slice(2)} : {"refuse": "nothing to open"};
+    if (name === "gio" && a[1] === "launch")
+        return {"refuse": "application launch"};
+    if (name === "xdg-open")
+        return a.length > 1 ? {"targets": a.slice(1)} : {"refuse": "nothing to open"};
+    if (name === "gtk-launch")
+        return a.length > 2 ? {"targets": a.slice(2)} : {"refuse": "application launch"};
+    return null;
+}

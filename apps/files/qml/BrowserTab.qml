@@ -454,8 +454,11 @@ FocusScope {
     function backgroundMenu(model: var): var {
         const items = [];
         if (model.isTrash) {
-            items.push({id: "emptyTrash", text: qsTr("Empty Trash…"), destructive: true, enabled: !root.app.places.trashEmpty});
-            items.push({separator: true});
+            // A dev session never empties a trash (ADR-0011): no action rather than a confirmation that does nothing.
+            if (!root.app.devSession) {
+                items.push({id: "emptyTrash", text: qsTr("Empty Trash…"), destructive: true, enabled: !root.app.places.trashEmpty});
+                items.push({separator: true});
+            }
         } else {
             items.push({id: "newFolder", text: qsTr("New Folder"), shortcut: qsTr("Ctrl+Shift+N"), enabled: model.writable});
             items.push({separator: true});

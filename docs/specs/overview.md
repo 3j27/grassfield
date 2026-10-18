@@ -33,6 +33,10 @@ pending). Non-goal: capturing protected surfaces.
 | v2 spike | live transforms: mechanism, layering, input, CPU, cleanup (`tests/compositor/overview.sh check`, `perf`) | L1 |
 
 ## Known limitations
+- Contrast (A2, open finding): the Spaces bar captions use `textSecondary` on the black dim over the wallpaper, not on
+  Material, so the exact token calculation (`tests/visual/test_contrast_tokens.py`) lists them as an exempt role
+  ("overview captions") and `contrast.sh` has no Overview surface. Their ratio is not measured; fix by measuring the
+  Overview surface with the glyph mask, or by moving the captions to the primary text colour.
 - v1 shows thumbnails, not the real windows moving; real-window transforms need the plugin (v2).
 - v2 (plugin side): popups are not transformed, full-screen windows are not transformed, fractional scales and
   rotated outputs are not verified (see "Shell contract" item 8).

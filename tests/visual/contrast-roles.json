@@ -6,10 +6,12 @@
   "flat wallpaper colour, with and without a fill overlay), accent (solid accent), apps (black dim over the wallpaper), apps-field",
   "(dim + the Apps search field fill), rename-field (colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
   "the drop shadow). kind: text >= 4.5, large|icon >= 3.0. exempt: reason, the role is listed but not asserted (a disabled control, or a",
-  "surface outside the A2 scope that is tracked as an open finding in docs/testing/visual.md).",
-  "sites: where the role is used in QML. A file x class count is cross-checked against shell/ and ui/Grassfield/ by the same test, so a new",
-  "textSecondary / withAlpha text / text-with-opacity / danger-text use without a role fails. classes: secondary (any [dark]colors.textSecondary),",
-  "alpha (withAlpha of text/accentText), opacity (a Text item with an opacity property), danger (any colors.danger use, text or graphic)."
+  "surface outside the A2 scope that is tracked as a known limitation in the module spec, docs/specs/<module>.md).",
+  "sites: where the role is used in QML. A file x class count is cross-checked against shell/ and ui/Grassfield/ by a structural scan",
+  "(tests/visual/qml_scan.py), so a new use without a role fails. classes: secondary (any read of textSecondary: palette alias, colors[\"textSecondary\"]),",
+  "danger (any read of the danger colour, text or graphic), alpha (a colour derived from a text token: withAlpha, Qt.alpha/darker/lighter/tint/rgba),",
+  "dynamic (a palette read with a computed key), opacity (a Text-like item or text component whose own or an ancestor's opacity is a literal below 1),",
+  "opacity-dynamic (the same with a computed value: a fade, drag ghost or disabled state; the steady state cannot be read from the source)."
  ],
  "roles": [
   {"id": "text on material", "fg": "colors.text", "backdrop": "material", "kind": "text", "sites": []},
@@ -50,8 +52,8 @@
   {"id": "search selected subtitle on accent", "fg": "colors.accentText", "opacity": ["search.selectedSubtitleOpacity"], "backdrop": "accent", "kind": "text", "sites": [
    {"file": "shell/search/SearchPanel.qml", "class": "alpha", "count": 1}
   ]},
-  {"id": "desktop label (white, shadow)", "fg": "darkColors.text", "backdrop": "desktop-label", "kind": "text", "sites": []},
-  {"id": "desktop label error (shadow)", "fg": "darkColors.danger", "backdrop": "desktop-label", "kind": "text", "sites": [
+  {"id": "desktop label (white on opaque shadow core: ceiling)", "fg": "darkColors.text", "backdrop": "desktop-label", "kind": "text", "sites": []},
+  {"id": "desktop label error (opaque shadow core: ceiling)", "fg": "darkColors.danger", "backdrop": "desktop-label", "kind": "text", "sites": [
    {"file": "shell/desktop/DesktopIcon.qml", "class": "danger", "count": 2}
   ]},
   {"id": "rename field text", "fg": "colors.fieldText", "backdrop": "rename-field", "kind": "text", "sites": []},
@@ -61,14 +63,31 @@
   ]},
   {"id": "apps label (drag source ghost)", "fg": "darkColors.text", "opacity": ["apps.dragSourceOpacity"], "backdrop": "apps", "kind": "text",
    "exempt": "the cell an item is dragged from is a faded ghost; the dragged item itself is shown at full opacity under the pointer",
-   "sites": [{"file": "shell/launchpad/AppsCell.qml", "class": "opacity", "count": 1}]},
+   "sites": [{"file": "shell/launchpad/AppsCell.qml", "class": "opacity-dynamic", "count": 1}]},
+  {"id": "text during a fade, crossfade or swipe (steady state opacity 1)", "fg": "colors.text", "backdrop": "material", "kind": "text",
+   "exempt": "opacity only animates the show/hide, page crossfade, hover reveal or swipe of the surface and is 1 once it is shown; the rendered steady state is measured by contrast.sh",
+   "sites": [
+    {"file": "shell/launchpad/AppsGrid.qml", "class": "opacity-dynamic", "count": 1},
+    {"file": "shell/launchpad/AppsWindow.qml", "class": "opacity-dynamic", "count": 5},
+    {"file": "shell/notifications/Banner.qml", "class": "opacity-dynamic", "count": 1},
+    {"file": "shell/overview/OverviewWindow.qml", "class": "opacity-dynamic", "count": 4},
+    {"file": "shell/search/SearchPanel.qml", "class": "opacity-dynamic", "count": 6},
+    {"file": "ui/Grassfield/Ui/Tooltip.qml", "class": "opacity-dynamic", "count": 1}
+  ]},
+  {"id": "lock screen field placeholder and focus ring", "fg": "darkColors.text", "backdrop": "material", "kind": "text",
+   "exempt": "the lock screen is outside this pass (shell/security gets its own security and contrast review); the sites are listed so that a change is seen",
+   "sites": [{"file": "shell/security/lock/LockView.qml", "class": "alpha", "count": 2}]},
   {"id": "overview captions (dim over wallpaper)", "fg": "colors.textSecondary", "backdrop": "material", "kind": "text",
-   "exempt": "Overview Spaces strip sits on a black dim over the wallpaper, not on material: outside the A2 scope of this pass, open finding in docs/testing/visual.md",
+   "exempt": "Overview Spaces strip sits on a black dim over the wallpaper, not on material: outside the A2 scope of this pass, known limitation in docs/specs/overview.md",
    "sites": [{"file": "shell/overview/OverviewWindow.qml", "class": "secondary", "count": 1}]},
   {"id": "disabled text", "fg": "colors.textSecondary", "opacity": ["material.disabledOpacity"], "backdrop": "material", "kind": "text",
    "exempt": "disabled or inactive component: exempt from WCAG 1.4.3",
    "sites": [
     {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "secondary", "count": 1},
+    {"file": "shell/widgets/builtin/calendar/Calendar.qml", "class": "alpha", "count": 1},
+    {"file": "shell/overlay/ForceQuitPanel.qml", "class": "opacity-dynamic", "count": 1},
+    {"file": "shell/security/PasswordField.qml", "class": "opacity-dynamic", "count": 2},
+    {"file": "shell/security/polkit/AuthDialog.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/menubar/MenuBar.qml", "class": "alpha", "count": 1},
     {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "alpha", "count": 1}
   ]}

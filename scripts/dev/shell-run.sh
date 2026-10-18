@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # (Re)start grassfield-shell inside the nested instance only. Never against the owner's session (R3).
 #
-# GRASSFIELD_PRIVATE_BUS=1 (--private-bus): run the shell on a private D-Bus session bus so that it can
-# own org.freedesktop.Notifications without touching the owner's session. One dbus-daemon per nested
+# Private D-Bus session bus (the default; --session-bus or GRASSFIELD_PRIVATE_BUS=0 keeps the owner's session bus for
+# the rare test that needs it): the shell owns org.freedesktop.Notifications without touching the owner's session, and
+# anything the bus activates (a D-Bus activatable handler, gvfs, portals) runs isolated: the bus daemon starts with the
+# XDG_* homes under .dev/apps-home and GRASSFIELD_DEV=1 (ADR-0011). One dbus-daemon per nested
 # session (session configuration, socket in /tmp as with dbus-run-session: libdbus caps socket paths at
 # 99 bytes, too short for .dev/ in a worktree), started by the first shell start and reused by shell restarts, so
 # applications on it keep their connection as on a real session bus; nested-down.sh stops it. The
@@ -21,6 +23,7 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 while [[ $# -gt 0 ]]; do
   case $1 in
     --private-bus) export GRASSFIELD_PRIVATE_BUS=1 ;;
+    --session-bus) export GRASSFIELD_PRIVATE_BUS=0 ;;
     --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
     --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
     --menu-bridge) export GRASSFIELD_MENU_BRIDGE=${2:?--menu-bridge needs a path}; shift ;;
@@ -30,6 +33,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 dev=$root/.dev
+apps_home=$dev/apps-home
 sig=$(cat "$dev/nested.instance" 2>/dev/null || true)
 sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
@@ -65,7 +69,7 @@ launch=(qs -p "$root/shell" --log-times --no-color)
 private=""
 bus_env=()
 bridge_sock=""
-if [[ ${GRASSFIELD_PRIVATE_BUS:-} == 1 ]]; then
+if [[ ${GRASSFIELD_PRIVATE_BUS:-1} == 1 ]]; then
   command -v dbus-daemon >/dev/null || { echo "shell-run: dbus-daemon not found" >&2; exit 1; }
   mkdir -p "$dev/run"
   chmod 700 "$dev/run"
@@ -76,7 +80,11 @@ if [[ ${GRASSFIELD_PRIVATE_BUS:-} == 1 ]]; then
     rm -f "$dev/bus.address" "$dev/bus.address.new"
     # Same configuration as dbus-run-session (session bus, service activation, unix:tmpdir=/tmp); activated
     # services inherit the nested Wayland socket, never the owner's.
+    # The isolated homes make every activated service isolated too (ADR-0011).
+    mkdir -p "$apps_home"/{config,cache,state,data}
     env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" GRASSFIELD_DEV=1 \
+      XDG_CONFIG_HOME="$apps_home/config" XDG_CACHE_HOME="$apps_home/cache" XDG_STATE_HOME="$apps_home/state" \
+      XDG_DATA_HOME="$apps_home/data" \
       setsid dbus-daemon --session --nofork --print-address=1 \
       >"$dev/bus.address.new" 2>"$dev/bus.log" </dev/null &
     printf '%s\n' "$!" >"$dev/bus.pid"
@@ -119,11 +127,23 @@ settings_cmd=${GRASSFIELD_SETTINGS_CMD:-}
 preview_cmd=${GRASSFIELD_PREVIEW_CMD:-}
 [[ -z $preview_cmd && -x $dev/build/grassfield-preview ]] && preview_cmd=$dev/build/grassfield-preview
 
+# Grassfield Files built by apps/files/build-direct.sh (the dev open policy opens folders in it, scripts/dev/open-policy.sh).
+files_cmd=${GRASSFIELD_FILES_CMD:-}
+[[ -z $files_cmd && -x $dev/build/grassfield-files ]] && files_cmd=$dev/build/grassfield-files
+
 # Apps started from the shell in dev (System Settings, Glance) run through the isolating helper: XDG_* under .dev/,
 # GRASSFIELD_*_HOME shared with this shell (the command is split on spaces by the shell; .dev paths have none).
 isolate=("$root/scripts/dev/isolated.sh" --name shell --config-home "$dev/config" --state-home "$dev/state" --)
 [[ -n $settings_cmd ]] && settings_cmd="${isolate[*]} $settings_cmd"
 [[ -n $preview_cmd ]] && preview_cmd="${isolate[*]} $preview_cmd"
+[[ -n $files_cmd ]] && files_cmd="${isolate[*]} $files_cmd"
+# Dev open policy: the shell never asks GIO or xdg-open to start an app (ADR-0011). One refusal line per refused open.
+open_policy=$root/scripts/dev/open-policy.sh
+open_log=$dev/open-policy.log
+# Optional plocate database for the Search file provider (a test database of a sandbox folder, never the owner's files):
+# .dev/plocate.db when present (updatedb --database-root DIR --output .dev/plocate.db --require-visibility no).
+plocate_db=""
+[[ -s $dev/plocate.db ]] && plocate_db=$dev/plocate.db
 
 # GRASSFIELD_RENDER_TIMING=1: opt-in Qt scene graph render timing (QSG_RENDER_TIMING) in the shell log.
 timing=()
@@ -152,10 +172,14 @@ elif jq -e '.lock.idleMinutes == null' "$cfg" >/dev/null 2>&1; then
   jq '.lock.idleMinutes = 0' "$cfg" >"$cfg.new" && mv "$cfg.new" "$cfg"
 fi
 
-env "${timing[@]}" "${bus_env[@]}" GRASSFIELD_MENU_BRIDGE_SOCKET="$bridge_sock" \
+# The open shims (gio, xdg-open, gtk-launch -> open-policy.sh) come first on the shell's PATH: QProcess resolves a program
+# on the PATH of its parent, so code that runs `gio open` in a Process (shell/desktop/DesktopFiles.qml) gets the policy too.
+env "${timing[@]}" "${bus_env[@]}" PATH="$root/scripts/dev/open-shims:$PATH" GRASSFIELD_MENU_BRIDGE_SOCKET="$bridge_sock" \
   GRASSFIELD_DESKTOP_DIR="$desktop_dir" WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
   GRASSFIELD_PRIVATE_BUS="$private" GRASSFIELD_SETTINGS_CMD="$settings_cmd" GRASSFIELD_PREVIEW_CMD="$preview_cmd" \
+  GRASSFIELD_FILES_CMD="$files_cmd" GRASSFIELD_OPEN_POLICY="$open_policy" GRASSFIELD_OPEN_LOG="$open_log" \
+  GRASSFIELD_SEARCH_PLOCATE_DB="$plocate_db" \
   QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui:$dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$dev/translations" \
   setsid "${launch[@]}" >"$dev/shell.log" 2>&1 </dev/null &
 printf '%s\n' "$!" > "$dev/shell.pid"

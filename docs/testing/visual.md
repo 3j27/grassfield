@@ -118,22 +118,28 @@ Search, Apps, banners, Notification Center. `tests/visual/contrast-regions.json`
 
 `python3 -I tests/visual/test_contrast_tokens.py` (run by `scripts/dev/test.sh`, no compositor) is the primary evidence of
 gate A2. For each text role of `tests/visual/contrast-roles.json` it composites the effective text colour (token colour x the
-item's opacity) over the backdrop (material tint at alpha `1 - t * (1 - tintAlphaMin)`, with and without a fill overlay; solid
+item's opacity) over the backdrop (material tint at `Appearance.tintAlpha(t)`: linear from 1 to `tintAlphaMin` 0.4, clamped to
+`tintAlphaClamp` 0.82 up to t = 0.6, with and without a fill overlay; solid
 accent; the Apps dim; the desktop label shadow core) for both appearances, t in {0, 0.25, 0.4, 0.6} and 9 worst-case flat
 wallpaper colours (black, white, mid-grey, red, blue, the yellow/green noise palette; the checker is black and white), and
-asserts 4.5:1 (3:1 for large text and icons). The role table is cross-checked against the QML (secondary-text, text-alpha,
-text-opacity and danger-colour uses per file): a new use without a role fails the test. Exempt roles are listed with a reason
-(disabled controls; the Overview strip and the Apps drag ghost are outside this pass).
+asserts 4.5:1 (3:1 for large text and icons). The role table is cross-checked against the QML by a structural scan
+(`tests/visual/qml_scan.py`: palette aliases, `colors["textSecondary"]`, an opacity on any ancestor, one-line items,
+`Qt.darker/lighter/alpha/tint/rgba`, `opacity :`, computed palette keys; one self-test sample per form, each must fail the
+check): a new use without a role fails the test. Exempt roles are listed with a reason (disabled controls, fades whose steady
+state is opacity 1, the lock screen, the Overview strip (known limitation in `docs/specs/overview.md`) and the Apps drag ghost).
+The desktop-label rows are a ceiling (white on the opaque shadow core, 19:1), not a bound: the rendered contrast of those labels is
+measured by `contrast.sh --surfaces desktop` (glyph mask).
 
 Tokens changed in the A2 pass, and why:
 
 | Token | Before | After | Why |
 |---|---|---|---|
-| `color.dark.textSecondary` | #B8B8C0 | #C4C4CC | 2.5:1 on a white wallpaper at t = 0.6 |
-| `color.light.textSecondary` | #55555D | #4A4A52 | 2.7:1 on a black wallpaper at t = 0.6 |
-| `color.dark.danger` | #FF6B63 | #FFB3AD | danger text on material 2.9:1 |
-| `color.light.danger` | #D93025 | #8F1E18 | danger text on material 2.6:1 |
-| `material.tintAlphaMin` | 0.4 | 0.85 | tint floor: at t = 0.6 the tint was 64 % opaque, so the wallpaper decided the contrast |
+| `color.dark.textSecondary` | #B8B8C0 | #DCDCE4 | 2.5:1 on a white wallpaper at t = 0.6 |
+| `color.light.textSecondary` | #55555D | #3A3A42 | 2.7:1 on a black wallpaper at t = 0.6 |
+| `color.dark.danger` | #FF6B63 | #FFD3CF | danger text on material 2.9:1 |
+| `color.light.danger` | #D93025 | #7A1812 | danger text on material 2.6:1 |
+| `material.tintAlphaMin` | 0.4 | 0.4 (kept) | the frosted look: tint 0.85 at the default t = 0.25 |
+| `material.tintAlphaClamp` / `tintClampUntil` | new | 0.82 / 0.6 | the tint never drops below 0.82 for t <= 0.6 (at t = 0.6 it was 0.64 and the wallpaper decided the contrast); text colours carry the rest |
 | `material.bodyOpacity` | 0.85 | removed | notification body drawn at opacity 0.85 measured 4.2-4.4; the rename field backing uses `desktopIcon.renameFillOpacity` |
 | `search.selectedSubtitleOpacity` | 0.8 | 0.9 | subtitle on the accent 4.2-4.4 |
 | `apps.backdropOpacity` | 0.5 | 0.6 | white labels 2.8:1 on a white wallpaper |
@@ -143,7 +149,12 @@ Tokens changed in the A2 pass, and why:
 Other changes: desktop labels use the always-dark palette text (white) with the accent text colour on the accent highlight
 when selected; the rename error text uses the dark danger colour; the Apps "No results" text uses the primary text colour;
 the search calculator badge fill dropped from 2x to 1x fill opacity. The frosted look keeps its default (t = 0.25: tint alpha
-0.96 instead of 0.90); only the high-transparency end of the slider is less transparent.
+0.85, as before the A2 pass). A first A2 attempt raised the tint floor to 0.85 (0.9625 at the default, 0.91 at 0.6), which
+made the material nearly opaque; it was reverted in favour of lighter and darker text colours and a clamp that only acts at high
+transparency.
+
+Tint alpha per transparency (`Appearance.tintAlpha`): t = 0 -> 1.00, 0.25 -> 0.85, 0.4 -> 0.82 (clamped, linear 0.76), 0.6 -> 0.82
+(clamped, linear 0.64), 1 -> 0.40; between 0.6 and 1 it falls linearly from 0.82 to 0.4.
 
 ### Method: glyph mask
 
