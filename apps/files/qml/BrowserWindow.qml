@@ -466,6 +466,7 @@ Window {
 
                     TextInput {
                         id: search
+                        TextCursor {}
                         anchors.left: searchIcon.right
                         anchors.leftMargin: Tokens.spacingXs
                         anchors.right: parent.right

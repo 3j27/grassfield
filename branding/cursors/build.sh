@@ -36,7 +36,9 @@ done
 
 hex_re='^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'
 [[ $fill =~ $hex_re && $outline =~ $hex_re ]] || { echo "cursors: --fill/--outline must be #RRGGBB or #RRGGBBAA" >&2; exit 2; }
-[[ $name =~ ^[A-Za-z0-9._-]+$ ]] || { echo "cursors: invalid theme name" >&2; exit 2; }
+# Letters, digits, - and _ only: the name becomes a directory name, the manifest name and an index.theme value
+# ("..", "." and names with dots or slashes are refused).
+[[ $name =~ ^[A-Za-z0-9_-]+$ ]] || { echo "cursors: invalid theme name (letters, digits, - and _ only)" >&2; exit 2; }
 [[ $sizes =~ ^[0-9]+( [0-9]+)*$ ]] || { echo "cursors: --sizes must be a space separated list of integers" >&2; exit 2; }
 for tool in hyprcursor-util rsvg-convert python3; do
   command -v "$tool" >/dev/null || { echo "cursors: $tool not found" >&2; exit 1; }
@@ -80,7 +82,9 @@ for row in "${table[@]}"; do
   cp "$svgdir/$source"-*.svg "$dir/"
   {
     echo "resize_algorithm = none"
-    awk -v x="$hx" -v y="$hy" 'BEGIN { printf "hotspot_x = %.5f\nhotspot_y = %.5f\n", x / 32, y / 32 }'
+    # Seven decimals keep the 1/64 steps of the table exact: libhyprcursor rounds the product with the size, and a
+    # shorter number (%.5f) turns 12.5/32 into 0.39062 and a hotspot of 12 where the XCursor file has 13.
+    awk -v x="$hx" -v y="$hy" 'BEGIN { printf "hotspot_x = %.7f\nhotspot_y = %.7f\n", x / 32, y / 32 }'
     echo "nominal_size = 1.0"
     IFS=, read -ra all <<<"$names"
     for alias in "${all[@]:1}"; do echo "define_override = $alias"; done
@@ -92,25 +96,44 @@ for row in "${table[@]}"; do
   args=()
   for size in $sizes; do
     for ((f = 0; f < frames; f++)); do
-      echo "-w $size -h $size -o $pngdir/$source-$f-$size.png $svgdir/$source-$f.svg" >> "$work/png-jobs"
+      printf '%s\t%s\t%s\n' "$size" "$pngdir/$source-$f-$size.png" "$svgdir/$source-$f.svg" >> "$work/png-jobs"
       args+=("$size:$pngdir/$source-$f-$size.png")
     done
   done
   delay=0; ((frames > 1)) && delay=80
-  printf '%s\n' "$theme/cursors/$canon $hx $hy $delay ${args[*]}" >> "$work/pack-jobs"
+  # Tab separated: paths may contain spaces.
+  { printf '%s\t%s\t%s\t%s' "$theme/cursors/$canon" "$hx" "$hy" "$delay"; printf '\t%s' "${args[@]}"; echo; } >> "$work/pack-jobs"
 done
 
 stage render-svg
+# Bounded parallelism (GRASSFIELD_CURSOR_JOBS, default min(nproc, 4)): a machine under load (other builds, a memory
+# limited cgroup) kills renders with SIGKILL when eight run at once.
 par=$(nproc 2>/dev/null || echo 4)
+jobs_max=${GRASSFIELD_CURSOR_JOBS:-4}
+[[ $jobs_max =~ ^[1-9][0-9]*$ ]] || jobs_max=4
+((par > jobs_max)) && par=$jobs_max
+export GRASSFIELD_CURSOR_JOBS=$par
+# render SIZE PNG SVG: one retry after a failure (a killed or crashed renderer), then a clear error.
+render() {
+  rsvg-convert -w "$1" -h "$1" -o "$2" "$3" 2>/dev/null && return 0
+  sleep 1
+  rsvg-convert -w "$1" -h "$1" -o "$2" "$3" && return 0
+  echo "cursors: rendering $3 at $1 px failed twice (rsvg-convert; out of memory or killed?)" >&2
+  return 1
+}
 stage png
-xargs -P "$par" -L1 rsvg-convert < "$work/png-jobs"
+while IFS=$'\t' read -r size png svg; do
+  render "$size" "$png" "$svg" &
+  while (($(jobs -rp | wc -l) >= par)); do wait -n || exit 1; done
+done < "$work/png-jobs"
+wait || { echo "cursors: rendering failed" >&2; exit 1; }
 stage xcursor
-while read -r outfile hx hy delay frames_list; do
-  # shellcheck disable=SC2086
-  python3 -I "$here/xcursor-pack.py" "$outfile" --hotspot "$hx" "$hy" --delay "$delay" $frames_list &
-  while (($(jobs -rp | wc -l) >= par)); do wait -n; done
+while IFS=$'\t' read -r -a job; do
+  { python3 -I "$here/xcursor-pack.py" "${job[0]}" --hotspot "${job[1]}" "${job[2]}" --delay "${job[3]}" "${job[@]:4}" \
+    || { sleep 1; python3 -I "$here/xcursor-pack.py" "${job[0]}" --hotspot "${job[1]}" "${job[2]}" --delay "${job[3]}" "${job[@]:4}"; }; } &
+  while (($(jobs -rp | wc -l) >= par)); do wait -n || exit 1; done
 done < "$work/pack-jobs"
-wait
+wait || { echo "cursors: xcursor-pack failed" >&2; exit 1; }
 
 stage aliases
 # 4. Aliases: relative symlinks to the canonical file.

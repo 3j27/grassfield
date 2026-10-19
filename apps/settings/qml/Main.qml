@@ -169,6 +169,7 @@ Window {
 
             TextInput {
                 id: search
+                TextCursor {}
                 anchors {
                     left: searchIcon.right
                     leftMargin: Tokens.spacingSm

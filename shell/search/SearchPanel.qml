@@ -137,6 +137,7 @@ Variants {
 
             TextInput {
                 id: field
+                TextCursor {}
                 x: glass.x + glass.width + Tokens.spacingMd
                 y: 0
                 width: panel.width - x - Tokens.spacingLg

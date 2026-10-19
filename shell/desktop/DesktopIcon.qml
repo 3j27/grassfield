@@ -181,6 +181,7 @@ Item {
 
         TextInput {
             id: field
+            TextCursor {}
             visible: root.renaming
             // Disabled outside a rename: a hidden field can never hold focus or commit.
             enabled: root.renaming

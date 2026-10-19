@@ -10,3 +10,6 @@ compositor/build/
 # Throwaway spike outputs
 spikes/**/out/
 .claude/worktrees/
+# Python bytecode
+__pycache__/
+*.pyc

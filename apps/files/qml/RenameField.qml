@@ -32,6 +32,7 @@ Rectangle {
 
     TextInput {
         id: input
+        TextCursor {}
         anchors.fill: parent
         anchors.leftMargin: Tokens.spacingXs
         anchors.rightMargin: Tokens.spacingXs

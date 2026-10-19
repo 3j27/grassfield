@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Capture the nested output with grim (wlr-screencopy on the nested compositor only).
-# Usage: shot.sh <name> [output]  → .dev/shots/<name>.png
+# Usage: shot.sh [--cursor] <name> [output]  → .dev/shots/<name>.png  (--cursor paints the pointer, grim -c)
 # Default output: GF-REF, the 1920x1080 headless reference output created by config/hypr/dev.lua.
 set -euo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
-name=${1:?usage: shot.sh <name> [output]}
+cursor=()
+if [[ ${1:-} == --cursor ]]; then cursor=(-c); shift; fi
+name=${1:?usage: shot.sh [--cursor] <name> [output]}
 output=${2:-GF-REF}
 # shellcheck source=pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
@@ -16,5 +18,5 @@ sock=$DEV_NESTED_SOCK
 
 mkdir -p "$dev/shots"
 out=$dev/shots/$name.png
-WAYLAND_DISPLAY=$sock grim -o "$output" "$out"
+WAYLAND_DISPLAY=$sock grim "${cursor[@]}" -o "$output" "$out"
 echo "$out"

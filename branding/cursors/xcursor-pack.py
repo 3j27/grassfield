@@ -6,6 +6,7 @@ usage: xcursor-pack.py OUT --hotspot HX HY --delay MS SIZE:PNG [SIZE:PNG ...]
 HX/HY are in the 32 px design grid and scale with SIZE. Frames of one size are written in the order given
 (animation order). PNGs must be 8-bit RGBA, non-interlaced (what rsvg-convert writes).
 """
+import math
 import os
 import struct
 import sys
@@ -80,14 +81,15 @@ def main(argv):
     chunks = []
     # Animated cursors have many large frames: decode them on all cores.
     if len(specs) > 8:
-        with ProcessPoolExecutor(os.cpu_count() or 2, mp_context=multiprocessing.get_context("fork")) as pool:
+        with ProcessPoolExecutor(max(1, min(os.cpu_count() or 2, int(os.environ.get("GRASSFIELD_CURSOR_JOBS", "4")))), mp_context=multiprocessing.get_context("fork")) as pool:
             decoded = list(pool.map(read_png, [s.split(":", 1)[1] for s in specs], chunksize=4))
     else:
         decoded = [read_png(s.split(":", 1)[1]) for s in specs]
     for spec, (width, height, rgba) in zip(specs, decoded):
         size = int(spec.split(":", 1)[0])
-        xhot = min(width - 1, max(0, round(hx * size / 32)))
-        yhot = min(height - 1, max(0, round(hy * size / 32)))
+        # Round half up, as libhyprcursor does (Python's round() rounds half to even: (8,4) against (8,5) at 48 px).
+        xhot = min(width - 1, max(0, math.floor(hx * size / 32 + 0.5)))
+        yhot = min(height - 1, max(0, math.floor(hy * size / 32 + 0.5)))
         header = struct.pack("<9I", 36, IMAGE_TYPE, size, 1, width, height, xhot, yhot, delay)
         chunks.append((size, header + argb_premultiplied(rgba)))
     if not chunks:
