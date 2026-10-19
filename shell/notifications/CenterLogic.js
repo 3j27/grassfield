@@ -22,6 +22,40 @@ function focusAfterClear(rows, at, app) {
     return rows.length > 0 ? rows[Math.min(at, rows.length) - 1].key : "";
 }
 
+// Key of the card that takes the keyboard focus when the focused card `key` LEFT the displayed rows (hidden by an arrival
+// pushing it out of a collapsed group, by "Show Less" or a collapse, removed by a clear, an expiry or the app). `oldRows`
+// and `rows` are the displayed rows before and after ({key, appName}, in display order). In order:
+//  1. the card that now occupies the same slot of the same group (same rank from the group's top; the card that moved up
+//     into it, the one an arrival pushed it down to, or the one a removal revealed);
+//  2. else the group's last displayed card (fewer cards displayed than its rank);
+//  3. else (the group is gone) the first card after the group's old place that is still displayed;
+//  4. else the nearest card before it; "" when no card is left. undefined when `key` was not displayed.
+function focusAfterGone(oldRows, rows, key) {
+    const at = oldRows.findIndex(r => r.key === key);
+    if (at < 0)
+        return undefined;
+    const app = oldRows[at].appName;
+    let rank = 0;
+    for (let i = 0; i < at; i++) {
+        if (oldRows[i].appName === app)
+            rank++;
+    }
+    const group = rows.filter(r => r.appName === app);
+    if (group.length > 0)
+        return group[Math.min(rank, group.length - 1)].key;
+    const alive = {};
+    rows.forEach(r => alive[r.key] = true);
+    for (let i = at + 1; i < oldRows.length; i++) {
+        if (alive[oldRows[i].key])
+            return oldRows[i].key;
+    }
+    for (let i = at - 1; i >= 0; i--) {
+        if (alive[oldRows[i].key])
+            return oldRows[i].key;
+    }
+    return rows.length > 0 ? rows[0].key : "";
+}
+
 // Pointer-over counts per app: a card, and the x that sticks out of its corner, each count while hovered, so the
 // group controls stay while any part of any card of the app is under the pointer, whatever order the enter and
 // leave events arrive in. Returns the new counts (never negative); the input is not changed.

@@ -5,7 +5,7 @@
 #   nested.sh send APP N [SUMMARY]   N notifications from APP (summaries "SUMMARY 1".."SUMMARY N", default the app name)
 #   nested.sh status                 notifications status (history/banners/center) and the history file size
 #   nested.sh open | close           toggle the Notifications column (tests/visual/ipc.sh)
-#   nested.sh clear                  test hook: remove every entry (dev sessions only)
+#   nested.sh clear                  test hook: remove every entry (needs nested-up.sh --visual-fixtures, refused otherwise)
 #   nested.sh history                the summaries in notifications.json, newest first
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)

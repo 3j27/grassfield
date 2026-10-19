@@ -43,6 +43,11 @@ Singleton {
     property int counter: 0
 
     property bool centerOpen: false
+    // Key of the card that holds the keyboard focus in the open column ("" when none; written by the column). When that
+    // card leaves the displayed rows, centerFocusMoved names the card the focus goes to (CenterLogic.focusAfterGone).
+    property string centerFocusKey: ""
+    property int focusMoves: 0
+    signal centerFocusMoved(string key)
     property string centerScreen: ""
 
     // Dev sessions share the owner's session bus; never register there (GRASSFIELD_PRIVATE_BUS=1
@@ -193,6 +198,7 @@ Singleton {
 
     function closeCenter(): void {
         centerOpen = false;
+        centerFocusKey = "";
         freshKeys = ({});
         if (Object.keys(expandedApps).length > 0) {
             expandedApps = ({});
@@ -381,6 +387,7 @@ Singleton {
         const wantKeys = [];
         const wantMeta = [];
         const wantSig = [];
+        const wantApps = [];
         const seen = {};
         for (let i = 0; i < centerKeys.length; i++) {
             const app = centerApps[i];
@@ -396,11 +403,22 @@ Singleton {
                 toggleCount: size > collapsed && rank === (expanded ? size - 1 : collapsed - 1) ? size : 0
             };
             wantKeys.push(centerKeys[i]);
+            wantApps.push(app);
             wantMeta.push(meta);
             wantSig.push(meta.headCount + "|" + meta.headFirst + "|" + meta.toggleCount);
         }
         const want = {};
         wantKeys.forEach(k => want[k] = true);
+        // The focused card leaves the displayed rows: decide where the focus goes while the old rows are still there.
+        let moveFocusTo;
+        if (centerFocusKey !== "" && !want[centerFocusKey]) {
+            const oldRows = [];
+            for (let i = 0; i < centerStore.count; i++) {
+                const r = centerStore.get(i);
+                oldRows.push({key: r.key, appName: r.appName});
+            }
+            moveFocusTo = CenterLogic.focusAfterGone(oldRows, wantKeys.map((k, i) => ({key: k, appName: wantApps[i]})), centerFocusKey);
+        }
         for (let i = shownKeys.length - 1; i >= 0; i--) {
             if (!want[shownKeys[i]]) {
                 centerStore.remove(i);
@@ -426,6 +444,10 @@ Singleton {
                 centerStore.set(i, wantMeta[i]);
                 shownSig[i] = wantSig[i];
             }
+        }
+        if (moveFocusTo !== undefined) {
+            focusMoves++;
+            centerFocusMoved(moveFocusTo);
         }
     }
 
@@ -473,6 +495,10 @@ Singleton {
     }
 
     function clearCenter(): void {
+        if (centerFocusKey !== "") {
+            focusMoves++;
+            centerFocusMoved("");
+        }
         centerStore.clear();
         centerKeys = [];
         centerApps = [];

@@ -68,12 +68,14 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
 
 ## Implementation notes (M2)
 - Code: `shell/notifications/` (`Notifications.qml` singleton: server, banner queue, history, IPC; `Banners.qml`/`Banner.qml`;
-  `NotificationCenter.qml`; `NotificationContent.qml`; pure `Sanitizer.js`, `History.js`).
+  `NotificationCenter.qml` (window, footer, widgets) + `NotificationList.qml` (the cards); `NotificationContent.qml`; pure `Sanitizer.js`, `History.js`).
 - Clear model (NotificationCenter.qml): `clearCard(group, refocus)` commits to the model at once: `Notifications.clear(key)` or, for a
   group, `Notifications.clearKeys(Notifications.keysOf(app))` (a snapshot of the keys at the click: a same-app notification that arrives
-  later stays). The ListView animates the result: `remove` (the delegate's `slide` to the right + `opacity` to 0) and `displaced` (`y`),
-  `motion.normal`. A card that arrives while the column is open slides in from the right while it fades in (run by the delegate, `enter`, for keys flagged by `Notifications.takeFresh`: the view's own `add` transition also ran for the rows "Show All" reveals and left cards at stale positions when the row above changed height), and a move of a group is animated (`move`, `y`); `displaced` and `move` also take `slide` and `opacity` to their final values, so a burst of arrivals never leaves a card half in. Reduce Motion (macOS: slides become fades): nothing moves (the cards stay in place and only fade in or out, within `motionReducedMax` through `Appearance.duration`; the cards below jump to their new place). A delegate that left the model is disabled
-  (`ListView.onRemove`): no input, no focus. The footer glides with a `Behavior on y`. Blur regions follow through `motionTick` (bumped at most once per frame, `bumpTick`, however many cards moved: 200 sliding cards bumped it 600 times a frame and each bump re-read every region; a faded card's region is skipped without mapping it); a card's region is cut to the list viewport on all four sides and shrinks about its centre with the
+  later stays). The ListView animates the result: `remove` (the delegate's `slide` to the right + `opacity` to 0), `motion.normal`. The cards below glide by a visual offset: a delegate always sits at the
+  layout position the view gives it (the model layout) and, when that `y` changes (a card above arrived, left, or changed height as "Show All" does), adds
+  `old y - new y` to its `shift` (a `Translate`) and animates `shift` to 0 (`glide`), so no transition can leave a final offset (the old `displaced`/`move`
+  transitions animated an absolute `y` to a target fixed at their start and left the cards below a "Show All" 36 px too low). A card that arrives while the column is open slides in from the right while it fades in (run by the delegate, `enter`, for keys flagged by `Notifications.takeFresh`; never a card that is merely revealed). Reduce Motion (macOS: slides become fades): nothing moves (the cards stay in place and only fade in or out, within `motionReducedMax` through `Appearance.duration`; the cards below jump to their new place). A delegate that left the model is disabled
+  (`ListView.onRemove`): no input, no focus. The footer glides with a `Behavior on y`. Blur regions follow through `list.motionTick` (bumped at most once per frame, `list.bumpTick`, however many cards moved: 200 sliding cards bumped it 600 times a frame and each bump re-read every region; a faded card's region is skipped without mapping it); a card's region is cut to the list viewport on all four sides and shrinks about its centre with the
   card's opacity, so the blur never outlives the glass. Surface records carry a unique id: Variants ignores and warns about equal values, and
   records of destroyed cards ({item: null}) were equal (163 464 "same value specified twice" lines for a 600-notification burst). The list is
   `panel.gutter` (= close size / 3) wider and taller than the column so the x can stick out of the card's corner like the banner's.
@@ -92,8 +94,18 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   `Shortcut`s (Tab, Shift+Tab; off while the widget gallery or a widget menu is open) run `ListView.tabStep`, which redirects only where Qt's next
   item would leave the card, and otherwise focuses Qt's own next item. Reduce Motion: see above.
   A group that empties forgets its "Show All" (`expandedApps`, also when the whole Center empties): its next cards arrive collapsed.
-  Tests: `tests/unit/tst_notifcenter.qml` (focus choice, hover counts), `tests/unit/tst_notifcenterlist.qml` (the view settings keep the focus across inserts, removals and moves), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
-  repeated group clears, focus after Delete in collapsed and expanded groups), `tests/shell/notif_clear/nested.sh` (nested helper).
+  Focus never stays on a card that is hidden, disabled or removed: the list tells the model which card holds the focus
+  (`Notifications.centerFocusKey`, from `Window.activeFocusItem`), and when `syncShown` drops that card from the displayed rows (an arrival pushing it out
+  of a collapsed group, "Show Less", a collapse, an expiry or removal by the app, a clear, an eviction) it decides, while the old rows still exist,
+  where the focus goes (pure `CenterLogic.focusAfterGone`) and emits `centerFocusMoved(key)`: the card in the same slot of the same group (same rank from
+  the group's top), else the group's last displayed card, else (group gone) the next group's first card, else the previous card, else the panel. A same-id
+  update by the app only changes the card's roles: the delegate and its focus stay. `Show All` used with the keyboard hands the focus to the group's
+  "Show Less"; `Show Less` hands it to "Show All" (macOS keeps the focus on the stack control).
+  The list is its own component (`NotificationList.qml`, a ListView) so that the tests run the shipped code: the PanelWindow needs a compositor.
+  Tests: `tests/unit/tst_notifcenter.qml` (focus choice incl. `focusAfterGone`, hover counts), `tests/shell/notif_center_list` (the real list in a plain
+  window on the real singleton: focus after arrival, Show Less, collapse, expiry, same-id update, group clear, last card; tabStep order incl. after arrivals;
+  focusedDelegate; clearCard refocus; Show All / Show Less focus handoff; layout invariant after toggles; bumpTick; takeFresh), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
+  repeated group clears, focus after Delete in collapsed and expanded groups), `tests/shell/notif_clear/nested.sh` (nested helper, notifications on the nested private bus only).
 - Banners: one layer-shell window (Overlay layer, no keyboard focus) on the first screen only; input and blur follow the cards.
   Timeout: `expire_timeout` (seconds), -1 = 5 s, 0 and critical = never. Expiry only hides the banner: the entry stays in the Center
   and stays actionable while the sender keeps the notification alive. x / drag-dismiss calls `dismiss()` (sender told "dismissed"),
@@ -151,7 +163,7 @@ itself logs its own registration warning. Verified on a private bus with a forei
 
 ## Verified (L1, nested, private bus, 2026-10-17)
 N1 name owned by qs (`busctl --user status`: PID of qs) · N2/N3 three normal banners gone after 6 s, critical (`-t 1000`) stays ·
-N5 `notify-send -A snooze=Snooze` prints `snooze` after `ipc call notifications invoke snooze` · N6 restart restores history, file 0600 ·
+N5 `notify-send -A snooze=Snooze` prints `snooze` after `ipc call notifications invoke snooze` (a test hook: needs `nested-up.sh --visual-fixtures`, refused otherwise) · N6 restart restores history, file 0600 ·
 N7 Center opens by IPC, Esc (wtype) closes · N8 DND hides banners, moon in bar, critical still shown · N9 unit tests (L0).
 Screenshots under `.dev/shots/` (not committed).
 
