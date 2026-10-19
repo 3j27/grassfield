@@ -21,6 +21,8 @@ Item {
     property alias asynchronous: icon.asynchronous
     property alias mode: icon.mode
     property alias tint: icon.tint
+    property alias darkAppearance: icon.darkAppearance
+    property alias overWallpaper: icon.overWallpaper
 
     readonly property string setting: FolderStyle.effectiveColor(root.folderColor, root.globalColor)
     readonly property bool recolored: FolderStyle.recolors(root.setting)

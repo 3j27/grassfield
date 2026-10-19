@@ -23,17 +23,23 @@ layout(std140, binding = 0) uniform buf {
     float dark;             // 1 in the dark appearance
     float rimUv;            // rim width in texture coordinates
     float rimGain;          // 0..1: the rim fades out on small icons
+    float sysPlateInset;    // system plate (Clear, Tinted): inset from the icon box, in box fractions
+    float sysPlateRadius;   // corner radius over the plate side
+    float sysGlyphScale;    // scale of the artwork sitting on the system plate
     float plateToleranceLow;
     float plateToleranceHigh;
     float plateAlphaLow;
     float plateAlphaHigh;
     float darkPlateLuma;
+    float darkPageLuma;
     float darkChromaKeep;
     float darkGlyphLuma;
     float darkGlyphBoost;
     float darkGlyphFloor;
     float darkRim;
     float clearPlateAlphaDark;
+    float clearPlateAlphaWallpaper;
+    float overWallpaper;      // 1: drawn over the bare wallpaper (desktop), not over a window material
     float clearPlateAlphaLight;
     float clearInkDark;
     float clearInkLight;
@@ -63,10 +69,6 @@ vec4 straight(vec4 t) {
 }
 
 void main() {
-    vec4 px = straight(texture(iconTexture, qt_TexCoord0));
-    vec3 c = px.rgb;
-    float a = px.a;
-
     // 1. Plate estimate. 16 probes on a ring at about 0.36 from the centre: inside a plate and inside the thin light
     //    border some icons have at their edge (it starts near 0.40), but away from most glyphs. The plate is the
     //    DOMINANT colour cluster of the probes (the probe with the most close neighbours, weighted by opacity); probes
@@ -98,25 +100,78 @@ void main() {
         float near = 1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(taps[bi].rgb, taps[j].rgb));
         sum2 += vec4(taps[j].rgb * taps[j].a * near, taps[j].a * near);
     }
-    vec3 plate = sum2.a > 0.0001 ? sum2.rgb / sum2.a : taps[bi].rgb;
-    float strength = smoothstep(plateAlphaLow, plateAlphaHigh, sum2.a / float(N));
+    vec3 plate1 = sum2.a > 0.0001 ? sum2.rgb / sum2.a : taps[bi].rgb;
+    float share1 = sum2.a / float(N);
+
+    // A second plate colour (a plate of two colours, as the split face of a file-manager icon has): the dominant cluster of
+    // the probes outside the first one, accepted when it holds a quarter of the probes. A pixel is plate when it is
+    // near either colour, and each pixel is mapped by the colour it is nearest to.
+    float best2 = -1.0;
+    int bj = 0;
+    float out1[N];
+    for (int j = 0; j < N; ++j)
+        out1[j] = taps[j].a * smoothstep(plateToleranceLow, plateToleranceHigh, distance(taps[bi].rgb, taps[j].rgb));
+    for (int i = 0; i < N; ++i) {
+        float w = 0.0;
+        for (int j = 0; j < N; ++j)
+            w += out1[j] * (1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(taps[i].rgb, taps[j].rgb)));
+        w *= out1[i];
+        if (w > best2) {
+            best2 = w;
+            bj = i;
+        }
+    }
+    vec4 sumB = vec4(0.0);
+    for (int j = 0; j < N; ++j) {
+        float nearB = out1[j] * (1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(taps[bj].rgb, taps[j].rgb)));
+        sumB += vec4(taps[j].rgb * nearB, nearB);
+    }
+    vec3 plate2 = sumB.a > 0.0001 ? sumB.rgb / sumB.a : plate1;
+    float share2 = sumB.a / float(N);
+    float use2 = smoothstep(0.2, 0.3, share2) * (best2 > 0.0 ? 1.0 : 0.0);
+    vec3 plate = plate1;
+    float strength = smoothstep(plateAlphaLow, plateAlphaHigh, share1 + use2 * share2);
+
+    // The icon's own plate must also be a rounded square filling the box: the four corner probes are opaque. A round logo,
+    // or a one-colour blob such as a mascot, is not a plate even when its colour dominates the probes.
+    float corners = (texture(iconTexture, vec2(0.15, 0.15)).a + texture(iconTexture, vec2(0.85, 0.15)).a +
+                     texture(iconTexture, vec2(0.15, 0.85)).a + texture(iconTexture, vec2(0.85, 0.85)).a) * 0.25;
+    // ... and so are the four edge midpoints (a mascot logo with a notch between its ears is not).
+    float edges = (texture(iconTexture, vec2(0.5, 0.08)).a + texture(iconTexture, vec2(0.5, 0.92)).a +
+                   texture(iconTexture, vec2(0.08, 0.5)).a + texture(iconTexture, vec2(0.92, 0.5)).a) * 0.25;
+    float own = strength * smoothstep(0.4, 0.8, min(corners, edges));
+    strength = own;
+
+    // Clear and Tinted: every icon sits on a system plate. An icon without its own plate also shrinks to sit inside it.
+    float sysW = modeIndex > 1.5 ? 1.0 - own : 0.0;
+    vec2 uv = mix(qt_TexCoord0, vec2(0.5) + (qt_TexCoord0 - vec2(0.5)) / sysGlyphScale, sysW);
+    bool inBox = uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
+    vec4 px = inBox ? straight(texture(iconTexture, uv)) : vec4(0.0);
+    vec3 c = px.rgb;
+    float a = px.a;
 
     // Context for icons without a plate: the local average colour (a blurred read) and the average of the whole icon.
-    vec4 localT = textureLod(iconTexture, qt_TexCoord0, 2.5);
+    vec4 localT = textureLod(iconTexture, uv, 2.5);
     vec3 local = localT.rgb / max(localT.a, 0.0001);
     vec4 wholeT = textureLod(iconTexture, vec2(0.5), 12.0);
     float Lmean = max(luma(wholeT.rgb / max(wholeT.a, 0.0001)), 0.05);
 
     // 2. Plate membership (0 glyph .. 1 plate).
+    // Per pixel: the nearer of the plate colours.
+    if (use2 > 0.5 && distance(c, plate2) < distance(c, plate1))
+        plate = plate2;
     float member = (1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(c, plate))) * strength;
     float Lc = luma(c);
     float Lp = max(luma(plate), 0.04);
-    bool isDark = dark > 0.5;
+    bool wall = overWallpaper > 0.5;
+    bool isDark = dark > 0.5 || wall;
 
     // Edge band: inside the shape, within rimUv of a transparent texel.
-    float lowest = min(min(texture(iconTexture, qt_TexCoord0 + vec2(rimUv, 0.0)).a, texture(iconTexture, qt_TexCoord0 - vec2(rimUv, 0.0)).a),
-                       min(texture(iconTexture, qt_TexCoord0 + vec2(0.0, rimUv)).a, texture(iconTexture, qt_TexCoord0 - vec2(0.0, rimUv)).a));
-    float edge = clamp(a - lowest, 0.0, 1.0) * strength * rimGain;
+    float lowest = min(min(texture(iconTexture, uv + vec2(rimUv, 0.0)).a, texture(iconTexture, uv - vec2(rimUv, 0.0)).a),
+                       min(texture(iconTexture, uv + vec2(0.0, rimUv)).a, texture(iconTexture, uv - vec2(0.0, rimUv)).a));
+    // Only opaque pixels carry the rim: a drop shadow around the shape (low opacity) is not lit.
+    float edge0 = clamp(a - lowest, 0.0, 1.0) * smoothstep(0.8, 0.95, a) * rimGain;
+    float edge = edge0 * strength;
 
     vec4 outc;   // premultiplied
     if (modeIndex < 1.5) {
@@ -139,11 +194,12 @@ void main() {
         // glyph inside it inverts.
         float lightCtx = (1.0 - strength) * smoothstep(0.55, 0.8, luma(local)) * (1.0 - smoothstep(0.08, 0.25, chroma(local)));
         float memberV = 1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(c, local));
-        vec3 plateV = c * min(darkPlateLuma / max(luma(local), 0.1), 1.0);
+        vec3 plateV = c * min(darkPageLuma / max(luma(local), 0.1), 1.0);
         vec3 inkV = vec3(mix(darkPlateLuma, darkGlyphLuma, clamp((1.0 - Lc / max(luma(local), 0.1)) * 3.0, 0.0, 1.0)));
         vec3 glyphV = mix(c, inkV, neutral);
         rgb = mix(rgb, mix(glyphV, plateV, memberV), lightCtx);
-        rgb = mix(rgb, vec3(1.0), edge * darkRim * (isDark ? 1.0 : 0.0));
+        // The rim also lights the outline of a darkened plateless page.
+        rgb = mix(rgb, vec3(1.0), edge0 * max(strength, lightCtx) * darkRim * (isDark ? 1.0 : 0.25));
         outc = vec4(rgb * a, a);
     } else if (modeIndex < 2.5) {
         // CLEAR: the plate becomes translucent glass (light in the dark appearance, smoked in the light one) and the
@@ -153,8 +209,10 @@ void main() {
         float detail = mix(clamp((relShade - 0.405) / 0.595, 0.0, 1.0), clamp(distance(c, plate) * 1.6, 0.0, 1.0), strength);
         vec3 ink = isDark ? vec3(inkL * (1.0 - clearDetail * 0.7 * (1.0 - detail)))
                           : vec3(inkL + clearDetail * 0.5 * (1.0 - detail));
-        vec3 glass = isDark ? vec3(1.0) : vec3(0.0);
-        float glassA = (isDark ? clearPlateAlphaDark : clearPlateAlphaLight) * a;
+        // Over a window material the glass is light on dark and smoked on light; over the bare wallpaper (any brightness)
+        // it is strongly smoked, so the white ink and rim read on a white wallpaper and the plate edge on a black one.
+        vec3 glass = (isDark && !wall) ? vec3(1.0) : vec3(0.0);
+        float glassA = (wall ? clearPlateAlphaWallpaper : (isDark ? clearPlateAlphaDark : clearPlateAlphaLight)) * a;
         vec4 plateP = vec4(glass * glassA, glassA);
         vec4 glyphP = vec4(ink * a, a);
         outc = mix(glyphP, plateP, member);
@@ -172,8 +230,40 @@ void main() {
         float rr = clamp(Lc / Lp, 0.8, 1.2);
         vec3 plateRgb = (isDark ? t * tintedPlateScale : mix(t, vec3(1.0), tintedPlateMixLight)) * rr;
         vec3 rgb = mix(ink, min(plateRgb, vec3(1.0)), member);
-        rgb = mix(rgb, isDark ? mix(base, vec3(1.0), 0.4) : base * 0.6, edge * tintedRim);
+        rgb = mix(rgb, isDark ? mix(base, vec3(1.0), 0.7) : base * 0.6, edge * tintedRim);
         outc = vec4(rgb * a, a);
+    }
+    if (modeIndex > 1.5 && sysW > 0.001) {
+        // The system plate: a rounded square (macOS squircle proportions), glass in Clear, tinted in Tinted.
+        float hs = 0.5 - sysPlateInset;
+        float rad = sysPlateRadius * 2.0 * hs;
+        vec2 q = abs(qt_TexCoord0 - vec2(0.5)) - vec2(hs - rad);
+        float sdf = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - rad;
+        float aa = max(fwidth(sdf), 0.0005);
+        float mask = 1.0 - smoothstep(-aa, aa, sdf);
+        float inside = -sdf;
+        float band = smoothstep(0.0, aa, inside) * (1.0 - smoothstep(rimUv * 0.8, rimUv * 1.0, inside)) * rimGain;
+        vec3 sysRgb;
+        float sysA;
+        vec3 rimRgb;
+        float rimK;
+        if (modeIndex < 2.5) {
+            sysRgb = (isDark && !wall) ? vec3(1.0) : vec3(0.0);
+            sysA = wall ? clearPlateAlphaWallpaper : (isDark ? clearPlateAlphaDark : clearPlateAlphaLight);
+            rimRgb = vec3(isDark ? clearInkDark : clearInkLight);
+            rimK = clearRim;
+        } else {
+            vec3 t2 = tint.rgb;
+            vec3 baseS = isDark ? mix(t2, vec3(1.0), tintedGlyphLift) : t2 * tintedGlyphShadeLight;
+            sysRgb = isDark ? t2 * tintedPlateScale : mix(t2, vec3(1.0), tintedPlateMixLight);
+            sysA = 1.0;
+            rimRgb = isDark ? mix(baseS, vec3(1.0), 0.7) : baseS * 0.6;
+            rimK = tintedRim;
+        }
+        vec4 plateS = vec4(sysRgb * sysA, sysA);
+        float rimS = band * rimK;
+        plateS = vec4(rimRgb * rimS, rimS) + plateS * (1.0 - rimS);
+        outc = outc + plateS * (mask * sysW) * (1.0 - outc.a);
     }
     fragColor = outc * qt_Opacity;
 }
