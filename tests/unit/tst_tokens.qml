@@ -105,6 +105,12 @@ TestCase {
         compare(Tokens.filesIconCellWidth, 112);
         compare(Tokens.desktopIconCellWidth, 112);
         compare(Tokens.filesInfoWindowWidth, 264);
+        // Quick Settings: 4 columns of 63 with 13 gaps are 291 wide; the Notifications column is a banner wide.
+        compare(Tokens.panelControlCenterWidth, 4 * Tokens.quicksettingsCell + 3 * Tokens.quicksettingsGap);
+        compare(Tokens.quicksettingsCell, 63);
+        compare(Tokens.quicksettingsIconDisk, 36);
+        compare(Tokens.panelCcIconButton, Tokens.quicksettingsIconDisk);
+        compare(Tokens.notificationCenterWidth, Tokens.notificationBannerWidth);
         fuzzyCompare(Tokens.materialSeparatorOpacityLight, 0.08, 1e-9);
         Appearance.dark = false;
         fuzzyCompare(Appearance.separatorOpacity, Tokens.materialSeparatorOpacityLight, 1e-9);

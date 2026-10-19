@@ -67,12 +67,13 @@ already running (`--keep`, `just nested-up`) is left alone.
   baselines therefore show its installed applications; install or remove an app and the Apps/Search baselines change.
   Contrast regions of the Apps surface assume the current first page (Aether, Chromium, Disks, Files).
 
-Surfaces: `menubar`, `systemmenu`, `appmenu`, `controlcenter`, `notificationcenter` (3 test notifications,
+Surfaces: `menubar`, `systemmenu`, `appmenu`, `controlcenter` (Quick Settings modules), `controlcenter-detail` (the Wi-Fi
+module opened by a click on its text), `notificationcenter` (3 test notifications, the floating column,
 opened by a click on the clock), `dock` (magnification 1.7, pointer at x=927), `search` (query "files"), `apps`
 (page 1), `overview` (4 foot windows), `lock` (never typed into; the nested instance is torn down afterwards
 because a locked nested session cannot be unlocked without a password), `settings` (Appearance page), `files`,
 `titlebar` (plugin titlebar of a foot window; needs `compositor/build/grassfield-compositor.so`).
-Each is captured for `en` and `fr`: baseline file names are `<surface>.<lang>.png` (26 files).
+Each is captured for `en` and `fr`: baseline file names are `<surface>.<lang>.png` (28 files).
 
 ## Comparison and threshold
 

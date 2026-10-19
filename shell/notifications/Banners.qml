@@ -35,7 +35,8 @@ PanelWindow {
     }
 
     screen: targetScreen
-    visible: targetScreen !== null && Notifications.bannerCount > 0
+    // The Notifications column replaces the banners while it is open (its cards float over the same area).
+    visible: targetScreen !== null && Notifications.bannerCount > 0 && !Notifications.centerOpen
     anchors {
         top: true
         right: true
