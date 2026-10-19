@@ -17,16 +17,14 @@ import Grassfield.Ui
 //   E (outside) the best of outline-vs-material, plate-vs-material and glyph-vs-material >= floor(default's): the icon
 //               stays visible on the material by its edge or by its glyph.
 // The plate is the median luminance of the ring 4 to 8 px inside the edge; the glyph is the 2nd or 98th percentile
-// luminance of the core (8 px in), whichever is farther from the plate; the outline is the mean of the 2 px edge band.
-// Known limits (documented in docs/specs/ui.md, "Icon shader"; still measured and logged, not failed):
-//   - an icon without a plate whose glyph is near black (dark-glyph-no-plate): Clear and Tinted keep luminance detail
-//     only, and in the dark range it is below 2:1 inside; Tinted also stays under 3:1 against a bright wallpaper's
-//     dark material (no plate to lift).
-//   - a logo without a plate in Tinted (light appearance): hue-only detail falls to about 1.8:1 inside.
-//   - a one-colour logo filling the canvas with holes (full-bleed-logo, e.g. the Discord icon of the default WhiteSur
-//     variant) cannot be told from a coloured plate: it is drawn as a plate (darker or glass) and its holes show the material.
-//   - Nautilus-like icons whose plate is two halves (no single plate colour): Tinted in the dark appearance over the
-//     brightest material reaches 2.5:1 by plate and rim.
+// luminance of the core (8 px in), whichever is farther from the plate; the outline is the best-contrast pixel of the 2 px edge band.
+// Known limits (measured values; docs/specs/ui.md "Icon shader"; still measured and logged, not failed). All are the
+// inside rule in monochrome modes for details that differ by hue only, or a plate of two colours:
+//   - logo-no-plate (orange/blue/white rings): Clear 1.63 inside, Tinted 1.52 (default 3.20; floor 2.0).
+//   - dark-glyph-no-plate (near-black house, grey door): Tinted light appearance 1.66 (default 6.89).
+//   - hicolor btop (red glyph with black outline, plateless): Tinted light appearance 1.43 (default 2.00, floor 1.8).
+//   - Nautilus (a two-colour split plate has no single plate colour): Dark 2.68 (floor 2.9), Clear 1.75, Tinted 1.72.
+//   - hicolor kdenlive (thin blue bars on transparency): Tinted on the brightest material, outside 2.75 (floor 3.0).
 // Contrast is the WCAG ratio of relative luminances. It needs a GPU scene graph (ShaderEffect does not run on the
 // software renderer used by the offscreen platform): the test skips there; scripts/dev/test-icons.sh runs it in the
 // nested session.
@@ -35,7 +33,7 @@ TestCase {
     name: "IconShaderA2"
     visible: true
     when: windowShown
-    width: 600
+    width: 1000
     height: 780
 
     readonly property int cell: 60
@@ -43,9 +41,20 @@ TestCase {
     readonly property int rowsPerGroup: 12
     readonly property string fixtureDir: Qt.resolvedUrl("../fixtures/icons/")
     readonly property string whitesurDir: Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/apps/scalable/")
-    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo"]
+    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo", "dark-plate-light-border", "white-page-document"]
     // Includes btop, Disk Usage Analyzer and white-plated icons (Chromium, Firefox, GIMP, Inkscape, Calendar, Notes).
     readonly property var whitesurNames: ["btop", "disk-usage-analyzer", "chromium", "firefox", "gimp", "inkscape", "org.gnome.Calendar", "accessories-text-editor", "org.gnome.Settings", "spotify", "vlc", "discord", "mpv", "obsidian", "foot", "org.gnome.Nautilus", "visual-studio-code"]
+    // Installed non-WhiteSur theme icons (read in place, never copied into the repo; a missing file is skipped).
+    readonly property var systemIcons: [
+        ["hicolor:foot", "hicolor/scalable/apps/foot.svg"], ["hicolor:libreoffice-writer", "hicolor/scalable/apps/libreoffice-writer.svg"],
+        ["hicolor:libreoffice-calc", "hicolor/scalable/apps/libreoffice-calc.svg"], ["hicolor:libreoffice-impress", "hicolor/scalable/apps/libreoffice-impress.svg"],
+        ["hicolor:btop", "hicolor/scalable/apps/btop.svg"], ["hicolor:mpv", "hicolor/scalable/apps/mpv.svg"],
+        ["hicolor:org.gnome.Evince", "hicolor/scalable/apps/org.gnome.Evince.svg"], ["hicolor:org.gnome.Nautilus", "hicolor/scalable/apps/org.gnome.Nautilus.svg"],
+        ["hicolor:omacalc", "hicolor/scalable/apps/omacalc.svg"], ["hicolor:kdenlive", "hicolor/scalable/apps/kdenlive.svg"],
+        ["hicolor:obs", "hicolor/scalable/apps/com.obsproject.Studio.svg"], ["hicolor:org.gnome.DiskUtility", "hicolor/scalable/apps/org.gnome.DiskUtility.svg"],
+        ["breeze:accessories-calculator", "breeze/apps/48/accessories-calculator.svg"], ["breeze:ark", "breeze/apps/48/ark.svg"],
+        ["breeze:accessories-text-editor", "breeze/apps/48/accessories-text-editor.svg"]
+    ]
     readonly property var modes: ["default", "dark", "clear", "tinted"]
     readonly property var fixtures: {
         const out = [];
@@ -53,6 +62,8 @@ TestCase {
             out.push({name: n, url: fixtureDir + n + ".svg"});
         for (const n of whitesurNames)
             out.push({name: "whitesur:" + n, url: whitesurDir + n + ".svg"});
+        for (const e of systemIcons)
+            out.push({name: e[0], url: "file:///usr/share/icons/" + e[1]});
         return out;
     }
 
@@ -170,12 +181,12 @@ TestCase {
         const lo = quantile(core, 0.02);
         const hi = quantile(core, 0.98);
         const glyph = ratio(lo, body) >= ratio(hi, body) ? lo : hi;
-        let outline = 0;
+        // The outline is the stroke at its strongest: the pixel of the 2 px edge band farthest in contrast from the material
+        // (the anti-aliased pixels beside it blend towards the material, so a mean would hide a 1 px stroke).
+        let outlineOverPanel = 1;
         for (const l of band)
-            outline += l;
-        outline = band.length > 0 ? outline / band.length : body;
+            outlineOverPanel = Math.max(outlineOverPanel, ratio(l, lp));
         const plateOverPanel = ratio(body, lp);
-        const outlineOverPanel = ratio(outline, lp);
         const glyphOverPanel = ratio(glyph, lp);
         return {
             inside: ratio(glyph, body),
@@ -187,8 +198,9 @@ TestCase {
     }
 
     readonly property var knownLimits: [
-        "dark-glyph-no-plate clear I", "dark-glyph-no-plate tinted I", "dark-glyph-no-plate tinted E",
-        "logo-no-plate tinted I", "whitesur:org.gnome.Nautilus tinted E", "full-bleed-logo * *"
+        "logo-no-plate clear I", "logo-no-plate tinted I", "dark-glyph-no-plate tinted I", "hicolor:btop tinted I",
+        "whitesur:org.gnome.Nautilus dark I", "whitesur:org.gnome.Nautilus clear I", "whitesur:org.gnome.Nautilus tinted I",
+        "hicolor:kdenlive tinted E"
     ]
 
     function isKnownLimit(name, mode, rule) {

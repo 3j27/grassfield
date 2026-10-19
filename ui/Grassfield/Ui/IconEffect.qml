@@ -29,7 +29,10 @@ ShaderEffect {
     }
     readonly property var iconTexture: textureSource
     readonly property real dark: root.darkAppearance ? 1 : 0
-    readonly property real rimUv: Tokens.iconModeRimWidth / Math.max(1, root.nominalSize)
+    // The rim keeps its width in logical pixels up to rimFullSize and shrinks and fades on smaller icons (a 1 px rim is
+    // heavy on a 16 px icon).
+    readonly property real rimGain: Math.min(1, root.nominalSize / Tokens.iconModeRimFullSize)
+    readonly property real rimUv: Tokens.iconModeRimWidth * root.rimGain / Math.max(1, root.nominalSize)
     readonly property real plateToleranceLow: Tokens.iconModePlateToleranceLow
     readonly property real plateToleranceHigh: Tokens.iconModePlateToleranceHigh
     readonly property real plateAlphaLow: Tokens.iconModePlateAlphaLow
@@ -38,6 +41,7 @@ ShaderEffect {
     readonly property real darkChromaKeep: Tokens.iconModeDarkChromaKeep
     readonly property real darkGlyphLuma: Tokens.iconModeDarkGlyphLuma
     readonly property real darkGlyphBoost: Tokens.iconModeDarkGlyphBoost
+    readonly property real darkGlyphFloor: Tokens.iconModeDarkGlyphFloor
     readonly property real darkRim: Tokens.iconModeDarkRim
     readonly property real clearPlateAlphaDark: Tokens.iconModeClearPlateAlphaDark
     readonly property real clearPlateAlphaLight: Tokens.iconModeClearPlateAlphaLight
