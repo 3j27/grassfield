@@ -104,6 +104,33 @@
     </message>
 </context>
 <context>
+    <name>AccessibilityPage</name>
+    <message>
+        <source>Accessibility</source>
+        <translation>Accessibilité</translation>
+    </message>
+    <message>
+        <source>Pointer</source>
+        <translation>Pointeur</translation>
+    </message>
+    <message>
+        <source>The pointer changes size as you drag. Apps that are already open keep their size until they are restarted.</source>
+        <translation>Le pointeur change de taille pendant que vous faites glisser. Les apps déjà ouvertes gardent leur taille jusqu’à leur redémarrage.</translation>
+    </message>
+    <message>
+        <source>Pointer size</source>
+        <translation>Taille du pointeur</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normale</translation>
+    </message>
+    <message>
+        <source>Large</source>
+        <translation>Grande</translation>
+    </message>
+</context>
+<context>
     <name>AppAboutPanel</name>
     <message>
         <source>About %1</source>
@@ -2741,6 +2768,14 @@
     <message>
         <source>dark light theme transparency material motion icons tint</source>
         <translation>sombre clair thème transparence matière animation apparence icônes teinte</translation>
+    </message>
+    <message>
+        <source>Accessibility</source>
+        <translation>Accessibilité</translation>
+    </message>
+    <message>
+        <source>pointer cursor size mouse large</source>
+        <translation>pointeur curseur taille souris grand grande</translation>
     </message>
     <message>
         <source>Desktop &amp; Dock</source>

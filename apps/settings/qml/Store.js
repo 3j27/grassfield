@@ -29,7 +29,8 @@ const DEFAULTS = {
     "hotCorners.bottomRight": "none",
     "icons.mode": "default",
     "icons.tint": "accent",
-    "icons.folderColor": "theme"
+    "icons.folderColor": "theme",
+    "pointer.size": Ui.PointerSize.DEFAULT
 };
 
 const CORNER_ACTIONS = ["none", "overview", "notifications", "apps", "lock"];
@@ -60,7 +61,9 @@ const RULES = {
     // "accent" or a #rrggbb colour (schema `pattern`).
     "icons.tint": {type: "tint"},
     // "theme", "accent" or a #rrggbb colour (schema `pattern`).
-    "icons.folderColor": {type: "folderColor"}
+    "icons.folderColor": {type: "folderColor"},
+    // Cursor size in pixels, mirrors ui/Grassfield/Ui/PointerSize.js (the unit test checks the bounds).
+    "pointer.size": {type: "integer", min: Ui.PointerSize.MIN, max: Ui.PointerSize.MAX}
 };
 
 // Error message for an invalid value, or "" when the value is acceptable for the key.

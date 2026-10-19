@@ -622,6 +622,8 @@ QtObject {
     readonly property int settingsListIconSize: 18
     // estimate: Sound pane, minimum gap between two volume writes while a slider is dragged
     readonly property int settingsVolumeApplyMs: 120
+    // estimate: shell, minimum gap between two compositor cursor reloads while the pointer size slider is dragged
+    readonly property int settingsPointerApplyMs: 100
     // estimate: Sound pane, width of the percentage next to a slider
     readonly property int settingsVolumeValueWidth: 44
 
