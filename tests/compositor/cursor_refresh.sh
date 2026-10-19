@@ -3,22 +3,29 @@
 # that does not move is drawn at the new size as soon as the shell applies it (macOS: the pointer grows while the slider
 # moves), keeps its shape and does not move. Without the feature the shell still applies the size and sends no refresh.
 #
-# Usage: tests/compositor/cursor_refresh.sh [check | baseline]
+# Usage: tests/compositor/cursor_refresh.sh [check | baseline | stress [seconds]]
 #   check     plugin loaded with cursor-refresh: the arrow over the desktop and the I-beam over foot, each 24 -> 48 -> 96
-#             -> 24 with the pointer still; 10 refreshes/s for 3 s and a 1000-call flood; plugin unload (no refresh: the
-#             new size waits for a shape change) and load again (refresh back).
+#             -> 24 with the pointer still; a pointer foot hides while typing stays hidden; 10 refreshes/s for 3 s and a
+#             1000-call flood; plugin unload (no refresh: the new size waits for a shape change) and load again.
 #   baseline  no cursor-refresh (scripts/dev/nested-up.sh --no-plugin): the shell applies the size (its setcursor lines,
 #             capabilities "ready degraded"), the still pointer keeps its old size, a shape change draws the new one.
+#   stress    (default 600 s) the verb 10 times per second and a new pointer.size every 3 s, nothing else; meant to run
+#             next to tests/compositor/soak.sh (C1). PASS when Hyprland is alive and at most 1 % of the calls failed.
 # NESTED only: needs scripts/dev/nested-up.sh, grassfield-shell and the dev cursor theme (`just cursors`). The size is set
 # as Settings sets it: pointer.size in the dev settings file (.dev/config/grassfield.json, restored at exit). Pointer
 # input through scripts/dev/pointer.sh, captures through scripts/dev/shot.sh, hyprctl through scripts/nestctl (read-only
-# queries, the verb, plugin unload/load). The size drawn = bounding box of (capture with the pointer) - (capture without),
-# in a 240 px square centred on the pointer.
+# queries, the verb, plugin unload/load). The size drawn = bounding box of (capture with the pointer) - (reference capture
+# with the pointer away), in a 240 px square centred on the pointer.
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Log and crops: .dev/cursor-refresh/run-<timestamp>/.
 set -uo pipefail
 
 mode=${1:-check}
-[[ $mode == check || $mode == baseline ]] || { echo "usage: cursor_refresh.sh [check | baseline]" >&2; exit 2; }
+stress_secs=${2:-600}
+case $mode in
+  check | baseline) ;;
+  stress) [[ $stress_secs =~ ^[1-9][0-9]*$ ]] || { echo "usage: cursor_refresh.sh [check | baseline | stress [seconds]]" >&2; exit 2; } ;;
+  *) echo "usage: cursor_refresh.sh [check | baseline | stress [seconds]]" >&2; exit 2 ;;
+esac
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
@@ -55,7 +62,7 @@ features() {
   jq -c '.features // []' <<<"$reply" 2>/dev/null || echo '[]'
 }
 has_refresh() { features | jq -e 'index("cursor-refresh")' >/dev/null; }
-if [[ $mode == check ]] && ! has_refresh; then
+if [[ $mode != baseline ]] && ! has_refresh; then
   echo "cursor_refresh: the nested plugin does not advertise cursor-refresh (features $(features))" >&2
   exit 2
 fi
@@ -75,8 +82,10 @@ settings=$dev/config/grassfield.json
 backup=$work/settings.backup
 had_settings=0
 [[ -f $settings ]] && { cp "$settings" "$backup"; had_settings=1; }
-base=$root/config/defaults/grassfield.json
-((had_settings)) && base=$backup
+# Never the defaults file as a base: its Dock pins a browser and a file manager (scripts/dev/shell-run.sh writes the dev
+# file with the foot-only Dock and no idle lock; the same minimal content when it is missing).
+base=$backup
+((had_settings)) || printf '{"version":1,"lock":{"idleMinutes":0},"dock":{"pinned":["foot"]}}\n' >"$base"
 foot_pid=""
 cleanup() {
   [[ -n $foot_pid ]] && kill "$foot_pid" 2>/dev/null
@@ -202,6 +211,33 @@ sequence() { # <name> <px> <py> <grow|stay>
 say "cursor_refresh $mode: run $work, nested pid $hypr_pid ($(nestctl -j version | jq -r .tag)), output $out ${mon_w}x${mon_h}"
 say "plugin features: $(features); shell capabilities: $("$root/tests/visual/ipc.sh" capabilities status 2>>"$log")"
 
+if [[ $mode == stress ]]; then
+  # The verb at 10/s and a new size every 3 s (the shell then sends its own setcursor + refresh) for stress_secs.
+  sizes=(24 48 96 64 32)
+  calls=0 failed=0 changes=0
+  end=$((SECONDS + stress_secs))
+  while ((SECONDS < end)); do
+    if ((calls % 30 == 0)); then
+      jq --argjson v "${sizes[changes % ${#sizes[@]}]}" '.pointer.size = $v' "$base" >"$settings.tmp" && mv "$settings.tmp" "$settings"
+      changes=$((changes + 1))
+    fi
+    nestctl dispatch 'hl.plugin.grassfield.cursor_refresh()' >/dev/null 2>>"$log" || failed=$((failed + 1))
+    calls=$((calls + 1))
+    ((calls % 1000 == 0)) && say "  $calls calls, $failed failed, $changes sizes"
+    kill -0 "$hypr_pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  say "stress: $calls calls in ${stress_secs} s, $failed failed, $changes size changes"
+  kill -0 "$hypr_pid" 2>/dev/null
+  check "nested Hyprland alive" $? "pid $hypr_pid"
+  check "calls answered" "$( ((failed * 100 <= calls)); echo $?)" "$failed of $calls failed"
+  check "plugin still advertises cursor-refresh" "$(has_refresh; echo $?)" "$(features)"
+  grep -a '\[grassfield\] cursor_refresh' "$dev/hyprland.log" 2>/dev/null | tail -n 5 >>"$log"
+  if ((fail == 0)); then say "cursor_refresh stress: PASS"; else say "cursor_refresh stress: FAIL"; fi
+  say "cursor_refresh stress: log $log"
+  exit "$fail"
+fi
+
 # 1. The arrow over the desktop (no window there): the shell's desktop surface sets the default shape.
 ax=$((mon_w / 2 - 300)) ay=$((mon_h / 2))
 if [[ $mode == check ]]; then
@@ -210,12 +246,27 @@ if [[ $mode == check ]]; then
 else
   say "arrow over the desktop without cursor-refresh, pointer still at ($ax,$ay)"
   sequence arrow "$ax" "$ay" stay
-  # The size was applied (the shell works): a shape change draws it. Over the Dock (another surface) and back.
+  # The size was applied (the shell works): a shape change draws it. Entering another surface is not enough: Hyprland
+  # 0.56.2 ignores a shape name set again (setCursorFromName returns when the name is unchanged and not forced), and the
+  # desktop and the Dock both set "default". So a foot opens under the pointer (I-beam) and closes again (arrow).
   set_size 96 || true
   read -r w h x y m < <(measure "arrow-96-still" "$ax" "$ay")
   say "  96 applied, pointer still: drawn ${w}x${h}"
   pointer abs "$ax" $((mon_h - 20)) sleep 300 abs "$ax" "$ay" sleep 50
   sleep 0.6
+  read -r w h x y m < <(measure "arrow-96-after-the-dock" "$ax" "$ay")
+  say "  96 applied, pointer over the Dock and back (same shape name): drawn ${w}x${h}"
+  WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot >/dev/null 2>&1 </dev/null &
+  foot_pid=$!
+  for _ in $(seq 1 30); do
+    nestctl -j clients | jq -e --argjson p "$foot_pid" 'any(.[]; .pid == $p and .mapped)' >/dev/null && break
+    sleep 0.2
+  done
+  pointer abs $((ax + 1)) "$ay" sleep 300 abs "$ax" "$ay" sleep 50 # over foot: the I-beam
+  kill "$foot_pid" 2>/dev/null
+  foot_pid=""
+  sleep 0.8 # foot gone: the desktop under the pointer sets the arrow again
+  pointer abs "$ax" "$ay" sleep 50
   read -r w h x y m < <(measure "arrow-96-after-shape-change" "$ax" "$ay")
   q=$(ratio "$h" "${seq_h24[arrow]:-0}")
   say "  after a shape change: drawn ${w}x${h} (${q} x the 24 px height)"
