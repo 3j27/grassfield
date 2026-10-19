@@ -50,8 +50,10 @@ Fix pass after the R13 review of 46b3e9b (plugin 0.6.1-stages, nested Hyprland v
 only window of the active stage, window cycling), `minimize.sh stages` PASS, `soak.sh 660 stages` PASS; the pre-fix build
 fails the three review sequences in the same session. Fix pass 2 after the R13 counter-review of 17208af (plugin
 0.6.2-stages): `stages.sh check` 51/51 (adds window actions after a swap under an Exclusive layer, strip menus, focus
-reasons); the pre-fix build fails the new active-window and menu checks in the same session. Details:
-`docs/specs/stages.md`.
+reasons); the pre-fix build fails the new active-window and menu checks in the same session. Fix pass 3 after the R13
+counter-review #3 of e9ebc7f (plugin 0.6.3-stages): `stages.sh check` 58/58 on one and two outputs (adds no window or
+monitor focus under an Exclusive layer, a special workspace, a Desktop not shown, a polkit-like dialog); the pre-fix
+build 51/58 in the same session; `soak.sh 1260 stages` and `soak.sh 1260` PASS. Details: `docs/specs/stages.md`.
 
 ## Consequences
 - Depends on Hyprland internals: `CWindow::setInputBlocked` with an unused reason bit (`1 << 6`), `acceptsInput()` in the

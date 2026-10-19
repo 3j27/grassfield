@@ -404,6 +404,18 @@ ended at round 20 with the nested Hyprland gone without a core dump, crash repor
 `docs/specs/compositor.md`). `minimize.sh stages` PASS, `desktop_focus.sh` 26/26, `overview.sh check` 32/32; C2 without
 the plugin: no `grassfield` request or verb, the shell in degraded mode.
 
+**Fix pass 3** (2026-10-19, plugin 0.6.3-stages, Hyprland v0.56.2 commit efb50993; R13 counter-review #3 of e9ebc7f):
+`stages.sh check` **58/58 PASS** on two outputs (`.dev/stages/run-20261019-125844-check`, `run-20261019-130423-check`,
+and on the final 0.6.3-stages build `run-20261019-140152-check`) and with GF-REF only (WAYLAND-1 disabled,
+`run-20261019-131100-check`). The pre-fix build ffdef45 (0.6.2-stages, loaded through `scripts/nestctl plugin load` in the
+same session, `stages.sh check --plugin <it>`) **51/58** (`run-20261019-130127-check`, `run-20261019-130612-check`): 8c
+both, 8f all three (c3 got `vq` typed into the layer, the special workspace was closed), 8g (Desktop switched 9 → 2, 4
+focus or Desktop events under the layer), 8h's first check (a window focus under the dialog). `minimize.sh stages` PASS
+twice, `desktop_focus.sh` 26/26, `overview.sh check` 32/32. C1: `soak.sh 1260 stages` PASS and `soak.sh 1260` (Stages off)
+PASS, each on a fresh supervised instance (see `docs/specs/compositor.md`, "Nested Hyprland losses"). C2 without the
+plugin: `hyprctl grassfield` "unknown request", `hl.plugin.grassfield.stages(...)` errors (nil `grassfield`), 0
+`[grassfield]` lines, shell "no compositor plugin reply, running in degraded mode".
+
 **Interactions** (ST13-ST16): minimize, full screen, overlap and desktop focus checked in nested as above; the overview
 code path makes strip windows draw from their real places in an open overview (they jump from their tile to the centre
 when the overview opens: prototype limit); desktop focus is unaffected (a press on a thumbnail is a press on a
