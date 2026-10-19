@@ -15,6 +15,16 @@ function isolatedEnvironment(appsHome) {
     };
 }
 
+// `extra` entries added to `base` (a new object, neither input changes).
+function mergeEnvironment(base, extra) {
+    const out = {};
+    for (const k in base)
+        out[k] = base[k];
+    for (const k in extra)
+        out[k] = extra[k];
+    return out;
+}
+
 // Directory of the isolated homes: `<dev>/apps-home`, where <dev> is the parent of GRASSFIELD_STATE_HOME
 // (scripts/dev/shell-run.sh passes `<dev>/state`); `fallbackBase` (a scratch directory) when it is unset.
 function appsHomeFor(stateHome, fallbackBase) {

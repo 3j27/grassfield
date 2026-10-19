@@ -18,6 +18,17 @@ TestCase {
         verify(!("XDG_DATA_DIRS" in env));
     }
 
+    function test_mergeEnvironment() {
+        const base = {"HOME": "/h"};
+        const extra = {"XCURSOR_SIZE": "48"};
+        compare(AppLaunch.mergeEnvironment(base, extra), {"HOME": "/h", "XCURSOR_SIZE": "48"});
+        compare(AppLaunch.mergeEnvironment({}, {}), {});
+        compare(AppLaunch.mergeEnvironment(base, {}), {"HOME": "/h"});
+        // Neither input is modified.
+        compare(base, {"HOME": "/h"});
+        compare(extra, {"XCURSOR_SIZE": "48"});
+    }
+
     function test_appsHomeIsNextToTheStateHome() {
         compare(AppLaunch.appsHomeFor("/w/.dev/state", "/run"), "/w/.dev/apps-home");
         compare(AppLaunch.appsHomeFor("/w/.dev/state/", "/run"), "/w/.dev/apps-home");
