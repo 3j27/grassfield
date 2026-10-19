@@ -3,7 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Widgets
 import Grassfield.Ui
 import qs.platform
 import qs.services
@@ -408,16 +407,15 @@ Scope {
                                 }
 
                                 // Application icon, growing upward from the shelf.
-                                IconImage {
+                                TintedIcon {
                                     id: appIcon
                                     visible: tile.isApp
+                                    size: win.iconSize
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: win.indicatorArea
                                     source: tile.isApp ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
-                                    smooth: true
-                                    mipmap: true
                                 }
 
                                 // Minimized window: live thumbnail with the app icon badge in the
@@ -453,14 +451,13 @@ Scope {
                                         }
                                     }
 
-                                    IconImage {
+                                    TintedIcon {
+                                        size: win.iconSize
                                         width: minimizedTile.live ? Math.round(parent.width * Tokens.dockMinimizedBadgeScale) : parent.width
                                         height: width
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
                                         source: minimizedTile.iconSource
-                                        smooth: true
-                                        mipmap: true
                                     }
                                 }
 

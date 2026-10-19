@@ -30,6 +30,17 @@ QtObject {
             target: Appearance
             property: "reduceMotion"
             value: root.app.reduceMotion
+        },
+        // Icon appearance (ADR-0014): file and app icons follow the shell live.
+        Binding {
+            target: Appearance
+            property: "iconMode"
+            value: root.app.iconMode
+        },
+        Binding {
+            target: Appearance
+            property: "iconTintSetting"
+            value: root.app.iconTint
         }
     ]
 

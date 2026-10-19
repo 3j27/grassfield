@@ -44,8 +44,9 @@ B. A fixed palette of prebuilt accent variants only.
   target. Effects are enabled only when the mode is not `default` (no offscreen pass by default); a per-surface layer is
   used instead of one pass per icon where many icons are shown (Apps panel, Files grid). Phase 2 (later, own review):
   a generated tinted theme for third-party apps, regenerated in the background.
-- Settings keys (settings contract, versioned): `appearance.iconMode` (`default|dark|clear|tinted`, default `default`),
-  `appearance.iconTint` (colour, default = accent). Settings › Appearance gets the mode and tint controls (macOS 26
+- Settings keys (settings contract, versioned): `icons.mode` (`default|dark|clear|tinted`, default `default`),
+  `icons.tint` (`accent` or `#rrggbb`, default `accent`). (Implemented 2026-10-19 under `icons.*` because `appearance` is
+  already a string key in contract version 1.) Settings › Appearance gets the mode and tint controls (macOS 26
   layout). The shell and Grassfield apps react live.
 - Base theme: Grassfield sets the icon theme name for its session and for the shell (Quickshell's IconTheme pragma or
   `QT_ICON_THEME`/environment, whichever the installed version supports — verify), with WhiteSur first and the

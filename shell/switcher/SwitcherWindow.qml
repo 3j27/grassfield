@@ -161,16 +161,11 @@ Variants {
                         border.color: Appearance.colors.accent
                     }
 
-                    Image {
+                    TintedIcon {
                         anchors.centerIn: parent
-                        width: Tokens.switcherIconSize
-                        height: width
+                        size: Tokens.switcherIconSize
                         source: Quickshell.iconPath(tile.modelData.icon, "application-x-executable")
-                        sourceSize: Qt.size(Tokens.switcherIconSize * 2, Tokens.switcherIconSize * 2)
-                        fillMode: Image.PreserveAspectFit
                         asynchronous: true
-                        smooth: true
-                        mipmap: true
                     }
 
                     MouseArea {

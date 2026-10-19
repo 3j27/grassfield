@@ -30,6 +30,9 @@ Singleton {
     readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
     readonly property bool dockAutohide: store.data.dock.autohide
 
+    readonly property string iconMode: store.iconMode
+    readonly property string iconTint: store.iconTint
+
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
@@ -80,6 +83,14 @@ Singleton {
 
     function setDockPinned(list: var): void {
         store.setDockPinned(list);
+    }
+
+    function setIconMode(value: string): void {
+        store.setIconMode(value);
+    }
+
+    function setIconTint(value: string): void {
+        store.setIconTint(value);
     }
 
     function setNotificationsDnd(value: bool): void {

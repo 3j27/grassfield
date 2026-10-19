@@ -916,6 +916,53 @@ QtObject {
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
 
+    // ADR-0014: Dark mode, MultiEffect saturation (-1..1): colours kept as they are
+    readonly property real iconModeDarkSaturation: 0.0
+    // ADR-0014: Dark mode, MultiEffect brightness: a small lift that keeps the dark parts readable after the darkening. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeDarkBrightness: 0.1
+    // ADR-0014: Dark mode, MultiEffect contrast: keeps the glyph readable on the darker plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeDarkContrast: 0.6
+    // ADR-0014: Dark mode, strength of the black colorization (multiplies every channel by 1 - this, hue kept). Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeDarkColorization: 0.4
+    // ADR-0014: Dark mode, colour the icon is darkened towards
+    readonly property string iconModeDarkShade: "#000000"
+    // ADR-0014: Clear mode, fully desaturated
+    readonly property real iconModeClearSaturation: -1.0
+    // ADR-0014: Clear mode, lighter. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeClearBrightness: 0.1
+    // ADR-0014: Clear mode, keeps the glyph readable on the grey plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeClearContrast: 0.4
+    // ADR-0014: Clear mode, translucent over the material; A2 keeps meaningful icons at 3:1 or more (measured)
+    readonly property real iconModeClearOpacity: 0.78
+    // ADR-0014: Tinted mode, saturation: 0 (MultiEffect desaturates after colorizing, so -1 would grey the tint out; the colorization already maps luminance to the tint)
+    readonly property real iconModeTintedSaturation: 0.0
+    // ADR-0014: Tinted mode, lifts the shadows so the ramp starts above black. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeTintedBrightness: 0.3
+    // ADR-0014: Tinted mode, spreads the luminance over the ramp. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeTintedContrast: 0.7
+    // ADR-0014: Tinted mode, strength of the tint (0..1)
+    readonly property real iconModeTintedColorization: 1.0
+    // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)
+    readonly property int iconModePreviewSize: 56
+    // estimate: Settings icon mode picker, tile width
+    readonly property int iconModePreviewTileWidth: 96
+    // estimate: Settings icon mode picker, tile height
+    readonly property int iconModePreviewTileHeight: 96
+    // estimate: Settings icon mode picker, tile corner radius
+    readonly property int iconModePreviewRadius: 10
+    // estimate: Settings icon mode picker, gap between tiles
+    readonly property int iconModePreviewGap: 12
+    // own sample icon of the mode previews: top of the plate gradient
+    readonly property string iconModeSampleTop: "#4DA3FF"
+    // own sample icon of the mode previews: bottom of the plate gradient
+    readonly property string iconModeSampleBottom: "#2B4BD8"
+    // own sample icon of the mode previews: plate corner radius over its edge
+    readonly property real iconModeSampleRadius: 0.22
+    // own sample icon of the mode previews: glyph on the plate
+    readonly property string iconModeSampleGlyph: "#FFFFFF"
+    // own picks, not copied: swatches of the Tinted icon colour (blue, purple, pink, red, orange, yellow, green, graphite); the accent is the first swatch
+    readonly property var iconModeTintColors: ["#3E7BFA", "#8E5BEA", "#E25AA1", "#E5484D", "#F5883B", "#E6B422", "#3FAE5A", "#8A8F98"]
+
     // F1 gap 19: icons about 104 pt
     readonly property int switcherIconSize: 104
     // F1 gap 19: icon pitch about 134 pt

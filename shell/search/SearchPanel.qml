@@ -290,12 +290,12 @@ Variants {
                         width: Tokens.searchRowIconSize
                         height: Tokens.searchRowIconSize
 
-                        Image {
+                        TintedIcon {
                             anchors.fill: parent
+                            size: Tokens.searchRowIconSize
+                            oversample: Tokens.searchIconOversample
                             visible: !row.isHeader && row.info.iconSource !== undefined
                             source: !row.isHeader && row.info.iconSource !== undefined ? row.info.iconSource : ""
-                            sourceSize: Qt.size(Tokens.searchRowIconSize * Tokens.searchIconOversample, Tokens.searchRowIconSize * Tokens.searchIconOversample)
-                            fillMode: Image.PreserveAspectFit
                             asynchronous: true
                         }
 

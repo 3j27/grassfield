@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
-import Quickshell.Widgets
 import Grassfield.Ui
 import qs.platform
 import qs.services
@@ -78,9 +77,8 @@ Dialog {
                         x: Tokens.spacingSm
                         spacing: Tokens.spacingSm
 
-                        IconImage {
-                            width: Tokens.menuItemHeight - 6
-                            height: width
+                        TintedIcon {
+                            size: Tokens.menuItemHeight - 6
                             anchors.verticalCenter: parent.verticalCenter
                             source: {
                                 const e = Apps.lookup(row.modelData.appId);
