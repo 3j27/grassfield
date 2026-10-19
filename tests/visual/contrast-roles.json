@@ -4,7 +4,7 @@
   "fg: <palette>.<colour token> (palette colors = the current appearance, darkColors = always dark). opacity: factors applied to the",
   "text alpha (numbers or token paths such as search.selectedSubtitleOpacity). backdrop: material (tint at 1 - t*(1-tintAlphaMin) over a",
   "flat wallpaper colour, with and without a fill overlay), accent (solid accent), rename-field",
-  "(colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
+  "(colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper), bar-light-tone and bar-dark-tone (the adaptive menu bar: the wallpaper itself, for the wallpaper colours the tone can be chosen for, see test_contrast_tokens.py), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
   "the drop shadow), lock (lock screen: dark shadow-colour scrim at lock.dimOpacity over the blurred wallpaper, the same in both appearances and at",
   "every transparency), lock-field (lock + the dark password field fill at lock.fieldFillOpacity), lock-avatar (lock + the light avatar disc at",
   "lock.avatarFillOpacity), lock-submit (lock-field + the return arrow disc: text colour at material.highlightOpacity, x2 when hovered).",
@@ -66,6 +66,8 @@
    {"file": "shell/search/SearchPanel.qml", "class": "alpha", "count": 1}
   ]},
   {"id": "desktop label (white on opaque shadow core: ceiling)", "fg": "darkColors.text", "backdrop": "desktop-label", "kind": "text", "sites": []},
+  {"id": "menu bar text and glyphs, light foreground (bare bar over a dark wallpaper)", "fg": "darkColors.barText", "backdrop": "bar-light-tone", "kind": "text", "sites": []},
+  {"id": "menu bar text and glyphs, dark foreground (bare bar over a light wallpaper)", "fg": "lightColors.barText", "backdrop": "bar-dark-tone", "kind": "text", "sites": []},
   {"id": "desktop label error (opaque shadow core: ceiling)", "fg": "darkColors.danger", "backdrop": "desktop-label", "kind": "text", "sites": [
    {"file": "shell/desktop/DesktopIcon.qml", "class": "danger", "count": 2}
   ]},
