@@ -315,8 +315,9 @@ Scope {
                 const out = dragOut && dragRemovable;
                 const slot = dragSlot;
                 const fromApp = dragFromApp;
-                const cx = tileItem.mapToItem(area, tileItem.width / 2, win.iconSize / 2).x + dragDx;
-                const cy = tileItem.mapToItem(area, 0, win.iconSize / 2).y + dragDy;
+                // mapToItem already includes the tile's drag translation (its Translate transform): adding dragDx/dragDy put the puff off the window.
+                const cx = tileItem.mapToItem(area, tileItem.width / 2, win.iconSize / 2).x;
+                const cy = tileItem.mapToItem(area, 0, win.iconSize / 2).y;
                 dragFrom = -1;
                 dragDx = 0;
                 dragDy = 0;
