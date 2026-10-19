@@ -40,7 +40,7 @@ Item {
     // the icon itself again, at the item's size.
     readonly property bool textureOnly: root.modeActive && !root.effectFailed
     // The shader could not be loaded or compiled: the plain image is shown instead of an effect that draws nothing.
-    readonly property bool effectFailed: effectLoader.item !== null && (effectLoader.item as IconEffect).status === ShaderEffect.Error
+    readonly property bool effectFailed: effectLoader.item !== null && (effectLoader.item as IconEffect).failed
 
     implicitWidth: size
     implicitHeight: size

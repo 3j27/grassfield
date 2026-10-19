@@ -30,6 +30,32 @@ ShaderEffect {
         mipmap: true
     }
     readonly property var iconTexture: textureSource
+    // The plate analysis, once per icon texture (shaders/icon_analysis.frag): a 2x1 texture the effect reads in place of
+    // 16 probes and a clustering per pixel. The source is live, so it is re-rendered only when the icon's texture changes
+    // (the image loads, the icon changes), never per frame.
+    ShaderEffect {
+        id: analysisEffect
+        visible: false
+        width: 2
+        height: 1
+        blending: false
+        property var iconTexture: textureSource
+        property real plateToleranceLow: Tokens.iconModePlateToleranceLow
+        property real plateToleranceHigh: Tokens.iconModePlateToleranceHigh
+        property real plateAlphaLow: Tokens.iconModePlateAlphaLow
+        property real plateAlphaHigh: Tokens.iconModePlateAlphaHigh
+        property url shaderUrl: root.analysisShaderUrl
+        fragmentShader: analysisEffect.shaderUrl
+    }
+    ShaderEffectSource {
+        id: analysisSource
+        visible: false
+        sourceItem: analysisEffect
+        textureSize: Qt.size(2, 1)
+        smooth: false
+        live: true
+    }
+    readonly property var analysis: analysisSource
     readonly property real dark: root.darkAppearance ? 1 : 0
     readonly property real overWallpaper: root.wallpaper ? 1 : 0
     readonly property real clearPlateAlphaWallpaper: Tokens.iconModeClearPlateAlphaWallpaper
@@ -43,8 +69,6 @@ ShaderEffect {
     readonly property real rimUv: Math.max(Tokens.iconModeRimMinWidth, Tokens.iconModeRimWidth * root.sizeFactor) / Math.max(1, root.nominalSize)
     readonly property real plateToleranceLow: Tokens.iconModePlateToleranceLow
     readonly property real plateToleranceHigh: Tokens.iconModePlateToleranceHigh
-    readonly property real plateAlphaLow: Tokens.iconModePlateAlphaLow
-    readonly property real plateAlphaHigh: Tokens.iconModePlateAlphaHigh
     readonly property real darkPlateLuma: Tokens.iconModeDarkPlateLuma
     readonly property real darkPageLuma: Tokens.iconModeDarkPageLuma
     readonly property real darkChromaKeep: Tokens.iconModeDarkChromaKeep
@@ -69,10 +93,13 @@ ShaderEffect {
 
     // The compiled shader; overridable for tests of the failure path.
     property url shaderUrl: Qt.resolvedUrl("shaders/icon.frag.qsb")
+    property url analysisShaderUrl: Qt.resolvedUrl("shaders/icon_analysis.frag.qsb")
     fragmentShader: root.shaderUrl
-    onStatusChanged: {
-        if (root.status === ShaderEffect.Error)
-            IconModes.warnOnce("icon shader failed to load, icons are drawn as they are: " + root.log);
+    // Either shader failed to load or compile: the owner draws the plain icon instead.
+    readonly property bool failed: root.status === ShaderEffect.Error || analysisEffect.status === ShaderEffect.Error
+    onFailedChanged: {
+        if (root.failed)
+            IconModes.warnOnce("icon shader failed to load, icons are drawn as they are: " + root.log + analysisEffect.log);
     }
     blending: true
 }

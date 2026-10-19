@@ -3,10 +3,9 @@
 // Build: scripts/dev/build-shaders.sh (qsb) -> icon.frag.qsb. Algorithm and limits: docs/specs/ui.md "Icon shader".
 //
 // Third-party icons have no separate plate and glyph layers, so they are separated per pixel:
-//  1. PLATE ESTIMATE. 12 probes on a ring inside the icon (where a rounded-square or round plate is, but a glyph
-//     usually is not) give the plate colour (opacity-weighted mean, then a second mean over the probes close to the
-//     first, which drops probes that landed on a glyph) and the plate strength (mean opacity of the probes: a logo
-//     on transparency has none).
+//  1. PLATE ESTIMATE, once per icon texture (shaders/icon_analysis.frag renders it into a 2x1 texture that this shader reads):
+//     16 probes on a ring inside the icon give the plate colour (dominant cluster), a second plate colour and the strength of
+//     the icon's own plate (a rounded square filling the box; a logo on transparency has none).
 //  2. PLATE MEMBERSHIP. A pixel is plate when its colour is near the plate colour (soft threshold, so a plate
 //     gradient stays plate); anything else is glyph.
 //  3. The mode maps plate pixels and glyph pixels differently (see each function), then an edge highlight (rim) is
@@ -28,8 +27,6 @@ layout(std140, binding = 0) uniform buf {
     float sysGlyphScale;    // scale of the artwork sitting on the system plate
     float plateToleranceLow;
     float plateToleranceHigh;
-    float plateAlphaLow;
-    float plateAlphaHigh;
     float darkPlateLuma;
     float darkPageLuma;
     float darkChromaKeep;
@@ -54,6 +51,7 @@ layout(std140, binding = 0) uniform buf {
 };
 
 layout(binding = 1) uniform sampler2D iconTexture;
+layout(binding = 2) uniform sampler2D analysis;   // 2x1 plate analysis (icon_analysis.frag)
 
 float luma(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -69,81 +67,19 @@ vec4 straight(vec4 t) {
 }
 
 void main() {
-    // 1. Plate estimate. 16 probes on a ring at about 0.36 from the centre: inside a plate and inside the thin light
-    //    border some icons have at their edge (it starts near 0.40), but away from most glyphs. The plate is the
-    //    DOMINANT colour cluster of the probes (the probe with the most close neighbours, weighted by opacity); probes
-    //    on a glyph fall outside it. The strength is the share of probes in the cluster: a multi-coloured logo or a
-    //    transparent background has no dominant cluster, hence no plate.
-    const int N = 16;
-    vec2 probe[N] = vec2[N](
-        vec2(0.86, 0.5), vec2(0.14, 0.5), vec2(0.5, 0.86), vec2(0.5, 0.14),
-        vec2(0.76, 0.76), vec2(0.24, 0.24), vec2(0.76, 0.24), vec2(0.24, 0.76),
-        vec2(0.83, 0.64), vec2(0.83, 0.36), vec2(0.17, 0.64), vec2(0.17, 0.36),
-        vec2(0.64, 0.83), vec2(0.36, 0.83), vec2(0.64, 0.17), vec2(0.36, 0.17));
-    vec4 taps[N];
-    for (int i = 0; i < N; ++i)
-        taps[i] = straight(texture(iconTexture, probe[i]));
-    float best = -1.0;
-    int bi = 0;
-    for (int i = 0; i < N; ++i) {
-        float w = 0.0;
-        for (int j = 0; j < N; ++j)
-            w += taps[j].a * (1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(taps[i].rgb, taps[j].rgb)));
-        w *= taps[i].a;
-        if (w > best) {
-            best = w;
-            bi = i;
-        }
-    }
-    vec4 sum2 = vec4(0.0);
-    for (int j = 0; j < N; ++j) {
-        float near = 1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(taps[bi].rgb, taps[j].rgb));
-        sum2 += vec4(taps[j].rgb * taps[j].a * near, taps[j].a * near);
-    }
-    vec3 plate1 = sum2.a > 0.0001 ? sum2.rgb / sum2.a : taps[bi].rgb;
-    float share1 = sum2.a / float(N);
-
-    // A second plate colour (a plate of two colours, as the split face of a file-manager icon has): the dominant cluster of
-    // the probes outside the first one, accepted when it holds a quarter of the probes. A pixel is plate when it is
-    // near either colour, and each pixel is mapped by the colour it is nearest to.
-    float best2 = -1.0;
-    int bj = 0;
-    float out1[N];
-    for (int j = 0; j < N; ++j)
-        out1[j] = taps[j].a * smoothstep(plateToleranceLow, plateToleranceHigh, distance(taps[bi].rgb, taps[j].rgb));
-    for (int i = 0; i < N; ++i) {
-        float w = 0.0;
-        for (int j = 0; j < N; ++j)
-            w += out1[j] * (1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(taps[i].rgb, taps[j].rgb)));
-        w *= out1[i];
-        if (w > best2) {
-            best2 = w;
-            bj = i;
-        }
-    }
-    vec4 sumB = vec4(0.0);
-    for (int j = 0; j < N; ++j) {
-        float nearB = out1[j] * (1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(taps[bj].rgb, taps[j].rgb)));
-        sumB += vec4(taps[j].rgb * nearB, nearB);
-    }
-    vec3 plate2 = sumB.a > 0.0001 ? sumB.rgb / sumB.a : plate1;
-    float share2 = sumB.a / float(N);
-    float use2 = smoothstep(0.2, 0.3, share2) * (best2 > 0.0 ? 1.0 : 0.0);
+    // 1. Plate estimate: analysed once per icon texture by icon_analysis.frag into a 2x1 texture (not per pixel). Texel 0: the
+    //    plate colour and the strength of the icon's own plate; texel 1: the second plate colour of a two-colour plate and how
+    //    much of it to use.
+    vec4 an0 = texture(analysis, vec2(0.25, 0.5));
+    vec4 an1 = texture(analysis, vec2(0.75, 0.5));
+    vec3 plate1 = an0.rgb;
+    vec3 plate2 = an1.rgb;
+    float use2 = an1.a;
     vec3 plate = plate1;
-    float strength = smoothstep(plateAlphaLow, plateAlphaHigh, share1 + use2 * share2);
-
-    // The icon's own plate must also be a rounded square filling the box: the four corner probes are opaque. A round logo,
-    // or a one-colour blob such as a mascot, is not a plate even when its colour dominates the probes.
-    float corners = (texture(iconTexture, vec2(0.15, 0.15)).a + texture(iconTexture, vec2(0.85, 0.15)).a +
-                     texture(iconTexture, vec2(0.15, 0.85)).a + texture(iconTexture, vec2(0.85, 0.85)).a) * 0.25;
-    // ... and so are the four edge midpoints (a mascot logo with a notch between its ears is not).
-    float edges = (texture(iconTexture, vec2(0.5, 0.08)).a + texture(iconTexture, vec2(0.5, 0.92)).a +
-                   texture(iconTexture, vec2(0.08, 0.5)).a + texture(iconTexture, vec2(0.92, 0.5)).a) * 0.25;
-    float own = strength * smoothstep(0.65, 0.9, min(corners, edges));
-    strength = own;
+    float strength = an0.a;
 
     // Every icon sits on a system plate (macOS 26 gives non-conforming icons one in every style, Dark included). An icon without its own plate also shrinks to sit inside it.
-    float sysW = 1.0 - own;
+    float sysW = 1.0 - strength;
     vec2 uv = mix(qt_TexCoord0, vec2(0.5) + (qt_TexCoord0 - vec2(0.5)) / sysGlyphScale, sysW);
     bool inBox = uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
     vec4 px = inBox ? straight(texture(iconTexture, uv)) : vec4(0.0);
