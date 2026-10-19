@@ -134,6 +134,8 @@ ShellRoot {
     }
     Switcher {
         id: switcher
+        // The session lock owns the screen and the keyboard: the switcher ends and does not start.
+        locked: Lock.lockState !== "unlocked"
     }
     SwitcherWindow {
         controller: switcher

@@ -637,6 +637,10 @@
         <translation>Droite</translation>
     </message>
     <message>
+        <source>Key above Tab</source>
+        <translation>Touche au-dessus de Tab</translation>
+    </message>
+    <message>
         <source>Left Mouse Button</source>
         <translation>Bouton gauche de la souris</translation>
     </message>
@@ -683,6 +687,18 @@
     <message>
         <source>Raise window</source>
         <translation>Mettre la fenêtre au premier plan</translation>
+    </message>
+    <message>
+        <source>Switch application</source>
+        <translation>Changer d’application</translation>
+    </message>
+    <message>
+        <source>Switch to the previous application</source>
+        <translation>Passer à l’application précédente</translation>
+    </message>
+    <message>
+        <source>Next window of the application</source>
+        <translation>Fenêtre suivante de l’application</translation>
     </message>
     <message>
         <source>Move window</source>

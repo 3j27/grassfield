@@ -989,10 +989,8 @@ QtObject {
     readonly property int switcherEdgeMargin: 32
     // task (macOS model): the panel appears after this long with the modifier held, or at a second Tab; a quick press-release switches without it
     readonly property int switcherShowDelayMs: 150
-    // estimate: the panel unmaps (releasing its keyboard grab) this long before the chosen app is activated, so the compositor's focus restore cannot override the activation
-    readonly property int switcherCommitDelayMs: 40
-    // estimate: if the compositor left the switcher key map and no release request arrived within this time, the switcher commits itself
-    readonly property int switcherBackstopMs: 250
+    // estimate: the chosen app is activated when the compositor reports the switcher surface unmapped; if no such event arrives within this time it is activated anyway
+    readonly property int switcherLayerWaitMs: 250
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real switcherFadeScale: 0.96
 }

@@ -109,14 +109,15 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
   workspace's last window is a restore; any other is the redirected request (the Dock activating an app of another
   Desktop) and brings its stage forward. Hyprland's reasons are mapped one to one in the core (`gf::stages::FocusCause`,
   unit test `StagesInput.OnlyRealUserFocusIsAChoice`); a reason added by a Hyprland update is a compiler warning.
-  **Window cycling (decision, macOS model).** Hyprland's `cycle_next` (the session binds ALT+TAB to it until the
-  Grassfield app switcher exists) skips windows that do not take input, so it cycles among the active stage's windows (and
+  **Window cycling (decision, macOS model).** Hyprland's `cycle_next` (the session binds ALT+TAB to it; the app switcher,
+  `docs/specs/switcher.md`, is SUPER+TAB) skips windows that do not take input, so it cycles among the active stage's windows (and
   windows Stages does not manage) and never reaches a strip window. That is the macOS model: Cmd+` cycles the windows of
   the current app, and with Stages the active stage holds the current app's windows; Cmd+Tab switches apps and brings the
-  chosen app's stage forward, which is Grassfield's activation path (Dock, Search, the coming app switcher: they focus
-  the app's window by dispatch, which brings its stage forward as above). A stage-aware ALT+TAB before the app switcher
-  would need either a function hook on `CWindowQuery::cycle` (rejected: fragile against Hyprland updates, as in the
-  overview spec) or a plugin verb bound in the session config (outside the plugin); it is left to the app switcher.
+  chosen app's stage forward, which is Grassfield's activation path (Dock, Search, the app switcher: they focus the app's
+  window, which brings its stage forward as above; the switcher activates once its own exclusive layer surface is gone,
+  because Hyprland refuses to focus a window while one exists). A stage-aware ALT+TAB would need either a function hook on
+  `CWindowQuery::cycle` (rejected: fragile against Hyprland updates, as in the overview spec) or a plugin verb bound in
+  the session config (outside the plugin); the SUPER+TAB switcher covers app switching, SUPER+` the windows of one app.
 - **ST11** `op:move` moves a window into a stage of its workspace (on top) or into a new strip stage (`"stage":"new"`;
   refused when the window is already alone); `op:merge` moves every window of a strip stage into the active stage.
   Requests naming an unknown stage or window change nothing (`reason:"unknown"`).

@@ -5,8 +5,9 @@ import Quickshell.Wayland
 import Grassfield.Ui
 import "SwitcherModel.js" as Model
 
-// App switcher panel (spec docs/specs/switcher.md): one overlay window per screen, mapped only on the controller's screen
-// while the panel is shown. A centred frosted panel with one large icon per app (most recently used first), the selection
+// App switcher surface (spec docs/specs/switcher.md): one overlay window per screen, mapped only on the controller's
+// screen while a session runs. It takes the keyboard (exclusive) the moment the session starts, so that it sees the Super
+// release itself, and stays transparent until the panel is due (quick switch). The panel is a centred frosted panel with one large icon per app (most recently used first), the selection
 // square on the chosen one and its name under the row. Hover selects, a click activates.
 Variants {
     id: root
@@ -23,12 +24,14 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool shown: root.controller.shown && root.controller.screenName === modelData.name
+        // Session running on this output: the surface is mapped and holds the keyboard.
+        readonly property bool grabbing: root.controller.active && root.controller.screenName === modelData.name
+        readonly property bool shown: root.controller.shown && grabbing
         readonly property var layout: Model.grid(root.controller.apps.length, width - 2 * (Tokens.switcherEdgeMargin + Tokens.switcherPadding), Tokens.switcherPitch)
         readonly property int selected: root.controller.selected
 
         screen: modelData
-        visible: shown
+        visible: grabbing
         anchors {
             top: true
             bottom: true
@@ -38,7 +41,7 @@ Variants {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: grabbing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-switcher"
         // qmllint disable missing-type
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blur : null
@@ -50,8 +53,8 @@ Variants {
             radius: Tokens.switcherPanelRadius
         }
 
-        onShownChanged: {
-            if (shown)
+        onGrabbingChanged: {
+            if (grabbing)
                 keys.forceActiveFocus();
         }
 
@@ -65,27 +68,32 @@ Variants {
         Item {
             id: keys
 
-            // Fallback for sessions without the compositor key map (the binds consume these keys first).
+            // Tab and Q/H are binds of the compositor config (they never reach a client); the rest comes through the grab.
             focus: true
-            Keys.onPressed: event => {
-                event.accepted = true;
+            Keys.onReleased: event => {                // The modifier release (the compositor config's release bind is the second path).
+                if (event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R || event.key === Qt.Key_Meta) {
+                    event.accepted = true;
+                    root.controller.release("");
+                }
+            }
+            Keys.onPressed: event => {                event.accepted = true;
                 switch (event.key) {
                 case Qt.Key_Escape:
                     root.controller.cancel();
                     break;
                 case Qt.Key_Left:
                 case Qt.Key_Backtab:
-                    root.controller.step(-1, true);
+                    root.controller.step(-1, true, "");
                     break;
                 case Qt.Key_Right:
-                    root.controller.step(1, true);
+                    root.controller.step(1, true, "");
                     break;
                 case Qt.Key_Tab:
-                    root.controller.step((event.modifiers & Qt.ShiftModifier) !== 0 ? -1 : 1, true);
+                    root.controller.step((event.modifiers & Qt.ShiftModifier) !== 0 ? -1 : 1, true, "");
                     break;
                 case Qt.Key_Return:
                 case Qt.Key_Enter:
-                    root.controller.release();
+                    root.controller.release("");
                     break;
                 default:
                     event.accepted = false;
