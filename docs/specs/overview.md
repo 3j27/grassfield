@@ -62,7 +62,7 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
   `refreshSpaces`, `topologyRevision`/`refreshOnEvents`.
 - Desktops bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
   tile thumbnails need v2). Click a tile: switch and close. "+": focus the next workspace id, Overview stays open.
-- Click a window: activate and close. The keyboard grab is released 80 ms before the focus action, otherwise Hyprland
+- Click a window: activate and close. The keyboard grab is released before the focus action, otherwise Hyprland
   refocuses the previous window (and workspace) when the exclusive layer goes away and undoes the switch.
 - Keyboard: arrows (spatial), Return, Tab/Shift+Tab cycle windows -> each Desktop tile -> "+", Esc. Up from the top
   row of windows enters the Desktops bar.
@@ -278,7 +278,7 @@ Desktop of the output whose chrome received the key instead of the window that w
 Rule (macOS model): the overview remembers the window that had the keyboard when it opened (`Overview.previous`, address and
 Desktop; none when the desktop surface held the keyboard, ADR-0012). Every close goes through `closeAnd(action)`:
 1. stage `releasing`: every chrome's keyboard mode is `None` (`V2.keyboardPlan`), keys are no longer handled;
-2. wait until **no chrome reports the keyboard** (`Window.active` false on all) and `overview.releaseSettleMs` (80 ms) have
+2. wait until **no chrome reports the keyboard** (`Window.active` false on all) and `overview.releaseSettleMs` (0 ms: the next event-loop turn) have
    passed since the last change of that report (`V2.releaseDone`): all chromes have committed, so no Exclusive layer remains;
    `overview.releaseBoundMs` (500 ms) bounds the wait whatever happens (a lost event must not leave the overview open);
 3. `on:false`, then the action, then the chromes hide. The action is the user's choice (window, Desktop tile); with no choice
@@ -297,19 +297,28 @@ exactly the one the chrome took the keyboard from (A active, pointer and holder 
 focus (`Minimized.focusWindowRequest`). (2) Releasing the holder last removes the `ignoring, exclusive LS present` refusals
 (0 in the nested runs; 5 in 20 closes before).
 
-Drop table (`tests/shell/overview_two_outputs.sh drop`, one injector process `Esc, -s D, tag, Return`, 10 closes per row,
-previous window A or B alternating, pointer alternating between the outputs; typical of 4 runs with the plugin and 1 without):
+Test setup: `tests/shell/overview_two_outputs.sh` runs on two HEADLESS outputs of the nested compositor (GF-REF 1920x1080
+and GF-REF2 1440x900, created and removed through `nestctl`; WAYLAND-1, the nested window tiled by the owner's window
+manager, is disabled for the run), so a host resize cannot change the measured geometry; the run is flagged INVALID when
+an output size changes. The earlier `backdrop` failure on the second output only ever appeared together with a host resize of
+WAYLAND-1 (output shrunk to 461x484 or 941x238: the click point fell off the output); on the headless pair the backdrop
+click closes the overview on both outputs in every run.
 
-| D after Esc | in the previous window | lost | in another window |
+Drop table (`drop`, one injector process `Esc, -s D, tag, Return`, 10 closes per row, previous window A or B alternating,
+pointer alternating between the outputs), by `overview.releaseSettleMs`, plugin runs (the 0 ms value: 5 plugin and 2
+`--no-plugin` runs of `all`, each 59/59 PASS on a fresh session):
+
+| D after Esc | 80 ms setting (host pair) | 40 ms | 0 ms (7 runs) |
 |---|---|---|---|
-| 0, 30, 60 ms | 0/10 | 10 | 0 |
-| 100 ms | 6-8/10 | 2-4 | 0 |
-| 150 ms | 3-8/10 | 2-7 | 0 |
-| 200 ms | 8-10/10 (10/10 in 4 of 5 runs) | 0-2 | 0 |
-| 300 ms | 10/10 | 0 | 0 |
+| 0 ms | 0/10 | 0/10 | 7-10/10 (9, 10, 9, 7, 10 with the plugin; 9, 8 without) |
+| 30 ms | 0/10 | 0/10 | 10/10 |
+| 60 ms | 0/10 | 8/10 | 10/10 |
+| 100 ms | 6-8/10 | 10/10 | 10/10 |
+| 150 ms and later | 3-10/10 | 10/10 | 10/10 |
 
-The release takes about 170 to 200 ms (two settle pauses of 80 ms plus the commits); shortening `overview.releaseSettleMs`
-shortens it. Keys typed meanwhile reach the chrome, which ignores them.
+No key ever reached the wrong window at any setting. With 0 ms the release completes as soon as no chrome reports the
+keyboard; the only loss left is for keys sent in the same millisecond as Esc (the 0 ms row), before the chrome has handled
+the key at all.
 
 ### Two outputs and shared drawing (2026-10-18, plugin 0.6.0-stages)
 The chrome rule is relaxed (contract item 2): one Exclusive chrome holding the keyboard, a mapped chrome on every target
