@@ -61,6 +61,11 @@ shot() { vs_capture "$1" >/dev/null; cp "$VS_SHOTS/$1.$VS_LANG.png" "$OUT/$1.$VS
 
 vs_session
 vs_reset
+# Only the twelve folders on the desktop: the fixtures of vs_fixtures (Notes.txt, Report.md, Archive.zip, Projects) would move
+# them in the grid, and folder_glyph_contrast.py --desktop finds each folder by its slot (sorted by name, 8 per column from the right).
+rm -f "$DESK/Notes.txt" "$DESK/Report.md" "$DESK/Archive.zip"
+rmdir "$DESK/Projects" 2>/dev/null || true
+vs_sleep 2
 magick -size 64x64 xc:black "$OUT/wall-black.png"
 magick -size 64x64 xc:white "$OUT/wall-white.png"
 

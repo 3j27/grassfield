@@ -59,14 +59,14 @@ def box(index, mode="default"):
     return cx - half, int(top + SIZE * (0.5 + (GLYPH_CENTER_Y - 0.5) * k)) - half, 2 * half, 2 * half
 
 
-# The desktop (fgd-* captures of folder-glyphs-desktop.sh): icons flow down the right edge, one column of 8 after the other
-# towards the left; the fixtures Archive.zip, Notes.txt, Projects and Report.md sort first, so 01..04 end the right column.
+# The desktop (fgd-* captures of folder-glyphs-desktop.sh, which leaves only the twelve folders there): icons flow down the right
+# edge, one column of 8 after the other towards the left, sorted by name (01..08, then 09..12).
 DESK_X = (1848, 1736)   # icon centres of the right and the next column
 DESK_Y0, DESK_PITCH = 80, 112
 
 
 def desk_box(index, mode="default"):
-    slot = index + 4                      # four fixtures come first
+    slot = index
     cx = DESK_X[slot // 8]
     cy = DESK_Y0 + (slot % 8) * DESK_PITCH
     k = 1.0 if mode == "default" else SYS_SCALE

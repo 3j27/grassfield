@@ -248,6 +248,9 @@ TestCase {
         wait(500);
         waitForRendering(board);
         const img = grabImage(board);
+        // The board of this scenario as a picture (every fixture in default, dark, clear and tinted, left to right), for a look.
+        if (name.indexOf("48px") === 0 && (name.indexOf("dark window wallpaper #000000") > 0 || name.indexOf("light window wallpaper #ffffff") > 0))
+            img.save(Qt.resolvedUrl("../../.dev/shots/a2-board-" + name.replace(/[^a-z0-9]+/gi, "-") + ".png").toString().replace("file://", ""));
         const inverse = Qt.rgba(1 - background.r, 1 - background.g, 1 - background.b, 1);
         testCase.panelColor = inverse;
         wait(300);
