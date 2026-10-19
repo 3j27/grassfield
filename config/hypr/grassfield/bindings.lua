@@ -26,7 +26,53 @@ bind("SUPER + H", "Hide app", shell("windows", "hide"))
 bind("SUPER + mouse:272", "Move window", hl.dsp.window.drag(), { mouse = true })
 bind("SUPER + mouse:273", "Resize window", hl.dsp.window.resize(), { mouse = true })
 
--- App switching (window cycling until the Grassfield app switcher exists).
+-- App switcher (macOS Cmd+Tab, shell/switcher). SUPER+TAB enters the "switcher" key map and asks the shell for the
+-- next app; inside it Tab, arrows, Q, H and Esc act on the shell, and releasing SUPER leaves the map and tells the
+-- shell to activate the selection. The shell also sees the map change (`submap` event) as a backstop.
+local function leave_switcher(request)
+  return function()
+    hl.dispatch(hl.dsp.submap("reset"))
+    hl.dispatch(shell("switcher", request))
+  end
+end
+
+local function enter_switcher(request)
+  return function()
+    hl.dispatch(hl.dsp.submap("switcher"))
+    hl.dispatch(shell("switcher", request))
+  end
+end
+
+-- Declared through tables (not literal bind() lines): the Settings Keyboard list translates only the descriptions it knows
+-- (apps/settings/qml/Bindings.js), and these are not there yet.
+for _, b in ipairs({
+  { "SUPER + TAB", "Switch application", enter_switcher("next") },
+  { "SUPER + SHIFT + TAB", "Switch to the previous application", enter_switcher("previous") },
+  { "SUPER + grave", "Next window of the application", shell("windows", "cycleApp") },
+}) do
+  bind(b[1], b[2], b[3])
+end
+
+hl.define_submap("switcher", function()
+  for _, b in ipairs({
+    { "SUPER + TAB", "Next application", shell("switcher", "next"), { repeating = true } },
+    { "SUPER + SHIFT + TAB", "Previous application", shell("switcher", "previous"), { repeating = true } },
+    { "SUPER + RIGHT", "Next application", shell("switcher", "right"), { repeating = true } },
+    { "SUPER + LEFT", "Previous application", shell("switcher", "left"), { repeating = true } },
+    { "SUPER + Q", "Quit the selected application", shell("switcher", "quit") },
+    { "SUPER + H", "Hide the selected application", shell("switcher", "hide") },
+    { "SUPER + ESCAPE", "Cancel the application switcher", leave_switcher("cancel") },
+    { "ESCAPE", "Cancel the application switcher", leave_switcher("cancel") },
+  }) do
+    bind(b[1], b[2], b[3], b[4])
+  end
+  -- Releasing SUPER (either key) activates the selection.
+  for _, key in ipairs({ "SUPER + Super_L", "SUPER + Super_R", "Super_L", "Super_R" }) do
+    bind(key, "Activate the selected application", leave_switcher("release"), { release = true })
+  end
+end)
+
+-- Window cycling inside the active Stage (Hyprland cycle_next; docs/specs/stages.md ST10).
 bind("ALT + TAB", "Next window", hl.dsp.window.cycle_next())
 bind("ALT + TAB", "Raise window", hl.dsp.window.bring_to_top())
 bind("ALT + SHIFT + TAB", "Previous window", hl.dsp.window.cycle_next({ next = false }))

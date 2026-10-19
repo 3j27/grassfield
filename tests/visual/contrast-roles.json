@@ -30,8 +30,8 @@
   {"id": "secondary on material", "fg": "colors.textSecondary", "backdrop": "material", "kind": "text", "sites": [
    {"file": "shell/launchpad/AppsWindow.qml", "class": "secondary", "count": 2},
    {"file": "shell/notifications/NotificationContent.qml", "class": "secondary", "count": 1},
-   {"file": "shell/notifications/NotificationCenter.qml", "class": "secondary", "count": 2},
-   {"file": "shell/overlay/ControlCenter.qml", "class": "secondary", "count": 1},
+   {"file": "shell/notifications/NotificationCenter.qml", "class": "secondary", "count": 3},
+   {"file": "shell/overlay/ControlCenter.qml", "class": "secondary", "count": 2},
    {"file": "shell/overlay/Dialog.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/AppAboutPanel.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/AboutPanel.qml", "class": "secondary", "count": 1},
@@ -62,6 +62,7 @@
    {"file": "shell/widgets/builtin/battery/Battery.qml", "class": "danger", "count": 1},
    {"file": "shell/widgets/builtin/system/System.qml", "class": "danger", "count": 1}
   ]},
+  {"id": "switcher app name on material", "fg": "colors.text", "backdrop": "material", "kind": "text", "sites": [{"file": "shell/switcher/SwitcherWindow.qml", "class": "opacity-dynamic", "count": 1}]},
   {"id": "accent text on accent", "fg": "colors.accentText", "backdrop": "accent", "kind": "text", "sites": [
    {"file": "shell/security/PasswordField.qml", "class": "primary", "count": 1},
    {"file": "shell/security/PasswordField.qml", "class": "backdrop", "count": 1}
