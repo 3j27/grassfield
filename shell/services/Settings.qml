@@ -35,6 +35,9 @@ Singleton {
 
     readonly property string iconMode: store.iconMode
     readonly property string iconTint: store.iconTint
+    readonly property string folderColor: store.folderColor
+
+    readonly property int pointerSize: store.pointerSize
 
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
@@ -47,6 +50,10 @@ Singleton {
     readonly property string hotCornerTopRight: store.hotCornerTopRight
     readonly property string hotCornerBottomLeft: store.hotCornerBottomLeft
     readonly property string hotCornerBottomRight: store.hotCornerBottomRight
+
+    function setPointerSize(value: int): void {
+        store.setPointerSize(value);
+    }
 
     function setHotCorner(corner: string, action: string): void {
         store.setHotCorner(corner, action);
@@ -98,6 +105,10 @@ Singleton {
 
     function setIconTint(value: string): void {
         store.setIconTint(value);
+    }
+
+    function setFolderColor(value: string): void {
+        store.setFolderColor(value);
     }
 
     function setNotificationsDnd(value: bool): void {

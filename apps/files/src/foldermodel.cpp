@@ -1,6 +1,7 @@
 #include "foldermodel.h"
 
 #include "filelogic.h"
+#include "folderstylestore.h"
 #include "imageproviders.h"
 #include "taglogic.h"
 #include "tagsearch.h"
@@ -333,6 +334,7 @@ void FolderModel::setUrl(const QUrl &url)
     m_renameUrl.clear();
     clearAllPreviews();
     m_tags.clear();
+    m_styles.clear();
     setError(QString());
     m_freeSpace = -1;
     emit freeSpaceChanged();
@@ -482,6 +484,8 @@ QHash<int, QByteArray> FolderModel::roleNames() const
         {LargeThumbnailRole, "largeThumbnail"},
         {TagsRole, "tags"},
         {TagColorsRole, "tagColors"},
+        {FolderColorRole, "folderColor"},
+        {FolderGlyphRole, "folderGlyph"},
     };
 }
 
@@ -529,6 +533,10 @@ QVariant FolderModel::data(const QModelIndex &index, int role) const
         return item.isLink() ? QStringLiteral("emblem-symbolic-link") : QString();
     case TagsRole:
         return TagLogic::displayOrder(tagsOf(item));
+    case FolderColorRole:
+        return styleOf(item).color;
+    case FolderGlyphRole:
+        return styleOf(item).glyph;
     case TagColorsRole: {
         QVariantList colors;
         const QList<int> indices = TagLogic::colorIndices(tagsOf(item));
@@ -578,8 +586,39 @@ QStringList FolderModel::tagsOf(const KFileItem &item) const
     return tags;
 }
 
+FolderStyleLogic::Style FolderModel::styleOf(const KFileItem &item) const
+{
+    if (!m_styleStore || !item.isDir() || item.isLink())
+        return {};
+    const QUrl url = item.url();
+    const auto it = m_styles.constFind(url);
+    if (it != m_styles.cend())
+        return *it;
+    const QString path = item.localPath();
+    const FolderStyleLogic::Style style = path.isEmpty() ? FolderStyleLogic::Style() : m_styleStore->read(path);
+    m_styles.insert(url, style);
+    return style;
+}
+
+void FolderModel::folderStylesChanged(const QList<QUrl> &urls)
+{
+    for (const QUrl &url : urls) {
+        m_styles.remove(url);
+        emitRowChanged(url, {FolderColorRole, FolderGlyphRole});
+    }
+}
+
+void FolderModel::allFolderStylesChanged()
+{
+    m_styles.clear();
+    if (rowCount() > 0)
+        emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {FolderColorRole, FolderGlyphRole});
+}
+
 void FolderModel::dropTags(const QUrl &url)
 {
+    if (m_styles.remove(url))
+        emitRowChanged(url, {FolderColorRole, FolderGlyphRole});
     if (m_tags.remove(url))
         emitRowChanged(url, {TagsRole, TagColorsRole});
 }
@@ -599,6 +638,7 @@ void FolderModel::tagsChanged(const QList<QUrl> &urls)
     QStringList joined;
     for (const QUrl &url : urls) {
         m_tags.remove(url);
+        m_styles.remove(url);
         if (!isSearch()) {
             emitRowChanged(url, {TagsRole, TagColorsRole});
             continue;
@@ -850,6 +890,9 @@ QVariantMap FolderModel::info(int row) const
     for (int c : indices)
         colors.append(c);
     m[QStringLiteral("tagColors")] = colors;
+    const FolderStyleLogic::Style style = styleOf(item);
+    m[QStringLiteral("folderColor")] = style.color;
+    m[QStringLiteral("folderGlyph")] = style.glyph;
     return m;
 }
 
@@ -994,6 +1037,7 @@ void FolderModel::reload()
     // not ask again), and refreshItems renews the thumbnails of the files that changed. Tags are read again.
     if (rowCount() > 0)
         emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {TagsRole, TagColorsRole});
+    m_styles.clear();
     m_dirModel->openUrl(m_url, KDirModel::Reload);
 }
 
@@ -1087,6 +1131,7 @@ void FolderModel::removeResults(const QList<QUrl> &urls)
         forgetThumbnail(m_small, url, false);
         forgetThumbnail(m_large, url, false);
         m_tags.remove(url);
+        m_styles.remove(url);
         m_results->remove(url);
     }
     if (selectionTouched)
@@ -1107,6 +1152,7 @@ void FolderModel::renameResult(const QUrl &from, const QUrl &to)
     forgetThumbnail(m_small, from, false);
     forgetThumbnail(m_large, from, false);
     m_tags.remove(from);
+    m_styles.remove(from);
     m_results->replace(from, KFileItem(to, KFileItem::SkipMimeTypeFromContent));
     if (selected)
         m_selected.insert(to);
@@ -1207,6 +1253,7 @@ void FolderModel::onItemsDeleted(const KFileItemList &items)
         forgetThumbnail(m_small, url, false);
         forgetThumbnail(m_large, url, false);
         m_tags.remove(url);
+        m_styles.remove(url);
     }
     if (selectionTouched)
         emit selectionChanged();

@@ -22,7 +22,7 @@ ShellRoot {
     readonly property string dirRange: base + "/range"
     readonly property string badText: '{ "appearance": "light", oops'
     readonly property string keepText: '{"version":1,"appearance":"light","material":{"transparency":0.5,"profile":"full"},"accessibility":{"reduceTransparency":false,"reduceMotion":false},"dock":{"pinned":["a","b"],"magnification":1.2,"magnificationEnabled":true,"autohide":false},"windows":{"titlebarDoubleClick":"minimize"},"notifications":{"dnd":false,"previews":"always"},"lock":{"idleMinutes":17}}'
-    readonly property string rangeText: '{"version":1,"icons":{"mode":"neon","tint":"#12345"},"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999}}'
+    readonly property string rangeText: '{"version":1,"icons":{"mode":"neon","tint":"#12345","folderColor":"red"},"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999},"pointer":{"size":7}}'
     readonly property string dirMerge: base + "/merge"
     readonly property string mergeText: '{"version":1,"appearance":"dark","lock":{"idleMinutes":3},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
     readonly property string mergeEdited: '{"version":1,"appearance":"light","lock":{"idleMinutes":42},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
@@ -74,6 +74,8 @@ ShellRoot {
             root.check("version", reader.data.version === 1);
             root.check("icons mode", reader.data.icons.mode === "tinted" && reader.iconMode === "tinted");
             root.check("icons tint", reader.data.icons.tint === "#e5484d" && reader.iconTint === "#e5484d");
+            root.check("icons folder colour", reader.data.icons.folderColor === "#e5484d" && reader.folderColor === "#e5484d");
+            root.check("pointer size", reader.data.pointer.size === 48 && reader.pointerSize === 48);
             root.check("defaults kept: profile", reader.data.material.profile === "balanced");
             root.check("defaults kept: titlebar", reader.data.windows.titlebarDoubleClick === "zoom");
             root.check("defaults kept: idle", reader.data.lock.idleMinutes === 5);
@@ -184,6 +186,8 @@ ShellRoot {
             root.check("range idle", range.lockIdleMinutes === 240);
             root.check("range icon mode", range.iconMode === "default");
             root.check("range icon tint", range.iconTint === "accent");
+            root.check("range folder colour", range.folderColor === "theme");
+            root.check("range pointer size", range.pointerSize === 24);
             mergeSetup.running = true;
         }
     }
@@ -341,12 +345,23 @@ ShellRoot {
         // Icon appearance (ADR-0014): defaults, normalization, values written to disk.
         check("default icon mode", writer.iconMode === "default" && writer.data.icons.mode === "default");
         check("default icon tint", writer.iconTint === "accent");
+        check("default folder colour", writer.folderColor === "theme" && writer.data.icons.folderColor === "theme");
+        writer.setFolderColor("pink");
+        check("folder colour normalized", writer.data.icons.folderColor === "theme");
         writer.setIconMode("sepia");
         check("icon mode normalized", writer.data.icons.mode === "default");
         writer.setIconTint("red");
         check("icon tint normalized", writer.data.icons.tint === "accent");
         writer.setIconMode("tinted");
         writer.setIconTint("#e5484d");
+        writer.setFolderColor("#e5484d");
+        // Pointer size: default, snapped to the 4 px step, kept in range, written to disk.
+        check("default pointer size", writer.pointerSize === 24 && writer.data.pointer.size === 24);
+        writer.setPointerSize(1000);
+        check("pointer size clamped", writer.data.pointer.size === 96);
+        writer.setPointerSize(51);
+        check("pointer size snapped", writer.data.pointer.size === 52);
+        writer.setPointerSize(48);
         writer.flush();
     }
 }

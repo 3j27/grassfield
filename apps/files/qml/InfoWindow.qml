@@ -31,6 +31,13 @@ Window {
         return root.app.tagNamesOf(root.info.url).join(", ");
     }
 
+    // The folder's own look, read again whenever Files writes one (FilesApp.folderStyleRevision).
+    readonly property var folderStyle: {
+        root.app.folderStyleRevision;
+        return root.info.isDir ? root.app.folderStyleOf(root.info.url) : {color: "", glyph: ""};
+    }
+    readonly property string customizeReason: root.info.isDir ? root.app.folderStyleUnavailable([root.info.url]) : "x"
+
     title: qsTr("%1 Info").arg(root.info.name)
     width: Tokens.filesInfoWindowWidth
     height: Tokens.filesInfoWindowHeight
@@ -50,6 +57,14 @@ Window {
                 root.folderSize = bytes < 0 ? qsTr("Unknown") : n === 1 ? qsTr("%1 for 1 item").arg(size) : qsTr("%1 for %2 items").arg(size).arg(n);
             });
         }
+    }
+
+    // Opened by the browser window that owns this one.
+    property var browser: null
+
+    function customize(): void {
+        if (root.browser)
+            root.browser.customizeFolders([root.info.url], root.info.name, root.info.iconName);
     }
 
     Shortcut {
@@ -93,6 +108,9 @@ Window {
                 FileIcon {
                     size: Tokens.filesInfoIconSize
                     iconName: root.info.iconName
+                    isDir: root.info.isDir
+                    folderColor: root.folderStyle.color
+                    folderGlyph: root.folderStyle.glyph
                     thumbnail: root.info.thumbnail
                 }
 
@@ -121,6 +139,14 @@ Window {
                         color: Appearance.colors.textSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
+                    }
+
+                    // Folders: the colour and symbol of this folder (the same window as the context menu's).
+                    Button {
+                        visible: root.info.isDir
+                        text: qsTr("Customize Folder…")
+                        enabled: root.customizeReason === ""
+                        onClicked: root.customize()
                     }
                 }
             }

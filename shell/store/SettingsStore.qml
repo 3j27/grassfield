@@ -39,6 +39,8 @@ Scope {
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
     readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
     readonly property string iconTint: IconModes.validTint(config.icons.tint) ? config.icons.tint : "accent"
+    readonly property string folderColor: FolderStyle.normalizeColor(config.icons.folderColor)
+    readonly property int pointerSize: PointerSize.normalize(config.pointer.size)
     readonly property int lockIdleMinutes: Math.round(clampNumber(config.lock.idleMinutes, 0, 240, 5))
 
     // Array-like (the adapter hands out a QVariantList) to a plain array of non-empty strings.
@@ -121,6 +123,13 @@ Scope {
         property string mode: "default"
         // "accent" or a #rrggbb colour for the tinted mode.
         property string tint: "accent"
+        // "theme" (the icon theme's own folder colour), "accent" or a #rrggbb colour: every folder icon.
+        property string folderColor: "theme"
+    }
+
+    component PointerConfig: JsonObject {
+        // Cursor size in pixels, 24 to 96 (Settings > Accessibility > Pointer).
+        property int size: 24
     }
 
     component NotificationsConfig: JsonObject {
@@ -183,6 +192,14 @@ Scope {
 
     function setIconTint(value: string): void {
         change("icons.tint", IconModes.validTint(value) ? value : "accent");
+    }
+
+    function setFolderColor(value: string): void {
+        change("icons.folderColor", FolderStyle.normalizeColor(value));
+    }
+
+    function setPointerSize(value: int): void {
+        change("pointer.size", PointerSize.snap(value));
     }
 
     function setNotificationsDnd(value: bool): void {
@@ -340,6 +357,7 @@ Scope {
         property DesktopConfig desktop: DesktopConfig {}
         property MenubarConfig menubar: MenubarConfig {}
         property IconsConfig icons: IconsConfig {}
+        property PointerConfig pointer: PointerConfig {}
     }
 
     // Fresh read of the file for the merge (the watched FileView may lag behind an external write).

@@ -171,3 +171,7 @@ Plugin unload (R13 review): an empty capabilities event now means the plugin is 
 `CapabilityEvent.js`, `tests/unit/tst_capabilities.qml`): the degraded notice is posted once (`shell.qml` `syncDegradedNotice`,
 screenshot after `just plugin-unload` and with `--no-plugin`: banner "Compositor extension not loaded" top right of the focused
 output), and desktop-focus / overview behaviour switch off live. No hello polling resumes after an unload.
+
+
+## Folder colours
+Folder icons on the desktop follow `icons.folderColor` and the folder's own look (colour and symbol set in Files, Customize Folder): `DesktopIcon` draws a folder through `FolderIcon`; `DesktopFiles` reads the attribute `user.grassfield.folder` of the listed folders with one `getfattr` process per listing change and the per-user store `folder-styles.json` through a watched `FileView` (docs/specs/files.md, Folder colours and Customize Folder).

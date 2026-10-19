@@ -11,10 +11,12 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include "folderstylelogic.h"
 #include "previewqueue.h"
 
 #include <KFileItem>
 
+class FolderStyleStore;
 class KDirLister;
 class KDirModel;
 class KJob;
@@ -80,6 +82,9 @@ public:
         // Stored tags in display order (colour tags first), and the palette indices of the colour tags (the dots).
         TagsRole,
         TagColorsRole,
+        // A folder's own look (FolderStyleStore): its colour setting ("" = follows icons.folderColor) and its symbol.
+        FolderColorRole,
+        FolderGlyphRole,
     };
     Q_ENUM(Roles)
 
@@ -113,6 +118,13 @@ public:
     void setLargePreviewSize(int size);
     bool isSearch() const;
     bool searchLimited() const { return m_searchLimited; }
+
+    // Where folder looks are read from (FilesApp's store; null: no folder is customised).
+    void setStyleStore(const FolderStyleStore *store) { m_styleStore = store; }
+    // FilesApp changed the look of `urls` (Customize Folder): their rows read it again. All: the per-user store
+    // changed under us.
+    void folderStylesChanged(const QList<QUrl> &urls);
+    void allFolderStylesChanged();
 
     // FilesApp changed the tags of `urls`: their rows read them again (and leave a tag search they no longer match).
     void tagsChanged(const QList<QUrl> &urls);
@@ -217,6 +229,8 @@ private:
     // Tags of an item (cached per url; read from user.xdg.tags of its local path).
     QStringList tagsOf(const KFileItem &item) const;
     void dropTags(const QUrl &url);
+    // The look of a shown folder, read once per row (one lgetxattr, nothing for files and links).
+    FolderStyleLogic::Style styleOf(const KFileItem &item) const;
     void emitRowChanged(const QUrl &url, const QList<int> &roles);
 
     // Tag search.
@@ -258,6 +272,9 @@ private:
     // Tags read for shown rows (url -> stored tags), and tags not yet reported through tagsSeen.
     mutable QHash<QUrl, QStringList> m_tags;
     mutable QSet<QString> m_seenPending;
+    // Folder looks read for shown rows (url -> style, empty for folders without one).
+    const FolderStyleStore *m_styleStore = nullptr;
+    mutable QHash<QUrl, FolderStyleLogic::Style> m_styles;
     mutable QTimer m_seenTimer;
 
     // Tag search: the matches (source model while searching), the running search and KIO's change notifications.

@@ -198,6 +198,8 @@ FocusScope {
             required property string kind
             required property bool selected
             required property bool isDir
+            required property string folderColor
+            required property string folderGlyph
             required property bool hidden
             required property var tagColors
 
@@ -233,6 +235,9 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
                 size: Tokens.filesListIconSize
                 iconName: row.iconName
+                isDir: row.isDir
+                folderColor: row.folderColor
+                folderGlyph: row.folderGlyph
                 emblem: row.emblem
             }
 

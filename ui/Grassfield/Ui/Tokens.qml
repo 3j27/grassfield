@@ -624,6 +624,8 @@ QtObject {
     readonly property int settingsListIconSize: 18
     // estimate: Sound pane, minimum gap between two volume writes while a slider is dragged
     readonly property int settingsVolumeApplyMs: 120
+    // estimate: shell, minimum gap between two compositor cursor reloads while the pointer size slider is dragged
+    readonly property int settingsPointerApplyMs: 100
     // estimate: Sound pane, width of the percentage next to a slider
     readonly property int settingsVolumeValueWidth: 44
 
@@ -773,6 +775,14 @@ QtObject {
     readonly property int filesInfoIconSize: 64
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesInfoLabelWidth: 100
+    // estimate: Customize Folder window (macOS 26 style panel: preview, colour row, symbol grid)
+    readonly property int filesCustomizeWindowWidth: 440
+    // estimate: Customize Folder window height (preview, colour row, custom colour, symbol grid and field, buttons)
+    readonly property int filesCustomizeWindowHeight: 500
+    // estimate: Customize Folder, custom colour and symbol fields
+    readonly property int filesCustomizeHexWidth: 140
+    // estimate: Customize Folder, time the per-user storage note stays before the window closes
+    readonly property int filesCustomizeNoteMs: 1800
     // estimate: Go to Folder and confirmation sheets
     readonly property int filesSheetWidth: 420
     // estimate: pause that starts a new type-to-select search
@@ -1022,6 +1032,27 @@ QtObject {
     readonly property int iconModePreviewFocusGap: 2
     // own picks, not copied: swatches of the Tinted icon colour (blue, purple, pink, red, orange, yellow, green, graphite); the accent is the first swatch
     readonly property var iconModeTintColors: ["#3E7BFA", "#8E5BEA", "#E25AA1", "#E5484D", "#F5883B", "#E6B422", "#3FAE5A", "#8A8F98"]
+
+    // folder colours: MultiEffect saturation (0: the colorization alone sets the hue; MultiEffect desaturates after colorizing)
+    readonly property real folderIconSaturation: 0.0
+    // folder colours: lifts the shading so the recoloured body keeps the lightness of the theme's folder (tuned on WhiteSur folders in the nested session, docs/specs/ui.md)
+    readonly property real folderIconBrightness: 0.15
+    // folder colours: keeps the flap and the body distinct after the colour mapping (tuned on WhiteSur folders)
+    readonly property real folderIconContrast: 0.25
+    // folder colours: strength of the colour (0..1): the luminance of the folder is mapped onto the colour, shape and shading kept
+    readonly property real folderIconColorization: 1.0
+    // estimate (macOS 26 Customize Folder): symbol or emoji edge over the folder icon edge
+    readonly property real folderIconGlyphScale: 0.34
+    // estimate: vertical centre of the symbol over the icon height (the body of the folder, below the flap)
+    readonly property real folderIconGlyphCenterY: 0.62
+    // estimate: colour of a symbol drawn on the folder (a darker, translucent emboss); emoji keep their own colours
+    readonly property string folderIconGlyphColor: "#73000000"
+    // estimate: Customize Folder, symbol suggestions per row
+    readonly property int folderIconPickerGlyphColumns: 8
+    // estimate: Customize Folder, side of one symbol suggestion
+    readonly property int folderIconPickerCell: 30
+    // estimate: Customize Folder, preview icon edge
+    readonly property int folderIconPickerPreviewSize: 96
 
     // F1 gap 19: icons about 104 pt
     readonly property int switcherIconSize: 104
