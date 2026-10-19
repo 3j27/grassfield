@@ -276,25 +276,54 @@ TestCase {
         return measured;
     }
 
-    function test_iconsStayRecognisable() {
+    // One size of the windows scenarios (both appearances x three wallpapers), or the desktop. Each is a test function of its
+    // own so that scripts/dev/test-icons.sh runs them one per process, each under a time limit and retried when the renderer
+    // stalls (GPU shared with other nested sessions): a stall costs one case, not the whole run.
+    function runSize(size) {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
             skip("needs a GPU scene graph (ShaderEffect does not run on the software renderer): scripts/dev/test-icons.sh");
         const failures = [];
         let measured = 0;
-        for (const size of [48, 32, 24, 16]) {
-            testCase.iconSize = size;
-            for (const dark of [true, false]) {
-                for (const wallpaper of ["#000000", "#808080", "#ffffff"])
-                    measured += runScenario(`${size}px ${dark ? "dark" : "light"} window wallpaper ${wallpaper}`, dark, materialOver(dark, wallpaper), failures);
-            }
+        testCase.iconSize = size;
+        for (const dark of [true, false]) {
+            for (const wallpaper of ["#000000", "#808080", "#ffffff"])
+                measured += runScenario(`${size}px ${dark ? "dark" : "light"} window wallpaper ${wallpaper}`, dark, materialOver(dark, wallpaper), failures);
         }
-        // The desktop: bare wallpaper, always styled for it (DesktopIcon passes darkAppearance), also when the windows are light.
+        finishRun(measured, failures);
+    }
+
+    function finishRun(measured, failures) {
+        verify(measured > 200, "measured " + measured + " icon renderings");
+        if (failures.length > 0)
+            fail(failures.length + " failures:\n" + failures.join("\n"));
+    }
+
+    function test_a2_size48() {
+        runSize(48);
+    }
+
+    function test_a2_size32() {
+        runSize(32);
+    }
+
+    function test_a2_size24() {
+        runSize(24);
+    }
+
+    function test_a2_size16() {
+        runSize(16);
+    }
+
+    // The desktop: bare wallpaper, always styled for it (DesktopIcon passes darkAppearance), also when the windows are light.
+    function test_a2_desktop() {
+        if (board.GraphicsInfo.api === GraphicsInfo.Software)
+            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+        const failures = [];
+        let measured = 0;
         testCase.iconSize = 48;
         for (const wallpaper of ["#000000", "#808080", "#ffffff", "#1d4a5c", "#3f7d58"])
             measured += runScenario(`48px desktop wallpaper ${wallpaper}`, true, Qt.color(wallpaper), failures, true);
-        verify(measured > 1000, "measured " + measured + " icon renderings");
-        if (failures.length > 0)
-            fail(failures.length + " failures:\n" + failures.join("\n"));
+        finishRun(measured, failures);
     }
 
     // The folder model (FolderStyle.modeSamples, used to engrave a folder symbol) against the rendered pixels: a plate-less
