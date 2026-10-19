@@ -389,6 +389,10 @@ namespace gf::minimizer {
             gf::logRequest(Log::DEBUG, "minimize: window {:x} is already minimized", address);
             return;
         }
+        // The Dock tile the shell computed for this window (layout coordinates). Tests read it from Hyprland's log
+        // (tests/compositor/minimize.sh, soak.sh: `hyprctl rollinglog -f`) to click that tile: keep the wording.
+        if (target)
+            gf::logRequest(Log::INFO, "minimize {:x}: toward the Dock rectangle {:.0f},{:.0f} {:.0f}x{:.0f}", address, target->x, target->y, target->w, target->h);
 
         // A restore still animating: the new animation starts where that one is.
         std::optional<mz::Box> from;
