@@ -23,11 +23,17 @@ Item {
     // Nominal edge: the image is decoded once at size x oversample, so a surface that scales the item (Dock
     // magnification) does not reload it. Decoded pixels per nominal pixel: hi-dpi and magnified tiles.
     property real oversample: 2
+    // The compiled icon shader; if it fails to load the icon is drawn as it is (the default look), see effectFailed.
+    property url shaderUrl: Qt.resolvedUrl("shaders/icon.frag.qsb")
 
     readonly property bool modeActive: IconModes.normalizeMode(root.mode) !== "default"
     // The effect item of an effect mode while the icon is shown, else null/false (tests, diagnostics).
     readonly property Item effectItem: effectLoader.item as Item
     readonly property bool effectActive: effectLoader.active
+    // True while the plain image is what is drawn (default mode, or an effect mode whose shader failed).
+    readonly property bool plainVisible: image.visible
+    // The shader could not be loaded or compiled: the plain image is shown instead of an effect that draws nothing.
+    readonly property bool effectFailed: effectLoader.item !== null && (effectLoader.item as IconEffect).status === ShaderEffect.Error
 
     implicitWidth: size
     implicitHeight: size
@@ -47,7 +53,7 @@ Item {
         smooth: true
         mipmap: true
         // Hidden while the effect draws it: the image only provides the texture.
-        visible: !root.modeActive
+        visible: !root.modeActive || root.effectFailed
     }
 
     // Effect modes: one shader effect per icon that is shown. `root.visible` is the effective visibility, so an icon
@@ -63,6 +69,7 @@ Item {
             tint: root.tint
             darkAppearance: root.darkAppearance
             nominalSize: root.size
+            shaderUrl: root.shaderUrl
         }
     }
 }

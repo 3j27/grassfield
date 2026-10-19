@@ -252,4 +252,49 @@ TestCase {
         if (failures.length > 0)
             fail(failures.length + " failures:\n" + failures.join("\n"));
     }
+
+    // A missing shader must not make an icon vanish: the plain image is drawn.
+    function test_missingShaderDrawsThePlainIcon() {
+        if (board.GraphicsInfo.api === GraphicsInfo.Software)
+            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+        testCase.darkPass = true;
+        testCase.panelColor = "#202024";
+        const holder = createTemporaryObject(brokenComponent, board);
+        verify(holder);
+        tryVerify(() => holder.icon.effectFailed, 3000, "the effect reports the missing shader");
+        wait(300);
+        waitForRendering(board);
+        const img = grabImage(board);
+        let drawn = 0;
+        for (let y = 0; y < testCase.iconSize; y++) {
+            for (let x = 0; x < testCase.iconSize; x++) {
+                const c = img.pixel(holder.x + x, holder.y + y);
+                if (Math.abs(c.r - 0x20 / 255) > 0.05 || Math.abs(c.b - 0x24 / 255) > 0.05)
+                    drawn++;
+            }
+        }
+        verify(drawn > testCase.iconSize * testCase.iconSize / 4, "the plain icon is drawn: " + drawn + " pixels");
+    }
+
+    Component {
+        id: brokenComponent
+
+        Rectangle {
+            property alias icon: broken
+
+            x: 700
+            y: 700
+            width: testCase.iconSize
+            height: testCase.iconSize
+            color: "#202024"
+
+            TintedIcon {
+                id: broken
+                size: testCase.iconSize
+                mode: "dark"
+                shaderUrl: Qt.resolvedUrl("missing/icon.frag.qsb")
+                source: testCase.fixtureDir + "blue-plate-white-glyph.svg"
+            }
+        }
+    }
 }

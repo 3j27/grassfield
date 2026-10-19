@@ -58,6 +58,12 @@ ShaderEffect {
     // 1 dark, 2 clear, 3 tinted (`tint` is the colour uniform).
     readonly property real modeIndex: root.params.index
 
-    fragmentShader: Qt.resolvedUrl("shaders/icon.frag.qsb")
+    // The compiled shader; overridable for tests of the failure path.
+    property url shaderUrl: Qt.resolvedUrl("shaders/icon.frag.qsb")
+    fragmentShader: root.shaderUrl
+    onStatusChanged: {
+        if (root.status === ShaderEffect.Error)
+            IconModes.warnOnce("icon shader failed to load, icons are drawn as they are: " + root.log);
+    }
     blending: true
 }

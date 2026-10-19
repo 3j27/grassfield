@@ -37,7 +37,9 @@ def check(value, schema, path, errors):
         errors.append(f"{path}: {value} > maximum {schema['maximum']}")
     if "minLength" in schema and len(value) < schema["minLength"]:
         errors.append(f"{path}: shorter than {schema['minLength']}")
-    if "pattern" in schema and isinstance(value, str) and not re.search(schema["pattern"], value):
+    # JSON Schema patterns are ECMA-262 and unanchored: `$` matches only at the very end (Python's also before a
+    # trailing newline, which would accept "accent\\n"), so `$` is translated to `\\Z`.
+    if "pattern" in schema and isinstance(value, str) and not re.search(re.sub(r"(?<!\\)\$", r"\\Z", schema["pattern"]), value):
         errors.append(f"{path}: {value!r} does not match {schema['pattern']}")
     if isinstance(value, dict):
         props = schema.get("properties", {})

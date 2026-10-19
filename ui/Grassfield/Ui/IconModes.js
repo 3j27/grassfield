@@ -28,3 +28,12 @@ function effect(mode, tint) {
     const normalized = normalizeMode(mode);
     return {enabled: normalized !== "default", index: MODES.indexOf(normalized), tint: tint, mode: normalized};
 }
+
+// One warning per process (an icon shader that cannot load fails for every icon).
+let warned = false;
+function warnOnce(message) {
+    if (warned)
+        return;
+    warned = true;
+    console.warn("grassfield-ui: " + message);
+}

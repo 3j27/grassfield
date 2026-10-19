@@ -20,7 +20,7 @@ for ok in accent '#12abEF'; do
   python3 -I "$root/scripts/dev/check-schema.py" "$tmp/ok.json" >/dev/null 2>&1
   check "tint $ok accepted" $?
 done
-for bad in red '#12345' '#12345g' 'Accent' '' '#1234567'; do
+for bad in red '#12345' '#12345g' 'Accent' '' '#1234567' $'accent\n' $'#12abEF\n' ' accent'; do
   doc "$bad" bad
   python3 -I "$root/scripts/dev/check-schema.py" "$tmp/bad.json" >/dev/null 2>&1
   [[ $? == 1 ]]

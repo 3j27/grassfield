@@ -173,4 +173,16 @@ TestCase {
         compare(icon.mode, "clear");
         compare(icon.effectItem.modeIndex, 2);
     }
+
+    // A shader that cannot load must not make icons vanish: the plain image is shown (and one warning logged).
+    function test_failedShaderShowsThePlainIcon() {
+        Appearance.iconMode = "dark";
+        const icon = createTemporaryObject(iconComponent, testCase, {shaderUrl: Qt.resolvedUrl("missing/icon.frag.qsb"), source: Qt.resolvedUrl("../fixtures/icons/blue-plate-white-glyph.svg")});
+        verify(icon);
+        compare(icon.plainVisible, false, "with a working shader the effect draws");
+        // Whether a missing shader reports an error here depends on the scene graph (the software renderer never
+        // compiles shaders); where it does, the plain image takes over.
+        tryVerify(() => icon.effectItem.status !== ShaderEffect.Uncompiled || icon.effectFailed === false, 500, "status settles or stays uncompiled");
+        compare(icon.plainVisible, icon.effectFailed);
+    }
 }
