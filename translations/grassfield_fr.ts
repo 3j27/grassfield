@@ -319,6 +319,18 @@
         <translation>Choisissez Teinté pour utiliser une couleur de teinte.</translation>
     </message>
     <message>
+        <source>Folder colour</source>
+        <translation>Couleur des dossiers</translation>
+    </message>
+    <message>
+        <source>Applies to every folder icon in Files, the desktop and Get Info. A folder can have its own colour (Files, Customize Folder).</source>
+        <translation>S’applique à chaque icône de dossier dans Fichiers, sur le bureau et dans Lire les informations. Un dossier peut avoir sa propre couleur (Fichiers, Personnaliser le dossier).</translation>
+    </message>
+    <message>
+        <source>Theme</source>
+        <translation>Thème</translation>
+    </message>
+    <message>
         <source>Material</source>
         <translation>Matière</translation>
     </message>
@@ -900,6 +912,10 @@
         <translation>Tags</translation>
     </message>
     <message>
+        <source>%1 Folders</source>
+        <translation>%1 dossiers</translation>
+    </message>
+    <message>
         <source>Put Back</source>
         <translation>Remettre</translation>
     </message>
@@ -946,6 +962,10 @@
     <message>
         <source>Move to Trash</source>
         <translation>Placer dans la corbeille</translation>
+    </message>
+    <message>
+        <source>Customize Folder…</source>
+        <translation>Personnaliser le dossier…</translation>
     </message>
     <message>
         <source>Rename</source>
@@ -1388,6 +1408,73 @@
     </message>
 </context>
 <context>
+    <name>CustomizeFolderWindow</name>
+    <message>
+        <source>Default</source>
+        <translation>Par défaut</translation>
+    </message>
+    <message>
+        <source>Accent</source>
+        <translation>Accent</translation>
+    </message>
+    <message>
+        <source>Customize Folder</source>
+        <translation>Personnaliser le dossier</translation>
+    </message>
+    <message>
+        <source>Saved for your account only: this folder can’t store it.</source>
+        <translation>Enregistré pour votre compte uniquement : ce dossier ne peut pas le conserver.</translation>
+    </message>
+    <message>
+        <source>Colour:</source>
+        <translation>Couleur :</translation>
+    </message>
+    <message>
+        <source>Folder colour</source>
+        <translation>Couleur des dossiers</translation>
+    </message>
+    <message>
+        <source>Custom:</source>
+        <translation>Personnalisée :</translation>
+    </message>
+    <message>
+        <source>Custom colour (#rrggbb)</source>
+        <translation>Couleur personnalisée (#rrggbb)</translation>
+    </message>
+    <message>
+        <source>#rrggbb</source>
+        <translation>#rrggbb</translation>
+    </message>
+    <message>
+        <source>Symbol:</source>
+        <translation>Symbole :</translation>
+    </message>
+    <message>
+        <source>Symbol</source>
+        <translation>Symbole</translation>
+    </message>
+    <message>
+        <source>Other symbol or emoji</source>
+        <translation>Autre symbole ou émoji</translation>
+    </message>
+    <message>
+        <source>Type or paste a symbol</source>
+        <translation>Saisissez ou collez un symbole</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>Réinitialiser</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+</context>
+<context>
     <name>DesktopFiles</name>
     <message>
         <source>Could not rename &quot;%1&quot;.</source>
@@ -1474,6 +1561,22 @@
     <message>
         <source>Automatically hide the Dock</source>
         <translation>Masquer automatiquement le Dock</translation>
+    </message>
+    <message>
+        <source>Show recent applications in the Dock</source>
+        <translation>Afficher les applications récentes dans le Dock</translation>
+    </message>
+    <message>
+        <source>Apps opened from the Dock that are not kept in it appear after the separator.</source>
+        <translation>Les apps ouvertes depuis le Dock et non conservées dans celui-ci apparaissent après le séparateur.</translation>
+    </message>
+    <message>
+        <source>Minimize windows into application icon</source>
+        <translation>Réduire les fenêtres dans l’icône de l’application</translation>
+    </message>
+    <message>
+        <source>Off: each minimized window gets its own tile next to the Trash.</source>
+        <translation>Désactivé : chaque fenêtre réduite a sa propre icône près de la Corbeille.</translation>
     </message>
     <message>
         <source>Menu Bar</source>
@@ -1636,6 +1739,14 @@
         <source>%1, running</source>
         <translation>%1, en cours d’exécution</translation>
     </message>
+    <message>
+        <source>, %1 notifications</source>
+        <translation>, %1 notifications</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Retirer</translation>
+    </message>
 </context>
 <context>
     <name>DockMenu</name>
@@ -1652,12 +1763,32 @@
         <translation>Ouvrir</translation>
     </message>
     <message>
+        <source>Options</source>
+        <translation>Options</translation>
+    </message>
+    <message>
         <source>Remove from Dock</source>
         <translation>Retirer du Dock</translation>
     </message>
     <message>
         <source>Keep in Dock</source>
         <translation>Garder dans le Dock</translation>
+    </message>
+    <message>
+        <source>Open at Login</source>
+        <translation>Ouvrir à la connexion</translation>
+    </message>
+    <message>
+        <source>Show in Files</source>
+        <translation>Afficher dans Fichiers</translation>
+    </message>
+    <message>
+        <source>Show All Windows</source>
+        <translation>Afficher toutes les fenêtres</translation>
+    </message>
+    <message>
+        <source>Hide</source>
+        <translation>Masquer</translation>
     </message>
     <message>
         <source>Quit</source>
@@ -1860,6 +1991,34 @@
         <translation>Les tags ne sont disponibles que pour les fichiers de cet ordinateur.</translation>
     </message>
     <message>
+        <source>Nothing is selected.</source>
+        <translation>Rien n’est sélectionné.</translation>
+    </message>
+    <message>
+        <source>Folders in the Trash can’t be customized.</source>
+        <translation>Les dossiers de la corbeille ne peuvent pas être personnalisés.</translation>
+    </message>
+    <message>
+        <source>Folders can be customized on this computer only.</source>
+        <translation>Les dossiers ne peuvent être personnalisés que sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Links can’t be customized.</source>
+        <translation>Les liens ne peuvent pas être personnalisés.</translation>
+    </message>
+    <message>
+        <source>Only folders can be customized.</source>
+        <translation>Seuls les dossiers peuvent être personnalisés.</translation>
+    </message>
+    <message>
+        <source>The look of “%1” couldn’t be changed: %2</source>
+        <translation>L’apparence de « %1 » n’a pas pu être modifiée : %2</translation>
+    </message>
+    <message>
+        <source>The look of %1 folders couldn’t be changed: %2</source>
+        <translation>L’apparence de %1 dossiers n’a pas pu être modifiée : %2</translation>
+    </message>
+    <message>
         <source>“%1” is no longer there.</source>
         <translation>«&#xa0;%1&#xa0;» n’existe plus.</translation>
     </message>
@@ -2029,6 +2188,10 @@
     <message>
         <source>Get Info</source>
         <translation>Obtenir des informations</translation>
+    </message>
+    <message>
+        <source>Customize Folder…</source>
+        <translation>Personnaliser le dossier…</translation>
     </message>
     <message>
         <source>Rename</source>
@@ -2418,6 +2581,10 @@
         <translation>Aucun accès</translation>
     </message>
     <message>
+        <source>Customize Folder…</source>
+        <translation>Personnaliser le dossier…</translation>
+    </message>
+    <message>
         <source>Tags:</source>
         <translation>Tags&#xa0;:</translation>
     </message>
@@ -2776,14 +2943,6 @@
     <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
-    </message>
-    <message>
-        <source>Notifications, Do Not Disturb on</source>
-        <translation>Notifications, Ne pas déranger activé</translation>
-    </message>
-    <message>
-        <source>Do Not Disturb</source>
-        <translation>Ne pas déranger</translation>
     </message>
     <message>
         <source>Clear All</source>

@@ -113,6 +113,11 @@ Platform.MenuBar {
             onTriggered: bar.tab.getInfo()
         }
         Platform.MenuItem {
+            text: qsTr("Customize Folder…")
+            enabled: bar.tab !== null && bar.count > 0 && bar.tab.canCustomize()
+            onTriggered: bar.tab.customizeSelection()
+        }
+        Platform.MenuItem {
             text: qsTr("Rename")
             shortcut: "F2"
             enabled: bar.count === 1 && bar.editable

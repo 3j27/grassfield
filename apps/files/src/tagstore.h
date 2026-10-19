@@ -79,4 +79,19 @@ QStringList read(const QString &path);
 // filesystem or the permissions refuse it.
 bool write(const QString &path, const QStringList &tags, QString *error = nullptr);
 
+// Any other user attribute of ours (the folder style, FolderStyleLogic) through the same calls, links never followed.
+enum class ReadResult {
+    Ok, // `value` holds the attribute
+    NoData, // the item has no such attribute (ENODATA): `value` is empty
+    Unsupported, // the filesystem has no user attributes (ENOTSUP)
+    Failed, // any other failure (permission, I/O error, a vanished file, a value that changes or grows too much): `error`
+};
+// Like readRawChecked for the attribute `attr`, telling the cases apart. A write that starts from a read must stop on
+// Failed (and on Unsupported it uses its fallback store).
+ReadResult readAttr(const QString &path, const char *attr, QByteArray *value, QString *error = nullptr);
+// One lgetxattr into a small buffer (the model's per-row check): Ok, NoData, Unsupported or Failed; nothing else.
+ReadResult quickReadAttr(const QString &path, const char *attr, QByteArray *value);
+// Stores `value` as is in `attr`; an empty value removes it (absent is fine). `errnoOut` receives the failure's errno.
+bool writeAttr(const QString &path, const char *attr, const QByteArray &value, QString *error = nullptr, int *errnoOut = nullptr);
+
 } // namespace TagStore

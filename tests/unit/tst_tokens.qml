@@ -110,6 +110,11 @@ TestCase {
         compare(Tokens.quicksettingsCell, 63);
         compare(Tokens.quicksettingsIconDisk, 36);
         compare(Tokens.panelCcIconButton, Tokens.quicksettingsIconDisk);
+        // Controls that share a size with the icon disk by accident keep their own tokens.
+        compare(Tokens.panelCcJoinButton, 30);
+        verify(Tokens.panelCcJoinButton <= Tokens.panelCcRowHeight);
+        compare(Tokens.panelCcTransportButton, 26);
+        compare(Tokens.panelWidgetTransportButton, 22);
         compare(Tokens.notificationCenterWidth, Tokens.notificationBannerWidth);
         fuzzyCompare(Tokens.materialSeparatorOpacityLight, 0.08, 1e-9);
         Appearance.dark = false;

@@ -117,9 +117,10 @@ Singleton {
     // Dock tile rectangle of the minimized slot `index` on a screen (`adding`: a tile that does not
     // exist yet, appended before the Trash). Empty ({0,0,0,0}) without a Dock there: the plugin then
     // hides/shows the window without animation.
-    function dockRect(screenName: string, index: int, adding: bool): var {
+    // With "minimize into application icon" (dock.minimizeIntoApp) the rectangle is the tile of the window's app.
+    function dockRect(screenName: string, index: int, adding: bool, toplevel: var): var {
         const owner = root.dockOwners[screenName];
-        return Minimized.finiteRect(owner ? owner.tileRect(index, adding) : null) || {x: 0, y: 0, w: 0, h: 0};
+        return Minimized.finiteRect(owner ? owner.tileRect(index, adding, toplevel) : null) || {x: 0, y: 0, w: 0, h: 0};
     }
 
     // Name of the monitor a window is on ("" if unknown).
@@ -145,7 +146,7 @@ Singleton {
             return false;
         // Rectangle of the tile this window gets (appended after the existing minimized tiles),
         // computed before the list changes.
-        const tile = dockRect(windowScreenName(top) || focusedScreenName, root.minimized.length, true);
+        const tile = dockRect(windowScreenName(top) || focusedScreenName, root.minimized.length, true, toplevel);
         root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title});
         if (Capabilities.has("minimize"))
             dispatchRequest(pluginWindowCall("minimize", address, tile));
@@ -161,7 +162,7 @@ Singleton {
         const rec = root.minimized.find(r => r.toplevel === toplevel);
         if (!rec)
             return;
-        const tile = dockRect(focusedScreenName, root.minimized.indexOf(rec), false);
+        const tile = dockRect(focusedScreenName, root.minimized.indexOf(rec), false, toplevel);
         root.minimized = Minimized.remove(root.minimized, toplevel);
         if (Capabilities.has("minimize")) {
             dispatchRequest(pluginWindowCall("restore", rec.address, tile));

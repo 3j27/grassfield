@@ -23,17 +23,32 @@ Singleton {
     readonly property string artUrl: available ? player.trackArtUrl : ""
     readonly property bool playing: available && player.isPlaying
 
+    // A GRASSFIELD_DEV session runs on the owner's machine: the transport never drives the real player there.
+    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+
+    function devGuarded(what: string): bool {
+        if (devSession)
+            console.info("dev guard: media " + what + " suppressed");
+        return devSession;
+    }
+
     function togglePlaying(): void {
+        if (devGuarded("toggle"))
+            return;
         if (available && player.canTogglePlaying)
             player.togglePlaying();
     }
 
     function next(): void {
+        if (devGuarded("next"))
+            return;
         if (available && player.canGoNext)
             player.next();
     }
 
     function previous(): void {
+        if (devGuarded("previous"))
+            return;
         if (available && player.canGoPrevious)
             player.previous();
     }

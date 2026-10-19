@@ -48,28 +48,9 @@ Singleton {
         shown = false;
     }
 
-    // Real volume change through wpctl (the default sink), then show.
+    // Real volume change through wpctl (Audio.keyStep; refused in a dev session, nothing runs), then show.
     function volumeStep(direction: string): void {
-        switch (direction) {
-        case "up":
-            wpctl.command = ["wpctl", "set-volume", "-l", "1", "@DEFAULT_AUDIO_SINK@", "5%+"];
-            break;
-        case "down":
-            wpctl.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"];
-            break;
-        case "mute":
-            wpctl.command = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"];
-            break;
-        default:
-            console.warn("osd: unknown volume command", direction);
-            return;
-        }
-        // The nested dev shell runs on the owner's machine: never touch the real sink there.
-        if (Quickshell.env("GRASSFIELD_DEV") === "1") {
-            console.info("dev guard: volume " + direction + " suppressed");
-            return;
-        }
-        wpctl.running = true;
+        Audio.keyStep(direction);
     }
 
     function brightnessStep(direction: string): void {
@@ -98,14 +79,6 @@ Singleton {
         onTriggered: root.armed = true
     }
 
-    Process {
-        id: wpctl
-        onRunningChanged: {
-            if (!running)
-                settle.restart();
-        }
-    }
-
     // wpctl returned; PipeWire reports the new state a moment later.
     Timer {
         id: settle
@@ -115,6 +88,10 @@ Singleton {
 
     Connections {
         target: Audio
+
+        function onKeyFinished(): void {
+            settle.restart();
+        }
 
         function onVolumeChanged(): void {
             if (root.armed)

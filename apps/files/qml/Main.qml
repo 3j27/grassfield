@@ -41,6 +41,11 @@ QtObject {
             target: Appearance
             property: "iconTintSetting"
             value: root.app.iconTint
+        },
+        Binding {
+            target: Appearance
+            property: "folderColorSetting"
+            value: root.app.folderColor
         }
     ]
 

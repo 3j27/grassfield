@@ -95,6 +95,12 @@ Window {
         value: cfg.value("icons.tint")
     }
 
+    Binding {
+        target: Appearance
+        property: "folderColorSetting"
+        value: cfg.value("icons.folderColor")
+    }
+
     function select(id: string): void {
         root.selectedId = id;
     }

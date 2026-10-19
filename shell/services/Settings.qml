@@ -29,9 +29,13 @@ Singleton {
     readonly property real dockMagnification: store.dockMagnification
     readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
     readonly property bool dockAutohide: store.data.dock.autohide
+    readonly property var dockRecent: store.dockRecent
+    readonly property bool dockShowRecents: store.data.dock.showRecents
+    readonly property bool dockMinimizeIntoApp: store.data.dock.minimizeIntoApp
 
     readonly property string iconMode: store.iconMode
     readonly property string iconTint: store.iconTint
+    readonly property string folderColor: store.folderColor
 
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
@@ -85,12 +89,20 @@ Singleton {
         store.setDockPinned(list);
     }
 
+    function setDockRecent(list: var): void {
+        store.setDockRecent(list);
+    }
+
     function setIconMode(value: string): void {
         store.setIconMode(value);
     }
 
     function setIconTint(value: string): void {
         store.setIconTint(value);
+    }
+
+    function setFolderColor(value: string): void {
+        store.setFolderColor(value);
     }
 
     function setNotificationsDnd(value: bool): void {
