@@ -291,6 +291,26 @@ Another full-attention surface opening (ExclusiveSurfaces: Apps, Search, the swi
 Hyprland returns the keyboard to the window that has it. Keys typed while the release runs (about 100 to 150 ms after Esc) reach
 the chrome, which ignores them: they are lost, never delivered to another window (drop table below).
 
+Two more measured facts. (1) The protocol `activate` does nothing for a window Hyprland still counts as focused, which is
+exactly the one the chrome took the keyboard from (A active, pointer and holder chrome on A's output, Esc: keys lost 11 of
+12 with `activate`, 12 of 12 recovered by the Lua `hl.dsp.focus({window=...})`), so `Compositor.focusWindow` uses the Lua
+focus (`Minimized.focusWindowRequest`). (2) Releasing the holder last removes the `ignoring, exclusive LS present` refusals
+(0 in the nested runs; 5 in 20 closes before).
+
+Drop table (`tests/shell/overview_two_outputs.sh drop`, one injector process `Esc, -s D, tag, Return`, 10 closes per row,
+previous window A or B alternating, pointer alternating between the outputs; typical of 4 runs with the plugin and 1 without):
+
+| D after Esc | in the previous window | lost | in another window |
+|---|---|---|---|
+| 0, 30, 60 ms | 0/10 | 10 | 0 |
+| 100 ms | 6-8/10 | 2-4 | 0 |
+| 150 ms | 3-8/10 | 2-7 | 0 |
+| 200 ms | 8-10/10 (10/10 in 4 of 5 runs) | 0-2 | 0 |
+| 300 ms | 10/10 | 0 | 0 |
+
+The release takes about 170 to 200 ms (two settle pauses of 80 ms plus the commits); shortening `overview.releaseSettleMs`
+shortens it. Keys typed meanwhile reach the chrome, which ignores them.
+
 ### Two outputs and shared drawing (2026-10-18, plugin 0.6.0-stages)
 The chrome rule is relaxed (contract item 2): one Exclusive chrome holding the keyboard, a mapped chrome on every target
 monitor. The drawing code moved to `compositor/src/WindowTransform.*` (shared with Stages, unchanged) and the JSON reader to
