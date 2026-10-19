@@ -7,7 +7,7 @@
 #          the window appears
 # Run as a BARE command (reference machine only). The nested session this script starts is torn down on exit.
 #   tests/visual/dock-motion.sh
-# Output: .dev/visual/dock-motion/<burst>.txt (time ms, x left, x centre, y top, pixels per frame), frames kept as PPM.
+# Output: .dev/visual/dock-motion/<burst>.txt (time ms, x left, x centre, y top, pixels per frame; the last line "# capture" gives the frame rate), frames kept as PPM.
 # Exit status 1 when a check fails.
 source "$(dirname "$0")/lib.sh"
 
