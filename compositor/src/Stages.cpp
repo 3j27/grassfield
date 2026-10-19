@@ -15,11 +15,13 @@
 #include <hyprland/src/desktop/view/WLSurface.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/managers/EventManager.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
+#include <hyprland/src/managers/XWaylandManager.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/protocols/LayerShell.hpp>
@@ -109,6 +111,9 @@ namespace {
         std::optional<uint64_t>          syncLater; // doLater sequence of a pending sync (its callback is code of this library)
         std::optional<st::WorkspaceId>   refocusSpace; // after a close: the active stage of this workspace takes the keyboard
         PHLWINDOWREF                     focusLater;   // the window the latest activate / merge / move request made key
+        PHLWINDOWREF                     pendingFront; // a focus Hyprland refused (Exclusive layer, lock): made once that ends
+        PHLLSREF                         pendingHolder; // the layer surface that held the keyboard when it was deferred
+        std::optional<uint64_t>          pendingLater; // doLater sequence of a deferred-focus attempt (code of this library)
         std::optional<uint64_t>          pointerLater; // doLater sequence of a pending pointer refresh (code of this library)
         bool                             pointerParked  = false; // pointer focus cleared off a blocked window (held button)
         bool                             warnedNoBuffer = false;
@@ -452,8 +457,16 @@ namespace {
         return g_pSessionLockManager && g_pSessionLockManager->isSessionLocked();
     }
 
+    // Hyprland's own condition for refusing a window focus (CFocusState::rawWindowFocus), read only: the list is never
+    // changed by this plugin.
     bool exclusiveLayerMapped() {
         return g_pInputManager && !g_pInputManager->m_exclusiveLSes.empty();
+    }
+
+    // Hyprland refuses every window focus now (CFocusState::rawWindowFocus: "Refusing a keyboard focus to a window because
+    // of a sessionlock / an exclusive ls"). The plugin then never asks for one (R13 counter-review #3 of e9ebc7f).
+    bool windowFocusRefused() {
+        return sessionLocked() || exclusiveLayerMapped();
     }
 
     // Drawn in a strip (input blocked), or about to be at the end of the running retarget.
@@ -483,50 +496,9 @@ namespace {
         return true;
     }
 
-    // Restores Hyprland's list of Exclusive layer surfaces when it leaves scope (also if Hyprland's code throws).
-    class CExclusiveAside {
-      public:
-        explicit CExclusiveAside(std::vector<PHLLSREF>& list) : m_list(list) {
-            m_aside.swap(m_list);
-        }
-        ~CExclusiveAside() {
-            for (const auto& ls : m_list) { // mapped during the call (not expected): kept
-                if (std::ranges::find(m_aside, ls) == m_aside.end())
-                    m_aside.push_back(ls);
-            }
-            m_list.swap(m_aside);
-        }
-        CExclusiveAside(const CExclusiveAside&)            = delete;
-        CExclusiveAside& operator=(const CExclusiveAside&) = delete;
-        CExclusiveAside(CExclusiveAside&&)                 = delete;
-        CExclusiveAside& operator=(CExclusiveAside&&)      = delete;
-
-      private:
-        std::vector<PHLLSREF>& m_list;
-        std::vector<PHLLSREF>  m_aside;
-    };
-
-    // `front` becomes Hyprland's active window while the layer surface that holds the keyboard keeps it: the focus names
-    // that surface as the one to focus (CFocusState::rawSurfaceFocus finds it already focused and changes nothing), and
-    // Hyprland's Exclusive-layer refusal (CFocusState::rawWindowFocus: "Refusing a keyboard focus to a window because of an
-    // exclusive ls") is set aside for this one call, on the compositor thread, the list restored right after. Hyprland
-    // then posts activewindow / activewindowv2, marks the window activated (xdg, foreign-toplevel: the shell's menu bar
-    // follows it) and records it as its workspace's last window; when the layer releases the keyboard, Hyprland's
-    // refocusLastWindow gives it the keyboard (reason FFM). A no_focus rule or a modal child still refuse it.
-    bool activateBehindLayer(const PHLWINDOW& front, const SP<CWLSurfaceResource>& holder) {
-        const auto fs = Desktop::focusState();
-        if (!fs || !front || !front->m_isMapped || !holder || !g_pInputManager)
-            return false;
-        {
-            const CExclusiveAside aside(g_pInputManager->m_exclusiveLSes);
-            fs->fullWindowFocus(front, Desktop::FOCUS_REASON_OTHER, holder);
-        }
-        return fs->window() == front;
-    }
-
     // The surface that holds the keyboard as Hyprland sees it: its focus surface; else the seat's keyboard focus; else,
     // while an Exclusive layer is mapped, that layer (Hyprland resets its focus surface when its focused window closes,
-    // CWindow::onUnmap, and refuses the next window while the layer is mapped: the layer keeps the keys).
+    // CWindow::onUnmap, and refuses the next window while the layer is mapped: the layer keeps the keys). Read only.
     SP<CWLSurfaceResource> keyboardHolder() {
         const auto fs = Desktop::focusState();
         if (auto surface = fs ? fs->surface() : nullptr)
@@ -545,9 +517,132 @@ namespace {
 
     PHLWINDOW frontOfActive(const SSpace& sp);
 
+    // Hyprland's active window goes to nothing and the keyboard holder is not touched: CFocusState::resetWindowFocus (what
+    // Hyprland itself does when its focused window unmaps, also while an Exclusive layer holds the keyboard:
+    // CWindow::onUnmap), then what Hyprland sends when its focus goes to nothing (CFocusState::rawWindowFocus without a
+    // window), without its keyboard change: the window is no longer activated (xdg / X11, as Hyprland deactivates the
+    // previous window on a focus change), activewindow / activewindowv2 name no window, and window.active(nullptr) (the
+    // foreign-toplevel "activated" state the shell's menu bar follows, the appmenu server). No focus request, no monitor,
+    // workspace or special workspace change: nothing of Hyprland's focus path runs.
+    void clearActiveWindow(const PHLWINDOW& old) {
+        const auto fs = Desktop::focusState();
+        if (!fs)
+            return;
+        fs->resetWindowFocus();
+        if (old && old->m_isMapped && old->m_workspace) {
+            if (g_pXWaylandManager)
+                g_pXWaylandManager->activateWindow(old, false);
+            old->updateDecorationValues();
+        }
+        if (g_pEventManager) {
+            g_pEventManager->postEvent(SHyprIPCEvent{.event = "activewindow", .data = ","});
+            g_pEventManager->postEvent(SHyprIPCEvent{.event = "activewindowv2", .data = ""});
+        }
+        if (const auto& bus = Event::bus())
+            bus->m_events.window.active.emit(nullptr, Desktop::FOCUS_REASON_OTHER);
+    }
+
+    // A focus Hyprland refuses now (an Exclusive layer, the lock) waits: the window takes the focus once the refusal is
+    // over (applyPendingFocus), checked again then. The latest request wins.
+    void deferFocus(const PHLWINDOW& w, std::string_view why) {
+        S().pendingFront  = w;
+        S().pendingHolder = gf::surfaces::ownerOf(keyboardHolder()).layer;
+        gf::logRequest(Log::DEBUG, "stages: focus of {:x} ({}) deferred: Hyprland refuses window focus while {}", addressOf(w), why,
+                       sessionLocked() ? "the session is locked" : "an Exclusive layer surface is mapped");
+    }
+
+    // Focuses `w` (a swap's incoming front window, the keyboard rule's pick) when Hyprland accepts a window focus; while
+    // it refuses one (an Exclusive layer is mapped, the session is locked) Hyprland is not asked at all and the focus is
+    // deferred. The plugin never works around that refusal (R13 counter-review #3 of e9ebc7f).
+    void focusOrDefer(const PHLWINDOW& w, std::string_view why) {
+        const auto fs = Desktop::focusState();
+        if (!fs || !w || !w->m_isMapped)
+            return;
+        if (windowFocusRefused()) {
+            deferFocus(w, why);
+            return;
+        }
+        S().pendingFront.reset();
+        fs->fullWindowFocus(w, Desktop::FOCUS_REASON_OTHER);
+    }
+
+    std::string_view dropReason(const st::PendingFocusState& state) {
+        if (!state.exists)
+            return "it closed, unmapped or was minimized";
+        if (!state.front)
+            return "it is no longer the front window of its Desktop's active stage";
+        if (state.focused)
+            return "it already holds the keyboard";
+        return "its Desktop is not shown or a special workspace covers it";
+    }
+
+    // The deferred focus, once Hyprland accepts window focus again (after Hyprland's own restore: an Exclusive layer that
+    // unmapped or dropped its keyboard interactivity, the unlock): the window still exists, still is the front window of its
+    // Desktop's active stage, that Desktop is shown and not covered by a special workspace, no Exclusive layer is mapped, the
+    // session is not locked and the layer surface that held the keyboard does not keep it. It then takes the focus and the
+    // keyboard (ST23), also from what Hyprland's refocus after the layer picked (a window or a surface under the cursor);
+    // a special workspace is never closed and a Desktop never switched after the fact.
+    void applyPendingFocus(std::string_view when) {
+        auto&      s = S();
+        const auto w = s.pendingFront.lock();
+        const auto fs = Desktop::focusState();
+        if (!w || !s.on || !fs) {
+            s.pendingFront.reset();
+            return;
+        }
+        const auto* sp    = spaceHolding(addressOf(w));
+        const auto  owner  = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus());
+        const auto  holder = s.pendingHolder.lock();
+        const st::PendingFocusState state{.exists        = w->m_isMapped && !w->isHidden(),
+                                          .front         = sp && frontOfActive(*sp) == w,
+                                          .shown         = w->m_workspace && w->m_workspace->isVisibleNotCovered(),
+                                          .locked        = sessionLocked(),
+                                          .exclusive     = exclusiveLayerMapped(),
+                                          .holderKeeps   = holder && holder->m_mapped && owner.layer == holder,
+                                          .focused       = fs->window() == w && owner.window == w};
+        switch (st::pendingFocusAction(state)) {
+            case st::PendingFocusAction::Wait: return;
+            case st::PendingFocusAction::Drop:
+                s.pendingFront.reset();
+                gf::logRequest(Log::DEBUG, "stages: deferred focus of {:x} dropped {}: {}", addressOf(w), when, dropReason(state));
+                return;
+            case st::PendingFocusAction::Focus:
+                s.pendingFront.reset();
+                fs->fullWindowFocus(w, Desktop::FOCUS_REASON_OTHER);
+                gf::logRequest(Log::INFO, "stages: deferred focus of {:x} applied {} (Hyprland accepts window focus again): {}", addressOf(w), when,
+                               fs->window() == w ? "it holds the keyboard" : "refused (no_focus rule or modal child)");
+                return;
+        }
+    }
+
+    // From Hyprland's events (a layer surface unmapped, the keyboard focus changed, the unlock): tried from the event loop,
+    // after Hyprland's own handling of that event (its refocus after a layer surface unmaps comes after the closed event).
+    void schedulePendingFocus() {
+        auto& s = S();
+        if (s.pendingLater || !g_pEventLoopManager || !s.pendingFront.lock())
+            return;
+        s.pendingLater = g_pEventLoopManager->doLater([] {
+            gf::guarded("stages deferred focus", [] {
+                S().pendingLater.reset();
+                applyPendingFocus("after a release");
+            });
+        });
+    }
+
+    void cancelPendingFocus() {
+        auto& s = S();
+        if (s.pendingLater && g_pEventLoopManager)
+            g_pEventLoopManager->removeDoLater(*s.pendingLater); // its callback is code of this library
+        s.pendingLater.reset();
+        s.pendingFront.reset();
+        s.pendingHolder.reset();
+    }
+
     // Hyprland's active window never stays on a strip window: window key bindings (close, full screen, floating), window
     // dispatchers without an explicit window and the shell's menu bar act on it. `preferred`: the window a request or the
-    // keyboard rule named (else the front window of the active stage of the active window's workspace).
+    // keyboard rule named (else the front window of the active stage of the active window's workspace). While Hyprland
+    // refuses window focus (an Exclusive layer) the strip window is only cleared (no active window, the keyboard holder
+    // untouched) and the front window waits for the layer (deferred focus).
     void keepActiveOffStrip(const PHLWINDOW& preferred, std::string_view when) {
         const auto fs     = Desktop::focusState();
         const auto active = fs ? fs->window() : nullptr;
@@ -563,18 +658,30 @@ namespace {
                                     .exclusive     = exclusiveLayerMapped(),
                                     .hasFront      = front != nullptr};
         for (int attempt = 0; attempt < 2; ++attempt) {
-            const auto action = st::activeWindowAction(state);
-            switch (action) {
+            switch (st::activeWindowAction(state)) {
                 case st::ActiveWindowAction::None:
                     if (state.locked)
                         gf::logRequest(Log::DEBUG, "stages: strip window {:x} stays Hyprland's active window under the session lock ({})", addressOf(active), when);
                     return;
-                case st::ActiveWindowAction::ActivateBehind: activateBehindLayer(front, holder); break;
-                case st::ActiveWindowAction::FocusFront: fs->fullWindowFocus(front, Desktop::FOCUS_REASON_OTHER); break;
+                case st::ActiveWindowAction::FocusFront: {
+                    S().pendingFront.reset();
+                    fs->fullWindowFocus(front, Desktop::FOCUS_REASON_OTHER);
+                    const auto now = fs->window();
+                    if (!inStrip(now)) {
+                        gf::logRequest(Log::INFO, "stages: Hyprland's active window moved off strip window {:x} to {:x} with the keyboard ({})", addressOf(active),
+                                       now ? addressOf(now) : 0, when);
+                        return;
+                    }
+                    state.hasFront = false; // refused (a no_focus rule, a modal child): asked again without it
+                    break;
+                }
                 case st::ActiveWindowAction::Clear:
-                    fs->resetWindowFocus();
-                    gf::logRequest(Log::WARN, "stages: strip window {:x} was Hyprland's active window behind a layer surface and no window could replace it: no active window ({})",
-                                   addressOf(active), when);
+                    clearActiveWindow(active);
+                    if (front && state.exclusive)
+                        deferFocus(front, "replaces a strip window as the active window");
+                    gf::logRequest(Log::INFO, "stages: strip window {:x} was Hyprland's active window while {}: no active window, the keyboard holder untouched ({}{})",
+                                   addressOf(active), state.exclusive ? "an Exclusive layer surface is mapped" : "a layer surface holds the keyboard", when,
+                                   front && state.exclusive ? "; the front window takes the focus when the layer releases the keyboard" : "");
                     return;
                 case st::ActiveWindowAction::Unfocus:
                     fs->fullWindowFocus(nullptr, Desktop::FOCUS_REASON_OTHER);
@@ -582,28 +689,7 @@ namespace {
                                    when);
                     return;
             }
-            const auto now = fs->window();
-            if (!inStrip(now)) {
-                gf::logRequest(Log::INFO, "stages: Hyprland's active window moved off strip window {:x} to {:x} ({}, {})", addressOf(active), now ? addressOf(now) : 0, when,
-                               action == st::ActiveWindowAction::ActivateBehind ? "the layer surface keeps the keyboard" : "with the keyboard");
-                return;
-            }
-            state.hasFront = false; // refused (a no_focus rule, a modal child): asked again without it
         }
-    }
-
-    // After a focus request (a swap, the keyboard rule) that Hyprland refused while a layer surface holds the keyboard (an
-    // Exclusive layer is mapped): the requested window becomes the active window behind the layer (ST23).
-    void activateRefused(const PHLWINDOW& focus) {
-        const auto fs = Desktop::focusState();
-        if (!fs || !focus || !focus->m_isMapped || fs->window() == focus || sessionLocked())
-            return;
-        const auto holder = keyboardHolder();
-        if (!holder || !gf::surfaces::ownerOf(holder).layer)
-            return;
-        const bool ok = activateBehindLayer(focus, holder);
-        gf::logRequest(ok ? Log::DEBUG : Log::INFO, "stages: focus of {:x} refused while a layer surface holds the keyboard: {}", addressOf(focus),
-                       ok ? "it is the active window behind the layer" : "refused again (no_focus rule or modal child)");
     }
 
     void tick();
@@ -690,8 +776,8 @@ namespace {
     enum class EContext : uint8_t { Focus, Teardown };
 
     // Computes every managed window's target from the model and the strips, then applies it: live windows unblocked
-    // first, a menu of a window going to the strip closed, `focus` focused (behind the layer surface that holds the
-    // keyboard when Hyprland refuses it), Hyprland's active window kept off strip windows, strip windows blocked and
+    // first, a menu of a window going to the strip closed, `focus` focused (deferred while Hyprland refuses window focus:
+    // an Exclusive layer, the lock), Hyprland's active window kept off strip windows, strip windows blocked and
     // transformed, and one animation from where each window is drawn now. The stacking order is Hyprland's
     // (CWindowState::raise would also allow a window over full-screen ones). Returns whether any window's input block
     // changed: the caller then refreshes the pointer focus (refreshPointer, or schedulePointerRefresh inside Hyprland's
@@ -789,10 +875,8 @@ namespace {
                 if (w && endGrabOf(w, "as its window goes to the strip"))
                     break; // one grab at a time (Hyprland has one)
             }
-            if (focus && focus->m_isMapped && Desktop::focusState()) {
-                Desktop::focusState()->fullWindowFocus(focus, Desktop::FOCUS_REASON_OTHER);
-                activateRefused(focus);
-            }
+            if (focus && focus->m_isMapped)
+                focusOrDefer(focus, "the incoming front window");
             keepActiveOffStrip(focus, "as windows go to the strip");
         }
         for (auto& e : s.wins) {
@@ -851,7 +935,7 @@ namespace {
             }
         }
         const bool changed = retarget(s.durationMs, focus);
-        if (clear && Desktop::focusState()) {
+        if (clear && Desktop::focusState() && !windowFocusRefused()) {
             const auto current = Desktop::focusState()->window();
             if (current && !mayHoldKeyboard(current)) {
                 gf::logRequest(Log::DEBUG, "stages: window {:x} may not keep the keyboard and no stage is left: keyboard focus cleared", addressOf(current));
@@ -961,6 +1045,13 @@ namespace {
         const bool wasLast = shown && shown->lastFocused == address;
         if (shown)
             shown->lastFocused = address;
+        const auto origin = st::focusOrigin(causeOf(reason), wasLast);
+        // A deferred focus is done once its window is focused, and superseded by another window the user chose.
+        if (const auto pending = s.pendingFront.lock(); pending && (pending == w || st::stripFocusBringsStage(origin))) {
+            if (pending != w)
+                gf::logRequest(Log::DEBUG, "stages: deferred focus of {:x} dropped: the user chose window {:x}", addressOf(pending), address);
+            s.pendingFront.reset();
+        }
         auto* sp = spaceHolding(address);
         if (!sp)
             return;
@@ -968,7 +1059,7 @@ namespace {
             sp->model.raise(address);
             return;
         }
-        if (const auto origin = st::focusOrigin(causeOf(reason), wasLast); !st::stripFocusBringsStage(origin)) {
+        if (!st::stripFocusBringsStage(origin)) {
             gf::logRequest(Log::DEBUG, "stages: Hyprland focused strip window {:x} (reason {}: {}): the active stage takes the keyboard", address, static_cast<int>(reason),
                            originName(origin));
             scheduleSync(sp->id);
@@ -1018,7 +1109,15 @@ namespace {
     // or nowhere.
     void beforeKey() {
         auto& s = S();
-        if (!s.on || s.wins.empty())
+        if (!s.on)
+            return;
+        if (s.pendingFront.lock()) { // the layer may have released the keyboard before the deferred focus ran
+            if (s.pendingLater && g_pEventLoopManager)
+                g_pEventLoopManager->removeDoLater(*s.pendingLater);
+            s.pendingLater.reset();
+            applyPendingFocus("before a key");
+        }
+        if (s.wins.empty())
             return;
         const auto fs = Desktop::focusState();
         if (!blockedOwner(gf::surfaces::keyboardFocus()) && !(fs && inStrip(fs->window())))
@@ -1033,12 +1132,13 @@ namespace {
             return;
         const auto* sp    = spaceHolding(addressOf(blocked));
         const auto  front = sp ? frontOfActive(*sp) : nullptr;
-        if (front && mayHoldKeyboard(front))
+        if (front && mayHoldKeyboard(front) && !windowFocusRefused())
             fs->fullWindowFocus(front, Desktop::FOCUS_REASON_OTHER);
         if (blockedOwner(gf::surfaces::keyboardFocus())) {
-            fs->fullWindowFocus(nullptr, Desktop::FOCUS_REASON_OTHER);
+            if (!windowFocusRefused())
+                fs->fullWindowFocus(nullptr, Desktop::FOCUS_REASON_OTHER);
             if (blockedOwner(gf::surfaces::keyboardFocus()))
-                fs->rawSurfaceFocus(nullptr);
+                fs->rawSurfaceFocus(nullptr); // the keyboard leaves the strip window for nothing (never for another surface)
         }
         const auto now = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus()).window;
         gf::logRequest(Log::INFO, "stages: a key arrived while the keyboard was on strip window {:x}: keyboard moved first to {:x} (0: nothing)", addressOf(blocked),
@@ -1150,6 +1250,7 @@ namespace {
         s.syncLater.reset();
         s.refocusSpace.reset();
         s.focusLater.reset();
+        cancelPendingFocus();
         if (retarget(durationMs)) // nothing is targeted any more: every window animates back to its live box
             refreshPointer();
         post(reason);
@@ -1232,6 +1333,8 @@ namespace gf::stager {
         s.strips.clear();
         s.pointerLater.reset();
         s.pointerParked = false;
+        s.pendingLater.reset();
+        s.pendingFront.reset();
         auto& ev        = bus->m_events;
         auto& l         = S().listeners;
         // Input guards, observed and never cancelled (FR13): they move a stale focus off a blocked window before Hyprland
@@ -1270,11 +1373,22 @@ namespace gf::stager {
         if (g_pSessionLockManager)
             l.push_back(g_pSessionLockManager->m_events.unlock.listen([] {
                 gf::guarded("stages unlock", [] {
-                    if (S().on)
+                    if (S().on) {
                         scheduleSync();
+                        schedulePendingFocus(); // a focus deferred under the lock
+                    }
                 });
             }));
-        l.push_back(ev.layer.closed.listen([](const PHLLS& ls) { gf::guarded("stages layer.closed", [&] { onLayerClosed(ls); }); }));
+        // A layer surface unmapping (an Exclusive one releases the keyboard; Hyprland refocuses after this event) or the
+        // keyboard focus changing (an Exclusive layer dropping its keyboard interactivity): a deferred focus is tried from
+        // the event loop, after Hyprland's own handling.
+        l.push_back(ev.layer.closed.listen([](const PHLLS& ls) {
+            gf::guarded("stages layer.closed", [&] {
+                onLayerClosed(ls);
+                schedulePendingFocus();
+            });
+        }));
+        l.push_back(ev.input.keyboard.focus.listen([](const SP<CWLSurfaceResource>& /*surface*/) { gf::guarded("stages keyboard.focus", [] { schedulePendingFocus(); }); }));
         l.push_back(ev.monitor.removed.listen([](const PHLMONITOR& /*monitor*/) { gf::guarded("stages monitor.removed", [] { onMonitorsChanged(); }); }));
         l.push_back(ev.monitor.layoutChanged.listen([] { gf::guarded("stages monitor.layoutChanged", [] { onMonitorsChanged(); }); }));
         S().ready = true;
@@ -1293,6 +1407,7 @@ namespace gf::stager {
         s.pointerLater.reset();
         s.refocusSpace.reset();
         s.focusLater.reset();
+        cancelPendingFocus();
         const bool wasOn = s.on || !s.wins.empty();
         s.on             = false;
         s.enabled        = false;

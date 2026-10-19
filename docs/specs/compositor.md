@@ -6,7 +6,7 @@ live transforms (feature 4, Mission Control v2: the plugin side; spike and shell
 R13 fixes 2026-10-18) and the desktop focus policy (feature `desktop-focus`, FR30-FR32, ADR-0012 amendment; v2
 `desktop-focus-v2`) implemented; Stages prototype behind a feature flag (features `stages-available` / `stages`,
 FR33-FR38, ADR-0013, spec `docs/specs/stages.md`; input guards after the R13 review of 46b3e9b; active window, menus
-and focus reasons after the R13 counter-review of 17208af). Plugin 0.6.2-stages.
+and focus reasons after the R13 counter-review of 17208af; no focus under an Exclusive layer after the R13 counter-review #3 of e9ebc7f). Plugin 0.6.3-stages.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -269,12 +269,15 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   focus on a window that does not take input as stale. Decision logic pure (`core/Stages.*`: `beforePointerEvent`,
   `keyboardAfterLeave`, `stripFocusBringsStage`; `core/DesktopFocus.*`: `classifyPointerFocus`). A transformed window
   without a free work buffer is drawn as nothing that frame (`WindowTransform.cpp`), never at its real place.
-  R13 counter-review of 17208af (ST24, ST6 menus, ST10): Hyprland's active window is never a strip window (a focus refused
-  under an Exclusive layer makes the window active behind the layer, the Exclusive-layer list set aside for that one
-  call; checked after every retarget and before every key); a menu (popup grab) of a window going to the strip ends as a
-  click outside it would (`CSeatManager::setGrab(nullptr)`); only real user focus reasons bring a strip stage forward
-  (reasons mapped one to one, `focusOrigin`; `WORKSPACE_CHANGE` is a restore only for the workspace's last focused
-  window). Decision logic pure: `activeWindowAction`, `focusOrigin`.
+  R13 counter-review of 17208af (ST24, ST6 menus, ST10): Hyprland's active window is never a strip window (checked after
+  every retarget and before every key); a menu (popup grab) of a window going to the strip ends as a click outside it
+  would (`CSeatManager::setGrab(nullptr)`); only real user focus reasons bring a strip stage forward (reasons mapped one
+  to one, `focusOrigin`; `WORKSPACE_CHANGE` is a restore only for the workspace's last focused window). R13
+  counter-review #3 of e9ebc7f (ST23, ST24): while Hyprland refuses window focus (an Exclusive layer is mapped, the session
+  is locked) the plugin requests none and changes none of Hyprland's lists: a strip window is cleared from Hyprland's
+  active window (`CFocusState::resetWindowFocus` plus Hyprland's "no active window" notifications, keyboard holder,
+  monitor, Desktop and special workspace untouched) and the incoming front window is focused once the layer released the
+  keyboard, checked again then. Decision logic pure: `activeWindowAction`, `pendingFocusAction`, `focusOrigin`.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -314,9 +317,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 had just focused, 7a `desktopA=ka`, and from a new window, 7b `desktopA=kn`; 7c PASS. An earlier 7a used ALT+TAB, which is
 not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed build: `desktop_focus.sh check` **26/26 PASS** (runs `.dev/desktop-focus/run-20261018-121710-check`, `run-20261018-142147-check` on the final 0.6.0-stages build), `race` 4/4 (plugin log `cancelled (keyboard focus moved)`, `cancelled (window opened)`). The `rawSurfaceFocus` fallback is removed; `no_focus` windows are skipped by Hyprland's hit test, so the refusal path is reached only for rules applied while the pointer rests on a window (not exercised) |
 | FR26 (relaxed chrome rule) | unit `OverviewChrome.*`; nested `overview.sh` two-output case | L0 / L1 | 2026-10-18, plugin 0.6.0-stages, runs `.dev/overview/run-20261018-130541` and `run-20261018-142052` (final build): **32/32 PASS**: chrome Exclusive on GF-REF and None on WAYLAND-1 → opens with 7 windows; a click at the WAYLAND-1 window's real place reaches nothing; after the close the previously active window gets the keys |
-| FR33-FR37 | unit `Stages*`, `Protocol.StagesFeaturesFollowAvailabilityAndTheFlag`; nested `tests/compositor/stages.sh` (`check`, `perf`) | L0 / L1 | 2026-10-18, plugin 0.6.0-stages, run `.dev/stages/run-20261018-141943-check`: **40/40 PASS** (detail and CPU table in `docs/specs/stages.md`); plugin 0.6.1-stages run `.dev/stages/run-20261018-200428-check`: **45/45 PASS**; plugin 0.6.2-stages runs `.dev/stages/run-20261019-080913-check` (GF-REF only) and `run-20261019-082610-check` (two outputs): **51/51 PASS** |
+| FR33-FR37 | unit `Stages*`, `Protocol.StagesFeaturesFollowAvailabilityAndTheFlag`; nested `tests/compositor/stages.sh` (`check`, `perf`) | L0 / L1 | 2026-10-18, plugin 0.6.0-stages, run `.dev/stages/run-20261018-141943-check`: **40/40 PASS** (detail and CPU table in `docs/specs/stages.md`); plugin 0.6.1-stages run `.dev/stages/run-20261018-200428-check`: **45/45 PASS**; plugin 0.6.2-stages runs `.dev/stages/run-20261019-080913-check` (GF-REF only) and `run-20261019-082610-check` (two outputs): **51/51 PASS**; plugin 0.6.3-stages runs `run-20261019-140152-check` (two outputs) and `run-20261019-131100-check` (GF-REF only): **58/58 PASS** |
 | FR38 (R13 review of 46b3e9b) | unit `StagesInput.*` (pointer guard decisions, keyboard after a leave, strip focus origin), `DesktopFocusTarget.PointerFocusOnABlockedWindowIsStale`; nested `stages.sh` 5b (click without motion after a swap), 7b (after a new window), 8b (swap under an Exclusive layer), 12b (minimize the only window of the active stage), 12c (`cycle_next` stays in the active stage); `minimize.sh stages`; `soak.sh 660 stages` | L0 / L1 | 2026-10-18, plugin 0.6.1-stages, Hyprland v0.56.2 (efb50993): stages.sh 45/45, `minimize.sh stages` PASS (O gets the keys after A, alone in the active stage, is minimized), soak PASS; the pre-fix build fbacf15 fails the 5b, 8b and 12b sequences (scratch probe, `docs/specs/stages.md` acceptance) |
 | FR38 (R13 counter-review of 17208af) | unit `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`, `StagesInput.OnlyRealUserFocusIsAChoice`, `StagesInput.ADesktopSwitchRestoringItsLastWindowIsNotAChoice`; nested `stages.sh` 8c (window actions after a swap under an Exclusive layer), 8d (strip menus), 8e (`WORKSPACE_CHANGE`) | L0 / L1 | 2026-10-19, plugin 0.6.2-stages: stages.sh 51/51 (twice); the pre-fix build b7f0c3d fails 8c (both checks) and 8d (the swap check) in the same session (`.dev/stages/run-20261019-081839-check`) |
+| FR38 (R13 counter-review #3 of e9ebc7f) | unit `StagesInput.UnderAnExclusiveLayerTheActiveStripWindowIsOnlyCleared`, `StagesInput.ADeferredFocusWaitsForTheLayerAndIsCheckedAgain`, `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`; nested `stages.sh` 8c (no window or monitor focus under an Exclusive layer, `close()` closes no window), 8f (special workspace), 8g (Desktop not shown), 8h (polkit-like dialog) | L0 / L1 | 2026-10-19, plugin 0.6.3-stages: stages.sh 58/58 on two outputs (three runs) and GF-REF only; the pre-fix build ffdef45 51/58 in the same session (8c, 8f, 8g, 8h first check; `.dev/stages/run-20261019-130127-check`, `run-20261019-130612-check`); `soak.sh 1260 stages` and `soak.sh 1260` PASS |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -627,7 +631,13 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   setPointerFocus, sendPointerFrame}` (`setPointerFocus` refuses and logs "BUG THIS" without a pointer device),
   `CWindow::{noInputBlockedReasonsBesides, isHidden}`, `CWorkspace::isVisible`, `CFocusState::{fullWindowFocus,
   rawSurfaceFocus}`, `Event::bus()->m_events.input.{keyboard.key, mouse.axis}` (observed, never cancelled),
-  `Desktop::FOCUS_REASON_FFM` (what `CInputManager::refocusLastWindow` uses when a layer releases the keyboard). Desktop focus v2: `CViewHitTester::{layerPopupSurfaceAt, layerSurfaceAt, windowSurfaceAt}`,
+  `Desktop::FOCUS_REASON_FFM` (what `CInputManager::refocusLastWindow` uses when a layer releases the keyboard). Plugin
+  0.6.3-stages: `CFocusState::resetWindowFocus`, `CHyprXWaylandManager::activateWindow(w, false)`,
+  `CWindow::updateDecorationValues`, `CEventManager::postEvent` (`activewindow` / `activewindowv2` with no window),
+  `Event::bus()->m_events.window.active.emit(nullptr, …)` (as `CFocusState::rawWindowFocus` does for no window),
+  `CWorkspace::isVisibleNotCovered`, `Event::bus()->m_events.input.keyboard.focus`; `CInputManager::m_exclusiveLSes` is
+  only read (Hyprland's refusal condition) and `CLayerSurface::onUnmap` emits `layer.closed` before Hyprland's refocus
+  (read from the v0.56.2 sources). Desktop focus v2: `CViewHitTester::{layerPopupSurfaceAt, layerSurfaceAt, windowSurfaceAt}`,
   `CMonitor::m_layerSurfaceLayers`, `State::monitorState()->query().vec()`, `IView::aliveAndVisible`.
 - GCC 16.2.1, C++23. Lua 5.5 headers (Hyprland links `liblua.so.5.5`). GoogleTest 1.18.0 for tests.
 - Quickshell 0.3.1 for the IPC spike.
@@ -766,6 +776,30 @@ Manual (L1, nested only):
   "unknown request", `hl.plugin.grassfield.stages(...)` errors (nil `grassfield`), 0 `[grassfield]` lines, shell log "no
   compositor plugin reply, running in degraded mode"; under an Exclusive layer `hl.dsp.window.close()` closes Hyprland's
   active window as usual (no Stages, nothing hidden).
+  Plugin 0.6.3-stages (Stages fix pass 3, R13 counter-review #3 of e9ebc7f, 2026-10-19, Hyprland v0.56.2 commit
+  efb50993, two outputs, host load ~2): `soak.sh 1260 stages` → PASS (log `.dev/soak-20261019-131315.log`: 764 rounds,
+  152 moves into new strip stages, 108 swaps, 2579 stages events, 95 minimize pairs all animated, 0 skipped; Hyprland
+  alive, RSS 161.0 MB from round 100 to the end; no core dump; 0 grassfield exceptions); `soak.sh 1260` with Stages off →
+  PASS (`.dev/soak-20261019-133750.log`: 771 rounds, 96 minimize pairs, RSS 160.7 MB flat, no core dump, 0 exceptions).
+  The Stages-on run used the build before the version-string change (code identical); the Stages-off run, the final
+  `stages.sh` run and C2 used the 0.6.3-stages build.
+  **Nested Hyprland losses (C1 investigation).** The reviewer's `soak.sh 1260 stages` on e9ebc7f lost the nested Hyprland
+  at round 554 (10:46:19). Findings: its log ends mid-stream with no shutdown line (a SIGTERM stop logs "Hyprland
+  received signal 15" and "Hyprland has reached the end", as 60+ other nested logs of that day did), no crash report, no
+  core dump, no kernel segfault or OOM line and no systemd-oomd action in the journal (previous boot, from 2026-10-18
+  21:00); xdg-desktop-portal-hyprland segfaulted 0.5 s later inside `exit()` on its lost connection (a consequence, seen
+  at every loss). Among the nested instances whose logs survived until the 11:31 power loss, five ended this way:
+  2026-10-18 22:24 and 22:48 (another worktree, overview work, Stages never turned on), 2026-10-19 07:33 (a 9 s old
+  instance, no Stages), 08:28 (fix pass 2's first soak, a foot of the run SIGKILLed at the same moment) and 10:46 (the
+  reviewer). Two of five never used Stages, so the losses are not tied to Stages; a loss without any log line, core dump
+  or crash report matches a SIGKILL from outside (the crash handler covers SIGSEGV/SIGABRT, SIGTERM is logged, an OOM
+  kill is logged by the kernel). The sender of a SIGKILL is not recorded without root tools (audit, BPF): NOT identified.
+  This pass ran each soak under a dev-only supervisor (scratch `.dev/fp3/supervise.py`, not tracked: it detaches from the
+  agent's tools, makes itself the child subreaper and runs `nested-up.sh`, so Hyprland's wait status is recorded, and
+  samples Hyprland every 10 s). Both 1260 s runs kept the nested Hyprland alive; it exited only at `nested-down.sh`,
+  "exited with status 0". Samples (Stages on / off): RSS 151.2 → max 166.7 → 152.8 MB / 153.5 → max 166.4 → 152.5 MB after
+  the run; fds 120 → max 177 → 141 / 128 → max 149 → 124; sockets back to 27 both times: no growth. The 11:31 stop was
+  a power loss of the machine (external, not this pattern).
   Title textures are cached per window and rebuilt only when the title, scale or available width changes;
   drawing adds 6 rect pass elements and 1 texture per decorated window.
 - Q1: `compositor/build-direct.sh tidy` must exit 0 with no diagnostics.
