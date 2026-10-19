@@ -56,10 +56,13 @@ B. A fixed palette of prebuilt accent variants only.
 - **Cursors: option A.** `branding/cursors/` holds the original SVG sources (CC-BY-SA-4.0 like the other Grassfield
   assets, drawn for Grassfield, macOS-like proportions without copying macOS artwork): the CSS cursor names plus legacy
   aliases; a build step (`hyprcursor-util --create`, XCursor PNG sizes 24/32/48/64/96 through the existing build tooling)
-  produces `grassfield-cursors`. Settings › Accessibility › Pointer (macOS model): size slider, fill and outline colour;
-  a change regenerates the theme into `$XDG_DATA_HOME/icons/grassfield-cursors-custom` and switches Hyprland to it; GTK
-  and Qt apps pick up the XCursor theme on their next start (documented limit). Dev: only the nested instance is ever
-  switched (scripts/nestctl).
+  produces `grassfield-cursors`. Settings > Accessibility > Pointer (macOS model: size slider, fill and outline colour).
+  Implemented now: the size. The shell asks the compositor for it with Hyprland's own `setcursor <theme> <size>` request
+  on its own instance's request socket (the theme is not changed), a live redraw follows through the compositor
+  capability `cursor-refresh` when the plugin has it, and the applications the shell starts get `XCURSOR_SIZE` and
+  `HYPRCURSOR_SIZE` in their environment; running applications keep their size (documented limit). Colours are a later
+  step: regenerating the theme into `$XDG_DATA_HOME/icons/grassfield-cursors-custom` and switching to it needs python3,
+  rsvg-convert and hyprcursor-util at runtime, an owner decision. Dev: only the nested instance is ever addressed.
 
 ## Consequences
 - New shared component and settings keys; every icon call site moves to `TintedIcon` (one pass per surface).

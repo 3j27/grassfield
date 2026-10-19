@@ -114,8 +114,8 @@
         <translation>Pointeur</translation>
     </message>
     <message>
-        <source>The pointer changes size as you drag. Apps that are already open keep their size until they are restarted.</source>
-        <translation>Le pointeur change de taille pendant que vous faites glisser. Les apps déjà ouvertes gardent leur taille jusqu’à leur redémarrage.</translation>
+        <source>The pointer changes size as you drag. Apps that are open when you change it keep the previous size until you quit and reopen them.</source>
+        <translation>Le pointeur change de taille pendant que vous faites glisser. Les apps ouvertes au moment du changement gardent l’ancienne taille jusqu’à ce que vous les quittiez et les rouvriez.</translation>
     </message>
     <message>
         <source>Pointer size</source>

@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.platform
 import "../launchpad/Model.js" as Model
 import "AppLaunch.js" as AppLaunch
 import "../dock/DockModel.js" as DockModel
@@ -109,7 +110,9 @@ Singleton {
     function launch(target: var): void {
         if (!target)
             return;
-        if (!devSession) {
+        const environment = launchEnvironment();
+        // Nothing to add to the environment of the shell: Quickshell's own execute().
+        if (Object.keys(environment).length === 0) {
             target.execute();
             return;
         }
@@ -121,7 +124,7 @@ Singleton {
             command = ["xdg-terminal-exec"].concat(command);
         const context = {
             "command": command,
-            "environment": AppLaunch.isolatedEnvironment(appsHome)
+            "environment": environment
         };
         if (target.workingDirectory)
             context.workingDirectory = target.workingDirectory;
@@ -139,8 +142,9 @@ Singleton {
         if (entry.runInTerminal === true)
             command = ["xdg-terminal-exec"].concat(command);
         const context = {"command": command};
-        if (devSession)
-            context.environment = AppLaunch.isolatedEnvironment(appsHome);
+        const environment = launchEnvironment();
+        if (Object.keys(environment).length > 0)
+            context.environment = environment;
         if (entry.workingDirectory)
             context.workingDirectory = entry.workingDirectory;
         Quickshell.execDetached(context);
@@ -157,14 +161,21 @@ Singleton {
     // environment. A real session runs the command unchanged.
     function openDetached(argv: var): void {
         if (!devSession) {
-            Quickshell.execDetached(argv);
+            const environment = launchEnvironment();
+            if (Object.keys(environment).length === 0)
+                Quickshell.execDetached(argv);
+            else
+                Quickshell.execDetached({
+                    "command": argv,
+                    "environment": environment
+                });
             return;
         }
         const request = AppLaunch.openRequest(argv);
         if (request === null) {
             Quickshell.execDetached({
                 "command": argv,
-                "environment": AppLaunch.isolatedEnvironment(appsHome)
+                "environment": launchEnvironment()
             });
             return;
         }
@@ -174,7 +185,7 @@ Singleton {
         }
         Quickshell.execDetached({
             "command": [openPolicy].concat(request.targets),
-            "environment": AppLaunch.isolatedEnvironment(appsHome)
+            "environment": launchEnvironment()
         });
     }
 
@@ -182,7 +193,14 @@ Singleton {
     // session. Such a Process still resolves `gio` on the shell's own PATH, where scripts/dev/shell-run.sh puts the
     // open shims first (a dev `gio open` follows the open policy even in code that does not call openDetached).
     function openEnvironment(): var {
-        return devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({});
+        return launchEnvironment();
+    }
+
+    // Environment added to every application the shell starts: the isolated homes in a dev session, and the pointer
+    // size the user chose when it differs from the session's (XCURSOR_SIZE and HYPRCURSOR_SIZE; applications read them
+    // when they start, so open ones keep their size). Never the owner's systemd or uwsm environment.
+    function launchEnvironment(): var {
+        return AppLaunch.mergeEnvironment(devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({}), Pointer.launchEnvironment());
     }
 
     function nameFor(appId: string): string {
