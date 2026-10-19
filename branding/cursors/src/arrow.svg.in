@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Grassfield cursor: arrow. Original drawing, 32 px grid, hotspot (5,3). -->
+  <defs><path id="s" d="M5 3 L5 24.2 L10.1 19.6 L13.5 27.2 L17.3 25.6 L13.9 18.1 L20.6 18.1 Z"/></defs>
+  <use href="#s" fill="{{OUTLINE}}" stroke="{{OUTLINE}}" stroke-width="3" stroke-linejoin="round"/>
+  <use href="#s" fill="{{FILL}}"/>
+</svg>

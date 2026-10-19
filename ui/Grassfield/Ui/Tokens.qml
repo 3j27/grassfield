@@ -20,6 +20,7 @@ QtObject {
         knob: "#FFFFFF",  // estimate; slider and toggle knobs
         fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field
         fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
+        barText: "#FFFFFF",  // menu bar text and glyphs on the bare wallpaper: pure white (dark palette, used over dark wallpapers) or pure black (light palette, over light ones); the adaptive tone picks the palette, not the appearance (docs/specs/menubar.md)
         separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         danger: "#FFD3CF",  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
@@ -42,6 +43,7 @@ QtObject {
         knob: "#FFFFFF",  // estimate; slider and toggle knobs
         fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field
         fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
+        barText: "#000000",  // menu bar text and glyphs on the bare wallpaper: pure white (dark palette, used over dark wallpapers) or pure black (light palette, over light ones); the adaptive tone picks the palette, not the appearance (docs/specs/menubar.md)
         separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
         danger: "#7A1812",  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
@@ -161,8 +163,16 @@ QtObject {
     readonly property real menubarInsetLeft: 20.5
     // F1 gap 3: clock end to the screen edge (18-19)
     readonly property real menubarInsetRight: 18.5
-    // A2: alpha of the drop shadow under the bar text and glyphs while the bar background is off (same treatment as the desktop labels)
-    readonly property real menubarTextShadowOpacity: 1.0
+    // adaptive bar: a bar showing the dark foreground switches to light when the wallpaper strip relative luminance falls below this; black text keeps 4.5:1 or more down to it (0.175), so the band is as wide as A2 allows (tested in test_contrast_tokens.py)
+    readonly property real menubarToneLightBelow: 0.175
+    // adaptive bar: a bar showing the light foreground switches to dark when the wallpaper strip relative luminance rises above this; white text keeps 4.5:1 or more up to it (0.18). The gap to toneLightBelow is the hysteresis
+    readonly property real menubarToneDarkAbove: 0.18
+    // adaptive bar: columns of the downscaled grab of the wallpaper strip under the bar
+    readonly property int menubarToneSampleColumns: 32
+    // adaptive bar: rows of the downscaled grab of the wallpaper strip under the bar
+    readonly property int menubarToneSampleRows: 4
+    // A2: alpha of the soft shadow (dark under light text, light under dark text) under the bar text and glyphs while the bar background is off; a single pass, the foreground adapts to the wallpaper
+    readonly property real menubarTextShadowOpacity: 0.5
     // A2: MultiEffect shadowBlur of the bar text shadow pass
     readonly property real menubarTextShadowBlur: 0.22
     // A2: vertical offset of the bar text shadow

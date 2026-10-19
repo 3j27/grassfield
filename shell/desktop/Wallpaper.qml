@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Grassfield.Ui
 import qs.services
 
 // Desktop wallpaper: the Grassfield artwork (WallpaperArt) on the background layer of every screen.
@@ -116,6 +117,50 @@ Scope {
             HoverHandler {
                 onPointChanged: if (hovered)
                     PointerTracker.report(win.modelData.name, point.position.x, point.position.y)
+            }
+
+            // The strip under this output's menu bar decides the bar's foreground (BarTone, per output): measured when the
+            // wallpaper or the output changes, never per frame. The artwork's top is a known gradient (sky), an image is
+            // grabbed into a small canvas and averaged. Nothing is shown of the canvas (it sits under the wallpaper).
+            readonly property string imageFile: VisualFixtures.wallpaperFile
+            readonly property string imageUrl: imageFile !== "" ? "file://" + imageFile : ""
+            function measure(): void {
+                if (imageFile !== "") {
+                    if (probe.isImageLoaded(imageUrl))
+                        probe.requestPaint();
+                    else
+                        probe.loadImage(imageUrl);
+                    return;
+                }
+                if (height > 0)
+                    BarTone.reportGradient(win.modelData.name, Qt.color(artwork.art.skyTop), Qt.color(artwork.art.skyMid), Tokens.menubarHeight / (0.55 * height));
+            }
+            onImageFileChanged: Qt.callLater(measure)
+            onHeightChanged: Qt.callLater(measure)
+            Component.onCompleted: Qt.callLater(measure)
+
+            // The whole image is drawn stretched onto a canvas scaled so that the bar's strip is toneSampleRows px tall; only
+            // that top strip is read back.
+            Canvas {
+                id: probe
+                z: -1
+                width: Tokens.menubarToneSampleColumns
+                height: Math.max(Tokens.menubarToneSampleRows, Math.round(win.height * Tokens.menubarToneSampleRows / Tokens.menubarHeight))
+                renderTarget: Canvas.Image
+                renderStrategy: Canvas.Immediate
+                onImageLoaded: requestPaint()
+                onPaint: {
+                    const url = win.imageUrl;
+                    if (url === "" || !isImageLoaded(url))
+                        return;
+                    const ctx = getContext("2d");
+                    ctx.clearRect(0, 0, width, height);
+                    ctx.drawImage(url, 0, 0, width, height);
+                    const lum = BarTone.pixelsLuminance(ctx.getImageData(0, 0, width, Tokens.menubarToneSampleRows).data);
+                    unloadImage(url);
+                    // Not inside the paint: the bar's bindings must change outside the render sync.
+                    Qt.callLater(() => BarTone.report(win.modelData.name, lum));
+                }
             }
 
             WallpaperArt {

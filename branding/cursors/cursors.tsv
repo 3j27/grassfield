@@ -1,0 +1,29 @@
+# Grassfield cursor table. Whitespace-separated columns:
+#   source (src/<source>.svg.in)  hotspot_x  hotspot_y (32 px grid)  frames  names (comma-separated; the first is canonical)
+# Names: CSS cursor names first, then legacy X11/KDE/GNOME aliases (the name list was taken from the installed
+# Adwaita and Yaru cursor folders; no file of either theme is used).
+arrow           5     3     1   default,left_ptr,arrow,top_left_arrow
+pointer         12.5  3.5   1   pointer,hand1,hand2,hand,pointing_hand,link
+text            16    16    1   text,xterm,ibeam
+vertical-text   16    16    1   vertical-text
+wait            16    16    12  wait,watch
+progress        5     3     12  progress,left_ptr_watch,half-busy
+help            5     3     1   help,question_arrow,left_ptr_help,whats_this,dnd-ask
+crosshair       16    16    1   crosshair,cross,tcross,cross_reverse,diamond_cross
+cell            16    16    1   cell,plus
+copy            5     3     1   copy,dnd-copy
+alias           5     3     1   alias,dnd-link
+context-menu    5     3     1   context-menu
+grab            16    16    1   grab,openhand
+grabbing        16    16    1   grabbing,closedhand,dnd-move
+no-drop         5     3     1   no-drop,dnd-no-drop,dnd-none
+not-allowed     16    16    1   not-allowed,crossed_circle,forbidden
+all-scroll      16    16    1   all-scroll,fleur,move,size_all
+col-resize      16    16    1   col-resize,split_h
+row-resize      16    16    1   row-resize,split_v
+resize-ew       16    16    1   ew-resize,e-resize,w-resize,sb_h_double_arrow,h_double_arrow,size_hor,left_side,right_side,double_arrow
+resize-ns       16    16    1   ns-resize,n-resize,s-resize,sb_v_double_arrow,v_double_arrow,size_ver,top_side,bottom_side
+resize-nesw     16    16    1   nesw-resize,ne-resize,sw-resize,bd_double_arrow,size_bdiag,top_right_corner,bottom_left_corner
+resize-nwse     16    16    1   nwse-resize,nw-resize,se-resize,fd_double_arrow,size_fdiag,top_left_corner,bottom_right_corner
+zoom-in         13    13    1   zoom-in
+zoom-out        13    13    1   zoom-out

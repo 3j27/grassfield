@@ -16,3 +16,4 @@ singleton GlanceApp 1.0 GlanceApp.qml
 singleton FixedTime 1.0 FixedTime.qml
 singleton VisualFixtures 1.0 VisualFixtures.qml
 singleton DesktopState 1.0 DesktopState.qml
+singleton BarTone 1.0 BarTone.qml

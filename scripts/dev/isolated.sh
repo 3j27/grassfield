@@ -41,6 +41,8 @@ for d in "$config_home" "$state_home"; do
   esac
 done
 mkdir -p "$config_home" "$state_home" "$base/home"
+# shellcheck source=devenv.sh
+. "$root/scripts/dev/devenv.sh"
 
 exec env -u DISPLAY HOME="$base/home" XDG_CONFIG_HOME="$base/config" XDG_CACHE_HOME="$base/cache" XDG_STATE_HOME="$base/state" \
   XDG_DATA_HOME="$base/data" GRASSFIELD_CONFIG_HOME="$config_home" GRASSFIELD_STATE_HOME="$state_home" \

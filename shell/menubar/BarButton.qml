@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Grassfield.Ui
@@ -12,8 +13,9 @@ Item {
     property real padding: Tokens.menubarItemPadding
     // Highlight colour (the bar passes the dark palette's while it has no background of its own).
     property color tint: Appearance.colors.hover
-    // Soft dark shadow under the content (gate A2) while the bar is drawn straight on the wallpaper.
+    // Soft shadow under the content (gate A2) while the bar is drawn straight on the wallpaper, in this colour.
     property bool shadowed: false
+    property color shadowColor: Appearance.darkColors.shadow
     default property alias content: row.data
     readonly property bool hovered: hover.hovered
 
@@ -68,47 +70,24 @@ Item {
         border.color: Appearance.colors.accent
     }
 
-    // Content with a soft drop shadow in three stacked passes (the row, its wrapper, the outer wrapper): each pass
-    // casts the shadow of the previous result, so the halo gets denser without a harder edge (gate A2, as the
-    // desktop labels). The passes are off while the bar has a material behind it.
+    // Content with a faint soft shadow (gate A2) while the bar is drawn straight on the wallpaper: dark under light text, light
+    // under dark text (the bar picks the colour from its adaptive tone). Off while a material is behind the bar.
     Item {
-        id: pass3
         anchors.centerIn: parent
         width: row.implicitWidth
         height: row.implicitHeight
-        layer.enabled: root.shadowed
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: Appearance.darkColors.shadow
-            shadowOpacity: Tokens.menubarTextShadowOpacity
-            shadowBlur: Tokens.menubarTextShadowBlur
-            shadowVerticalOffset: Tokens.menubarTextShadowOffsetY
-        }
 
-        Item {
-            id: pass2
-            anchors.fill: parent
+        Row {
+            id: row
+            anchors.centerIn: parent
+            spacing: Tokens.spacingXs
             layer.enabled: root.shadowed
             layer.effect: MultiEffect {
                 shadowEnabled: true
-                shadowColor: Appearance.darkColors.shadow
+                shadowColor: root.shadowColor
                 shadowOpacity: Tokens.menubarTextShadowOpacity
                 shadowBlur: Tokens.menubarTextShadowBlur
                 shadowVerticalOffset: Tokens.menubarTextShadowOffsetY
-            }
-
-            Row {
-                id: row
-                anchors.centerIn: parent
-                spacing: Tokens.spacingXs
-                layer.enabled: root.shadowed
-                layer.effect: MultiEffect {
-                    shadowEnabled: true
-                    shadowColor: Appearance.darkColors.shadow
-                    shadowOpacity: Tokens.menubarTextShadowOpacity
-                    shadowBlur: Tokens.menubarTextShadowBlur
-                    shadowVerticalOffset: Tokens.menubarTextShadowOffsetY
-                }
             }
         }
     }
