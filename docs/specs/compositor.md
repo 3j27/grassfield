@@ -6,7 +6,7 @@ live transforms (feature 4, Mission Control v2: the plugin side; spike and shell
 R13 fixes 2026-10-18) and the desktop focus policy (feature `desktop-focus`, FR30-FR32, ADR-0012 amendment; v2
 `desktop-focus-v2`) implemented; Stages prototype behind a feature flag (features `stages-available` / `stages`,
 FR33-FR38, ADR-0013, spec `docs/specs/stages.md`; input guards after the R13 review of 46b3e9b; active window, menus
-and focus reasons after the R13 counter-review of 17208af). Plugin 0.6.2-stages.
+and focus reasons after the R13 counter-review of 17208af; no focus under an Exclusive layer after the R13 counter-review #3 of e9ebc7f). Plugin 0.6.3-stages.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
