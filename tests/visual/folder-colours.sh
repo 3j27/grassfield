@@ -32,7 +32,7 @@ fixtures() {
   setattr "$SB/Archive" '{"v":1,"color":"#8a8f98"}'
   setattr "$SB/Pictures" '{"v":1,"glyph":"📷"}'
   # Desktop sandbox of the shell: two customised folders.
-  mkdir -p "$DESK/Work" "$DESK/Music"
+  mkdir -p "$DESK/Work" "$DESK/Music" "$DESK/Projects"
   setattr "$DESK/Work" '{"v":1,"color":"#f5883b","glyph":"💼"}'
   setattr "$DESK/Projects" '{"v":1,"color":"#8e5bea"}'
 }

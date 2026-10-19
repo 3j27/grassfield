@@ -48,7 +48,18 @@ Platform.MenuBar {
         return bar.app.applicationsFor(f.selectedUrls());
     }
 
-    // Menu text from data (file and application names): one line, and a literal & doubled (a single one marks a
+    // Customize Folder applies to a selection of local folders. Read from folder.selectedCount (its NOTIFY fires on every
+    // selection change, also from one item to another one: a binding on `count` does not, and canCustomize() reads no
+    // property, so the menu item stayed stale: the bug class above) and from the folder style revision.
+    readonly property bool customizeEnabled: {
+        bar.app.folderStyleRevision;
+        const f = bar.folder;
+        if (!f || f.selectedCount === 0)
+            return false;
+        return f.selectedRows().every(r => f.isDirAt(r)) && bar.app.folderStyleUnavailable(f.selectedUrls()) === "";
+    }
+
+        // Menu text from data (file and application names): one line, and a literal & doubled (a single one marks a
     // mnemonic in Qt menus).
     function label(text: string): string {
         return String(text).replace(/[\r\n]+/g, "⏎").replace(/&/g, "&&");
@@ -114,7 +125,7 @@ Platform.MenuBar {
         }
         Platform.MenuItem {
             text: qsTr("Customize Folder…")
-            enabled: bar.tab !== null && bar.count > 0 && bar.tab.canCustomize()
+            enabled: bar.tab !== null && bar.customizeEnabled
             onTriggered: bar.tab.customizeSelection()
         }
         Platform.MenuItem {
