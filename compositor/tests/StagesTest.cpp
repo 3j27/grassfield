@@ -411,20 +411,65 @@ TEST(StagesInput, ADesktopSwitchRestoringItsLastWindowIsNotAChoice) {
 TEST(StagesInput, HyprlandsActiveWindowNeverStaysOnAStripWindow) {
     using A = ActiveWindowAction;
     EXPECT_EQ(activeWindowAction({.hidden = false, .locked = false, .layerKeyboard = true, .exclusive = true, .hasFront = true}), A::None) << "not a strip window";
-    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = true, .hasFront = true}), A::ActivateBehind)
-        << "Search or the overview holds the keyboard: the front window becomes active behind it";
-    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = false, .hasFront = true}), A::ActivateBehind)
-        << "the desktop (on_demand) keeps the keyboard";
     EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = false, .exclusive = false, .hasFront = true}), A::FocusFront)
         << "no layer holds the keyboard: the front window takes it, as after a swap";
-    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = true, .hasFront = false}), A::Clear)
-        << "nothing may replace it under an Exclusive layer: no active window";
-    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = false, .exclusive = true, .hasFront = true}), A::Clear);
-    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = false, .hasFront = false}), A::Clear)
-        << "the desktop keeps the keyboard, no active window";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = false, .hasFront = true}), A::FocusFront)
+        << "an on_demand layer (the desktop): Hyprland accepts the focus, the front window takes the keyboard as on any focus";
     EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = false, .exclusive = false, .hasFront = false}), A::Unfocus)
         << "a no_focus front window: nothing focused, as Hyprland does when its focused window gets blocked";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = false, .hasFront = false}), A::Clear)
+        << "the desktop keeps the keyboard, no active window";
     EXPECT_EQ(activeWindowAction({.hidden = true, .locked = true, .layerKeyboard = true, .exclusive = true, .hasFront = true}), A::None) << "the session lock is never touched";
+}
+
+// R13 counter-review #3 of e9ebc7f, HIGH: the plugin set Hyprland's Exclusive-layer list aside to make the incoming front
+// window active behind the layer; Hyprland's side paths (a special workspace closing, a switch to a Desktop not shown) then
+// gave that window the keyboard: keys typed into an Exclusive layer (the polkit dialog) reached an app window. Under an
+// Exclusive layer the plugin now never focuses a window: a strip window that is Hyprland's active window is cleared, the
+// keyboard holder untouched.
+TEST(StagesInput, UnderAnExclusiveLayerTheActiveStripWindowIsOnlyCleared) {
+    using A = ActiveWindowAction;
+    for (const bool layerKeyboard : {true, false}) {
+        for (const bool hasFront : {true, false}) {
+            EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = layerKeyboard, .exclusive = true, .hasFront = hasFront}), A::Clear)
+                << "layer keyboard " << layerKeyboard << ", front " << hasFront << ": never a focus while Hyprland refuses window focus";
+        }
+    }
+    EXPECT_EQ(activeWindowAction({.hidden = false, .locked = false, .layerKeyboard = true, .exclusive = true, .hasFront = true}), A::None)
+        << "a window that is not in the strip (a special workspace's window) stays Hyprland's active window";
+}
+
+// The front window the plugin could not focus under an Exclusive layer (or the lock) takes the focus only once Hyprland
+// accepts window focus again, and only if it still is the front window of a Desktop that is shown and not covered.
+TEST(StagesInput, ADeferredFocusWaitsForTheLayerAndIsCheckedAgain) {
+    using P                         = PendingFocusAction;
+    const PendingFocusState settled = {.exists = true, .front = true, .shown = true, .locked = false, .exclusive = false, .layerKeyboard = false, .focused = false};
+    EXPECT_EQ(pendingFocusAction(settled), P::Focus) << "the layer is gone: the swap's front window takes the keyboard (ST23)";
+
+    auto s      = settled;
+    s.exclusive = true;
+    EXPECT_EQ(pendingFocusAction(s), P::Wait) << "an Exclusive layer (this one or another) is still mapped";
+    s               = settled;
+    s.layerKeyboard = true;
+    EXPECT_EQ(pendingFocusAction(s), P::Wait) << "the layer dropped its exclusivity but keeps the keyboard (on_demand)";
+    s        = settled;
+    s.locked = true;
+    EXPECT_EQ(pendingFocusAction(s), P::Wait) << "the session lock: nothing until the unlock";
+
+    s        = settled;
+    s.exists = false;
+    s.locked = true;
+    EXPECT_EQ(pendingFocusAction(s), P::Drop) << "the window closed or was minimized";
+    s           = settled;
+    s.front     = false;
+    s.exclusive = true;
+    EXPECT_EQ(pendingFocusAction(s), P::Drop) << "another stage came forward meanwhile";
+    s       = settled;
+    s.shown = false;
+    EXPECT_EQ(pendingFocusAction(s), P::Drop) << "its Desktop is not shown or a special workspace covers it: nothing is switched or closed after the fact";
+    s         = settled;
+    s.focused = true;
+    EXPECT_EQ(pendingFocusAction(s), P::Drop) << "Hyprland's restore already gave it the keyboard";
 }
 
 // HIGH 2: minimizing the only window of the active stage left the keyboard on it (special:minimized).

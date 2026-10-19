@@ -272,8 +272,11 @@ namespace gf::stages {
     // Hyprland's active window (CFocusState::window()) is what window key bindings (close, full screen, floating), window
     // dispatchers without an explicit window and the shell's menu bar (foreign-toplevel "activated") act on. It can differ
     // from the keyboard holder: while a layer surface holds the keyboard (an Exclusive one: Search, the overview chrome,
-    // Quick Settings; or an on_demand one: the desktop) it stays the last focused window, and Hyprland refuses every window
-    // focus while an Exclusive layer is mapped. It must never be a strip window (R13 counter-review of 17208af).
+    // Quick Settings, the polkit dialog; or an on_demand one: the desktop) it stays the last focused window, and Hyprland
+    // refuses every window focus while an Exclusive layer is mapped or the session is locked. It must never be a strip
+    // window (R13 counter-review of 17208af). The plugin never works around Hyprland's refusal (R13 counter-review #3 of
+    // e9ebc7f: setting Hyprland's Exclusive-layer list aside let the keyboard leave an Exclusive layer through Hyprland's
+    // side paths: a special workspace closing, a Desktop switch).
     struct ActiveWindowState {
         bool hidden        = false; // Hyprland's active window is a strip window (or is about to be blocked as one)
         bool locked        = false; // the session is locked (nothing is focused until the unlock; the lock is not touched)
@@ -283,19 +286,44 @@ namespace gf::stages {
     };
 
     enum class ActiveWindowAction : uint8_t {
-        None,           // nothing to do (not a strip window, or the session is locked)
-        ActivateBehind, // the front window becomes the active window, the layer surface keeps the keyboard; it gets the
-                        // keyboard when the layer releases it (Hyprland's refocusLastWindow restores the active window)
-        FocusFront,     // no layer surface holds the keyboard: the front window takes focus, as after a swap
-        Clear,          // no window may replace it while a layer surface holds the keyboard or an Exclusive layer is
-                        // mapped: no active window, the keyboard holder untouched (CFocusState::resetWindowFocus)
-        Unfocus,        // no window may replace it otherwise: no active window and no keyboard focus (what Hyprland
-                        // itself does when the input of its focused window gets blocked)
+        None,       // nothing to do (not a strip window, or the session is locked)
+        FocusFront, // Hyprland accepts a window focus (no Exclusive layer): the front window takes focus and the keyboard,
+                    // as after a swap (an on_demand layer such as the desktop loses it, as on any window focus)
+        Clear,      // Hyprland refuses window focus (an Exclusive layer is mapped), or no window may replace it while a layer
+                    // surface holds the keyboard: no active window, the keyboard holder untouched
+                    // (CFocusState::resetWindowFocus, what Hyprland does when its focused window unmaps); the front window,
+                    // if any, takes the focus once the Exclusive layer released the keyboard (PendingFocusState)
+        Unfocus,    // no window may replace it otherwise: no active window and no keyboard focus (what Hyprland itself
+                    // does when the input of its focused window gets blocked)
     };
 
-    // What the glue does so that Hyprland's active window is never a strip window. After an ActivateBehind or FocusFront
-    // that Hyprland refused (a no_focus rule, a modal child), the glue asks again with hasFront = false.
+    // What the glue does so that Hyprland's active window is never a strip window. After a FocusFront that Hyprland refused
+    // (a no_focus rule, a modal child), the glue asks again with hasFront = false.
     ActiveWindowAction activeWindowAction(const ActiveWindowState& state);
+
+    // A focus the plugin could not make because Hyprland refuses window focus (an Exclusive layer is mapped, the session is
+    // locked): the window (a swap's incoming front window, the keyboard rule's front window) is remembered and focused only
+    // once the refusal is over, checked again then. Tried after a layer surface unmaps, after a keyboard focus change (an
+    // Exclusive layer dropping its keyboard interactivity), after the unlock and before a key.
+    struct PendingFocusState {
+        bool exists        = false; // the remembered window is still mapped and not hidden
+        bool front         = false; // it is still the front window of its workspace's active stage
+        bool shown         = false; // its workspace is shown on its monitor and not covered by a special workspace
+        bool locked        = false; // the session is locked
+        bool exclusive     = false; // an Exclusive layer surface is mapped
+        bool layerKeyboard = false; // a mapped layer surface (or one of its popups) holds the keyboard
+        bool focused       = false; // it already is Hyprland's active window and holds the keyboard
+    };
+
+    enum class PendingFocusAction : uint8_t {
+        Wait,  // Hyprland still refuses (lock, Exclusive layer) or a layer surface keeps the keyboard: try again later
+        Focus, // focus it now (Hyprland's own restore after the layer, if any, is replaced: ST23)
+        Drop,  // forget it: gone, no longer the front window (another stage came forward), already focused, or its Desktop
+               // is not shown or a special workspace covers it (nothing is switched or closed after the fact; the keyboard
+               // rule focuses the active stage when that Desktop is shown again: ST22)
+    };
+
+    PendingFocusAction pendingFocusAction(const PendingFocusState& state);
 
     enum class PointerEvent : uint8_t { Press, Release, Axis };
 

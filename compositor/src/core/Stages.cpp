@@ -625,13 +625,21 @@ namespace gf::stages {
     ActiveWindowAction activeWindowAction(const ActiveWindowState& state) {
         if (!state.hidden || state.locked)
             return ActiveWindowAction::None;
-        if (state.hasFront && state.layerKeyboard)
-            return ActiveWindowAction::ActivateBehind;
         if (state.hasFront && !state.exclusive)
             return ActiveWindowAction::FocusFront;
         if (state.layerKeyboard || state.exclusive)
             return ActiveWindowAction::Clear;
         return ActiveWindowAction::Unfocus;
+    }
+
+    PendingFocusAction pendingFocusAction(const PendingFocusState& state) {
+        if (!state.exists || !state.front)
+            return PendingFocusAction::Drop;
+        if (state.locked || state.exclusive || state.layerKeyboard)
+            return PendingFocusAction::Wait;
+        if (state.focused || !state.shown)
+            return PendingFocusAction::Drop;
+        return PendingFocusAction::Focus;
     }
 
     PointerAction beforePointerEvent(PointerEvent event, const PointerState& state) {
