@@ -175,18 +175,23 @@ namespace gf::overviewfocus {
         return target == Target::Remembered && rememberedShown ? FallbackSpace::Remembered : FallbackSpace::FocusedMonitor;
     }
 
-    std::vector<WindowId> frontOrder(std::span<const Candidate> bottomToTop, WindowId lastFocused) {
+    std::vector<WindowId> frontOrder(std::span<const Candidate> bottomToTop) {
         const auto eligible = [](const Candidate& c) { return c.id != 0 && c.onWorkspace && c.mapped && !c.hidden && c.takesInput && c.focusable; };
         std::vector<WindowId> out;
-        if (lastFocused != 0) {
-            const auto last = std::ranges::find_if(bottomToTop, [lastFocused](const Candidate& c) { return c.id == lastFocused; });
-            if (last != bottomToTop.end() && eligible(*last))
-                out.push_back(lastFocused);
+        struct SRanked {
+            WindowId id    = 0;
+            uint64_t seq   = 0;
+            size_t   level = 0; // stack position, higher is closer to the top
+        };
+        std::vector<SRanked> ranked;
+        for (size_t i = 0; i < bottomToTop.size(); ++i) {
+            const auto& c = bottomToTop[i];
+            if (eligible(c) && std::ranges::none_of(ranked, [&c](const SRanked& r) { return r.id == c.id; }))
+                ranked.push_back(SRanked{.id = c.id, .seq = c.focusSeq, .level = i});
         }
-        for (auto it = bottomToTop.rbegin(); it != bottomToTop.rend(); ++it) {
-            if (eligible(*it) && std::ranges::find(out, it->id) == out.end())
-                out.push_back(it->id);
-        }
+        std::ranges::sort(ranked, [](const SRanked& a, const SRanked& b) { return a.seq != b.seq ? a.seq > b.seq : a.level > b.level; });
+        for (const auto& r : ranked)
+            out.push_back(r.id);
         return out;
     }
 

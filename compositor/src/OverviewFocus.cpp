@@ -44,6 +44,13 @@ namespace {
         CHyprSignalListener commit;
     };
 
+    // When a window last took focus (Hyprland's focus events since the load): the front-most window of a Desktop is the
+    // one activated last (macOS), and Hyprland does not raise a floating window on every focus.
+    struct SFocusMark {
+        PHLWINDOWREF window;
+        uint64_t     seq = 0;
+    };
+
     struct SState {
         bool                             ready = false;
         std::optional<of::Request>       pending;  // the request waiting for Hyprland to accept window focus
@@ -52,6 +59,8 @@ namespace {
         SP<CEventLoopTimer>              bound;    // fires at the deadline; shared: CEventLoopManager holds a reference too
         std::vector<CHyprSignalListener> listeners;
         std::vector<SLayerWatch>         watches;
+        std::vector<SFocusMark>          marks;
+        uint64_t                         focusSeq = 0;
     };
 
     // Constructed on first use inside a guarded call (R13). Emptied by stop() before dlclose.
@@ -116,6 +125,7 @@ namespace {
     // ---- the waiting request ----
 
     void scheduleAttempt();
+    void attempt(std::string_view when);
 
     void watch(const PHLLS& ls) {
         auto& s = S();
@@ -143,7 +153,7 @@ namespace {
             return;
         if (!s.bound) {
             s.bound = makeShared<CEventLoopTimer>(
-                std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { gf::guarded("overview focus bound", [] { scheduleAttempt(); }); }, nullptr);
+                std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { gf::guarded("overview focus bound", [] { attempt("at the bound"); }); }, nullptr);
             g_pEventLoopManager->addTimer(s.bound);
         }
         // A little past the deadline, so that the attempt it schedules sees the bound passed.
@@ -160,9 +170,21 @@ namespace {
             s.bound->updateTimeout(std::nullopt);
     }
 
+    // "window 55aa01", "Desktop 3", "remembered 55aa01 (Desktop 2)", "none" (log lines).
+    std::string describe(const of::Request& r) {
+        switch (r.target) {
+            case of::Target::Window:
+            case of::Target::Press: return std::format("{} {:x}", of::targetName(r.target), r.window);
+            case of::Target::Workspace: return std::format("Desktop {}", r.workspace);
+            case of::Target::Remembered: return r.workspace > 0 ? std::format("remembered {:x} (Desktop {})", r.window, r.workspace) : std::format("remembered {:x}", r.window);
+            case of::Target::None: return "none";
+        }
+        return "none";
+    }
+
     void finish(of::Outcome outcome, const of::Request& r, const PHLWINDOW& w, std::optional<of::WorkspaceId> workspace, std::string_view reason, std::string_view when) {
-        gf::logRequest(Log::INFO, "overview focus: request {} ({} {:x} / Desktop {}) {} {}: {}{}{}", r.id, of::targetName(r.target), r.window, r.workspace, of::outcomeName(outcome),
-                       when, w ? std::format("window {:x} holds the keyboard", addressOf(w)) : std::string{"no window holds the keyboard"},
+        gf::logRequest(Log::INFO, "overview focus: request {} ({}) {} {}: {}{}{}", r.id, describe(r), of::outcomeName(outcome), when,
+                       w ? std::format("window {:x} holds the keyboard", addressOf(w)) : std::string{"no window holds the keyboard"},
                        workspace ? std::format(" (Desktop {})", *workspace) : std::string{}, reason.empty() ? std::string{} : std::format(", reason {}", reason));
         post(outcome, r, w, workspace, reason);
     }
@@ -187,7 +209,25 @@ namespace {
         if (holdsKeyboard(w))
             return true;
         fs->fullWindowFocus(w, reason);
-        return holdsKeyboard(w);
+        if (!holdsKeyboard(w) && fs->window() == w && !gf::deferredFocus::windowFocusRefused()) {
+            // Hyprland counts the window focused although the keyboard is elsewhere: its own focus of it under the Exclusive
+            // layer (the successor of a window closed under the chrome: "On closed window, new focused candidate is …",
+            // then "Refusing a keyboard focus to a window because of an exclusive ls") set its focus state and was refused
+            // the keyboard, so fullWindowFocus returns early (measured: tests/compositor/overview_focus.sh case 8). The state
+            // goes back to no window (CFocusState::resetWindowFocus, what Hyprland does when its focused window unmaps) and
+            // the focus is made again, through the same path.
+            gf::logRequest(Log::DEBUG, "overview focus: Hyprland counted window {:x} focused without the keyboard: focus state reset, focused again", addressOf(w));
+            fs->resetWindowFocus();
+            fs->fullWindowFocus(w, reason);
+        }
+        const bool held = holdsKeyboard(w);
+        if (!held) {
+            const auto now   = fs->window();
+            const auto owner = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus());
+            gf::logRequest(Log::DEBUG, "overview focus: Hyprland did not give window {:x} the keyboard (its focused window {:x}, keyboard on window {:x} / layer {})", addressOf(w),
+                           now ? addressOf(now) : 0, owner.window ? addressOf(owner.window) : 0, owner.layer ? owner.layer->m_namespace : std::string{"-"});
+        }
+        return held;
     }
 
     // The windows to try for the front window of a Desktop, in order (core frontOrder over Hyprland's stacking order).
@@ -200,16 +240,17 @@ namespace {
         for (const auto& w : Desktop::windowState()->windows()) { // bottom to top
             if (!w)
                 continue;
+            const auto mark = std::ranges::find_if(S().marks, [&w](const SFocusMark& m) { return m.window.lock() == w; });
             candidates.push_back(of::Candidate{.id          = addressOf(w),
                                                .onWorkspace = w->m_workspace == ws,
                                                .mapped      = w->m_isMapped,
                                                .hidden      = w->isHidden(),
                                                .takesInput  = w->acceptsInput(),
-                                               .focusable   = !w->m_X11ShouldntFocus});
+                                               .focusable   = !w->m_X11ShouldntFocus,
+                                               .focusSeq    = mark == S().marks.end() ? 0 : mark->seq});
             windows.push_back(w);
         }
-        const auto last = ws->m_lastFocusedWindow.lock();
-        for (const auto id : of::frontOrder(candidates, last ? addressOf(last) : 0)) {
+        for (const auto id : of::frontOrder(candidates)) {
             const auto it = std::ranges::find_if(windows, [id](const PHLWINDOW& w) { return addressOf(w) == id; });
             if (it != windows.end())
                 out.push_back(*it);
@@ -325,7 +366,7 @@ namespace {
         auto& s = S();
         if (!s.pending)
             return;
-        s.attempt.schedule([] { gf::guarded("overview focus attempt", [] { attempt("after a release"); }); });
+        s.attempt.schedule([] { gf::guarded("overview focus attempt", [] { attempt("after a layer, keyboard or lock change"); }); });
     }
 
     // A press (pointer button, touch down, tablet tip or button) after the request, before Hyprland handles it.
@@ -343,8 +384,8 @@ namespace {
                 return;
             }
             case of::PressEffect::Retarget:
-                gf::logRequest(Log::INFO, "overview focus: request {}: a press beside the Exclusive layers on window {:x}: it takes the focus instead of {} {:x}", s.pending->id,
-                               press.target, of::targetName(s.pending->target), s.pending->window);
+                gf::logRequest(Log::INFO, "overview focus: request {}: a press beside the Exclusive layers on window {:x}: it takes the focus instead of {}", s.pending->id,
+                               press.target, describe(*s.pending));
                 s.pending->target    = of::Target::Press;
                 s.pending->window    = press.target;
                 s.pending->workspace = 0;
@@ -356,6 +397,10 @@ namespace {
     // ran): a user choice of another window ends the request.
     void onActive(const PHLWINDOW& w, Desktop::eFocusReason reason) {
         auto& s = S();
+        if (w) {
+            std::erase_if(s.marks, [&w](const SFocusMark& m) { return !m.window.lock() || m.window.lock() == w; });
+            s.marks.push_back(SFocusMark{.window = w, .seq = ++s.focusSeq});
+        }
         if (!s.pending || !w)
             return;
         const bool namesWindow = s.pending->target == of::Target::Window || s.pending->target == of::Target::Remembered || s.pending->target == of::Target::Press;
@@ -383,6 +428,10 @@ namespace gf::overviewFocus {
         s.attempt.clear();
         s.watches.clear();
         s.bound.reset();
+        s.marks.clear();
+        s.focusSeq = 0;
+        if (const auto fs = Desktop::focusState(); fs && fs->window())
+            s.marks.push_back(SFocusMark{.window = fs->window(), .seq = ++s.focusSeq});
         auto& ev = bus->m_events;
         auto& l  = s.listeners;
         // Before a key is delivered: the last Exclusive layer may have gone in this same dispatch, before the attempt ran.
@@ -432,6 +481,7 @@ namespace gf::overviewFocus {
         }
         s.attempt.cancel();
         s.watches.clear();
+        s.marks.clear();
         if (s.bound) {
             if (g_pEventLoopManager)
                 g_pEventLoopManager->removeTimer(s.bound);
@@ -449,15 +499,13 @@ namespace gf::overviewFocus {
             post(of::Outcome::Unavailable, r, nullptr, std::nullopt, "unloading");
             return;
         }
-        if (s.pending)
-            gf::logRequest(Log::INFO, "overview focus: request {} replaces request {}", r.id, s.pending->id);
-        else
+        const auto replaced = s.pending ? std::format(", replaces request {}", s.pending->id) : std::string{};
+        if (!s.pending)
             watchLayers();
         s.pending  = r;
         s.deadline = Clock::now() + of::kBound;
         armBound();
-        gf::logRequest(Log::INFO, "overview focus: request {}: {} {:x} / Desktop {}, made once Hyprland accepts window focus (at most {} ms)", r.id, of::targetName(r.target),
-                       r.window, r.workspace, of::kBound.count());
+        gf::logRequest(Log::INFO, "overview focus: request {} ({}){}: made once Hyprland accepts window focus (at most {} ms)", r.id, describe(r), replaced, of::kBound.count());
         post(of::Outcome::Pending, r);
         scheduleAttempt();
     }

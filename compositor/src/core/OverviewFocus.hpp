@@ -133,12 +133,17 @@ namespace gf::overviewfocus {
         bool     hidden      = false; // CWindow::isHidden
         bool     takesInput  = false; // CWindow::acceptsInput (a Stages strip window or an inactive group member does not)
         bool     focusable   = false; // not an X11 window that refuses focus
+        uint64_t focusSeq    = 0;     // when it last took focus (higher: more recent; 0: not since the plugin loaded)
     };
 
-    // The windows to try, in order, for a Desktop's front window: Hyprland's last focused window of that Desktop (its key
-    // window) when eligible, then the eligible windows from the top of the stack down. Eligible: on that Desktop, mapped,
-    // not hidden, taking input, focusable. Hyprland may still refuse one (a no_focus rule): the glue tries the next.
-    std::vector<WindowId> frontOrder(std::span<const Candidate> bottomToTop, WindowId lastFocused);
+    // The windows to try, in order, for a Desktop's front window (macOS: the front-most window is the one activated last):
+    // the eligible windows by their last focus (most recent first), then the eligible windows not focused since the load
+    // from the top of the stack down. Hyprland does not raise a floating window on every focus, so the stack alone is not
+    // the activation order, and its CWorkspace::m_lastFocusedWindow is not either: CFocusState::rawWindowFocus sets it to the
+    // window it was asked for before it refuses the focus (an Exclusive layer), e.g. its successor of a window closed under
+    // the Overview chrome (measured: tests/compositor/overview_focus.sh case 8). Eligible: on that Desktop, mapped, not
+    // hidden, taking input, focusable. Hyprland may still refuse one (a no_focus rule): the glue tries the next.
+    std::vector<WindowId> frontOrder(std::span<const Candidate> bottomToTop);
 
     // ---- the user's input while a request waits ----
 

@@ -131,17 +131,20 @@ TEST(OverviewFocusTarget, FallbackDesktop) {
 TEST(OverviewFocusTarget, FrontWindowOrder) {
     auto c = [](WindowId id, bool on = true) { return Candidate{.id = id, .onWorkspace = on, .mapped = true, .hidden = false, .takesInput = true, .focusable = true}; };
     std::vector<Candidate> stack = {c(0x1), c(0x2), c(0x3, false), c(0x4)}; // bottom to top
-    EXPECT_EQ(frontOrder(stack, 0), (std::vector<WindowId>{0x4, 0x2, 0x1})) << "top of the stack first, other Desktops skipped";
-    EXPECT_EQ(frontOrder(stack, 0x1), (std::vector<WindowId>{0x1, 0x4, 0x2})) << "the Desktop's key window first, once";
-    EXPECT_EQ(frontOrder(stack, 0x3), (std::vector<WindowId>{0x4, 0x2, 0x1})) << "a last window on another Desktop does not count";
+    EXPECT_EQ(frontOrder(stack), (std::vector<WindowId>{0x4, 0x2, 0x1})) << "nothing focused since the load: top of the stack first, other Desktops skipped";
+    stack[0].focusSeq = 7; // the most recently focused, at the bottom of the stack (Hyprland did not raise it)
+    stack[1].focusSeq = 3;
+    stack[2].focusSeq = 9; // on another Desktop
+    EXPECT_EQ(frontOrder(stack), (std::vector<WindowId>{0x1, 0x2, 0x4})) << "the activation order first, then the stack";
     stack[3].takesInput = false; // a Stages strip window (input blocked)
     stack[1].hidden     = true;
-    stack[0].focusable  = false; // an X11 window that refuses focus
-    EXPECT_TRUE(frontOrder(stack, 0x4).empty()) << "nothing eligible: no window (the desktop)";
+    EXPECT_EQ(frontOrder(stack), (std::vector<WindowId>{0x1}));
+    stack[0].focusable = false; // an X11 window that refuses focus
+    EXPECT_TRUE(frontOrder(stack).empty()) << "nothing eligible: no window (the desktop)";
     stack[0].focusable = true;
     stack[0].mapped    = false;
-    EXPECT_TRUE(frontOrder(stack, 0).empty());
-    EXPECT_TRUE(frontOrder({}, 0x1).empty());
+    EXPECT_TRUE(frontOrder(stack).empty());
+    EXPECT_TRUE(frontOrder({}).empty());
 }
 
 // ---- the user's input while a request waits ----
