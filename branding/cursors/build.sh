@@ -3,13 +3,19 @@
 #
 #   build.sh [--out ICONS_DIR] [--name NAME] [--fill #RRGGBB] [--outline #RRGGBB] [--sizes "24 32 48 64 96"]
 #   build.sh --remove [--out ICONS_DIR] [--name NAME]      delete the theme ICONS_DIR/NAME (the shell's "Reset Color")
+#   build.sh --clean [--out ICONS_DIR] [--name NAME]       delete the work directories of builds that are no longer running
 #
-# Output: ICONS_DIR/NAME/{index.theme,manifest.hl,hyprcursors/*.hlc,cursors/*}  (written atomically).
+# Output: ICONS_DIR/NAME/{index.theme,manifest.hl,hyprcursors/*.hlc,cursors/*,colors}  (written atomically).
+# `colors` is the stamp of the theme: one line "#outline #fill" (lower case), the colours it was built for. The shell
+# (shell/platform/PointerTheme.qml) decides from it whether the theme on disk is the one of the stored colours.
 # Defaults: ICONS_DIR=<repo>/.dev/share/icons, NAME=grassfield-cursors, fill #000000, outline #FFFFFF.
 # The package build uses --out "$pkgdir/usr/share/icons"; the shell (shell/platform/PointerTheme.qml) regenerates the
 # theme for the pointer colours at runtime with
 #   --name grassfield-cursors-custom --out "$XDG_DATA_HOME/icons" --fill ... --outline ...
-# SIGTERM stops the build and removes its work directory (the shell supersedes a build with a newer colour).
+# SIGTERM stops the build, its children (renderers, packers) and removes its work directory (the shell supersedes a
+# build with a newer colour; it also signals the whole process group, the build is started under setsid). A build that
+# was killed (SIGKILL) leaves a work directory named .NAME.build.PID.XXXXXX: the next --clean, --remove or build removes
+# every one whose PID is not running any more, at once.
 # Tools: hyprcursor-util (package hyprcursor), rsvg-convert (librsvg), python3: runtime dependencies of grassfield-desktop.
 set -euo pipefail
 
@@ -22,6 +28,7 @@ outline='#FFFFFF'
 sizes='24 32 48 64 96'
 verbose=0
 remove=0
+clean=0
 stage() { ((verbose)) && printf 'cursors: %-12s t=%ss\n' "$1" "${EPOCHREALTIME:0:-3}" >&2 || true; }
 
 while [[ $# -gt 0 ]]; do
@@ -32,6 +39,7 @@ while [[ $# -gt 0 ]]; do
     --outline) outline=${2:?--outline needs a colour}; shift ;;
     --sizes) sizes=${2:?--sizes needs a list}; shift ;;
     --remove) remove=1 ;;
+    --clean) clean=1 ;;
     -v|--verbose) verbose=1 ;;
     -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "cursors: unknown option $1" >&2; exit 2 ;;
@@ -42,10 +50,28 @@ done
 # Letters, digits, - and _ only: the name becomes a directory name, the manifest name and an index.theme value
 # ("..", "." and names with dots or slashes are refused).
 [[ $name =~ ^[A-Za-z0-9_-]+$ ]] || { echo "cursors: invalid theme name (letters, digits, - and _ only)" >&2; exit 2; }
+# Work directories of builds that are no longer running (their PID is in the name; a name without one is stale too).
+clean_stale() {
+  local d base pid
+  for d in "$out"/."$name".build.*; do
+    [[ -d $d ]] || continue
+    base=${d##*/}
+    pid=${base#".$name.build."}
+    pid=${pid%%.*}
+    if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then continue; fi
+    rm -rf -- "$d"
+  done
+  return 0
+}
+if ((clean)); then
+  clean_stale
+  exit 0
+fi
 if ((remove)); then
   # Only a directory that is a cursor theme of ours (it holds manifest.hl) is deleted, nothing else under ICONS_DIR.
   if [[ -f $out/$name/manifest.hl ]]; then rm -rf -- "${out:?}/${name:?}"; fi
   rm -rf -- "${out:?}/${name:?}.old"
+  clean_stale
   exit 0
 fi
 
@@ -57,12 +83,34 @@ for tool in hyprcursor-util rsvg-convert python3; do
 done
 
 mkdir -p "$out"
-# Work directories left by a build that was killed (SIGKILL) more than an hour ago.
-find "$out" -maxdepth 1 -name ".${name}.build.*" -mmin +60 -exec rm -rf {} + 2>/dev/null || true
-work=$(mktemp -d "$out/.${name}.build.XXXXXX")
-trap 'rm -rf "$work"' EXIT
-# SIGTERM (the shell superseding this build with a newer colour): stop the background jobs, clean up, exit.
-trap 'kill $(jobs -p) 2>/dev/null; exit 143' TERM INT
+# Work directories left by a build that was killed (SIGKILL): removed now, not after an hour.
+clean_stale
+work=$(mktemp -d "$out/.${name}.build.$$.XXXXXX")
+# Every process below this one (a renderer, a packer, the subshell around it): children first.
+descendants() {
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null || true); do
+    descendants "$c"
+    echo "$c"
+  done
+}
+# Stop the children, wait for them, then remove the work directory (retried: a child that is still exiting may be
+# writing into it). Runs on every way out, so no process outlives the build and no directory is left behind.
+cleanup() {
+  local i p
+  trap - EXIT
+  for p in $(descendants "$$"); do kill -TERM "$p" 2>/dev/null || true; done
+  wait 2>/dev/null || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    rm -rf -- "$work" 2>/dev/null || true
+    [[ -e $work ]] || return 0
+    sleep 0.2
+  done
+  return 0
+}
+trap cleanup EXIT
+# SIGTERM (the shell superseding this build with a newer colour): the EXIT trap stops the children and cleans up.
+trap 'trap "" TERM INT; exit 143' TERM INT
 svgdir=$work/svg pngdir=$work/png hc=$work/hc theme=$work/theme
 mkdir -p "$svgdir" "$pngdir" "$hc/hyprcursors" "$theme/cursors"
 
@@ -167,6 +215,8 @@ hyprcursor-util --create "$hc" -o "$work/hcout" >"$work/hyprcursor-util.log" 2>&
 built=$(find "$work/hcout" -mindepth 1 -maxdepth 1 -type d | head -n 1)
 [[ -n $built && -f $built/manifest.hl ]] || { cat "$work/hyprcursor-util.log" >&2; echo "cursors: no hyprcursor theme produced" >&2; exit 1; }
 cp -a "$built/." "$theme/"
+# The stamp: the colours this theme was built for (the shell compares it with the stored colours).
+printf '%s %s\n' "${outline,,}" "${fill,,}" > "$theme/colors"
 cat > "$theme/index.theme" <<EOF
 [Icon Theme]
 Name=$name
