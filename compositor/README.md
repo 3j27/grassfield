@@ -110,7 +110,7 @@ scripts/dev/pointer.sh output GF-REF abs 960 250 down drag 700 400 up   # drag a
 ```
 
 Startup log line (in `$XDG_RUNTIME_DIR/hypr/<nested instance>/hyprland.log`):
-`[grassfield] grassfield-compositor 0.6.3-stages initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+`[grassfield] grassfield-compositor 0.6.4-stages initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
 Hyprland buffers this log file: later lines can take a long time to appear.
 
 ## Soak (gate C1, nested only)
