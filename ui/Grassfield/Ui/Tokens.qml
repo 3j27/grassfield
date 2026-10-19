@@ -930,6 +930,8 @@ QtObject {
     readonly property real iconModeRimWidth: 1.0
     // ADR-0014 Dark: luma (sRGB 0..1) the plate is darkened to (near-black graphite, hue kept); plates already darker are kept. macOS 26 Dark plates are near black.
     readonly property real iconModeDarkPlateLuma: 0.13
+    // ADR-0014 Dark: fraction of its brightness a fully saturated plate keeps (neutral plates go to darkPlateLuma); keeps coloured plates and full-bleed logos visible on a dark material
+    readonly property real iconModeDarkChromaKeep: 0.5
     // ADR-0014 Dark: luma a black glyph on a light plate becomes (neutral glyphs invert, coloured glyphs keep their colour)
     readonly property real iconModeDarkGlyphLuma: 0.92
     // ADR-0014 Dark: how much dark coloured glyphs on a light plate are brightened so they stay vivid on the dark plate (0 = not at all)

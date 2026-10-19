@@ -27,6 +27,7 @@ layout(std140, binding = 0) uniform buf {
     float plateAlphaLow;
     float plateAlphaHigh;
     float darkPlateLuma;
+    float darkChromaKeep;
     float darkGlyphLuma;
     float darkGlyphBoost;
     float darkRim;
@@ -100,7 +101,10 @@ void main() {
     if (modeIndex < 1.5) {
         // DARK: the plate is darkened to near black keeping its hue and gradient; neutral glyphs on a light plate
         // invert (dark glyph -> light), coloured glyphs keep their colour, brightened if dark.
-        float k = min(darkPlateLuma / Lp, 1.0);
+        // A saturated plate keeps part of its brightness (a full-bleed logo is indistinguishable from a coloured plate and
+        // must not turn navy on a dark material); a neutral plate goes to darkPlateLuma.
+        float plateTarget = mix(darkPlateLuma, Lp * darkChromaKeep, smoothstep(0.25, 0.6, chroma(plate)));
+        float k = min(plateTarget / Lp, 1.0);
         vec3 plateRgb = c * k;
         float lightPlate = smoothstep(0.45, 0.65, Lp) * strength;
         float neutral = 1.0 - smoothstep(0.08, 0.25, chroma(c));

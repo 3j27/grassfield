@@ -18,11 +18,16 @@ ShaderEffect {
     readonly property var params: IconModes.effect(root.mode, root.tint)
 
     // Shader uniforms (names match shaders/icon.frag).
-    readonly property var iconTexture: ShaderEffectSource {
+    // A child item (not a bare property object) so that it lives in the same window as the effect; it is not drawn
+    // itself (the effect draws its texture).
+    ShaderEffectSource {
+        id: textureSource
+        visible: false
         sourceItem: root.source
         smooth: true
         mipmap: true
     }
+    readonly property var iconTexture: textureSource
     readonly property real dark: root.darkAppearance ? 1 : 0
     readonly property real rimUv: Tokens.iconModeRimWidth / Math.max(1, root.nominalSize)
     readonly property real plateToleranceLow: Tokens.iconModePlateToleranceLow
@@ -30,6 +35,7 @@ ShaderEffect {
     readonly property real plateAlphaLow: Tokens.iconModePlateAlphaLow
     readonly property real plateAlphaHigh: Tokens.iconModePlateAlphaHigh
     readonly property real darkPlateLuma: Tokens.iconModeDarkPlateLuma
+    readonly property real darkChromaKeep: Tokens.iconModeDarkChromaKeep
     readonly property real darkGlyphLuma: Tokens.iconModeDarkGlyphLuma
     readonly property real darkGlyphBoost: Tokens.iconModeDarkGlyphBoost
     readonly property real darkRim: Tokens.iconModeDarkRim

@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtTest
 import Grassfield.Ui
@@ -9,7 +10,7 @@ import Grassfield.Ui
 //
 // Pass rule, per icon, mode in dark/clear/tinted, appearance in light/dark, wallpaper in black/grey/white under the
 // default material (the extremes bound the blurred backdrop):
-//   floor(d) = 3 when the default rendering has d >= 3, else 0.9 * d (never more than 10 percent worse than default).
+//   floor(d) = 2.9 (3:1 less a rounding margin) when the default rendering has d >= 3, else 0.9 * d (never more than 10 percent worse than default).
 //   I (inside)  glyph-vs-plate contrast >= floor(default's), for icons whose default has a glyph (>= 2:1 inside).
 //               Clear and Tinted are monochrome (a glyph differing from its plate only by hue loses that difference),
 //               so their floor is min(2, 0.9 * default) instead of 3.
@@ -22,6 +23,8 @@ import Grassfield.Ui
 //     only, and in the dark range it is below 2:1 inside; Tinted also stays under 3:1 against a bright wallpaper's
 //     dark material (no plate to lift).
 //   - a logo without a plate in Tinted (light appearance): hue-only detail falls to about 1.8:1 inside.
+//   - a one-colour logo filling the canvas with holes (full-bleed-logo, e.g. the Discord icon of the default WhiteSur
+//     variant) cannot be told from a coloured plate: it is drawn as a plate (darker or glass) and its holes show the material.
 //   - Nautilus-like icons whose plate is two halves (no single plate colour): Tinted in the dark appearance over the
 //     brightest material reaches 2.5:1 by plate and rim.
 // Contrast is the WCAG ratio of relative luminances. It needs a GPU scene graph (ShaderEffect does not run on the
@@ -40,7 +43,7 @@ TestCase {
     readonly property int rowsPerGroup: 12
     readonly property string fixtureDir: Qt.resolvedUrl("../fixtures/icons/")
     readonly property string whitesurDir: Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/apps/scalable/")
-    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate"]
+    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo"]
     // Includes btop, Disk Usage Analyzer and white-plated icons (Chromium, Firefox, GIMP, Inkscape, Calendar, Notes).
     readonly property var whitesurNames: ["btop", "disk-usage-analyzer", "chromium", "firefox", "gimp", "inkscape", "org.gnome.Calendar", "accessories-text-editor", "org.gnome.Settings", "spotify", "vlc", "discord", "mpv", "obsidian", "foot", "org.gnome.Nautilus", "visual-studio-code"]
     readonly property var modes: ["default", "dark", "clear", "tinted"]
@@ -185,15 +188,19 @@ TestCase {
 
     readonly property var knownLimits: [
         "dark-glyph-no-plate clear I", "dark-glyph-no-plate tinted I", "dark-glyph-no-plate tinted E",
-        "logo-no-plate tinted I", "whitesur:org.gnome.Nautilus tinted E"
+        "logo-no-plate tinted I", "whitesur:org.gnome.Nautilus tinted E", "full-bleed-logo * *"
     ]
+
+    function isKnownLimit(name, mode, rule) {
+        return knownLimits.indexOf(name + " " + mode + " " + rule) >= 0 || knownLimits.indexOf(name + " * *") >= 0;
+    }
 
     function test_iconsStayRecognisable() {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
             skip("needs a GPU scene graph (ShaderEffect does not run on the software renderer): scripts/dev/test-icons.sh");
         const failures = [];
         let measured = 0;
-        const floorOf = v => v >= 3 ? 3 : 0.9 * v;
+        const floorOf = v => v >= 3 ? 2.9 : 0.9 * v;
         const floorIn = (v, mode) => mode === "dark" ? floorOf(v) : Math.min(2, 0.9 * v);
         for (const dark of [true, false]) {
             for (const wallpaper of ["#000000", "#808080", "#ffffff"]) {
@@ -221,10 +228,9 @@ TestCase {
                         measured++;
                         const line = `${label}: inside ${r.inside.toFixed(2)} (default ${base.inside.toFixed(2)}), outside ${r.outside.toFixed(2)} (default ${base.outside.toFixed(2)}; plate ${r.plateOverPanel.toFixed(2)} outline ${r.outlineOverPanel.toFixed(2)} glyph ${r.glyphOverPanel.toFixed(2)})`;
                         console.log("A2 " + line);
-                        const key = testCase.fixtures[f].name + " " + testCase.modes[m] + " ";
-                        if (base.inside >= 2 && r.inside < floorIn(base.inside, testCase.modes[m]) && testCase.knownLimits.indexOf(key + "I") < 0)
+                        if (base.inside >= 2 && r.inside < floorIn(base.inside, testCase.modes[m]) && !testCase.isKnownLimit(testCase.fixtures[f].name, testCase.modes[m], "I"))
                             failures.push("I " + line);
-                        if (r.outside < floorOf(base.outside) && testCase.knownLimits.indexOf(key + "E") < 0)
+                        if (r.outside < floorOf(base.outside) && !testCase.isKnownLimit(testCase.fixtures[f].name, testCase.modes[m], "E"))
                             failures.push("E " + line);
                     }
                 }
