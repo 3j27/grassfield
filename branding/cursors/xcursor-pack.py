@@ -81,7 +81,7 @@ def main(argv):
     chunks = []
     # Animated cursors have many large frames: decode them on all cores.
     if len(specs) > 8:
-        with ProcessPoolExecutor(os.cpu_count() or 2, mp_context=multiprocessing.get_context("fork")) as pool:
+        with ProcessPoolExecutor(max(1, min(os.cpu_count() or 2, int(os.environ.get("GRASSFIELD_CURSOR_JOBS", "4")))), mp_context=multiprocessing.get_context("fork")) as pool:
             decoded = list(pool.map(read_png, [s.split(":", 1)[1] for s in specs], chunksize=4))
     else:
         decoded = [read_png(s.split(":", 1)[1]) for s in specs]

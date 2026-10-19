@@ -106,16 +106,31 @@ for row in "${table[@]}"; do
 done
 
 stage render-svg
+# Bounded parallelism (GRASSFIELD_CURSOR_JOBS, default min(nproc, 4)): a machine under load (other builds, a memory
+# limited cgroup) kills renders with SIGKILL when eight run at once.
 par=$(nproc 2>/dev/null || echo 4)
+jobs_max=${GRASSFIELD_CURSOR_JOBS:-4}
+[[ $jobs_max =~ ^[1-9][0-9]*$ ]] || jobs_max=4
+((par > jobs_max)) && par=$jobs_max
+export GRASSFIELD_CURSOR_JOBS=$par
+# render SIZE PNG SVG: one retry after a failure (a killed or crashed renderer), then a clear error.
+render() {
+  rsvg-convert -w "$1" -h "$1" -o "$2" "$3" 2>/dev/null && return 0
+  sleep 1
+  rsvg-convert -w "$1" -h "$1" -o "$2" "$3" && return 0
+  echo "cursors: rendering $3 at $1 px failed twice (rsvg-convert; out of memory or killed?)" >&2
+  return 1
+}
 stage png
 while IFS=$'\t' read -r size png svg; do
-  rsvg-convert -w "$size" -h "$size" -o "$png" "$svg" &
+  render "$size" "$png" "$svg" &
   while (($(jobs -rp | wc -l) >= par)); do wait -n || exit 1; done
 done < "$work/png-jobs"
-wait || { echo "cursors: rsvg-convert failed" >&2; exit 1; }
+wait || { echo "cursors: rendering failed" >&2; exit 1; }
 stage xcursor
 while IFS=$'\t' read -r -a job; do
-  python3 -I "$here/xcursor-pack.py" "${job[0]}" --hotspot "${job[1]}" "${job[2]}" --delay "${job[3]}" "${job[@]:4}" &
+  { python3 -I "$here/xcursor-pack.py" "${job[0]}" --hotspot "${job[1]}" "${job[2]}" --delay "${job[3]}" "${job[@]:4}" \
+    || { sleep 1; python3 -I "$here/xcursor-pack.py" "${job[0]}" --hotspot "${job[1]}" "${job[2]}" --delay "${job[3]}" "${job[@]:4}"; }; } &
   while (($(jobs -rp | wc -l) >= par)); do wait -n || exit 1; done
 done < "$work/pack-jobs"
 wait || { echo "cursors: xcursor-pack failed" >&2; exit 1; }
