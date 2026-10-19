@@ -586,6 +586,30 @@ namespace gf::stages {
 
     // ---- input on strip windows ----
 
+    FocusOrigin focusOrigin(FocusCause cause, bool wasLastFocused) {
+        switch (cause) {
+            case FocusCause::KeyBinding:
+            case FocusCause::FocusDispatch:
+            case FocusCause::GroupDispatch:
+            case FocusCause::Click:
+            case FocusCause::Activation:
+            case FocusCause::SwitchSoft:
+            case FocusCause::SwitchHard: return FocusOrigin::UserChoice;
+            case FocusCause::UnmapTiling:
+            case FocusCause::UnmapFloating:
+            case FocusCause::UnmapGrouped: return FocusOrigin::AfterClose;
+            case FocusCause::PointerFollow:
+            case FocusCause::ToggleSpecialWorkspace: return FocusOrigin::Restore;
+            case FocusCause::WorkspaceChange: return wasLastFocused ? FocusOrigin::Restore : FocusOrigin::UserChoice;
+            case FocusCause::Unknown:
+            case FocusCause::Other:
+            case FocusCause::GroupCurrentChange:
+            case FocusCause::NewWindow:
+            case FocusCause::Ghosts: return FocusOrigin::Automatic;
+        }
+        return FocusOrigin::Automatic;
+    }
+
     bool stripFocusBringsStage(FocusOrigin origin) {
         return origin == FocusOrigin::UserChoice;
     }
@@ -596,6 +620,18 @@ namespace gf::stages {
         if (hasFront)
             return KeyboardTarget::FrontOfActive;
         return KeyboardTarget::Nothing;
+    }
+
+    ActiveWindowAction activeWindowAction(const ActiveWindowState& state) {
+        if (!state.hidden || state.locked)
+            return ActiveWindowAction::None;
+        if (state.hasFront && state.layerKeyboard)
+            return ActiveWindowAction::ActivateBehind;
+        if (state.hasFront && !state.exclusive)
+            return ActiveWindowAction::FocusFront;
+        if (state.exclusive)
+            return ActiveWindowAction::Clear;
+        return ActiveWindowAction::None;
     }
 
     PointerAction beforePointerEvent(PointerEvent event, const PointerState& state) {
