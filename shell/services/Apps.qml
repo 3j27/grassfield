@@ -217,7 +217,7 @@ Singleton {
     function openWith(entry: var, files: var, resolved: var): bool {
         if (!entry || !DockModel.acceptsFiles(entry, files, mimeData, resolved))
             return false;
-        const commands = DockModel.commandsForFiles(Array.from(entry.command || []), files);
+        const commands = DockModel.commandsForFiles(DockModel.entryArgs(entry), files);
         const environment = launchEnvironment();
         for (const c of commands) {
             if (c.length === 0)

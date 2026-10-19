@@ -296,6 +296,74 @@ function mimeTypesOf(path, data, resolved) {
     return Object.keys(all);
 }
 
+// argv of a desktop entry's raw Exec string (Quickshell's `DesktopEntry.execString`), field codes kept: Quickshell's own
+// `command` has them stripped, so it cannot say whether the app takes files. Quoting like GLib's Exec parsing: whitespace
+// separates arguments, single quotes are literal, double quotes allow \" \` \$ \\, a backslash outside quotes escapes the next
+// character. [] for an empty string or an unterminated quote.
+function execArgs(execString) {
+    const s = String(execString === undefined || execString === null ? "" : execString);
+    const out = [];
+    let cur = "";
+    let started = false;
+    let i = 0;
+    while (i < s.length) {
+        const c = s[i];
+        if (c === "'") {
+            const end = s.indexOf("'", i + 1);
+            if (end < 0)
+                return [];
+            cur += s.substring(i + 1, end);
+            started = true;
+            i = end + 1;
+        } else if (c === '"') {
+            started = true;
+            i++;
+            let closed = false;
+            while (i < s.length) {
+                if (s[i] === '"') {
+                    closed = true;
+                    i++;
+                    break;
+                }
+                if (s[i] === "\\" && i + 1 < s.length && '"`$\\'.indexOf(s[i + 1]) >= 0) {
+                    cur += s[i + 1];
+                    i += 2;
+                } else {
+                    cur += s[i];
+                    i++;
+                }
+            }
+            if (!closed)
+                return [];
+        } else if (c === "\\" && i + 1 < s.length) {
+            cur += s[i + 1];
+            started = true;
+            i += 2;
+        } else if (c === " " || c === "\t" || c === "\n") {
+            if (started)
+                out.push(cur);
+            cur = "";
+            started = false;
+            i++;
+        } else {
+            cur += c;
+            started = true;
+            i++;
+        }
+    }
+    if (started)
+        out.push(cur);
+    return out;
+}
+
+// argv of an entry with its field codes: from the raw Exec string when the entry has one (Quickshell's DesktopEntry), else
+// from `command` (plain objects, tests).
+function entryArgs(entry) {
+    if (!entry)
+        return [];
+    return typeof entry.execString === "string" ? execArgs(entry.execString) : Array.from(entry.command || []);
+}
+
 function hasFileCode(command) {
     return Array.from(command || []).some(a => /%[fFuU]/.test(String(a).replace(/%%/g, "")));
 }
@@ -305,7 +373,7 @@ function hasFileCode(command) {
 // `resolved` (optional) maps a path to its real type (dock/file-types.sh). `lenient` (hovering): a path whose type the name
 // does not tell (folder, extensionless file) is let through, the drop resolves it and decides.
 function acceptsFiles(entry, paths, data, resolved, lenient) {
-    if (!entry || !data || !data.ready || !paths || paths.length === 0 || !hasFileCode(entry.command))
+    if (!entry || !data || !data.ready || !paths || paths.length === 0 || !hasFileCode(entryArgs(entry)))
         return false;
     const declared = data.entries[entry.id];
     if (!declared || declared.length === 0)

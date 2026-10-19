@@ -248,6 +248,29 @@ TestCase {
         verify(!DockModel.acceptsFiles(open("edit", ["edit", "%F"]), [], data));
     }
 
+    // Quickshell's DesktopEntry.command has the field codes stripped: the drop logic reads the raw execString.
+    function test_execArgsKeepsFieldCodes() {
+        compare(DockModel.execArgs("foot").join("|"), "foot");
+        compare(DockModel.execArgs("viewer --open %U").join("|"), "viewer|--open|%U");
+        compare(DockModel.execArgs("  env  A=1   viewer %f ").join("|"), "env|A=1|viewer|%f");
+        compare(DockModel.execArgs('sh -c "echo \\"$@\\"" x %F').join("|"), 'sh|-c|echo "$@"|x|%F');
+        compare(DockModel.execArgs("sh -c 'echo \"$@\" >> /tmp/log' gfdroptest %F").join("|"), 'sh|-c|echo "$@" >> /tmp/log|gfdroptest|%F');
+        compare(DockModel.execArgs('"/opt/My App/run" %F').join("|"), "/opt/My App/run|%F");
+        compare(DockModel.execArgs("a\\ b %f").join("|"), "a b|%f");
+        compare(DockModel.execArgs('empty "" end').join("|"), "empty||end");
+        compare(DockModel.execArgs("broken 'quote").length, 0);
+        compare(DockModel.execArgs('broken "quote').length, 0);
+        compare(DockModel.execArgs("").length, 0);
+        // a real entry object: command stripped, execString raw
+        const real = {id: "viewer", command: ["viewer", "--open"], execString: "viewer --open %U"};
+        compare(DockModel.entryArgs(real).join("|"), "viewer|--open|%U");
+        const data = DockModel.parseMimeData(mimeText);
+        verify(DockModel.acceptsFiles({id: "edit", command: ["edit"], execString: "edit %F"}, ["/a/b.txt"], data));
+        verify(!DockModel.acceptsFiles({id: "edit", command: ["edit"], execString: "edit"}, ["/a/b.txt"], data));
+        compare(DockModel.commandsForFiles(DockModel.entryArgs({command: ["x"], execString: "x --file=%f"}), ["/a b/c.txt"]).map(c => c.join(" ")).join("|"), "x --file=/a b/c.txt");
+        compare(DockModel.commandsForFiles(DockModel.entryArgs({command: ["x"], execString: "x %F"}), ["/a", "/b"]).length, 1);
+    }
+
     // Folders and extensionless files: the name tells nothing, the real type is resolved at drop time (dock/file-types.sh).
     function test_dropResolvesRealTypes() {
         const data = DockModel.parseMimeData(mimeText + "\nE\tfiles\tinode/directory;\nE\tsh\ttext/x-shellscript;\nS\ttext/x-shellscript text/plain");
