@@ -50,6 +50,8 @@
     "folderColor": "theme"
   },
   "pointer": {
-    "size": 24
+    "size": 24,
+    "outlineColor": "#ffffff",
+    "fillColor": "#000000"
   }
 }

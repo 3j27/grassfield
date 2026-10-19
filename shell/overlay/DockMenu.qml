@@ -105,28 +105,9 @@ PopupMenu {
         }
     }
 
-    // Writes or removes the autostart file (a plain desktop file; the isolated config home in a dev session).
-    Process {
-        id: autostartWrite
-        property string path: ""
-        property string text: ""
-        property bool enable: true
-        command: enable ? ["sh", Quickshell.shellPath("overlay/write-autostart.sh"), path, text] : ["rm", "-f", "--", path]
-    }
-
-    // Folder of the app's executable, opened in Files (through the dev open policy in a dev session).
-    Process {
-        id: reveal
-        property string program: ""
-        command: ["sh", "-c", 'p=$(command -v -- "$1") && dirname -- "$(readlink -f -- "$p")"', "sh", program]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const dir = text.trim();
-                if (dir !== "")
-                    Apps.openDetached(["gio", "open", dir]);
-            }
-        }
-    }
+    // The autostart file is written or removed (a plain desktop file; the isolated config home in a dev session) and the
+    // executable's folder revealed by Apps (Apps.writeAutostart / removeAutostart / revealExecutable): this menu is destroyed
+    // by Popups.close() the moment an item is chosen, which would kill a Process it owned before it finished.
 
     onActivated: item => {
         const data = root.info;
@@ -149,17 +130,13 @@ PopupMenu {
             break;
         case "login":
             // Refused (nothing written or removed) for an id that is not a plain file name or a hostile command.
-            if (root.autostartPath !== "" && (root.autostart || AppLaunch.autostartText(data.entry) !== "")) {
-                autostartWrite.path = root.autostartPath;
-                autostartWrite.enable = !root.autostart;
-                autostartWrite.text = AppLaunch.autostartText(data.entry);
-                autostartWrite.running = true;
-            }
+            if (root.autostartPath !== "" && root.autostart)
+                Apps.removeAutostart(root.autostartPath);
+            else if (root.autostartPath !== "" && AppLaunch.autostartText(data.entry) !== "")
+                Apps.writeAutostart(root.autostartPath, AppLaunch.autostartText(data.entry));
             break;
         case "reveal":
-            reveal.program = data.entry.command && data.entry.command.length > 0 ? data.entry.command[0] : "";
-            if (reveal.program !== "")
-                reveal.running = true;
+            Apps.revealExecutable(data.entry.command && data.entry.command.length > 0 ? data.entry.command[0] : "");
             break;
         case "showall":
             if (appId !== "")

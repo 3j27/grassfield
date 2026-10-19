@@ -42,12 +42,21 @@ function setCursorRequest(theme, size) {
     return "/setcursor " + theme + " " + size;
 }
 
-// Environment that gives an application started by the shell the pointer size the user chose: XCURSOR_SIZE and
-// HYPRCURSOR_SIZE, only when it differs from what the session environment already holds (`sessionSize`). {} otherwise.
-function launchEnvironment(size, sessionSize) {
-    if (!valid(size) || size === sessionSize)
-        return {};
-    return {"XCURSOR_SIZE": String(size), "HYPRCURSOR_SIZE": String(size)};
+// Environment that gives an application started by the shell the pointer the user chose: XCURSOR_SIZE and
+// HYPRCURSOR_SIZE when the size differs from what the session environment already holds (`sessionSize`), and
+// XCURSOR_THEME and HYPRCURSOR_THEME when `theme` (the regenerated colour theme, "" for none) differs from the
+// session's (`sessionTheme`). {} when nothing differs.
+function launchEnvironment(size, sessionSize, theme, sessionTheme) {
+    const env = {};
+    if (valid(size) && size !== sessionSize) {
+        env["XCURSOR_SIZE"] = String(size);
+        env["HYPRCURSOR_SIZE"] = String(size);
+    }
+    if (typeof theme === "string" && /^[A-Za-z0-9_-]+$/.test(theme) && theme !== sessionTheme) {
+        env["XCURSOR_THEME"] = theme;
+        env["HYPRCURSOR_THEME"] = theme;
+    }
+    return env;
 }
 
 // Wait before attempt number `attempt` (1 for the first retry) of a lost request: base, then doubling.

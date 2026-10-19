@@ -362,6 +362,8 @@ ShellRoot {
         writer.setPointerSize(51);
         check("pointer size snapped", writer.data.pointer.size === 52);
         writer.setPointerSize(48);
+        // Pointer colours: the packaged theme's own by default; the Settings app writes them (the shell only reads).
+        check("default pointer colours", writer.pointerOutlineColor === "#ffffff" && writer.pointerFillColor === "#000000" && writer.data.pointer.outlineColor === "#ffffff" && writer.data.pointer.fillColor === "#000000");
         writer.flush();
     }
 }
