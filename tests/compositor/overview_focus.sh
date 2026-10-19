@@ -4,8 +4,10 @@
 # left. Hyprland 0.56.2 refuses window focus while any Exclusive layer is mapped and does not retry when the last one goes
 # (with two outputs the keyboard was lost after a close); the protocol activate does nothing for the still-focused window.
 #
-# Usage: tests/compositor/overview_focus.sh [check|baseline] [--plugin PATH]
+# Usage: tests/compositor/overview_focus.sh [check|baseline|stress [seconds]] [--plugin PATH]
 #   check     the loaded plugin advertises overview-focus: every check must pass (exit 0), else exit 1
+#   stress    requests at ~4/s for <seconds> (default 600) against whatever windows exist, next to tests/compositor/soak.sh
+#             (no outputs, chromes or keys: see the stress block below)
 #   baseline  the loaded plugin does not (an older build loaded with scripts/nestctl plugin load, or a session started with
 #             scripts/dev/nested-up.sh --no-plugin, C2): the same cases run, the verb is a no-op (the shell's guarded
 #             call; nothing emulates the shell's own focus action); focus checks may fail (they show what the plugin
@@ -56,9 +58,12 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 mode=${args[0]:-check}
+stress_secs=${args[1]:-600}
+usage="usage: overview_focus.sh [check|baseline|stress [seconds]] [--plugin PATH]"
 case $mode in
   check | baseline) ;;
-  *) echo "usage: overview_focus.sh [check|baseline] [--plugin PATH]" >&2; exit 2 ;;
+  stress) [[ $stress_secs =~ ^[1-9][0-9]*$ ]] || { echo "$usage" >&2; exit 2; } ;;
+  *) echo "$usage" >&2; exit 2 ;;
 esac
 
 # shellcheck source=../../scripts/dev/pidfile.sh
@@ -81,7 +86,7 @@ done
 nestctl() { timeout 10 "$root/scripts/nestctl" "$@"; }
 features() { nestctl -j grassfield 2>/dev/null | jq -c '.features' 2>/dev/null || echo "none (no plugin)"; }
 has_feature() { nestctl -j grassfield 2>/dev/null | jq -e --arg f "$1" '.features | index($f)' >/dev/null 2>&1; }
-if [[ $mode == check ]] && ! has_feature overview-focus; then
+if [[ $mode != baseline ]] && ! has_feature overview-focus; then
   echo "overview_focus: the loaded plugin does not advertise \"overview-focus\" (baseline mode is for that)" >&2
   exit 2
 fi
@@ -285,6 +290,50 @@ outcome_is() { # <label> <id> <outcome> [address]: the request's final event
   if [[ -n $j && $(jq -r '.outcome' <<<"$j") == "$3" ]] && [[ -z ${4:-} || $addr == "$(hexof "$4")" ]]; then ok=0; fi
   check "$1: outcome $3${4:+ ($4)}" "$ok" "${j:-no event}"
 }
+
+# ---- stress: the verb under load, nothing typed (next to tests/compositor/soak.sh) ----
+# About 4 requests a second for <seconds>: targets cycled over the live windows (some of them close meanwhile: the soak's
+# churn), their Desktops, none, an invalid payload every 10th, a 100-request flood every 60 s. No chrome is mapped, so each
+# request is applied at once (a focus). PASS: Hyprland alive, overview-focus still advertised, every flood answered with one
+# outcome, outcomes posted, no grassfield exception in the log.
+if [[ $mode == stress ]]; then
+  say "overview-focus stress: $stress_secs s, nested pid $hypr_pid, plugin features $(features)"
+  end_at=$(($(date +%s) + stress_secs)) n=0 floods=0 flood_ok=0 inv=0
+  while (($(date +%s) < end_at)); do
+    n=$((n + 1))
+    mapfile -t wins < <(nestctl -j clients 2>/dev/null | jq -r '.[] | select(.mapped) | "\(.address) \(.workspace.id)"')
+    pick=${wins[$((RANDOM % (${#wins[@]} > 0 ? ${#wins[@]} : 1)))]:-}
+    read -r w_addr w_ws <<<"$pick"
+    if ((n % 10 == 0)); then
+      request '{"target":"window"}'
+      inv=$((inv + 1))
+    elif ((n % 240 == 0)); then
+      floods=$((floods + 1))
+      nestctl dispatch "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.overview_focus then for i = 1, 100 do p.overview_focus([[{\"target\":\"none\",\"id\":$((900000 + floods))}]]) end end end" >>"$log" 2>&1
+      sleep 0.4
+      [[ -n $(outcome_of $((900000 + floods))) ]] && flood_ok=$((flood_ok + 1))
+    elif [[ -z ${w_addr:-} ]] || ((n % 4 == 0)); then
+      request "{\"target\":\"none\",\"id\":$n}"
+    elif ((n % 4 == 1)); then
+      request "{\"target\":\"window\",\"address\":\"$w_addr\",\"id\":$n}"
+    elif ((n % 4 == 2)) && [[ ${w_ws:-0} =~ ^[1-9][0-9]*$ ]]; then
+      request "{\"target\":\"workspace\",\"workspace\":$w_ws,\"id\":$n}"
+    else
+      request "{\"target\":\"remembered\",\"address\":\"$w_addr\",\"id\":$n}"
+    fi
+    sleep 0.25
+  done
+  sleep 1
+  outcomes=$(ovf_events | grep -cv '"outcome":"pending"')
+  kill -0 "$hypr_pid" 2>/dev/null; safe "stress: nested Hyprland alive" $?
+  has_feature overview-focus; safe "stress: overview-focus still advertised" $? "$(features)"
+  ((floods == flood_ok)); check "stress: every flood answered ($flood_ok/$floods)" $?
+  ((outcomes > 0)); check "stress: outcomes posted" $? "$outcomes non-pending event(s) for $n requests ($inv invalid)"
+  ! grep -aq "\[grassfield\] .*exception" "$hyprlog"; safe "stress: no grassfield exception in the log" $?
+  if ((fail)); then say "FAIL ($passed/$total checks)"; exit 1; fi
+  say "PASS ($passed/$total checks)"
+  exit 0
+fi
 
 # ---- setup ----
 say "overview-focus $mode: run $run, nested pid $hypr_pid ($(nestctl -j version | jq -r .tag)), plugin features $(features)"

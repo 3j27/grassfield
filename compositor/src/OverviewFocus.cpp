@@ -127,9 +127,11 @@ namespace {
     void scheduleAttempt();
     void attempt(std::string_view when);
 
+    // Every layer surface while a request waits (also one that is not mapped yet when Hyprland reports it opened): its
+    // commits are cheap to watch, and one that turns Exclusive or drops it arrives in a commit.
     void watch(const PHLLS& ls) {
         auto& s = S();
-        if (!ls || !ls->m_mapped)
+        if (!ls)
             return;
         if (std::ranges::any_of(s.watches, [&ls](const SLayerWatch& w) { return w.layer.lock() == ls; }))
             return;

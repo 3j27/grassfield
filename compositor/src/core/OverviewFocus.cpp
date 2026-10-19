@@ -190,6 +190,7 @@ namespace gf::overviewfocus {
                 ranked.push_back(SRanked{.id = c.id, .seq = c.focusSeq, .level = i});
         }
         std::ranges::sort(ranked, [](const SRanked& a, const SRanked& b) { return a.seq != b.seq ? a.seq > b.seq : a.level > b.level; });
+        out.reserve(ranked.size());
         for (const auto& r : ranked)
             out.push_back(r.id);
         return out;
