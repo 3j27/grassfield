@@ -115,6 +115,14 @@ function prep(app) {
     return p;
 }
 
+// Fills the normalized-field cache for every app and runs the scoring path once, so that the first keystroke
+// does not pay for the preparation (idle time or panel opening; the result is discarded).
+function warm(apps) {
+    for (const app of apps)
+        prep(app);
+    rank(apps, "a", newUsage(), 1);
+}
+
 // Score for an already normalized, trimmed, non-empty query.
 function scoreNormalized(app, query, usage, queryMask) {
     const p = prep(app);

@@ -60,11 +60,28 @@ Variants {
             }
         }
 
+        // Idle time: fills the cell pool while nothing is shown (the first query would pay for it otherwise).
+        Connections {
+            target: root.controller
+
+            function onItemsChanged(): void {
+                if (!win.shown)
+                    Qt.callLater(grid.warmPool);
+            }
+        }
+
+        Component.onCompleted: {
+            if (!shown)
+                Qt.callLater(grid.warmPool);
+        }
+
         onShownChanged: {
             if (shown) {
+                grid.warmPool();
                 field.text = "";
                 grid.positionViewAtBeginning();
                 host.focusZone("search");
+                host.updateView();
                 firstFrame.done = false;
             }
         }
@@ -87,15 +104,17 @@ Variants {
 
         // Logs query change -> next rendered frame when a keystroke takes more than three frames.
         Connections {
-            target: win.shown && root.controller.searchStartMs > 0 ? frame.Window.window : null
+            target: win.shown && root.controller.pendingSearchMs.length > 0 ? frame.Window.window : null
 
+            // Each keystroke is timed from its own query change to the frame that shows it.
             function onFrameSwapped(): void {
-                const start = root.controller.searchStartMs;
-                if (start === 0)
-                    return;
-                root.controller.searchStartMs = 0;
-                if (root.controller.trace || Date.now() - start > 50)
-                    console.info("grassfield-shell: apps search->frame", Date.now() - start, "ms,", root.controller.items.length, "items");
+                const now = Date.now();
+                const pending = root.controller.pendingSearchMs;
+                root.controller.pendingSearchMs = [];
+                for (const start of pending) {
+                    if (root.controller.trace || now - start > 50)
+                        console.info("grassfield-shell: apps search->frame", now - start, "ms,", root.controller.items.length, "items");
+                }
             }
         }
 
@@ -109,7 +128,8 @@ Variants {
             }
 
             function onItemsChanged(): void {
-                grid.positionViewAtBeginning();
+                if (!root.controller.listRefresh)
+                    grid.positionViewAtBeginning();
                 host.updateView();
             }
 
@@ -414,6 +434,7 @@ Variants {
                         cellWidth: root.controller.grid.cellW
                         cellHeight: root.controller.grid.cellH
                         items: root.controller.items
+                        keepScroll: root.controller.listRefresh
                         selectedIndex: root.controller.selected
                         ringVisible: root.controller.keyNav || root.controller.searching
                         onActivated: item => root.controller.activate(item)
@@ -429,7 +450,7 @@ Variants {
 
                     Text {
                         anchors.horizontalCenter: grid.horizontalCenter
-                        y: grid.y + grid.height / 3
+                        y: grid.y + grid.height * Tokens.launcherEmptyOffsetFraction
                         visible: root.controller.items.length === 0
                         text: qsTr("No results")
                         textFormat: Text.PlainText
@@ -453,7 +474,7 @@ Variants {
                         x: grid.x + grid.width + (Tokens.launcherPadding - width) / 2
                         y: grid.y + (grid.contentHeight > 0 ? grid.height * (grid.contentY + grid.topMargin) / (grid.contentHeight + grid.topMargin + grid.bottomMargin) : 0)
                         width: Tokens.launcherScrollbarWidth
-                        height: grid.contentHeight > 0 ? Math.max(Tokens.launcherScrollbarWidth * 4, grid.height * grid.height / (grid.contentHeight + grid.topMargin + grid.bottomMargin)) : 0
+                        height: grid.contentHeight > 0 ? Math.max(Tokens.launcherScrollbarWidth * Tokens.launcherScrollbarMinLengthFactor, grid.height * grid.height / (grid.contentHeight + grid.topMargin + grid.bottomMargin)) : 0
                         radius: width / 2
                         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.launcherScrollbarOpacity)
                         visible: needed && opacity > 0.01

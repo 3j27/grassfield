@@ -108,11 +108,26 @@ ShellRoot {
     Banners {}
     NotificationCenter {}
     OsdWindow {}
-    Search {}
+    Search {
+        id: searchSurface
+    }
     AuthAgent {}
     Idle {}
-    Overview {}
-    AppsController {}
+    Overview {
+        id: overviewSurface
+    }
+    AppsController {
+        id: appsSurface
+    }
+
+    // Opening Overview, Apps or Search closes the other two: the keyboard follows the visible top surface.
+    ExclusiveSurfaces {
+        surfaces: [
+            {target: overviewSurface, close: () => overviewSurface.requestClose()},
+            {target: appsSurface, close: () => appsSurface.hide()},
+            {target: searchSurface, close: () => searchSurface.hide()}
+        ]
+    }
 
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore).
