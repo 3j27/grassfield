@@ -277,12 +277,12 @@ TestCase {
         const files = {id: "files", command: ["files", "%U"]};
         const edit = {id: "edit", command: ["edit", "%F"]};
         const dir = "/home/u/Photos", bare = "/home/u/run";
-        // names alone decide nothing: refused when strict (the old behaviour), let through while hovering
+        // names alone decide nothing for a folder: refused strictly, "pending" while its type is looked up
         verify(!DockModel.acceptsFiles(files, [dir], data));
-        verify(DockModel.acceptsFiles(files, [dir], data, null, true));
-        verify(!DockModel.acceptsFiles({id: "files", command: ["files"]}, [dir], data, null, true));  // no field code
-        verify(!DockModel.acceptsFiles({id: "bare", command: ["bare", "%f"]}, [dir], data, null, true));  // no MimeType
-        compare(DockModel.unresolvedPaths([dir, bare, "/home/u/a.txt"], data).join(","), dir + "," + bare);
+        compare(DockModel.dropVerdict(files, [dir], data, {}), "pending");
+        compare(DockModel.dropVerdict({id: "files", command: ["files"]}, [dir], data, {}), "no");  // no field code
+        compare(DockModel.dropVerdict({id: "bare", command: ["bare", "%f"]}, [dir], data, {}), "no");  // no MimeType
+        compare(DockModel.unknownPaths([dir, bare, "/home/u/a.txt"], {[dir]: "inode/directory"}).join(","), bare + ",/home/u/a.txt");
         // resolved: a folder goes to the file manager only, a text file without extension to the editor
         const resolved = DockModel.parseResolved([dir, bare], "inode/directory\ntext/x-shellscript\n");
         compare(resolved[dir], "inode/directory");
@@ -330,5 +330,59 @@ TestCase {
         const out = DockModel.bounceKeys({foot: 1000, chromium: 1000, old: 0}, items, 5000, 10000);
         compare(Object.keys(out).join(","), "foot");
         compare(Object.keys(DockModel.bounceKeys({foot: 1000}, items, 20000, 10000)).length, 0);
+    }
+
+    // A folder whose name has an extension is a folder (the stat type wins over the name), a file keeps its name type.
+    function test_folderWithExtensionIsAFolder() {
+        const data = DockModel.parseMimeData(mimeText + "\nE\tfiles\tinode/directory;");
+        const files = {id: "files", command: ["files", "%U"]};
+        const view = {id: "view", command: ["view", "%f"]};
+        const dir = "/home/u/Photos.png";
+        const types = {[dir]: "inode/directory"};
+        compare(DockModel.mimeTypesOf(dir, data, null).indexOf("inode/directory"), -1);  // by name alone it is a PNG
+        compare(DockModel.mimeTypesOf(dir, data, types).join(","), "inode/directory");
+        compare(DockModel.dropVerdict(files, [dir], data, types), "yes");
+        compare(DockModel.dropVerdict(view, [dir], data, types), "no");
+        // a real file keeps its name type even when the lookup says something generic
+        compare(DockModel.dropVerdict(view, ["/home/u/a.png"], data, {"/home/u/a.png": "application/octet-stream"}), "yes");
+        // verdicts: a known refusal wins over pending paths
+        compare(DockModel.dropVerdict(view, [dir, "/home/u/b"], data, types), "no");
+        compare(DockModel.dropVerdict(files, [dir, "/home/u/b"], data, types), "pending");
+    }
+
+    // Keyed model updates: applying the steps turns the old keys into the new ones, removals first.
+    function test_diffKeysTurnsOldIntoNew() {
+        const apply = (from, ops) => {
+            const l = from.slice();
+            ops.forEach(o => {
+                if (o.op === "remove")
+                    l.splice(o.at, 1);
+                else if (o.op === "insert")
+                    l.splice(o.at, 0, o.key);
+                else
+                    l.splice(o.to, 0, l.splice(o.from, 1)[0]);
+            });
+            return l;
+        };
+        const cases = [
+            [["a", "b", "c", "sep", "trash"], ["a", "b", "c", "sep", "trash"]],
+            [["a", "b", "sep", "trash"], ["a", "b", "c", "sep", "trash"]],
+            [["a", "b", "c", "sep", "trash"], ["a", "c", "sep", "trash"]],
+            [["a", "b", "c", "sep", "trash"], ["c", "a", "b", "sep", "trash"]],
+            [["a", "b", "sep", "trash"], ["a", "sep", "div", "b", "trash"]],
+            [["a", "b", "c", "d"], ["d", "x", "c", "b"]],
+            [[], ["a", "b"]],
+            [["a", "b"], []]
+        ];
+        cases.forEach(c => {
+            const ops = DockModel.diffKeys(c[0], c[1]);
+            compare(apply(c[0], ops).join(","), c[1].join(","));
+            const firstOther = ops.findIndex(o => o.op !== "remove");
+            verify(firstOther < 0 || ops.slice(firstOther).every(o => o.op !== "remove"));
+        });
+        compare(DockModel.diffKeys(["a", "b"], ["a", "b"]).length, 0);  // nothing to do: delegates untouched
+        // a tile that changes section is one move, not a remove and an insert (its delegate survives)
+        const moved = DockModel.diffKeys(["app:x", "app:y", "sep", "trash"], ["app:y", "sep", "app:x", "trash"]);
+        verify(moved.every(o => o.op === "move"));
     }
 }

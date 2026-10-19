@@ -91,7 +91,7 @@ below are scaled to Grassfield's 48-pt tile, taking the visible body as about 80
 | Magnification default | off | `dock.magnificationEnabled` default true | — | missing (default) |
 | Full Dock | shrinks to fit the screen width | not specified | — | missing (minor) |
 
-Fidelity pass 2026-10-19 (docs/specs/dock.md): shelf glass material (`dock.tintAlpha` 0.42, rim, highlight), theme Trash icons, tooltip and icon menu tails, bounce, badges, drag and drop are in; the icon menu tail uses base 19, height 13, tip 16 above the shelf.
+Fidelity pass 2026-10-19 (docs/specs/dock.md): shelf glass material (`dock.tintAlphaDark` 0.52 / `dock.tintAlphaLight` 0.42, rim, highlight), theme Trash icons, tooltip and icon menu tails, bounce, badges, drag and drop are in; the icon menu tail uses base 19, height 13, tip 16 above the shelf.
 
 ### Window chrome
 
