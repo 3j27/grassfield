@@ -304,14 +304,14 @@ if [[ $mode == stress ]]; then
     mapfile -t wins < <(nestctl -j clients 2>/dev/null | jq -r '.[] | select(.mapped) | "\(.address) \(.workspace.id)"')
     pick=${wins[$((RANDOM % (${#wins[@]} > 0 ? ${#wins[@]} : 1)))]:-}
     read -r w_addr w_ws <<<"$pick"
-    if ((n % 10 == 0)); then
-      request '{"target":"window"}'
-      inv=$((inv + 1))
-    elif ((n % 240 == 0)); then
+    if ((n % 240 == 0)); then
       floods=$((floods + 1))
       nestctl dispatch "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.overview_focus then for i = 1, 100 do p.overview_focus([[{\"target\":\"none\",\"id\":$((900000 + floods))}]]) end end end" >>"$log" 2>&1
       sleep 0.4
       [[ -n $(outcome_of $((900000 + floods))) ]] && flood_ok=$((flood_ok + 1))
+    elif ((n % 10 == 0)); then
+      request '{"target":"window"}'
+      inv=$((inv + 1))
     elif [[ -z ${w_addr:-} ]] || ((n % 4 == 0)); then
       request "{\"target\":\"none\",\"id\":$n}"
     elif ((n % 4 == 1)); then
@@ -327,7 +327,7 @@ if [[ $mode == stress ]]; then
   outcomes=$(ovf_events | grep -cv '"outcome":"pending"')
   kill -0 "$hypr_pid" 2>/dev/null; safe "stress: nested Hyprland alive" $?
   has_feature overview-focus; safe "stress: overview-focus still advertised" $? "$(features)"
-  ((floods == flood_ok)); check "stress: every flood answered ($flood_ok/$floods)" $?
+  ((floods > 0 && floods == flood_ok)); check "stress: every flood answered ($flood_ok/$floods)" $?
   ((outcomes > 0)); check "stress: outcomes posted" $? "$outcomes non-pending event(s) for $n requests ($inv invalid)"
   ! grep -aq "\[grassfield\] .*exception" "$hyprlog"; safe "stress: no grassfield exception in the log" $?
   if ((fail)); then say "FAIL ($passed/$total checks)"; exit 1; fi
