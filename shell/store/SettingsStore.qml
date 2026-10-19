@@ -41,6 +41,8 @@ Scope {
     readonly property string iconTint: IconModes.validTint(config.icons.tint) ? config.icons.tint : "accent"
     readonly property string folderColor: FolderStyle.normalizeColor(config.icons.folderColor)
     readonly property int pointerSize: PointerSize.fromStored(config.pointer.size)
+    readonly property string pointerOutlineColor: PointerColors.normalizeOutline(config.pointer.outlineColor)
+    readonly property string pointerFillColor: PointerColors.normalizeFill(config.pointer.fillColor)
     readonly property int lockIdleMinutes: Math.round(clampNumber(config.lock.idleMinutes, 0, 240, 5))
 
     // Array-like (the adapter hands out a QVariantList) to a plain array of non-empty strings.
@@ -131,6 +133,9 @@ Scope {
         // Cursor size in pixels, 24 to 96 (Settings > Accessibility > Pointer). A var, not an int: an int property
         // would turn 51.5 or "64" into a valid size before PointerSize.fromStored could refuse them.
         property var size: 24
+        // #rrggbb colours of the pointer (outline white, fill black = the packaged theme). Vars for the same reason.
+        property var outlineColor: "#ffffff"
+        property var fillColor: "#000000"
     }
 
     component NotificationsConfig: JsonObject {

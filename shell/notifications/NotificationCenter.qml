@@ -140,7 +140,7 @@ Variants {
 
             MouseArea {
                 anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
+                cursorShape: Qt.ArrowCursor
                 onClicked: pill.clicked()
             }
         }
@@ -449,7 +449,7 @@ Variants {
                                 MouseArea {
                                     anchors.fill: parent
                                     enabled: parent.opacity > 0
-                                    cursorShape: Qt.PointingHandCursor
+                                    cursorShape: Qt.ArrowCursor
                                     onClicked: Notifications.clear(item.key)
                                 }
                             }
@@ -666,7 +666,7 @@ Variants {
 
                         MouseArea {
                             anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
+                            cursorShape: Qt.ArrowCursor
                             onClicked: Notifications.closeCenter()
                         }
                     }

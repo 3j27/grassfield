@@ -152,7 +152,7 @@ WidgetBase {
                 MouseArea {
                     anchors.fill: parent
                     enabled: root.transportEnabled
-                    cursorShape: Qt.PointingHandCursor
+                    cursorShape: Qt.ArrowCursor
                     onClicked: root.transport(button.modelData.action)
                 }
             }

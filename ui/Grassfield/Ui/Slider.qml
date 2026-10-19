@@ -104,7 +104,7 @@ Item {
 
     MouseArea {
         anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: Qt.ArrowCursor
         function at(mouseX: real): void {
             root.forceActiveFocus();
             const t = root.travel > 0 ? (mouseX - Tokens.controlSliderKnobWidth / 2) / root.travel : 0;
