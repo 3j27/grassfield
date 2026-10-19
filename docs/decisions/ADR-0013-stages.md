@@ -69,14 +69,19 @@ reasons); the pre-fix build fails the new active-window and menu checks in the s
   Exclusive layer is kept. Spec `docs/specs/stages.md` ST6, ST9, ST10, ST23.
 - Hyprland's active window (what window bindings, window dispatchers without a window and the menu bar act on) is never a
   strip window (R13 counter-review of 17208af: after a swap under an Exclusive layer `hl.dsp.window.close()` closed the
-  hidden outgoing window). Hyprland refuses every window focus while an Exclusive layer is mapped, so the plugin makes the
-  incoming front window the active window behind the layer by setting Hyprland's Exclusive-layer list aside for that one
-  focus call (the keyboard stays on the layer; Hyprland gives the window the keyboard when the layer releases it), and
-  checks the active window after every retarget and before every key. A menu (popup grab) of a window going to the strip
-  closes as a click outside it would (Hyprland's grab refuses the keyboard to every other surface). Only real user focus
-  reasons bring a strip stage forward. Spec ST6, ST10, ST23, ST24. More internals to re-verify on Hyprland updates:
-  `CInputManager::m_exclusiveLSes`, `CFocusState::fullWindowFocus` with an explicit surface, `CSeatManager::setGrab`,
-  `Desktop::eFocusReason` (mapped one to one; a new reason is a compiler warning).
+  hidden outgoing window). The plugin never works around Hyprland's refusal of window focus under an Exclusive layer or
+  the session lock and never changes Hyprland's private lists (R13 counter-review #3 of e9ebc7f: setting the
+  Exclusive-layer list aside for one focus call let that call's side paths, a special workspace closing or a Desktop
+  switch, give a window the keyboard while the layer, possibly the polkit dialog, was up). Under such a layer a strip
+  window is only cleared from Hyprland's active window (`CFocusState::resetWindowFocus`, as Hyprland does when its
+  focused window unmaps, plus Hyprland's "no active window" notifications) and the incoming front window is focused only
+  after the layer released the keyboard, checked again then (still the front window of a shown, uncovered Desktop; no
+  Exclusive layer, no lock). The active window is checked after every retarget and before every key. A menu (popup grab)
+  of a window going to the strip closes as a click outside it would (Hyprland's grab refuses the keyboard to every other
+  surface). Only real user focus reasons bring a strip stage forward. Spec ST6, ST10, ST23, ST24. More internals to
+  re-verify on Hyprland updates: `CInputManager::m_exclusiveLSes` (read only), `CFocusState::{rawWindowFocus,
+  resetWindowFocus}`, the order of `CLayerSurface::onUnmap` (closed event, then Hyprland's refocus),
+  `CSeatManager::setGrab`, `Desktop::eFocusReason` (mapped one to one; a new reason is a compiler warning).
 - Window cycling stays within the active stage (Hyprland's `cycle_next` skips windows that do not take input): the macOS
   model keeps Cmd+` (windows of the current app) inside the stage, and app switching (Cmd+Tab: Dock, Search, the coming
   app switcher) brings a stage forward through a focus by dispatch. A stage-aware ALT+TAB would need a function hook on

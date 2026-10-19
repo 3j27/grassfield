@@ -269,12 +269,15 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   focus on a window that does not take input as stale. Decision logic pure (`core/Stages.*`: `beforePointerEvent`,
   `keyboardAfterLeave`, `stripFocusBringsStage`; `core/DesktopFocus.*`: `classifyPointerFocus`). A transformed window
   without a free work buffer is drawn as nothing that frame (`WindowTransform.cpp`), never at its real place.
-  R13 counter-review of 17208af (ST24, ST6 menus, ST10): Hyprland's active window is never a strip window (a focus refused
-  under an Exclusive layer makes the window active behind the layer, the Exclusive-layer list set aside for that one
-  call; checked after every retarget and before every key); a menu (popup grab) of a window going to the strip ends as a
-  click outside it would (`CSeatManager::setGrab(nullptr)`); only real user focus reasons bring a strip stage forward
-  (reasons mapped one to one, `focusOrigin`; `WORKSPACE_CHANGE` is a restore only for the workspace's last focused
-  window). Decision logic pure: `activeWindowAction`, `focusOrigin`.
+  R13 counter-review of 17208af (ST24, ST6 menus, ST10): Hyprland's active window is never a strip window (checked after
+  every retarget and before every key); a menu (popup grab) of a window going to the strip ends as a click outside it
+  would (`CSeatManager::setGrab(nullptr)`); only real user focus reasons bring a strip stage forward (reasons mapped one
+  to one, `focusOrigin`; `WORKSPACE_CHANGE` is a restore only for the workspace's last focused window). R13
+  counter-review #3 of e9ebc7f (ST23, ST24): while Hyprland refuses window focus (an Exclusive layer is mapped, the session
+  is locked) the plugin requests none and changes none of Hyprland's lists: a strip window is cleared from Hyprland's
+  active window (`CFocusState::resetWindowFocus` plus Hyprland's "no active window" notifications, keyboard holder,
+  monitor, Desktop and special workspace untouched) and the incoming front window is focused once the layer released the
+  keyboard, checked again then. Decision logic pure: `activeWindowAction`, `pendingFocusAction`, `focusOrigin`.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -627,7 +630,13 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   setPointerFocus, sendPointerFrame}` (`setPointerFocus` refuses and logs "BUG THIS" without a pointer device),
   `CWindow::{noInputBlockedReasonsBesides, isHidden}`, `CWorkspace::isVisible`, `CFocusState::{fullWindowFocus,
   rawSurfaceFocus}`, `Event::bus()->m_events.input.{keyboard.key, mouse.axis}` (observed, never cancelled),
-  `Desktop::FOCUS_REASON_FFM` (what `CInputManager::refocusLastWindow` uses when a layer releases the keyboard). Desktop focus v2: `CViewHitTester::{layerPopupSurfaceAt, layerSurfaceAt, windowSurfaceAt}`,
+  `Desktop::FOCUS_REASON_FFM` (what `CInputManager::refocusLastWindow` uses when a layer releases the keyboard). Plugin
+  0.6.3-stages: `CFocusState::resetWindowFocus`, `CHyprXWaylandManager::activateWindow(w, false)`,
+  `CWindow::updateDecorationValues`, `CEventManager::postEvent` (`activewindow` / `activewindowv2` with no window),
+  `Event::bus()->m_events.window.active.emit(nullptr, …)` (as `CFocusState::rawWindowFocus` does for no window),
+  `CWorkspace::isVisibleNotCovered`, `Event::bus()->m_events.input.keyboard.focus`; `CInputManager::m_exclusiveLSes` is
+  only read (Hyprland's refusal condition) and `CLayerSurface::onUnmap` emits `layer.closed` before Hyprland's refocus
+  (read from the v0.56.2 sources). Desktop focus v2: `CViewHitTester::{layerPopupSurfaceAt, layerSurfaceAt, windowSurfaceAt}`,
   `CMonitor::m_layerSurfaceLayers`, `State::monitorState()->query().vec()`, `IView::aliveAndVisible`.
 - GCC 16.2.1, C++23. Lua 5.5 headers (Hyprland links `liblua.so.5.5`). GoogleTest 1.18.0 for tests.
 - Quickshell 0.3.1 for the IPC spike.

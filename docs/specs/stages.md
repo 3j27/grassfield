@@ -154,39 +154,56 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
   front window then takes the keyboard.
 - **ST21** Degradation: without the plugin (or with an ABI mismatch, or with `stages-available` missing) Stages does not
   exist: no verb, no capability, Quick Settings hides the toggle; nothing in the shell depends on it.
-- **ST23** Exclusive layer: a swap requested while an Exclusive layer (overview chrome, Search, Quick Settings) holds the
-  keyboard is applied and kept. Hyprland refuses every window focus while an Exclusive layer is mapped; the incoming
-  front window becomes Hyprland's active window behind the layer (ST24) and the layer keeps the keyboard. When the layer
-  releases the keyboard (it unmaps, or drops its keyboard interactivity) Hyprland restores its active window
-  (`refocusLastWindow`, reason `FFM`): the incoming front window takes the keyboard. The swap is never undone silently
-  (R13 review of 46b3e9b: that restore used to bring the outgoing stage back). The same holds for every focus the plugin
-  requests under such a layer: a close that empties the active stage (exercised, `stages.sh` 8c); a minimize or a move
-  that empties it, a new window that maps while a layer surface holds the keyboard and so gets no initial focus (same
-  code path, not exercised in nested).
+- **ST23** Exclusive layer: a swap requested while an Exclusive layer (overview chrome, Search, Quick Settings, the
+  polkit dialog) holds the keyboard is applied and kept, and the layer keeps every key. Hyprland refuses every window
+  focus while an Exclusive layer is mapped or the session is locked (`CFocusState::rawWindowFocus`); the plugin then
+  never asks it for one and never works around the refusal (R13 counter-review #3 of e9ebc7f: setting Hyprland's
+  Exclusive-layer list aside for one focus call also disabled the guard for that call's side paths: a special workspace
+  closing and a switch to a Desktop not shown focused the window, so the keys typed into the layer reached it). Under the
+  layer the model changes, the windows are drawn and blocked as usual, Hyprland's active window is cleared if it would be
+  a strip window (ST24) and the incoming front window is remembered (deferred focus). Nothing else changes: no keyboard,
+  monitor, Desktop or special-workspace change, no `activewindow` naming a window. When the layer releases the keyboard
+  (it unmaps, or drops its keyboard interactivity), Hyprland runs its own refocus first (the closed event comes before
+  it, so the plugin tries from the event loop; also after a keyboard focus change, after the unlock and before a key);
+  the remembered window then takes the focus and the keyboard if it is still mapped, still the front window of its
+  Desktop's active stage, that Desktop is shown and not covered by a special workspace, no Exclusive layer is mapped, the
+  session is not locked and the layer that held the keyboard does not keep it (it dropped to on_demand): it replaces what
+  Hyprland's refocus picked (a window or a surface under the cursor). Otherwise Hyprland's choice stands: a special
+  workspace stays open and its window keeps the keyboard (the active stage takes it when the special workspace closes:
+  ST10 restore + ST9), a Desktop not shown is not switched to (ST22 when it is shown again); a user's focus choice in
+  between supersedes it. Decision `gf::stages::pendingFocusAction`, unit test
+  `StagesInput.ADeferredFocusWaitsForTheLayerAndIsCheckedAgain`. The swap is never undone silently (R13 review of
+  46b3e9b). The same holds for every focus the plugin requests under such a layer: a close that empties the active stage;
+  a minimize or a move that empties it, a new window that maps while a layer surface holds the keyboard (same code path,
+  not exercised in nested).
 - **ST24** Hyprland's active window (`CFocusState::window()`) is never a strip window (R13 counter-review of 17208af: after
   a swap under an Exclusive layer it stayed on the outgoing window, hidden in the strip; `hl.dsp.window.close()` closed
   it). It is what window key bindings (close, full screen, floating), window dispatchers without an explicit window and
   the shell's menu bar (foreign-toplevel `activated`, the `appmenu` window) act on, and it differs from the keyboard holder
   while a layer surface holds the keyboard. A safety property in the plugin (it holds without the shell), checked after
-  every retarget and before every key (key bindings run after the plugin's key listener):
-  - a focus Hyprland refuses while a layer surface holds the keyboard: the requested window becomes the active window
-    behind that layer: `CFocusState::fullWindowFocus(window, OTHER, <the layer's surface>)` with Hyprland's list of
-    Exclusive layer surfaces (`CInputManager::m_exclusiveLSes`) set aside for that one call on the compositor thread and
-    restored right after (also if Hyprland's code throws). Hyprland finds the layer's surface already focused and leaves
-    the keyboard on it; it posts `activewindow` / `activewindowv2`, marks the window activated (xdg, foreign toplevel),
-    records it as its Desktop's last window and gives it the keyboard when the layer releases it. A `no_focus` rule or a
-    modal child still refuse it;
-  - otherwise, when Hyprland's active window is (or is about to be blocked as) a strip window: the front window of its
-    workspace's active stage replaces it, behind the layer surface that holds the keyboard if any, else with the
-    keyboard; if no window may replace it, there is no active window (behind a layer surface or an Exclusive layer:
-    `CFocusState::resetWindowFocus`, the keyboard holder untouched; else nothing is focused, as Hyprland does itself when
-    its focused window's input gets blocked). Decision table: `gf::stages::activeWindowAction`, unit test
-    `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`;
+  every retarget and before every key (key bindings run after the plugin's key listener). When Hyprland's active window is
+  (or is about to be blocked as) a strip window:
+  - while an Exclusive layer is mapped (Hyprland refuses window focus) it is cleared, nothing is focused: no active
+    window, the keyboard holder untouched. `CFocusState::resetWindowFocus` (what Hyprland itself does when its focused
+    window unmaps, also under an Exclusive layer: `CWindow::onUnmap`), then what Hyprland sends when its focus goes to
+    nothing, without its keyboard change: the window is deactivated (`CHyprXWaylandManager::activateWindow(w, false)`, as
+    Hyprland does for the previous window on a focus change), `activewindow` / `activewindowv2` name no window and
+    `window.active` is emitted without a window (foreign-toplevel "activated", the appmenu server: the shell's menu bar
+    names no app). No focus request, no monitor, Desktop or special-workspace change: nothing of Hyprland's focus path
+    runs (R13 counter-review #3 of e9ebc7f). The front window of its workspace's active stage takes the focus when the
+    layer releases the keyboard (ST23). Until then window key bindings and window dispatchers without a window act on
+    nothing (`hl.dsp.window.close()` closes no window);
+  - otherwise (Hyprland accepts a window focus) the front window of its workspace's active stage replaces it, with the
+    keyboard (an on_demand layer such as the desktop loses it, as on any window focus); if no window may replace it
+    (a `no_focus` rule, a modal child), there is no active window (behind a layer surface that holds the keyboard:
+    cleared as above; else nothing is focused, as Hyprland does itself when its focused window's input gets blocked).
+    Decision table: `gf::stages::activeWindowAction`, unit tests `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`,
+    `StagesInput.UnderAnExclusiveLayerTheActiveStripWindowIsOnlyCleared`;
   - the holder is Hyprland's focus surface, else the seat's keyboard focus, else the mapped Exclusive layer (Hyprland
-    resets its focus surface when its focused window closes, `CWindow::onUnmap`);
-  - under the session lock nothing is changed (the lock is never touched; Hyprland focuses nothing while locked); after
-    the unlock (Hyprland refocuses at the cursor only) a retarget runs and moves the active window off the strip. The
-    session lock during a swap was not exercised.
+    resets its focus surface when its focused window closes, `CWindow::onUnmap`). Hyprland's lists are only read;
+  - under the session lock nothing is changed (the lock is never touched; Hyprland focuses nothing while locked); a focus
+    requested meanwhile is deferred; after the unlock (Hyprland refocuses at the cursor only) a retarget runs, moves the
+    active window off the strip and the deferred focus is tried. The session lock during a swap was not exercised.
 
 ## Acceptance criteria
 | ID | Test | Level | Result (2026-10-18, nested Hyprland 0.56.2) |
@@ -362,6 +379,14 @@ shown normally again lose their transformer at the end; a 150 ms watchdog comple
    (each new virtual keyboard gets the focus surface). `stages.sh` waits 150 ms after each new keyboard (`wtype -s`) and
    before motionless clicks, and moves twice before clicks on Quickshell surfaces; `minimize.sh` keeps one waiting
    pointer and one waiting keyboard for the whole run (both capabilities stay, as in a real session).
+8. (R13 counter-review #3 of e9ebc7f, fixed in 0.6.3-stages) The 0.6.2 fix made the incoming front window active behind
+   an Exclusive layer by setting Hyprland's Exclusive-layer list aside for one `fullWindowFocus` call. Hyprland's guard was
+   then off for that call's side paths too: with a special workspace open, `rawWindowFocus` closed it and the nested focus
+   gave the window the keyboard (the next keys reached the window, not the layer; Hyprland log "Set keyboard focus to
+   surface … [Window x]"); with the window on a Desktop not shown, Hyprland switched Desktops and the keyboard went to the
+   window for a moment; the focused monitor switched for a moment; listeners saw a window focus while the layer was up.
+   A polkit dialog is such a layer. Fix: the plugin never focuses a window while Hyprland refuses one; it clears a strip
+   window from Hyprland's active window and defers the focus until the layer releases the keyboard (ST23, ST24).
 
 **Fix pass** (2026-10-18, plugin 0.6.1-stages): `tests/compositor/soak.sh 660 stages` → PASS (log
 `.dev/soak-20261018-201156.log`: 372 rounds, 74 moves of a window into a new strip stage, 52 tile-0 activations, 1393
@@ -387,9 +412,13 @@ when the overview opens: prototype limit); desktop focus is unaffected (a press 
 - Popups of strip windows are not transformed: a menu that holds a popup grab closes when its window goes to the strip
   (ST6), but a popup without a grab (a tooltip) stays drawn at its real place until the app closes it (it takes no input:
   ST6 guards).
-- Hyprland's active window is moved off strip windows by setting Hyprland's Exclusive-layer list aside for one focus call
-  (ST24), an internal structure: re-verify `CInputManager::m_exclusiveLSes`, `CFocusState::rawWindowFocus` and
-  `refocusLastWindow` on every Hyprland update. Under the session lock nothing is changed until the unlock (not exercised).
+- While an Exclusive layer holds the keyboard after a swap, Hyprland has no active window (ST24): window key bindings and
+  dispatchers without a window act on nothing and the menu bar names no app until the layer releases the keyboard. The
+  plugin reads (never changes) Hyprland's Exclusive-layer list and lock state to know when Hyprland refuses window focus,
+  and relies on the order of `CLayerSurface::onUnmap` (the `layer.closed` event before Hyprland's refocus) and on
+  `CFocusState::resetWindowFocus`: re-verify `CFocusState::rawWindowFocus`, `CInputManager::{m_exclusiveLSes,
+  refocusLastWindow}` and `CLayerSurface::{onUnmap, onCommit}` on every Hyprland update. Under the session lock nothing is
+  changed until the unlock (not exercised).
 - `WORKSPACE_CHANGE` is classified with the plugin's own record of each workspace's last focused window (ST10); a restore
   of a strip window as a Desktop's last window only arises after a refused focus (session lock, `no_focus` rule, modal
   child) and is covered by unit tests only.
