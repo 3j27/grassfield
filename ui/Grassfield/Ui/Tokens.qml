@@ -727,6 +727,8 @@ QtObject {
     readonly property int filesInfoLabelWidth: 100
     // estimate: Customize Folder window (macOS 26 style panel: preview, colour row, symbol grid)
     readonly property int filesCustomizeWindowWidth: 440
+    // estimate: Customize Folder window height (preview, colour row, custom colour, symbol grid and field, buttons)
+    readonly property int filesCustomizeWindowHeight: 500
     // estimate: Customize Folder, custom colour and symbol fields
     readonly property int filesCustomizeHexWidth: 140
     // estimate: Customize Folder, time the per-user storage note stays before the window closes

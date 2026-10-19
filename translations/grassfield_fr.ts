@@ -2146,6 +2146,10 @@
         <translation>Obtenir des informations</translation>
     </message>
     <message>
+        <source>Customize Folder…</source>
+        <translation>Personnaliser le dossier…</translation>
+    </message>
+    <message>
         <source>Rename</source>
         <translation>Renommer</translation>
     </message>

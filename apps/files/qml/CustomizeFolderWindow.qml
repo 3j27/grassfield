@@ -36,7 +36,7 @@ Window {
 
     title: qsTr("Customize Folder")
     width: Tokens.filesCustomizeWindowWidth
-    height: panel.implicitHeight + 2 * Tokens.spacingLg
+    height: Tokens.filesCustomizeWindowHeight
     minimumWidth: width
     maximumWidth: width
     minimumHeight: height
@@ -82,7 +82,6 @@ Window {
     FocusScope {
         id: panel
         anchors.fill: parent
-        implicitHeight: content.implicitHeight
         Accessible.role: Accessible.Dialog
         Accessible.name: root.title
 
@@ -346,7 +345,7 @@ Window {
 
                 Rectangle {
                     x: Tokens.filesInfoLabelWidth + Tokens.spacingSm
-                    width: Tokens.filesCustomizeHexWidth
+                    width: parent.width - x
                     height: parent.height
                     radius: Tokens.radiusControl
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)

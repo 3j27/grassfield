@@ -332,6 +332,13 @@ FocusScope {
             root.win.showInfo(m.info(rows[i]));
     }
 
+    // Whether Customize Folder applies to the selection (local folders only).
+    function canCustomize(): bool {
+        const m = root.activeFolder;
+        const rows = m.selectedRows();
+        return rows.length > 0 && rows.every(r => m.isDirAt(r)) && root.app.folderStyleUnavailable(m.selectedUrls()) === "";
+    }
+
     function customizeSelection(): void {
         const m = root.activeFolder;
         const rows = m.selectedRows();
