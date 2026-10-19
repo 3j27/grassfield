@@ -212,6 +212,7 @@ private:
     // Why `url` can't be tagged, "" when it can (`support`: what TagStore found).
     QString tagsReason(const QUrl &url, TagStore::Support support) const;
     QString schemeReason(const QUrl &url) const;
+    void styleMoved(const QUrl &from, const QUrl &to);
     QVariantMap changeFolderStyles(const QList<QUrl> &urls, const FolderStyleLogic::Style &style);
     // Tags in use, for the sidebar (kept across sessions, at most kMaxKnownTags).
     void noteTags(const QStringList &tags);

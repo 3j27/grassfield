@@ -10,9 +10,13 @@
 //   - popup (GF_STAGES_ROLE=popup, another instance): an app window (xdg toplevel, 600x400) whose click opens a menu (an
 //     xdg_popup with a grab, as an app menu); it logs the menu opening and closing and every key the window and the menu
 //     receive.
+//   - polkit (GF_STAGES_ROLE=polkit, another instance): what the shell's authentication dialog is to Hyprland
+//     (shell/security/polkit/AuthAgent.qml: a full-output Overlay-layer surface with Exclusive keyboard interactivity and a
+//     password field). It logs every key the field receives (test text only, never a real password). Escape releases it
+//     as the dialog does when it ends: the keyboard interactivity goes to None first, the surface unmaps 400 ms later.
 // Input (validated): GF_STAGES_OUTPUT (output name, required), GF_STAGES_TILES (JSON array of {x,y,w,h} in layout
 // coordinates, at most 8), GF_STAGES_STRIP (JSON {x,y,w,h}: the strip surface box in layout coordinates), GF_STAGES_ROLE
-// ("strip", the default, "exclusive" or "popup").
+// ("strip", the default, "exclusive", "popup" or "polkit").
 // Run: WAYLAND_DISPLAY=<nested> qs -p <this dir>
 pragma ComponentBehavior: Bound
 import QtQuick
@@ -45,8 +49,11 @@ ShellRoot {
     readonly property var screen: Quickshell.screens.find(s => s.name === root.outputName) ?? null
     readonly property string role: {
         const raw = Quickshell.env("GF_STAGES_ROLE") ?? "";
-        return raw === "exclusive" || raw === "popup" ? raw : "strip";
+        return raw === "exclusive" || raw === "popup" || raw === "polkit" ? raw : "strip";
     }
+    // polkit role: the dialog holds the keyboard until Escape (then None, and unmapped 400 ms later).
+    property bool polkitHeld: true
+    property bool polkitShown: true
 
     Component.onCompleted: console.log("[stages-fixture] output " + (root.screen ? root.screen.name + " found" : root.outputName + " missing") + ", " + root.tiles.length + " tile(s), role " + root.role)
 
@@ -125,6 +132,65 @@ ShellRoot {
             anchors.fill: parent
             focus: true
             Keys.onPressed: event => console.log("[stages-fixture] key " + event.text)
+        }
+    }
+
+    // qmllint disable uncreatable-type
+    PanelWindow {
+        // qmllint enable uncreatable-type
+        id: polkitWindow
+
+        visible: root.role === "polkit" && root.screen !== null && root.polkitShown
+        screen: root.screen
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        exclusionMode: ExclusionMode.Ignore
+        color: Qt.rgba(0, 0, 0, 0.25)
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: root.polkitHeld ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.namespace: "grassfield-stages-test-polkit"
+        Component.onCompleted: if (visible) console.log("[stages-fixture] polkit dialog shown")
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 420
+            height: 160
+            radius: 14
+            color: "#2b2f3a"
+
+            TextInput {
+                id: passwordField
+
+                anchors.centerIn: parent
+                width: 300
+                focus: true
+                color: "#ffffff"
+                echoMode: TextInput.Password
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Escape) {
+                        event.accepted = true;
+                        root.polkitHeld = false;
+                        console.log("[stages-fixture] polkit released");
+                        polkitHide.start();
+                        return;
+                    }
+                    console.log("[stages-fixture] polkit key " + event.text);
+                }
+            }
+        }
+
+        Timer {
+            id: polkitHide
+
+            interval: 400
+            onTriggered: {
+                root.polkitShown = false;
+                console.log("[stages-fixture] polkit hidden");
+            }
         }
     }
 

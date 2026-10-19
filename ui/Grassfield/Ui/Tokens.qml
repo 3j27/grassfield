@@ -10,7 +10,7 @@ QtObject {
         text: "#F5F5F7",  // estimate, pending F1 measurement from design/reference
         textSecondary: "#DCDCE4",  // A2: was #B8B8C0; 4.5:1 or more on every material backdrop up to transparency 0.6 over a white wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#4FB36B",  // own Grassfield green, not copied
-        indicator: "#E6E6EA",  // estimate, pending F1 measurement from design/reference
+        indicator: "#FFFFFF",  // Dock fidelity fix: running dot over a shelf darker than dock.indicatorDarkAbove (pure white, 3:1 or more up to relative luminance 0.30)
         hover: "#FFFFFF",  // estimate; drawn at hoverOpacity
         materialTint: "#1D1F24",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
@@ -33,7 +33,7 @@ QtObject {
         text: "#1B1B1F",  // estimate, pending F1 measurement from design/reference
         textSecondary: "#3A3A42",  // A2: was #55555D; 4.5:1 or more on every material backdrop up to transparency 0.6 over a black wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#26763F",  // own Grassfield green, not copied
-        indicator: "#2A2A30",  // estimate, pending F1 measurement from design/reference
+        indicator: "#000000",  // Dock fidelity fix: running dot over a shelf lighter than dock.indicatorDarkAbove (pure black, 3:1 or more from relative luminance 0.10)
         hover: "#000000",  // estimate; drawn at hoverOpacity
         materialTint: "#F3F4F6",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
@@ -188,6 +188,10 @@ QtObject {
     readonly property int dockBottomMargin: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIndicatorSize: 4
+    // Dock fidelity fix: shelf relative luminance above which the running dot is black, else white; both are at least 4.5:1 at this crossover (WCAG, computed)
+    readonly property real dockIndicatorDarkAbove: 0.18
+    // Dock fidelity fix: central fraction of the wallpaper width sampled under the shelf to choose the running dot tone
+    readonly property real dockIndicatorSampleSpan: 0.5
     // task spec default; user value in grassfield.json dock.magnification
     readonly property real dockMagnificationMax: 1.6
     // dock.magnification is clamped to 2.5 (SettingsStore, Settings contract): a tile icon is decoded at the largest size it is ever drawn, so magnification never upscales it
@@ -225,7 +229,7 @@ QtObject {
     // estimate: the launch bounce stops after this long without a window, ms
     readonly property int dockLaunchTimeout: 12000
     // estimate: transparent room above the shelf for a dragged icon and the poof
-    readonly property int dockDragArea: 128
+    readonly property int dockDragArea: 168
     // estimate: px above the shelf top (icon centre) from which a dropped tile leaves the Dock
     readonly property int dockDragOutDistance: 56
     // estimate: removal puff, ms
@@ -576,6 +580,10 @@ QtObject {
     readonly property int overviewChromeWaitMs: 600
     // v2: pause before the single retry of an on:true the plugin refused with no-chrome (the second output's Exclusive commit may lag)
     readonly property int overviewChromeRetryMs: 120
+    // v2: pause (0: the next event-loop turn; measured 0 keys lost from 30 ms, none in the wrong window) after the last change of which chrome holds the keyboard before the close completes: every output's chrome commits keyboard None on its own, and Hyprland refuses to refocus while any of them is still Exclusive
+    readonly property int overviewReleaseSettleMs: 0
+    // v2: upper bound of the keyboard release; the close completes then even if a chrome still reports the keyboard (a lost chrome event must not leave the overview open)
+    readonly property int overviewReleaseBoundMs: 500
     // F1 gap 15: add-space button is a 32 circle
     readonly property int overviewAddSize: 32
 
@@ -626,6 +634,12 @@ QtObject {
     readonly property int settingsVolumeApplyMs: 120
     // estimate: shell, minimum gap between two compositor cursor reloads while the pointer size slider is dragged
     readonly property int settingsPointerApplyMs: 100
+    // estimate: shell, how long a compositor request socket may stay silent before the pointer request counts as lost
+    readonly property int settingsPointerAnswerMs: 1000
+    // estimate: shell, first wait before a lost pointer request is sent again (doubles each attempt)
+    readonly property int settingsPointerRetryMs: 250
+    // estimate: shell, attempts for one pointer size before waiting for the next change or compositor event
+    readonly property int settingsPointerRetryMax: 5
     // estimate: Sound pane, width of the percentage next to a slider
     readonly property int settingsVolumeValueWidth: 44
 
@@ -1051,8 +1065,28 @@ QtObject {
     readonly property real folderIconGlyphScale: 0.34
     // estimate: vertical centre of the symbol over the icon height (the body of the folder, below the flap)
     readonly property real folderIconGlyphCenterY: 0.62
-    // estimate: colour of a symbol drawn on the folder (a darker, translucent emboss); emoji keep their own colours
-    readonly property string folderIconGlyphColor: "#73000000"
+    // A2 (icons >= 3:1): a plain symbol is an engraved shade of the folder's own colour (macOS 26), darkened in the colour's hue until it reaches this contrast against the plate
+    readonly property real folderIconGlyphMinContrast: 3.0
+    // measured safety over the minimum (the plate is estimated from the colour, the real one differs by a few percent)
+    readonly property real folderIconGlyphContrastMargin: 0.3
+    // measured on the recoloured folder plate under the symbol (nested captures, tests/visual/folder_glyph_contrast.py): plate over the folder colour, icon mode default and clear
+    readonly property real folderIconPlateDefault: 0.96
+    // measured: plate over the folder colour in the Dark icon mode
+    readonly property real folderIconPlateDark: 0.78
+    // measured (two icon tints, dark and light appearance): plate over the folder colour in the Tinted icon mode = base + slope x relative luminance of the icon tint
+    readonly property real folderIconPlateTintedBase: 0.37
+    // measured: see plateTintedBase
+    readonly property real folderIconPlateTintedSlope: 1.5
+    // measured: in the Tinted icon mode the theme's own folder plate is the icon tint times this
+    readonly property real folderIconThemeTintedGain: 1.27
+    // measured: in the Clear icon mode a dark plate lets the backdrop through (a black folder over a light backdrop): the lightest plate over the colour, as a share of the way to white
+    readonly property real folderIconClearLift: 0.22
+    // measured: plate of the icon theme's own folder under the symbol (default mode, current theme of the reference session)
+    readonly property string folderIconThemePlate: "#a4caee"
+    // estimate: 1 px light edge under an engraved symbol (the engraved look)
+    readonly property string folderIconGlyphHighlight: "#40ffffff"
+    // estimate: offset of that edge over the icon edge (at least 1 px)
+    readonly property real folderIconGlyphHighlightOffset: 0.016
     // estimate: Customize Folder, symbol suggestions per row
     readonly property int folderIconPickerGlyphColumns: 8
     // estimate: Customize Folder, side of one symbol suggestion

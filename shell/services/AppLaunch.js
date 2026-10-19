@@ -15,6 +15,16 @@ function isolatedEnvironment(appsHome) {
     };
 }
 
+// `extra` entries added to `base` (a new object, neither input changes).
+function mergeEnvironment(base, extra) {
+    const out = {};
+    for (const k in base)
+        out[k] = base[k];
+    for (const k in extra)
+        out[k] = extra[k];
+    return out;
+}
+
 // Directory of the isolated homes: `<dev>/apps-home`, where <dev> is the parent of GRASSFIELD_STATE_HOME
 // (scripts/dev/shell-run.sh passes `<dev>/state`); `fallbackBase` (a scratch directory) when it is unset.
 function appsHomeFor(stateHome, fallbackBase) {
@@ -64,7 +74,19 @@ function autostartDir(devSession, appsHome, xdgConfigHome, home) {
     return (xdgConfigHome ? xdgConfigHome : home + "/.config") + "/autostart";
 }
 
-// One Exec argument quoted for a desktop file (reserved characters inside double quotes are escaped; % is doubled).
+// A control character (C0, DEL, C1) anywhere in `v`.
+function hasControl(v) {
+    return /[\u0000-\u001f\u007f-\u009f]/.test(String(v));
+}
+
+// Desktop Entry spec "string" value escaping: backslash, newline, tab, carriage return (and a leading space as \s).
+function escapeValue(v) {
+    return String(v === undefined || v === null ? "" : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\t/g, "\\t").replace(/\r/g, "\\r").replace(/^ /, "\\s");
+}
+
+// One Exec argument quoted for a desktop file (the Exec quoting rule: an argument with reserved characters goes inside double
+// quotes with `"`, backtick, `$` and `\` escaped by a backslash; % is doubled). The result still goes through escapeValue()
+// as part of the Exec value (the spec applies the string escape after the quoting rule).
 function execQuote(arg) {
     const a = String(arg).replace(/%/g, "%%");
     if (/^[A-Za-z0-9_\/.,:=+@-]+$/.test(a))
@@ -72,13 +94,25 @@ function execQuote(arg) {
     return '"' + a.replace(/(["`$\\])/g, "\\$1") + '"';
 }
 
-// Text of an autostart desktop file for an entry (name, icon, command, runInTerminal); newlines in values are removed.
+// File name of the autostart entry of the desktop entry `id` inside `dir`: "" for an id that is not a plain file name
+// (separator, leading dot, control character, empty, too long), so that the file can only land directly in `dir`.
+function autostartFile(dir, id) {
+    const s = String(id === undefined || id === null ? "" : id);
+    if (s === "" || s.length > 200 || s[0] === "." || /[\/\\]/.test(s) || hasControl(s) || !dir)
+        return "";
+    return dir + "/" + s + ".desktop";
+}
+
+// Text of an autostart desktop file for an entry (name, icon, command, runInTerminal), values escaped per the Desktop Entry
+// spec (a newline in a name cannot add keys). "" (refused) when the command is empty or an Exec argument has a control
+// character.
 function autostartText(entry) {
-    const one = v => String(v === undefined || v === null ? "" : v).replace(/[\r\n]+/g, " ");
-    const command = stripFieldCodes(entry.command);
-    let text = "[Desktop Entry]\nType=Application\nName=" + one(entry.name) + "\nExec=" + command.map(execQuote).join(" ") + "\n";
+    const args = stripFieldCodes(entry.command);
+    if (args.length === 0 || args.some(hasControl))
+        return "";
+    let text = "[Desktop Entry]\nType=Application\nName=" + escapeValue(entry.name) + "\nExec=" + escapeValue(args.map(execQuote).join(" ")) + "\n";
     if (entry.icon)
-        text += "Icon=" + one(entry.icon) + "\n";
+        text += "Icon=" + escapeValue(entry.icon) + "\n";
     text += "Terminal=" + (entry.runInTerminal === true ? "true" : "false") + "\n";
     return text;
 }

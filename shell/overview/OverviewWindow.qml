@@ -235,17 +235,12 @@ Variants {
             if (info)
                 root.controller.closeAnd(() => Compositor.activate(info.toplevel));
             else
-                root.controller.hide();
+                root.controller.closeAnd(null);
         }
 
-        // Esc / backdrop: closes and re-focuses the Space shown on this output now. Releasing
-        // the exclusive keyboard grab lets Hyprland refocus its last window, which can live on
-        // the previous Space (e.g. right after "+"), so the current Space is focused again once
-        // the grab is gone.
+        // Esc / backdrop: closes without a choice; the controller returns to the window that was active at open.
         function closeKeepingSpace(): void {
-            const mon = Compositor.monitorByName(screenName);
-            const id = mon && mon.activeWorkspace ? mon.activeWorkspace.id : 0;
-            root.controller.closeAnd(id > 0 ? () => Compositor.focusSpace(id) : null);
+            root.controller.closeAnd(null);
         }
 
         function switchSpace(id: int): void {
@@ -255,7 +250,9 @@ Variants {
         function addSpace(): void {
             // v2: the compositor ends its overview on a Space switch; the chrome stays on the new, empty Space.
             root.controller.switchingSpace = true;
-            Compositor.focusSpace(Compositor.nextSpaceId());
+            const id = Compositor.nextSpaceId();
+            root.controller.stayOnSpace = id;
+            Compositor.focusSpace(id);
         }
 
         function activateTile(index: int): void {
@@ -381,7 +378,6 @@ Variants {
                     anchors.fill: parent
                     acceptedButtons: Qt.AllButtons
                     onPressed: {
-                        root.controller.keyScreen = win.screenName;
                         win.closeKeepingSpace();
                     }
                 }
@@ -401,7 +397,6 @@ Variants {
                     }
                     const inSpaces = win.spaceFocus >= 0;
                     event.accepted = true;
-                    root.controller.keyScreen = win.screenName;
                     switch (event.key) {
                     case Qt.Key_Escape:
                         // Release-then-act as for the other actions: staying on a Space just
@@ -539,7 +534,6 @@ Variants {
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: {
-                                root.controller.keyScreen = win.screenName;
                                 win.activateTile(tile.index);
                             }
                         }
@@ -721,7 +715,6 @@ Variants {
                             }
                         }
                         onPressed: mouse => {
-                            root.controller.keyScreen = win.screenName;
                             pressAt = mapToItem(contentRoot, mouse.x, mouse.y);
                             moved = false;
                         }

@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.platform
 import "../launchpad/Model.js" as Model
 import "AppLaunch.js" as AppLaunch
 import "../dock/DockModel.js" as DockModel
@@ -109,7 +110,9 @@ Singleton {
     function launch(target: var): void {
         if (!target)
             return;
-        if (!devSession) {
+        const environment = launchEnvironment();
+        // Nothing to add to the environment of the shell: Quickshell's own execute().
+        if (Object.keys(environment).length === 0) {
             target.execute();
             return;
         }
@@ -121,29 +124,68 @@ Singleton {
             command = ["xdg-terminal-exec"].concat(command);
         const context = {
             "command": command,
-            "environment": AppLaunch.isolatedEnvironment(appsHome)
+            "environment": environment
         };
         if (target.workingDirectory)
             context.workingDirectory = target.workingDirectory;
         Quickshell.execDetached(context);
     }
 
+    // MimeType keys of the desktop entries and the shared MIME database (dock/mime-data.sh), rebuilt with the entry list.
+    // Until it has loaded nothing accepts a drop.
+    property var mimeData: DockModel.parseMimeData("")
+
+    Process {
+        id: mimeScan
+        property bool again: false
+        command: ["sh", Quickshell.shellPath("dock/mime-data.sh")]
+        stdout: StdioCollector {
+            onStreamFinished: root.mimeData = DockModel.parseMimeData(text)
+        }
+        onRunningChanged: {
+            if (!running && again) {
+                again = false;
+                running = true;
+            }
+        }
+    }
+
+    Connections {
+        target: root
+
+        function onListChanged(): void {
+            if (mimeScan.running)
+                mimeScan.again = true;
+            else
+                mimeScan.running = true;
+        }
+    }
+
+    // Whether `entry` can open the dropped local paths: file field code in Exec and a matching MimeType.
+    function canOpen(entry: var, paths: var): bool {
+        return !!entry && DockModel.acceptsFiles(entry, paths, mimeData);
+    }
+
     // Opens files with a desktop entry (files dropped on a Dock tile): the entry command with its file field codes
-    // filled in (DockModel.commandWithFiles), the isolated environment in a dev session.
-    function openWith(entry: var, files: var): void {
-        if (!entry || !files || files.length === 0)
-            return;
-        let command = DockModel.commandWithFiles(Array.from(entry.command || []), files);
-        if (command.length === 0)
-            return;
-        if (entry.runInTerminal === true)
-            command = ["xdg-terminal-exec"].concat(command);
-        const context = {"command": command};
-        if (devSession)
-            context.environment = AppLaunch.isolatedEnvironment(appsHome);
-        if (entry.workingDirectory)
-            context.workingDirectory = entry.workingDirectory;
-        Quickshell.execDetached(context);
+    // filled in per the Desktop Entry spec (DockModel.commandsForFiles; a command without one never gets the files
+    // appended), the launch environment (isolated in a dev session, pointer size). Refused unless the app can open every
+    // file.
+    function openWith(entry: var, files: var): bool {
+        if (!canOpen(entry, files))
+            return false;
+        const commands = DockModel.commandsForFiles(Array.from(entry.command || []), files);
+        const environment = launchEnvironment();
+        for (const c of commands) {
+            if (c.length === 0)
+                continue;
+            const context = {"command": entry.runInTerminal === true ? ["xdg-terminal-exec"].concat(c) : c};
+            if (Object.keys(environment).length > 0)
+                context.environment = environment;
+            if (entry.workingDirectory)
+                context.workingDirectory = entry.workingDirectory;
+            Quickshell.execDetached(context);
+        }
+        return commands.length > 0;
     }
 
     // Dev open policy (ADR-0011, scripts/dev/open-policy.sh): folders open in Grassfield Files, files Preview can show
@@ -157,14 +199,21 @@ Singleton {
     // environment. A real session runs the command unchanged.
     function openDetached(argv: var): void {
         if (!devSession) {
-            Quickshell.execDetached(argv);
+            const environment = launchEnvironment();
+            if (Object.keys(environment).length === 0)
+                Quickshell.execDetached(argv);
+            else
+                Quickshell.execDetached({
+                    "command": argv,
+                    "environment": environment
+                });
             return;
         }
         const request = AppLaunch.openRequest(argv);
         if (request === null) {
             Quickshell.execDetached({
                 "command": argv,
-                "environment": AppLaunch.isolatedEnvironment(appsHome)
+                "environment": launchEnvironment()
             });
             return;
         }
@@ -174,7 +223,7 @@ Singleton {
         }
         Quickshell.execDetached({
             "command": [openPolicy].concat(request.targets),
-            "environment": AppLaunch.isolatedEnvironment(appsHome)
+            "environment": launchEnvironment()
         });
     }
 
@@ -182,7 +231,14 @@ Singleton {
     // session. Such a Process still resolves `gio` on the shell's own PATH, where scripts/dev/shell-run.sh puts the
     // open shims first (a dev `gio open` follows the open policy even in code that does not call openDetached).
     function openEnvironment(): var {
-        return devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({});
+        return launchEnvironment();
+    }
+
+    // Environment added to every application the shell starts: the isolated homes in a dev session, and the pointer
+    // size the user chose when it differs from the session's (XCURSOR_SIZE and HYPRCURSOR_SIZE; applications read them
+    // when they start, so open ones keep their size). Never the owner's systemd or uwsm environment.
+    function launchEnvironment(): var {
+        return AppLaunch.mergeEnvironment(devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({}), Pointer.launchEnvironment());
     }
 
     function nameFor(appId: string): string {

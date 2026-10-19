@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Overview keyboard and pointer on TWO outputs (WAYLAND-1 + GF-REF) in the NESTED session. Run it bare, with a nested
+# Overview keyboard and pointer on TWO HEADLESS outputs (GF-REF + GF-REF2, WAYLAND-1 disabled) in the NESTED session. Run it bare, with a nested
 # session up (`just nested-up`, or `scripts/dev/nested-up.sh --no-plugin` for the thumbnail variant); it starts two
 # foot windows (one per output, through scripts/dev/isolated.sh) and kills only those.
 #
@@ -8,13 +8,18 @@
 # click     (1) overview open with B active: a click on A's rect on the other output focuses A and A gets typed keys; reverse.
 # hover     (2) hover selects the window under the pointer on both outputs.
 # drag      (2) a window dragged to the "+" Space tile of its output, on each output, changes Space.
-# loop      (3) 10x open/close, alternating Esc and IPC close, focus alternating between outputs: after each close the
-#               previous window is the active one and gets the keys.
+# loop      (3) 10x open/close, alternating Esc and IPC close, focus alternating between outputs, the pointer on the OTHER
+#               output: after each close the previous window is the active one and gets the keys.
+# paths     (3b) every close path (Esc, IPC close, toggle, backdrop click, Apps opening through ExclusiveSurfaces), with the
+#               pointer on either output and either window active at open: the window active at open holds the KEYBOARD
+#               (typed keys arrive in that exact window and in no other).
 # backdrop  (4) a click on empty space of the other output closes the overview.
+# drop      (5) keys typed D ms after Esc (one injector process, exact delay): never in the wrong window; from 200 ms all
+#               arrive in the previously active window. Prints the drop table. Part of `all`.
 # Exit 0 when every check passes. Input only through scripts/dev/keys.sh and scripts/dev/pointer.sh.
 set -uo pipefail
 
-root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
 dev=$root/.dev
 out=$dev/ovt
 # scripts/dev/test.sh runs every tests/shell/*.sh: without a running nested session this test is skipped.
@@ -37,8 +42,12 @@ pids=()
 check() {
   if [[ $2 == 0 ]]; then echo "PASS $1"; else echo "FAIL $1"; fails=1; fi
 }
-ipc() { "$root/tests/visual/ipc.sh" "$@"; }
-ptr() { "$root/scripts/dev/pointer.sh" "$@" >/dev/null; }
+# The helper scripts validate the nested session on every call (pidfile.sh) and, with several agents loading the host,
+# that validation sometimes fails transiently before anything is sent: retry such a call (nothing was injected).
+retry() { local i; for i in 1 2 3 4 5 6; do "$@" && return 0; sleep 0.4; done; return 1; }
+ipc() { retry "$root/tests/visual/ipc.sh" "$@"; }
+ptr() { retry "$root/scripts/dev/pointer.sh" "$@" >/dev/null; }
+kb() { retry "$root/scripts/dev/keys.sh" "$@"; }
 status() { ipc overview status; }
 active_title() { "$root/scripts/nestctl" activewindow -j | jq -r '.title // ""'; }
 active_monitor() { "$root/scripts/nestctl" activewindow -j | jq -r '.monitor // -1'; }
@@ -59,7 +68,7 @@ spawn_foot() { # <title> <output>
   pids+=("$!")
   sleep 2
 }
-cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; }
+cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; [[ ${headless:-} == 1 ]] && headless_down; }
 trap cleanup EXIT
 
 focus() { # <title>: focus a window by title (nested instance only, through nestctl)
@@ -106,10 +115,10 @@ open_overview() {
 type_into() { # <title>: type a line, expect it in the window's file
   local t=$1 tag=$2
   sleep 0.4   # keyboard enter after the close
-  "$root/scripts/dev/keys.sh" "$tag" -k Return
+  kb "$tag" -k Return
   wait_for 3 grep -q "$tag" "$out/$t.txt" && return 0
   # Diagnostic only (the check still fails): were the keys lost, or is the window not receiving at all?
-  "$root/scripts/dev/keys.sh" "R$tag" -k Return
+  kb "R$tag" -k Return
   if wait_for 3 grep -q "R$tag" "$out/$t.txt"; then echo "note: $t: first typing lost, second arrived; active=$(active_title)"; else echo "note: $t: second typing lost too; active=$(active_title)"; fi
   return 1
 }
@@ -121,10 +130,46 @@ click_on() { # <title>
   ptr output "$o" abs $((x + 2)) $((y + 2)) sleep 300 click
 }
 
+# The measured pair is two HEADLESS outputs of the nested compositor: GF-REF (1920x1080, from config/hypr/dev.lua) and
+# GF-REF2 (1440x900, created here and removed at the end, through nestctl only). WAYLAND-1 is the nested compositor's
+# window in the owner's session, tiled by the owner's window manager and resized at any time by other agents' sessions:
+# it is disabled for the run (and enabled again at the end), so the measured geometry cannot change under the test.
+OUT_A=GF-REF
+OUT_B=GF-REF2
+nc() { "$root/scripts/nestctl" "$@"; }
+mon_sizes() { nc monitors -j | jq -r '[.[] | "\(.name)=\(.width)x\(.height)"] | sort | join(" ")'; }
+# Lua monitor rule through the nested instance (the call is evaluated by hl.dispatch's argument; its "expected a dispatcher"
+# error is harmless: the rule has been applied).
+monrule() { nc dispatch "hl.monitor($1)" >/dev/null 2>&1 || true; sleep 0.8; }
+headless_up() {
+  nc monitors all -j | jq -e --arg n "$OUT_B" 'any(.[]; .name == $n)' >/dev/null || nc output create headless "$OUT_B" >/dev/null
+  sleep 0.8
+  monrule '{ output = "WAYLAND-1", disabled = true }'
+  monrule "{ output = \"$OUT_A\", mode = \"1920x1080@60\", position = \"0x0\", scale = 1 }"
+  monrule "{ output = \"$OUT_B\", mode = \"1440x900@60\", position = \"1920x0\", scale = 1 }"
+  # The shell creates its per-output surfaces on the new output.
+  sleep 2
+}
+headless_down() {
+  nc output remove "$OUT_B" >/dev/null 2>&1 || true
+  monrule '{ output = "WAYLAND-1", mode = "1440x900", position = "auto", scale = 1 }'
+  monrule "{ output = \"$OUT_A\", mode = \"1920x1080@60\", position = \"auto-right\", scale = 1 }"
+}
+size_guard() {
+  local now
+  now=$(mon_sizes)
+  if [[ $now != "$start_sizes" ]]; then echo "INVALID RUN: an output changed size during the run (start: $start_sizes; end: $now): rerun"; fails=1; fi
+}
+
 setup() {
-  spawn_foot A WAYLAND-1
-  spawn_foot B GF-REF
-  "$root/scripts/nestctl" clients -j | jq -c '.[] | select(.title == "A" or .title == "B") | {title, mon: .monitor, ws: .workspace.id}'
+  headless=1
+  headless_up
+  start_sizes=$(mon_sizes)
+  echo "outputs: $start_sizes"
+  [[ $start_sizes == "$OUT_B=1440x900 $OUT_A=1920x1080" ]] || { echo "INVALID RUN: expected only $OUT_A and $OUT_B, got: $start_sizes"; exit 4; }
+  spawn_foot A "$OUT_A"
+  spawn_foot B "$OUT_B"
+  nc clients -j | jq -c '.[] | select(.title == "A" or .title == "B") | {title, mon: .monitor, ws: .workspace.id}'
 }
 
 t_click() {
@@ -180,13 +225,13 @@ t_drag() {
   local t other o x y spare tgt before after
   # Known placement whatever the earlier tests left: A and B on their output's own Space, the spares on a second one.
   local wa wb
-  wa=$("$root/scripts/nestctl" monitors -j | jq -r '.[] | select(.name == "WAYLAND-1") | .activeWorkspace.id')
-  wb=$("$root/scripts/nestctl" monitors -j | jq -r '.[] | select(.name == "GF-REF") | .activeWorkspace.id')
+  wa=$("$root/scripts/nestctl" monitors -j | jq -r --arg n "$OUT_A" '.[] | select(.name == $n) | .activeWorkspace.id')
+  wb=$("$root/scripts/nestctl" monitors -j | jq -r --arg n "$OUT_B" '.[] | select(.name == $n) | .activeWorkspace.id')
   move_to_space A "$wa"
   move_to_space B "$wb"
-  spawn_foot C1 WAYLAND-1
+  spawn_foot C1 $OUT_A
   move_to_space C1 9
-  spawn_foot C2 GF-REF
+  spawn_foot C2 $OUT_B
   move_to_space C2 10
   for t in A B; do
     other=$([[ $t == A ]] && echo B || echo A)
@@ -207,57 +252,127 @@ t_drag() {
   done
 }
 
+# ptr_on <title>: park the pointer on the output of the foot window <title> (an empty spot of it: no focus change expected).
+out_of() { [[ $1 == A ]] && echo $OUT_A || echo $OUT_B; }
+park="700 120"   # a bare spot of an output: no window, no Dock tile, no hot corner
+ptr_on() { ptr output "$(out_of "$1")" abs $park; sleep 0.3; }
+
+# keys_arrive <title> <tag>: type <tag> + Return and check it arrived in the window <title> and in no other one: the
+# KEYBOARD (not activewindow) is what is verified. Prints where it went when it did not.
+keys_arrive() {
+  local t=$1 tag=$2 where
+  kb "$tag" -k Return
+  if ! wait_for 3 grep -qx "$tag" "$out/$t.txt"; then
+    where=$(grep -lx "$tag" "$out"/*.txt 2>/dev/null | xargs -r -n1 basename | tr '\n' ' ')
+    echo "note: '$tag' did not reach $t (went to: ${where:-nowhere}; active=$(active_title))"
+    return 1
+  fi
+  ! grep -lx "$tag" "$out"/*.txt | grep -qv "/$t.txt"
+}
+
+# close_via <path> <output>: closes the open overview by one path. esc | ipc | toggle | backdrop (click on empty space of
+# <output>) | apps (the Apps launcher opens, which closes the overview through ExclusiveSurfaces; then it is closed too).
+close_via() {
+  local path=$1 o=$2 h
+  case $path in
+    esc) kb -k Escape ;;
+    ipc) ipc overview close >/dev/null ;;
+    toggle) ipc overview toggle >/dev/null ;;
+    backdrop)
+      h=$(status | jq -r --arg n "$o" '.screens[] | select(.name == $n) | .height')
+      ptr output "$o" abs 6 $(( h > 200 ? h - 60 : 100 )) sleep 300 click ;;
+    apps) ipc apps open >/dev/null; sleep 1; ipc apps close >/dev/null; sleep 0.8 ;;
+  esac
+  wait_for 5 overview_closed
+}
+
+# paths: after every close path, with the pointer on either output and either window previously active, the window
+# that was active when the overview opened (captured at open) holds the keyboard.
+t_paths() {
+  local path prev o pre tag n=0
+  for path in esc ipc toggle backdrop apps; do
+    for prev in A B; do
+      for o in $OUT_A $OUT_B; do
+        n=$((n + 1))
+        focus "$prev"
+        ptr output "$o" abs $park; sleep 0.3
+        pre=$(active_title)
+        open_overview
+        close_via "$path" "$o"
+        sleep 0.5
+        tag="P$n$RANDOM"
+        keys_arrive "$prev" "$tag"; check "paths: $path, pointer on $o, $prev active at open (was $pre): $prev holds the keyboard" $?
+      done
+    done
+  done
+}
+
 t_loop() {
-  local i from other mode act pre
+  local i from other mode act pre tag
   for i in $(seq 1 10); do
     if (( i % 2 )); then from=A; other=B; else from=B; other=A; fi
     focus "$from"
+    ptr_on "$other"   # the pointer rests on the OTHER output
     pre=$(active_title)
     open_overview
     if (( i % 4 < 2 )); then
-      "$root/scripts/dev/keys.sh" -k Escape; mode=Esc
+      kb -k Escape; mode=Esc
     else
       ipc overview close >/dev/null; mode=IPC
     fi
     wait_for 5 overview_closed
     sleep 0.7
     act=$(active_title)
-    [[ $act == "$from" ]]; check "loop $i ($mode): $from active after close (active=$act, before open=$pre)" $?
-    type_into "$from" "L$i-$RANDOM"; check "loop $i: $from receives typed keys" $?
+    [[ $act == "$from" ]]; check "loop $i ($mode, pointer on $other's output): $from active after close (active=$act, before open=$pre)" $?
+    tag="L$i$RANDOM"
+    keys_arrive "$from" "$tag"; check "loop $i: $from receives typed keys" $?
   done
 }
 
-# drop: Esc closes the overview, one character plus Return is typed D ms later into the active foot (10 tries per delay).
-# The character may land in A or B (the close returns to the last active window, which depends on the pointer): it counts
-# as arrived in either file. Reports how many arrived; it is a measurement of the close-to-keyboard window and fails only when the 200 ms row is not
-# complete (a key typed long after the close must always arrive).
+# drop: Esc closes the overview, one injector process types a tag + Return D ms later (keys.sh -k Escape -s D tag: a single
+# connected process, so the delay is exactly D, without the tool's start-up time). 10 tries per delay; the previously active
+# window (A or B alternating, the pointer alternating between the outputs) must get the keys: no key may reach the other
+# window at any delay, and from 200 ms every key must arrive. Faster keys meet the chrome still holding the keyboard (it
+# commits None, then the focus follows): they are lost, never misdelivered. Prints the drop table.
 t_drop() {
-  local d i ok last act
-  focus A
-  for d in 0 30 60 100 200; do
-    ok=0 act=""
+  local d i ok wrong lost prev o tag
+  for d in 0 30 60 100 150 200 300; do
+    ok=0 wrong=0 lost=0
     for i in $(seq 1 10); do
+      if (( i % 2 )); then prev=A; else prev=B; fi
+      if (( i % 4 < 2 )); then o=$(out_of "$prev"); else o=$([[ $prev == A ]] && echo $OUT_B || echo $OUT_A); fi
+      focus "$prev"
+      ptr output "$o" abs $park; sleep 0.3
       open_overview
-      : >"$out/A.txt"; : >"$out/B.txt"
-      "$root/scripts/dev/keys.sh" -k Escape
-      (( d > 0 )) && sleep "0.$(printf %03d "$d")"
-      "$root/scripts/dev/keys.sh" q -k Return
-      sleep 0.6
-      cat "$out/A.txt" "$out/B.txt" | grep -qx q && ok=$((ok + 1))
+      tag="d${d}i${i}r$RANDOM"
+      if (( d > 0 )); then
+        kb -k Escape -s "$d" "$tag" -k Return
+      else
+        kb -k Escape "$tag" -k Return
+      fi
+      sleep 0.7
+      if grep -qx "$tag" "$out/$prev.txt"; then
+        ok=$((ok + 1))
+      elif grep -lx "$tag" "$out"/*.txt >/dev/null 2>&1; then
+        wrong=$((wrong + 1))
+      else
+        lost=$((lost + 1))
+      fi
       wait_for 3 overview_closed
-      sleep 0.5
-      act="$act$(active_title | head -c1)"
+      sleep 0.4
     done
-    echo "drop: ${d} ms after Esc: $ok/10 arrived (active window after each close: $act)"
-    last=$ok
+    echo "drop table: ${d} ms after Esc: $ok/10 in the previous window, $lost lost, $wrong in another window"
+    check "drop: ${d} ms after Esc no key reaches another window ($wrong)" $(( wrong == 0 ? 0 : 1 ))
+    if (( d >= 200 )); then
+      check "drop: ${d} ms after Esc every key reaches the previously active window ($ok/10)" $(( ok == 10 ? 0 : 1 ))
+    fi
   done
-  [[ $last == 10 ]]; check "drop: 200 ms after Esc every character arrives ($last/10)" $?
 }
 
 t_backdrop() {
   local o
-  for o in GF-REF WAYLAND-1; do
-    focus "$([[ $o == GF-REF ]] && echo A || echo B)"
+  for o in $OUT_B $OUT_A; do
+    focus "$([[ $o == $OUT_B ]] && echo A || echo B)"
     open_overview
     # Bottom-left corner area: no window, no Spaces bar.
     ptr output "$o" abs 6 600 sleep 300 click
@@ -267,6 +382,7 @@ t_backdrop() {
 }
 
 mode=${1:-all}
+[[ $mode == lib ]] && return 0   # sourced by a probe script: functions only
 setup
 case $mode in
   click) t_click ;;
@@ -275,8 +391,10 @@ case $mode in
   loop) t_loop ;;
   backdrop) t_backdrop ;;
   drop) t_drop ;;
-  shots) focus A; open_overview; for o in WAYLAND-1 GF-REF; do "$root/scripts/dev/shot.sh" "ovt-$o" "$o"; done; ipc overview close >/dev/null ;;
-  all) t_click; t_hover; t_loop; t_backdrop; t_drag ;;   # drag last: it moves A and B to another Space
-  *) echo "usage: $0 [click|hover|drag|loop|backdrop|drop|all]" >&2; exit 2 ;;
+  shots) focus A; open_overview; for o in $OUT_A $OUT_B; do "$root/scripts/dev/shot.sh" "ovt-$o" "$o"; done; ipc overview close >/dev/null ;;
+  paths) t_paths ;;
+  all) t_click; t_hover; t_loop; t_paths; t_backdrop; t_drop; t_drag ;;   # drag last: it moves A and B to another Space
+  *) echo "usage: $0 [click|hover|drag|loop|paths|backdrop|drop|all]" >&2; exit 2 ;;
 esac
+size_guard
 exit "$fails"

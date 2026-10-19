@@ -42,9 +42,30 @@ QString normalizeGlyph(const QString &glyph)
     const QString cluster = end < 0 ? trimmed : trimmed.left(end);
     if (cluster.size() > kMaxGlyphUnits)
         return {};
-    for (const QChar c : cluster) {
-        if (c.category() == QChar::Other_Control || c == QChar(0xFFFD))
+    // Same rule as ui/Grassfield/Ui/FolderStyle.js normalizeGlyph: no control, format (bidi marks, zero width space...,
+    // except the joiner of emoji sequences and the tag characters of subdivision flags), separator, lone surrogate or
+    // replacement character.
+    for (int i = 0; i < cluster.size(); ++i) {
+        uint ucs4 = cluster.at(i).unicode();
+        if (QChar::isHighSurrogate(ucs4) && i + 1 < cluster.size() && QChar::isLowSurrogate(cluster.at(i + 1).unicode())) {
+            ucs4 = QChar::surrogateToUcs4(ucs4, cluster.at(i + 1).unicode());
+            ++i;
+        }
+        switch (QChar::category(ucs4)) {
+        case QChar::Other_Control:
+        case QChar::Other_Surrogate:
+        case QChar::Separator_Line:
+        case QChar::Separator_Paragraph:
             return {};
+        case QChar::Other_Format:
+            if (ucs4 != 0x200D && !(ucs4 >= 0xE0020 && ucs4 <= 0xE007F))
+                return {};
+            break;
+        default:
+            if (ucs4 == 0xFFFD)
+                return {};
+            break;
+        }
     }
     return cluster;
 }
@@ -70,6 +91,11 @@ Style parse(const QByteArray &stored)
     if (glyph.isString())
         style.glyph = normalizeGlyph(glyph.toString());
     return style;
+}
+
+bool tooLargeToEdit(const QByteArray &stored)
+{
+    return stored.size() > kMaxStored;
 }
 
 QByteArray apply(const QByteArray &stored, const Style &style)

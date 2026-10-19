@@ -30,8 +30,10 @@ const char *attributeName();
 bool validColor(const QString &color);
 // A valid colour as stored (hex in lower case), "" for anything else.
 QString normalizeColor(const QString &color);
-// The first grapheme cluster of `glyph` (white space around it trimmed), "" when empty, a control character or longer
-// than a sane cluster (a pasted sentence is not a symbol).
+// The symbol rule, the same in ui/Grassfield/Ui/FolderStyle.js (shared test vectors): the first grapheme cluster of
+// `glyph` (white space around it trimmed); "" when empty, longer than 16 UTF-16 units (a pasted sentence is not a
+// symbol), or when it holds a control, format (bidi marks, zero width space; the emoji joiner and tag characters are
+// allowed), line/paragraph separator, lone surrogate or replacement character.
 QString normalizeGlyph(const QString &glyph);
 
 // The style held by a stored value. Anything that is not a JSON object, or holds invalid fields, reads as empty fields
@@ -40,8 +42,13 @@ Style parse(const QByteArray &stored);
 
 // `stored` with `style` applied: colour and glyph set to exactly `style`'s (an empty field removes its key), every other
 // key and the version kept as stored. Returns an empty value when nothing is left (remove the attribute). A stored
-// value that is not a JSON object is replaced.
+// value that is not a JSON object is replaced (it holds nothing of a newer version); one larger than the read limit
+// (tooLargeToEdit) must not be edited at all: it would drop the keys this version cannot read.
 QByteArray apply(const QByteArray &stored, const Style &style);
+
+// A stored value larger than the limit the reader accepts (4096 bytes): it reads as empty, and editing it would lose its
+// content, so callers refuse to write instead.
+bool tooLargeToEdit(const QByteArray &stored);
 
 // The value for `style` alone (apply to nothing).
 QByteArray serialize(const Style &style);

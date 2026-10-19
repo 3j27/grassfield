@@ -48,20 +48,45 @@ Scope {
     // Tiles launched from the Dock that have no window yet (they bounce): key -> start time (ms).
     property var launching: ({})
 
+    // Keys of the listed apps that had a window at the previous rebuild (null: no rebuild yet).
+    property var previousRunning: null
+
+    // Persists the recent apps list only when it differs from the stored one.
+    function writeRecents(list: var): void {
+        const current = Settings.dockRecent;
+        if (list.length !== current.length || list.some((k, i) => k !== current[i]))
+            Settings.setDockRecent(list);
+    }
+
+    // A tile is being dragged on some screen: the tiles are not rebuilt until the release (a rebuild destroys the dragged
+    // delegate and its drag handler, and the drop would never be finished). The latest state is applied right after.
+    property bool rebuildPending: false
+
+    function dragInProgress(): bool {
+        return windows.instances.some(w => w.dragFrom >= 0);
+    }
+
     function rebuild(): void {
+        if (dragInProgress()) {
+            rebuildPending = true;
+            return;
+        }
+        rebuildPending = false;
         const running = [];
         const tops = Compositor.toplevels ? Compositor.toplevels.values : [];
         for (let i = 0; i < tops.length; i++)
             running.push({appId: tops[i].appId, ref: tops[i]});
         const apps = DockModel.merge(Settings.dockPinned, running, Apps.lookup);
-        // Running apps that are not kept in the Dock become "recent" when they quit (never rewritten while listed).
+        // Apps that were running and quit while not kept in the Dock become "recent" (DockModel.recentsAfter: a pure
+        // function of the previous and current running sets, written only when the list really changes).
+        const runningKeys = apps.filter(a => a.windows.length > 0 && a.entry && Apps.isListed(a.entry)).map(a => a.key);
+        const before = previousRunning;
+        previousRunning = runningKeys;
         if (Settings.dockShowRecents) {
-            const known = Settings.dockRecent;
-            const fresh = apps.filter(a => !a.pinned && a.entry && known.indexOf(a.key) < 0).map(a => a.key);
-            if (fresh.length > 0)
-                Qt.callLater(() => Settings.setDockRecent(fresh.reduce((list, k) => DockModel.pushRecent(list, k, Tokens.dockRecentMax), Settings.dockRecent)));
+            const pinnedKeys = apps.filter(a => a.pinned).map(a => a.key);
+            writeRecents(DockModel.recentsAfter(Settings.dockRecent, before, runningKeys, pinnedKeys, Tokens.dockRecentMax));
         }
-        const shown = Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax) : apps;
+        const shown = Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, Apps.isListed) : apps;
         const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
         items = DockModel.withTail(shown, tail);
         pruneLaunching();
@@ -86,8 +111,8 @@ Scope {
         next[item.key] = Date.now();
         launching = next;
         launchTimer.restart();
-        if (!item.pinned && Settings.dockShowRecents)
-            Settings.setDockRecent(DockModel.pushRecent(Settings.dockRecent, item.key, Tokens.dockRecentMax));
+        if (!item.pinned && Settings.dockShowRecents && Apps.isListed(item.entry))
+            writeRecents(DockModel.pushRecent(Settings.dockRecent, item.key, Tokens.dockRecentMax));
     }
 
     // Removes a tile from the Dock (drag out): unpins it and forgets it as a recent app. Running apps keep their
@@ -257,8 +282,13 @@ Scope {
             property int dragFrom: -1
             property real dragDx: 0
             property real dragDy: 0
-            readonly property int appCount: root.items.filter(it => it.kind === "app").length
-            readonly property int dragSlot: dragFrom < 0 ? -1 : DockModel.dropSlot(baseCenters, appCount, baseCenters[dragFrom] + dragDx)
+            onDragFromChanged: if (dragFrom < 0 && root.rebuildPending)
+                root.rebuild()
+            // Item indices of the app tiles; the drag slots and the reorder work on positions in this list (the recent
+            // applications divider sits between app tiles).
+            readonly property var appItems: DockModel.appIndices(root.items)
+            readonly property int dragFromApp: dragFrom < 0 ? -1 : appItems.indexOf(dragFrom)
+            readonly property int dragSlot: dragFrom < 0 ? -1 : DockModel.dropSlot(baseCenters, appItems, baseCenters[dragFrom] + dragDx)
             readonly property bool dragOut: dragFrom >= 0 && dragDy < -(Tokens.dockPadding + iconSize / 2 + Tokens.dockDragOutDistance)
             readonly property bool dragRemovable: dragFrom >= 0 && !!root.items[dragFrom] && (root.items[dragFrom].pinned || root.items[dragFrom].recent === true) && root.items[dragFrom].windows.length === 0
             property real poofX: 0
@@ -267,9 +297,11 @@ Scope {
 
             function finishDrag(tileItem: Item): void {
                 const from = dragFrom;
-                const item = root.items[from];
+                const all = root.items;
+                const item = all[from];
                 const out = dragOut && dragRemovable;
                 const slot = dragSlot;
+                const fromApp = dragFromApp;
                 const cx = tileItem.mapToItem(area, tileItem.width / 2, win.iconSize / 2).x + dragDx;
                 const cy = tileItem.mapToItem(area, 0, win.iconSize / 2).y + dragDy;
                 dragFrom = -1;
@@ -282,7 +314,7 @@ Scope {
                         win.poof(cx, cy);
                     return;
                 }
-                const r = DockModel.reorder(root.items, from, slot);
+                const r = DockModel.reorder(all, fromApp, slot);
                 if (r.changed)
                     Settings.setDockPinned(r.pinned);
             }
@@ -304,6 +336,9 @@ Scope {
                 easing.type: Easing.OutQuad
             }
             readonly property bool autohide: Settings.dockAutohide
+            // Running dots: white over a dark shelf, black over a light one (the shelf is the tint over the wallpaper under
+            // it, BarTone), so they keep 3:1 or more whatever the wallpaper and appearance.
+            readonly property bool dotLight: BarTone.dotToneFor(win.screen ? win.screen.name : "", Appearance.colors.materialTint, shelf.blurActive ? shelf.tintAlpha : 1) === "light"
 
             // Layout from the unmagnified geometry (stable under the pointer), then scaled.
             readonly property var widths: root.items.map(it => it.kind === "separator" ? separatorWidth : iconSize)
@@ -382,7 +417,7 @@ Scope {
             // separator): where that window lands (minimize, `adding`: the tile does not exist yet and is
             // appended before the Trash) or leaves from (restore). Called by Compositor for this screen.
             function tileRect(index: int, adding: bool, toplevel: var): var {
-                const sep = root.items.findIndex(it => it.kind === "separator");
+                const sep = root.items.findIndex(it => it.kind === "separator" && !it.divider);
                 const mon = Compositor.monitorByName(win.screen.name);
                 if (Settings.dockMinimizeIntoApp && toplevel && mon) {
                     // Minimize into the application icon: the window goes to (and comes from) its app's tile.
@@ -542,15 +577,16 @@ Scope {
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
                                 readonly property real shiftX: {
-                                    const from = win.dragFrom;
-                                    if (from < 0 || index === from || !isApp)
+                                    const from = win.dragFromApp;
+                                    const at = win.appItems.indexOf(index);
+                                    if (from < 0 || at === from || !isApp)
                                         return 0;
                                     if (win.dragOut && win.dragRemovable)
-                                        return index > from && isApp ? -win.pitch : 0;
+                                        return at > from ? -win.pitch : 0;
                                     const slot = win.dragSlot;
-                                    if (from < slot && index > from && index <= slot)
+                                    if (from < slot && at > from && at <= slot)
                                         return -win.pitch;
-                                    if (slot < from && index >= slot && index < from)
+                                    if (slot < from && at >= slot && at < from)
                                         return win.pitch;
                                     return 0;
                                 }
@@ -572,7 +608,7 @@ Scope {
                                 }
                                 activeFocusOnTab: !isSeparator
                                 Accessible.role: isSeparator ? Accessible.Separator : Accessible.Button
-                                Accessible.name: isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? qsTr(", %1 notifications").arg(badge) : "")))
+                                Accessible.name: isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? (badge === 1 ? qsTr(", 1 notification") : qsTr(", %1 notifications").arg(badge)) : "")))
                                 Accessible.focusable: !isSeparator
                                 Accessible.ignored: isSeparator
                                 Accessible.onPressAction: root.activateItem(modelData)
@@ -753,7 +789,7 @@ Scope {
                                     width: Tokens.dockIndicatorSize
                                     height: Tokens.dockIndicatorSize
                                     radius: width / 2
-                                    color: Appearance.colors.indicator
+                                    color: win.dotLight ? Appearance.darkColors.indicator : Appearance.lightColors.indicator
                                     x: (tile.width - width) / 2
                                     y: win.iconSize + Tokens.dockSpacing
                                 }
@@ -807,16 +843,32 @@ Scope {
                                     anchors.fill: parent
                                     enabled: tile.isApp && !!tile.modelData.entry
                                     keys: ["text/uri-list"]
+                                    // The tile highlights and accepts only a document its app can open (file field code
+                                    // in Exec and a matching MimeType); otherwise the drop is refused.
+                                    property bool acceptable: false
+                                    // The URI list is not always readable while the drag is only hovering (some sources hand it
+                                    // over at the drop): then the tile highlights and the drop itself decides.
+                                    function check(drag: var): bool {
+                                        const text = drag.getDataAsString("text/uri-list");
+                                        return text === "" || Apps.canOpen(tile.modelData.entry, Icons.parseUriList(text));
+                                    }
+                                    onEntered: drag => {
+                                        acceptable = check(drag);
+                                        drag.accepted = acceptable;
+                                    }
+                                    onExited: acceptable = false
                                     onDropped: drop => {
-                                        drop.accept(Qt.CopyAction);
                                         const paths = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
-                                        if (paths.length > 0)
-                                            Apps.openWith(tile.modelData.entry, paths);
+                                        acceptable = false;
+                                        if (paths.length > 0 && Apps.openWith(tile.modelData.entry, paths))
+                                            drop.accept(Qt.CopyAction);
+                                        else
+                                            drop.accepted = false;
                                     }
                                 }
 
                                 Rectangle {
-                                    visible: tile.isApp && appDrop.containsDrag
+                                    visible: tile.isApp && appDrop.containsDrag && appDrop.acceptable
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
@@ -843,7 +895,9 @@ Scope {
                                     onTranslationChanged: {
                                         if (active) {
                                             win.dragDx = translation.x;
-                                            win.dragDy = translation.y;
+                                            // Never above the point where the "Remove" label would leave the window.
+                                            const iconTop = win.height - Tokens.dockBottomMargin - Tokens.dockPadding - win.indicatorArea - tile.iconPx;
+                                            win.dragDy = Math.max(translation.y, -(iconTop - Tokens.dockTooltipGap - tooltip.height));
                                         }
                                     }
                                 }

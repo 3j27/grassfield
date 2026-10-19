@@ -156,4 +156,74 @@ TestCase {
         compare(V2.keysEnabled("closed"), false);
         compare(V2.keysEnabled(undefined), false);
     }
+
+    // ---- release sequencing ----
+
+    // The holder is released last: first every other chrome None while the holder stays Exclusive, then all None.
+    function test_keyboardPlanReleasesTheHolderLast() {
+        const first = V2.keyboardPlan(["WAYLAND-1", "GF-REF"], "releasing", "GF-REF");
+        compare(first["GF-REF"], "exclusive");
+        compare(first["WAYLAND-1"], "none");
+        const second = V2.keyboardPlan(["WAYLAND-1", "GF-REF"], "releasing", "");
+        compare(second["GF-REF"], "none");
+        compare(second["WAYLAND-1"], "none");
+        // `keep` only matters while releasing.
+        compare(V2.keyboardPlan(["a"], "closed", "a").a, "none");
+        compare(V2.keyboardPlan(["a", "b"], "open", "a").b, "exclusive");
+    }
+
+    // Every chrome commits None on its own: the close completes only when no chrome reports the keyboard and the settle
+    // pause since the last change has elapsed; the bound ends the wait whatever the reports say.
+    function test_releaseDoneWaitsForEveryChromeAndTheSettlePause() {
+        compare(V2.releaseDone(true, false, false), false, "keyboard still on a chrome");
+        compare(V2.releaseDone(true, true, false), false, "settled but a chrome still reports the keyboard");
+        compare(V2.releaseDone(false, false, false), false, "released but not settled (another chrome may still commit)");
+        compare(V2.releaseDone(false, true, false), true);
+    }
+
+    function test_releaseDoneBoundEndsTheWait() {
+        compare(V2.releaseDone(true, false, true), true);
+        compare(V2.releaseDone(false, false, true), true);
+        compare(V2.releaseDone(true, true, undefined), false, "forced must be exactly true");
+    }
+
+    // The holder commits first (Hyprland refuses to refocus), then the other chrome: replay the controller's timer rules.
+    function test_releaseSequenceHolderFirstThenSettle() {
+        let held = true;
+        let settled = false;
+        const log = [];
+        log.push(V2.releaseDone(held, settled, false));
+        held = false;   // the holder's chrome reports Window.active false: the settle restarts
+        settled = false;
+        log.push(V2.releaseDone(held, settled, false));
+        settled = true; // the settle pause elapsed with no further change
+        log.push(V2.releaseDone(held, settled, false));
+        compare(log, [false, false, true]);
+    }
+
+    // ---- what a close without a chosen window focuses ----
+
+    function test_restorePlanReturnsToThePreviouslyActiveWindow() {
+        const plan = V2.restorePlan({address: "0xa", workspaceId: 3}, ["0xb", "0xa"], 0);
+        compare(plan.kind, "window");
+        compare(plan.address, "0xa");
+        compare(plan.workspaceId, 3);
+    }
+
+    function test_restorePlanWindowGoneLeavesHyprlandsChoice() {
+        compare(V2.restorePlan({address: "0xa", workspaceId: 3}, ["0xb"], 0).kind, "none");
+        compare(V2.restorePlan({address: "0xa", workspaceId: 3}, [], 0).kind, "none");
+        compare(V2.restorePlan({address: "0xa", workspaceId: 3}, null, 0).kind, "none");
+    }
+
+    function test_restorePlanNothingRememberedLeavesHyprlandsChoice() {
+        compare(V2.restorePlan(null, ["0xa"], 0).kind, "none");
+        compare(V2.restorePlan({address: "", workspaceId: 1}, ["0xa"], 0).kind, "none");
+    }
+
+    function test_restorePlanStaysOnADesktopCreatedWhileOpen() {
+        const plan = V2.restorePlan({address: "0xa", workspaceId: 3}, ["0xa"], 7);
+        compare(plan.kind, "space");
+        compare(plan.id, 7);
+    }
 }

@@ -5,7 +5,7 @@
 // Record: {toplevel, address, appId, title}.
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview"];
+var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -30,6 +30,13 @@ function windowCall(verb, address, rect) {
     const args = ["\"0x" + hex + "\""];
     [r.x, r.y, r.w, r.h].forEach(n => args.push(String(Math.round(n))));
     return guardedPluginCall(verb, args);
+}
+
+// hl.plugin.grassfield.cursor_refresh() (gfc/1 capability "cursor-refresh"): the plugin redraws the cursor with the
+// theme and size Hyprland holds now. ASSUMPTION until the compositor side lands: the Lua name is the capability with an
+// underscore (a Lua identifier) and the call takes no argument; guarded, so a plugin without it makes this a no-op.
+function cursorRefreshCall() {
+    return guardedPluginCall("cursor_refresh", []);
 }
 
 // hl.plugin.grassfield.appmenu(address): the plugin re-posts that window's gfc/1 appmenu event (FR22). Used after a
@@ -125,6 +132,15 @@ function focusRequest(id) {
     if (!/^[1-9][0-9]{0,8}$/.test(ws))
         return "";
     return "hl.dsp.focus({ workspace = \"" + ws + "\" })";
+}
+
+// Focus of a window by address (keyboard included), "" if invalid. Unlike the protocol `activate`, this gives the keyboard
+// back to a window Hyprland still counts as focused after a layer surface held the keyboard.
+function focusWindowRequest(address) {
+    const hex = normalizeAddress(address);
+    if (hex === "")
+        return "";
+    return "hl.dsp.focus({ window = \"address:0x" + hex + "\" })";
 }
 
 // Fullscreen state change of a window; mode "maximized" is Zoom, "fullscreen" is full screen.

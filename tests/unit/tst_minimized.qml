@@ -104,6 +104,8 @@ TestCase {
         for (const v of ["hello", "minimize", "restore", "config", "appmenu"])
             verify(Minimized.isPluginVerb(v), v);
         verify(Minimized.isPluginVerb("overview"));
+        verify(Minimized.isPluginVerb("cursor_refresh"));
+        compare(Minimized.cursorRefreshCall(), "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.cursor_refresh then p.cursor_refresh() end end");
         for (const v of ["theme"])
             verify(!Minimized.isPluginVerb(v), v);
         compare(Minimized.guardedPluginCall("theme", []), "");
@@ -186,6 +188,14 @@ TestCase {
         compare(Minimized.moveRequest("55ab", "foo"), "");
         compare(Minimized.moveRequest("55ab", "0"), "");
         compare(Minimized.moveRequest("55ab", 4).indexOf("workspace = \"4\"") > 0, true);
+    }
+
+    function test_focusWindowRequestValidates() {
+        compare(Minimized.focusWindowRequest("0xAB12"), "hl.dsp.focus({ window = \"address:0xab12\" })");
+        compare(Minimized.focusWindowRequest("ab12"), "hl.dsp.focus({ window = \"address:0xab12\" })");
+        compare(Minimized.focusWindowRequest("0x1\" }) evil"), "");
+        compare(Minimized.focusWindowRequest(""), "");
+        compare(Minimized.focusWindowRequest(undefined), "");
     }
 
     function test_focusRequestValidates() {
