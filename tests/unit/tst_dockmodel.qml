@@ -273,6 +273,35 @@ TestCase {
         verify(!DockModel.acceptsFiles(files, [dir], data, DockModel.parseResolved([dir], "")));
     }
 
+    // An unpinned running app that quits joins the recents section: its tile glides there (no jump), the others close the gap.
+    function test_layoutTransitionFollowsTheKeys() {
+        const lk = id => entries[id];
+        const before = DockModel.withTail(DockModel.merge(["foot"], [{appId: "chromium", ref: "c"}, {appId: "org.gnome.Nautilus", ref: "n"}], lk), []);
+        // chromium quits: it is a recent app now (after a divider), nautilus keeps running
+        const apps = DockModel.merge(["foot"], [{appId: "org.gnome.Nautilus", ref: "n"}], lk);
+        const after = DockModel.withTail(DockModel.withRecents(apps, ["chromium"], lk, 3), []);
+        const xs = (items, widths) => {
+            const out = {};
+            let x = 0;
+            items.forEach(it => {
+                out[DockModel.tileKey(it)] = x;
+                x += (it.kind === "separator" ? 9 : 48) + 4;
+            });
+            return out;
+        };
+        const plan = DockModel.layoutTransition(xs(before), xs(after), 1);
+        compare(DockModel.tileKey(before[1]), "app:chromium");
+        compare(Object.keys(plan.slide).sort().join(","), "app:chromium,app:org.gnome.Nautilus,sep,trash");
+        compare(plan.slide["app:chromium"], -65);  // it glides in from the left: its old place is 65 px left of the new one
+        compare(plan.slide["app:org.gnome.Nautilus"], 52);
+        compare(plan.enter.join(","), "sep:divider");
+        // first build and unchanged layouts animate nothing
+        compare(Object.keys(DockModel.layoutTransition({}, xs(after), 1).slide).length, 0);
+        compare(DockModel.layoutTransition({}, xs(after), 1).enter.length, 0);
+        const same = DockModel.layoutTransition(xs(after), xs(after), 1);
+        compare(Object.keys(same.slide).length + same.enter.length, 0);
+    }
+
     function test_bounceKeys() {
         const items = DockModel.merge(["foot", "chromium"], [{appId: "chromium", ref: "c"}], lookup);
         const out = DockModel.bounceKeys({foot: 1000, chromium: 1000, old: 0}, items, 5000, 10000);

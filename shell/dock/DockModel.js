@@ -378,3 +378,38 @@ function bounceKeys(launching, items, now, timeoutMs) {
     }
     return out;
 }
+
+// ---- Layout transitions ----
+// Tiles are rebuilt when apps open, quit or move between sections (an app that quits and is not kept in the Dock leaves the
+// app section and joins the recents section after the divider). To keep that from jumping, every rebuild animates the
+// tiles from where their key was to where it is now (FLIP): the window records the x of each tile before the rebuild and
+// compares it with the new layout.
+
+// Identity of an item across rebuilds.
+function tileKey(item) {
+    if (!item)
+        return "";
+    if (item.kind === "separator")
+        return item.divider ? "sep:divider" : "sep";
+    if (item.kind === "trash")
+        return "trash";
+    return item.kind + ":" + item.key;
+}
+
+// {slide: {key: before - after}, enter: [key]} for two {key: x} maps in the same coordinates: tiles in both that moved by
+// more than `min` px start offset by the difference and glide to 0; tiles only in `after` fade in. An empty `before`
+// (first build) animates nothing.
+function layoutTransition(before, after, min) {
+    const slide = {};
+    const enter = [];
+    const known = Object.keys(before ? before : {}).length > 0;
+    if (!known)
+        return {slide: slide, enter: enter};
+    for (const key of Object.keys(after ? after : {})) {
+        if (before[key] === undefined)
+            enter.push(key);
+        else if (Math.abs(before[key] - after[key]) > min)
+            slide[key] = before[key] - after[key];
+    }
+    return {slide: slide, enter: enter};
+}

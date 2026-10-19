@@ -89,7 +89,10 @@ Scope {
             writeRecents(step.recent);
         const shown = ready && Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, Apps.isListed) : apps;
         const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
+        const all = windows.instances;
+        all.forEach(w => w.captureLayout());
         items = DockModel.withTail(shown, tail);
+        all.forEach(w => w.playLayout());
         pruneLaunching();
     }
 
@@ -327,6 +330,43 @@ Scope {
                 const r = DockModel.reorder(all, fromApp, slot);
                 if (r.changed)
                     Settings.setDockPinned(r.pinned);
+            }
+
+            // Layout transition (DockModel.layoutTransition): x of every tile (window coordinates) before a rebuild.
+            property var layoutBefore: ({})
+
+            function tileXs(): var {
+                const out = {};
+                for (let i = 0; i < tileRepeater.count; i++) {
+                    const t = tileRepeater.itemAt(i) as Item;
+                    if (t)
+                        out[DockModel.tileKey(t.modelData)] = t.mapToItem(area, 0, 0).x;
+                }
+                return out;
+            }
+
+            function captureLayout(): void {
+                layoutBefore = tileXs();
+            }
+
+            // After the tiles were rebuilt: tiles that moved glide from their old place (an app that quit moves into the
+            // recents section instead of jumping), new tiles fade in. Skipped with Reduce Motion and while a tile is dragged.
+            function playLayout(): void {
+                if (Appearance.reduceMotion || dragFrom >= 0)
+                    return;
+                tiles.forceLayout();
+                const after = tileXs();
+                const plan = DockModel.layoutTransition(layoutBefore, after, 1);
+                for (let i = 0; i < tileRepeater.count; i++) {
+                    const t = tileRepeater.itemAt(i) as Item;
+                    if (!t)
+                        continue;
+                    const key = DockModel.tileKey(t.modelData);
+                    if (plan.slide[key] !== undefined)
+                        t.glideFrom(plan.slide[key]);
+                    else if (plan.enter.indexOf(key) >= 0)
+                        t.fadeIn();
+                }
             }
 
             // Removal puff (own drawing, no artwork): a ring of fading circles around (x, y).
@@ -597,11 +637,41 @@ Scope {
                                     return 0;
                                 }
 
+                                // Layout transition: horizontal offset gliding to 0, and the fade-in of a new tile.
+                                property real glide: 0
+                                function glideFrom(dx: real): void {
+                                    glide = dx;
+                                    glideAnim.restart();
+                                }
+                                function fadeIn(): void {
+                                    opacity = 0;
+                                    fadeAnim.restart();
+                                }
+
+                                NumberAnimation {
+                                    id: glideAnim
+                                    target: tile
+                                    property: "glide"
+                                    to: 0
+                                    duration: Appearance.duration(Tokens.motionNormal)
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: Appearance.curve
+                                }
+
+                                NumberAnimation {
+                                    id: fadeAnim
+                                    target: tile
+                                    property: "opacity"
+                                    to: 1
+                                    duration: Appearance.duration(Tokens.motionNormal)
+                                    easing.type: Easing.OutQuad
+                                }
+
                                 width: isSeparator ? win.separatorWidth : iconPx
                                 height: win.iconSize + win.indicatorArea
                                 z: dragging ? 100 : 0
                                 transform: Translate {
-                                    x: tile.dragging ? win.dragDx : tile.shiftX
+                                    x: tile.dragging ? win.dragDx : tile.shiftX + tile.glide
                                     y: tile.dragging ? win.dragDy : 0
 
                                     Behavior on x {
@@ -657,8 +727,13 @@ Scope {
                                     SequentialAnimation {
                                         running: tile.bouncing
                                         loops: Animation.Infinite
-                                        onRunningChanged: if (!running)
-                                            appIcon.lift = 0
+                                        // The hop ends by landing (a few small rebounds), not by snapping back.
+                                        onRunningChanged: {
+                                            if (running)
+                                                landAnim.stop();
+                                            else if (appIcon.lift > 0)
+                                                landAnim.restart();
+                                        }
 
                                         NumberAnimation {
                                             target: appIcon
@@ -674,6 +749,15 @@ Scope {
                                             duration: Tokens.dockBounceDuration / 2
                                             easing.type: Easing.InQuad
                                         }
+                                    }
+
+                                    NumberAnimation {
+                                        id: landAnim
+                                        target: appIcon
+                                        property: "lift"
+                                        to: 0
+                                        duration: Appearance.duration(Tokens.motionNormal)
+                                        easing.type: Easing.OutBounce
                                     }
 
                                     // Notification badge (counts from the notification history).
