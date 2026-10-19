@@ -713,6 +713,9 @@ Scope {
                                     id: appIcon
                                     visible: tile.isApp
                                     size: win.iconSize
+                                    // Default mode is decoded as before; an effect mode decodes at the largest magnification so the
+                                    // fixed-size texture is never upscaled.
+                                    oversample: appIcon.modeActive ? Tokens.dockIconOversample : appIcon.defaultOversample
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
