@@ -26,7 +26,11 @@
 # Hyprland's pointer focus; a swap made while an Exclusive layer holds the keyboard is kept when the layer closes (8b,
 # second fixture instance with GF_STAGES_ROLE=exclusive); minimizing the only window of the active stage gives the
 # keyboard to the next stage's front window, never to the minimized window (12b); Hyprland's window cycling stays within
-# the active stage (12c).
+# the active stage (12c). R13 counter-review of 17208af: after a swap under an Exclusive layer Hyprland's active window is
+# the new front window and a window dispatcher (close) never reaches the strip window (8c); a menu of the active stage's
+# window keeps its keys, and closes when its window goes to the strip without losing a key (8d, a third fixture instance
+# with GF_STAGES_ROLE=popup); a request for a strip window on another Desktop still brings its stage forward, a Desktop
+# switch back keeps the active stage (8e).
 # Screenshots (grim -o OUTPUT): .dev/stages/run-<timestamp>/. Exit: 0 PASS, 1 FAIL, 2 usage or environment error.
 set -uo pipefail
 
@@ -78,10 +82,16 @@ events=$run/events.log
 fixlog=$run/fixture.log
 start_human=$(date '+%Y-%m-%d %H:%M:%S')
 hyprlog=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/hyprland.log
+# The fixture instances (Quickshell) talk to the nested session's private bus, never the owner's session bus (without
+# one, D-Bus is disabled for them).
+fixture_bus=disabled:
+[[ -s $dev/bus.address ]] && fixture_bus=$(head -n 1 "$dev/bus.address")
 
 say() { printf '%s %s\n' "$(date '+%H:%M:%S.%3N')" "$*" | tee -a "$log"; }
 pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log" 2>&1; }
-keys() { timeout 10 "$root/scripts/dev/keys.sh" "$@" >>"$log" 2>&1; }
+# Each keys.sh / pointer.sh run adds a virtual device; clients bind their new wl_keyboard / wl_pointer when the seat
+# capability comes back, so the first event can be lost on a loaded host: a short wait after the device appears.
+keys() { timeout 10 "$root/scripts/dev/keys.sh" -s 150 "$@" >>"$log" 2>&1; }
 shot() { WAYLAND_DISPLAY=$sock grim -l 0 -o "$out" "$run/$1.png" 2>>"$log"; }
 
 pids=()
@@ -92,6 +102,7 @@ plugin_unloaded=0
 cleanup() {
   [[ -n $fixture_pid ]] && kill "$fixture_pid" 2>/dev/null
   [[ -n $exclusive_pid ]] && kill "$exclusive_pid" 2>/dev/null
+  [[ -n ${popup_pid:-} ]] && kill "$popup_pid" 2>/dev/null
   nestctl dispatch 'hl.plugin.grassfield.stages([[{"op":"off","durationMs":0}]])' >/dev/null 2>&1
   nestctl dispatch 'hl.plugin.grassfield.config("stagesEnabled", "false")' >/dev/null 2>&1
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
@@ -133,7 +144,7 @@ tile() { jq -r --argjson i "$1" '.[$i] | "\(.x) \(.y) \(.w) \(.h)"' <<<"$tiles_j
 
 start_fixture() {
   : >"$fixlog"
-  GF_STAGES_OUTPUT=$out GF_STAGES_STRIP=$strip_json GF_STAGES_TILES=$tiles_json WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
+  GF_STAGES_OUTPUT=$out GF_STAGES_STRIP=$strip_json GF_STAGES_TILES=$tiles_json WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
     setsid "$root/scripts/dev/isolated.sh" --name stages-fixture qs -p "$root/tests/compositor/stages-fixture" --no-color >"$fixlog" 2>&1 </dev/null &
   fixture_pid=$!
   local i
@@ -155,7 +166,7 @@ stop_fixture() {
 exlog=$run/exclusive.log
 start_exclusive() {
   : >"$exlog"
-  GF_STAGES_ROLE=exclusive GF_STAGES_OUTPUT=$out WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig \
+  GF_STAGES_ROLE=exclusive GF_STAGES_OUTPUT=$out WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
     setsid "$root/scripts/dev/isolated.sh" --name stages-exclusive qs -p "$root/tests/compositor/stages-fixture" --no-color >"$exlog" 2>&1 </dev/null &
   exclusive_pid=$!
   local i
@@ -172,6 +183,33 @@ stop_exclusive() {
   wait "$exclusive_pid" 2>/dev/null
   exclusive_pid=""
 }
+# A third fixture instance: an app window whose click opens a menu (an xdg_popup with a grab); it logs the menu opening and
+# closing and every key the window and the menu receive.
+popuplog=$run/popup.log
+popup_pid=""
+start_popup_app() {
+  : >"$popuplog"
+  GF_STAGES_ROLE=popup GF_STAGES_OUTPUT=$out WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
+    setsid "$root/scripts/dev/isolated.sh" --name stages-popup qs -p "$root/tests/compositor/stages-fixture" --no-color >"$popuplog" 2>&1 </dev/null &
+  popup_pid=$!
+  wait_log "$popuplog" "popup app shown" 50
+}
+stop_popup_app() {
+  [[ -n $popup_pid ]] || return 0
+  kill "$popup_pid" 2>/dev/null
+  wait "$popup_pid" 2>/dev/null
+  popup_pid=""
+}
+# Waits until a fixture log has a "[stages-fixture] <text>" line (Quickshell writes its log lines with a delay).
+wait_log() { # <log> <text> <tries of 50 ms>
+  local i
+  for i in $(seq 1 "$3"); do
+    grep -q "\[stages-fixture\] $2" "$1" 2>/dev/null && return 0
+    sleep 0.05
+  done
+  return 1
+}
+client_mapped() { nestctl -j clients 2>/dev/null | jq -e --arg a "$1" 'any(.[]; .address == $a and .mapped)' >/dev/null; }
 active_window() { nestctl -j activewindow 2>/dev/null | jq -r '.address // ""'; }
 cap_since() { tail -c +"$(($2 + 1))" "$1" | cat -v | head -c 120; } # <capture> <size before>: bytes typed since
 
@@ -396,7 +434,9 @@ capc_new=$(tail -c +"$((capc0 + 1))" "$cap_c" | cat -v | head -c 120)
 check "strip window b3 takes no click at its real place; keys go to the active stage (c3)" $? "ring point $ring_x,$ring_y: b3 got '$capb_new', c3 got '$capc_new'"
 read -r tx ty tw th < <(tile 0)
 p0=$(grep -c "\[stages-fixture\] press" "$fixlog")
-pointer abs $((tx + tw / 2 - mon_x)) $((ty + th / 2 - mon_y)) sleep 150 click sleep 200
+# Two motions: each pointer.sh run adds a pointer device, the client binds a new wl_pointer after the first motion and gets
+# its enter at a stale position (-1,-1); the second motion gives it the real one (Quickshell drops a press outside items).
+pointer abs $((tx + tw / 2 - mon_x)) $((ty + th / 2 - mon_y)) sleep 150 abs $((tx + tw / 2 - mon_x + 1)) $((ty + th / 2 - mon_y)) sleep 100 click sleep 200
 for _ in $(seq 1 40); do # Quickshell writes its log lines with a delay
   (($(grep -c "\[stages-fixture\] press" "$fixlog") > p0)) && break
   sleep 0.05
@@ -447,7 +487,7 @@ stages "{\"op\":\"activate\",\"stage\":$sc}"
 wait_st '"active":'"$sc"',' "$a0" 2000
 sw_rc=$?
 sleep 1.2 # the 900 ms swap
-pointer click sleep 300 # buttons only: no motion since the swap
+pointer sleep 150 click sleep 300 # buttons only: no motion since the swap
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
 [[ $sw_rc == 0 && -z $capb_new && $capc_new == *"[<0;"*M* ]]
 check "5b click without motion after a swap: the window now under the cursor (c3) gets it, the strip window (b3) nothing" $? \
@@ -489,7 +529,7 @@ in_active "$addr_d" && [[ $(slot_id 0) == "$prev_active" ]]
 check "a new window of another app opens a new active stage; the previous one leads the strip" $? "d $addr_d, active $(active_id), tile0 $(slot_id 0)"
 # 7b. a click without motion after the new window opened: b3 (strip now) gets nothing.
 capb0=$(stat -c %s "$cap_b")
-pointer click sleep 300
+pointer sleep 150 click sleep 300
 capb_new=$(cap_since "$cap_b" "$capb0")
 [[ -n $addr_d && -z $capb_new ]]
 check "7b click without motion after a new window opened: the strip window under the cursor (b3) gets nothing" $? \
@@ -542,6 +582,141 @@ capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
 ((ex_rc == 0 && sw_rc == 0 && ex_keys >= 1)) && [[ $(active_id) == "$sb" && $capb_new == *k8* && -z $capc_new ]]
 check "8b swap while an Exclusive layer holds the keyboard: kept when the layer closes, the keys go to the new stage (b3)" $? \
   "layer got $ex_keys key line(s) while open; active $(active_id) (expected $sb); b3 got '$capb_new', c3 got '$capc_new'"
+
+# 8c. window actions after a swap under an Exclusive layer target the new stage's front window, never the strip window
+# (R13 counter-review of 17208af: Hyprland's active window stayed on the outgoing window, hidden in the strip, and
+# hl.dsp.window.close() closed it). Two disposable capture windows of new apps: g (newest, active, holds the keyboard)
+# and f (tile 0). Under the layer, f's stage is activated: Hyprland's active window (what window key bindings, window
+# dispatchers and the shell's menu bar act on) must be f; the close dispatcher closes f, g (in the strip at that moment)
+# survives; with f gone g's stage is active again and g becomes the active window behind the layer; when the layer
+# closes, g gets the keys.
+cap_f=$run/capture-f.cap cap_g=$run/capture-g.cap
+p=$(foot_capture gf-stage-f "$cap_f"); pids+=("$p"); pid_f=$p
+addr_f=$(address_of "$p")
+sleep 0.6
+p=$(foot_capture gf-stage-g "$cap_g"); pids+=("$p"); pid_g=$p
+addr_g=$(address_of "$p")
+sleep 0.8
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_g\" })" >>"$log" 2>&1
+sleep 0.4
+start_exclusive
+ex_rc=$?
+keys x9
+sleep 0.4
+sf=$(stage_of "$addr_f")
+a0=$(st_count '"active":'"$sf"',')
+stages "{\"op\":\"activate\",\"stage\":$sf}"
+wait_st '"active":'"$sf"',' "$a0" 2000
+sw_rc=$?
+sleep 0.6
+aw_swap=$(active_window)
+awv2_swap=$(grep -a "activewindowv2>>" "$events" | tail -n 1 | sed 's/.*>>//')
+g_strip=$(in_active "$addr_g" && echo no || echo yes)
+nestctl dispatch 'hl.dsp.window.close()' >>"$log" 2>&1
+sleep 1
+f_left=$(client_mapped "$addr_f" && echo yes || echo no)
+g_left=$(client_mapped "$addr_g" && echo yes || echo no)
+aw_close=$(active_window)
+stop_exclusive
+sleep 1
+capg0=$(stat -c %s "$cap_g")
+keys k9
+sleep 0.4
+capg_new=$(cap_since "$cap_g" "$capg0")
+[[ $ex_rc == 0 && $sw_rc == 0 && $aw_swap == "$addr_f" && $awv2_swap == "$(hexof "$addr_f")" && $g_strip == yes ]]
+check "8c swap under an Exclusive layer: Hyprland's active window is the new stage's front window (f), never the strip window (g)" $? \
+  "active window $aw_swap, last activewindowv2 $awv2_swap (f $addr_f, g $addr_g); g in the strip: $g_strip"
+[[ $f_left == no && $g_left == yes && $aw_close == "$addr_g" && $capg_new == *k9* ]] && in_active "$addr_g"
+check "8c hl.dsp.window.close() under the layer closes the front window (f); the strip window (g) survives, comes forward and gets the keys after the layer" $? \
+  "f mapped after close: $f_left, g mapped: $g_left; active window $aw_close; g got '$capg_new'"
+kill "$pid_g" "$pid_f" 2>/dev/null
+sleep 0.8
+
+# 8d. a menu (xdg_popup with a grab) of the active stage's window keeps its keys; when that window goes to the strip its
+# menu closes at once, as a click outside it would, and every key goes to the new stage (R13 counter-review of 17208af:
+# Hyprland 0.56.2 keeps the keyboard on the toplevel during a popup grab and refused the new window the keyboard; the
+# first key cleared the focus, the app closed its menu, 1-2 keys were lost).
+start_popup_app
+pp_rc=$?
+addr_p=$(address_of "$popup_pid")
+sleep 1.2 # Quickshell's first frames (a click before them can be missed)
+read -r ppx ppy ppw pph < <(jq -r '.[] | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' <<<"$(clients_of "$addr_p")")
+open_menu() { # clicks inside the window, outside where its menu opens, until one more "menu open" line (at most 3 tries)
+  local before i
+  before=$(grep -c "\[stages-fixture\] menu open" "$popuplog")
+  for i in 1 2 3; do # two motions: see the press on a thumbnail (4.)
+    pointer abs $((ppx + ppw - 60 - mon_x)) $((ppy + pph - 60 - mon_y)) sleep 200 abs $((ppx + ppw - 59 - mon_x)) $((ppy + pph - 60 - mon_y)) sleep 100 click sleep 300
+    for _ in $(seq 1 20); do
+      (($(grep -c "\[stages-fixture\] menu open" "$popuplog") > before)) && return 0
+      sleep 0.05
+    done
+  done
+  return 1
+}
+open_menu
+keys p1
+sleep 0.4
+wait_log "$popuplog" "menu key" 40
+menu_keys=$(grep -c "\[stages-fixture\] menu key" "$popuplog")
+app_keys=$(grep -c "\[stages-fixture\] app key" "$popuplog")
+# The nested session's keyboard device goes away after each keys.sh run and Qt then closes the menu (a real keyboard
+# stays): the menu is opened again for the swap.
+sleep 0.4
+reopen_rc=0
+if grep -q "\[stages-fixture\] menu closed" "$popuplog"; then
+  open_menu
+  reopen_rc=$?
+fi
+pl0=$(grep -c "" "$popuplog")
+sb=$(stage_of "$addr_b3")
+a0=$(st_count '"active":'"$sb"',')
+stages "{\"op\":\"activate\",\"stage\":$sb}"
+wait_st '"active":'"$sb"',' "$a0" 2000
+sw_rc=$?
+wait_log "$popuplog" "menu closed" 40
+sleep 0.2
+closed_before_keys=$(tail -n +"$((pl0 + 1))" "$popuplog" | grep -c "\[stages-fixture\] menu closed")
+pl1=$(grep -c "" "$popuplog")
+capb0=$(stat -c %s "$cap_b")
+keys q2
+sleep 0.6
+capb_new=$(cap_since "$cap_b" "$capb0")
+p_keys=$(tail -n +"$((pl1 + 1))" "$popuplog" | grep -c "\[stages-fixture\] \(menu\|app\) key")
+# Qt can drop the first key after a new virtual keyboard (its keyboard capability comes back with it): one menu key line
+# shows that the keys reach the menu.
+((pp_rc == 0 && menu_keys >= 1 && app_keys == 0))
+check "8d a menu of the active stage's window gets its keys" $? "app $addr_p: $menu_keys menu key line(s), $app_keys app key line(s)"
+((sw_rc == 0 && reopen_rc == 0 && closed_before_keys >= 1 && p_keys == 0)) && [[ $capb_new == *q2* ]] && ! in_active "$addr_p"
+check "8d its window goes to the strip: the menu closes before any key, every key goes to the new stage (b3), none to the strip window" $? \
+  "menu reopened for the swap: rc $reopen_rc; closed before the keys: $closed_before_keys; b3 got '$capb_new'; app and menu key lines after the swap: $p_keys"
+stop_popup_app
+sleep 0.8
+
+# 8e. focus reasons: a request for a strip window on a Desktop that is not shown (Hyprland switches to that Desktop and
+# focuses the window with reason WORKSPACE_CHANGE) still brings its stage forward; a plain Desktop switch back restores the
+# Desktop's last window and keeps the active stage (R13 counter-review of 17208af: Hyprland's own picks counted as user
+# choices). a1 then c3 are focused, so a1 is the previous window in Hyprland's focus history.
+ws_8e=$(last_st | jq -r '.monitors[0].workspace')
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_a1\" })" >>"$log" 2>&1
+sleep 0.5
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_c3\" })" >>"$log" 2>&1
+sleep 0.5
+nestctl dispatch 'hl.dsp.focus({ workspace = "9" })' >>"$log" 2>&1
+sleep 0.6
+nestctl dispatch 'hl.dsp.focus({ last = true })' >>"$log" 2>&1
+sleep 0.8
+ws_back=$(nestctl -j activeworkspace | jq -r '.id')
+aw_last=$(active_window)
+[[ $ws_back == "$ws_8e" && $aw_last == "$addr_a1" ]] && in_active "$addr_a1"
+check "8e focus { last } of a strip window on another Desktop (WORKSPACE_CHANGE): its stage comes forward" $? \
+  "Desktop $ws_back (expected $ws_8e), active window $aw_last (a1 $addr_a1), active stage $(active_id), stage of a1 $(stage_of "$addr_a1")"
+act_8e=$(active_id)
+nestctl dispatch 'hl.dsp.focus({ workspace = "9" })' >>"$log" 2>&1
+sleep 0.6
+nestctl dispatch "hl.dsp.focus({ workspace = \"$ws_8e\" })" >>"$log" 2>&1
+sleep 0.8
+[[ $(active_id) == "$act_8e" && $(active_window) == "$addr_a1" ]]
+check "8e a Desktop switch away and back keeps the active stage and its window" $? "active stage $(active_id) (was $act_8e), active window $(active_window)"
 
 # 9. hidden strip: thumbnails slide out of the monitor; shown again.
 stages "$(on_json 0 true)"
@@ -619,6 +794,10 @@ cap_e=$run/capture-e.cap
 p=$(foot_capture gf-stage-e "$cap_e"); pids+=("$p"); pid_e=$p
 addr_e=$(address_of "$p")
 sleep 0.8
+# A key first: the nested session has no keyboard device between keys.sh runs, so Hyprland's seat focus can lag behind its
+# focus surface (each new virtual keyboard gets the focus surface); with a real keyboard both always agree.
+keys e0
+sleep 0.3
 next=$(slot_id 0)
 next_front=$(last_st | jq -r --argjson s "$next" '[.monitors[0].stages[] | select(.id == $s)][0].windows[-1].address // ""')
 e_alone=$(last_st | jq -r --arg a "$(hexof "$addr_e")" '.monitors[0] as $m | [$m.stages[] | select(.id == $m.active)][0].windows | map(.address) == [$a]')

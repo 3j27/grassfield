@@ -7,9 +7,12 @@
 //   - exclusive (GF_STAGES_ROLE=exclusive, a second instance): an Overlay-layer surface with Exclusive keyboard
 //     interactivity in the top-right corner (what the shell's overview chrome or Search is to Hyprland), logging every key
 //     it receives; the script ends it by killing the process (the surface unmaps).
+//   - popup (GF_STAGES_ROLE=popup, another instance): an app window (xdg toplevel, 600x400) whose click opens a menu (an
+//     xdg_popup with a grab, as an app menu); it logs the menu opening and closing and every key the window and the menu
+//     receive.
 // Input (validated): GF_STAGES_OUTPUT (output name, required), GF_STAGES_TILES (JSON array of {x,y,w,h} in layout
 // coordinates, at most 8), GF_STAGES_STRIP (JSON {x,y,w,h}: the strip surface box in layout coordinates), GF_STAGES_ROLE
-// ("strip", the default, or "exclusive").
+// ("strip", the default, "exclusive" or "popup").
 // Run: WAYLAND_DISPLAY=<nested> qs -p <this dir>
 pragma ComponentBehavior: Bound
 import QtQuick
@@ -40,7 +43,10 @@ ShellRoot {
         }
     }
     readonly property var screen: Quickshell.screens.find(s => s.name === root.outputName) ?? null
-    readonly property string role: (Quickshell.env("GF_STAGES_ROLE") ?? "") === "exclusive" ? "exclusive" : "strip"
+    readonly property string role: {
+        const raw = Quickshell.env("GF_STAGES_ROLE") ?? "";
+        return raw === "exclusive" || raw === "popup" ? raw : "strip";
+    }
 
     Component.onCompleted: console.log("[stages-fixture] output " + (root.screen ? root.screen.name + " found" : root.outputName + " missing") + ", " + root.tiles.length + " tile(s), role " + root.role)
 
@@ -119,6 +125,58 @@ ShellRoot {
             anchors.fill: parent
             focus: true
             Keys.onPressed: event => console.log("[stages-fixture] key " + event.text)
+        }
+    }
+
+    // qmllint disable uncreatable-type
+    FloatingWindow {
+        // qmllint enable uncreatable-type
+        id: appWindow
+
+        visible: root.role === "popup"
+        implicitWidth: 600
+        implicitHeight: 400
+        color: "#334455"
+        title: "stages-popup"
+        Component.onCompleted: if (visible) console.log("[stages-fixture] popup app shown")
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: mouse => {
+                console.log("[stages-fixture] app click " + Math.round(mouse.x) + " " + Math.round(mouse.y));
+                appMenu.visible = true;
+            }
+        }
+        Item {
+            anchors.fill: parent
+            focus: true
+            Keys.onPressed: event => console.log("[stages-fixture] app key " + event.text)
+        }
+
+        PopupWindow {
+            id: appMenu
+
+            anchor.window: appWindow
+            anchor.rect.x: 40
+            anchor.rect.y: 40
+            implicitWidth: 260
+            implicitHeight: 200
+            color: "#dd2222"
+            grabFocus: true
+            visible: false
+            onVisibleChanged: {
+                console.log("[stages-fixture] menu " + (visible ? "open" : "closed"));
+                if (visible)
+                    menuKeys.forceActiveFocus();
+            }
+
+            Item {
+                id: menuKeys
+
+                anchors.fill: parent
+                focus: true
+                Keys.onPressed: event => console.log("[stages-fixture] menu key " + event.text)
+            }
         }
     }
 }
