@@ -623,7 +623,12 @@ TEST(FolderStyleStore, PruningStatsOnlyLocalEntriesAndOnlyOffTheGuiThread)
     FolderStyleStore::setStatObserverForTests(nullptr);
     EXPECT_FALSE(onGuiThread) << "a store entry is never statted on the GUI thread";
     for (const QString &p : statted)
-        EXPECT_TRUE(p.startsWith(dir->path())) << "only local entries are looked at: " << p.toStdString();
+    {
+        // The components above a share or an unplugged volume are on the local root and are looked at; nothing at or under
+        // the mount points of the network share, the stick or the unmounted fstab/removable points is.
+        for (const char *point : {"/mnt/nas", "/mnt/usb", "/run/media/me/STICK"})
+            EXPECT_FALSE(p == QLatin1String(point) || p.startsWith(QLatin1String(point) + QLatin1Char('/'))) << "statted: " << p.toStdString();
+    }
     EXPECT_EQ(store.fallbackCount(), 5) << "only the vanished local folder is pruned";
     FolderStyleStore again(file);
     EXPECT_TRUE(again.read(goneLocal).isEmpty());

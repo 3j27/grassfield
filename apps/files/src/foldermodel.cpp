@@ -268,9 +268,15 @@ FolderModel::FolderModel(QObject *parent)
             m_expectTimer.start();
     };
     m_attrTimer.setSingleShot(true);
-    m_attrTimer.setInterval(200);
     connect(&m_attrTimer, &QTimer::timeout, this, &FolderModel::revalidateStyles);
-    connect(&m_attrWatcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_attrTimer.start(); });
+    // 200 ms of quiet, at the latest kAttrMaxWaitMs after the first change of a burst: steady activity in the folder (a
+    // change every 50 ms) must not postpone showing a look set from outside for ever.
+    connect(&m_attrTimer, &QTimer::timeout, this, [this] { m_attrBurst.invalidate(); });
+    connect(&m_attrWatcher, &QFileSystemWatcher::directoryChanged, this, [this] {
+        if (!m_attrBurst.isValid())
+            m_attrBurst.start();
+        m_attrTimer.start(FolderStyleLogic::debounceDelay(kAttrQuietMs, kAttrMaxWaitMs, m_attrBurst.elapsed()));
+    });
     m_structureTimer.setSingleShot(true);
     m_structureTimer.setInterval(0);
     connect(&m_structureTimer, &QTimer::timeout, this, [this] {
@@ -611,6 +617,7 @@ void FolderModel::watchShownFolder()
     if (!old.isEmpty())
         m_attrWatcher.removePaths(old);
     m_attrTimer.stop();
+    m_attrBurst.invalidate();
     // A local folder only (a watch on a network mount is KIO's business), and only when looks are shown at all.
     if (m_styleStore && m_url.isLocalFile() && !TagLogic::isSearchUrl(m_url))
         m_attrWatcher.addPath(m_url.toLocalFile());

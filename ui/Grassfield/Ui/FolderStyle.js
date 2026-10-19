@@ -1,5 +1,6 @@
 .pragma library
 .import "GraphemeData.js" as Data
+.import "IconModes.js" as Modes
 
 // Folder colours and a folder's own look (docs/specs/ui.md "Folder colours"). Pure functions, no I/O, nothing shared
 // with the icon appearance modes (IconModes.js): the colour step is separate from the mode step.
@@ -143,10 +144,11 @@ function lookup(path, store, attributes) {
 // The first grapheme cluster of the text (white space around it trimmed); "" when empty, longer than 16 UTF-16 units, or
 // when it holds a control, format (bidi marks, zero width space; the emoji joiner and tag characters are allowed),
 // line/paragraph separator, lone surrogate or replacement character. QML's JavaScript has neither Intl.Segmenter nor
-// Unicode property escapes: the clusters are cut by the algorithm of UAX #29 (extending and spacing marks, ExtPict Extend*
-// ZWJ x ExtPict, regional indicator pairs, Hangul syllables, Indic conjuncts) over GraphemeData.js, which is generated from
-// the C++ side's classes (scripts/dev/gen-glyph-tables.sh): both sides run one algorithm over one set of data, and
-// tests/fixtures/glyph-vectors.json holds both to the same answers.
+// Unicode property escapes: the clusters are cut by the whole of UAX #29 (extended grapheme clusters: GB3 to GB13, with
+// GB9b prepended characters and GB9c Indic conjuncts) over GraphemeData.js, which is generated from the Unicode
+// properties (scripts/dev/gen-glyph-tables.sh, the same data as Files' apps/files/src/graphemedata.inc): both sides run
+// one algorithm over one set of data, tests/fixtures/glyph-vectors.json holds both to the same answers, and
+// scripts/dev/glyph-icu-compare.sh checks them against ICU's own segmenter.
 
 
 const GLYPH_MAX_UNITS = 16;
@@ -154,7 +156,7 @@ const SPACE = /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u2
 
 // Class bits (GlyphClass, apps/files/src/folderstylelogic.h).
 const EXTEND = 1, SPACING = 2, JOINER = 4, REGIONAL = 8, PICTOGRAPH = 16, HANGUL_L = 32, HANGUL_V = 64, HANGUL_T = 128,
-    CONSONANT = 256, LINKER = 512, CONTROL = 1024, REJECTED = 2048, EMOJI = 4096;
+    CONSONANT = 256, LINKER = 512, CONTROL = 1024, REJECTED = 2048, EMOJI = 4096, PREPEND = 8192, INCB_EXTEND = 16384;
 const HANGUL_FIRST = 0xAC00, HANGUL_LAST = 0xD7A3;
 // Hangul kinds: 0 none, 1 L, 2 V, 3 T, 4 LV, 5 LVT.
 
@@ -200,14 +202,19 @@ function hangulOf(cp, classes) {
     return 0;
 }
 
-// The end (UTF-16 units) of the first cluster of a non-empty text.
+// The end (UTF-16 units) of the first cluster of a non-empty text (the same algorithm as firstClusterEnd in
+// apps/files/src/folderstylelogic.cpp).
 function firstClusterEnd(t) {
     const first = cpAt(t, 0);
     const firstClasses = classesOf(first);
     let end = unitsOf(first);
-    if (firstClasses & CONTROL)
+    if (firstClasses & CONTROL) {
+        if (first === 0x0D && end < t.length && t.charCodeAt(end) === 0x0A)
+            end++;                                        // GB3: CR x LF; GB4/GB5: any other control stands alone
         return end;
+    }
     let hangul = hangulOf(first, firstClasses);
+    let prepended = (firstClasses & PREPEND) !== 0;
     let regionals = (firstClasses & REGIONAL) ? 1 : 0;
     let pict = (firstClasses & PICTOGRAPH) ? 1 : 0;      // 0 none, 1 an ExtPict (Extend*) seen, 2 ... then the joiner
     let conjunct = (firstClasses & CONSONANT) ? 1 : 0;   // 1 a consonant seen, 2 ... then a linker
@@ -225,16 +232,19 @@ function firstClusterEnd(t) {
         else if ((hangul === 5 || hangul === 3) && h === 3)
             join = true;
         if (!join && (classes & (EXTEND | JOINER | SPACING)))
-            join = true;
+            join = true;                                  // GB9, GB9a
+        if (!join && prepended)
+            join = true;                                  // GB9b
         if (!join && (classes & CONSONANT) && conjunct === 2)
-            join = true;
+            join = true;                                  // GB9c
         if (!join && (classes & PICTOGRAPH) && pict === 2)
-            join = true;
+            join = true;                                  // GB11
         if (!join && (classes & REGIONAL) && regionals % 2 === 1)
-            join = true;
+            join = true;                                  // GB12, GB13
         if (!join)
             break;
         hangul = h;
+        prepended = (classes & PREPEND) !== 0;
         regionals = (classes & REGIONAL) ? regionals + 1 : 0;
         if (classes & PICTOGRAPH)
             pict = 1;
@@ -248,7 +258,7 @@ function firstClusterEnd(t) {
             conjunct = 1;
         else if (classes & LINKER)
             conjunct = conjunct >= 1 ? 2 : 0;
-        else if (!(classes & (EXTEND | JOINER)))
+        else if (!(classes & INCB_EXTEND))
             conjunct = 0;
         end += unitsOf(cp);
     }
@@ -273,7 +283,8 @@ function normalizeGlyph(text) {
 }
 
 // Whether a symbol is drawn as a colour emoji (opaque, its own colours) rather than as an engraved shade: the emoji
-// selector (U+FE0F), a keycap, or a character with the Emoji property, unless the text selector (U+FE0E) is in it.
+// selector (U+FE0F), a keycap, or a character with the Emoji property (not the ASCII digits, # and *), unless the text
+// selector (U+FE0E) is in it.
 // (Text-by-default emoji characters such as an umbrella count as emoji without it: this system's fonts draw them in
 // colour.) The same as FolderStyleLogic::isEmoji.
 function isEmoji(glyph) {
@@ -290,11 +301,13 @@ function isEmoji(glyph) {
 }
 
 // ---- Colour of a plain symbol (A2: icons >= 3:1) ----
-// The symbol is the plate's colour darkened in its hue until it reaches the minimum contrast against the plate, and
-// lightened only when even black cannot (a black or very dark folder). The plate is MEASURED from the folder icon as it
-// is drawn (theme, size, icon mode and colour included): FolderPlate reads the pixels under the symbol once per
-// combination and passes them here (`plateFromPixels`). The estimate below (`plateOf`) only serves when no measure is
-// possible (no window, icon not loaded); it was calibrated on one icon theme and is never used for a measured icon.
+// The symbol is an engraved shade of the plate's hue: darker or lighter than the plate, whichever the icon mode asks for
+// (`prefersLighter`) and the plate allows, until it reaches the minimum contrast against the plate. The plate is MEASURED,
+// once per icon file and size bucket and independent of the colour, the icon mode and the appearance: FolderPlate reads
+// the RAW icon's pixels under the symbol (`sampleBox`), and the plate of any combination is then computed from those
+// samples by the same shader arithmetic as Qt's MultiEffect (`effectSamples`: the icon mode, then the folder colour,
+// `plateThrough`), so a new colour, mode or appearance never needs another measure. The estimate (`plateOf`) only serves
+// until the samples are known, and when they cannot be read (no icon).
 
 function rgbOf(color) {
     if (color !== null && typeof color === "object")
@@ -391,19 +404,34 @@ function lightestPlateOf(plate, mode, tokens) {
     return [plate[0] + (1 - plate[0]) * lift, plate[1] + (1 - plate[1]) * lift, plate[2] + (1 - plate[2]) * lift];
 }
 
+// Which way a plain symbol is engraved in an icon mode, one rule per mode so that the folders of a view agree: Dark engraves
+// the lighter shade (the mode darkens its folders); Tinted does when the mode's own folder plate (`reference`, the relative
+// luminance of the theme's folder plate through the mode) is dark; Default and Clear engrave the darker shade (macOS 26). A
+// plate that cannot reach the contrast that way (a black folder in Default, a pale one in Dark) takes the other shade.
+function prefersLighter(mode, reference, tokens) {
+    if (mode === "dark")
+        return true;
+    if (mode === "tinted")
+        return reference < tokens.folderIconGlyphLighterBelow;
+    return false;
+}
+
 // The colour (#rrggbb) of a plain symbol on a folder of colour `tint` (or the theme's own colour when !recolored) in
-// icon mode `mode` with icon tint `modeTint`. `measured`: the plate read from the drawn icon ({dark, light, hue}, see
-// plateFromPixels), else the estimate.
+// icon mode `mode` with icon tint `modeTint`. `measured`: the plate computed from the icon's samples ({dark, light, hue, ref},
+// see plateThrough), else the estimate.
 function glyphShade(recolored, tint, mode, modeTint, tokens, measured) {
     const hasMeasure = measured !== undefined && measured !== null && measured.dark !== undefined;
     const plate = hasMeasure ? measured.dark : plateOf(recolored, tint, mode, modeTint, tokens);
     const lightest = hasMeasure ? measured.light : lightestPlateOf(plate, mode, tokens);
+    const reference = hasMeasure && measured.ref !== undefined ? measured.ref : relativeLuminance(plateOf(false, "", mode, modeTint, tokens));
     const target = tokens.folderIconGlyphMinContrast + tokens.folderIconGlyphContrastMargin;
     const hueRgb = recolored ? rgbOf(tint) : (hasMeasure ? measured.hue : rgbOf(mode === "tinted" ? modeTint : tokens.folderIconThemePlate));
     const hsl = toHsl(hueRgb);
     const at = l => fromHsl([hsl[0], hsl[1], l]);
+    const darkerOk = contrastRatio(at(0), plate) >= target;
+    const lighterOk = contrastRatio(at(1), lightest) >= target;
     // Darker: the lightest shade (largest l) in the hue that reaches the target against the darkest plate.
-    if (contrastRatio(at(0), plate) >= target) {
+    const darker = () => {
         let lo = 0, hi = hsl[2];
         for (let i = 0; i < 24; i++) {
             const mid = (lo + hi) / 2;
@@ -413,57 +441,126 @@ function glyphShade(recolored, tint, mode, modeTint, tokens, measured) {
                 hi = mid;
         }
         return hexOf(at(lo));
-    }
-    // A plate too dark for a darker symbol: lighten (the smallest l that reaches the target, else white).
-    if (contrastRatio(at(1), lightest) < target)
-        return "#ffffff";
-    let lo = hsl[2], hi = 1;
-    for (let i = 0; i < 24; i++) {
-        const mid = (lo + hi) / 2;
-        if (contrastRatio(at(mid), lightest) >= target)
-            hi = mid;
-        else
-            lo = mid;
-    }
-    return hexOf(at(hi));
+    };
+    // Lighter: the smallest l that reaches the target against the lightest plate.
+    const lighter = () => {
+        let lo = hsl[2], hi = 1;
+        for (let i = 0; i < 24; i++) {
+            const mid = (lo + hi) / 2;
+            if (contrastRatio(at(mid), lightest) >= target)
+                hi = mid;
+            else
+                lo = mid;
+        }
+        return hexOf(at(hi));
+    };
+    if (prefersLighter(mode, reference, tokens) && lighterOk)
+        return lighter();
+    if (darkerOk)
+        return darker();
+    if (lighterOk)
+        return lighter();
+    // Neither reaches it (a mid-grey plate under a margin this large): the better of black and white.
+    return contrastRatio(at(0), plate) >= contrastRatio(at(1), lightest) ? hexOf(at(0)) : hexOf(at(1));
 }
 
-// The plate under a symbol read from rendered pixels: `data` = RGBA bytes (straight alpha, row after row, `width` wide),
-// the box [x0, x1) x [y0, y1) (the symbol's box). Every pixel is composited over black and over white (a translucent
-// icon, Clear mode, shows an unknown backdrop): `dark` = the mean of the darkest quarter over black, `light` = the mean
-// of the lightest quarter over white, `hue` = the mean colour weighted by alpha. All rgb 0..1. null when the box holds
-// no pixel or only transparent ones.
-function plateFromPixels(data, width, height, x0, y0, x1, y1) {
+// ---- The plate from samples of the raw icon ----
+
+// Samples of the pixels of a box [x0, x1) x [y0, y1) of an image (`data` = RGBA bytes, straight alpha, row after row,
+// `width` wide): a grid of at most n x n of them as one flat array [r, g, b, a, ...] (0..1), null when the box holds no
+// pixel or only transparent ones. A small fixed number whatever the icon size: everything after it is cheap.
+function sampleBox(data, width, height, x0, y0, x1, y1, n) {
     const xa = Math.max(0, Math.floor(x0)), xb = Math.min(width, Math.ceil(x1));
     const ya = Math.max(0, Math.floor(y0)), yb = Math.min(height, Math.ceil(y1));
-    const over = [];
-    const sum = [0, 0, 0];
-    let weight = 0;
-    for (let y = ya; y < yb; y++) {
-        for (let x = xa; x < xb; x++) {
-            const i = 4 * (y * width + x);
-            const a = data[i + 3] / 255;
-            const c = [data[i] / 255, data[i + 1] / 255, data[i + 2] / 255];
-            over.push({dark: [c[0] * a, c[1] * a, c[2] * a], light: [c[0] * a + 1 - a, c[1] * a + 1 - a, c[2] * a + 1 - a]});
-            for (let k = 0; k < 3; k++)
-                sum[k] += c[k] * a;
-            weight += a;
+    const w = xb - xa, h = yb - ya;
+    if (w <= 0 || h <= 0)
+        return null;
+    const nx = Math.min(n, w), ny = Math.min(n, h);
+    const out = [];
+    let opaque = false;
+    for (let j = 0; j < ny; j++) {
+        const y = ya + Math.floor((j + 0.5) * h / ny);
+        for (let i = 0; i < nx; i++) {
+            const x = xa + Math.floor((i + 0.5) * w / nx);
+            const k = 4 * (y * width + x);
+            out.push(data[k] / 255, data[k + 1] / 255, data[k + 2] / 255, data[k + 3] / 255);
+            if (data[k + 3] > 0)
+                opaque = true;
         }
     }
-    if (over.length === 0 || weight <= 0)
-        return null;
-    const quarter = list => {
-        const n = Math.max(1, Math.ceil(list.length / 4));
-        const m = [0, 0, 0];
-        for (let i = 0; i < n; i++) {
-            for (let k = 0; k < 3; k++)
-                m[k] += list[i][k] / n;
+    return opaque ? out : null;
+}
+
+// One MultiEffect stage over samples, the arithmetic of Qt's multieffect shader (checked against the compiled shader's
+// source): on the colour c with alpha a (premultiplied), c = (c - 0.5a) (1 + contrast) + 0.5a + brightness a; gray =
+// dot(c, (0.299, 0.587, 0.114)); c = tint gray w + c (1 - w) with w = colorization; c = mix(gray, c, 1 + saturation);
+// alpha times opacity. Everything is homogeneous in a, so it is done on the straight colour. `p`: the parameters of
+// IconModes.effect or effect(); each stage's result is clamped to 0..1 (the layer or the screen is 8 bits).
+function effectSamples(samples, p) {
+    const col = rgbOf(p.colorizationColor);
+    const k = 1 + p.contrast, b = p.brightness, w = p.colorization, sat = 1 + p.saturation;
+    const opacity = p.opacity === undefined ? 1 : p.opacity;
+    const out = new Array(samples.length);
+    const clamp = v => Math.max(0, Math.min(1, v));
+    for (let i = 0; i < samples.length; i += 4) {
+        const r = (samples[i] - 0.5) * k + 0.5 + b;
+        const g = (samples[i + 1] - 0.5) * k + 0.5 + b;
+        const bl = (samples[i + 2] - 0.5) * k + 0.5 + b;
+        const gray = 0.299 * r + 0.587 * g + 0.114 * bl;
+        out[i] = clamp(gray + (col[0] * gray * w + r * (1 - w) - gray) * sat);
+        out[i + 1] = clamp(gray + (col[1] * gray * w + g * (1 - w) - gray) * sat);
+        out[i + 2] = clamp(gray + (col[2] * gray * w + bl * (1 - w) - gray) * sat);
+        out[i + 3] = samples[i + 3] * opacity;
+    }
+    return out;
+}
+
+// The plate under a symbol from samples: every sample is composited over `backdrop` (rgb 0..1; a translucent plate, Clear
+// mode, shows the view behind it), `dark` = the mean of the darkest quarter, `light` = the mean of the lightest quarter, `hue`
+// = the mean colour weighted by alpha, `mean` = the mean of the composites. All rgb 0..1.
+function plateSummary(samples, backdrop) {
+    const bd = backdrop === undefined || backdrop === null ? [0, 0, 0] : backdrop;
+    const comp = [];
+    const sum = [0, 0, 0], total = [0, 0, 0];
+    let weight = 0;
+    for (let i = 0; i < samples.length; i += 4) {
+        const a = samples[i + 3];
+        const c = [samples[i] * a + bd[0] * (1 - a), samples[i + 1] * a + bd[1] * (1 - a), samples[i + 2] * a + bd[2] * (1 - a)];
+        comp.push({c: c, l: relativeLuminance(c)});
+        for (let q = 0; q < 3; q++) {
+            sum[q] += samples[i + q] * a;
+            total[q] += c[q];
         }
-        return m;
-    };
-    const byDark = over.map(o => o.dark).sort((p, q) => relativeLuminance(p) - relativeLuminance(q));
-    const byLight = over.map(o => o.light).sort((p, q) => relativeLuminance(q) - relativeLuminance(p));
-    return {dark: quarter(byDark), light: quarter(byLight), hue: [sum[0] / weight, sum[1] / weight, sum[2] / weight]};
+        weight += a;
+    }
+    if (comp.length === 0 || weight <= 0)
+        return null;
+    comp.sort((p, q) => p.l - q.l);
+    const n = Math.max(1, Math.ceil(comp.length / 4));
+    const dark = [0, 0, 0], light = [0, 0, 0];
+    for (let i = 0; i < n; i++) {
+        for (let q = 0; q < 3; q++) {
+            dark[q] += comp[i].c[q] / n;
+            light[q] += comp[comp.length - 1 - i].c[q] / n;
+        }
+    }
+    return {dark: dark, light: light, hue: [sum[0] / weight, sum[1] / weight, sum[2] / weight], mean: [total[0] / comp.length, total[1] / comp.length, total[2] / comp.length]};
+}
+
+// The plate of a combination from the raw icon's samples: through the icon mode (IconModes.effect) and then, when the folder
+// is recoloured, through the folder colour (effect). `modeTint`: the icon tint (only Tinted uses it); `tint`: the folder
+// colour; `backdrop`: rgb of the view behind a translucent plate. Adds `ref`: the relative luminance of the mode's own
+// folder plate (no folder colour), what `prefersLighter` reads. null when there is nothing to read.
+function plateThrough(samples, mode, modeTint, recolored, tint, backdrop, tokens) {
+    const m = Modes.effect(mode, modeTint, tokens);
+    const modeSamples = m.enabled ? effectSamples(samples, m) : samples;
+    const own = plateSummary(modeSamples, backdrop);
+    if (own === null)
+        return null;
+    const out = recolored ? plateSummary(effectSamples(modeSamples, effect(tint, tokens)), backdrop) : own;
+    if (out === null)
+        return null;
+    return {dark: out.dark, light: out.light, hue: out.hue, ref: relativeLuminance(own.mean)};
 }
 
 // The symbol's box in a square icon image of edge `size`: [x0, y0, x1, y1] (tokens glyphScale, glyphCenterY).
