@@ -248,6 +248,31 @@ TestCase {
         verify(!DockModel.acceptsFiles(open("edit", ["edit", "%F"]), [], data));
     }
 
+    // Folders and extensionless files: the name tells nothing, the real type is resolved at drop time (dock/file-types.sh).
+    function test_dropResolvesRealTypes() {
+        const data = DockModel.parseMimeData(mimeText + "\nE\tfiles\tinode/directory;\nE\tsh\ttext/x-shellscript;\nS\ttext/x-shellscript text/plain");
+        const files = {id: "files", command: ["files", "%U"]};
+        const edit = {id: "edit", command: ["edit", "%F"]};
+        const dir = "/home/u/Photos", bare = "/home/u/run";
+        // names alone decide nothing: refused when strict (the old behaviour), let through while hovering
+        verify(!DockModel.acceptsFiles(files, [dir], data));
+        verify(DockModel.acceptsFiles(files, [dir], data, null, true));
+        verify(!DockModel.acceptsFiles({id: "files", command: ["files"]}, [dir], data, null, true));  // no field code
+        verify(!DockModel.acceptsFiles({id: "bare", command: ["bare", "%f"]}, [dir], data, null, true));  // no MimeType
+        compare(DockModel.unresolvedPaths([dir, bare, "/home/u/a.txt"], data).join(","), dir + "," + bare);
+        // resolved: a folder goes to the file manager only, a text file without extension to the editor
+        const resolved = DockModel.parseResolved([dir, bare], "inode/directory\ntext/x-shellscript\n");
+        compare(resolved[dir], "inode/directory");
+        verify(DockModel.acceptsFiles(files, [dir], data, resolved));
+        verify(!DockModel.acceptsFiles(edit, [dir], data, resolved));
+        verify(DockModel.acceptsFiles(edit, [bare], data, resolved));  // text/x-shellscript is a text/plain subclass
+        verify(!DockModel.acceptsFiles(files, [bare], data, resolved));
+        // a mix with a known name still has to match every file; unknown ("-") stays refused
+        verify(!DockModel.acceptsFiles(edit, [bare, "/home/u/a.png"], data, resolved));
+        verify(!DockModel.acceptsFiles(files, [dir], data, DockModel.parseResolved([dir], "-\n")));
+        verify(!DockModel.acceptsFiles(files, [dir], data, DockModel.parseResolved([dir], "")));
+    }
+
     function test_bounceKeys() {
         const items = DockModel.merge(["foot", "chromium"], [{appId: "chromium", ref: "c"}], lookup);
         const out = DockModel.bounceKeys({foot: 1000, chromium: 1000, old: 0}, items, 5000, 10000);

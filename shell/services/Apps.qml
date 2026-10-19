@@ -161,17 +161,61 @@ Singleton {
         }
     }
 
-    // Whether `entry` can open the dropped local paths: file field code in Exec and a matching MimeType.
-    function canOpen(entry: var, paths: var): bool {
-        return !!entry && DockModel.acceptsFiles(entry, paths, mimeData);
+    // Whether `entry` can open the dropped local paths: file field code in Exec and a matching MimeType. `lenient` (while
+    // hovering): paths whose type the name does not tell are let through, the drop resolves them.
+    function canOpen(entry: var, paths: var, lenient: bool): bool {
+        return !!entry && DockModel.acceptsFiles(entry, paths, mimeData, null, lenient === true);
+    }
+
+    // Drop jobs waiting for the real types of folders and extensionless files ({entry, paths, unresolved}).
+    property var typeJobs: []
+    property var typeJob: null
+
+    Process {
+        id: typeScan
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const job = root.typeJob;
+                root.typeJob = null;
+                if (job)
+                    root.openWith(job.entry, job.paths, DockModel.parseResolved(job.unresolved, text));
+                root.nextTypeJob();
+            }
+        }
+    }
+
+    function nextTypeJob(): void {
+        if (typeScan.running || typeJobs.length === 0)
+            return;
+        typeJob = typeJobs[0];
+        typeJobs = typeJobs.slice(1);
+        typeScan.command = ["timeout", "10", "sh", Quickshell.shellPath("dock/file-types.sh")].concat(typeJob.unresolved);
+        typeScan.running = true;
+    }
+
+    // Files dropped on an app tile: opened at once when the file names decide, otherwise (folders, extensionless files) after
+    // their real types are resolved off the UI path, for these paths only. True when the drop is accepted.
+    function dropOnApp(entry: var, paths: var): bool {
+        if (!entry || !paths || paths.length === 0)
+            return false;
+        if (canOpen(entry, paths, false))
+            return openWith(entry, paths, null);
+        const unresolved = DockModel.unresolvedPaths(paths, mimeData);
+        if (unresolved.length === 0 || !canOpen(entry, paths, true))
+            return false;
+        if (typeJobs.length >= 4)
+            return false;
+        typeJobs = typeJobs.concat([{entry: entry, paths: Array.from(paths), unresolved: unresolved}]);
+        nextTypeJob();
+        return true;
     }
 
     // Opens files with a desktop entry (files dropped on a Dock tile): the entry command with its file field codes
     // filled in per the Desktop Entry spec (DockModel.commandsForFiles; a command without one never gets the files
     // appended), the launch environment (isolated in a dev session, pointer size). Refused unless the app can open every
     // file.
-    function openWith(entry: var, files: var): bool {
-        if (!canOpen(entry, files))
+    function openWith(entry: var, files: var, resolved: var): bool {
+        if (!entry || !DockModel.acceptsFiles(entry, files, mimeData, resolved))
             return false;
         const commands = DockModel.commandsForFiles(Array.from(entry.command || []), files);
         const environment = launchEnvironment();

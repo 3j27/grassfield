@@ -268,13 +268,16 @@ function parseMimeData(text) {
 
 // MIME types of a file name (by name only, longest matching extension first): the matched types, their parents
 // (subclasses; text/* is a subclass of text/plain) and aliases. [] when the name matches no pattern.
-function mimeTypesOf(path, data) {
+function mimeTypesOf(path, data, resolved) {
     const name = String(path).replace(/\/+$/, "").replace(/^.*\//, "").toLowerCase();
     let found = data.names[name] ? data.names[name] : [];
     for (let i = 1; found.length === 0 && i < name.length; i++) {
         if (name[i] === "." && data.suffix[name.substring(i)])
             found = data.suffix[name.substring(i)];
     }
+    // The real type found at drop time (folders, extensionless files, magic) wins over the name.
+    if (resolved && typeof resolved[path] === "string" && resolved[path] !== "" && resolved[path] !== "-")
+        found = [resolved[path]];
     const all = {};
     const queue = found.slice();
     while (queue.length > 0) {
@@ -299,16 +302,36 @@ function hasFileCode(command) {
 
 // The tile of `entry` ({id, command}) accepts the dropped `paths`: file field code in Exec and, for every file, a MimeType
 // of the entry that equals one of the file's types (or matches "type/*").
-function acceptsFiles(entry, paths, data) {
+// `resolved` (optional) maps a path to its real type (dock/file-types.sh). `lenient` (hovering): a path whose type the name
+// does not tell (folder, extensionless file) is let through, the drop resolves it and decides.
+function acceptsFiles(entry, paths, data, resolved, lenient) {
     if (!entry || !data || !data.ready || !paths || paths.length === 0 || !hasFileCode(entry.command))
         return false;
     const declared = data.entries[entry.id];
     if (!declared || declared.length === 0)
         return false;
     return paths.every(p => {
-        const types = mimeTypesOf(p, data);
+        const types = mimeTypesOf(p, data, resolved);
+        if (lenient && types.length === 0)
+            return true;
         return types.some(t => declared.some(d => d === t || (d.endsWith("/*") && t.startsWith(d.substring(0, d.length - 1)))));
     });
+}
+
+// Paths whose type the file name does not tell (no glob matches: folders, extensionless files): their real type is
+// resolved at drop time. [] when the name decides every path.
+function unresolvedPaths(paths, data) {
+    return Array.from(paths || []).filter(p => data && mimeTypesOf(p, data).length === 0);
+}
+
+// {path: type} from the lines printed by dock/file-types.sh for `paths` (same order).
+function parseResolved(paths, text) {
+    const lines = String(text || "").split("\n");
+    const out = {};
+    Array.from(paths || []).forEach((p, i) => {
+        out[p] = (lines[i] || "-").trim();
+    });
+    return out;
 }
 
 // file:// URI of a local path (%u %U get URIs, %f %F paths).

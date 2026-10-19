@@ -855,7 +855,7 @@ Scope {
                                     // over at the drop): then the tile highlights and the drop itself decides.
                                     function check(drag: var): bool {
                                         const text = drag.getDataAsString("text/uri-list");
-                                        return text === "" || Apps.canOpen(tile.modelData.entry, Icons.parseUriList(text));
+                                        return text === "" || Apps.canOpen(tile.modelData.entry, Icons.parseUriList(text), true);
                                     }
                                     onEntered: drag => {
                                         acceptable = check(drag);
@@ -865,7 +865,7 @@ Scope {
                                     onDropped: drop => {
                                         const paths = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
                                         acceptable = false;
-                                        if (paths.length > 0 && Apps.openWith(tile.modelData.entry, paths))
+                                        if (paths.length > 0 && Apps.dropOnApp(tile.modelData.entry, paths))
                                             drop.accept(Qt.CopyAction);
                                         else
                                             drop.accepted = false;
