@@ -352,7 +352,7 @@ Variants {
 
                         readonly property bool expanded: Notifications.expandedApps[appName] === true
                         // The focusable card (see ListView.focusAfterRemoval).
-                        readonly property alias rowItem: row
+                        readonly property Item rowItem: row
 
                         width: list.width
                         // Groups are set apart; cards of one group are one banner gap apart.
