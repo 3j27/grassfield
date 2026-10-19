@@ -784,7 +784,7 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   `tests/compositor/cursor_refresh.sh baseline` and the unload step of `check`.
 - Without `overview-focus` (plugin absent, mismatched, an older plugin, its listeners failed, or withdrawn at unload): the
   verb does not exist (the shell's guarded call is a no-op) and the shell restores the focus after the Overview itself (checks
-  and retries: `Overview.startFocus`, docs/specs/overview.md "Close and keyboard"). An unload while a request waits posts outcome `unavailable` first. Measured:
+  and retries: `FocusReturn.startFallback`, docs/specs/overview.md "Close and keyboard"). An unload while a request waits posts outcome `unavailable` first. Measured:
   `tests/compositor/overview_focus.sh baseline` (an older build, a `--no-plugin` session) and case 14 of `check`.
 
 ## Automated tests · Manual verification steps
