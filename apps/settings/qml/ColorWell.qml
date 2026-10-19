@@ -173,7 +173,9 @@ Item {
 
         Rectangle {
             id: card
-            width: Tokens.settingsColorSquareWidth + 2 * Tokens.spacingMd
+            // The square, or the preset swatches when they are wider.
+            readonly property real contentWidth: Math.max(Tokens.settingsColorSquareWidth, swatches.implicitWidth - 2 * Tokens.menuItemPadding)
+            width: card.contentWidth + 2 * Tokens.spacingMd
             height: column.height + 2 * Tokens.spacingMd
             radius: Tokens.radiusMenu
             color: Appearance.colors.materialTint
@@ -193,7 +195,7 @@ Item {
                 id: column
                 x: Tokens.spacingMd
                 y: Tokens.spacingMd
-                width: Tokens.settingsColorSquareWidth
+                width: card.contentWidth
                 spacing: Tokens.spacingSm
 
                 SwatchRow {
@@ -218,7 +220,7 @@ Item {
                 // Saturation (left to right) and brightness (bottom to top) of the hue.
                 Item {
                     id: square
-                    width: Tokens.settingsColorSquareWidth
+                    width: card.contentWidth
                     height: Tokens.settingsColorSquareHeight
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Slider

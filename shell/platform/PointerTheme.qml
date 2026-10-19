@@ -148,6 +148,8 @@ Scope {
             return;
         root.removing = true;
         root.dirty = false;
+        // The theme is about to be deleted: the same colours chosen again have to be built again.
+        root.plan = PointerColors.forgetBuilt(root.plan);
         root.removals++;
         remover.command = command;
         remover.running = true;

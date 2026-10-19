@@ -199,6 +199,24 @@ ShellRoot {
             });
         },
         function () {
+            // The colours that were built before the reset, chosen again: the theme is gone, so it is built again.
+            root.mark = theme.started;
+            theme.outline = "#ffeedd";
+            theme.fill = "#334455";
+            root.waitFor(() => theme.ready, 5000);
+        },
+        function () {
+            root.check("choosing the same colours after a reset builds again", theme.started === root.mark + 1);
+            root.run(["sh", "-c", "test -e \"$1\"/icons/grassfield-cursors-custom/colors; echo $?", "sh", root.tmp], () => root.advance());
+        },
+        function () {
+            root.check("the rebuilt theme is on disk", root.out.trim() === "0");
+            theme.outline = "#ffffff";
+            theme.fill = "#000000";
+            theme.removeTheme();
+            root.waitFor(() => theme.removals === 2 && !theme.removing, 3000);
+        },
+        function () {
             // Real build.sh.
             root.run(["sh", "-c", "for t in hyprcursor-util rsvg-convert python3; do command -v $t >/dev/null || exit 1; done; exit 0", "sh"], () => {
                 root.haveTools = root.code === 0;

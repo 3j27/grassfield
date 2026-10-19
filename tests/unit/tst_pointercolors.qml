@@ -181,6 +181,18 @@ TestCase {
         compare(PointerColors.decide(s), "none");
     }
 
+    function test_scheduleForgetsDeletedTheme() {
+        let s = PointerColors.want(PointerColors.initialState(), "#1|#1");
+        s = PointerColors.exited(PointerColors.started(s), true);
+        compare(s.built, "#1|#1");
+        // Reset deletes the theme: the same pair chosen again is built again, not taken for built.
+        s = PointerColors.want(s, "");
+        s = PointerColors.forgetBuilt(s);
+        compare(s.built, "");
+        s = PointerColors.want(s, "#1|#1");
+        compare(PointerColors.decide(s), "start");
+    }
+
     // ---- colour well maths ----
 
     function test_hsv() {

@@ -126,6 +126,13 @@ function decide(state) {
     return "none";
 }
 
+// The custom theme was deleted: nothing is built any more (the same pair chosen again must build again).
+function forgetBuilt(state) {
+    const next = copy(state);
+    next.built = "";
+    return next;
+}
+
 function started(state) {
     const next = copy(state);
     next.running = state.wanted;
