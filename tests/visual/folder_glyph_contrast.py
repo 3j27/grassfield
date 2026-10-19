@@ -47,18 +47,22 @@ def ratio(a, b):
     return (hi + 0.05) / (lo + 0.05)
 
 
-def box(index):
+SYS_SCALE = 0.72   # iconMode.sysGlyphScale: in an icon mode the folder (no plate of its own) shrinks onto the system plate
+
+
+def box(index, mode="default"):
     col, row = index % 6, index // 6
     cx = X0 + col * PITCH_X
     top = Y0 - SIZE // 2 + row * PITCH_Y
-    half = int(SIZE * GLYPH_SCALE * 0.5)
-    return cx - half, int(top + SIZE * GLYPH_CENTER_Y) - half, 2 * half, 2 * half
+    k = 1.0 if mode == "default" else SYS_SCALE
+    half = int(SIZE * GLYPH_SCALE * k * 0.5)
+    return cx - half, int(top + SIZE * (0.5 + (GLYPH_CENTER_Y - 0.5) * k)) - half, 2 * half, 2 * half
 
 
-def measure(symbol, plain):
+def measure(symbol, plain, mode="default"):
     results = []
     for i, name in enumerate(NAMES):
-        x, y, w, h = box(i)
+        x, y, w, h = box(i, mode)
         a = pixels(symbol, x, y, w, h)
         b = pixels(plain, x, y, w, h)
         plate = tuple(sum(p[k] for p in b) / len(b) for k in range(3))
@@ -87,7 +91,7 @@ def main():
             if not (os.path.exists(sym) and os.path.exists(non)):
                 continue
             print(f"== {appearance} / {mode}")
-            for name, r, plate, glyph in measure(sym, non):
+            for name, r, plate, glyph in measure(sym, non, mode):
                 plate_s = "#%02x%02x%02x" % tuple(int(round(v)) for v in plate)
                 if r is None:
                     print(f"  {name:10s} NO SYMBOL (plate {plate_s})")

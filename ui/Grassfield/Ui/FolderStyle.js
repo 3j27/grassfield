@@ -574,10 +574,16 @@ function modeSamples(samples, mode, modeTint, dark, tokens) {
         const relShade = Math.max(0.3, Math.min(1, 0.3 + 0.7 * lc / (lmean * 1.5)));
         let rgb;
         if (name === "dark") {
-            // A light neutral area (a white folder) is darkened like a page; a coloured folder keeps its colour.
+            // A light neutral area (a white folder) is darkened like a page; else the artwork sits on the dark system plate:
+            // dark colours are lifted to a luma floor, a near-black neutral becomes light, a coloured folder keeps its colour.
+            const neutral = 1 - smooth(0.08, 0.25, chromaOf(r, g, b));
             const lightCtx = smooth(0.55, 0.8, lc) * (1 - smooth(0.08, 0.25, chromaOf(r, g, b)));
             const k = Math.min(tokens.iconModeDarkPageLuma / Math.max(lc, 0.1), 1);
-            rgb = [r + (r * k - r) * lightCtx, g + (g * k - g) * lightCtx, b + (b * k - b) * lightCtx];
+            const lift = Math.max(1, Math.min(4, tokens.iconModeDarkGlyphFloor / Math.max(lc, 0.02)));
+            const toLight = neutral * (1 - smooth(0.2, 0.5, lc));
+            const lifted = [r, g, b].map(v => Math.min(v * lift, 1) * (1 - toLight) + tokens.iconModeDarkGlyphLuma * toLight);
+            const page = [r, g, b].map(v => v * k);
+            rgb = [0, 1, 2].map(q => lifted[q] + (page[q] - lifted[q]) * lightCtx);
         } else if (name === "clear") {
             const detail = Math.max(0, Math.min(1, (relShade - 0.405) / 0.595));
             const ink = dark ? tokens.iconModeClearInkDark * (1 - tokens.iconModeClearDetail * 0.7 * (1 - detail))

@@ -297,6 +297,118 @@ TestCase {
             fail(failures.length + " failures:\n" + failures.join("\n"));
     }
 
+    // The folder model (FolderStyle.modeSamples, used to engrave a folder symbol) against the rendered pixels: a plate-less
+    // folder in every mode, appearance and surface. The box under the symbol is read from the icon drawn in default mode
+    // (the raw icon), run through the model and compared with the mean colour of the same box in the mode's rendering
+    // (the folder shrinks to the system plate by sysGlyphScale about the centre).
+    readonly property var folderUrls: [Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/places/scalable/folder.svg"),
+                                       Qt.resolvedUrl("fixtures/folder-light.svg"), Qt.resolvedUrl("fixtures/folder-dark.svg")]
+
+    Component {
+        id: folderCell
+
+        Rectangle {
+            id: cell
+
+            required property int fx
+            required property string cellMode
+            required property url cellSource
+            readonly property alias icon: tintedFolder
+
+            x: cell.fx * 120
+            y: 560
+            width: 112
+            height: 112
+            color: "#808080"
+
+            TintedIcon {
+                id: tintedFolder
+                anchors.centerIn: parent
+                size: 96
+                source: cell.cellSource
+                mode: cell.cellMode
+                tint: "#3E7BFA"
+                darkAppearance: testCase.darkPass
+                overWallpaper: testCase.wallpaperPass
+            }
+        }
+    }
+
+    function boxMean(img, x0, y0, side, scale) {
+        const box = FolderStyle.glyphBox(side, Tokens);
+        const c = side / 2;
+        const sum = [0, 0, 0];
+        let n = 0;
+        for (let y = Math.floor(box[1]); y < box[3]; y += 2) {
+            for (let x = Math.floor(box[0]); x < box[2]; x += 2) {
+                // the box position after the scale about the icon centre
+                const px = Math.round(x0 + c + (x - c) * scale), py = Math.round(y0 + c + (y - c) * scale);
+                const col = img.pixel(px, py);
+                sum[0] += col.r;
+                sum[1] += col.g;
+                sum[2] += col.b;
+                n++;
+            }
+        }
+        return [sum[0] / n, sum[1] / n, sum[2] / n];
+    }
+
+    function test_folderModelMatchesTheShader() {
+        if (board.GraphicsInfo.api === GraphicsInfo.Software)
+            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+        const failures = [];
+        let compared = 0;
+        const tint = "#3E7BFA";
+        board.visible = false;
+        for (const url of testCase.folderUrls) {
+            for (const dark of [true, false]) {
+                for (const wall of [false, true]) {
+                    testCase.darkPass = dark;
+                    testCase.wallpaperPass = wall;
+                    const cells = [];
+                    ["default", "dark", "clear", "tinted"].forEach((m, i) => cells.push(createTemporaryObject(folderCell, testCase, {fx: i, cellMode: m, cellSource: url})));
+                    tryVerify(() => cells[0].icon.status === Image.Ready || cells[0].icon.status === Image.Error, 3000);
+                    if (cells[0].icon.status !== Image.Ready) {
+                        cells.forEach(c => c.destroy());
+                        continue;
+                    }
+                    wait(400);
+                    const img = grabImage(testCase);
+                    const rawBox = FolderStyle.glyphBox(96, Tokens);
+                    const raw = [];
+                    for (let y = Math.floor(rawBox[1]); y < rawBox[3]; y += 4) {
+                        for (let x = Math.floor(rawBox[0]); x < rawBox[2]; x += 4) {
+                            const c = img.pixel(8 + x, 560 + 8 + y);
+                            raw.push(c.r, c.g, c.b, 1);
+                        }
+                    }
+                    for (let m = 1; m < 4; m++) {
+                        const mode = cells[m].cellMode;
+                        const modelled = FolderStyle.modeSamples(raw, mode, tint, dark || wall, Tokens);
+                        const mean = [0, 0, 0];
+                        for (let i = 0; i < modelled.length; i += 4) {
+                            mean[0] += modelled[i] * 4 / modelled.length;
+                            mean[1] += modelled[i + 1] * 4 / modelled.length;
+                            mean[2] += modelled[i + 2] * 4 / modelled.length;
+                        }
+                        const drawn = testCase.boxMean(img, m * 120 + 8, 560 + 8, 96, Tokens.iconModeSysGlyphScale);
+                        const d = Math.max(Math.abs(mean[0] - drawn[0]), Math.abs(mean[1] - drawn[1]), Math.abs(mean[2] - drawn[2]));
+                        const label = `${String(url).split("/").pop()} ${mode} ${dark ? "dark" : "light"}${wall ? " wallpaper" : ""}: model ${FolderStyle.hexOf(mean)} drawn ${FolderStyle.hexOf(drawn)} (max channel diff ${(d * 255).toFixed(0)}/255)`;
+                        console.log("A2 folder " + label);
+                        compared++;
+                        if (d > 0.04)
+                            failures.push(label);
+                    }
+                    cells.forEach(c => c.destroy());
+                }
+            }
+        }
+        board.visible = true;
+        verify(compared >= 12, "compared " + compared);
+        if (failures.length > 0)
+            fail(failures.length + " folder model differences over 10/255:\n" + failures.join("\n"));
+    }
+
     // A missing shader must not make an icon vanish: the plain image is drawn, at the icon's own size and place.
     function test_missingShaderDrawsThePlainIcon() {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
