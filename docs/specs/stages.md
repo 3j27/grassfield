@@ -2,8 +2,9 @@
 
 UI naming (renamed 2026-10-18, owner decision): "Space" in older notes is shown to the user as "Desktop" (fr « Bureau »).
 
-Status: spike positive; plugin prototype behind a feature flag (plugin 0.6.4-stages, 2026-10-19, after the R13
-counter-review #4 of 0.6.3-stages, nested only); shell strip NOT implemented (contract below). Decision: `docs/decisions/ADR-0013-stages.md` (Proposed). UI name **Stages** (§14);
+Status: spike positive; plugin prototype behind a feature flag (plugin 0.7.1-stages, 2026-10-19: fix pass 4 after the R13
+counter-review #4 of 0.6.3-stages, tested as 0.6.4-stages and again after the merge with cursor-refresh 0.7.0-cursor;
+nested only); shell strip NOT implemented (contract below). Decision: `docs/decisions/ADR-0013-stages.md` (Proposed). UI name **Stages** (§14);
 the Apple name is never used in the UI. Code: `compositor/src/core/Stages.*` (model, validation, geometry, events; unit
 tests `compositor/tests/StagesTest.cpp`), `compositor/src/Stages.*` (Hyprland glue), `compositor/src/WindowTransform.*`
 (drawing shared with the overview), verb in `compositor/src/Ipc.cpp`. Nested scenario: `tests/compositor/stages.sh`
@@ -468,7 +469,19 @@ nested window is resized and hovered by the owner's session); an earlier run wit
 `run-20261019-170925`), `desktop_focus.sh` 26/26, `overview.sh check` 32/32 on the headless pair (it named WAYLAND-1 for its
 two-output case and failed with "no WAYLAND-1" there: 29/30, test fixed). C2 without the plugin: `hyprctl grassfield`
 "unknown request", "no plugins loaded", `hl.plugin.grassfield.stages(...)` errors (nil `grassfield`), 0 `[grassfield]`
-lines, shell "no compositor plugin reply, running in degraded mode".
+lines, shell "no compositor plugin reply, running in degraded mode". After the merge with main (cursor-refresh,
+plugin 0.7.1-stages, features now include `cursor-refresh`): `stages.sh check` **66/66** on the headless pair
+(`run-20261019-174116-check`) and on GF-REF only (`run-20261019-174322-check`); `minimize.sh` and `minimize.sh 20 stages`
+PASS (`.dev/minimize/run-20261019-174720`, `run-20261019-174756`), each Dock click on the rectangle the shell sent for that
+window (the follow log is now line-buffered; the Dock rectangle line has its own log budget, see C1 below).
+C1: `soak.sh 1260 stages` on the merged build, GF-REF only, on a fresh instance run under a dev-only supervisor (scratch,
+not tracked: child subreaper that runs `nested-up.sh` and records Hyprland's wait status) → **PASS** (log
+`.dev/soak-20261019-174857.log`: 735 rounds, 147 moves into new strip stages, 104 swaps, 2651 stages events, 92 minimize
+pairs, 92 `minimized` + 92 `restored` events, every Dock click on the rectangle the shell sent, 0 rejected rectangles;
+RSS 149.7 → 159.3 MB, sampled max 165.0 MB; fds max 197, 105 before the stop; no core dump; 0 grassfield exceptions);
+the nested Hyprland exited only at `nested-down.sh`, wait status 0. An earlier 1260 s run on 0.6.4-stages
+(`.dev/soak-20261019-171247.log`, 721 rounds) also PASSed (exit 0 at `nested-down.sh`) but clicked no Dock tile: the
+shared request log budget had held back 88 of the 90 Dock rectangle lines (fixed with the line's own budget).
 Environment (recorded for the next runs; cause not established, the plugin's drawing is unchanged in this pass and the
 kernel logged no such line during pass 3): while three other worktrees' nested sessions ran on the same
 Intel UHD GPU, runs with WAYLAND-1 enabled were slow and erratic (hyprctl "IPC didn't respond in time", windows opened on

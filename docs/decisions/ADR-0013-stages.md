@@ -57,7 +57,8 @@ build 51/58 in the same session; `soak.sh 1260 stages` and `soak.sh 1260` PASS. 
 of 0.6.3-stages (plugin 0.6.4-stages): `stages.sh check` 66/66 on a headless output pair and on GF-REF only (adds Hyprland's
 refocus at the cursor after the layer over an unrelated window, the stage's back window and empty desktop, the remembered
 window closed under the layer, a real click winning, a focus-matched window rule, the event's front window); the pre-fix
-build 60/66 in the same session. Details: `docs/specs/stages.md`.
+build 60/66 in the same session; after the merge with cursor-refresh (0.7.1-stages) 66/66 again and `soak.sh 1260 stages`
+PASS. Details: `docs/specs/stages.md`.
 
 ## Consequences
 - Depends on Hyprland internals: `CWindow::setInputBlocked` with an unused reason bit (`1 << 6`), `acceptsInput()` in the
