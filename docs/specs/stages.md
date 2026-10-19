@@ -370,6 +370,13 @@ Every Dock click of the run landed on the minimized foot window's tile: the tile
 seen moving to `special:minimized`, the Dock held one pinned app (foot) and the capture `.dev/soak-dock-1792347116.png`
 shows the clicked point (966,1035) on the minimized foot tile, between the separator and the Trash.
 
+**Fix pass 2** (2026-10-19, plugin 0.6.2-stages): `tests/compositor/soak.sh 360 stages` → PASS (log
+`.dev/soak-20261019-083846.log`: 166 rounds, 33 moves into new strip stages, 23 swaps, 594 stages events, 17 minimize
+pairs all animated; RSS 151.4 → 161.0 MB; no core dump; 0 grassfield exceptions). A first attempt on another instance
+ended at round 20 with the nested Hyprland gone without a core dump, crash report or log line (cause not found, see
+`docs/specs/compositor.md`). `minimize.sh stages` PASS, `desktop_focus.sh` 26/26, `overview.sh check` 32/32; C2 without
+the plugin: no `grassfield` request or verb, the shell in degraded mode.
+
 **Interactions** (ST13-ST16): minimize, full screen, overlap and desktop focus checked in nested as above; the overview
 code path makes strip windows draw from their real places in an open overview (they jump from their tile to the centre
 when the overview opens: prototype limit); desktop focus is unaffected (a press on a thumbnail is a press on a

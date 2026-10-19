@@ -316,6 +316,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | FR26 (relaxed chrome rule) | unit `OverviewChrome.*`; nested `overview.sh` two-output case | L0 / L1 | 2026-10-18, plugin 0.6.0-stages, runs `.dev/overview/run-20261018-130541` and `run-20261018-142052` (final build): **32/32 PASS**: chrome Exclusive on GF-REF and None on WAYLAND-1 → opens with 7 windows; a click at the WAYLAND-1 window's real place reaches nothing; after the close the previously active window gets the keys |
 | FR33-FR37 | unit `Stages*`, `Protocol.StagesFeaturesFollowAvailabilityAndTheFlag`; nested `tests/compositor/stages.sh` (`check`, `perf`) | L0 / L1 | 2026-10-18, plugin 0.6.0-stages, run `.dev/stages/run-20261018-141943-check`: **40/40 PASS** (detail and CPU table in `docs/specs/stages.md`); plugin 0.6.1-stages run `.dev/stages/run-20261018-200428-check`: **45/45 PASS**; plugin 0.6.2-stages runs `.dev/stages/run-20261019-080913-check` (GF-REF only) and `run-20261019-082610-check` (two outputs): **51/51 PASS** |
 | FR38 (R13 review of 46b3e9b) | unit `StagesInput.*` (pointer guard decisions, keyboard after a leave, strip focus origin), `DesktopFocusTarget.PointerFocusOnABlockedWindowIsStale`; nested `stages.sh` 5b (click without motion after a swap), 7b (after a new window), 8b (swap under an Exclusive layer), 12b (minimize the only window of the active stage), 12c (`cycle_next` stays in the active stage); `minimize.sh stages`; `soak.sh 660 stages` | L0 / L1 | 2026-10-18, plugin 0.6.1-stages, Hyprland v0.56.2 (efb50993): stages.sh 45/45, `minimize.sh stages` PASS (O gets the keys after A, alone in the active stage, is minimized), soak PASS; the pre-fix build fbacf15 fails the 5b, 8b and 12b sequences (scratch probe, `docs/specs/stages.md` acceptance) |
+| FR38 (R13 counter-review of 17208af) | unit `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`, `StagesInput.OnlyRealUserFocusIsAChoice`, `StagesInput.ADesktopSwitchRestoringItsLastWindowIsNotAChoice`; nested `stages.sh` 8c (window actions after a swap under an Exclusive layer), 8d (strip menus), 8e (`WORKSPACE_CHANGE`) | L0 / L1 | 2026-10-19, plugin 0.6.2-stages: stages.sh 51/51 (twice); the pre-fix build b7f0c3d fails 8c (both checks) and 8d (the swap check) in the same session (`.dev/stages/run-20261019-081839-check`) |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -752,6 +753,19 @@ Manual (L1, nested only):
   `tests/integration/global_menus.sh` PASS (41 checks). C2: `nested-up.sh --no-plugin` → `hyprctl grassfield` "unknown
   request", `hl.plugin.grassfield.stages(...)` errors (nil `grassfield`), no `[grassfield]` line in the nested log, shell
   log "no compositor plugin reply, running in degraded mode".
+  Plugin 0.6.2-stages (Stages fix pass 2, R13 counter-review of 17208af, 2026-10-19, Hyprland v0.56.2 commit efb50993, host
+  loaded by other agents' sessions, load average ~6): `soak.sh 360 stages` → PASS (log `.dev/soak-20261019-083846.log`:
+  166 rounds, 33 moves into new strip stages, 23 swaps, 594 stages events, 17 minimize pairs all animated (3 skipped, no
+  move seen); RSS 151.4 → 161.0 MB; no core dump; 0 grassfield exceptions; 86 seat warnings as designed). A first
+  `soak.sh 360 stages` on another fresh instance ended at round 20 (`.dev/soak-20261019-082810.log`): the nested Hyprland
+  vanished without a core dump, a crash report or a log line, a foot of the run was SIGKILLed at the same moment and
+  xdg-desktop-portal-hyprland segfaulted on its lost connection; no OOM or systemd-oomd entry in the journal; cause not
+  found (not reproduced). Stages on: `stages.sh` 51/51 (two runs, one with GF-REF only, one with GF-REF and WAYLAND-1),
+  `minimize.sh stages` PASS; Stages off: `desktop_focus.sh` 26/26, `overview.sh check` 32/32 (a first run 31/32: the
+  WAYLAND-1 probe window opened on GF-REF, the rerun passed). C2: `nested-up.sh --no-plugin` → `hyprctl grassfield`
+  "unknown request", `hl.plugin.grassfield.stages(...)` errors (nil `grassfield`), 0 `[grassfield]` lines, shell log "no
+  compositor plugin reply, running in degraded mode"; under an Exclusive layer `hl.dsp.window.close()` closes Hyprland's
+  active window as usual (no Stages, nothing hidden).
   Title textures are cached per window and rebuilt only when the title, scale or available width changes;
   drawing adds 6 rect pass elements and 1 texture per decorated window.
 - Q1: `compositor/build-direct.sh tidy` must exit 0 with no diagnostics.
