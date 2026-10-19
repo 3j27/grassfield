@@ -20,7 +20,7 @@ Window {
         {id: "bluetooth", title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
         {id: "sound", title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
         {id: "displays", title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
-        {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion")},
+        {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
         {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window menu bar background transparent")},
         {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
         {id: "lock", title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
@@ -80,6 +80,19 @@ Window {
         target: Appearance
         property: "reduceMotion"
         value: cfg.value("accessibility.reduceMotion")
+    }
+
+    // Icon appearance (ADR-0014): the previews and any app icon follow the file live.
+    Binding {
+        target: Appearance
+        property: "iconMode"
+        value: cfg.value("icons.mode")
+    }
+
+    Binding {
+        target: Appearance
+        property: "iconTintSetting"
+        value: cfg.value("icons.tint")
     }
 
     function select(id: string): void {
@@ -156,6 +169,7 @@ Window {
 
             TextInput {
                 id: search
+                TextCursor {}
                 anchors {
                     left: searchIcon.right
                     leftMargin: Tokens.spacingSm

@@ -358,6 +358,8 @@ Variants {
                             Accessible.name: qsTr("Search")
                             Accessible.description: qsTr("Type to filter applications")
 
+                            TextCursor {}
+
                             onTextChanged: {
                                 if (win.shown)
                                     root.controller.setQuery(text);

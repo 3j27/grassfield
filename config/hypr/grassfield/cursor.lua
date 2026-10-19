@@ -1,6 +1,9 @@
 -- Pointer theme (ADR-0014): Grassfield's own cursors for Hyprland (hyprcursor), XWayland, GTK and Qt (XCursor).
 -- hl.env() runs while the config is parsed, before Hyprland loads its cursor manager and before any client starts,
--- so the compositor and every client it spawns see the same theme and size.
+-- so the compositor and the processes it spawns itself (exec_cmd, Xwayland) see the same theme and size. Processes
+-- started by systemd (grassfield-shell, D-Bus activated apps) do not inherit Hyprland's environment: in the real
+-- session autostart.lua lists these variables in the `uwsm finalize` import; the nested dev session gets them from
+-- scripts/dev/devenv.sh (shell, private bus, isolated apps).
 --
 -- Theme choice:
 --   * dev (nested) session: the theme built by branding/cursors/build.sh into <repo>/.dev/share/icons, only if it exists;
@@ -59,8 +62,14 @@ function M.apply()
   if choice.icons_dir then
     local share = choice.icons_dir:match("^(.*)/icons$")
     local data_dirs = os.getenv("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
-    hl.env("XDG_DATA_DIRS", share .. ":" .. data_dirs)
-    hl.env("XCURSOR_PATH", choice.icons_dir .. ":" .. (os.getenv("XCURSOR_PATH") or "~/.local/share/icons:~/.icons:/usr/share/icons"))
+    -- devenv.sh already put .dev/share first for the nested tree: no second entry.
+    if not (":" .. data_dirs .. ":"):find(":" .. share .. ":", 1, true) then
+      hl.env("XDG_DATA_DIRS", share .. ":" .. data_dirs)
+    end
+    local xcursor_path = os.getenv("XCURSOR_PATH") or "~/.local/share/icons:~/.icons:/usr/share/icons"
+    if not (":" .. xcursor_path .. ":"):find(":" .. choice.icons_dir .. ":", 1, true) then
+      hl.env("XCURSOR_PATH", choice.icons_dir .. ":" .. xcursor_path)
+    end
   end
   hl.env("HYPRCURSOR_THEME", choice.theme)
   hl.env("HYPRCURSOR_SIZE", tostring(choice.size))

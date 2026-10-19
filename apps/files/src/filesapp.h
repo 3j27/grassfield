@@ -30,6 +30,8 @@ class FilesApp : public QObject
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
     Q_PROPERTY(bool devSession READ devSession CONSTANT)
     Q_PROPERTY(bool reduceMotion READ reduceMotion NOTIFY appearanceChanged)
+    Q_PROPERTY(QString iconMode READ iconMode NOTIFY appearanceChanged)
+    Q_PROPERTY(QString iconTint READ iconTint NOTIFY appearanceChanged)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoChanged)
     Q_PROPERTY(QString undoText READ undoText NOTIFY undoChanged)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY undoChanged)
@@ -63,6 +65,9 @@ public:
     // GRASSFIELD_DEV=1: never offers anything that touches the owner's real trash (ADR-0011).
     bool devSession() const { return qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1"); }
     bool reduceMotion() const { return m_reduceMotion; }
+    // Icon appearance (ADR-0014): default | dark | clear | tinted, and "accent" or #rrggbb.
+    QString iconMode() const { return m_iconMode; }
+    QString iconTint() const { return m_iconTint; }
     bool canUndo() const;
     QString undoText() const;
     bool canRedo() const;
@@ -193,6 +198,8 @@ private:
     QFileSystemWatcher m_watcher;
     bool m_dark = true;
     bool m_reduceMotion = false;
+    QString m_iconMode = QStringLiteral("default");
+    QString m_iconTint = QStringLiteral("accent");
     QString m_activity;
     int m_activityPercent = -1;
     QList<QPointer<KJob>> m_jobs;

@@ -16,11 +16,12 @@ Item {
     Accessible.role: Accessible.Graphic
     Accessible.ignored: true
 
-    ThemeIcon {
+    // The type icon follows the icon appearance mode (ADR-0014); thumbnails are content and are never tinted.
+    TintedIcon {
         anchors.fill: parent
         size: root.size
-        name: root.iconName
-        tint: false
+        oversample: Tokens.filesThumbnailOversample
+        source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
         visible: thumb.status !== Image.Ready
     }
 

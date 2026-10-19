@@ -151,6 +151,7 @@ Column {
 
             TextInput {
                 id: password
+                TextCursor {}
                 anchors.fill: parent
                 anchors.leftMargin: Tokens.spacingSm
                 anchors.rightMargin: Tokens.spacingSm

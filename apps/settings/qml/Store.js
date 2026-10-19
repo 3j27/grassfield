@@ -24,7 +24,9 @@ const DEFAULTS = {
     "hotCorners.topLeft": "none",
     "hotCorners.topRight": "none",
     "hotCorners.bottomLeft": "none",
-    "hotCorners.bottomRight": "none"
+    "hotCorners.bottomRight": "none",
+    "icons.mode": "default",
+    "icons.tint": "accent"
 };
 
 const CORNER_ACTIONS = ["none", "overview", "notifications", "apps", "lock"];
@@ -48,7 +50,10 @@ const RULES = {
     "hotCorners.topLeft": {type: "enum", values: CORNER_ACTIONS},
     "hotCorners.topRight": {type: "enum", values: CORNER_ACTIONS},
     "hotCorners.bottomLeft": {type: "enum", values: CORNER_ACTIONS},
-    "hotCorners.bottomRight": {type: "enum", values: CORNER_ACTIONS}
+    "hotCorners.bottomRight": {type: "enum", values: CORNER_ACTIONS},
+    "icons.mode": {type: "enum", values: ["default", "dark", "clear", "tinted"]},
+    // "accent" or a #rrggbb colour (schema `pattern`).
+    "icons.tint": {type: "tint"}
 };
 
 // Error message for an invalid value, or "" when the value is acceptable for the key.
@@ -59,6 +64,8 @@ function validate(path, value) {
     switch (rule.type) {
     case "enum":
         return rule.values.indexOf(value) >= 0 ? "" : path + ": expected one of " + rule.values.join(", ");
+    case "tint":
+        return Ui.IconModes.validTint(value) ? "" : path + ": expected accent or a #rrggbb colour";
     case "boolean":
         return typeof value === "boolean" ? "" : path + ": expected true or false";
     case "integer":

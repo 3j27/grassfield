@@ -155,6 +155,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Anchor devices for the whole run: a virtual pointer and a virtual keyboard that only wait. The seat then keeps both
+# capabilities while pointer.sh and keys.sh add and remove their own devices, so clients keep their wl_pointer and
+# wl_keyboard (otherwise each new device makes them bind again; on a loaded host a click then lands at the stale enter
+# position (-1,-1), e.g. beside the Dock tile, and the first typed key is lost). A real session keeps its devices too.
+"$root/scripts/dev/pointer.sh" output "$out" sleep 3600000 >>"$log" 2>&1 &
+pids+=($!)
+"$root/scripts/dev/keys.sh" -s 3600000 >>"$log" 2>&1 &
+pids+=($!)
+sleep 0.3
+
 # Every event line gets the time it was read (microseconds since the epoch) as its first field.
 stamp_events() { local l; while IFS= read -r l; do printf '%s %s\n' "${EPOCHREALTIME/./}" "$l"; done; }
 socat -u UNIX-CONNECT:"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/.socket2.sock" STDOUT 2>>"$log" </dev/null > >(stamp_events >"$events") &

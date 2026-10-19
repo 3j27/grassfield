@@ -206,13 +206,47 @@ namespace gf::stages {
     // only and does not check the block when it delivers keys, buttons or scrolls to the current focus. These decisions
     // keep every event away from a blocked window (R13 review of 46b3e9b).
 
-    // Why Hyprland focused a strip window (from its focus reason).
-    enum class FocusOrigin : uint8_t {
-        UserChoice, // a key binding, a dispatch (Dock, Search, activation request), a click: the user chose that window
-        AfterClose, // Hyprland's successor after a close or unmap (reasons UNMAP_*)
-        Restore,    // Hyprland restoring its last window (reason FFM: an Exclusive layer released the keyboard, a popup grab
-                    // ended); the hit test never picks a blocked window on pointer motion
+    // Hyprland 0.56.2's focus reasons (Desktop::eFocusReason), one to one; the glue maps them with an exhaustive switch.
+    enum class FocusCause : uint8_t {
+        Unknown,                // FOCUS_REASON_UNKNOWN (unused by Hyprland)
+        PointerFollow,          // FFM: refocusLastWindow (an Exclusive layer released the keyboard), a popup grab ended,
+                                // focus follows the pointer
+        KeyBinding,             // KEYBIND: movefocus, focusmonitor, swap and similar dispatchers
+        FocusDispatch,          // DISPATCH_FOCUSWINDOW: hl.dsp.focus({ window = … }) (Dock, Search, scripts)
+        GroupDispatch,          // DISPATCH_MOVEWINDOWINTOGROUP
+        Click,                  // CLICK: a press (the hit test never picks a blocked window), group bar clicks
+        Other,                  // OTHER: plugins (this one included) and the closing window's own notification
+        Activation,             // DESKTOP_STATE_CHANGE: CWindow::activate (xdg-activation, foreign-toplevel activate from the
+                                // shell's Dock), drags, layout and workspace swaps that refocus the current window
+        SwitchSoft,             // SWITCH_TO_WINDOW_SOFT: cycle_next, focus { last }, focus { urgent_or_last }
+        SwitchHard,             // SWITCH_TO_WINDOW_HARD: the same over a full-screen window
+        GroupCurrentChange,     // GROUP_CURRENT_WINDOW_CHANGE: a group's current window changed under the focus
+        WorkspaceChange,        // WORKSPACE_CHANGE: a Desktop switch focuses that Desktop's last focused window
+        ToggleSpecialWorkspace, // TOGGLE_SPECIAL_WORKSPACE: a special workspace closed, its last window is refocused
+        UnmapTiling,            // UNMAP_WINDOW_TILING: Hyprland's successor after a close
+        UnmapFloating,          // UNMAP_WINDOW_FLOATING
+        UnmapGrouped,           // UNMAP_GROUPED_WINDOW
+        NewWindow,              // NEW_WINDOW: a window mapped (it takes focus, or the previous focus is restored)
+        Ghosts,                 // GHOSTS (unused for focusing by Hyprland)
     };
+
+    // Why Hyprland focused a strip window.
+    enum class FocusOrigin : uint8_t {
+        UserChoice, // a key binding, a focus dispatch, an activation request (Dock, xdg-activation), a click: the user (or
+                    // the app at the user's request) chose that window
+        AfterClose, // Hyprland's successor after a close or unmap (reasons UNMAP_*)
+        Restore,    // Hyprland restoring a window it focused before: its last window (FFM: an Exclusive layer released the
+                    // keyboard, a popup grab ended) or a Desktop's last focused window (WORKSPACE_CHANGE, special workspace
+                    // closed)
+        Automatic,  // Hyprland's own pick for another reason (a new window mapped, a group change, plugins, unknown)
+    };
+
+    // Hyprland 0.56.2 focuses a window of a Desktop that is not shown by switching to that Desktop first, which focuses
+    // the Desktop's last focused window with WORKSPACE_CHANGE (CFocusState::rawWindowFocus sets it to the requested window
+    // just before): a request for a strip window on another Desktop (Dock, activation) arrives as WORKSPACE_CHANGE. It is a
+    // restore only when that window already was the last window Hyprland focused on that Desktop (`wasLastFocused`, tracked
+    // by the glue from Hyprland's focus events); otherwise it is the redirected request, a user choice.
+    FocusOrigin focusOrigin(FocusCause cause, bool wasLastFocused);
 
     // Only a user choice brings a strip window's stage forward (ST10); otherwise the active stage keeps the keyboard.
     bool stripFocusBringsStage(FocusOrigin origin);
@@ -234,6 +268,34 @@ namespace gf::stages {
     // The keyboard never stays on a minimized, hidden or strip window: an eligible holder keeps it, otherwise the active
     // stage's front window takes it (`hasFront`), otherwise nothing holds it.
     KeyboardTarget keyboardAfterLeave(const KeyboardHolder& holder, bool hasFront);
+
+    // Hyprland's active window (CFocusState::window()) is what window key bindings (close, full screen, floating), window
+    // dispatchers without an explicit window and the shell's menu bar (foreign-toplevel "activated") act on. It can differ
+    // from the keyboard holder: while a layer surface holds the keyboard (an Exclusive one: Search, the overview chrome,
+    // Quick Settings; or an on_demand one: the desktop) it stays the last focused window, and Hyprland refuses every window
+    // focus while an Exclusive layer is mapped. It must never be a strip window (R13 counter-review of 17208af).
+    struct ActiveWindowState {
+        bool hidden        = false; // Hyprland's active window is a strip window (or is about to be blocked as one)
+        bool locked        = false; // the session is locked (nothing is focused until the unlock; the lock is not touched)
+        bool layerKeyboard = false; // a layer surface (or one of its popups) holds the keyboard
+        bool exclusive     = false; // an Exclusive layer surface is mapped (Hyprland refuses window focus)
+        bool hasFront      = false; // the active stage of that window's workspace has a front window that may be focused
+    };
+
+    enum class ActiveWindowAction : uint8_t {
+        None,           // nothing to do (not a strip window, or the session is locked)
+        ActivateBehind, // the front window becomes the active window, the layer surface keeps the keyboard; it gets the
+                        // keyboard when the layer releases it (Hyprland's refocusLastWindow restores the active window)
+        FocusFront,     // no layer surface holds the keyboard: the front window takes focus, as after a swap
+        Clear,          // no window may replace it while a layer surface holds the keyboard or an Exclusive layer is
+                        // mapped: no active window, the keyboard holder untouched (CFocusState::resetWindowFocus)
+        Unfocus,        // no window may replace it otherwise: no active window and no keyboard focus (what Hyprland
+                        // itself does when the input of its focused window gets blocked)
+    };
+
+    // What the glue does so that Hyprland's active window is never a strip window. After an ActivateBehind or FocusFront
+    // that Hyprland refused (a no_focus rule, a modal child), the glue asks again with hasFront = false.
+    ActiveWindowAction activeWindowAction(const ActiveWindowState& state);
 
     enum class PointerEvent : uint8_t { Press, Release, Axis };
 

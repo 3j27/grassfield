@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import Quickshell.Widgets
 import Grassfield.Ui
 import qs.services
 
@@ -26,9 +25,8 @@ Dialog {
     }
 
     content: [
-        IconImage {
-            width: Tokens.dockIconSize
-            height: Tokens.dockIconSize
+        TintedIcon {
+            size: Tokens.dockIconSize
             source: Quickshell.iconPath(root.entry ? root.entry.icon : "", "application-x-executable")
         },
         Line {

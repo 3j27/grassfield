@@ -13,6 +13,8 @@ const NAMES = {
     "TAB": QT_TRANSLATE_NOOP("Bindings", "Tab"), "ESCAPE": QT_TRANSLATE_NOOP("Bindings", "Esc"),
     "UP": QT_TRANSLATE_NOOP("Bindings", "Up"), "DOWN": QT_TRANSLATE_NOOP("Bindings", "Down"),
     "LEFT": QT_TRANSLATE_NOOP("Bindings", "Left"), "RIGHT": QT_TRANSLATE_NOOP("Bindings", "Right"),
+    // The key above Tab, bound by keycode so that it works on every layout (grave on US, a different symbol on AZERTY).
+    "code:49": QT_TRANSLATE_NOOP("Bindings", "Key above Tab"),
     "mouse:272": QT_TRANSLATE_NOOP("Bindings", "Left Mouse Button"),
     "mouse:273": QT_TRANSLATE_NOOP("Bindings", "Right Mouse Button")
 };
@@ -31,6 +33,9 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Next window"),
     QT_TRANSLATE_NOOP("Bindings", "Previous window"),
     QT_TRANSLATE_NOOP("Bindings", "Raise window"),
+    QT_TRANSLATE_NOOP("Bindings", "Switch application"),
+    QT_TRANSLATE_NOOP("Bindings", "Switch to the previous application"),
+    QT_TRANSLATE_NOOP("Bindings", "Next window of the application"),
     QT_TRANSLATE_NOOP("Bindings", "Move window"),
     QT_TRANSLATE_NOOP("Bindings", "Resize window"),
     "Next Space",

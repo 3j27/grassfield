@@ -71,6 +71,7 @@ Item {
 
         TextEdit {
             id: edit
+            TextCursor {}
             x: Tokens.spacingMd
             y: Tokens.spacingMd
             width: flick.width - 2 * Tokens.spacingMd

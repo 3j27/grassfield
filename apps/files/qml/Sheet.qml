@@ -129,6 +129,7 @@ Item {
 
                 TextInput {
                     id: field
+                    TextCursor {}
                     anchors.fill: parent
                     anchors.leftMargin: Tokens.spacingSm
                     anchors.rightMargin: Tokens.spacingSm

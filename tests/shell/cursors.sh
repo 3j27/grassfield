@@ -19,6 +19,16 @@ no-drop not-allowed all-scroll col-resize row-resize n-resize ne-resize e-resize
 nw-resize ew-resize ns-resize nesw-resize nwse-resize zoom-in zoom-out
 left_ptr arrow hand1 hand2 xterm watch left_ptr_watch fleur sb_h_double_arrow sb_v_double_arrow crossed_circle question_arrow"
 
+# Every name Hyprland itself can ask for (CursorShapes.hpp of the installed headers; "invalid" is not a shape) plus
+# the names toolkits and X11 clients use that Hyprland falls back to.
+shapes_h=/usr/include/hyprland/src/helpers/CursorShapes.hpp
+if [[ -f $shapes_h ]]; then
+  required+=" $(grep -o '"[A-Za-z_-]*"' "$shapes_h" | tr -d '"' | grep -vx invalid | tr '\n' ' ')"
+else
+  echo "NOTE: $shapes_h not found: Hyprland's own shape list not checked"
+fi
+required+=" all-resize X_cursor move size_all"
+
 # Default theme into a throwaway icons dir, custom theme under a temporary XDG_DATA_HOME.
 export XDG_DATA_HOME=$tmp/xdg
 mkdir -p "$XDG_DATA_HOME/icons"
@@ -116,5 +126,58 @@ if not os.path.isfile(os.path.join(custom, "manifest.hl")) or "grassfield-cursor
     bad("custom theme metadata")
 sys.exit(0 if ok else 1)
 PY
+
+# libhyprcursor (the library Hyprland uses) against the XCursor files: same hotspot for every name at every size.
+desc="hyprcursor and XCursor agree on every hotspot at every size, and hyprcursor lacks no name (probe)"
+if command -v gcc >/dev/null && pkg-config --exists cairo hyprcursor 2>/dev/null; then
+  probe=$tmp/cursors_probe
+  # shellcheck disable=SC2046
+  gcc -o "$probe" "$root/tests/shell/cursors_probe.c" $(pkg-config --cflags cairo hyprcursor) -lhyprcursor
+  mkdir -p "$tmp/data"
+  ln -s "$tmp/icons" "$tmp/data/icons"
+  # shellcheck disable=SC2086
+  XDG_DATA_DIRS=$tmp/data XDG_DATA_HOME=$tmp/none "$probe" grassfield-cursors "24 32 48 64 96" $required > "$tmp/probe.out" || true
+  check python3 -I - "$theme" "$tmp/probe.out" <<'PY'
+import os, struct, sys
+theme, probe = sys.argv[1:3]
+ok = True
+def xcursor_hotspots(name):
+    d = open(os.path.join(theme, "cursors", name), "rb").read()
+    n = struct.unpack("<I", d[12:16])[0]
+    out = {}
+    for i in range(n):
+        pos = struct.unpack("<3I", d[16 + 12 * i:28 + 12 * i])[2]
+        _, _, nominal, _, w, h, xh, yh, delay = struct.unpack("<9I", d[pos:pos + 36])
+        out.setdefault(nominal, (xh, yh))
+    return out
+seen = 0
+for line in open(probe):
+    f = line.split()
+    seen += 1
+    if f[2] == "MISSING":
+        print("  hyprcursor: " + f[0] + " " + f[1] + " MISSING"); ok = False; continue
+    want = xcursor_hotspots(f[0])[int(f[1])]
+    got = (int(f[2]), int(f[3]))
+    if want != got:
+        print(f"  {f[0]} at {f[1]}: xcursor {want}, hyprcursor {got}"); ok = False
+if seen == 0:
+    print("  probe produced no output"); ok = False
+sys.exit(0 if ok else 1)
+PY
+else
+  echo "SKIP: hotspot agreement (gcc, cairo or hyprcursor development files missing)"
+fi
+
+# Argument validation and paths with spaces.
+desc="build.sh refuses theme names that are not letters, digits, - and _ (.., ., a/b, a b, empty, a.b)"
+bad=0
+for n in .. . a/b "a b" "" a.b; do
+  "$root/branding/cursors/build.sh" --out "$tmp/names" --name "$n" >/dev/null 2>&1 && bad=1
+done
+check test "$bad" = 0 -a ! -e "$tmp/names"
+desc="build.sh works when --out contains a space"
+check bash -c '"$0" --out "$1" --name spaced --sizes 32 >/dev/null' "$root/branding/cursors/build.sh" "$tmp/out with space"
+desc="the build in a directory with a space is complete (hyprcursor + XCursor)"
+check test -f "$tmp/out with space/spaced/manifest.hl" -a -f "$tmp/out with space/spaced/cursors/default" -a -f "$tmp/out with space/spaced/hyprcursors/default.hlc"
 
 exit "$fail"

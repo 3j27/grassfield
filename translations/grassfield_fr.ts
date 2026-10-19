@@ -255,6 +255,70 @@
         <translation>Sombre</translation>
     </message>
     <message>
+        <source>Icon appearance</source>
+        <translation>Apparence des icônes</translation>
+    </message>
+    <message>
+        <source>Applies to app and file icons in the Dock, Apps, Search, the desktop and Files. Tinted maps each icon to shades of one colour.</source>
+        <translation>S’applique aux icônes d’app et de fichier du Dock, d’Apps, de la recherche, du bureau et de Fichiers. Teinté ramène chaque icône à des nuances d’une seule couleur.</translation>
+    </message>
+    <message>
+        <source>Blue</source>
+        <translation>Bleu</translation>
+    </message>
+    <message>
+        <source>Purple</source>
+        <translation>Violet</translation>
+    </message>
+    <message>
+        <source>Pink</source>
+        <translation>Rose</translation>
+    </message>
+    <message>
+        <source>Red</source>
+        <translation>Rouge</translation>
+    </message>
+    <message>
+        <source>Orange</source>
+        <translation>Orange</translation>
+    </message>
+    <message>
+        <source>Yellow</source>
+        <translation>Jaune</translation>
+    </message>
+    <message>
+        <source>Green</source>
+        <translation>Vert</translation>
+    </message>
+    <message>
+        <source>Graphite</source>
+        <translation>Graphite</translation>
+    </message>
+    <message>
+        <source>Accent</source>
+        <translation>Accent</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>Par défaut</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Transparent</translation>
+    </message>
+    <message>
+        <source>Tinted</source>
+        <translation>Teinté</translation>
+    </message>
+    <message>
+        <source>Tint colour</source>
+        <translation>Couleur de teinte</translation>
+    </message>
+    <message>
+        <source>Choose Tinted to use a tint colour.</source>
+        <translation>Choisissez Teinté pour utiliser une couleur de teinte.</translation>
+    </message>
+    <message>
         <source>Material</source>
         <translation>Matière</translation>
     </message>
@@ -573,6 +637,10 @@
         <translation>Droite</translation>
     </message>
     <message>
+        <source>Key above Tab</source>
+        <translation>Touche au-dessus de Tab</translation>
+    </message>
+    <message>
         <source>Left Mouse Button</source>
         <translation>Bouton gauche de la souris</translation>
     </message>
@@ -619,6 +687,18 @@
     <message>
         <source>Raise window</source>
         <translation>Mettre la fenêtre au premier plan</translation>
+    </message>
+    <message>
+        <source>Switch application</source>
+        <translation>Changer d’application</translation>
+    </message>
+    <message>
+        <source>Switch to the previous application</source>
+        <translation>Passer à l’application précédente</translation>
+    </message>
+    <message>
+        <source>Next window of the application</source>
+        <translation>Fenêtre suivante de l’application</translation>
     </message>
     <message>
         <source>Move window</source>
@@ -2492,8 +2572,8 @@
         <translation>Apparence</translation>
     </message>
     <message>
-        <source>dark light theme transparency material motion</source>
-        <translation>sombre clair thème transparence matière animation apparence</translation>
+        <source>dark light theme transparency material motion icons tint</source>
+        <translation>sombre clair thème transparence matière animation apparence icônes teinte</translation>
     </message>
     <message>
         <source>Desktop &amp; Dock</source>

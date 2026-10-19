@@ -375,6 +375,56 @@ TEST(StagesInput, OnlyAUserChoiceBringsAStripStageForward) {
     EXPECT_TRUE(stripFocusBringsStage(FocusOrigin::UserChoice));
     EXPECT_FALSE(stripFocusBringsStage(FocusOrigin::AfterClose));
     EXPECT_FALSE(stripFocusBringsStage(FocusOrigin::Restore));
+    EXPECT_FALSE(stripFocusBringsStage(FocusOrigin::Automatic));
+}
+
+// R13 counter-review of 17208af, minor: every reason Hyprland 0.56.2 uses for its own picks (a Desktop switch, a new
+// window, a special workspace closing, a group change, plugins) counted as a user choice. Only a key binding, a focus
+// dispatch, an activation request (Dock, xdg-activation), a click or a window switch dispatcher is one.
+TEST(StagesInput, OnlyRealUserFocusIsAChoice) {
+    for (const auto cause : {FocusCause::KeyBinding, FocusCause::FocusDispatch, FocusCause::GroupDispatch, FocusCause::Click, FocusCause::Activation, FocusCause::SwitchSoft,
+                             FocusCause::SwitchHard}) {
+        EXPECT_EQ(focusOrigin(cause, false), FocusOrigin::UserChoice) << static_cast<int>(cause);
+        EXPECT_EQ(focusOrigin(cause, true), FocusOrigin::UserChoice) << static_cast<int>(cause);
+    }
+    for (const auto cause : {FocusCause::UnmapTiling, FocusCause::UnmapFloating, FocusCause::UnmapGrouped})
+        EXPECT_EQ(focusOrigin(cause, false), FocusOrigin::AfterClose) << static_cast<int>(cause);
+    EXPECT_EQ(focusOrigin(FocusCause::PointerFollow, false), FocusOrigin::Restore) << "an Exclusive layer released the keyboard, a popup grab ended";
+    EXPECT_EQ(focusOrigin(FocusCause::ToggleSpecialWorkspace, false), FocusOrigin::Restore);
+    for (const auto cause : {FocusCause::NewWindow, FocusCause::GroupCurrentChange, FocusCause::Other, FocusCause::Unknown, FocusCause::Ghosts}) {
+        EXPECT_EQ(focusOrigin(cause, false), FocusOrigin::Automatic) << static_cast<int>(cause);
+        EXPECT_FALSE(stripFocusBringsStage(focusOrigin(cause, true))) << static_cast<int>(cause);
+    }
+}
+
+// WORKSPACE_CHANGE: a Desktop switch restoring that Desktop's last window is not a choice; a request for a strip window on
+// a Desktop that is not shown (the Dock, an activation) reaches the plugin as WORKSPACE_CHANGE too (Hyprland switches the
+// Desktop first and focuses the requested window as its last one), and stays a choice.
+TEST(StagesInput, ADesktopSwitchRestoringItsLastWindowIsNotAChoice) {
+    EXPECT_EQ(focusOrigin(FocusCause::WorkspaceChange, true), FocusOrigin::Restore);
+    EXPECT_FALSE(stripFocusBringsStage(focusOrigin(FocusCause::WorkspaceChange, true)));
+    EXPECT_EQ(focusOrigin(FocusCause::WorkspaceChange, false), FocusOrigin::UserChoice) << "a redirected request for that window";
+}
+
+// R13 counter-review of 17208af, MAJOR: a swap made while an Exclusive layer held the keyboard left Hyprland's active window
+// on the outgoing window, hidden in the strip, and hl.dsp.window.close() closed it.
+TEST(StagesInput, HyprlandsActiveWindowNeverStaysOnAStripWindow) {
+    using A = ActiveWindowAction;
+    EXPECT_EQ(activeWindowAction({.hidden = false, .locked = false, .layerKeyboard = true, .exclusive = true, .hasFront = true}), A::None) << "not a strip window";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = true, .hasFront = true}), A::ActivateBehind)
+        << "Search or the overview holds the keyboard: the front window becomes active behind it";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = false, .hasFront = true}), A::ActivateBehind)
+        << "the desktop (on_demand) keeps the keyboard";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = false, .exclusive = false, .hasFront = true}), A::FocusFront)
+        << "no layer holds the keyboard: the front window takes it, as after a swap";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = true, .hasFront = false}), A::Clear)
+        << "nothing may replace it under an Exclusive layer: no active window";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = false, .exclusive = true, .hasFront = true}), A::Clear);
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = false, .hasFront = false}), A::Clear)
+        << "the desktop keeps the keyboard, no active window";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = false, .exclusive = false, .hasFront = false}), A::Unfocus)
+        << "a no_focus front window: nothing focused, as Hyprland does when its focused window gets blocked";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = true, .layerKeyboard = true, .exclusive = true, .hasFront = true}), A::None) << "the session lock is never touched";
 }
 
 // HIGH 2: minimizing the only window of the active stage left the keyboard on it (special:minimized).

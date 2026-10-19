@@ -52,17 +52,12 @@ Item {
         border.color: Appearance.colors.accent
     }
 
-    Image {
+    TintedIcon {
         x: (root.cellW - width) / 2
         y: root.iconTop
-        width: Tokens.launcherIconSize
-        height: Tokens.launcherIconSize
+        size: Tokens.launcherIconSize
         source: Quickshell.iconPath(root.info.rec.icon, "application-x-executable")
-        sourceSize: Qt.size(Tokens.launcherIconSize * 2, Tokens.launcherIconSize * 2)
-        fillMode: Image.PreserveAspectFit
         asynchronous: true
-        smooth: true
-        mipmap: true
     }
 
     Text {

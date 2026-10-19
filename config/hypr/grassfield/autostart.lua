@@ -3,6 +3,9 @@
 hl.on("hyprland.start", function()
   -- Hand the session environment to systemd and D-Bus activation (uwsm finalizes the compositor unit).
   local vars = "WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP HYPRLAND_INSTANCE_SIGNATURE GRASSFIELD_SESSION"
+  -- Pointer theme (cursor.lua, ADR-0014): uwsm finalize exports only the variables it is given, so the shell and
+  -- D-Bus activated apps (systemd user units do not inherit Hyprland's environment) need these named.
+  vars = vars .. " XCURSOR_THEME XCURSOR_SIZE HYPRCURSOR_THEME HYPRCURSOR_SIZE"
   local import_env = "if command -v uwsm >/dev/null; then uwsm finalize " .. vars .. "; else dbus-update-activation-environment --systemd " .. vars .. "; fi"
 
   -- Both units have ConditionEnvironment=GRASSFIELD_SESSION=1, which reads the environment that the import hands to
