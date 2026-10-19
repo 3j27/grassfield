@@ -845,9 +845,11 @@ Scope {
                                     // The tile highlights and accepts only a document its app can open (file field code
                                     // in Exec and a matching MimeType); otherwise the drop is refused.
                                     property bool acceptable: false
+                                    // The URI list is not always readable while the drag is only hovering (some sources hand it
+                                    // over at the drop): then the tile highlights and the drop itself decides.
                                     function check(drag: var): bool {
-                                        const paths = Icons.parseUriList(drag.getDataAsString("text/uri-list"));
-                                        return Apps.canOpen(tile.modelData.entry, paths);
+                                        const text = drag.getDataAsString("text/uri-list");
+                                        return text === "" || Apps.canOpen(tile.modelData.entry, Icons.parseUriList(text));
                                     }
                                     onEntered: drag => {
                                         acceptable = check(drag);
