@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Dev guard of the audio service: in a GRASSFIELD_DEV session NOTHING may change the owner's audio. Runs
-# tests/shell/audio_dev_guard.d/shell.qml (every volume, mute, key and device action) offscreen with a wpctl shim first on PATH
+# tests/shell/audio_dev_guard.d/guard.qml (every volume, mute, key and device action) offscreen with a wpctl shim first on PATH
 # that only records its arguments, twice: dev (must make zero backend calls, zero wpctl runs) and a control without
 # the guard (must write the stand-in sink and run the shim, which proves the test can fail). The shim is the only
 # wpctl that can run here: nothing touches the machine.
@@ -19,7 +19,7 @@ mkdir -p "$tmp/cfg"
 for entry in shell/*; do
   [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
 done
-cp tests/shell/audio_dev_guard.d/shell.qml "$tmp/cfg/shell.qml"
+cp tests/shell/audio_dev_guard.d/guard.qml "$tmp/cfg/shell.qml"
 for tool in wpctl pactl; do
   printf '#!/bin/sh\necho "%s $*" >> "%s/marker"\nexit 0\n' "$tool" "$tmp" >"$tmp/bin/$tool"
   chmod +x "$tmp/bin/$tool"

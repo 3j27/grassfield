@@ -2,8 +2,9 @@ import QtQuick
 import Grassfield.Ui
 
 // Radio / mode row: round icon button (accent when on), title, state, optional chevron.
-// The icon toggles; the text and the chevron expand the section. Keyboard: Space/Return toggle,
-// Right expands, Left collapses.
+// The icon toggles; the text and the chevron expand the section. Keyboard: Space toggles (Return too, except on an
+// expandable row where Return opens the section); Left/Right move to the capsule beside, and Right on the last
+// capsule of a row opens the section.
 NavItem {
     id: root
 
@@ -29,11 +30,12 @@ NavItem {
     ringRadius: height / 2
     visible: available
     onActivated: if (available) toggled()
+    handlesArrow: true
+    returnActivates: !expandable
+    onConfirmed: if (expandable && available) expandToggled()
     onArrow: direction => {
-        if (expandable && available && (direction > 0) !== expanded)
+        if (!root.navigate(direction, 0) && expandable && available && direction > 0 && !expanded)
             expandToggled();
-        else if (!expandable)
-            root.moveFocus(direction > 0);
     }
 
     HoverHandler {
@@ -79,12 +81,16 @@ NavItem {
 
         Column {
             anchors.left: parent.left
+            // Text is elided before the chevron, never under it.
             anchors.right: parent.right
+            anchors.rightMargin: chevron.visible ? chevron.width + Tokens.spacingXs : 0
             anchors.verticalCenter: parent.verticalCenter
 
             Label {
                 width: parent.width
                 text: root.title
+                // The title is the emphasized line, the state is regular (macOS model).
+                font.weight: Tokens.typographyMenuBoldWeight
                 // Long module titles wrap to a second line inside the tile (no font shrink).
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2

@@ -75,6 +75,44 @@ function stepIndex(current, count, delta) {
     return Math.max(0, Math.min(count - 1, current + delta));
 }
 
+// Spatial arrow navigation between focusable controls (Quick Settings): rects are {x, y, w, h} in one
+// coordinate space, `current` the index of the focused one, (dx, dy) the direction (one of them non-zero).
+// A candidate must lie wholly beyond the current control in that direction (and, sideways, share a row with it);
+// vertically, those that overlap it in x win over the others, then the smallest gap, then the closest centre. Returns -1 when there is none.
+function navTarget(rects, current, dx, dy) {
+    if (current < 0 || current >= rects.length)
+        return -1;
+    const c = rects[current];
+    const horizontal = dx !== 0;
+    let best = -1;
+    let bestKey = null;
+    for (let i = 0; i < rects.length; i++) {
+        if (i === current)
+            continue;
+        const r = rects[i];
+        let gap;
+        let overlap;
+        let off;
+        if (horizontal) {
+            gap = dx > 0 ? r.x - (c.x + c.w) : c.x - (r.x + r.w);
+            overlap = Math.min(c.y + c.h, r.y + r.h) - Math.max(c.y, r.y) > 0;
+            off = Math.abs((r.y + r.h / 2) - (c.y + c.h / 2));
+        } else {
+            gap = dy > 0 ? r.y - (c.y + c.h) : c.y - (r.y + r.h);
+            overlap = Math.min(c.x + c.w, r.x + r.w) - Math.max(c.x, r.x) > 0;
+            off = Math.abs((r.x + r.w / 2) - (c.x + c.w / 2));
+        }
+        if (gap < -1 || (horizontal && !overlap))
+            continue;
+        const key = [overlap ? 0 : 1, Math.max(0, gap), off];
+        if (bestKey === null || key[0] < bestKey[0] || (key[0] === bestKey[0] && (key[1] < bestKey[1] || (key[1] === bestKey[1] && key[2] < bestKey[2])))) {
+            best = i;
+            bestKey = key;
+        }
+    }
+    return best;
+}
+
 // Quickshell ConnectionFailReason (enum order: Unknown, NoSecrets, WifiClientDisconnected,
 // WifiClientFailed, WifiAuthTimeout, WifiNetworkLost) -> a stable key the UI translates.
 function failReasonKey(reason) {

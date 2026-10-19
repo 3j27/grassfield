@@ -4,7 +4,7 @@ import Quickshell
 import qs.services
 import qs.osd
 
-// Body of tests/shell/audio_dev_guard.sh (run it through that script: it sets the environment and a wpctl shim).
+// Body of tests/shell/audio_dev_guard.sh (named guard.qml so the plain tests/shell/*/shell.qml loop skips it) (run it through that script: it sets the environment and a wpctl shim).
 // GF_EXPECT=dev: every audio action of the shell (slider, scroll, volume keys through Osd/IPC, mute, device
 // switches) must leave the stand-in sink untouched, never write the backend (Audio.backendWrites) and never start wpctl.
 // GF_EXPECT=real (control, proves the test can fail): the same actions do change the stand-in sink and run the wpctl shim.

@@ -120,7 +120,7 @@ WidgetBase {
 
                 required property var modelData
 
-                width: Tokens.panelCcIconButton - Tokens.spacingSm
+                width: Tokens.panelWidgetTransportButton
                 height: width
                 activeFocusOnTab: root.transportEnabled
                 Accessible.role: Accessible.Button

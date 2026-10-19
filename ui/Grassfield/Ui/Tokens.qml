@@ -296,6 +296,12 @@ QtObject {
     readonly property int panelAboutLabelWidth: 100
     // F1 gap 6: 36-pt icon disk of a 2x1 module
     readonly property int panelCcIconButton: 36
+    // estimate: Wi-Fi join button in a 34-pt list row (kept at its pre-36 size)
+    readonly property int panelCcJoinButton: 30
+    // estimate: Now Playing transport button in the Quick Settings 2x2 module (kept at its pre-36 size)
+    readonly property int panelCcTransportButton: 26
+    // estimate: transport button of the Now Playing desktop widget (kept at its pre-36 size)
+    readonly property int panelWidgetTransportButton: 22
     // estimate: list row in an expanded Control Center section
     readonly property int panelCcRowHeight: 34
     // estimate: chevron glyph size
@@ -372,8 +378,6 @@ QtObject {
     readonly property int notificationCenterWidth: 344
     // F1 gap 7: right inset and offset below the bar 15 +-1 (same as the banners)
     readonly property int notificationCenterInset: 16
-    // estimate: title capsule of the Notifications column
-    readonly property int notificationCenterHeaderHeight: 36
     // F1 gap 7: edit-widgets pill 87 x 23
     readonly property int notificationCenterPillWidth: 87
     // F1 gap 7: edit-widgets pill 87 x 23
