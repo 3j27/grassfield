@@ -57,7 +57,6 @@
    {"name": "card 1 body", "box": [1616, 152, 182, 12], "kind": "text"},
    {"name": "card 1 time", "box": [1848, 131, 22, 10], "kind": "text"},
    {"name": "card 2 group name", "box": [1572, 215, 36, 13], "kind": "text"},
-   {"name": "card 2 body", "box": [1616, 266, 214, 12], "kind": "text"},
    {"name": "footer Edit Widgets", "box": [1792, 1046, 70, 11], "kind": "text"}
   ],
   "apps": [

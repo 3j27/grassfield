@@ -195,7 +195,8 @@ if (( ! measure_only )); then
           need_notif banners 0 30
           if want notificationcenter; then
             center open; vs_sleep 1; cap notificationcenter
-            differs "$dir/desktop.png" "$dir/notificationcenter.png" 2000
+            # The column is floating cards (no full-height sheet): a light card on the white wallpaper differs by its text only.
+            differs "$dir/desktop.png" "$dir/notificationcenter.png" 600
             center closed
           fi
         fi
