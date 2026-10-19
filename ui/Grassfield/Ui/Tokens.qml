@@ -188,10 +188,6 @@ QtObject {
     readonly property int dockBottomMargin: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIndicatorSize: 4
-    // Dock fidelity fix: shelf relative luminance above which the running dot is black, else white; both are at least 4.5:1 at this crossover (WCAG, computed)
-    readonly property real dockIndicatorDarkAbove: 0.18
-    // Dock fidelity fix: central fraction of the wallpaper width sampled under the shelf to choose the running dot tone
-    readonly property real dockIndicatorSampleSpan: 0.5
     // task spec default; user value in grassfield.json dock.magnification
     readonly property real dockMagnificationMax: 1.6
     // task spec: cosine falloff over about 3 icons each side
@@ -212,8 +208,10 @@ QtObject {
     readonly property real dockMinimizedBadgeScale: 0.4
     // estimate, pending F1 measurement from design/reference
     readonly property real dockTrashIconScale: 0.6
-    // Dock fidelity pass: the shelf holds icons only (no text), so it is more translucent than the A2 text clamp; real blur behind it (reference gs-016-031: shelf a few percent lighter than its backdrop)
-    readonly property real dockTintAlpha: 0.42
+    // Dock fidelity pass: the shelf holds icons only (no text), so it is more translucent than the A2 text clamp; real blur behind it (reference gs-016-031: shelf a few percent lighter than its backdrop). Light appearance: black dot, needs relative luminance 0.10 or more over a black backdrop (0.42 gives 0.133, 3.7:1), tested in tests/unit/tst_bartone.qml
+    readonly property real dockTintAlphaLight: 0.42
+    // Dock fix pass 2: dark appearance, white dot, needs relative luminance 0.30 or less over a white backdrop (a white window under an autohidden or floating shelf); 0.52 gives 0.256 (3.4:1), tested in tests/unit/tst_bartone.qml
+    readonly property real dockTintAlphaDark: 0.52
     // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge)
     readonly property real dockHighlightOpacity: 0.34
     // Dock fidelity pass: 1 px rim, white in both appearances (glass edge)

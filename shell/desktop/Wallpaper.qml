@@ -133,8 +133,6 @@ Scope {
                     return;
                 }
                 if (height > 0) {
-                    // The Dock shelf sits over the foreground hills of the artwork.
-                    BarTone.reportDock(win.modelData.name, BarTone.colorLuminance(Qt.color(artwork.art.hillFront)));
                     BarTone.reportGradient(win.modelData.name, Qt.color(artwork.art.skyTop), Qt.color(artwork.art.skyMid), Tokens.menubarHeight / (0.55 * height));
                 }
             }
@@ -160,16 +158,9 @@ Scope {
                     ctx.clearRect(0, 0, width, height);
                     ctx.drawImage(url, 0, 0, width, height);
                     const lum = BarTone.pixelsLuminance(ctx.getImageData(0, 0, width, Tokens.menubarToneSampleRows).data);
-                    // The strip under the Dock shelf: the bottom rows, the central part of the width.
-                    const dockPx = Tokens.dockIconSize + 2 * Tokens.dockPadding + Tokens.dockIndicatorSize + Tokens.dockSpacing + Tokens.dockBottomMargin;
-                    const dockRows = Math.max(1, Math.min(height, Math.round(dockPx * height / win.height)));
-                    const dockLum = BarTone.dockLuminance(ctx.getImageData(0, height - dockRows, width, dockRows).data, width, 0, dockRows, Tokens.dockIndicatorSampleSpan);
                     unloadImage(url);
                     // Not inside the paint: the bar's bindings must change outside the render sync.
-                    Qt.callLater(() => {
-                        BarTone.report(win.modelData.name, lum);
-                        BarTone.reportDock(win.modelData.name, dockLum);
-                    });
+                    Qt.callLater(() => BarTone.report(win.modelData.name, lum));
                 }
             }
 

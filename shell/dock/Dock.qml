@@ -336,10 +336,6 @@ Scope {
                 easing.type: Easing.OutQuad
             }
             readonly property bool autohide: Settings.dockAutohide
-            // Running dots: white over a dark shelf, black over a light one (the shelf is the tint over the wallpaper under
-            // it, BarTone), so they keep 3:1 or more whatever the wallpaper and appearance.
-            readonly property bool dotLight: BarTone.dotToneFor(win.screen ? win.screen.name : "", Appearance.colors.materialTint, shelf.blurActive ? shelf.tintAlpha : 1) === "light"
-
             // Layout from the unmagnified geometry (stable under the pointer), then scaled.
             readonly property var widths: root.items.map(it => it.kind === "separator" ? separatorWidth : iconSize)
             readonly property real baseTotal: Magnify.totalWidth(widths, Tokens.dockSpacing)
@@ -535,7 +531,7 @@ Scope {
                     x: (win.width - width) / 2
                     y: win.height - Tokens.dockBottomMargin - height + (win.revealed ? 0 : height + Tokens.dockBottomMargin + shadowMargin)
                     radius: Tokens.radiusDock
-                    tintAlphaOverride: Tokens.dockTintAlpha
+                    tintAlphaOverride: Appearance.dark ? Tokens.dockTintAlphaDark : Tokens.dockTintAlphaLight
                     highlightOpacity: Tokens.dockHighlightOpacity
                     borderOpacity: Tokens.dockRimOpacity
                     borderColor: Appearance.colors.materialHighlight
@@ -788,7 +784,7 @@ Scope {
                                     width: Tokens.dockIndicatorSize
                                     height: Tokens.dockIndicatorSize
                                     radius: width / 2
-                                    color: win.dotLight ? Appearance.darkColors.indicator : Appearance.lightColors.indicator
+                                    color: Appearance.colors.indicator
                                     x: (tile.width - width) / 2
                                     y: win.iconSize + Tokens.dockSpacing
                                 }
