@@ -2778,14 +2778,6 @@
         <translation>Notifications</translation>
     </message>
     <message>
-        <source>Notifications, Do Not Disturb on</source>
-        <translation>Notifications, Ne pas déranger activé</translation>
-    </message>
-    <message>
-        <source>Do Not Disturb</source>
-        <translation>Ne pas déranger</translation>
-    </message>
-    <message>
         <source>Clear All</source>
         <translation>Tout effacer</translation>
     </message>

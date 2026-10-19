@@ -11,10 +11,11 @@ Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belong
 - Multiple banners stack vertically with 6 pt gaps; same-app notifications group with a count in the
   Notifications column.
 - The Notifications column opens from the clock in the menu bar (click). macOS model (F1 gap 7): no full-height panel; a
-  344 pt column of floating glass cards, the width of a banner, 16 pt from the right edge and below the bar. A title capsule
-  (title, Do Not Disturb state, Clear All) leads; cards are grouped by app, newest first; the first card of a group carries the
+  344 pt column of floating glass cards, the width of a banner, 16 pt from the right edge and below the bar. No title capsule (the
+  reference has none); cards are grouped by app, newest first; the first card of a group carries the
   app name, the count and Clear, the last visible one carries Show All / Show Less; widgets placed in the Center follow as glass
-  tiles; the footer is an Edit Widgets pill and a 24 pt close circle at the bottom. The banners hide while the column is open.
+  tiles; the footer (Clear All pill while there are notifications, Edit Widgets pill, 24 pt close circle) is centred under the column, 16 pt below the last card (at the bottom when the list fills the column). The banners hide while the column or Quick Settings is open.
+  Delete or Backspace on a focused card clears it and focuses the next card (the previous one when it was the last, the column when none is left).
   Esc, the close circle or a click outside the cards closes.
 - Do Not Disturb (from Quick Settings) silences banners; the menu bar shows a moon icon.
 
@@ -67,7 +68,7 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
 - Actions: first 3 non-default actions are buttons, the rest appear after "More" (inline expansion, not a menu).
 - Click on a banner/row runs `default` and focuses a window of `desktop-entry` when one is open.
 - Notifications column: separate full-screen transparent window (Esc and click outside the cards close, the menu bar strip stays clickable so the
-  clock toggles it). Groups by app name, newest first, 3 rows per group then "Show All". Every card, the title capsule, each widget
+  clock toggles it). Groups by app name, newest first, 3 rows per group then "Show All". Every card, each widget
   tile and the footer controls are separate glass surfaces: each registers itself with the content (`addSurface`) and gets its own blur
   region (`Variants` of `Region`, rectangle in window coordinates, cut to the list viewport for rows, refreshed when the list scrolls or
   changes height). A click outside every registered surface closes; the empty area below the last card is outside the list.
