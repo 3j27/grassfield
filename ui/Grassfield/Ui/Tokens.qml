@@ -10,7 +10,7 @@ QtObject {
         text: "#F5F5F7",  // estimate, pending F1 measurement from design/reference
         textSecondary: "#DCDCE4",  // A2: was #B8B8C0; 4.5:1 or more on every material backdrop up to transparency 0.6 over a white wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#4FB36B",  // own Grassfield green, not copied
-        indicator: "#FFFFFF",  // Dock fidelity fix: running dot over a shelf darker than dock.indicatorDarkAbove (pure white, 3:1 or more up to relative luminance 0.30)
+        indicator: "#FFFFFF",  // Dock fidelity fix: running dot, pure white in dark mode like macOS; the per-appearance shelf tint (dock.tintAlphaDark) keeps it at 3:1 or more over any backdrop
         hover: "#FFFFFF",  // estimate; drawn at hoverOpacity
         materialTint: "#1D1F24",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
@@ -33,7 +33,7 @@ QtObject {
         text: "#1B1B1F",  // estimate, pending F1 measurement from design/reference
         textSecondary: "#3A3A42",  // A2: was #55555D; 4.5:1 or more on every material backdrop up to transparency 0.6 over a black wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#26763F",  // own Grassfield green, not copied
-        indicator: "#000000",  // Dock fidelity fix: running dot over a shelf lighter than dock.indicatorDarkAbove (pure black, 3:1 or more from relative luminance 0.10)
+        indicator: "#000000",  // Dock fidelity fix: running dot, pure black in light mode like macOS; the per-appearance shelf tint (dock.tintAlphaLight) keeps it at 3:1 or more over any backdrop
         hover: "#000000",  // estimate; drawn at hoverOpacity
         materialTint: "#F3F4F6",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
@@ -580,6 +580,10 @@ QtObject {
     readonly property int overviewChromeRetryMs: 120
     // v2: pause (0: the next event-loop turn; measured 0 keys lost from 30 ms, none in the wrong window) after the last change of which chrome holds the keyboard before the close completes: every output's chrome commits keyboard None on its own, and Hyprland refuses to refocus while any of them is still Exclusive
     readonly property int overviewReleaseSettleMs: 0
+    // estimate: without the plugin capability overview-focus, delay before the first check that the focus the shell asked for holds after the chromes are gone; it doubles with each retry (a focus dispatch settles within a few frames)
+    readonly property int overviewFocusRetryMs: 60
+    // without overview-focus: the shell stops checking and retrying this long after the first attempt (Hyprland's own choice then stands); the plugin's own bound is 1 s
+    readonly property int overviewFocusBoundMs: 1000
     // v2: upper bound of the keyboard release; the close completes then even if a chrome still reports the keyboard (a lost chrome event must not leave the overview open)
     readonly property int overviewReleaseBoundMs: 500
     // F1 gap 15: add-space button is a 32 circle

@@ -16,7 +16,9 @@ import "Minimized.js" as Minimized
 // colours) and switched to once it is on disk; until then, and when the build fails, the pointer stays as it is. A session
 // that started with the custom theme in its environment (it was on disk at login) and has the default colours is sent
 // back to the packaged theme at startup, and the custom theme is deleted once the compositor has left it (Reset Color
-// is the same path). The custom theme is identified by the colour key of its stamp, not by a build counter: a rebuilt theme
+// is the same path). The environment is never trusted as the compositor's state: once the settings are read the wanted
+// theme and size are always sent once (also after a socket change or a config reload), and the custom theme is removed
+// only after the compositor answered "ok" to that request (a failed switch keeps it). The custom theme is identified by the colour key of its stamp, not by a build counter: a rebuilt theme
 // under the same name is sent again when the colours it was built for differ from what the compositor loaded.
 // Degrades quietly: not running under Hyprland (no socket) or no cursor theme to ask for (the session has none)
 // means nothing is sent. No polling.
@@ -51,6 +53,10 @@ Singleton {
     // Settings (grassfield.json) have been read, or are not coming (no file): only then are the colours known to be the
     // defaults, so only then is a custom theme on disk removed; bound by the shell.
     property bool colorsKnown: false
+    // The settings file exists but is malformed or unreadable: the colours stay unknown (nothing is switched or removed)
+    // until a valid file is read; bound by the shell.
+    property bool settingsFailed: false
+    onSettingsFailedChanged: root.update()
     // The theme for the default colours: the packaged one ("" when the session has no cursor theme; a theme that is not
     // Grassfield's is kept).
     readonly property string baseTheme: PointerColors.baseTheme(root.theme)
@@ -61,6 +67,11 @@ Singleton {
     readonly property string wantedTheme: root.wantedThemeNow()
     // The theme the compositor has, as far as this shell knows ("" = the session's, until a request was answered).
     property string appliedTheme: ""
+    // The compositor answered "ok" to a request of this shell since the shell started, the request socket changed or the
+    // compositor reloaded: only then is its state known. Before that the environment is a guess (a Reset made while the
+    // shell was down leaves the compositor on the custom theme), so the wanted theme and size are sent once, and the
+    // custom theme is not removed.
+    property bool known: false
     // The colours (key) of the custom theme the compositor has loaded ("" = none, or not known: sent again when needed).
     property string appliedKey: ""
     readonly property string wantedKey: root.wantedKeyNow()
@@ -92,6 +103,10 @@ Singleton {
     onWantedThemeChanged: root.update()
     onWantedKeyChanged: root.update()
     onColorsKnownChanged: root.update()
+    onSocketPathChanged: {
+        root.known = false;
+        root.update();
+    }
 
     function currentTheme(): string {
         return root.appliedTheme !== "" ? root.appliedTheme : root.theme;
@@ -129,14 +144,20 @@ Singleton {
 
     // The compositor has what is wanted: size, theme, and the build of the custom theme.
     function inSync(): bool {
+        // Once the settings are read the compositor's state is not trusted until it answered one request.
+        if (root.colorsKnown && !root.known)
+            return false;
         const theme = root.wantedThemeNow();
         return root.size === root.applied && theme === root.currentTheme() && (theme !== PointerColors.CUSTOM_THEME || root.wantedKeyNow() === root.appliedKey);
     }
 
     function update(): void {
+        // A malformed settings file: the wanted values are only defaults, never sent; the compositor keeps its theme.
+        if (root.settingsFailed && !root.colorsKnown)
+            return;
         // Default colours, and the compositor is on the packaged theme (not the custom one: it was loaded at login, or
         // the colours were reset and the request is answered): the custom theme is no longer needed.
-        if (root.colorsKnown && PointerColors.isDefault(root.outlineColor, root.fillColor) && root.currentTheme() !== PointerColors.CUSTOM_THEME && !root.busy)
+        if (root.colorsKnown && root.known && PointerColors.isDefault(root.outlineColor, root.fillColor) && root.currentTheme() !== PointerColors.CUSTOM_THEME && !root.busy)
             themeBuilder.removeTheme();
         if (root.inSync())
             return;
@@ -161,6 +182,8 @@ Singleton {
     }
 
     function transmit(): void {
+        if (root.settingsFailed && !root.colorsKnown)
+            return;
         const theme = root.wantedThemeNow();
         const line = PointerSize.setCursorRequest(theme, root.size);
         if (line === "" || root.socketPath === "")
@@ -203,6 +226,7 @@ Singleton {
         root.applied = size;
         root.appliedTheme = root.inflightTheme;
         root.appliedKey = root.inflightTheme === PointerColors.CUSTOM_THEME ? root.inflightKey : "";
+        root.known = true;
         root.attempts = 0;
         root.gaveUp = false;
         root.delivered++;
@@ -283,6 +307,7 @@ Singleton {
         root.applied = root.sessionSize;
         root.appliedTheme = "";
         root.appliedKey = "";
+        root.known = false;
         root.update();
     }
 
@@ -310,7 +335,7 @@ Singleton {
 
     // grassfield.json that does not exist never loads: after this the stored colours are the defaults.
     Timer {
-        running: !root.colorsKnown
+        running: !root.colorsKnown && !root.settingsFailed
         interval: Tokens.settingsPointerSettingsWaitMs
         onTriggered: root.colorsKnown = true
     }

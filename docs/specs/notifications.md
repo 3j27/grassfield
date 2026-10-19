@@ -18,10 +18,13 @@ Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belong
   macOS 26 clear model (owner decision 2026-10-19, batch 4): there is NO permanent "Clear All" pill. Hovering (or focusing) a card
   shows a small round x at its top-left corner (accessible name "Close", fr « Fermer »); hovering a group shows, on its header card,
   "Show Less" (when the group was expanded with "Show All") and a round x that grows into a "Clear All" pill (fr « Tout effacer ») under
-  the pointer or the keyboard focus and clears the whole group. A cleared card (or every card of a cleared group) slides out to the
-  right while it fades (`motion.normal`), then the column reflows (cards below slide up). Keyboard: Tab reaches each card, then
+  the pointer or the keyboard focus and clears the whole group (only for a group of two or more: a single notification has just its own
+  x, as on macOS). A clear takes effect at once (history, "No Notifications", the file); the column only animates it: the cleared card
+  (or every card of a cleared group) slides out to the right while it fades (`motion.normal`) and the cards below slide up, so closing
+  the column mid-animation never loses a clear. Keyboard: Tab reaches each card, then
   its x, then the group controls; Space or Return on the x clears; Delete or Backspace on a focused card clears it and focuses the next card
-  (the previous one when it was the last, the column when none is left).
+  (the card that now holds its slot; when the group has no card left to reveal, the group's new last card, else the next group's first
+  card, else the previous one; never another app's card while the same app still has one; the column when none is left).
   Esc, the close circle or a click outside the cards closes.
 - Do Not Disturb (from Quick Settings) silences banners; the menu bar shows a moon icon.
 
@@ -66,14 +69,21 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
 ## Implementation notes (M2)
 - Code: `shell/notifications/` (`Notifications.qml` singleton: server, banner queue, history, IPC; `Banners.qml`/`Banner.qml`;
   `NotificationCenter.qml`; `NotificationContent.qml`; pure `Sanitizer.js`, `History.js`).
-- Clear model (NotificationCenter.qml): each delegate owns the slide-out (`beginLeave(group, refocus)`: `slide` + `opacity` animations,
-  `motion.normal`, `Appearance.duration` so reduced motion shortens it); the end of the animation calls `Notifications.clear(key)` or, for a
-  group, `Notifications.clearApp(app)` once (from the header card; the other cards of the group, found through `leavingApp`, only animate).
-  `ListView.displaced` is not used: the delegates' `y` is re-laid out by the ListView and the blur regions follow through `motionTick`
-  (bumped on every `y`/`slide` change). The list is `panel.gutter` (= close size / 3) wider and taller than the column so the x
-  can stick out of the card's corner like the banner's. The keyboard focus after a clear goes to the neighbour found BY KEY (`neighbourKey`
-  before the clear, `focusKey` after `forceLayout()`): the list drops a cleared delegate only on its next layout, and that layout took the focus away again.
-  `Notifications.clearAll()` stays as the IPC test hook `clearAll()` only; the UI has no global Clear All.
+- Clear model (NotificationCenter.qml): `clearCard(group, refocus)` commits to the model at once: `Notifications.clear(key)` or, for a
+  group, `Notifications.clearKeys(Notifications.keysOf(app))` (a snapshot of the keys at the click: a same-app notification that arrives
+  later stays). The ListView animates the result: `remove` (the delegate's `slide` to the right + `opacity` to 0) and `displaced` (`y`),
+  `motion.normal` through `Appearance.duration`, so reduced motion makes them instant. A delegate that left the model is disabled
+  (`ListView.onRemove`): no input, no focus. The footer glides with a `Behavior on y`. Blur regions follow through `motionTick` (bumped on
+  every `y`/`slide`/`opacity` change); a card's region is cut to the list viewport on all four sides and shrinks about its centre with the
+  card's opacity, so the blur never outlives the glass. Surface records carry a unique id: Variants ignores and warns about equal values, and
+  records of destroyed cards ({item: null}) were equal (163 464 "same value specified twice" lines for a 600-notification burst). The list is
+  `panel.gutter` (= close size / 3) wider and taller than the column so the x can stick out of the card's corner like the banner's.
+  The keyboard focus after a clear is `Notifications.focusKeyAfter(slot, app)` (pure `CenterLogic.focusAfterClear`) read from the model AFTER
+  the update, applied by key after `forceLayout()`. Hover over the group controls is counted per hover handler (card and the x that sticks
+  out of it; `CenterLogic.hoverStep`), also decremented when a card is destroyed under the pointer.
+  `Notifications.clearAll()` stays as the IPC test hook `clearAll()` only (refused unless `GRASSFIELD_DEV=1`); the UI has no global Clear All.
+  Tests: `tests/unit/tst_notifcenter.qml` (focus choice, hover counts), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
+  repeated group clears, focus after Delete in collapsed and expanded groups), `tests/shell/notif_clear/nested.sh` (nested helper).
 - Banners: one layer-shell window (Overlay layer, no keyboard focus) on the first screen only; input and blur follow the cards.
   Timeout: `expire_timeout` (seconds), -1 = 5 s, 0 and critical = never. Expiry only hides the banner: the entry stays in the Center
   and stays actionable while the sender keeps the notification alive. x / drag-dismiss calls `dismiss()` (sender told "dismissed"),

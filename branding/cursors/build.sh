@@ -90,17 +90,52 @@ work=$(mktemp -d "$out/.${name}.build.$$.XXXXXX")
 descendants() {
   local c
   for c in $(pgrep -P "$1" 2>/dev/null || true); do
+    # The command substitution that runs this listing is itself a child of the build: never list it.
+    [[ $c == "$BASHPID" ]] && continue
     descendants "$c"
     echo "$c"
+  done
+}
+# Other members of this process group (when it is one): not this shell, not the command substitution listing them.
+group_others() {
+  local p
+  for p in $(pgrep -g "$$" 2>/dev/null || true); do
+    [[ $p == "$$" || $p == "$BASHPID" ]] || echo "$p"
   done
 }
 # Stop the children, wait for them, then remove the work directory (retried: a child that is still exiting may be
 # writing into it). Runs on every way out, so no process outlives the build and no directory is left behind.
 cleanup() {
-  local i p
+  local i p procs again
   trap - EXIT
-  for p in $(descendants "$$"); do kill -TERM "$p" 2>/dev/null || true; done
+  # Nothing may interrupt the cleanup half way (a second SIGTERM between the freeze and the resume below would leave
+  # stopped processes behind).
+  trap '' TERM INT
+  if [[ $(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ') == "$$" ]]; then
+    # Started with setsid (the shell, the tests): every renderer, packer and subshell is in this process group, also
+    # one started a moment ago or orphaned by its subshell, so one signal to the group reaches them all (this shell
+    # ignores it now).
+    kill -TERM -- "-$$" 2>/dev/null || true
+  else
+    # Started from a terminal: freeze the whole tree before signalling it, so a render subshell cannot start its retry
+    # between the listing and its own signal; stopped processes start nothing, so the list is complete once two
+    # listings agree. SIGTERM is then acted on first when they resume.
+    procs=$(descendants "$$")
+    for i in 1 2 3 4 5; do
+      for p in $procs; do kill -STOP "$p" 2>/dev/null || true; done
+      again=$(descendants "$$")
+      [[ $again == "$procs" ]] && break
+      procs=$again
+    done
+    for p in $procs; do kill -TERM "$p" 2>/dev/null || true; done
+    for p in $procs; do kill -CONT "$p" 2>/dev/null || true; done
+  fi
   wait 2>/dev/null || true
+  # Children of a subshell are not this shell's to wait for: wait until no process of the build is left (bounded).
+  for i in $(seq 1 30); do
+    [[ -z $(descendants "$$") && -z $(group_others) ]] && break
+    sleep 0.1
+  done
   for i in 1 2 3 4 5 6 7 8 9 10; do
     rm -rf -- "$work" 2>/dev/null || true
     [[ -e $work ]] || return 0

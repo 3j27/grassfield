@@ -44,6 +44,17 @@ mkdir -p "$config_home" "$state_home" "$base/home"
 # shellcheck source=devenv.sh
 . "$root/scripts/dev/devenv.sh"
 
-exec env -u DISPLAY HOME="$base/home" XDG_CONFIG_HOME="$base/config" XDG_CACHE_HOME="$base/cache" XDG_STATE_HOME="$base/state" \
+# Hyprland instance: a client started here may run hyprctl (a test client, a fixture), so it must never inherit the
+# owner's instance signature from the caller's environment. It gets this tree's nested instance when the client
+# connects to that instance's Wayland socket, and no signature otherwise.
+hypr=(-u HYPRLAND_INSTANCE_SIGNATURE)
+nested_sig=$(cat "$dev/nested.instance" 2>/dev/null || true)
+nested_sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
+main_sig=$(cat "$dev/main.instance" 2>/dev/null || true)
+if [[ -n $nested_sig && $nested_sig != "$main_sig" && -n $nested_sock && ${WAYLAND_DISPLAY:-} == "$nested_sock" ]]; then
+  hypr=(HYPRLAND_INSTANCE_SIGNATURE="$nested_sig")
+fi
+
+exec env -u DISPLAY "${hypr[@]}" HOME="$base/home" XDG_CONFIG_HOME="$base/config" XDG_CACHE_HOME="$base/cache" XDG_STATE_HOME="$base/state" \
   XDG_DATA_HOME="$base/data" GRASSFIELD_CONFIG_HOME="$config_home" GRASSFIELD_STATE_HOME="$state_home" \
   GRASSFIELD_ISOLATED=1 GRASSFIELD_DEV=1 "$@"

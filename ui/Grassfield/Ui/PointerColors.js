@@ -120,13 +120,27 @@ function groupSignalCommand(signal, pid) {
 }
 
 // One short line for the Settings pane from what a failed build printed: the last non-empty line of stderr, at most 160
-// characters, control characters removed; exit 127 (no script) and an empty message have their own text.
-function failureReason(exitCode, stderrText) {
+// characters (cut with an ellipsis), the home folder written "~", control characters removed; exit 127 (no script) and
+// an empty message have their own text.
+function failureReason(exitCode, stderrText, home) {
     if (exitCode === 127)
         return "the cursor builder is not installed";
     const lines = String(stderrText || "").split("\n").map(l => l.replace(/[\u0000-\u001f\u007f]/g, " ").trim()).filter(l => l !== "");
     const last = lines.length > 0 ? lines[lines.length - 1] : "";
-    return last !== "" ? last.substring(0, 160) : "the cursor builder failed (exit " + exitCode + ")";
+    if (last === "")
+        return "the cursor builder failed (exit " + exitCode + ")";
+    const short = tildeHome(last, home);
+    return short.length > 160 ? short.substring(0, 159) + "…" : short;
+}
+
+// Writes the home folder as "~" (only where it is a whole path prefix: followed by "/" or the end, after a space or the
+// start or a quote of any kind, straight or curly, or a colon). No home (or "/"): unchanged.
+function tildeHome(text, home) {
+    const h = typeof home === "string" ? home.replace(/\/+$/, "") : "";
+    if (h === "" || h.charAt(0) !== "/")
+        return text;
+    const escaped = h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return text.replace(new RegExp("(^|[\\s'\"`\u2018\u2019\u201a\u201c\u201d\u00ab\u00bb\u2039\u203a=:(])" + escaped + "(?=/|$|[\\s'\"`\u2018\u2019\u201a\u201c\u201d\u00ab\u00bb\u2039\u203a:,;)])", "g"), "$1~");
 }
 
 // What kind of failure it was, for the Settings pane to say in its own language: "builder" (no script: exit 127),

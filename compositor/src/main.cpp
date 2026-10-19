@@ -10,6 +10,7 @@
 #include "Ipc.hpp"
 #include "Minimize.hpp"
 #include "Overview.hpp"
+#include "OverviewFocus.hpp"
 #include "Plugin.hpp"
 #include "Stages.hpp"
 #include "Titlebar.hpp"
@@ -94,6 +95,8 @@ namespace {
         // anything else sees the press (R13 review of 46b3e9b).
         l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) {
             gf::guarded("stages pointer guard", [&] { gf::stager::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
+            // A press after an overview focus request wins over the target the shell named (recorded only).
+            gf::guarded("overview focus press", [&] { gf::overviewFocus::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             CGrassfieldTitlebar::onGlobalMouseButton(e);
         }));
     }
@@ -178,6 +181,7 @@ namespace {
         step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
         step("overview", [] { gf::overviewer::stop(); });   // every window back to normal rendering, transformers detached
         step("stages", [] { gf::stager::stop(); });          // strip windows shown normally, input unblocked, transformers detached
+        step("overview focus", [] { gf::overviewFocus::stop(); }); // a waiting request ends "unavailable"; watches and timer removed
         step("cursor refresh", [] { gf::cursorRefresh::stop(); }); // trailing-refresh timer removed (its callback is in this library)
         step("appmenu", [] { gf::appmenuServer::stop(); }); // no wl_resource may point into this library after dlclose
         step("events", [] { gf::ipc::stopEvents(); });      // after the appmenu clears: waiting events posted, timer removed
@@ -201,7 +205,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     auto& s  = state();
     s.handle = handle;
 
-    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu, overview, desktop focus, Stages, cursor refresh and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
+    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu, overview, overview focus, desktop focus, Stages, cursor refresh and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
 
     const std::string serverHash = __hyprland_api_get_hash();
     const std::string clientHash = __hyprland_api_get_client_hash();
@@ -245,6 +249,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         if (!stagesOk) {
             gf::guarded("stages rollback", [] { gf::stager::stop(); });
             gf::log(Log::WARN, "stages listeners failed to register; stages-available not advertised");
+        }
+        // Optional feature: without it the shell restores the focus after the Overview itself (checks and retries).
+        bool overviewFocusOk = false;
+        gf::guarded("overview focus start", [&] { overviewFocusOk = gf::overviewFocus::start(); });
+        if (!overviewFocusOk) {
+            gf::guarded("overview focus rollback", [] { gf::overviewFocus::stop(); });
+            gf::log(Log::WARN, "overview focus listeners failed to register; overview-focus not advertised");
         }
         // Optional feature: without it the shell sends no refresh and a new pointer size shows at the next shape change.
         bool cursorRefreshOk = false;

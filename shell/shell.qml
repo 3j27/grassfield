@@ -100,7 +100,14 @@ ShellRoot {
     Binding {
         target: Pointer
         property: "colorsKnown"
-        value: Settings.loaded
+        value: Settings.validRead
+    }
+
+    // A malformed grassfield.json is not a read: the compositor theme and the custom theme on disk stay as they are.
+    Binding {
+        target: Pointer
+        property: "settingsFailed"
+        value: Settings.writeBlocked
     }
 
     Binding {
@@ -168,6 +175,8 @@ ShellRoot {
     Idle {}
     Overview {
         id: overviewSurface
+        // The session lock owns the screen and the keyboard: the overview closes and focuses nothing.
+        locked: Lock.lockState !== "unlocked"
     }
     AppsController {
         id: appsSurface

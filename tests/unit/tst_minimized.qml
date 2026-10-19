@@ -43,6 +43,45 @@ TestCase {
     readonly property string ovHead: "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.overview then p.overview("
     readonly property string ovTail: ") end end"
 
+    // ---- overview_focus verb (docs/specs/overview.md "Close focus") ----
+
+    readonly property string ofHead: "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.overview_focus then p.overview_focus("
+    function ofLua(json) { return ofHead + "\"" + json.replace(/"/g, "\\\"") + "\"" + ovTail; }
+
+    function test_overviewFocusCallTargets() {
+        compare(Minimized.overviewFocusCall({kind: "window", address: "0x55AB"}), ofLua('{"target":"window","address":"0x55ab"}'));
+        compare(Minimized.overviewFocusCall({kind: "workspace", workspace: 3}), ofLua('{"target":"workspace","workspace":3}'));
+        compare(Minimized.overviewFocusCall({kind: "remembered", address: "55ab", workspace: 2}), ofLua('{"target":"remembered","address":"0x55ab","workspace":2}'));
+        compare(Minimized.overviewFocusCall({kind: "remembered", address: "55ab"}), ofLua('{"target":"remembered","address":"0x55ab"}'));
+        compare(Minimized.overviewFocusCall({kind: "none"}), ofLua('{"target":"none"}'));
+        compare(Minimized.overviewFocusCall({kind: "none"}, 7), ofLua('{"target":"none","id":7}'));
+    }
+
+    function test_overviewFocusCallUsesOnlyTheFieldsOfTheTarget() {
+        // A field the plugin refuses for that target is never produced, whatever the input carries.
+        compare(Minimized.overviewFocusCall({kind: "window", address: "55ab", workspace: 3}), ofLua('{"target":"window","address":"0x55ab"}'));
+        compare(Minimized.overviewFocusCall({kind: "workspace", workspace: 3, address: "55ab"}), ofLua('{"target":"workspace","workspace":3}'));
+        compare(Minimized.overviewFocusCall({kind: "none", address: "55ab", workspace: 3}), ofLua('{"target":"none"}'));
+    }
+
+    function test_overviewFocusCallRejectsEverythingInvalid() {
+        compare(Minimized.overviewFocusCall(null), "");
+        compare(Minimized.overviewFocusCall({kind: "skip"}), "");
+        compare(Minimized.overviewFocusCall({kind: "window"}), "");
+        compare(Minimized.overviewFocusCall({kind: "window", address: "55ab\"); os.exit() --"}), "");
+        compare(Minimized.overviewFocusCall({kind: "window", address: ""}), "");
+        compare(Minimized.overviewFocusCall({kind: "workspace", workspace: 0}), "");
+        compare(Minimized.overviewFocusCall({kind: "workspace", workspace: -1}), "");
+        compare(Minimized.overviewFocusCall({kind: "workspace", workspace: "special:minimized"}), "", "never a special workspace");
+        compare(Minimized.overviewFocusCall({kind: "workspace", workspace: 1.5}), "");
+        compare(Minimized.overviewFocusCall({kind: "remembered", address: "55ab", workspace: "x"}), "");
+        compare(Minimized.overviewFocusCall({kind: "none"}, -1), "");
+        compare(Minimized.overviewFocusCall({kind: "none"}, 4294967296), "");
+        compare(Minimized.overviewFocusCall({kind: "none"}, 1.5), "");
+        verify(Minimized.overviewFocusCall({kind: "none"}, 4294967295) !== "");
+        verify(Minimized.isPluginVerb("overview_focus"));
+    }
+
     function test_overviewCallOpenIsAValidatedLuaString() {
         const call = Minimized.overviewCall({on: true, durationMs: 350, curve: [0.2, 0, 0, 1], windows: [{address: "0x55AB", x: 10.4, y: 20.6, w: 300.2, h: 200.5}]});
         compare(call, ovHead + "\"{\\\"on\\\":true,\\\"durationMs\\\":350,\\\"curve\\\":[0.2,0,0,1],\\\"windows\\\":[{\\\"address\\\":\\\"0x55ab\\\",\\\"x\\\":10,\\\"y\\\":21,\\\"w\\\":300,\\\"h\\\":201}]}\"" + ovTail);

@@ -1,5 +1,6 @@
 #include "Stages.hpp"
 
+#include "DeferredFocus.hpp"
 #include "Ipc.hpp"
 #include "Overview.hpp"
 #include "Plugin.hpp"
@@ -12,8 +13,6 @@
 #include <hyprland/src/desktop/rule/Rule.hpp>
 #include <hyprland/src/desktop/rule/windowRule/WindowRuleApplicator.hpp>
 #include <hyprland/src/desktop/state/LayerState.hpp>
-#include <hyprland/src/desktop/state/ViewHitTester.hpp>
-#include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/desktop/view/WLSurface.hpp>
@@ -118,9 +117,9 @@ namespace {
         PHLWINDOWREF                     pendingFront; // a focus Hyprland refused (Exclusive layer, lock): made once that ends
         std::optional<st::WorkspaceId>   pendingSpace; // its Desktop: that Desktop's front window takes it if it went away
         PHLLSREF                         pendingHolder; // the layer surface that held the keyboard when it was deferred
-        std::optional<uint64_t>          pendingLater; // doLater sequence of a deferred-focus attempt (code of this library)
+        gf::deferredFocus::CLater        pendingAttempt; // a deferred-focus attempt from the event loop (code of this library)
         st::PressRecord                  press;        // the latest press (pointer button, touch, tablet): which CLICK focus is it
-        std::optional<uint64_t>          pressLater;   // doLater sequence that ends a press record (code of this library)
+        gf::deferredFocus::CLater        pressEnd;     // ends a press record from the event loop (code of this library)
         std::optional<uint64_t>          pointerLater; // doLater sequence of a pending pointer refresh (code of this library)
         bool                             pointerParked  = false; // pointer focus cleared off a blocked window (held button)
         bool                             warnedNoBuffer = false;
@@ -135,6 +134,14 @@ namespace {
     uint64_t addressOf(const PHLWINDOW& w) {
         return reinterpret_cast<uintptr_t>(w.get());
     }
+
+    // Hyprland's refusal conditions, the keyboard holder, where a press goes and Hyprland's focus reasons: the deferred
+    // focus shared with the overview focus (DeferredFocus.*, core/DeferredFocus.*).
+    using gf::deferredFocus::causeOf;
+    using gf::deferredFocus::exclusiveLayerMapped;
+    using gf::deferredFocus::keyboardHolder;
+    using gf::deferredFocus::sessionLocked;
+    using gf::deferredFocus::windowFocusRefused;
 
     // The address is compared, never dereferenced.
     PHLWINDOW windowByAddress(uint64_t address) {
@@ -429,31 +436,6 @@ namespace {
         return sp && sp->model.isActive(addressOf(w)) && shownOn(sp->id) && w->noInputBlockedReasonsBesides(INPUT_BLOCK_STAGES_BIT);
     }
 
-    // Hyprland 0.56.2's focus reasons, one to one (no default: a new reason in an update is a compiler warning).
-    st::FocusCause causeOf(Desktop::eFocusReason reason) {
-        switch (reason) {
-            case Desktop::FOCUS_REASON_UNKNOWN: return st::FocusCause::Unknown;
-            case Desktop::FOCUS_REASON_FFM: return st::FocusCause::PointerFollow;
-            case Desktop::FOCUS_REASON_KEYBIND: return st::FocusCause::KeyBinding;
-            case Desktop::FOCUS_REASON_DISPATCH_FOCUSWINDOW: return st::FocusCause::FocusDispatch;
-            case Desktop::FOCUS_REASON_DISPATCH_MOVEWINDOWINTOGROUP: return st::FocusCause::GroupDispatch;
-            case Desktop::FOCUS_REASON_CLICK: return st::FocusCause::Click;
-            case Desktop::FOCUS_REASON_OTHER: return st::FocusCause::Other;
-            case Desktop::FOCUS_REASON_DESKTOP_STATE_CHANGE: return st::FocusCause::Activation;
-            case Desktop::FOCUS_REASON_SWITCH_TO_WINDOW_SOFT: return st::FocusCause::SwitchSoft;
-            case Desktop::FOCUS_REASON_SWITCH_TO_WINDOW_HARD: return st::FocusCause::SwitchHard;
-            case Desktop::FOCUS_REASON_GROUP_CURRENT_WINDOW_CHANGE: return st::FocusCause::GroupCurrentChange;
-            case Desktop::FOCUS_REASON_WORKSPACE_CHANGE: return st::FocusCause::WorkspaceChange;
-            case Desktop::FOCUS_REASON_TOGGLE_SPECIAL_WORKSPACE: return st::FocusCause::ToggleSpecialWorkspace;
-            case Desktop::FOCUS_REASON_UNMAP_WINDOW_TILING: return st::FocusCause::UnmapTiling;
-            case Desktop::FOCUS_REASON_UNMAP_WINDOW_FLOATING: return st::FocusCause::UnmapFloating;
-            case Desktop::FOCUS_REASON_UNMAP_GROUPED_WINDOW: return st::FocusCause::UnmapGrouped;
-            case Desktop::FOCUS_REASON_NEW_WINDOW: return st::FocusCause::NewWindow;
-            case Desktop::FOCUS_REASON_GHOSTS: return st::FocusCause::Ghosts;
-        }
-        return st::FocusCause::Unknown;
-    }
-
     std::string_view originName(st::FocusOrigin origin) {
         switch (origin) {
             case st::FocusOrigin::UserChoice: return "a user choice";
@@ -466,22 +448,6 @@ namespace {
     }
 
     // ---- Hyprland's active window and popup grabs (R13 counter-review of 17208af) ----
-
-    bool sessionLocked() {
-        return g_pSessionLockManager && g_pSessionLockManager->isSessionLocked();
-    }
-
-    // Hyprland's own condition for refusing a window focus (CFocusState::rawWindowFocus), read only: the list is never
-    // changed by this plugin.
-    bool exclusiveLayerMapped() {
-        return g_pInputManager && !g_pInputManager->m_exclusiveLSes.empty();
-    }
-
-    // Hyprland refuses every window focus now (CFocusState::rawWindowFocus: "Refusing a keyboard focus to a window because
-    // of a sessionlock / an exclusive ls"). The plugin then never asks for one (R13 counter-review #3 of e9ebc7f).
-    bool windowFocusRefused() {
-        return sessionLocked() || exclusiveLayerMapped();
-    }
 
     // Drawn in a strip (input blocked), or about to be at the end of the running retarget.
     bool inStrip(const PHLWINDOW& w) {
@@ -508,25 +474,6 @@ namespace {
         g_pSeatManager->setGrab(nullptr);
         gf::logRequest(Log::INFO, "stages: the menu (popup grab) of window {:x} closed {}", addressOf(w), when);
         return true;
-    }
-
-    // The surface that holds the keyboard as Hyprland sees it: its focus surface; else the seat's keyboard focus; else,
-    // while an Exclusive layer is mapped, that layer (Hyprland resets its focus surface when its focused window closes,
-    // CWindow::onUnmap, and refuses the next window while the layer is mapped: the layer keeps the keys). Read only.
-    SP<CWLSurfaceResource> keyboardHolder() {
-        const auto fs = Desktop::focusState();
-        if (auto surface = fs ? fs->surface() : nullptr)
-            return surface;
-        if (auto surface = gf::surfaces::keyboardFocus())
-            return surface;
-        if (g_pInputManager) {
-            for (const auto& ref : g_pInputManager->m_exclusiveLSes) {
-                const auto ls = ref.lock();
-                if (ls && ls->m_mapped && ls->resource())
-                    return ls->resource();
-            }
-        }
-        return nullptr;
     }
 
     // Hyprland's active window goes to nothing and the keyboard holder is not touched: CFocusState::resetWindowFocus (what
@@ -678,21 +625,13 @@ namespace {
     // after Hyprland's own handling of that event (its refocus after a layer surface unmaps comes after the closed event).
     void schedulePendingFocus() {
         auto& s = S();
-        if (s.pendingLater || !g_pEventLoopManager || !s.pendingSpace)
+        if (!s.pendingSpace)
             return;
-        s.pendingLater = g_pEventLoopManager->doLater([] {
-            gf::guarded("stages deferred focus", [] {
-                S().pendingLater.reset();
-                applyPendingFocus("after a release");
-            });
-        });
+        s.pendingAttempt.schedule([] { gf::guarded("stages deferred focus", [] { applyPendingFocus("after a release"); }); });
     }
 
     void cancelPendingFocus() {
-        auto& s = S();
-        if (s.pendingLater && g_pEventLoopManager)
-            g_pEventLoopManager->removeDoLater(*s.pendingLater); // its callback is code of this library
-        s.pendingLater.reset();
+        S().pendingAttempt.cancel(); // its callback is code of this library
         forgetPending();
     }
 
@@ -701,13 +640,9 @@ namespace {
     // Ends the record from the event loop: after Hyprland handled the press (its refocus at the cursor for that press runs
     // while it handles it), or after Hyprland's refocus once the last Exclusive layer went away (a press beside the layer).
     void schedulePressEnd() {
-        auto& s = S();
-        if (s.pressLater || !g_pEventLoopManager)
-            return;
-        s.pressLater = g_pEventLoopManager->doLater([] {
+        S().pressEnd.schedule([] {
             gf::guarded("stages press end", [] {
                 auto& s = S();
-                s.pressLater.reset();
                 // A press beside a layer ends once no Exclusive layer is left: Hyprland's refocus after it has run (and did
                 // not focus the window pressed).
                 if (s.press.scope == st::PressScope::ThisPress || (s.press.scope == st::PressScope::UntilFocus && !exclusiveLayerMapped()))
@@ -718,22 +653,8 @@ namespace {
 
     void cancelPress() {
         auto& s = S();
-        if (s.pressLater && g_pEventLoopManager)
-            g_pEventLoopManager->removeDoLater(*s.pressLater); // its callback is code of this library
-        s.pressLater.reset();
+        s.pressEnd.cancel(); // its callback is code of this library
         s.press = {};
-    }
-
-    // The cursor lies over a mapped Exclusive layer surface (or one of its popups): Hyprland's own hit test of its
-    // Exclusive-layer list (CInputManager::mouseMoveUnified), run on a copy of the list (it is only read).
-    bool cursorOnExclusiveLayer(const Vector2D& at) {
-        if (!g_pInputManager || !Desktop::viewState())
-            return false;
-        std::vector<PHLLSREF> exclusive = g_pInputManager->m_exclusiveLSes;
-        Vector2D              local;
-        PHLLS                 found;
-        const auto            tester = Desktop::viewState()->hitTest();
-        return tester.layerPopupSurfaceAt(at, static_cast<const std::vector<PHLLSREF>*>(&exclusive), &local, &found) || tester.layerSurfaceAt(at, &exclusive, &local, &found);
     }
 
     // A press arrives (before Hyprland handles it). `pointer`: a pointer button at the cursor; otherwise a touch or a tablet
@@ -742,17 +663,7 @@ namespace {
         auto& s = S();
         if (!s.on)
             return;
-        st::PressContext context{.exclusive = exclusiveLayerMapped(), .onExclusive = true, .under = 0};
-        if (pointer && context.exclusive && g_pInputManager && Desktop::viewState()) {
-            const auto at       = g_pInputManager->getMouseCoordsInternal();
-            context.onExclusive = cursorOnExclusiveLayer(at);
-            if (!context.onExclusive) {
-                const auto under = Desktop::viewState()->hitTest().windowAt(
-                    at, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING | Desktop::View::FOLLOW_MOUSE_CHECK);
-                context.under = under ? addressOf(under) : 0;
-            }
-        }
-        s.press = st::recordPress(context);
+        s.press = st::recordPress(gf::deferredFocus::pressContext(pointer));
         if (s.press.scope == st::PressScope::ThisPress)
             schedulePressEnd();
         else if (s.press.scope == st::PressScope::UntilFocus)
@@ -1250,9 +1161,7 @@ namespace {
         if (!s.on)
             return;
         if (s.pendingSpace) { // the layer may have released the keyboard before the deferred focus ran
-            if (s.pendingLater && g_pEventLoopManager)
-                g_pEventLoopManager->removeDoLater(*s.pendingLater);
-            s.pendingLater.reset();
+            s.pendingAttempt.cancel();
             applyPendingFocus("before a key");
         }
         if (s.wins.empty())
@@ -1472,9 +1381,9 @@ namespace gf::stager {
         s.strips.clear();
         s.pointerLater.reset();
         s.pointerParked = false;
-        s.pendingLater.reset();
+        s.pendingAttempt.clear();
         forgetPending();
-        s.pressLater.reset();
+        s.pressEnd.clear();
         s.press         = {};
         auto& ev        = bus->m_events;
         auto& l         = S().listeners;

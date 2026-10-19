@@ -275,9 +275,12 @@ function mimeTypesOf(path, data, resolved) {
         if (name[i] === "." && data.suffix[name.substring(i)])
             found = data.suffix[name.substring(i)];
     }
-    // The real type found at drop time (folders, extensionless files, magic) wins over the name.
-    if (resolved && typeof resolved[path] === "string" && resolved[path] !== "" && resolved[path] !== "-")
-        found = [resolved[path]];
+    // A folder is a folder whatever its name ("Photos.png"); for other paths the real type found at drop time
+    // (extensionless files, magic) is used only when the name tells nothing.
+    if (resolved && typeof resolved[path] === "string" && resolved[path] !== "" && resolved[path] !== "-") {
+        if (resolved[path] === "inode/directory" || found.length === 0)
+            found = [resolved[path]];
+    }
     const all = {};
     const queue = found.slice();
     while (queue.length > 0) {
@@ -386,6 +389,33 @@ function acceptsFiles(entry, paths, data, resolved, lenient) {
     });
 }
 
+// Verdict of a tile for the hovered or dropped `paths` while their real types (`resolved`, a partial {path: type} map: a
+// folder may carry an extension) are being looked up: "no" when the entry can not open a path whose type is known (or
+// can open nothing), "pending" when every known path is fine but some are not resolved yet, "yes" when all are fine.
+function dropVerdict(entry, paths, data, resolved) {
+    if (!entry || !data || !data.ready || !paths || paths.length === 0 || !hasFileCode(entryArgs(entry)))
+        return "no";
+    const declared = data.entries[entry.id];
+    if (!declared || declared.length === 0)
+        return "no";
+    let pending = false;
+    for (const p of paths) {
+        if (!resolved || resolved[p] === undefined) {
+            pending = true;
+            continue;
+        }
+        const types = mimeTypesOf(p, data, resolved);
+        if (!types.some(t => declared.some(d => d === t || (d.endsWith("/*") && t.startsWith(d.substring(0, d.length - 1))))))
+            return "no";
+    }
+    return pending ? "pending" : "yes";
+}
+
+// Paths whose real type is not known yet (not in `resolved`).
+function unknownPaths(paths, resolved) {
+    return Array.from(paths || []).filter(p => !resolved || resolved[p] === undefined);
+}
+
 // Paths whose type the file name does not tell (no glob matches: folders, extensionless files): their real type is
 // resolved at drop time. [] when the name decides every path.
 function unresolvedPaths(paths, data) {
@@ -480,4 +510,37 @@ function layoutTransition(before, after, min) {
             slide[key] = before[key] - after[key];
     }
     return {slide: slide, enter: enter};
+}
+
+// ---- Stable tile model ----
+// The Dock tiles live in a keyed list model updated by diffing, so a delegate (and its animations) survives a rebuild.
+
+// Steps that turn the key list `from` into `to`: [{op: "remove", at}, {op: "insert", at, key}, {op: "move", from, to}], to be
+// applied in order (removals first, so no delegate outlives its key). Keys must be unique.
+function diffKeys(from, to) {
+    const want = {};
+    to.forEach(k => {
+        want[k] = true;
+    });
+    const list = from.slice();
+    const ops = [];
+    for (let i = list.length - 1; i >= 0; i--) {
+        if (!want[list[i]]) {
+            ops.push({op: "remove", at: i});
+            list.splice(i, 1);
+        }
+    }
+    for (let i = 0; i < to.length; i++) {
+        if (list[i] === to[i])
+            continue;
+        const at = list.indexOf(to[i], i + 1);
+        if (at >= 0) {
+            ops.push({op: "move", from: at, to: i});
+            list.splice(i, 0, list.splice(at, 1)[0]);
+        } else {
+            ops.push({op: "insert", at: i, key: to[i]});
+            list.splice(i, 0, to[i]);
+        }
+    }
+    return ops;
 }

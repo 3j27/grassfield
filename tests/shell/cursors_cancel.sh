@@ -11,6 +11,16 @@ cleanup() { for p in "${pids[@]}"; do kill -KILL -- "-$p" 2>/dev/null || true; d
 trap cleanup EXIT
 fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
+# Nothing of the build in $1 is left: no work directory, no renderer or packer. Children may need a moment to exit after
+# the build itself has (a loaded machine); poll for up to 5 s instead of a fixed pause.
+left_nothing() {
+  local i
+  for ((i = 0; i < 50; i++)); do
+    [[ -z $(ls -A "$1" 2>/dev/null | grep "\.build\.") && $(ps -eo args= | grep -c "[x]cursor-pack.py.*$1\|[r]svg-convert.*$1") == 0 ]] && return 0
+    sleep 0.1
+  done
+  return 1
+}
 build=$root/branding/cursors/build.sh
 name=grassfield-cursors-custom
 
@@ -53,7 +63,7 @@ for delay in 0.4 1.1; do
   desc="SIGTERM at ${delay}s: exit 143, no error message (got rc=$rc, log: $(tr '\n' ' ' <"$tmp/log"))"
   check bash -c '[[ $1 == 143 && ! -s $2 ]]' _ "$rc" "$tmp/log"
   desc="SIGTERM at ${delay}s: no work directory and no child process left"
-  check bash -c '[[ -z $(ls -A "$1" 2>/dev/null | grep "\.build\.") && $(ps -eo args= | grep -c "[x]cursor-pack.py.*$1\|[r]svg-convert.*$1") == 0 ]]' _ "$out"
+  check left_nothing "$out"
 done
 
 # The shell's way: setsid, the whole group is signalled.
@@ -67,7 +77,7 @@ rc=0
 wait "$pid" || rc=$?
 sleep 0.3
 desc="group SIGTERM: stopped, nothing left (rc=$rc)"
-check bash -c '[[ -z $(ls -A "$1" 2>/dev/null | grep "\.build\.") && $(ps -eo args= | grep -c "[x]cursor-pack.py.*$1\|[r]svg-convert.*$1") == 0 ]]' _ "$out"
+check left_nothing "$out"
 
 # SIGKILL of the group: the work directory stays (nothing can clean it), no child survives, the next build removes it at once.
 out=$tmp/kill

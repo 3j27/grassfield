@@ -146,6 +146,31 @@ TestCase {
         // One short line of plain text: control characters are removed, the length is bounded.
         compare(PointerColors.failureReason(1, "a\u001b[31mb\u0007c"), "a [31mb c");
         compare(PointerColors.failureReason(1, "x".repeat(500)).length, 160);
+        // A cut line ends with an ellipsis; a line of exactly 160 is not cut.
+        verify(PointerColors.failureReason(1, "x".repeat(500)).endsWith("…"));
+        compare(PointerColors.failureReason(1, "x".repeat(160)), "x".repeat(160));
+        // The home folder is written "~".
+        compare(PointerColors.failureReason(1, "cursors: cannot write /home/ann/.local/share/icons/.x.build.1: denied", "/home/ann"), "cursors: cannot write ~/.local/share/icons/.x.build.1: denied");
+        compare(PointerColors.failureReason(1, "no such directory '/home/ann'", "/home/ann/"), "no such directory '~'");
+        compare(PointerColors.failureReason(1, "in /home/annabel/x", "/home/ann"), "in /home/annabel/x");
+        compare(PointerColors.failureReason(1, "in /home/ann/x", ""), "in /home/ann/x");
+        compare(PointerColors.failureReason(1, "in /x", "/"), "in /x");
+        // Real tool messages, English and French locales (coreutils quotes with curly quotes in UTF-8 locales).
+        const home = "/home/ann";
+        compare(PointerColors.failureReason(1, "rm: cannot remove '/home/ann/.local/share/icons/x': Permission denied", home), "rm: cannot remove '~/.local/share/icons/x': Permission denied");
+        compare(PointerColors.failureReason(1, "rm: cannot remove ‘/home/ann/.local/share/icons/x’: Permission denied", home), "rm: cannot remove ‘~/.local/share/icons/x’: Permission denied");
+        compare(PointerColors.failureReason(1, "rm : impossible de supprimer ‘/home/ann/.local/share/icons/x’ : Permission non accordée", home), "rm : impossible de supprimer ‘~/.local/share/icons/x’ : Permission non accordée");
+        compare(PointerColors.failureReason(1, "mkdir: cannot create directory ‘/home/ann/.local/share/icons/.x.build.1’: No space left on device", home), "mkdir: cannot create directory ‘~/.local/share/icons/.x.build.1’: No space left on device");
+        compare(PointerColors.failureReason(1, "mkdir : impossible de créer le répertoire « /home/ann/.local/share/icons » : Aucun espace disponible", home), "mkdir : impossible de créer le répertoire « ~/.local/share/icons » : Aucun espace disponible");
+        compare(PointerColors.failureReason(1, "Error reading SVG: Error opening file /home/ann/.cache/gf/cursor.svg: No such file or directory", home), "Error reading SVG: Error opening file ~/.cache/gf/cursor.svg: No such file or directory");
+        compare(PointerColors.failureReason(1, "Impossible d’ouvrir “/home/ann/.cache/gf/cursor.svg”", home), "Impossible d’ouvrir “~/.cache/gf/cursor.svg”");
+        compare(PointerColors.failureReason(1, "hyprcursor-util: failed to create \"/home/ann/.local/share/icons/x\", reason: Permission denied", home), "hyprcursor-util: failed to create \"~/.local/share/icons/x\", reason: Permission denied");
+        compare(PointerColors.failureReason(1, "echec: /home/ann/a et ‘/home/ann/b’ /home/annabel/c ‘/home/annabel’", home), "echec: ~/a et ‘~/b’ /home/annabel/c ‘/home/annabel’");
+        // Replaced before the cut: a long home path does not eat the room.
+        const long = "/home/ann/" + "d".repeat(200);
+        const cut = PointerColors.failureReason(1, long, "/home/ann");
+        compare(cut.length, 160);
+        verify(cut.startsWith("~/ddd"));
     }
 
     // ---- build scheduling ----

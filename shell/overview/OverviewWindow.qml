@@ -39,8 +39,9 @@ Variants {
         readonly property string screenName: modelData.name
         readonly property bool shown: root.controller.open
         readonly property bool v2: !root.controller.thumbnailMode
-        // Every chrome is Exclusive while open (Hyprland sends pointer input to Exclusive layers only) and every chrome
-        // is None once the close starts, so Hyprland refocuses the last window (V2.keyboardPlan).
+        // Every chrome is Exclusive while open (Hyprland sends pointer input to Exclusive layers only); when the close
+        // starts the non-holders drop to None, then the holder (V2.keyboardPlan). The focus itself comes from the
+        // compositor plugin (`overview-focus`) or, without it, from the controller's checked retry.
         readonly property bool holdsKeyboard: root.controller.keyboardPlan[screenName] === "exclusive"
 
         // 0 = windows at their real place, 1 = fully laid out.
@@ -56,9 +57,11 @@ Variants {
         property var winKeys: []
         property var byKey: ({})
 
-        // Selection: window address ("" none) or, in Spaces mode, the tile index (windows mode = -1).
-        property string selected: ""
-        property int spaceFocus: -1
+        // Selection: window address ("" none, or a window of another output) or, in Spaces mode on this output, the tile
+        // index (windows mode = -1). The state lives in the controller (one selection across outputs: the keyboard
+        // reaches whichever chrome Hyprland picked, so the keys cannot depend on the output they arrive on).
+        readonly property string selected: byKey[root.controller.selected] ? root.controller.selected : ""
+        readonly property int spaceFocus: root.controller.spaceScreen === screenName ? root.controller.spaceFocus : -1
         // Drag state.
         property string dragKey: ""
         property point dragPoint: Qt.point(0, 0)
@@ -205,8 +208,6 @@ Variants {
             for (const w of liveWins)
                 map[w.address] = w;
             byKey = map;
-            if (selected !== "" && !map[selected])
-                selected = "";
         }
 
         onLiveSpacesChanged: {
@@ -216,8 +217,6 @@ Variants {
 
         onShownChanged: {
             if (shown) {
-                selected = "";
-                spaceFocus = -1;
                 dragKey = "";
                 keys.forceActiveFocus();
             }
@@ -233,7 +232,10 @@ Variants {
         function activateWindow(key: string): void {
             const info = byKey[key];
             if (info)
-                root.controller.closeAnd(() => Compositor.activate(info.toplevel));
+                root.controller.closeAnd({
+                    kind: "window",
+                    address: info.address
+                });
             else
                 root.controller.closeAnd(null);
         }
@@ -244,7 +246,10 @@ Variants {
         }
 
         function switchSpace(id: int): void {
-            root.controller.closeAnd(() => Compositor.focusSpace(id));
+            root.controller.closeAnd({
+                kind: "space",
+                id: id
+            });
         }
 
         function addSpace(): void {
@@ -285,37 +290,39 @@ Variants {
                 Compositor.moveToSpace(info.address, tile.id);
         }
 
-        function selectDirection(dir: string): void {
+        // Used by the controller's arrow-key navigation: the window next to `key` in a direction on this output ("" none).
+        function neighborOf(key: string, dir: string): string {
             const rects = placement.rects;
-            let at = -1;
-            for (let i = 0; i < rects.length; i++) {
-                if (rects[i].id === selected)
-                    at = i;
-            }
-            if (at < 0) {
-                // First arrow key: the focused window, else the first.
-                const active = wins.findIndex(w => w.toplevel && w.toplevel === Compositor.focusedToplevel);
-                const pick = rects.length > 0 ? rects[active >= 0 ? active : 0] : null;
-                selected = pick ? pick.id : "";
-                return;
-            }
+            const at = rects.findIndex(r => r.id === key);
+            if (at < 0)
+                return "";
             const next = Layout.neighbor(rects, at, dir);
-            if (next >= 0)
-                selected = rects[next].id;
-            else if (dir === "up" && tiles.length > 0)
-                enterSpaces(spaces.findIndex(s => s.active));
+            return next >= 0 ? rects[next].id : "";
         }
 
-        function enterSpaces(index: int): void {
-            spaceFocus = Math.max(0, Math.min(index, tiles.length - 1));
+        // Size of the laid-out area (the window below the menu bar) and the position (0..1) of a window's centre across
+        // `dir`'s axis: what the next output's entry window is chosen from.
+        function areaSize(): var {
+            return {
+                w: Math.max(1, modelData.width),
+                h: Math.max(1, modelData.height - Tokens.menubarHeight)
+            };
         }
 
-        // Tab order: windows (-1), then each tile, then back to the windows.
-        function cycle(step: int): void {
-            let next = spaceFocus + step;
-            if (next >= tiles.length || next < -1)
-                next = step > 0 ? -1 : tiles.length - 1;
-            spaceFocus = next;
+        function crossFraction(key: string, dir: string): real {
+            const r = placedMap[key];
+            if (!r)
+                return 0.5;
+            const a = areaSize();
+            return (dir === "left" || dir === "right") ? (r.y + r.h / 2) / a.h : (r.x + r.w / 2) / a.w;
+        }
+
+        function entryFor(dir: string, crossFrac: real): string {
+            return V2.entryWindow(placement.rects, dir, crossFrac, areaSize());
+        }
+
+        function activeTileIndex(): int {
+            return Math.max(0, spaces.findIndex(s => s.active));
         }
 
         function statusData(): var {
@@ -395,7 +402,7 @@ Variants {
                         event.accepted = false;
                         return;
                     }
-                    const inSpaces = win.spaceFocus >= 0;
+                    const c = root.controller;
                     event.accepted = true;
                     switch (event.key) {
                     case Qt.Key_Escape:
@@ -405,33 +412,25 @@ Variants {
                         break;
                     case Qt.Key_Return:
                     case Qt.Key_Enter:
-                        if (inSpaces)
-                            win.activateTile(win.spaceFocus);
-                        else if (win.selected !== "")
-                            win.activateWindow(win.selected);
+                        c.activateSelection();
                         break;
                     case Qt.Key_Tab:
-                        win.cycle((event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+                        c.cycle((event.modifiers & Qt.ShiftModifier) ? -1 : 1);
                         break;
                     case Qt.Key_Backtab:
-                        win.cycle(-1);
+                        c.cycle(-1);
                         break;
                     case Qt.Key_Left:
+                        c.arrow("left");
+                        break;
                     case Qt.Key_Right:
-                        if (inSpaces)
-                            win.enterSpaces(win.spaceFocus + (event.key === Qt.Key_Left ? -1 : 1));
-                        else
-                            win.selectDirection(event.key === Qt.Key_Left ? "left" : "right");
+                        c.arrow("right");
                         break;
                     case Qt.Key_Down:
-                        if (inSpaces)
-                            win.spaceFocus = -1;
-                        else
-                            win.selectDirection("down");
+                        c.arrow("down");
                         break;
                     case Qt.Key_Up:
-                        if (!inSpaces)
-                            win.selectDirection("up");
+                        c.arrow("up");
                         break;
                     default:
                         event.accepted = false;
@@ -709,10 +708,8 @@ Variants {
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton
                         onEntered: {
-                            if (win.dragKey === "") {
-                                win.spaceFocus = -1;
-                                win.selected = thumb.modelData;
-                            }
+                            if (win.dragKey === "")
+                                root.controller.hoverSelect(thumb.modelData);
                         }
                         onPressed: mouse => {
                             pressAt = mapToItem(contentRoot, mouse.x, mouse.y);

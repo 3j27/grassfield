@@ -62,10 +62,11 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
   `refreshSpaces`, `topologyRevision`/`refreshOnEvents`.
 - Desktops bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
   tile thumbnails need v2). Click a tile: switch and close. "+": focus the next workspace id, Overview stays open.
-- Click a window: activate and close. The keyboard grab is released before the focus action, otherwise Hyprland
-  refocuses the previous window (and workspace) when the exclusive layer goes away and undoes the switch.
-- Keyboard: arrows (spatial), Return, Tab/Shift+Tab cycle windows -> each Desktop tile -> "+", Esc. Up from the top
-  row of windows enters the Desktops bar.
+- Click a window: focus it and close. The keyboard grab is released before the focus lands (the plugin waits for the last
+  Exclusive layer; without it the shell focuses after the release and checks), otherwise Hyprland refocuses the previous
+  window (and workspace) when the exclusive layer goes away and undoes the switch.
+- Keyboard: arrows (spatial, across outputs; the first arrow selects the window active at open), Return, Tab/Shift+Tab
+  cycle windows -> each Desktop tile -> "+", Esc. Up from the top row of windows enters the Desktops bar.
 - Profiles (`material.profile`): full = live `ScreencopyView`; balanced = single frames every
   `overview.balancedIntervalMs` (250 ms; the API has no rate control, so `captureFrame()` on a timer); reduced = one
   snapshot per window when opening.
@@ -276,20 +277,36 @@ names a window. Setting every chrome to `None` in one QML step is therefore not 
 Desktop of the output whose chrome received the key instead of the window that was active.
 
 Rule (macOS model): the overview remembers the window that had the keyboard when it opened (`Overview.previous`, address and
-Desktop; none when the desktop surface held the keyboard, ADR-0012). Every close goes through `closeAnd(action)`:
+Desktop; none when the desktop surface held the keyboard, ADR-0012). Every close goes through `closeAnd(choice)`, which
+first works out ONE target (`V2.closeTarget`: a window chosen, a Desktop tile chosen, the Desktop created with "+", the
+remembered window, or none) and then:
+0. with the plugin capability `overview-focus` sends that target as ONE `overview_focus` request (see "Close focus" below),
+   before anything is released; without it the shell focuses after step 3 (below);
 1. stage `releasing`: every chrome's keyboard mode is `None` (`V2.keyboardPlan`), keys are no longer handled;
 2. wait until **no chrome reports the keyboard** (`Window.active` false on all) and `overview.releaseSettleMs` (0 ms: the next event-loop turn) have
    passed since the last change of that report (`V2.releaseDone`): all chromes have committed, so no Exclusive layer remains;
    `overview.releaseBoundMs` (500 ms) bounds the wait whatever happens (a lost event must not leave the overview open);
-3. `on:false`, then the action, then the chromes hide. The action is the user's choice (window, Desktop tile); with no choice
-   (Esc, backdrop click, IPC close, toggle, activating nothing) it is `restoreFocus()`: `V2.restorePlan` gives the remembered
-   window if it still exists (focused through `Compositor.focusWindow`: its Desktop first when not the one shown, then
-   `Compositor.activate`, the path Dock and Search use, so Stages brings that window's stage forward), the Desktop created by
-   "+" when there was one, else nothing (Hyprland's choice stands).
-Another full-attention surface opening (ExclusiveSurfaces: Apps, Search, the switcher) closes the overview with
-`requestCloseForOther()`: same release, no focus action, the keyboard belongs to the opening surface; when that closes
-Hyprland returns the keyboard to the window that has it. Keys typed while the release runs (about 100 to 150 ms after Esc) reach
-the chrome, which ignores them: they are lost, never delivered to another window (drop table below).
+3. `on:false`, then the chromes hide. **Without `overview-focus` (C2)** the shell then focuses the target itself
+   (`Overview.startFocus`): `V2.fallbackPlan` keeps a remembered or chosen window that still exists and is not minimized (a
+   minimized window never gets focus), a Desktop becomes its front window (`Compositor.frontWindowOn`: focused last; the
+   Desktop itself when empty), anything else nothing (Hyprland's choice stands). The focus is the Lua dispatch (`Compositor.focusWindow`: its Desktop first when not the one
+   shown), then checked (`V2.focusHolds`: the active window, or the focused Desktop) after
+   `overview.focusRetryMs` (60 ms, doubling at each retry) and retried until it holds or `overview.focusBoundMs` (1 s) has
+   passed. Nothing is focused while the session is locked.
+Another full-attention surface opening (ExclusiveSurfaces: Apps, Search, the switcher) or the lock closes the overview with
+`requestCloseForOther()`: same release, **no request and no focus action**, the keyboard belongs to the opening surface; when
+that closes Hyprland returns the keyboard to the window that has it. When the plugin ends the overview itself
+(`interrupted`: a Desktop switch, the lock) the same close runs (chromes released in order, request target `workspace` with the
+Desktop focused at that moment, so the user's switch is kept when Hyprland refocuses the window that was active at open;
+`none` when it is unknown), never `hide()` dropping every chrome at once. A switch of the Desktop of the output that does not
+have the monitor focus leaves the focus where it was: that window keeps the keyboard. Keys typed while the release runs (about 100 to
+150 ms after Esc) reach the chrome, which ignores them: they are lost, never delivered to another window (drop table below).
+
+Keyboard selection is one value for all outputs (`Overview.selected`, `spaceFocus`, `spaceScreen`), since the keyboard
+reaches whichever chrome Hyprland picked: the first arrow key selects the window that was active at open, wherever it is
+(`V2.startSelection`; macOS), later arrows move to the neighbour on that output (`Layout.neighbor`) and, with none that way,
+to the window entered on the output lying that way (`V2.adjacentScreen`, `V2.entryWindow`: the same height, the near edge);
+up with nothing above enters the Desktops bar of that output.
 
 Two more measured facts. (1) The protocol `activate` does nothing for a window Hyprland still counts as focused, which is
 exactly the one the chrome took the keyboard from (A active, pointer and holder chrome on A's output, Esc: keys lost 11 of
@@ -319,6 +336,81 @@ pointer alternating between the outputs), by `overview.releaseSettleMs`, plugin 
 No key ever reached the wrong window at any setting. With 0 ms the release completes as soon as no chrome reports the
 keyboard; the only loss left is for keys sent in the same millisecond as Esc (the 0 ms row), before the chrome has handled
 the key at all.
+
+### Close focus (plugin `overview-focus`, owner decision 2026-10-19 batch 5)
+Counter-review of the fix pass 2 (FAIL): with two outputs Esc still lost the keyboard (the holder released before the
+other chromes' `None` commits landed; Hyprland refuses a refocus while any Exclusive layer exists, "refocusLastWindow:
+ignoring, exclusive LS present", and retries nothing when the last one goes), and the protocol `activate` / `focusSpace`
+did nothing for the window Hyprland still counts focused and for the current Desktop. Decision: **the shell names the
+target, grassfield-compositor makes the focus at the moment the last Exclusive layer is gone**; without the plugin the shell
+checks and retries itself (shell side shipped: `Overview.closeAnd` / `startFocus`, see "Close and keyboard" above).
+Plugin side shipped in 0.8.0-ovfocus (`compositor/src/OverviewFocus.*`, `core/OverviewFocus.*`, on the deferred focus shared
+with Stages: `DeferredFocus.*`, `core/DeferredFocus.*`; requirements `docs/specs/compositor.md` FR41-FR43).
+
+Shell contract (for the integration):
+1. **Capability** `overview-focus` (gfc/1). Without it nothing changes: the shell keeps its own path.
+2. **When.** As the close starts (Esc, a window or Desktop chosen, backdrop, IPC close, toggle), before the chromes drop to
+   `None`, send once through `Hyprland.dispatch` (guarded like every verb: add `overview_focus` to `Minimized.pluginVerbs`;
+   the Lua name has an underscore) `hl.plugin.grassfield.overview_focus("<json>")`, the JSON built from validated pieces:
+   - a window chosen: `{"target":"window","address":"0x…"}`;
+   - a Desktop tile chosen, or the Desktop created with "+" while open: `{"target":"workspace","workspace":N}`;
+   - no choice, a window remembered at open: `{"target":"remembered","address":"0x…","workspace":N}` (its Desktop at open);
+   - no choice and nothing remembered (the desktop or nothing had the keyboard): `{"target":"none"}`;
+   - optional `"id":N` (0..2^32-1), echoed in the events. At most 512 bytes; a field the target does not use is refused.
+   Then release the chromes as now and send `on:false`, but do **not** run the focus action (`Compositor.focusWindow`,
+   `focusSpace`, `activate`): the plugin does it. A request closing for another full-attention surface (Apps, Search: the
+   keyboard belongs to it) sends nothing.
+3. **What the plugin does.** It waits until Hyprland's Exclusive-layer list is empty (every chrome released, no dialog),
+   event driven: commits of every mapped layer surface (watched while it waits: a chrome that drops to `None` while another
+   one is still Exclusive changes nothing else in Hyprland), unmaps, keyboard focus changes, the lock, and before every key
+   (a key typed right after the last release gets the target first). Bounded: 1 s after the request it gives up (outcome
+   `timeout`, Hyprland's choice stands). Then, checked again: the session lock (`refused`, nothing focused); the named
+   window still exists, is not hidden, not minimized (on a special workspace) and its Desktop is shown → Hyprland's own
+   focus (`CFocusState::fullWindowFocus`, reason `DISPATCH_FOCUSWINDOW`, what `hl.dsp.focus({window = …})` runs, without its
+   cursor warp), which also gives the keyboard back to the window Hyprland still counts focused; a Desktop shown → its front
+   window; a Desktop not shown → Hyprland's own switch (`Config::Actions::changeWorkspace`, what `hl.dsp.focus({workspace =
+   …})` runs: the Desktop appears on its own monitor), then its front window; an empty Desktop → no window (Hyprland's active
+   window cleared, the keyboard to nothing unless an `on_demand` layer such as the desktop holds it; that monitor focused).
+   **Fallback** (the window closed, minimized, hidden or moved to a Desktop not shown, the Desktop gone, Hyprland refused the
+   window, or `none`): the front window of the remembered Desktop when it is still shown (macOS: leaving Mission Control
+   returns to the Desktop you were on), else of the Desktop shown on Hyprland's focused monitor (Hyprland moves the monitor
+   focus to the pointer's output when the focused window closes), else no window. **Front window** = the window of that
+   Desktop focused last (Hyprland's focus events since the plugin loaded; macOS: the front-most window is the one activated
+   last), then the stack top down; only windows taking input (never a Stages strip window), not hidden, focusable.
+4. **The user wins.** A press after the request beside every Exclusive layer on a window (Hyprland gives such a press to the
+   remaining Exclusive layer and focuses nothing) makes that window the target (`"target":"press"`); a press while Hyprland
+   accepts window focus, or a user's focus choice of another window (key binding, dispatch, activation), ends the request
+   (`superseded`). A press into a chrome or a dialog changes nothing. A newer request replaces a waiting one.
+5. **Events** `grassfield>>{"v":"gfc/1","type":"overview-focus","outcome":"…","target":"window|workspace|remembered|none|press","id":N}`
+   plus `"address"` (the window that holds the keyboard), `"workspace"` and `"reason"` when known. Outcomes: `pending`,
+   `focused`, `fallback` (reasons `gone`, `minimized`, `hidden`, `not-shown`, `no-workspace`, `none`, `refused-by-hyprland`;
+   no address: no window), `timeout` (`exclusive-layer`), `refused` (`locked`), `superseded` (`press`, `user-focus`),
+   `unavailable` (`unloading`), `invalid`. Coalesced (channel `overview-focus`, latest wins): a state, not a log.
+6. **Without the plugin** (absent, older, unload: capabilities `[]`) the verb does not exist; the guarded call is a no-op and
+   the shell checks and retries (`Overview.startFocus`). An unload while a request waits posts `unavailable` first.
+
+Evidence (nested Hyprland v0.56.2 commit efb50993, plugin 0.8.0-ovfocus, headless pair GF-REF 1920x1080 + GF-REF2
+1440x900 with WAYLAND-1 disabled, `tests/compositor/overview_focus.sh`, fixture `tests/compositor/overview-focus-fixture`:
+one Exclusive Overlay chrome per output, namespace `grassfield-overview`, released holder first / holder last / together,
+staying mapped or unmapping): **66/66 PASS** on the final build (`.dev/overview-focus/run-20261019-194052-check`, also
+`run-20261019-192909-check`; 53/53 on an earlier script version). Keys (letters only, `scripts/dev/keys.sh`) reached exactly the target in every
+case: the window active at open (still Hyprland's focused window) for the three release orders; a window on the other
+output (chromes staying mapped or unmapping); the current Desktop; a Desktop shown on the other output; another Desktop
+(switched on its monitor); a chosen window closed during the close and a remembered window minimized during the close
+(fallback to the front window, the minimized one got nothing and stayed minimized); a press beside the remaining chrome on
+the other output's window (that window, target `press`); a polkit-like dialog appearing during the close (its field got the
+letters, no window did; outcome `timeout` past the bound; a short dialog: no outcome while it was up, the target after it);
+the session lock during the close (`refused`, no `activewindowv2` naming a window while locked, nothing typed). Hyprland
+logged its `ignoring, exclusive LS present` refusal about 10 times per run (the refocus it gave up, after which the plugin
+focused).
+Comparison (`overview_focus.sh baseline`: the verb absent, the guarded call a no-op, nothing emulates the shell's own focus
+action): the old build 0.7.1-stages **32/44** (`run-20261019-201004-baseline`) and a `--no-plugin` session (C2) **32/44**
+(`run-20261019-200901-baseline`; `hyprctl grassfield` "unknown request", shell log "no compositor plugin reply, running in
+degraded mode", safety checks all PASS): the window on the other output, the Desktop on the other output, another Desktop and
+the press got nothing (the keys went to the last focused window); after a closed or a minimized target the keys were lost;
+the remembered window on the same output and the current Desktop got them (Hyprland's own refocus did it in this fixture).
+Under load: `soak.sh 1260` PASS with `overview_focus.sh stress 1200` alongside (4239 requests at ~4/s, 423 invalid, every one
+answered; no exception), and `stress 180` alone (647 requests, 2 floods of 100 answered with one outcome each).
 
 ### Two outputs and shared drawing (2026-10-18, plugin 0.6.0-stages)
 The chrome rule is relaxed (contract item 2): one Exclusive chrome holding the keyboard, a mapped chrome on every target
@@ -357,8 +449,10 @@ layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (
   the layout of all outputs is sent (surface box = layout rect minus the 28 px band x scale, global coordinates).
   `durationMs` = `motion.slow` (350), 0 with Reduce Motion (the dim then crossfades in at most `motion.reducedMax`).
   A new layout while open (window opened/closed/moved) retargets with a new `on:true`.
-- Close: every chrome drops to keyboard None first; when no chrome reports the keyboard any more and the settle pause has
-  passed, `on:false` is sent, then the focus action and the hide (the plugin lets the asked closing animation finish).
+- Close: the focus target goes to the plugin first (`overview_focus`, capability `overview-focus`); every chrome drops to
+  keyboard None; when no chrome reports the keyboard any more and the settle pause has passed, `on:false` is sent and the
+  chromes hide (the plugin lets the asked closing animation finish; without `overview-focus` the shell focuses afterwards
+  and checks).
   Esc, a click on a window or on empty space, a Desktop tile, IPC close/toggle all go through it ("Close and keyboard").
 - Input is the shell's own: per-window hit areas (surface + band), hover selects and shows the app label, arrows/Tab/Return,
   drag to a Desktop tile (a ghost follows the pointer; the real window stays drawn by the plugin; drop = `moveToSpace`).

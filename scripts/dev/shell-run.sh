@@ -24,6 +24,7 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --private-bus) export GRASSFIELD_PRIVATE_BUS=1 ;;
     --session-bus) export GRASSFIELD_PRIVATE_BUS=0 ;;
+    --render-timing) export GRASSFIELD_RENDER_TIMING=1 ;;  # Qt scene graph frame timing in .dev/shell.log (QSG_RENDER_TIMING)
     --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
     --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
     --menu-bridge) export GRASSFIELD_MENU_BRIDGE=${2:?--menu-bridge needs a path}; shift ;;
@@ -134,7 +135,8 @@ open_log=$dev/open-policy.log
 plocate_db=""
 [[ -s $dev/plocate.db ]] && plocate_db=$dev/plocate.db
 
-# GRASSFIELD_RENDER_TIMING=1: opt-in Qt scene graph render timing (QSG_RENDER_TIMING) in the shell log.
+# --render-timing (GRASSFIELD_RENDER_TIMING=1): opt-in Qt scene graph render timing (QSG_RENDER_TIMING) in the shell log.
+# Only this start of the shell has it: a start without the option is quiet again.
 timing=()
 [[ ${GRASSFIELD_RENDER_TIMING:-} == 1 ]] && timing=(QSG_RENDER_TIMING=1)
 

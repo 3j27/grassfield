@@ -27,7 +27,9 @@ ShellRoot {
         {"name": "colour name is the default", "text": '{"version":1,"pointer":{"outlineColor":"yellow","fillColor":"red"}}', "want": 24},
         {"name": "short and long forms are the default", "text": '{"version":1,"pointer":{"outlineColor":"#ff0","fillColor":"#ff0000ff"}}', "want": 24},
         {"name": "non-strings are the default", "text": '{"version":1,"pointer":{"outlineColor":16776960,"fillColor":["#ff0000"]}}', "want": 24},
-        {"name": "null is the default", "text": '{"version":1,"pointer":{"outlineColor":null,"fillColor":true}}', "want": 24}
+        {"name": "null is the default", "text": '{"version":1,"pointer":{"outlineColor":null,"fillColor":true}}', "want": 24},
+        {"name": "malformed file is not a valid read", "text": '{"version":1,"pointer":{"size":', "want": 24, "valid": false},
+        {"name": "empty file is a valid read", "text": '', "want": 24}
     ]
     property var failures: []
     property int loaded: 0
@@ -68,6 +70,7 @@ ShellRoot {
                 configDir: root.dir(item.index)
                 onLoadedFile: {
                     const c = root.cases[item.index];
+                    root.check(c.name + ": validRead " + validRead, validRead === (c.valid ?? true) && writeBlocked === !(c.valid ?? true));
                     root.check(c.name + ": got " + pointerSize, pointerSize === c.want);
                     root.check(c.name + ": outline " + pointerOutlineColor, pointerOutlineColor === (c.outline ?? "#ffffff"));
                     root.check(c.name + ": fill " + pointerFillColor, pointerFillColor === (c.fill ?? "#000000"));
