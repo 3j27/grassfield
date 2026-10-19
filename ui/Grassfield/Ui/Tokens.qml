@@ -214,6 +214,36 @@ QtObject {
     readonly property real dockHighlightOpacity: 0.34
     // Dock fidelity pass: 1 px rim, white in both appearances (glass edge)
     readonly property real dockRimOpacity: 0.34
+    // macOS convention: at most three recent applications
+    readonly property int dockRecentMax: 3
+    // estimate: launch bounce rise in px (half an icon)
+    readonly property int dockBounceHeight: 24
+    // estimate: one up-and-down hop of the launch bounce, ms
+    readonly property int dockBounceDuration: 420
+    // estimate: the launch bounce stops after this long without a window, ms
+    readonly property int dockLaunchTimeout: 12000
+    // estimate: transparent room above the shelf for a dragged icon and the poof
+    readonly property int dockDragArea: 128
+    // estimate: px above the shelf top (icon centre) from which a dropped tile leaves the Dock
+    readonly property int dockDragOutDistance: 56
+    // estimate: removal puff, ms
+    readonly property int dockPoofDuration: 420
+    // estimate: final diameter of each puff circle, px
+    readonly property int dockPoofSize: 56
+    // estimate: notification badge height and minimum width
+    readonly property int dockBadgeSize: 20
+    // estimate: how far the badge sticks out of the icon corner, px
+    readonly property int dockBadgeOverhang: 5
+    // estimate: starting opacity of the removal puff
+    readonly property real dockPoofOpacity: 0.5
+    // estimate: centre circle of the puff, fraction of poofSize
+    readonly property real dockPoofCoreScale: 0.7
+    // estimate: outer circles of the puff, fraction of poofSize
+    readonly property real dockPoofPuffScale: 0.4
+    // estimate: circles start at this fraction of their size and grow by one more
+    readonly property real dockPoofGrowFrom: 0.5
+    // estimate: accent fill of a tile under a file drag
+    readonly property real dockDropHighlightOpacity: 0.28
 
     // task spec: pointer dwell before a hot corner fires
     readonly property int hotCornerDwellMs: 150
