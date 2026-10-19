@@ -59,7 +59,10 @@ B. A fixed palette of prebuilt accent variants only.
   produces `grassfield-cursors`. Settings > Accessibility > Pointer (macOS model: size slider, fill and outline colour).
   Implemented now: the size. The shell asks the compositor for it with Hyprland's own `setcursor <theme> <size>` request
   on its own instance's request socket (the theme is not changed), a live redraw follows through the compositor
-  capability `cursor-refresh` when the plugin has it, and the applications the shell starts get `XCURSOR_SIZE` and
+  capability `cursor-refresh` when the plugin has it (gfc/1 verb `hl.plugin.grassfield.cursor_refresh()`, plugin
+  0.7.0-cursor: Hyprland's last named shape re-applied with force, so a pointer that does not move is drawn at the new
+  size with the same shape and at the same place; never while it is hidden or a client draws its own cursor surface;
+  `docs/specs/compositor.md` FR39-FR40), and the applications the shell starts get `XCURSOR_SIZE` and
   `HYPRCURSOR_SIZE` in their environment; running applications keep their size (documented limit). Colours are a later
   step: regenerating the theme into `$XDG_DATA_HOME/icons/grassfield-cursors-custom` and switching to it needs python3,
   rsvg-convert and hyprcursor-util at runtime, an owner decision. Dev: only the nested instance is ever addressed.
