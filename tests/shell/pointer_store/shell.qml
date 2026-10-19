@@ -73,8 +73,45 @@ ShellRoot {
                     root.check(c.name + ": fill " + pointerFillColor, pointerFillColor === (c.fill ?? "#000000"));
                     root.loaded++;
                     if (root.loaded === root.cases.length)
-                        cleanup.running = true;
+                        delSetup.running = true;
                 }
+            }
+        }
+    }
+
+    // Keys deleted from the file: the old value must not stay active (the adapter keeps it), the default applies.
+    property int delPhase: 0
+    Process {
+        id: delSetup
+        command: ["sh", "-c", 'mkdir -p "$1/del" && printf "%s" \'{"version":1,"pointer":{"size":64,"outlineColor":"#ff0000","fillColor":"#00ff00"}}\' > "$1/del/grassfield.json"', "sh", root.base]
+        onRunningChanged: {
+            if (!running)
+                delStore.configDir = root.base + "/del";
+        }
+    }
+
+    Process {
+        id: delRewrite
+        command: ["sh", "-c", 'printf "%s" \'{"version":1}\' > "$1/del/grassfield.json"', "sh", root.base]
+        onRunningChanged: {
+            if (!running)
+                delStore.reload();
+        }
+    }
+
+    SettingsStore {
+        id: delStore
+        saveDelay: 10
+        onLoadedFile: {
+            root.delPhase++;
+            if (root.delPhase === 1) {
+                root.check("keys present: size " + pointerSize, pointerSize === 64);
+                root.check("keys present: colours " + pointerOutlineColor + " " + pointerFillColor, pointerOutlineColor === "#ff0000" && pointerFillColor === "#00ff00");
+                delRewrite.running = true;
+            } else if (root.delPhase === 2) {
+                root.check("keys deleted: size is the default, not the old 64 (" + pointerSize + ")", pointerSize === 24);
+                root.check("keys deleted: colours are the defaults, not the old ones (" + pointerOutlineColor + " " + pointerFillColor + ")", pointerOutlineColor === "#ffffff" && pointerFillColor === "#000000");
+                cleanup.running = true;
             }
         }
     }
