@@ -516,30 +516,37 @@ function layoutTransition(before, after, min) {
 // The Dock tiles live in a keyed list model updated by diffing, so a delegate (and its animations) survives a rebuild.
 
 // Steps that turn the key list `from` into `to`: [{op: "remove", at}, {op: "insert", at, key}, {op: "move", from, to}], to be
-// applied in order (removals first, so no delegate outlives its key). Keys must be unique.
+// applied in order (removals first, so no delegate outlives its key). Keys are meant to be unique; the boundary is safe anyway:
+// a repeated key in `from` loses its later rows (removed), and a repeated key in `to` is wanted once (its first place).
 function diffKeys(from, to) {
+    const target = to.filter((k, i) => to.indexOf(k) === i);
     const want = {};
-    to.forEach(k => {
+    target.forEach(k => {
         want[k] = true;
     });
     const list = from.slice();
     const ops = [];
-    for (let i = list.length - 1; i >= 0; i--) {
-        if (!want[list[i]]) {
-            ops.push({op: "remove", at: i});
-            list.splice(i, 1);
-        }
+    const seen = {};
+    const drop = [];
+    list.forEach((k, i) => {
+        if (!want[k] || seen[k])
+            drop.push(i);
+        seen[k] = true;
+    });
+    for (let d = drop.length - 1; d >= 0; d--) {
+        ops.push({op: "remove", at: drop[d]});
+        list.splice(drop[d], 1);
     }
-    for (let i = 0; i < to.length; i++) {
-        if (list[i] === to[i])
+    for (let i = 0; i < target.length; i++) {
+        if (list[i] === target[i])
             continue;
-        const at = list.indexOf(to[i], i + 1);
+        const at = list.indexOf(target[i], i + 1);
         if (at >= 0) {
             ops.push({op: "move", from: at, to: i});
             list.splice(i, 0, list.splice(at, 1)[0]);
         } else {
-            ops.push({op: "insert", at: i, key: to[i]});
-            list.splice(i, 0, to[i]);
+            ops.push({op: "insert", at: i, key: target[i]});
+            list.splice(i, 0, target[i]);
         }
     }
     return ops;
