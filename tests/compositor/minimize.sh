@@ -23,9 +23,11 @@
 # is unchanged) opens first and is moved into a strip stage of its own, so that A is the only window of the active stage.
 # Step 1 then also checks the keyboard after the minimize: O's stage comes forward and O gets the typed keys (keys through
 # scripts/dev/keys.sh), A gets nothing. Stages is turned off and the fixture ended at the end of the run.
-# The Dock tile position is computed like shell/dock/Dock.qml does (tokens from ui/Grassfield/Ui/Tokens.qml,
-# one tile per pinned app with a desktop entry and per running unpinned app, a separator, the minimized
-# tiles, the Trash), centered on the output. MZ_DOCK_APPS overrides the number of app tiles.
+# The Dock tile is the one the shell itself computed: the shell sends its rectangle with every minimize
+# (hl.plugin.grassfield.minimize(address, x, y, w, h)) and the plugin logs it ("minimize <hex>: toward the Dock
+# rectangle x,y wxh"); the test follows Hyprland's log (`scripts/nestctl rollinglog -f`, read-only) and clicks the
+# centre of that rectangle. Nothing about the Dock layout (pinned apps, recents, separators, sizes) is computed
+# here, so Dock changes cannot make the click miss; without that line the test fails and clicks nothing.
 # The animation itself is reported (not asserted): time from the plugin's move of the window to its
 # minimized/restored event (~300 ms when animated; ~0 when the rectangle the shell sent was rejected, e.g. the
 # Dock of Quickshell.screens[0] laid out for an output size that changed since), plus captures requested
@@ -163,6 +165,11 @@ trap cleanup EXIT
 pids+=($!)
 "$root/scripts/dev/keys.sh" -s 3600000 >>"$log" 2>&1 &
 pids+=($!)
+# Hyprland's log as it is written (read-only hyprctl request; the log file itself is written late): the plugin's line
+# with the Dock rectangle the shell sent for each minimize.
+follow=$run/hyprland-follow.log
+timeout 3600 "$root/scripts/nestctl" rollinglog -f >"$follow" 2>&1 &
+pids+=($!)
 sleep 0.3
 
 # Every event line gets the time it was read (microseconds since the epoch) as its first field.
@@ -202,37 +209,30 @@ if ((stages_mode)); then
   [[ -n $o_addr ]] || { echo "minimize: setup error: window O not found" >&2; exit 2; }
 fi
 
-# ---- Dock geometry (shell/dock/Dock.qml) ----
+# ---- Dock tile: the rectangle the shell sent with the minimize (logged by the plugin) ----
+# Centre of the Dock tile the shell computed for window <hex> at its latest minimize, as "<output> <x> <y>" (x, y relative
+# to that output); only lines after line <since> of the follow log count (a closed window's address can be reused); waits
+# up to 3 s for the plugin's line; nothing when it never came (the caller then clicks nothing).
+follow_lines() { grep -ac "" "$follow" 2>/dev/null || echo 0; }
+dock_tile() { # <hex address, no 0x> <since>
+  local line rect deadline=$(($(date +%s%3N) + 3000))
+  while :; do
+    line=$(tail -n +"$(($2 + 1))" "$follow" 2>/dev/null | grep -a "\[grassfield\] minimize $1: toward the Dock rectangle " | tail -n 1)
+    [[ -n $line ]] && break
+    (($(date +%s%3N) > deadline)) && return 1
+    sleep 0.05
+  done
+  rect=$(sed -n 's/.*toward the Dock rectangle \(-\{0,1\}[0-9]*\),\(-\{0,1\}[0-9]*\) \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' <<<"$line")
+  [[ -n $rect ]] || return 1
+  read -r rx ry rw rh <<<"$rect"
+  query monitors | jq -r --argjson x $((rx + rw / 2)) --argjson y $((ry + rh / 2)) \
+    '[.[] | select($x >= .x and $x < .x + .width and $y >= .y and $y < .y + .height) | "\(.name) \($x - .x) \($y - .y)"][0] // empty'
+}
+# Pitch of the Dock's tiles (its layout tokens, ui/Grassfield/Ui/Tokens.qml): the Trash sits one pitch right of the
+# minimized tile, and the minimize inserts one tile (the centred Dock grows by one pitch, the Trash moves half a pitch).
 token() { sed -n "s/.*readonly property int $1: \([0-9]*\).*/\1/p" "$root/ui/Grassfield/Ui/Tokens.qml" | head -n 1; }
 icon=$(token dockIconSize)
-spacing=$(token dockSpacing)
-padding=$(token dockPadding)
-sep_w=$((2 * spacing + $(token dockSeparatorWidth)))
-shelf_h=$((icon + 2 * padding + $(token dockIndicatorSize) + spacing))
-tile_y=$((mon_h - $(token dockBottomMargin) - shelf_h + padding + icon / 2))
-if [[ -n ${MZ_DOCK_APPS:-} ]]; then
-  apps=$MZ_DOCK_APPS
-else
-  config=$dev/config/grassfield.json
-  [[ -f $config ]] || config=$root/config/defaults/grassfield.json
-  apps=0
-  pinned=" "
-  while read -r id; do
-    for d in "${XDG_DATA_HOME:-$HOME/.local/share}" /usr/local/share /usr/share; do
-      if [[ -f $d/applications/$id.desktop ]]; then apps=$((apps + 1)); pinned+="${id,,} "; break; fi
-    done
-  done < <(jq -r --slurpfile d "$root/config/defaults/grassfield.json" '(.dock.pinned // $d[0].dock.pinned)[]' "$config")
-  # Plus one tile per running app that is not pinned (window class = Wayland app id), e.g. a crash dialog.
-  while read -r class; do
-    [[ -n $class && $pinned != *" ${class,,} "* ]] && apps=$((apps + 1))
-  done < <(query clients | jq -r '[.[] | select(.mapped) | .class] | unique[]')
-fi
-# Center of minimized tile <index> (0-based) when <count> windows are minimized.
-tile_x() { # <index> <count>
-  local n=$((apps + $2 + 1)) # icon-sized tiles: apps, minimized windows, Trash (plus one separator)
-  local total=$((n * icon + sep_w + n * spacing))
-  echo $(((mon_w - total) / 2 + apps * (icon + spacing) + sep_w + spacing + $1 * (icon + spacing) + icon / 2))
-}
+pitch=$((icon + $(token dockSpacing)))
 
 # ---- Window helpers ----
 open_foot() { # -> PID
@@ -276,7 +276,7 @@ check() { # <label> <0 = ok> <details>
   if [[ $2 == 0 ]]; then say "  $1: OK   ($3)"; else say "  $1: FAIL ($3)"; fail=1; fi
 }
 
-say "minimize: nested pid $hypr_pid, output $out ${mon_w}x${mon_h}, Dock: $apps app tiles, icon $icon, tile row y=$tile_y; repeats $repeats"
+say "minimize: nested pid $hypr_pid, output $out ${mon_w}x${mon_h}, Dock tiles from the shell's rectangles (icon $icon, pitch $pitch); repeats $repeats"
 pointer abs $((mon_w / 2)) $((mon_h / 3)) sleep 50 # windows open on the output under the pointer
 a_pid=$(open_foot)
 pids+=("$a_pid")
@@ -307,6 +307,7 @@ WAYLAND_DISPLAY=$sock grim -t ppm "$run/before-all.ppm" 2>>"$log"
 n=$(event_count minimized "$hex")
 to_minimized="^[0-9]+ movewindowv2>>$hex,-?[0-9]+,special:minimized\$"
 moves=$(grep -cE "$to_minimized" "$events")
+f0=$(follow_lines)
 pointer abs "$min_x" "$bar_y" sleep 40 click
 frames_after_move "$to_minimized" "$moves" min &
 bpid=$!
@@ -331,18 +332,22 @@ fi
 sleep 0.3
 shot after-minimize
 WAYLAND_DISPLAY=$sock grim -t ppm "$run/after-all.ppm" 2>>"$log"
-tx=$(tile_x 0 1)
-# The Dock tile: the Trash moved exactly one slot to the right of where it was (same image at the new
-# slot), and the slot left of it, where the tile is computed, now holds something else than the Trash.
-if command -v magick >/dev/null; then
+read -r dock_out tx tile_y <<<"$(dock_tile "$hex" "$f0")"
+[[ -n ${tile_y:-} ]]
+check "the shell's Dock rectangle for A (plugin log line)" $? "tile centre ${tx:-?},${tile_y:-?} on ${dock_out:-?} (follow log $follow)"
+[[ -n ${tile_y:-} ]] || { say "minimize: no Dock rectangle for A: no tile is clicked"; say "minimize: FAIL"; exit 1; }
+dock_pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$dock_out" "$@" >>"$log" 2>&1; }
+# The Dock tile: the Trash moved half a pitch to the right (the centred Dock grew by one tile; same image at the new
+# slot), and the tile the shell named, left of it, holds something else than the Trash.
+if command -v magick >/dev/null && [[ $dock_out == "$out" ]]; then
   crop() { echo "${icon}x${icon}+$(($1 - icon / 2))+$((tile_y - icon / 2))"; }
   ae() { magick compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1 | cut -d' ' -f1 | cut -d. -f1; }
-  trash_moved=$(ae "$run/before-minimize.png[$(crop "$(tile_x 0 0)")]" "$run/after-minimize.png[$(crop "$(tile_x 1 1)")]")
-  tile_vs_trash=$(ae "$run/after-minimize.png[$(crop "$tx")]" "$run/after-minimize.png[$(crop "$(tile_x 1 1)")]")
+  trash_moved=$(ae "$run/before-minimize.png[$(crop $((tx + pitch / 2)))]" "$run/after-minimize.png[$(crop $((tx + pitch)))]")
+  tile_vs_trash=$(ae "$run/after-minimize.png[$(crop "$tx")]" "$run/after-minimize.png[$(crop $((tx + pitch)))]")
   [[ $trash_moved =~ ^[0-9]+$ && $tile_vs_trash =~ ^[0-9]+$ ]] && ((trash_moved < icon * icon / 20 && tile_vs_trash > icon * icon / 10))
-  check "Dock tile appeared at ($tx,$tile_y)" $? "Trash one slot right: $trash_moved px differ; tile vs Trash: $tile_vs_trash of $((icon * icon)) px differ"
+  check "Dock tile appeared at ($tx,$tile_y)" $? "Trash half a pitch right: $trash_moved px differ; tile vs Trash: $tile_vs_trash of $((icon * icon)) px differ"
 else
-  say "  Dock tile appeared: NOT VERIFIED (ImageMagick missing)"
+  say "  Dock tile appeared: NOT VERIFIED (ImageMagick missing, or the Dock is on $dock_out, not the captured $out)"
 fi
 say "  minimize animation: $(animation_ms "$to_minimized" minimized) (move to special:minimized -> minimized event)"
 contact_sheet min "$run/minimize-frames.png"
@@ -351,11 +356,11 @@ say "  minimize animation on screen: $(intermediate_frames min "$run/before-all.
 # 2 restore with a click on the Dock tile
 say "2 restore with a click on the Dock tile"
 n=$(event_count restored "$hex")
-pointer abs "$tx" "$tile_y" sleep 300 # hover first (Dock magnification settles)
+dock_pointer abs "$tx" "$tile_y" sleep 300 # hover first (Dock magnification settles)
 WAYLAND_DISPLAY=$sock grim -t ppm "$run/before-restore-all.ppm" 2>>"$log"
 to_workspace="^[0-9]+ movewindowv2>>$hex,[0-9]+,$ws0\$"
 moves=$(grep -cE "$to_workspace" "$events")
-pointer abs "$tx" "$tile_y" sleep 40 click
+dock_pointer abs "$tx" "$tile_y" sleep 40 click
 frames_after_move "$to_workspace" "$moves" restore &
 bpid=$!
 wait_event restored "$hex" "$n" 3000
@@ -385,7 +390,7 @@ for ((i = 1; i <= repeats; i++)); do
   else
     wait_event minimized "$hex" "$nm" 3000 || { say "  round $i: no minimized event"; bad=$((bad + 1)); }
   fi
-  pointer abs "$tx" "$tile_y" sleep 30 click
+  dock_pointer abs "$tx" "$tile_y" sleep 30 click
   if ! wait_event restored "$hex" "$nr" 3000; then
     say "  round $i: no restored event"
     bad=$((bad + 1))
@@ -421,10 +426,15 @@ sleep 1.5
 read -r c_addr cx cy _ _ _ < <(client "$c_pid")
 if [[ -n ${c_addr:-} ]]; then
   n=$(event_count minimized "${c_addr#0x}")
+  f0=$(follow_lines)
   pointer abs $((cx + 38)) $((cy - 14)) sleep 30 click
   wait_event minimized "${c_addr#0x}" "$n" 3000
   sleep 0.3
-  pointer abs "$(tile_x 0 1)" "$tile_y" sleep 30 click
+  # C's own rectangle; after the rapid repetition the plugin's request log budget (FR24: 20 lines, then one per second)
+  # may have held its line back: C then has the tile A had in step 1 (the only minimized window, the same Dock).
+  read -r c_out c_tx c_ty <<<"$(dock_tile "${c_addr#0x}" "$f0")"
+  [[ -n ${c_ty:-} ]] || { c_out=$dock_out c_tx=$tx c_ty=$tile_y; say "  C: no Dock rectangle line (log budget): A's tile of step 1 is used"; }
+  timeout 20 "$root/scripts/dev/pointer.sh" output "$c_out" abs "$c_tx" "$c_ty" sleep 30 click >>"$log" 2>&1
   sleep 0.1
   kill "$c_pid" 2>/dev/null
   shot closed-during-restore
