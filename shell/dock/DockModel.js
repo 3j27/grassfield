@@ -136,6 +136,16 @@ function recentsAfter(recent, previous, now, pinned, max) {
     return list;
 }
 
+// One rebuild step of the recent list: until the desktop entries and the hidden-entry list (OnlyShowIn / NotShowIn) are
+// loaded (`ready` false) nothing is evaluated, because an app that looks listed now may turn out hidden (or unresolved) a
+// moment later and would then count as "quit". Returns {recent, previous}: the list to keep and the running set to
+// remember (null while not ready: the first ready rebuild only records the running set, like a shell restart).
+function recentsStep(ready, recent, previous, now, pinned, max) {
+    if (!ready)
+        return {recent: recent ? recent : [], previous: null};
+    return {recent: recentsAfter(recent, previous, now, pinned, max), previous: now};
+}
+
 // Recent apps that are neither pinned nor running, resolved through `lookup`, appended to the app list
 // ({kind: "app", recent: true, windows: [], pinned: false}). `apps` is the result of merge(). `listed` (optional) is a
 // predicate on the desktop entry: NoDisplay / hidden entries are never shown as recents.

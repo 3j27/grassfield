@@ -80,13 +80,14 @@ Scope {
         // Apps that were running and quit while not kept in the Dock become "recent" (DockModel.recentsAfter: a pure
         // function of the previous and current running sets, written only when the list really changes).
         const runningKeys = apps.filter(a => a.windows.length > 0 && a.entry && Apps.isListed(a.entry)).map(a => a.key);
-        const before = previousRunning;
-        previousRunning = runningKeys;
-        if (Settings.dockShowRecents) {
-            const pinnedKeys = apps.filter(a => a.pinned).map(a => a.key);
-            writeRecents(DockModel.recentsAfter(Settings.dockRecent, before, runningKeys, pinnedKeys, Tokens.dockRecentMax));
-        }
-        const shown = Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, Apps.isListed) : apps;
+        // Not before the desktop entries and the hidden-entry list are loaded (DockModel.recentsStep).
+        const ready = Apps.hiddenReady && DesktopEntries.applications.values.length > 0;
+        const pinnedKeys = apps.filter(a => a.pinned).map(a => a.key);
+        const step = DockModel.recentsStep(ready, Settings.dockRecent, previousRunning, runningKeys, pinnedKeys, Tokens.dockRecentMax);
+        previousRunning = step.previous;
+        if (ready && Settings.dockShowRecents)
+            writeRecents(step.recent);
+        const shown = ready && Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, Apps.isListed) : apps;
         const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
         items = DockModel.withTail(shown, tail);
         pruneLaunching();
@@ -171,6 +172,15 @@ Scope {
         target: Compositor
 
         function onMinimizedChanged(): void {
+            root.rebuild();
+        }
+    }
+
+    Connections {
+        target: Apps
+
+        // The hidden-entry list has (re)loaded.
+        function onListChanged(): void {
             root.rebuild();
         }
     }

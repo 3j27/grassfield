@@ -147,6 +147,30 @@ TestCase {
         compare(DockModel.recentsAfter(["x", "y"], ["a", "x"], [], [], 3).join(","), "x,a,y");
     }
 
+    // A hidden entry (OnlyShowIn / NotShowIn) looks listed until the hidden list loads, then not: it must not count as an
+    // app that quit and take a recent slot. Nothing is evaluated before the entries and the hidden list are loaded.
+    function test_recentsWaitForHiddenListAndEntries() {
+        let stored = ["x"];
+        let previous = null;
+        const rebuild = (ready, running) => {
+            const step = DockModel.recentsStep(ready, stored, previous, running, [], 3);
+            previous = step.previous;
+            stored = step.recent;
+        };
+        rebuild(false, ["hidden", "foot"]);   // startup: entries / hidden list not loaded, the hidden app looks listed
+        compare(previous, null);
+        rebuild(false, ["foot"]);
+        compare(stored.join(","), "x");
+        rebuild(true, ["foot"]);              // loaded: the hidden app is excluded, the first ready step only records
+        compare(stored.join(","), "x");
+        compare(previous.join(","), "foot");
+        rebuild(true, []);                    // a real quit afterwards is remembered
+        compare(stored.join(","), "foot,x");
+        // without the gate the same sequence takes a slot for the hidden app
+        let naive = DockModel.recentsAfter(["x"], ["hidden", "foot"], ["foot"], [], 3);
+        compare(naive.join(","), "hidden,x");
+    }
+
     function items3() {
         return DockModel.withTail(DockModel.merge(["foot", "chromium"], [{appId: "org.gnome.Nautilus", ref: "n"}], lookup));
     }
