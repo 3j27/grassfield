@@ -251,7 +251,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   activate / merge / move requests: a dispatch causes at most one focus change).
 - **FR36** Stages events: `{"v":"gfc/1","type":"stages","on":bool,"monitors":[…]}` (FR24 channel `stages`, one key), with
   `reason` as in FR34 plus `interrupted` (a strip surface went away or the monitors changed: that monitor's windows are
-  shown normally at once) and `unavailable` (unload).
+  shown normally at once) and `unavailable` (unload). Since 0.6.4-stages each monitor also names the front window of the
+  shown Desktop's active stage and its app (`"front":{"address","app"}`, additive; app sanitized to valid UTF-8, at most
+  256 bytes), re-posted when it changes: the menu bar's source while Hyprland has no active window (ST24).
 - **FR37** Stages cleanup: `PLUGIN_EXIT` (and turning Stages off) removes every Stages transformer before `dlclose` and
   lifts every input block, removes the pending `doLater` callbacks (model sync, pointer refresh) and the watchdog timer,
   and posts `on:false`/`unavailable` before the event throttle stops; `start()` resets the flag and the model (the library
@@ -278,6 +280,15 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   active window (`CFocusState::resetWindowFocus` plus Hyprland's "no active window" notifications, keyboard holder,
   monitor, Desktop and special workspace untouched) and the incoming front window is focused once the layer released the
   keyboard, checked again then. Decision logic pure: `activeWindowAction`, `pendingFocusAction`, `focusOrigin`.
+  R13 counter-review #4 of 0.6.3-stages (ST10 clicks, ST23, ST24): Hyprland reports `FOCUS_REASON_CLICK` for every
+  refocus at the cursor (`CInputManager::refocus`, also when a layer unmaps with no active window), so a `CLICK` focus
+  is a user choice only when a press caused it: the plugin records pointer button presses (its first button listener),
+  touch downs and tablet tip/button presses before Hyprland handles them (`recordPress`, `clickFromPress`: a press
+  counts while Hyprland handles it; with an Exclusive layer mapped, a press beside every Exclusive layer on a window
+  counts for that window's refocus once the layer is gone). Hyprland's own pick while a focus is deferred neither drops
+  it nor raises a window of the active stage; the deferred focus goes to the front window of the remembered Desktop's
+  active stage (the remembered window, or the one in front now if it went away). Clearing the active window also runs
+  `CWindowRuleApplicator::propertiesChanged(RULE_PROP_FOCUS)` and `CInputManager::recheckIdleInhibitorStatus`.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -321,6 +332,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | FR38 (R13 review of 46b3e9b) | unit `StagesInput.*` (pointer guard decisions, keyboard after a leave, strip focus origin), `DesktopFocusTarget.PointerFocusOnABlockedWindowIsStale`; nested `stages.sh` 5b (click without motion after a swap), 7b (after a new window), 8b (swap under an Exclusive layer), 12b (minimize the only window of the active stage), 12c (`cycle_next` stays in the active stage); `minimize.sh stages`; `soak.sh 660 stages` | L0 / L1 | 2026-10-18, plugin 0.6.1-stages, Hyprland v0.56.2 (efb50993): stages.sh 45/45, `minimize.sh stages` PASS (O gets the keys after A, alone in the active stage, is minimized), soak PASS; the pre-fix build fbacf15 fails the 5b, 8b and 12b sequences (scratch probe, `docs/specs/stages.md` acceptance) |
 | FR38 (R13 counter-review of 17208af) | unit `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`, `StagesInput.OnlyRealUserFocusIsAChoice`, `StagesInput.ADesktopSwitchRestoringItsLastWindowIsNotAChoice`; nested `stages.sh` 8c (window actions after a swap under an Exclusive layer), 8d (strip menus), 8e (`WORKSPACE_CHANGE`) | L0 / L1 | 2026-10-19, plugin 0.6.2-stages: stages.sh 51/51 (twice); the pre-fix build b7f0c3d fails 8c (both checks) and 8d (the swap check) in the same session (`.dev/stages/run-20261019-081839-check`) |
 | FR38 (R13 counter-review #3 of e9ebc7f) | unit `StagesInput.UnderAnExclusiveLayerTheActiveStripWindowIsOnlyCleared`, `StagesInput.ADeferredFocusWaitsForTheLayerAndIsCheckedAgain`, `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`; nested `stages.sh` 8c (no window or monitor focus under an Exclusive layer, `close()` closes no window), 8f (special workspace), 8g (Desktop not shown), 8h (polkit-like dialog) | L0 / L1 | 2026-10-19, plugin 0.6.3-stages: stages.sh 58/58 on two outputs (three runs) and GF-REF only; the pre-fix build ffdef45 51/58 in the same session (8c, 8f, 8g, 8h first check; `.dev/stages/run-20261019-130127-check`, `run-20261019-130612-check`); `soak.sh 1260 stages` and `soak.sh 1260` PASS |
+| FR36, FR38 (R13 counter-review #4 of 0.6.3-stages) | unit `StagesInput.ARefocusAtTheCursorWithoutAPressIsNotAClick`, `APressIsAClickWhileHyprlandHandlesIt`, `APressBesideAnExclusiveLayerChoosesTheWindowPressed`, `ADeferredFocusFallsBackToTheFrontWindowNow`, `StagesEvents.TheFrontWindowAndItsApp`, `ClientTextIsSanitized`; nested `stages.sh` 8i (refocus at the cursor over an unrelated window, the stage's back window, empty desktop; remembered window closed; a click beside the layer or just after it wins; `front` in the event) and 8c (a focus-matched window rule rechecked) | L0 / L1 | 2026-10-19, plugin 0.6.4-stages, Hyprland v0.56.2 (efb50993): stages.sh **66/66** on the headless pair GF-REF + GF-REF2 (`.dev/stages/run-20261019-165827-check`) and on GF-REF only (`run-20261019-170037-check`), WAYLAND-1 disabled; the pre-fix build 3a1a7a8 (0.6.3-stages) **60/66** in the same session (`run-20261019-170310-check`: 8c rule, 8i(a) both checks, 8i(b), 8i(d), 8i(e) just after); details in `docs/specs/stages.md` "Fix pass 4" |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -638,7 +650,14 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   `CWorkspace::isVisibleNotCovered`, `Event::bus()->m_events.input.keyboard.focus`; `CInputManager::m_exclusiveLSes` is
   only read (Hyprland's refusal condition) and `CLayerSurface::onUnmap` emits `layer.closed` before Hyprland's refocus
   (read from the v0.56.2 sources). Desktop focus v2: `CViewHitTester::{layerPopupSurfaceAt, layerSurfaceAt, windowSurfaceAt}`,
-  `CMonitor::m_layerSurfaceLayers`, `State::monitorState()->query().vec()`, `IView::aliveAndVisible`.
+  `CMonitor::m_layerSurfaceLayers`, `State::monitorState()->query().vec()`, `IView::aliveAndVisible`. Plugin 0.6.4-stages
+  (all exported, checked with `nm -D /usr/bin/Hyprland`): `CWindowRuleApplicator::propertiesChanged` with
+  `Desktop::Rule::RULE_PROP_FOCUS`, `CInputManager::{recheckIdleInhibitorStatus, getMouseCoordsInternal}`,
+  `CViewHitTester::windowAt` (Hyprland's press hit test flags) and `layerSurfaceAt` / `layerPopupSurfaceAt` on a copy of
+  `m_exclusiveLSes`, `Event::bus()->m_events.input.{touch.down, tablet.tip, tablet.button}` (observed, never cancelled);
+  read from the v0.56.2 sources: `CInputManager::refocus` is `mouseMoveUnified(…, refocus = true)` and reports
+  `FOCUS_REASON_CLICK`; `refocusLastWindow` falls back to it when there is no active window on that monitor; the touch
+  down, tablet tip and tablet button handlers emit their bus event before their own `refocus`.
 - GCC 16.2.1, C++23. Lua 5.5 headers (Hyprland links `liblua.so.5.5`). GoogleTest 1.18.0 for tests.
 - Quickshell 0.3.1 for the IPC spike.
 
@@ -681,7 +700,10 @@ validation, registrations and their announcements; `Protocol.Appmenu*`: event JS
 parsing and validation, bounds, timing, interpolation, texture box, event JSON, FR25-FR28). Shell side: `tests/unit/tst_minimized.qml`
 (request builders, config allowlist, `movewindowv2` parsing). Lint (Q1): `compositor/build-direct.sh tidy`
 (`compositor/.clang-tidy`). Soak (C1): `tests/compositor/soak.sh [seconds]` (see `compositor/README.md`).
-Nested scenarios: `tests/compositor/minimize.sh [repeats]` (FR6, FR14–FR17), `tests/compositor/double_click_setting.sh` (FR8, FR16), `tests/compositor/zoom_restore.sh`
+Nested scenarios: `tests/compositor/minimize.sh [repeats] [stages]` (FR6, FR14–FR17; since 0.6.4-stages it clicks the
+Dock tile the shell itself sent with the minimize, read from the plugin's log line "minimize <hex>: toward the Dock
+rectangle x,y wxh" through `scripts/nestctl rollinglog -f`, never a position computed from the Dock layout; the Dock fix
+pass 31458f5 (recents, dividers) had made the computed tile drift), `tests/compositor/double_click_setting.sh` (FR8, FR16), `tests/compositor/zoom_restore.sh`
 (FR8), `tests/compositor/input_consistency.sh [rounds]` (FR13), `tests/compositor/appmenu.sh [variants]`
 (FR18–FR22, spike S5; fixtures `tests/fixtures/{menu-demo, fake-registrar, appmenu-client}`, built by
 `tests/fixtures/build.sh`), `tests/compositor/event_flood.sh [requests...]` (FR24; needs grassfield-shell),

@@ -53,7 +53,11 @@ fails the three review sequences in the same session. Fix pass 2 after the R13 c
 reasons); the pre-fix build fails the new active-window and menu checks in the same session. Fix pass 3 after the R13
 counter-review #3 of e9ebc7f (plugin 0.6.3-stages): `stages.sh check` 58/58 on one and two outputs (adds no window or
 monitor focus under an Exclusive layer, a special workspace, a Desktop not shown, a polkit-like dialog); the pre-fix
-build 51/58 in the same session; `soak.sh 1260 stages` and `soak.sh 1260` PASS. Details: `docs/specs/stages.md`.
+build 51/58 in the same session; `soak.sh 1260 stages` and `soak.sh 1260` PASS. Fix pass 4 after the R13 counter-review #4
+of 0.6.3-stages (plugin 0.6.4-stages): `stages.sh check` 66/66 on a headless output pair and on GF-REF only (adds Hyprland's
+refocus at the cursor after the layer over an unrelated window, the stage's back window and empty desktop, the remembered
+window closed under the layer, a real click winning, a focus-matched window rule, the event's front window); the pre-fix
+build 60/66 in the same session. Details: `docs/specs/stages.md`.
 
 ## Consequences
 - Depends on Hyprland internals: `CWindow::setInputBlocked` with an unused reason bit (`1 << 6`), `acceptsInput()` in the
@@ -84,6 +88,16 @@ build 51/58 in the same session; `soak.sh 1260 stages` and `soak.sh 1260` PASS. 
   re-verify on Hyprland updates: `CInputManager::m_exclusiveLSes` (read only), `CFocusState::{rawWindowFocus,
   resetWindowFocus}`, the order of `CLayerSurface::onUnmap` (closed event, then Hyprland's refocus),
   `CSeatManager::setGrab`, `Desktop::eFocusReason` (mapped one to one; a new reason is a compiler warning).
+- A focus reason alone does not tell a click from Hyprland's own refocus (R13 counter-review #4 of 0.6.3-stages:
+  `CInputManager::refocus` reports `FOCUS_REASON_CLICK` also when a layer unmaps with no active window, so the window
+  under the pointer took the keyboard from a swap made under the layer). The plugin records real presses (pointer
+  buttons, touch, tablet) before Hyprland handles them and counts a `CLICK` focus as a choice only when a press caused it;
+  a deferred focus goes to the front window of its Desktop's active stage when the remembered window went away (macOS: the
+  frontmost app's key window). Clearing Hyprland's active window repeats Hyprland's focus rechecks (focus-matched window
+  rules, idle inhibitors). The stages event names the front window and app, the menu bar's source while Hyprland has no
+  active window. More internals to re-verify on Hyprland updates: `CInputManager::{refocus, refocusLastWindow}` (which
+  reason, which fallback), the order of the bus press events before Hyprland's own refocus (mouse button, touch down,
+  tablet tip/button), `CWindowRuleApplicator::propertiesChanged`, `CInputManager::recheckIdleInhibitorStatus`.
 - Window cycling stays within the active stage (Hyprland's `cycle_next` skips windows that do not take input): the macOS
   model keeps Cmd+` (windows of the current app) inside the stage, and app switching (Cmd+Tab: Dock, Search, the coming
   app switcher) brings a stage forward through a focus by dispatch. A stage-aware ALT+TAB would need a function hook on
