@@ -26,7 +26,43 @@ bind("SUPER + H", "Hide app", shell("windows", "hide"))
 bind("SUPER + mouse:272", "Move window", hl.dsp.window.drag(), { mouse = true })
 bind("SUPER + mouse:273", "Resize window", hl.dsp.window.resize(), { mouse = true })
 
--- App switching (window cycling until the Grassfield app switcher exists).
+-- App switcher (macOS Cmd+Tab, shell/switcher). SUPER+TAB enters the "switcher" key map and asks the shell for the
+-- next app; inside it Tab, arrows, Q, H and Esc act on the shell, and releasing SUPER leaves the map and tells the
+-- shell to activate the selection. The shell also sees the map change (`submap` event) as a backstop.
+local function leave_switcher(request)
+  return function()
+    hl.dispatch(hl.dsp.submap("reset"))
+    hl.dispatch(shell("switcher", request))
+  end
+end
+
+local function enter_switcher(request)
+  return function()
+    hl.dispatch(hl.dsp.submap("switcher"))
+    hl.dispatch(shell("switcher", request))
+  end
+end
+
+bind("SUPER + TAB", "Switch application", enter_switcher("next"))
+bind("SUPER + SHIFT + TAB", "Switch to the previous application", enter_switcher("previous"))
+bind("SUPER + grave", "Next window of the application", shell("windows", "cycleApp"))
+
+hl.define_submap("switcher", function()
+  bind("SUPER + TAB", "Next application", shell("switcher", "next"))
+  bind("SUPER + SHIFT + TAB", "Previous application", shell("switcher", "previous"))
+  bind("SUPER + RIGHT", "Next application", shell("switcher", "right"))
+  bind("SUPER + LEFT", "Previous application", shell("switcher", "left"))
+  bind("SUPER + Q", "Quit the selected application", shell("switcher", "quit"))
+  bind("SUPER + H", "Hide the selected application", shell("switcher", "hide"))
+  bind("SUPER + ESCAPE", "Cancel the application switcher", leave_switcher("cancel"))
+  bind("ESCAPE", "Cancel the application switcher", leave_switcher("cancel"))
+  bind("SUPER + Super_L", "Activate the selected application", leave_switcher("release"), { release = true })
+  bind("SUPER + Super_R", "Activate the selected application", leave_switcher("release"), { release = true })
+  bind("Super_L", "Activate the selected application", leave_switcher("release"), { release = true })
+  bind("Super_R", "Activate the selected application", leave_switcher("release"), { release = true })
+end)
+
+-- Window cycling inside the active Stage (Hyprland cycle_next; docs/specs/stages.md ST10).
 bind("ALT + TAB", "Next window", hl.dsp.window.cycle_next())
 bind("ALT + TAB", "Raise window", hl.dsp.window.bring_to_top())
 bind("ALT + SHIFT + TAB", "Previous window", hl.dsp.window.cycle_next({ next = false }))

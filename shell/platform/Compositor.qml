@@ -22,6 +22,10 @@ Singleton {
     // Output with keyboard/pointer focus ("" when unknown): target of keyboard-driven shell UI.
     readonly property string focusedScreenName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
 
+    // Active key map of the compositor ("" = default), from `submap` events. The app switcher holds "switcher" while
+    // its modifier is down (config/hypr/grassfield/bindings.lua).
+    property string submap: ""
+
     // Re-reads Hyprland's window list (pid and other IPC data are only fetched for windows that
     // existed at shell start or on this request). Call before showing data that needs the pid.
     function refreshToplevels(): void {
@@ -394,6 +398,13 @@ Singleton {
             if (root.focusedAppId !== "")
                 root.hideApp(root.focusedAppId);
         }
+
+        // SUPER+`: next window of the focused app (macOS Cmd+`).
+        function cycleApp(): void {
+            const pool = root.toplevelsFor(root.focusedAppId).filter(t => !root.isMinimized(t));
+            if (pool.length > 1)
+                root.activate(root.nextAfter(pool, root.focusedToplevel));
+        }
     }
 
     // Ask the client to close this window (xdg close request, not a kill).
@@ -430,6 +441,10 @@ Singleton {
                 const address = Minimized.minimizeRequestAddress(event.data);
                 if (address !== "")
                     root.minimizeByAddress(address);
+                return;
+            }
+            if (event.name === "submap") {
+                root.submap = event.data;
                 return;
             }
             if (event.name === "activespecialv2") {

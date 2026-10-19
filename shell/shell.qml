@@ -17,6 +17,7 @@ import qs.security.idle
 import qs.security.lock
 import qs.security.polkit
 import qs.services
+import qs.switcher
 
 // grassfield-shell root. Settings feed the design-system Appearance singleton; surfaces
 // read Appearance and Tokens only.
@@ -108,11 +109,36 @@ ShellRoot {
     Banners {}
     NotificationCenter {}
     OsdWindow {}
-    Search {}
+    Search {
+        id: search
+    }
     AuthAgent {}
     Idle {}
-    Overview {}
-    AppsController {}
+    Overview {
+        id: overview
+    }
+    AppsController {
+        id: apps
+    }
+    Switcher {
+        id: switcher
+    }
+    SwitcherWindow {
+        controller: switcher
+    }
+
+    // Opening the app switcher closes Search, Overview and Apps (one full-screen surface at a time).
+    Connections {
+        target: switcher
+
+        function onShownChanged(): void {
+            if (!switcher.shown)
+                return;
+            search.hide();
+            overview.hide();
+            apps.hide();
+        }
+    }
 
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore).
