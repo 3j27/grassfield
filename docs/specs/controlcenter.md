@@ -2,26 +2,30 @@
 
 UI naming (renamed 2026-10-18, owner decision): internally `controlcenter` / `ControlCenter.qml`; the user sees "Quick Settings" (fr « Réglages rapides »). The Focus tile is "Do Not Disturb" (fr « Ne pas déranger »), subtitle On/Off. A long module title wraps to a second line inside its tile (two lines at most, then an ellipsis; no font shrink), as macOS does; the accessible name stays "title, state".
 
-## macOS reference behavior (described in words)
-- Opens from the Quick Settings icon (two toggles) at the right of the menu bar as a ~320 pt wide material
-  panel anchored under the icon, rounded ~18 pt.
-- Modules in a grid: Wi-Fi / Bluetooth / AirDrop-like tile (we show Wi-Fi, Bluetooth, Airplane mode),
-  Do Not Disturb tile, Display brightness slider, Sound slider with output device chevron, Now Playing tile,
-  optional Keyboard brightness. Clicking a tile's chevron expands it in place (list of networks/devices).
-- Toggles are rounded tiles with an icon circle filled with the accent when on.
+## macOS reference behavior (described in words; measured in docs/testing/f1-reference-gaps.md, gap 6)
+- Opens from the Quick Settings icon (two toggles) at the right of the menu bar. There is no shared panel: every module
+  is its own glass shape on a 4-column grid (cells 63 pt, gaps 13, 291 pt wide), 14 pt from the right edge of the screen and
+  about 13 pt below the bar.
+- Modules: Wi-Fi / Bluetooth / AirDrop 2x1 capsules (139 x 63; we show Wi-Fi, Bluetooth, Airplane Mode), Do Not Disturb 2x1,
+  Now Playing 2x2 (138 x 139, radius ~30), Display and Sound slider modules (291 x 63, radius 20, bold title, 4 pt track).
+- Clicking a capsule's text opens that module as a detail panel (a list of networks or devices) in place of the grid; a back
+  button returns. The icon disk (36 pt, filled with the accent when on) toggles.
 
-## M1 subset (implemented, shell-engineer)
-Opened by the Quick Settings menu bar icon (`qs.overlay/ControlCenter.qml`, 320 px, anchored under the icon): Appearance (Light/Dark), Transparency slider (`material.transparency` 0–1, live), Reduce Transparency toggle, Reduce Motion toggle, output volume slider. Everything persists to grassfield.json through `Settings` (see ui.md). Verified: screenshots at transparency 0, 0.25, 0.6 and in the light appearance; `grassfield.json` written in the dev config dir. 
+## M1 subset (implemented, shell-engineer; the 320 px single panel was replaced by the modules below)
+Opened by the Quick Settings menu bar icon (`qs.overlay/ControlCenter.qml`): Appearance (Light/Dark), Transparency slider (`material.transparency` 0–1, live), Reduce Transparency toggle, Reduce Motion toggle, output volume slider. Everything persists to grassfield.json through `Settings` (see ui.md). Verified: screenshots at transparency 0, 0.25, 0.6 and in the light appearance; `grassfield.json` written in the dev config dir. 
 
-## M2 implementation (shell-engineer)
-`shell/overlay/ControlCenter.qml` + `shell/overlay/controlcenter/*` (pure logic in `Model.js`, tests `tests/unit/tst_ccmodel.qml`).
-- Layout: connectivity tile (Wi-Fi, Bluetooth, Airplane Mode) left; Do Not Disturb and Now Playing right (Do Not Disturb fills the column when no player runs); Display slider (hidden without backlight); Sound slider with mute button and device chevron; Keyboard Brightness (only with a `*kbd_backlight` LED); Appearance row expanding to Appearance + Material. One section expanded at a time; the detail card opens under the tile grid (full width) rather than inside the half-width tile.
+## Fidelity pass 2: floating modules (shell-engineer)
+`shell/overlay/ControlCenter.qml` + `shell/overlay/controlcenter/*` (pure logic in `Model.js`, tests `tests/unit/tst_ccmodel.qml`; `Module.qml` is the glass surface).
+- Grid (tokens `quicksettings.*`, `panel.controlCenterWidth` 291): cell 63, gap 13, 4 columns. Left: Wi-Fi, Bluetooth, Airplane Mode (2x1 capsules, 36-pt icon disk, title wraps to two lines, status line). Right: Do Not Disturb (2x1) and, while a player runs, Now Playing (2x2); with no player Appearance (2x1) takes that slot and Airplane Mode spans the full width. Below: Display (hidden without a backlight), Keyboard Brightness (only with a `*kbd_backlight` LED) and Sound (mute, slider, device chevron) as 4x1 slider modules (radius 20, bold title, 4 pt track); Appearance as a 4x1 capsule when a player runs.
+- Each module is its own `Module` (Material, no shadow). `ControlCenter.surfaces` lists the visible ones; `Overlay.qml` builds one blur region per surface (`Variants` of `Region`), so every module blurs on its own (never a fake blur); the hosting window stays one transparent layer-shell surface. Position: right edge at `quicksettings.edgeMargin` (14), top at the bar plus `quicksettings.topGap` (13), set in `Overlay.qml` (the menu bar item only opens the popup).
+- Detail module: opening Wi-Fi, Bluetooth, Sound (output and input lists) or Appearance (Appearance + Material) replaces the grid with ONE 4-column module: back button, title, power toggle (Wi-Fi, Bluetooth), then the list. Esc and the Left key go back first, then Esc closes; focus returns to the capsule that opened it. The chevron of a capsule shows on hover, focus or while open (a 139-pt capsule has no room for it permanently).
+- Keyboard: Tab and Up/Down move between modules in grid order, Left/Right move between the two capsules of a row or open (Right) and close (Left) the detail module, Space/Return toggle or press, sliders use arrows, Esc goes back or closes.
+- Not built (measured in the reference, no backend or out of scope): AirDrop, Screen Mirroring, Stage Manager and Screenshot 1x1 modules, edit mode (minus badges, controls gallery, size menu).
 - Wi-Fi: Quickshell Networking; scan list (deduplicated, connected first, then strength), lock icon for secured, connect to known/open networks, new WPA/WPA2/WPA3-personal network: inline password field (`connectWithPsk`), 802.1X: `nm-connection-editor`. Scanning is enabled only while the list is open. SSIDs are PlainText and elided.
 - Bluetooth: paired devices, connect/disconnect, battery if exposed. Devices are not discovered or paired from here (no pairing flow).
 - Airplane Mode: derived (on when every present radio is off); switches the Wi-Fi radio (NetworkManager) and the Bluetooth adapter power (BlueZ). It is NOT an rfkill soft block, and the label says "Wi-Fi and Bluetooth off".
 - Sound: output and input device lists (PipeWire), default checked.
-- Keyboard: Tab and Up/Down move between controls, Space/Return activate, Right/Left expand/collapse rows and the sound chevron, Esc closes; sliders use arrows.
-- Dev guard (`GRASSFIELD_DEV=1`): Wi-Fi/Bluetooth/airplane toggles, connects, device switches and mute are not executed (logged as `dev guard: ... suppressed`, header shows "dev: not applied"); volume stays within +-5 % of its starting value and is restored when the panel closes; brightness is never changed.
+- Dev guard (`GRASSFIELD_DEV=1`): Wi-Fi/Bluetooth/airplane toggles, connects, device switches and mute are not executed (logged as `dev guard: ... suppressed`, a "dev: not applied" capsule appears under the modules); volume stays within +-5 % of its starting value and is restored when the panel closes; brightness is never changed.
 - Known gaps: Now Playing transport and Bluetooth device lists are not exercised in the dev session guard (player controls act on the real player); keyboard backlight and Bluetooth device rows unverified on this hardware (no kbd LED, no paired devices).
 
 ## Purpose and non-goals

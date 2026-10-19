@@ -50,16 +50,34 @@ Variants {
                 intersection: Intersection.Subtract
             }
         }
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? blurRegion : null
+        // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
         // qmllint enable missing-type
+
+        Region {
+            id: modulesRegion
+            regions: moduleRegions.instances
+        }
+
+        Variants {
+            id: moduleRegions
+            model: {
+                const cc = holder.item as ControlCenter;
+                return Popups.kind === "controlcenter" && cc ? cc.surfaces : [];
+            }
+
+            Region {
+                required property var modelData
+                item: modelData
+                radius: modelData ? modelData.radius : 0
+            }
+        }
 
         Region {
             id: blurRegion
             item: holder
             radius: {
                 switch (Popups.kind) {
-                case "controlcenter":
-                    return Tokens.radiusPanel;
                 case "about":
                 case "forcequit":
                 case "confirm":
@@ -91,7 +109,11 @@ Variants {
             id: holder
 
             readonly property real margin: Tokens.panelPopupMargin
+            readonly property bool ccPlaced: Popups.kind === "controlcenter"
             readonly property real wantedX: {
+                // Quick Settings keeps the macOS offsets: a fixed inset from the right edge of the screen.
+                if (ccPlaced)
+                    return win.width - width - Tokens.quicksettingsEdgeMargin;
                 switch (Popups.align) {
                 case "right":
                     return Popups.anchorX - width;
@@ -103,6 +125,8 @@ Variants {
                 return Popups.anchorX;
             }
             readonly property real wantedY: {
+                if (ccPlaced)
+                    return Tokens.menubarHeight + Tokens.quicksettingsTopGap;
                 switch (Popups.align) {
                 case "above":
                     return Popups.anchorY - height;
