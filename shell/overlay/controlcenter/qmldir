@@ -1,7 +1,7 @@
 module qs.overlay.controlcenter
 Label 1.0 Label.qml
 Caption 1.0 Caption.qml
-Tile 1.0 Tile.qml
+Module 1.0 Module.qml
 NavItem 1.0 NavItem.qml
 RadioRow 1.0 RadioRow.qml
 ListRow 1.0 ListRow.qml

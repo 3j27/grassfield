@@ -6,10 +6,13 @@ import Grassfield.Ui
 import qs.services
 import qs.widgets
 
-// Notification Center (N7): full-height panel at the right edge, opened from the clock or by
-// IPC. Grouped by app, newest first; Clear per group and Clear All; Esc or a click outside
-// closes. Below the notifications (scrolling with them) sits the widgets area: tiles of the
-// widgets placed there, and Edit Widgets (gallery overlay, docs/specs/widgets.md).
+// Notifications column (N7, internal Notification Center): the macOS model. No full-height panel:
+// a column of floating glass cards as wide as a banner, at the right under the menu bar, opened from the clock or
+// by IPC. A title capsule (Clear All, Do Not Disturb state) leads; then the cards grouped by app, newest first (the
+// first card of a group carries the app name, its count and Clear; the last visible one carries Show All / Show
+// Less); then the widgets placed there; a footer pill (Edit Widgets, gallery overlay, docs/specs/widgets.md) and a
+// close circle. Every card is its own surface with its own blur region (registered by the card, see
+// addSurface). Esc or a click outside the cards closes.
 //
 // The window exists per screen but its content (a Loader) only while the Center is open on that
 // screen, so a closed Center costs nothing. Rows come from the keyed Notifications.centerModel
@@ -61,8 +64,7 @@ Variants {
 
         Region {
             id: blur
-            item: content.item ? (content.item as CenterContent).panel : null
-            radius: Tokens.radiusPanel
+            regions: content.item ? (content.item as CenterContent).regionList : []
         }
 
         // A popup (menus, Control Center) takes over.
@@ -82,28 +84,148 @@ Variants {
             sourceComponent: CenterContent {}
         }
 
+        // Glass pill of the footer.
+        component Pill: Item {
+            id: pill
+
+            // The CenterContent that owns the blur regions.
+        required property var surfaceHost
+        property string text: ""
+
+            signal clicked
+
+            implicitWidth: Math.max(Tokens.notificationCenterPillWidth, label.implicitWidth + 2 * Tokens.spacingMd)
+            implicitHeight: Tokens.notificationCenterPillHeight
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: pill.text
+            Accessible.focusable: true
+            Accessible.onPressAction: pill.clicked()
+            Keys.onPressed: event => {
+                if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    pill.clicked();
+                    event.accepted = true;
+                }
+            }
+
+            Material {
+                id: pillSurface
+                anchors.fill: parent
+                radius: height / 2
+                shadowEnabled: false
+                Component.onCompleted: pill.surfaceHost.addSurface(pillSurface, false, Math.floor(height / 2))
+            }
+
+            Text {
+                id: label
+                anchors.centerIn: parent
+                width: Math.min(implicitWidth, parent.width - 2 * Tokens.spacingSm)
+                horizontalAlignment: Text.AlignHCenter
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+                text: pill.text
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+                font.weight: Tokens.typographyMenuBoldWeight
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: height / 2
+                color: "transparent"
+                border.width: pill.activeFocus ? Tokens.controlFocusRing : 0
+                border.color: Appearance.colors.accent
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: pill.clicked()
+            }
+        }
+
         component CenterContent: Item {
             id: host
 
             readonly property Item panel: panel
+            // One blur region per glass surface (cards, title capsule, widgets, footer).
+            readonly property var regionList: regions.instances
             // Slides in from the right edge after creation.
             property bool shown: false
+            // Registered glass surfaces: {item, clip (inside the list viewport), radius}. Destroyed items read as null
+            // and are dropped the next time a surface registers or the row count changes.
+            property var surfaces: []
+            // Anything that moves or resizes a surface without changing its own geometry.
+            readonly property real tick: list.contentY + list.contentHeight + list.count + list.height + panel.x + panel.y
+
+            function addSurface(item: Item, clip: bool, radius: real): void {
+                surfaces = surfaces.filter(r => r.item).concat([{item: item, clip: clip, radius: radius}]);
+            }
+
+            // Rectangle of a surface in window coordinates, cut to the list viewport for rows.
+            function rectOf(rec: var): rect {
+                const it = rec.item as Item;
+                if (!it)
+                    return Qt.rect(0, 0, 0, 0);
+                const p = it.mapToItem(null, 0, 0);
+                let top = p.y;
+                let bottom = p.y + it.height;
+                if (rec.clip) {
+                    const v = list.mapToItem(null, 0, 0);
+                    top = Math.max(top, v.y);
+                    bottom = Math.min(bottom, v.y + list.height);
+                }
+                return Qt.rect(p.x, top, it.width, Math.max(0, bottom - top));
+            }
+
+            function overSurface(x: real, y: real): bool {
+                for (const rec of surfaces) {
+                    const r = rectOf(rec);
+                    if (x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
+                        return true;
+                }
+                return false;
+            }
 
             Component.onCompleted: {
                 shown = true;
                 panel.forceActiveFocus();
             }
 
+            Variants {
+                id: regions
+                model: host.surfaces
+
+                Region {
+                    id: region
+
+                    required property var modelData
+                    readonly property rect box: {
+                        host.tick;
+                        return host.rectOf(region.modelData);
+                    }
+
+                    x: Math.round(box.x)
+                    y: Math.round(box.y)
+                    width: Math.round(box.width)
+                    height: Math.round(box.height)
+                    radius: region.modelData.radius
+                }
+            }
+
+            // A click outside every card closes; a click on a card or the title capsule does not.
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
-                onPressed: Notifications.closeCenter()
+                onPressed: mouse => {
+                    if (!host.overSurface(mouse.x, mouse.y))
+                        Notifications.closeCenter();
+                }
             }
 
             FocusScope {
                 id: panel
-
-                readonly property real margin: Tokens.spacingSm
 
                 // Widgets: the gallery overlay and the context menu of a placed widget.
                 property bool galleryOpen: false
@@ -140,10 +262,10 @@ Variants {
                         Widgets.setSize(entry.uid, action.substring(5));
                 }
 
-                x: host.width - width - margin + (host.shown ? 0 : width)
-                y: Tokens.menubarHeight + margin
+                x: host.width - width - Tokens.notificationCenterInset + (host.shown ? 0 : width + Tokens.notificationCenterInset)
+                y: Tokens.menubarHeight + Tokens.notificationCenterInset
                 width: Tokens.notificationCenterWidth
-                height: host.height - y - margin
+                height: host.height - y - Tokens.notificationCenterInset
                 Accessible.role: Accessible.Window
                 Accessible.name: qsTr("Notifications")
                 Keys.onEscapePressed: Notifications.closeCenter()
@@ -156,26 +278,26 @@ Variants {
                     }
                 }
 
-                // Swallows clicks on the panel itself.
-                MouseArea {
-                    anchors.fill: parent
-                    acceptedButtons: Qt.AllButtons
-                }
-
-                Material {
-                    anchors.fill: parent
-                    radius: Tokens.radiusPanel
-                }
-
+                // Title capsule: the title, the Do Not Disturb state, Clear All.
                 Item {
                     id: header
-                    x: Tokens.spacingLg
-                    y: Tokens.spacingLg
-                    width: parent.width - 2 * Tokens.spacingLg
-                    height: clearAll.implicitHeight
+                    width: parent.width
+                    height: Tokens.notificationCenterHeaderHeight
+                    Accessible.role: Accessible.Grouping
+                    Accessible.name: Notifications.dnd ? qsTr("Notifications, Do Not Disturb on") : qsTr("Notifications")
+
+                    Material {
+                        id: headerSurface
+                        anchors.fill: parent
+                        radius: height / 2
+                        shadowEnabled: false
+                        Component.onCompleted: host.addSurface(headerSurface, false, Math.floor(height / 2))
+                    }
 
                     Text {
+                        id: title
                         textFormat: Text.PlainText
+                        x: Tokens.spacingLg
                         anchors.verticalCenter: parent.verticalCenter
                         text: qsTr("Notifications")
                         color: Appearance.colors.text
@@ -184,9 +306,37 @@ Variants {
                         font.weight: Tokens.typographyMenuBoldWeight
                     }
 
+                    // Do Not Disturb is visible while it is on.
+                    Row {
+                        anchors.right: clearAll.visible ? clearAll.left : parent.right
+                        anchors.rightMargin: Tokens.spacingSm
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Tokens.spacingXs
+                        visible: Notifications.dnd
+
+                        Icon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: Tokens.panelCcChevron + Tokens.spacingXs
+                            name: "moon"
+                        }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            textFormat: Text.PlainText
+                            text: qsTr("Do Not Disturb")
+                            color: Appearance.colors.textSecondary
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyCaptionSize
+                            font.weight: Tokens.typographyMenuBoldWeight
+                        }
+                    }
+
                     Button {
                         id: clearAll
                         anchors.right: parent.right
+                        anchors.rightMargin: Tokens.spacingSm
+                        anchors.verticalCenter: parent.verticalCenter
+                        capsule: true
                         visible: Notifications.count > 0
                         text: qsTr("Clear All")
                         onClicked: Notifications.clearAll()
@@ -195,22 +345,33 @@ Variants {
 
                 ListView {
                     id: list
-                    x: Tokens.spacingLg
-                    y: header.y + header.height + Tokens.spacingMd
-                    width: parent.width - 2 * Tokens.spacingLg
-                    height: parent.height - y - Tokens.spacingLg
+                    y: header.height + Tokens.notificationBannerGap
+                    width: parent.width
+                    // As tall as its content (the area below the last card is outside the list, so a click there closes).
+                    height: Math.min(contentHeight, Math.max(0, parent.height - y - footer.height - Tokens.notificationBannerGap))
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
                     model: Notifications.centerModel
+                    onCountChanged: Qt.callLater(() => host.surfaces = host.surfaces.filter(r => r.item))
                     header: Item {
                         width: list.width
-                        height: Notifications.count === 0 ? emptyText.implicitHeight + 2 * Tokens.spacingLg : 0
+                        height: Notifications.count === 0 ? emptyText.implicitHeight + 2 * Tokens.spacingLg + Tokens.notificationBannerGap : 0
                         visible: Notifications.count === 0
+
+                        Material {
+                            id: emptySurface
+                            width: parent.width
+                            height: parent.height - Tokens.notificationBannerGap
+                            radius: Tokens.radiusBanner
+                            shadowEnabled: false
+                            Component.onCompleted: host.addSurface(emptySurface, true, Tokens.radiusBanner)
+                        }
 
                         Text {
                             id: emptyText
                             textFormat: Text.PlainText
-                            anchors.centerIn: parent
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: Tokens.spacingLg
                             text: qsTr("No Notifications")
                             color: Appearance.colors.textSecondary
                             font.family: Appearance.fontFamily
@@ -235,59 +396,17 @@ Variants {
                         required property real time
                         required property int urgency
                         required property string actionsJson
-        // Group info carried by the rows that need it (see Notifications.syncShown).
-        required property int headCount
-        required property bool headFirst
-        required property int toggleCount
+                        // Group info carried by the rows that need it (see Notifications.syncShown).
+                        required property int headCount
+                        required property bool headFirst
+                        required property int toggleCount
 
                         readonly property bool expanded: Notifications.expandedApps[appName] === true
 
                         width: list.width
-                        spacing: Tokens.spacingSm
-
-                        // Group header (first row of the group). Before the row in the tab order.
-                        Item {
-                            id: head
-
-                            visible: item.headCount > 0
-                            width: item.width
-                            height: visible ? clearGroup.implicitHeight + (item.headFirst ? 0 : Tokens.spacingLg) : 0
-
-                            Row {
-                                y: item.headFirst ? 0 : Tokens.spacingLg
-                                height: clearGroup.implicitHeight
-                                spacing: Tokens.spacingSm
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: Notifications.groupLabel(item.appName)
-                                    textFormat: Text.PlainText
-                                    color: Appearance.colors.text
-                                    font.family: Appearance.fontFamily
-                                    font.pixelSize: Tokens.typographyBodySize
-                                    font.weight: Tokens.typographyMenuBoldWeight
-                                }
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    textFormat: Text.PlainText
-                                    visible: item.headCount > 1
-                                    text: String(item.headCount)
-                                    color: Appearance.colors.textSecondary
-                                    font.family: Appearance.fontFamily
-                                    font.pixelSize: Tokens.typographyBodySize
-                                    font.weight: Tokens.typographyMenuWeight
-                                }
-                            }
-
-                            Button {
-                                id: clearGroup
-                                y: item.headFirst ? 0 : Tokens.spacingLg
-                                anchors.right: parent.right
-                                text: qsTr("Clear")
-                                onClicked: Notifications.clearApp(item.appName)
-                            }
-                        }
+                        // Groups are set apart; cards of one group are one banner gap apart.
+                        topPadding: item.headCount > 0 && !item.headFirst ? Tokens.spacingMd : 0
+                        bottomPadding: Tokens.notificationBannerGap
 
                         Item {
                             id: row
@@ -346,7 +465,7 @@ Variants {
                             // Keyboard focus ring.
                             Rectangle {
                                 anchors.fill: parent
-                                radius: Tokens.radiusMenu
+                                radius: Tokens.radiusBanner
                                 color: "transparent"
                                 border.width: row.activeFocus ? Tokens.controlFocusRing : 0
                                 border.color: Appearance.colors.accent
@@ -383,73 +502,115 @@ Variants {
                                 }
                             }
 
+                            // One floating card: the group header on the first card of a group, the notification, Show
+                            // All / Show Less on the last visible card of a group.
                             Component {
                                 id: rowBody
 
                                 Item {
-                                    implicitHeight: rowContent.implicitHeight + 2 * Tokens.spacingMd
+                                    implicitHeight: cardColumn.implicitHeight + 2 * Tokens.spacingMd
 
-                                    Rectangle {
+                                    Material {
+                                        id: cardSurface
                                         anchors.fill: parent
-                                        radius: Tokens.radiusMenu
-                                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity / 2)
+                                        radius: Tokens.radiusBanner
+                                        shadowEnabled: false
+                                        Component.onCompleted: host.addSurface(cardSurface, true, Tokens.radiusBanner)
                                     }
 
-                                    NotificationContent {
-                                        id: rowContent
+                                    Column {
+                                        id: cardColumn
                                         x: Tokens.spacingMd
                                         y: Tokens.spacingMd
                                         width: parent.width - 2 * Tokens.spacingMd
-                                        summary: item.summary
-                                        appName: item.appName
-                                        urgency: item.urgency
-                                        actionsJson: item.actionsJson
-                                        live: row.live
-                                        trailingReserve: Tokens.notificationCloseSize + Tokens.spacingXs
-                                        body: Notifications.bodyFor(item.bodyHtml)
-                                        timeText: Notifications.timeFor(item.time)
-                                        iconSource: Notifications.iconSource(item.image, item.appIcon)
-                                        onActionTriggered: actionId => Notifications.invokeAction(item.key, actionId)
+                                        spacing: Tokens.spacingSm
+
+                                        Item {
+                                            visible: item.headCount > 0
+                                            width: parent.width
+                                            height: visible ? clearGroup.implicitHeight : 0
+
+                                            Row {
+                                                height: parent.height
+                                                spacing: Tokens.spacingSm
+
+                                                Text {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    text: Notifications.groupLabel(item.appName)
+                                                    textFormat: Text.PlainText
+                                                    color: Appearance.colors.text
+                                                    font.family: Appearance.fontFamily
+                                                    font.pixelSize: Tokens.typographyBodySize
+                                                    font.weight: Tokens.typographyMenuBoldWeight
+                                                }
+
+                                                Text {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    textFormat: Text.PlainText
+                                                    visible: item.headCount > 1
+                                                    text: String(item.headCount)
+                                                    color: Appearance.colors.textSecondary
+                                                    font.family: Appearance.fontFamily
+                                                    font.pixelSize: Tokens.typographyBodySize
+                                                    font.weight: Tokens.typographyMenuWeight
+                                                }
+                                            }
+
+                                            Button {
+                                                id: clearGroup
+                                                anchors.right: parent.right
+                                                // Room for the remove button of the card.
+                                                anchors.rightMargin: Tokens.notificationCloseSize + Tokens.spacingXs
+                                                capsule: true
+                                                text: qsTr("Clear")
+                                                onClicked: Notifications.clearApp(item.appName)
+                                            }
+                                        }
+
+                                        NotificationContent {
+                                            id: rowContent
+                                            width: parent.width
+                                            summary: item.summary
+                                            appName: item.appName
+                                            urgency: item.urgency
+                                            actionsJson: item.actionsJson
+                                            live: row.live
+                                            trailingReserve: Tokens.notificationCloseSize + Tokens.spacingXs
+                                            body: Notifications.bodyFor(item.bodyHtml)
+                                            timeText: Notifications.timeFor(item.time)
+                                            iconSource: Notifications.iconSource(item.image, item.appIcon)
+                                            onActionTriggered: actionId => Notifications.invokeAction(item.key, actionId)
+                                        }
+
+                                        Item {
+                                            visible: item.toggleCount > 0
+                                            width: parent.width
+                                            height: visible ? toggle.implicitHeight : 0
+
+                                            Button {
+                                                id: toggle
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                capsule: true
+                                                text: item.expanded ? qsTr("Show Less") : qsTr("Show All (%1)").arg(item.toggleCount)
+                                                onClicked: {
+                                                    Notifications.setExpanded(item.appName, !item.expanded);
+                                                }
+                                            }
+                                        }
                                     }
-                                }
-                            }
-                        }
-
-                        Item {
-                            visible: item.toggleCount > 0
-                            width: parent.width
-                            height: visible ? toggle.implicitHeight : 0
-
-                            Button {
-                                id: toggle
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: item.expanded ? qsTr("Show Less") : qsTr("Show All (%1)").arg(item.toggleCount)
-                                onClicked: {
-                                    Notifications.setExpanded(item.appName, !item.expanded);
                                 }
                             }
                         }
                     }
                 }
 
-                // Widgets area: the footer of the list, so it scrolls with the notifications.
+                // Widgets: the footer of the list, so they scroll with the notifications. Each is a glass tile.
                 Component {
                     id: widgetsArea
 
                     Column {
                         width: list.width
-                        topPadding: Tokens.spacingLg
-                        spacing: Tokens.spacingMd
-
-                        Text {
-                            textFormat: Text.PlainText
-                            visible: Widgets.center.length > 0
-                            text: qsTr("Widgets")
-                            color: Appearance.colors.text
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyTitleSize
-                            font.weight: Tokens.typographyMenuBoldWeight
-                        }
+                        topPadding: Widgets.center.length > 0 ? Tokens.spacingMd : 0
 
                         Flow {
                             width: parent.width
@@ -464,13 +625,13 @@ Variants {
                                     required property var modelData
 
                                     entry: modelData
-                                    flat: true
                                     cell: (list.width - Tokens.widgetGap) / 2
                                     onMenuRequested: (x, y) => panel.openWidgetMenu(tile, x, y, modelData)
                                     onRemoveRequested: {
                                         Widgets.remove(modelData.uid);
                                         panel.forceActiveFocus();
                                     }
+                                    Component.onCompleted: host.addSurface(tile, true, Tokens.widgetRadius)
                                     onActiveFocusChanged: {
                                         if (!activeFocus)
                                             return;
@@ -483,17 +644,66 @@ Variants {
                                 }
                             }
                         }
+                    }
+                }
 
-                        Item {
-                            width: parent.width
-                            height: editWidgets.implicitHeight + Tokens.spacingSm
+                // Footer: Edit Widgets and the close circle, at the bottom of the column.
+                Row {
+                    id: footer
+                    anchors.right: parent.right
+                    y: parent.height - height
+                    height: Tokens.notificationCenterCloseDisk
+                    spacing: Tokens.spacingSm
 
-                            Button {
-                                id: editWidgets
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: qsTr("Edit Widgets")
-                                onClicked: panel.galleryOpen = true
+                    Pill {
+                        surfaceHost: host
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("Edit Widgets")
+                        onClicked: panel.galleryOpen = true
+                    }
+
+                    Item {
+                        id: closeDisk
+                        width: Tokens.notificationCenterCloseDisk
+                        height: width
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Close")
+                        Accessible.focusable: true
+                        Accessible.onPressAction: Notifications.closeCenter()
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                Notifications.closeCenter();
+                                event.accepted = true;
                             }
+                        }
+
+                        Material {
+                            id: closeSurface
+                            anchors.fill: parent
+                            radius: width / 2
+                            shadowEnabled: false
+                            Component.onCompleted: host.addSurface(closeSurface, false, Math.floor(width / 2))
+                        }
+
+                        Icon {
+                            anchors.centerIn: parent
+                            size: parent.width - Tokens.notificationCloseGlyphInset
+                            name: "close-glyph"
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: "transparent"
+                            border.width: closeDisk.activeFocus ? Tokens.controlFocusRing : 0
+                            border.color: Appearance.colors.accent
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Notifications.closeCenter()
                         }
                     }
                 }

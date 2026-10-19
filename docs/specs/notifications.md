@@ -8,10 +8,14 @@ Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belong
   app icon left, bold title, body up to 4 lines, relative time ("now", "2m ago") top-right. They stay ~5 s
   (alerts stay until acted on), hovering pauses dismissal, a swipe/drag to the right dismisses, a close (×)
   button appears on hover at the top-left corner.
-- Multiple banners stack vertically with 8 pt gaps; same-app notifications group with a count in the
-  Notifications panel.
-- Notifications panel opens from the clock in the menu bar (click) as a full-height panel on the right;
-  it shows grouped notifications (newest first) and widgets below; "Clear" per group; Esc or click outside closes.
+- Multiple banners stack vertically with 6 pt gaps; same-app notifications group with a count in the
+  Notifications column.
+- The Notifications column opens from the clock in the menu bar (click). macOS model (F1 gap 7): no full-height panel; a
+  344 pt column of floating glass cards, the width of a banner, 16 pt from the right edge and below the bar. A title capsule
+  (title, Do Not Disturb state, Clear All) leads; cards are grouped by app, newest first; the first card of a group carries the
+  app name, the count and Clear, the last visible one carries Show All / Show Less; widgets placed in the Center follow as glass
+  tiles; the footer is an Edit Widgets pill and a 24 pt close circle at the bottom. The banners hide while the column is open.
+  Esc, the close circle or a click outside the cards closes.
 - Do Not Disturb (from Quick Settings) silences banners; the menu bar shows a moon icon.
 
 ## Purpose and non-goals
@@ -62,8 +66,11 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   click clears the entry unless `resident`. Max 5 banners visible; older ones wait in the queue.
 - Actions: first 3 non-default actions are buttons, the rest appear after "More" (inline expansion, not a menu).
 - Click on a banner/row runs `default` and focuses a window of `desktop-entry` when one is open.
-- Notifications panel: separate full-screen transparent window (Esc and click outside close, the menu bar strip stays clickable so the
-  clock toggles it). Groups by app name, newest first, 3 rows per group then "Show All". No widgets area in M2 (omitted, not stubbed).
+- Notifications column: separate full-screen transparent window (Esc and click outside the cards close, the menu bar strip stays clickable so the
+  clock toggles it). Groups by app name, newest first, 3 rows per group then "Show All". Every card, the title capsule, each widget
+  tile and the footer controls are separate glass surfaces: each registers itself with the content (`addSurface`) and gets its own blur
+  region (`Variants` of `Region`, rectangle in window coordinates, cut to the list viewport for rows, refreshed when the list scrolls or
+  changes height). A click outside every registered surface closes; the empty area below the last card is outside the list.
   Opening a menu/popup closes the Center.
   The Center list shows only the DISPLAYED rows: `Notifications.centerModel` (keyed ListModel) holds the first 3 rows of each app
   group (all rows of a group the user expanded with "Show All"; the expansion resets when the Center closes), so collapsed rows
@@ -74,8 +81,8 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   Clear), `headFirst` (top group, no leading gap), `toggleCount` (> 0 on the row that carries Show All / Show Less); a role is
   written only when its value changed. History insert is O(dropped) (`History.pushNewest`) and
   evicted live notifications are dismissed after the Notify reply (`Qt.callLater`). The Center window is full-screen and keeps its
-  size while open (the panel slides in once; blur region = the constant panel item), so a Notify never reconfigures the layer
-  surface or the blur region. Notify round trip on the nested shell,
+  size while open (the column slides in once), so a Notify never reconfigures the layer surface; it adds one card and one blur
+  region (the region list is rebuilt when a surface registers or the row count changes). Notify round trip on the nested shell,
   loaded machine: median 32-38 ms from 60 to 200 same-app entries (bare gdbus 16-17 ms); before: 44-54 ms at 200. With the Center
   open (history 200, `notifications toggleCenter`): median 35-37 ms against 28-33 ms closed (60 / 40 sends, 2026-10-17).
 - Body markup: `Sanitizer.sanitize` keeps only b, i, u and br (balanced); links render as "label (url)" text and are not clickable;
