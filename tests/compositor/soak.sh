@@ -96,7 +96,8 @@ if HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null 
   # ("minimize <hex>: toward the Dock rectangle x,y wxh"), read from Hyprland's log as it is written (read-only
   # `hyprctl rollinglog -f` through scripts/nestctl). Nothing about the Dock layout is computed here.
   follow=$dev/soak-follow-$start_epoch.log
-  timeout $((duration + 600)) "$root/scripts/nestctl" rollinglog -f >"$follow" 2>&1 &
+  # Line-buffered (stdbuf): hyprctl's stdout into a file is block-buffered and a line could reach it seconds late.
+  timeout $((duration + 600)) stdbuf -oL "$root/scripts/nestctl" rollinglog -f >"$follow" 2>&1 &
   follow_pid=$!
   read -r out_x out_y < <(HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y)"')
 fi

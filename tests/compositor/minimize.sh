@@ -168,7 +168,8 @@ pids+=($!)
 # Hyprland's log as it is written (read-only hyprctl request; the log file itself is written late): the plugin's line
 # with the Dock rectangle the shell sent for each minimize.
 follow=$run/hyprland-follow.log
-timeout 3600 "$root/scripts/nestctl" rollinglog -f >"$follow" 2>&1 &
+# Line-buffered (stdbuf): hyprctl's stdout into a file is block-buffered and a line could reach it seconds late.
+timeout 3600 stdbuf -oL "$root/scripts/nestctl" rollinglog -f >"$follow" 2>&1 &
 pids+=($!)
 sleep 0.3
 
