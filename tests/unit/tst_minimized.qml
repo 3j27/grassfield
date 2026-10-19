@@ -190,6 +190,14 @@ TestCase {
         compare(Minimized.moveRequest("55ab", 4).indexOf("workspace = \"4\"") > 0, true);
     }
 
+    function test_focusWindowRequestValidates() {
+        compare(Minimized.focusWindowRequest("0xAB12"), "hl.dsp.focus({ window = \"address:0xab12\" })");
+        compare(Minimized.focusWindowRequest("ab12"), "hl.dsp.focus({ window = \"address:0xab12\" })");
+        compare(Minimized.focusWindowRequest("0x1\" }) evil"), "");
+        compare(Minimized.focusWindowRequest(""), "");
+        compare(Minimized.focusWindowRequest(undefined), "");
+    }
+
     function test_focusRequestValidates() {
         compare(Minimized.focusRequest(3), "hl.dsp.focus({ workspace = \"3\" })");
         compare(Minimized.focusRequest("12"), "hl.dsp.focus({ workspace = \"12\" })");

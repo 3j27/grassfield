@@ -90,13 +90,17 @@ function surfaceRect(rect, realWidth, band, screenX, screenY, offsetY) {
 
 // Keyboard plan of the chrome surfaces (v1 and v2). `screens` are the output names, `phase` "open" | "releasing" | "closed". Returns
 // {screenName: "exclusive" | "none"}. While open every chrome is Exclusive: Hyprland sends pointer input to Exclusive
-// layers only, so a None chrome would be dead to hover, click and drag. The keyboard goes to the chrome of the
-// pointer's output and the shell handles keys on any chrome. Every chrome is None while releasing (before the close
-// completes) and when closed, so no Exclusive layer remains and Hyprland refocuses the last window.
-function keyboardPlan(screens, phase) {
+// layers only, so a None chrome would be dead to hover, click and drag. Hyprland gives the keyboard to ONE of the
+// chromes (measured: not reliably the pointer's output) and the shell handles keys on any chrome. Every chrome is None
+// when closed; the close then waits for every one to have committed (releaseDone) and focuses the remembered window
+// itself (restorePlan).
+// While releasing, `keep` (the output of the chrome that holds the keyboard, "" for none) stays Exclusive until every other
+// chrome has committed None: the holder is released LAST, so that no Exclusive layer remains at the moment Hyprland
+// refocuses (released first, its refocus is refused and never retried).
+function keyboardPlan(screens, phase, keep) {
     const plan = {};
     for (const name of screens || [])
-        plan[name] = phase === "open" ? "exclusive" : "none";
+        plan[name] = phase === "open" || (phase === "releasing" && keep === name) ? "exclusive" : "none";
     return plan;
 }
 
@@ -104,4 +108,26 @@ function keyboardPlan(screens, phase) {
 // once closed a key reaching a chrome is neither handled nor swallowed (it belongs to the window being refocused).
 function keysEnabled(phase) {
     return phase === "open";
+}
+
+// Whether the keyboard release is complete and the close may proceed (action, plugin `on:false`, hide). Every output's
+// chrome commits keyboard None on its own: Hyprland refuses to refocus ("refocusLastWindow: ignoring, exclusive LS
+// present") while any of them is still Exclusive, and does not retry when the last one commits. So the close waits until
+// no chrome reports the keyboard (`held` false) and the settle pause since the last change (`settled`) has elapsed;
+// `forced` (the bound ran out) ends the wait whatever the reports say.
+function releaseDone(held, settled, forced) {
+    return forced === true || (!held && settled === true);
+}
+
+// What to focus when the overview closes without a chosen window. `previous` is {address, workspaceId} of the window
+// that was active when it opened (null when none, or the desktop had the keyboard); `live` the addresses of the windows
+// that exist now; `stayOnSpace` the id of a Desktop created with "+" while open (the shell switched to it: staying there
+// is the choice). Returns {kind: "space", id} | {kind: "window", address, workspaceId} | {kind: "none"} (Hyprland's own
+// choice stands).
+function restorePlan(previous, live, stayOnSpace) {
+    if (stayOnSpace > 0)
+        return {kind: "space", id: stayOnSpace};
+    if (previous && previous.address && (live || []).indexOf(previous.address) >= 0)
+        return {kind: "window", address: previous.address, workspaceId: previous.workspaceId};
+    return {kind: "none"};
 }

@@ -62,7 +62,7 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
   `refreshSpaces`, `topologyRevision`/`refreshOnEvents`.
 - Desktops bar tiles (v1): "Desktop N", window count and up to 4 app icons; no capture of the workspace (the real
   tile thumbnails need v2). Click a tile: switch and close. "+": focus the next workspace id, Overview stays open.
-- Click a window: activate and close. The keyboard grab is released 80 ms before the focus action, otherwise Hyprland
+- Click a window: activate and close. The keyboard grab is released before the focus action, otherwise Hyprland
   refocuses the previous window (and workspace) when the exclusive layer goes away and undoes the switch.
 - Keyboard: arrows (spatial), Return, Tab/Shift+Tab cycle windows -> each Desktop tile -> "+", Esc. Up from the top
   row of windows enters the Desktops bar.
@@ -78,8 +78,10 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
   zoom-out starts; the dim animates on its own. The overlay window is persistent (one per screen, always mapped,
   empty input mask and hidden content between opens). Nested, 3 open/close cycles: max swap 717-1110 ms ->
   107 ms.
-- Close (Esc, backdrop click) releases the keyboard grab, then re-focuses the Desktop that was active on that
-  output when closing started, so Hyprland's refocus of its last window cannot jump back after "+".
+- Close without a choice (Esc, backdrop click, IPC close/toggle) releases the keyboard grab, then focuses the window
+  that was active when the overview opened (and its Desktop): macOS returns to the window and Desktop you were on when
+  you leave Mission Control without choosing. A Desktop created with "+" while open is the exception (the shell switched
+  to it; staying there is the choice). See "Close and keyboard" below.
 
 ## S4 results (spike: ScreencopyView cost of 9 toplevels)
 Nested Hyprland 0.56.2 on the owner's session (parent GPU path, UHD 630; indication only), 9 foot windows (700x500)
@@ -215,12 +217,9 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
      while the overview is open (opening/open) **every output's chrome is `Exclusive`**, because while an Exclusive
      layer exists Hyprland sends pointer focus to Exclusive layers only (`CInputManager::mouseMoveUnified`, "forced
      above all"): a `None` chrome would make hover, click, drag, the Desktops tiles and the backdrop click dead on its
-     output. Hyprland gives the keyboard to the chrome of the pointer's output; the shell handles keys on any chrome and
-     keeps `keyScreen` in sync with the chrome that has the keyboard (`Window.active`) and with key presses. On close
-     (Esc, a click on a window or the backdrop, IPC close/toggle, a Desktop switch, a fallback) the shell first sets
-     **every** chrome to keyboard `None` (the 80 ms release step), and only then sends `on:false`, activates the target
-     window and hides the chromes: no chrome may stay `Exclusive` once the release starts, else Hyprland's
-     `refocusLastWindow` is refused ("ignoring, exclusive LS present") and the keyboard is lost after the close.
+     output. Hyprland gives the keyboard to ONE of the chromes; it is **not** reliably the pointer's output (measured on
+     GF-REF + WAYLAND-1: the GF-REF chrome had it in 10 of 12 trials with the pointer on WAYLAND-1), so the shell handles
+     keys on any chrome and never infers anything from which one holds it. On close see "Close and keyboard" below.
      **Required by the plugin** (relaxed 2026-10-18, main 46b3e9b): an `on:true` that would transform windows is
      refused with reason `no-chrome` unless every monitor of those windows has a mapped chrome surface (any keyboard
      interactivity) and the keyboard is on a chrome surface (or one of its popups) with `Exclusive` interactivity. While
@@ -268,6 +267,59 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
    full-screen window on such a workspace); Desktops bar tiles of other workspaces still need captures (nothing of another
    workspace is rendered); fractional scales and rotated outputs are not verified.
 
+### Close and keyboard (overview fix pass 2, 2026-10-19)
+Review of 5c0aab6 (FAIL): with two outputs the keyboard was lost after a close (Esc and IPC) and Esc focused the wrong
+window. Cause: each output's chrome commits its keyboard mode on its own. When the chrome that holds the keyboard commits
+`None` first, Hyprland tries `refocusLastWindow`, logs `ignoring, exclusive LS present` (the other chrome is still
+Exclusive) and does not try again when the other chrome commits: no surface has the keyboard, while `activewindow` still
+names a window. Setting every chrome to `None` in one QML step is therefore not one step for Hyprland. Esc also focused the
+Desktop of the output whose chrome received the key instead of the window that was active.
+
+Rule (macOS model): the overview remembers the window that had the keyboard when it opened (`Overview.previous`, address and
+Desktop; none when the desktop surface held the keyboard, ADR-0012). Every close goes through `closeAnd(action)`:
+1. stage `releasing`: every chrome's keyboard mode is `None` (`V2.keyboardPlan`), keys are no longer handled;
+2. wait until **no chrome reports the keyboard** (`Window.active` false on all) and `overview.releaseSettleMs` (0 ms: the next event-loop turn) have
+   passed since the last change of that report (`V2.releaseDone`): all chromes have committed, so no Exclusive layer remains;
+   `overview.releaseBoundMs` (500 ms) bounds the wait whatever happens (a lost event must not leave the overview open);
+3. `on:false`, then the action, then the chromes hide. The action is the user's choice (window, Desktop tile); with no choice
+   (Esc, backdrop click, IPC close, toggle, activating nothing) it is `restoreFocus()`: `V2.restorePlan` gives the remembered
+   window if it still exists (focused through `Compositor.focusWindow`: its Desktop first when not the one shown, then
+   `Compositor.activate`, the path Dock and Search use, so Stages brings that window's stage forward), the Desktop created by
+   "+" when there was one, else nothing (Hyprland's choice stands).
+Another full-attention surface opening (ExclusiveSurfaces: Apps, Search, the switcher) closes the overview with
+`requestCloseForOther()`: same release, no focus action, the keyboard belongs to the opening surface; when that closes
+Hyprland returns the keyboard to the window that has it. Keys typed while the release runs (about 100 to 150 ms after Esc) reach
+the chrome, which ignores them: they are lost, never delivered to another window (drop table below).
+
+Two more measured facts. (1) The protocol `activate` does nothing for a window Hyprland still counts as focused, which is
+exactly the one the chrome took the keyboard from (A active, pointer and holder chrome on A's output, Esc: keys lost 11 of
+12 with `activate`, 12 of 12 recovered by the Lua `hl.dsp.focus({window=...})`), so `Compositor.focusWindow` uses the Lua
+focus (`Minimized.focusWindowRequest`). (2) Releasing the holder last removes the `ignoring, exclusive LS present` refusals
+(0 in the nested runs; 5 in 20 closes before).
+
+Test setup: `tests/shell/overview_two_outputs.sh` runs on two HEADLESS outputs of the nested compositor (GF-REF 1920x1080
+and GF-REF2 1440x900, created and removed through `nestctl`; WAYLAND-1, the nested window tiled by the owner's window
+manager, is disabled for the run), so a host resize cannot change the measured geometry; the run is flagged INVALID when
+an output size changes. The earlier `backdrop` failure on the second output only ever appeared together with a host resize of
+WAYLAND-1 (output shrunk to 461x484 or 941x238: the click point fell off the output); on the headless pair the backdrop
+click closes the overview on both outputs in every run.
+
+Drop table (`drop`, one injector process `Esc, -s D, tag, Return`, 10 closes per row, previous window A or B alternating,
+pointer alternating between the outputs), by `overview.releaseSettleMs`, plugin runs (the 0 ms value: 5 plugin and 2
+`--no-plugin` runs of `all`, each 59/59 PASS on a fresh session):
+
+| D after Esc | 80 ms setting (host pair) | 40 ms | 0 ms (7 runs) |
+|---|---|---|---|
+| 0 ms | 0/10 | 0/10 | 7-10/10 (9, 10, 9, 7, 10 with the plugin; 9, 8 without) |
+| 30 ms | 0/10 | 0/10 | 10/10 |
+| 60 ms | 0/10 | 8/10 | 10/10 |
+| 100 ms | 6-8/10 | 10/10 | 10/10 |
+| 150 ms and later | 3-10/10 | 10/10 | 10/10 |
+
+No key ever reached the wrong window at any setting. With 0 ms the release completes as soon as no chrome reports the
+keyboard; the only loss left is for keys sent in the same millisecond as Esc (the 0 ms row), before the chrome has handled
+the key at all.
+
 ### Two outputs and shared drawing (2026-10-18, plugin 0.6.0-stages)
 The chrome rule is relaxed (contract item 2): one Exclusive chrome holding the keyboard, a mapped chrome on every target
 monitor. The drawing code moved to `compositor/src/WindowTransform.*` (shared with Stages, unchanged) and the JSON reader to
@@ -305,8 +357,9 @@ layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (
   the layout of all outputs is sent (surface box = layout rect minus the 28 px band x scale, global coordinates).
   `durationMs` = `motion.slow` (350), 0 with Reduce Motion (the dim then crossfades in at most `motion.reducedMax`).
   A new layout while open (window opened/closed/moved) retargets with a new `on:true`.
-- Close: every chrome drops to keyboard None first; 80 ms later `on:false` is sent, then the focus action and the hide
-  (the plugin lets the asked closing animation finish). Esc, a click on a window or on empty space, a Desktop tile all go through it.
+- Close: every chrome drops to keyboard None first; when no chrome reports the keyboard any more and the settle pause has
+  passed, `on:false` is sent, then the focus action and the hide (the plugin lets the asked closing animation finish).
+  Esc, a click on a window or on empty space, a Desktop tile, IPC close/toggle all go through it ("Close and keyboard").
 - Input is the shell's own: per-window hit areas (surface + band), hover selects and shows the app label, arrows/Tab/Return,
   drag to a Desktop tile (a ghost follows the pointer; the real window stays drawn by the plugin; drop = `moveToSpace`).
 - "+": switches to the new Desktop; the plugin ends its overview on a Desktop switch, the shell keeps the chrome open on the

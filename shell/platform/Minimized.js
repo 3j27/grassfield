@@ -134,6 +134,15 @@ function focusRequest(id) {
     return "hl.dsp.focus({ workspace = \"" + ws + "\" })";
 }
 
+// Focus of a window by address (keyboard included), "" if invalid. Unlike the protocol `activate`, this gives the keyboard
+// back to a window Hyprland still counts as focused after a layer surface held the keyboard.
+function focusWindowRequest(address) {
+    const hex = normalizeAddress(address);
+    if (hex === "")
+        return "";
+    return "hl.dsp.focus({ window = \"address:0x" + hex + "\" })";
+}
+
 // Fullscreen state change of a window; mode "maximized" is Zoom, "fullscreen" is full screen.
 function fullscreenRequest(address, mode) {
     const hex = normalizeAddress(address);
