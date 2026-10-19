@@ -43,8 +43,12 @@ config owns the keys (`config/hypr/grassfield/bindings.lua`):
   within `switcher.backstopMs`, it commits by itself; a `next` request that arrives after the key map was already left (the
   two `qs ipc` processes race) commits at once (quick switch).
 - With no compositor config (no key map) the panel still takes Esc, arrows, Tab and Return from its keyboard grab.
-- wtype's `-M logo` only sets the modifier mask and never sends a Super key event; test the release with
-  `wtype -P Super_L -k Tab -p Super_L` (see Tests).
+- Test injection limit: wtype's virtual keyboard has its own keymap and Hyprland resolves binds by keycode through its
+  layout, so the first key wtype sends is keycode 9 (Escape in the US layout) whatever its keysym, and its modifier mask has
+  no Super map. `wtype -k Escape` therefore exercises the Esc bind (cancel, key map reset; verified), but SUPER+TAB and the
+  Super release cannot be injected. `tests/shell/switcher/nested.sh enter|quick` replays the two actions of the SUPER+TAB
+  bind (enter the key map through scripts/nestctl, then the `qs ipc` request). The physical Super release bind is verified
+  only as registered (`nestctl binds`, release flag) until tried on real hardware (L2).
 
 ## Surface
 

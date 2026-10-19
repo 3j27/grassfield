@@ -47,7 +47,6 @@ Scope {
     }
 
     function apply(result: var): void {
-        const before = session.phase;
         session = result.state;
         switch (result.action) {
         case "show":
@@ -56,7 +55,7 @@ Scope {
         case "commit":
             showTimer.stop();
             backstop.stop();
-            commit(result.index, before === "shown");
+            commit(result.index);
             break;
         case "cancel":
             showTimer.stop();
@@ -68,7 +67,10 @@ Scope {
     function openPanel(): void {
         Popups.close();
         showTimer.stop();
-        screenName = Compositor.focusedScreenName;
+        // The output of the focused window, else the one with the pointer or keyboard focus.
+        screenName = Compositor.windowScreenName(Compositor.hyprlandToplevel(Compositor.focusedToplevel));
+        if (screenName === "")
+            screenName = Compositor.focusedScreenName;
         if (screenName === "" && Quickshell.screens.length > 0)
             screenName = Quickshell.screens[0].name;
     }
@@ -125,16 +127,13 @@ Scope {
     }
 
     // Raises the app's most recent window (un-minimizes when all are minimized; its Space and Stage come forward through
-    // the compositor's focus path). With the panel up, the activation waits for the panel to unmap first.
-    function commit(index: int, wasShown: bool): void {
+    // the compositor's focus path). The activation waits a moment so that the panel (if up) has unmapped and released its keyboard grab.
+    function commit(index: int): void {
         const app = apps[index];
         if (!app)
             return;
         target = app;
-        if (wasShown)
-            commitTimer.restart();
-        else
-            activateTarget();
+        commitTimer.restart();
     }
 
     function activateTarget(): void {
