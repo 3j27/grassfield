@@ -456,6 +456,17 @@ t_desktop() {
 t_interrupt() {
   local prev tgt ws n=0 want
   ensure_spares
+  # Without the plugin (C2) nothing ends the overview on a Desktop switch: the thumbnails overview stays open, as designed.
+  focus A
+  open_overview
+  if status | jq -e '.thumbnailMode' >/dev/null; then
+    echo "SKIP interrupt: no compositor overview (thumbnail mode, no plugin): nothing ends the overview on a Desktop switch"
+    ipc overview close >/dev/null
+    wait_for 5 overview_closed
+    return 0
+  fi
+  ipc overview close >/dev/null
+  wait_for 5 overview_closed
   for prev in A B; do
     for tgt in C1 C2; do
       n=$((n + 1))

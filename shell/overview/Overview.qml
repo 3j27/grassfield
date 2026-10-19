@@ -386,7 +386,9 @@ Scope {
         id: focusTimer
         onTriggered: {
             const ws = Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : -1;
-            if (V2.focusHolds(root.focusGoal, Compositor.activeWindow(), ws) || Date.now() - root.focusStarted >= Tokens.overviewFocusBoundMs || root.open) {
+            const holds = V2.focusHolds(root.focusGoal, Compositor.activeWindow(), ws);
+            if (holds || Date.now() - root.focusStarted >= Tokens.overviewFocusBoundMs || root.open) {
+                console.info("grassfield-overview: close focus (shell fallback)", holds ? "holds" : "given up", "after", root.focusAttempt + 1, "attempt(s)");
                 root.focusPlan = null;
                 return;
             }
