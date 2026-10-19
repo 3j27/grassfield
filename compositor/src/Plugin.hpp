@@ -23,7 +23,7 @@ class IHyprWindowDecoration;
 namespace gf {
 
     inline constexpr const char* kPluginName    = "grassfield-compositor";
-    inline constexpr const char* kPluginVersion = "0.6.1-stages";
+    inline constexpr const char* kPluginVersion = "0.6.2-stages";
 
     struct SPluginState {
         HANDLE                             handle = nullptr;
@@ -61,7 +61,7 @@ namespace gf {
     void log(Hyprutils::CLI::eLogLevel level, std::format_string<Args...> fmt, Args&&... args) {
         try {
             Log::logger->log(level, std::string{"[grassfield] "} + std::format(fmt, std::forward<Args>(args)...));
-        } catch (...) {
+        } catch (...) { // NOLINT(bugprone-empty-catch): nothing to report to, and nothing may escape
             // logging must never throw into Hyprland
         }
     }
@@ -79,7 +79,7 @@ namespace gf {
             if (*held > 0)
                 line += std::format(" ({} similar line(s) held back)", *held);
             Log::logger->log(level, line);
-        } catch (...) {
+        } catch (...) { // NOLINT(bugprone-empty-catch): nothing to report to, and nothing may escape
             // logging must never throw into Hyprland
         }
     }
