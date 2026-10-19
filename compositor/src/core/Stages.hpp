@@ -311,13 +311,15 @@ namespace gf::stages {
         bool shown         = false; // its workspace is shown on its monitor and not covered by a special workspace
         bool locked        = false; // the session is locked
         bool exclusive     = false; // an Exclusive layer surface is mapped
-        bool layerKeyboard = false; // a mapped layer surface (or one of its popups) holds the keyboard
+        bool holderKeeps   = false; // the layer surface that held the keyboard when the focus was deferred still holds it
+                                    // (it dropped its exclusivity and kept the keyboard: on_demand)
         bool focused       = false; // it already is Hyprland's active window and holds the keyboard
     };
 
     enum class PendingFocusAction : uint8_t {
-        Wait,  // Hyprland still refuses (lock, Exclusive layer) or a layer surface keeps the keyboard: try again later
-        Focus, // focus it now (Hyprland's own restore after the layer, if any, is replaced: ST23)
+        Wait,  // Hyprland still refuses (lock, Exclusive layer) or that layer surface keeps the keyboard: try again later
+        Focus, // focus it now (what Hyprland's own refocus after the layer picked, a window or a surface under the cursor, is
+               // replaced: ST23)
         Drop,  // forget it: gone, no longer the front window (another stage came forward), already focused, or its Desktop
                // is not shown or a special workspace covers it (nothing is switched or closed after the fact; the keyboard
                // rule focuses the active stage when that Desktop is shown again: ST22)

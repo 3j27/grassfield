@@ -443,14 +443,14 @@ TEST(StagesInput, UnderAnExclusiveLayerTheActiveStripWindowIsOnlyCleared) {
 // accepts window focus again, and only if it still is the front window of a Desktop that is shown and not covered.
 TEST(StagesInput, ADeferredFocusWaitsForTheLayerAndIsCheckedAgain) {
     using P                         = PendingFocusAction;
-    const PendingFocusState settled = {.exists = true, .front = true, .shown = true, .locked = false, .exclusive = false, .layerKeyboard = false, .focused = false};
+    const PendingFocusState settled = {.exists = true, .front = true, .shown = true, .locked = false, .exclusive = false, .holderKeeps = false, .focused = false};
     EXPECT_EQ(pendingFocusAction(settled), P::Focus) << "the layer is gone: the swap's front window takes the keyboard (ST23)";
 
     auto s      = settled;
     s.exclusive = true;
     EXPECT_EQ(pendingFocusAction(s), P::Wait) << "an Exclusive layer (this one or another) is still mapped";
-    s               = settled;
-    s.layerKeyboard = true;
+    s             = settled;
+    s.holderKeeps = true;
     EXPECT_EQ(pendingFocusAction(s), P::Wait) << "the layer dropped its exclusivity but keeps the keyboard (on_demand)";
     s        = settled;
     s.locked = true;

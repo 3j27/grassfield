@@ -112,6 +112,7 @@ namespace {
         std::optional<st::WorkspaceId>   refocusSpace; // after a close: the active stage of this workspace takes the keyboard
         PHLWINDOWREF                     focusLater;   // the window the latest activate / merge / move request made key
         PHLWINDOWREF                     pendingFront; // a focus Hyprland refused (Exclusive layer, lock): made once that ends
+        PHLLSREF                         pendingHolder; // the layer surface that held the keyboard when it was deferred
         std::optional<uint64_t>          pendingLater; // doLater sequence of a deferred-focus attempt (code of this library)
         std::optional<uint64_t>          pointerLater; // doLater sequence of a pending pointer refresh (code of this library)
         bool                             pointerParked  = false; // pointer focus cleared off a blocked window (held button)
@@ -544,7 +545,8 @@ namespace {
     // A focus Hyprland refuses now (an Exclusive layer, the lock) waits: the window takes the focus once the refusal is
     // over (applyPendingFocus), checked again then. The latest request wins.
     void deferFocus(const PHLWINDOW& w, std::string_view why) {
-        S().pendingFront = w;
+        S().pendingFront  = w;
+        S().pendingHolder = gf::surfaces::ownerOf(keyboardHolder()).layer;
         gf::logRequest(Log::DEBUG, "stages: focus of {:x} ({}) deferred: Hyprland refuses window focus while {}", addressOf(w), why,
                        sessionLocked() ? "the session is locked" : "an Exclusive layer surface is mapped");
     }
@@ -577,8 +579,9 @@ namespace {
     // The deferred focus, once Hyprland accepts window focus again (after Hyprland's own restore: an Exclusive layer that
     // unmapped or dropped its keyboard interactivity, the unlock): the window still exists, still is the front window of its
     // Desktop's active stage, that Desktop is shown and not covered by a special workspace, no Exclusive layer is mapped, the
-    // session is not locked and no layer surface holds the keyboard. It then takes the focus and the keyboard (ST23); a
-    // special workspace is never closed and a Desktop never switched after the fact.
+    // session is not locked and the layer surface that held the keyboard does not keep it. It then takes the focus and the
+    // keyboard (ST23), also from what Hyprland's refocus after the layer picked (a window or a surface under the cursor);
+    // a special workspace is never closed and a Desktop never switched after the fact.
     void applyPendingFocus(std::string_view when) {
         auto&      s = S();
         const auto w = s.pendingFront.lock();
@@ -588,13 +591,14 @@ namespace {
             return;
         }
         const auto* sp    = spaceHolding(addressOf(w));
-        const auto  owner = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus());
+        const auto  owner  = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus());
+        const auto  holder = s.pendingHolder.lock();
         const st::PendingFocusState state{.exists        = w->m_isMapped && !w->isHidden(),
                                           .front         = sp && frontOfActive(*sp) == w,
                                           .shown         = w->m_workspace && w->m_workspace->isVisibleNotCovered(),
                                           .locked        = sessionLocked(),
                                           .exclusive     = exclusiveLayerMapped(),
-                                          .layerKeyboard = owner.layer && owner.layer->m_mapped,
+                                          .holderKeeps   = holder && holder->m_mapped && owner.layer == holder,
                                           .focused       = fs->window() == w && owner.window == w};
         switch (st::pendingFocusAction(state)) {
             case st::PendingFocusAction::Wait: return;
@@ -631,6 +635,7 @@ namespace {
             g_pEventLoopManager->removeDoLater(*s.pendingLater); // its callback is code of this library
         s.pendingLater.reset();
         s.pendingFront.reset();
+        s.pendingHolder.reset();
     }
 
     // Hyprland's active window never stays on a strip window: window key bindings (close, full screen, floating), window

@@ -635,7 +635,7 @@ namespace gf::stages {
     PendingFocusAction pendingFocusAction(const PendingFocusState& state) {
         if (!state.exists || !state.front)
             return PendingFocusAction::Drop;
-        if (state.locked || state.exclusive || state.layerKeyboard)
+        if (state.locked || state.exclusive || state.holderKeeps)
             return PendingFocusAction::Wait;
         if (state.focused || !state.shown)
             return PendingFocusAction::Drop;
