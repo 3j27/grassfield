@@ -48,6 +48,14 @@ layout(std140, binding = 0) uniform buf {
     float tintedGlyphShadeLight;
     float tintedDetail;
     float tintedRim;
+    vec4 folderTint;          // folder colour step (FolderIcon): a = 1 when the artwork is recoloured, 0 otherwise
+    float folderBrightness;   // MultiEffect arithmetic of the folder colour (FolderEffect, tokens folderIcon*)
+    float folderContrast;
+    float folderColorization;
+    float folderSaturation;
+    float localLow;           // local contrast (a stroke of nearly the plate's colour): below this it is not a stroke
+    float localHigh;
+    float strokeLod;          // mip level of the neighbourhood read: about a tenth of the decoded icon
 };
 
 layout(binding = 1) uniform sampler2D iconTexture;
@@ -59,6 +67,12 @@ float luma(vec3 c) {
 
 float chroma(vec3 c) {
     return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+}
+
+// Dark: the luma a plate colour is darkened to (a neutral plate goes to darkPlateLuma, a saturated one keeps part of its brightness).
+float darkTarget(vec3 p) {
+    float l = max(luma(p), 0.04);
+    return mix(darkPlateLuma, l * darkChromaKeep, smoothstep(0.25, 0.6, chroma(p)));
 }
 
 // Straight (non-premultiplied) colour of a premultiplied texel; w = opacity.
@@ -94,11 +108,21 @@ void main() {
 
     // 2. Plate membership (0 glyph .. 1 plate).
     // Per pixel: the nearer of the plate colours.
-    if (use2 > 0.5 && distance(c, plate2) < distance(c, plate1))
+    bool second = modeIndex < 1.5 && use2 > 0.5 && distance(c, plate2) < distance(c, plate1);
+    if (second)
         plate = plate2;
     float member = (1.0 - smoothstep(plateToleranceLow, plateToleranceHigh, distance(c, plate))) * strength;
     float Lc = luma(c);
     float Lp = max(luma(plate), 0.04);
+    // A glyph of nearly the plate's colour (a project-tool logo: the same hue, a little darker) is inside the plate tolerance and
+    // would vanish into it. Local contrast brings it back: a pixel that is farther from the plate than its neighbourhood (a
+    // blurred read) is on a stroke, one that is nearer (the plate beside a glyph) is not, so no halo forms around glyphs.
+    vec4 wideT = textureLod(iconTexture, uv, strokeLod);
+    vec3 wide = wideT.rgb / max(wideT.a, 0.0001);
+    float dcol = max(distance(c, plate), 2.0 * abs(Lc - Lp));
+    float dwide = max(distance(wide, plate), 2.0 * abs(luma(wide) - Lp));
+    float stroke = smoothstep(localLow, localHigh, max(abs(Lc - luma(wide)), 0.6 * distance(c, wide))) * smoothstep(0.01, 0.05, dcol - dwide) * strength;
+    member *= 1.0 - stroke;
     bool wall = overWallpaper > 0.5;
     bool isDark = dark > 0.5 || wall;
 
@@ -115,15 +139,32 @@ void main() {
         // invert (dark glyph -> light), coloured glyphs keep their colour, brightened if dark.
         // A saturated plate keeps part of its brightness (a full-bleed logo is indistinguishable from a coloured plate and
         // must not turn navy on a dark material); a neutral plate goes to darkPlateLuma.
-        float plateTarget = mix(darkPlateLuma, Lp * darkChromaKeep, smoothstep(0.25, 0.6, chroma(plate)));
+        float plateTarget = darkTarget(plate);
+        if (use2 > 0.5) {
+            // Two plate colours (a split face, a sky and a mountain): darkened separately they become the same near-black. The
+            // lighter one is lifted so that the pair keeps its contrast ratio (at most 2.5:1), never above its own brightness.
+            float Y1 = pow(max(luma(plate1), 0.04), 2.2);
+            float Y2 = pow(max(luma(plate2), 0.04), 2.2);
+            float T1 = pow(darkTarget(plate1), 2.2);
+            float T2 = pow(darkTarget(plate2), 2.2);
+            bool firstIsLight = Y1 >= Y2;
+            float Rn = min((max(Y1, Y2) + 0.05) / (min(Y1, Y2) + 0.05), 2.5);
+            float Tlight = firstIsLight ? T1 : T2;
+            float Tdark = firstIsLight ? T2 : T1;
+            float Tlifted = min(max(Tlight, Rn * (Tdark + 0.05) - 0.05), max(Y1, Y2));
+            bool pixelLight = second ? !firstIsLight : firstIsLight;
+            plateTarget = pow(pixelLight ? Tlifted : Tdark, 1.0 / 2.2);
+        }
         float k = min(plateTarget / Lp, 1.0);
         vec3 plateRgb = c * k;
         // Neutral dark glyphs invert when any of the plate colours is light (a two-colour plate with a light half).
         float Lplate = max(Lp, use2 > 0.5 ? luma(plate2) : 0.0);
         float lightPlate = smoothstep(0.45, 0.65, Lplate) * strength;
         float neutral = 1.0 - smoothstep(0.08, 0.25, chroma(c));
-        float r = clamp(Lc / max(Lplate, 0.04), 0.0, 1.0);
-        vec3 ink = vec3(mix(darkPlateLuma, darkGlyphLuma, clamp((1.0 - r) * 3.0, 0.0, 1.0)));
+        // A glyph darker than the plate inverts to light; one LIGHTER than the plate (a white gear on a light grey plate) is light
+        // too: the ink is as far from the plate as the glyph was, in either direction.
+        float r = Lc / max(Lplate, 0.04);
+        vec3 ink = vec3(mix(darkPlateLuma, darkGlyphLuma, clamp(abs(1.0 - r) * 3.0, 0.0, 1.0)));
         // Coloured glyphs on a light plate stay vivid: dark ones are scaled up to a luma floor.
         vec3 keep = min(c * mix(1.0, clamp(darkGlyphFloor / max(Lc, 0.02), 1.0, 4.0), lightPlate * darkGlyphBoost), vec3(1.0));
         vec3 glyphRgb = mix(keep, ink, neutral * lightPlate);
@@ -148,7 +189,7 @@ void main() {
         // glyph a monochrome ink whose shading follows the glyph's contrast with the plate.
         float inkL = isDark ? clearInkDark : clearInkLight;
         float relShade = clamp(0.3 + 0.7 * Lc / (Lmean * 1.5), 0.3, 1.0);   // no plate: the icon's mean is a bright ink, darker parts dim
-        float detail = mix(clamp((relShade - 0.405) / 0.595, 0.0, 1.0), clamp(distance(c, plate) * 3.0, 0.0, 1.0), strength);
+        float detail = mix(clamp((relShade - 0.405) / 0.595, 0.0, 1.0), max(clamp(distance(c, plate) * 3.0, 0.0, 1.0), stroke), strength);
         vec3 ink = isDark ? vec3(inkL * (1.0 - clearDetail * 0.7 * (1.0 - detail)))
                           : vec3(inkL + clearDetail * 0.5 * (1.0 - detail));
         // Over a window material the glass is light on dark and smoked on light; over the bare wallpaper (any brightness)
@@ -165,7 +206,7 @@ void main() {
         // tint-coloured glyph (light appearance). The glyph's own shading modulates the tint.
         vec3 t = tint.rgb;
         float relShade = clamp(0.3 + 0.7 * Lc / (Lmean * 1.5), 0.3, 1.0);
-        float detail = mix(clamp((relShade - 0.3) / 0.7, 0.0, 1.0), clamp(distance(c, plate) * 3.0, 0.0, 1.0), strength);
+        float detail = mix(clamp((relShade - 0.3) / 0.7, 0.0, 1.0), max(clamp(distance(c, plate) * 3.0, 0.0, 1.0), stroke), strength);
         float shade = mix(1.0, 0.3 + 0.7 * detail, tintedDetail);
         vec3 base = isDark ? mix(t, vec3(1.0), tintedGlyphLift) : t * tintedGlyphShadeLight;
         vec3 ink = base * shade;
@@ -174,6 +215,16 @@ void main() {
         vec3 rgb = mix(ink, min(plateRgb, vec3(1.0)), member);
         rgb = mix(rgb, isDark ? mix(base, vec3(1.0), 0.9) : base * 0.6, edge * tintedRim);
         outc = vec4(rgb * a, a);
+    }
+    if (folderTint.a > 0.5 && outc.a > 0.0001) {
+        // The folder colour maps the luminance of the artwork onto the colour (the arithmetic of Qt's MultiEffect, which
+        // FolderEffect used as a layer over the whole icon, system plate and rim included). Only the artwork is recoloured: the
+        // plate and its edge highlight stay, so a black folder keeps a visible plate on a black wallpaper.
+        vec3 sc = outc.rgb / outc.a;
+        vec3 cc = (sc - vec3(0.5)) * (1.0 + folderContrast) + vec3(0.5 + folderBrightness);
+        float gray = dot(cc, vec3(0.299, 0.587, 0.114));
+        vec3 rc = vec3(gray) + (folderTint.rgb * gray * folderColorization + cc * (1.0 - folderColorization) - vec3(gray)) * (1.0 + folderSaturation);
+        outc = vec4(clamp(rc, 0.0, 1.0) * outc.a, outc.a);
     }
     if (sysW > 0.001) {
         // The system plate: a rounded square (macOS squircle proportions), graphite in Dark, glass in Clear, tinted in Tinted.

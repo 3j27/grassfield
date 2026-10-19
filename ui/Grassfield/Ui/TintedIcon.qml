@@ -18,6 +18,9 @@ Item {
     property bool darkAppearance: Appearance.dark
     // Drawn over the bare wallpaper (desktop icons) rather than a window material.
     property bool overWallpaper: false
+    // The folder colour (FolderIcon), applied by the effect to the artwork only; drawn by the owner's layer in default mode.
+    property bool recolor: false
+    property color recolorTint: "#000000"
     property alias status: image.status
     property alias asynchronous: image.asynchronous
     property alias paintedWidth: image.paintedWidth
@@ -40,7 +43,7 @@ Item {
     // the icon itself again, at the item's size.
     readonly property bool textureOnly: root.modeActive && !root.effectFailed
     // The shader could not be loaded or compiled: the plain image is shown instead of an effect that draws nothing.
-    readonly property bool effectFailed: effectLoader.item !== null && (effectLoader.item as IconEffect).failed
+    readonly property bool effectFailed: root.modeActive && (Appearance.iconShaderBroken || (effectLoader.item !== null && (effectLoader.item as IconEffect).failed))
 
     implicitWidth: size
     implicitHeight: size
@@ -69,13 +72,15 @@ Item {
     Loader {
         id: effectLoader
         anchors.fill: parent
-        active: root.modeActive && root.visible
+        active: root.modeActive && root.visible && !Appearance.iconShaderBroken
         sourceComponent: IconEffect {
             source: image
             mode: root.mode
             tint: root.tint
             darkAppearance: root.darkAppearance
             wallpaper: root.overWallpaper
+            recolor: root.recolor
+            recolorTint: root.recolorTint
             nominalSize: root.size
             shaderUrl: root.shaderUrl
         }

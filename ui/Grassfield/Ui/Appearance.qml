@@ -6,6 +6,9 @@ import QtQuick
 QtObject {
     // User settings (set by the host).
     property bool dark: true
+    // Set by the first icon effect whose shader fails to load: no other icon creates an effect item then (the plain icon is
+    // drawn, and Qt logs the failure once, not once per icon).
+    property bool iconShaderBroken: false
     property real transparency: Tokens.materialDefaultTransparency
     property bool reduceTransparency: false
     property bool reduceMotion: false

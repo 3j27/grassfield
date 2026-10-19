@@ -20,7 +20,7 @@ dev_nested_target "$dev" || { echo "test-icons: no nested session of this tree (
 limit=${GRASSFIELD_ICONS_TIMEOUT:-240}
 attempts=${GRASSFIELD_ICONS_ATTEMPTS:-4}
 cases=("$@")
-[[ ${#cases[@]} -gt 0 ]] || cases=(test_a2_size48 test_a2_size32 test_a2_size24 test_a2_size16 test_a2_desktop test_folderModelMatchesTheShader test_missingShaderDrawsThePlainIcon)
+[[ ${#cases[@]} -gt 0 ]] || cases=(test_a2_size48 test_a2_size32 test_a2_size24 test_a2_size16 test_a2_desktop test_a2_transparent48 test_a2_transparent24 test_a2_transparent16 test_folderModelMatchesTheShader test_blackFolderKeepsItsPlateOnBlack test_missingShaderDrawsThePlainIcon)
 overall=0
 for fn in "${cases[@]}"; do
   done_case=0

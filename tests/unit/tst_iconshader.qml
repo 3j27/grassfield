@@ -40,9 +40,9 @@ TestCase {
     readonly property int rowsPerGroup: 12
     readonly property string fixtureDir: Qt.resolvedUrl("../fixtures/icons/")
     readonly property string whitesurDir: Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/apps/scalable/")
-    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo", "dark-plate-light-border", "white-page-document"]
+    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo", "dark-plate-light-border", "white-page-document", "same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph"]
     // Includes btop, Disk Usage Analyzer and white-plated icons (Chromium, Firefox, GIMP, Inkscape, Calendar, Notes).
-    readonly property var whitesurNames: ["btop", "disk-usage-analyzer", "chromium", "firefox", "gimp", "inkscape", "org.gnome.Calendar", "accessories-text-editor", "org.gnome.Settings", "spotify", "vlc", "discord", "mpv", "obsidian", "foot", "org.gnome.Nautilus", "visual-studio-code"]
+    readonly property var whitesurNames: ["btop", "disk-usage-analyzer", "chromium", "firefox", "gimp", "inkscape", "org.gnome.Calendar", "accessories-text-editor", "org.gnome.Settings", "spotify", "vlc", "discord", "mpv", "obsidian", "foot", "org.gnome.Nautilus", "visual-studio-code", "hwloc"]
     // Installed non-WhiteSur theme icons (read in place, never copied into the repo; a missing file is skipped).
     readonly property var systemIcons: [
         ["hicolor:foot", "hicolor/scalable/apps/foot.svg"], ["hicolor:libreoffice-writer", "hicolor/scalable/apps/libreoffice-writer.svg"],
@@ -51,7 +51,7 @@ TestCase {
         ["hicolor:org.gnome.Evince", "hicolor/scalable/apps/org.gnome.Evince.svg"], ["hicolor:org.gnome.Nautilus", "hicolor/scalable/apps/org.gnome.Nautilus.svg"],
         ["hicolor:omacalc", "hicolor/scalable/apps/omacalc.svg"], ["hicolor:kdenlive", "hicolor/scalable/apps/kdenlive.svg"],
         ["hicolor:obs", "hicolor/scalable/apps/com.obsproject.Studio.svg"], ["hicolor:org.gnome.DiskUtility", "hicolor/scalable/apps/org.gnome.DiskUtility.svg"],
-        ["breeze:accessories-calculator", "breeze/apps/48/accessories-calculator.svg"], ["breeze:ark", "breeze/apps/48/ark.svg"],
+        ["hicolor:basecamp", "hicolor/256x256/apps/basecamp.png"], ["breeze:accessories-calculator", "breeze/apps/48/accessories-calculator.svg"], ["breeze:ark", "breeze/apps/48/ark.svg"],
         ["breeze:accessories-text-editor", "breeze/apps/48/accessories-text-editor.svg"]
     ]
     readonly property var modes: ["default", "dark", "clear", "tinted"]
@@ -107,6 +107,11 @@ TestCase {
         }
     }
 
+    // A shader that failed to load marks the icon effect broken for the whole process (Appearance.iconShaderBroken): not for the next case.
+    function cleanup() {
+        Appearance.iconShaderBroken = false;
+    }
+
     function channel(v) {
         return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
     }
@@ -124,9 +129,9 @@ TestCase {
     }
 
     // The material colour over a flat wallpaper (sRGB compositing, as Qt does), default transparency.
-    function materialOver(appearanceDark, wallpaper) {
+    function materialOver(appearanceDark, wallpaper, transparency) {
         const tint = Qt.color((appearanceDark ? Tokens.colorDark : Tokens.colorLight).materialTint);
-        const a = Appearance.tintAlpha(Tokens.materialDefaultTransparency);
+        const a = Appearance.tintAlpha(transparency === undefined ? Tokens.materialDefaultTransparency : transparency);
         const w = Qt.color(wallpaper);
         return Qt.rgba(tint.r * a + w.r * (1 - a), tint.g * a + w.g * (1 - a), tint.b * a + w.b * (1 - a), 1);
     }
@@ -215,12 +220,17 @@ TestCase {
     // 0.015 against 0.2 to 0.6 for that material) and the edge highlight are 5 to 8:1 against it by construction.
     //   breeze text editor Dark, outside 1.84 at 16 px, 2.23 at 32 px (default 9.1; a white page with a thin grey frame).
     //   kdenlive (thin bars) Dark outside 2.61-2.78 and Tinted outside 2.49-2.53 at 16-32 px (floor 2.9, default 2.9-4.5).
+    //   sky-mountain (a sky and a large green shape: two plate colours) Dark in the dark appearance, outside 1.4-2.4 at 24-32 px
+    //     (default 6.7-11.5): the pair keeps its contrast ratio, so its lighter colour is lifted to a mid grey that lies near the
+    //     material over a grey wallpaper; the rim fades with the size.
     //   Nautilus (two-colour split plate, own plate kept and darkened) Dark: inside 2.72-3.04 at every size (default 5.6-6.6, floor
     //     2.9): the two halves become two near-black greys and the glyph keeps its colour; outside 2.70 at 32 px.
     readonly property var knownLimits: [
         "breeze:accessories-text-editor dark E", "hicolor:kdenlive dark E", "hicolor:kdenlive tinted E",
-        "whitesur:org.gnome.Nautilus dark I", "whitesur:org.gnome.Nautilus dark E"
+        "whitesur:org.gnome.Nautilus dark I", "whitesur:org.gnome.Nautilus dark E", "sky-mountain dark E"
     ]
+
+    readonly property var separationFixtures: ["same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph", "whitesur:hwloc", "hicolor:basecamp"]
 
     function isKnownLimit(name, mode, rule) {
         return knownLimits.indexOf(name + " " + mode + " " + rule) >= 0;
@@ -241,7 +251,9 @@ TestCase {
         waitForRendering(board);
         const img2 = grabImage(board);
         testCase.panelColor = background;
-        const floorOf = v => v >= 3 ? 2.9 : 0.9 * v;
+        // At transparency 1.0 the material is the unblurred wallpaper behind the window: a flat 3:1 is no guarantee over a busy
+        // picture, so that scenario holds a floor of 2.0 for Clear (measured 2.08 to 6 in this pass, 1.0 to 2.2 before it).
+        const floorOf = v => testCase.onlyMode !== "" ? Math.min(2.0, v >= 3 ? 2.9 : 0.9 * v) : (v >= 3 ? 2.9 : 0.9 * v);
         const floorIn = (v, mode) => mode === "dark" ? floorOf(v) : Math.min(2, 0.9 * v);
         let measured = 0;
         for (let f = 0; f < testCase.fixtures.length; f++) {
@@ -250,10 +262,16 @@ TestCase {
                 cells.push(slots.itemAt(f * testCase.modes.length + m));
             if (cells[0] === undefined || cells[0].icon.status !== Image.Ready)
                 continue;
+            // A glyph that is 1.45:1 against its plate in the default rendering (same hue, a little darker) is below legibility
+            // below 48 px by its own design: it is tested from 48 px only.
+            if (testCase.iconSize < 48 && testCase.fixtures[f].name === "same-tone-glyph")
+                continue;
             const base = measure(img, img2, cells[0], background, inverse);
             if (base === null)
                 continue;
             for (let m = 1; m < testCase.modes.length; m++) {
+                if (testCase.onlyMode !== "" && testCase.modes[m] !== testCase.onlyMode)
+                    continue;
                 const r = measure(img, img2, cells[m], background, inverse);
                 const label = `${testCase.fixtures[f].name} ${testCase.modes[m]} ${name}`;
                 if (r === null) {
@@ -267,6 +285,11 @@ TestCase {
                 const name1 = testCase.fixtures[f].name;
                 if (testCase.iconSize >= 24 && base.inside >= 2 && r.inside < floorIn(base.inside, testCase.modes[m]) && !testCase.isKnownLimit(name1, testCase.modes[m], "I"))
                     failures.push("I " + line);
+                // Artwork that is only a little different from its plate (a same-hue glyph, a mountain on a sky, a pale gear on a light
+                // plate) must not vanish into it in any mode: its glyph-vs-plate contrast keeps 85 percent of the default's, or 1.5.
+                if (testCase.iconSize >= 24 && testCase.separationFixtures.indexOf(name1) >= 0 && base.inside >= 1.2
+                        && r.inside < Math.min(1.5, 0.85 * base.inside) && !testCase.isKnownLimit(name1, testCase.modes[m], "S"))
+                    failures.push("S " + line);
                 if (r.outside < floorOf(base.outside) && !testCase.isKnownLimit(name1, testCase.modes[m], "E"))
                     failures.push("E " + line);
             }
@@ -290,8 +313,43 @@ TestCase {
         finishRun(measured, failures);
     }
 
+    // The material at transparency 1.0 (Appearance.transparency, the Control Center slider at its end) lets the wallpaper through:
+    // the icons must hold over a bright wallpaper in the dark appearance and a dark one in the light appearance.
+    // Only this mode is checked while it is set (the transparency scenarios are for Clear).
+    property string onlyMode: ""
+
+    function runTransparent(size) {
+        if (board.GraphicsInfo.api === GraphicsInfo.Software)
+            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+        const failures = [];
+        let measured = 0;
+        const saved = Appearance.transparency;
+        Appearance.transparency = 1.0;
+        testCase.onlyMode = "clear";
+        testCase.iconSize = size;
+        for (const dark of [true, false]) {
+            for (const wallpaper of ["#000000", "#808080", "#ffffff"])
+                measured += runScenario(`${size}px ${dark ? "dark" : "light"} window transparency 1.0 wallpaper ${wallpaper}`, dark, materialOver(dark, wallpaper, 1.0), failures);
+        }
+        Appearance.transparency = saved;
+        testCase.onlyMode = "";
+        finishRun(measured, failures);
+    }
+
+    function test_a2_transparent48() {
+        runTransparent(48);
+    }
+
+    function test_a2_transparent24() {
+        runTransparent(24);
+    }
+
+    function test_a2_transparent16() {
+        runTransparent(16);
+    }
+
     function finishRun(measured, failures) {
-        verify(measured > 200, "measured " + measured + " icon renderings");
+        verify(measured > (testCase.onlyMode !== "" ? 50 : 200), "measured " + measured + " icon renderings");
         if (failures.length > 0)
             fail(failures.length + " failures:\n" + failures.join("\n"));
     }
@@ -434,6 +492,75 @@ TestCase {
         verify(compared >= 12, "compared " + compared);
         if (failures.length > 0)
             fail(failures.length + " folder model differences over 10/255:\n" + failures.join("\n"));
+    }
+
+    // A folder of the colour black keeps its system plate and the plate's edge in every icon mode, on a black wallpaper: the
+    // folder colour recolours the artwork only (in the shader), not the plate and its rim.
+    Component {
+        id: blackFolder
+
+        Rectangle {
+            id: holder
+
+            required property string holderMode
+            readonly property alias folder: blackFolderIcon
+
+            width: 112
+            height: 112
+            color: "#000000"
+
+            FolderIcon {
+                id: blackFolderIcon
+                anchors.centerIn: parent
+                size: 96
+                source: Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/places/scalable/folder.svg")
+                folderColor: "#000000"
+                mode: holder.holderMode
+                darkAppearance: testCase.darkPass
+                overWallpaper: testCase.wallpaperPass
+            }
+        }
+    }
+
+    function test_blackFolderKeepsItsPlateOnBlack() {
+        if (board.GraphicsInfo.api === GraphicsInfo.Software)
+            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+        const failures = [];
+        board.visible = false;
+        for (const dark of [true, false]) {
+            for (const wall of [false, true]) {
+                testCase.darkPass = dark;
+                testCase.wallpaperPass = wall;
+                for (const mode of ["dark", "clear", "tinted"]) {
+                    const holder = createTemporaryObject(blackFolder, testCase, {holderMode: mode});
+                    verify(holder);
+                    tryVerify(() => holder.folder.status === Image.Ready || holder.folder.status === Image.Error, 3000);
+                    if (holder.folder.status !== Image.Ready) {
+                        holder.destroy();
+                        board.visible = true;
+                        skip("WhiteSur folder icon is not provisioned in .dev");
+                    }
+                    wait(400);
+                    const img = grabImage(holder);
+                    let lit = 0;
+                    for (let y = 0; y < 112; y += 2) {
+                        for (let x = 0; x < 112; x += 2) {
+                            const c = img.pixel(x, y);
+                            if (c.r + c.g + c.b > 0.06)
+                                lit++;
+                        }
+                    }
+                    const label = `black folder ${mode} ${dark ? "dark" : "light"}${wall ? " wallpaper" : ""}: ${lit} of 3136 sampled pixels differ from black (the plate, or at least its edge highlight, is there)`;
+                    console.log("A2 " + label);
+                    if (lit < 60)
+                        failures.push(label);
+                    holder.destroy();
+                }
+            }
+        }
+        board.visible = true;
+        if (failures.length > 0)
+            fail(failures.join("\n"));
     }
 
     // A missing shader must not make an icon vanish: the plain image is drawn, at the icon's own size and place.

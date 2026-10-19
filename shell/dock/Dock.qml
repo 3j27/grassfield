@@ -927,7 +927,10 @@ Scope {
                                     }
 
                                     TintedIcon {
+                                        id: minimizedIcon
                                         size: win.iconSize
+                                        // The same decode as the tile's icon: an effect mode decodes at the largest magnification.
+                                        oversample: minimizedIcon.modeActive ? Tokens.dockIconOversample : minimizedIcon.defaultOversample
                                         width: minimizedTile.live ? Math.round(parent.width * Tokens.dockMinimizedBadgeScale) : parent.width
                                         height: width
                                         anchors.right: parent.right
@@ -943,6 +946,7 @@ Scope {
                                     readonly property string themed: Quickshell.iconPath(Trash.empty ? "user-trash" : "user-trash-full", true)
                                     visible: tile.isTrash && themed !== ""
                                     size: win.iconSize
+                                    oversample: trashThemed.modeActive ? Tokens.dockIconOversample : trashThemed.defaultOversample
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom

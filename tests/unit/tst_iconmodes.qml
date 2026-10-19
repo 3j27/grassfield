@@ -16,6 +16,7 @@ TestCase {
     readonly property color red: "#e5484d"
 
     function cleanup() {
+        Appearance.iconShaderBroken = false;
         Appearance.iconMode = "default";
         Appearance.iconTintSetting = "accent";
     }

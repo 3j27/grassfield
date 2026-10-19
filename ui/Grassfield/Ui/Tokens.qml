@@ -1018,32 +1018,6 @@ QtObject {
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
 
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, MultiEffect saturation (-1..1): colours kept as they are
-    readonly property real iconModeDarkSaturation: 0.0
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, MultiEffect brightness: a small lift that keeps the dark parts readable after the darkening. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeDarkBrightness: 0.1
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, MultiEffect contrast: keeps the glyph readable on the darker plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeDarkContrast: 0.6
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, strength of the black colorization (multiplies every channel by 1 - this, hue kept). Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeDarkColorization: 0.4
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, colour the icon is darkened towards
-    readonly property string iconModeDarkShade: "#000000"
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Clear mode, fully desaturated
-    readonly property real iconModeClearSaturation: -1.0
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Clear mode, lighter. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeClearBrightness: 0.1
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Clear mode, keeps the glyph readable on the grey plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeClearContrast: 0.4
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Clear mode, translucent over the material; A2 keeps meaningful icons at 3:1 or more (measured)
-    readonly property real iconModeClearOpacity: 0.78
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Tinted mode, saturation: 0 (MultiEffect desaturates after colorizing, so -1 would grey the tint out; the colorization already maps luminance to the tint)
-    readonly property real iconModeTintedSaturation: 0.0
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Tinted mode, lifts the shadows so the ramp starts above black. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeTintedBrightness: 0.3
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Tinted mode, spreads the luminance over the ramp. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeTintedContrast: 0.7
-    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Tinted mode, strength of the tint (0..1)
-    readonly property real iconModeTintedColorization: 1.0
     // ADR-0014 shader: colour distance (RGB 0..1) from the estimated plate colour below which a pixel is plate. Chosen on 29 WhiteSur icons (docs/specs/ui.md, icon shader).
     readonly property real iconModePlateToleranceLow: 0.25
     // ADR-0014 shader: colour distance above which a pixel is glyph (between the two: a soft edge). Chosen on 29 WhiteSur icons; a white glyph on a blue plate is about 0.8 away, a plate gradient about 0.2.
@@ -1106,6 +1080,14 @@ QtObject {
     readonly property real iconModeTintedDetail: 1.0
     // ADR-0014 Tinted: opacity of the glyph-coloured edge highlight of the plate
     readonly property real iconModeTintedRim: 1.0
+    // ADR-0014 shader: local contrast (a pixel against its blurred neighbourhood) below which a pixel of nearly the plate's colour stays plate (not a stroke)
+    readonly property real iconModeLocalContrastLow: 0.03
+    // ADR-0014 shader: local contrast from which a pixel of nearly the plate's colour is a stroke of the glyph (a project-tool logo: same hue, a little darker); between the two a soft edge
+    readonly property real iconModeLocalContrastHigh: 0.1
+    // ADR-0014 shader: the neighbourhood a pixel's local contrast is measured against, as a share of the decoded icon (a mip level of that size)
+    readonly property real iconModeLocalContrastRadius: 0.1
+    // ADR-0014 Clear: from this material transparency (Control Center slider, 0..1) the wallpaper shows through the window material so much that Clear icons are drawn as over the bare wallpaper (smoked plate, opaque rim); measured with A2 at 1.0 (193 cells below the floor before, 8 after)
+    readonly property real iconModeWallpaperLikeTransparency: 0.8
     // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)
     readonly property int iconModePreviewSize: 56
     // estimate: Settings icon mode picker, tile width
@@ -1141,16 +1123,6 @@ QtObject {
     readonly property real folderIconGlyphContrastMargin: 0.3
     // estimate, only used when the plate cannot be measured (FolderPlate): plate over the folder colour (measured on the fallback theme, tests/visual/folder_glyph_contrast.py), icon mode default and clear
     readonly property real folderIconPlateDefault: 0.96
-    // measured: plate over the folder colour in the Dark icon mode
-    readonly property real folderIconPlateDark: 0.78
-    // measured (two icon tints, dark and light appearance): plate over the folder colour in the Tinted icon mode = base + slope x relative luminance of the icon tint
-    readonly property real folderIconPlateTintedBase: 0.37
-    // measured: see plateTintedBase
-    readonly property real folderIconPlateTintedSlope: 1.5
-    // measured: in the Tinted icon mode the theme's own folder plate is the icon tint times this
-    readonly property real folderIconThemeTintedGain: 1.27
-    // measured: in the Clear icon mode a dark plate lets the backdrop through (a black folder over a light backdrop): the lightest plate over the colour, as a share of the way to white
-    readonly property real folderIconClearLift: 0.22
     // estimate, only used when the plate cannot be measured (FolderPlate): plate of the fallback icon theme folder under the symbol (default mode); the symbol shade otherwise follows the measured plate, any theme
     readonly property string folderIconThemePlate: "#a4caee"
     // A2 design rule: in the Tinted icon mode the symbol is engraved lighter when the mode's own folder plate (the theme's folder through the mode) has a relative luminance below this (a lighter shade reaches 3.3:1 on plates up to about 0.268), darker otherwise; Default, Dark and Clear darker (a Dark folder keeps its colour on the dark system plate)

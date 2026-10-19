@@ -14,6 +14,10 @@ ShaderEffect {
     property bool darkAppearance: Appearance.dark
     // Drawn over the bare wallpaper (desktop icons): a look that holds on any wallpaper brightness.
     property bool wallpaper: false
+    // The folder colour step (FolderIcon): the artwork is recoloured in the shader, after the mode and before the system plate,
+    // so the plate and its rim keep their look. Not used when "recolor" is false.
+    property bool recolor: false
+    property color recolorTint: "#000000"
     // Nominal icon edge in logical pixels (the rim has a width in logical pixels).
     property real nominalSize: 48
 
@@ -57,7 +61,9 @@ ShaderEffect {
     }
     readonly property var analysis: analysisSource
     readonly property real dark: root.darkAppearance ? 1 : 0
-    readonly property real overWallpaper: root.wallpaper ? 1 : 0
+    // Over the bare wallpaper (desktop icons); for Clear also over a material that lets so much of it through (transparency at its
+    // end) that the icon is over the wallpaper: the look that holds on any wallpaper brightness.
+    readonly property real overWallpaper: (root.wallpaper || (root.params.index === 2 && Appearance.effectiveTransparency >= Tokens.iconModeWallpaperLikeTransparency)) ? 1 : 0
     readonly property real clearPlateAlphaWallpaper: Tokens.iconModeClearPlateAlphaWallpaper
     // The rim keeps its width in logical pixels up to rimFullSize and shrinks and fades on smaller icons (a 1 px rim is
     // heavy on a 16 px icon).
@@ -88,6 +94,15 @@ ShaderEffect {
     readonly property real tintedGlyphShadeLight: Tokens.iconModeTintedGlyphShadeLight
     readonly property real tintedDetail: Tokens.iconModeTintedDetail
     readonly property real tintedRim: Tokens.iconModeTintedRim
+    readonly property color folderTint: Qt.rgba(root.recolorTint.r, root.recolorTint.g, root.recolorTint.b, root.recolor ? 1 : 0)
+    readonly property real folderBrightness: Tokens.folderIconBrightness
+    readonly property real folderContrast: Tokens.folderIconContrast
+    readonly property real folderColorization: Tokens.folderIconColorization
+    readonly property real folderSaturation: Tokens.folderIconSaturation
+    readonly property real localLow: Tokens.iconModeLocalContrastLow
+    readonly property real localHigh: Tokens.iconModeLocalContrastHigh
+    // The neighbourhood of a pixel is about a tenth of the decoded icon, whatever its size.
+    readonly property real strokeLod: Math.log(Math.max(16, root.source ? root.source.width : 96) * Tokens.iconModeLocalContrastRadius) / Math.LN2
     // 1 dark, 2 clear, 3 tinted (`tint` is the colour uniform).
     readonly property real modeIndex: root.params.index
 
@@ -98,8 +113,10 @@ ShaderEffect {
     // Either shader failed to load or compile: the owner draws the plain icon instead.
     readonly property bool failed: root.status === ShaderEffect.Error || analysisEffect.status === ShaderEffect.Error
     onFailedChanged: {
-        if (root.failed)
+        if (root.failed) {
+            Appearance.iconShaderBroken = true;
             IconModes.warnOnce("icon shader failed to load, icons are drawn as they are: " + root.log + analysisEffect.log);
+        }
     }
     blending: true
 }
