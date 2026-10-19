@@ -55,3 +55,30 @@ function openRequest(argv) {
         return a.length > 2 ? {"targets": a.slice(2)} : {"refuse": "application launch"};
     return null;
 }
+
+// Directory of the user's autostart entries (XDG): `<appsHome>/config/autostart` in a dev session (never the owner's
+// own), else `$XDG_CONFIG_HOME/autostart` or `~/.config/autostart`.
+function autostartDir(devSession, appsHome, xdgConfigHome, home) {
+    if (devSession)
+        return appsHome + "/config/autostart";
+    return (xdgConfigHome ? xdgConfigHome : home + "/.config") + "/autostart";
+}
+
+// One Exec argument quoted for a desktop file (reserved characters inside double quotes are escaped; % is doubled).
+function execQuote(arg) {
+    const a = String(arg).replace(/%/g, "%%");
+    if (/^[A-Za-z0-9_\/.,:=+@-]+$/.test(a))
+        return a;
+    return '"' + a.replace(/(["`$\\])/g, "\\$1") + '"';
+}
+
+// Text of an autostart desktop file for an entry (name, icon, command, runInTerminal); newlines in values are removed.
+function autostartText(entry) {
+    const one = v => String(v === undefined || v === null ? "" : v).replace(/[\r\n]+/g, " ");
+    const command = stripFieldCodes(entry.command);
+    let text = "[Desktop Entry]\nType=Application\nName=" + one(entry.name) + "\nExec=" + command.map(execQuote).join(" ") + "\n";
+    if (entry.icon)
+        text += "Icon=" + one(entry.icon) + "\n";
+    text += "Terminal=" + (entry.runInTerminal === true ? "true" : "false") + "\n";
+    return text;
+}

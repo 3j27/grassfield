@@ -49,4 +49,15 @@ TestCase {
         compare(AppLaunch.openRequest(["nm-connection-editor"]), null);
         compare(AppLaunch.openRequest([]), null);
     }
+
+    function test_autostart() {
+        compare(AppLaunch.autostartDir(true, "/w/.dev/apps-home", "/x", "/h"), "/w/.dev/apps-home/config/autostart");
+        compare(AppLaunch.autostartDir(false, "", "/x", "/h"), "/x/autostart");
+        compare(AppLaunch.autostartDir(false, "", "", "/h"), "/h/.config/autostart");
+        const text = AppLaunch.autostartText({name: "My App", icon: "my-app", command: ["/usr/bin/my app", "--x=%u", "50%"], runInTerminal: false});
+        verify(text.startsWith("[Desktop Entry]\nType=Application\nName=My App\n"));
+        verify(text.indexOf('Exec="/usr/bin/my app" --x= "50%%"\n') > 0);
+        verify(text.indexOf("Icon=my-app\n") > 0 && text.indexOf("Terminal=false\n") > 0);
+        compare(AppLaunch.execQuote("a$b"), '"a\\$b"');
+    }
 }

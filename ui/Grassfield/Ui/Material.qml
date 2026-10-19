@@ -21,7 +21,14 @@ Item {
 
     // Host contract: request a blur region only when the surface is not opaque.
     readonly property bool blurActive: transparency > 0
-    readonly property real tintAlpha: Appearance.tintAlpha(transparency)
+    // Surfaces without text (the Dock shelf) may be more translucent than the A2 clamp allows: an explicit tint alpha
+    // (0..1, -1 = from `transparency`) that applies only while the surface is not opaque (Reduce Transparency wins).
+    property real tintAlphaOverride: -1
+    // Rim: highlight gradient and border strength and the border colour (default: the material tokens).
+    property real highlightOpacity: Tokens.materialHighlightOpacity
+    property real borderOpacity: Tokens.materialBorderOpacity
+    property color borderColor: Appearance.colors.materialBorder
+    readonly property real tintAlpha: tintAlphaOverride >= 0 && blurActive ? tintAlphaOverride : Appearance.tintAlpha(transparency)
     // The host window needs this much room around the shape for the shadow.
     readonly property int shadowMargin: Tokens.shadowBlur + Tokens.shadowOffsetY
 
@@ -96,7 +103,7 @@ Item {
         gradient: Gradient {
             GradientStop {
                 position: 0.0
-                color: Appearance.withAlpha(Appearance.colors.materialHighlight, Tokens.materialHighlightOpacity)
+                color: Appearance.withAlpha(Appearance.colors.materialHighlight, root.highlightOpacity)
             }
             GradientStop {
                 position: Math.min(1, Tokens.spacingMd / Math.max(root.height, 1))
@@ -116,7 +123,7 @@ Item {
         radius: root.radius
         color: "transparent"
         border.width: 1
-        border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+        border.color: Appearance.withAlpha(root.borderColor, root.borderOpacity)
     }
 
     Item {

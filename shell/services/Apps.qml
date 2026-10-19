@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import "../launchpad/Model.js" as Model
 import "AppLaunch.js" as AppLaunch
+import "../dock/DockModel.js" as DockModel
 
 // Desktop entry resolution shared by the menu bar and the Dock, and the list of entries that
 // Search and Apps may show. Apps are identified by their foreign-toplevel app id mapped to a
@@ -124,6 +125,24 @@ Singleton {
         };
         if (target.workingDirectory)
             context.workingDirectory = target.workingDirectory;
+        Quickshell.execDetached(context);
+    }
+
+    // Opens files with a desktop entry (files dropped on a Dock tile): the entry command with its file field codes
+    // filled in (DockModel.commandWithFiles), the isolated environment in a dev session.
+    function openWith(entry: var, files: var): void {
+        if (!entry || !files || files.length === 0)
+            return;
+        let command = DockModel.commandWithFiles(Array.from(entry.command || []), files);
+        if (command.length === 0)
+            return;
+        if (entry.runInTerminal === true)
+            command = ["xdg-terminal-exec"].concat(command);
+        const context = {"command": command};
+        if (devSession)
+            context.environment = AppLaunch.isolatedEnvironment(appsHome);
+        if (entry.workingDirectory)
+            context.workingDirectory = entry.workingDirectory;
         Quickshell.execDetached(context);
     }
 
