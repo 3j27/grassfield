@@ -79,4 +79,30 @@ TestCase {
         well.hexInput.textEdited();
         compare(well.shown, "#0000ff");
     }
+
+    function test_shortFormIsExpandedWhenEditingFinishes() {
+        const well = createTemporaryObject(wellComponent, testCase);
+        verify(well);
+        let edited = [];
+        well.edited.connect(c => edited.push(c));
+        well.hexInput.text = "#0f0";
+        well.hexInput.textEdited();
+        compare(edited.length, 0);
+        // Return: the short form becomes #rrggbb, which is all that is stored.
+        well.hexInput.editingFinished();
+        compare(edited[edited.length - 1], "#00ff00");
+        compare(well.shown, "#00ff00");
+        compare(well.hexInput.text, "#00ff00");
+        // Without the hash, upper case.
+        well.hexInput.text = "F80";
+        well.hexInput.editingFinished();
+        compare(edited[edited.length - 1], "#ff8800");
+        compare(well.hexInput.text, "#ff8800");
+        // Not a colour: reverts, nothing stored.
+        const n = edited.length;
+        well.hexInput.text = "#0g";
+        well.hexInput.editingFinished();
+        compare(edited.length, n);
+        compare(well.hexInput.text, "#ff8800");
+    }
 }

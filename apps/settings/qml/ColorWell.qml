@@ -46,7 +46,8 @@ Item {
     Component.onCompleted: root.syncHsv(root.shown)
 
     // The typed field shows the colour: whatever changed it (a swatch, the square, the slider, the host), except the text
-    // the user is typing, which already names this colour (a complete "#0f0" stays as typed).
+    // the user is typing, which already names this colour (a "#0f0" typed for it stays until editing finishes, then shows
+    // "#00ff00").
     onShownChanged: {
         if (PointerColors.parseTyped(hexField.text) !== root.shown)
             hexField.text = root.shown;
@@ -368,7 +369,15 @@ Item {
                                 root.pick(c, true);
                             }
                         }
-                        onEditingFinished: text = root.shown
+                        // Return or leaving the field: a short "#0f0" is expanded to "#00ff00" (only #rrggbb is stored); anything else reverts.
+                        onEditingFinished: {
+                            const c = PointerColors.parseTyped(text);
+                            if (c !== "" && c !== root.shown) {
+                                root.syncHsv(c);
+                                root.pick(c, true);
+                            }
+                            text = root.shown;
+                        }
                         Keys.onEscapePressed: root.hide()
                     }
                 }
