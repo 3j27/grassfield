@@ -130,7 +130,11 @@ Cursors (ADR-0014): the `grassfield-cursors` theme (hyprcursor SVG theme plus XC
 `branding/cursors/` (CC-BY-SA-4.0 proposed, listed in `BRANDING.md`). No file of Adwaita, Yaru, WhiteSur or capitaine is
 used; only cursor names (a vocabulary shared by CSS and X11) were read from installed themes. The build uses
 `hyprcursor-util` (BSD-3-Clause), `rsvg-convert` (librsvg, LGPL-2.1-or-later) and Python as build tools; the XCursor
-writer is Grassfield's own stdlib script. Later runtime regeneration (custom accent or size) needs the same three tools.
+writer is Grassfield's own stdlib script. The runtime regeneration for the pointer colours (Settings > Accessibility >
+Pointer, `grassfield-cursors-custom` under `$XDG_DATA_HOME/icons`, owner decision 2026-10-19) runs the same script
+(`/usr/share/grassfield/cursors/build.sh`) with the same three tools, so `python`, `librsvg` and `hyprcursor` are runtime
+dependencies of `grassfield-desktop` (declared in `packaging/arch/PKGBUILD`); they are used as separate programs, nothing
+of them is linked or copied. The generated custom theme is derived from the same CC-BY-SA-4.0 templates.
 
 ## 6. Test and build only (not shipped)
 
