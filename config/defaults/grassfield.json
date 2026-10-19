@@ -43,6 +43,7 @@
   },
   "icons": {
     "mode": "default",
-    "tint": "accent"
+    "tint": "accent",
+    "folderColor": "theme"
   }
 }

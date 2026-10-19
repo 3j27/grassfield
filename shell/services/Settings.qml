@@ -32,6 +32,7 @@ Singleton {
 
     readonly property string iconMode: store.iconMode
     readonly property string iconTint: store.iconTint
+    readonly property string folderColor: store.folderColor
 
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
@@ -91,6 +92,10 @@ Singleton {
 
     function setIconTint(value: string): void {
         store.setIconTint(value);
+    }
+
+    function setFolderColor(value: string): void {
+        store.setFolderColor(value);
     }
 
     function setNotificationsDnd(value: bool): void {
