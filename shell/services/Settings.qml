@@ -51,10 +51,6 @@ Singleton {
     readonly property string hotCornerBottomLeft: store.hotCornerBottomLeft
     readonly property string hotCornerBottomRight: store.hotCornerBottomRight
 
-    function setPointerSize(value: int): void {
-        store.setPointerSize(value);
-    }
-
     function setHotCorner(corner: string, action: string): void {
         store.setHotCorner(corner, action);
     }
