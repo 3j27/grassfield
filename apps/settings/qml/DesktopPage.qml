@@ -65,7 +65,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Show recent applications in the Dock")
-            subtitle: qsTr("Apps opened from the Dock that are not kept in it appear after the separator.")
+            subtitle: qsTr("Apps you used recently that are not kept in the Dock appear in their own section before the Trash.")
             Toggle {
                 accessibleName: qsTr("Show recent applications in the Dock")
                 checked: root.store.value("dock.showRecents")
