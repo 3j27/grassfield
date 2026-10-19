@@ -315,10 +315,6 @@
         <translation>Couleur de teinte</translation>
     </message>
     <message>
-        <source>Used by the Tinted appearance.</source>
-        <translation>Utilisée par l’apparence Teinté.</translation>
-    </message>
-    <message>
         <source>Choose Tinted to use a tint colour.</source>
         <translation>Choisissez Teinté pour utiliser une couleur de teinte.</translation>
     </message>

@@ -23,12 +23,13 @@ function tintColor(setting, accent) {
 }
 
 // MultiEffect parameters of a mode. `enabled` false means the icon is drawn as is: no effect item exists, so no
-// extra render pass. `tint` is only used by "tinted" (colorizationColor); other modes leave colorization at 0.
+// extra render pass. `tint` is only used by "tinted" (colorizationColor). "dark" darkens by colorizing towards black
+// (every channel times 1 - colorization: hue kept; an additive brightness cut turns light icons blue); "clear" has no colorization.
 function effect(mode, tint, tokens) {
     switch (normalizeMode(mode)) {
     case "dark":
         return {enabled: true, saturation: tokens.iconModeDarkSaturation, brightness: tokens.iconModeDarkBrightness,
-                contrast: tokens.iconModeDarkContrast, colorization: 0, colorizationColor: tint, opacity: 1};
+                contrast: tokens.iconModeDarkContrast, colorization: tokens.iconModeDarkColorization, colorizationColor: tokens.iconModeDarkShade, opacity: 1};
     case "clear":
         return {enabled: true, saturation: tokens.iconModeClearSaturation, brightness: tokens.iconModeClearBrightness,
                 contrast: tokens.iconModeClearContrast, colorization: 0, colorizationColor: tint, opacity: tokens.iconModeClearOpacity};

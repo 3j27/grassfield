@@ -33,11 +33,11 @@ TestCase {
     function test_darkIsDarkerWithContrastKept() {
         const p = IconModes.effect("dark", testCase.red, Tokens);
         compare(p.enabled, true);
-        verify(p.brightness < 0, "darker plate");
+        verify(p.colorization > 0.3 && p.colorization < 1, "darkened by colorizing towards black (hue kept)");
+        compare(p.colorizationColor.toString(), Qt.color("#000000").toString(), "never the tint");
         verify(p.contrast > 0, "contrast kept so the glyph stays readable");
-        compare(p.colorization, 0, "no tint");
         compare(p.opacity, 1);
-        verify(p.saturation > -1, "colour is kept, only lowered");
+        verify(p.saturation > -1, "colour is kept");
     }
 
     function test_clearIsDesaturatedLighterTranslucent() {
@@ -52,8 +52,8 @@ TestCase {
     function test_tintedMapsLuminanceToTheTint() {
         const p = IconModes.effect("tinted", testCase.red, Tokens);
         compare(p.enabled, true);
-        compare(p.saturation, -1, "luminance only");
-        verify(p.colorization > 0.9);
+        verify(p.saturation >= 0, "no desaturation after the colorization (it would grey the tint out)");
+        verify(p.colorization > 0.9, "luminance mapped to the tint");
         compare(p.opacity, 1, "alpha kept");
         compare(p.colorizationColor.toString(), Qt.color(testCase.red).toString());
     }
@@ -126,8 +126,8 @@ TestCase {
         Appearance.iconMode = "dark";
         compare(icon.modeActive, true);
         verify(loader.item !== null);
-        verify(loader.item.brightness < 0);
-        compare(loader.item.colorization, 0);
+        compare(loader.item.colorization, Tokens.iconModeDarkColorization);
+        compare(loader.item.colorizationColor.toString(), Qt.color(Tokens.iconModeDarkShade).toString());
 
         Appearance.iconMode = "tinted";
         compare(loader.item.colorization, Tokens.iconModeTintedColorization);

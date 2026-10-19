@@ -56,12 +56,12 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Tint colour")
-            subtitle: qsTr("Used by the Tinted appearance.")
             SwatchRow {
                 id: tintRow
                 accessibleName: qsTr("Tint colour")
                 enabled: iconGroup.mode === "tinted"
-                caption: qsTr("Choose Tinted to use a tint colour.")
+                // Disabled: why. Enabled: the name of the chosen colour (SwatchRow shows it when nothing is hovered).
+                caption: enabled ? iconGroup.tintModel.filter(m => m.state === 2).map(m => m.name).join("") : qsTr("Choose Tinted to use a tint colour.")
                 model: iconGroup.tintModel
                 activeFocusOnTab: true
                 onActiveFocusChanged: {

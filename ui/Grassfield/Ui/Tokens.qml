@@ -883,26 +883,30 @@ QtObject {
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
 
-    // ADR-0014: Dark mode, MultiEffect saturation (-1..1); tuned on WhiteSur captures
-    readonly property real iconModeDarkSaturation: -0.1
-    // ADR-0014: Dark mode, MultiEffect brightness: darker plate
-    readonly property real iconModeDarkBrightness: -0.3
-    // ADR-0014: Dark mode, MultiEffect contrast: keeps the glyph readable on the darker plate
-    readonly property real iconModeDarkContrast: 0.2
+    // ADR-0014: Dark mode, MultiEffect saturation (-1..1): colours kept as they are
+    readonly property real iconModeDarkSaturation: 0.0
+    // ADR-0014: Dark mode, MultiEffect brightness: a small lift that keeps the dark parts readable after the darkening. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeDarkBrightness: 0.1
+    // ADR-0014: Dark mode, MultiEffect contrast: keeps the glyph readable on the darker plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeDarkContrast: 0.6
+    // ADR-0014: Dark mode, strength of the black colorization (multiplies every channel by 1 - this, hue kept). Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeDarkColorization: 0.4
+    // ADR-0014: Dark mode, colour the icon is darkened towards
+    readonly property string iconModeDarkShade: "#000000"
     // ADR-0014: Clear mode, fully desaturated
     readonly property real iconModeClearSaturation: -1.0
-    // ADR-0014: Clear mode, lighter
-    readonly property real iconModeClearBrightness: 0.3
-    // ADR-0014: Clear mode, flattened
-    readonly property real iconModeClearContrast: -0.2
+    // ADR-0014: Clear mode, lighter. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeClearBrightness: 0.1
+    // ADR-0014: Clear mode, keeps the glyph readable on the grey plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeClearContrast: 0.4
     // ADR-0014: Clear mode, translucent over the material; A2 keeps meaningful icons at 3:1 or more (measured)
-    readonly property real iconModeClearOpacity: 0.75
-    // ADR-0014: Tinted mode, luminance only before the colour ramp
-    readonly property real iconModeTintedSaturation: -1.0
-    // ADR-0014: Tinted mode, lifts the shadows so the ramp starts above black
-    readonly property real iconModeTintedBrightness: 0.1
-    // ADR-0014: Tinted mode, spreads the luminance over the ramp
-    readonly property real iconModeTintedContrast: 0.2
+    readonly property real iconModeClearOpacity: 0.78
+    // ADR-0014: Tinted mode, saturation: 0 (MultiEffect desaturates after colorizing, so -1 would grey the tint out; the colorization already maps luminance to the tint)
+    readonly property real iconModeTintedSaturation: 0.0
+    // ADR-0014: Tinted mode, lifts the shadows so the ramp starts above black. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeTintedBrightness: 0.3
+    // ADR-0014: Tinted mode, spreads the luminance over the ramp. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeTintedContrast: 0.7
     // ADR-0014: Tinted mode, strength of the tint (0..1)
     readonly property real iconModeTintedColorization: 1.0
     // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)

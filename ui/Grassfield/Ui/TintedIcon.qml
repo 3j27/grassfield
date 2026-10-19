@@ -28,9 +28,13 @@ Item {
     Accessible.role: Accessible.Graphic
     Accessible.ignored: true
 
+    // Default mode: the image fills the item. Effect modes: the image keeps a fixed size (the decoded size) and only
+    // provides the texture, so the effect's texture never changes size while a surface scales the item (Dock
+    // magnification); the effect quad is scaled by the GPU.
     Image {
         id: image
-        anchors.fill: parent
+        width: root.modeActive ? root.size * root.oversample : root.width
+        height: root.modeActive ? root.size * root.oversample : root.height
         source: root.source
         sourceSize: Qt.size(root.size * root.oversample, root.size * root.oversample)
         fillMode: Image.PreserveAspectFit
