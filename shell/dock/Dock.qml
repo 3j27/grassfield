@@ -20,6 +20,42 @@ Scope {
 
     // [{kind, key, name, icon, entry, windows, pinned}], rebuilt when apps/toplevels/pins change.
     property var items: []
+    // Tiles are a keyed list model updated by diffing (DockModel.diffKeys) so a delegate survives a rebuild and its animations
+    // (glide, launch bounce and landing) keep running. A delegate reads its item from itemByKey by its key.
+    property var itemByKey: ({})
+    property var tileKeys: []
+    ListModel {
+        id: tileModel
+    }
+
+    function applyOps(ops: var): void {
+        for (const o of ops) {
+            if (o.op === "remove") {
+                tileModel.remove(o.at);
+                tileKeys.splice(o.at, 1);
+            } else if (o.op === "insert") {
+                tileModel.insert(o.at, {tileId: o.key});
+                tileKeys.splice(o.at, 0, o.key);
+            } else {
+                tileModel.move(o.from, o.to, 1);
+                tileKeys.splice(o.to, 0, tileKeys.splice(o.from, 1)[0]);
+            }
+        }
+    }
+
+    // Replaces the items: rows that went away are removed first (no delegate looks up a missing key), then the items are
+    // published, then rows are inserted and moved.
+    function setItems(next: var): void {
+        const ops = DockModel.diffKeys(tileKeys, next.map(DockModel.tileKey));
+        applyOps(ops.filter(o => o.op === "remove"));
+        const map = {};
+        next.forEach(it => {
+            map[DockModel.tileKey(it)] = it;
+        });
+        itemByKey = map;
+        items = next;
+        applyOps(ops.filter(o => o.op !== "remove"));
+    }
     // Test hooks (IPC): a pointer x forcing magnification, and a forced reveal.
     property real testPointerX: -1
     property bool testReveal: false
@@ -91,7 +127,7 @@ Scope {
         const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
         const all = windows.instances;
         all.forEach(w => w.captureLayout());
-        items = DockModel.withTail(shown, tail);
+        setItems(DockModel.withTail(shown, tail));
         all.forEach(w => w.playLayout());
         pruneLaunching();
     }
@@ -318,19 +354,62 @@ Scope {
                 // mapToItem already includes the tile's drag translation (its Translate transform): adding dragDx/dragDy put the puff off the window.
                 const cx = tileItem.mapToItem(area, tileItem.width / 2, win.iconSize / 2).x;
                 const cy = tileItem.mapToItem(area, 0, win.iconSize / 2).y;
+                const dx = dragDx;
+                const dy = dragDy;
+                // The tiles keep their dragged / displaced places until the rebuild: it animates from there.
+                layoutBefore = tileXs();
+                dragSnap = true;
+                collapseAnim.stop();
+                dragCollapse = 0;
                 dragFrom = -1;
                 dragDx = 0;
                 dragDy = 0;
                 if (!item)
                     return;
                 if (out) {
-                    if (root.removeItem(item))
+                    if (root.removeItem(item)) {
+                        holdLayout = true;
+                        holdTimer.restart();
                         win.poof(cx, cy);
+                    } else {
+                        tileItem.glideFrom(dx, dy);
+                    }
                     return;
                 }
                 const r = DockModel.reorder(all, fromApp, slot);
-                if (r.changed)
+                if (r.changed) {
+                    holdLayout = true;
+                    holdTimer.restart();
                     Settings.setDockPinned(r.pinned);
+                } else {
+                    tileItem.glideFrom(dx, dy);
+                }
+            }
+
+            Timer {
+                id: holdTimer
+                interval: Tokens.motionNormal
+                onTriggered: win.holdLayout = false
+            }
+
+            // A tile dragged out of the Dock (it would be removed) closes its gap in the shelf, and reopens when dragged back.
+            property real dragCollapse: 0
+            property bool dragSnap: false
+            readonly property bool dragCollapsing: dragFrom >= 0 && dragOut && dragRemovable
+            onDragCollapsingChanged: {
+                if (dragFrom < 0)
+                    return;
+                collapseAnim.stop();
+                collapseAnim.to = dragCollapsing ? 1 : 0;
+                collapseAnim.start();
+            }
+
+            NumberAnimation {
+                id: collapseAnim
+                target: win
+                property: "dragCollapse"
+                duration: Appearance.duration(Tokens.motionFast)
+                easing.type: Easing.OutQuad
             }
 
             // Layout transition (DockModel.layoutTransition): x of every tile (window coordinates) before a rebuild.
@@ -341,18 +420,24 @@ Scope {
                 for (let i = 0; i < tileRepeater.count; i++) {
                     const t = tileRepeater.itemAt(i) as Item;
                     if (t)
-                        out[DockModel.tileKey(t.modelData)] = t.mapToItem(area, 0, 0).x;
+                        out[t.tileId] = t.mapToItem(area, 0, 0).x;
                 }
                 return out;
             }
 
+            // Set by finishDrag: the positions captured when the tile was released (with the drag and make-room offsets still
+            // applied) are the ones the next rebuild animates from.
+            property bool holdLayout: false
+
             function captureLayout(): void {
-                layoutBefore = tileXs();
+                if (!holdLayout)
+                    layoutBefore = tileXs();
             }
 
             // After the tiles were rebuilt: tiles that moved glide from their old place (an app that quit moves into the
             // recents section instead of jumping), new tiles fade in. Skipped with Reduce Motion and while a tile is dragged.
             function playLayout(): void {
+                holdLayout = false;
                 if (Appearance.reduceMotion || dragFrom >= 0)
                     return;
                 tiles.forceLayout();
@@ -362,9 +447,9 @@ Scope {
                     const t = tileRepeater.itemAt(i) as Item;
                     if (!t)
                         continue;
-                    const key = DockModel.tileKey(t.modelData);
+                    const key = t.tileId;
                     if (plan.slide[key] !== undefined)
-                        t.glideFrom(plan.slide[key]);
+                        t.glideFrom(plan.slide[key], 0);
                     else if (plan.enter.indexOf(key) >= 0)
                         t.fadeIn();
                 }
@@ -401,7 +486,7 @@ Scope {
                 const raw = Magnify.scales(baseCenters, pointerX, pitch, maxScale, Tokens.dockMagnificationRadius);
                 return raw.map((s, i) => root.items[i].kind === "separator" ? 1 : 1 + (s - 1) * influence);
             }
-            readonly property real shelfWidth: Magnify.totalWidth(widths.map((w, i) => w * scaleList[i]), Tokens.dockSpacing) + 2 * Tokens.dockPadding
+            readonly property real shelfWidth: Magnify.totalWidth(widths.map((w, i) => w * scaleList[i]), Tokens.dockSpacing) + 2 * Tokens.dockPadding - dragCollapse * pitch
 
             // Autohide: revealed while the pointer is on the dock (or the bottom edge strip).
             property bool revealedState: false
@@ -603,13 +688,14 @@ Scope {
 
                         Repeater {
                             id: tileRepeater
-                            model: root.items
+                            model: tileModel
 
                             delegate: Item {
                                 id: tile
 
-                                required property var modelData
+                                required property string tileId
                                 required property int index
+                                readonly property var modelData: root.itemByKey[tileId] !== undefined ? root.itemByKey[tileId] : ({kind: "", windows: []})
 
                                 readonly property real tileScale: win.scaleList[index] !== undefined ? win.scaleList[index] : 1
                                 readonly property bool isApp: modelData.kind === "app"
@@ -624,12 +710,14 @@ Scope {
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
                                 readonly property real shiftX: {
+                                    if (win.dragFrom < 0 || index === win.dragFrom)
+                                        return 0;
+                                    if (win.dragCollapsing)
+                                        return index > win.dragFrom ? -win.pitch : 0;
                                     const from = win.dragFromApp;
                                     const at = win.appItems.indexOf(index);
                                     if (from < 0 || at === from || !isApp)
                                         return 0;
-                                    if (win.dragOut && win.dragRemovable)
-                                        return at > from ? -win.pitch : 0;
                                     const slot = win.dragSlot;
                                     if (from < slot && at > from && at <= slot)
                                         return -win.pitch;
@@ -640,9 +728,22 @@ Scope {
 
                                 // Layout transition: horizontal offset gliding to 0, and the fade-in of a new tile.
                                 property real glide: 0
-                                function glideFrom(dx: real): void {
+                                property real glideY: 0
+                                // The make-room offset animates while a tile is dragged; it snaps at the release, together
+                                // with the layout change.
+                                property real shiftAnim: shiftX
+                                Behavior on shiftAnim {
+                                    enabled: !tile.dragging && !win.dragSnap
+                                    NumberAnimation {
+                                        duration: Appearance.duration(Tokens.motionFast)
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
+                                function glideFrom(dx: real, dy: real): void {
                                     glide = dx;
+                                    glideY = dy;
                                     glideAnim.restart();
+                                    glideYAnim.restart();
                                 }
                                 function fadeIn(): void {
                                     opacity = 0;
@@ -653,6 +754,16 @@ Scope {
                                     id: glideAnim
                                     target: tile
                                     property: "glide"
+                                    to: 0
+                                    duration: Appearance.duration(Tokens.motionNormal)
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: Appearance.curve
+                                }
+
+                                NumberAnimation {
+                                    id: glideYAnim
+                                    target: tile
+                                    property: "glideY"
                                     to: 0
                                     duration: Appearance.duration(Tokens.motionNormal)
                                     easing.type: Easing.BezierSpline
@@ -671,17 +782,10 @@ Scope {
                                 width: isSeparator ? win.separatorWidth : iconPx
                                 height: win.iconSize + win.indicatorArea
                                 z: dragging ? 100 : 0
+                                // The shelf closes a gap around its centre: the dragged tile compensates to stay under the pointer.
                                 transform: Translate {
-                                    x: tile.dragging ? win.dragDx : tile.shiftX + tile.glide
-                                    y: tile.dragging ? win.dragDy : 0
-
-                                    Behavior on x {
-                                        enabled: !tile.dragging
-                                        NumberAnimation {
-                                            duration: Appearance.duration(Tokens.motionFast)
-                                            easing.type: Easing.OutQuad
-                                        }
-                                    }
+                                    x: tile.dragging ? win.dragDx - win.dragCollapse * win.pitch / 2 : tile.shiftAnim + tile.glide
+                                    y: tile.dragging ? win.dragDy : tile.glideY
                                 }
                                 activeFocusOnTab: !isSeparator
                                 Accessible.role: isSeparator ? Accessible.Separator : Accessible.Button
@@ -862,7 +966,7 @@ Scope {
 
                                 // Keyboard focus ring.
                                 Rectangle {
-                                    visible: tile.activeFocus && !tile.isSeparator
+                                    visible: tile.activeFocus && root.keyboardMode && !tile.isSeparator
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
@@ -890,7 +994,7 @@ Scope {
                                     tail: true
                                     text: tile.dragging ? qsTr("Remove") : tile.label
                                     delay: 0
-                                    shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tileHover.hovered || tile.activeFocus) && !Popups.active && win.dragFrom < 0)
+                                    shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tileHover.hovered || (tile.activeFocus && root.keyboardMode)) && !Popups.active && win.dragFrom < 0)
                                     x: (tile.width - width) / 2
                                     y: tile.height - win.indicatorArea - tile.iconPx - Tokens.dockTooltipGap - height
                                 }
@@ -934,23 +1038,39 @@ Scope {
                                     enabled: tile.isApp && !!tile.modelData.entry
                                     keys: ["text/uri-list"]
                                     // The tile highlights and accepts only a document its app can open (file field code
-                                    // in Exec and a matching MimeType); otherwise the drop is refused.
-                                    property bool acceptable: false
-                                    // The URI list is not always readable while the drag is only hovering (some sources hand it
-                                    // over at the drop): then the tile highlights and the drop itself decides.
-                                    function check(drag: var): bool {
-                                        const text = drag.getDataAsString("text/uri-list");
-                                        return text === "" || Apps.canOpen(tile.modelData.entry, Icons.parseUriList(text), true);
+                                    // in Exec and a matching MimeType). The real type of every path (a folder may carry an extension)
+                                    // is looked up while hovering (Apps.hoverEnter, cached for the drag): until it is known the tile
+                                    // accepts without highlighting, once known a refused file is refused at the DnD level too (the source
+                                    // gets a cancel). A source that hands its URI list over only at the drop leaves the verdict unknown.
+                                    property var paths: []
+                                    readonly property string verdict: paths.length === 0 ? "unknown" : Apps.hoverVerdict(tile.modelData.entry, paths)
+                                    readonly property bool acceptable: verdict === "yes" || verdict === "unknown"
+                                    function read(drag: var): void {
+                                        if (paths.length > 0)
+                                            return;
+                                        const found = Icons.parseUriList(drag.getDataAsString("text/uri-list"));
+                                        if (found.length === 0)
+                                            return;
+                                        paths = found;
+                                        Apps.hoverEnter(tile.modelData.entry, found);
                                     }
                                     onEntered: drag => {
-                                        acceptable = check(drag);
-                                        drag.accepted = acceptable;
+                                        paths = [];
+                                        read(drag);
+                                        drag.accepted = verdict !== "no";
                                     }
-                                    onExited: acceptable = false
+                                    onPositionChanged: drag => {
+                                        read(drag);
+                                        drag.accepted = verdict !== "no";
+                                    }
+                                    onExited: {
+                                        paths = [];
+                                        Apps.hoverLeave();
+                                    }
                                     onDropped: drop => {
-                                        const paths = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
-                                        acceptable = false;
-                                        if (paths.length > 0 && Apps.dropOnApp(tile.modelData.entry, paths))
+                                        const found = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
+                                        paths = [];
+                                        if (found.length > 0 && Apps.dropOnApp(tile.modelData.entry, found))
                                             drop.accept(Qt.CopyAction);
                                         else
                                             drop.accepted = false;
@@ -958,7 +1078,7 @@ Scope {
                                 }
 
                                 Rectangle {
-                                    visible: tile.isApp && appDrop.containsDrag && appDrop.acceptable
+                                    visible: tile.isApp && appDrop.containsDrag && appDrop.acceptable && appDrop.verdict !== "pending"
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
@@ -975,6 +1095,7 @@ Scope {
                                     cursorShape: Qt.ClosedHandCursor
                                     onActiveChanged: {
                                         if (active) {
+                                            win.dragSnap = false;
                                             win.dragFrom = tile.index;
                                             win.dragDx = 0;
                                             win.dragDy = 0;
@@ -995,10 +1116,7 @@ Scope {
                                 TapHandler {
                                     enabled: !tile.isSeparator
                                     acceptedButtons: Qt.LeftButton
-                                    onTapped: {
-                                        tile.forceActiveFocus();
-                                        root.activateItem(tile.modelData);
-                                    }
+                                    onTapped: root.activateItem(tile.modelData)
                                 }
 
                                 TapHandler {

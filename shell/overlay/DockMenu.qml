@@ -36,7 +36,8 @@ PopupMenu {
             id: "options",
             text: qsTr("Options"),
             submenu: [
-                {id: "keep", text: info.pinned ? qsTr("Remove from Dock") : qsTr("Keep in Dock"), checked: info.pinned === true, enabled: info.pinned === true || entry !== null},
+                {id: "keep", text: qsTr("Keep in Dock"), checked: info.pinned === true, enabled: info.pinned === true || entry !== null},
+                {id: "remove", text: qsTr("Remove from Dock"), enabled: info.pinned === true},
                 {id: "login", text: qsTr("Open at Login"), checked: autostart, enabled: entry !== null},
                 {id: "reveal", text: qsTr("Show in Files"), enabled: entry !== null}
             ]
@@ -121,6 +122,9 @@ PopupMenu {
             break;
         case "action":
             Apps.launch(data.entry.actions[item.index]);
+            break;
+        case "remove":
+            Settings.setDockPinned(DockModel.unpinKey(Settings.dockPinned, data.key, root.lookupFn));
             break;
         case "keep":
             if (data.pinned)
