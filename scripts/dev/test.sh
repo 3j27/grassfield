@@ -39,7 +39,11 @@ for dir in tests/shell/*/ tests/security/*/; do
   [[ -f ${dir}shell.qml ]] || continue
   # Private runtime/cache dirs: works inside the Claude Code sandbox (no writes to /run/user or ~/.cache).
   mkdir -p -m 700 "$GRASSFIELD_TEST_TMP/runtime" "$GRASSFIELD_TEST_TMP/cache"
-  out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" GRASSFIELD_LANG=en \
+  # A test that loads the real notification singleton carries a `dev-session` marker file: it runs as a dev session
+  # (GRASSFIELD_DEV=1: no D-Bus server on the owner's bus) with its state and config under the scratch dir.
+  dev_env=()
+  [[ -f ${dir}dev-session ]] && dev_env=(-u DBUS_SESSION_BUS_ADDRESS GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$GRASSFIELD_TEST_TMP/state" GRASSFIELD_CONFIG_HOME="$GRASSFIELD_TEST_TMP/config")
+  out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE "${dev_env[@]}" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" GRASSFIELD_LANG=en \
     XDG_RUNTIME_DIR="$GRASSFIELD_TEST_TMP/runtime" XDG_CACHE_HOME="$GRASSFIELD_TEST_TMP/cache" \
     timeout 60 qs -p "$dir" --no-color 2>&1) || { echo "$out"; echo "FAIL: $dir"; status=1; continue; }
   echo "$out" | grep -E "PASS|FAIL|SKIP" || { echo "$out"; status=1; }
