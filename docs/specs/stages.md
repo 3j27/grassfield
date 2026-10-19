@@ -159,8 +159,9 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
   releases the keyboard (it unmaps, or drops its keyboard interactivity) Hyprland restores its active window
   (`refocusLastWindow`, reason `FFM`): the incoming front window takes the keyboard. The swap is never undone silently
   (R13 review of 46b3e9b: that restore used to bring the outgoing stage back). The same holds for every focus the plugin
-  requests under such a layer (a close, a minimize or a move that empties the active stage, a new window that maps while
-  a layer surface holds the keyboard and so gets no initial focus).
+  requests under such a layer: a close that empties the active stage (exercised, `stages.sh` 8c); a minimize or a move
+  that empties it, a new window that maps while a layer surface holds the keyboard and so gets no initial focus (same
+  code path, not exercised in nested).
 - **ST24** Hyprland's active window (`CFocusState::window()`) is never a strip window (R13 counter-review of 17208af: after
   a swap under an Exclusive layer it stayed on the outgoing window, hidden in the strip; `hl.dsp.window.close()` closed
   it). It is what window key bindings (close, full screen, floating), window dispatchers without an explicit window and
