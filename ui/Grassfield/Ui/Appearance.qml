@@ -49,6 +49,7 @@ QtObject {
         c.fieldText = m;
         c.barText = m;
         c.indicator = m;
+        c.destructiveText = m;
         return c;
     }
 

@@ -67,6 +67,12 @@ already running (`--keep`, `just nested-up`) is left alone.
   baselines therefore show its installed applications; install or remove an app and the Apps/Search baselines change.
   Contrast regions of the Apps surface assume the current first page (Aether, Chromium, Disks, Files).
 
+Contrast surfaces of the Dock (`contrast.sh --surfaces dock,dockdrag`, captured last in each combination with two foot windows
+`gfdockA`/`gfdockB` that are closed again): `dock` (running dots, the tooltip capsule of the hovered tile, the notification
+badge count) and `dockdrag` (the "Remove" capsule while the pinned foot tile is dragged up; it is brought back to its slot
+before the release, so nothing is removed). The dot tone follows the shelf luminance (`BarTone.dotToneFor`), measured at 5.1:1
+or more over white, black and noise in light and dark, transparency 0.25 and 0.6.
+
 Surfaces: `menubar`, `systemmenu`, `appmenu`, `controlcenter` (Quick Settings modules), `controlcenter-detail` (the Wi-Fi
 module opened by a click on its text), `notificationcenter` (3 test notifications, the floating column,
 opened by a click on the clock), `dock` (magnification 1.7, pointer at x=927), `search` (query "files"), `apps`
