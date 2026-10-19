@@ -150,6 +150,52 @@ overlay() {
   fail "$name did not show on GF-REF after three attempts"
 }
 
+# Dock tile centres on GF-REF with the dock of this run (pinned foot, then the two test apps, separator, Trash): the pinned
+# tile and the two running ones (their dots, tooltip and badge). Magnification is off, so the layout is the unscaled one.
+DOCK_X_FOOT=875 DOCK_X_A=927 DOCK_X_B=979 DOCK_Y=1032
+
+# dock_surface: two running test apps (foot windows with distinct app ids: running dots), a notification for one of them (the
+# badge), the pointer on the first (its tooltip) -> "dock"; the pinned foot tile pressed and dragged up (its "Remove" label) ->
+# "dockdrag"; the drag comes back to its slot before the release, so nothing is removed from the Dock. The windows are
+# closed again (they would be in the backdrop of the surfaces that follow).
+dock_surface() {
+  local m
+  # One after the other: the tiles follow the order of the windows (A first, B second).
+  vs_spawn foot --app-id gfdockA
+  vs_sleep 1.5
+  vs_spawn foot --app-id gfdockB
+  vs_sleep 2
+  DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a gfdockB -t 20000 "Test" "Badge"
+  vs_sleep 1
+  # Hover: the tooltip of the first test tile.
+  vs_pointer abs $DOCK_X_A $DOCK_Y >/dev/null
+  vs_sleep 1.5
+  VS_SHOTS=$dir VS_NOPARK=1 VS_SETTLE=0.8 vs_capture dock >/dev/null
+  mv "$dir/dock.en.png" "$dir/dock.png"
+  for m in hidden white black; do
+    vs_ipc visual glyphs "$m" >/dev/null
+    VS_SHOTS=$dir VS_NOPARK=1 VS_SETTLE=0.8 vs_capture dock >/dev/null
+    mv "$dir/dock.en.png" "$dir/dock.$m.png"
+  done
+  vs_ipc visual glyphs normal >/dev/null
+  # Drag: held for the four captures, then back on its slot and released (an unchanged order).
+  "$VS_ROOT/scripts/dev/pointer.sh" output "$VS_OUTPUT" abs $DOCK_X_FOOT $DOCK_Y sleep 300 down sleep 300 drag $DOCK_X_FOOT 900 \
+    sleep 14000 drag $DOCK_X_FOOT $DOCK_Y sleep 400 up sleep 300 abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null &
+  local pointer_pid=$!
+  vs_sleep 2
+  VS_SHOTS=$dir VS_NOPARK=1 VS_SETTLE=0.3 vs_capture dockdrag >/dev/null
+  mv "$dir/dockdrag.en.png" "$dir/dockdrag.png"
+  for m in hidden white black; do
+    vs_ipc visual glyphs "$m" >/dev/null
+    VS_SHOTS=$dir VS_NOPARK=1 VS_SETTLE=0.3 vs_capture dockdrag >/dev/null
+    mv "$dir/dockdrag.en.png" "$dir/dockdrag.$m.png"
+  done
+  vs_ipc visual glyphs normal >/dev/null
+  wait "$pointer_pid" || true
+  vs_kill_clients
+  vs_park
+}
+
 if (( ! measure_only )); then
   rm -rf "$out"; mkdir -p "$out"
   python3 -I "$VS_HERE/contrast.py" gen "$wp"
@@ -199,6 +245,9 @@ if (( ! measure_only )); then
             differs "$dir/desktop.png" "$dir/notificationcenter.png" 600
             center closed
           fi
+        fi
+        if want dock || want dockdrag; then
+          dock_surface
         fi
         vs_park
       done

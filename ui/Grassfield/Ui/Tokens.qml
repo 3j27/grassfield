@@ -10,7 +10,7 @@ QtObject {
         text: "#F5F5F7",  // estimate, pending F1 measurement from design/reference
         textSecondary: "#DCDCE4",  // A2: was #B8B8C0; 4.5:1 or more on every material backdrop up to transparency 0.6 over a white wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#4FB36B",  // own Grassfield green, not copied
-        indicator: "#E6E6EA",  // estimate, pending F1 measurement from design/reference
+        indicator: "#FFFFFF",  // Dock fidelity fix: running dot over a shelf darker than dock.indicatorDarkAbove (pure white, 3:1 or more up to relative luminance 0.30)
         hover: "#FFFFFF",  // estimate; drawn at hoverOpacity
         materialTint: "#1D1F24",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
@@ -33,7 +33,7 @@ QtObject {
         text: "#1B1B1F",  // estimate, pending F1 measurement from design/reference
         textSecondary: "#3A3A42",  // A2: was #55555D; 4.5:1 or more on every material backdrop up to transparency 0.6 over a black wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#26763F",  // own Grassfield green, not copied
-        indicator: "#2A2A30",  // estimate, pending F1 measurement from design/reference
+        indicator: "#000000",  // Dock fidelity fix: running dot over a shelf lighter than dock.indicatorDarkAbove (pure black, 3:1 or more from relative luminance 0.10)
         hover: "#000000",  // estimate; drawn at hoverOpacity
         materialTint: "#F3F4F6",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
@@ -188,6 +188,10 @@ QtObject {
     readonly property int dockBottomMargin: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIndicatorSize: 4
+    // Dock fidelity fix: shelf relative luminance above which the running dot is black, else white; both are at least 4.5:1 at this crossover (WCAG, computed)
+    readonly property real dockIndicatorDarkAbove: 0.18
+    // Dock fidelity fix: central fraction of the wallpaper width sampled under the shelf to choose the running dot tone
+    readonly property real dockIndicatorSampleSpan: 0.5
     // task spec default; user value in grassfield.json dock.magnification
     readonly property real dockMagnificationMax: 1.6
     // task spec: cosine falloff over about 3 icons each side
@@ -223,7 +227,7 @@ QtObject {
     // estimate: the launch bounce stops after this long without a window, ms
     readonly property int dockLaunchTimeout: 12000
     // estimate: transparent room above the shelf for a dragged icon and the poof
-    readonly property int dockDragArea: 128
+    readonly property int dockDragArea: 168
     // estimate: px above the shelf top (icon centre) from which a dropped tile leaves the Dock
     readonly property int dockDragOutDistance: 56
     // estimate: removal puff, ms

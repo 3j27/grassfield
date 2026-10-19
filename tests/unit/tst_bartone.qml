@@ -118,4 +118,49 @@ TestCase {
         verify((1 + 0.05) / (hi + 0.05) >= 4.5, "white text at the light-to-dark threshold");
         verify((lo + 0.05) / (0 + 0.05) >= 4.5 - 1e-9, "black text at the dark-to-light threshold");
     }
+
+    // ---- Dock running dots: 3:1 or more against the shelf over every wallpaper and appearance ----
+
+    function ratio(a, b) {
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+
+    function rgb(hex) {
+        return {r: parseInt(hex.substr(1, 2), 16) / 255, g: parseInt(hex.substr(3, 2), 16) / 255, b: parseInt(hex.substr(5, 2), 16) / 255};
+    }
+
+    function test_dockDotKeepsContrastOnEveryWallpaper() {
+        const above = Tokens.dockIndicatorDarkAbove;
+        const tints = {dark: rgb(Tokens.colorDark.materialTint), light: rgb(Tokens.colorLight.materialTint)};
+        // wallpaper luminances: black, dark grays, mid gray, noise (~0.5), white
+        for (const appearance of ["dark", "light"]) {
+            for (const wall of [0, 0.02, 0.05, 0.1, 0.2159, 0.35, 0.5, 0.7, 1]) {
+                for (const alpha of [Tokens.dockTintAlpha, 1]) {
+                    const shelf = Logic.shelfLuminance(wall, tints[appearance], alpha);
+                    const tone = Logic.dotTone(shelf, above);
+                    const dot = tone === "light" ? 1 : 0;
+                    verify(ratio(dot, shelf) >= 3, appearance + " wall " + wall + " alpha " + alpha + " shelf " + shelf + " tone " + tone + " ratio " + ratio(dot, shelf));
+                }
+            }
+        }
+        // both tones are at least 4.5:1 at the crossover
+        verify(ratio(1, above) >= 4.5);
+        verify(ratio(0, above) >= 4.5);
+    }
+
+    function test_dockDotColoursArePureTones() {
+        compare(Tokens.colorDark.indicator, "#FFFFFF");
+        compare(Tokens.colorLight.indicator, "#000000");
+    }
+
+    function test_regionLuminanceSamplesTheCentre() {
+        // 4 columns x 2 rows: dark edges, white centre columns
+        const bytes = [];
+        for (let y = 0; y < 2; y++) {
+            for (let x = 0; x < 4; x++)
+                bytes.push(...(x === 1 || x === 2 ? [255, 255, 255, 255] : [0, 0, 0, 255]));
+        }
+        fuzzyCompare(Logic.regionLuminance(bytes, 4, 0, 2, 0.5), 1, 1e-9);
+        fuzzyCompare(Logic.regionLuminance(bytes, 4, 0, 2, 1), 0.5, 1e-9);
+    }
 }
