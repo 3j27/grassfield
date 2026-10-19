@@ -15,6 +15,8 @@ const DEFAULTS = {
     "dock.magnification": 1.6,
     "dock.magnificationEnabled": false,
     "dock.autohide": false,
+    "dock.showRecents": true,
+    "dock.minimizeIntoApp": false,
     "desktop.showIcons": true,
     "menubar.showBackground": false,
     "windows.titlebarDoubleClick": "zoom",
@@ -26,7 +28,9 @@ const DEFAULTS = {
     "hotCorners.bottomLeft": "none",
     "hotCorners.bottomRight": "none",
     "icons.mode": "default",
-    "icons.tint": "accent"
+    "icons.tint": "accent",
+    "icons.folderColor": "theme",
+    "pointer.size": Ui.PointerSize.DEFAULT
 };
 
 const CORNER_ACTIONS = ["none", "overview", "notifications", "apps", "lock"];
@@ -41,6 +45,8 @@ const RULES = {
     "dock.magnification": {type: "number", min: 1, max: 2.5},
     "dock.magnificationEnabled": {type: "boolean"},
     "dock.autohide": {type: "boolean"},
+    "dock.showRecents": {type: "boolean"},
+    "dock.minimizeIntoApp": {type: "boolean"},
     "desktop.showIcons": {type: "boolean"},
     "menubar.showBackground": {type: "boolean"},
     "windows.titlebarDoubleClick": {type: "enum", values: ["zoom", "minimize", "none"]},
@@ -53,7 +59,11 @@ const RULES = {
     "hotCorners.bottomRight": {type: "enum", values: CORNER_ACTIONS},
     "icons.mode": {type: "enum", values: ["default", "dark", "clear", "tinted"]},
     // "accent" or a #rrggbb colour (schema `pattern`).
-    "icons.tint": {type: "tint"}
+    "icons.tint": {type: "tint"},
+    // "theme", "accent" or a #rrggbb colour (schema `pattern`).
+    "icons.folderColor": {type: "folderColor"},
+    // Cursor size in pixels, mirrors ui/Grassfield/Ui/PointerSize.js (the unit test checks the bounds).
+    "pointer.size": {type: "integer", min: Ui.PointerSize.MIN, max: Ui.PointerSize.MAX}
 };
 
 // Error message for an invalid value, or "" when the value is acceptable for the key.
@@ -66,6 +76,8 @@ function validate(path, value) {
         return rule.values.indexOf(value) >= 0 ? "" : path + ": expected one of " + rule.values.join(", ");
     case "tint":
         return Ui.IconModes.validTint(value) ? "" : path + ": expected accent or a #rrggbb colour";
+    case "folderColor":
+        return Ui.FolderStyle.validColor(value) ? "" : path + ": expected theme, accent or a #rrggbb colour";
     case "boolean":
         return typeof value === "boolean" ? "" : path + ": expected true or false";
     case "integer":

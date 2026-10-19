@@ -2,6 +2,7 @@
 
 #include "filelogic.h"
 #include "foldermodel.h"
+#include "folderstylelogic.h"
 #include "placesmodel.h"
 #include "taglogic.h"
 #include "tagstore.h"
@@ -118,8 +119,19 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
         const QString f = configFile();
         if (QFileInfo::exists(f) && !m_watcher.files().contains(f))
             m_watcher.addPath(f);
+        const QString styles = m_folderStyles.fallbackFile();
+        if (QFileInfo::exists(styles) && !m_watcher.files().contains(styles))
+            m_watcher.addPath(styles);
         readAppearance();
+        // The per-user folder style store (same directory) changed under us: every listing reads its folders again.
+        if (m_folderStyles.reload()) {
+            ++m_folderStyleRevision;
+            emit folderStyleRevisionChanged();
+            emit allFolderStylesChanged();
+        }
     };
+    if (QFileInfo::exists(m_folderStyles.fallbackFile()))
+        m_watcher.addPath(m_folderStyles.fallbackFile());
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, reread);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, reread);
     readAppearance();
@@ -157,7 +169,12 @@ void FilesApp::readAppearance()
     static const QRegularExpression hex(QStringLiteral("^#[0-9a-fA-F]{6}$"));
     if (!hex.match(tint).hasMatch())
         tint = QStringLiteral("accent");
-    if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint) {
+    QString folderColor = icons.value(QStringLiteral("folderColor")).toString();
+    static const QRegularExpression folderHex(QStringLiteral("^(theme|accent|#[0-9a-fA-F]{6})$"));
+    if (!folderHex.match(folderColor).hasMatch())
+        folderColor = QStringLiteral("theme");
+    if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint || folderColor != m_folderColor) {
+        m_folderColor = folderColor;
         m_dark = dark;
         m_reduceMotion = reduce;
         m_iconMode = mode;
@@ -291,6 +308,9 @@ QObject *FilesApp::createFolderModel(QObject *parent)
     auto *model = new FolderModel(parent ? parent : this);
     connect(model, &FolderModel::tagsSeen, this, &FilesApp::noteTags);
     connect(this, &FilesApp::tagsChanged, model, &FolderModel::tagsChanged);
+    model->setStyleStore(&m_folderStyles);
+    connect(this, &FilesApp::folderStylesChanged, model, &FolderModel::folderStylesChanged);
+    connect(this, &FilesApp::allFolderStylesChanged, model, &FolderModel::allFolderStylesChanged);
     return model;
 }
 
@@ -498,10 +518,13 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
             f->expect(url, false);
     });
     if (cut) {
-        connect(job, &KJob::result, this, [job] {
+        connect(job, &KJob::result, this, [this, job, urls, destination] {
             // A cut selection is consumed by its paste.
-            if (!job->error())
-                QGuiApplication::clipboard()->clear();
+            if (job->error())
+                return;
+            QGuiApplication::clipboard()->clear();
+            for (const QUrl &u : urls)
+                styleMoved(u, childUrl(destination, u.fileName()));
         });
     }
     track(job, countText(cut ? tr("Moving 1 item…") : tr("Copying 1 item…"), cut ? tr("Moving %1 items…") : tr("Copying %1 items…"), urls.size()));
@@ -568,6 +591,9 @@ void FilesApp::newFolder(const QUrl &directory, QObject *folder)
             emit operationFailed(job->errorString());
             return;
         }
+        // A look left at this path by a folder that went away outside Files must not apply to the new folder.
+        if (url.isLocalFile())
+            m_folderStyles.dropEntry(url.toLocalFile());
         if (auto *f = asFolder(target))
             f->expect(url, true);
     });
@@ -592,14 +618,27 @@ void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
     attachDelegate(job);
     KIO::FileUndoManager::self()->recordJob(KIO::FileUndoManager::Rename, {url}, destination, job);
     QPointer<QObject> target = folder;
-    connect(job, &KJob::result, this, [this, job, destination, target] {
+    connect(job, &KJob::result, this, [this, job, url, destination, target] {
         if (job->error()) {
             emit operationFailed(job->errorString());
             return;
         }
+        styleMoved(url, destination);
         if (auto *f = asFolder(target))
             f->expect(destination, false);
     });
+}
+
+// Files moved or renamed a folder: its look follows (the attribute travels by itself; the per-user entry is keyed by path).
+void FilesApp::styleMoved(const QUrl &from, const QUrl &to)
+{
+    if (!from.isLocalFile() || !to.isLocalFile())
+        return;
+    if (m_folderStyles.moveEntries(from.toLocalFile(), to.toLocalFile())) {
+        ++m_folderStyleRevision;
+        emit folderStyleRevisionChanged();
+        emit allFolderStylesChanged();
+    }
 }
 
 void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
@@ -672,6 +711,14 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
     for (const QUrl &u : std::as_const(sources)) {
         if (auto *f = asFolder(target))
             f->expect(childUrl(dest, u.fileName()), false);
+    }
+    if (!copy) {
+        connect(job, &KJob::result, this, [this, job, sources, dest] {
+            if (job->error())
+                return;
+            for (const QUrl &u : sources)
+                styleMoved(u, childUrl(dest, u.fileName()));
+        });
     }
     track(job, countText(copy ? tr("Copying 1 item…") : tr("Moving 1 item…"), copy ? tr("Copying %1 items…") : tr("Moving %1 items…"), sources.size()));
 }
@@ -857,6 +904,90 @@ void FilesApp::rewriteTags(const QList<QUrl> &urls, const QString &tag, bool on)
         emit operationFailed(tr("The tags of “%1” couldn’t be changed: %2").arg(failed.first(), reason));
     else if (failed.size() > 1)
         emit operationFailed(tr("The tags of %1 items couldn’t be changed: %2").arg(failed.size()).arg(reason));
+}
+
+QString FilesApp::folderStyleUnavailable(const QList<QUrl> &urls) const
+{
+    if (urls.isEmpty())
+        return tr("Nothing is selected.");
+    for (const QUrl &url : urls) {
+        if (url.scheme() == QLatin1String("trash"))
+            return tr("Folders in the Trash can’t be customized.");
+        if (!url.isLocalFile())
+            return tr("Folders can be customized on this computer only.");
+        const QFileInfo info(url.toLocalFile());
+        if (info.isSymLink())
+            return tr("Links can’t be customized.");
+        if (!info.isDir())
+            return tr("Only folders can be customized.");
+    }
+    return QString();
+}
+
+QVariantMap FilesApp::folderStyleOf(const QUrl &url) const
+{
+    QVariantMap m;
+    FolderStyleLogic::Style style;
+    if (folderStyleUnavailable({url}).isEmpty())
+        style = m_folderStyles.read(url.toLocalFile());
+    m[QStringLiteral("color")] = style.color;
+    m[QStringLiteral("glyph")] = style.glyph;
+    return m;
+}
+
+QVariantMap FilesApp::applyFolderStyle(const QList<QUrl> &urls, const QString &color, const QString &glyph)
+{
+    FolderStyleLogic::Style style;
+    style.color = FolderStyleLogic::normalizeColor(color);
+    style.glyph = FolderStyleLogic::normalizeGlyph(glyph);
+    return changeFolderStyles(urls, style);
+}
+
+QVariantMap FilesApp::resetFolderStyle(const QList<QUrl> &urls)
+{
+    return changeFolderStyles(urls, {});
+}
+
+QVariantMap FilesApp::changeFolderStyles(const QList<QUrl> &urls, const FolderStyleLogic::Style &style)
+{
+    QVariantMap out;
+    out[QStringLiteral("ok")] = false;
+    out[QStringLiteral("fellBack")] = false;
+    const QString why = folderStyleUnavailable(urls);
+    if (!why.isEmpty()) {
+        out[QStringLiteral("error")] = why;
+        return out;
+    }
+    QList<QUrl> changed;
+    QStringList failed;
+    QString reason;
+    bool fellBack = false;
+    for (const QUrl &url : urls) {
+        const FolderStyleStore::Result r = m_folderStyles.write(url.toLocalFile(), style);
+        if (!r.ok) {
+            failed.append(url.fileName());
+            reason = r.error;
+            // A failed reset can still have dropped the entry saved for this account: the views show it.
+            if (r.changed)
+                changed.append(url);
+            continue;
+        }
+        fellBack = fellBack || r.fellBack;
+        if (r.changed)
+            changed.append(url);
+    }
+    if (!changed.isEmpty()) {
+        ++m_folderStyleRevision;
+        emit folderStyleRevisionChanged();
+        emit folderStylesChanged(changed);
+    }
+    out[QStringLiteral("ok")] = failed.isEmpty();
+    out[QStringLiteral("fellBack")] = fellBack;
+    if (failed.size() == 1)
+        out[QStringLiteral("error")] = tr("The look of “%1” couldn’t be changed: %2").arg(failed.first(), reason);
+    else if (failed.size() > 1)
+        out[QStringLiteral("error")] = tr("The look of %1 folders couldn’t be changed: %2").arg(failed.size()).arg(reason);
+    return out;
 }
 
 QString FilesApp::tagName(const QString &tag) const

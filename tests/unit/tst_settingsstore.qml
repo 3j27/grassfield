@@ -63,9 +63,10 @@ TestCase {
 
     function test_schemaParity() {
         const leaves = schemaLeaves(readSchema(), "", {});
-        // Owned by other modules: version is fixed, dock.pinned belongs to the Dock.
+        // Owned by other modules: version is fixed, dock.pinned and dock.recent belong to the Dock.
         delete leaves["version"];
         delete leaves["dock.pinned"];
+        delete leaves["dock.recent"];
         compare(Object.keys(Store.RULES).sort(), Object.keys(leaves).sort());
         compare(Object.keys(Store.DEFAULTS).sort(), Object.keys(leaves).sort());
         for (const path in leaves) {
@@ -77,7 +78,7 @@ TestCase {
                 compare(r.min, s.minimum, path);
             if (s.maximum !== undefined)
                 compare(r.max, s.maximum, path);
-            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" ? "string" : r.type, s.type, path);
+            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" ? "string" : r.type, s.type, path);
             // Defaults satisfy their own rule.
             compare(Store.validate(path, Store.DEFAULTS[path]), "", path);
         }

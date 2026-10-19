@@ -47,7 +47,7 @@ B. A fixed palette of prebuilt accent variants only.
 - Settings keys (settings contract, versioned): `icons.mode` (`default|dark|clear|tinted`, default `default`),
   `icons.tint` (`accent` or `#rrggbb`, default `accent`). (Implemented 2026-10-19 under `icons.*` because `appearance` is
   already a string key in contract version 1.) Settings › Appearance gets the mode and tint controls (macOS 26
-  layout). The shell and Grassfield apps react live.
+  layout). Folder colours (owner request 2026-10-19) are a separate step, `icons.folderColor` (`theme|accent|#rrggbb`, default `theme`) and a per-folder colour and symbol (docs/specs/ui.md, docs/specs/files.md), so the mode effects stay untouched. The shell and Grassfield apps react live.
 - Base theme: Grassfield sets the icon theme name for its session and for the shell (Quickshell's IconTheme pragma or
   `QT_ICON_THEME`/environment, whichever the installed version supports — verify), with WhiteSur first and the
   freedesktop fallback chain (`hicolor`, then the system theme) for missing icons. Packaging: WhiteSur is a dependency of

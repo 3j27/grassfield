@@ -60,7 +60,9 @@ Singleton {
     }
 
     function setEnabled(on: bool): void {
-        if (available && !guarded("bluetooth toggle"))
+        if (guarded("bluetooth toggle"))
+            return;
+        if (available)
             adapter.enabled = on;
     }
 

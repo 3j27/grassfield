@@ -86,9 +86,20 @@ Window {
         InfoWindow {}
     }
 
+    Component {
+        id: customizeComponent
+        CustomizeFolderWindow {}
+    }
+
+    // Customize Folder for local folder URLs (a window per request, like Get Info).
+    function customizeFolders(urls: var, name: string, iconName: string): void {
+        if (urls && urls.length > 0)
+            customizeComponent.createObject(win, {app: win.app, urls: urls, folderName: name, iconName: iconName, transientParent: win});
+    }
+
     function showInfo(info: var): void {
         if (info && info.name !== undefined)
-            infoComponent.createObject(win, {app: win.app, info: info, transientParent: win});
+            infoComponent.createObject(win, {app: win.app, info: info, browser: win, transientParent: win});
     }
 
     function confirm(title: string, message: string, confirmText: string, action: var): void {

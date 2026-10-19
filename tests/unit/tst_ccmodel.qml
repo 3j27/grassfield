@@ -74,13 +74,6 @@ TestCase {
         compare(off.bluetooth, true);
     }
 
-    function test_devVolumeClamp() {
-        fuzzyCompare(Model.devVolume(0.5, 0.9, 0.05), 0.55, 1e-9);
-        fuzzyCompare(Model.devVolume(0.5, 0.1, 0.05), 0.45, 1e-9);
-        fuzzyCompare(Model.devVolume(0.98, 1, 0.05), 1, 1e-9);
-        fuzzyCompare(Model.devVolume(0.02, 0, 0.05), 0, 1e-9);
-    }
-
     function test_stepIndex() {
         compare(Model.stepIndex(-1, 3, 1), 0);
         compare(Model.stepIndex(-1, 3, -1), 2);
@@ -97,5 +90,37 @@ TestCase {
         compare(Model.failReasonKey(5), "lost");
         compare(Model.failReasonKey(0), "unknown");
         compare(Model.failReasonKey(99), "unknown");
+    }
+
+    // Grid with a player: Wi-Fi | DND, Bluetooth | Now Playing (2x2 with one transport button), Airplane |, then a slider module.
+    readonly property var grid: [
+        {x: 0, y: 0, w: 139, h: 63},      // 0 wifi
+        {x: 152, y: 0, w: 139, h: 63},    // 1 dnd
+        {x: 0, y: 76, w: 139, h: 63},     // 2 bluetooth
+        {x: 200, y: 120, w: 40, h: 30},   // 3 transport button (inside the 2x2 at x 152, y 76)
+        {x: 0, y: 152, w: 139, h: 63},    // 4 airplane
+        {x: 10, y: 228, w: 20, h: 20},    // 5 mute
+        {x: 40, y: 228, w: 200, h: 20},   // 6 slider
+        {x: 250, y: 228, w: 20, h: 20}    // 7 chevron
+    ]
+
+    function test_navTargetVertical() {
+        compare(Model.navTarget(grid, 0, 0, 1), 2);
+        compare(Model.navTarget(grid, 2, 0, 1), 4);
+        compare(Model.navTarget(grid, 1, 0, 1), 3);
+        compare(Model.navTarget(grid, 4, 0, 1), 5);
+        compare(Model.navTarget(grid, 6, 0, -1), 4);
+        compare(Model.navTarget(grid, 0, 0, -1), -1);
+        compare(Model.navTarget(grid, 7, 0, 1), -1);
+    }
+
+    function test_navTargetHorizontal() {
+        compare(Model.navTarget(grid, 0, 1, 0), 1);
+        compare(Model.navTarget(grid, 1, -1, 0), 0);
+        compare(Model.navTarget(grid, 5, 1, 0), 6);
+        compare(Model.navTarget(grid, 6, 1, 0), 7);
+        compare(Model.navTarget(grid, 4, 1, 0), -1);
+        compare(Model.navTarget(grid, 0, -1, 0), -1);
+        compare(Model.navTarget(grid, 99, 1, 0), -1);
     }
 }

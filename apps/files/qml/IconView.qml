@@ -160,6 +160,8 @@ FocusScope {
             required property string emblem
             required property bool selected
             required property bool isDir
+            required property string folderColor
+            required property string folderGlyph
             required property bool canPreview
             required property bool hidden
             required property var tagColors
@@ -202,6 +204,9 @@ FocusScope {
                 y: Tokens.spacingSm
                 size: Tokens.filesIconSize
                 iconName: cell.iconName
+                isDir: cell.isDir
+                folderColor: cell.folderColor
+                folderGlyph: cell.folderGlyph
                 thumbnail: cell.thumbnail
                 emblem: cell.emblem
             }

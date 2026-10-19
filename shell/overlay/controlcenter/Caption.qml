@@ -8,5 +8,5 @@ Text {
     color: Appearance.colors.textSecondary
     font.family: Appearance.fontFamily
     font.pixelSize: Tokens.typographyCaptionSize
-    font.weight: Tokens.typographyMenuBoldWeight
+    font.weight: Tokens.typographyMenuWeight
 }

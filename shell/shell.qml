@@ -69,6 +69,19 @@ ShellRoot {
         value: Settings.iconTint
     }
 
+    Binding {
+        target: Appearance
+        property: "folderColorSetting"
+        value: Settings.folderColor
+    }
+
+    // Pointer size (Settings > Accessibility > Pointer): the compositor is asked for the new size live.
+    Binding {
+        target: Pointer
+        property: "size"
+        value: Settings.pointerSize
+    }
+
     // One degraded-mode notice when the compositor extension never answered; withdrawn if it loads later.
     property string degradedNoticeKey: ""
 

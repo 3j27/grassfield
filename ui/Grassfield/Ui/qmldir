@@ -16,3 +16,7 @@ SwatchRow 1.0 SwatchRow.qml
 TintedIcon 1.0 TintedIcon.qml
 IconEffect 1.0 IconEffect.qml
 IconModes 1.0 IconModes.js
+FolderStyle 1.0 FolderStyle.js
+FolderEffect 1.0 FolderEffect.qml
+FolderIcon 1.0 FolderIcon.qml
+PointerSize 1.0 PointerSize.js

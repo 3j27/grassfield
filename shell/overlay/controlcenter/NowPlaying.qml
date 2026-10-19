@@ -69,7 +69,7 @@ Module {
 
                 required property var modelData
 
-                width: Tokens.panelCcIconButton - Tokens.spacingXs
+                width: Tokens.panelCcTransportButton
                 height: width
                 accessibleName: modelData.name
                 ringRadius: width / 2

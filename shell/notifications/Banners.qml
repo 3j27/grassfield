@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.osd
+import qs.services
 import qs.platform
 
 // Banner stack, top-right under the menu bar, on ONE screen: the focused one (first screen
@@ -35,8 +36,9 @@ PanelWindow {
     }
 
     screen: targetScreen
-    // The Notifications column replaces the banners while it is open (its cards float over the same area).
-    visible: targetScreen !== null && Notifications.bannerCount > 0 && !Notifications.centerOpen
+    // The Notifications column and Quick Settings replace the banners while they are open (their modules float over the
+    // same area, and a banner would show through the gaps between them).
+    visible: targetScreen !== null && Notifications.bannerCount > 0 && !Notifications.centerOpen && Popups.kind !== "controlcenter"
     anchors {
         top: true
         right: true

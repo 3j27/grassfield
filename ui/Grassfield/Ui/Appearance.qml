@@ -12,10 +12,14 @@ QtObject {
     // Icon appearance (ADR-0014): default | dark | clear | tinted, and the tint setting ("accent" or "#rrggbb").
     property string iconMode: "default"
     property string iconTintSetting: "accent"
+    // Folder colour (`icons.folderColor`): "theme" (the icon theme's own), "accent" or "#rrggbb".
+    property string folderColorSetting: "theme"
 
     // Derived values.
     // Tint of the Tinted icon mode: the chosen colour, the accent by default.
     readonly property color iconTint: IconModes.tintColor(iconTintSetting, colors.accent)
+    // Colour of folder icons for the global setting (the accent for "accent"); only meaningful when it recolours.
+    readonly property color folderTint: FolderStyle.colorOf(folderColorSetting, colors.accent)
     // Reduce Transparency is equivalent to transparency 0 (opaque tinted surfaces).
     readonly property real effectiveTransparency: reduceTransparency ? 0 : clamp01(transparency)
     // Hairline alpha: the light appearance uses a lighter line (F1 gap 18).

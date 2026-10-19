@@ -20,7 +20,7 @@ TestCase {
         property bool loading: false
         property string error: ""
         property url url: "file:///sandbox"
-        property var largeRequests: []
+        property var largeLive: ({})
 
         signal revealRequested(int row, bool rename)
 
@@ -33,10 +33,18 @@ TestCase {
             return {name: listing.get(row).name, kind: "Plain text document", sizeText: "1 KB", isDir: false, created: "Today at 10:00", modified: "Today at 11:00", accessed: "", where: "/sandbox"};
         }
         function requestPreview(row: int, large: bool): void {
-            if (large)
-                listing.largeRequests = listing.largeRequests.concat([row]);
+            if (large) {
+                const live = listing.largeLive;
+                                live[listing.get(row).url] = true;
+                listing.largeLive = live;
+            }
         }
         function cancelPreview(url: url, large: bool): void {
+            if (large) {
+                const live = listing.largeLive;
+                delete live[url];
+                listing.largeLive = live;
+            }
         }
         function selectedUrls(): var {
             return listing.currentRow >= 0 ? [listing.get(listing.currentRow).url] : [];
@@ -47,7 +55,7 @@ TestCase {
 
         function row(name: string, isDir: bool, canPreview: bool, tagColors: var): var {
             return {name: name, url: "file:///sandbox/" + name, iconName: "", thumbnail: "", largeThumbnail: "", emblem: "", selected: false, isDir: isDir,
-                    canPreview: canPreview, hidden: false, tagColors: tagColors};
+                    canPreview: canPreview, hidden: false, tagColors: tagColors, folderColor: "", folderGlyph: ""};
         }
 
         Component.onCompleted: {
@@ -166,12 +174,21 @@ TestCase {
     }
 
     function test_largePreviewFollowsTheCurrentItem() {
-        listing.largeRequests = [];
+        // The ListView creates and releases its pages on its own schedule (what earlier tests scrolled over, when the
+        // cache is trimmed), so assert the state the preview logic must reach rather than the moment a request is made:
+        // a page holds a large-thumbnail request while it exists and cancels it when it goes away (largeLive).
+        const delta = listing.get(3).url;
+        keyClick(Qt.Key_Home);
+        for (let i = 0; i < 3; i++)
+            keyClick(Qt.Key_Right);
+        compare(listing.currentRow, 3);
+        // The current page (delta.pdf, previewable) always exists, so it must hold its gallery-size thumbnail.
+        tryVerify(() => listing.largeLive[delta] !== undefined);
         keyClick(Qt.Key_End);
         waitForRendering(gallery);
-        // The page of delta.pdf (row 3, previewable) asked for its gallery-size thumbnail on its way into view.
-        tryVerify(() => listing.largeRequests.indexOf(3) >= 0);
         compare(gallery.info.name, "epsilon.md");
+        // The previous page stays in the view's cache next to the new current one: its request is still held.
+        tryVerify(() => listing.largeLive[delta] !== undefined);
     }
 
     function test_infoPanelFollowsItsPreference() {

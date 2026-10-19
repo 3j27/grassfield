@@ -9,6 +9,7 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include "folderstylestore.h"
 #include "tagstore.h"
 
 #include <functional>
@@ -32,6 +33,8 @@ class FilesApp : public QObject
     Q_PROPERTY(bool reduceMotion READ reduceMotion NOTIFY appearanceChanged)
     Q_PROPERTY(QString iconMode READ iconMode NOTIFY appearanceChanged)
     Q_PROPERTY(QString iconTint READ iconTint NOTIFY appearanceChanged)
+    // icons.folderColor: "theme", "accent" or "#rrggbb" (every folder icon).
+    Q_PROPERTY(QString folderColor READ folderColor NOTIFY appearanceChanged)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoChanged)
     Q_PROPERTY(QString undoText READ undoText NOTIFY undoChanged)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY undoChanged)
@@ -68,6 +71,7 @@ public:
     // Icon appearance (ADR-0014): default | dark | clear | tinted, and "accent" or #rrggbb.
     QString iconMode() const { return m_iconMode; }
     QString iconTint() const { return m_iconTint; }
+    QString folderColor() const { return m_folderColor; }
     bool canUndo() const;
     QString undoText() const;
     bool canRedo() const;
@@ -165,6 +169,22 @@ public:
     // The way back: lists a tag removed from the sidebar again (Tags section's menu).
     Q_INVOKABLE void showTag(const QString &tag);
 
+    // Customize Folder (FolderStyleLogic, FolderStyleStore): a folder's own colour and symbol. Only local folders
+    // carry one. folderStyleUnavailable() is "" when every item of `urls` is such a folder, else the reason shown in
+    // place of the controls (the menu item is disabled for it).
+    Q_INVOKABLE QString folderStyleUnavailable(const QList<QUrl> &urls) const;
+    // {color, glyph} of one folder, read now ("" fields: none). Callers depend on folderStyleRevision.
+    Q_INVOKABLE QVariantMap folderStyleOf(const QUrl &url) const;
+    // Sets the look of the folders among `urls` to exactly `color` ("theme", "accent", "#rrggbb" or "" = follow the
+    // global setting) and `glyph` ("" = none). Returns {ok, fellBack, error}: fellBack when a folder's volume can't
+    // hold the attribute and the choice went to the per-user store (documented in docs/specs/files.md).
+    Q_INVOKABLE QVariantMap applyFolderStyle(const QList<QUrl> &urls, const QString &color, const QString &glyph);
+    // Back to the global colour and no symbol.
+    Q_INVOKABLE QVariantMap resetFolderStyle(const QList<QUrl> &urls);
+    // The shown folders' own looks follow Files' writes and the per-user store's changes.
+    Q_PROPERTY(int folderStyleRevision READ folderStyleRevision NOTIFY folderStyleRevisionChanged)
+    int folderStyleRevision() const { return m_folderStyleRevision; }
+
 signals:
     void appearanceChanged();
     void undoChanged();
@@ -176,6 +196,10 @@ signals:
     void tagsChanged(const QList<QUrl> &urls);
     void tagRevisionChanged();
     void hiddenTagsChanged();
+    // Files wrote the folder looks of `urls`; allFolderStylesChanged: the per-user store changed under us.
+    void folderStylesChanged(const QList<QUrl> &urls);
+    void allFolderStylesChanged();
+    void folderStyleRevisionChanged();
 
 private:
     void track(KJob *job, const QString &activity);
@@ -188,6 +212,8 @@ private:
     // Why `url` can't be tagged, "" when it can (`support`: what TagStore found).
     QString tagsReason(const QUrl &url, TagStore::Support support) const;
     QString schemeReason(const QUrl &url) const;
+    void styleMoved(const QUrl &from, const QUrl &to);
+    QVariantMap changeFolderStyles(const QList<QUrl> &urls, const FolderStyleLogic::Style &style);
     // Tags in use, for the sidebar (kept across sessions, at most kMaxKnownTags).
     void noteTags(const QStringList &tags);
     void publishKnownTags();
@@ -200,6 +226,7 @@ private:
     bool m_reduceMotion = false;
     QString m_iconMode = QStringLiteral("default");
     QString m_iconTint = QStringLiteral("accent");
+    QString m_folderColor = QStringLiteral("theme");
     QString m_activity;
     int m_activityPercent = -1;
     QList<QPointer<KJob>> m_jobs;
@@ -209,4 +236,6 @@ private:
     // Tag state of the items asked about by the menus (selection), probed once per few seconds.
     mutable TagStore::Cache m_tagCache;
     int m_tagRevision = 0;
+    FolderStyleStore m_folderStyles;
+    int m_folderStyleRevision = 0;
 };

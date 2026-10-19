@@ -8,17 +8,17 @@ import qs.widgets
 
 // Notifications column (N7, internal Notification Center): the macOS model. No full-height panel:
 // a column of floating glass cards as wide as a banner, at the right under the menu bar, opened from the clock or
-// by IPC. A title capsule (Clear All, Do Not Disturb state) leads; then the cards grouped by app, newest first (the
-// first card of a group carries the app name, its count and Clear; the last visible one carries Show All / Show
-// Less); then the widgets placed there; a footer pill (Edit Widgets, gallery overlay, docs/specs/widgets.md) and a
-// close circle. Every card is its own surface with its own blur region (registered by the card, see
+// by IPC. No title: the cards grouped by app, newest first (the first card of a group carries the app name, its
+// count and Clear; the last visible one carries Show All / Show Less), then the widgets placed there; a footer of
+// pills (Clear All, Edit Widgets: gallery overlay, docs/specs/widgets.md) and a close circle, centred one spacing.lg
+// below the last card. Every card is its own surface with its own blur region (registered by the card, see
 // addSurface). Esc or a click outside the cards closes.
 //
 // The window exists per screen but its content (a Loader) only while the Center is open on that
 // screen, so a closed Center costs nothing. Rows come from the keyed Notifications.centerModel
 // (displayed rows only, ordered by group; the first row of a group draws its header), so new notifications never rebuild the list.
 // Keyboard: Tab moves between rows and buttons, Return opens the row's default action, Delete or
-// Backspace clears the row.
+// Backspace clears the row and moves focus to the next card (the previous one when it was the last).
 Variants {
     id: root
 
@@ -89,8 +89,8 @@ Variants {
             id: pill
 
             // The CenterContent that owns the blur regions.
-        required property var surfaceHost
-        property string text: ""
+            required property var surfaceHost
+            property string text: ""
 
             signal clicked
 
@@ -278,77 +278,13 @@ Variants {
                     }
                 }
 
-                // Title capsule: the title, the Do Not Disturb state, Clear All.
-                Item {
-                    id: header
-                    width: parent.width
-                    height: Tokens.notificationCenterHeaderHeight
-                    Accessible.role: Accessible.Grouping
-                    Accessible.name: Notifications.dnd ? qsTr("Notifications, Do Not Disturb on") : qsTr("Notifications")
-
-                    Material {
-                        id: headerSurface
-                        anchors.fill: parent
-                        radius: height / 2
-                        shadowEnabled: false
-                        Component.onCompleted: host.addSurface(headerSurface, false, Math.floor(height / 2))
-                    }
-
-                    Text {
-                        id: title
-                        textFormat: Text.PlainText
-                        x: Tokens.spacingLg
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("Notifications")
-                        color: Appearance.colors.text
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyTitleSize
-                        font.weight: Tokens.typographyMenuBoldWeight
-                    }
-
-                    // Do Not Disturb is visible while it is on.
-                    Row {
-                        anchors.right: clearAll.visible ? clearAll.left : parent.right
-                        anchors.rightMargin: Tokens.spacingSm
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: Tokens.spacingXs
-                        visible: Notifications.dnd
-
-                        Icon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            size: Tokens.panelCcChevron + Tokens.spacingXs
-                            name: "moon"
-                        }
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            textFormat: Text.PlainText
-                            text: qsTr("Do Not Disturb")
-                            color: Appearance.colors.textSecondary
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyCaptionSize
-                            font.weight: Tokens.typographyMenuBoldWeight
-                        }
-                    }
-
-                    Button {
-                        id: clearAll
-                        anchors.right: parent.right
-                        anchors.rightMargin: Tokens.spacingSm
-                        anchors.verticalCenter: parent.verticalCenter
-                        capsule: true
-                        visible: Notifications.count > 0
-                        text: qsTr("Clear All")
-                        onClicked: Notifications.clearAll()
-                    }
-                }
-
                 ListView {
                     id: list
-                    y: header.height + Tokens.notificationBannerGap
+                    y: 0
                     width: parent.width
-                    // As tall as its content (the area below the last card is outside the list, so a click there closes).
-                    height: Math.min(contentHeight, Math.max(0, parent.height - y - footer.height - Tokens.notificationBannerGap))
+                    // As tall as its content (the area below the last card is outside the list, so a click there closes);
+                    // the footer sits one spacing.lg below it, or at the bottom of the column when the list fills it.
+                    height: Math.min(contentHeight, Math.max(0, parent.height - y - footer.height - Tokens.spacingLg))
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
                     model: Notifications.centerModel
@@ -380,6 +316,19 @@ Variants {
                         }
                     }
                     footer: widgetsArea
+
+                    // After a card was cleared with the keyboard: focus goes to the card that took its place (the next
+                    // one, or the previous when it was the last), never to an invisible item; the panel when none is left.
+                    function focusAfterRemoval(at: int): void {
+                        Qt.callLater(() => {
+                            const n = list.count;
+                            const target = n > 0 ? list.itemAtIndex(Math.min(at, n - 1)) : null;
+                            if (target && (target as Item).rowItem)
+                                ((target as Item).rowItem as Item).forceActiveFocus();
+                            else
+                                panel.forceActiveFocus();
+                        });
+                    }
                     // Rows near the viewport stay alive so Tab can reach them.
                     cacheBuffer: Tokens.notificationCenterCache
                     delegate: Column {
@@ -402,6 +351,8 @@ Variants {
                         required property int toggleCount
 
                         readonly property bool expanded: Notifications.expandedApps[appName] === true
+                        // The focusable card (see ListView.focusAfterRemoval).
+                        readonly property Item rowItem: row
 
                         width: list.width
                         // Groups are set apart; cards of one group are one banner gap apart.
@@ -435,8 +386,9 @@ Variants {
                                     row.open();
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                                    const at = item.index;
                                     Notifications.clear(item.key);
-                                    panel.forceActiveFocus();
+                                    list.focusAfterRemoval(at);
                                     event.accepted = true;
                                 }
                             }
@@ -647,13 +599,25 @@ Variants {
                     }
                 }
 
-                // Footer: Edit Widgets and the close circle, at the bottom of the column.
+                // Footer (macOS model): Edit Widgets and the close circle, centred under the column, one spacing.lg below
+                // the last card; Clear All joins them while there are notifications.
                 Row {
                     id: footer
-                    anchors.right: parent.right
-                    y: parent.height - height
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.min(list.y + list.height + Tokens.spacingLg, parent.height - height)
                     height: Tokens.notificationCenterCloseDisk
                     spacing: Tokens.spacingSm
+
+                    Pill {
+                        surfaceHost: host
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Notifications.count > 0
+                        text: qsTr("Clear All")
+                        onClicked: {
+                            Notifications.clearAll();
+                            panel.forceActiveFocus();
+                        }
+                    }
 
                     Pill {
                         surfaceHost: host

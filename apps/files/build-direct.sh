@@ -21,8 +21,8 @@ if [[ ${1:-} == "--tests" ]]; then
   "$moc" "$here/src/tagsearch.h" -o "$out/moc_tests_tagsearch.cpp"
   g++ "${cxxflags[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core) \
     "$root/tests/unit/files/tst_filelogic.cpp" "$root/tests/unit/files/tst_previewqueue.cpp" "$root/tests/unit/files/tst_tags.cpp" \
-    "$root/tests/unit/files/tst_tagsearch.cpp" \
-    "$here/src/filelogic.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$out/moc_tests_tagsearch.cpp" \
+    "$root/tests/unit/files/tst_tagsearch.cpp" "$root/tests/unit/files/tst_folderstyle.cpp" \
+    "$here/src/filelogic.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$out/moc_tests_tagsearch.cpp" \
     $(pkg-config --libs Qt6Core) -lgtest -lgtest_main -pthread \
     -o "$out/files-unit-tests"
   echo "built $out/files-unit-tests"
@@ -58,7 +58,7 @@ read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick
 read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus)"
 sources=("$here/src/main.cpp" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp"
   "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp"
-  "$here/src/tagsearch.cpp" "${mocs[@]}")
+  "$here/src/tagsearch.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "${mocs[@]}")
 pids=() objs=()
 for src in "${sources[@]}"; do
   obj=$objdir/$(basename "${src%.cpp}").o

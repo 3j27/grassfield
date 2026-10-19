@@ -81,6 +81,48 @@ SettingsPage {
     }
 
     SettingsGroup {
+        id: folderGroup
+        caption: qsTr("Folder colour")
+        footnote: qsTr("Applies to every folder icon in Files, the desktop and Get Info. A folder can have its own colour (Files, Customize Folder).")
+
+        readonly property string setting: root.store.value("icons.folderColor")
+        // Theme (the icon theme's own colour), Accent (follows the accent), then the palette; the chosen one is marked.
+        readonly property var model: {
+            const out = [
+                {color: Tokens.iconModeSampleTop, name: qsTr("Theme"), state: folderGroup.setting === "theme" ? 2 : 0},
+                {color: Appearance.colors.accent, name: qsTr("Accent"), state: folderGroup.setting === "accent" ? 2 : 0}
+            ];
+            for (let i = 0; i < Tokens.iconModeTintColors.length; i++) {
+                const c = Tokens.iconModeTintColors[i];
+                out.push({color: c, name: iconGroup.tintNames[i], state: folderGroup.setting.toLowerCase() === c.toLowerCase() ? 2 : 0});
+            }
+            return out;
+        }
+
+        SettingsRow {
+            title: qsTr("Folder colour")
+            SwatchRow {
+                accessibleName: qsTr("Folder colour")
+                caption: folderGroup.model.filter(m => m.state === 2).map(m => m.name).join("")
+                model: folderGroup.model
+                activeFocusOnTab: true
+                onActiveFocusChanged: {
+                    if (activeFocus && currentIndex < 0) {
+                        for (let i = 0; i < model.length; i++) {
+                            if (model[i].state === 2)
+                                currentIndex = i;
+                        }
+                    }
+                }
+                onChosen: index => {
+                    currentIndex = index;
+                    root.store.set("icons.folderColor", index === 0 ? "theme" : (index === 1 ? "accent" : Tokens.iconModeTintColors[index - 2]));
+                }
+            }
+        }
+    }
+
+    SettingsGroup {
         caption: qsTr("Material")
         footnote: qsTr("Transparency applies to the menu bar, Dock, menus and panels. Reduce Transparency makes them opaque.")
 

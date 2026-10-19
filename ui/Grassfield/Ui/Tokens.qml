@@ -208,6 +208,48 @@ QtObject {
     readonly property real dockMinimizedBadgeScale: 0.4
     // estimate, pending F1 measurement from design/reference
     readonly property real dockTrashIconScale: 0.6
+    // Dock fidelity pass: the shelf holds icons only (no text), so it is more translucent than the A2 text clamp; real blur behind it (reference gs-016-031: shelf a few percent lighter than its backdrop)
+    readonly property real dockTintAlpha: 0.42
+    // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge)
+    readonly property real dockHighlightOpacity: 0.34
+    // Dock fidelity pass: 1 px rim, white in both appearances (glass edge)
+    readonly property real dockRimOpacity: 0.34
+    // macOS convention: at most three recent applications
+    readonly property int dockRecentMax: 3
+    // estimate: launch bounce rise in px (half an icon)
+    readonly property int dockBounceHeight: 24
+    // estimate: one up-and-down hop of the launch bounce, ms
+    readonly property int dockBounceDuration: 420
+    // estimate: the launch bounce stops after this long without a window, ms
+    readonly property int dockLaunchTimeout: 12000
+    // estimate: transparent room above the shelf for a dragged icon and the poof
+    readonly property int dockDragArea: 128
+    // estimate: px above the shelf top (icon centre) from which a dropped tile leaves the Dock
+    readonly property int dockDragOutDistance: 56
+    // estimate: removal puff, ms
+    readonly property int dockPoofDuration: 420
+    // estimate: final diameter of each puff circle, px
+    readonly property int dockPoofSize: 56
+    // estimate: notification badge height and minimum width
+    readonly property int dockBadgeSize: 20
+    // estimate: how far the badge sticks out of the icon corner, px
+    readonly property int dockBadgeOverhang: 5
+    // estimate: starting opacity of the removal puff
+    readonly property real dockPoofOpacity: 0.5
+    // estimate: centre circle of the puff, fraction of poofSize
+    readonly property real dockPoofCoreScale: 0.7
+    // estimate: outer circles of the puff, fraction of poofSize
+    readonly property real dockPoofPuffScale: 0.4
+    // estimate: circles start at this fraction of their size and grow by one more
+    readonly property real dockPoofGrowFrom: 0.5
+    // estimate: accent fill of a tile under a file drag
+    readonly property real dockDropHighlightOpacity: 0.28
+    // reference gs-014-019: icon menu tail base ~19 px
+    readonly property int dockMenuTailWidth: 19
+    // reference gs-014-019: icon menu tail height ~12.6 px
+    readonly property int dockMenuTailHeight: 13
+    // reference gs-014-019: tail tip 16 above the shelf top
+    readonly property int dockMenuTailGap: 16
 
     // task spec: pointer dwell before a hot corner fires
     readonly property int hotCornerDwellMs: 150
@@ -296,6 +338,12 @@ QtObject {
     readonly property int panelAboutLabelWidth: 100
     // F1 gap 6: 36-pt icon disk of a 2x1 module
     readonly property int panelCcIconButton: 36
+    // estimate: Wi-Fi join button in a 34-pt list row (kept at its pre-36 size)
+    readonly property int panelCcJoinButton: 30
+    // estimate: Now Playing transport button in the Quick Settings 2x2 module (kept at its pre-36 size)
+    readonly property int panelCcTransportButton: 26
+    // estimate: transport button of the Now Playing desktop widget (kept at its pre-36 size)
+    readonly property int panelWidgetTransportButton: 22
     // estimate: list row in an expanded Control Center section
     readonly property int panelCcRowHeight: 34
     // estimate: chevron glyph size
@@ -372,8 +420,6 @@ QtObject {
     readonly property int notificationCenterWidth: 344
     // F1 gap 7: right inset and offset below the bar 15 +-1 (same as the banners)
     readonly property int notificationCenterInset: 16
-    // estimate: title capsule of the Notifications column
-    readonly property int notificationCenterHeaderHeight: 36
     // F1 gap 7: edit-widgets pill 87 x 23
     readonly property int notificationCenterPillWidth: 87
     // F1 gap 7: edit-widgets pill 87 x 23
@@ -576,6 +622,8 @@ QtObject {
     readonly property int settingsListIconSize: 18
     // estimate: Sound pane, minimum gap between two volume writes while a slider is dragged
     readonly property int settingsVolumeApplyMs: 120
+    // estimate: shell, minimum gap between two compositor cursor reloads while the pointer size slider is dragged
+    readonly property int settingsPointerApplyMs: 100
     // estimate: Sound pane, width of the percentage next to a slider
     readonly property int settingsVolumeValueWidth: 44
 
@@ -725,6 +773,14 @@ QtObject {
     readonly property int filesInfoIconSize: 64
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesInfoLabelWidth: 100
+    // estimate: Customize Folder window (macOS 26 style panel: preview, colour row, symbol grid)
+    readonly property int filesCustomizeWindowWidth: 440
+    // estimate: Customize Folder window height (preview, colour row, custom colour, symbol grid and field, buttons)
+    readonly property int filesCustomizeWindowHeight: 500
+    // estimate: Customize Folder, custom colour and symbol fields
+    readonly property int filesCustomizeHexWidth: 140
+    // estimate: Customize Folder, time the per-user storage note stays before the window closes
+    readonly property int filesCustomizeNoteMs: 1800
     // estimate: Go to Folder and confirmation sheets
     readonly property int filesSheetWidth: 420
     // estimate: pause that starts a new type-to-select search
@@ -962,6 +1018,47 @@ QtObject {
     readonly property string iconModeSampleGlyph: "#FFFFFF"
     // own picks, not copied: swatches of the Tinted icon colour (blue, purple, pink, red, orange, yellow, green, graphite); the accent is the first swatch
     readonly property var iconModeTintColors: ["#3E7BFA", "#8E5BEA", "#E25AA1", "#E5484D", "#F5883B", "#E6B422", "#3FAE5A", "#8A8F98"]
+
+    // folder colours: MultiEffect saturation (0: the colorization alone sets the hue; MultiEffect desaturates after colorizing)
+    readonly property real folderIconSaturation: 0.0
+    // folder colours: lifts the shading so the recoloured body keeps the lightness of the theme's folder (tuned on WhiteSur folders in the nested session, docs/specs/ui.md)
+    readonly property real folderIconBrightness: 0.15
+    // folder colours: keeps the flap and the body distinct after the colour mapping (tuned on WhiteSur folders)
+    readonly property real folderIconContrast: 0.25
+    // folder colours: strength of the colour (0..1): the luminance of the folder is mapped onto the colour, shape and shading kept
+    readonly property real folderIconColorization: 1.0
+    // estimate (macOS 26 Customize Folder): symbol or emoji edge over the folder icon edge
+    readonly property real folderIconGlyphScale: 0.34
+    // estimate: vertical centre of the symbol over the icon height (the body of the folder, below the flap)
+    readonly property real folderIconGlyphCenterY: 0.62
+    // A2 (icons >= 3:1): a plain symbol is an engraved shade of the folder's own colour (macOS 26), darkened in the colour's hue until it reaches this contrast against the plate
+    readonly property real folderIconGlyphMinContrast: 3.0
+    // measured safety over the minimum (the plate is estimated from the colour, the real one differs by a few percent)
+    readonly property real folderIconGlyphContrastMargin: 0.3
+    // measured on the recoloured folder plate under the symbol (nested captures, tests/visual/folder_glyph_contrast.py): plate over the folder colour, icon mode default and clear
+    readonly property real folderIconPlateDefault: 0.96
+    // measured: plate over the folder colour in the Dark icon mode
+    readonly property real folderIconPlateDark: 0.78
+    // measured (two icon tints, dark and light appearance): plate over the folder colour in the Tinted icon mode = base + slope x relative luminance of the icon tint
+    readonly property real folderIconPlateTintedBase: 0.37
+    // measured: see plateTintedBase
+    readonly property real folderIconPlateTintedSlope: 1.5
+    // measured: in the Tinted icon mode the theme's own folder plate is the icon tint times this
+    readonly property real folderIconThemeTintedGain: 1.27
+    // measured: in the Clear icon mode a dark plate lets the backdrop through (a black folder over a light backdrop): the lightest plate over the colour, as a share of the way to white
+    readonly property real folderIconClearLift: 0.22
+    // measured: plate of the icon theme's own folder under the symbol (default mode, current theme of the reference session)
+    readonly property string folderIconThemePlate: "#a4caee"
+    // estimate: 1 px light edge under an engraved symbol (the engraved look)
+    readonly property string folderIconGlyphHighlight: "#40ffffff"
+    // estimate: offset of that edge over the icon edge (at least 1 px)
+    readonly property real folderIconGlyphHighlightOffset: 0.016
+    // estimate: Customize Folder, symbol suggestions per row
+    readonly property int folderIconPickerGlyphColumns: 8
+    // estimate: Customize Folder, side of one symbol suggestion
+    readonly property int folderIconPickerCell: 30
+    // estimate: Customize Folder, preview icon edge
+    readonly property int folderIconPickerPreviewSize: 96
 
     // F1 gap 19: icons about 104 pt
     readonly property int switcherIconSize: 104

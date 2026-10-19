@@ -182,7 +182,7 @@ Column {
 
         NavItem {
             id: join
-            width: Tokens.panelCcIconButton
+            width: Tokens.panelCcJoinButton
             height: Tokens.panelCcRowHeight
             accessibleName: qsTr("Join network")
             ringRadius: width / 2
@@ -190,7 +190,7 @@ Column {
 
             Rectangle {
                 anchors.centerIn: parent
-                width: Tokens.panelCcIconButton
+                width: Tokens.panelCcJoinButton
                 height: width
                 radius: width / 2
                 color: password.text !== "" ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
