@@ -629,9 +629,9 @@ namespace gf::stages {
             return ActiveWindowAction::ActivateBehind;
         if (state.hasFront && !state.exclusive)
             return ActiveWindowAction::FocusFront;
-        if (state.exclusive)
+        if (state.layerKeyboard || state.exclusive)
             return ActiveWindowAction::Clear;
-        return ActiveWindowAction::None;
+        return ActiveWindowAction::Unfocus;
     }
 
     PointerAction beforePointerEvent(PointerEvent event, const PointerState& state) {

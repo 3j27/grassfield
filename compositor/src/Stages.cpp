@@ -524,6 +524,25 @@ namespace {
         return fs->window() == front;
     }
 
+    // The surface that holds the keyboard as Hyprland sees it: its focus surface; else the seat's keyboard focus; else,
+    // while an Exclusive layer is mapped, that layer (Hyprland resets its focus surface when its focused window closes,
+    // CWindow::onUnmap, and refuses the next window while the layer is mapped: the layer keeps the keys).
+    SP<CWLSurfaceResource> keyboardHolder() {
+        const auto fs = Desktop::focusState();
+        if (auto surface = fs ? fs->surface() : nullptr)
+            return surface;
+        if (auto surface = gf::surfaces::keyboardFocus())
+            return surface;
+        if (g_pInputManager) {
+            for (const auto& ref : g_pInputManager->m_exclusiveLSes) {
+                const auto ls = ref.lock();
+                if (ls && ls->m_mapped && ls->resource())
+                    return ls->resource();
+            }
+        }
+        return nullptr;
+    }
+
     PHLWINDOW frontOfActive(const SSpace& sp);
 
     // Hyprland's active window never stays on a strip window: window key bindings (close, full screen, floating), window
@@ -537,7 +556,7 @@ namespace {
         const auto* sp     = spaceHolding(addressOf(active));
         auto        front  = preferred && preferred->m_isMapped ? preferred : (sp ? frontOfActive(*sp) : nullptr);
         front              = inStrip(front) ? nullptr : front;
-        const auto  holder = fs->surface();
+        const auto  holder = keyboardHolder();
         st::ActiveWindowState state{.hidden        = true,
                                     .locked        = sessionLocked(),
                                     .layerKeyboard = holder && gf::surfaces::ownerOf(holder).layer,
@@ -554,8 +573,13 @@ namespace {
                 case st::ActiveWindowAction::FocusFront: fs->fullWindowFocus(front, Desktop::FOCUS_REASON_OTHER); break;
                 case st::ActiveWindowAction::Clear:
                     fs->resetWindowFocus();
-                    gf::logRequest(Log::WARN, "stages: strip window {:x} was Hyprland's active window under an Exclusive layer and no window could replace it: no active window ({})",
+                    gf::logRequest(Log::WARN, "stages: strip window {:x} was Hyprland's active window behind a layer surface and no window could replace it: no active window ({})",
                                    addressOf(active), when);
+                    return;
+                case st::ActiveWindowAction::Unfocus:
+                    fs->fullWindowFocus(nullptr, Desktop::FOCUS_REASON_OTHER);
+                    gf::logRequest(Log::INFO, "stages: strip window {:x} was Hyprland's active window and no window could replace it: nothing focused ({})", addressOf(active),
+                                   when);
                     return;
             }
             const auto now = fs->window();
@@ -574,7 +598,7 @@ namespace {
         const auto fs = Desktop::focusState();
         if (!fs || !focus || !focus->m_isMapped || fs->window() == focus || sessionLocked())
             return;
-        const auto holder = fs->surface();
+        const auto holder = keyboardHolder();
         if (!holder || !gf::surfaces::ownerOf(holder).layer)
             return;
         const bool ok = activateBehindLayer(focus, holder);

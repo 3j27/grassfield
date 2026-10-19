@@ -420,8 +420,10 @@ TEST(StagesInput, HyprlandsActiveWindowNeverStaysOnAStripWindow) {
     EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = true, .hasFront = false}), A::Clear)
         << "nothing may replace it under an Exclusive layer: no active window";
     EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = false, .exclusive = true, .hasFront = true}), A::Clear);
-    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = false, .exclusive = false, .hasFront = false}), A::None)
-        << "Hyprland clears its focus itself when the window's input is blocked";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = true, .exclusive = false, .hasFront = false}), A::Clear)
+        << "the desktop keeps the keyboard, no active window";
+    EXPECT_EQ(activeWindowAction({.hidden = true, .locked = false, .layerKeyboard = false, .exclusive = false, .hasFront = false}), A::Unfocus)
+        << "a no_focus front window: nothing focused, as Hyprland does when its focused window gets blocked";
     EXPECT_EQ(activeWindowAction({.hidden = true, .locked = true, .layerKeyboard = true, .exclusive = true, .hasFront = true}), A::None) << "the session lock is never touched";
 }
 

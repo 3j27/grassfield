@@ -283,11 +283,14 @@ namespace gf::stages {
     };
 
     enum class ActiveWindowAction : uint8_t {
-        None,           // nothing to do (or Hyprland clears its focus itself when the window's input is blocked)
+        None,           // nothing to do (not a strip window, or the session is locked)
         ActivateBehind, // the front window becomes the active window, the layer surface keeps the keyboard; it gets the
                         // keyboard when the layer releases it (Hyprland's refocusLastWindow restores the active window)
-        FocusFront,     // nothing holds the keyboard for a layer: the front window takes focus, as after a swap
-        Clear,          // last resort under an Exclusive layer: no active window (window actions then target nothing)
+        FocusFront,     // no layer surface holds the keyboard: the front window takes focus, as after a swap
+        Clear,          // no window may replace it while a layer surface holds the keyboard or an Exclusive layer is
+                        // mapped: no active window, the keyboard holder untouched (CFocusState::resetWindowFocus)
+        Unfocus,        // no window may replace it otherwise: no active window and no keyboard focus (what Hyprland
+                        // itself does when the input of its focused window gets blocked)
     };
 
     // What the glue does so that Hyprland's active window is never a strip window. After an ActivateBehind or FocusFront
