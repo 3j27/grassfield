@@ -57,10 +57,29 @@ Scope {
         value: root.open
     }
 
+    // The session lock owns the screen and the keyboard (set from shell.qml): nothing is focused by the shell, and an
+    // open overview closes without a request.
+    property bool locked: false
+    onLockedChanged: {
+        if (locked)
+            requestCloseForOther();
+    }
+
+    // Selection, one for all outputs (OverviewWindow reads it): a window address ("" none) and, with the keyboard in the
+    // Spaces bar of the output `spaceScreen`, the tile index (-1 while the windows have it).
+    property string selected: ""
+    property int spaceFocus: -1
+    property string spaceScreen: ""
+
     function show(): void {
         if (open)
             return;
+        focusTimer.stop();
+        focusPlan = null;
         previous = DesktopState.holdsKeyboard ? null : Compositor.activeWindow();
+        selected = "";
+        spaceFocus = -1;
+        spaceScreen = "";
         stayOnSpace = 0;
         Compositor.refreshSpaces();
         phase = "idle";
@@ -216,10 +235,15 @@ Scope {
         if (d.close && !switchingSpace) {
             live = false;
             closing = true;
-            // The keyboard leaving the chrome ends the plugin's overview as soon as the release starts: that is the
-            // shell's own close in progress, which must still run its action (a focus), not be cut short.
-            if (!releasing)
-                hide();
+            // The plugin ended the overview itself (a Desktop switch, the lock): the same close as every other, so the
+            // chromes release their keyboard in order and the focus request goes out, naming the Desktop focused now (a
+            // user's switch must survive Hyprland refocusing the window that was active at open). When the release is
+            // already running (the keyboard leaving the chrome ends the plugin's overview too) that close is carried on.
+            if (stage === "open")
+                closeAnd({
+                    kind: "ended",
+                    workspace: Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : 0
+                });
         } else if (d.close) {
             live = false;
         }
@@ -258,22 +282,27 @@ Scope {
     // Keyboard mode of every output's chrome (V2.keyboardPlan): all Exclusive while open; releasing: all None but the
     // holder, then all None.
     readonly property var keyboardPlan: V2.keyboardPlan(Quickshell.screens.map(s => s.name), stage, keepScreen)
+    // The focus target of the close in progress (V2.closeTarget) and whether the plugin was given it.
     property var pending: null
+    property bool focusViaPlugin: false
 
-    // Close Overview, then focus something. Each output's chrome commits its keyboard mode on its own; while any chrome is
-    // Exclusive Hyprland refuses to refocus a window ("ignoring, exclusive LS present") and retries nothing when the last
-    // one commits. So the order is: every chrome but the holder drops to None; after the settle pause the holder drops
-    // too (nothing Exclusive is left when Hyprland refocuses); the close waits until no chrome reports the keyboard and the
-    // settle pause has passed again (V2.releaseDone, bounded by releaseBound); then on:false is sent, the action runs and
-    // the chromes hide. `action` is the user's choice (a window, a Desktop);
-    // null means no choice: the window that was active at open, or the Desktop created with "+", gets the keyboard
-    // (V2.restorePlan); a window that no longer exists leaves Hyprland's choice.
+    // Close Overview, then focus something (docs/specs/overview.md "Close focus"). `choice` is what the user did (see
+    // V2.closeTarget): a window, a Desktop, nothing (null: Esc, toggle, backdrop), or "ended" / "other" (the plugin ended
+    // the overview; another surface takes the keyboard). The target is worked out once, at the start:
+    //  - with the plugin capability `overview-focus` ONE request goes out now, before the chromes drop to None; the
+    //    compositor waits for the last Exclusive layer and focuses (no shell focus action, no race with the layers);
+    //  - without it the shell focuses after the chromes are released and checks the result (retryFocus).
+    // Each output's chrome commits its keyboard mode on its own, so the order is: every chrome but the holder drops to
+    // None; after the settle pause the holder drops too; the close waits until no chrome reports the keyboard and the
+    // settle pause has passed again (V2.releaseDone, bounded by releaseBound); then on:false is sent and the chromes hide.
     property bool releaseSettled: false
 
-    function closeAnd(action: var): void {
+    function closeAnd(choice: var): void {
         if (stage !== "open")
             return;
-        pending = action;
+        const target = V2.closeTarget(choice, previous, stayOnSpace);
+        focusViaPlugin = target.kind !== "skip" && !locked && Capabilities.has("overview-focus") && Compositor.overviewFocus(target);
+        pending = target;
         releaseSettled = false;
         keepScreen = holderScreen();
         stage = "releasing";
@@ -295,25 +324,158 @@ Scope {
         releaseTimer.stop();
         releaseBound.stop();
         keepScreen = "";
-        const action = pending;
-        pending = null;
+        const target = pending;
+        const viaPlugin = focusViaPlugin;
         try {
             closeV2();
-            if (action)
-                action();
-            else
-                restoreFocus();
         } finally {
             hide();
         }
+        if (!viaPlugin && !locked)
+            startFocus(target);
     }
 
-    function restoreFocus(): void {
-        const plan = V2.restorePlan(previous, Compositor.windowAddresses(), stayOnSpace);
+    // ---- Without the plugin capability: focus, check, retry ----
+
+    // {kind: "window", address} | {kind: "space", id} (V2.fallbackPlan), the goal of the current attempt, the attempt
+    // number and when the first one started.
+    property var focusPlan: null
+    property var focusGoal: null
+    property int focusAttempt: 0
+    property real focusStarted: 0
+
+    function startFocus(target: var): void {
+        const plan = V2.fallbackPlan(target, Compositor.windowAddresses(), Compositor.minimizedAddresses());
+        if (plan.kind === "none")
+            return;
+        focusPlan = plan;
+        focusAttempt = 0;
+        focusStarted = Date.now();
+        attemptFocus();
+    }
+
+    // The Lua focus dispatch (Compositor.focusWindow: the protocol `activate` does nothing for the window Hyprland still
+    // counts as focused). For a Desktop the window focused last on it, else the Desktop itself.
+    function attemptFocus(): void {
+        const plan = focusPlan;
+        if (!plan || locked) {
+            focusPlan = null;
+            return;
+        }
+        let address = plan.address;
         if (plan.kind === "space")
+            address = Compositor.frontWindowOn(plan.id);
+        if (address) {
+            focusGoal = {
+                address: address
+            };
+            Compositor.focusWindow(address);
+        } else {
+            focusGoal = {
+                workspace: plan.id
+            };
             Compositor.focusSpace(plan.id);
-        else if (plan.kind === "window")
-            Compositor.focusWindow(plan.address);
+        }
+        focusTimer.interval = V2.retryDelay(focusAttempt, Tokens.overviewFocusRetryMs);
+        focusTimer.restart();
+    }
+
+    // Whether the focus holds (activewindow through the foreign-toplevel state, the focused workspace): done, else try
+    // again with a longer wait until the bound runs out (Hyprland's own choice then stands).
+    Timer {
+        id: focusTimer
+        onTriggered: {
+            const ws = Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : -1;
+            const holds = V2.focusHolds(root.focusGoal, Compositor.activeWindow(), ws);
+            if (holds || Date.now() - root.focusStarted >= Tokens.overviewFocusBoundMs || root.open) {
+                console.info("grassfield-overview: close focus (shell fallback)", holds ? "holds" : "given up", "after", root.focusAttempt + 1, "attempt(s)");
+                root.focusPlan = null;
+                return;
+            }
+            root.focusAttempt++;
+            root.attemptFocus();
+        }
+    }
+
+    // ---- Selection (one for all outputs) ----
+
+    function windowOf(address: string): var {
+        return windows.instances.find(w => w.winKeys.indexOf(address) >= 0) ?? null;
+    }
+
+    function hoverSelect(address: string): void {
+        spaceFocus = -1;
+        selected = address;
+    }
+
+    // Arrow keys. Nothing selected: the window that was active at open (macOS), wherever it is. Otherwise the neighbour
+    // on that output, else the window entered on the output lying that way; up with nothing above enters the Desktops bar.
+    function arrow(dir: string): void {
+        const all = windows.instances;
+        if (spaceFocus >= 0) {
+            const owner = all.find(w => w.screenName === spaceScreen);
+            if (dir === "down") {
+                spaceFocus = -1;
+            } else if ((dir === "left" || dir === "right") && owner) {
+                spaceFocus = Math.max(0, Math.min(spaceFocus + (dir === "left" ? -1 : 1), owner.tiles.length - 1));
+            }
+            return;
+        }
+        const owner = windowOf(selected);
+        if (!owner) {
+            selected = V2.startSelection(previous, all.map(w => ({
+                        name: w.screenName,
+                        addresses: w.winKeys
+                    })));
+            return;
+        }
+        const next = owner.neighborOf(selected, dir);
+        if (next !== "") {
+            selected = next;
+            return;
+        }
+        if (dir === "up") {
+            if (owner.tiles.length > 0) {
+                spaceScreen = owner.screenName;
+                spaceFocus = owner.activeTileIndex();
+            }
+            return;
+        }
+        const toName = V2.adjacentScreen(all.map(w => ({
+                    name: w.screenName,
+                    x: w.modelData.x,
+                    y: w.modelData.y,
+                    w: w.modelData.width,
+                    h: w.modelData.height
+                })), owner.screenName, dir);
+        const dest = toName === "" ? null : all.find(w => w.screenName === toName);
+        const entry = dest ? dest.entryFor(dir, owner.crossFraction(selected, dir)) : "";
+        if (entry !== "")
+            selected = entry;
+    }
+
+    // Tab order: windows (-1), then each Desktop tile of the output holding the selection, then back to the windows.
+    function cycle(step: int): void {
+        const owner = spaceFocus >= 0 ? windows.instances.find(w => w.screenName === spaceScreen) : (windowOf(selected) ?? windows.instances[0]);
+        if (!owner)
+            return;
+        let next = spaceFocus + step;
+        if (next >= owner.tiles.length || next < -1)
+            next = step > 0 ? -1 : owner.tiles.length - 1;
+        spaceScreen = owner.screenName;
+        spaceFocus = next;
+    }
+
+    function activateSelection(): void {
+        if (spaceFocus >= 0) {
+            const owner = windows.instances.find(w => w.screenName === spaceScreen);
+            if (owner)
+                owner.activateTile(spaceFocus);
+        } else if (selected !== "") {
+            const owner = windowOf(selected);
+            if (owner)
+                owner.activateWindow(selected);
+        }
     }
 
     Timer {
@@ -342,7 +504,9 @@ Scope {
     // nothing is focused here.
     function requestCloseForOther(): void {
         if (stage === "open")
-            closeAnd(() => {});
+            closeAnd({
+                kind: "other"
+            });
     }
 
     // Close from outside (IPC, shortcut): same path as Esc, the keyboard is released before the close completes.

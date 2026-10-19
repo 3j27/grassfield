@@ -784,7 +784,7 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   `tests/compositor/cursor_refresh.sh baseline` and the unload step of `check`.
 - Without `overview-focus` (plugin absent, mismatched, an older plugin, its listeners failed, or withdrawn at unload): the
   verb does not exist (the shell's guarded call is a no-op) and the shell restores the focus after the Overview itself (checks
-  and retries: shell side, later task). An unload while a request waits posts outcome `unavailable` first. Measured:
+  and retries: `Overview.startFocus`, docs/specs/overview.md "Close and keyboard"). An unload while a request waits posts outcome `unavailable` first. Measured:
   `tests/compositor/overview_focus.sh baseline` (an older build, a `--no-plugin` session) and case 14 of `check`.
 
 ## Automated tests · Manual verification steps
@@ -953,8 +953,8 @@ Manual (L1, nested only):
 ## Known limitations (honest, user-visible gaps vs macOS)
 
 - Stages (prototype behind a flag): limits and risks in `docs/specs/stages.md` "Known limitations and risks".
-- Overview close focus (`overview-focus`): the shell does not send it yet (shell integration is a later task), so the
-  Overview keeps its own focus path until then. Keys typed before the last chrome released still reach that chrome (lost,
+- Overview close focus (`overview-focus`): the shell sends it on every close (`Overview.closeAnd`) and keeps its own
+  checked focus path without the capability. Keys typed before the last chrome released still reach that chrome (lost,
   as in the drop table of `docs/specs/overview.md`). The bound is fixed (1 s): a dialog open longer during the close ends the
   request (`timeout`) and Hyprland's own refocus decides when it closes. The activation order behind the front window starts
   at the plugin load (before it, and after a reload, the stack order is used). A touch or tablet press during the close counts

@@ -168,6 +168,8 @@ ShellRoot {
     Idle {}
     Overview {
         id: overviewSurface
+        // The session lock owns the screen and the keyboard: the overview closes and focuses nothing.
+        locked: Lock.lockState !== "unlocked"
     }
     AppsController {
         id: appsSurface

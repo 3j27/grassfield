@@ -578,6 +578,10 @@ QtObject {
     readonly property int overviewChromeRetryMs: 120
     // v2: pause (0: the next event-loop turn; measured 0 keys lost from 30 ms, none in the wrong window) after the last change of which chrome holds the keyboard before the close completes: every output's chrome commits keyboard None on its own, and Hyprland refuses to refocus while any of them is still Exclusive
     readonly property int overviewReleaseSettleMs: 0
+    // estimate: without the plugin capability overview-focus, delay before the first check that the focus the shell asked for holds after the chromes are gone; it doubles with each retry (a focus dispatch settles within a few frames)
+    readonly property int overviewFocusRetryMs: 60
+    // without overview-focus: the shell stops checking and retrying this long after the first attempt (Hyprland's own choice then stands); the plugin's own bound is 1 s
+    readonly property int overviewFocusBoundMs: 1000
     // v2: upper bound of the keyboard release; the close completes then even if a chrome still reports the keyboard (a lost chrome event must not leave the overview open)
     readonly property int overviewReleaseBoundMs: 500
     // F1 gap 15: add-space button is a 32 circle
