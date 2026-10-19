@@ -1,7 +1,11 @@
 #pragma once
 
 #include <QByteArray>
+#include <QList>
+#include <QPair>
+#include <QSet>
 #include <QString>
+#include <QUrl>
 
 // A folder's own look in Grassfield Files and on the desktop ("Customize Folder…", macOS 26): a colour and an optional
 // symbol or emoji drawn on the folder icon. Pure logic (Qt Core only, unit tested in tests/unit/files/tst_folderstyle.cpp).
@@ -64,6 +68,11 @@ unsigned glyphClasses(uint cp);
 // (U+FE0E) is in it. Characters of text presentation by default (an umbrella, a heart) count as emoji without the text
 // selector because the fonts of this system draw them as colour glyphs.
 bool isEmoji(const QString &glyph);
+
+// After a cut-and-paste: the folders whose look follows, as (from, to). Only a folder the job really created at
+// destination/name counts: with Skip in the conflict dialog nothing is created, with Rename the folder lands under another
+// name, and a look must not end up on a different folder that happens to have the name.
+QList<QPair<QUrl, QUrl>> followingPaste(const QList<QUrl> &sources, const QUrl &destination, const QSet<QUrl> &created);
 
 // The style held by a stored value. Anything that is not a JSON object, or holds invalid fields, reads as empty fields
 // (an invalid colour is dropped, the glyph is normalised).

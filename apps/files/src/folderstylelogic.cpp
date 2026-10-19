@@ -280,6 +280,18 @@ bool isEmoji(const QString &glyph)
     return emoji;
 }
 
+QList<QPair<QUrl, QUrl>> followingPaste(const QList<QUrl> &sources, const QUrl &destination, const QSet<QUrl> &created)
+{
+    QList<QPair<QUrl, QUrl>> out;
+    for (const QUrl &from : sources) {
+        QUrl to = destination.adjusted(QUrl::StripTrailingSlash);
+        to.setPath(to.path() + QLatin1Char('/') + from.fileName());
+        if (created.contains(to))
+            out.append({from, to});
+    }
+    return out;
+}
+
 namespace
 {
 QJsonObject objectOf(const QByteArray &stored)

@@ -712,3 +712,23 @@ TEST(FolderStyleStore, AStoreOverTheByteLimitIsNeverWritten)
     EXPECT_FALSE(reader.fallbackBroken());
     EXPECT_GE(reader.fallbackCount(), n);
 }
+
+// A cut-and-paste with Skip or Rename in the conflict dialog: the look follows only a folder really created at
+// destination/name, never a different existing folder of that name.
+TEST(FolderStyleLogic, LooksFollowOnlyWhatThePasteReallyCreated)
+{
+    const QUrl dest = QUrl::fromLocalFile(QStringLiteral("/data/target/"));
+    const QList<QUrl> sources = {QUrl::fromLocalFile(QStringLiteral("/data/src/Photos")), QUrl::fromLocalFile(QStringLiteral("/data/src/Music")),
+                                 QUrl::fromLocalFile(QStringLiteral("/data/src/Docs")), QUrl::fromLocalFile(QStringLiteral("/data/src/Misc"))};
+    QSet<QUrl> created;
+    created.insert(QUrl::fromLocalFile(QStringLiteral("/data/target/Photos")));        // moved as it is
+    created.insert(QUrl::fromLocalFile(QStringLiteral("/data/target/Music (copy)"))); // Rename in the dialog: another name
+    // Docs: Skip (nothing created); Misc: nothing reported.
+    const auto follow = FolderStyleLogic::followingPaste(sources, dest, created);
+    ASSERT_EQ(follow.size(), 1);
+    EXPECT_EQ(follow.at(0).first, sources.at(0));
+    EXPECT_EQ(follow.at(0).second, QUrl::fromLocalFile(QStringLiteral("/data/target/Photos")));
+    // Overwrite: the folder is created (replaced) under the same name: it follows.
+    EXPECT_EQ(FolderStyleLogic::followingPaste({sources.at(2)}, dest, {QUrl::fromLocalFile(QStringLiteral("/data/target/Docs"))}).size(), 1);
+    EXPECT_TRUE(FolderStyleLogic::followingPaste(sources, dest, {}).isEmpty());
+}
