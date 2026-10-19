@@ -150,26 +150,26 @@ Variants {
 
         // Round x of a group header that grows into a "Clear All" pill under the pointer or the keyboard focus.
         component GroupClear: Item {
-            id: gc
+            id: ctl
 
             property string text: ""
             // False: invisible and not clickable (focus still shows it).
             property bool active: false
-            readonly property bool expanded: gcHover.hovered || gc.activeFocus
+            readonly property bool expanded: gcHover.hovered || ctl.activeFocus
 
             signal clicked
 
-            width: gc.expanded ? Math.max(height, gcLabel.implicitWidth + 2 * Tokens.spacingSm) : height
+            width: ctl.expanded ? Math.max(height, gcLabel.implicitWidth + 2 * Tokens.spacingSm) : height
             height: Tokens.notificationCloseSize + Tokens.spacingXs
-            opacity: gc.active || gc.activeFocus || gcHover.hovered ? 1 : 0
+            opacity: ctl.active || ctl.activeFocus || gcHover.hovered ? 1 : 0
             activeFocusOnTab: true
             Accessible.role: Accessible.Button
-            Accessible.name: gc.text
+            Accessible.name: ctl.text
             Accessible.focusable: true
-            Accessible.onPressAction: gc.clicked()
+            Accessible.onPressAction: ctl.clicked()
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    gc.clicked();
+                    ctl.clicked();
                     event.accepted = true;
                 }
             }
@@ -195,16 +195,17 @@ Variants {
             Rectangle {
                 anchors.fill: parent
                 radius: height / 2
-                color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                border.width: gc.activeFocus ? Tokens.controlFocusRing : 0
-                border.color: Appearance.colors.accent
+                // Same backing as the x of a card (A2: the label must stay legible on any wallpaper).
+                color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
+                border.width: ctl.activeFocus ? Tokens.controlFocusRing : 1
+                border.color: ctl.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
             }
 
             Icon {
                 anchors.centerIn: parent
                 size: Tokens.notificationCloseSize - Tokens.notificationCloseGlyphInset
                 name: "close-glyph"
-                opacity: gc.expanded ? 0 : 1
+                opacity: ctl.expanded ? 0 : 1
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -217,8 +218,8 @@ Variants {
                 id: gcLabel
                 anchors.centerIn: parent
                 textFormat: Text.PlainText
-                text: gc.text
-                opacity: gc.expanded ? 1 : 0
+                text: ctl.text
+                opacity: ctl.expanded ? 1 : 0
                 color: Appearance.colors.text
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
@@ -233,9 +234,9 @@ Variants {
 
             MouseArea {
                 anchors.fill: parent
-                enabled: gc.opacity > 0
+                enabled: ctl.opacity > 0
                 cursorShape: Qt.PointingHandCursor
-                onClicked: gc.clicked()
+                onClicked: ctl.clicked()
             }
         }
 
@@ -440,16 +441,32 @@ Variants {
                     }
                     footer: widgetsArea
 
-                    // After a card was cleared with the keyboard: focus goes to the card that took its place (the next
-                    // one, or the previous when it was the last), never to an invisible item; the panel when none is left.
-                    function focusAfterRemoval(at: int): void {
+                    // Key of the card that takes the focus when the card at `at` (and, for a group, the cards of the same app
+                    // below it) is cleared: the next card, else the previous one, "" when none is left.
+                    function neighbourKey(at: int, app: string, group: bool): string {
+                        const m = Notifications.centerModel;
+                        let j = at + 1;
+                        while (group && j < m.count && m.get(j).appName === app)
+                            j++;
+                        if (j < m.count)
+                            return m.get(j).key;
+                        return at > 0 ? m.get(at - 1).key : "";
+                    }
+
+                    // After a card was cleared with the keyboard: focus goes to the card that took its place (found by key: the
+                    // list drops the cleared delegate only on its next layout), never to an invisible item; the panel when none is left.
+                    function focusKey(key: string): void {
                         Qt.callLater(() => {
-                            const n = list.count;
-                            const target = n > 0 ? list.itemAtIndex(Math.min(at, n - 1)) : null;
-                            if (target && (target as Item).rowItem)
-                                ((target as Item).rowItem as Item).forceActiveFocus();
-                            else
-                                panel.forceActiveFocus();
+                            // Apply the removal first: the layout it triggers would otherwise take the focus away again.
+                            list.forceLayout();
+                            for (let i = 0; key !== "" && i < list.count; i++) {
+                                const it = list.itemAtIndex(i);
+                                if (it && it.key === key && it.rowItem) {
+                                    it.rowItem.forceActiveFocus();
+                                    return;
+                                }
+                            }
+                            panel.forceActiveFocus();
                         });
                     }
                     // Rows near the viewport stay alive so Tab can reach them.
@@ -474,7 +491,7 @@ Variants {
                         required property int toggleCount
 
                         readonly property bool expanded: Notifications.expandedApps[appName] === true
-                        // The focusable card (see ListView.focusAfterRemoval).
+                        // The focusable card (see ListView.focusKey).
                         readonly property Item rowItem: row
                         // The pointer is over a card of this app, or its group is being cleared.
                         readonly property bool groupHot: host.hoverApp === appName
@@ -499,15 +516,16 @@ Variants {
                         }
 
                         function finishLeave(): void {
-                            const at = index;
+                            // Read everything first: clearing destroys this delegate.
+                            const next = leaveAnim.refocus ? list.neighbourKey(index, appName, clearGroupAtEnd) : null;
                             if (clearGroupAtEnd) {
                                 Notifications.clearApp(appName);
                                 host.leavingGroup = false;
                             } else if (!groupLeaving) {
                                 Notifications.clear(key);
                             }
-                            if (leaveAnim.refocus)
-                                list.focusAfterRemoval(at);
+                            if (next !== null)
+                                list.focusKey(next);
                         }
 
                         onGroupLeavingChanged: {
@@ -604,25 +622,11 @@ Variants {
                                 onTapped: row.open()
                             }
 
-                            Loader {
-                                id: rowLoader
-                                width: parent.width
-                                sourceComponent: rowBody
-                            }
-
-                            // Keyboard focus ring.
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: Tokens.radiusBanner
-                                color: "transparent"
-                                border.width: row.activeFocus ? Tokens.controlFocusRing : 0
-                                border.color: Appearance.colors.accent
-                            }
-
                             // Close (clear) this entry: a small round x on the card's top-left corner, shown on hover or
                             // keyboard focus (Tab reaches it after the card; Space or Return clears).
                             Item {
                                 id: closeButton
+                                z: 1
 
                                 x: -panel.gutter
                                 y: -panel.gutter
@@ -673,6 +677,21 @@ Variants {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: item.beginLeave(false, false)
                                 }
+                            }
+
+                            Loader {
+                                id: rowLoader
+                                width: parent.width
+                                sourceComponent: rowBody
+                            }
+
+                            // Keyboard focus ring.
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Tokens.radiusBanner
+                                color: "transparent"
+                                border.width: row.activeFocus ? Tokens.controlFocusRing : 0
+                                border.color: Appearance.colors.accent
                             }
 
                             // One floating card: the group header on the first card of a group, the notification, Show

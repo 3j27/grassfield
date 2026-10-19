@@ -74,8 +74,9 @@ before the release, so nothing is removed). The dot tone follows the shelf lumin
 or more over white, black and noise in light and dark, transparency 0.25 and 0.6.
 
 Surfaces: `menubar`, `systemmenu`, `appmenu`, `controlcenter` (Quick Settings modules), `controlcenter-detail` (the Wi-Fi
-module opened by a click on its text), `notificationcenter` (3 test notifications, the floating column,
-opened by a click on the clock), `dock` (magnification 1.7, pointer at x=927), `search` (query "files"), `apps`
+module opened by a click on its text), `notificationcenter` (2 test notifications on a cleared history, the floating column,
+opened by a click on the clock) with `notificationcenterhover` (pointer on the first card: its x and the group x) and
+`notificationcenterclear` (pointer on the group x: the "Clear All" pill), `dock` (magnification 1.7, pointer at x=927), `search` (query "files"), `apps`
 (page 1), `overview` (4 foot windows), `lock` (never typed into; the nested instance is torn down afterwards
 because a locked nested session cannot be unlocked without a password; in dev the lock shows "dev: password checks
 disabled" under the field: PAM is suppressed unless `GRASSFIELD_DEV_ALLOW_PAM=1`, which no automated test sets, see
