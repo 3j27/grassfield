@@ -1012,6 +1012,32 @@ QtObject {
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
 
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, MultiEffect saturation (-1..1): colours kept as they are
+    readonly property real iconModeDarkSaturation: 0.0
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, MultiEffect brightness: a small lift that keeps the dark parts readable after the darkening. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeDarkBrightness: 0.1
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, MultiEffect contrast: keeps the glyph readable on the darker plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeDarkContrast: 0.6
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, strength of the black colorization (multiplies every channel by 1 - this, hue kept). Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeDarkColorization: 0.4
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Dark mode, colour the icon is darkened towards
+    readonly property string iconModeDarkShade: "#000000"
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Clear mode, fully desaturated
+    readonly property real iconModeClearSaturation: -1.0
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Clear mode, lighter. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeClearBrightness: 0.1
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Clear mode, keeps the glyph readable on the grey plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeClearContrast: 0.4
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Clear mode, translucent over the material; A2 keeps meaningful icons at 3:1 or more (measured)
+    readonly property real iconModeClearOpacity: 0.78
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Tinted mode, saturation: 0 (MultiEffect desaturates after colorizing, so -1 would grey the tint out; the colorization already maps luminance to the tint)
+    readonly property real iconModeTintedSaturation: 0.0
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Tinted mode, lifts the shadows so the ramp starts above black. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeTintedBrightness: 0.3
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Tinted mode, spreads the luminance over the ramp. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
+    readonly property real iconModeTintedContrast: 0.7
+    // legacy MultiEffect model of the mode, used only by FolderStyle's engraving-contrast estimate (the shader replaced it for drawing); ADR-0014: Tinted mode, strength of the tint (0..1)
+    readonly property real iconModeTintedColorization: 1.0
     // ADR-0014 shader: colour distance (RGB 0..1) from the estimated plate colour below which a pixel is plate. Chosen on 29 WhiteSur icons (docs/specs/ui.md, icon shader).
     readonly property real iconModePlateToleranceLow: 0.25
     // ADR-0014 shader: colour distance above which a pixel is glyph (between the two: a soft edge). Chosen on 29 WhiteSur icons; a white glyph on a blue plate is about 0.8 away, a plate gradient about 0.2.
