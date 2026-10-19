@@ -4,8 +4,11 @@
 # onto its slot, release) N times, in three variants: plain, a window opening during the drag (the rebuild waits for the release),
 # and a very short hold. After every iteration the live pinned list (qs ipc: dock pinned) must still be ["foot"]. A last drag that
 # is released far above the Dock must remove the tile: it proves the pointer really drives the drag.
+# Interruptions: while the tile is held out of the Dock, something else takes over (Search, Overview, Apps, the app switcher, the
+# Dock menu, a banner, an output added then removed, an app quitting); the pointer then comes back and releases on the slot. A
+# tile is removed only by a real release outside the Dock, so the pins must be unchanged after each of them (5 times each).
 # Run as a BARE command (reference machine only). The nested session this script starts is torn down on exit.
-#   tests/visual/dock-drag-stress.sh [ITERATIONS=50]
+#   tests/visual/dock-drag-stress.sh [ITERATIONS=50] [INTERRUPT-ROUNDS=5] ["trigger ..."]
 # Exit status 1 when the pinned list changed (the iteration is named) or the control drag did not remove the tile.
 source "$(dirname "$0")/lib.sh"
 
@@ -73,6 +76,67 @@ for i in $(seq 1 "$n"); do
 done
 echo "drags: $i, pinned changed: $lost (live list: $(pinned))"
 [[ $(jq -c '.dock.pinned' "$cfg") == "$want" ]] || { echo "config file dock.pinned is $(jq -c '.dock.pinned' "$cfg")"; fail=1; }
+
+# Interruptions during a held drag-out (nested only). ROUNDS (2nd argument, default 5) per trigger; 3rd argument: the triggers to run.
+rounds=${2:-5}
+bus() { cat "$VS_DEV/bus.address"; }
+kill_class() {
+  local pid
+  for pid in $("$VS_ROOT/scripts/nestctl" clients -j | jq -r --arg c "$1" '.[] | select(.class == $c) | .pid'); do
+    dev_may_signal "$pid" && kill "$pid" || true
+  done
+}
+# trial NAME CLEANUP-FUNCTION TRIGGER-FUNCTION: hold the tile out, run the trigger, release on the slot, assert the pins.
+trial() {
+  local name=$1 after=$2 trigger=$3
+  "$VS_ROOT/scripts/dev/pointer.sh" output "$VS_OUTPUT" abs $FOOT_X $DOCK_Y sleep 200 down sleep 200 drag $FOOT_X $UP_Y sleep 3000 drag $FOOT_X $DOCK_Y sleep 150 up sleep 150 abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null &
+  ptr_pid=$!
+  sleep 1.5
+  "$trigger" >/dev/null 2>&1 || true
+  sleep 0.6
+  wait "$ptr_pid" || true
+  ptr_pid=""
+  sleep 1.2
+  local got; got=$(pinned)
+  if [[ $got != "$want" ]]; then
+    echo "interruption $name: pinned is $got"
+    return 1
+  fi
+  "$after" >/dev/null 2>&1 || true
+  [[ $(pinned) == "$want" ]] || { echo "interruption $name: pinned changed in cleanup: $(pinned)"; return 1; }
+}
+trig_overview() { vs_ipc overview open; }
+end_overview() { vs_ipc overview close; sleep 1.5; }
+trig_apps() { vs_ipc apps open; }
+end_apps() { vs_ipc apps close; sleep 1.5; }
+trig_search() { vs_ipc search open files; }
+end_search() { vs_ipc search close; sleep 1; }
+trig_switcher() { vs_ipc switcher next ""; }
+end_switcher() { vs_ipc switcher cancel; sleep 1; }
+trig_dockmenu() { vs_ipc dock menu 1 GF-REF; }
+end_dockmenu() { vs_ipc menubar close; sleep 1; }
+trig_banner() { DBUS_SESSION_BUS_ADDRESS=$(bus) notify-send -a gfdockB -t 4000 Interrupt "Banner during a drag"; }
+end_banner() { sleep 4.5; }
+trig_hotplugadd() { "$VS_ROOT/scripts/nestctl" output create headless GF-HOT; }
+end_hotplugadd() { "$VS_ROOT/scripts/nestctl" output remove GF-HOT; sleep 1; }
+trig_hotplugremove() { "$VS_ROOT/scripts/nestctl" output remove GF-HOT; }
+end_hotplugremove() { sleep 1; }
+trig_appquit() { kill_class gfdockB; }
+end_appquit() { vs_spawn foot --app-id gfdockB; sleep 3; }
+ints=0
+for name in ${3:-overview apps search switcher dockmenu banner hotplugadd hotplugremove appquit}; do
+  for r in $(seq 1 "$rounds"); do
+    ints=$(( ints + 1 ))
+    # Removal needs the output the previous step created.
+    if [[ $name == hotplugremove ]]; then "$VS_ROOT/scripts/nestctl" output create headless GF-HOT >/dev/null 2>&1 || true; sleep 1; fi
+    if ! trial "$name (round $r)" "end_$name" "trig_$name"; then
+      fail=1
+      break 2
+    fi
+  done
+done
+"$VS_ROOT/scripts/nestctl" output remove GF-HOT >/dev/null 2>&1 || true
+echo "interruptions: $ints trials, pins $([[ $(pinned) == "$want" ]] && echo unchanged || echo CHANGED: $(pinned))"
 
 # Control: released far above the Dock, the (not running) pinned tile is removed. Needs foot with no window: the test apps are
 # not foot, so it has none.
