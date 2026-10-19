@@ -91,4 +91,9 @@ bool tooLargeToEdit(const QByteArray &stored);
 // The value for `style` alone (apply to nothing).
 QByteArray serialize(const Style &style);
 
+// Debounce with a maximum wait: how long to wait (ms) after an event that follows `sinceFirstMs` of continuous activity
+// (events closer than `quietMs` to each other), so that the work runs after `quietMs` of quiet, and at the latest
+// `maxWaitMs` after the first event of the burst even if the activity never stops.
+int debounceDelay(int quietMs, int maxWaitMs, qint64 sinceFirstMs);
+
 } // namespace FolderStyleLogic

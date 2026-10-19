@@ -346,4 +346,10 @@ QByteArray serialize(const Style &style)
     return apply({}, style);
 }
 
+int debounceDelay(int quietMs, int maxWaitMs, qint64 sinceFirstMs)
+{
+    const qint64 left = qMax<qint64>(0, qint64(maxWaitMs) - sinceFirstMs);
+    return int(qMin<qint64>(quietMs, left));
+}
+
 } // namespace FolderStyleLogic

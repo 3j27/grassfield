@@ -193,3 +193,37 @@ TEST(FolderStylePrune, ExitDoesNotWaitForAWorkerBlockedInAStat)
     EXPECT_EQ(calls.load(), 1) << "the abandoned worker stopped at its next step (one stat, no more)";
     FolderStyleStore::setStatObserverForTests(nullptr);
 }
+
+// ---- the debounce of the live look refresh (FolderModel::m_attrTimer) ----
+
+#include "folderstylelogic.h"
+
+TEST(FolderStyleLogic, DebounceFiresUnderSteadyActivityWithinTheMaxWait)
+{
+    // Simulate FolderModel: an event every `period` ms for 3500 ms; the timer is restarted with debounceDelay on every event.
+    const int quiet = 200, maxWait = 500;
+    for (const int period : {10, 50, 100, 190}) {
+        qint64 first = -1, deadline = -1;
+        int fires = 0;
+        qint64 firstFire = -1;
+        for (qint64 t = 0; t <= 3500; t += 1) {
+            if (deadline >= 0 && t >= deadline) {
+                ++fires;
+                if (firstFire < 0)
+                    firstFire = t;
+                first = -1;
+                deadline = -1;
+            }
+            if (t % period == 0) {
+                if (first < 0)
+                    first = t;
+                deadline = t + FolderStyleLogic::debounceDelay(quiet, maxWait, t - first);
+            }
+        }
+        EXPECT_GT(fires, 3) << "period " << period;
+        EXPECT_LE(firstFire, maxWait + 1) << "period " << period << ": the first refresh came after " << firstFire << " ms";
+    }
+    EXPECT_EQ(FolderStyleLogic::debounceDelay(200, 500, 0), 200) << "an isolated event waits the quiet time";
+    EXPECT_EQ(FolderStyleLogic::debounceDelay(200, 500, 400), 100);
+    EXPECT_EQ(FolderStyleLogic::debounceDelay(200, 500, 900), 0) << "past the max wait: now";
+}

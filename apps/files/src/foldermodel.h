@@ -280,6 +280,9 @@ private:
     // look set by another tool shows without a reload. KIO's own update does not report an extended attribute change.
     QFileSystemWatcher m_attrWatcher;
     QTimer m_attrTimer;
+    QElapsedTimer m_attrBurst; // the first change of the burst being debounced
+    static constexpr int kAttrQuietMs = 200;
+    static constexpr int kAttrMaxWaitMs = 500;
     void watchShownFolder();
     void revalidateStyles();
     mutable QTimer m_seenTimer;
