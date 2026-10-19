@@ -106,6 +106,30 @@ TestCase {
         compare(grid.current, 5);
     }
 
+    // With a custom colour (matching no swatch) the swatch row still shows where the focus is: the ring starts on the
+    // first swatch; with a swatch chosen it starts there.
+    function test_swatchRowShowsItsFocusRingWithACustomColour() {
+        const win = createTemporaryObject(windowComponent, test);
+        win.pickedColor = "#123456";
+        win.requestActivate();
+        tryVerify(() => win.activeFocusItem !== null, 3000, "the window has the focus");
+        const swatches = find(win.contentItem, "swatches");
+        compare(swatches.currentIndex, -1);
+        find(win.contentItem, "hexField").forceActiveFocus();
+        swatches.forceActiveFocus(Qt.TabFocusReason);
+        compare(swatches.currentIndex, 0, "the focus has a place");
+        compare(swatches.markedIndex, 0, "and a ring");
+        // Arrow keys move it from there.
+        keyClick(Qt.Key_Right);
+        compare(swatches.currentIndex, 1);
+        // A chosen swatch: the ring starts on it.
+        find(win.contentItem, "hexField").forceActiveFocus();
+        swatches.currentIndex = -1;
+        win.pickedColor = "accent";
+        swatches.forceActiveFocus(Qt.TabFocusReason);
+        compare(swatches.currentIndex, 1);
+    }
+
     function test_symbolFieldKeepsOneSymbol() {
         const win = createTemporaryObject(windowComponent, test);
         const field = find(win.contentItem, "glyphField");

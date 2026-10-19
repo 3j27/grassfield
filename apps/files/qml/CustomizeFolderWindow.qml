@@ -156,14 +156,6 @@ Window {
                     caption: root.swatchModel.filter(m => m.state === 2).map(m => m.name).join("")
                     model: root.swatchModel
                     activeFocusOnTab: true
-                    onActiveFocusChanged: {
-                        if (activeFocus && currentIndex < 0) {
-                            for (let i = 0; i < model.length; i++) {
-                                if (model[i].state === 2)
-                                    currentIndex = i;
-                            }
-                        }
-                    }
                     onChosen: index => {
                         currentIndex = index;
                         root.chooseSwatch(index);
