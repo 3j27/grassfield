@@ -50,6 +50,9 @@ Singleton {
     readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
     readonly property bool privateBus: Quickshell.env("GRASSFIELD_PRIVATE_BUS") === "1"
     readonly property bool serverEnabled: !devSession || privateBus
+    // Test-only IPC hooks (invoke, clearAll, dismissAll): same gate as the visual fixtures (GRASSFIELD_DEV=1 and
+    // GRASSFIELD_VISUAL_FIXTURES=1, never with GRASSFIELD_SESSION=1), so nothing outside a test session can drive them.
+    readonly property bool testHooks: VisualFixtures.active
 
     // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
     readonly property string stateDir: {
@@ -367,6 +370,13 @@ Singleton {
         const sizes = {};
         for (const a of centerApps)
             sizes[a] = (sizes[a] || 0) + 1;
+        // A group that emptied forgets its "Show All": the next notification of that app arrives collapsed.
+        const stale = Object.keys(expandedApps).filter(a => !sizes[a]);
+        if (stale.length > 0) {
+            const kept = Object.assign({}, expandedApps);
+            stale.forEach(a => delete kept[a]);
+            expandedApps = kept;
+        }
         const wantKeys = [];
         const wantMeta = [];
         const wantSig = [];
@@ -467,6 +477,7 @@ Singleton {
         centerApps = [];
         shownKeys = [];
         shownSig = [];
+        expandedApps = ({});
     }
 
     function rebuildCenter(): void {
@@ -830,6 +841,43 @@ Singleton {
         }
     }
 
+    // ---- test hooks (IPC, gated by testHooks) ----
+
+    function hookRefused(name: string): string {
+        console.warn("notifications: " + name + " is a test hook (GRASSFIELD_DEV=1 and GRASSFIELD_VISUAL_FIXTURES=1 only); refused");
+        return "refused: " + name + " is a test hook";
+    }
+
+    function hookInvoke(actionId: string): string {
+        if (!testHooks)
+            return hookRefused("invoke");
+        for (const e of history) {
+            if (e.nid >= 0) {
+                if (actionId === "default")
+                    activateDefault(e.key);
+                else
+                    invokeAction(e.key, actionId);
+                return "invoked " + actionId + " on " + e.summary;
+            }
+        }
+        return "no live notification";
+    }
+
+    function hookClearAll(): string {
+        if (!testHooks)
+            return hookRefused("clearAll");
+        clearAll();
+        return "ok";
+    }
+
+    function hookDismissAll(): string {
+        if (!testHooks)
+            return hookRefused("dismissAll");
+        while (bannerCount > 0)
+            dismissBanner(bannerModel.get(0).key);
+        return "ok";
+    }
+
     IpcHandler {
         target: "notifications"
 
@@ -844,16 +892,7 @@ Singleton {
         // Test hook (no pointer in the nested session): runs an action of the newest live
         // notification as a click on its button would ("default" = click on the banner).
         function invoke(actionId: string): string {
-            for (const e of root.history) {
-                if (e.nid >= 0) {
-                    if (actionId === "default")
-                        root.activateDefault(e.key);
-                    else
-                        root.invokeAction(e.key, actionId);
-                    return "invoked " + actionId + " on " + e.summary;
-                }
-            }
-            return "no live notification";
+            return root.hookInvoke(actionId);
         }
 
         // Test hook: one-line state.
@@ -862,20 +901,14 @@ Singleton {
                 + " dnd=" + root.dnd + " center=" + root.centerOpen;
         }
 
-        // Test hook: remove every entry (history, banners, Center); the UI has no global Clear All. Dev and test
-        // sessions only (GRASSFIELD_DEV=1): in a real session nothing outside the shell may wipe the history.
-        function clearAll(): void {
-            if (!root.devSession) {
-                console.warn("notifications: clearAll is a test hook (GRASSFIELD_DEV=1 only); refused");
-                return;
-            }
-            root.clearAll();
+        // Test hook: remove every entry (history, banners, Center); the UI has no global Clear All.
+        function clearAll(): string {
+            return root.hookClearAll();
         }
 
         // Test hook: dismiss every banner as a swipe would.
-        function dismissAll(): void {
-            while (root.bannerCount > 0)
-                root.dismissBanner(root.bannerModel.get(0).key);
+        function dismissAll(): string {
+            return root.hookDismissAll();
         }
     }
 }

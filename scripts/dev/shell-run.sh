@@ -24,6 +24,7 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --private-bus) export GRASSFIELD_PRIVATE_BUS=1 ;;
     --session-bus) export GRASSFIELD_PRIVATE_BUS=0 ;;
+    --visual-fixtures) export GRASSFIELD_VISUAL_FIXTURES=1 ;;  # test hooks and fixed values (shell/services/VisualFixtures.qml, dev only)
     --render-timing) export GRASSFIELD_RENDER_TIMING=1 ;;  # Qt scene graph frame timing in .dev/shell.log (QSG_RENDER_TIMING)
     --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
     --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
