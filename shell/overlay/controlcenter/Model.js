@@ -66,11 +66,6 @@ function airplaneTargets(wifiPresent, btPresent, turnOn) {
     return {wifi: wifiPresent ? !turnOn : null, bluetooth: btPresent ? !turnOn : null};
 }
 
-// Volume while developing on the owner's machine: stays within +-limit of the baseline.
-function devVolume(baseline, target, limit) {
-    return Math.max(Math.max(0, baseline - limit), Math.min(Math.min(1, baseline + limit), target));
-}
-
 // Next index for arrow navigation over `count` items (no wrap).
 function stepIndex(current, count, delta) {
     if (count <= 0)

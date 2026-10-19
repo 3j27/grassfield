@@ -28,12 +28,12 @@ Singleton {
 
     // delta: fraction of the range (0.05 = 5 percent). Returns false when nothing was changed.
     function adjust(delta: real): bool {
-        if (!available)
-            return false;
         if (devSession) {
             console.info("brightness: dev session, not changing the backlight (" + (delta > 0 ? "+" : "") + Math.round(delta * 100) + "%)");
             return false;
         }
+        if (!available)
+            return false;
         const pct = Math.round(Math.abs(delta) * 100);
         setter.command = ["brightnessctl", "-q", "-d", root.device, "set", pct + "%" + (delta > 0 ? "+" : "-")];
         setter.running = true;
@@ -42,12 +42,12 @@ Singleton {
 
     // Absolute level 0..1 (a slider). Returns false when nothing was changed.
     function setLevel(fraction: real): bool {
-        if (!available)
-            return false;
         if (devSession) {
             console.info("brightness: dev session, not changing the backlight (set " + Math.round(fraction * 100) + "%)");
             return false;
         }
+        if (!available)
+            return false;
         setter.command = ["brightnessctl", "-q", "-d", root.device, "set", Math.round(Math.max(0, Math.min(1, fraction)) * 100) + "%"];
         setter.running = true;
         return true;
@@ -61,12 +61,12 @@ Singleton {
     readonly property real kbdLevel: kbdAvailable ? Math.max(0, Math.min(1, kbdValue / kbdMax)) : 0
 
     function setKbdLevel(fraction: real): bool {
-        if (!kbdAvailable)
-            return false;
         if (devSession) {
             console.info("brightness: dev session, not changing the keyboard backlight");
             return false;
         }
+        if (!kbdAvailable)
+            return false;
         kbdSetter.command = ["brightnessctl", "-q", "-d", root.kbdDevice, "set", Math.round(Math.max(0, Math.min(1, fraction)) * root.kbdMax).toString()];
         kbdSetter.running = true;
         return true;

@@ -91,7 +91,6 @@ FocusScope {
 
     Component.onDestruction: {
         Connectivity.setScanning(false);
-        Audio.devRestore();
     }
 
     Timer {

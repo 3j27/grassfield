@@ -74,13 +74,6 @@ TestCase {
         compare(off.bluetooth, true);
     }
 
-    function test_devVolumeClamp() {
-        fuzzyCompare(Model.devVolume(0.5, 0.9, 0.05), 0.55, 1e-9);
-        fuzzyCompare(Model.devVolume(0.5, 0.1, 0.05), 0.45, 1e-9);
-        fuzzyCompare(Model.devVolume(0.98, 1, 0.05), 1, 1e-9);
-        fuzzyCompare(Model.devVolume(0.02, 0, 0.05), 0, 1e-9);
-    }
-
     function test_stepIndex() {
         compare(Model.stepIndex(-1, 3, 1), 0);
         compare(Model.stepIndex(-1, 3, -1), 2);
