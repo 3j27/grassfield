@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.platform
 
 // Glance (`grassfield-preview --glance <files>`) for the surfaces of the shell. Lives in a singleton so the
 // process outlives the surface that asked for it, and so Space can toggle it: a layer surface keeps the
@@ -45,6 +46,8 @@ Singleton {
         const cmd = (Quickshell.env("GRASSFIELD_PREVIEW_CMD") || "grassfield-preview").split(" ").filter(w => w !== "" && w !== "--glance");
         root.shownKey = files.join("\n");
         launcher.command = ["sh", "-c", "command -v -- \"$1\" >/dev/null 2>&1 || { echo missing; exit 0; }; exec \"$@\"", "sh"].concat(cmd, ["--glance", "--"], files);
+        // The pointer size and colour theme the user chose (Pointer.launchEnvironment), like every app the shell starts.
+        launcher.environment = Pointer.launchEnvironment();
         launcher.running = true;
     }
 

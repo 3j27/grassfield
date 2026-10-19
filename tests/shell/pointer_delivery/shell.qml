@@ -142,6 +142,53 @@ ShellRoot {
         },
         function () {
             root.check("bad theme never reaches the socket", root.requests.length === root.mark);
+            // Colours: a valid session theme again, and the fake builder (same arguments as branding/cursors/build.sh).
+            Pointer.theme = "gf-test";
+            server.active = true;
+            Pointer.builder.script = Quickshell.shellPath("../pointer_theme/fake-build.sh");
+            Pointer.builder.iconsDir = root.sock + ".icons";
+            Pointer.builder.debounceMs = 100;
+            root.waitFor(() => Pointer.applied === 28, 4000);
+        },
+        function () {
+            root.check("colours: size delivered with the session theme", root.last() === "/setcursor gf-test 28");
+            root.mark = root.requests.length;
+            Pointer.outlineColor = "#ffeedd";
+            Pointer.fillColor = "#112233";
+            // Nothing is sent before the theme is on disk: the pointer stays as it is.
+            idle.start();
+        },
+        function () {
+            root.check("colours: waiting for the build, then switched to the custom theme",root.requests.length === root.mark + 1 && root.last() === "/setcursor grassfield-cursors-custom 28");
+            root.check("colours: applied theme is the custom one", Pointer.appliedTheme === "grassfield-cursors-custom" && Pointer.builder.ready);
+            const env = Pointer.launchEnvironment();
+            root.check("colours: new apps get the custom theme", env["XCURSOR_THEME"] === "grassfield-cursors-custom" && env["HYPRCURSOR_THEME"] === "grassfield-cursors-custom");
+            // New colours: the rebuilt theme has the same name, the request is sent again once it is built.
+            root.mark = root.requests.length;
+            Pointer.fillColor = "#223344";
+            idle.start();
+        },
+        function () {
+            root.check("colours: rebuilt theme requested again under the same name, once", root.requests.length === root.mark + 1 && root.last() === "/setcursor grassfield-cursors-custom 28");
+            root.check("colours: second build counted", Pointer.builder.generation === 2 && Pointer.appliedGeneration === 2);
+            // A failing build: nothing is sent, the pointer keeps what it has, apps still match it.
+            root.mark = root.requests.length;
+            Pointer.fillColor = "#ff0000";
+            idle.start();
+        },
+        function () {
+            root.check("colours: failed build sends nothing", root.requests.length === root.mark && Pointer.builder.error !== "");
+            root.check("colours: pointer keeps the previous custom theme", Pointer.appliedTheme === "grassfield-cursors-custom");
+            root.check("colours: apps still get the theme on screen", Pointer.launchEnvironment()["XCURSOR_THEME"] === "grassfield-cursors-custom");
+            // Reset Color: back to the session theme, then the custom theme is deleted.
+            root.mark = root.requests.length;
+            Pointer.outlineColor = "#ffffff";
+            Pointer.fillColor = "#000000";
+            root.waitFor(() => Pointer.appliedTheme === "gf-test" && Pointer.builder.removals === 1 && !Pointer.builder.removing, 4000);
+        },
+        function () {
+            root.check("reset: session theme requested", root.requests.length === root.mark + 1 && root.last() === "/setcursor gf-test 28");
+            root.check("reset: no custom theme for new apps", Pointer.launchEnvironment()["XCURSOR_THEME"] === undefined);
             root.finish();
         }
     ]
@@ -209,7 +256,7 @@ ShellRoot {
 
     Process {
         id: cleanup
-        command: ["rm", "-f", root.sock]
+        command: ["rm", "-rf", root.sock, root.sock + ".icons"]
         onRunningChanged: {
             if (running)
                 return;

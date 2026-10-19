@@ -2,12 +2,15 @@
 # Build the Grassfield cursor theme (hyprcursor SVG theme + XCursor fallback) from branding/cursors/src.
 #
 #   build.sh [--out ICONS_DIR] [--name NAME] [--fill #RRGGBB] [--outline #RRGGBB] [--sizes "24 32 48 64 96"]
+#   build.sh --remove [--out ICONS_DIR] [--name NAME]      delete the theme ICONS_DIR/NAME (the shell's "Reset Color")
 #
 # Output: ICONS_DIR/NAME/{index.theme,manifest.hl,hyprcursors/*.hlc,cursors/*}  (written atomically).
 # Defaults: ICONS_DIR=<repo>/.dev/share/icons, NAME=grassfield-cursors, fill #000000, outline #FFFFFF.
-# The package build uses --out "$pkgdir/usr/share/icons"; the shell regenerates a custom accent/size with
-#   --name grassfield-cursors-custom --out "$XDG_DATA_HOME/icons" --fill ... --outline ... --sizes ...
-# Tools: hyprcursor-util and rsvg-convert (both come with hyprland's dependencies, librsvg via hyprcursor), python3.
+# The package build uses --out "$pkgdir/usr/share/icons"; the shell (shell/platform/PointerTheme.qml) regenerates the
+# theme for the pointer colours at runtime with
+#   --name grassfield-cursors-custom --out "$XDG_DATA_HOME/icons" --fill ... --outline ...
+# SIGTERM stops the build and removes its work directory (the shell supersedes a build with a newer colour).
+# Tools: hyprcursor-util (package hyprcursor), rsvg-convert (librsvg), python3: runtime dependencies of grassfield-desktop.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -18,6 +21,7 @@ fill='#000000'
 outline='#FFFFFF'
 sizes='24 32 48 64 96'
 verbose=0
+remove=0
 stage() { ((verbose)) && printf 'cursors: %-12s t=%ss\n' "$1" "${EPOCHREALTIME:0:-3}" >&2 || true; }
 
 while [[ $# -gt 0 ]]; do
@@ -27,26 +31,38 @@ while [[ $# -gt 0 ]]; do
     --fill) fill=${2:?--fill needs a colour}; shift ;;
     --outline) outline=${2:?--outline needs a colour}; shift ;;
     --sizes) sizes=${2:?--sizes needs a list}; shift ;;
+    --remove) remove=1 ;;
     -v|--verbose) verbose=1 ;;
-    -h|--help) sed -n '2,11p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "cursors: unknown option $1" >&2; exit 2 ;;
   esac
   shift
 done
 
-hex_re='^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'
-[[ $fill =~ $hex_re && $outline =~ $hex_re ]] || { echo "cursors: --fill/--outline must be #RRGGBB or #RRGGBBAA" >&2; exit 2; }
 # Letters, digits, - and _ only: the name becomes a directory name, the manifest name and an index.theme value
 # ("..", "." and names with dots or slashes are refused).
 [[ $name =~ ^[A-Za-z0-9_-]+$ ]] || { echo "cursors: invalid theme name (letters, digits, - and _ only)" >&2; exit 2; }
+if ((remove)); then
+  # Only a directory that is a cursor theme of ours (it holds manifest.hl) is deleted, nothing else under ICONS_DIR.
+  if [[ -f $out/$name/manifest.hl ]]; then rm -rf -- "${out:?}/${name:?}"; fi
+  rm -rf -- "${out:?}/${name:?}.old"
+  exit 0
+fi
+
+hex_re='^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'
+[[ $fill =~ $hex_re && $outline =~ $hex_re ]] || { echo "cursors: --fill/--outline must be #RRGGBB or #RRGGBBAA" >&2; exit 2; }
 [[ $sizes =~ ^[0-9]+( [0-9]+)*$ ]] || { echo "cursors: --sizes must be a space separated list of integers" >&2; exit 2; }
 for tool in hyprcursor-util rsvg-convert python3; do
   command -v "$tool" >/dev/null || { echo "cursors: $tool not found" >&2; exit 1; }
 done
 
 mkdir -p "$out"
+# Work directories left by a build that was killed (SIGKILL) more than an hour ago.
+find "$out" -maxdepth 1 -name ".${name}.build.*" -mmin +60 -exec rm -rf {} + 2>/dev/null || true
 work=$(mktemp -d "$out/.${name}.build.XXXXXX")
 trap 'rm -rf "$work"' EXIT
+# SIGTERM (the shell superseding this build with a newer colour): stop the background jobs, clean up, exit.
+trap 'kill $(jobs -p) 2>/dev/null; exit 143' TERM INT
 svgdir=$work/svg pngdir=$work/png hc=$work/hc theme=$work/theme
 mkdir -p "$svgdir" "$pngdir" "$hc/hyprcursors" "$theme/cursors"
 
