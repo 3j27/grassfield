@@ -3,7 +3,7 @@ import QtQml
 // Application menu models (T0, docs/specs/menubar.md). Pure: builds menu item arrays from a
 // plain context object, so it is unit-tested without a compositor (tests/unit/tst_appmenumodel.qml).
 //
-// ctx: {hasApp, appName, entry: {id, actions: [{id, name}]} | null, singleMain: bool,
+// ctx: {displayOnly?: bool (app named from the Stages event, no key window: window commands disabled), hasApp, appName, entry: {id, actions: [{id, name}]} | null, singleMain: bool,
 //       windows: [{ref, title, focused, minimized}], focusedWindow: ref | null,
 //       fullscreen: bool, maximized: bool, windowSpaceId: int,
 //       othersCount: int, hiddenCount: int, spaces: [{id}], newSpaceId: int}
@@ -72,7 +72,8 @@ QtObject {
     function windowMenu(ctx: var): var {
         const fw = ctx.focusedWindow;
         const focusedMinimized = fw ? ctx.windows.some(w => w.ref === fw && w.minimized) : false;
-        const canAct = fw !== null && fw !== undefined && !focusedMinimized;
+        // displayOnly: the app is named from the Stages event while no window is key (macOS greys window commands then).
+        const canAct = fw !== null && fw !== undefined && !focusedMinimized && ctx.displayOnly !== true;
         const spaces = ctx.spaces.map(s => ({
             id: "moveTo",
             space: s.id,

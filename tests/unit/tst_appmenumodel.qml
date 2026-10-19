@@ -97,6 +97,14 @@ TestCase {
         compare(list[1].ref, "w2");
     }
 
+    function test_windowCommandsAreGreyWhenTheAppIsNamedFromStagesOnly() {
+        const items = model.windowMenu(ctx({displayOnly: true}));
+        for (const id of ["minimize", "zoom", "fullscreen", "moveMenu"])
+            verify(!items.find(i => i.id === id).enabled, id);
+        verify(items.find(i => i.id === "bringAll").enabled);
+        verify(model.windowMenu(ctx({})).find(i => i.id === "minimize").enabled);
+    }
+
     function test_windowMenuMoveToDesktopSubmenu() {
         const move = model.windowMenu(ctx({})).find(i => i.id === "moveMenu");
         const sub = move.submenu.filter(i => !i.separator);

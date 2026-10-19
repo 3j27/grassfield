@@ -60,7 +60,10 @@ Singleton {
         // A popup holds the keyboard focus, so the active toplevel can be empty: fall back to the most recent.
         const focusedHere = wins.indexOf(Compositor.focusedToplevel) >= 0 ? Compositor.focusedToplevel : Compositor.mostRecent(visible);
         const rev = Compositor.topologyRevision;
+        // The app is named from the Stages event only (no window has the keyboard, no popup is open): display only.
+        const displayOnly = hasApp && !Compositor.focusedToplevel && !Popups.active && Compositor.stagesFrontAppId === appId;
         return {
+            displayOnly: displayOnly,
             hasApp: hasApp,
             appName: hasApp ? Apps.nameFor(appId) : "",
             entry: entry,

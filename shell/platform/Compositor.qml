@@ -7,6 +7,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.services
 import "Minimized.js" as Minimized
+import "StagesFront.js" as StagesFront
 
 // Compositor state and actions for the shell (master-prompt 5.2: the only place, together
 // with Capabilities, that talks to the compositor). Event-driven; never polls hyprctl.
@@ -17,6 +18,19 @@ Singleton {
     readonly property var toplevels: ToplevelManager.toplevels
     readonly property var focusedToplevel: ToplevelManager.activeToplevel
     readonly property string focusedAppId: focusedToplevel ? focusedToplevel.appId : ""
+
+    // Last Stages event (StagesFront.parse) or null; select() ignores it once it says `on:false`.
+    property var stagesState: null
+    // Window class the bar names while Hyprland has no active window under Stages (an Exclusive layer holds the keyboard
+    // after a swap): the front app of the last Stages event while its window still exists, else "". Display only: no
+    // window has the keyboard. Never set with Stages off.
+    readonly property string stagesFrontAppId: {
+        const live = [];
+        const list = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        for (let i = 0; i < list.length; i++)
+            live.push(list[i].address);
+        return StagesFront.select(root.stagesState, !!root.focusedToplevel, Capabilities.pluginPresent, root.focusedScreenName, live);
+    }
 
     readonly property var focusedWorkspace: Hyprland.focusedWorkspace
     // Output with keyboard/pointer focus ("" when unknown): target of keyboard-driven shell UI.
@@ -444,6 +458,11 @@ Singleton {
 
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "grassfield") {
+                const stages = StagesFront.parse(event.data);
+                if (stages) {
+                    root.stagesState = stages;
+                    return;
+                }
                 const address = Minimized.minimizeRequestAddress(event.data);
                 if (address !== "")
                     root.minimizeByAddress(address);
