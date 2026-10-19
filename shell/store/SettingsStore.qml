@@ -27,6 +27,10 @@ Scope {
     readonly property alias loaded: file.loaded
     // True while the file on disk could not be parsed: nothing is written until it loads again.
     property bool writeBlocked: false
+    // True once a file was read and is valid (an empty file counts); false before any read and while the file on disk is
+    // malformed or unreadable. Consumers that act destructively on "the settings are the defaults" wait for this, not for
+    // `loaded` (which is also true for a malformed file, whose values are then only the adapter's leftovers).
+    property bool validRead: false
 
     // Validated views of the loaded values (a hand-edited file may hold anything).
     readonly property string appearance: ["dark", "light", "auto"].indexOf(config.appearance) >= 0 ? config.appearance : "dark"
@@ -322,6 +326,7 @@ Scope {
         if (!ok && !writeBlocked)
             console.warn("settings: " + file.path + " " + why + "; keeping the file untouched, changes will not be saved until it is fixed");
         writeBlocked = !ok;
+        validRead = ok;
         if (!ok)
             saveTimer.stop();
     }

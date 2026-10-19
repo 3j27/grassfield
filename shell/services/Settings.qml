@@ -39,6 +39,9 @@ Singleton {
 
     // grassfield.json has been read at least once.
     readonly property bool loaded: store.loaded
+    // ... and is valid (false while it is malformed): the pointer theme acts on defaults only then.
+    readonly property bool validRead: store.validRead
+    readonly property bool writeBlocked: store.writeBlocked
     readonly property int pointerSize: store.pointerSize
     readonly property string pointerOutlineColor: store.pointerOutlineColor
     readonly property string pointerFillColor: store.pointerFillColor
