@@ -1045,7 +1045,7 @@ QtObject {
     readonly property real folderIconGlyphMinContrast: 3.0
     // measured safety over the minimum (the plate is estimated from the colour, the real one differs by a few percent)
     readonly property real folderIconGlyphContrastMargin: 0.3
-    // measured on the recoloured folder plate under the symbol (nested captures, tests/visual/folder_glyph_contrast.py): plate over the folder colour, icon mode default and clear
+    // estimate, only used when the plate cannot be measured (FolderPlate): plate over the folder colour (measured on the fallback theme, tests/visual/folder_glyph_contrast.py), icon mode default and clear
     readonly property real folderIconPlateDefault: 0.96
     // measured: plate over the folder colour in the Dark icon mode
     readonly property real folderIconPlateDark: 0.78
@@ -1057,7 +1057,7 @@ QtObject {
     readonly property real folderIconThemeTintedGain: 1.27
     // measured: in the Clear icon mode a dark plate lets the backdrop through (a black folder over a light backdrop): the lightest plate over the colour, as a share of the way to white
     readonly property real folderIconClearLift: 0.22
-    // measured: plate of the icon theme's own folder under the symbol (default mode, current theme of the reference session)
+    // estimate, only used when the plate cannot be measured (FolderPlate): plate of the fallback icon theme folder under the symbol (default mode); the symbol shade otherwise follows the measured plate, any theme
     readonly property string folderIconThemePlate: "#a4caee"
     // estimate: 1 px light edge under an engraved symbol (the engraved look)
     readonly property string folderIconGlyphHighlight: "#40ffffff"

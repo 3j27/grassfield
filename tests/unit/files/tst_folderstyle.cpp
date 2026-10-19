@@ -12,9 +12,13 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QCoreApplication>
+#include <QFileSystemWatcher>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QTemporaryDir>
+#include <QEventLoop>
+#include <QTimer>
 #include <QThread>
 
 #include <memory>
@@ -731,4 +735,29 @@ TEST(FolderStyleLogic, LooksFollowOnlyWhatThePasteReallyCreated)
     // Overwrite: the folder is created (replaced) under the same name: it follows.
     EXPECT_EQ(FolderStyleLogic::followingPaste({sources.at(2)}, dest, {QUrl::fromLocalFile(QStringLiteral("/data/target/Docs"))}).size(), 1);
     EXPECT_TRUE(FolderStyleLogic::followingPaste(sources, dest, {}).isEmpty());
+}
+
+// The premise of the live update (FolderModel::watchShownFolder): a watch on a folder is told when another tool sets the
+// look (an extended attribute) of one of its entries.
+TEST(FolderStyleStore, AWatchOnTheFolderSeesAnotherToolSettingTheAttributeOfAnEntry)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    static int argc = 1;
+    static char name[] = "tst";
+    static char *argv[] = {name, nullptr};
+    if (!QCoreApplication::instance())
+        new QCoreApplication(argc, argv);
+    const QString shown = makeFolder(*dir, QStringLiteral("shown"));
+    const QString entry = makeFolder(*dir, QStringLiteral("shown/Music"));
+    QFileSystemWatcher watcher;
+    ASSERT_TRUE(watcher.addPath(shown));
+    QEventLoop loop;
+    bool seen = false;
+    QObject::connect(&watcher, &QFileSystemWatcher::directoryChanged, &loop, [&] { seen = true; loop.quit(); });
+    QTimer::singleShot(2000, &loop, &QEventLoop::quit);
+    const QByteArray value = "{\"v\":1,\"color\":\"#e5484d\"}";
+    ASSERT_EQ(::lsetxattr(QFile::encodeName(entry).constData(), FolderStyleLogic::attributeName(), value.constData(), size_t(value.size()), 0), 0);
+    EXPECT_TRUE(seen || (loop.exec(), seen)) << "no directoryChanged for an attribute change of an entry";
+    FolderStyleStore store(dir->filePath(QStringLiteral("cfg/folder-styles.json")));
+    EXPECT_EQ(store.read(entry).color, QStringLiteral("#e5484d")) << "and a read now sees it";
 }
