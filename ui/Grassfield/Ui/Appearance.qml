@@ -48,6 +48,7 @@ QtObject {
         c.accentText = m;
         c.fieldText = m;
         c.barText = m;
+        c.indicator = m;
         return c;
     }
 

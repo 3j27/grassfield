@@ -51,3 +51,37 @@ function update(tones, name, lum, lightBelow, darkAbove) {
     next[name] = decide(lum, tones[name] || "", lightBelow, darkAbove);
     return next;
 }
+
+// ---- Dock running dot ----
+
+// sRGB channel (0..1) of a linear value.
+function encode(l) {
+    return l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055;
+}
+
+// Relative luminance of the Dock shelf: the material tint (`tint` {r, g, b} 0..1) at `alpha` over a wallpaper of relative
+// luminance `wall` (taken as a grey), blended in sRGB like the compositor does. Without blur (`alpha` 1) it is the tint's own.
+function shelfLuminance(wall, tint, alpha) {
+    const g = encode(Math.max(0, Math.min(1, wall)));
+    const a = Math.max(0, Math.min(1, alpha));
+    return luminance(a * tint.r + (1 - a) * g, a * tint.g + (1 - a) * g, a * tint.b + (1 - a) * g);
+}
+
+// "dark" (black dot) over a shelf lighter than `darkAbove`, else "light" (white dot).
+function dotTone(shelfLum, darkAbove) {
+    return shelfLum > darkAbove ? "dark" : "light";
+}
+
+// Mean luminance of `rows` rows from row `from` of a `width`-column RGBA grab, central `span` (0..1) of the columns.
+function regionLuminance(bytes, width, from, rows, span) {
+    const x0 = Math.floor(width * (1 - span) / 2);
+    const x1 = Math.max(x0 + 1, Math.ceil(width * (1 + span) / 2));
+    const part = [];
+    for (let y = from; y < from + rows; y++) {
+        for (let x = x0; x < x1; x++) {
+            const i = 4 * (y * width + x);
+            part.push(bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]);
+        }
+    }
+    return meanLuminance(part);
+}
