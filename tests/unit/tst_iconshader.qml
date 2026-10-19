@@ -475,19 +475,21 @@ TestCase {
                     }
                     for (let m = 1; m < 4; m++) {
                         const mode = cells[m].cellMode;
+                        // The artwork of the mode over the system plate over the cell's grey (#808080).
                         const modelled = FolderStyle.modeSamples(raw, mode, tint, dark || wall, Tokens);
+                        const under = FolderStyle.underlay(mode, tint, dark || wall, wall, [0.5, 0.5, 0.5], Tokens);
                         const mean = [0, 0, 0];
                         for (let i = 0; i < modelled.length; i += 4) {
-                            mean[0] += modelled[i] * 4 / modelled.length;
-                            mean[1] += modelled[i + 1] * 4 / modelled.length;
-                            mean[2] += modelled[i + 2] * 4 / modelled.length;
+                            const al = modelled[i + 3];
+                            for (let q = 0; q < 3; q++)
+                                mean[q] += (modelled[i + q] * al + under[q] * (1 - al)) * 4 / modelled.length;
                         }
                         const drawn = testCase.boxMean(img, m * 120 + 8, 560 + 8, 96, Tokens.iconModeSysGlyphScale);
                         const d = Math.max(Math.abs(mean[0] - drawn[0]), Math.abs(mean[1] - drawn[1]), Math.abs(mean[2] - drawn[2]));
                         const label = `${String(url).split("/").pop()} ${mode} ${dark ? "dark" : "light"}${wall ? " wallpaper" : ""}: model ${FolderStyle.hexOf(mean)} drawn ${FolderStyle.hexOf(drawn)} (max channel diff ${(d * 255).toFixed(0)}/255)`;
                         console.log("A2 folder " + label);
                         compared++;
-                        if (d > 0.04)
+                        if (d > 4 / 255 + 1e-6)
                             failures.push(label);
                     }
                     cells.forEach(c => c.destroy());
@@ -497,7 +499,7 @@ TestCase {
         board.visible = true;
         verify(compared >= 12, "compared " + compared);
         if (failures.length > 0)
-            fail(failures.length + " folder model differences over 10/255:\n" + failures.join("\n"));
+            fail(failures.length + " folder model differences over 4/255:\n" + failures.join("\n"));
     }
 
     // A folder of the colour black keeps its system plate and the plate's edge in every icon mode, on a black wallpaper: the

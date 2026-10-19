@@ -1,8 +1,9 @@
 import QtQuick
 
 // The icon appearance effect of one mode over an item (an Image or a layered Item): one custom fragment shader
-// (shaders/icon.frag, built to icon.frag.qsb by scripts/dev/build-shaders.sh) that separates the icon's plate from its
-// glyph and renders both for the mode. Used by TintedIcon and so by every icon surface and the mode previews in Settings.
+// (shaders/icon.frag, built to icon.frag.qsb by scripts/dev/build-shaders.sh), a single pass: the icon scaled onto a system
+// plate (graphite, glass or tinted) and recoloured by a fixed transform per mode, no analysis of the icon. Used by
+// TintedIcon and so by every icon surface and the mode previews in Settings.
 // The numbers are the `iconMode` token group; the algorithm and its limits are in docs/specs/ui.md, "Icon shader".
 ShaderEffect {
     id: root
@@ -14,7 +15,7 @@ ShaderEffect {
     property bool darkAppearance: Appearance.dark
     // Drawn over the bare wallpaper (desktop icons): a look that holds on any wallpaper brightness.
     property bool wallpaper: false
-    // The folder colour step (FolderIcon): the artwork is recoloured in the shader, after the mode and before the system plate,
+    // The folder colour step (FolderIcon): the artwork is recoloured in the shader, before the system plate is drawn,
     // so the plate and its rim keep their look. Not used when "recolor" is false.
     property bool recolor: false
     property color recolorTint: "#000000"
@@ -34,88 +35,55 @@ ShaderEffect {
         mipmap: true
     }
     readonly property var iconTexture: textureSource
-    // The plate analysis, once per icon texture (shaders/icon_analysis.frag): a 2x1 texture the effect reads in place of
-    // 16 probes and a clustering per pixel. The source is live, so it is re-rendered only when the icon's texture changes
-    // (the image loads, the icon changes), never per frame.
-    ShaderEffect {
-        id: analysisEffect
-        visible: false
-        width: 2
-        height: 1
-        blending: false
-        property var iconTexture: textureSource
-        property real plateToleranceLow: Tokens.iconModePlateToleranceLow
-        property real plateToleranceHigh: Tokens.iconModePlateToleranceHigh
-        property real plateAlphaLow: Tokens.iconModePlateAlphaLow
-        property real plateAlphaHigh: Tokens.iconModePlateAlphaHigh
-        property url shaderUrl: root.analysisShaderUrl
-        fragmentShader: analysisEffect.shaderUrl
-    }
-    ShaderEffectSource {
-        id: analysisSource
-        visible: false
-        sourceItem: analysisEffect
-        textureSize: Qt.size(2, 1)
-        smooth: false
-        live: true
-    }
-    readonly property var analysis: analysisSource
     readonly property real dark: root.darkAppearance ? 1 : 0
     // Over the bare wallpaper (desktop icons); for Clear also over a material that lets so much of it through (transparency at its
     // end) that the icon is over the wallpaper: the look that holds on any wallpaper brightness.
     readonly property real overWallpaper: (root.wallpaper || (root.params.index === 2 && Appearance.effectiveTransparency >= Tokens.iconModeWallpaperLikeTransparency)) ? 1 : 0
     readonly property real clearPlateAlphaWallpaper: Tokens.iconModeClearPlateAlphaWallpaper
-    // The rim keeps its width in logical pixels up to rimFullSize and shrinks and fades on smaller icons (a 1 px rim is
-    // heavy on a 16 px icon).
     readonly property real sysPlateInset: Tokens.iconModeSysPlateInset
     readonly property real sysPlateRadius: Tokens.iconModeSysPlateRadius
     readonly property real sysGlyphScale: Tokens.iconModeSysGlyphScale
+    // The rim keeps its width in logical pixels up to rimFullSize and shrinks and fades on smaller icons (a 1 px rim is
+    // heavy on a 16 px icon).
     readonly property real sizeFactor: Math.min(1, root.nominalSize / Tokens.iconModeRimFullSize)
     readonly property real rimGain: Math.max(Tokens.iconModeRimMinOpacity, root.sizeFactor)
     readonly property real rimUv: Math.max(Tokens.iconModeRimMinWidth, Tokens.iconModeRimWidth * root.sizeFactor) / Math.max(1, root.nominalSize)
-    readonly property real plateToleranceLow: Tokens.iconModePlateToleranceLow
-    readonly property real plateToleranceHigh: Tokens.iconModePlateToleranceHigh
     readonly property real darkPlateLuma: Tokens.iconModeDarkPlateLuma
-    readonly property real darkPageLuma: Tokens.iconModeDarkPageLuma
-    readonly property real darkChromaKeep: Tokens.iconModeDarkChromaKeep
-    readonly property real darkGlyphLuma: Tokens.iconModeDarkGlyphLuma
-    readonly property real darkGlyphBoost: Tokens.iconModeDarkGlyphBoost
-    readonly property real darkGlyphFloor: Tokens.iconModeDarkGlyphFloor
+    readonly property real darkArtSaturation: Tokens.iconModeDarkArtSaturation
+    readonly property real darkArtScale: Tokens.iconModeDarkArtScale
+    readonly property real darkArtLift: Tokens.iconModeDarkArtLift
+    readonly property real darkArtLiftRange: Tokens.iconModeDarkArtLiftRange
     readonly property real darkRim: Tokens.iconModeDarkRim
     readonly property real clearPlateAlphaDark: Tokens.iconModeClearPlateAlphaDark
     readonly property real clearPlateAlphaLight: Tokens.iconModeClearPlateAlphaLight
     readonly property real clearInkDark: Tokens.iconModeClearInkDark
     readonly property real clearInkLight: Tokens.iconModeClearInkLight
-    readonly property real clearDetail: Tokens.iconModeClearDetail
+    readonly property real clearAlphaFloor: Tokens.iconModeClearAlphaFloor
     readonly property real clearRim: Tokens.iconModeClearRim
     readonly property real tintedPlateScale: Tokens.iconModeTintedPlateScale
     readonly property real tintedPlateMixLight: Tokens.iconModeTintedPlateMixLight
-    readonly property real tintedGlyphLift: Tokens.iconModeTintedGlyphLift
-    readonly property real tintedGlyphShadeLight: Tokens.iconModeTintedGlyphShadeLight
-    readonly property real tintedDetail: Tokens.iconModeTintedDetail
+    readonly property real tintedRampLowDark: Tokens.iconModeTintedRampLowDark
+    readonly property real tintedRampHighDark: Tokens.iconModeTintedRampHighDark
+    readonly property real tintedRampLowLight: Tokens.iconModeTintedRampLowLight
+    readonly property real tintedRampHighLight: Tokens.iconModeTintedRampHighLight
     readonly property real tintedRim: Tokens.iconModeTintedRim
     readonly property color folderTint: Qt.rgba(root.recolorTint.r, root.recolorTint.g, root.recolorTint.b, root.recolor ? 1 : 0)
     readonly property real folderBrightness: Tokens.folderIconBrightness
     readonly property real folderContrast: Tokens.folderIconContrast
     readonly property real folderColorization: Tokens.folderIconColorization
     readonly property real folderSaturation: Tokens.folderIconSaturation
-    readonly property real localLow: Tokens.iconModeLocalContrastLow
-    readonly property real localHigh: Tokens.iconModeLocalContrastHigh
-    // The neighbourhood of a pixel is about a tenth of the decoded icon, whatever its size.
-    readonly property real strokeLod: Math.log(Math.max(16, root.source ? root.source.width : 96) * Tokens.iconModeLocalContrastRadius) / Math.LN2
     // 1 dark, 2 clear, 3 tinted (`tint` is the colour uniform).
     readonly property real modeIndex: root.params.index
 
     // The compiled shader; overridable for tests of the failure path.
     property url shaderUrl: Qt.resolvedUrl("shaders/icon.frag.qsb")
-    property url analysisShaderUrl: Qt.resolvedUrl("shaders/icon_analysis.frag.qsb")
     fragmentShader: root.shaderUrl
-    // Either shader failed to load or compile: the owner draws the plain icon instead.
-    readonly property bool failed: root.status === ShaderEffect.Error || analysisEffect.status === ShaderEffect.Error
+    // The shader failed to load or compile: the owner draws the plain icon instead.
+    readonly property bool failed: root.status === ShaderEffect.Error
     onFailedChanged: {
         if (root.failed) {
             Appearance.iconShaderBroken = true;
-            IconModes.warnOnce("icon shader failed to load, icons are drawn as they are: " + root.log + analysisEffect.log);
+            IconModes.warnOnce("icon shader failed to load, icons are drawn as they are: " + root.log);
         }
     }
     blending: true

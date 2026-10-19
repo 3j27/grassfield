@@ -43,9 +43,10 @@ TestCase {
     // The mode numbers are tokens that the shader reads; wrong ranges would break the look silently.
     function test_shaderTokensInRange() {
         verify(Tokens.iconModeDarkPlateLuma > 0 && Tokens.iconModeDarkPlateLuma < 0.3, "Dark plates are near black");
-        verify(Tokens.iconModeDarkGlyphLuma > 0.7, "a black glyph becomes light");
-        verify(Tokens.iconModePlateToleranceLow < Tokens.iconModePlateToleranceHigh);
-        verify(Tokens.iconModePlateAlphaLow < Tokens.iconModePlateAlphaHigh);
+        verify(Tokens.iconModeDarkArtLift > Tokens.iconModeDarkPlateLuma, "a black part of the artwork is lifted above the plate");
+        verify(Tokens.iconModeDarkArtLift * 1.5 / Tokens.iconModeDarkArtLiftRange <= 1, "the Dark lift keeps the transform monotonic");
+        verify(Tokens.iconModeClearAlphaFloor > 0 && Tokens.iconModeClearAlphaFloor < 1, "the ink never vanishes entirely");
+        verify(Tokens.iconModeTintedRampLowDark > Tokens.iconModeTintedPlateScale, "the artwork is lighter than the dark tinted plate");
         verify(Tokens.iconModeClearPlateAlphaDark > 0 && Tokens.iconModeClearPlateAlphaDark < 0.5, "translucent glass");
         verify(Tokens.iconModeClearPlateAlphaLight > 0 && Tokens.iconModeClearPlateAlphaLight < 0.5, "translucent glass");
         verify(Tokens.iconModeClearInkDark > Tokens.iconModeClearInkLight, "light ink on dark, dark ink on light");

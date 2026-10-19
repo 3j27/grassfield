@@ -38,9 +38,9 @@ Item {
     readonly property bool needsPlate: root.hasGlyph && !root.glyphIsEmoji
     readonly property string rawKey: FolderPlate.rawKeyOf(root.source, root.size)
     readonly property var plate: root.needsPlate ? FolderPlate.plateOf(root.rawKey, root.modeName, root.modeName === "tinted" ? String(root.tint) : "",
-                                                                       root.recolored ? String(root.folderTint) : "", root.darkAppearance || root.overWallpaper) : undefined
+                                                                       root.recolored ? String(root.folderTint) : "", root.darkAppearance || root.overWallpaper, root.overWallpaper) : undefined
     // The engraved shade of the plate's colour (opaque).
-    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.modeName, root.tint, Tokens, root.plate, root.darkAppearance || root.overWallpaper)
+    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.modeName, root.tint, Tokens, root.plate, root.darkAppearance || root.overWallpaper, root.overWallpaper)
     // Its own hex colour, else the global colour (which is the accent for "accent").
     readonly property color folderTint: FolderStyle.colorOf(root.setting, Appearance.colors.accent)
 

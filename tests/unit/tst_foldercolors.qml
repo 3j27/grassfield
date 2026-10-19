@@ -367,26 +367,35 @@ TestCase {
             return Math.abs(rgb[0] - want[0]) <= tol && Math.abs(rgb[1] - want[1]) <= tol && Math.abs(rgb[2] - want[2]) <= tol;
         };
         const dk = String(Tokens.colorDark.accent);
-        // Dark: a coloured folder keeps its colour (it sits on the dark system plate)
-        const darkMode = FolderStyle.plateThrough(raw, "dark", dk, false, "", [0, 0, 0], Tokens, true);
-        verify(near(darkMode.dark, "#74cbf5", 0.01), "dark mode " + FolderStyle.hexOf(darkMode.dark));
-        // Dark, red folder: the recolour of the unchanged folder = the default red recolour (measured #d14246)
-        verify(near(FolderStyle.plateThrough(raw, "dark", dk, true, "#e5484d", [0, 0, 0], Tokens, true).dark, "#d14246", 0.01), "dark mode, red");
+        // Dark: the artwork darkened and a little desaturated, dark parts lifted (shaders/icon.frag, derived here by hand)
+        const rawRgb = FolderStyle.rgbOf("#74cbf5");
+        const lc = 0.2126 * rawRgb[0] + 0.7152 * rawRgb[1] + 0.0722 * rawRgb[2];
+        const dd = rawRgb.map(v => (lc + (v - lc) * Tokens.iconModeDarkArtSaturation) * Tokens.iconModeDarkArtScale);
+        const ld = 0.2126 * dd[0] + 0.7152 * dd[1] + 0.0722 * dd[2];
+        const x = Math.min(1, ld / Tokens.iconModeDarkArtLiftRange);
+        const darkWant = dd.map(v => v + Tokens.iconModeDarkArtLift * (1 - x * x * (3 - 2 * x)));
+        const darkMode = FolderStyle.plateThrough(raw, "dark", dk, false, "", [0, 0, 0], Tokens, true).dark;
+        verify(Math.abs(darkMode[0] - darkWant[0]) < 0.005 && Math.abs(darkMode[1] - darkWant[1]) < 0.005 && Math.abs(darkMode[2] - darkWant[2]) < 0.005, "dark mode " + FolderStyle.hexOf(darkMode));
+        // The artwork keeps its hue: still a blue (b > g > r)
+        verify(darkMode[2] > darkMode[1] && darkMode[1] > darkMode[0], "dark mode keeps the colour identity");
+        // Dark, red folder: the recolour (MultiEffect arithmetic) of the darkened folder; a red stays red
+        const redDark = FolderStyle.plateThrough(raw, "dark", dk, true, "#e5484d", [0, 0, 0], Tokens, true).dark;
+        verify(redDark[0] > redDark[1] * 2 && redDark[0] > redDark[2] * 2, "dark mode, red " + FolderStyle.hexOf(redDark));
         // default mode, red folder: measured #d14246; blue folder #3970e5; white folder #e9e9e9
         verify(near(FolderStyle.plateThrough(raw, "default", dk, true, "#e5484d", [0, 0, 0], Tokens).dark, "#d14246", 0.01), "default red");
         verify(near(FolderStyle.plateThrough(raw, "default", dk, true, "#3e7bfa", [0, 0, 0], Tokens).dark, "#3970e5", 0.012), "default blue");
         verify(near(FolderStyle.plateThrough(raw, "default", dk, true, "#ffffff", [0, 0, 0], Tokens).dark, "#e9e9e9", 0.012), "default white");
-        // Tinted, dark appearance: ink = (tint lifted to white by tintedGlyphLift) x shade; one flat sample: Lc = mean, so
-        // relShade = 0.3 + 0.7 / 1.5, detail = (relShade - 0.3) / 0.7, shade = 0.3 + 0.7 detail.
+        // Tinted, dark appearance: the luminance of the artwork on the two-tone ramp of the tint.
         const t = FolderStyle.rgbOf(dk);
-        const shade = 0.3 + 0.7 * ((0.3 + 0.7 / 1.5 - 0.3) / 0.7);
-        const want = t.map(v => (v + (1 - v) * Tokens.iconModeTintedGlyphLift) * shade);
+        const want = t.map(v => v * Tokens.iconModeTintedRampLowDark + ((v + (1 - v) * Tokens.iconModeTintedRampHighDark) - v * Tokens.iconModeTintedRampLowDark) * lc);
         const tinted = FolderStyle.plateThrough(raw, "tinted", dk, false, "", [0, 0, 0], Tokens, true).dark;
         verify(Math.abs(tinted[0] - want[0]) < 0.01 && Math.abs(tinted[1] - want[1]) < 0.01 && Math.abs(tinted[2] - want[2]) < 0.01, "tinted theme " + FolderStyle.hexOf(tinted));
-        // Clear, dark appearance: a light ink (opaque: the folder is not translucent, only the system plate is).
-        const clearInk = Tokens.iconModeClearInkDark * (1 - Tokens.iconModeClearDetail * 0.7 * (1 - (0.3 + 0.7 / 1.5 - 0.405) / 0.595));
+        // Clear, dark appearance: a light ink whose opacity follows the luminance, over the glass of the system plate over the backdrop.
+        const inkA = Tokens.iconModeClearAlphaFloor + (1 - Tokens.iconModeClearAlphaFloor) * lc;
+        const glassed = Tokens.iconModeClearPlateAlphaDark;   // white glass over the black backdrop
+        const clearWant = Tokens.iconModeClearInkDark * inkA + glassed * (1 - inkA);
         const clear = FolderStyle.plateThrough(raw, "clear", dk, false, "", [0, 0, 0], Tokens, true).dark;
-        verify(Math.abs(clear[0] - clearInk) < 0.01 && Math.abs(clear[2] - clearInk) < 0.01, "clear dark " + FolderStyle.hexOf(clear));
+        verify(Math.abs(clear[0] - clearWant) < 0.01 && Math.abs(clear[2] - clearWant) < 0.01, "clear dark " + FolderStyle.hexOf(clear) + " want " + clearWant.toFixed(3));
         // an absent colour is the identity of the default mode
         verify(near(FolderStyle.plateThrough(raw, "default", dk, false, "", [0, 0, 0], Tokens).dark, "#74cbf5", 0.003), "default theme");
     }
@@ -404,8 +413,8 @@ TestCase {
     function shadeFor(mode, dark, color) {
         const modeTint = String(dark ? Tokens.colorDark.accent : Tokens.colorLight.accent);
         const backdrop = FolderStyle.rgbOf(dark ? Tokens.folderIconPlateBackdropDark : Tokens.folderIconPlateBackdropLight);
-        const plate = FolderStyle.plateThrough(flatRaw, mode, modeTint, color !== "", color, backdrop, Tokens);
-        const shade = FolderStyle.glyphShade(color !== "", color, mode, modeTint, Tokens, plate);
+        const plate = FolderStyle.plateThrough(flatRaw, mode, modeTint, color !== "", color, backdrop, Tokens, dark);
+        const shade = FolderStyle.glyphShade(color !== "", color, mode, modeTint, Tokens, plate, dark);
         return {plate: plate, shade: shade, lighter: FolderStyle.relativeLuminance(FolderStyle.rgbOf(shade)) > FolderStyle.relativeLuminance(plate.dark)};
     }
 

@@ -5,7 +5,7 @@ import QtQuick
 // constants calibrated for one icon theme. The RAW icon's pixels under the symbol are read once per (icon file, size
 // bucket) as a small grid of samples (FolderStyle.sampleBox, by one FolderIcon at a time, application wide); the plate of any
 // combination of icon mode, folder colour and appearance is then computed from those samples (FolderStyle.plateThrough:
-// the icon shader's arithmetic for a plate-less pixel and the MultiEffect arithmetic of the folder colour), so a new colour or
+// the icon shader's per-pixel arithmetic over its system plate and the MultiEffect arithmetic of the folder colour), so a new colour or
 // mode never costs another read. No grab of the visible icon.
 QtObject {
     id: root
@@ -41,13 +41,13 @@ QtObject {
     // The plate of a combination ({dark, light, hue, ref}, FolderStyle.plateThrough), undefined (the icon is not read yet), or
     // null (it could not be read: the estimate serves). Reads `revision`: use it in a binding. `modeTint`: the icon tint
     // as a string, "" unless the mode is Tinted; `folderTint`: the folder colour as a string, "" when the icon is not recoloured.
-    function plateOf(rawKey, mode, modeTint, folderTint, dark) {
+    function plateOf(rawKey, mode, modeTint, folderTint, dark, wall) {
         const r = root.revision;
         const s = r >= 0 ? root.samples[rawKey] : undefined;
         if (s === undefined || s === null)
             return s;
         root.cache.used[rawKey] = ++root.cache.tick;
-        const key = rawKey + "|" + mode + "|" + modeTint + "|" + folderTint + "|" + (dark ? "d" : "l");
+        const key = rawKey + "|" + mode + "|" + modeTint + "|" + folderTint + "|" + (dark ? "d" : "l") + (wall === true ? "w" : "");
         let plate = root.cache.plates[key];
         if (plate === undefined) {
             if (root.cache.n >= root.derivedLimit) {
@@ -55,7 +55,7 @@ QtObject {
                 root.cache.n = 0;
             }
             plate = FolderStyle.plateThrough(s, mode, modeTint === "" ? "#000000" : modeTint, folderTint !== "", folderTint,
-                                             FolderStyle.rgbOf(dark ? Tokens.folderIconPlateBackdropDark : Tokens.folderIconPlateBackdropLight), Tokens, dark);
+                                             FolderStyle.rgbOf(dark ? Tokens.folderIconPlateBackdropDark : Tokens.folderIconPlateBackdropLight), Tokens, dark, wall === true);
             root.cache.plates[key] = plate;
             root.cache.n++;
         }
