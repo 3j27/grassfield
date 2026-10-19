@@ -139,7 +139,7 @@ void main() {
     // ... and so are the four edge midpoints (a mascot logo with a notch between its ears is not).
     float edges = (texture(iconTexture, vec2(0.5, 0.08)).a + texture(iconTexture, vec2(0.5, 0.92)).a +
                    texture(iconTexture, vec2(0.08, 0.5)).a + texture(iconTexture, vec2(0.92, 0.5)).a) * 0.25;
-    float own = strength * smoothstep(0.4, 0.8, min(corners, edges));
+    float own = strength * smoothstep(0.65, 0.9, min(corners, edges));
     strength = own;
 
     // Every icon sits on a system plate (macOS 26 gives non-conforming icons one in every style, Dark included). An icon without its own plate also shrinks to sit inside it.

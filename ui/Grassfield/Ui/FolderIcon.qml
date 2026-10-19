@@ -38,9 +38,9 @@ Item {
     readonly property bool needsPlate: root.hasGlyph && !root.glyphIsEmoji
     readonly property string rawKey: FolderPlate.rawKeyOf(root.source, root.size)
     readonly property var plate: root.needsPlate ? FolderPlate.plateOf(root.rawKey, root.modeName, root.modeName === "tinted" ? String(root.tint) : "",
-                                                                       root.recolored ? String(root.folderTint) : "", Appearance.dark) : undefined
+                                                                       root.recolored ? String(root.folderTint) : "", root.darkAppearance || root.overWallpaper) : undefined
     // The engraved shade of the plate's colour (opaque).
-    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.modeName, root.tint, Tokens, root.plate)
+    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.modeName, root.tint, Tokens, root.plate, root.darkAppearance || root.overWallpaper)
     // Its own hex colour, else the global colour (which is the accent for "accent").
     readonly property color folderTint: FolderStyle.colorOf(root.setting, Appearance.colors.accent)
 
@@ -180,6 +180,10 @@ Item {
 
         objectName: "glyphBox"
         anchors.fill: parent
+        // In an icon mode the folder (no plate of its own) shrinks to sit on the system plate (the shader's sysGlyphScale):
+        // the symbol follows it. Not when the shader failed and the plain icon is drawn.
+        scale: root.modeName !== "default" && !icon.effectFailed ? Tokens.iconModeSysGlyphScale : 1
+        transformOrigin: Item.Center
         clip: true
         visible: root.hasGlyph
 

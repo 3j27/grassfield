@@ -20,7 +20,7 @@ QtObject {
     property int count: 0
     // Plates computed from the samples (full key -> plate), bounded the same way. One object changed in place: a binding that
     // computes a plate must not depend on, or be invalidated by, its own cache.
-    readonly property var cache: ({plates: {}, n: 0})
+    readonly property var cache: ({plates: {}, n: 0, used: {}, tick: 0})
     readonly property int derivedLimit: 4096
 
     // The size bucket of an icon edge: the smallest bucket that holds it, else the largest.
@@ -45,6 +45,7 @@ QtObject {
         const s = r >= 0 ? root.samples[rawKey] : undefined;
         if (s === undefined || s === null)
             return s;
+        root.cache.used[rawKey] = ++root.cache.tick;
         const key = rawKey + "|" + mode + "|" + modeTint + "|" + folderTint + "|" + (dark ? "d" : "l");
         let plate = root.cache.plates[key];
         if (plate === undefined) {
@@ -53,7 +54,7 @@ QtObject {
                 root.cache.n = 0;
             }
             plate = FolderStyle.plateThrough(s, mode, modeTint === "" ? "#000000" : modeTint, folderTint !== "", folderTint,
-                                             FolderStyle.rgbOf(dark ? Tokens.folderIconPlateBackdropDark : Tokens.folderIconPlateBackdropLight), Tokens);
+                                             FolderStyle.rgbOf(dark ? Tokens.folderIconPlateBackdropDark : Tokens.folderIconPlateBackdropLight), Tokens, dark);
             root.cache.plates[key] = plate;
             root.cache.n++;
         }
@@ -77,24 +78,46 @@ QtObject {
     }
 
     // The samples of a raw key (null = they could not be read: the caller keeps the estimate; remembered so it is not retried).
+    // Past the bound the least recently used quarter is evicted (an icon in use is touched by every plate lookup), so
+    // the icons on screen keep their plates instead of all falling back to the estimate at once.
     function store(key, samplesRead) {
-        if (root.count >= root.limit) {
-            root.samples = ({});
-            root.cache.plates = {};
-            root.cache.n = 0;
-            root.count = 0;
-        }
+        if (root.count >= root.limit)
+            root.evict();
+        if (root.samples[key] === undefined)
+            root.count++;
         root.samples[key] = samplesRead;
-        root.count++;
+        root.cache.used[key] = ++root.cache.tick;
         if (root.busy === key)
             root.busy = "";
         root.revision++;
+    }
+
+    function evict() {
+        const keys = Object.keys(root.samples);
+        keys.sort((a, b) => (root.cache.used[a] || 0) - (root.cache.used[b] || 0));
+        const drop = Math.max(1, Math.floor(keys.length / 4));
+        const gone = {};
+        for (let i = 0; i < drop; i++) {
+            delete root.samples[keys[i]];
+            delete root.cache.used[keys[i]];
+            gone[keys[i]] = true;
+        }
+        root.count -= drop;
+        // The derived plates of the evicted icons (full key = raw key + "|" + parts).
+        for (const k of Object.keys(root.cache.plates)) {
+            const raw = k.split("|").slice(0, 2).join("|");
+            if (gone[raw] === true) {
+                delete root.cache.plates[k];
+                root.cache.n--;
+            }
+        }
     }
 
     // Test hook: forget everything.
     function reset() {
         root.samples = ({});
         root.cache.plates = {};
+        root.cache.used = {};
         root.cache.n = 0;
         root.busy = "";
         root.count = 0;
