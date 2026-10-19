@@ -342,7 +342,7 @@ Scope {
                     return;
                 const t = tileRepeater.itemAt(index);
                 const cx = t.mapToItem(null, t.width / 2, 0).x;
-                Popups.open("dock", win.screen.name, cx, win.screen.height - Tokens.dockBottomMargin - shelfHeight - Tokens.spacingSm, "above", {
+                Popups.open("dock", win.screen.name, cx, win.screen.height - Tokens.dockBottomMargin - shelfHeight - Tokens.dockMenuTailGap - Tokens.dockMenuTailHeight, "above", {
                     key: item.key,
                     entry: item.entry,
                     pinned: item.pinned,

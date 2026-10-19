@@ -244,6 +244,12 @@ QtObject {
     readonly property real dockPoofGrowFrom: 0.5
     // estimate: accent fill of a tile under a file drag
     readonly property real dockDropHighlightOpacity: 0.28
+    // reference gs-014-019: icon menu tail base ~19 px
+    readonly property int dockMenuTailWidth: 19
+    // reference gs-014-019: icon menu tail height ~12.6 px
+    readonly property int dockMenuTailHeight: 13
+    // reference gs-014-019: tail tip 16 above the shelf top
+    readonly property int dockMenuTailGap: 16
 
     // task spec: pointer dwell before a hot corner fires
     readonly property int hotCornerDwellMs: 150
