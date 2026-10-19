@@ -8,6 +8,7 @@ import "../../apps/settings/qml/Store.js" as Store
 TestCase {
     id: testCase
     name: "FolderColors"
+    visible: true
     when: windowShown
     width: 200
     height: 200
@@ -128,9 +129,10 @@ TestCase {
 
     // The layer's effect instance: Qt parents it to the layered item's parent.
     function effectOf(icon) {
-        for (let i = 0; i < icon.children.length; i++) {
-            if (icon.children[i].colorizationColor !== undefined)
-                return icon.children[i];
+        const box = child(icon, "plateSource");
+        for (let i = 0; i < box.children.length; i++) {
+            if (box.children[i].colorizationColor !== undefined)
+                return box.children[i];
         }
         return null;
     }
@@ -184,21 +186,33 @@ TestCase {
         compare(icon.recolored, true);
     }
 
-    // The symbol rule's shared vectors: FolderStyleLogic::normalizeGlyph (tests/unit/files/tst_folderstyle.cpp,
-    // GlyphRuleSharedVectors) answers the same.
+    // "1F468 200D 1F469" -> the string of those code points.
+    function fromCodePoints(hex) {
+        let s = "";
+        for (const h of hex.split(" ")) {
+            if (h === "")
+                continue;
+            const cp = parseInt(h, 16);
+            s += cp > 0xFFFF ? String.fromCodePoint(cp) : String.fromCharCode(cp);
+        }
+        return s;
+    }
+
+    // The symbol rule's shared vectors (tests/fixtures/glyph-vectors.json, the same file FolderStyleLogic::normalizeGlyph
+    // is held to in tests/unit/files/tst_folderstyle.cpp GlyphRuleSharedVectors): the preview is what is saved.
     function test_glyphRuleSharedVectors() {
-        const music = "\u{1F3B5}", heart = "\u2764\uFE0F", fr = "\u{1F1EB}\u{1F1F7}", keycap = "1\uFE0F\u20E3", eAcute = "e\u0301";
-        const vectors = [
-            [music, music], [heart, heart], [fr, fr], [fr + "\u{1F1EB}", fr], [keycap, keycap], [eAcute + "x", eAcute],
-            ["WWWWWWWWWWWWWWWW", "W"], ["Holiday photos", "H"], ["a\u202e", "a"], ["\u202ea", ""], ["\u200ea", ""], ["a\u200b", "a"],
-            ["\u0001a", ""], ["  \u2605  ", "\u2605"], ["\uFFFD", ""]
-        ];
-        for (const v of vectors)
-            compare(FolderStyle.normalizeGlyph(v[0]), v[1], JSON.stringify(v[0]));
-        const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
-        compare(FolderStyle.normalizeGlyph(family + "x"), family);
-        const thumbs = "\u{1F44D}\u{1F3FD}";
-        compare(FolderStyle.normalizeGlyph(thumbs + "x"), thumbs);
+        const request = new XMLHttpRequest();
+        request.open("GET", Qt.resolvedUrl("../fixtures/glyph-vectors.json"), false);
+        request.send();
+        const vectors = JSON.parse(request.responseText).vectors;
+        verify(vectors.length > 100, "vectors read: " + vectors.length);
+        for (const v of vectors) {
+            const got = FolderStyle.normalizeGlyph(fromCodePoints(v.input));
+            compare(got, fromCodePoints(v.expected), v.name);
+            if (v.emoji !== null)
+                compare(FolderStyle.isEmoji(got), v.emoji, v.name + " (emoji)");
+            compare(FolderStyle.normalizeGlyph(got), got, v.name + " (stable)");
+        }
         let zalgo = "e";
         for (let i = 0; i < 16; i++)
             zalgo += "\u0301";
@@ -306,5 +320,112 @@ TestCase {
     function test_blackFolderGetsALightSymbol() {
         const shade = Qt.color(FolderStyle.glyphShade(true, "#000000", "default", "#4daf69", Tokens));
         verify(shade.r > 0.3, "lightened: " + shade);
+    }
+
+    // ---- The plate is measured from the icon as drawn, not assumed (A2 on any icon theme) ----
+
+    function test_plateFromPixels() {
+        const w = 4, h = 4, data = [];
+        for (let i = 0; i < w * h; i++)
+            data.push(i < 8 ? 200 : 100, i < 8 ? 200 : 100, i < 8 ? 200 : 100, 255);
+        const p = FolderStyle.plateFromPixels(data, w, h, 0, 0, 4, 4);
+        verify(Math.abs(p.dark[0] - 100 / 255) < 1e-6, "darkest quarter");
+        verify(Math.abs(p.light[0] - 200 / 255) < 1e-6, "lightest quarter");
+        verify(Math.abs(p.hue[0] - 150 / 255) < 1e-6, "mean");
+        compare(FolderStyle.plateFromPixels(data, w, h, 10, 10, 20, 20), null, "a box outside the image");
+        // Translucent: over black it is darker, over white lighter.
+        const t = FolderStyle.plateFromPixels([255, 255, 255, 128], 1, 1, 0, 0, 1, 1);
+        verify(t.dark[0] < 0.51 && t.light[0] > 0.99, "alpha composited both ways");
+        compare(FolderStyle.plateFromPixels([9, 9, 9, 0], 1, 1, 0, 0, 1, 1), null, "fully transparent");
+    }
+
+    // The shade follows the measured plate: a light and a dark plate of two imaginary icon themes both reach 3:1.
+    function test_glyphShadeFollowsTheMeasuredPlate() {
+        for (const hex of ["#e8eef4", "#a4caee", "#6fa3d8", "#303844", "#101418", "#ffffff", "#c8b070"]) {
+            const rgb = FolderStyle.rgbOf(hex);
+            const measured = {dark: rgb, light: rgb, hue: rgb};
+            for (const recolored of [false, true]) {
+                const shade = FolderStyle.glyphShade(recolored, "#e5484d", "default", "#3e7bfa", Tokens, measured);
+                const r = FolderStyle.contrastRatio(FolderStyle.rgbOf(shade), rgb);
+                verify(r >= Tokens.folderIconGlyphMinContrast + Tokens.folderIconGlyphContrastMargin - 0.02, hex + " " + recolored + ": " + shade + " " + r.toFixed(2));
+            }
+        }
+    }
+
+    Component {
+        id: measuredComponent
+
+        FolderIcon {
+            size: 64
+        }
+    }
+
+    function measureOf(icon) {
+        tryVerify(() => FolderPlate.plateOf(icon.plateKey) !== undefined, 5000, "plate measured: " + icon.plateKey);
+        return FolderPlate.plateOf(icon.plateKey);
+    }
+
+    // End to end: the plate under the symbol is read from the rendered icon (grab + canvas), once per combination, and the
+    // symbol reaches 3:1 on a light icon and on a dark one, with and without a folder colour.
+    function test_plateMeasuredFromTheRenderedIcon() {
+        FolderPlate.reset();
+        for (const svg of ["folder-light.svg", "folder-dark.svg"]) {
+            // The recolour is a shader effect: the software scene graph of the offscreen runner cannot draw it (the plate
+            // then stays unmeasured and the estimate serves); the GPU case is measured by tests/visual/folder-glyphs.sh.
+            for (const color of GraphicsInfo.api === GraphicsInfo.Software ? ["theme"] : ["theme", "#e5484d", "#3fae5a"]) {
+                const icon = createTemporaryObject(measuredComponent, testCase, {source: Qt.resolvedUrl("fixtures/" + svg), folderColor: color, folderGlyph: "\u2605"});
+                verify(icon);
+                const plate = measureOf(icon);
+                verify(plate !== null, "measured, not failed: " + svg + " " + color);
+                const box = child(icon, "glyphBox");
+                tryVerify(() => box.visible, 2000, "the symbol appears once the plate is known");
+                const r = FolderStyle.contrastRatio(FolderStyle.rgbOf(icon.glyphColor), plate.dark);
+                verify(r >= Tokens.folderIconGlyphMinContrast, svg + " " + color + ": " + r.toFixed(2));
+            }
+        }
+        // A light theme icon: a dark symbol; a dark one: a lighter symbol than the plate.
+        const light = createTemporaryObject(measuredComponent, testCase, {source: Qt.resolvedUrl("fixtures/folder-light.svg"), folderColor: "theme", folderGlyph: "\u2605"});
+        const dark = createTemporaryObject(measuredComponent, testCase, {source: Qt.resolvedUrl("fixtures/folder-dark.svg"), folderColor: "theme", folderGlyph: "\u2605"});
+        measureOf(light);
+        measureOf(dark);
+        verify(FolderStyle.relativeLuminance(FolderStyle.rgbOf(light.glyphColor)) < FolderStyle.relativeLuminance(FolderPlate.plateOf(light.plateKey).dark));
+        verify(FolderStyle.relativeLuminance(FolderStyle.rgbOf(dark.glyphColor)) > FolderStyle.relativeLuminance(FolderPlate.plateOf(dark.plateKey).dark));
+    }
+
+    // Once per combination: a second icon with the same key finds the plate and does not measure again.
+    function test_plateMeasuredOncePerCombination() {
+        FolderPlate.reset();
+        const props = {source: Qt.resolvedUrl("fixtures/folder-light.svg"), folderColor: "#3e7bfa", folderGlyph: "\u2605"};
+        const a = createTemporaryObject(measuredComponent, testCase, props);
+        measureOf(a);
+        const stored = FolderPlate.count;
+        const b = createTemporaryObject(measuredComponent, testCase, props);
+        verify(b.plate !== undefined, "known at once");
+        wait(100);
+        compare(FolderPlate.count, stored, "no second measure");
+        // A different mode is another combination.
+        b.mode = "dark";
+        measureOf(b);
+        compare(FolderPlate.count, stored + 1);
+    }
+
+    // Two icons asking for one combination at once: one measures, both get the plate.
+    function test_simultaneousIconsShareOneMeasure() {
+        FolderPlate.reset();
+        const props = {source: Qt.resolvedUrl("fixtures/folder-dark.svg"), folderColor: "#e5484d", folderGlyph: "\u2605"};
+        const a = createTemporaryObject(measuredComponent, testCase, props);
+        const b = createTemporaryObject(measuredComponent, testCase, props);
+        measureOf(a);
+        tryVerify(() => b.plate !== undefined);
+        compare(FolderPlate.count, 1);
+    }
+
+    // No icon, nothing to measure: the symbol still shows (estimate), it does not wait for ever.
+    function test_noIconFallsBackToTheEstimate() {
+        FolderPlate.reset();
+        const icon = createTemporaryObject(measuredComponent, testCase, {folderColor: "#e5484d", folderGlyph: "\u2605"});
+        const box = child(icon, "glyphBox");
+        tryVerify(() => box.visible);
+        compare(icon.plate, undefined);
     }
 }

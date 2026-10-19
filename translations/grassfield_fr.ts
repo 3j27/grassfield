@@ -2096,6 +2096,10 @@
         <translation>le fichier personnel des aspects de dossiers (%1) est illisible ; il est laissé tel quel</translation>
     </message>
     <message>
+        <source>the list of folders customized for your account only would be too large (over %1 MiB, long folder paths); reset some of them first</source>
+        <translation>la liste des dossiers personnalisés pour votre compte seulement serait trop grande (plus de %1 Mio, chemins de dossiers longs) ; réinitialisez-en quelques-uns d’abord</translation>
+    </message>
+    <message>
         <source>not a folder on this computer</source>
         <translation>pas un dossier de cet ordinateur</translation>
     </message>

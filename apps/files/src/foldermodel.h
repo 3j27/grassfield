@@ -2,6 +2,7 @@
 
 #include <QCollator>
 #include <QDeadlineTimer>
+#include <QFileSystemWatcher>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QPointer>
@@ -275,6 +276,12 @@ private:
     // Folder looks read for shown rows (url -> style, empty for folders without one).
     const FolderStyleStore *m_styleStore = nullptr;
     mutable QHash<QUrl, FolderStyleLogic::Style> m_styles;
+    // The shown folder, watched for attribute changes of its entries (inotify IN_ATTRIB reaches a watch on the folder): a
+    // look set by another tool shows without a reload. KIO's own update does not report an extended attribute change.
+    QFileSystemWatcher m_attrWatcher;
+    QTimer m_attrTimer;
+    void watchShownFolder();
+    void revalidateStyles();
     mutable QTimer m_seenTimer;
 
     // Tag search: the matches (source model while searching), the running search and KIO's change notifications.
