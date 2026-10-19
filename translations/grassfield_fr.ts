@@ -1594,8 +1594,8 @@
         <translation>Afficher les applications récentes dans le Dock</translation>
     </message>
     <message>
-        <source>Apps opened from the Dock that are not kept in it appear after the separator.</source>
-        <translation>Les apps ouvertes depuis le Dock et non conservées dans celui-ci apparaissent après le séparateur.</translation>
+        <source>Apps you used recently that are not kept in the Dock appear in their own section before the Trash.</source>
+        <translation>Les apps utilisées récemment et non conservées dans le Dock apparaissent dans leur propre section avant la Corbeille.</translation>
     </message>
     <message>
         <source>Minimize windows into application icon</source>
@@ -1769,6 +1769,10 @@
     <message>
         <source>, %1 notifications</source>
         <translation>, %1 notifications</translation>
+    </message>
+    <message>
+        <source>, 1 notification</source>
+        <translation>, 1 notification</translation>
     </message>
     <message>
         <source>Remove</source>
