@@ -380,6 +380,25 @@ TestCase {
             const firstOther = ops.findIndex(o => o.op !== "remove");
             verify(firstOther < 0 || ops.slice(firstOther).every(o => o.op !== "remove"));
         });
+        // duplicates are tolerated at the boundary (never produced today): no stale row is left behind
+        const applyList = (from, to) => apply(from, DockModel.diffKeys(from, to));
+        compare(applyList(["a", "b", "a", "c"], ["a", "b", "c"]).join(","), "a,b,c");
+        compare(applyList(["a", "a", "a"], ["a"]).join(","), "a");
+        compare(applyList(["a", "b", "b", "c"], ["c", "b"]).join(","), "c,b");
+        compare(applyList(["a", "b"], ["a", "b", "a", "b"]).join(","), "a,b");
+        compare(applyList(["x", "x", "y"], ["y", "x", "x", "z"]).join(","), "y,x,z");
+        let seed = 12345;
+        const rnd = n => {
+            seed = (seed * 1103515245 + 12345) % 2147483648;
+            return seed % n;
+        };
+        const dedup = l => l.filter((k, i) => l.indexOf(k) === i);
+        for (let n = 0; n < 2000; n++) {
+            const mk = () => Array.from({length: rnd(8)}, () => "k" + rnd(5));
+            const from = mk();
+            const to = mk();
+            compare(applyList(from, to).join(","), dedup(to).join(","), "from " + from + " to " + to);
+        }
         compare(DockModel.diffKeys(["a", "b"], ["a", "b"]).length, 0);  // nothing to do: delegates untouched
         // a tile that changes section is one move, not a remove and an insert (its delegate survives)
         const moved = DockModel.diffKeys(["app:x", "app:y", "sep", "trash"], ["app:y", "sep", "app:x", "trash"]);

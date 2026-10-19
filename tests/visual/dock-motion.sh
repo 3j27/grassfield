@@ -7,7 +7,10 @@
 #          the window appears
 # Run as a BARE command (reference machine only). The nested session this script starts is torn down on exit.
 #   tests/visual/dock-motion.sh
-# Output: .dev/visual/dock-motion/<burst>.txt (time ms, x left, x centre, y top, pixels per frame), frames kept as PPM.
+# Capture rate: measured per burst (last line of each .txt): 18-25 ms per frame in the last run, 35-50 ms on a busier host. The checks
+# do not need a minimum frame count: monotonic progress, no step larger than the capture rate allows, start/end places and the time
+# between them (duration window around the 220 ms / 120 ms animation); verified with the same frames thinned to 54 and 85 ms.
+# Output: .dev/visual/dock-motion/<burst>.txt (time ms, x left, x centre, y top, pixels per frame; the last line "# capture" gives the frame rate), frames kept as PPM.
 # Exit status 1 when a check fails.
 source "$(dirname "$0")/lib.sh"
 

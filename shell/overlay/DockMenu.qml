@@ -35,17 +35,25 @@ PopupMenu {
         items.push({
             id: "options",
             text: qsTr("Options"),
-            submenu: [
-                {id: "keep", text: qsTr("Keep in Dock"), checked: info.pinned === true, enabled: info.pinned === true || entry !== null},
-                {id: "remove", text: qsTr("Remove from Dock"), enabled: info.pinned === true},
-                {id: "login", text: qsTr("Open at Login"), checked: autostart, enabled: entry !== null},
-                {id: "reveal", text: qsTr("Show in Files"), enabled: entry !== null}
-            ]
+            submenu: root.optionItems()
         });
         items.push({separator: true});
         items.push({id: "showall", text: qsTr("Show All Windows"), enabled: info.running === true});
         items.push({id: "hide", text: qsTr("Hide"), enabled: info.running === true});
         items.push({id: "quit", text: qsTr("Quit"), enabled: info.running === true});
+        return items;
+    }
+
+    // Options submenu (macOS): a running app has "Keep in Dock" (checked when kept; unchecking removes it once the app quits);
+    // a kept app that is not running has "Remove from Dock" and no "Keep in Dock"; a recent app that is not kept has "Keep in Dock".
+    function optionItems(): var {
+        const items = [];
+        if (info.running === true || info.pinned !== true)
+            items.push({id: "keep", text: qsTr("Keep in Dock"), checked: info.pinned === true, enabled: info.pinned === true || entry !== null});
+        else
+            items.push({id: "remove", text: qsTr("Remove from Dock")});
+        items.push({id: "login", text: qsTr("Open at Login"), checked: autostart, enabled: entry !== null});
+        items.push({id: "reveal", text: qsTr("Show in Files"), enabled: entry !== null});
         return items;
     }
 

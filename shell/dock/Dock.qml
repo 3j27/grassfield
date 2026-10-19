@@ -203,6 +203,12 @@ Scope {
         target: Compositor.toplevels
 
         function onValuesChanged(): void {
+            // A window opened or closed under a drag: the compositor may hand the pointer to that window, which ends the drag
+            // with a release that is not the user's. Such an end never removes the tile.
+            windows.instances.forEach(w => {
+                if (w.dragFrom >= 0)
+                    w.dragInterrupted = true;
+            });
             root.rebuild();
         }
     }
@@ -255,6 +261,11 @@ Scope {
     // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu>.
     IpcHandler {
         target: "dock"
+
+        // The kept apps (JSON list) from the live settings: the drag stress test asserts it never changes.
+        function pinned(): string {
+            return JSON.stringify(Settings.dockPinned);
+        }
 
         function hover(x: real): void {
             root.testPointerX = x;
@@ -338,17 +349,26 @@ Scope {
             readonly property var appItems: DockModel.appIndices(root.items)
             readonly property int dragFromApp: dragFrom < 0 ? -1 : appItems.indexOf(dragFrom)
             readonly property int dragSlot: dragFrom < 0 ? -1 : DockModel.dropSlot(baseCenters, appItems, baseCenters[dragFrom] + dragDx)
-            readonly property bool dragOut: dragFrom >= 0 && dragDy < -(Tokens.dockPadding + iconSize / 2 + Tokens.dockDragOutDistance)
+            // How far above its press point a tile must be to leave the Dock (outside the drop zone: the shelf and the room around it).
+            readonly property real dragOutReach: Tokens.dockPadding + iconSize / 2 + Tokens.dockDragOutDistance
+            readonly property bool dragOut: dragFrom >= 0 && dragDy < -dragOutReach
+            // Set when the pointer grab was cancelled (not a release): such an end never removes a tile.
+            property bool dragInterrupted: false
             readonly property bool dragRemovable: dragFrom >= 0 && !!root.items[dragFrom] && (root.items[dragFrom].pinned || root.items[dragFrom].recent === true) && root.items[dragFrom].windows.length === 0
             property real poofX: 0
             property real poofY: 0
             property real poofProgress: 1
 
-            function finishDrag(tileItem: Item): void {
+            // releaseDy: offset of the release point itself from the press point (NaN: unknown). A tile is removed only when it
+            // was released outside the Dock's drop zone: the live drag offset AND the offset of the release both say "out", and
+            // the drag ended with a real release. A release inside the shelf never removes (macOS).
+            function finishDrag(tileItem: Item, releaseDy: real): void {
                 const from = dragFrom;
                 const all = root.items;
                 const item = all[from];
-                const out = dragOut && dragRemovable;
+                const releasedOutside = !dragInterrupted && !isNaN(releaseDy) && releaseDy < -dragOutReach;
+                const out = dragOut && dragRemovable && releasedOutside;
+                const dragOutNotReleased = dragOut && dragRemovable && !releasedOutside;
                 const slot = dragSlot;
                 const fromApp = dragFromApp;
                 // mapToItem already includes the tile's drag translation (its Translate transform): adding dragDx/dragDy put the puff off the window.
@@ -374,6 +394,11 @@ Scope {
                     } else {
                         tileItem.glideFrom(dx, dy);
                     }
+                    return;
+                }
+                if (dragOutNotReleased) {
+                    // Dragged out but not released out there (interrupted): nothing changes, the tile glides back.
+                    tileItem.glideFrom(dx, dy);
                     return;
                 }
                 const r = DockModel.reorder(all, fromApp, slot);
@@ -1093,14 +1118,27 @@ Scope {
                                     enabled: tile.isApp
                                     target: null
                                     cursorShape: Qt.ClosedHandCursor
+                                    // A cancelled grab (the compositor or Qt took the pointer away) is not a release.
+                                    onGrabChanged: (transition, point) => {
+                                        if (active && (transition === PointerDevice.CancelGrabExclusive || transition === PointerDevice.CancelGrabPassive))
+                                            win.dragInterrupted = true;
+                                    }
                                     onActiveChanged: {
                                         if (active) {
+                                            win.dragInterrupted = false;
                                             win.dragSnap = false;
                                             win.dragFrom = tile.index;
                                             win.dragDx = 0;
                                             win.dragDy = 0;
                                         } else if (win.dragFrom === tile.index) {
-                                            win.finishDrag(tile);
+                                            // One turn of the event loop later: a grab cancellation can be reported after the
+                                            // deactivation, and the release point is final by then.
+                                            const relDy = centroid.scenePosition.y - centroid.scenePressPosition.y;
+                                            const idx = tile.index;
+                                            Qt.callLater(() => {
+                                                if (win.dragFrom === idx)
+                                                    win.finishDrag(tile, relDy);
+                                            });
                                         }
                                     }
                                     onTranslationChanged: {
