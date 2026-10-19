@@ -32,7 +32,7 @@ Window {
         return out;
     }
     // Suggestions for the symbol: emoji and plain symbols (one grapheme cluster each).
-    readonly property var glyphChoices: ["⭐", "❤️", "🎵", "📷", "🎬", "📄", "💼", "🏠", "🎮", "📚", "🔒", "☁️", "🛠️", "⚙️", "🎨", "✈️", "🧩", "💡", "📦", "🔥", "🌿", "🚀", "✅", "★", "♥", "♪", "✓", "⚑", "☂", "✎"]
+    readonly property var glyphChoices: ["⭐", "❤️", "🎵", "📷", "🎬", "📄", "💼", "🏠", "🎮", "📚", "🔒", "☁️", "🛠️", "⚙️", "🎨", "✈️", "🧩", "💡", "📦", "🔥", "🌿", "🚀", "✅", "★", "♥\uFE0E", "♪", "✓", "⚑", "☂", "✎"]
 
     title: qsTr("Customize Folder")
     width: Tokens.filesCustomizeWindowWidth

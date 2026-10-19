@@ -186,21 +186,33 @@ TestCase {
         compare(icon.recolored, true);
     }
 
-    // The symbol rule's shared vectors: FolderStyleLogic::normalizeGlyph (tests/unit/files/tst_folderstyle.cpp,
-    // GlyphRuleSharedVectors) answers the same.
+    // "1F468 200D 1F469" -> the string of those code points.
+    function fromCodePoints(hex) {
+        let s = "";
+        for (const h of hex.split(" ")) {
+            if (h === "")
+                continue;
+            const cp = parseInt(h, 16);
+            s += cp > 0xFFFF ? String.fromCodePoint(cp) : String.fromCharCode(cp);
+        }
+        return s;
+    }
+
+    // The symbol rule's shared vectors (tests/fixtures/glyph-vectors.json, the same file FolderStyleLogic::normalizeGlyph
+    // is held to in tests/unit/files/tst_folderstyle.cpp GlyphRuleSharedVectors): the preview is what is saved.
     function test_glyphRuleSharedVectors() {
-        const music = "\u{1F3B5}", heart = "\u2764\uFE0F", fr = "\u{1F1EB}\u{1F1F7}", keycap = "1\uFE0F\u20E3", eAcute = "e\u0301";
-        const vectors = [
-            [music, music], [heart, heart], [fr, fr], [fr + "\u{1F1EB}", fr], [keycap, keycap], [eAcute + "x", eAcute],
-            ["WWWWWWWWWWWWWWWW", "W"], ["Holiday photos", "H"], ["a\u202e", "a"], ["\u202ea", ""], ["\u200ea", ""], ["a\u200b", "a"],
-            ["\u0001a", ""], ["  \u2605  ", "\u2605"], ["\uFFFD", ""]
-        ];
-        for (const v of vectors)
-            compare(FolderStyle.normalizeGlyph(v[0]), v[1], JSON.stringify(v[0]));
-        const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
-        compare(FolderStyle.normalizeGlyph(family + "x"), family);
-        const thumbs = "\u{1F44D}\u{1F3FD}";
-        compare(FolderStyle.normalizeGlyph(thumbs + "x"), thumbs);
+        const request = new XMLHttpRequest();
+        request.open("GET", Qt.resolvedUrl("../fixtures/glyph-vectors.json"), false);
+        request.send();
+        const vectors = JSON.parse(request.responseText).vectors;
+        verify(vectors.length > 100, "vectors read: " + vectors.length);
+        for (const v of vectors) {
+            const got = FolderStyle.normalizeGlyph(fromCodePoints(v.input));
+            compare(got, fromCodePoints(v.expected), v.name);
+            if (v.emoji !== null)
+                compare(FolderStyle.isEmoji(got), v.emoji, v.name + " (emoji)");
+            compare(FolderStyle.normalizeGlyph(got), got, v.name + " (stable)");
+        }
         let zalgo = "e";
         for (let i = 0; i < 16; i++)
             zalgo += "\u0301";

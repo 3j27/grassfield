@@ -8,6 +8,10 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 
 #include <memory>
@@ -97,33 +101,45 @@ TEST(FolderStyleLogic, GlyphIsOneGraphemeCluster)
     EXPECT_EQ(FolderStyleLogic::normalizeGlyph(QString(QChar(0x07))), QString());
 }
 
-// The symbol rule's shared vectors: ui/Grassfield/Ui/FolderStyle.js normalizeGlyph must give the same answers
-// (tests/unit/tst_foldercolors.qml test_glyphRuleSharedVectors holds the same table).
+namespace
+{
+// "1F468 200D 1F469" -> the string of those code points (a lone surrogate stays one).
+QString fromCodePoints(const QString &hex)
+{
+    QString s;
+    for (const QString &h : hex.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+        const uint cp = h.toUInt(nullptr, 16);
+        if (cp > 0xFFFF) {
+            s.append(QChar(QChar::highSurrogate(cp)));
+            s.append(QChar(QChar::lowSurrogate(cp)));
+        } else {
+            s.append(QChar(ushort(cp)));
+        }
+    }
+    return s;
+}
+} // namespace
+
+// The symbol rule's shared vectors (tests/fixtures/glyph-vectors.json): ui/Grassfield/Ui/FolderStyle.js answers the same
+// (tests/unit/tst_foldercolors.qml test_glyphRuleSharedVectors reads the same file): what the preview shows is what is saved.
 TEST(FolderStyleLogic, GlyphRuleSharedVectors)
 {
-    struct Vector {
-        const char *input;
-        const char *expected;
-    };
-    const Vector vectors[] = {
-        {"\xF0\x9F\x8E\xB5", "\xF0\x9F\x8E\xB5"},                                      // music note
-        {"\xE2\x9D\xA4\xEF\xB8\x8F", "\xE2\x9D\xA4\xEF\xB8\x8F"},                      // heart + VS16
-        {"\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7", "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7"},  // flag FR
-        {"\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7\xF0\x9F\x87\xAB", "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7"}, // 3 regional indicators
-        {"1\xEF\xB8\x8F\xE2\x83\xA3", "1\xEF\xB8\x8F\xE2\x83\xA3"},                      // keycap 1
-        {"e\xCC\x81x", "e\xCC\x81"},                                                   // e + acute, then a letter
-        {"WWWWWWWWWWWWWWWW", "W"},                                                        // sixteen letters: one cluster
-        {"Holiday photos", "H"},
-        {"a\xE2\x80\xAE", "a"},                                                         // a, then RLO: the cluster ends before it
-        {"\xE2\x80\xAE" "a", ""},                                                       // RLO first
-        {"\xE2\x80\x8E" "a", ""},                                                       // LRM first
-        {"a\xE2\x80\x8B", "a"},                                                         // zero width space is a break
-        {"\x01" "a", ""},                                                                 // control first
-        {"  \xE2\x98\x85  ", "\xE2\x98\x85"},                                          // trimmed
-        {"\xEF\xBF\xBD", ""},                                                           // replacement character
-    };
-    for (const Vector &v : vectors) {
-        EXPECT_EQ(FolderStyleLogic::normalizeGlyph(QString::fromUtf8(v.input)), QString::fromUtf8(v.expected)) << v.input;
+    const QDir tests = QFileInfo(QStringLiteral(__FILE__)).absoluteDir(); // tests/unit/files
+    QFile file(QDir::cleanPath(tests.filePath(QStringLiteral("../../fixtures/glyph-vectors.json"))));
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly)) << file.fileName().toStdString();
+    const QJsonArray vectors = QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("vectors")).toArray();
+    ASSERT_GT(vectors.size(), 100);
+    for (const QJsonValue &value : vectors) {
+        const QJsonObject v = value.toObject();
+        const std::string name = v.value(QStringLiteral("name")).toString().toStdString();
+        const QString input = fromCodePoints(v.value(QStringLiteral("input")).toString());
+        const QString expected = fromCodePoints(v.value(QStringLiteral("expected")).toString());
+        const QString got = FolderStyleLogic::normalizeGlyph(input);
+        EXPECT_EQ(got, expected) << name;
+        if (!v.value(QStringLiteral("emoji")).isNull())
+            EXPECT_EQ(FolderStyleLogic::isEmoji(got), v.value(QStringLiteral("emoji")).toBool()) << name;
+        // Normalising is stable: a kept symbol stays as it is.
+        EXPECT_EQ(FolderStyleLogic::normalizeGlyph(got), got) << name;
     }
     // Over the cap (more than 16 UTF-16 units in one cluster): nothing.
     QString zalgo = QStringLiteral("e");

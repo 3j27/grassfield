@@ -28,9 +28,10 @@ Item {
     readonly property string glyph: FolderStyle.normalizeGlyph(root.folderGlyph)
     readonly property bool hasGlyph: root.glyph !== ""
     readonly property bool glyphIsEmoji: FolderStyle.isEmoji(root.glyph)
-    // The plate under a plain symbol, measured from this icon as drawn (FolderPlate: once per icon, size, mode and
-    // colour); undefined until then, null when it could not be measured (the estimate of FolderStyle serves).
-    readonly property bool needsPlate: root.hasGlyph && !root.glyphIsEmoji
+    // The plate under the symbol, measured from this icon as drawn (FolderPlate: once per icon, size, mode and colour):
+    // a plain symbol is shaded against it, and so is an emoji drawn without colour glyphs. undefined until measured, null
+    // when it could not be (the estimate of FolderStyle serves).
+    readonly property bool needsPlate: root.hasGlyph
     readonly property string plateKey: root.source + "|" + root.size + "|" + root.mode + "|" + (IconModes.normalizeMode(root.mode) === "tinted" ? String(root.tint) : "") + "|"
                                        + (root.recolored ? String(root.folderTint) : "theme")
     readonly property var plate: root.needsPlate ? FolderPlate.plateOf(root.plateKey) : undefined
