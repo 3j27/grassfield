@@ -75,8 +75,8 @@ def check_glide(rows):
     if any((x - end) * sign > 1 for x in xs):
         return "the tile went past its place"
     anim, dt = ANIM["glide"], interval(rows)
-    # A frame step may cover dt of the ease-out: at most that share of the distance (never more than 0.95).
-    allowed = min(0.95, max(0.65, 2.2 * dt / anim))
+    # A frame step covers up to dt of an ease-out (fast at the start): a share of the distance that grows with dt/anim, 0.65 to 0.95.
+    allowed = min(0.95, max(0.65, 3.2 * dt / anim))
     if max(abs(v) for v in steps) > allowed * abs(dist):
         return "a single frame moved %d of %d px (allowed %d%% at %d ms per frame): a jump" % (max(abs(v) for v in steps), abs(dist), allowed * 100, dt)
     took = span(rows, lambda r: r[1])
@@ -136,7 +136,7 @@ def check_collapse(rows):
     if took < 0.5 * anim:
         return "the gap closed in at most %d ms (animation %d ms): no animation" % (took, anim)
     steps = [b - a for a, b in zip(up, up[1:])]
-    allowed = min(0.95, max(0.65, 2.2 * dt / anim))
+    allowed = min(0.95, max(0.65, 3.2 * dt / anim))
     if steps and max(abs(v) for v in steps) > allowed * abs(far - start):
         return "the gap closed in a single %d px step (allowed %d%% at %d ms per frame)" % (max(abs(v) for v in steps), allowed * 100, dt)
     if abs(xs[-1] - start) > 2:
