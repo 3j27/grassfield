@@ -257,6 +257,45 @@ ShellRoot {
         },
         function () {
             root.check("settings read: now it is removed", Pointer.builder.removals === root.rem + 1);
+            // A Reset made while the shell was down: the compositor has the custom theme, but the fresh shell's
+            // environment names the packaged one and the size is the same, so nothing looks different. The wanted theme
+            // and size must still be sent once, and the custom theme must stay until the compositor said "ok".
+            root.mode = "ok";
+            Pointer.size = Pointer.sessionSize;
+            root.waitFor(() => Pointer.applied === Pointer.sessionSize && Pointer.known && !Pointer.busy, 4000);
+        },
+        function () {
+            root.rem = Pointer.builder.removals;
+            root.mark = root.requests.length;
+            root.mode = "silent";
+            root.run(["sh", "-c", "d=\"$1\"; mkdir -p \"$d/grassfield-cursors-custom\"; touch \"$d/grassfield-cursors-custom/manifest.hl\"", "sh", root.sock + ".icons"], () => {
+                Pointer.theme = "grassfield-cursors";
+                Pointer.builder.dirty = true;
+                Pointer.compositorReset();
+                root.waitFor(() => root.requests.length >= root.mark + 1, 3000);
+            });
+        },
+        function () {
+            root.check("fresh start, defaults: one setcursor of the packaged theme and size is sent (" + root.last() + ")", root.last() === "/setcursor grassfield-cursors " + Pointer.sessionSize);
+            root.check("fresh start: not known before an answer", !Pointer.known);
+            idle.start();
+        },
+        function () {
+            root.check("fresh start: the custom theme is not removed before the answer", Pointer.builder.removals === root.rem);
+            root.mode = "bad";
+            root.waitFor(() => Pointer.attempts >= 2, 8000);
+        },
+        function () {
+            root.check("failed switch: the custom theme is not removed", Pointer.builder.removals === root.rem && !Pointer.known);
+            root.mode = "ok";
+            root.waitFor(() => Pointer.known && Pointer.builder.removals === root.rem + 1 && !Pointer.builder.removing, 8000);
+        },
+        function () {
+            root.check("answered ok: the custom theme is removed after the switch", Pointer.builder.removals === root.rem + 1 && Pointer.appliedTheme === "grassfield-cursors");
+            root.run(["sh", "-c", "test -e \"$1\"/grassfield-cursors-custom; echo $?", "sh", root.sock + ".icons"], () => root.advance());
+        },
+        function () {
+            root.check("answered ok: the directory is gone", root.out.trim() === "1");
             root.finish();
         }
     ]
