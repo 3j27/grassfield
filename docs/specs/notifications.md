@@ -72,17 +72,27 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
 - Clear model (NotificationCenter.qml): `clearCard(group, refocus)` commits to the model at once: `Notifications.clear(key)` or, for a
   group, `Notifications.clearKeys(Notifications.keysOf(app))` (a snapshot of the keys at the click: a same-app notification that arrives
   later stays). The ListView animates the result: `remove` (the delegate's `slide` to the right + `opacity` to 0) and `displaced` (`y`),
-  `motion.normal` through `Appearance.duration`, so reduced motion makes them instant. A delegate that left the model is disabled
-  (`ListView.onRemove`): no input, no focus. The footer glides with a `Behavior on y`. Blur regions follow through `motionTick` (bumped on
-  every `y`/`slide`/`opacity` change); a card's region is cut to the list viewport on all four sides and shrinks about its centre with the
+  `motion.normal`. A card that arrives while the column is open slides in from the right while it fades in (run by the delegate, `enter`, for keys flagged by `Notifications.takeFresh`: the view's own `add` transition also ran for the rows "Show All" reveals and left cards at stale positions when the row above changed height), and a move of a group is animated (`move`, `y`); `displaced` and `move` also take `slide` and `opacity` to their final values, so a burst of arrivals never leaves a card half in. Reduce Motion (macOS: slides become fades): nothing moves (the cards stay in place and only fade in or out, within `motionReducedMax` through `Appearance.duration`; the cards below jump to their new place). A delegate that left the model is disabled
+  (`ListView.onRemove`): no input, no focus. The footer glides with a `Behavior on y`. Blur regions follow through `motionTick` (bumped at most once per frame, `bumpTick`, however many cards moved: 200 sliding cards bumped it 600 times a frame and each bump re-read every region; a faded card's region is skipped without mapping it); a card's region is cut to the list viewport on all four sides and shrinks about its centre with the
   card's opacity, so the blur never outlives the glass. Surface records carry a unique id: Variants ignores and warns about equal values, and
   records of destroyed cards ({item: null}) were equal (163 464 "same value specified twice" lines for a 600-notification burst). The list is
   `panel.gutter` (= close size / 3) wider and taller than the column so the x can stick out of the card's corner like the banner's.
   The keyboard focus after a clear is `Notifications.focusKeyAfter(slot, app)` (pure `CenterLogic.focusAfterClear`) read from the model AFTER
   the update, applied by key after `forceLayout()`. Hover over the group controls is counted per hover handler (card and the x that sticks
   out of it; `CenterLogic.hoverStep`), also decremented when a card is destroyed under the pointer.
-  `Notifications.clearAll()` stays as the IPC test hook `clearAll()` only (refused unless `GRASSFIELD_DEV=1`); the UI has no global Clear All.
-  Tests: `tests/unit/tst_notifcenter.qml` (focus choice, hover counts), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
+  `Notifications.clearAll()` stays as the IPC test hook `clearAll()` only; the UI has no global Clear All. The IPC test hooks `invoke`, `clearAll` and
+  `dismissAll` share one gate, `Notifications.testHooks` = `VisualFixtures.active` (`GRASSFIELD_DEV=1` AND `GRASSFIELD_VISUAL_FIXTURES=1`, never with
+  `GRASSFIELD_SESSION=1`; `nested-up.sh` and `shell-run.sh` take `--visual-fixtures`), else they answer `refused: <name> is a test hook` and change nothing
+  (`tests/shell/notif_hooks.sh`).
+  Keyboard focus is independent of the view: the ListView has `currentIndex: -1`, no highlight following and no key navigation (a current item
+  made the view move the focus onto that delegate on any insert or removal at or above it); focus moves only by key (`focusKey`). A clear keeps the
+  focus on another card, and moves it (next card rule above) when it was on the cleared card, any card of a cleared group, or on the keyboard and
+  accessibility paths (the x's accessibility press behaves like Space on it). Tab and Shift+Tab follow the visual order (top to bottom, then the widgets, then Edit Widgets and the close circle; inside a card: card, x, buttons):
+  Qt's focus chain follows delegate CREATION order (newer cards sit above older ones) and moves the focus before any parent sees the key, so two
+  `Shortcut`s (Tab, Shift+Tab; off while the widget gallery or a widget menu is open) run `ListView.tabStep`, which redirects only where Qt's next
+  item would leave the card, and otherwise focuses Qt's own next item. Reduce Motion: see above.
+  A group that empties forgets its "Show All" (`expandedApps`, also when the whole Center empties): its next cards arrive collapsed.
+  Tests: `tests/unit/tst_notifcenter.qml` (focus choice, hover counts), `tests/unit/tst_notifcenterlist.qml` (the view settings keep the focus across inserts, removals and moves), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
   repeated group clears, focus after Delete in collapsed and expanded groups), `tests/shell/notif_clear/nested.sh` (nested helper).
 - Banners: one layer-shell window (Overlay layer, no keyboard focus) on the first screen only; input and blur follow the cards.
   Timeout: `expire_timeout` (seconds), -1 = 5 s, 0 and critical = never. Expiry only hides the banner: the entry stays in the Center
@@ -121,7 +131,7 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   low-urgency non-resident notifications are not stored, images are not stored, actions are stored as labels and restored non-actionable.
   Writes are debounced 400 ms and blocked until the file was read, so a slow start never wipes the history.
 - IPC target `notifications`: `toggleCenter()`, `dnd(on)`, and test hooks `clearAll()`, `invoke(actionId)` (newest live notification; "default" =
-  banner click), `status()`, `dismissAll()`.
+  banner click), `dismissAll()` (all three gated, see Clear model) and `status()`.
 
 ## Dev / nested testing (private bus)
 The nested session shares the owner's D-Bus session bus, where omarchy-shell owns `org.freedesktop.Notifications`. Never take it over:

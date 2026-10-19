@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Grassfield.Ui
 import qs.notifications
 
 // Clear model of the Notifications column on the REAL Notifications singleton (scripts/dev/test.sh: `qs -p tests/shell/notif_clear`,
@@ -156,6 +157,64 @@ ShellRoot {
         check("row keys unique", !dup);
         Notifications.clearKeys(Notifications.keysOf("app3"));
         check("one group of ten cleared", Notifications.count === 90 && Notifications.keysOf("app3").length === 0);
+        Notifications.clearApp("app0");
+        for (let g = 1; g < 10; g++)
+            Notifications.clearApp("app" + g);
+        check("everything cleared", Notifications.count === 0 && Notifications.centerModel.count === 0);
+
+        // 7. "Show All" does not survive the group: once the group empties, its next notifications arrive collapsed.
+        for (let i = 0; i < 6; i++)
+            add("news");
+        Notifications.setExpanded("news", true);
+        check("expanded group shows all six", Notifications.centerModel.count === 6);
+        Notifications.clearApp("news");
+        check("expanded flag dropped with the group", Notifications.expandedApps.news === undefined);
+        for (let i = 0; i < 6; i++)
+            add("news");
+        check("new cards of that app arrive collapsed", Notifications.centerModel.count === Tokens.notificationCenterGroupCollapsed);
+        // Clearing single cards down to one keeps the group (and its expansion) until it is empty.
+        Notifications.setExpanded("news", true);
+        const ks = Notifications.keysOf("news");
+        for (let i = 0; i < ks.length - 1; i++)
+            Notifications.clear(ks[i]);
+        check("expansion kept while the group has a card", Notifications.expandedApps.news === true);
+        Notifications.clear(ks[ks.length - 1]);
+        check("expansion dropped with the last card", Notifications.expandedApps.news === undefined);
+
+        // Same while another app keeps the Center non-empty (the group, not the whole column, empties).
+        add("other");
+        for (let i = 0; i < 6; i++)
+            add("news");
+        Notifications.setExpanded("news", true);
+        check("expanded again", Notifications.expandedApps.news === true);
+        Notifications.clearApp("news");
+        check("expanded flag dropped with the group (other app present)", Notifications.expandedApps.news === undefined);
+        for (let i = 0; i < 6; i++)
+            add("news");
+        check("collapsed again (other app present)", Notifications.keysOf("news").length === 6
+            && Notifications.centerModel.count === Tokens.notificationCenterGroupCollapsed + 1);
+        Notifications.clearApp("news");
+        Notifications.clearApp("other");
+
+        // 8. Test-only IPC hooks follow the VisualFixtures gate (GRASSFIELD_DEV=1 and GRASSFIELD_VISUAL_FIXTURES=1, not a
+        // packaged session). tests/shell/notif_hooks.sh runs this test in both modes (NOTIF_CLEAR_HOOKS=allowed|refused);
+        // scripts/dev/test.sh runs it without the fixture flag: refused.
+        const allowed = Quickshell.env("NOTIF_CLEAR_HOOKS") === "allowed";
+        check("testHooks follows the gate", Notifications.testHooks === allowed);
+        add("hook");
+        const before = Notifications.count;
+        const wiped = Notifications.hookClearAll();
+        const dismissed = Notifications.hookDismissAll();
+        const invoked = Notifications.hookInvoke("default");
+        if (allowed) {
+            check("clearAll hook works when allowed", wiped === "ok" && Notifications.count === 0);
+            check("dismissAll hook works when allowed", dismissed === "ok");
+            check("invoke hook works when allowed", invoked === "no live notification");
+        } else {
+            check("clearAll hook refused", wiped.startsWith("refused") && Notifications.count === before);
+            check("dismissAll hook refused", dismissed.startsWith("refused"));
+            check("invoke hook refused", invoked.startsWith("refused"));
+        }
     }
 
     Timer {
