@@ -1063,6 +1063,16 @@ QtObject {
     readonly property real folderIconClearLift: 0.22
     // estimate, only used when the plate cannot be measured (FolderPlate): plate of the fallback icon theme folder under the symbol (default mode); the symbol shade otherwise follows the measured plate, any theme
     readonly property string folderIconThemePlate: "#a4caee"
+    // A2 design rule: in the Tinted icon mode the symbol is engraved lighter when the mode's own folder plate (the theme's folder through the mode) has a relative luminance below this (a lighter shade reaches 3.3:1 on plates up to about 0.268), darker otherwise; Dark always lighter, Default and Clear darker
+    readonly property real folderIconGlyphLighterBelow: 0.25
+    // estimate: samples per axis of the grid read under the symbol from the raw icon (the plate of every colour, mode and appearance is computed from them)
+    readonly property int folderIconPlateSamples: 12
+    // estimate: icon size buckets of the plate measure (one measure per icon file and bucket); a larger icon uses the last
+    readonly property var folderIconPlateBuckets: [32, 64, 128, 256]
+    // estimate: the view behind a translucent (Clear mode) icon in dark appearance, composited under the plate when its shade is chosen
+    readonly property string folderIconPlateBackdropDark: "#1e1f24"
+    // estimate: the view behind a translucent (Clear mode) icon in light appearance
+    readonly property string folderIconPlateBackdropLight: "#f4f5f7"
     // estimate: 1 px light edge under an engraved symbol (the engraved look)
     readonly property string folderIconGlyphHighlight: "#40ffffff"
     // estimate: offset of that edge over the icon edge (at least 1 px)
