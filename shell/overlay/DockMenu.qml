@@ -18,7 +18,7 @@ PopupMenu {
     readonly property var desktopActions: entry && entry.actions ? entry.actions : []
     // Open at Login: whether the autostart file of this app exists (checked once when the menu opens).
     property bool autostart: false
-    readonly property string autostartPath: entry ? AppLaunch.autostartDir(Apps.devSession, Apps.appsHome, Quickshell.env("XDG_CONFIG_HOME"), Quickshell.env("HOME")) + "/" + entry.id + ".desktop" : ""
+    readonly property string autostartPath: entry ? AppLaunch.autostartFile(AppLaunch.autostartDir(Apps.devSession, Apps.appsHome, Quickshell.env("XDG_CONFIG_HOME"), Quickshell.env("HOME")), entry.id) : ""
 
     accessibleName: qsTr("Dock item menu")
     currentIndex: -1
@@ -111,7 +111,7 @@ PopupMenu {
         property string path: ""
         property string text: ""
         property bool enable: true
-        command: enable ? ["sh", "-c", 'mkdir -p "$(dirname "$1")" && printf "%s" "$2" > "$1"', "sh", path, text] : ["rm", "-f", path]
+        command: enable ? ["sh", Quickshell.shellPath("overlay/write-autostart.sh"), path, text] : ["rm", "-f", "--", path]
     }
 
     // Folder of the app's executable, opened in Files (through the dev open policy in a dev session).
@@ -148,10 +148,13 @@ PopupMenu {
                 Settings.setDockPinned(DockModel.pin(Settings.dockPinned, data.key));
             break;
         case "login":
-            autostartWrite.path = root.autostartPath;
-            autostartWrite.enable = !root.autostart;
-            autostartWrite.text = AppLaunch.autostartText(data.entry);
-            autostartWrite.running = true;
+            // Refused (nothing written or removed) for an id that is not a plain file name or a hostile command.
+            if (root.autostartPath !== "" && (root.autostart || AppLaunch.autostartText(data.entry) !== "")) {
+                autostartWrite.path = root.autostartPath;
+                autostartWrite.enable = !root.autostart;
+                autostartWrite.text = AppLaunch.autostartText(data.entry);
+                autostartWrite.running = true;
+            }
             break;
         case "reveal":
             reveal.program = data.entry.command && data.entry.command.length > 0 ? data.entry.command[0] : "";
