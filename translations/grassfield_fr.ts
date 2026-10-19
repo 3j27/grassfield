@@ -3019,16 +3019,8 @@
         <translation>Aucune notification</translation>
     </message>
     <message>
-        <source>Clear</source>
-        <translation>Effacer</translation>
-    </message>
-    <message>
         <source>Close</source>
         <translation>Fermer</translation>
-    </message>
-    <message>
-        <source>Clear notification</source>
-        <translation>Effacer la notification</translation>
     </message>
     <message>
         <source>Show Less</source>

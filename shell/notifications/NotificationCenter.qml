@@ -9,16 +9,19 @@ import qs.widgets
 // Notifications column (N7, internal Notification Center): the macOS model. No full-height panel:
 // a column of floating glass cards as wide as a banner, at the right under the menu bar, opened from the clock or
 // by IPC. No title: the cards grouped by app, newest first (the first card of a group carries the app name, its
-// count and Clear; the last visible one carries Show All / Show Less), then the widgets placed there; a footer of
-// pills (Clear All, Edit Widgets: gallery overlay, docs/specs/widgets.md) and a close circle, centred one spacing.lg
-// below the last card. Every card is its own surface with its own blur region (registered by the card, see
-// addSurface). Esc or a click outside the cards closes.
+// count and, on hover or focus, "Show Less" and a round x that grows into a "Clear All" pill; the last visible
+// one carries Show All), then the widgets placed there; a footer of an Edit Widgets pill (gallery overlay,
+// docs/specs/widgets.md) and a close circle, centred one spacing.lg below the last card. No permanent global Clear All
+// (macOS 26 model): a card shows a round x at its top-left corner on hover or focus; clearing slides the card out
+// to the right while it fades, then the column reflows. Every card is its own surface with its own blur region
+// (registered by the card, see addSurface). Esc or a click outside the cards closes.
 //
 // The window exists per screen but its content (a Loader) only while the Center is open on that
 // screen, so a closed Center costs nothing. Rows come from the keyed Notifications.centerModel
 // (displayed rows only, ordered by group; the first row of a group draws its header), so new notifications never rebuild the list.
 // Keyboard: Tab moves between rows and buttons, Return opens the row's default action, Delete or
-// Backspace clears the row and moves focus to the next card (the previous one when it was the last).
+// Backspace clears the row and moves focus to the next card (the previous one when it was the last); each card's
+// x and the group controls are reachable with Tab.
 Variants {
     id: root
 
@@ -145,6 +148,97 @@ Variants {
             }
         }
 
+        // Round x of a group header that grows into a "Clear All" pill under the pointer or the keyboard focus.
+        component GroupClear: Item {
+            id: gc
+
+            property string text: ""
+            // False: invisible and not clickable (focus still shows it).
+            property bool active: false
+            readonly property bool expanded: gcHover.hovered || gc.activeFocus
+
+            signal clicked
+
+            width: gc.expanded ? Math.max(height, gcLabel.implicitWidth + 2 * Tokens.spacingSm) : height
+            height: Tokens.notificationCloseSize + Tokens.spacingXs
+            opacity: gc.active || gc.activeFocus || gcHover.hovered ? 1 : 0
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: gc.text
+            Accessible.focusable: true
+            Accessible.onPressAction: gc.clicked()
+            Keys.onPressed: event => {
+                if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    gc.clicked();
+                    event.accepted = true;
+                }
+            }
+
+            Behavior on width {
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.motionFast)
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.curve
+                }
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.motionFast)
+                }
+            }
+
+            HoverHandler {
+                id: gcHover
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: height / 2
+                color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                border.width: gc.activeFocus ? Tokens.controlFocusRing : 0
+                border.color: Appearance.colors.accent
+            }
+
+            Icon {
+                anchors.centerIn: parent
+                size: Tokens.notificationCloseSize - Tokens.notificationCloseGlyphInset
+                name: "close-glyph"
+                opacity: gc.expanded ? 0 : 1
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.duration(Tokens.motionFast)
+                    }
+                }
+            }
+
+            Text {
+                id: gcLabel
+                anchors.centerIn: parent
+                textFormat: Text.PlainText
+                text: gc.text
+                opacity: gc.expanded ? 1 : 0
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+                font.weight: Tokens.typographyMenuBoldWeight
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.duration(Tokens.motionFast)
+                    }
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: gc.opacity > 0
+                cursorShape: Qt.PointingHandCursor
+                onClicked: gc.clicked()
+            }
+        }
+
         component CenterContent: Item {
             id: host
 
@@ -156,8 +250,31 @@ Variants {
             // Registered glass surfaces: {item, clip (inside the list viewport), radius}. Destroyed items read as null
             // and are dropped the next time a surface registers or the row count changes.
             property var surfaces: []
+            // Counts the frames of a card sliding out or of the column reflowing (their surfaces move without the
+            // list geometry changing), so the blur regions follow the cards.
+            property int motionTick: 0
             // Anything that moves or resizes a surface without changing its own geometry.
-            readonly property real tick: list.contentY + list.contentHeight + list.count + list.height + panel.x + panel.y
+            readonly property real tick: list.contentY + list.contentHeight + list.count + list.height + panel.x + panel.y + motionTick
+            // App whose group is being cleared (its cards slide out together), and the app the pointer is over (group controls).
+            property string leavingApp: ""
+            property bool leavingGroup: false
+            property string hoverApp: ""
+
+            Timer {
+                id: hoverRelease
+                interval: Appearance.duration(Tokens.motionFast)
+                onTriggered: host.hoverApp = ""
+            }
+
+            // A pointer on a card of an app group, or leaving it (a short grace covers the gap between two cards).
+            function hoverCard(app: string, over: bool): void {
+                if (over) {
+                    hoverRelease.stop();
+                    hoverApp = app;
+                } else if (hoverApp === app) {
+                    hoverRelease.restart();
+                }
+            }
 
             function addSurface(item: Item, clip: bool, radius: real): void {
                 surfaces = surfaces.filter(r => r.item).concat([{item: item, clip: clip, radius: radius}]);
@@ -233,6 +350,9 @@ Variants {
                 property real menuX: 0
                 property real menuY: 0
                 property Item menuReturn: null
+                // Room left of the cards for the x of a card, which sticks out of its top-left corner (the list is that
+                // much wider and taller; the cards keep their place).
+                readonly property int gutter: Math.ceil(Tokens.notificationCloseSize / 3)
 
                 function openWidgetMenu(tile: Item, x: real, y: real, entry: var): void {
                     const p = tile.mapToItem(panel, x, y);
@@ -280,11 +400,13 @@ Variants {
 
                 ListView {
                     id: list
-                    y: 0
-                    width: parent.width
+                    x: -panel.gutter
+                    y: -panel.gutter
+                    topMargin: panel.gutter
+                    width: parent.width + panel.gutter
                     // As tall as its content (the area below the last card is outside the list, so a click there closes);
                     // the footer sits one spacing.lg below it, or at the bottom of the column when the list fills it.
-                    height: Math.min(contentHeight, Math.max(0, parent.height - y - footer.height - Tokens.spacingLg))
+                    height: Math.min(contentHeight + topMargin, Math.max(0, parent.height - y - footer.height - Tokens.spacingLg))
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
                     model: Notifications.centerModel
@@ -296,7 +418,8 @@ Variants {
 
                         Material {
                             id: emptySurface
-                            width: parent.width
+                            x: panel.gutter
+                            width: parent.width - panel.gutter
                             height: parent.height - Tokens.notificationBannerGap
                             radius: Tokens.radiusBanner
                             shadowEnabled: false
@@ -306,7 +429,7 @@ Variants {
                         Text {
                             id: emptyText
                             textFormat: Text.PlainText
-                            anchors.horizontalCenter: parent.horizontalCenter
+                            x: panel.gutter + (parent.width - panel.gutter - width) / 2
                             y: Tokens.spacingLg
                             text: qsTr("No Notifications")
                             color: Appearance.colors.textSecondary
@@ -353,8 +476,82 @@ Variants {
                         readonly property bool expanded: Notifications.expandedApps[appName] === true
                         // The focusable card (see ListView.focusAfterRemoval).
                         readonly property Item rowItem: row
+                        // The pointer is over a card of this app, or its group is being cleared.
+                        readonly property bool groupHot: host.hoverApp === appName
+                        readonly property bool groupLeaving: host.leavingGroup && host.leavingApp === appName
+                        // Sliding out to the right, fading: the end of the slide really clears the entry(ies).
+                        property real slide: 0
+                        property bool leaving: false
+                        property bool clearGroupAtEnd: false
+
+                        // Clear this card, or (group) the whole app group, after the slide-out.
+                        function beginLeave(group: bool, refocus: bool): void {
+                            if (leaving)
+                                return;
+                            leaving = true;
+                            clearGroupAtEnd = group;
+                            if (group) {
+                                host.leavingApp = appName;
+                                host.leavingGroup = true;
+                            }
+                            leaveAnim.refocus = refocus;
+                            leaveAnim.start();
+                        }
+
+                        function finishLeave(): void {
+                            const at = index;
+                            if (clearGroupAtEnd) {
+                                Notifications.clearApp(appName);
+                                host.leavingGroup = false;
+                            } else if (!groupLeaving) {
+                                Notifications.clear(key);
+                            }
+                            if (leaveAnim.refocus)
+                                list.focusAfterRemoval(at);
+                        }
+
+                        onGroupLeavingChanged: {
+                            // The other cards of the group slide out with the header card (which clears the group).
+                            if (groupLeaving && !leaving) {
+                                leaving = true;
+                                leaveAnim.refocus = false;
+                                leaveAnim.start();
+                            }
+                        }
+                        onYChanged: host.motionTick++
+
+                        transform: Translate {
+                            x: item.slide
+                        }
+
+                        ParallelAnimation {
+                            id: leaveAnim
+
+                            property bool refocus: false
+
+                            NumberAnimation {
+                                target: item
+                                property: "slide"
+                                to: list.width
+                                duration: Appearance.duration(Tokens.motionNormal)
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.curve
+                            }
+
+                            NumberAnimation {
+                                target: item
+                                property: "opacity"
+                                to: 0
+                                duration: Appearance.duration(Tokens.motionNormal)
+                            }
+
+                            onFinished: item.finishLeave()
+                        }
+
+                        onSlideChanged: host.motionTick++
 
                         width: list.width
+                        leftPadding: panel.gutter
                         // Groups are set apart; cards of one group are one banner gap apart.
                         topPadding: item.headCount > 0 && !item.headFirst ? Tokens.spacingMd : 0
                         bottomPadding: Tokens.notificationBannerGap
@@ -365,7 +562,7 @@ Variants {
                             readonly property bool hovered: rowHover.hovered
                             readonly property bool live: item.nid >= 0
 
-                            width: item.width
+                            width: item.width - panel.gutter
                             height: rowLoader.height
                             activeFocusOnTab: true
                             Accessible.role: Accessible.ListItem
@@ -386,9 +583,7 @@ Variants {
                                     row.open();
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
-                                    const at = item.index;
-                                    Notifications.clear(item.key);
-                                    list.focusAfterRemoval(at);
+                                    item.beginLeave(false, true);
                                     event.accepted = true;
                                 }
                             }
@@ -400,11 +595,12 @@ Variants {
 
                             HoverHandler {
                                 id: rowHover
+                                onHoveredChanged: host.hoverCard(item.appName, hovered)
                             }
 
                             TapHandler {
                                 acceptedButtons: Qt.LeftButton
-                                enabled: row.live
+                                enabled: row.live && !closeHover.hovered && !item.leaving
                                 onTapped: row.open()
                             }
 
@@ -423,21 +619,46 @@ Variants {
                                 border.color: Appearance.colors.accent
                             }
 
-                            // Remove this entry; shown on hover or keyboard focus.
+                            // Close (clear) this entry: a small round x on the card's top-left corner, shown on hover or
+                            // keyboard focus (Tab reaches it after the card; Space or Return clears).
                             Item {
-                                x: row.width - width - Tokens.spacingXs
-                                y: Tokens.spacingXs
+                                id: closeButton
+
+                                x: -panel.gutter
+                                y: -panel.gutter
                                 width: Tokens.notificationCloseSize
                                 height: width
-                                opacity: row.hovered || row.activeFocus ? 1 : 0
+                                opacity: row.hovered || row.activeFocus || closeHover.hovered || closeButton.activeFocus ? 1 : 0
+                                activeFocusOnTab: true
                                 Accessible.role: Accessible.Button
-                                Accessible.name: qsTr("Clear notification")
-                                Accessible.onPressAction: Notifications.clear(item.key)
+                                Accessible.name: qsTr("Close")
+                                Accessible.description: item.summary
+                                Accessible.focusable: true
+                                Accessible.onPressAction: item.beginLeave(false, false)
+                                Keys.onPressed: event => {
+                                    if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                        item.beginLeave(false, true);
+                                        event.accepted = true;
+                                    }
+                                }
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: Appearance.duration(Tokens.motionFast)
+                                    }
+                                }
+
+                                HoverHandler {
+                                    id: closeHover
+                                    onHoveredChanged: host.hoverCard(item.appName, hovered)
+                                }
 
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: width / 2
-                                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                                    color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
+                                    border.width: closeButton.activeFocus ? Tokens.controlFocusRing : 1
+                                    border.color: closeButton.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
                                 }
 
                                 Icon {
@@ -450,7 +671,7 @@ Variants {
                                     anchors.fill: parent
                                     enabled: parent.opacity > 0
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: Notifications.clear(item.key)
+                                    onClicked: item.beginLeave(false, false)
                                 }
                             }
 
@@ -480,7 +701,7 @@ Variants {
                                         Item {
                                             visible: item.headCount > 0
                                             width: parent.width
-                                            height: visible ? clearGroup.implicitHeight : 0
+                                            height: visible ? Math.max(clearGroup.height, showLess.implicitHeight) : 0
 
                                             Row {
                                                 height: parent.height
@@ -508,14 +729,34 @@ Variants {
                                                 }
                                             }
 
-                                            Button {
-                                                id: clearGroup
+                                            Row {
                                                 anchors.right: parent.right
-                                                // Room for the remove button of the card.
-                                                anchors.rightMargin: Tokens.notificationCloseSize + Tokens.spacingXs
-                                                capsule: true
-                                                text: qsTr("Clear")
-                                                onClicked: Notifications.clearApp(item.appName)
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                spacing: Tokens.spacingSm
+
+                                                Button {
+                                                    id: showLess
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    visible: item.expanded && item.headCount > Tokens.notificationCenterGroupCollapsed
+                                                    opacity: item.groupHot || activeFocus ? 1 : 0
+                                                    capsule: true
+                                                    text: qsTr("Show Less")
+                                                    onClicked: Notifications.setExpanded(item.appName, false)
+
+                                                    Behavior on opacity {
+                                                        NumberAnimation {
+                                                            duration: Appearance.duration(Tokens.motionFast)
+                                                        }
+                                                    }
+                                                }
+
+                                                GroupClear {
+                                                    id: clearGroup
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    active: item.groupHot
+                                                    text: qsTr("Clear All")
+                                                    onClicked: item.beginLeave(true, true)
+                                                }
                                             }
                                         }
 
@@ -527,7 +768,6 @@ Variants {
                                             urgency: item.urgency
                                             actionsJson: item.actionsJson
                                             live: row.live
-                                            trailingReserve: Tokens.notificationCloseSize + Tokens.spacingXs
                                             body: Notifications.bodyFor(item.bodyHtml)
                                             timeText: Notifications.timeFor(item.time)
                                             iconSource: Notifications.iconSource(item.image, item.appIcon)
@@ -535,7 +775,7 @@ Variants {
                                         }
 
                                         Item {
-                                            visible: item.toggleCount > 0
+                                            visible: item.toggleCount > 0 && !item.expanded
                                             width: parent.width
                                             height: visible ? toggle.implicitHeight : 0
 
@@ -543,10 +783,8 @@ Variants {
                                                 id: toggle
                                                 anchors.horizontalCenter: parent.horizontalCenter
                                                 capsule: true
-                                                text: item.expanded ? qsTr("Show Less") : qsTr("Show All (%1)").arg(item.toggleCount)
-                                                onClicked: {
-                                                    Notifications.setExpanded(item.appName, !item.expanded);
-                                                }
+                                                text: qsTr("Show All (%1)").arg(item.toggleCount)
+                                                onClicked: Notifications.setExpanded(item.appName, true)
                                             }
                                         }
                                     }
@@ -562,10 +800,11 @@ Variants {
 
                     Column {
                         width: list.width
+                        leftPadding: panel.gutter
                         topPadding: Widgets.center.length > 0 ? Tokens.spacingMd : 0
 
                         Flow {
-                            width: parent.width
+                            width: parent.width - panel.gutter
                             spacing: Tokens.widgetGap
 
                             Repeater {
@@ -577,7 +816,7 @@ Variants {
                                     required property var modelData
 
                                     entry: modelData
-                                    cell: (list.width - Tokens.widgetGap) / 2
+                                    cell: (list.width - panel.gutter - Tokens.widgetGap) / 2
                                     onMenuRequested: (x, y) => panel.openWidgetMenu(tile, x, y, modelData)
                                     onRemoveRequested: {
                                         Widgets.remove(modelData.uid);
@@ -600,24 +839,13 @@ Variants {
                 }
 
                 // Footer (macOS model): Edit Widgets and the close circle, centred under the column, one spacing.lg below
-                // the last card; Clear All joins them while there are notifications.
+                // the last card. No Clear All here: it lives on the group headers.
                 Row {
                     id: footer
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: Math.min(list.y + list.height + Tokens.spacingLg, parent.height - height)
                     height: Tokens.notificationCenterCloseDisk
                     spacing: Tokens.spacingSm
-
-                    Pill {
-                        surfaceHost: host
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: Notifications.count > 0
-                        text: qsTr("Clear All")
-                        onClicked: {
-                            Notifications.clearAll();
-                            panel.forceActiveFocus();
-                        }
-                    }
 
                     Pill {
                         surfaceHost: host
