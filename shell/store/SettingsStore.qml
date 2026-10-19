@@ -36,6 +36,8 @@ Scope {
     readonly property var dockPinned: stringList(config.dock.pinned)
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
+    readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
+    readonly property string iconTint: IconModes.validTint(config.icons.tint) ? config.icons.tint : "accent"
     readonly property int lockIdleMinutes: Math.round(clampNumber(config.lock.idleMinutes, 0, 240, 5))
 
     // Array-like (the adapter hands out a QVariantList) to a plain array of non-empty strings.
@@ -108,6 +110,13 @@ Scope {
         property bool showBackground: false
     }
 
+    component IconsConfig: JsonObject {
+        // default | dark | clear | tinted (ADR-0014): app and file icons only.
+        property string mode: "default"
+        // "accent" or a #rrggbb colour for the tinted mode.
+        property string tint: "accent"
+    }
+
     component NotificationsConfig: JsonObject {
         property bool dnd: false
         // always | unlocked | never (ADR-0004). "never" hides bodies; "unlocked" equals "always" until the lock screen exists.
@@ -156,6 +165,14 @@ Scope {
 
     function setMenubarShowBackground(value: bool): void {
         change("menubar.showBackground", value);
+    }
+
+    function setIconMode(value: string): void {
+        change("icons.mode", IconModes.normalizeMode(value));
+    }
+
+    function setIconTint(value: string): void {
+        change("icons.tint", IconModes.validTint(value) ? value : "accent");
     }
 
     function setNotificationsDnd(value: bool): void {
@@ -312,6 +329,7 @@ Scope {
         property HotCornersConfig hotCorners: HotCornersConfig {}
         property DesktopConfig desktop: DesktopConfig {}
         property MenubarConfig menubar: MenubarConfig {}
+        property IconsConfig icons: IconsConfig {}
     }
 
     // Fresh read of the file for the merge (the watched FileView may lag behind an external write).

@@ -40,5 +40,9 @@
   },
   "menubar": {
     "showBackground": false
+  },
+  "icons": {
+    "mode": "default",
+    "tint": "accent"
   }
 }

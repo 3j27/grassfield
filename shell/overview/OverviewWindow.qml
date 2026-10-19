@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Widgets
 import Grassfield.Ui
 import qs.platform
 import qs.services
@@ -503,13 +502,11 @@ Variants {
                             Repeater {
                                 model: tile.shownIcons
 
-                                delegate: IconImage {
+                                delegate: TintedIcon {
                                     id: tileIcon
                                     required property int index
-                                    implicitSize: Tokens.overviewTileIconSize
+                                    size: Tokens.overviewTileIconSize
                                     source: Quickshell.iconPath(Apps.lookup(tile.modelData.appIds[index]) ? Apps.lookup(tile.modelData.appIds[index]).icon : "", "application-x-executable")
-                                    smooth: true
-                                    mipmap: true
                                 }
                             }
                         }
@@ -806,12 +803,10 @@ Variants {
                     anchors.centerIn: parent
                     spacing: Tokens.spacingSm
 
-                    IconImage {
-                        implicitSize: Tokens.overviewLabelIconSize
+                    TintedIcon {
+                        size: Tokens.overviewLabelIconSize
                         anchors.verticalCenter: parent.verticalCenter
                         source: Quickshell.iconPath(label.entry ? label.entry.icon : "", "application-x-executable")
-                        smooth: true
-                        mipmap: true
                     }
 
                     Text {

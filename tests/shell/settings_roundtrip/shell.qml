@@ -22,7 +22,7 @@ ShellRoot {
     readonly property string dirRange: base + "/range"
     readonly property string badText: '{ "appearance": "light", oops'
     readonly property string keepText: '{"version":1,"appearance":"light","material":{"transparency":0.5,"profile":"full"},"accessibility":{"reduceTransparency":false,"reduceMotion":false},"dock":{"pinned":["a","b"],"magnification":1.2,"magnificationEnabled":true,"autohide":false},"windows":{"titlebarDoubleClick":"minimize"},"notifications":{"dnd":false,"previews":"always"},"lock":{"idleMinutes":17}}'
-    readonly property string rangeText: '{"version":1,"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999}}'
+    readonly property string rangeText: '{"version":1,"icons":{"mode":"neon","tint":"#12345"},"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999}}'
     readonly property string dirMerge: base + "/merge"
     readonly property string mergeText: '{"version":1,"appearance":"dark","lock":{"idleMinutes":3},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
     readonly property string mergeEdited: '{"version":1,"appearance":"light","lock":{"idleMinutes":42},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
@@ -72,6 +72,8 @@ ShellRoot {
             root.check("dnd", reader.data.notifications.dnd === true);
             root.check("previews", reader.data.notifications.previews === "never");
             root.check("version", reader.data.version === 1);
+            root.check("icons mode", reader.data.icons.mode === "tinted" && reader.iconMode === "tinted");
+            root.check("icons tint", reader.data.icons.tint === "#e5484d" && reader.iconTint === "#e5484d");
             root.check("defaults kept: profile", reader.data.material.profile === "balanced");
             root.check("defaults kept: titlebar", reader.data.windows.titlebarDoubleClick === "zoom");
             root.check("defaults kept: idle", reader.data.lock.idleMinutes === 5);
@@ -180,6 +182,8 @@ ShellRoot {
             root.check("range titlebar", range.titlebarDoubleClick === "zoom");
             root.check("range previews", range.notificationsPreviews === "unlocked");
             root.check("range idle", range.lockIdleMinutes === 240);
+            root.check("range icon mode", range.iconMode === "default");
+            root.check("range icon tint", range.iconTint === "accent");
             mergeSetup.running = true;
         }
     }
@@ -334,6 +338,15 @@ ShellRoot {
         writer.setDockPinned(["foot", "kitty"]);
         writer.setNotificationsDnd(true);
         writer.setNotificationsPreviews("never");
+        // Icon appearance (ADR-0014): defaults, normalization, values written to disk.
+        check("default icon mode", writer.iconMode === "default" && writer.data.icons.mode === "default");
+        check("default icon tint", writer.iconTint === "accent");
+        writer.setIconMode("sepia");
+        check("icon mode normalized", writer.data.icons.mode === "default");
+        writer.setIconTint("red");
+        check("icon tint normalized", writer.data.icons.tint === "accent");
+        writer.setIconMode("tinted");
+        writer.setIconTint("#e5484d");
         writer.flush();
     }
 }

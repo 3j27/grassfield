@@ -3,7 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import QtQuick.Effects
-import Quickshell.Widgets
 import Grassfield.Ui
 import "IconsLogic.js" as Logic
 
@@ -89,12 +88,11 @@ Item {
         width: root.iconSize
         height: root.iconSize
 
-        IconImage {
+        TintedIcon {
             anchors.fill: parent
+            size: root.iconSize
             visible: !(root.thumbnail && thumb.status === Image.Ready)
             source: Quickshell.iconPath(root.iconTheme, "text-x-generic")
-            smooth: true
-            mipmap: true
         }
 
         Image {

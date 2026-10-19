@@ -183,6 +183,28 @@
           "type": "boolean"
         }
       }
+    },
+    "icons": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Icon appearance of Grassfield surfaces (ADR-0014): app and file icons only, never symbolic glyphs.",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "default",
+            "dark",
+            "clear",
+            "tinted"
+          ]
+        },
+        "tint": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(accent|#[0-9a-fA-F]{6})$",
+          "description": "\"accent\" follows the accent colour, else a #rrggbb colour used by the tinted mode."
+        }
+      }
     }
   }
 }

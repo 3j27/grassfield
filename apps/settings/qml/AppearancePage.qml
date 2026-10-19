@@ -23,6 +23,64 @@ SettingsPage {
     }
 
     SettingsGroup {
+        id: iconGroup
+        caption: qsTr("Icon appearance")
+        footnote: qsTr("Applies to app and file icons in the Dock, Apps, Search, the desktop and Files. Tinted maps each icon to shades of one colour.")
+
+        readonly property string mode: root.store.value("icons.mode")
+        readonly property string tintSetting: root.store.value("icons.tint")
+        readonly property var tintNames: [qsTr("Blue"), qsTr("Purple"), qsTr("Pink"), qsTr("Red"), qsTr("Orange"), qsTr("Yellow"), qsTr("Green"), qsTr("Graphite")]
+        // Accent first (the default), then the palette; the chosen one is marked.
+        readonly property var tintModel: {
+            const out = [{color: Appearance.colors.accent, name: qsTr("Accent"), state: iconGroup.tintSetting === "accent" ? 2 : 0}];
+            for (let i = 0; i < Tokens.iconModeTintColors.length; i++) {
+                const c = Tokens.iconModeTintColors[i];
+                out.push({color: c, name: iconGroup.tintNames[i], state: iconGroup.tintSetting.toLowerCase() === c.toLowerCase() ? 2 : 0});
+            }
+            return out;
+        }
+
+        Item {
+            width: parent.width
+            height: picker.height + 2 * Tokens.spacingMd
+
+            IconModePicker {
+                id: picker
+                anchors.centerIn: parent
+                accessibleName: qsTr("Icon appearance")
+                model: [{id: "default", text: qsTr("Default")}, {id: "dark", text: qsTr("Dark")}, {id: "clear", text: qsTr("Clear")}, {id: "tinted", text: qsTr("Tinted")}]
+                value: iconGroup.mode
+                onPicked: id => root.store.set("icons.mode", id)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Tint colour")
+            subtitle: qsTr("Used by the Tinted appearance.")
+            SwatchRow {
+                id: tintRow
+                accessibleName: qsTr("Tint colour")
+                enabled: iconGroup.mode === "tinted"
+                caption: qsTr("Choose Tinted to use a tint colour.")
+                model: iconGroup.tintModel
+                activeFocusOnTab: true
+                onActiveFocusChanged: {
+                    if (activeFocus && currentIndex < 0) {
+                        for (let i = 0; i < model.length; i++) {
+                            if (model[i].state === 2)
+                                currentIndex = i;
+                        }
+                    }
+                }
+                onChosen: index => {
+                    currentIndex = index;
+                    root.store.set("icons.tint", index === 0 ? "accent" : Tokens.iconModeTintColors[index - 1]);
+                }
+            }
+        }
+    }
+
+    SettingsGroup {
         caption: qsTr("Material")
         footnote: qsTr("Transparency applies to the menu bar, Dock, menus and panels. Reduce Transparency makes them opaque.")
 

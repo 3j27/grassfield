@@ -882,4 +882,47 @@ QtObject {
     readonly property real launcherEmptyOffsetFraction: 0.33
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
+
+    // ADR-0014: Dark mode, MultiEffect saturation (-1..1); tuned on WhiteSur captures
+    readonly property real iconModeDarkSaturation: -0.1
+    // ADR-0014: Dark mode, MultiEffect brightness: darker plate
+    readonly property real iconModeDarkBrightness: -0.3
+    // ADR-0014: Dark mode, MultiEffect contrast: keeps the glyph readable on the darker plate
+    readonly property real iconModeDarkContrast: 0.2
+    // ADR-0014: Clear mode, fully desaturated
+    readonly property real iconModeClearSaturation: -1.0
+    // ADR-0014: Clear mode, lighter
+    readonly property real iconModeClearBrightness: 0.3
+    // ADR-0014: Clear mode, flattened
+    readonly property real iconModeClearContrast: -0.2
+    // ADR-0014: Clear mode, translucent over the material; A2 keeps meaningful icons at 3:1 or more (measured)
+    readonly property real iconModeClearOpacity: 0.75
+    // ADR-0014: Tinted mode, luminance only before the colour ramp
+    readonly property real iconModeTintedSaturation: -1.0
+    // ADR-0014: Tinted mode, lifts the shadows so the ramp starts above black
+    readonly property real iconModeTintedBrightness: 0.1
+    // ADR-0014: Tinted mode, spreads the luminance over the ramp
+    readonly property real iconModeTintedContrast: 0.2
+    // ADR-0014: Tinted mode, strength of the tint (0..1)
+    readonly property real iconModeTintedColorization: 1.0
+    // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)
+    readonly property int iconModePreviewSize: 56
+    // estimate: Settings icon mode picker, tile width
+    readonly property int iconModePreviewTileWidth: 96
+    // estimate: Settings icon mode picker, tile height
+    readonly property int iconModePreviewTileHeight: 96
+    // estimate: Settings icon mode picker, tile corner radius
+    readonly property int iconModePreviewRadius: 10
+    // estimate: Settings icon mode picker, gap between tiles
+    readonly property int iconModePreviewGap: 12
+    // own sample icon of the mode previews: top of the plate gradient
+    readonly property string iconModeSampleTop: "#4DA3FF"
+    // own sample icon of the mode previews: bottom of the plate gradient
+    readonly property string iconModeSampleBottom: "#2B4BD8"
+    // own sample icon of the mode previews: plate corner radius over its edge
+    readonly property real iconModeSampleRadius: 0.22
+    // own sample icon of the mode previews: glyph on the plate
+    readonly property string iconModeSampleGlyph: "#FFFFFF"
+    // own picks, not copied: swatches of the Tinted icon colour (blue, purple, pink, red, orange, yellow, green, graphite); the accent is the first swatch
+    readonly property var iconModeTintColors: ["#3E7BFA", "#8E5BEA", "#E25AA1", "#E5484D", "#F5883B", "#E6B422", "#3FAE5A", "#8A8F98"]
 }

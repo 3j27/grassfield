@@ -15,6 +15,7 @@
 #include <QMimeData>
 #include <QMimeDatabase>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStorageInfo>
 
 #include <KApplicationTrader>
@@ -147,9 +148,20 @@ void FilesApp::readAppearance()
     // Same rule as the shell and Settings: anything but "light" renders dark.
     const bool dark = root.value(QStringLiteral("appearance")).toString() != QLatin1String("light");
     const bool reduce = root.value(QStringLiteral("accessibility")).toObject().value(QStringLiteral("reduceMotion")).toBool(false);
-    if (dark != m_dark || reduce != m_reduceMotion) {
+    // Icon appearance: the same validation as the shell (unknown values fall back to the defaults).
+    const QJsonObject icons = root.value(QStringLiteral("icons")).toObject();
+    QString mode = icons.value(QStringLiteral("mode")).toString();
+    if (!QStringList{QStringLiteral("dark"), QStringLiteral("clear"), QStringLiteral("tinted")}.contains(mode))
+        mode = QStringLiteral("default");
+    QString tint = icons.value(QStringLiteral("tint")).toString();
+    static const QRegularExpression hex(QStringLiteral("^#[0-9a-fA-F]{6}$"));
+    if (!hex.match(tint).hasMatch())
+        tint = QStringLiteral("accent");
+    if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint) {
         m_dark = dark;
         m_reduceMotion = reduce;
+        m_iconMode = mode;
+        m_iconTint = tint;
         emit appearanceChanged();
     }
 }

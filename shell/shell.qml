@@ -56,6 +56,18 @@ ShellRoot {
         value: Settings.reduceMotion
     }
 
+    Binding {
+        target: Appearance
+        property: "iconMode"
+        value: Settings.iconMode
+    }
+
+    Binding {
+        target: Appearance
+        property: "iconTintSetting"
+        value: Settings.iconTint
+    }
+
     // One degraded-mode notice when the compositor extension never answered; withdrawn if it loads later.
     property string degradedNoticeKey: ""
 
