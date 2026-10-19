@@ -186,19 +186,37 @@ namespace gf::stages {
         std::vector<EventWindow> windows;   // back to front
     };
 
-    struct EventMonitor {
-        std::string             monitor;
-        WorkspaceId             workspace = 0;
-        StageId                 active    = 0;
-        bool                    hidden    = false;
-        bool                    overlap   = false; // an active-stage window overlaps the strip band
-        std::vector<EventStage> stages;            // recency order, active first
+    // The front window of the active stage of the Desktop shown on a monitor: the app the menu bar names (macOS keeps naming
+    // the frontmost app). It is the window that holds, or takes once a layer surface lets go, the keyboard; while an
+    // Exclusive layer holds the keyboard after a swap Hyprland has no active window at all (ST24), so the shell cannot learn
+    // it from Hyprland.
+    struct EventFront {
+        WindowId    id = 0;
+        std::string app; // the window's class (what stages group by), as received from the client: sanitized by eventJson
     };
 
+    struct EventMonitor {
+        std::string               monitor;
+        WorkspaceId               workspace = 0;
+        StageId                   active    = 0;
+        bool                      hidden    = false;
+        bool                      overlap   = false; // an active-stage window overlaps the strip band
+        std::optional<EventFront> front;             // absent when the Desktop has no stage
+        std::vector<EventStage>   stages;            // recency order, active first
+    };
+
+    // Longest app name in an event (bytes); a client's class can be any length.
+    inline constexpr size_t kMaxAppBytes = 256;
+
+    // Client text made safe for the event: valid UTF-8 kept, every invalid byte replaced by U+FFFD, cut at a character
+    // boundary to at most `maxBytes` bytes (JSON escaping is done by the caller).
+    std::string sanitizedText(std::string_view in, size_t maxBytes);
+
     // {"v":"gfc/1","type":"stages","on":bool,"monitors":[{"monitor":"…","workspace":N,"active":N,"hidden":bool,
-    // "overlap":bool,"stages":[{"id":N,"slot":N,"windows":[{"address":"<hex, no 0x>","x":…,"y":…,"w":…,"h":…}]}]}]},
-    // plus "reason":"…" when a request was refused (the state is the unchanged current one) or Stages ended without the
-    // shell's request. Window rects are present only for windows drawn in a tile; numbers are rounded to 0.1 px.
+    // "overlap":bool,"front":{"address":"<hex, no 0x>","app":"…"},"stages":[{"id":N,"slot":N,"windows":[{"address":"<hex,
+    // no 0x>","x":…,"y":…,"w":…,"h":…}]}]}]}, plus "reason":"…" when a request was refused (the state is the unchanged
+    // current one) or Stages ended without the shell's request. Window rects are present only for windows drawn in a tile;
+    // numbers are rounded to 0.1 px; "front" is absent when the Desktop has no stage.
     std::string eventJson(bool on, std::span<const EventMonitor> monitors, Reason reason = Reason::None);
 
     // ---- input on strip windows ----
@@ -214,7 +232,9 @@ namespace gf::stages {
         KeyBinding,             // KEYBIND: movefocus, focusmonitor, swap and similar dispatchers
         FocusDispatch,          // DISPATCH_FOCUSWINDOW: hl.dsp.focus({ window = … }) (Dock, Search, scripts)
         GroupDispatch,          // DISPATCH_MOVEWINDOWINTOGROUP
-        Click,                  // CLICK: a press (the hit test never picks a blocked window), group bar clicks
+        Click,                  // CLICK: CInputManager::refocus, a refocus at the cursor: on a press (the hit test never picks
+                                // a blocked window), group bar clicks, but also after an Exclusive layer unmapped with no
+                                // active window, after the unlock, a popup grab ending, the last window of a Desktop closing
         Other,                  // OTHER: plugins (this one included) and the closing window's own notification
         Activation,             // DESKTOP_STATE_CHANGE: CWindow::activate (xdg-activation, foreign-toplevel activate from the
                                 // shell's Dock), drags, layout and workspace swaps that refocus the current window
@@ -230,15 +250,17 @@ namespace gf::stages {
         Ghosts,                 // GHOSTS (unused for focusing by Hyprland)
     };
 
-    // Why Hyprland focused a strip window.
+    // Why Hyprland focused a window.
     enum class FocusOrigin : uint8_t {
-        UserChoice, // a key binding, a focus dispatch, an activation request (Dock, xdg-activation), a click: the user (or
-                    // the app at the user's request) chose that window
-        AfterClose, // Hyprland's successor after a close or unmap (reasons UNMAP_*)
-        Restore,    // Hyprland restoring a window it focused before: its last window (FFM: an Exclusive layer released the
-                    // keyboard, a popup grab ended) or a Desktop's last focused window (WORKSPACE_CHANGE, special workspace
-                    // closed)
-        Automatic,  // Hyprland's own pick for another reason (a new window mapped, a group change, plugins, unknown)
+        UserChoice,    // a key binding, a focus dispatch, an activation request (Dock, xdg-activation), a click (a real
+                       // press): the user (or the app at the user's request) chose that window
+        AfterClose,    // Hyprland's successor after a close or unmap (reasons UNMAP_*)
+        Restore,       // Hyprland restoring a window it focused before: its last window (FFM: an Exclusive layer released
+                       // the keyboard, a popup grab ended) or a Desktop's last focused window (WORKSPACE_CHANGE, special
+                       // workspace closed)
+        CursorRefocus, // Hyprland's refocus at the cursor without a press (CLICK): whatever lies under the pointer when an
+                       // Exclusive layer unmapped with no active window, after the unlock, a grab ending, a Desktop emptied
+        Automatic,     // Hyprland's own pick for another reason (a new window mapped, a group change, plugins, unknown)
     };
 
     // Hyprland 0.56.2 focuses a window of a Desktop that is not shown by switching to that Desktop first, which focuses
@@ -246,7 +268,41 @@ namespace gf::stages {
     // just before): a request for a strip window on another Desktop (Dock, activation) arrives as WORKSPACE_CHANGE. It is a
     // restore only when that window already was the last window Hyprland focused on that Desktop (`wasLastFocused`, tracked
     // by the glue from Hyprland's focus events); otherwise it is the redirected request, a user choice.
-    FocusOrigin focusOrigin(FocusCause cause, bool wasLastFocused);
+    // CLICK is a user choice only when a real press caused it (`pressed`, clickFromPress): Hyprland reports CLICK for every
+    // refocus at the cursor (R13 counter-review #4 of 0.6.3-stages: when an Exclusive layer closed after a swap, the window
+    // under the pointer took the keyboard from the swap's front window as if the user had clicked it).
+    FocusOrigin focusOrigin(FocusCause cause, bool wasLastFocused, bool pressed);
+
+    // ---- presses ----
+    // Where a press (pointer button, touch down, tablet tip or button) goes, read when it arrives, before Hyprland handles
+    // it. While an Exclusive layer surface is mapped Hyprland gives every press to it (CInputManager::mouseMoveUnified: the
+    // exclusive layers come first, and one of them takes the press even when the cursor is outside it) and refuses window
+    // focus; it refocuses at the cursor once the layer is gone.
+    struct PressContext {
+        bool     exclusive   = false; // an Exclusive layer surface is mapped
+        bool     onExclusive = false; // the cursor is over one of them (its input region or one of its popups)
+        WindowId under       = 0;     // the window Hyprland's hit test finds under the cursor (input-blocked windows skipped)
+    };
+
+    enum class PressScope : uint8_t {
+        None,       // a press into an Exclusive layer (a dialog, Search): it chooses no window
+        ThisPress,  // Hyprland refocuses at the cursor while it handles the press: a CLICK focus then is this press
+        UntilFocus, // a press beside every Exclusive layer, on a window: the user clicked that window; Hyprland refocuses
+                    // there only when the layer is gone, and that focus is the user's choice (macOS: a click outside a
+                    // panel activates the window clicked)
+    };
+
+    struct PressRecord {
+        PressScope scope  = PressScope::None;
+        WindowId   target = 0; // UntilFocus: the window pressed
+    };
+
+    PressRecord recordPress(const PressContext& context);
+
+    // Whether Hyprland's CLICK focus of `window` comes from the recorded press. ThisPress lasts while Hyprland handles the
+    // press (the glue clears it from the event loop); UntilFocus until the next focus change, a deferred focus (a later
+    // swap wins), or the refocus after the last Exclusive layer.
+    bool clickFromPress(const PressRecord& press, WindowId window);
 
     // Only a user choice brings a strip window's stage forward (ST10); otherwise the active stage keeps the keyboard.
     bool stripFocusBringsStage(FocusOrigin origin);
@@ -302,27 +358,32 @@ namespace gf::stages {
     ActiveWindowAction activeWindowAction(const ActiveWindowState& state);
 
     // A focus the plugin could not make because Hyprland refuses window focus (an Exclusive layer is mapped, the session is
-    // locked): the window (a swap's incoming front window, the keyboard rule's front window) is remembered and focused only
-    // once the refusal is over, checked again then. Tried after a layer surface unmaps, after a keyboard focus change (an
-    // Exclusive layer dropping its keyboard interactivity), after the unlock and before a key.
+    // locked): the window (a swap's incoming front window, the keyboard rule's front window) and its Desktop are remembered;
+    // once the refusal is over the front window of that Desktop's active stage takes the focus, checked again then: the
+    // remembered window, or, when it closed, was minimized or moved away or another stage came forward meanwhile, the window
+    // in front now (macOS: the frontmost app's key window gets the keyboard back). Tried after a layer surface unmaps, after
+    // a keyboard focus change (an Exclusive layer dropping its keyboard interactivity), after the unlock and before a key.
     struct PendingFocusState {
-        bool exists        = false; // the remembered window is still mapped and not hidden
-        bool front         = false; // it is still the front window of its workspace's active stage
-        bool shown         = false; // its workspace is shown on its monitor and not covered by a special workspace
-        bool locked        = false; // the session is locked
-        bool exclusive     = false; // an Exclusive layer surface is mapped
-        bool holderKeeps   = false; // the layer surface that held the keyboard when the focus was deferred still holds it
-                                    // (it dropped its exclusivity and kept the keyboard: on_demand)
-        bool focused       = false; // it already is Hyprland's active window and holds the keyboard
+        bool remembered  = false; // the remembered window is mapped, not hidden and still the front window of its Desktop's
+                                  // active stage
+        bool hasFront    = false; // that Desktop's active stage has a front window (the remembered one or the one now in front)
+        bool shown       = false; // the target's Desktop is shown on its monitor and not covered by a special workspace
+        bool locked      = false; // the session is locked
+        bool exclusive   = false; // an Exclusive layer surface is mapped
+        bool holderKeeps = false; // the layer surface that held the keyboard when the focus was deferred still holds it
+                                  // (it dropped its exclusivity and kept the keyboard: on_demand)
+        bool focused     = false; // the target already is Hyprland's active window and holds the keyboard
     };
 
     enum class PendingFocusAction : uint8_t {
-        Wait,  // Hyprland still refuses (lock, Exclusive layer) or that layer surface keeps the keyboard: try again later
-        Focus, // focus it now (what Hyprland's own refocus after the layer picked, a window or a surface under the cursor, is
-               // replaced: ST23)
-        Drop,  // forget it: gone, no longer the front window (another stage came forward), already focused, or its Desktop
-               // is not shown or a special workspace covers it (nothing is switched or closed after the fact; the keyboard
-               // rule focuses the active stage when that Desktop is shown again: ST22)
+        Wait,       // Hyprland still refuses (lock, Exclusive layer) or that layer surface keeps the keyboard: try again later
+        Focus,      // focus the remembered window now (what Hyprland's own refocus after the layer picked, a window or a
+                    // surface under the cursor, is replaced: ST23)
+        FocusFront, // the remembered window is gone or no longer in front: the front window of its Desktop's active stage
+                    // takes the focus instead (also replacing Hyprland's pick, which may be nothing)
+        Drop,       // forget it: that Desktop has no stage left, the target already holds the keyboard, or the Desktop is not
+                    // shown or a special workspace covers it (nothing is switched or closed after the fact; the keyboard
+                    // rule focuses the active stage when that Desktop is shown again: ST22)
     };
 
     PendingFocusAction pendingFocusAction(const PendingFocusState& state);
