@@ -143,10 +143,11 @@ function lookup(path, store, attributes) {
 // The first grapheme cluster of the text (white space around it trimmed); "" when empty, longer than 16 UTF-16 units, or
 // when it holds a control, format (bidi marks, zero width space; the emoji joiner and tag characters are allowed),
 // line/paragraph separator, lone surrogate or replacement character. QML's JavaScript has neither Intl.Segmenter nor
-// Unicode property escapes: the clusters are cut by the algorithm of UAX #29 (extending and spacing marks, ExtPict Extend*
-// ZWJ x ExtPict, regional indicator pairs, Hangul syllables, Indic conjuncts) over GraphemeData.js, which is generated from
-// the C++ side's classes (scripts/dev/gen-glyph-tables.sh): both sides run one algorithm over one set of data, and
-// tests/fixtures/glyph-vectors.json holds both to the same answers.
+// Unicode property escapes: the clusters are cut by the whole of UAX #29 (extended grapheme clusters: GB3 to GB13, with
+// GB9b prepended characters and GB9c Indic conjuncts) over GraphemeData.js, which is generated from the Unicode
+// properties (scripts/dev/gen-glyph-tables.sh, the same data as Files' apps/files/src/graphemedata.inc): both sides run
+// one algorithm over one set of data, tests/fixtures/glyph-vectors.json holds both to the same answers, and
+// scripts/dev/glyph-icu-compare.sh checks them against ICU's own segmenter.
 
 
 const GLYPH_MAX_UNITS = 16;
@@ -154,7 +155,7 @@ const SPACE = /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u2
 
 // Class bits (GlyphClass, apps/files/src/folderstylelogic.h).
 const EXTEND = 1, SPACING = 2, JOINER = 4, REGIONAL = 8, PICTOGRAPH = 16, HANGUL_L = 32, HANGUL_V = 64, HANGUL_T = 128,
-    CONSONANT = 256, LINKER = 512, CONTROL = 1024, REJECTED = 2048, EMOJI = 4096;
+    CONSONANT = 256, LINKER = 512, CONTROL = 1024, REJECTED = 2048, EMOJI = 4096, PREPEND = 8192, INCB_EXTEND = 16384;
 const HANGUL_FIRST = 0xAC00, HANGUL_LAST = 0xD7A3;
 // Hangul kinds: 0 none, 1 L, 2 V, 3 T, 4 LV, 5 LVT.
 
@@ -200,14 +201,19 @@ function hangulOf(cp, classes) {
     return 0;
 }
 
-// The end (UTF-16 units) of the first cluster of a non-empty text.
+// The end (UTF-16 units) of the first cluster of a non-empty text (the same algorithm as firstClusterEnd in
+// apps/files/src/folderstylelogic.cpp).
 function firstClusterEnd(t) {
     const first = cpAt(t, 0);
     const firstClasses = classesOf(first);
     let end = unitsOf(first);
-    if (firstClasses & CONTROL)
+    if (firstClasses & CONTROL) {
+        if (first === 0x0D && end < t.length && t.charCodeAt(end) === 0x0A)
+            end++;                                        // GB3: CR x LF; GB4/GB5: any other control stands alone
         return end;
+    }
     let hangul = hangulOf(first, firstClasses);
+    let prepended = (firstClasses & PREPEND) !== 0;
     let regionals = (firstClasses & REGIONAL) ? 1 : 0;
     let pict = (firstClasses & PICTOGRAPH) ? 1 : 0;      // 0 none, 1 an ExtPict (Extend*) seen, 2 ... then the joiner
     let conjunct = (firstClasses & CONSONANT) ? 1 : 0;   // 1 a consonant seen, 2 ... then a linker
@@ -225,16 +231,19 @@ function firstClusterEnd(t) {
         else if ((hangul === 5 || hangul === 3) && h === 3)
             join = true;
         if (!join && (classes & (EXTEND | JOINER | SPACING)))
-            join = true;
+            join = true;                                  // GB9, GB9a
+        if (!join && prepended)
+            join = true;                                  // GB9b
         if (!join && (classes & CONSONANT) && conjunct === 2)
-            join = true;
+            join = true;                                  // GB9c
         if (!join && (classes & PICTOGRAPH) && pict === 2)
-            join = true;
+            join = true;                                  // GB11
         if (!join && (classes & REGIONAL) && regionals % 2 === 1)
-            join = true;
+            join = true;                                  // GB12, GB13
         if (!join)
             break;
         hangul = h;
+        prepended = (classes & PREPEND) !== 0;
         regionals = (classes & REGIONAL) ? regionals + 1 : 0;
         if (classes & PICTOGRAPH)
             pict = 1;
@@ -248,7 +257,7 @@ function firstClusterEnd(t) {
             conjunct = 1;
         else if (classes & LINKER)
             conjunct = conjunct >= 1 ? 2 : 0;
-        else if (!(classes & (EXTEND | JOINER)))
+        else if (!(classes & INCB_EXTEND))
             conjunct = 0;
         end += unitsOf(cp);
     }
@@ -273,7 +282,8 @@ function normalizeGlyph(text) {
 }
 
 // Whether a symbol is drawn as a colour emoji (opaque, its own colours) rather than as an engraved shade: the emoji
-// selector (U+FE0F), a keycap, or a character with the Emoji property, unless the text selector (U+FE0E) is in it.
+// selector (U+FE0F), a keycap, or a character with the Emoji property (not the ASCII digits, # and *), unless the text
+// selector (U+FE0E) is in it.
 // (Text-by-default emoji characters such as an umbrella count as emoji without it: this system's fonts draw them in
 // colour.) The same as FolderStyleLogic::isEmoji.
 function isEmoji(glyph) {
