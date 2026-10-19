@@ -136,6 +136,16 @@ function recentsAfter(recent, previous, now, pinned, max) {
     return list;
 }
 
+// One rebuild step of the recent list: until the desktop entries and the hidden-entry list (OnlyShowIn / NotShowIn) are
+// loaded (`ready` false) nothing is evaluated, because an app that looks listed now may turn out hidden (or unresolved) a
+// moment later and would then count as "quit". Returns {recent, previous}: the list to keep and the running set to
+// remember (null while not ready: the first ready rebuild only records the running set, like a shell restart).
+function recentsStep(ready, recent, previous, now, pinned, max) {
+    if (!ready)
+        return {recent: recent ? recent : [], previous: null};
+    return {recent: recentsAfter(recent, previous, now, pinned, max), previous: now};
+}
+
 // Recent apps that are neither pinned nor running, resolved through `lookup`, appended to the app list
 // ({kind: "app", recent: true, windows: [], pinned: false}). `apps` is the result of merge(). `listed` (optional) is a
 // predicate on the desktop entry: NoDisplay / hidden entries are never shown as recents.
@@ -258,13 +268,16 @@ function parseMimeData(text) {
 
 // MIME types of a file name (by name only, longest matching extension first): the matched types, their parents
 // (subclasses; text/* is a subclass of text/plain) and aliases. [] when the name matches no pattern.
-function mimeTypesOf(path, data) {
+function mimeTypesOf(path, data, resolved) {
     const name = String(path).replace(/\/+$/, "").replace(/^.*\//, "").toLowerCase();
     let found = data.names[name] ? data.names[name] : [];
     for (let i = 1; found.length === 0 && i < name.length; i++) {
         if (name[i] === "." && data.suffix[name.substring(i)])
             found = data.suffix[name.substring(i)];
     }
+    // The real type found at drop time (folders, extensionless files, magic) wins over the name.
+    if (resolved && typeof resolved[path] === "string" && resolved[path] !== "" && resolved[path] !== "-")
+        found = [resolved[path]];
     const all = {};
     const queue = found.slice();
     while (queue.length > 0) {
@@ -283,22 +296,110 @@ function mimeTypesOf(path, data) {
     return Object.keys(all);
 }
 
+// argv of a desktop entry's raw Exec string (Quickshell's `DesktopEntry.execString`), field codes kept: Quickshell's own
+// `command` has them stripped, so it cannot say whether the app takes files. Quoting like GLib's Exec parsing: whitespace
+// separates arguments, single quotes are literal, double quotes allow \" \` \$ \\, a backslash outside quotes escapes the next
+// character. [] for an empty string or an unterminated quote.
+function execArgs(execString) {
+    const s = String(execString === undefined || execString === null ? "" : execString);
+    const out = [];
+    let cur = "";
+    let started = false;
+    let i = 0;
+    while (i < s.length) {
+        const c = s[i];
+        if (c === "'") {
+            const end = s.indexOf("'", i + 1);
+            if (end < 0)
+                return [];
+            cur += s.substring(i + 1, end);
+            started = true;
+            i = end + 1;
+        } else if (c === '"') {
+            started = true;
+            i++;
+            let closed = false;
+            while (i < s.length) {
+                if (s[i] === '"') {
+                    closed = true;
+                    i++;
+                    break;
+                }
+                if (s[i] === "\\" && i + 1 < s.length && '"`$\\'.indexOf(s[i + 1]) >= 0) {
+                    cur += s[i + 1];
+                    i += 2;
+                } else {
+                    cur += s[i];
+                    i++;
+                }
+            }
+            if (!closed)
+                return [];
+        } else if (c === "\\" && i + 1 < s.length) {
+            cur += s[i + 1];
+            started = true;
+            i += 2;
+        } else if (c === " " || c === "\t" || c === "\n") {
+            if (started)
+                out.push(cur);
+            cur = "";
+            started = false;
+            i++;
+        } else {
+            cur += c;
+            started = true;
+            i++;
+        }
+    }
+    if (started)
+        out.push(cur);
+    return out;
+}
+
+// argv of an entry with its field codes: from the raw Exec string when the entry has one (Quickshell's DesktopEntry), else
+// from `command` (plain objects, tests).
+function entryArgs(entry) {
+    if (!entry)
+        return [];
+    return typeof entry.execString === "string" ? execArgs(entry.execString) : Array.from(entry.command || []);
+}
+
 function hasFileCode(command) {
     return Array.from(command || []).some(a => /%[fFuU]/.test(String(a).replace(/%%/g, "")));
 }
 
 // The tile of `entry` ({id, command}) accepts the dropped `paths`: file field code in Exec and, for every file, a MimeType
 // of the entry that equals one of the file's types (or matches "type/*").
-function acceptsFiles(entry, paths, data) {
-    if (!entry || !data || !data.ready || !paths || paths.length === 0 || !hasFileCode(entry.command))
+// `resolved` (optional) maps a path to its real type (dock/file-types.sh). `lenient` (hovering): a path whose type the name
+// does not tell (folder, extensionless file) is let through, the drop resolves it and decides.
+function acceptsFiles(entry, paths, data, resolved, lenient) {
+    if (!entry || !data || !data.ready || !paths || paths.length === 0 || !hasFileCode(entryArgs(entry)))
         return false;
     const declared = data.entries[entry.id];
     if (!declared || declared.length === 0)
         return false;
     return paths.every(p => {
-        const types = mimeTypesOf(p, data);
+        const types = mimeTypesOf(p, data, resolved);
+        if (lenient && types.length === 0)
+            return true;
         return types.some(t => declared.some(d => d === t || (d.endsWith("/*") && t.startsWith(d.substring(0, d.length - 1)))));
     });
+}
+
+// Paths whose type the file name does not tell (no glob matches: folders, extensionless files): their real type is
+// resolved at drop time. [] when the name decides every path.
+function unresolvedPaths(paths, data) {
+    return Array.from(paths || []).filter(p => data && mimeTypesOf(p, data).length === 0);
+}
+
+// {path: type} from the lines printed by dock/file-types.sh for `paths` (same order).
+function parseResolved(paths, text) {
+    const lines = String(text || "").split("\n");
+    const out = {};
+    Array.from(paths || []).forEach((p, i) => {
+        out[p] = (lines[i] || "-").trim();
+    });
+    return out;
 }
 
 // file:// URI of a local path (%u %U get URIs, %f %F paths).
@@ -344,4 +445,39 @@ function bounceKeys(launching, items, now, timeoutMs) {
         out[key] = launching[key];
     }
     return out;
+}
+
+// ---- Layout transitions ----
+// Tiles are rebuilt when apps open, quit or move between sections (an app that quits and is not kept in the Dock leaves the
+// app section and joins the recents section after the divider). To keep that from jumping, every rebuild animates the
+// tiles from where their key was to where it is now (FLIP): the window records the x of each tile before the rebuild and
+// compares it with the new layout.
+
+// Identity of an item across rebuilds.
+function tileKey(item) {
+    if (!item)
+        return "";
+    if (item.kind === "separator")
+        return item.divider ? "sep:divider" : "sep";
+    if (item.kind === "trash")
+        return "trash";
+    return item.kind + ":" + item.key;
+}
+
+// {slide: {key: before - after}, enter: [key]} for two {key: x} maps in the same coordinates: tiles in both that moved by
+// more than `min` px start offset by the difference and glide to 0; tiles only in `after` fade in. An empty `before`
+// (first build) animates nothing.
+function layoutTransition(before, after, min) {
+    const slide = {};
+    const enter = [];
+    const known = Object.keys(before ? before : {}).length > 0;
+    if (!known)
+        return {slide: slide, enter: enter};
+    for (const key of Object.keys(after ? after : {})) {
+        if (before[key] === undefined)
+            enter.push(key);
+        else if (Math.abs(before[key] - after[key]) > min)
+            slide[key] = before[key] - after[key];
+    }
+    return {slide: slide, enter: enter};
 }

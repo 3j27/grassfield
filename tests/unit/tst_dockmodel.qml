@@ -147,6 +147,30 @@ TestCase {
         compare(DockModel.recentsAfter(["x", "y"], ["a", "x"], [], [], 3).join(","), "x,a,y");
     }
 
+    // A hidden entry (OnlyShowIn / NotShowIn) looks listed until the hidden list loads, then not: it must not count as an
+    // app that quit and take a recent slot. Nothing is evaluated before the entries and the hidden list are loaded.
+    function test_recentsWaitForHiddenListAndEntries() {
+        let stored = ["x"];
+        let previous = null;
+        const rebuild = (ready, running) => {
+            const step = DockModel.recentsStep(ready, stored, previous, running, [], 3);
+            previous = step.previous;
+            stored = step.recent;
+        };
+        rebuild(false, ["hidden", "foot"]);   // startup: entries / hidden list not loaded, the hidden app looks listed
+        compare(previous, null);
+        rebuild(false, ["foot"]);
+        compare(stored.join(","), "x");
+        rebuild(true, ["foot"]);              // loaded: the hidden app is excluded, the first ready step only records
+        compare(stored.join(","), "x");
+        compare(previous.join(","), "foot");
+        rebuild(true, []);                    // a real quit afterwards is remembered
+        compare(stored.join(","), "foot,x");
+        // without the gate the same sequence takes a slot for the hidden app
+        let naive = DockModel.recentsAfter(["x"], ["hidden", "foot"], ["foot"], [], 3);
+        compare(naive.join(","), "hidden,x");
+    }
+
     function items3() {
         return DockModel.withTail(DockModel.merge(["foot", "chromium"], [{appId: "org.gnome.Nautilus", ref: "n"}], lookup));
     }
@@ -222,6 +246,83 @@ TestCase {
         // no database yet / nothing dropped
         verify(!DockModel.acceptsFiles(open("edit", ["edit", "%F"]), ["/x/a.txt"], DockModel.parseMimeData("")));
         verify(!DockModel.acceptsFiles(open("edit", ["edit", "%F"]), [], data));
+    }
+
+    // Quickshell's DesktopEntry.command has the field codes stripped: the drop logic reads the raw execString.
+    function test_execArgsKeepsFieldCodes() {
+        compare(DockModel.execArgs("foot").join("|"), "foot");
+        compare(DockModel.execArgs("viewer --open %U").join("|"), "viewer|--open|%U");
+        compare(DockModel.execArgs("  env  A=1   viewer %f ").join("|"), "env|A=1|viewer|%f");
+        compare(DockModel.execArgs('sh -c "echo \\"$@\\"" x %F').join("|"), 'sh|-c|echo "$@"|x|%F');
+        compare(DockModel.execArgs("sh -c 'echo \"$@\" >> /tmp/log' gfdroptest %F").join("|"), 'sh|-c|echo "$@" >> /tmp/log|gfdroptest|%F');
+        compare(DockModel.execArgs('"/opt/My App/run" %F').join("|"), "/opt/My App/run|%F");
+        compare(DockModel.execArgs("a\\ b %f").join("|"), "a b|%f");
+        compare(DockModel.execArgs('empty "" end').join("|"), "empty||end");
+        compare(DockModel.execArgs("broken 'quote").length, 0);
+        compare(DockModel.execArgs('broken "quote').length, 0);
+        compare(DockModel.execArgs("").length, 0);
+        // a real entry object: command stripped, execString raw
+        const real = {id: "viewer", command: ["viewer", "--open"], execString: "viewer --open %U"};
+        compare(DockModel.entryArgs(real).join("|"), "viewer|--open|%U");
+        const data = DockModel.parseMimeData(mimeText);
+        verify(DockModel.acceptsFiles({id: "edit", command: ["edit"], execString: "edit %F"}, ["/a/b.txt"], data));
+        verify(!DockModel.acceptsFiles({id: "edit", command: ["edit"], execString: "edit"}, ["/a/b.txt"], data));
+        compare(DockModel.commandsForFiles(DockModel.entryArgs({command: ["x"], execString: "x --file=%f"}), ["/a b/c.txt"]).map(c => c.join(" ")).join("|"), "x --file=/a b/c.txt");
+        compare(DockModel.commandsForFiles(DockModel.entryArgs({command: ["x"], execString: "x %F"}), ["/a", "/b"]).length, 1);
+    }
+
+    // Folders and extensionless files: the name tells nothing, the real type is resolved at drop time (dock/file-types.sh).
+    function test_dropResolvesRealTypes() {
+        const data = DockModel.parseMimeData(mimeText + "\nE\tfiles\tinode/directory;\nE\tsh\ttext/x-shellscript;\nS\ttext/x-shellscript text/plain");
+        const files = {id: "files", command: ["files", "%U"]};
+        const edit = {id: "edit", command: ["edit", "%F"]};
+        const dir = "/home/u/Photos", bare = "/home/u/run";
+        // names alone decide nothing: refused when strict (the old behaviour), let through while hovering
+        verify(!DockModel.acceptsFiles(files, [dir], data));
+        verify(DockModel.acceptsFiles(files, [dir], data, null, true));
+        verify(!DockModel.acceptsFiles({id: "files", command: ["files"]}, [dir], data, null, true));  // no field code
+        verify(!DockModel.acceptsFiles({id: "bare", command: ["bare", "%f"]}, [dir], data, null, true));  // no MimeType
+        compare(DockModel.unresolvedPaths([dir, bare, "/home/u/a.txt"], data).join(","), dir + "," + bare);
+        // resolved: a folder goes to the file manager only, a text file without extension to the editor
+        const resolved = DockModel.parseResolved([dir, bare], "inode/directory\ntext/x-shellscript\n");
+        compare(resolved[dir], "inode/directory");
+        verify(DockModel.acceptsFiles(files, [dir], data, resolved));
+        verify(!DockModel.acceptsFiles(edit, [dir], data, resolved));
+        verify(DockModel.acceptsFiles(edit, [bare], data, resolved));  // text/x-shellscript is a text/plain subclass
+        verify(!DockModel.acceptsFiles(files, [bare], data, resolved));
+        // a mix with a known name still has to match every file; unknown ("-") stays refused
+        verify(!DockModel.acceptsFiles(edit, [bare, "/home/u/a.png"], data, resolved));
+        verify(!DockModel.acceptsFiles(files, [dir], data, DockModel.parseResolved([dir], "-\n")));
+        verify(!DockModel.acceptsFiles(files, [dir], data, DockModel.parseResolved([dir], "")));
+    }
+
+    // An unpinned running app that quits joins the recents section: its tile glides there (no jump), the others close the gap.
+    function test_layoutTransitionFollowsTheKeys() {
+        const lk = id => entries[id];
+        const before = DockModel.withTail(DockModel.merge(["foot"], [{appId: "chromium", ref: "c"}, {appId: "org.gnome.Nautilus", ref: "n"}], lk), []);
+        // chromium quits: it is a recent app now (after a divider), nautilus keeps running
+        const apps = DockModel.merge(["foot"], [{appId: "org.gnome.Nautilus", ref: "n"}], lk);
+        const after = DockModel.withTail(DockModel.withRecents(apps, ["chromium"], lk, 3), []);
+        const xs = (items, widths) => {
+            const out = {};
+            let x = 0;
+            items.forEach(it => {
+                out[DockModel.tileKey(it)] = x;
+                x += (it.kind === "separator" ? 9 : 48) + 4;
+            });
+            return out;
+        };
+        const plan = DockModel.layoutTransition(xs(before), xs(after), 1);
+        compare(DockModel.tileKey(before[1]), "app:chromium");
+        compare(Object.keys(plan.slide).sort().join(","), "app:chromium,app:org.gnome.Nautilus,sep,trash");
+        compare(plan.slide["app:chromium"], -65);  // it glides in from the left: its old place is 65 px left of the new one
+        compare(plan.slide["app:org.gnome.Nautilus"], 52);
+        compare(plan.enter.join(","), "sep:divider");
+        // first build and unchanged layouts animate nothing
+        compare(Object.keys(DockModel.layoutTransition({}, xs(after), 1).slide).length, 0);
+        compare(DockModel.layoutTransition({}, xs(after), 1).enter.length, 0);
+        const same = DockModel.layoutTransition(xs(after), xs(after), 1);
+        compare(Object.keys(same.slide).length + same.enter.length, 0);
     }
 
     function test_bounceKeys() {

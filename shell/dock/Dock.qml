@@ -80,15 +80,19 @@ Scope {
         // Apps that were running and quit while not kept in the Dock become "recent" (DockModel.recentsAfter: a pure
         // function of the previous and current running sets, written only when the list really changes).
         const runningKeys = apps.filter(a => a.windows.length > 0 && a.entry && Apps.isListed(a.entry)).map(a => a.key);
-        const before = previousRunning;
-        previousRunning = runningKeys;
-        if (Settings.dockShowRecents) {
-            const pinnedKeys = apps.filter(a => a.pinned).map(a => a.key);
-            writeRecents(DockModel.recentsAfter(Settings.dockRecent, before, runningKeys, pinnedKeys, Tokens.dockRecentMax));
-        }
-        const shown = Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, Apps.isListed) : apps;
+        // Not before the desktop entries and the hidden-entry list are loaded (DockModel.recentsStep).
+        const ready = Apps.hiddenReady && DesktopEntries.applications.values.length > 0;
+        const pinnedKeys = apps.filter(a => a.pinned).map(a => a.key);
+        const step = DockModel.recentsStep(ready, Settings.dockRecent, previousRunning, runningKeys, pinnedKeys, Tokens.dockRecentMax);
+        previousRunning = step.previous;
+        if (ready && Settings.dockShowRecents)
+            writeRecents(step.recent);
+        const shown = ready && Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, Apps.isListed) : apps;
         const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
+        const all = windows.instances;
+        all.forEach(w => w.captureLayout());
         items = DockModel.withTail(shown, tail);
+        all.forEach(w => w.playLayout());
         pruneLaunching();
     }
 
@@ -171,6 +175,15 @@ Scope {
         target: Compositor
 
         function onMinimizedChanged(): void {
+            root.rebuild();
+        }
+    }
+
+    Connections {
+        target: Apps
+
+        // The hidden-entry list has (re)loaded.
+        function onListChanged(): void {
             root.rebuild();
         }
     }
@@ -302,8 +315,9 @@ Scope {
                 const out = dragOut && dragRemovable;
                 const slot = dragSlot;
                 const fromApp = dragFromApp;
-                const cx = tileItem.mapToItem(area, tileItem.width / 2, win.iconSize / 2).x + dragDx;
-                const cy = tileItem.mapToItem(area, 0, win.iconSize / 2).y + dragDy;
+                // mapToItem already includes the tile's drag translation (its Translate transform): adding dragDx/dragDy put the puff off the window.
+                const cx = tileItem.mapToItem(area, tileItem.width / 2, win.iconSize / 2).x;
+                const cy = tileItem.mapToItem(area, 0, win.iconSize / 2).y;
                 dragFrom = -1;
                 dragDx = 0;
                 dragDy = 0;
@@ -317,6 +331,43 @@ Scope {
                 const r = DockModel.reorder(all, fromApp, slot);
                 if (r.changed)
                     Settings.setDockPinned(r.pinned);
+            }
+
+            // Layout transition (DockModel.layoutTransition): x of every tile (window coordinates) before a rebuild.
+            property var layoutBefore: ({})
+
+            function tileXs(): var {
+                const out = {};
+                for (let i = 0; i < tileRepeater.count; i++) {
+                    const t = tileRepeater.itemAt(i) as Item;
+                    if (t)
+                        out[DockModel.tileKey(t.modelData)] = t.mapToItem(area, 0, 0).x;
+                }
+                return out;
+            }
+
+            function captureLayout(): void {
+                layoutBefore = tileXs();
+            }
+
+            // After the tiles were rebuilt: tiles that moved glide from their old place (an app that quit moves into the
+            // recents section instead of jumping), new tiles fade in. Skipped with Reduce Motion and while a tile is dragged.
+            function playLayout(): void {
+                if (Appearance.reduceMotion || dragFrom >= 0)
+                    return;
+                tiles.forceLayout();
+                const after = tileXs();
+                const plan = DockModel.layoutTransition(layoutBefore, after, 1);
+                for (let i = 0; i < tileRepeater.count; i++) {
+                    const t = tileRepeater.itemAt(i) as Item;
+                    if (!t)
+                        continue;
+                    const key = DockModel.tileKey(t.modelData);
+                    if (plan.slide[key] !== undefined)
+                        t.glideFrom(plan.slide[key]);
+                    else if (plan.enter.indexOf(key) >= 0)
+                        t.fadeIn();
+                }
             }
 
             // Removal puff (own drawing, no artwork): a ring of fading circles around (x, y).
@@ -336,10 +387,6 @@ Scope {
                 easing.type: Easing.OutQuad
             }
             readonly property bool autohide: Settings.dockAutohide
-            // Running dots: white over a dark shelf, black over a light one (the shelf is the tint over the wallpaper under
-            // it, BarTone), so they keep 3:1 or more whatever the wallpaper and appearance.
-            readonly property bool dotLight: BarTone.dotToneFor(win.screen ? win.screen.name : "", Appearance.colors.materialTint, shelf.blurActive ? shelf.tintAlpha : 1) === "light"
-
             // Layout from the unmagnified geometry (stable under the pointer), then scaled.
             readonly property var widths: root.items.map(it => it.kind === "separator" ? separatorWidth : iconSize)
             readonly property real baseTotal: Magnify.totalWidth(widths, Tokens.dockSpacing)
@@ -535,7 +582,7 @@ Scope {
                     x: (win.width - width) / 2
                     y: win.height - Tokens.dockBottomMargin - height + (win.revealed ? 0 : height + Tokens.dockBottomMargin + shadowMargin)
                     radius: Tokens.radiusDock
-                    tintAlphaOverride: Tokens.dockTintAlpha
+                    tintAlphaOverride: Appearance.dark ? Tokens.dockTintAlphaDark : Tokens.dockTintAlphaLight
                     highlightOpacity: Tokens.dockHighlightOpacity
                     borderOpacity: Tokens.dockRimOpacity
                     borderColor: Appearance.colors.materialHighlight
@@ -591,11 +638,41 @@ Scope {
                                     return 0;
                                 }
 
+                                // Layout transition: horizontal offset gliding to 0, and the fade-in of a new tile.
+                                property real glide: 0
+                                function glideFrom(dx: real): void {
+                                    glide = dx;
+                                    glideAnim.restart();
+                                }
+                                function fadeIn(): void {
+                                    opacity = 0;
+                                    fadeAnim.restart();
+                                }
+
+                                NumberAnimation {
+                                    id: glideAnim
+                                    target: tile
+                                    property: "glide"
+                                    to: 0
+                                    duration: Appearance.duration(Tokens.motionNormal)
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: Appearance.curve
+                                }
+
+                                NumberAnimation {
+                                    id: fadeAnim
+                                    target: tile
+                                    property: "opacity"
+                                    to: 1
+                                    duration: Appearance.duration(Tokens.motionNormal)
+                                    easing.type: Easing.OutQuad
+                                }
+
                                 width: isSeparator ? win.separatorWidth : iconPx
                                 height: win.iconSize + win.indicatorArea
                                 z: dragging ? 100 : 0
                                 transform: Translate {
-                                    x: tile.dragging ? win.dragDx : tile.shiftX
+                                    x: tile.dragging ? win.dragDx : tile.shiftX + tile.glide
                                     y: tile.dragging ? win.dragDy : 0
 
                                     Behavior on x {
@@ -651,8 +728,13 @@ Scope {
                                     SequentialAnimation {
                                         running: tile.bouncing
                                         loops: Animation.Infinite
-                                        onRunningChanged: if (!running)
-                                            appIcon.lift = 0
+                                        // The hop ends by landing (a few small rebounds), not by snapping back.
+                                        onRunningChanged: {
+                                            if (running)
+                                                landAnim.stop();
+                                            else if (appIcon.lift > 0)
+                                                landAnim.restart();
+                                        }
 
                                         NumberAnimation {
                                             target: appIcon
@@ -668,6 +750,15 @@ Scope {
                                             duration: Tokens.dockBounceDuration / 2
                                             easing.type: Easing.InQuad
                                         }
+                                    }
+
+                                    NumberAnimation {
+                                        id: landAnim
+                                        target: appIcon
+                                        property: "lift"
+                                        to: 0
+                                        duration: Appearance.duration(Tokens.motionNormal)
+                                        easing.type: Easing.OutBounce
                                     }
 
                                     // Notification badge (counts from the notification history).
@@ -788,7 +879,7 @@ Scope {
                                     width: Tokens.dockIndicatorSize
                                     height: Tokens.dockIndicatorSize
                                     radius: width / 2
-                                    color: win.dotLight ? Appearance.darkColors.indicator : Appearance.lightColors.indicator
+                                    color: Appearance.colors.indicator
                                     x: (tile.width - width) / 2
                                     y: win.iconSize + Tokens.dockSpacing
                                 }
@@ -849,7 +940,7 @@ Scope {
                                     // over at the drop): then the tile highlights and the drop itself decides.
                                     function check(drag: var): bool {
                                         const text = drag.getDataAsString("text/uri-list");
-                                        return text === "" || Apps.canOpen(tile.modelData.entry, Icons.parseUriList(text));
+                                        return text === "" || Apps.canOpen(tile.modelData.entry, Icons.parseUriList(text), true);
                                     }
                                     onEntered: drag => {
                                         acceptable = check(drag);
@@ -859,7 +950,7 @@ Scope {
                                     onDropped: drop => {
                                         const paths = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
                                         acceptable = false;
-                                        if (paths.length > 0 && Apps.openWith(tile.modelData.entry, paths))
+                                        if (paths.length > 0 && Apps.dropOnApp(tile.modelData.entry, paths))
                                             drop.accept(Qt.CopyAction);
                                         else
                                             drop.accepted = false;
