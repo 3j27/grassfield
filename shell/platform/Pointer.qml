@@ -53,6 +53,10 @@ Singleton {
     // Settings (grassfield.json) have been read, or are not coming (no file): only then are the colours known to be the
     // defaults, so only then is a custom theme on disk removed; bound by the shell.
     property bool colorsKnown: false
+    // The settings file exists but is malformed or unreadable: the colours stay unknown (nothing is switched or removed)
+    // until a valid file is read; bound by the shell.
+    property bool settingsFailed: false
+    onSettingsFailedChanged: root.update()
     // The theme for the default colours: the packaged one ("" when the session has no cursor theme; a theme that is not
     // Grassfield's is kept).
     readonly property string baseTheme: PointerColors.baseTheme(root.theme)
@@ -148,6 +152,9 @@ Singleton {
     }
 
     function update(): void {
+        // A malformed settings file: the wanted values are only defaults, never sent; the compositor keeps its theme.
+        if (root.settingsFailed && !root.colorsKnown)
+            return;
         // Default colours, and the compositor is on the packaged theme (not the custom one: it was loaded at login, or
         // the colours were reset and the request is answered): the custom theme is no longer needed.
         if (root.colorsKnown && root.known && PointerColors.isDefault(root.outlineColor, root.fillColor) && root.currentTheme() !== PointerColors.CUSTOM_THEME && !root.busy)
@@ -175,6 +182,8 @@ Singleton {
     }
 
     function transmit(): void {
+        if (root.settingsFailed && !root.colorsKnown)
+            return;
         const theme = root.wantedThemeNow();
         const line = PointerSize.setCursorRequest(theme, root.size);
         if (line === "" || root.socketPath === "")
@@ -326,7 +335,7 @@ Singleton {
 
     // grassfield.json that does not exist never loads: after this the stored colours are the defaults.
     Timer {
-        running: !root.colorsKnown
+        running: !root.colorsKnown && !root.settingsFailed
         interval: Tokens.settingsPointerSettingsWaitMs
         onTriggered: root.colorsKnown = true
     }

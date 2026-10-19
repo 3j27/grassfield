@@ -296,6 +296,36 @@ ShellRoot {
         },
         function () {
             root.check("answered ok: the directory is gone", root.out.trim() === "1");
+            // A malformed grassfield.json: the defaults are only leftovers. The session started on the custom theme;
+            // nothing is sent and nothing is deleted, not even after the wait for a file that never loads.
+            root.mode = "ok";
+            root.mark = root.requests.length;
+            root.rem = Pointer.builder.removals;
+            root.run(["sh", "-c", "d=\"$1\"; mkdir -p \"$d/grassfield-cursors-custom\"; touch \"$d/grassfield-cursors-custom/manifest.hl\"", "sh", root.sock + ".icons"], () => {
+                Pointer.settingsFailed = true;
+                Pointer.colorsKnown = false;
+                Pointer.theme = "grassfield-cursors-custom";
+                Pointer.builder.dirty = true;
+                Pointer.compositorReset();
+                longIdle.start();
+            });
+        },
+        function () {
+            root.check("malformed settings: the wait did not turn the defaults into a read", !Pointer.colorsKnown);
+            root.check("malformed settings: no setcursor is sent (" + (root.requests.length - root.mark) + ")", root.requests.length === root.mark);
+            root.check("malformed settings: the custom theme is not removed", Pointer.builder.removals === root.rem);
+            root.run(["sh", "-c", "test -e \"$1\"/grassfield-cursors-custom; echo $?", "sh", root.sock + ".icons"], () => root.advance());
+        },
+        function () {
+            root.check("malformed settings: the custom theme is still on disk", root.out.trim() === "0");
+            // A valid file with the defaults is read: switch, then removal after "ok".
+            Pointer.settingsFailed = false;
+            Pointer.colorsKnown = true;
+            root.waitFor(() => Pointer.known && Pointer.builder.removals === root.rem + 1 && !Pointer.builder.removing, 8000);
+        },
+        function () {
+            root.check("valid file after a malformed one: the packaged theme is requested (" + root.last() + ")", root.last() === "/setcursor grassfield-cursors " + Pointer.sessionSize);
+            root.check("valid file after a malformed one: the custom theme is removed after ok", Pointer.builder.removals === root.rem + 1);
             root.finish();
         }
     ]
@@ -378,6 +408,13 @@ ShellRoot {
             server.active = false;
             root.advance();
         }
+    }
+
+    // Longer than the wait for a settings file that never loads (Tokens.settingsPointerSettingsWaitMs, 3000).
+    Timer {
+        id: longIdle
+        interval: 4500
+        onTriggered: root.advance()
     }
 
     Timer {
