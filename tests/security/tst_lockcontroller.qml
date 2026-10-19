@@ -96,6 +96,28 @@ TestCase {
         verify(clearSpy.count > clears);
     }
 
+    // Defence in depth (R12 review #3 MAJOR): in a dev/test session without the opt-in, a submit never reaches PAM,
+    // the field is cleared and the session stays LOCKED. This is what stops a stray nested key from counting a
+    // faillock failure against the real account.
+    function test_devPamSuppressedNeverCallsPam() {
+        ctl.pamSuppressed = true;
+        const clears = clearSpy.count;
+        verify(ctl.submit("anything")); // consumed
+        compare(pam.starts, 0); // PAM never started
+        compare(ctl.lockState, "locked"); // never enters authenticating
+        verify(!ctl.authenticating);
+        verify(!ctl.holdsSecret); // no secret retained
+        compare(unlockSpy.count, 0); // never unlocks
+        compare(failedSpy.count, 0); // not counted as a failure
+        compare(ctl.failedAttempts, 0);
+        verify(clearSpy.count > clears); // field cleared
+        // A later real attempt (opt-in) still works through the normal path.
+        ctl.pamSuppressed = false;
+        verify(ctl.submit("pw"));
+        compare(ctl.lockState, "authenticating");
+        compare(pam.starts, 1);
+    }
+
     function test_typingClearsTheErrorOnly() {
         ctl.submit("wrong");
         prompt();

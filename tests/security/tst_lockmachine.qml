@@ -142,6 +142,26 @@ TestCase {
         compare(Machine.ownershipAction(Machine.compositorLockState([{solitaryBlockedBy: ["WINDOWED", "CANDIDATE"]}]), 1), "relock");
     }
 
+    // Suspected takeover (R12 review #3): the probe runs every 100 ms while no lock surface of this
+    // shell has the keyboard or the lock was inherited at start; 1 s only when both are known false.
+    function test_takeoverSuspected() {
+        compare(Machine.takeoverSuspected(true, false), false);
+        verify(Machine.takeoverSuspected(false, false));
+        verify(Machine.takeoverSuspected(true, true));
+        verify(Machine.takeoverSuspected(false, true));
+        // Unknown inputs never slow the probe down.
+        verify(Machine.takeoverSuspected(undefined, false));
+        verify(Machine.takeoverSuspected(true, undefined));
+        verify(Machine.takeoverSuspected(1, false));
+        verify(Machine.takeoverSuspected(null, null));
+        compare(Machine.probeInterval(false), 1000);
+        compare(Machine.probeInterval(true), 100);
+        compare(Machine.probeInterval(undefined), 100);
+        compare(Machine.probeInterval(0), 100);
+        verify(Machine.PROBE_SUSPECTED_MS < Machine.PROBE_INTERVAL_MS);
+        verify(Machine.PROBE_SUSPECTED_MS <= 100);
+    }
+
     // Hyprland 0.56 `hyprctl -j monitors` shapes (verified in nested: LOCK stays after the lock
     // client is killed).
     function test_compositorLockState() {
@@ -154,6 +174,39 @@ TestCase {
         compare(Machine.compositorLockState([]), "unknown");
         compare(Machine.compositorLockState(undefined), "unknown");
         compare(Machine.compositorLockState([null, {}, {solitaryBlockedBy: "LOCK"}]), "unknown");
+    }
+
+    // Lazy reading (R12 counter-review: per-probe garbage of the 100 ms check): same answers as compositorLockState for
+    // every shape, and while locked only the first monitor's IPC object is read.
+    function test_compositorLockStateLazy() {
+        const shapes = [
+            [{solitaryBlockedBy: ["LOCK", "WINDOWED", "CANDIDATE"]}],
+            [{solitaryBlockedBy: ["WORKSPACE"]}, {solitaryBlockedBy: ["WINDOWED", "LOCK"]}],
+            [{solitaryBlockedBy: ["WINDOWED", "CANDIDATE"]}],
+            [{solitaryBlockedBy: ["WORKSPACE"]}],
+            [{solitaryBlockedBy: ["WORKSPACE"]}, {solitaryBlockedBy: []}],
+            [],
+            [null, {}, {solitaryBlockedBy: "LOCK"}],
+            [{solitaryBlockedBy: ["WINDOWED"]}, {solitaryBlockedBy: ["LOCK"]}],
+            [{solitaryBlockedBy: ["LOCK"]}, {solitaryBlockedBy: ["WINDOWED"]}]
+        ];
+        for (let k = 0; k < shapes.length; k++) {
+            const list = shapes[k];
+            compare(Machine.compositorLockStateLazy(list.length, i => list[i]), Machine.compositorLockState(list), JSON.stringify(list));
+        }
+        // Locked on the first monitor: the second is never read.
+        let reads = [];
+        const locked = [{solitaryBlockedBy: ["LOCK"]}, {solitaryBlockedBy: ["LOCK"]}];
+        compare(Machine.compositorLockStateLazy(2, i => { reads.push(i); return locked[i]; }), "locked");
+        compare(reads, [0]);
+        // Unlocked: every monitor is read (a later LOCK would still win), each once, in order.
+        reads = [];
+        const unlocked = [{solitaryBlockedBy: ["WINDOWED"]}, {solitaryBlockedBy: ["CANDIDATE"]}];
+        compare(Machine.compositorLockStateLazy(2, i => { reads.push(i); return unlocked[i]; }), "unlocked");
+        compare(reads, [0, 1]);
+        // Bad counts read nothing and prove nothing.
+        compare(Machine.compositorLockStateLazy(undefined, i => locked[i]), "unknown");
+        compare(Machine.compositorLockStateLazy(0, i => locked[i]), "unknown");
     }
 
     function test_displayNameAndInitials() {

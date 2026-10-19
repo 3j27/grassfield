@@ -88,18 +88,37 @@ function restoreAtStart(intent, markerAvailable, markerText) {
 // stops listing at "WORKSPACE" (monitor without a workspace yet), so such a list proves nothing.
 // Returns "locked", "unlocked" or "unknown" (no complete list; e.g. not Hyprland).
 function compositorLockState(monitors) {
-    var readable = false;
     var list = monitors || [];
-    for (var i = 0; i < list.length; i++) {
-        var blockers = list[i] ? list[i].solitaryBlockedBy : undefined;
+    return compositorLockStateLazy(list.length, function (i) {
+        return list[i];
+    });
+}
+
+// Same result as compositorLockState, reading monitor i's IPC object only when needed (get(i), called at most once per
+// monitor, in order). Each read of Quickshell's HyprlandMonitor.lastIpcObject converts a whole monitor map to JS, which
+// the 100 ms ownership check did twice per answer (the garbage made the shell's RSS climb ~5 MB/min between
+// collections). A monitor listing LOCK settles the answer (the session lock is global), so in the steady locked state
+// only the first monitor is read. Any other answer still reads every monitor, exactly as before.
+function compositorLockStateLazy(count, get) {
+    var readable = false;
+    var n = typeof count === "number" ? count : 0;
+    for (var i = 0; i < n; i++) {
+        var object = get(i);
+        var blockers = object ? object.solitaryBlockedBy : undefined;
         if (!blockers || typeof blockers === "string" || typeof blockers.length !== "number")
             continue;
-        var names = [];
-        for (var j = 0; j < blockers.length; j++)
-            names.push(String(blockers[j]));
-        if (names.indexOf("LOCK") !== -1)
+        var lock = false;
+        var workspace = false;
+        for (var j = 0; j < blockers.length; j++) {
+            var name = String(blockers[j]);
+            if (name === "LOCK")
+                lock = true;
+            else if (name === "WORKSPACE")
+                workspace = true;
+        }
+        if (lock)
             return "locked";
-        if (names.indexOf("WORKSPACE") === -1)
+        if (!workspace)
             readable = true;
     }
     return readable ? "unlocked" : "unknown";
@@ -123,6 +142,27 @@ function ownershipAction(compositorState, unlockedBefore) {
     if (compositorState !== "unlocked")
         return "unknown";
     return unlockedBefore >= 1 ? "relock" : "confirm";
+}
+
+// Lock ownership probe intervals (ms) while this shell holds a lock on Hyprland (Lock.qml ownershipProbe): one
+// monitor query per tick. The interval bounds how long the session can stay unlocked after another client releases
+// a lock it took over, so it is short while such a release is possible.
+var PROBE_INTERVAL_MS = 1000;
+var PROBE_SUSPECTED_MS = 100;
+
+// A takeover is suspected, i.e. another client may hold or have held the session lock, so that its release can unlock
+// the session under this shell's lock, while
+//   - no lock surface of this shell has the keyboard (another client's lock surface took it, or the session was
+//     unlocked under this lock and a window took it), or
+//   - the lock this shell holds was requested at start or after a reload ("restore"): it may be a lock this shell
+//     took over from a live foreign locker, whose release unlocks the session without any event.
+// Anything but exact booleans counts as suspected: probing faster never unlocks anything (fail closed).
+function takeoverSuspected(surfaceFocused, inheritedLock) {
+    return !(surfaceFocused === true && inheritedLock === false);
+}
+
+function probeInterval(suspected) {
+    return suspected === false ? PROBE_INTERVAL_MS : PROBE_SUSPECTED_MS;
 }
 
 // File name of the marker; the instance id is reduced to safe file-name characters.
