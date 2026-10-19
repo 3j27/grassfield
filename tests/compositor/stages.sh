@@ -3,7 +3,7 @@
 # live, draws them into the shell's strip tiles, blocks their input and swaps a stage into the centre, without resizing,
 # moving or configuring any client.
 #
-# Usage: tests/compositor/stages.sh [check]              functional scenario (default)
+# Usage: tests/compositor/stages.sh [check] [--plugin PATH]  functional scenario (default; PATH: the build loaded, see below)
 #        tests/compositor/stages.sh perf [seconds]       CPU of the nested Hyprland, 3 stages x 3 foot windows, each phase
 #                                                        `seconds` long (default 30), plus the special-workspace
 #                                                        alternative (windows parked, not rendered)
@@ -41,13 +41,27 @@ set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
-mode=${1:-check}
-perf_secs=${2:-30}
+# --plugin PATH: the build loaded in the nested session for this run (default compositor/build/grassfield-compositor.so),
+# e.g. a pre-fix build loaded through scripts/nestctl plugin load to show that the checks discriminate; step 15 unloads
+# and loads that same file.
+plugin=$root/compositor/build/grassfield-compositor.so
+args=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --plugin) plugin=${2:?--plugin needs a path}; shift ;;
+    *) args+=("$1") ;;
+  esac
+  shift
+done
+mode=${args[0]:-check}
+perf_secs=${args[1]:-30}
+usage="usage: stages.sh [check|perf [seconds]] [--plugin PATH]"
 case $mode in
   check) ;;
-  perf) [[ $perf_secs =~ ^[1-9][0-9]*$ ]] || { echo "usage: stages.sh [check|perf [seconds]]" >&2; exit 2; } ;;
-  *) echo "usage: stages.sh [check|perf [seconds]]" >&2; exit 2 ;;
+  perf) [[ $perf_secs =~ ^[1-9][0-9]*$ ]] || { echo "$usage" >&2; exit 2; } ;;
+  *) echo "$usage" >&2; exit 2 ;;
 esac
+[[ -f $plugin ]] || { echo "stages: no plugin build at $plugin" >&2; exit 2; }
 
 out=GF-REF
 sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
@@ -61,7 +75,6 @@ hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
-plugin=$root/compositor/build/grassfield-compositor.so
 if [[ -z $sock || -z $sig || -z $hypr_pid ]] || ! kill -0 "$hypr_pid" 2>/dev/null; then
   echo "stages: no nested instance (run scripts/dev/nested-up.sh)" >&2
   exit 2
@@ -678,15 +691,16 @@ g_left=$(client_mapped "$addr_g" && echo yes || echo no)
 ex1=$(layer_got "$exlog" key uc)
 capf_mid=$(cap_since "$cap_f" "$capf0"); capg_mid=$(cap_since "$cap_g" "$capg0")
 focus_ev=$(events_since "$ev0" | grep -acE " activewindowv2>>($(hexof "$addr_g")|$(hexof "$addr_f"))$")
+mon_ev=$(events_since "$ev0" | grep -ac ' focusedmon>>') # Hyprland's focused monitor changed (even for a moment)
 stop_exclusive
 sleep 1
 capf1=$(stat -c %s "$cap_f")
 keys k9
 sleep 0.4
 capf_new=$(cap_since "$cap_f" "$capf1"); capg_new=$(cap_since "$cap_g" "$capg0")
-((ex_rc == 0 && sw_rc == 0 && ex1 >= 1 && focus_ev == 0)) && [[ $aw_swap != "$addr_g" && $g_strip == yes && $mon1 == "$mon0" && -z $capf_mid && -z $capg_mid ]]
+((ex_rc == 0 && sw_rc == 0 && ex1 >= 1 && focus_ev == 0 && mon_ev == 0)) && [[ $aw_swap != "$addr_g" && $g_strip == yes && $mon1 == "$mon0" && -z $capf_mid && -z $capg_mid ]]
 check "8c swap under an Exclusive layer: Hyprland's active window is never the strip window (g), no window focus while the layer is up, the focused monitor stays, the layer keeps the keys" $? \
-  "active window '$aw_swap' (f $addr_f, g $addr_g); g in the strip: $g_strip; activewindowv2 naming f or g under the layer: $focus_ev; focused monitor $mon0 -> $mon1; layer got $ex1 of the 2 keys; f got '$capf_mid', g got '$capg_mid'"
+  "active window '$aw_swap' (f $addr_f, g $addr_g); g in the strip: $g_strip; activewindowv2 naming f or g under the layer: $focus_ev; focused monitor $mon0 -> $mon1, focusedmon events: $mon_ev; layer got $ex1 of the 2 keys; f got '$capf_mid', g got '$capg_mid'"
 [[ $g_left == yes && $f_left == yes && $capf_new == *k9* && -z $capg_new ]] && in_active "$addr_f"
 check "8c hl.dsp.window.close() under the layer closes no window (the strip window g survives); after the layer the new stage's front window (f) gets the keys" $? \
   "f mapped after close: $f_left, g mapped: $g_left; f got '$capf_new', g got '$capg_new'"
@@ -732,11 +746,11 @@ sleep 0.4
 ex1=$(layer_got "$exlog" key vq)
 sp1=$(special_of); mon1=$(focused_monitor)
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0"); caps_new=$(cap_since "$cap_s" "$caps0")
-focus_ev=$(events_since "$ev0" | grep -acE ' activewindowv2>>[0-9a-f]+$')
+focus_ev=$(events_since "$ev0" | grep -acE ' (activewindowv2>>[0-9a-f]+|focusedmon>>.*)$')
 ((ex_rc == 0 && sw_rc == 0 && ex1 >= 1 && focus_ev == 0)) && [[ $sp0 == special:gf-st && $sp1 == special:gf-st && $mon1 == "$mon0" && -z $capb_new && -z $capc_new && -z $caps_new ]] \
   && in_active "$addr_c3"
 check "8f Exclusive layer + special workspace + activate: the layer keeps every key, the special workspace stays open, no window focus" $? \
-  "special $sp0 -> $sp1; layer got $ex1 of the 2 keys; window focus events under the layer: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new', s got '$caps_new'"
+  "special $sp0 -> $sp1; layer got $ex1 of the 2 keys; window or monitor focus events under the layer: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new', s got '$caps_new'"
 stop_exclusive
 sleep 1
 sp2=$(special_of)
@@ -827,10 +841,10 @@ sleep 0.4
 pk1=$(layer_got "$pklog" "polkit key" secrt)
 mon1=$(focused_monitor)
 capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
-focus_ev=$(events_since "$ev0" | grep -acE ' activewindowv2>>[0-9a-f]+$')
+focus_ev=$(events_since "$ev0" | grep -acE ' (activewindowv2>>[0-9a-f]+|focusedmon>>.*)$')
 ((pk_rc == 0 && sw_rc == 0 && pk1 >= 5 && focus_ev == 0)) && [[ $aw != "$addr_b3" && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
 check "8h polkit-like dialog: a stage activated under it, every key goes to its password field, none to a window; the active window is never the strip window" $? \
-  "field got $pk1 of the 6 keys; active window '$aw' (b3 $addr_b3); window focus events: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new'"
+  "field got $pk1 of the 6 keys; active window '$aw' (b3 $addr_b3); window or monitor focus events under the dialog: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new'"
 keys -k Escape
 wait_log "$pklog" "polkit hidden" 40
 sleep 0.8
