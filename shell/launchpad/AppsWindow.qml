@@ -81,6 +81,7 @@ Variants {
                 field.text = "";
                 grid.positionViewAtBeginning();
                 host.focusZone("search");
+                host.updateView();
                 firstFrame.done = false;
             }
         }
