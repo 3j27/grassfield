@@ -7,7 +7,9 @@ R13 fixes 2026-10-18) and the desktop focus policy (feature `desktop-focus`, FR3
 `desktop-focus-v2`) implemented; Stages prototype behind a feature flag (features `stages-available` / `stages`,
 FR33-FR38, ADR-0013, spec `docs/specs/stages.md`; input guards after the R13 review of 46b3e9b; active window, menus
 and focus reasons after the R13 counter-review of 17208af; no focus under an Exclusive layer after the R13 counter-review #3 of e9ebc7f); cursor
-refresh for the pointer size (feature `cursor-refresh`, FR39-FR40, ADR-0014). Plugin 0.7.0-cursor.
+refresh for the pointer size (feature `cursor-refresh`, FR39-FR40, ADR-0014); the focus after the Overview closes (feature
+`overview-focus`, FR41-FR43, owner decision 2026-10-19 batch 5; its deferred-focus core shared with Stages). Plugin
+0.8.0-ovfocus.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -74,8 +76,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `grassfield>>{"v":"gfc/1","type":"capabilities","features":[...]}`: `decorations` always; `minimize` only
   when the `minimize`/`restore` Lua functions and the minimize render hooks registered; `config` only when the
   `config` Lua function registered; `appmenu` (FR18), `overview` (FR29), `desktop-focus` + `desktop-focus-v2` (FR31),
-  `stages-available` (FR33) and `cursor-refresh` (FR40) likewise; `stages` only while its flag is on (FR33)
-  (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh"]`
+  `stages-available` (FR33), `cursor-refresh` (FR40) and `overview-focus` (FR43) likewise; `stages` only while its flag is on
+  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus"]`
   when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
@@ -310,6 +312,43 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   always drawn and a flood costs at most one run per 25 ms. Log lines through the request log budget: one when the outcome
   or the shape changes and at 1, 10, 100, … runs or folded requests. `cursor-refresh` is advertised when the Lua function
   registered and Hyprland's renderer exists; `PLUGIN_EXIT` removes the timer and the Lua function.
+- **FR41** Overview close focus request (`docs/specs/overview.md` "Close focus"): `hl.plugin.grassfield.overview_focus(json)`,
+  one Lua string of at most 512 bytes copied out of Lua with non-raising calls, parsed strictly (`core/OverviewFocus`:
+  `{"target":"window","address":"0x…"}`, `{"target":"workspace","workspace":N}`, `{"target":"remembered","address":"0x…",
+  "workspace":N?}`, `{"target":"none"}`, optional `"id"` 0..2^32-1; addresses 1-16 hex digits, not 0; workspaces 1..2^31-1;
+  a field the target does not use, a key given twice or trailing text is refused; unknown keys skipped). A refused payload
+  posts outcome `invalid` and changes nothing; a valid one replaces a waiting request and posts `pending`. Request log lines
+  share the request log budget.
+- **FR42** Overview close focus behaviour: the request waits while Hyprland refuses window focus (its Exclusive-layer list is
+  not empty, read only; the shared `deferredfocus::mustWait`), tried from the event loop after every commit of a mapped layer
+  surface (commit listeners on each `CLayerShellResource` while a request waits, and on layers that map meanwhile), a layer
+  unmap, a keyboard focus change and the session lock, and synchronously before every key; bounded by 1 s (a timer: outcome
+  `timeout`). Under the session lock: outcome `refused`, nothing focused. Once Hyprland accepts window focus the target is
+  checked again: a named window that is mapped, not hidden, not on a special workspace and on a shown Desktop is focused with
+  `CFocusState::fullWindowFocus(w, FOCUS_REASON_DISPATCH_FOCUSWINDOW)` (as `hl.dsp.focus({window = …})` after its Desktop
+  switch, without its cursor warp); when Hyprland counts that window focused without the keyboard (its own focus attempt
+  under the chrome was refused), `resetWindowFocus()` then the same focus again. A Desktop shown: its front window; not shown:
+  `Config::Actions::changeWorkspace(ws)` (exported, the path of `hl.dsp.focus({workspace = …})`; never for the Desktop already
+  shown, so `workspace_back_and_forth` cannot apply), then its front window; no window: Hyprland's active window and the
+  keyboard cleared (`fullWindowFocus(nullptr)`, then `rawSurfaceFocus(nullptr)` if the keyboard stayed on a released chrome)
+  unless an `on_demand` layer holds it, and that monitor focused. Fallback (window gone, minimized, hidden, not shown, Desktop
+  missing, focus refused by Hyprland, target `none`): the front window of the remembered Desktop when shown, else of the
+  Desktop on Hyprland's focused monitor, else no window. Front window: eligible windows (on the Desktop, mapped, not hidden,
+  `acceptsInput()`, not `m_X11ShouldntFocus`) by their last focus since the load (`window.active`), then the stack top down
+  (pure `frontOrder`); each candidate Hyprland refuses (a rule) is skipped. A press after the request (pointer button from the
+  plugin's first button listener, touch down, tablet tip/button; `deferredfocus::recordPress` on the shared press context)
+  beside every Exclusive layer on a window retargets to it; a press while Hyprland accepts window focus, or a `window.active`
+  user choice of another window, ends the request (`superseded`). Events: channel `overview-focus` (FR24),
+  `{"v":"gfc/1","type":"overview-focus","outcome":"pending|focused|fallback|timeout|refused|superseded|unavailable|invalid",
+  "target":"…","id":N}` plus `address`, `workspace`, `reason`. Decision logic pure (`core/OverviewFocus`: `parseRequest`,
+  `step`, `judgeWindow`, `plan`, `fallbackSpace`, `frontOrder`, `pressEffect`, `supersedes`, `eventJson`).
+- **FR43** Overview close focus lifecycle and sharing: `overview-focus` is advertised when its listeners and the Lua function
+  registered. `PLUGIN_EXIT` (before the event throttle stops) ends a waiting request with outcome `unavailable`, removes its
+  listeners, commit watches, event-loop callback (`deferredFocus::CLater`) and timer; `start()` resets everything (the library
+  may stay mapped, FR23). The deferred-focus core is shared with Stages: `core/DeferredFocus` (focus reasons and origins, press
+  records, the refusal gate) and `DeferredFocus.*` (Hyprland's refusal checks, keyboard holder, cursor on an Exclusive layer,
+  press context, reason mapping, coalesced event-loop attempt); Stages uses them unchanged (same conditions, order and doLater
+  semantics; `gf::stages` keeps aliases).
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -355,6 +394,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | FR38 (R13 counter-review #3 of e9ebc7f) | unit `StagesInput.UnderAnExclusiveLayerTheActiveStripWindowIsOnlyCleared`, `StagesInput.ADeferredFocusWaitsForTheLayerAndIsCheckedAgain`, `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`; nested `stages.sh` 8c (no window or monitor focus under an Exclusive layer, `close()` closes no window), 8f (special workspace), 8g (Desktop not shown), 8h (polkit-like dialog) | L0 / L1 | 2026-10-19, plugin 0.6.3-stages: stages.sh 58/58 on two outputs (three runs) and GF-REF only; the pre-fix build ffdef45 51/58 in the same session (8c, 8f, 8g, 8h first check; `.dev/stages/run-20261019-130127-check`, `run-20261019-130612-check`); `soak.sh 1260 stages` and `soak.sh 1260` PASS |
 | FR36, FR38 (R13 counter-review #4 of 0.6.3-stages) | unit `StagesInput.ARefocusAtTheCursorWithoutAPressIsNotAClick`, `APressIsAClickWhileHyprlandHandlesIt`, `APressBesideAnExclusiveLayerChoosesTheWindowPressed`, `ADeferredFocusFallsBackToTheFrontWindowNow`, `StagesEvents.TheFrontWindowAndItsApp`, `ClientTextIsSanitized`; nested `stages.sh` 8i (refocus at the cursor over an unrelated window, the stage's back window, empty desktop; remembered window closed; a click beside the layer or just after it wins; `front` in the event) and 8c (a focus-matched window rule rechecked) | L0 / L1 | 2026-10-19, plugin 0.6.4-stages, Hyprland v0.56.2 (efb50993): stages.sh **66/66** on the headless pair GF-REF + GF-REF2 (`.dev/stages/run-20261019-165827-check`) and on GF-REF only (`run-20261019-170037-check`), WAYLAND-1 disabled; the pre-fix build 3a1a7a8 (0.6.3-stages) **60/66** in the same session (`run-20261019-170310-check`: 8c rule, 8i(a) both checks, 8i(b), 8i(d), 8i(e) just after); after the merge with cursor-refresh (plugin 0.7.1-stages): 66/66 on the pair (`run-20261019-174116-check`) and GF-REF only (`run-20261019-174322-check`); `soak.sh 1260 stages` PASS (735 rounds, 92 minimize/restore pairs through the Dock, Hyprland exit status 0 only at `nested-down.sh`); details in `docs/specs/stages.md` "Fix pass 4" |
 | FR39-FR40 | unit `CursorRefresh.*` (12); nested `tests/compositor/cursor_refresh.sh check` / `baseline` / `stress` | L0 / L1 | 2026-10-19, plugin 0.7.0-cursor, Hyprland v0.56.2 (efb50993), theme grassfield-cursors: `check` **PASS** 3 runs (`.dev/cursor-refresh/run-20261019-153210-check` final): a still arrow over the desktop 15×21 → 29×41 → 57×82 → 15×21 px (heights ×1.95 / ×3.9, back to the identical first image, 0 px differ), a still I-beam over foot 10×20 → 20×40 → 38×78 → 10×20, w/h kept (arrow 0.71, I-beam 0.50), `cursorpos` unchanged, image anchored at the hotspot; foot's hide-when-typing pointer stays hidden after a size change and a refresh (plugin outcome `client-surface`), shown again by a motion at the size applied meanwhile; 30 calls at 10/s + a 1000-call flood: 2 runs for the flood, `1/10/100 request(s) folded` logged, same image; unload: features `[]`, the still pointer keeps 24 px; load: grows again. `baseline` on `nested-up.sh --no-plugin` **PASS**: `hyprctl grassfield` "unknown request", 0 `[grassfield]` log lines, shell "ready degraded", every size sent (`pointer /setcursor grassfield-cursors N`), no script error, the still pointer keeps 24 px at 48/96, also after desktop → Dock → desktop, and shows 96 after an I-beam round trip. `stress 880` next to `soak.sh 900`: 7499 calls, 250 size changes, 0 failed (see C1) |
+| FR41-FR43 | unit `OverviewFocus*` (request validation, gate, target plan, fallback Desktop, front window order, presses, user focus, events, capability: 11), `DeferredFocus*` (3; the Stages cases run through the aliases); nested `tests/compositor/overview_focus.sh check` / `baseline` / `stress`; `stages.sh`, `overview.sh`, `desktop_focus.sh`, `minimize.sh`, `soak.sh` (C1) | L0 / L1 | 2026-10-19, plugin 0.8.0-ovfocus, Hyprland v0.56.2 (efb50993): `check` **66/66 PASS** on the headless pair GF-REF + GF-REF2, WAYLAND-1 disabled (`.dev/overview-focus/run-20261019-194052-check`, final build; `run-20261019-192909-check`): letters reach exactly the target for the window active at open (three release orders), a window on the other output (chromes mapped or unmapping), the current Desktop, a Desktop on the other output, another Desktop, a closed and a minimized target (fallback), a press beside the remaining chrome, a polkit-like dialog during the close (its field gets the letters, `timeout`; a short one: the target after it), the lock (`refused`, nothing typed, no window focused); invalid payloads, a 300-request flood (one outcome), unload while waiting (`unavailable`, reload advertises the feature). `baseline` (the verb a no-op): old build 0.7.1-stages and `--no-plugin` both **32/44**, safety PASS (`run-20261019-201004-baseline`, `run-20261019-200901-baseline`): the targets on the other output, another Desktop and the press get nothing, keys lost after a closed or minimized target. Regressions on the same builds: `stages.sh` **66/66** (pair, `.dev/stages/run-20261019-193039-check`; final build with GF-REF + WAYLAND-1, `run-20261019-200634-check`), `overview.sh` 32/32, `desktop_focus.sh` 26/26, `minimize.sh` PASS |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -380,6 +420,8 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | `hl.plugin.grassfield.stages("<json>")` | `{"op":"on"\|"off"\|"activate"\|"move"\|"merge",…}` (FR34; contract `docs/specs/stages.md`) |
 | plugin → shell | socket2 event `grassfield` (Stages state) | `{"v":"gfc/1","type":"stages","on":bool,"monitors":[…]}` (+ `"reason"`; FR36) |
 | shell → plugin | `hl.plugin.grassfield.cursor_refresh()` (feature `cursor-refresh`), after the shell's `setcursor <theme> <size>` was answered `ok` | the pointer is drawn again at that size, same shape, same place (FR39-FR40); no event |
+| shell → plugin | `hl.plugin.grassfield.overview_focus("<json>")` (feature `overview-focus`) when the Overview starts closing | `{"target":"window"\|"workspace"\|"remembered"\|"none",…}` (FR41; contract `docs/specs/overview.md` "Close focus") |
+| plugin → shell | socket2 event `grassfield` (overview focus outcome) | `{"v":"gfc/1","type":"overview-focus","outcome":"…","target":"…","id":N}` (+ `"address"`, `"workspace"`, `"reason"`; FR42) |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 The shell sends every verb guarded (`local p = hl.plugin and hl.plugin.grassfield; if p and p.<verb> then
@@ -691,6 +733,21 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   (theme lookup at the size of the last `changeTheme`). `setCursorHidden(false)`: `surf` → `setCursorSurface(surf, hotspot,
   true)`, else a non-empty name → `setCursorFromName(name, true)`, else `setCursorFromName("left_ptr", true)`.
   `shouldRenderCursor()` = `!m_cursorHidden && m_cursorHasSurface` (both protected).
+- Overview close focus (plugin 0.8.0-ovfocus, read from the 0.56.2 headers `desktop/state/FocusState.hpp`,
+  `config/shared/actions/ConfigActions.hpp`, `protocols/LayerShell.hpp`, `managers/SessionLockManager.hpp`,
+  `state/WorkspaceState.hpp`, `desktop/Workspace.hpp`; exported symbols checked with `nm -D /usr/bin/Hyprland`
+  (`Config::Actions::focus`, `Config::Actions::changeWorkspace(PHLWORKSPACE)`); behaviour read from the binary with
+  `objdump -d`, no source used): `Config::Actions::focus` runs `changeWorkspace` when needed, then
+  `CFocusState::fullWindowFocus(w, FOCUS_REASON_DISPATCH_FOCUSWINDOW = 3)`, then `CWindow::warpCursor`; `changeWorkspace`
+  focuses the monitor, `CMonitor::changeWorkspace`, its focus candidate, and may warp the pointer per config. Used:
+  `CFocusState::{fullWindowFocus, resetWindowFocus, rawSurfaceFocus, rawMonitorFocus, window, monitor}`,
+  `CLayerShellResource::m_events.commit`, `CSessionLockManager::m_events.lock`, `State::workspaceState()->query().id().run()`,
+  `CWindow::{acceptsInput, isHidden, m_X11ShouldntFocus}`, `CEventLoopManager::{doLater, removeDoLater, addTimer, removeTimer}`.
+  Measured in nested: Hyprland's successor focus of a window closed under the chrome logs "On closed window, new focused
+  candidate is …", then "Refusing a keyboard focus to a window because of an exclusive ls", and leaves that window as its
+  focused window without the keyboard (a later `fullWindowFocus` of it returns early: hence the state reset); a plugin load
+  or unload reloads the config (its monitor rules enable WAYLAND-1 again); a plugin unloaded with appmenu clients alive stays
+  mapped and a load of the same path gets the same library (FR23): test a rebuild in a new nested session.
 - GCC 16.2.1, C++23. Lua 5.5 headers (Hyprland links `liblua.so.5.5`). GoogleTest 1.18.0 for tests.
 - Quickshell 0.3.1 for the IPC spike.
 
@@ -725,6 +782,10 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   pointer keeps its previous size until the shape name changes: entering another surface that sets the same shape
   (desktop → Dock, both `default`) is not enough, since `setCursorFromName` returns for an unchanged name. Measured:
   `tests/compositor/cursor_refresh.sh baseline` and the unload step of `check`.
+- Without `overview-focus` (plugin absent, mismatched, an older plugin, its listeners failed, or withdrawn at unload): the
+  verb does not exist (the shell's guarded call is a no-op) and the shell restores the focus after the Overview itself (checks
+  and retries: shell side, later task). An unload while a request waits posts outcome `unavailable` first. Measured:
+  `tests/compositor/overview_focus.sh baseline` (an older build, a `--no-plugin` session) and case 14 of `check`.
 
 ## Automated tests · Manual verification steps
 
@@ -752,7 +813,11 @@ pass 31458f5 (recents, dividers) had made the computed tile drift), `tests/compo
 Unit tests also cover the desktop focus policy (`DesktopFocus*`: decision table, layer classification, pending grant,
 press target source), Stages (`Stages*`: model, request validation, thumbnail geometry, events, flag) and the cursor
 refresh (`CursorRefresh.*`: verb and feature names as the shell sends them, advertised list, decision table, log names,
-rate gate). Nested: `tests/compositor/cursor_refresh.sh [check | baseline | stress [seconds]]` (FR39-FR40).
+rate gate). Nested: `tests/compositor/cursor_refresh.sh [check | baseline | stress [seconds]]` (FR39-FR40),
+`tests/compositor/overview_focus.sh [check | baseline] [--plugin PATH]` (FR41-FR43; fixture
+`tests/compositor/overview-focus-fixture`, the foreign locker `tests/security/foreign_locker/ForeignLocker.qml`). Unit tests
+also cover the overview focus (`OverviewFocus*`: request validation, gate, target plan, fallback Desktop, front window order,
+presses, user focus, events, capability) and the shared deferred focus (`DeferredFocus*`).
 
 Manual (L1, nested only):
 
@@ -853,6 +918,14 @@ Manual (L1, nested only):
   at 10/s, 250 `pointer.size` changes through the shell, 0 failed calls, `cursor-refresh` still advertised); then on the
   same build `overview.sh` 32/32, `desktop_focus.sh` 26/26, `minimize.sh` PASS, `cursor_refresh.sh check` PASS. C2:
   `nested-up.sh --no-plugin` → `cursor_refresh.sh baseline` PASS (FR39-FR40 row).
+  Plugin 0.8.0-ovfocus (overview close focus, 2026-10-19, Hyprland v0.56.2 commit efb50993, GF-REF + WAYLAND-1): `soak.sh 1260`
+  → PASS, exit 0 (log `.dev/soak-20261019-194150.log`: 732 rounds, 183 drags, 92 abandoned, 184 zoom pairs, 91 cancels, 91
+  closes, 90 minimize pairs all animated, 1 skipped (no move seen); RSS 159.1 MB at rounds 600-700, 157.8 MB at the end; no
+  core dump; 0 grassfield exceptions; 418 seat warnings as designed) with `overview_focus.sh stress 1200` running at the same
+  time (4239 overview focus requests at ~4/s over the churned windows, 423 invalid, every one answered, `overview-focus` still
+  advertised); `stress 180` alone afterwards: 647 requests, 2 floods of 100 each answered with one outcome. 0 i915 fence
+  timeout or GPU hang lines in `journalctl -k` during the runs. C2: `nested-up.sh --no-plugin` → `hyprctl grassfield` "unknown
+  request", shell "running in degraded mode", `overview_focus.sh baseline` safety PASS (FR41-FR43 row).
   **Nested Hyprland losses (C1 investigation).** The reviewer's `soak.sh 1260 stages` on e9ebc7f lost the nested Hyprland
   at round 554 (10:46:19). Findings: its log ends mid-stream with no shutdown line (a SIGTERM stop logs "Hyprland
   received signal 15" and "Hyprland has reached the end", as 60+ other nested logs of that day did), no crash report, no
@@ -880,6 +953,12 @@ Manual (L1, nested only):
 ## Known limitations (honest, user-visible gaps vs macOS)
 
 - Stages (prototype behind a flag): limits and risks in `docs/specs/stages.md` "Known limitations and risks".
+- Overview close focus (`overview-focus`): the shell does not send it yet (shell integration is a later task), so the
+  Overview keeps its own focus path until then. Keys typed before the last chrome released still reach that chrome (lost,
+  as in the drop table of `docs/specs/overview.md`). The bound is fixed (1 s): a dialog open longer during the close ends the
+  request (`timeout`) and Hyprland's own refocus decides when it closes. The activation order behind the front window starts
+  at the plugin load (before it, and after a reload, the stack order is used). A touch or tablet press during the close counts
+  as a press into the Exclusive layer (it never retargets). Stages on during a close focus was not exercised in nested.
 - Minimize uses the "Scale" effect; there is no "Genie" warp.
 - The animation shows a snapshot taken at the start: a window that changes while it animates (video) is
   frozen for 300 ms; translucent windows are drawn without their blur during the animation (Hyprland renders
