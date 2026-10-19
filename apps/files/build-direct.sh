@@ -21,7 +21,7 @@ if [[ ${1:-} == "--tests" ]]; then
   "$moc" "$here/src/tagsearch.h" -o "$out/moc_tests_tagsearch.cpp"
   g++ "${cxxflags[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core) \
     "$root/tests/unit/files/tst_filelogic.cpp" "$root/tests/unit/files/tst_previewqueue.cpp" "$root/tests/unit/files/tst_tags.cpp" \
-    "$root/tests/unit/files/tst_tagsearch.cpp" "$root/tests/unit/files/tst_folderstyle.cpp" \
+    "$root/tests/unit/files/tst_tagsearch.cpp" "$root/tests/unit/files/tst_folderstyle.cpp" "$root/tests/unit/files/tst_folderprune.cpp" \
     "$here/src/filelogic.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$out/moc_tests_tagsearch.cpp" \
     $(pkg-config --libs Qt6Core) -lgtest -lgtest_main -pthread \
     -o "$out/files-unit-tests"

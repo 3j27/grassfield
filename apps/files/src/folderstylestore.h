@@ -8,10 +8,9 @@
 #include <QString>
 #include <QStringList>
 
+#include <atomic>
 #include <functional>
 #include <memory>
-
-class QThread;
 
 // Where a folder's own look (FolderStyleLogic) is kept, and how it is read and written.
 //
@@ -41,6 +40,8 @@ public:
     // The most entries the store takes. Entries beyond it that are already in a file are kept, never dropped on a write;
     // a new entry is refused with a reason once the store is full (after entries of vanished folders are pruned).
     static constexpr int kMaxFallbackEntries = 20000;
+    // How long the destructor waits for a cancelled worker before abandoning it (milliseconds).
+    static constexpr int kExitGraceMs = 150;
 
     explicit FolderStyleStore(const QString &fallbackFile = QString());
     ~FolderStyleStore();
@@ -62,12 +63,24 @@ public:
         // /run/media, /media, /mnt by convention) that is not mounted right now.
         bool isLocalAndMounted(const QString &path) const;
     };
-    // The keys among `keys` whose folder is gone: judged only for paths on a mounted local filesystem (lstat there), plus
-    // the paths of that kind under a gone one. Runs on any thread.
+    // The file system as the pruner sees it; real by default, a fake one in tests (symlinks, dead shares).
+    struct Fs {
+        enum Kind { Missing, Dir, Link, Other, Error };
+        std::function<Kind(const QString &path)> kindOf;      // lstat; Missing only for ENOENT/ENOTDIR, any other failure is Error
+        std::function<QString(const QString &path)> readLink; // "" on failure
+        static Fs real();
+    };
+    // The keys among `keys` whose folder is gone. Each key is resolved by its canonical path (symbolic links followed
+    // only through components on mounted local filesystems, every step checked against `mounts` before it is looked at):
+    // an entry with a component on a network, FUSE, removable or unknown mount, or whose status cannot be told (an error
+    // other than "does not exist"), is kept without a stat there. Plus the entries under a gone folder that are not found
+    // themselves. Runs on any thread; `cancel` (optional) stops it at its next step (nothing is returned then).
     static QStringList goneEntries(const QStringList &keys, const Mounts &mounts);
+    static QStringList goneEntries(const QStringList &keys, const Mounts &mounts, const Fs &fs, const std::atomic<bool> *cancel);
     // Test hooks: the mounts the pruner uses (default: Mounts::system() when a pruning starts) and an observer called
     // for every stat the pruner does (path, on which thread).
     void setMountsForTests(const Mounts &mounts);
+    void setFsForTests(const Fs &fs);
     static void setStatObserverForTests(std::function<void(const QString &)> observer);
 
     // Pruning of entries of vanished folders, in a worker thread: started after a write (at most once a minute, or at once
@@ -121,9 +134,10 @@ private:
     mutable qint64 m_serial = 0;
     mutable QHash<QString, FolderStyleLogic::Style> m_entries;
     std::shared_ptr<PruneJob> m_job;
-    std::unique_ptr<QThread> m_thread;
     QElapsedTimer m_lastPrune;
     bool m_haveMounts = false;
     Mounts m_mounts;
+    bool m_haveFs = false;
+    Fs m_fs;
     QStringList m_touched; // keys written, moved or dropped while a pruning runs: it may not remove them
 };
