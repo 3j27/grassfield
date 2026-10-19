@@ -6,6 +6,9 @@ import QtQuick
 QtObject {
     // User settings (set by the host).
     property bool dark: true
+    // Set by the first icon effect whose shader fails to load: no other icon creates an effect item then (the plain icon is
+    // drawn, and Qt logs the failure once, not once per icon).
+    property bool iconShaderBroken: false
     property real transparency: Tokens.materialDefaultTransparency
     property bool reduceTransparency: false
     property bool reduceMotion: false
@@ -14,6 +17,10 @@ QtObject {
     property string iconTintSetting: "accent"
     // Folder colour (`icons.folderColor`): "theme" (the icon theme's own), "accent" or "#rrggbb".
     property string folderColorSetting: "theme"
+
+    // A sample app icon (an SVG shipped with this module) for the icon appearance previews: it goes through the same
+    // TintedIcon pipeline as every icon.
+    readonly property url iconSampleSource: Qt.resolvedUrl("samples/icon-sample.svg")
 
     // Derived values.
     // Tint of the Tinted icon mode: the chosen colour, the accent by default.

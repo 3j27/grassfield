@@ -842,6 +842,9 @@ Scope {
                                     id: appIcon
                                     visible: tile.isApp
                                     size: win.iconSize
+                                    // Default mode is decoded as before; an effect mode decodes at the largest magnification so the
+                                    // fixed-size texture is never upscaled.
+                                    oversample: appIcon.modeActive ? Tokens.dockIconOversample : appIcon.defaultOversample
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
@@ -949,7 +952,10 @@ Scope {
                                     }
 
                                     TintedIcon {
+                                        id: minimizedIcon
                                         size: win.iconSize
+                                        // The same decode as the tile's icon: an effect mode decodes at the largest magnification.
+                                        oversample: minimizedIcon.modeActive ? Tokens.dockIconOversample : minimizedIcon.defaultOversample
                                         width: minimizedTile.live ? Math.round(parent.width * Tokens.dockMinimizedBadgeScale) : parent.width
                                         height: width
                                         anchors.right: parent.right
@@ -965,6 +971,7 @@ Scope {
                                     readonly property string themed: Quickshell.iconPath(Trash.empty ? "user-trash" : "user-trash-full", true)
                                     visible: tile.isTrash && themed !== ""
                                     size: win.iconSize
+                                    oversample: trashThemed.modeActive ? Tokens.dockIconOversample : trashThemed.defaultOversample
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom

@@ -47,18 +47,38 @@ def ratio(a, b):
     return (hi + 0.05) / (lo + 0.05)
 
 
-def box(index):
+SYS_SCALE = 0.72   # iconMode.sysGlyphScale: in an icon mode the folder (no plate of its own) shrinks onto the system plate
+
+
+def box(index, mode="default"):
     col, row = index % 6, index // 6
     cx = X0 + col * PITCH_X
     top = Y0 - SIZE // 2 + row * PITCH_Y
-    half = int(SIZE * GLYPH_SCALE * 0.5)
-    return cx - half, int(top + SIZE * GLYPH_CENTER_Y) - half, 2 * half, 2 * half
+    k = 1.0 if mode == "default" else SYS_SCALE
+    half = int(SIZE * GLYPH_SCALE * k * 0.5)
+    return cx - half, int(top + SIZE * (0.5 + (GLYPH_CENTER_Y - 0.5) * k)) - half, 2 * half, 2 * half
 
 
-def measure(symbol, plain):
+# The desktop (fgd-* captures of folder-glyphs-desktop.sh, which leaves only the twelve folders there): icons flow down the right
+# edge, one column of 8 after the other towards the left, sorted by name (01..08, then 09..12).
+DESK_X = (1848, 1736)   # icon centres of the right and the next column
+DESK_Y0, DESK_PITCH = 80, 112
+
+
+def desk_box(index, mode="default"):
+    slot = index
+    cx = DESK_X[slot // 8]
+    cy = DESK_Y0 + (slot % 8) * DESK_PITCH
+    k = 1.0 if mode == "default" else SYS_SCALE
+    half = int(SIZE * GLYPH_SCALE * k * 0.5)
+    return cx - half, int(cy - SIZE / 2 + SIZE * (0.5 + (GLYPH_CENTER_Y - 0.5) * k)) - half, 2 * half, 2 * half
+
+
+def measure(symbol, plain, mode="default", boxes=None):
+    boxes = boxes or box
     results = []
     for i, name in enumerate(NAMES):
-        x, y, w, h = box(i)
+        x, y, w, h = boxes(i, mode)
         a = pixels(symbol, x, y, w, h)
         b = pixels(plain, x, y, w, h)
         plate = tuple(sum(p[k] for p in b) / len(b) for k in range(3))
@@ -78,7 +98,9 @@ def main():
         print(__doc__)
         return 2
     d = sys.argv[1]
-    lang = sys.argv[2] if len(sys.argv) > 2 else "en"
+    lang = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("--") else "en"
+    if "--desktop" in sys.argv:
+        return main_desktop(d, lang)
     failed = False
     for appearance in ("dark", "light"):
         for mode in ("default", "dark", "clear", "tinted"):
@@ -87,7 +109,7 @@ def main():
             if not (os.path.exists(sym) and os.path.exists(non)):
                 continue
             print(f"== {appearance} / {mode}")
-            for name, r, plate, glyph in measure(sym, non):
+            for name, r, plate, glyph in measure(sym, non, mode):
                 plate_s = "#%02x%02x%02x" % tuple(int(round(v)) for v in plate)
                 if r is None:
                     print(f"  {name:10s} NO SYMBOL (plate {plate_s})")
@@ -99,6 +121,31 @@ def main():
                     failed = True
                 print(f"  {name:10s} {r:5.2f}:1  symbol {glyph_s} on plate {plate_s}  {flag}")
     return 1 if failed else 0
+
+
+def main_desktop(d, lang):
+    failed = False
+    cells = 0
+    for appearance in ("dark", "light"):
+        for mode in ("default", "dark", "clear", "tinted"):
+            for wall in ("artwork", "black", "white"):
+                sym = os.path.join(d, f"fgd-symbol-{appearance}-{mode}-{wall}.{lang}.png")
+                non = os.path.join(d, f"fgd-nothing-{appearance}-{mode}-{wall}.{lang}.png")
+                if not (os.path.exists(sym) and os.path.exists(non)):
+                    continue
+                print(f"== desktop {appearance} / {mode} / {wall}")
+                for name, r, plate, glyph in measure(sym, non, mode, desk_box):
+                    cells += 1
+                    plate_s = "#%02x%02x%02x" % tuple(int(round(v)) for v in plate)
+                    if r is None:
+                        print(f"  {name:10s} NO SYMBOL (plate {plate_s})")
+                        failed = True
+                        continue
+                    flag = "ok" if r >= MIN else "FAIL"
+                    failed = failed or r < MIN
+                    print(f"  {name:10s} {r:5.2f}:1  symbol #%02x%02x%02x on plate {plate_s}  {flag}" % glyph)
+    print(f"{cells} cells")
+    return 1 if failed or cells == 0 else 0
 
 
 if __name__ == "__main__":

@@ -39,10 +39,20 @@ B. A fixed palette of prebuilt accent variants only.
 ## Decision (proposed)
 - **Icons: option 3, phased.** Phase 1 = option 1: `TintedIcon` with modes `default` (unchanged), `dark` (darker plate,
   luminance compressed, contrast kept), `clear` (desaturated, lighter, translucent over the material), `tinted`
-  (luminance → two-tone ramp of the tint colour, alpha kept). First implementation with `MultiEffect`
-  (colorization/saturation/brightness); a custom `qsb` shader only if MultiEffect cannot reach the look or the cost
-  target. Effects are enabled only when the mode is not `default` (no offscreen pass by default); a per-surface layer is
-  used instead of one pass per icon where many icons are shown (Apps panel, Files grid). Phase 2 (later, own review):
+  (a dark tinted plate with a tint-coloured glyph, a light tinted plate with a dark tint glyph in the light appearance; alpha kept). Implemented with a custom `qsb` fragment shader (`ui/Grassfield/Ui/shaders/icon.frag`): MultiEffect (colorization, saturation,
+  brightness, contrast) could not reach the macOS 26 look (a white plate only went from 248 to 210 in Dark; Tinted gave a
+  bright tint-coloured plate), so the shader separates plate and glyph per pixel (plate colour from probes inside the
+  icon, membership by colour distance) and maps each mode (algorithm and limits: docs/specs/ui.md, "Icon shader").
+  **System plate (owner decision 2026-10-19, macOS 26 model: nothing may vanish):** in every mode except `default`, an icon
+  whose own plate is not a rounded square filling its box (a logo, a mascot, a page, a round icon, a folder) is drawn smaller
+  (`iconMode.sysGlyphScale` 0.72) on a system plate, a squircle (`sysPlateInset` 0.04, `sysPlateRadius` 0.225) in graphite
+  (Dark), glass (Clear, smoked over the bare wallpaper and at material transparency 0.8 and above) or the tint (Tinted),
+  with an edge highlight; an icon with its own rounded-square plate keeps it, recoloured. The plate analysis (dominant
+  colour clusters of 16 probes, the corner and edge-midpoint test of the own plate) runs once per icon texture in a 2x1 pass
+  (`icon_analysis.frag`), not per pixel: Files with 1000 folders scrolls as smoothly in an effect mode as in default. The
+  folder colour (below) recolours the artwork only, not the system plate.
+  Effects exist only when the mode is not `default` and only for icons that are shown: one effect item per visible icon
+  (not one shared pass per surface: a container layer would redraw labels, highlights and indicators through the effect). Phase 2 (later, own review):
   a generated tinted theme for third-party apps, regenerated in the background.
 - Settings keys (settings contract, versioned): `icons.mode` (`default|dark|clear|tinted`, default `default`),
   `icons.tint` (`accent` or `#rrggbb`, default `accent`). (Implemented 2026-10-19 under `icons.*` because `appearance` is
@@ -87,7 +97,7 @@ B. A fixed palette of prebuilt accent variants only.
   is ever addressed.
 
 ## Consequences
-- New shared component and settings keys; every icon call site moves to `TintedIcon` (one pass per surface).
+- New shared component, a committed compiled shader (`scripts/dev/build-shaders.sh`, checked by `just check`) and settings keys; every icon call site moves to `TintedIcon` (one effect item per visible icon).
 - New asset folder `branding/cursors/` and build steps (hyprcursor-util and XCursor generation as build dependencies).
 - GPL-3.0 WhiteSur is a separate package; the ISO (M6) must ship its source offer and licence; public release needs the
   E27 legal review again.

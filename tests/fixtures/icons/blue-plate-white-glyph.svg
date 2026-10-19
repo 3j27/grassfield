@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Test fixture (own drawing): saturated plate gradient, white glyph. -->
+  <defs><linearGradient id="p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4DA3FF"/><stop offset="1" stop-color="#2B4BD8"/></linearGradient></defs>
+  <rect x="6" y="6" width="116" height="116" rx="27" fill="url(#p)"/>
+  <circle cx="64" cy="64" r="30" fill="#FFFFFF"/>
+  <circle cx="64" cy="64" r="12" fill="#3A66E8"/>
+</svg>

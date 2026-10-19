@@ -305,8 +305,8 @@ function isEmoji(glyph) {
 // (`prefersLighter`) and the plate allows, until it reaches the minimum contrast against the plate. The plate is MEASURED,
 // once per icon file and size bucket and independent of the colour, the icon mode and the appearance: FolderPlate reads
 // the RAW icon's pixels under the symbol (`sampleBox`), and the plate of any combination is then computed from those
-// samples by the same shader arithmetic as Qt's MultiEffect (`effectSamples`: the icon mode, then the folder colour,
-// `plateThrough`), so a new colour, mode or appearance never needs another measure. The estimate (`plateOf`) only serves
+// samples by the arithmetic of the icon shader for a plate-less pixel (`modeSamples`) and of Qt's MultiEffect for the folder
+// colour (`effectSamples`; `plateThrough`), so a new colour, mode or appearance never needs another measure. The estimate (`plateOf`) only serves
 // until the samples are known, and when they cannot be read (no icon).
 
 function rgbOf(color) {
@@ -375,42 +375,21 @@ function fromHsl(hsl) {
     return [channel(h + 1 / 3), channel(h), channel(h - 1 / 3)];
 }
 
-// The estimated plate colour (rgb 0..1) under a symbol: the folder colour when the folder is recoloured, else the icon
-// theme's own folder plate; scaled by the icon mode (default: the recolour alone; Dark and Tinted lower it, Tinted by
-// the luminance of the icon tint `modeTint`; in Tinted mode the theme's own folder takes the tint's hue).
-function plateOf(recolored, tint, mode, modeTint, tokens) {
-    const tintRgb = rgbOf(modeTint);
-    if (mode === "tinted") {
-        if (!recolored) {
-            const g = tokens.folderIconThemeTintedGain;
-            return [Math.min(1, tintRgb[0] * g), Math.min(1, tintRgb[1] * g), Math.min(1, tintRgb[2] * g)];
-        }
-        const f = Math.max(0.3, Math.min(1, tokens.folderIconPlateTintedBase + tokens.folderIconPlateTintedSlope * relativeLuminance(tintRgb)));
-        const b = rgbOf(tint);
-        return [b[0] * f, b[1] * f, b[2] * f];
-    }
+// The estimated plate colour (rgb 0..1) under a symbol: the folder colour (times `plateDefault`) when the folder is
+// recoloured, else the icon theme's own folder plate, through the icon mode's step (`modeSamples`: Dark keeps a coloured
+// folder, Clear makes it a light or dark ink, Tinted the tint). Only used until the icon's samples are read.
+function plateOf(recolored, tint, mode, modeTint, tokens, dark) {
     const base = rgbOf(recolored ? tint : tokens.folderIconThemePlate);
-    let k = recolored ? tokens.folderIconPlateDefault : 1;
-    if (mode === "dark")
-        k = recolored ? tokens.folderIconPlateDark : tokens.folderIconPlateDark / tokens.folderIconPlateDefault;
-    return [base[0] * k, base[1] * k, base[2] * k];
+    const k = recolored ? tokens.folderIconPlateDefault : 1;
+    const out = modeSamples([base[0] * k, base[1] * k, base[2] * k, 1], mode, modeTint, dark !== false, tokens);
+    return [out[0], out[1], out[2]];
 }
 
-// The lightest the plate can be: in Clear mode the plate is translucent and a dark one shows the backdrop through.
-function lightestPlateOf(plate, mode, tokens) {
-    if (mode !== "clear")
-        return plate;
-    const lift = tokens.folderIconClearLift;
-    return [plate[0] + (1 - plate[0]) * lift, plate[1] + (1 - plate[1]) * lift, plate[2] + (1 - plate[2]) * lift];
-}
-
-// Which way a plain symbol is engraved in an icon mode, one rule per mode so that the folders of a view agree: Dark engraves
-// the lighter shade (the mode darkens its folders); Tinted does when the mode's own folder plate (`reference`, the relative
-// luminance of the theme's folder plate through the mode) is dark; Default and Clear engrave the darker shade (macOS 26). A
-// plate that cannot reach the contrast that way (a black folder in Default, a pale one in Dark) takes the other shade.
+// Which way a plain symbol is engraved in an icon mode, one rule per mode so that the folders of a view agree: Tinted does
+// when the mode's own folder plate (`reference`, the relative luminance of the theme's folder plate through the mode) is
+// dark; Default, Dark and Clear engrave the darker shade (macOS 26; a Dark folder keeps its colour on the dark system plate).
+// A plate that cannot reach the contrast that way (a black folder, a very dark tint) takes the other shade.
 function prefersLighter(mode, reference, tokens) {
-    if (mode === "dark")
-        return true;
     if (mode === "tinted")
         return reference < tokens.folderIconGlyphLighterBelow;
     return false;
@@ -419,11 +398,11 @@ function prefersLighter(mode, reference, tokens) {
 // The colour (#rrggbb) of a plain symbol on a folder of colour `tint` (or the theme's own colour when !recolored) in
 // icon mode `mode` with icon tint `modeTint`. `measured`: the plate computed from the icon's samples ({dark, light, hue, ref},
 // see plateThrough), else the estimate.
-function glyphShade(recolored, tint, mode, modeTint, tokens, measured) {
+function glyphShade(recolored, tint, mode, modeTint, tokens, measured, dark) {
     const hasMeasure = measured !== undefined && measured !== null && measured.dark !== undefined;
-    const plate = hasMeasure ? measured.dark : plateOf(recolored, tint, mode, modeTint, tokens);
-    const lightest = hasMeasure ? measured.light : lightestPlateOf(plate, mode, tokens);
-    const reference = hasMeasure && measured.ref !== undefined ? measured.ref : relativeLuminance(plateOf(false, "", mode, modeTint, tokens));
+    const plate = hasMeasure ? measured.dark : plateOf(recolored, tint, mode, modeTint, tokens, dark);
+    const lightest = hasMeasure ? measured.light : plate;
+    const reference = hasMeasure && measured.ref !== undefined ? measured.ref : relativeLuminance(plateOf(false, "", mode, modeTint, tokens, dark));
     const target = tokens.folderIconGlyphMinContrast + tokens.folderIconGlyphContrastMargin;
     const hueRgb = recolored ? rgbOf(tint) : (hasMeasure ? measured.hue : rgbOf(mode === "tinted" ? modeTint : tokens.folderIconThemePlate));
     const hsl = toHsl(hueRgb);
@@ -547,17 +526,75 @@ function plateSummary(samples, backdrop) {
     return {dark: dark, light: light, hue: [sum[0] / weight, sum[1] / weight, sum[2] / weight], mean: [total[0] / comp.length, total[1] / comp.length, total[2] / comp.length]};
 }
 
-// The plate of a combination from the raw icon's samples: through the icon mode (IconModes.effect) and then, when the folder
+// The icon mode step over samples of a folder, the arithmetic of shaders/icon.frag for a pixel of an icon WITHOUT its own plate
+// (a folder is not a rounded square: it is always plate-less, so the plate-membership terms are zero and the pixel is drawn
+// as the glyph the mode makes of it; the folder then sits on the system plate, which is not under the symbol). `dark`: the
+// icon is drawn for a dark material (the dark appearance or over the bare wallpaper), `modeTint`: the Tinted colour (#rrggbb).
+// The local average of the shader is the sample itself (a folder body is flat) and the mean of the whole icon is that of the box.
+function modeSamples(samples, mode, modeTint, dark, tokens) {
+    const name = Modes.normalizeMode(mode);
+    if (name === "default")
+        return samples;
+    const smooth = (a, b, x) => {
+        const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+        return t * t * (3 - 2 * t);
+    };
+    const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const chromaOf = (r, g, b) => Math.max(r, g, b) - Math.min(r, g, b);
+    const t = rgbOf(modeTint);
+    let weighted = 0, weight = 0;
+    for (let i = 0; i < samples.length; i += 4) {
+        weighted += luma(samples[i], samples[i + 1], samples[i + 2]) * samples[i + 3];
+        weight += samples[i + 3];
+    }
+    const lmean = Math.max(weight > 0 ? weighted / weight : 0.5, 0.05);
+    const out = new Array(samples.length);
+    for (let i = 0; i < samples.length; i += 4) {
+        const r = samples[i], g = samples[i + 1], b = samples[i + 2];
+        const lc = luma(r, g, b);
+        const relShade = Math.max(0.3, Math.min(1, 0.3 + 0.7 * lc / (lmean * 1.5)));
+        let rgb;
+        if (name === "dark") {
+            // A light neutral area (a white folder) is darkened like a page; else the artwork sits on the dark system plate:
+            // dark colours are lifted to a luma floor, a near-black neutral becomes light, a coloured folder keeps its colour.
+            const neutral = 1 - smooth(0.08, 0.25, chromaOf(r, g, b));
+            const lightCtx = smooth(0.55, 0.8, lc) * (1 - smooth(0.08, 0.25, chromaOf(r, g, b)));
+            const k = Math.min(tokens.iconModeDarkPageLuma / Math.max(lc, 0.1), 1);
+            const lift = Math.max(1, Math.min(4, tokens.iconModeDarkGlyphFloor / Math.max(lc, 0.02)));
+            const toLight = neutral * (1 - smooth(0.2, 0.5, lc));
+            const lifted = [r, g, b].map(v => Math.min(v * lift, 1) * (1 - toLight) + tokens.iconModeDarkGlyphLuma * toLight);
+            const page = [r, g, b].map(v => v * k);
+            rgb = [0, 1, 2].map(q => lifted[q] + (page[q] - lifted[q]) * lightCtx);
+        } else if (name === "clear") {
+            const detail = Math.max(0, Math.min(1, (relShade - 0.405) / 0.595));
+            const ink = dark ? tokens.iconModeClearInkDark * (1 - tokens.iconModeClearDetail * 0.7 * (1 - detail))
+                             : tokens.iconModeClearInkLight + tokens.iconModeClearDetail * 0.5 * (1 - detail);
+            rgb = [ink, ink, ink];
+        } else {
+            const detail = Math.max(0, Math.min(1, (relShade - 0.3) / 0.7));
+            const shade = 1 + (0.3 + 0.7 * detail - 1) * tokens.iconModeTintedDetail;
+            const lift = tokens.iconModeTintedGlyphLift, light = tokens.iconModeTintedGlyphShadeLight;
+            rgb = [0, 1, 2].map(q => (dark ? t[q] + (1 - t[q]) * lift : t[q] * light) * shade);
+        }
+        out[i] = Math.max(0, Math.min(1, rgb[0]));
+        out[i + 1] = Math.max(0, Math.min(1, rgb[1]));
+        out[i + 2] = Math.max(0, Math.min(1, rgb[2]));
+        out[i + 3] = samples[i + 3];
+    }
+    return out;
+}
+
+// The plate of a combination from the raw icon's samples: through the icon mode (`modeSamples`) and then, when the folder
 // is recoloured, through the folder colour (effect). `modeTint`: the icon tint (only Tinted uses it); `tint`: the folder
-// colour; `backdrop`: rgb of the view behind a translucent plate. Adds `ref`: the relative luminance of the mode's own
-// folder plate (no folder colour), what `prefersLighter` reads. null when there is nothing to read.
-function plateThrough(samples, mode, modeTint, recolored, tint, backdrop, tokens) {
-    const m = Modes.effect(mode, modeTint, tokens);
-    const modeSamples = m.enabled ? effectSamples(samples, m) : samples;
-    const own = plateSummary(modeSamples, backdrop);
+// colour; `backdrop`: rgb of the view behind a translucent plate; `dark`: drawn for a dark material. Adds `ref`: the
+// relative luminance of the mode's own folder plate (no folder colour), what `prefersLighter` reads. null when there is
+// nothing to read.
+function plateThrough(samples, mode, modeTint, recolored, tint, backdrop, tokens, dark) {
+    const modeOut = modeSamples(samples, mode, modeTint, dark !== false, tokens);
+    const own = plateSummary(modeOut, backdrop);
     if (own === null)
         return null;
-    const out = recolored ? plateSummary(effectSamples(modeSamples, effect(tint, tokens)), backdrop) : own;
+    const out = recolored ? plateSummary(effectSamples(modeOut, effect(tint, tokens)), backdrop) : own;
     if (out === null)
         return null;
     return {dark: out.dark, light: out.light, hue: out.hue, ref: relativeLuminance(own.mean)};
