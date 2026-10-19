@@ -624,6 +624,12 @@ QtObject {
     readonly property int settingsVolumeApplyMs: 120
     // estimate: shell, minimum gap between two compositor cursor reloads while the pointer size slider is dragged
     readonly property int settingsPointerApplyMs: 100
+    // estimate: shell, how long a compositor request socket may stay silent before the pointer request counts as lost
+    readonly property int settingsPointerAnswerMs: 1000
+    // estimate: shell, first wait before a lost pointer request is sent again (doubles each attempt)
+    readonly property int settingsPointerRetryMs: 250
+    // estimate: shell, attempts for one pointer size before waiting for the next change or compositor event
+    readonly property int settingsPointerRetryMax: 5
     // estimate: Sound pane, width of the percentage next to a slider
     readonly property int settingsVolumeValueWidth: 44
 

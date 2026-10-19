@@ -44,13 +44,32 @@ TestCase {
             verify(PointerSize.valid(PointerSize.snap(v)), "snap(" + v + ")");
     }
 
-    function test_xcursorSize() {
-        const expected = {24: 24, 28: 24, 32: 32, 36: 32, 40: 32, 44: 48, 48: 48, 56: 48, 60: 64, 64: 64, 76: 64, 80: 64, 84: 96, 96: 96};
-        for (const size in expected)
-            compare(PointerSize.xcursorSize(Number(size)), expected[size], "size " + size);
-        // Invalid input is the default size.
-        compare(PointerSize.xcursorSize(5), 24);
-        compare(PointerSize.xcursorSize("big"), 24);
+    function test_fromStored() {
+        // Valid integers: on the step as is, off the step snapped.
+        compare(PointerSize.fromStored(24), 24);
+        compare(PointerSize.fromStored(48), 48);
+        compare(PointerSize.fromStored(51), 52);
+        compare(PointerSize.fromStored(96), 96);
+        // Anything else is the default, never rounded, parsed or clamped.
+        const bad = [51.5, "64", "x", true, null, undefined, NaN, Infinity, 23, 97, 1000, -48, [48], {}];
+        for (const v of bad)
+            compare(PointerSize.fromStored(v), 24, "fromStored(" + JSON.stringify(v) + ")");
+    }
+
+    function test_launchEnvironment() {
+        compare(PointerSize.launchEnvironment(24, 24), {});
+        compare(PointerSize.launchEnvironment(48, 48), {});
+        compare(PointerSize.launchEnvironment(48, 24), {"XCURSOR_SIZE": "48", "HYPRCURSOR_SIZE": "48"});
+        compare(PointerSize.launchEnvironment(24, 48), {"XCURSOR_SIZE": "24", "HYPRCURSOR_SIZE": "24"});
+        compare(PointerSize.launchEnvironment(51.5, 24), {});
+        compare(PointerSize.launchEnvironment("48", 24), {});
+    }
+
+    function test_retryDelay() {
+        compare(PointerSize.retryDelay(250, 1), 250);
+        compare(PointerSize.retryDelay(250, 2), 500);
+        compare(PointerSize.retryDelay(250, 4), 2000);
+        compare(PointerSize.retryDelay(250, 0), 250);
     }
 
     function test_setCursorRequest() {

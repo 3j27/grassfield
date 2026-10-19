@@ -15,9 +15,6 @@ Item {
     property bool verticalKeys: true
     // Track thickness; Quick Settings passes controlSliderTrackCompact.
     property real trackHeight: Tokens.controlSliderTrack
-    // Pointer shape over the slider. Settings > Pointer alternates it while the size changes: the compositor draws the
-    // pointer and only picks the new size up when a client sets a shape.
-    property int cursorShape: Qt.PointingHandCursor
 
     // Emitted when the user changes the value (not when it is set from outside).
     signal moved(real value)
@@ -107,7 +104,7 @@ Item {
 
     MouseArea {
         anchors.fill: parent
-        cursorShape: root.cursorShape
+        cursorShape: Qt.PointingHandCursor
         function at(mouseX: real): void {
             root.forceActiveFocus();
             const t = root.travel > 0 ? (mouseX - Tokens.controlSliderKnobWidth / 2) / root.travel : 0;

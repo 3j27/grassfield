@@ -104,6 +104,8 @@ TestCase {
         for (const v of ["hello", "minimize", "restore", "config", "appmenu"])
             verify(Minimized.isPluginVerb(v), v);
         verify(Minimized.isPluginVerb("overview"));
+        verify(Minimized.isPluginVerb("cursor_refresh"));
+        compare(Minimized.cursorRefreshCall(), "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.cursor_refresh then p.cursor_refresh() end end");
         for (const v of ["theme"])
             verify(!Minimized.isPluginVerb(v), v);
         compare(Minimized.guardedPluginCall("theme", []), "");
