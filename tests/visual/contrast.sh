@@ -242,18 +242,22 @@ if (( ! measure_only )); then
           overlay apps
         fi
         if want banners || want notificationcenter; then
-          # Banners stay up for the four captures (about 6 s), then expire before the Notification Center is opened.
+          # Banners stay up for the four captures (6 s to 15 s on a busy host; 24 s lifetime), then expire before the Notification Center is opened.
           vs_ipc notifications clearAll >/dev/null
-          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Mail" -t 14000 "Anna Martin" "Are we still on for lunch tomorrow?"
-          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 14000 "Design review" "Starts in 10 minutes in Room 4."
+          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Mail" -t 24000 "Anna Martin" "Are we still on for lunch tomorrow?"
+          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 24000 "Design review" "Starts in 10 minutes in Room 4."
           need_notif banners 2
           if want banners; then
             vs_sleep 1.5; cap banners 0.5
             differs "$dir/desktop.png" "$dir/banners.png" 2000
           fi
-          # The banners expire (14 s) before the Notification Center is opened; both are checked, not assumed.
-          need_notif banners 0 30
+          # The banners expire (24 s) before the Notification Center is opened; both are checked, not assumed.
+          need_notif banners 0 45
           if want notificationcenter; then
+            # A second Calendar card (a short banner, waited out) makes the top group a group of two: a single card has
+            # no group controls (no "Clear All"), and the hover cells measure them.
+            DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 1000 "Standup" "Starts in 5 minutes in Room 2."
+            need_notif banners 0 45
             center open; vs_sleep 3; cap notificationcenter
             # The column is floating cards (no full-height sheet): a light card on the white wallpaper differs by its text only.
             differs "$dir/desktop.png" "$dir/notificationcenter.png" 600

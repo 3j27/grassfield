@@ -53,8 +53,8 @@
    {"name": "card 1 title", "box": [1616, 90, 100, 13], "kind": "text"},
    {"name": "card 1 body", "box": [1616, 110, 188, 12], "kind": "text"},
    {"name": "card 1 time", "box": [1868, 90, 26, 10], "kind": "text"},
-   {"name": "card 2 group name", "box": [1572, 173, 30, 13], "kind": "text"},
-   {"name": "footer Edit Widgets", "box": [1682, 278, 70, 11], "kind": "text"}
+   {"name": "card 3 group name (Mail)", "box": [1572, 239, 30, 13], "kind": "text"},
+   {"name": "footer Edit Widgets", "box": [1682, 344, 70, 11], "kind": "text"}
   ],
   "notificationcenterhover": [
    {"name": "card x glyph (pointer on the card)", "box": [1558, 39, 10, 10], "kind": "icon"},
