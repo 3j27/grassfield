@@ -1,7 +1,11 @@
 #pragma once
 
 #include <QByteArray>
+#include <QList>
+#include <QPair>
+#include <QSet>
 #include <QString>
+#include <QUrl>
 
 // A folder's own look in Grassfield Files and on the desktop ("Customize Folder…", macOS 26): a colour and an optional
 // symbol or emoji drawn on the folder icon. Pure logic (Qt Core only, unit tested in tests/unit/files/tst_folderstyle.cpp).
@@ -35,6 +39,40 @@ QString normalizeColor(const QString &color);
 // symbol), or when it holds a control, format (bidi marks, zero width space; the emoji joiner and tag characters are
 // allowed), line/paragraph separator, lone surrogate or replacement character.
 QString normalizeGlyph(const QString &glyph);
+
+// The classes of a code point for that rule (a bit mask). The cluster rule is UAX #29 (grapheme clusters) as far as a
+// symbol needs it: extending and spacing marks, the emoji joiner (ExtPict Extend* ZWJ x ExtPict, GB11), regional
+// indicator pairs, Hangul syllables, Indic conjuncts (GB9c); Qt's own segmenter is not used because it cuts Indic
+// conjuncts differently from the standard. The QML side (ui/Grassfield/Ui/FolderStyle.js) runs the same algorithm over
+// ui/Grassfield/Ui/GraphemeData.js, generated from glyphClasses() by scripts/dev/gen-glyph-tables.sh, and both are held
+// to the same answers by tests/fixtures/glyph-vectors.json.
+enum GlyphClass : unsigned {
+    GlyphExtend = 1u << 0,       // Mn, Me, ZWNJ, emoji modifiers, tag characters: attach to the previous character
+    GlyphSpacing = 1u << 1,      // Mc (but a few) and Lao AM: attach, but end an emoji sequence
+    GlyphJoiner = 1u << 2,       // U+200D
+    GlyphRegional = 1u << 3,     // regional indicator (flags come in pairs)
+    GlyphPictograph = 1u << 4,   // Extended_Pictographic: what a joiner can join
+    GlyphHangulL = 1u << 5,
+    GlyphHangulV = 1u << 6,
+    GlyphHangulT = 1u << 7,
+    GlyphConsonant = 1u << 8,    // InCB=Consonant
+    GlyphLinker = 1u << 9,       // InCB=Linker (virama)
+    GlyphControl = 1u << 10,     // ends a cluster: control, separator, format (not an attaching one), surrogate
+    GlyphRejected = 1u << 11,    // a symbol holding it is refused: control, format, separator, lone surrogate, U+FFFD
+    GlyphEmoji = 1u << 12        // drawn as an emoji unless the text selector follows (Emoji property, supplementary pictographs)
+};
+// The classes of `cp` (Hangul syllables, U+AC00..U+D7A3, are computed, not listed: no class bit).
+unsigned glyphClasses(uint cp);
+// Whether the symbol is drawn as a colour emoji (opaque, in its own colours) rather than as an engraved shade: the
+// emoji presentation selector (U+FE0F), a keycap, or a character with the Emoji property, unless the text selector
+// (U+FE0E) is in it. Characters of text presentation by default (an umbrella, a heart) count as emoji without the text
+// selector because the fonts of this system draw them as colour glyphs.
+bool isEmoji(const QString &glyph);
+
+// After a cut-and-paste: the folders whose look follows, as (from, to). Only a folder the job really created at
+// destination/name counts: with Skip in the conflict dialog nothing is created, with Rename the folder lands under another
+// name, and a look must not end up on a different folder that happens to have the name.
+QList<QPair<QUrl, QUrl>> followingPaste(const QList<QUrl> &sources, const QUrl &destination, const QSet<QUrl> &created);
 
 // The style held by a stored value. Anything that is not a JSON object, or holds invalid fields, reads as empty fields
 // (an invalid colour is dropped, the glyph is normalised).

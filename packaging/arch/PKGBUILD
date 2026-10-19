@@ -52,8 +52,9 @@ check() {
 
 package_grassfield-desktop() {
   pkgdesc+=" — shell, design system, session"
-  # python, librsvg (rsvg-convert) and hyprcursor (hyprcursor-util): /usr/share/grassfield/cursors/build.sh regenerates
-  # the cursor theme at runtime (custom accent or size, ADR-0014); without them only the packaged theme is available.
+  # python, librsvg (rsvg-convert) and hyprcursor (hyprcursor-util) are RUNTIME dependencies (owner decision 2026-10-19):
+  # the shell runs /usr/share/grassfield/cursors/build.sh to regenerate the cursor theme for the pointer colours
+  # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
   depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine python librsvg hyprcursor)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'

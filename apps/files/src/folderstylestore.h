@@ -2,8 +2,16 @@
 
 #include "folderstylelogic.h"
 
+#include <QElapsedTimer>
 #include <QHash>
+#include <QList>
 #include <QString>
+#include <QStringList>
+
+#include <functional>
+#include <memory>
+
+class QThread;
 
 // Where a folder's own look (FolderStyleLogic) is kept, and how it is read and written.
 //
@@ -17,8 +25,9 @@
 // exFAT, NTFS, some network mounts), a read-only folder or volume, an immutable folder. Entries are keyed by the cleaned
 // absolute path (a move outside Files loses them; the attribute does not), written atomically (QSaveFile, mode 0600).
 // An entry wins over the attribute (it is the user's explicit choice on this machine). Entries follow Files' renames and
-// moves of the folder; entries of folders that vanished are pruned whenever the store is written; at most
-// kMaxFallbackEntries entries. A store that cannot be parsed is
+// moves of the folder; entries of folders that vanished are pruned by a worker thread after a write (never a stat of a
+// store entry on the GUI thread, and only for entries on a mounted local filesystem: a dead network mount or an
+// unplugged volume is never touched, its entries are kept); at most kMaxFallbackEntries entries. A store that cannot be parsed is
 // never overwritten (writes that need it are refused with a reason). Format:
 //   {"version":1,"serial":N,"folders":{"/abs/path":{"color":"#rrggbb","glyph":"x"}}}
 // `serial` also moves on every successful attribute write: it is the change signal for other processes (the desktop
@@ -34,6 +43,39 @@ public:
     static constexpr int kMaxFallbackEntries = 20000;
 
     explicit FolderStyleStore(const QString &fallbackFile = QString());
+    ~FolderStyleStore();
+    FolderStyleStore(const FolderStyleStore &) = delete;
+    FolderStyleStore &operator=(const FolderStyleStore &) = delete;
+
+    // The filesystems the pruner may look at, from /proc/self/mountinfo (reading it never touches a mount) and /etc/fstab.
+    struct Mounts {
+        struct Mount {
+            QString point;
+            QString type;
+        };
+        QList<Mount> mounted;
+        QStringList declared; // mount points named in fstab
+        static Mounts parse(const QByteArray &mountinfo, const QByteArray &fstab);
+        static Mounts system();
+        // Whether `path` lies on a currently mounted local disk filesystem (so a stat of it cannot hang and a missing
+        // path really is gone): not on a network or FUSE or removable filesystem, and not under a mount point (fstab, or
+        // /run/media, /media, /mnt by convention) that is not mounted right now.
+        bool isLocalAndMounted(const QString &path) const;
+    };
+    // The keys among `keys` whose folder is gone: judged only for paths on a mounted local filesystem (lstat there), plus
+    // the paths of that kind under a gone one. Runs on any thread.
+    static QStringList goneEntries(const QStringList &keys, const Mounts &mounts);
+    // Test hooks: the mounts the pruner uses (default: Mounts::system() when a pruning starts) and an observer called
+    // for every stat the pruner does (path, on which thread).
+    void setMountsForTests(const Mounts &mounts);
+    static void setStatObserverForTests(std::function<void(const QString &)> observer);
+
+    // Pruning of entries of vanished folders, in a worker thread: started after a write (at most once a minute, or at once
+    // when a new entry finds the store full); its result is applied by collectPruned, which every write/move/drop calls
+    // first. True when entries were removed. waitForPrune: tests.
+    void startPrune(bool force = false);
+    bool collectPruned();
+    void waitForPrune();
 
     void setFallbackFile(const QString &file);
     QString fallbackFile() const { return m_file; }
@@ -69,7 +111,7 @@ private:
     void ensureLoaded() const;
     bool loadFile() const;
     bool saveFile(QString *error);
-    void pruneGone();
+    struct PruneJob;
     static QString keyFor(const QString &path);
 
     QString m_file;
@@ -78,4 +120,10 @@ private:
     mutable qint64 m_stamp = 0; // mtime and size of the file when loaded
     mutable qint64 m_serial = 0;
     mutable QHash<QString, FolderStyleLogic::Style> m_entries;
+    std::shared_ptr<PruneJob> m_job;
+    std::unique_ptr<QThread> m_thread;
+    QElapsedTimer m_lastPrune;
+    bool m_haveMounts = false;
+    Mounts m_mounts;
+    QStringList m_touched; // keys written, moved or dropped while a pruning runs: it may not remove them
 };

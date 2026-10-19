@@ -61,7 +61,7 @@ Row {
 
             MouseArea {
                 anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
+                cursorShape: Qt.ArrowCursor
                 onClicked: {
                     segment.forceActiveFocus();
                     root.picked(segment.modelData);

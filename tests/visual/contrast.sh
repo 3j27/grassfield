@@ -42,14 +42,27 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
+# snap NAME SETTLE [VS_NOPARK]: one capture -> $dir/NAME.en.png. The nested GF-REF output sometimes returns a fully
+# transparent frame (an RGBA image with mean alpha ~ 0.0000005; a real capture has no alpha channel, mean.a reads 0) while
+# the host is busy; such a frame is taken again (up to 8 times, 2 s apart) instead of being measured as a blank surface.
+snap() {
+  local name=$1 settle=$2 try
+  for try in 1 2 3 4 5 6 7 8; do
+    VS_SHOTS=$dir VS_SETTLE=$settle vs_capture "$name" >/dev/null
+    [[ $(magick "$dir/$name.en.png" -format '%[fx:(mean.a>0&&mean.a<0.01)?1:0]' info: 2>/dev/null) == 0 ]] && return 0
+    sleep 2
+  done
+  fail "$name: the nested output kept returning an empty frame"
+}
+
 # cap SURFACE [SETTLE]: the surface in the four glyph modes -> $dir/SURFACE{,.hidden,.white,.black}.png
 cap() {
   local name=$1 settle=${2:-1} m
-  VS_SHOTS=$dir VS_SETTLE=$settle vs_capture "$name" >/dev/null
+  snap "$name" "$settle"
   mv "$dir/$name.en.png" "$dir/$name.png"
   for m in hidden white black; do
     vs_ipc visual glyphs "$m" >/dev/null
-    VS_SHOTS=$dir VS_SETTLE=0.5 VS_NOPARK=1 vs_capture "$name" >/dev/null
+    VS_NOPARK=1 snap "$name" 0.5
     mv "$dir/$name.en.png" "$dir/$name.$m.png"
   done
   vs_ipc visual glyphs normal >/dev/null
@@ -230,6 +243,7 @@ if (( ! measure_only )); then
         fi
         if want banners || want notificationcenter; then
           # Banners stay up for the four captures (about 6 s), then expire before the Notification Center is opened.
+          vs_ipc notifications clearAll >/dev/null
           DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Mail" -t 14000 "Anna Martin" "Are we still on for lunch tomorrow?"
           DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 14000 "Design review" "Starts in 10 minutes in Room 4."
           need_notif banners 2
@@ -240,9 +254,24 @@ if (( ! measure_only )); then
           # The banners expire (14 s) before the Notification Center is opened; both are checked, not assumed.
           need_notif banners 0 30
           if want notificationcenter; then
-            center open; vs_sleep 1; cap notificationcenter
+            center open; vs_sleep 3; cap notificationcenter
             # The column is floating cards (no full-height sheet): a light card on the white wallpaper differs by its text only.
             differs "$dir/desktop.png" "$dir/notificationcenter.png" 600
+            # Hover states (macOS model, no permanent Clear All): the pointer on the first card shows its x and the
+            # group x; the pointer on the group x grows it into the "Clear All" pill. Frames are slow in the nested
+            # session, so the pointer is nudged while the reveal animation runs.
+            vs_pointer abs 1730 110 sleep 300 abs 1731 111 sleep 300 abs 1730 110 sleep 300 abs 1731 111 sleep 300 abs 1730 110 \
+              sleep 300 abs 1731 111 sleep 300 abs 1730 110 >/dev/null
+            vs_sleep 1.5
+            VS_NOPARK=1 cap notificationcenterhover
+            vs_pointer abs 1881 65 sleep 300 abs 1882 65 sleep 300 abs 1881 65 sleep 300 abs 1882 66 sleep 300 abs 1881 65 \
+              sleep 300 abs 1882 65 sleep 300 abs 1881 65 sleep 300 abs 1882 66 sleep 300 abs 1881 65 sleep 600 \
+              abs 1862 73 sleep 300 abs 1863 73 sleep 300 abs 1862 73 >/dev/null
+            # (the pointer ends on the lower edge of the pill so the cursor image does not cover the label)
+            vs_sleep 1.5
+            VS_NOPARK=1 cap notificationcenterclear
+            differs "$dir/notificationcenter.png" "$dir/notificationcenterclear.png" 200
+            vs_park
             center closed
           fi
         fi

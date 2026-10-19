@@ -20,8 +20,10 @@ Hyprland plugin for the Grassfield session (master-prompt §5.6):
 - Stages (M5 prototype, behind the flag `config("stagesEnabled", "true")`, features `stages-available` / `stages`,
   ADR-0013): strip stages' windows stay mapped and live, drawn into the shell's strip tiles, their input blocked; swaps
   animated (`docs/specs/stages.md`);
+- cursor refresh (feature `cursor-refresh`, ADR-0014): after the shell's `setcursor <theme> <size>`, a pointer that does
+  not move is drawn again at the new size, same shape, same place (FR39-FR40);
 - shell IPC `gfc/1`: capabilities event on Hyprland's socket2, `hl.plugin.grassfield.{hello, minimize,
-  restore, config, appmenu, overview, stages}()`, `hyprctl grassfield`.
+  restore, config, appmenu, overview, stages, cursor_refresh}()`, `hyprctl grassfield`.
 
 Spec: [`docs/specs/compositor.md`](../docs/specs/compositor.md).
 
@@ -110,7 +112,7 @@ scripts/dev/pointer.sh output GF-REF abs 960 250 down drag 700 400 up   # drag a
 ```
 
 Startup log line (in `$XDG_RUNTIME_DIR/hypr/<nested instance>/hyprland.log`):
-`[grassfield] grassfield-compositor 0.6.4-stages initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+`[grassfield] grassfield-compositor 0.7.1-stages initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
 Hyprland buffers this log file: later lines can take a long time to appear.
 
 ## Soak (gate C1, nested only)
@@ -175,6 +177,11 @@ hidden strip, workspace switch, minimize, full screen, overlap, strip surface go
 unload and reload. `stages.sh perf [seconds]` measures Hyprland's CPU with 3 stages × 3 windows and the
 special-workspace alternative.
 
+Cursor refresh (nested only, FR39-FR40, needs `just cursors` once): `tests/compositor/cursor_refresh.sh` — a still arrow
+over the desktop and a still I-beam over foot, 24 → 48 → 96 → 24 px through the dev settings file (the shell's
+`setcursor` + refresh): size, shape, place, a pointer foot hides while typing stays hidden, a flood, unload/load.
+`cursor_refresh.sh baseline` on `nested-up.sh --no-plugin` (C2); `cursor_refresh.sh stress [seconds]` next to `soak.sh`.
+
 Zoom restore (FR8 regression, nested only): `tests/compositor/zoom_restore.sh` — double-click, click + zoom
 button and a drag on a maximized titlebar; PASS (exit 0) = the zoom toggle always restores the floating
 geometry and a drag un-zooms the window under the pointer.
@@ -230,6 +237,7 @@ feature list is posted so the shell returns to its fallbacks.
 | plugin → shell | socket2 event, overview state | `grassfield>>{"v":"gfc/1","type":"overview","state":"opening\|open\|closing\|closed","windows":N}` (+ `"reason"`: invalid, no-windows, no-chrome, unavailable, interrupted, fullscreen) |
 | plugin → shell | socket2 event at unload | `grassfield>>{"v":"gfc/1","type":"capabilities","features":[]}` |
 | (no verb) | feature `desktop-focus` | click-to-focus policy for `grassfield-desktop-icons` on pointer presses |
+| shell → plugin | `hl.plugin.grassfield.cursor_refresh()` (feature `cursor-refresh`) after `setcursor` answered `ok` | the pointer drawn again at the new size, same shape, same place; rate-limited |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dispatch is evaluated as
@@ -243,14 +251,16 @@ There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dis
   validation, easing, frames, snapshot texture boxes), `Appmenu.*` (D-Bus name / object path validation,
   per-surface registrations and the events they produce), `Overview.*` (strict payload reader and validation,
   interpolation, overview event JSON, chrome rule, focus causes, damage steps), `DesktopFocus.*` (desktop focus
-  decision table, layer classification, pending grant).
+  decision table, layer classification, pending grant), `CursorRefresh.*` (cursor refresh decision, request rate gate).
 - `src/` — Hyprland glue: `main.cpp` (entry points, ABI check, event bus listeners, unload), `Titlebar.*`
   (decoration, drawing, input), `Ipc.*` (socket2 events, Lua functions, hyprctl command), `Minimize.*`
   (hidden state, snapshots, render hooks), `AppmenuServer.*` (the `org_kde_kwin_appmenu_manager` global, its
   resources, window listeners, unload policy), `Overview.*` (window transformers, damage, failsafes), `DesktopFocus.*`
-  (button and layer commit listeners, keyboard focus moves), `Surfaces.*` (wl_surface -> window / layer owner).
+  (button and layer commit listeners, keyboard focus moves), `Surfaces.*` (wl_surface -> window / layer owner),
+  `CursorRefresh.*` (re-applies Hyprland's last named cursor shape with force, trailing-refresh timer).
 - `protocols/appmenu.xml` — KDE's appmenu protocol, version 2 (LGPL-2.1-or-later, upstream notice kept).
 - `tests/` — GoogleTest unit tests for `src/core/`. Nested scenarios (repository root):
   `tests/compositor/soak.sh`, `tests/compositor/input_consistency.sh`, `tests/compositor/zoom_restore.sh`,
   `tests/compositor/minimize.sh`, `tests/compositor/double_click_setting.sh`, `tests/compositor/appmenu.sh`,
-  `tests/compositor/event_flood.sh`, `tests/compositor/overview.sh`, `tests/compositor/desktop_focus.sh`.
+  `tests/compositor/event_flood.sh`, `tests/compositor/overview.sh`, `tests/compositor/desktop_focus.sh`,
+  `tests/compositor/stages.sh`, `tests/compositor/cursor_refresh.sh`.

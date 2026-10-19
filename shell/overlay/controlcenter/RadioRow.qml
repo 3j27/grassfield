@@ -67,7 +67,7 @@ NavItem {
         MouseArea {
             anchors.fill: parent
             enabled: root.available
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: Qt.ArrowCursor
             onClicked: root.toggled()
         }
     }
@@ -117,7 +117,7 @@ NavItem {
         MouseArea {
             anchors.fill: parent
             enabled: root.available
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: Qt.ArrowCursor
             onClicked: root.expandable ? root.expandToggled() : root.toggled()
         }
     }

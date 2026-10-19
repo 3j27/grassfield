@@ -30,7 +30,9 @@ const DEFAULTS = {
     "icons.mode": "default",
     "icons.tint": "accent",
     "icons.folderColor": "theme",
-    "pointer.size": Ui.PointerSize.DEFAULT
+    "pointer.size": Ui.PointerSize.DEFAULT,
+    "pointer.outlineColor": Ui.PointerColors.DEFAULT_OUTLINE,
+    "pointer.fillColor": Ui.PointerColors.DEFAULT_FILL
 };
 
 const CORNER_ACTIONS = ["none", "overview", "notifications", "apps", "lock"];
@@ -63,7 +65,10 @@ const RULES = {
     // "theme", "accent" or a #rrggbb colour (schema `pattern`).
     "icons.folderColor": {type: "folderColor"},
     // Cursor size in pixels, mirrors ui/Grassfield/Ui/PointerSize.js (the unit test checks the bounds).
-    "pointer.size": {type: "integer", min: Ui.PointerSize.MIN, max: Ui.PointerSize.MAX}
+    "pointer.size": {type: "integer", min: Ui.PointerSize.MIN, max: Ui.PointerSize.MAX},
+    // #rrggbb (schema `pattern`), any colour: like macOS there is no contrast guard.
+    "pointer.outlineColor": {type: "pointerColor"},
+    "pointer.fillColor": {type: "pointerColor"}
 };
 
 // Error message for an invalid value, or "" when the value is acceptable for the key.
@@ -78,6 +83,8 @@ function validate(path, value) {
         return Ui.IconModes.validTint(value) ? "" : path + ": expected accent or a #rrggbb colour";
     case "folderColor":
         return Ui.FolderStyle.validColor(value) ? "" : path + ": expected theme, accent or a #rrggbb colour";
+    case "pointerColor":
+        return Ui.PointerColors.validColor(value) ? "" : path + ": expected a #rrggbb colour";
     case "boolean":
         return typeof value === "boolean" ? "" : path + ": expected true or false";
     case "integer":

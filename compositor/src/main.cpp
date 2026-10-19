@@ -5,6 +5,7 @@
 // its degraded mode because no `grassfield` capabilities event is ever posted.
 
 #include "AppmenuServer.hpp"
+#include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
 #include "Ipc.hpp"
 #include "Minimize.hpp"
@@ -177,6 +178,7 @@ namespace {
         step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
         step("overview", [] { gf::overviewer::stop(); });   // every window back to normal rendering, transformers detached
         step("stages", [] { gf::stager::stop(); });          // strip windows shown normally, input unblocked, transformers detached
+        step("cursor refresh", [] { gf::cursorRefresh::stop(); }); // trailing-refresh timer removed (its callback is in this library)
         step("appmenu", [] { gf::appmenuServer::stop(); }); // no wl_resource may point into this library after dlclose
         step("events", [] { gf::ipc::stopEvents(); });      // after the appmenu clears: waiting events posted, timer removed
         step("ipc", [] { gf::ipc::unregisterAll(); });
@@ -199,7 +201,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     auto& s  = state();
     s.handle = handle;
 
-    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu, overview, desktop focus, Stages and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
+    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu, overview, desktop focus, Stages, cursor refresh and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
 
     const std::string serverHash = __hyprland_api_get_hash();
     const std::string clientHash = __hyprland_api_get_client_hash();
@@ -243,6 +245,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         if (!stagesOk) {
             gf::guarded("stages rollback", [] { gf::stager::stop(); });
             gf::log(Log::WARN, "stages listeners failed to register; stages-available not advertised");
+        }
+        // Optional feature: without it the shell sends no refresh and a new pointer size shows at the next shape change.
+        bool cursorRefreshOk = false;
+        gf::guarded("cursor refresh start", [&] { cursorRefreshOk = gf::cursorRefresh::start(); });
+        if (!cursorRefreshOk) {
+            gf::guarded("cursor refresh rollback", [] { gf::cursorRefresh::stop(); });
+            gf::log(Log::WARN, "no renderer for the cursor refresh; cursor-refresh not advertised");
         }
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");

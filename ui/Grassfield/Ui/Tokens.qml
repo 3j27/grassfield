@@ -188,10 +188,6 @@ QtObject {
     readonly property int dockBottomMargin: 6
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIndicatorSize: 4
-    // Dock fidelity fix: shelf relative luminance above which the running dot is black, else white; both are at least 4.5:1 at this crossover (WCAG, computed)
-    readonly property real dockIndicatorDarkAbove: 0.18
-    // Dock fidelity fix: central fraction of the wallpaper width sampled under the shelf to choose the running dot tone
-    readonly property real dockIndicatorSampleSpan: 0.5
     // task spec default; user value in grassfield.json dock.magnification
     readonly property real dockMagnificationMax: 1.6
     // task spec: cosine falloff over about 3 icons each side
@@ -212,8 +208,10 @@ QtObject {
     readonly property real dockMinimizedBadgeScale: 0.4
     // estimate, pending F1 measurement from design/reference
     readonly property real dockTrashIconScale: 0.6
-    // Dock fidelity pass: the shelf holds icons only (no text), so it is more translucent than the A2 text clamp; real blur behind it (reference gs-016-031: shelf a few percent lighter than its backdrop)
-    readonly property real dockTintAlpha: 0.42
+    // Dock fidelity pass: the shelf holds icons only (no text), so it is more translucent than the A2 text clamp; real blur behind it (reference gs-016-031: shelf a few percent lighter than its backdrop). Light appearance: black dot, needs relative luminance 0.10 or more over a black backdrop (0.42 gives 0.133, 3.7:1), tested in tests/unit/tst_bartone.qml
+    readonly property real dockTintAlphaLight: 0.42
+    // Dock fix pass 2: dark appearance, white dot, needs relative luminance 0.30 or less over a white backdrop (a white window under an autohidden or floating shelf); 0.52 gives 0.256 (3.4:1), tested in tests/unit/tst_bartone.qml
+    readonly property real dockTintAlphaDark: 0.52
     // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge)
     readonly property real dockHighlightOpacity: 0.34
     // Dock fidelity pass: 1 px rim, white in both appearances (glass edge)
@@ -638,6 +636,32 @@ QtObject {
     readonly property int settingsPointerRetryMs: 250
     // estimate: shell, attempts for one pointer size before waiting for the next change or compositor event
     readonly property int settingsPointerRetryMax: 5
+    // estimate: shell, quiet time after the last pointer colour change before the cursor theme is regenerated (a colour well dragged for a second makes one build, for the colour it stops on)
+    readonly property int settingsPointerColorDebounceMs: 350
+    // estimate: shell, a cursor theme build that runs longer than this is killed (a normal one takes about 2 s)
+    readonly property int settingsPointerBuildTimeoutMs: 60000
+    // estimate: shell, wait for a cancelled build to stop on SIGTERM before it is killed
+    readonly property int settingsPointerBuildKillMs: 3000
+    // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged
+    readonly property int settingsColorWriteMs: 120
+    // estimate: Settings colour well, side of the round well in a row
+    readonly property int settingsColorWellSize: 22
+    // estimate: Settings colour well, width of the saturation and brightness square
+    readonly property int settingsColorSquareWidth: 200
+    // estimate: Settings colour well, height of the saturation and brightness square
+    readonly property int settingsColorSquareHeight: 140
+    // estimate: Settings colour well, width of the typed #rrggbb field
+    readonly property int settingsColorHexWidth: 84
+    // estimate: Settings pointer preview, side of the arrow tile (the arrow is drawn on the 32 unit grid of the cursor sources)
+    readonly property int settingsPointerPreviewSize: 28
+    // the pure ends of the saturation/brightness square of the colour well are colour maths, not a theme colour
+    readonly property string settingsColorSquareWhite: "#ffffff"
+    // same: transparent white end of the square
+    readonly property string settingsColorSquareWhiteClear: "#00ffffff"
+    // same: black end of the square
+    readonly property string settingsColorSquareBlack: "#000000"
+    // same: transparent black end of the square
+    readonly property string settingsColorSquareBlackClear: "#00000000"
     // estimate: Sound pane, width of the percentage next to a slider
     readonly property int settingsVolumeValueWidth: 44
 
@@ -1049,7 +1073,7 @@ QtObject {
     readonly property real folderIconGlyphMinContrast: 3.0
     // measured safety over the minimum (the plate is estimated from the colour, the real one differs by a few percent)
     readonly property real folderIconGlyphContrastMargin: 0.3
-    // measured on the recoloured folder plate under the symbol (nested captures, tests/visual/folder_glyph_contrast.py): plate over the folder colour, icon mode default and clear
+    // estimate, only used when the plate cannot be measured (FolderPlate): plate over the folder colour (measured on the fallback theme, tests/visual/folder_glyph_contrast.py), icon mode default and clear
     readonly property real folderIconPlateDefault: 0.96
     // measured: plate over the folder colour in the Dark icon mode
     readonly property real folderIconPlateDark: 0.78
@@ -1061,7 +1085,7 @@ QtObject {
     readonly property real folderIconThemeTintedGain: 1.27
     // measured: in the Clear icon mode a dark plate lets the backdrop through (a black folder over a light backdrop): the lightest plate over the colour, as a share of the way to white
     readonly property real folderIconClearLift: 0.22
-    // measured: plate of the icon theme's own folder under the symbol (default mode, current theme of the reference session)
+    // estimate, only used when the plate cannot be measured (FolderPlate): plate of the fallback icon theme folder under the symbol (default mode); the symbol shade otherwise follows the measured plate, any theme
     readonly property string folderIconThemePlate: "#a4caee"
     // estimate: 1 px light edge under an engraved symbol (the engraved look)
     readonly property string folderIconGlyphHighlight: "#40ffffff"

@@ -20,7 +20,13 @@ if [[ -d $_gf_dev_root/.dev/share/icons ]]; then
   fi
 fi
 if [[ -f $_gf_dev_root/.dev/share/icons/grassfield-cursors/manifest.hl ]]; then
-  _gf_cursor_size=${GRASSFIELD_CURSOR_SIZE:-24}
+  # The size follows Settings > Accessibility > Pointer (.dev/config/grassfield.json, pointer.size, 24..96 as an integer)
+  # unless GRASSFIELD_CURSOR_SIZE overrides it; anything else is the default 24.
+  _gf_cursor_size=${GRASSFIELD_CURSOR_SIZE:-}
+  if [[ -z $_gf_cursor_size && -r $_gf_dev_root/.dev/config/grassfield.json ]] && command -v jq >/dev/null 2>&1; then
+    _gf_cursor_size=$(jq -r 'if (.pointer.size | type) == "number" and .pointer.size == (.pointer.size | floor) and .pointer.size >= 24 and .pointer.size <= 96 then .pointer.size else 24 end' "$_gf_dev_root/.dev/config/grassfield.json" 2>/dev/null || true)
+  fi
+  [[ $_gf_cursor_size =~ ^[0-9]+$ ]] || _gf_cursor_size=24
   export HYPRCURSOR_THEME=grassfield-cursors HYPRCURSOR_SIZE=$_gf_cursor_size
   export XCURSOR_THEME=grassfield-cursors XCURSOR_SIZE=$_gf_cursor_size
   case ":${XCURSOR_PATH:-}:" in

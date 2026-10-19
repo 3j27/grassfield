@@ -96,6 +96,40 @@ TestCase {
         compare(History.removeApp(list, "mail").map(e => e.key).join(","), "2");
     }
 
+    // Clear one (the x of a card): only that entry goes, order kept, unknown key changes nothing, input untouched.
+    function test_clearOneKeepsTheRest() {
+        const list = [entry("1", "mail", now), entry("2", "mail", now - 1000), entry("3", "chat", now - 2000)];
+        const after = History.removeKey(list, "2");
+        compare(after.map(e => e.key).join(","), "1,3");
+        compare(list.length, 3);
+        compare(History.removeKey(list, "nope").map(e => e.key).join(","), "1,2,3");
+        compare(History.removeKey([], "1").length, 0);
+        compare(History.group(after).map(g => g.appName + ":" + g.items.length).join(","), "mail:1,chat:1");
+    }
+
+    // Clear group (Clear All on a group header): every entry of the app, also the app without a name, nothing else.
+    function test_clearGroupRemovesWholeApp() {
+        const list = [entry("1", "mail", now), entry("2", "", now - 1000), entry("3", "mail", now - 2000), entry("4", "chat", now - 3000),
+            entry("5", "", now - 4000)];
+        compare(History.removeApp(list, "mail").map(e => e.key).join(","), "2,4,5");
+        compare(History.removeApp(list, "").map(e => e.key).join(","), "1,3,4");
+        compare(History.removeApp(list, "none").length, 5);
+        compare(History.group(History.removeApp(list, "mail")).map(g => g.appName).join(","), ",chat");
+    }
+
+    // History state after clearing: what is written to disk no longer holds the cleared entries; clearing everything
+    // writes an empty list that parses back to nothing (no "Clear All" is needed to reach that state).
+    function test_clearedEntriesLeaveTheStoredHistory() {
+        const list = [entry("1", "mail", now - 1000), entry("2", "mail", now - 2000), entry("3", "chat", now - 3000)];
+        const stored = JSON.parse(History.serialize(History.removeApp(History.removeKey(list, "3"), "mail"), now));
+        compare(stored.notifications.length, 0);
+        const some = JSON.parse(History.serialize(History.removeKey(list, "1"), now));
+        compare(some.notifications.map(e => e.key).join(","), "2,3");
+        const restored = History.parse(History.serialize(History.removeKey(list, "2"), now), now);
+        compare(restored.map(e => e.key).join(","), "1,3");
+        compare(History.parse(History.serialize([], now), now).length, 0);
+    }
+
     function test_relativeParts() {
         compare(History.relativeParts(now - 5000, now).unit, "now");
         compare(JSON.stringify(History.relativeParts(now - 120000, now)), "{\"unit\":\"m\",\"n\":2}");

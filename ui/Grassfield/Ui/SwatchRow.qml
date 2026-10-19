@@ -29,6 +29,21 @@ FocusScope {
     Accessible.name: root.accessibleName
     Accessible.description: root.enabled ? "" : root.caption
 
+    // The row takes the focus: the ring starts on the chosen swatch (state 2), else on the first one, so the focus is
+    // always visible (a custom colour selects no swatch).
+    onActiveFocusChanged: {
+        if (!root.activeFocus || !root.enabled || root.currentIndex >= 0 || root.model.length === 0)
+            return;
+        let start = 0;
+        for (let i = 0; i < root.model.length; i++) {
+            if ((root.model[i].state ?? 0) === 2) {
+                start = i;
+                break;
+            }
+        }
+        root.currentIndex = start;
+    }
+
     Keys.onPressed: event => {
         const n = root.model.length;
         if (n === 0 || !root.enabled)

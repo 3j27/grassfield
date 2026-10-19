@@ -33,8 +33,9 @@ function windowCall(verb, address, rect) {
 }
 
 // hl.plugin.grassfield.cursor_refresh() (gfc/1 capability "cursor-refresh"): the plugin redraws the cursor with the
-// theme and size Hyprland holds now. ASSUMPTION until the compositor side lands: the Lua name is the capability with an
-// underscore (a Lua identifier) and the call takes no argument; guarded, so a plugin without it makes this a no-op.
+// theme and size Hyprland holds now. The plugin registers the capability name with an underscore (a Lua identifier) and
+// the call takes no argument (compositor FR39-FR40, measured by tests/compositor/cursor_refresh.sh); guarded, so a
+// plugin without it makes this a no-op.
 function cursorRefreshCall() {
     return guardedPluginCall("cursor_refresh", []);
 }

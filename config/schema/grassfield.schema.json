@@ -235,6 +235,16 @@
           "minimum": 24,
           "maximum": 96,
           "description": "Cursor size in pixels (the macOS slider Normal to Large). Applied live by the shell; the XCursor fallback uses the nearest of 24, 32, 48, 64, 96."
+        },
+        "outlineColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Pointer outline colour (#rrggbb). The default #ffffff is the packaged cursor theme; any other pair makes the shell regenerate the theme grassfield-cursors-custom."
+        },
+        "fillColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Pointer fill colour (#rrggbb). The default #000000 is the packaged cursor theme."
         }
       }
     }

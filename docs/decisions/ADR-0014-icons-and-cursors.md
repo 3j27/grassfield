@@ -57,12 +57,28 @@ B. A fixed palette of prebuilt accent variants only.
   assets, drawn for Grassfield, macOS-like proportions without copying macOS artwork): the CSS cursor names plus legacy
   aliases; a build step (`hyprcursor-util --create`, XCursor PNG sizes 24/32/48/64/96 through the existing build tooling)
   produces `grassfield-cursors`. Settings > Accessibility > Pointer (macOS model: size slider, fill and outline colour).
-  Implemented now: the size. The shell asks the compositor for it with Hyprland's own `setcursor <theme> <size>` request
-  on its own instance's request socket (the theme is not changed), a live redraw follows through the compositor
-  capability `cursor-refresh` when the plugin has it, and the applications the shell starts get `XCURSOR_SIZE` and
-  `HYPRCURSOR_SIZE` in their environment; running applications keep their size (documented limit). Colours are a later
-  step: regenerating the theme into `$XDG_DATA_HOME/icons/grassfield-cursors-custom` and switching to it needs python3,
-  rsvg-convert and hyprcursor-util at runtime, an owner decision. Dev: only the nested instance is ever addressed.
+  Implemented: the size and the colours. The shell asks the compositor for the size with Hyprland's own
+  `setcursor <theme> <size>` request on its own instance's request socket, a live redraw follows through the compositor
+  capability `cursor-refresh` when the plugin has it (gfc/1 verb `hl.plugin.grassfield.cursor_refresh()`, plugin
+  0.7.0-cursor: Hyprland's last named shape re-applied with force, so a pointer that does not move is drawn at the new
+  size with the same shape and at the same place; never while it is hidden or a client draws its own cursor surface;
+  `docs/specs/compositor.md` FR39-FR40), and the applications the shell starts get `XCURSOR_SIZE` and
+  `HYPRCURSOR_SIZE` in their environment; running applications keep their size (documented limit).
+  **Colours (owner decision 2026-10-19, macOS Accessibility > Display > Pointer: "Pointer outline color", "Pointer fill
+  color", "Reset Color"; any colour is allowed, no contrast guard, as macOS):** the settings keys `pointer.outlineColor`
+  (default `#ffffff`) and `pointer.fillColor` (default `#000000`), the two placeholders of the SVG sources. For any other
+  pair the shell regenerates the theme: `branding/cursors/build.sh --name grassfield-cursors-custom --out <icons dir>
+  --outline ... --fill ...` (SVG recolour, `hyprcursor-util --create`, XCursor PNG sizes) in a Process off the UI thread,
+  debounced while a colour well is dragged (the final pair is always built), one build at a time (a newer pair terminates
+  the running one), written atomically (build into a temporary directory, rename), then `setcursor
+  grassfield-cursors-custom <size>` and the `cursor-refresh` redraw; "Reset Colour" switches back to the session theme and
+  deletes the custom one. A failed or impossible build (missing tool, no script, no directory) leaves the pointer as it is
+  and the reason is shown in Settings. **`python`, `librsvg` (rsvg-convert) and `hyprcursor` (hyprcursor-util) are
+  runtime dependencies of `grassfield-desktop`** (`depends=` in `packaging/arch/PKGBUILD`); the script, the sources and
+  the table are installed under `/usr/share/grassfield/cursors`. The icons directory is `$XDG_DATA_HOME/icons`, else
+  `$HOME/.local/share/icons` (hyprcursor and XCursor search `$HOME/.local/share/icons` and `$XDG_DATA_DIRS`); a dev
+  session writes under `.dev/share/icons` only and refuses to build without that directory. Dev: only the nested instance
+  is ever addressed.
 
 ## Consequences
 - New shared component and settings keys; every icon call site moves to `TintedIcon` (one pass per surface).

@@ -8,7 +8,18 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QCoreApplication>
+#include <QFileSystemWatcher>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QTemporaryDir>
+#include <QEventLoop>
+#include <QTimer>
+#include <QThread>
 
 #include <memory>
 #include <sys/stat.h>
@@ -97,33 +108,45 @@ TEST(FolderStyleLogic, GlyphIsOneGraphemeCluster)
     EXPECT_EQ(FolderStyleLogic::normalizeGlyph(QString(QChar(0x07))), QString());
 }
 
-// The symbol rule's shared vectors: ui/Grassfield/Ui/FolderStyle.js normalizeGlyph must give the same answers
-// (tests/unit/tst_foldercolors.qml test_glyphRuleSharedVectors holds the same table).
+namespace
+{
+// "1F468 200D 1F469" -> the string of those code points (a lone surrogate stays one).
+QString fromCodePoints(const QString &hex)
+{
+    QString s;
+    for (const QString &h : hex.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+        const uint cp = h.toUInt(nullptr, 16);
+        if (cp > 0xFFFF) {
+            s.append(QChar(QChar::highSurrogate(cp)));
+            s.append(QChar(QChar::lowSurrogate(cp)));
+        } else {
+            s.append(QChar(ushort(cp)));
+        }
+    }
+    return s;
+}
+} // namespace
+
+// The symbol rule's shared vectors (tests/fixtures/glyph-vectors.json): ui/Grassfield/Ui/FolderStyle.js answers the same
+// (tests/unit/tst_foldercolors.qml test_glyphRuleSharedVectors reads the same file): what the preview shows is what is saved.
 TEST(FolderStyleLogic, GlyphRuleSharedVectors)
 {
-    struct Vector {
-        const char *input;
-        const char *expected;
-    };
-    const Vector vectors[] = {
-        {"\xF0\x9F\x8E\xB5", "\xF0\x9F\x8E\xB5"},                                      // music note
-        {"\xE2\x9D\xA4\xEF\xB8\x8F", "\xE2\x9D\xA4\xEF\xB8\x8F"},                      // heart + VS16
-        {"\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7", "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7"},  // flag FR
-        {"\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7\xF0\x9F\x87\xAB", "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7"}, // 3 regional indicators
-        {"1\xEF\xB8\x8F\xE2\x83\xA3", "1\xEF\xB8\x8F\xE2\x83\xA3"},                      // keycap 1
-        {"e\xCC\x81x", "e\xCC\x81"},                                                   // e + acute, then a letter
-        {"WWWWWWWWWWWWWWWW", "W"},                                                        // sixteen letters: one cluster
-        {"Holiday photos", "H"},
-        {"a\xE2\x80\xAE", "a"},                                                         // a, then RLO: the cluster ends before it
-        {"\xE2\x80\xAE" "a", ""},                                                       // RLO first
-        {"\xE2\x80\x8E" "a", ""},                                                       // LRM first
-        {"a\xE2\x80\x8B", "a"},                                                         // zero width space is a break
-        {"\x01" "a", ""},                                                                 // control first
-        {"  \xE2\x98\x85  ", "\xE2\x98\x85"},                                          // trimmed
-        {"\xEF\xBF\xBD", ""},                                                           // replacement character
-    };
-    for (const Vector &v : vectors) {
-        EXPECT_EQ(FolderStyleLogic::normalizeGlyph(QString::fromUtf8(v.input)), QString::fromUtf8(v.expected)) << v.input;
+    const QDir tests = QFileInfo(QStringLiteral(__FILE__)).absoluteDir(); // tests/unit/files
+    QFile file(QDir::cleanPath(tests.filePath(QStringLiteral("../../fixtures/glyph-vectors.json"))));
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly)) << file.fileName().toStdString();
+    const QJsonArray vectors = QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("vectors")).toArray();
+    ASSERT_GT(vectors.size(), 100);
+    for (const QJsonValue &value : vectors) {
+        const QJsonObject v = value.toObject();
+        const std::string name = v.value(QStringLiteral("name")).toString().toStdString();
+        const QString input = fromCodePoints(v.value(QStringLiteral("input")).toString());
+        const QString expected = fromCodePoints(v.value(QStringLiteral("expected")).toString());
+        const QString got = FolderStyleLogic::normalizeGlyph(input);
+        EXPECT_EQ(got, expected) << name;
+        if (!v.value(QStringLiteral("emoji")).isNull())
+            EXPECT_EQ(FolderStyleLogic::isEmoji(got), v.value(QStringLiteral("emoji")).toBool()) << name;
+        // Normalising is stable: a kept symbol stays as it is.
+        EXPECT_EQ(FolderStyleLogic::normalizeGlyph(got), got) << name;
     }
     // Over the cap (more than 16 UTF-16 units in one cluster): nothing.
     QString zalgo = QStringLiteral("e");
@@ -438,6 +461,7 @@ TEST(FolderStyleStore, EntriesFollowRenamesAndAreNotInheritedByNewFolders)
         GTEST_SKIP() << "root ignores permissions";
     const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
     FolderStyleStore store(file);
+    store.setMountsForTests(FolderStyleStore::Mounts::parse("1 0 0:1 / / rw - ext4 /dev/x rw\n", ""));
     const QString a = makeFolder(*dir, QStringLiteral("a"));
     const QString sub = makeFolder(*dir, QStringLiteral("a/sub"));
     ::chmod(QFile::encodeName(sub).constData(), 0555);
@@ -461,7 +485,9 @@ TEST(FolderStyleStore, EntriesFollowRenamesAndAreNotInheritedByNewFolders)
     ::chmod(QFile::encodeName(other).constData(), 0555);
     ASSERT_TRUE(store.write(other, style("#8e5bea")).fellBack);
     ::chmod(QFile::encodeName(other).constData(), 0755);
-    EXPECT_EQ(store.fallbackCount(), 1) << "the entries of the vanished folders are pruned";
+    store.startPrune(true);
+    store.waitForPrune();
+    EXPECT_EQ(store.fallbackCount(), 1) << "the entries of the vanished folders are pruned (by the worker)";
     makeFolder(*dir, QStringLiteral("b"));
     EXPECT_TRUE(store.read(b).isEmpty()) << "a new folder at an old path does not inherit the look";
 
@@ -531,4 +557,207 @@ TEST(FolderStyleStore, TheCapIsExplicitAndNothingIsDroppedSilently)
     ::chmod(QFile::encodeName(plain).constData(), 0755);
     EXPECT_TRUE(again.dropEntry(QStringLiteral("/run/media/nobody/GF-TEST-STICK/f0")));
     EXPECT_EQ(FolderStyleStore(file).fallbackCount(), total - 1) << "only the entry asked for is gone";
+}
+
+// ---- pruning: which entries may be looked at, and where ----
+
+TEST(FolderStyleStore, MountTableDecidesWhatMayBePruned)
+{
+    const QByteArray mountinfo =
+        "1 0 8:1 / / rw - ext4 /dev/sda1 rw\n"
+        "2 1 0:50 / /mnt/nas rw - nfs4 server:/export rw\n"
+        "3 1 8:17 / /run/media/me/STICK rw - vfat /dev/sdb1 rw\n"
+        "4 1 8:33 / /data rw - btrfs /dev/sdc rw\n"
+        "5 1 0:60 / /mnt/with\\040space rw - fuse.sshfs me@host: rw\n"
+        "6 1 8:49 / /mnt/disk2 rw - ext4 /dev/sdd1 rw\n";
+    const QByteArray fstab = "# comment\n/dev/sde1 /mnt/usb ext4 defaults 0 2\n/dev/sdc /data btrfs defaults 0 0\n\n";
+    const auto m = FolderStyleStore::Mounts::parse(mountinfo, fstab);
+    EXPECT_TRUE(m.isLocalAndMounted(QStringLiteral("/home/u/Projects")));
+    EXPECT_TRUE(m.isLocalAndMounted(QStringLiteral("/data/x")));
+    EXPECT_TRUE(m.isLocalAndMounted(QStringLiteral("/mnt/disk2/x"))) << "a fixed disk that is mounted";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/mnt/nas/Photos"))) << "network";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/mnt/with space/x"))) << "FUSE (and an escaped mount point)";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/run/media/me/STICK/x"))) << "removable filesystem";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/run/media/me/OTHER/x"))) << "a stick that is not plugged in";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/mnt/usb/x"))) << "an fstab mount point that is not mounted";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/mnt/unknown/x"))) << "under /mnt but no mount: kept";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/media/disk/x")));
+    EXPECT_FALSE(FolderStyleStore::Mounts().isLocalAndMounted(QStringLiteral("/home/u"))) << "no mount table, no stat";
+}
+
+TEST(FolderStyleStore, PruningStatsOnlyLocalEntriesAndOnlyOffTheGuiThread)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
+    QDir().mkpath(dir->filePath(QStringLiteral("cfg")));
+    const QString goneLocal = dir->filePath(QStringLiteral("vanished"));
+    const QString aliveLocal = makeFolder(*dir, QStringLiteral("alive"));
+    QByteArray json = "{\"version\":1,\"serial\":1,\"folders\":{";
+    const QStringList keys = {goneLocal, aliveLocal, QStringLiteral("/mnt/nas/Photos"), QStringLiteral("/mnt/nas/Gone/Deeper"),
+                              QStringLiteral("/mnt/usb/Photos"), QStringLiteral("/run/media/me/STICK/Music")};
+    for (int i = 0; i < keys.size(); ++i)
+        json += (i ? "," : "") + QByteArray("\"") + keys.at(i).toUtf8() + "\":{\"color\":\"#e5484d\"}";
+    json += "}}";
+    QFile f(file);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(json);
+    f.close();
+
+    QMutex lock;
+    QStringList statted;
+    bool onGuiThread = false;
+    const QThread *gui = QThread::currentThread();
+    FolderStyleStore::setStatObserverForTests([&](const QString &path) {
+        QMutexLocker l(&lock);
+        statted.append(path);
+        onGuiThread = onGuiThread || QThread::currentThread() == gui;
+    });
+    FolderStyleStore store(file);
+    store.setMountsForTests(FolderStyleStore::Mounts::parse(
+        "1 0 8:1 / / rw - ext4 /dev/sda1 rw\n2 1 0:50 / /mnt/nas rw - nfs4 server:/export rw\n3 1 8:17 / /run/media/me/STICK rw - vfat /dev/sdb1 rw\n", ""));
+    EXPECT_EQ(store.fallbackCount(), 6);
+    store.startPrune(true);
+    store.waitForPrune();
+    FolderStyleStore::setStatObserverForTests(nullptr);
+    EXPECT_FALSE(onGuiThread) << "a store entry is never statted on the GUI thread";
+    for (const QString &p : statted)
+        EXPECT_TRUE(p.startsWith(dir->path())) << "only local entries are looked at: " << p.toStdString();
+    EXPECT_EQ(store.fallbackCount(), 5) << "only the vanished local folder is pruned";
+    FolderStyleStore again(file);
+    EXPECT_TRUE(again.read(goneLocal).isEmpty());
+    EXPECT_EQ(again.read(QStringLiteral("/mnt/nas/Photos")).color, QStringLiteral("#e5484d")) << "network entries are kept";
+    EXPECT_EQ(again.read(QStringLiteral("/mnt/nas/Gone/Deeper")).color, QStringLiteral("#e5484d"));
+    EXPECT_EQ(again.read(QStringLiteral("/mnt/usb/Photos")).color, QStringLiteral("#e5484d")) << "an empty fixed mount point is kept";
+    EXPECT_EQ(again.read(QStringLiteral("/run/media/me/STICK/Music")).color, QStringLiteral("#e5484d"));
+    EXPECT_EQ(again.read(aliveLocal).color, QStringLiteral("#e5484d"));
+}
+
+TEST(FolderStyleStore, ARefusedNewEntryFindsRoomOnceVanishedFoldersArePruned)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
+    QDir().mkpath(dir->filePath(QStringLiteral("cfg")));
+    QByteArray json = "{\"version\":1,\"serial\":1,\"folders\":{";
+    for (int i = 0; i < FolderStyleStore::kMaxFallbackEntries; ++i) {
+        if (i)
+            json += ',';
+        json += "\"" + dir->filePath(QStringLiteral("gone%1").arg(i)).toUtf8() + "\":{\"color\":\"#e5484d\"}";
+    }
+    json += "}}";
+    QFile f(file);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(json);
+    f.close();
+    FolderStyleStore store(file);
+    store.setMountsForTests(FolderStyleStore::Mounts::parse("1 0 8:1 / / rw - ext4 /dev/sda1 rw\n", ""));
+    const QString folder = makeFolder(*dir, QStringLiteral("ro"));
+    ::chmod(QFile::encodeName(folder).constData(), 0555);
+    EXPECT_FALSE(store.write(folder, style("#3fae5a")).ok) << "full: refused now";
+    store.waitForPrune();
+    EXPECT_EQ(store.fallbackCount(), 0) << "the vanished folders were pruned in the background";
+    EXPECT_TRUE(store.write(folder, style("#3fae5a")).ok) << "room now";
+    ::chmod(QFile::encodeName(folder).constData(), 0755);
+}
+
+TEST(FolderStyleStore, AStoreOverTheByteLimitIsNeverWritten)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
+    QDir().mkpath(dir->filePath(QStringLiteral("cfg")));
+    // Long paths (a few KB each) fill the 4 MiB the reader accepts long before 20000 entries.
+    QByteArray json = "{\"version\":1,\"serial\":1,\"folders\":{";
+    int n = 0;
+    while (json.size() < 4 * 1024 * 1024 - 3400) {
+        if (n)
+            json += ',';
+        json += "\"/run/media/nobody/L/" + QByteArray::number(n) + QByteArray(3000, 'x') + "\":{\"color\":\"#e5484d\"}";
+        ++n;
+    }
+    json += "}}";
+    ASSERT_LT(json.size(), 4 * 1024 * 1024);
+    QFile f(file);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(json);
+    f.close();
+    FolderStyleStore store(file);
+    ASSERT_EQ(store.fallbackCount(), n);
+    // Entries that would push the file over the limit: refused with a reason, the file untouched and still readable.
+    QStringList folders;
+    const auto big = [&] {
+        for (int i = 0; i < 60; ++i)
+            folders.append(makeFolder(*dir, QStringLiteral("ro%1").arg(i)));
+    };
+    big();
+    bool refused = false;
+    QString reason;
+    for (const QString &folder : folders) {
+        ::chmod(QFile::encodeName(folder).constData(), 0555);
+        const auto r = store.write(folder, style("#3fae5a", "A"));
+        ::chmod(QFile::encodeName(folder).constData(), 0755);
+        if (!r.ok) {
+            refused = true;
+            reason = r.error;
+            break;
+        }
+    }
+    store.waitForPrune();
+    EXPECT_TRUE(refused) << "a store that would not be read back is refused";
+    EXPECT_FALSE(reason.isEmpty());
+    QFile after(file);
+    ASSERT_TRUE(after.open(QIODevice::ReadOnly));
+    EXPECT_LE(after.size(), 4 * 1024 * 1024) << "never written over the limit";
+    FolderStyleStore reader(file);
+    EXPECT_FALSE(reader.fallbackBroken());
+    EXPECT_GE(reader.fallbackCount(), n);
+}
+
+// A cut-and-paste with Skip or Rename in the conflict dialog: the look follows only a folder really created at
+// destination/name, never a different existing folder of that name.
+TEST(FolderStyleLogic, LooksFollowOnlyWhatThePasteReallyCreated)
+{
+    const QUrl dest = QUrl::fromLocalFile(QStringLiteral("/data/target/"));
+    const QList<QUrl> sources = {QUrl::fromLocalFile(QStringLiteral("/data/src/Photos")), QUrl::fromLocalFile(QStringLiteral("/data/src/Music")),
+                                 QUrl::fromLocalFile(QStringLiteral("/data/src/Docs")), QUrl::fromLocalFile(QStringLiteral("/data/src/Misc"))};
+    QSet<QUrl> created;
+    created.insert(QUrl::fromLocalFile(QStringLiteral("/data/target/Photos")));        // moved as it is
+    created.insert(QUrl::fromLocalFile(QStringLiteral("/data/target/Music (copy)"))); // Rename in the dialog: another name
+    // Docs: Skip (nothing created); Misc: nothing reported.
+    const auto follow = FolderStyleLogic::followingPaste(sources, dest, created);
+    ASSERT_EQ(follow.size(), 1);
+    EXPECT_EQ(follow.at(0).first, sources.at(0));
+    EXPECT_EQ(follow.at(0).second, QUrl::fromLocalFile(QStringLiteral("/data/target/Photos")));
+    // Overwrite: the folder is created (replaced) under the same name: it follows.
+    EXPECT_EQ(FolderStyleLogic::followingPaste({sources.at(2)}, dest, {QUrl::fromLocalFile(QStringLiteral("/data/target/Docs"))}).size(), 1);
+    EXPECT_TRUE(FolderStyleLogic::followingPaste(sources, dest, {}).isEmpty());
+}
+
+// The premise of the live update (FolderModel::watchShownFolder): a watch on a folder is told when another tool sets the
+// look (an extended attribute) of one of its entries.
+TEST(FolderStyleStore, AWatchOnTheFolderSeesAnotherToolSettingTheAttributeOfAnEntry)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    static int argc = 1;
+    static char name[] = "tst";
+    static char *argv[] = {name, nullptr};
+    if (!QCoreApplication::instance())
+        new QCoreApplication(argc, argv);
+    const QString shown = makeFolder(*dir, QStringLiteral("shown"));
+    const QString entry = makeFolder(*dir, QStringLiteral("shown/Music"));
+    QFileSystemWatcher watcher;
+    ASSERT_TRUE(watcher.addPath(shown));
+    QEventLoop loop;
+    bool seen = false;
+    QObject::connect(&watcher, &QFileSystemWatcher::directoryChanged, &loop, [&] { seen = true; loop.quit(); });
+    QTimer::singleShot(2000, &loop, &QEventLoop::quit);
+    const QByteArray value = "{\"v\":1,\"color\":\"#e5484d\"}";
+    ASSERT_EQ(::lsetxattr(QFile::encodeName(entry).constData(), FolderStyleLogic::attributeName(), value.constData(), size_t(value.size()), 0), 0);
+    EXPECT_TRUE(seen || (loop.exec(), seen)) << "no directoryChanged for an attribute change of an entry";
+    FolderStyleStore store(dir->filePath(QStringLiteral("cfg/folder-styles.json")));
+    EXPECT_EQ(store.read(entry).color, QStringLiteral("#e5484d")) << "and a read now sees it";
 }

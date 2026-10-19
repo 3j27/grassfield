@@ -8,6 +8,7 @@
 #include "tagstore.h"
 
 #include <QClipboard>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -16,8 +17,12 @@
 #include <QMimeData>
 #include <QMimeDatabase>
 #include <QProcess>
+#include <QPair>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStorageInfo>
+
+#include <memory>
 
 #include <KApplicationTrader>
 #include <KIO/ApplicationLauncherJob>
@@ -513,18 +518,22 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
         return;
     attachDelegate(job);
     QPointer<QObject> target = folder;
-    connect(job, &KIO::PasteJob::itemCreated, this, [target](const QUrl &url) {
+    // What the job really created: a Rename or Skip answer in the conflict dialog puts a folder elsewhere than
+    // destination/name, or nowhere, and a look must not land on a different folder that happens to have that name.
+    auto created = std::make_shared<QSet<QUrl>>();
+    connect(job, &KIO::PasteJob::itemCreated, this, [target, created](const QUrl &url) {
+        created->insert(url);
         if (auto *f = asFolder(target))
             f->expect(url, false);
     });
     if (cut) {
-        connect(job, &KJob::result, this, [this, job, urls, destination] {
+        connect(job, &KJob::result, this, [this, job, urls, destination, created] {
             // A cut selection is consumed by its paste.
             if (job->error())
                 return;
             QGuiApplication::clipboard()->clear();
-            for (const QUrl &u : urls)
-                styleMoved(u, childUrl(destination, u.fileName()));
+            for (const auto &pair : FolderStyleLogic::followingPaste(urls, destination, *created))
+                styleMoved(pair.first, pair.second);
         });
     }
     track(job, countText(cut ? tr("Moving 1 item…") : tr("Copying 1 item…"), cut ? tr("Moving %1 items…") : tr("Copying %1 items…"), urls.size()));
@@ -632,7 +641,7 @@ void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
 // Files moved or renamed a folder: its look follows (the attribute travels by itself; the per-user entry is keyed by path).
 void FilesApp::styleMoved(const QUrl &from, const QUrl &to)
 {
-    if (!from.isLocalFile() || !to.isLocalFile())
+    if (!from.isLocalFile() || !to.isLocalFile() || m_folderStyles.fallbackCount() == 0)
         return;
     if (m_folderStyles.moveEntries(from.toLocalFile(), to.toLocalFile())) {
         ++m_folderStyleRevision;
@@ -713,11 +722,19 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
             f->expect(childUrl(dest, u.fileName()), false);
     }
     if (!copy) {
-        connect(job, &KJob::result, this, [this, job, sources, dest] {
+        // The look follows the folder to where the job really put it (copyingDone names the actual destination: a Rename
+        // answer in the conflict dialog gives another name, a Skip answer gives nothing, an Overwrite the same one).
+        auto done = std::make_shared<QList<QPair<QUrl, QUrl>>>();
+        connect(job, &KIO::CopyJob::copyingDone, this, [done](KIO::Job *, const QUrl &from, const QUrl &to, const QDateTime &, bool directory, bool renamed) {
+            // A folder moved by a rename is reported as renamed (not as a directory); files are of no interest.
+            if (directory || renamed)
+                done->append({from, to});
+        });
+        connect(job, &KJob::result, this, [this, job, done] {
             if (job->error())
                 return;
-            for (const QUrl &u : sources)
-                styleMoved(u, childUrl(dest, u.fileName()));
+            for (const auto &pair : *done)
+                styleMoved(pair.first, pair.second);
         });
     }
     track(job, countText(copy ? tr("Copying 1 item…") : tr("Moving 1 item…"), copy ? tr("Copying %1 items…") : tr("Moving %1 items…"), sources.size()));

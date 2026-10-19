@@ -414,7 +414,7 @@ FocusScope {
 
                         MouseArea {
                             anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
+                            cursorShape: Qt.ArrowCursor
                             onClicked: {
                                 mute.forceActiveFocus();
                                 Audio.toggleMute();
@@ -462,7 +462,7 @@ FocusScope {
 
                         MouseArea {
                             anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
+                            cursorShape: Qt.ArrowCursor
                             onClicked: {
                                 soundChevron.forceActiveFocus();
                                 root.toggleSection("sound");
@@ -538,7 +538,7 @@ FocusScope {
 
                     MouseArea {
                         anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
+                        cursorShape: Qt.ArrowCursor
                         onClicked: root.collapse()
                     }
                 }
