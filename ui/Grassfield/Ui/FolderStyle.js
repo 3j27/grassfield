@@ -1,4 +1,6 @@
 .pragma library
+.import "GraphemeData.js" as Data
+.import "IconModes.js" as Modes
 
 // Folder colours and a folder's own look (docs/specs/ui.md "Folder colours"). Pure functions, no I/O, nothing shared
 // with the icon appearance modes (IconModes.js): the colour step is separate from the mode step.
@@ -142,12 +144,21 @@ function lookup(path, store, attributes) {
 // The first grapheme cluster of the text (white space around it trimmed); "" when empty, longer than 16 UTF-16 units, or
 // when it holds a control, format (bidi marks, zero width space; the emoji joiner and tag characters are allowed),
 // line/paragraph separator, lone surrogate or replacement character. QML's JavaScript has neither Intl.Segmenter nor
-// Unicode property escapes: clusters are cut by code point ranges (emoji sequences, combining marks, variation
-// selectors, keycaps, flags). Scripts that need shaping rules (Indic conjuncts, Hangul jamo) may be cut differently
-// from Qt's segmenter; both sides then still keep a single capped cluster.
+// Unicode property escapes: the clusters are cut by the whole of UAX #29 (extended grapheme clusters: GB3 to GB13, with
+// GB9b prepended characters and GB9c Indic conjuncts) over GraphemeData.js, which is generated from the Unicode
+// properties (scripts/dev/gen-glyph-tables.sh, the same data as Files' apps/files/src/graphemedata.inc): both sides run
+// one algorithm over one set of data, tests/fixtures/glyph-vectors.json holds both to the same answers, and
+// scripts/dev/glyph-icu-compare.sh checks them against ICU's own segmenter.
+
 
 const GLYPH_MAX_UNITS = 16;
 const SPACE = /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g;
+
+// Class bits (GlyphClass, apps/files/src/folderstylelogic.h).
+const EXTEND = 1, SPACING = 2, JOINER = 4, REGIONAL = 8, PICTOGRAPH = 16, HANGUL_L = 32, HANGUL_V = 64, HANGUL_T = 128,
+    CONSONANT = 256, LINKER = 512, CONTROL = 1024, REJECTED = 2048, EMOJI = 4096, PREPEND = 8192, INCB_EXTEND = 16384;
+const HANGUL_FIRST = 0xAC00, HANGUL_LAST = 0xD7A3;
+// Hangul kinds: 0 none, 1 L, 2 V, 3 T, 4 LV, 5 LVT.
 
 function cpAt(s, i) {
     const c = s.charCodeAt(i);
@@ -159,90 +170,144 @@ function cpAt(s, i) {
     return c;
 }
 
-function inRanges(c, ranges) {
-    for (let i = 0; i < ranges.length; i += 2) {
-        if (c >= ranges[i] && c <= ranges[i + 1])
-            return true;
-    }
-    return false;
-}
-
-const EXTENDERS = [0x300, 0x36F, 0x483, 0x489, 0x591, 0x5BD, 0x5BF, 0x5BF, 0x5C1, 0x5C2, 0x5C4, 0x5C5, 0x5C7, 0x5C7, 0x610, 0x61A, 0x64B, 0x65F,
-                   0x670, 0x670, 0x6D6, 0x6DC, 0x6DF, 0x6E4, 0x6E7, 0x6E8, 0x6EA, 0x6ED, 0x900, 0x903, 0x93A, 0x93C, 0x93E, 0x94F, 0x951, 0x957,
-                   0x962, 0x963, 0xE31, 0xE31, 0xE34, 0xE3A, 0xE47, 0xE4E, 0x1AB0, 0x1AFF, 0x1DC0, 0x1DFF, 0x200C, 0x200C, 0x20D0, 0x20FF,
-                   0x302A, 0x302F, 0x3099, 0x309A, 0xFE00, 0xFE0F, 0xFE20, 0xFE2F, 0x1F3FB, 0x1F3FF, 0xE0020, 0xE007F, 0xE0100, 0xE01EF];
-// What a joiner (U+200D) can join to: pictographs.
-const PICTOGRAPHS = [0xA9, 0xA9, 0xAE, 0xAE, 0x203C, 0x203C, 0x2049, 0x2049, 0x2122, 0x2122, 0x2139, 0x2139, 0x2190, 0x21FF, 0x2300, 0x23FF,
-                     0x24C2, 0x24C2, 0x25A0, 0x25FF, 0x2600, 0x27BF, 0x2934, 0x2935, 0x2B00, 0x2BFF, 0x3030, 0x3030, 0x303D, 0x303D,
-                     0x3297, 0x3297, 0x3299, 0x3299, 0x1F000, 0x1FAFF];
-// Format characters other than the joiner and the tag characters.
-const FORMATS = [0xAD, 0xAD, 0x600, 0x605, 0x61C, 0x61C, 0x6DD, 0x6DD, 0x70F, 0x70F, 0x890, 0x891, 0x8E2, 0x8E2, 0x180E, 0x180E, 0x200B, 0x200C,
-                 0x200E, 0x200F, 0x202A, 0x202E, 0x2060, 0x2064, 0x2066, 0x206F, 0xFEFF, 0xFEFF, 0xFFF9, 0xFFFB, 0x110BD, 0x110BD, 0x110CD, 0x110CD,
-                 0x13430, 0x1343F, 0x1BCA0, 0x1BCA3, 0x1D173, 0x1D17A, 0xE0001, 0xE0001];
-
-function rejectedCodePoint(c) {
-    return c < 0x20 || (c >= 0x7F && c <= 0x9F) || (c >= 0xD800 && c <= 0xDFFF) || c === 0x2028 || c === 0x2029 || c === 0xFFFD || inRanges(c, FORMATS);
-}
-
 function unitsOf(c) {
     return c > 0xFFFF ? 2 : 1;
+}
+
+// The class mask of a code point: binary search in the generated runs [first, last, mask, ...].
+function classesOf(cp) {
+    const runs = Data.CLASSES;
+    let lo = 0, hi = runs.length / 3 - 1;
+    while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (cp < runs[3 * mid])
+            hi = mid - 1;
+        else if (cp > runs[3 * mid + 1])
+            lo = mid + 1;
+        else
+            return runs[3 * mid + 2];
+    }
+    return 0;
+}
+
+function hangulOf(cp, classes) {
+    if (cp >= HANGUL_FIRST && cp <= HANGUL_LAST)
+        return (cp - HANGUL_FIRST) % 28 === 0 ? 4 : 5;
+    if (classes & HANGUL_L)
+        return 1;
+    if (classes & HANGUL_V)
+        return 2;
+    if (classes & HANGUL_T)
+        return 3;
+    return 0;
+}
+
+// The end (UTF-16 units) of the first cluster of a non-empty text (the same algorithm as firstClusterEnd in
+// apps/files/src/folderstylelogic.cpp).
+function firstClusterEnd(t) {
+    const first = cpAt(t, 0);
+    const firstClasses = classesOf(first);
+    let end = unitsOf(first);
+    if (firstClasses & CONTROL) {
+        if (first === 0x0D && end < t.length && t.charCodeAt(end) === 0x0A)
+            end++;                                        // GB3: CR x LF; GB4/GB5: any other control stands alone
+        return end;
+    }
+    let hangul = hangulOf(first, firstClasses);
+    let prepended = (firstClasses & PREPEND) !== 0;
+    let regionals = (firstClasses & REGIONAL) ? 1 : 0;
+    let pict = (firstClasses & PICTOGRAPH) ? 1 : 0;      // 0 none, 1 an ExtPict (Extend*) seen, 2 ... then the joiner
+    let conjunct = (firstClasses & CONSONANT) ? 1 : 0;   // 1 a consonant seen, 2 ... then a linker
+    while (end < t.length) {
+        const cp = cpAt(t, end);
+        const classes = classesOf(cp);
+        if (classes & CONTROL)
+            break;
+        const h = hangulOf(cp, classes);
+        let join = false;
+        if (hangul === 1 && h !== 0 && h !== 3)
+            join = true;
+        else if ((hangul === 4 || hangul === 2) && (h === 2 || h === 3))
+            join = true;
+        else if ((hangul === 5 || hangul === 3) && h === 3)
+            join = true;
+        if (!join && (classes & (EXTEND | JOINER | SPACING)))
+            join = true;                                  // GB9, GB9a
+        if (!join && prepended)
+            join = true;                                  // GB9b
+        if (!join && (classes & CONSONANT) && conjunct === 2)
+            join = true;                                  // GB9c
+        if (!join && (classes & PICTOGRAPH) && pict === 2)
+            join = true;                                  // GB11
+        if (!join && (classes & REGIONAL) && regionals % 2 === 1)
+            join = true;                                  // GB12, GB13
+        if (!join)
+            break;
+        hangul = h;
+        prepended = (classes & PREPEND) !== 0;
+        regionals = (classes & REGIONAL) ? regionals + 1 : 0;
+        if (classes & PICTOGRAPH)
+            pict = 1;
+        else if (pict === 1 && (classes & EXTEND))
+            pict = 1;
+        else if (pict === 1 && (classes & JOINER))
+            pict = 2;
+        else
+            pict = 0;
+        if (classes & CONSONANT)
+            conjunct = 1;
+        else if (classes & LINKER)
+            conjunct = conjunct >= 1 ? 2 : 0;
+        else if (!(classes & INCB_EXTEND))
+            conjunct = 0;
+        end += unitsOf(cp);
+    }
+    return end;
 }
 
 function normalizeGlyph(text) {
     const t = String(text).replace(SPACE, "");
     if (t === "")
         return "";
-    const c = cpAt(t, 0);
-    let i = unitsOf(c);
-    if (c >= 0x1F1E6 && c <= 0x1F1FF && i < t.length) {
-        const n = cpAt(t, i);
-        if (n >= 0x1F1E6 && n <= 0x1F1FF)
-            i += unitsOf(n);
-    }
-    while (i < t.length) {
-        const n = cpAt(t, i);
-        if (inRanges(n, EXTENDERS)) {
-            i += unitsOf(n);
-        } else if (n === 0x200D) {
-            i += 1;
-            if (i < t.length && inRanges(cpAt(t, i), PICTOGRAPHS))
-                i += unitsOf(cpAt(t, i));
-        } else {
-            break;
-        }
-    }
-    const cluster = t.slice(0, i);
-    if (cluster.length > GLYPH_MAX_UNITS)
+    let cluster = t.slice(0, firstClusterEnd(t));
+    // A joiner with nothing to join is invisible baggage: it is dropped ("a" + joiner + star keeps the "a").
+    while (cluster.length > 0 && cluster.charCodeAt(cluster.length - 1) === 0x200D)
+        cluster = cluster.slice(0, -1);
+    if (cluster === "" || cluster.length > GLYPH_MAX_UNITS)
         return "";
     for (let k = 0; k < cluster.length; k += unitsOf(cpAt(cluster, k))) {
-        if (rejectedCodePoint(cpAt(cluster, k)))
+        if (classesOf(cpAt(cluster, k)) & REJECTED)
             return "";
     }
     return cluster;
 }
 
-// Code points drawn as colour emoji by default (no variation selector needed) among the BMP symbols.
-const EMOJI_BMP = [0x231A, 0x231B, 0x23E9, 0x23EC, 0x23F0, 0x23F0, 0x23F3, 0x23F3, 0x25FD, 0x25FE, 0x2614, 0x2615, 0x2648, 0x2653, 0x267F, 0x267F,
-                   0x2693, 0x2693, 0x26A1, 0x26A1, 0x26AA, 0x26AB, 0x26BD, 0x26BE, 0x26C4, 0x26C5, 0x26CE, 0x26CE, 0x26D4, 0x26D4, 0x26EA, 0x26EA,
-                   0x26F2, 0x26F3, 0x26F5, 0x26F5, 0x26FA, 0x26FA, 0x26FD, 0x26FD, 0x2705, 0x2705, 0x270A, 0x270B, 0x2728, 0x2728, 0x274C, 0x274C,
-                   0x274E, 0x274E, 0x2753, 0x2755, 0x2757, 0x2757, 0x2795, 0x2797, 0x27B0, 0x27B0, 0x27BF, 0x27BF, 0x2B1B, 0x2B1C, 0x2B50, 0x2B50,
-                   0x2B55, 0x2B55];
-
-// Whether a symbol is an emoji (drawn in its own colours, opaque) rather than a plain symbol (drawn as an engraved shade).
+// Whether a symbol is drawn as a colour emoji (opaque, its own colours) rather than as an engraved shade: the emoji
+// selector (U+FE0F), a keycap, or a character with the Emoji property (not the ASCII digits, # and *), unless the text
+// selector (U+FE0E) is in it.
+// (Text-by-default emoji characters such as an umbrella count as emoji without it: this system's fonts draw them in
+// colour.) The same as FolderStyleLogic::isEmoji.
 function isEmoji(glyph) {
     const t = String(glyph);
+    let emoji = false;
     for (let i = 0; i < t.length; i += unitsOf(cpAt(t, i))) {
         const c = cpAt(t, i);
-        if (c >= 0x1F000 || c === 0xFE0F || c === 0x20E3 || inRanges(c, EMOJI_BMP))
-            return true;
+        if (c === 0xFE0E)
+            return false;
+        if (c === 0xFE0F || c === 0x20E3 || (classesOf(c) & EMOJI))
+            emoji = true;
     }
-    return false;
+    return emoji;
 }
 
 // ---- Colour of a plain symbol (A2: icons >= 3:1) ----
-// The recoloured folder plate under the symbol is close to the folder colour (measured, tokens folderIconPlate*); the
-// symbol is that colour darkened in its hue until it reaches the minimum contrast against the plate, and lightened only
-// when even black cannot (a black or very dark folder).
+// The symbol is an engraved shade of the plate's hue: darker or lighter than the plate, whichever the icon mode asks for
+// (`prefersLighter`) and the plate allows, until it reaches the minimum contrast against the plate. The plate is MEASURED,
+// once per icon file and size bucket and independent of the colour, the icon mode and the appearance: FolderPlate reads
+// the RAW icon's pixels under the symbol (`sampleBox`), and the plate of any combination is then computed from those
+// samples by the same shader arithmetic as Qt's MultiEffect (`effectSamples`: the icon mode, then the folder colour,
+// `plateThrough`), so a new colour, mode or appearance never needs another measure. The estimate (`plateOf`) only serves
+// until the samples are known, and when they cannot be read (no icon).
 
 function rgbOf(color) {
     if (color !== null && typeof color === "object")
@@ -339,17 +404,34 @@ function lightestPlateOf(plate, mode, tokens) {
     return [plate[0] + (1 - plate[0]) * lift, plate[1] + (1 - plate[1]) * lift, plate[2] + (1 - plate[2]) * lift];
 }
 
+// Which way a plain symbol is engraved in an icon mode, one rule per mode so that the folders of a view agree: Dark engraves
+// the lighter shade (the mode darkens its folders); Tinted does when the mode's own folder plate (`reference`, the relative
+// luminance of the theme's folder plate through the mode) is dark; Default and Clear engrave the darker shade (macOS 26). A
+// plate that cannot reach the contrast that way (a black folder in Default, a pale one in Dark) takes the other shade.
+function prefersLighter(mode, reference, tokens) {
+    if (mode === "dark")
+        return true;
+    if (mode === "tinted")
+        return reference < tokens.folderIconGlyphLighterBelow;
+    return false;
+}
+
 // The colour (#rrggbb) of a plain symbol on a folder of colour `tint` (or the theme's own colour when !recolored) in
-// icon mode `mode` with icon tint `modeTint`.
-function glyphShade(recolored, tint, mode, modeTint, tokens) {
-    const plate = plateOf(recolored, tint, mode, modeTint, tokens);
-    const lightest = lightestPlateOf(plate, mode, tokens);
+// icon mode `mode` with icon tint `modeTint`. `measured`: the plate computed from the icon's samples ({dark, light, hue, ref},
+// see plateThrough), else the estimate.
+function glyphShade(recolored, tint, mode, modeTint, tokens, measured) {
+    const hasMeasure = measured !== undefined && measured !== null && measured.dark !== undefined;
+    const plate = hasMeasure ? measured.dark : plateOf(recolored, tint, mode, modeTint, tokens);
+    const lightest = hasMeasure ? measured.light : lightestPlateOf(plate, mode, tokens);
+    const reference = hasMeasure && measured.ref !== undefined ? measured.ref : relativeLuminance(plateOf(false, "", mode, modeTint, tokens));
     const target = tokens.folderIconGlyphMinContrast + tokens.folderIconGlyphContrastMargin;
-    const hueRgb = rgbOf(mode === "tinted" && !recolored ? modeTint : (recolored ? tint : tokens.folderIconThemePlate));
+    const hueRgb = recolored ? rgbOf(tint) : (hasMeasure ? measured.hue : rgbOf(mode === "tinted" ? modeTint : tokens.folderIconThemePlate));
     const hsl = toHsl(hueRgb);
     const at = l => fromHsl([hsl[0], hsl[1], l]);
+    const darkerOk = contrastRatio(at(0), plate) >= target;
+    const lighterOk = contrastRatio(at(1), lightest) >= target;
     // Darker: the lightest shade (largest l) in the hue that reaches the target against the darkest plate.
-    if (contrastRatio(at(0), plate) >= target) {
+    const darker = () => {
         let lo = 0, hi = hsl[2];
         for (let i = 0; i < 24; i++) {
             const mid = (lo + hi) / 2;
@@ -359,17 +441,131 @@ function glyphShade(recolored, tint, mode, modeTint, tokens) {
                 hi = mid;
         }
         return hexOf(at(lo));
+    };
+    // Lighter: the smallest l that reaches the target against the lightest plate.
+    const lighter = () => {
+        let lo = hsl[2], hi = 1;
+        for (let i = 0; i < 24; i++) {
+            const mid = (lo + hi) / 2;
+            if (contrastRatio(at(mid), lightest) >= target)
+                hi = mid;
+            else
+                lo = mid;
+        }
+        return hexOf(at(hi));
+    };
+    if (prefersLighter(mode, reference, tokens) && lighterOk)
+        return lighter();
+    if (darkerOk)
+        return darker();
+    if (lighterOk)
+        return lighter();
+    // Neither reaches it (a mid-grey plate under a margin this large): the better of black and white.
+    return contrastRatio(at(0), plate) >= contrastRatio(at(1), lightest) ? hexOf(at(0)) : hexOf(at(1));
+}
+
+// ---- The plate from samples of the raw icon ----
+
+// Samples of the pixels of a box [x0, x1) x [y0, y1) of an image (`data` = RGBA bytes, straight alpha, row after row,
+// `width` wide): a grid of at most n x n of them as one flat array [r, g, b, a, ...] (0..1), null when the box holds no
+// pixel or only transparent ones. A small fixed number whatever the icon size: everything after it is cheap.
+function sampleBox(data, width, height, x0, y0, x1, y1, n) {
+    const xa = Math.max(0, Math.floor(x0)), xb = Math.min(width, Math.ceil(x1));
+    const ya = Math.max(0, Math.floor(y0)), yb = Math.min(height, Math.ceil(y1));
+    const w = xb - xa, h = yb - ya;
+    if (w <= 0 || h <= 0)
+        return null;
+    const nx = Math.min(n, w), ny = Math.min(n, h);
+    const out = [];
+    let opaque = false;
+    for (let j = 0; j < ny; j++) {
+        const y = ya + Math.floor((j + 0.5) * h / ny);
+        for (let i = 0; i < nx; i++) {
+            const x = xa + Math.floor((i + 0.5) * w / nx);
+            const k = 4 * (y * width + x);
+            out.push(data[k] / 255, data[k + 1] / 255, data[k + 2] / 255, data[k + 3] / 255);
+            if (data[k + 3] > 0)
+                opaque = true;
+        }
     }
-    // A plate too dark for a darker symbol: lighten (the smallest l that reaches the target, else white).
-    if (contrastRatio(at(1), lightest) < target)
-        return "#ffffff";
-    let lo = hsl[2], hi = 1;
-    for (let i = 0; i < 24; i++) {
-        const mid = (lo + hi) / 2;
-        if (contrastRatio(at(mid), lightest) >= target)
-            hi = mid;
-        else
-            lo = mid;
+    return opaque ? out : null;
+}
+
+// One MultiEffect stage over samples, the arithmetic of Qt's multieffect shader (checked against the compiled shader's
+// source): on the colour c with alpha a (premultiplied), c = (c - 0.5a) (1 + contrast) + 0.5a + brightness a; gray =
+// dot(c, (0.299, 0.587, 0.114)); c = tint gray w + c (1 - w) with w = colorization; c = mix(gray, c, 1 + saturation);
+// alpha times opacity. Everything is homogeneous in a, so it is done on the straight colour. `p`: the parameters of
+// IconModes.effect or effect(); each stage's result is clamped to 0..1 (the layer or the screen is 8 bits).
+function effectSamples(samples, p) {
+    const col = rgbOf(p.colorizationColor);
+    const k = 1 + p.contrast, b = p.brightness, w = p.colorization, sat = 1 + p.saturation;
+    const opacity = p.opacity === undefined ? 1 : p.opacity;
+    const out = new Array(samples.length);
+    const clamp = v => Math.max(0, Math.min(1, v));
+    for (let i = 0; i < samples.length; i += 4) {
+        const r = (samples[i] - 0.5) * k + 0.5 + b;
+        const g = (samples[i + 1] - 0.5) * k + 0.5 + b;
+        const bl = (samples[i + 2] - 0.5) * k + 0.5 + b;
+        const gray = 0.299 * r + 0.587 * g + 0.114 * bl;
+        out[i] = clamp(gray + (col[0] * gray * w + r * (1 - w) - gray) * sat);
+        out[i + 1] = clamp(gray + (col[1] * gray * w + g * (1 - w) - gray) * sat);
+        out[i + 2] = clamp(gray + (col[2] * gray * w + bl * (1 - w) - gray) * sat);
+        out[i + 3] = samples[i + 3] * opacity;
     }
-    return hexOf(at(hi));
+    return out;
+}
+
+// The plate under a symbol from samples: every sample is composited over `backdrop` (rgb 0..1; a translucent plate, Clear
+// mode, shows the view behind it), `dark` = the mean of the darkest quarter, `light` = the mean of the lightest quarter, `hue`
+// = the mean colour weighted by alpha, `mean` = the mean of the composites. All rgb 0..1.
+function plateSummary(samples, backdrop) {
+    const bd = backdrop === undefined || backdrop === null ? [0, 0, 0] : backdrop;
+    const comp = [];
+    const sum = [0, 0, 0], total = [0, 0, 0];
+    let weight = 0;
+    for (let i = 0; i < samples.length; i += 4) {
+        const a = samples[i + 3];
+        const c = [samples[i] * a + bd[0] * (1 - a), samples[i + 1] * a + bd[1] * (1 - a), samples[i + 2] * a + bd[2] * (1 - a)];
+        comp.push({c: c, l: relativeLuminance(c)});
+        for (let q = 0; q < 3; q++) {
+            sum[q] += samples[i + q] * a;
+            total[q] += c[q];
+        }
+        weight += a;
+    }
+    if (comp.length === 0 || weight <= 0)
+        return null;
+    comp.sort((p, q) => p.l - q.l);
+    const n = Math.max(1, Math.ceil(comp.length / 4));
+    const dark = [0, 0, 0], light = [0, 0, 0];
+    for (let i = 0; i < n; i++) {
+        for (let q = 0; q < 3; q++) {
+            dark[q] += comp[i].c[q] / n;
+            light[q] += comp[comp.length - 1 - i].c[q] / n;
+        }
+    }
+    return {dark: dark, light: light, hue: [sum[0] / weight, sum[1] / weight, sum[2] / weight], mean: [total[0] / comp.length, total[1] / comp.length, total[2] / comp.length]};
+}
+
+// The plate of a combination from the raw icon's samples: through the icon mode (IconModes.effect) and then, when the folder
+// is recoloured, through the folder colour (effect). `modeTint`: the icon tint (only Tinted uses it); `tint`: the folder
+// colour; `backdrop`: rgb of the view behind a translucent plate. Adds `ref`: the relative luminance of the mode's own
+// folder plate (no folder colour), what `prefersLighter` reads. null when there is nothing to read.
+function plateThrough(samples, mode, modeTint, recolored, tint, backdrop, tokens) {
+    const m = Modes.effect(mode, modeTint, tokens);
+    const modeSamples = m.enabled ? effectSamples(samples, m) : samples;
+    const own = plateSummary(modeSamples, backdrop);
+    if (own === null)
+        return null;
+    const out = recolored ? plateSummary(effectSamples(modeSamples, effect(tint, tokens)), backdrop) : own;
+    if (out === null)
+        return null;
+    return {dark: out.dark, light: out.light, hue: out.hue, ref: relativeLuminance(own.mean)};
+}
+
+// The symbol's box in a square icon image of edge `size`: [x0, y0, x1, y1] (tokens glyphScale, glyphCenterY).
+function glyphBox(size, tokens) {
+    const half = size * tokens.folderIconGlyphScale / 2;
+    const cy = size * tokens.folderIconGlyphCenterY;
+    return [size / 2 - half, cy - half, size / 2 + half, cy + half];
 }

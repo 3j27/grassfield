@@ -836,6 +836,11 @@ Singleton {
                 + " dnd=" + root.dnd + " center=" + root.centerOpen;
         }
 
+        // Test hook: remove every entry (history, banners, Center); the UI has no global Clear All.
+        function clearAll(): void {
+            root.clearAll();
+        }
+
         // Test hook: dismiss every banner as a swipe would.
         function dismissAll(): void {
             while (root.bannerCount > 0)

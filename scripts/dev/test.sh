@@ -4,6 +4,11 @@ set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
 status=0
+# Skipped checks are reported on their own (a SKIP line is never a pass): every line with "SKIP" printed by a test or
+# by this script is collected here and repeated in the summary at the end.
+skips=()
+collect_skips() { local line; while IFS= read -r line; do [[ $line == *SKIP* ]] && skips+=("$line"); done <<<"$1"; return 0; }
+skip() { echo "SKIP: $1"; skips+=("SKIP: $1"); }
 # Offscreen tests must not load the desktop's platform theme (QT_QPA_PLATFORMTHEME=gtk3 calls gtk_init, which
 # needs a display and fails inside the Claude Code sandbox).
 unset QT_QPA_PLATFORMTHEME
@@ -37,19 +42,23 @@ for dir in tests/shell/*/ tests/security/*/; do
   out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" GRASSFIELD_LANG=en \
     XDG_RUNTIME_DIR="$GRASSFIELD_TEST_TMP/runtime" XDG_CACHE_HOME="$GRASSFIELD_TEST_TMP/cache" \
     timeout 60 qs -p "$dir" --no-color 2>&1) || { echo "$out"; echo "FAIL: $dir"; status=1; continue; }
-  echo "$out" | grep -E "PASS|FAIL" || { echo "$out"; status=1; }
+  echo "$out" | grep -E "PASS|FAIL|SKIP" || { echo "$out"; status=1; }
+  collect_skips "$out"
   if grep -q "FAIL" <<<"$out"; then status=1; fi
 done
 # The CMake build of ui/i18n (packaging/arch/PKGBUILD) installs a loadable plugin: i18n_live runs against it.
 if command -v cmake >/dev/null && command -v ninja >/dev/null; then
   scripts/dev/i18n-cmake-check.sh || { echo "FAIL: scripts/dev/i18n-cmake-check.sh"; status=1; }
 else
-  echo "SKIP: i18n CMake check (cmake/ninja not installed)"
+  skip "i18n CMake check (cmake/ninja not installed)"
 fi
 # Plain shell tests: tests/shell/*.sh print PASS/FAIL and exit non-zero on failure.
 for script in tests/shell/*.sh; do
   [[ -f $script ]] || continue
-  bash "$script" || { echo "FAIL: $script"; status=1; }
+  script_out=$(bash "$script" 2>&1) && script_rc=0 || script_rc=$?
+  [[ -n $script_out ]] && echo "$script_out"
+  collect_skips "$script_out"
+  ((script_rc == 0)) || { echo "FAIL: $script"; status=1; }
 done
 # Grassfield Files pure logic (sort keys, sizes, dates, path segments, names): gtest, built here.
 if [[ -f /usr/include/gtest/gtest.h ]]; then
@@ -59,7 +68,7 @@ if [[ -f /usr/include/gtest/gtest.h ]]; then
     echo "FAIL: building tests/unit/files"; status=1
   fi
 else
-  echo "SKIP: tests/unit/files (gtest not installed)"
+  skip "tests/unit/files (gtest not installed)"
 fi
 # Grassfield Preview pure logic (URL validation, size caps, file-type routing): gtest, built here.
 if [[ -f /usr/include/gtest/gtest.h ]]; then
@@ -69,7 +78,7 @@ if [[ -f /usr/include/gtest/gtest.h ]]; then
     echo "FAIL: building tests/unit/preview"; status=1
   fi
 else
-  echo "SKIP: tests/unit/preview (gtest not installed)"
+  skip "tests/unit/preview (gtest not installed)"
 fi
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards): gtest, built here.
 # The peer-to-peer D-Bus case skips itself inside the sandbox (no Unix sockets).
@@ -80,7 +89,7 @@ if [[ -f /usr/include/gtest/gtest.h ]]; then
     echo "FAIL: building tests/unit/menu-bridge"; status=1
   fi
 else
-  echo "SKIP: tests/unit/menu-bridge (gtest not installed)"
+  skip "tests/unit/menu-bridge (gtest not installed)"
 fi
 # Isolation: no test or dev script may start an app (grassfield-settings/files/preview, foot, ...) without
 # scripts/dev/isolated.sh (nothing may be written to the owner's home), and the checker itself is tested.
@@ -92,5 +101,11 @@ python3 -I tests/visual/test_contrast.py || status=1
 python3 -I tests/visual/test_contrast_tokens.py || status=1
 if [[ -x compositor/build/grassfield-compositor-tests ]]; then
   compositor/build/grassfield-compositor-tests || status=1
+fi
+if ((${#skips[@]})); then
+  echo "summary: ${#skips[@]} check(s) SKIPPED (nothing was verified by them):"
+  printf '  %s\n' "${skips[@]}"
+else
+  echo "summary: no check skipped"
 fi
 exit $status

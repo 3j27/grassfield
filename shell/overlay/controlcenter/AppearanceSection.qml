@@ -93,7 +93,7 @@ Column {
 
                 MouseArea {
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
+                    cursorShape: Qt.ArrowCursor
                     onClicked: Settings.setAppearance(choice.modelData.id)
                 }
             }

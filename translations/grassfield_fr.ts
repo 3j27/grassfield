@@ -114,8 +114,52 @@
         <translation>Pointeur</translation>
     </message>
     <message>
-        <source>The pointer changes size as you drag. Apps that are open when you change it keep the previous size until you quit and reopen them.</source>
-        <translation>Le pointeur change de taille pendant que vous faites glisser. Les apps ouvertes au moment du changement gardent l’ancienne taille jusqu’à ce que vous les quittiez et les rouvriez.</translation>
+        <source>White</source>
+        <translation>Blanc</translation>
+    </message>
+    <message>
+        <source>Black</source>
+        <translation>Noir</translation>
+    </message>
+    <message>
+        <source>Blue</source>
+        <translation>Bleu</translation>
+    </message>
+    <message>
+        <source>Purple</source>
+        <translation>Violet</translation>
+    </message>
+    <message>
+        <source>Pink</source>
+        <translation>Rose</translation>
+    </message>
+    <message>
+        <source>Red</source>
+        <translation>Rouge</translation>
+    </message>
+    <message>
+        <source>Orange</source>
+        <translation>Orange</translation>
+    </message>
+    <message>
+        <source>Yellow</source>
+        <translation>Jaune</translation>
+    </message>
+    <message>
+        <source>Green</source>
+        <translation>Vert</translation>
+    </message>
+    <message>
+        <source>The pointer colours could not be applied: %1. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: %1. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>Applying the new pointer colours…</source>
+        <translation>Application des nouvelles couleurs du pointeur…</translation>
+    </message>
+    <message>
+        <source>The pointer changes as you drag, and apps that use the system pointer follow it. Without the Grassfield compositor extension the pointer changes the next time it changes shape. Apps that draw their own pointer keep the previous size and colours until you quit and reopen them.</source>
+        <translation>Le pointeur change pendant que vous faites glisser, et les apps qui utilisent le pointeur du système le suivent. Sans l’extension de compositeur Grassfield, le pointeur change à son prochain changement de forme. Les apps qui dessinent leur propre pointeur gardent l’ancienne taille et les anciennes couleurs jusqu’à ce que vous les quittiez et les rouvriez.</translation>
     </message>
     <message>
         <source>Pointer size</source>
@@ -128,6 +172,18 @@
     <message>
         <source>Large</source>
         <translation>Grande</translation>
+    </message>
+    <message>
+        <source>Pointer outline colour</source>
+        <translation>Couleur du contour du pointeur</translation>
+    </message>
+    <message>
+        <source>Pointer fill colour</source>
+        <translation>Couleur de remplissage du pointeur</translation>
+    </message>
+    <message>
+        <source>Reset Colour</source>
+        <translation>Réinitialiser la couleur</translation>
     </message>
 </context>
 <context>
@@ -1273,6 +1329,25 @@
     </message>
 </context>
 <context>
+    <name>ColorWell</name>
+    <message>
+        <source>Preset colours</source>
+        <translation>Couleurs prédéfinies</translation>
+    </message>
+    <message>
+        <source>Saturation and brightness</source>
+        <translation>Saturation et luminosité</translation>
+    </message>
+    <message>
+        <source>Hue</source>
+        <translation>Teinte</translation>
+    </message>
+    <message>
+        <source>Colour (#rrggbb)</source>
+        <translation>Couleur (#rrggbb)</translation>
+    </message>
+</context>
+<context>
     <name>ColumnView</name>
     <message>
         <source>Columns</source>
@@ -2096,6 +2171,10 @@
         <translation>le fichier personnel des aspects de dossiers (%1) est illisible ; il est laissé tel quel</translation>
     </message>
     <message>
+        <source>the list of folders customized for your account only would be too large (over %1 MiB, long folder paths); reset some of them first</source>
+        <translation>la liste des dossiers personnalisés pour votre compte seulement serait trop grande (plus de %1 Mio, chemins de dossiers longs) ; réinitialisez-en quelques-uns d’abord</translation>
+    </message>
+    <message>
         <source>not a folder on this computer</source>
         <translation>pas un dossier de cet ordinateur</translation>
     </message>
@@ -2801,8 +2880,8 @@
         <translation>Accessibilité</translation>
     </message>
     <message>
-        <source>pointer cursor size mouse large</source>
-        <translation>pointeur curseur taille souris grand grande</translation>
+        <source>pointer cursor size mouse large color colour outline fill</source>
+        <translation>pointeur curseur taille souris grand grande couleur contour remplissage</translation>
     </message>
     <message>
         <source>Desktop &amp; Dock</source>
@@ -3015,16 +3094,8 @@
         <translation>Aucune notification</translation>
     </message>
     <message>
-        <source>Clear</source>
-        <translation>Effacer</translation>
-    </message>
-    <message>
         <source>Close</source>
         <translation>Fermer</translation>
-    </message>
-    <message>
-        <source>Clear notification</source>
-        <translation>Effacer la notification</translation>
     </message>
     <message>
         <source>Show Less</source>
@@ -3279,6 +3350,17 @@
     <message>
         <source>The volume could not be ejected.</source>
         <translation>Le volume n’a pas pu être éjecté.</translation>
+    </message>
+</context>
+<context>
+    <name>PointerPreview</name>
+    <message>
+        <source>Pointer preview</source>
+        <translation>Aperçu du pointeur</translation>
+    </message>
+    <message>
+        <source>Outline %1, fill %2</source>
+        <translation>Contour %1, remplissage %2</translation>
     </message>
 </context>
 <context>

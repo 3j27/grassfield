@@ -267,6 +267,16 @@ FolderModel::FolderModel(QObject *parent)
         if (!m_expected.isEmpty() && !m_checkingExpected)
             m_expectTimer.start();
     };
+    m_attrTimer.setSingleShot(true);
+    connect(&m_attrTimer, &QTimer::timeout, this, &FolderModel::revalidateStyles);
+    // 200 ms of quiet, at the latest kAttrMaxWaitMs after the first change of a burst: steady activity in the folder (a
+    // change every 50 ms) must not postpone showing a look set from outside for ever.
+    connect(&m_attrTimer, &QTimer::timeout, this, [this] { m_attrBurst.invalidate(); });
+    connect(&m_attrWatcher, &QFileSystemWatcher::directoryChanged, this, [this] {
+        if (!m_attrBurst.isValid())
+            m_attrBurst.start();
+        m_attrTimer.start(FolderStyleLogic::debounceDelay(kAttrQuietMs, kAttrMaxWaitMs, m_attrBurst.elapsed()));
+    });
     m_structureTimer.setSingleShot(true);
     m_structureTimer.setInterval(0);
     connect(&m_structureTimer, &QTimer::timeout, this, [this] {
@@ -352,6 +362,7 @@ void FolderModel::setUrl(const QUrl &url)
         m_results->clear();
         m_dirModel->openUrl(m_url);
     }
+    watchShownFolder();
     emit urlChanged();
     emit rootChanged();
     emit currentRowChanged();
@@ -598,6 +609,32 @@ FolderStyleLogic::Style FolderModel::styleOf(const KFileItem &item) const
     const FolderStyleLogic::Style style = path.isEmpty() ? FolderStyleLogic::Style() : m_styleStore->read(path);
     m_styles.insert(url, style);
     return style;
+}
+
+void FolderModel::watchShownFolder()
+{
+    const QStringList old = m_attrWatcher.directories();
+    if (!old.isEmpty())
+        m_attrWatcher.removePaths(old);
+    m_attrTimer.stop();
+    m_attrBurst.invalidate();
+    // A local folder only (a watch on a network mount is KIO's business), and only when looks are shown at all.
+    if (m_styleStore && m_url.isLocalFile() && !TagLogic::isSearchUrl(m_url))
+        m_attrWatcher.addPath(m_url.toLocalFile());
+}
+
+// The rows whose look was read: read again, and only the ones that changed are announced.
+void FolderModel::revalidateStyles()
+{
+    if (!m_styleStore)
+        return;
+    for (auto it = m_styles.begin(); it != m_styles.end(); ++it) {
+        const FolderStyleLogic::Style now = m_styleStore->read(it.key().toLocalFile());
+        if (now != *it) {
+            *it = now;
+            emitRowChanged(it.key(), {FolderColorRole, FolderGlyphRole});
+        }
+    }
 }
 
 void FolderModel::folderStylesChanged(const QList<QUrl> &urls)

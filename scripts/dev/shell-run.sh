@@ -172,7 +172,8 @@ env "${timing[@]}" "${bus_env[@]}" PATH="$root/scripts/dev/open-shims:$PATH" GRA
   GRASSFIELD_STATE_HOME="$dev/state" GRASSFIELD_CONFIG_HOME="$dev/config" GRASSFIELD_DEV=1 \
   GRASSFIELD_PRIVATE_BUS="$private" GRASSFIELD_SETTINGS_CMD="$settings_cmd" GRASSFIELD_PREVIEW_CMD="$preview_cmd" \
   GRASSFIELD_FILES_CMD="$files_cmd" GRASSFIELD_OPEN_POLICY="$open_policy" GRASSFIELD_OPEN_LOG="$open_log" \
-  GRASSFIELD_SEARCH_PLOCATE_DB="$plocate_db" \
+  GRASSFIELD_SEARCH_PLOCATE_DB="$plocate_db" GRASSFIELD_CURSORS_BUILD="$root/branding/cursors/build.sh" \
+  GRASSFIELD_CURSORS_ICONS="$dev/share/icons" \
   QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$root/ui:$dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$dev/translations" \
   setsid "${launch[@]}" >"$dev/shell.log" 2>&1 </dev/null &
 shell_pid=$!

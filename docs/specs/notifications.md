@@ -13,9 +13,15 @@ Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belong
 - The Notifications column opens from the clock in the menu bar (click). macOS model (F1 gap 7): no full-height panel; a
   344 pt column of floating glass cards, the width of a banner, 16 pt from the right edge and below the bar. No title capsule (the
   reference has none); cards are grouped by app, newest first; the first card of a group carries the
-  app name, the count and Clear, the last visible one carries Show All / Show Less; widgets placed in the Center follow as glass
-  tiles; the footer (Clear All pill while there are notifications, Edit Widgets pill, 24 pt close circle) is centred under the column, 16 pt below the last card (at the bottom when the list fills the column). The banners hide while the column or Quick Settings is open.
-  Delete or Backspace on a focused card clears it and focuses the next card (the previous one when it was the last, the column when none is left).
+  app name and the count; widgets placed in the Center follow as glass tiles; the footer (Edit Widgets pill, 24 pt close circle) is
+  centred under the column, 16 pt below the last card (at the bottom when the list fills the column). The banners hide while the column or Quick Settings is open.
+  macOS 26 clear model (owner decision 2026-10-19, batch 4): there is NO permanent "Clear All" pill. Hovering (or focusing) a card
+  shows a small round x at its top-left corner (accessible name "Close", fr « Fermer »); hovering a group shows, on its header card,
+  "Show Less" (when the group was expanded with "Show All") and a round x that grows into a "Clear All" pill (fr « Tout effacer ») under
+  the pointer or the keyboard focus and clears the whole group. A cleared card (or every card of a cleared group) slides out to the
+  right while it fades (`motion.normal`), then the column reflows (cards below slide up). Keyboard: Tab reaches each card, then
+  its x, then the group controls; Space or Return on the x clears; Delete or Backspace on a focused card clears it and focuses the next card
+  (the previous one when it was the last, the column when none is left).
   Esc, the close circle or a click outside the cards closes.
 - Do Not Disturb (from Quick Settings) silences banners; the menu bar shows a moon icon.
 
@@ -32,7 +38,7 @@ Grassfield sound (later), cross-device sync.
 4. N4 Clicking the banner invokes the `default` action if present and focuses the sender window if known.
 5. N5 Actions render as buttons (max 3 visible, rest in a "More" menu); each invokes the real action.
 6. N6 History persisted per ADR-0004 (0600, ≤ 200 entries, ≤ 7 days, transient not stored).
-7. N7 Notifications panel: opens from the clock or `SUPER+N`; grouped by app; per-group Clear; "Clear all".
+7. N7 Notifications panel: opens from the clock or `SUPER+N`; grouped by app; per-card x and per-group "Clear All" (hover/focus; no global Clear All).
 8. N8 DND: toggle (Quick Settings); suppresses banners except critical; menu bar moon indicator.
 9. N9 Markup is sanitized (allow b, i, u, a href shown as text); images limited to 256 px.
 10. N10 Never shown on the lock screen by default (L4).
@@ -60,6 +66,14 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
 ## Implementation notes (M2)
 - Code: `shell/notifications/` (`Notifications.qml` singleton: server, banner queue, history, IPC; `Banners.qml`/`Banner.qml`;
   `NotificationCenter.qml`; `NotificationContent.qml`; pure `Sanitizer.js`, `History.js`).
+- Clear model (NotificationCenter.qml): each delegate owns the slide-out (`beginLeave(group, refocus)`: `slide` + `opacity` animations,
+  `motion.normal`, `Appearance.duration` so reduced motion shortens it); the end of the animation calls `Notifications.clear(key)` or, for a
+  group, `Notifications.clearApp(app)` once (from the header card; the other cards of the group, found through `leavingApp`, only animate).
+  `ListView.displaced` is not used: the delegates' `y` is re-laid out by the ListView and the blur regions follow through `motionTick`
+  (bumped on every `y`/`slide` change). The list is `panel.gutter` (= close size / 3) wider and taller than the column so the x
+  can stick out of the card's corner like the banner's. The keyboard focus after a clear goes to the neighbour found BY KEY (`neighbourKey`
+  before the clear, `focusKey` after `forceLayout()`): the list drops a cleared delegate only on its next layout, and that layout took the focus away again.
+  `Notifications.clearAll()` stays as the IPC test hook `clearAll()` only; the UI has no global Clear All.
 - Banners: one layer-shell window (Overlay layer, no keyboard focus) on the first screen only; input and blur follow the cards.
   Timeout: `expire_timeout` (seconds), -1 = 5 s, 0 and critical = never. Expiry only hides the banner: the entry stays in the Center
   and stays actionable while the sender keeps the notification alive. x / drag-dismiss calls `dismiss()` (sender told "dismissed"),
@@ -96,7 +110,7 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   the 0600 mode (verified with `stat -c %a`). Max 200 entries, max 7 days (pruned on every arrival and every 30 s), `transient` and
   low-urgency non-resident notifications are not stored, images are not stored, actions are stored as labels and restored non-actionable.
   Writes are debounced 400 ms and blocked until the file was read, so a slow start never wipes the history.
-- IPC target `notifications`: `toggleCenter()`, `dnd(on)`, and test hooks `invoke(actionId)` (newest live notification; "default" =
+- IPC target `notifications`: `toggleCenter()`, `dnd(on)`, and test hooks `clearAll()`, `invoke(actionId)` (newest live notification; "default" =
   banner click), `status()`, `dismissAll()`.
 
 ## Dev / nested testing (private bus)
@@ -121,11 +135,23 @@ N5 `notify-send -A snooze=Snooze` prints `snooze` after `ipc call notifications 
 N7 Center opens by IPC, Esc (wtype) closes · N8 DND hides banners, moon in bar, critical still shown · N9 unit tests (L0).
 Screenshots under `.dev/shots/` (not committed).
 
+## Verified (L1, nested, private bus, 2026-10-19: macOS 26 clear model)
+Pointer (`scripts/dev/pointer.sh`) and keyboard (`scripts/dev/keys.sh`) on the nested private bus: no Clear All pill in the footer; hover on a card
+shows its x at the top-left corner and, on the group header, the round group x; hover on the group x grows it into "Clear All"; the x of a card clears
+only that card (history 8 -> 7) and the column reflows; "Clear All" of the Mail group removed its 4 entries (7 -> 3); Show All then "Show Less" on the header;
+Tab reaches a card, then its x (focus ring), Space clears and the focus lands on the next card; Delete on a focused card clears it and focuses the next one.
+A2 (`tests/visual/contrast.sh --surfaces desktop,notificationcenter,notificationcenterhover,notificationcenterclear --wallpapers white,black,noise
+--transparency 0.25`): 102 cells, 0 failures; card x glyph min 7.1:1, group x glyph min 7.5:1, "Clear All" pill label min 14.9:1 (light and dark).
+Not verified: transparency 0.6, Reduce Motion, two outputs, the fr strings on screen (catalog entries only), the pill growth frame by frame
+(the nested compositor draws few frames while idle; only the end states were captured).
+
 ## Known limitations
 - Inline reply depends on Quickshell support; otherwise hidden (not faked). Not offered in M2 (`inlineReplySupported: false`).
 - No per-app notification sounds in M2.
-- Pointer interactions (hover pause, x button, drag dismiss, button clicks) are implemented with Qt handlers but were NOT verified with a
-  real pointer in the nested session (no safe input injection for pointers); keyboard (Esc) and IPC hooks were.
+- Banner pointer interactions (hover pause, x button, drag dismiss) were NOT verified with a real pointer. The Notifications column
+  clear model (hover x on a card, group x growing into Clear All, Show Less, slide-out) was verified with `scripts/dev/pointer.sh` on the
+  nested private bus (2026-10-19); the nested compositor draws few frames while idle, so the slide-out can look frozen in a capture taken
+  right after the click (it finishes on the next frames; a pointer nudge drives them).
 - Banners appear on the first screen only; no per-app settings UI (only the global `notifications.previews`).
 - "unlocked" previews behave like "always" until the lock screen (L4) exists.
 - Replacing notifications (same id) update the entry and restart the banner timer, but do not re-show a banner that already expired.

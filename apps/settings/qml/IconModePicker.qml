@@ -123,7 +123,7 @@ FocusScope {
 
                 MouseArea {
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
+                    cursorShape: Qt.ArrowCursor
                     onClicked: {
                         root.forceActiveFocus();
                         root.picked(tile.modelData.id);

@@ -40,6 +40,9 @@ namespace gf::ipc {
     // The Stages listeners, hl.plugin.grassfield.stages and hl.plugin.grassfield.config are registered (whatever the flag).
     bool stagesAvailable();
 
+    // hl.plugin.grassfield.cursor_refresh is registered and the refresh is ready (Hyprland's renderer exists).
+    bool cursorRefreshAvailable();
+
     // Registers the Lua function(s) (hl.plugin.grassfield.*) and the hyprctl command. Returns false if any failed.
     bool registerAll();
 

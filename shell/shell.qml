@@ -82,6 +82,26 @@ ShellRoot {
         value: Settings.pointerSize
     }
 
+    // Pointer colours: the cursor theme is regenerated (debounced, off the UI thread) and switched to; the state of the
+    // build is written next to grassfield.json for the Settings app.
+    Binding {
+        target: Pointer
+        property: "outlineColor"
+        value: Settings.pointerOutlineColor
+    }
+
+    Binding {
+        target: Pointer
+        property: "fillColor"
+        value: Settings.pointerFillColor
+    }
+
+    Binding {
+        target: Pointer
+        property: "statusPath"
+        value: Settings.configDir + "/pointer-theme.json"
+    }
+
     // One degraded-mode notice when the compositor extension never answered; withdrawn if it loads later.
     property string degradedNoticeKey: ""
 

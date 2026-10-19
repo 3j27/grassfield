@@ -19,7 +19,7 @@ IFS=:
     done
     [ -d "$d/applications" ] || continue
     printf '/%s/applications/\n' "${d#/}"
-    find -L "$d/applications" -name '*.desktop' ! -name "*$NL*" ! -path "*$NL*" -printf '%P\n' 2>/dev/null
+    find -L "$d/applications" -type f -readable -size -256k -name '*.desktop' ! -name "*$NL*" ! -path "*$NL*" -printf '%P\n' 2>/dev/null
   done
 } | awk '
   /^[GSA]\t/ { print; next }

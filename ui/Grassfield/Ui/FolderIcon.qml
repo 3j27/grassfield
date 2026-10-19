@@ -30,8 +30,17 @@ Item {
     readonly property string glyph: FolderStyle.normalizeGlyph(root.folderGlyph)
     readonly property bool hasGlyph: root.glyph !== ""
     readonly property bool glyphIsEmoji: FolderStyle.isEmoji(root.glyph)
-    // The engraved shade of the folder colour (opaque).
-    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.mode, root.tint, Tokens)
+    readonly property string modeName: IconModes.normalizeMode(root.mode)
+    // The plate under the symbol (FolderPlate): the raw icon's pixels under it are read once per icon file and size bucket
+    // (never per colour), the plate of this icon's mode, colour and appearance is computed from them. A plain symbol is
+    // shaded against it. undefined until read, null when it could not be (the estimate of FolderStyle serves, and serves
+    // until then). An emoji is opaque and in its own colours: it needs no plate.
+    readonly property bool needsPlate: root.hasGlyph && !root.glyphIsEmoji
+    readonly property string rawKey: FolderPlate.rawKeyOf(root.source, root.size)
+    readonly property var plate: root.needsPlate ? FolderPlate.plateOf(root.rawKey, root.modeName, root.modeName === "tinted" ? String(root.tint) : "",
+                                                                       root.recolored ? String(root.folderTint) : "", Appearance.dark) : undefined
+    // The engraved shade of the plate's colour (opaque).
+    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.modeName, root.tint, Tokens, root.plate)
     // Its own hex colour, else the global colour (which is the accent for "accent").
     readonly property color folderTint: FolderStyle.colorOf(root.setting, Appearance.colors.accent)
 
@@ -54,11 +63,121 @@ Item {
         }
     }
 
+    // ---- Plate read: the raw icon's pixels under the symbol, by one icon at a time, never from the visible icon ----
+    function measure() {
+        if (!root.needsPlate || root.plate !== undefined || root.width <= 0 || root.height <= 0 || !root.visible || root.Window.window === null
+            || String(root.source) === "" || probe.active)
+            return;
+        const key = root.rawKey;
+        if (!FolderPlate.claim(key))
+            return;
+        probe.key = key;
+        probe.bucket = FolderPlate.bucketOf(root.size);
+        probe.url = String(root.source);
+        probe.active = true;
+    }
+
+    function scheduleMeasure() {
+        settle.restart();
+    }
+
+    // Changes arrive in bursts (key parts, window): look once after them, in a turn of the event loop of its own.
+    Timer {
+        id: settle
+
+        interval: 0
+        onTriggered: root.measure()
+    }
+
+    onNeedsPlateChanged: root.scheduleMeasure()
+    onRawKeyChanged: root.scheduleMeasure()
+    onVisibleChanged: root.scheduleMeasure()
+    Component.onCompleted: root.scheduleMeasure()
+    Component.onDestruction: {
+        if (probe.key !== "")
+            FolderPlate.release(probe.key);
+    }
+
+    Connections {
+        target: root.Window
+
+        function onWindowChanged() {
+            root.scheduleMeasure();
+        }
+    }
+
+    // A claim released by another icon (it went away) or samples stored: look again.
+    Connections {
+        target: FolderPlate
+
+        function onRevisionChanged() {
+            if (root.needsPlate && root.plate === undefined)
+                root.scheduleMeasure();
+        }
+    }
+
+    Loader {
+        id: probe
+
+        property string key: ""
+        property string url: ""
+        property int bucket: 0
+
+        function finish(samples) {
+            const k = probe.key;
+            probe.key = "";
+            probe.active = false;
+            if (k !== "")
+                FolderPlate.store(k, samples);
+        }
+
+        active: false
+
+        sourceComponent: Canvas {
+            id: canvas
+
+            function read() {
+                if (probe.key === "")
+                    return;
+                const ctx = canvas.getContext("2d");
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(probe.url, 0, 0, probe.bucket, probe.bucket);
+                // Only the box under the symbol is read back.
+                const box = FolderStyle.glyphBox(probe.bucket, Tokens);
+                const x0 = Math.max(0, Math.floor(box[0])), y0 = Math.max(0, Math.floor(box[1]));
+                const w = Math.max(1, Math.min(probe.bucket, Math.ceil(box[2])) - x0), h = Math.max(1, Math.min(probe.bucket, Math.ceil(box[3])) - y0);
+                const data = ctx.getImageData(x0, y0, w, h);
+                probe.finish(FolderStyle.sampleBox(data.data, data.width, data.height, 0, 0, data.width, data.height, Tokens.folderIconPlateSamples));
+            }
+
+            width: probe.bucket
+            height: probe.bucket
+            opacity: 0
+            renderTarget: Canvas.Image
+            renderStrategy: Canvas.Immediate
+            onImageLoaded: canvas.read()
+            onAvailableChanged: {
+                if (canvas.available && probe.key !== "" && canvas.isImageLoaded(probe.url))
+                    canvas.read();
+            }
+            Component.onCompleted: canvas.loadImage(probe.url)
+
+            Timer {
+                interval: 3000
+                running: true
+                onTriggered: probe.finish(null)
+            }
+        }
+    }
+
     // The symbol is drawn over the effect, clipped to the icon (a hostile value cannot draw outside it). Emoji keep their
     // own colours and are opaque (their colour glyphs ignore `color`; a text-presentation fallback uses the shade); a
-    // plain symbol is an engraved shade of the folder's colour (A2: >= 3:1 against the plate) with a light edge under it.
+    // plain symbol is an engraved shade of the plate's colour (A2: >= 3:1 against the plate, FolderStyle.glyphShade) with a
+    // light edge under it. It is drawn at once, with the estimate of the plate, and settles on the measured plate with a
+    // cross-fade of one motion token (no pop).
     Item {
         id: glyphBox
+
         objectName: "glyphBox"
         anchors.fill: parent
         clip: true
@@ -79,6 +198,7 @@ Item {
 
         Text {
             id: glyphText
+
             objectName: "glyph"
             y: root.height * Tokens.folderIconGlyphCenterY - height / 2
             width: root.width
@@ -89,6 +209,12 @@ Item {
             textFormat: Text.PlainText
             color: root.glyphColor
             font.pixelSize: Math.max(1, Math.round(root.size * Tokens.folderIconGlyphScale))
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: Appearance.duration(Tokens.motionNormal)
+                }
+            }
         }
     }
 }
