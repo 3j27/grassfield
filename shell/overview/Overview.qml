@@ -74,8 +74,7 @@ Scope {
     function show(): void {
         if (open)
             return;
-        focusTimer.stop();
-        focusPlan = null;
+        FocusReturn.cancelFallback();
         previous = DesktopState.holdsKeyboard ? null : Compositor.activeWindow();
         selected = "";
         spaceFocus = -1;
@@ -196,8 +195,19 @@ Scope {
         }
     }
     onOpenChanged: {
-        if (open)
+        if (open) {
             closing = false;
+            FocusReturn.opened("overview");
+        } else {
+            // The Overview names its own focus target (closeAnd), so the shared return has nothing to add.
+            FocusReturn.closed("overview", false);
+        }
+    }
+
+    Binding {
+        target: FocusReturn
+        property: "locked"
+        value: root.locked
     }
 
     // The chrome did not get the keyboard in time: the plugin would refuse, show thumbnails.
@@ -332,70 +342,11 @@ Scope {
             hide();
         }
         if (!viaPlugin && !locked)
-            startFocus(target);
+            FocusReturn.startFallback(target, 0);
     }
 
-    // ---- Without the plugin capability: focus, check, retry ----
-
-    // {kind: "window", address} | {kind: "space", id} (V2.fallbackPlan), the goal of the current attempt, the attempt
-    // number and when the first one started.
-    property var focusPlan: null
-    property var focusGoal: null
-    property int focusAttempt: 0
-    property real focusStarted: 0
-
-    function startFocus(target: var): void {
-        const plan = V2.fallbackPlan(target, Compositor.windowAddresses(), Compositor.minimizedAddresses());
-        if (plan.kind === "none")
-            return;
-        focusPlan = plan;
-        focusAttempt = 0;
-        focusStarted = Date.now();
-        attemptFocus();
-    }
-
-    // The Lua focus dispatch (Compositor.focusWindow: the protocol `activate` does nothing for the window Hyprland still
-    // counts as focused). For a Desktop the window focused last on it, else the Desktop itself.
-    function attemptFocus(): void {
-        const plan = focusPlan;
-        if (!plan || locked) {
-            focusPlan = null;
-            return;
-        }
-        let address = plan.address;
-        if (plan.kind === "space")
-            address = Compositor.frontWindowOn(plan.id);
-        if (address) {
-            focusGoal = {
-                address: address
-            };
-            Compositor.focusWindow(address);
-        } else {
-            focusGoal = {
-                workspace: plan.id
-            };
-            Compositor.focusSpace(plan.id);
-        }
-        focusTimer.interval = V2.retryDelay(focusAttempt, Tokens.overviewFocusRetryMs);
-        focusTimer.restart();
-    }
-
-    // Whether the focus holds (activewindow through the foreign-toplevel state, the focused workspace): done, else try
-    // again with a longer wait until the bound runs out (Hyprland's own choice then stands).
-    Timer {
-        id: focusTimer
-        onTriggered: {
-            const ws = Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : -1;
-            const holds = V2.focusHolds(root.focusGoal, Compositor.activeWindow(), ws);
-            if (holds || Date.now() - root.focusStarted >= Tokens.overviewFocusBoundMs || root.open) {
-                console.info("grassfield-overview: close focus (shell fallback)", holds ? "holds" : "given up", "after", root.focusAttempt + 1, "attempt(s)");
-                root.focusPlan = null;
-                return;
-            }
-            root.focusAttempt++;
-            root.attemptFocus();
-        }
-    }
+    // Without the plugin capability the focus, check and retry run in FocusReturn.startFallback (shared with the Exclusive
+    // surfaces; it stops when the user acted or another surface opened).
 
     // ---- Selection (one for all outputs) ----
 

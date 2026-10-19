@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.platform
 import qs.services
 
 // Search window, one per screen, mapped only on the controller's screen while open. Full-screen
@@ -26,7 +27,9 @@ Variants {
         readonly property real maxResults: height * Tokens.searchMaxHeightFraction - Tokens.searchFieldHeight
 
         screen: modelData
-        visible: shown
+        // Mapped a moment longer than it holds the keyboard (the fade-out): a layer destroyed while Exclusive leaves the
+        // compositor with no keyboard focus.
+        visible: release.mapped
         anchors {
             top: true
             bottom: true
@@ -57,6 +60,11 @@ Variants {
             id: blur
             item: panel
             radius: Tokens.radiusSearch
+        }
+
+        KeyboardRelease {
+            id: release
+            shown: win.shown
         }
 
         onShownChanged: {

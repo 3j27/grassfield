@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.platform
 import "SwitcherModel.js" as Model
 
 // App switcher surface (spec docs/specs/switcher.md): one overlay window per screen, mapped only on the controller's
@@ -31,7 +32,9 @@ Variants {
         readonly property int selected: root.controller.selected
 
         screen: modelData
-        visible: grabbing
+        // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
+        // keyboard focus (the cancelled switch must give it back).
+        visible: release.mapped
         anchors {
             top: true
             bottom: true
@@ -51,6 +54,11 @@ Variants {
             id: blur
             item: panel
             radius: Tokens.switcherPanelRadius
+        }
+
+        KeyboardRelease {
+            id: release
+            shown: win.grabbing
         }
 
         onGrabbingChanged: {

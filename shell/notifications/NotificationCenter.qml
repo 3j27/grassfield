@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.platform
 import qs.services
 import qs.widgets
 import "CenterLogic.js" as CenterLogic
@@ -41,7 +42,9 @@ Variants {
         readonly property bool open: Notifications.centerOpen && Notifications.centerScreen === modelData.name
 
         screen: modelData
-        visible: open
+        // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
+        // keyboard focus.
+        visible: release.mapped
         anchors {
             top: true
             bottom: true
@@ -71,6 +74,11 @@ Variants {
         Region {
             id: blur
             regions: content.item ? (content.item as CenterContent).regionList : []
+        }
+
+        KeyboardRelease {
+            id: release
+            shown: win.open
         }
 
         // A popup (menus, Control Center) takes over.

@@ -18,6 +18,13 @@ Scope {
     id: root
 
     property bool open: false
+    // Key focus returns to the window that was active when this opened (FocusReturn), as on macOS.
+    onOpenChanged: {
+        if (open)
+            FocusReturn.opened("apps");
+        else
+            FocusReturn.closed("apps", true);
+    }
     property string screenName: ""
     property string query: ""
     // Selected chip id (Model.CATEGORY_IDS) and the chip that holds the keyboard focus in the "chips" zone.

@@ -43,6 +43,13 @@ Singleton {
     property int counter: 0
 
     property bool centerOpen: false
+    // Key focus returns to the window active when the center opened (FocusReturn).
+    onCenterOpenChanged: {
+        if (centerOpen)
+            FocusReturn.opened("notification-center");
+        else
+            FocusReturn.closed("notification-center", true);
+    }
     property string centerScreen: ""
 
     // Dev sessions share the owner's session bus; never register there (GRASSFIELD_PRIVATE_BUS=1
@@ -585,8 +592,10 @@ Singleton {
         if (!n.desktopEntry)
             return;
         const list = Compositor.toplevelsFor(n.desktopEntry);
-        if (list && list.length > 0)
+        if (list && list.length > 0) {
+            FocusReturn.skip();
             Compositor.activate(list[0]);
+        }
     }
 
     function actionsOf(n: var): var {
