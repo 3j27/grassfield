@@ -615,8 +615,9 @@ Singleton {
             return false;
         if (top.workspace && top.workspace.id > 0 && !top.workspace.active)
             focusSpace(top.workspace.id);
-        activate(top.wayland);
-        return true;
+        // The Lua focus, not the protocol `activate`: the latter does nothing for a window Hyprland still counts as
+        // focused, which is exactly the one a layer surface just took the keyboard from (measured: 11 of 12 lost).
+        return dispatchRequest(Minimized.focusWindowRequest(address));
     }
 
     // Move a window to a Space without following it (the address is validated by moveRequest).

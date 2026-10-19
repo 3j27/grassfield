@@ -19,7 +19,7 @@
 # Exit 0 when every check passes. Input only through scripts/dev/keys.sh and scripts/dev/pointer.sh.
 set -uo pipefail
 
-root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
 dev=$root/.dev
 out=$dev/ovt
 # scripts/dev/test.sh runs every tests/shell/*.sh: without a running nested session this test is skipped.
@@ -214,7 +214,8 @@ t_drag() {
 
 # ptr_on <title>: park the pointer on the output of the foot window <title> (an empty spot of it: no focus change expected).
 out_of() { [[ $1 == A ]] && echo WAYLAND-1 || echo GF-REF; }
-ptr_on() { ptr output "$(out_of "$1")" abs 40 300; sleep 0.3; }
+park="700 120"   # a bare spot of an output: no window, no Dock tile, no hot corner
+ptr_on() { ptr output "$(out_of "$1")" abs $park; sleep 0.3; }
 
 # keys_arrive <title> <tag>: type <tag> + Return and check it arrived in the window <title> and in no other one: the
 # KEYBOARD (not activewindow) is what is verified. Prints where it went when it did not.
@@ -254,7 +255,7 @@ t_paths() {
       for o in WAYLAND-1 GF-REF; do
         n=$((n + 1))
         focus "$prev"
-        ptr output "$o" abs 40 300; sleep 0.3
+        ptr output "$o" abs $park; sleep 0.3
         pre=$(active_title)
         open_overview
         close_via "$path" "$o"
@@ -301,7 +302,7 @@ t_drop() {
       if (( i % 2 )); then prev=A; else prev=B; fi
       if (( i % 4 < 2 )); then o=$(out_of "$prev"); else o=$([[ $prev == A ]] && echo GF-REF || echo WAYLAND-1); fi
       focus "$prev"
-      ptr output "$o" abs 40 300; sleep 0.3
+      ptr output "$o" abs $park; sleep 0.3
       open_overview
       tag="d${d}i${i}r$RANDOM"
       if (( d > 0 )); then
@@ -341,6 +342,7 @@ t_backdrop() {
 }
 
 mode=${1:-all}
+[[ $mode == lib ]] && return 0   # sourced by a probe script: functions only
 setup
 case $mode in
   click) t_click ;;
