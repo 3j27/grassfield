@@ -205,7 +205,7 @@ void main() {
         vec3 lifted = mix(min(c * clamp(darkGlyphFloor / max(Lc, 0.02), 1.0, 4.0), vec3(1.0)), vec3(darkGlyphLuma), neutral * (1.0 - smoothstep(0.2, 0.5, Lc)));
         rgb = mix(rgb, lifted, sysW * (1.0 - lightCtx));
         // The rim also lights the outline of a darkened plateless page.
-        rgb = mix(rgb, vec3(1.0), edge0 * max(strength, lightCtx) * darkRim * (isDark ? 1.0 : 0.25));
+        rgb = mix(rgb, vec3(1.0), edge0 * max(strength, lightCtx) * (wall ? 1.0 : darkRim * (isDark ? 1.0 : 0.25)));
         outc = vec4(rgb * a, a);
     } else if (modeIndex < 2.5) {
         // CLEAR: the plate becomes translucent glass (light in the dark appearance, smoked in the light one) and the
@@ -257,7 +257,7 @@ void main() {
             sysRgb = vec3(darkPlateLuma);
             sysA = 1.0;
             rimRgb = vec3(1.0);
-            rimK = darkRim * (isDark ? 1.0 : 0.25);
+            rimK = wall ? 1.0 : darkRim * (isDark ? 1.0 : 0.25);   // over the bare wallpaper the rim is fully opaque (it must read on any wallpaper)
         } else if (modeIndex < 2.5) {
             sysRgb = (isDark && !wall) ? vec3(1.0) : vec3(0.0);
             sysA = wall ? clearPlateAlphaWallpaper : (isDark ? clearPlateAlphaDark : clearPlateAlphaLight);

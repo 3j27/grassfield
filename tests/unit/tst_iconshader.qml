@@ -206,22 +206,20 @@ TestCase {
     }
 
     // Remaining limits, measured (worst value over every size, appearance and background, against the floor; docs/specs/ui.md
-    // "Icon shader"). They are logged, not failed. Clear and Tinted have none among the sizes 24-48 except the two LibreOffice
-    // desktop rows; every icon sits on a system plate in all three modes, Dark included.
-    //   breeze text editor Dark, 16-32 px: outside 1.84 (default 9.1; a white page with a thin grey frame: the darkened page
-    //     and the dark system plate are close to each other and to the dark material, and the frame is a 1 px line).
-    //   kdenlive at 16 px (thin bars): Dark outside 2.61, Tinted outside 2.49 (floor 2.9).
-    //   mascot blob Dark, inside 2.57 (default 3.43, floor 3.09): its holes show the dark plate behind.
-    //   LibreOffice writer/calc Dark at 24 px light window: inside 2.42-2.73 (default 3.1, floor 2.79), outside 2.85 (floor 2.9).
-    //   LibreOffice writer/calc/impress Tinted on the desktop over the green hill colour: outside 2.64 (floor 2.9; the icon's
-    //     own plate has a soft edge, so the rim is weak).
-    //   Nautilus (two-colour split plate) Dark: inside 2.26 at 24 px and 2.65 on the desktop (default 5.64-6.56, floor 2.9),
-    //     outside 2.7 at 32 px; VLC Dark on the desktop over grey: outside 2.82 (floor 2.9).
+    // "Icon shader"). They are logged, not failed. Clear and Tinted have none: every icon sits on a system plate in all three modes,
+    // Dark included, and the plate test is a hard ramp (a folder, a page or a mascot is not fuzzily half a plate). What is left is
+    // all in the dark appearance over a LIGHT wallpaper (the material is then mid grey) and is a limit of the measurement:
+    // the "plate" is the median of the ring 4 to 8 px inside the edge and the "outline" the 90th percentile of a band of
+    // 1 px at 16 to 24 px (the antialiased edge pixel of the system plate, whose inset is about 1 px there), so for an icon
+    // without a plate of its own the ring holds its artwork and the band is not the rim. The graphite plate (relative luminance
+    // 0.015 against 0.2 to 0.6 for that material) and the edge highlight are 5 to 8:1 against it by construction.
+    //   breeze text editor Dark, outside 1.84 at 16 px, 2.23 at 32 px (default 9.1; a white page with a thin grey frame).
+    //   kdenlive (thin bars) Dark outside 2.61-2.78 and Tinted outside 2.49-2.53 at 16-32 px (floor 2.9, default 2.9-4.5).
+    //   Nautilus (two-colour split plate, own plate kept and darkened) Dark: inside 2.72-3.04 at every size (default 5.6-6.6, floor
+    //     2.9): the two halves become two near-black greys and the glyph keeps its colour; outside 2.70 at 32 px.
     readonly property var knownLimits: [
-        "breeze:accessories-text-editor dark E", "hicolor:kdenlive dark E", "hicolor:kdenlive tinted E", "full-bleed-logo dark I",
-        "hicolor:libreoffice-calc dark E", "hicolor:libreoffice-writer dark I", "hicolor:libreoffice-calc tinted E",
-        "hicolor:libreoffice-impress tinted E", "hicolor:libreoffice-writer tinted E", "whitesur:org.gnome.Nautilus dark I",
-        "whitesur:org.gnome.Nautilus dark E", "whitesur:vlc dark E"
+        "breeze:accessories-text-editor dark E", "hicolor:kdenlive dark E", "hicolor:kdenlive tinted E",
+        "whitesur:org.gnome.Nautilus dark I", "whitesur:org.gnome.Nautilus dark E"
     ]
 
     function isKnownLimit(name, mode, rule) {
