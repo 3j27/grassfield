@@ -236,12 +236,13 @@ Scope {
             live = false;
             closing = true;
             // The plugin ended the overview itself (a Desktop switch, the lock): the same close as every other, so the
-            // chromes release their keyboard in order and the focus request goes out (target none: the plugin's own
-            // fallback, the front window of the Desktop shown). When the release is already running (the keyboard
-            // leaving the chrome ends the plugin's overview too) that close is simply carried on.
+            // chromes release their keyboard in order and the focus request goes out, naming the Desktop focused now (a
+            // user's switch must survive Hyprland refocusing the window that was active at open). When the release is
+            // already running (the keyboard leaving the chrome ends the plugin's overview too) that close is carried on.
             if (stage === "open")
                 closeAnd({
-                    kind: "none"
+                    kind: "ended",
+                    workspace: Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : 0
                 });
         } else if (d.close) {
             live = false;
@@ -286,7 +287,7 @@ Scope {
     property bool focusViaPlugin: false
 
     // Close Overview, then focus something (docs/specs/overview.md "Close focus"). `choice` is what the user did (see
-    // V2.closeTarget): a window, a Desktop, nothing (null: Esc, toggle, backdrop), or "none" / "other" (the plugin ended
+    // V2.closeTarget): a window, a Desktop, nothing (null: Esc, toggle, backdrop), or "ended" / "other" (the plugin ended
     // the overview; another surface takes the keyboard). The target is worked out once, at the start:
     //  - with the plugin capability `overview-focus` ONE request goes out now, before the chromes drop to None; the
     //    compositor waits for the last Exclusive layer and focuses (no shell focus action, no race with the layers);
@@ -344,7 +345,7 @@ Scope {
     property real focusStarted: 0
 
     function startFocus(target: var): void {
-        const plan = V2.fallbackPlan(target, Compositor.windowAddresses(), Compositor.minimizedAddresses(), Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : 0);
+        const plan = V2.fallbackPlan(target, Compositor.windowAddresses(), Compositor.minimizedAddresses());
         if (plan.kind === "none")
             return;
         focusPlan = plan;

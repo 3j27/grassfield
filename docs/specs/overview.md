@@ -289,16 +289,17 @@ remembered window, or none) and then:
 3. `on:false`, then the chromes hide. **Without `overview-focus` (C2)** the shell then focuses the target itself
    (`Overview.startFocus`): `V2.fallbackPlan` keeps a remembered or chosen window that still exists and is not minimized (a
    minimized window never gets focus), a Desktop becomes its front window (`Compositor.frontWindowOn`: focused last; the
-   Desktop itself when empty), an overview the plugin ended (Desktop switch) the Desktop now shown, anything else nothing
-   (Hyprland's choice stands). The focus is the Lua dispatch (`Compositor.focusWindow`: its Desktop first when not the one
+   Desktop itself when empty), anything else nothing (Hyprland's choice stands). The focus is the Lua dispatch (`Compositor.focusWindow`: its Desktop first when not the one
    shown), then checked (`V2.focusHolds`: the active window, or the focused Desktop) after
    `overview.focusRetryMs` (60 ms, doubling at each retry) and retried until it holds or `overview.focusBoundMs` (1 s) has
    passed. Nothing is focused while the session is locked.
 Another full-attention surface opening (ExclusiveSurfaces: Apps, Search, the switcher) or the lock closes the overview with
 `requestCloseForOther()`: same release, **no request and no focus action**, the keyboard belongs to the opening surface; when
 that closes Hyprland returns the keyboard to the window that has it. When the plugin ends the overview itself
-(`interrupted`: a Desktop switch, the lock) the same close runs (chromes released in order, request target `none`, flagged
-`ended` for the C2 fallback), never `hide()` dropping every chrome at once. Keys typed while the release runs (about 100 to
+(`interrupted`: a Desktop switch, the lock) the same close runs (chromes released in order, request target `workspace` with the
+Desktop focused at that moment, so the user's switch is kept when Hyprland refocuses the window that was active at open;
+`none` when it is unknown), never `hide()` dropping every chrome at once. A switch of the Desktop of the output that does not
+have the monitor focus leaves the focus where it was: that window keeps the keyboard. Keys typed while the release runs (about 100 to
 150 ms after Esc) reach the chrome, which ignores them: they are lost, never delivered to another window (drop table below).
 
 Keyboard selection is one value for all outputs (`Overview.selected`, `spaceFocus`, `spaceScreen`), since the keyboard

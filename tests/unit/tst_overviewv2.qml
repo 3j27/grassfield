@@ -231,8 +231,9 @@ TestCase {
         compare(V2.closeTarget(null, prev, 7), {kind: "workspace", workspace: 7});
     }
 
-    function test_closeTargetEndedByThePluginIsNone() {
-        compare(V2.closeTarget({kind: "none"}, prev, 7), {kind: "none", ended: true}, "interrupted: the plugin's fallback decides");
+    function test_closeTargetEndedByThePluginKeepsTheUsersDesktop() {
+        compare(V2.closeTarget({kind: "ended", workspace: 9}, prev, 7), {kind: "workspace", workspace: 9}, "interrupted: the Desktop switched to");
+        compare(V2.closeTarget({kind: "ended", workspace: 0}, prev, 7), {kind: "none"}, "unknown: the plugin's fallback decides");
     }
 
     function test_closeTargetAnotherSurfaceSendsNothing() {
@@ -259,12 +260,6 @@ TestCase {
         compare(V2.fallbackPlan({kind: "none"}, ["0xa"], []).kind, "none");
         compare(V2.fallbackPlan({kind: "skip"}, ["0xa"], []).kind, "none");
         compare(V2.fallbackPlan(null, ["0xa"], []).kind, "none");
-    }
-
-    function test_fallbackPlanEndedByThePluginFocusesTheShownDesktop() {
-        compare(V2.fallbackPlan({kind: "none", ended: true}, [], [], 5), {kind: "space", id: 5});
-        compare(V2.fallbackPlan({kind: "none", ended: true}, [], [], 0).kind, "none");
-        compare(V2.fallbackPlan({kind: "none"}, [], [], 5).kind, "none", "no remembered window: Hyprland's choice stands");
     }
 
     function test_focusHolds() {

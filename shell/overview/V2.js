@@ -121,18 +121,19 @@ function releaseDone(held, settled, forced) {
 
 // What the close asks to be focused, one value for both modes (docs/specs/overview.md "Close focus"). `choice` is what
 // the user did: null (no choice: Esc, toggle, IPC, backdrop), {kind: "window", address}, {kind: "space", id},
-// {kind: "none"} (the plugin ended the overview itself: a Desktop switch, the lock) or {kind: "other"} (another
-// full-attention surface took the keyboard: nothing at all is requested). `previous` is {address, workspaceId} of the
-// window that was active when the overview opened (null when none, or the desktop had the keyboard); `stayOnSpace` the id
-// of a Desktop created with "+" while open (the shell switched to it: staying there is the choice).
+// {kind: "ended", workspace} (the plugin ended the overview itself, by a Desktop switch or the lock; `workspace` is the
+// Desktop focused at that moment, 0 when unknown: the user's switch is kept, Hyprland's own refocus of the window active at
+// open would undo it) or {kind: "other"} (another full-attention surface took the keyboard: nothing at all is requested).
+// `previous` is {address, workspaceId} of the window that was active when the overview opened (null when none, or the
+// desktop had the keyboard); `stayOnSpace` the id of a Desktop created with "+" while open (the shell switched to it:
+// staying there is the choice).
 // Returns {kind: "skip"} | {kind: "none"} | {kind: "window", address} | {kind: "workspace", workspace} |
-// {kind: "remembered", address, workspace?}: the plugin's `overview_focus` targets, plus "skip". `ended: true` marks the
-// none of an overview the plugin ended itself (the shell fallback then focuses the Desktop now shown, as the plugin does).
+// {kind: "remembered", address, workspace?}: the plugin's `overview_focus` targets, plus "skip".
 function closeTarget(choice, previous, stayOnSpace) {
     if (choice && choice.kind === "other")
         return {kind: "skip"};
-    if (choice && choice.kind === "none")
-        return {kind: "none", ended: true};
+    if (choice && choice.kind === "ended")
+        return choice.workspace > 0 ? {kind: "workspace", workspace: Math.floor(choice.workspace)} : {kind: "none"};
     if (choice && choice.kind === "window" && choice.address)
         return {kind: "window", address: choice.address};
     if (choice && choice.kind === "space" && choice.id > 0)
@@ -150,9 +151,8 @@ function closeTarget(choice, previous, stayOnSpace) {
 
 // Without the plugin capability (C2): what the shell focuses itself for a target. `live` are the addresses of the windows
 // that exist now, `minimized` the addresses the shell has minimized (a minimized window never gets focus: it is not
-// shown). `focusedWorkspace` is the id of the Desktop on Hyprland's focused monitor. Returns {kind: "window", address} |
-// {kind: "space", id} | {kind: "none"} (Hyprland's own choice stands).
-function fallbackPlan(target, live, minimized, focusedWorkspace) {
+// shown). Returns {kind: "window", address} | {kind: "space", id} | {kind: "none"} (Hyprland's own choice stands).
+function fallbackPlan(target, live, minimized) {
     const exists = a => (live || []).indexOf(a) >= 0 && (minimized || []).indexOf(a) < 0;
     switch (target ? target.kind : "") {
     case "window":
@@ -160,10 +160,6 @@ function fallbackPlan(target, live, minimized, focusedWorkspace) {
         return exists(target.address) ? {kind: "window", address: target.address} : {kind: "none"};
     case "workspace":
         return {kind: "space", id: target.workspace};
-    case "none":
-        // The overview ended by a Desktop switch: whatever is now shown gets the keyboard (a switch while the chromes
-        // held it leaves it on no surface).
-        return target.ended === true && focusedWorkspace > 0 ? {kind: "space", id: focusedWorkspace} : {kind: "none"};
     }
     return {kind: "none"};
 }
