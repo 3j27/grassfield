@@ -50,6 +50,10 @@ check-scripts:
 test:
     scripts/dev/test.sh
 
+# Gate A2 for the icon modes on a GPU scene graph, as a client of the nested session (ask).
+test-icons:
+    scripts/dev/test-icons.sh
+
 # Nested dev session (ask).
 nested-up:
     scripts/dev/nested-up.sh

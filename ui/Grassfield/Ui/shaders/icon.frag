@@ -116,9 +116,8 @@ void main() {
         // CLEAR: the plate becomes translucent glass (light in the dark appearance, smoked in the light one) and the
         // glyph a monochrome ink whose shading follows the glyph's contrast with the plate.
         float inkL = isDark ? clearInkDark : clearInkLight;
-        float ref = mix(0.5, Lp, strength);
-        float detail = mix(Lc, clamp(abs(Lc - ref) * 2.2, 0.0, 1.0), strength);
-        vec3 ink = isDark ? vec3(inkL * (1.0 - clearDetail * 0.55 * (1.0 - detail)))
+        float detail = mix(0.2 + 0.8 * Lc * Lc, clamp(distance(c, plate) * 1.6, 0.0, 1.0), strength);
+        vec3 ink = isDark ? vec3(inkL * (1.0 - clearDetail * 0.7 * (1.0 - detail)))
                           : vec3(inkL + clearDetail * 0.5 * (1.0 - detail));
         vec3 glass = isDark ? vec3(1.0) : vec3(0.0);
         float glassA = (isDark ? clearPlateAlphaDark : clearPlateAlphaLight) * a;
@@ -131,9 +130,8 @@ void main() {
         // TINTED: a dark tinted plate with a tint-coloured glyph (dark appearance), a light tinted plate with a dark
         // tint-coloured glyph (light appearance). The glyph's own shading modulates the tint.
         vec3 t = tint.rgb;
-        float ref = mix(0.5, Lp, strength);
-        float detail = mix(Lc, clamp(abs(Lc - ref) * 2.2, 0.0, 1.0), strength);
-        float shade = mix(1.0, 0.55 + 0.45 * detail, tintedDetail);
+        float detail = mix(0.2 + 0.8 * Lc * Lc, clamp(distance(c, plate) * 1.6, 0.0, 1.0), strength);
+        float shade = mix(1.0, 0.3 + 0.7 * detail, tintedDetail);
         vec3 base = isDark ? mix(t, vec3(1.0), tintedGlyphLift) : t * tintedGlyphShadeLight;
         vec3 ink = base * shade;
         float rr = clamp(Lc / Lp, 0.8, 1.2);

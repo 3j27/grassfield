@@ -935,7 +935,7 @@ QtObject {
     // ADR-0014 Dark: how much dark coloured glyphs on a light plate are brightened so they stay vivid on the dark plate (0 = not at all)
     readonly property real iconModeDarkGlyphBoost: 0.8
     // ADR-0014 Dark: opacity of the white edge highlight in the dark appearance; chosen with the A2 test (docs/specs/ui.md) so the plate outline stays visible on the dark material
-    readonly property real iconModeDarkRim: 0.22
+    readonly property real iconModeDarkRim: 0.45
     // ADR-0014 Clear: opacity of the white glass plate in the dark appearance (the material shows through)
     readonly property real iconModeClearPlateAlphaDark: 0.22
     // ADR-0014 Clear: opacity of the dark glass plate in the light appearance (the material shows through)
@@ -945,9 +945,9 @@ QtObject {
     // ADR-0014 Clear: luma of the glyph in the light appearance (near black)
     readonly property real iconModeClearInkLight: 0.14
     // ADR-0014 Clear: how much of the glyph's own shading is kept (0 = a flat silhouette, 1 = full range)
-    readonly property real iconModeClearDetail: 0.5
+    readonly property real iconModeClearDetail: 0.85
     // ADR-0014 Clear: opacity of the glyph-coloured edge highlight of the glass plate
-    readonly property real iconModeClearRim: 0.3
+    readonly property real iconModeClearRim: 0.4
     // ADR-0014 Tinted, dark appearance: the plate is the tint colour at this fraction of its brightness (a dark tinted plate, macOS 26)
     readonly property real iconModeTintedPlateScale: 0.3
     // ADR-0014 Tinted, light appearance: the plate is the tint colour mixed this far to white (a light tinted plate)
@@ -955,11 +955,11 @@ QtObject {
     // ADR-0014 Tinted, dark appearance: the glyph is the tint colour mixed this far to white so it stays luminous on the dark plate
     readonly property real iconModeTintedGlyphLift: 0.2
     // ADR-0014 Tinted, light appearance: the glyph is the tint colour at this fraction of its brightness (dark enough on the light plate)
-    readonly property real iconModeTintedGlyphShadeLight: 0.55
+    readonly property real iconModeTintedGlyphShadeLight: 0.7
     // ADR-0014 Tinted: how much of the glyph's own shading is kept (0 = flat tint colour, 1 = full range)
-    readonly property real iconModeTintedDetail: 0.45
+    readonly property real iconModeTintedDetail: 1.0
     // ADR-0014 Tinted: opacity of the glyph-coloured edge highlight of the plate
-    readonly property real iconModeTintedRim: 0.25
+    readonly property real iconModeTintedRim: 0.5
     // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)
     readonly property int iconModePreviewSize: 56
     // estimate: Settings icon mode picker, tile width
