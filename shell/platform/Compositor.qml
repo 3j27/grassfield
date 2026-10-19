@@ -22,9 +22,14 @@ Singleton {
     // Output with keyboard/pointer focus ("" when unknown): target of keyboard-driven shell UI.
     readonly property string focusedScreenName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
 
-    // Active key map of the compositor ("" = default), from `submap` events. The app switcher holds "switcher" while
-    // its modifier is down (config/hypr/grassfield/bindings.lua).
-    property string submap: ""
+    // A layer surface with this namespace was unmapped (`closelayer` event). The app switcher activates its target only
+    // after its own exclusive surface is gone: Hyprland refuses to focus a window while one exists (FocusState.cpp).
+    signal layerClosed(string namespace)
+
+    // Windows currently in the hidden-app workspace, as toplevel handles (see hiddenWindows).
+    function isHidden(toplevel: var): bool {
+        return hiddenWindows(0).some(w => w.toplevel === toplevel);
+    }
 
     // Re-reads Hyprland's window list (pid and other IPC data are only fetched for windows that
     // existed at shell start or on this request). Call before showing data that needs the pid.
@@ -443,8 +448,8 @@ Singleton {
                     root.minimizeByAddress(address);
                 return;
             }
-            if (event.name === "submap") {
-                root.submap = event.data;
+            if (event.name === "closelayer") {
+                root.layerClosed(event.data);
                 return;
             }
             if (event.name === "activespecialv2") {

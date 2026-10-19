@@ -43,14 +43,15 @@ function idle() {
     return {phase: "idle", selected: -1, count: 0};
 }
 
-// First selection of a session: Tab goes to the previous app (index 1), Shift+Tab to the least recent one.
-function firstSelection(count, dir) {
+// First selection of a session: Tab goes to the previous app (index 1) when the most recent app is the focused one
+// (`current`), else to the most recent one (index 0: nothing is in front, e.g. an empty desktop); Shift+Tab to the least recent.
+function firstSelection(count, dir, current) {
     if (count <= 0)
         return -1;
-    return dir < 0 ? count - 1 : Math.min(1, count - 1);
+    return dir < 0 ? count - 1 : (current ? Math.min(1, count - 1) : 0);
 }
 
-// event: {type: "step", dir: +1|-1, count} | {type: "timer"} | {type: "release"} | {type: "cancel"} | {type: "hover", index}
+// event: {type: "step", dir: +1|-1, count, current?: bool (default true)} | {type: "timer"} | {type: "release"} | {type: "cancel"} | {type: "hover", index}
 //        | {type: "click", index} | {type: "count", count, selected}
 function reduce(state, ev) {
     switch (ev.type) {
@@ -58,7 +59,7 @@ function reduce(state, ev) {
         if (state.phase === "idle") {
             if (ev.count <= 0)
                 return {state: idle(), action: "none"};
-            return {state: {phase: "pending", selected: firstSelection(ev.count, ev.dir), count: ev.count}, action: "none"};
+            return {state: {phase: "pending", selected: firstSelection(ev.count, ev.dir, ev.current !== false), count: ev.count}, action: "none"};
         }
         // A second press shows the panel and moves on.
         return {state: {phase: "shown", selected: wrap(state.selected + (ev.dir < 0 ? -1 : 1), state.count), count: state.count},

@@ -66,6 +66,12 @@ TestCase {
         compare(Model.reduce(Model.idle(), {type: "step", dir: -1, count: 4}).state.selected, 3);
     }
 
+    function test_noFocusedAppFirstSelectionIsTheMostRecentApp() {
+        compare(Model.reduce(Model.idle(), {type: "step", dir: 1, count: 3, current: false}).state.selected, 0);
+        compare(Model.reduce(Model.idle(), {type: "step", dir: 1, count: 3, current: true}).state.selected, 1);
+        compare(Model.reduce(Model.idle(), {type: "step", dir: -1, count: 3, current: false}).state.selected, 2);
+    }
+
     function test_singleAppAndNoApp() {
         compare(Model.reduce(Model.idle(), {type: "step", dir: 1, count: 1}).state.selected, 0);
         compare(Model.reduce(Model.idle(), {type: "step", dir: 1, count: 0}).state.phase, "idle");

@@ -15,62 +15,74 @@ local function bind(keys, description, dispatcher, opts)
   hl.bind(keys, dispatcher, opts)
 end
 
+-- App switcher (macOS Cmd+Tab, shell/switcher; docs/specs/switcher.md, Key handling). No key map (submap) is used: the
+-- shell takes the keyboard with an exclusive layer surface when SUPER+TAB fires, so no global mode can get stuck.
+-- Hyprland records the key map that was active when a key went DOWN and checks only that map's binds on release
+-- (KeybindManager.cpp, efb5099), so a release bind inside a map entered after SUPER went down never fires; the release
+-- bind below lives in the default map, where SUPER went down.
+--
+-- Every request carries a hold id (one per physical hold of SUPER): `next` and `release` are separate `qs ipc`
+-- processes that can arrive in either order after a quick tap, and the shell orders them by id.
+-- Ids start from the clock, so that a config reload (a new Lua state) never reuses ids the shell has already seen.
+local switcher_id = os.time()
+local switcher_held = false
+
+local function switcher_request(request)
+  return function()
+    if not switcher_held then
+      switcher_held = true
+      switcher_id = switcher_id + 1
+    end
+    hl.dispatch(shell("switcher", request .. " " .. switcher_id))
+  end
+end
+
+-- SUPER released: tell the shell once per hold (a stale request is ignored by the shell).
+local function switcher_release()
+  if not switcher_held then
+    return
+  end
+  switcher_held = false
+  hl.dispatch(shell("switcher", "release " .. switcher_id))
+end
+
+-- True while the switcher surface (exclusive keyboard grab) is mapped: SUPER+Q and SUPER+H then act on the selected app.
+local function switcher_mapped()
+  for _, layer in ipairs(hl.get_layers({ namespace = "grassfield-switcher" })) do
+    if layer.mapped then
+      return true
+    end
+  end
+  return false
+end
+
+local function in_switcher_else(request, otherwise)
+  return function()
+    hl.dispatch(switcher_mapped() and shell("switcher", request) or otherwise)
+  end
+end
+
 -- Windows
-bind("SUPER + Q", "Close window", hl.dsp.window.close())
+bind("SUPER + Q", "Close window", in_switcher_else("quit", hl.dsp.window.close()))
 bind("SUPER + W", "Close window", hl.dsp.window.close())
 bind("SUPER + CTRL + F", "Full screen", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 bind("SUPER + ALT + F", "Zoom (fill the screen)", hl.dsp.window.fullscreen({ mode = "maximized" }))
 bind("SUPER + T", "Toggle floating/tiling", hl.dsp.window.float({ action = "toggle" }))
 bind("SUPER + M", "Minimize window", shell("windows", "minimize"))
-bind("SUPER + H", "Hide app", shell("windows", "hide"))
+bind("SUPER + H", "Hide app", in_switcher_else("hide", shell("windows", "hide")))
 bind("SUPER + mouse:272", "Move window", hl.dsp.window.drag(), { mouse = true })
 bind("SUPER + mouse:273", "Resize window", hl.dsp.window.resize(), { mouse = true })
 
--- App switcher (macOS Cmd+Tab, shell/switcher). SUPER+TAB enters the "switcher" key map and asks the shell for the
--- next app; inside it Tab, arrows, Q, H and Esc act on the shell, and releasing SUPER leaves the map and tells the
--- shell to activate the selection. The shell also sees the map change (`submap` event) as a backstop.
-local function leave_switcher(request)
-  return function()
-    hl.dispatch(hl.dsp.submap("reset"))
-    hl.dispatch(shell("switcher", request))
-  end
+-- Application switcher: Tab (and its key repeat) moves the selection; arrows and Esc reach the shell through its grab.
+bind("SUPER + TAB", "Switch application", switcher_request("next"), { repeating = true })
+bind("SUPER + SHIFT + TAB", "Switch to the previous application", switcher_request("previous"), { repeating = true })
+for _, key in ipairs({ "SUPER + Super_L", "SUPER + Super_R", "Super_L", "Super_R" }) do
+  -- transparent: Hyprland shadows every bind whose key is still down once another bind fired (shadowKeybinds), so
+  -- without it the SUPER release would be ignored after SUPER+TAB.
+  bind(key, "Activate the selected application", switcher_release, { release = true, non_consuming = true, transparent = true })
 end
-
-local function enter_switcher(request)
-  return function()
-    hl.dispatch(hl.dsp.submap("switcher"))
-    hl.dispatch(shell("switcher", request))
-  end
-end
-
--- Declared through tables (not literal bind() lines): the Settings Keyboard list translates only the descriptions it knows
--- (apps/settings/qml/Bindings.js), and these are not there yet.
-for _, b in ipairs({
-  { "SUPER + TAB", "Switch application", enter_switcher("next") },
-  { "SUPER + SHIFT + TAB", "Switch to the previous application", enter_switcher("previous") },
-  { "SUPER + grave", "Next window of the application", shell("windows", "cycleApp") },
-}) do
-  bind(b[1], b[2], b[3])
-end
-
-hl.define_submap("switcher", function()
-  for _, b in ipairs({
-    { "SUPER + TAB", "Next application", shell("switcher", "next"), { repeating = true } },
-    { "SUPER + SHIFT + TAB", "Previous application", shell("switcher", "previous"), { repeating = true } },
-    { "SUPER + RIGHT", "Next application", shell("switcher", "right"), { repeating = true } },
-    { "SUPER + LEFT", "Previous application", shell("switcher", "left"), { repeating = true } },
-    { "SUPER + Q", "Quit the selected application", shell("switcher", "quit") },
-    { "SUPER + H", "Hide the selected application", shell("switcher", "hide") },
-    { "SUPER + ESCAPE", "Cancel the application switcher", leave_switcher("cancel") },
-    { "ESCAPE", "Cancel the application switcher", leave_switcher("cancel") },
-  }) do
-    bind(b[1], b[2], b[3], b[4])
-  end
-  -- Releasing SUPER (either key) activates the selection.
-  for _, key in ipairs({ "SUPER + Super_L", "SUPER + Super_R", "Super_L", "Super_R" }) do
-    bind(key, "Activate the selected application", leave_switcher("release"), { release = true })
-  end
-end)
+-- The key above Tab (grave on a US layout, ² on AZERTY): bound by keycode, so it works on every layout.
+bind("SUPER + code:49", "Next window of the application", shell("windows", "cycleApp"))
 
 -- Window cycling inside the active Stage (Hyprland cycle_next; docs/specs/stages.md ST10).
 bind("ALT + TAB", "Next window", hl.dsp.window.cycle_next())

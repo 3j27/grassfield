@@ -261,6 +261,11 @@ TestCase {
         const list = Bindings.parse(xhr.responseText);
         verify(list.length > 20, "found " + list.length);
         verify(list.some(b => b.keys === "Super + Space" && b.description === "Search"));
+        // The app switcher shortcuts are literal bind lines (the Keyboard page shows them); the key above Tab is bound by
+        // keycode (AZERTY) and shown under a layout-independent name.
+        verify(list.some(b => b.keys === "Super + Tab" && b.description === "Switch application"));
+        verify(list.some(b => b.keys === "Super + Shift + Tab" && b.description === "Switch to the previous application"));
+        verify(list.some(b => b.keys === "Super + Key above Tab" && b.description === "Next window of the application"));
     }
 
     // Every literal description and key name of the real bindings file is listed for translation (Keyboard page).
