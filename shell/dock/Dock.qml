@@ -807,7 +807,7 @@ Scope {
                                 HoverHandler {
                                     id: tileHover
                                     enabled: !tile.isSeparator
-                                    cursorShape: Qt.PointingHandCursor
+                                    cursorShape: Qt.ArrowCursor
                                 }
 
                                 // Files dropped on the Trash tile (from the desktop icons or any

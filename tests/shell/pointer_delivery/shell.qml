@@ -192,7 +192,7 @@ ShellRoot {
         interval: 200
         onTriggered: {
             if (!server.active) {
-                console.log("pointer-delivery: PASS (SKIPPED, nothing checked: no Unix socket server in this sandbox)");
+                console.log("pointer-delivery: SKIP (nothing checked: no Unix socket server in this sandbox)");
                 Qt.exit(0);
                 return;
             }

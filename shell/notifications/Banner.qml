@@ -146,7 +146,7 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 enabled: close.opacity > 0
-                cursorShape: Qt.PointingHandCursor
+                cursorShape: Qt.ArrowCursor
                 onClicked: Notifications.dismissBanner(root.key)
             }
         }
