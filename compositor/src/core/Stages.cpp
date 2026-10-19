@@ -538,7 +538,55 @@ namespace gf::stages {
             const double r = std::round(v * 10.0) / 10.0;
             return std::format("{}", r == 0.0 ? 0.0 : r); // no "-0"
         }
+
+        bool continuation(unsigned char c) {
+            return (c & 0xC0U) == 0x80U;
+        }
+
+        // Length of the valid UTF-8 sequence at `at` (RFC 3629: no overlong forms, no surrogates, at most U+10FFFF), or 0.
+        size_t utf8Length(std::string_view s, size_t at) {
+            const auto byte = [&s](size_t i) { return static_cast<unsigned char>(s[i]); };
+            const auto c0   = byte(at);
+            const size_t left = s.size() - at;
+            if (c0 < 0x80U)
+                return 1;
+            if (c0 >= 0xC2U && c0 <= 0xDFU)
+                return left >= 2 && continuation(byte(at + 1)) ? 2 : 0;
+            if (c0 >= 0xE0U && c0 <= 0xEFU) {
+                if (left < 3 || !continuation(byte(at + 1)) || !continuation(byte(at + 2)))
+                    return 0;
+                const auto c1 = byte(at + 1);
+                if ((c0 == 0xE0U && c1 < 0xA0U) || (c0 == 0xEDU && c1 > 0x9FU))
+                    return 0;
+                return 3;
+            }
+            if (c0 >= 0xF0U && c0 <= 0xF4U) {
+                if (left < 4 || !continuation(byte(at + 1)) || !continuation(byte(at + 2)) || !continuation(byte(at + 3)))
+                    return 0;
+                const auto c1 = byte(at + 1);
+                if ((c0 == 0xF0U && c1 < 0x90U) || (c0 == 0xF4U && c1 > 0x8FU))
+                    return 0;
+                return 4;
+            }
+            return 0;
+        }
     } // namespace
+
+    std::string sanitizedText(std::string_view in, size_t maxBytes) {
+        static constexpr std::string_view REPLACEMENT = "\xEF\xBF\xBD"; // U+FFFD
+        std::string                       out;
+        out.reserve(std::min(in.size(), maxBytes));
+        size_t at = 0;
+        while (at < in.size()) {
+            const size_t           n     = utf8Length(in, at);
+            const std::string_view piece = n > 0 ? in.substr(at, n) : REPLACEMENT;
+            if (out.size() + piece.size() > maxBytes)
+                break;
+            out += piece;
+            at += n > 0 ? n : 1;
+        }
+        return out;
+    }
 
     std::string eventJson(bool on, std::span<const EventMonitor> monitors, Reason reason) {
         std::string out{R"({"v":")"};
@@ -558,8 +606,13 @@ namespace gf::stages {
             firstMonitor = false;
             out += R"({"monitor":")";
             out += gf::gfc::jsonEscape(m.monitor);
-            out += std::format(R"(","workspace":{},"active":{},"hidden":{},"overlap":{},"stages":[)", m.workspace, m.active, m.hidden ? "true" : "false",
-                               m.overlap ? "true" : "false");
+            out += std::format(R"(","workspace":{},"active":{},"hidden":{},"overlap":{},)", m.workspace, m.active, m.hidden ? "true" : "false", m.overlap ? "true" : "false");
+            if (m.front) {
+                out += std::format(R"("front":{{"address":"{:x}","app":")", m.front->id);
+                out += gf::gfc::jsonEscape(sanitizedText(m.front->app, kMaxAppBytes));
+                out += R"("},)";
+            }
+            out += R"("stages":[)";
             bool firstStage = true;
             for (const auto& s : m.stages) {
                 if (!firstStage)
@@ -586,12 +639,12 @@ namespace gf::stages {
 
     // ---- input on strip windows ----
 
-    FocusOrigin focusOrigin(FocusCause cause, bool wasLastFocused) {
+    FocusOrigin focusOrigin(FocusCause cause, bool wasLastFocused, bool pressed) {
         switch (cause) {
+            case FocusCause::Click: return pressed ? FocusOrigin::UserChoice : FocusOrigin::CursorRefocus;
             case FocusCause::KeyBinding:
             case FocusCause::FocusDispatch:
             case FocusCause::GroupDispatch:
-            case FocusCause::Click:
             case FocusCause::Activation:
             case FocusCause::SwitchSoft:
             case FocusCause::SwitchHard: return FocusOrigin::UserChoice;
@@ -614,6 +667,23 @@ namespace gf::stages {
         return origin == FocusOrigin::UserChoice;
     }
 
+    PressRecord recordPress(const PressContext& context) {
+        if (!context.exclusive)
+            return PressRecord{.scope = PressScope::ThisPress, .target = 0};
+        if (context.onExclusive || context.under == 0)
+            return PressRecord{};
+        return PressRecord{.scope = PressScope::UntilFocus, .target = context.under};
+    }
+
+    bool clickFromPress(const PressRecord& press, WindowId window) {
+        switch (press.scope) {
+            case PressScope::None: return false;
+            case PressScope::ThisPress: return true;
+            case PressScope::UntilFocus: return press.target != 0 && press.target == window;
+        }
+        return false;
+    }
+
     KeyboardTarget keyboardAfterLeave(const KeyboardHolder& holder, bool hasFront) {
         if (holder.present && holder.eligible)
             return KeyboardTarget::Keep;
@@ -633,13 +703,13 @@ namespace gf::stages {
     }
 
     PendingFocusAction pendingFocusAction(const PendingFocusState& state) {
-        if (!state.exists || !state.front)
+        if (!state.remembered && !state.hasFront)
             return PendingFocusAction::Drop;
         if (state.locked || state.exclusive || state.holderKeeps)
             return PendingFocusAction::Wait;
         if (state.focused || !state.shown)
             return PendingFocusAction::Drop;
-        return PendingFocusAction::Focus;
+        return state.remembered ? PendingFocusAction::Focus : PendingFocusAction::FocusFront;
     }
 
     PointerAction beforePointerEvent(PointerEvent event, const PointerState& state) {

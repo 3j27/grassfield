@@ -518,11 +518,13 @@ sleep 0.5
 # 5e. two outputs (shell integration review, main 23caeab): a chrome on each output, only the focused output's chrome
 # Exclusive, the other keyboard None. on:true with windows on both outputs opens (the former rule refused it: every chrome
 # had to be Exclusive, and the keyboard was lost after the close); after the close, once the chrome dropped its keyboard,
-# the previously active window gets the keys.
-other=WAYLAND-1
+# the previously active window gets the keys. The second output is any enabled output other than $out: WAYLAND-1 (the
+# nested window, sized and hovered by the owner's session) or a headless one (GF-REF2, as tests/shell/overview_two_outputs.sh
+# sets up with WAYLAND-1 disabled).
+other=$(nestctl -j monitors | jq -r --arg o "$out" '[.[] | select(.name != $o)][0].name // ""')
 read -r ox oy ow oh < <(nestctl -j monitors | jq -r --arg o "$other" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
-if [[ -z ${ow:-} ]]; then
-  check "two outputs: $other exists" 1 "no $other"
+if [[ -z $other || -z ${ow:-} ]]; then
+  check "two outputs: a second enabled output exists" 1 "outputs: $(nestctl -j monitors | jq -c '[.[].name]')"
 else
   timeout 20 "$root/scripts/dev/pointer.sh" output "$other" abs $((ow / 2)) $((oh / 2)) sleep 50 >>"$log" 2>&1
   cap_w1=$run/capture-w1.cap

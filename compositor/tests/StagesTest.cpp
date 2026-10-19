@@ -349,6 +349,33 @@ TEST(StagesEvents, Json) {
     EXPECT_EQ(eventJson(false, {}, Reason::Unavailable), R"({"v":"gfc/1","type":"stages","on":false,"reason":"unavailable","monitors":[]})");
 }
 
+// R13 counter-review #4 of 0.6.3-stages: while an Exclusive layer holds the keyboard after a swap Hyprland has no active
+// window; the event names the active stage's front window and app, so that the menu bar keeps naming the front app.
+TEST(StagesEvents, TheFrontWindowAndItsApp) {
+    std::vector<EventMonitor> monitors(1);
+    monitors[0].monitor   = "GF-REF";
+    monitors[0].workspace = 2;
+    monitors[0].active    = 5;
+    monitors[0].front     = EventFront{.id = 0xab, .app = "org.example \"Q\"\n"};
+    monitors[0].stages    = {EventStage{.id = 5, .slot = -1, .windows = {EventWindow{.id = 0xab, .thumb = std::nullopt}}}};
+    EXPECT_EQ(eventJson(true, monitors),
+              R"({"v":"gfc/1","type":"stages","on":true,"monitors":[{"monitor":"GF-REF","workspace":2,"active":5,"hidden":false,"overlap":false,)"
+              R"("front":{"address":"ab","app":"org.example \"Q\"\n"},"stages":[{"id":5,"slot":-1,"windows":[{"address":"ab"}]}]}]})");
+}
+
+// The app name is client text: valid UTF-8 is kept, invalid bytes become U+FFFD, and it is cut at a character boundary.
+TEST(StagesEvents, ClientTextIsSanitized) {
+    EXPECT_EQ(sanitizedText("foot", 256), "foot");
+    EXPECT_EQ(sanitizedText("caf\xC3\xA9", 256), "caf\xC3\xA9");
+    EXPECT_EQ(sanitizedText("\xF0\x9F\x98\x80", 256), "\xF0\x9F\x98\x80") << "4-byte sequence";
+    EXPECT_EQ(sanitizedText("a\xFF" "b", 256), "a\xEF\xBF\xBD" "b") << "invalid byte";
+    EXPECT_EQ(sanitizedText("\xC0\xAF", 256), "\xEF\xBF\xBD\xEF\xBF\xBD") << "overlong form";
+    EXPECT_EQ(sanitizedText("\xED\xA0\x80", 256), "\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD") << "UTF-16 surrogate";
+    EXPECT_EQ(sanitizedText("\xE2\x82", 256), "\xEF\xBF\xBD\xEF\xBF\xBD") << "truncated sequence";
+    EXPECT_EQ(sanitizedText("ab\xC3\xA9", 3), "ab") << "never cut inside a character";
+    EXPECT_EQ(sanitizedText(std::string(1000, 'x'), kMaxAppBytes).size(), kMaxAppBytes);
+}
+
 TEST(StagesEvents, ReasonNames) {
     EXPECT_EQ(reasonName(Reason::Invalid), "invalid");
     EXPECT_EQ(reasonName(Reason::Disabled), "disabled");
@@ -382,28 +409,56 @@ TEST(StagesInput, OnlyAUserChoiceBringsAStripStageForward) {
 // window, a special workspace closing, a group change, plugins) counted as a user choice. Only a key binding, a focus
 // dispatch, an activation request (Dock, xdg-activation), a click or a window switch dispatcher is one.
 TEST(StagesInput, OnlyRealUserFocusIsAChoice) {
-    for (const auto cause : {FocusCause::KeyBinding, FocusCause::FocusDispatch, FocusCause::GroupDispatch, FocusCause::Click, FocusCause::Activation, FocusCause::SwitchSoft,
+    for (const auto cause : {FocusCause::KeyBinding, FocusCause::FocusDispatch, FocusCause::GroupDispatch, FocusCause::Activation, FocusCause::SwitchSoft,
                              FocusCause::SwitchHard}) {
-        EXPECT_EQ(focusOrigin(cause, false), FocusOrigin::UserChoice) << static_cast<int>(cause);
-        EXPECT_EQ(focusOrigin(cause, true), FocusOrigin::UserChoice) << static_cast<int>(cause);
+        for (const bool pressed : {false, true}) {
+            EXPECT_EQ(focusOrigin(cause, false, pressed), FocusOrigin::UserChoice) << static_cast<int>(cause);
+            EXPECT_EQ(focusOrigin(cause, true, pressed), FocusOrigin::UserChoice) << static_cast<int>(cause);
+        }
     }
+    EXPECT_EQ(focusOrigin(FocusCause::Click, false, true), FocusOrigin::UserChoice) << "a click: a real press";
     for (const auto cause : {FocusCause::UnmapTiling, FocusCause::UnmapFloating, FocusCause::UnmapGrouped})
-        EXPECT_EQ(focusOrigin(cause, false), FocusOrigin::AfterClose) << static_cast<int>(cause);
-    EXPECT_EQ(focusOrigin(FocusCause::PointerFollow, false), FocusOrigin::Restore) << "an Exclusive layer released the keyboard, a popup grab ended";
-    EXPECT_EQ(focusOrigin(FocusCause::ToggleSpecialWorkspace, false), FocusOrigin::Restore);
+        EXPECT_EQ(focusOrigin(cause, false, true), FocusOrigin::AfterClose) << static_cast<int>(cause);
+    EXPECT_EQ(focusOrigin(FocusCause::PointerFollow, false, true), FocusOrigin::Restore) << "an Exclusive layer released the keyboard, a popup grab ended";
+    EXPECT_EQ(focusOrigin(FocusCause::ToggleSpecialWorkspace, false, false), FocusOrigin::Restore);
     for (const auto cause : {FocusCause::NewWindow, FocusCause::GroupCurrentChange, FocusCause::Other, FocusCause::Unknown, FocusCause::Ghosts}) {
-        EXPECT_EQ(focusOrigin(cause, false), FocusOrigin::Automatic) << static_cast<int>(cause);
-        EXPECT_FALSE(stripFocusBringsStage(focusOrigin(cause, true))) << static_cast<int>(cause);
+        EXPECT_EQ(focusOrigin(cause, false, false), FocusOrigin::Automatic) << static_cast<int>(cause);
+        EXPECT_FALSE(stripFocusBringsStage(focusOrigin(cause, true, true))) << static_cast<int>(cause);
     }
 }
 
-// WORKSPACE_CHANGE: a Desktop switch restoring that Desktop's last window is not a choice; a request for a strip window on
-// a Desktop that is not shown (the Dock, an activation) reaches the plugin as WORKSPACE_CHANGE too (Hyprland switches the
-// Desktop first and focuses the requested window as its last one), and stays a choice.
-TEST(StagesInput, ADesktopSwitchRestoringItsLastWindowIsNotAChoice) {
-    EXPECT_EQ(focusOrigin(FocusCause::WorkspaceChange, true), FocusOrigin::Restore);
-    EXPECT_FALSE(stripFocusBringsStage(focusOrigin(FocusCause::WorkspaceChange, true)));
-    EXPECT_EQ(focusOrigin(FocusCause::WorkspaceChange, false), FocusOrigin::UserChoice) << "a redirected request for that window";
+// R13 counter-review #4 of 0.6.3-stages, MAJOR: when an Exclusive layer closed after a swap made under it, Hyprland
+// refocused at the cursor (CInputManager::refocus, reason CLICK) and the window under the pointer (an unrelated window, or
+// the swapped-in stage's back window) took the keyboard from the swap's front window, as if the user had clicked it. CLICK
+// is a choice only when a real press caused it.
+TEST(StagesInput, ARefocusAtTheCursorWithoutAPressIsNotAClick) {
+    EXPECT_EQ(focusOrigin(FocusCause::Click, false, false), FocusOrigin::CursorRefocus);
+    EXPECT_EQ(focusOrigin(FocusCause::Click, true, false), FocusOrigin::CursorRefocus);
+    EXPECT_FALSE(stripFocusBringsStage(FocusOrigin::CursorRefocus));
+    EXPECT_FALSE(clickFromPress(PressRecord{}, 0x10)) << "no press recorded";
+}
+
+// A press with no Exclusive layer: Hyprland refocuses at the cursor while it handles the press, so a CLICK focus during it
+// (whatever window it picks) is the press. The glue ends it from the event loop, after Hyprland handled the press.
+TEST(StagesInput, APressIsAClickWhileHyprlandHandlesIt) {
+    const auto press = recordPress({.exclusive = false, .onExclusive = false, .under = 0x10});
+    EXPECT_EQ(press.scope, PressScope::ThisPress);
+    EXPECT_TRUE(clickFromPress(press, 0x10));
+    EXPECT_TRUE(clickFromPress(press, 0x20)) << "Hyprland's own hit test decides which window the press focuses";
+    EXPECT_EQ(recordPress({.exclusive = false, .onExclusive = false, .under = 0}).scope, PressScope::ThisPress) << "a press on the desktop or a layer";
+}
+
+// While an Exclusive layer is mapped Hyprland gives every press to it and refuses window focus. A press into the layer (a
+// dialog's button, Search) chooses no window; a press beside it on a window is the user's click on that window: when the
+// layer is gone, Hyprland's refocus at the cursor focuses it, and that click wins over a deferred focus; any other window
+// Hyprland refocuses there is not the click.
+TEST(StagesInput, APressBesideAnExclusiveLayerChoosesTheWindowPressed) {
+    EXPECT_EQ(recordPress({.exclusive = true, .onExclusive = true, .under = 0x10}).scope, PressScope::None) << "a press into the layer";
+    EXPECT_EQ(recordPress({.exclusive = true, .onExclusive = false, .under = 0}).scope, PressScope::None) << "beside the layer, on no window";
+    const auto press = recordPress({.exclusive = true, .onExclusive = false, .under = 0x10});
+    EXPECT_EQ(press.scope, PressScope::UntilFocus);
+    EXPECT_TRUE(clickFromPress(press, 0x10)) << "the refocus after the layer finds the window pressed";
+    EXPECT_FALSE(clickFromPress(press, 0x20)) << "the pointer moved to another window before the layer went away";
 }
 
 // R13 counter-review of 17208af, MAJOR: a swap made while an Exclusive layer held the keyboard left Hyprland's active window
@@ -440,10 +495,10 @@ TEST(StagesInput, UnderAnExclusiveLayerTheActiveStripWindowIsOnlyCleared) {
 }
 
 // The front window the plugin could not focus under an Exclusive layer (or the lock) takes the focus only once Hyprland
-// accepts window focus again, and only if it still is the front window of a Desktop that is shown and not covered.
+// accepts window focus again, and only if its Desktop is shown and not covered.
 TEST(StagesInput, ADeferredFocusWaitsForTheLayerAndIsCheckedAgain) {
     using P                         = PendingFocusAction;
-    const PendingFocusState settled = {.exists = true, .front = true, .shown = true, .locked = false, .exclusive = false, .holderKeeps = false, .focused = false};
+    const PendingFocusState settled = {.remembered = true, .hasFront = true, .shown = true, .locked = false, .exclusive = false, .holderKeeps = false, .focused = false};
     EXPECT_EQ(pendingFocusAction(settled), P::Focus) << "the layer is gone: the swap's front window takes the keyboard (ST23)";
 
     auto s      = settled;
@@ -456,20 +511,31 @@ TEST(StagesInput, ADeferredFocusWaitsForTheLayerAndIsCheckedAgain) {
     s.locked = true;
     EXPECT_EQ(pendingFocusAction(s), P::Wait) << "the session lock: nothing until the unlock";
 
-    s        = settled;
-    s.exists = false;
-    s.locked = true;
-    EXPECT_EQ(pendingFocusAction(s), P::Drop) << "the window closed or was minimized";
-    s           = settled;
-    s.front     = false;
-    s.exclusive = true;
-    EXPECT_EQ(pendingFocusAction(s), P::Drop) << "another stage came forward meanwhile";
     s       = settled;
     s.shown = false;
     EXPECT_EQ(pendingFocusAction(s), P::Drop) << "its Desktop is not shown or a special workspace covers it: nothing is switched or closed after the fact";
     s         = settled;
     s.focused = true;
     EXPECT_EQ(pendingFocusAction(s), P::Drop) << "Hyprland's restore already gave it the keyboard";
+}
+
+// R13 counter-review #4 of 0.6.3-stages, minor: when the remembered window closed while the layer was up and the pointer was
+// over empty space, the keyboard ended on nothing. macOS: the frontmost app's key window gets the keyboard back; here the
+// front window of that Desktop's active stage (another stage may have come forward when the window closed).
+TEST(StagesInput, ADeferredFocusFallsBackToTheFrontWindowNow) {
+    using P                    = PendingFocusAction;
+    const PendingFocusState gone = {.remembered = false, .hasFront = true, .shown = true, .locked = false, .exclusive = false, .holderKeeps = false, .focused = false};
+    EXPECT_EQ(pendingFocusAction(gone), P::FocusFront) << "closed, minimized or moved away, or another stage came forward";
+    auto s      = gone;
+    s.exclusive = true;
+    EXPECT_EQ(pendingFocusAction(s), P::Wait) << "still under the layer";
+    s         = gone;
+    s.focused = true;
+    EXPECT_EQ(pendingFocusAction(s), P::Drop) << "the front window already holds the keyboard";
+    s          = gone;
+    s.hasFront = false;
+    s.locked   = true;
+    EXPECT_EQ(pendingFocusAction(s), P::Drop) << "no stage left on that Desktop: Hyprland's choice stands";
 }
 
 // HIGH 2: minimizing the only window of the active stage left the keyboard on it (special:minimized).

@@ -59,6 +59,9 @@ namespace {
         std::vector<SAnimation>          animations;
         std::vector<CHyprSignalListener> listeners;
         SP<CEventLoopTimer>              watchdog;
+        // The Dock rectangle line of each minimize has a budget of its own (20 at once, then 2 per second; spec FR24):
+        // tests read it, and the shared request budget is often spent by titlebar and Stages lines during a soak.
+        gf::events::CLogLimiter targetLog{20, std::chrono::milliseconds(500)};
     };
 
     // Constructed on first use inside a guarded call (R13). Emptied by stop() before dlclose.
@@ -388,6 +391,13 @@ namespace gf::minimizer {
         if (onMinimizedWorkspace(w)) {
             gf::logRequest(Log::DEBUG, "minimize: window {:x} is already minimized", address);
             return;
+        }
+        // The Dock tile the shell computed for this window (layout coordinates). Tests read it from Hyprland's log
+        // (tests/compositor/minimize.sh, soak.sh: `hyprctl rollinglog -f`) to click that tile: keep the wording.
+        if (target) {
+            if (const auto held = st().targetLog.admit(gf::events::Clock::now()))
+                gf::log(Log::INFO, "minimize {:x}: toward the Dock rectangle {:.0f},{:.0f} {:.0f}x{:.0f}{}", address, target->x, target->y, target->w, target->h,
+                        *held > 0 ? std::format(" ({} similar line(s) held back)", *held) : std::string{});
         }
 
         // A restore still animating: the new animation starts where that one is.

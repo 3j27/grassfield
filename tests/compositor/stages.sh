@@ -35,7 +35,12 @@
 # first when there are two); a swap under the layer with a special workspace open keeps every key at the layer and the
 # special workspace open (8f); a stage of a Desktop not shown activated under the layer switches nothing and focuses
 # nothing (8g); a polkit-like dialog (GF_STAGES_ROLE=polkit: full-output Overlay, Exclusive, password field) keeps every
-# key, and the activated stage gets the keyboard when it ends (8h).
+# key, and the activated stage gets the keyboard when it ends (8h). R13 counter-review #4 of 0.6.3-stages (Hyprland's
+# refocus at the cursor reports CLICK): after a swap under an Exclusive layer the swapped-in front window gets the keys with
+# the pointer over an unrelated tiled window, the stage's back window or empty desktop, the stage's window now in front gets
+# them when the remembered one closed under the layer, a real click beside the layer or just after it wins, and the Stages
+# event names the front window and app while Hyprland has no active window (8i); a focus-matched window rule is rechecked
+# when the plugin clears the active window (8c).
 # Screenshots (grim -o OUTPUT): .dev/stages/run-<timestamp>/. Exit: 0 PASS, 1 FAIL, 2 usage or environment error.
 set -uo pipefail
 
@@ -652,7 +657,11 @@ check "8b swap while an Exclusive layer holds the keyboard: kept when the layer 
 # Hyprland's active window is not g (there is none: f takes the focus when the layer is gone), no activewindowv2 names g
 # or f while the layer is up, the focused monitor does not change (with two outputs the pointer first goes to the other
 # output, which Hyprland then focuses), the layer keeps the keys and the window dispatcher hl.dsp.window.close() closes no
-# window; when the layer closes, f gets the keys and g nothing.
+# window; when the layer closes, f gets the keys and g nothing. R13 counter-review #4 of 0.6.3-stages (minor): clearing
+# Hyprland's active window must recheck what Hyprland rechecks on a focus change; a window rule matching on focus (opacity
+# 0.5 while focused, a test rule for these two apps only) leaves g when the plugin clears it.
+nestctl dispatch 'hl.window_rule({ name = "gf-test-stages-focus", match = { class = "^gf-stage-[fg]$", focus = true }, opacity = "0.5" })' >>"$log" 2>&1
+opacity_of() { nestctl getprop "address:$1" opacity 2>/dev/null | head -n 1; }
 cap_f=$run/capture-f.cap cap_g=$run/capture-g.cap
 p=$(foot_capture gf-stage-f "$cap_f"); pids+=("$p"); pid_f=$p
 addr_f=$(address_of "$p")
@@ -672,12 +681,14 @@ if [[ -n $other_out ]]; then # the focused monitor becomes the other output (a p
 fi
 mon0=$(focused_monitor)
 sf=$(stage_of "$addr_f")
+op_g0=$(opacity_of "$addr_g")
 ev0=$(event_lines)
 a0=$(st_count '"active":'"$sf"',')
 stages "{\"op\":\"activate\",\"stage\":$sf}"
 wait_st '"active":'"$sf"',' "$a0" 2000
 sw_rc=$?
 sleep 0.6
+op_g1=$(opacity_of "$addr_g")
 aw_swap=$(active_window)
 mon1=$(focused_monitor)
 g_strip=$(in_active "$addr_g" && echo no || echo yes)
@@ -704,6 +715,9 @@ check "8c swap under an Exclusive layer: Hyprland's active window is never the s
 [[ $g_left == yes && $f_left == yes && $capf_new == *k9* && -z $capg_new ]] && in_active "$addr_f"
 check "8c hl.dsp.window.close() under the layer closes no window (the strip window g survives); after the layer the new stage's front window (f) gets the keys" $? \
   "f mapped after close: $f_left, g mapped: $g_left; f got '$capf_new', g got '$capg_new'"
+[[ $op_g0 == 0.5 && $op_g1 == 1 ]]
+check "8c a window rule matching on focus is rechecked when the plugin clears the strip window g from Hyprland's active window" $? \
+  "g's opacity (rule: 0.5 while focused) $op_g0 while active -> $op_g1 after the swap under the layer"
 kill "$pid_g" "$pid_f" 2>/dev/null
 sleep 0.8
 pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100 # back on $out
@@ -857,6 +871,172 @@ check "8h the dialog ends (keyboard None, then unmapped): the activated stage's 
   "c3 got '$capc_new', b3 got '$capb_new'"
 stop_polkit
 sleep 0.6
+
+# 8i. Hyprland's refocus at the cursor when the layer goes away is not a click (R13 counter-review #4 of 0.6.3-stages:
+# Hyprland reports it as CLICK and the plugin counted it as the user's choice, so the window under the pointer took the
+# keyboard from the swap's front window). After a swap under an Exclusive layer the swapped-in front window gets the keys
+# with the pointer over (a) an unrelated tiled window u, (b) the swapped-in stage's back window h1 (a stage of h1, 1200x900,
+# and h2, 600x400 in front), (c) empty desktop; (d) when that front window closes under the layer, the window now in front
+# of its stage gets them (macOS: the frontmost app's key window); (e) a real click wins: on another window beside the layer
+# while it is up, or just after the layer went away. While the layer holds the keyboard after the swap Hyprland has no
+# active window and the Stages event names the front window and its app (what the menu bar keeps showing).
+cap_u=$run/capture-u.cap cap_h1=$run/capture-h1.cap cap_h2=$run/capture-h2.cap
+p=$(foot_capture gf-stage-u "$cap_u"); pids+=("$p"); pid_u=$p
+addr_u=$(address_of "$p")
+sleep 0.6
+nestctl dispatch "hl.dsp.window.float({ action = \"toggle\", window = \"address:$addr_u\" })" >>"$log" 2>&1 # tiled: Stages leaves it alone
+sleep 0.6
+p=$(foot_capture gf-stage-h "$cap_h1" --window-size-pixels=1200x900); pids+=("$p"); pid_h1=$p
+addr_h1=$(address_of "$p")
+sleep 0.6
+p=$(foot_capture gf-stage-h "$cap_h2" --window-size-pixels=600x400); pids+=("$p"); pid_h2=$p
+addr_h2=$(address_of "$p")
+sleep 0.8
+u_tiled=$(nestctl -j clients | jq -r --arg a "$addr_u" '.[] | select(.address == $a) | .floating | not')
+say "8i: u $addr_u (tiled: $u_tiled), h1 $addr_h1 (back), h2 $addr_h2 (front)"
+# Points (on $out): on u only (right of every floating window, below the layer), on h1 only (inside h1, outside h2; the
+# other stages' windows there are in the strip, which Hyprland's hit test skips), empty desktop once u is closed.
+u_x=$((mon_w - 100)) u_y=$((mon_h / 2))
+h1_x=$((mon_w / 2 + 450)) h1_y=$((mon_h / 2))
+caps_reset() { capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c"); capu0=$(stat -c %s "$cap_u"); caph10=$(stat -c %s "$cap_h1"); caph20=$(stat -c %s "$cap_h2"); }
+caps_read() { capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0"); capu_new=$(cap_since "$cap_u" "$capu0"); caph1_new=$(cap_since "$cap_h1" "$caph10"); caph2_new=$(cap_since "$cap_h2" "$caph20"); }
+swap_under_layer() { # <stage id>: activated while the Exclusive layer is up
+  local a0
+  a0=$(st_count '"active":'"$1"',')
+  stages "{\"op\":\"activate\",\"stage\":$1}"
+  wait_st '"active":'"$1"',' "$a0" 2000
+}
+
+# (a) the pointer on the unrelated tiled window u.
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_c3\" })" >>"$log" 2>&1
+sleep 0.5
+sb=$(stage_of "$addr_b3")
+start_exclusive
+ex_rc=$?
+pointer abs "$u_x" "$u_y" sleep 150
+swap_under_layer "$sb"
+sw_rc=$?
+sleep 0.6
+aw_a=$(active_window)
+front_a=$(last_st | jq -r '.monitors[0].front.address // ""'); app_a=$(last_st | jq -r '.monitors[0].front.app // ""')
+stop_exclusive
+sleep 1
+caps_reset
+keys ia
+sleep 0.4
+caps_read
+((ex_rc == 0 && sw_rc == 0)) && [[ $u_tiled == true && $capb_new == *ia* && -z $capu_new && -z $capc_new ]]
+check "8i(a) pointer on an unrelated tiled window when the layer closes: the swapped-in front window (b3) gets the keys, the window under the pointer (u) nothing" $? \
+  "b3 got '$capb_new', u got '$capu_new', c3 got '$capc_new'"
+[[ -z $aw_a && $front_a == "$(hexof "$addr_b3")" && $app_a == gf-stage-b ]]
+check "8i(a) under the layer after the swap: no active window in Hyprland, the Stages event names the front window and app (b3, gf-stage-b)" $? \
+  "active window '$aw_a'; event front '$front_a' app '$app_a' (b3 $addr_b3)"
+
+# (b) the pointer on the swapped-in stage's back window h1 (b3, Hyprland's active window, goes to the strip; h's stage is
+# activated).
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_b3\" })" >>"$log" 2>&1
+sleep 0.5
+sh=$(stage_of "$addr_h2")
+start_exclusive
+ex_rc=$?
+pointer abs "$h1_x" "$h1_y" sleep 150
+swap_under_layer "$sh"
+sw_rc=$?
+sleep 0.6
+stop_exclusive
+sleep 1
+caps_reset
+keys ib
+sleep 0.4
+caps_read
+aw_b=$(active_window)
+((ex_rc == 0 && sw_rc == 0)) && [[ $caph2_new == *ib* && -z $caph1_new && -z $capb_new && $aw_b == "$addr_h2" ]] && in_active "$addr_h2"
+check "8i(b) pointer on the swapped-in stage's back window when the layer closes: its front window (h2) gets the keys, the back window (h1) nothing" $? \
+  "h2 got '$caph2_new', h1 got '$caph1_new', b3 got '$capb_new'; active window $aw_b (h2 $addr_h2)"
+
+# (e1) a real click beside the layer while it is up, on u: when the layer goes away, u keeps the keyboard (the click came
+# after the swap and wins over it).
+sc=$(stage_of "$addr_c3")
+start_exclusive
+ex_rc=$?
+swap_under_layer "$sc"
+sw_rc=$?
+sleep 0.6
+pointer abs "$u_x" "$u_y" sleep 150 abs $((u_x + 1)) "$u_y" sleep 100 click sleep 200
+ex_still=$( [[ -n $exclusive_pid ]] && kill -0 "$exclusive_pid" 2>/dev/null && echo yes || echo no)
+stop_exclusive
+sleep 1
+caps_reset
+keys ic
+sleep 0.4
+caps_read
+((ex_rc == 0 && sw_rc == 0)) && [[ $ex_still == yes && $capu_new == *ic* && -z $capc_new && -z $caph2_new ]]
+check "8i(e) a click on another window (u) beside the layer while it is up wins: u gets the keys after the layer, not the swapped-in front window (c3)" $? \
+  "layer up at the click: $ex_still; u got '$capu_new', c3 got '$capc_new', h2 got '$caph2_new'"
+
+# (e2) a click just after the layer went away: the swapped-in front window (h2) took the keyboard (the pointer still on
+# u), and the click on u then gives it to u.
+start_exclusive
+ex_rc=$?
+swap_under_layer "$sh"
+sw_rc=$?
+sleep 0.6
+stop_exclusive
+sleep 0.4
+aw_e=$(active_window)
+pointer abs $((u_x - 1)) "$u_y" sleep 100 click sleep 300
+caps_reset
+keys id
+sleep 0.4
+caps_read
+((ex_rc == 0 && sw_rc == 0)) && [[ $aw_e == "$addr_h2" && $capu_new == *id* && -z $caph2_new ]]
+check "8i(e) a click on u just after the layer: before it the swapped-in front window (h2) is active, the click gives u the keys" $? \
+  "active window after the layer $aw_e (h2 $addr_h2); u got '$capu_new', h2 got '$caph2_new'"
+
+# (c) empty desktop under the pointer (u closed).
+kill "$pid_u" 2>/dev/null
+sleep 0.8
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_h2\" })" >>"$log" 2>&1
+sleep 0.5
+start_exclusive
+ex_rc=$?
+pointer abs "$u_x" "$u_y" sleep 150
+swap_under_layer "$sc"
+sw_rc=$?
+sleep 0.6
+stop_exclusive
+sleep 1
+caps_reset
+keys ie
+sleep 0.4
+caps_read
+((ex_rc == 0 && sw_rc == 0)) && [[ $capc_new == *ie* && -z $caph2_new ]]
+check "8i(c) pointer on empty desktop when the layer closes: the swapped-in front window (c3) gets the keys" $? \
+  "c3 got '$capc_new', h2 got '$caph2_new'"
+
+# (d) the remembered front window closes while the layer is up (the pointer on empty desktop): the window now in front of
+# that stage (h1) gets the keys, nothing is left without the keyboard.
+start_exclusive
+ex_rc=$?
+swap_under_layer "$sh"
+sw_rc=$?
+sleep 0.6
+kill "$pid_h2" 2>/dev/null
+sleep 0.8
+h2_gone=$(client_mapped "$addr_h2" && echo no || echo yes)
+stop_exclusive
+sleep 1
+caps_reset
+keys if
+sleep 0.4
+caps_read
+aw_d=$(active_window)
+((ex_rc == 0 && sw_rc == 0)) && [[ $h2_gone == yes && $caph1_new == *if* && $aw_d == "$addr_h1" && -z $capc_new ]]
+check "8i(d) the remembered front window closed under the layer: its stage's window now in front (h1) gets the keys" $? \
+  "h2 closed: $h2_gone; h1 got '$caph1_new', c3 got '$capc_new'; active window $aw_d (h1 $addr_h1)"
+kill "$pid_h1" 2>/dev/null
+sleep 0.8
+pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100
 
 # 8d. a menu (xdg_popup with a grab) of the active stage's window keeps its keys; when that window goes to the strip its
 # menu closes at once, as a click outside it would, and every key goes to the new stage (R13 counter-review of 17208af:

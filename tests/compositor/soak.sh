@@ -8,11 +8,13 @@
 # of the new window with the virtual pointer (scripts/dev/pointer.sh): drags (some abandoned mid-drag,
 # so the pointer device disappears while a button is held), double-click zoom, zoom button, close
 # button, press-move-away cancel, and (when the plugin advertises "minimize" and grassfield-shell runs)
-# minimize button + restore through a click on the Dock tile (geometry as in tests/compositor/minimize.sh).
+# minimize button + restore through a click on the Dock tile.
 # The double-click rounds expect Settings windows.titlebarDoubleClick = zoom (the default).
-# The Dock tile is clicked only after the window was seen moving to special:minimized (socket2 movewindowv2), so the
-# click always lands on that (foot) window's minimized tile, never on another Dock tile; the Dock geometry used and one
-# capture of the Dock at the first minimize are logged.
+# The Dock tile is clicked only after the window was seen moving to special:minimized (socket2 movewindowv2), at the
+# centre of the rectangle the shell sent for that window (the plugin's log line, as in tests/compositor/minimize.sh), or,
+# when the plugin's request log budget held that line back, the previous such rectangle while exactly one window is
+# minimized; otherwise the tile is not clicked (counted). So the click lands on that (foot) window's minimized tile, never
+# on another Dock tile; the tile clicked first and one capture of the Dock at the first minimize are logged.
 # With `stages`: the Stages flag on, the strip stand-in tests/compositor/stages-fixture mapped on SOAK_OUTPUT and op "on"
 # sent (verbs through scripts/nestctl); every 5th round one long-lived window is moved into a strip stage of its own, every
 # 7th round the stage in tile 0 is activated (a swap), so that windows keep entering and leaving the strip (blocked and
@@ -85,28 +87,38 @@ zoom_x=$((left + 58))
 
 # Minimize rounds: plugin feature (read-only `hyprctl grassfield`) and a running shell (Dock, minimize-request).
 minimize_rounds=0
+follow=/dev/null follow_pid=""
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
 if HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null | jq -e '.features | index("minimize")' >/dev/null 2>&1 \
   && [[ -n $shell_pid ]] && kill -0 "$shell_pid" 2>/dev/null; then
   minimize_rounds=1
-  token() { sed -n "s/.*readonly property int $1: \([0-9]*\).*/\1/p" "$root/ui/Grassfield/Ui/Tokens.qml" | head -n 1; }
-  icon=$(token dockIconSize)
-  dspacing=$(token dockSpacing)
-  dpadding=$(token dockPadding)
-  sep_w=$((2 * dspacing + $(token dockSeparatorWidth)))
-  tile_y=$((out_h - $(token dockBottomMargin) - (icon + 2 * dpadding + $(token dockIndicatorSize) + dspacing) + dpadding + icon / 2))
-  config=$dev/config/grassfield.json
-  [[ -f $config ]] || config=$root/config/defaults/grassfield.json
-  apps=0
-  while read -r id; do
-    for d in "${XDG_DATA_HOME:-$HOME/.local/share}" /usr/local/share /usr/share; do
-      if [[ -f $d/applications/$id.desktop ]]; then apps=$((apps + 1)); break; fi
-    done
-  done < <(jq -r --slurpfile d "$root/config/defaults/grassfield.json" '(.dock.pinned // $d[0].dock.pinned)[]' "$config")
-  n=$((apps + 2)) # apps, one minimized tile, the Trash
-  restore_x=$(((out_w - (n * icon + sep_w + n * dspacing)) / 2 + apps * (icon + dspacing) + sep_w + dspacing + icon / 2))
-  pinned_ids=$(jq -r --slurpfile d "$root/config/defaults/grassfield.json" '(.dock.pinned // $d[0].dock.pinned) | join(",")' "$config")
+  # The Dock tile is the one the shell computed: the plugin logs the rectangle the shell sent with each minimize
+  # ("minimize <hex>: toward the Dock rectangle x,y wxh"), read from Hyprland's log as it is written (read-only
+  # `hyprctl rollinglog -f` through scripts/nestctl). Nothing about the Dock layout is computed here.
+  follow=$dev/soak-follow-$start_epoch.log
+  # Line-buffered (stdbuf): hyprctl's stdout into a file is block-buffered and a line could reach it seconds late.
+  timeout $((duration + 600)) stdbuf -oL "$root/scripts/nestctl" rollinglog -f >"$follow" 2>&1 &
+  follow_pid=$!
+  read -r out_x out_y < <(HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y)"')
 fi
+follow_lines() { grep -ac "" "$follow" 2>/dev/null || echo 0; }
+# Centre "<x> <y>" (relative to $out) of the Dock tile the shell computed for window <hex> after line <since> of the follow
+# log; waits up to 1.5 s; nothing when the line never came (the request log budget may hold it back) or lies off $out.
+dock_tile() { # <hex> <since>
+  local line rx ry rw rh cx cy deadline=$(($(date +%s%3N) + 1500))
+  while :; do
+    line=$(tail -n +"$(($2 + 1))" "$follow" 2>/dev/null | grep -a "\[grassfield\] minimize $1: toward the Dock rectangle " | tail -n 1)
+    [[ -n $line ]] && break
+    (($(date +%s%3N) > deadline)) && return 1
+    sleep 0.05
+  done
+  read -r rx ry rw rh < <(sed -n 's/.*toward the Dock rectangle \(-\{0,1\}[0-9]*\),\(-\{0,1\}[0-9]*\) \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' <<<"$line")
+  [[ -n ${rh:-} ]] || return 1
+  cx=$((rx + rw / 2 - out_x)) cy=$((ry + rh / 2 - out_y))
+  ((cx >= 0 && cx < out_w && cy >= 0 && cy < out_h)) && echo "$cx $cy"
+}
+minimized_count() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j clients 2>/dev/null | jq '[.[] | select(.workspace.name == "special:minimized")] | length'; }
+restore_x="" tile_y="" # the latest tile the shell named while exactly one window was minimized
 rand_x() { echo $((100 + RANDOM % (out_w - 200))); }
 rand_y() { echo $((80 + RANDOM % (out_h - 280))); }
 
@@ -124,6 +136,7 @@ cleanup() {
   fi
   for p in "${pool[@]}" "${resident[@]}"; do kill "$p" 2>/dev/null; done
   [[ -n ${events_pid:-} ]] && kill "$events_pid" 2>/dev/null
+  [[ -n ${follow_pid:-} ]] && kill "$follow_pid" 2>/dev/null
 }
 trap cleanup EXIT
 
@@ -164,7 +177,7 @@ fi
 
 say "soak: start $start_human, duration ${duration}s, nested pid $hypr_pid, instance $sig, output $out ${out_w}x${out_h}"
 say "soak: Hyprland RSS at start: $(rss_kb) kB"
-((minimize_rounds)) && say "soak: Dock: $apps pinned app tile(s) with a desktop entry (pinned: ${pinned_ids:-?}); the minimized foot tile is clicked at ($restore_x,$tile_y) only after its window moved to special:minimized"
+((minimize_rounds)) && say "soak: Dock: the minimized foot tile is clicked only after its window moved to special:minimized, at the centre of the rectangle the shell sent for it (plugin log line; else the previous one while exactly one window is minimized, else not clicked)"
 ((stages_mode)) && say "soak: Stages on (strip stand-in on $out, 4 tiles); resident windows moved into strip stages every 5th round, tile 0 activated every 7th"
 
 while (( $(date +%s) < end_epoch )); do
@@ -227,20 +240,35 @@ while (( $(date +%s) < end_epoch )); do
     7) # minimize the newest window with its button, restore it from its Dock tile (while it may still animate). The
       # tile is clicked only once the window moved to special:minimized: otherwise there is no minimized tile there.
       m0=$(moves_to_minimized)
+      f0=$(follow_lines)
       pointer abs "$min_x" "$bar_y" sleep 50 click
       moved=0
       for _ in $(seq 1 30); do
         (($(moves_to_minimized) > m0)) && { moved=1; break; }
         sleep 0.05
       done
+      tile=""
       if ((moved)); then
+        mhex=$(grep -E '^movewindowv2>>[0-9a-f]+,[^,]*,special:minimized$' "$events" | tail -n 1 | sed 's/^movewindowv2>>\([0-9a-f]*\),.*/\1/')
+        tile=$(dock_tile "$mhex" "$f0")
+        if [[ -n $tile && $(minimized_count) == 1 ]]; then
+          read -r restore_x tile_y <<<"$tile"
+        elif [[ -z $tile && -n $restore_x && $(minimized_count) == 1 ]]; then
+          tile="$restore_x $tile_y" # line held back by the log budget: the same Dock with one minimized window
+          dock_cached=$((${dock_cached:-0} + 1))
+        fi
+      fi
+      if [[ -n $tile ]]; then
         sleep "0.$((150 + RANDOM % 400))"
+        read -r tx ty <<<"$tile"
         if [[ -z $dock_shot ]]; then
           dock_shot=$dev/soak-dock-$start_epoch.png
-          WAYLAND_DISPLAY=$sock grim -l 0 -o "$out" "$dock_shot" 2>>"$log" && say "soak: Dock captured at the first minimize: $dock_shot (tile clicked at $restore_x,$tile_y)"
+          WAYLAND_DISPLAY=$sock grim -l 0 -o "$out" "$dock_shot" 2>>"$log" && say "soak: Dock captured at the first minimize: $dock_shot (tile clicked at $tx,$ty)"
         fi
-        pointer abs "$restore_x" "$tile_y" sleep 50 click sleep 300
+        pointer abs "$tx" "$ty" sleep 50 click sleep 300
         minimizes=$((minimizes + 1))
+      elif ((moved)); then
+        no_tile=$((${no_tile:-0} + 1)) # minimized, but no Dock rectangle known for it: its tile is not clicked
       else
         skipped=$((skipped + 1)) # the newest window was not where its button was expected (e.g. a resident covered it)
       fi ;;
@@ -264,7 +292,7 @@ while (( $(date +%s) < end_epoch )); do
 done
 
 elapsed=$(( $(date +%s) - start_epoch ))
-say "soak: done after ${elapsed}s, $round rounds: short $short, churn $spawned, drags $drags, abandoned $abandoned, zoom pairs $zooms, cancels $cancels, closes $closes, minimize pairs $minimizes (skipped, no move seen: $skipped)"
+say "soak: done after ${elapsed}s, $round rounds: short $short, churn $spawned, drags $drags, abandoned $abandoned, zoom pairs $zooms, cancels $cancels, closes $closes, minimize pairs $minimizes (skipped, no move seen: $skipped; minimized without a known Dock tile, not clicked: ${no_tile:-0}; previous tile reused: ${dock_cached:-0})"
 ((stages_mode)) && say "soak: Stages: $st_moves move-to-new-stage and $st_swaps activate requests, $(grep -ac 'grassfield>>{"v":"gfc/1","type":"stages"' "$events") stages events, still on: $(st_last | jq -r '.on')"
 
 fail=0
