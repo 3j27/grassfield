@@ -1256,9 +1256,12 @@ capb_new=$(tail -c +"$((capb0 + 1))" "$cap_b" | cat -v | head -c 60)
 ((fs_rc == 0 && sg0 <= 2)) && [[ $capb_new == *"[<0;"*M* ]]
 check "strip surface gone: interrupted, no thumbnail, every window takes input at its place" $? "tile0 $sg0 %, b3 got '$capb_new'"
 start_fixture >/dev/null
+o_back=$(st_count '"on":true')
 stages "$(on_json 0)"
+wait_st '"on":true' "$o_back" 2000 # a fresh event, newer than the request: the latest one alone could be an old one
+back_rc=$?
 sleep 0.6
-(($(stage_count) >= 2)) && [[ $(last_st | jq -r '.on') == true ]]
+((back_rc == 0 && $(stage_count) >= 2)) && [[ $(last_st | jq -r '.on') == true ]]
 check "op on again after the strip came back: Stages resumes with its stages" $? "$(stage_count) stages"
 
 # 14. invalid payloads and a flood.
