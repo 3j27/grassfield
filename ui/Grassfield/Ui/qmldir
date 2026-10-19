@@ -21,3 +21,4 @@ singleton FolderPlate 1.0 FolderPlate.qml
 FolderEffect 1.0 FolderEffect.qml
 FolderIcon 1.0 FolderIcon.qml
 PointerSize 1.0 PointerSize.js
+PointerColors 1.0 PointerColors.js

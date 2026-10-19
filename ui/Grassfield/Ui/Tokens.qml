@@ -638,6 +638,32 @@ QtObject {
     readonly property int settingsPointerRetryMs: 250
     // estimate: shell, attempts for one pointer size before waiting for the next change or compositor event
     readonly property int settingsPointerRetryMax: 5
+    // estimate: shell, quiet time after the last pointer colour change before the cursor theme is regenerated (a colour well dragged for a second makes one build, for the colour it stops on)
+    readonly property int settingsPointerColorDebounceMs: 350
+    // estimate: shell, a cursor theme build that runs longer than this is killed (a normal one takes about 2 s)
+    readonly property int settingsPointerBuildTimeoutMs: 60000
+    // estimate: shell, wait for a cancelled build to stop on SIGTERM before it is killed
+    readonly property int settingsPointerBuildKillMs: 3000
+    // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged
+    readonly property int settingsColorWriteMs: 120
+    // estimate: Settings colour well, side of the round well in a row
+    readonly property int settingsColorWellSize: 22
+    // estimate: Settings colour well, width of the saturation and brightness square
+    readonly property int settingsColorSquareWidth: 200
+    // estimate: Settings colour well, height of the saturation and brightness square
+    readonly property int settingsColorSquareHeight: 140
+    // estimate: Settings colour well, width of the typed #rrggbb field
+    readonly property int settingsColorHexWidth: 84
+    // estimate: Settings pointer preview, side of the arrow tile (the arrow is drawn on the 32 unit grid of the cursor sources)
+    readonly property int settingsPointerPreviewSize: 28
+    // the pure ends of the saturation/brightness square of the colour well are colour maths, not a theme colour
+    readonly property string settingsColorSquareWhite: "#ffffff"
+    // same: transparent white end of the square
+    readonly property string settingsColorSquareWhiteClear: "#00ffffff"
+    // same: black end of the square
+    readonly property string settingsColorSquareBlack: "#000000"
+    // same: transparent black end of the square
+    readonly property string settingsColorSquareBlackClear: "#00000000"
     // estimate: Sound pane, width of the percentage next to a slider
     readonly property int settingsVolumeValueWidth: 44
 

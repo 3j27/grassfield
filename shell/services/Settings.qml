@@ -38,6 +38,8 @@ Singleton {
     readonly property string folderColor: store.folderColor
 
     readonly property int pointerSize: store.pointerSize
+    readonly property string pointerOutlineColor: store.pointerOutlineColor
+    readonly property string pointerFillColor: store.pointerFillColor
 
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
