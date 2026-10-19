@@ -3370,6 +3370,13 @@
     </message>
 </context>
 <context>
+    <name>SwitcherWindow</name>
+    <message>
+        <source>Application Switcher</source>
+        <translation>Sélecteur d’applications</translation>
+    </message>
+</context>
+<context>
     <name>System</name>
     <message>
         <source>System, CPU %1%, memory %2%</source>

@@ -17,6 +17,7 @@ import qs.security.idle
 import qs.security.lock
 import qs.security.polkit
 import qs.services
+import qs.switcher
 
 // grassfield-shell root. Settings feed the design-system Appearance singleton; surfaces
 // read Appearance and Tokens only.
@@ -119,13 +120,20 @@ ShellRoot {
     AppsController {
         id: appsSurface
     }
+    Switcher {
+        id: switcher
+    }
+    SwitcherWindow {
+        controller: switcher
+    }
 
-    // Opening Overview, Apps or Search closes the other two: the keyboard follows the visible top surface.
+    // Opening Overview, Apps, Search or the app switcher closes the others: the keyboard follows the visible top surface.
     ExclusiveSurfaces {
         surfaces: [
             {target: overviewSurface, close: () => overviewSurface.requestClose()},
             {target: appsSurface, close: () => appsSurface.hide()},
-            {target: searchSurface, close: () => searchSurface.hide()}
+            {target: searchSurface, close: () => searchSurface.hide()},
+            {target: switcher, close: () => switcher.cancel()}
         ]
     }
 

@@ -62,6 +62,7 @@
    {"file": "shell/widgets/builtin/battery/Battery.qml", "class": "danger", "count": 1},
    {"file": "shell/widgets/builtin/system/System.qml", "class": "danger", "count": 1}
   ]},
+  {"id": "switcher app name on material", "fg": "colors.text", "backdrop": "material", "kind": "text", "sites": [{"file": "shell/switcher/SwitcherWindow.qml", "class": "opacity-dynamic", "count": 1}]},
   {"id": "accent text on accent", "fg": "colors.accentText", "backdrop": "accent", "kind": "text", "sites": [
    {"file": "shell/security/PasswordField.qml", "class": "primary", "count": 1},
    {"file": "shell/security/PasswordField.qml", "class": "backdrop", "count": 1}
