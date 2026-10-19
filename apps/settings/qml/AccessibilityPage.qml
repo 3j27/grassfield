@@ -33,14 +33,23 @@ SettingsPage {
 
     title: qsTr("Accessibility")
 
-    // A tool's message is a sentence fragment: no trailing full stop before the sentence's own.
-    function fragment(reason: string): string {
-        return reason.trim().replace(/[.\s]+$/, "");
+    // Why the colours could not be applied, in the user's language; the tool's own message (English, technical) follows
+    // on a line of its own.
+    function failureText(): string {
+        const code = themeStatus.code;
+        let sentence = qsTr("The pointer colours could not be applied. The pointer is unchanged.");
+        if (code === "builder")
+            sentence = qsTr("The pointer colours could not be applied: the cursor builder is not installed. The pointer is unchanged.");
+        else if (code === "folder")
+            sentence = qsTr("The pointer colours could not be applied: there is no folder for the custom pointer theme. The pointer is unchanged.");
+        else if (/^tool:[A-Za-z0-9_-]+$/.test(code))
+            sentence = qsTr("The pointer colours could not be applied: %1 is not installed. The pointer is unchanged.").arg(code.substring(5));
+        return themeStatus.reason !== "" ? sentence + "\n" + qsTr("Details: %1").arg(themeStatus.reason) : sentence;
     }
 
     SettingsGroup {
         caption: qsTr("Pointer")
-        footnote: themeStatus.result === "failed" ? qsTr("The pointer colours could not be applied: %1. The pointer is unchanged.").arg(root.fragment(themeStatus.reason))
+        footnote: themeStatus.result === "failed" ? root.failureText()
             : themeStatus.result === "building" && root.customColors ? qsTr("Applying the new pointer colours…")
             : qsTr("The pointer changes as you drag, and apps that use the system pointer follow it. Without the Grassfield compositor extension the pointer changes the next time it changes shape. Apps that draw their own pointer keep the previous size and colours until you quit and reopen them.")
 
@@ -79,11 +88,6 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Pointer outline colour")
-            PointerPreview {
-                anchors.verticalCenter: parent.verticalCenter
-                outlineColor: root.outlineColor
-                fillColor: root.fillColor
-            }
             ColorWell {
                 anchors.verticalCenter: parent.verticalCenter
                 accessibleName: qsTr("Pointer outline colour")
@@ -95,11 +99,6 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Pointer fill colour")
-            PointerPreview {
-                anchors.verticalCenter: parent.verticalCenter
-                outlineColor: root.outlineColor
-                fillColor: root.fillColor
-            }
             ColorWell {
                 anchors.verticalCenter: parent.verticalCenter
                 accessibleName: qsTr("Pointer fill colour")
@@ -111,6 +110,12 @@ SettingsPage {
 
         SettingsRow {
             title: ""
+            // One preview of the pointer in the chosen colours (the pointer is one thing, as in macOS).
+            PointerPreview {
+                anchors.verticalCenter: parent.verticalCenter
+                outlineColor: root.outlineColor
+                fillColor: root.fillColor
+            }
             Button {
                 text: qsTr("Reset Colour")
                 enabled: root.customColors
