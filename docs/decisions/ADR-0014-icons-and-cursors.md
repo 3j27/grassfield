@@ -71,8 +71,14 @@ B. A fixed palette of prebuilt accent variants only.
   --outline ... --fill ...` (SVG recolour, `hyprcursor-util --create`, XCursor PNG sizes) in a Process off the UI thread,
   debounced while a colour well is dragged (the final pair is always built), one build at a time (a newer pair terminates
   the running one), written atomically (build into a temporary directory, rename), then `setcursor
-  grassfield-cursors-custom <size>` and the `cursor-refresh` redraw; "Reset Colour" switches back to the session theme and
-  deletes the custom one. A failed or impossible build (missing tool, no script, no directory) leaves the pointer as it is
+  grassfield-cursors-custom <size>` and the `cursor-refresh` redraw; "Reset Colour" switches back to `grassfield-cursors`
+  and deletes the custom one. **The wanted theme is derived from the stored colours only, never from the session
+  environment** (fix pass after review: when `cursor.lua` chose the custom theme at login because it existed on disk,
+  Reset Colour was a no-op): `cursor.lua` always starts a real session with `grassfield-cursors`; the shell switches to the
+  custom theme when its settings are read and the stamp (`colors`, written by build.sh inside the theme) names the stored
+  colours, rebuilds when it does not, and at startup with default colours sends `grassfield-cursors` and deletes any
+  custom theme. The theme on disk is identified by its stamp, not by a build counter; a build is its own process group
+  (`setsid`) and is stopped as a group. A failed or impossible build (missing tool, no script, no directory) leaves the pointer as it is
   and the reason is shown in Settings. **`python`, `librsvg` (rsvg-convert) and `hyprcursor` (hyprcursor-util) are
   runtime dependencies of `grassfield-desktop`** (`depends=` in `packaging/arch/PKGBUILD`); the script, the sources and
   the table are installed under `/usr/share/grassfield/cursors`. The icons directory is `$XDG_DATA_HOME/icons`, else

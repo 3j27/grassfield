@@ -54,4 +54,37 @@ LUA
 else
   echo "SKIP: cursor.lua dedupe (lua not installed)"
 fi
+
+# GRASSFIELD_CURSOR_THEME (nested-up.sh/shell-run.sh --cursor-theme) simulates a login with the custom theme on disk: only
+# the custom Grassfield theme, only when it exists under .dev/share/icons.
+mkdir -p "$fake/.dev/share/icons/grassfield-cursors"
+touch "$fake/.dev/share/icons/grassfield-cursors/manifest.hl"
+out=$(env_of GRASSFIELD_CURSOR_THEME=grassfield-cursors-custom)
+desc="without the custom theme on disk GRASSFIELD_CURSOR_THEME changes nothing"
+check bash -c 'grep -qx "HYPRCURSOR_THEME=grassfield-cursors" <<<"$1"' _ "$out"
+mkdir -p "$fake/.dev/share/icons/grassfield-cursors-custom"
+touch "$fake/.dev/share/icons/grassfield-cursors-custom/manifest.hl"
+out=$(env_of GRASSFIELD_CURSOR_THEME=grassfield-cursors-custom)
+desc="GRASSFIELD_CURSOR_THEME=grassfield-cursors-custom puts the custom theme in the session environment"
+check bash -c 'grep -qx "XCURSOR_THEME=grassfield-cursors-custom" <<<"$1" && grep -qx "HYPRCURSOR_THEME=grassfield-cursors-custom" <<<"$1"' _ "$out"
+out=$(env_of GRASSFIELD_CURSOR_THEME=Adwaita)
+desc="any other GRASSFIELD_CURSOR_THEME value is ignored"
+check bash -c 'grep -qx "HYPRCURSOR_THEME=grassfield-cursors" <<<"$1"' _ "$out"
+
+# cursor.lua in a real session: the custom theme on disk is never what the compositor starts with (the shell decides
+# from the stored colours and switches).
+if command -v lua >/dev/null; then
+  data=$tmp/data
+  mkdir -p "$data/icons/grassfield-cursors-custom"
+  touch "$data/icons/grassfield-cursors-custom/manifest.hl"
+  theme=$(XDG_DATA_HOME="$data" lua - "$root/config/hypr/grassfield/cursor.lua" <<'LUA'
+local calls = {}
+hl = { env = function(k, v) calls[k] = v end }
+dofile(arg[1]).apply()
+print(calls.HYPRCURSOR_THEME .. " " .. calls.XCURSOR_THEME)
+LUA
+)
+  desc="real session: cursor.lua starts with the packaged theme although the custom theme is on disk (got: $theme)"
+  check test "$theme" = "grassfield-cursors grassfield-cursors"
+fi
 exit "$fail"

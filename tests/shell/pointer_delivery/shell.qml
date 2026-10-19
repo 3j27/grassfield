@@ -103,11 +103,12 @@ ShellRoot {
             root.check("no refresh without the capability", Pointer.refreshed === 0);
             Capabilities.features = ["cursor-refresh"];
             Capabilities.pluginPresent = true;
+            root.check("a request delivered before the capability was known is redrawn when it arrives", Pointer.refreshed === 1);
             Pointer.size = 76;
             root.waitFor(() => Pointer.applied === 76, 3000);
         },
         function () {
-            root.check("refresh sent after the delivered size with the capability", Pointer.refreshed === 1);
+            root.check("refresh sent after the delivered size with the capability", Pointer.refreshed === 2);
             Capabilities.pluginPresent = false;
             // Retries run out: stops sending (no busy loop), a new size starts a new series.
             server.active = false;
@@ -170,7 +171,7 @@ ShellRoot {
         },
         function () {
             root.check("colours: rebuilt theme requested again under the same name, once", root.requests.length === root.mark + 1 && root.last() === "/setcursor grassfield-cursors-custom 28");
-            root.check("colours: second build counted", Pointer.builder.generation === 2 && Pointer.appliedGeneration === 2);
+            root.check("colours: the compositor has the colours of the second build", Pointer.appliedKey === "#ffeedd|#223344");
             // A failing build: nothing is sent, the pointer keeps what it has, apps still match it.
             root.mark = root.requests.length;
             Pointer.fillColor = "#ff0000";
@@ -180,18 +181,110 @@ ShellRoot {
             root.check("colours: failed build sends nothing", root.requests.length === root.mark && Pointer.builder.error !== "");
             root.check("colours: pointer keeps the previous custom theme", Pointer.appliedTheme === "grassfield-cursors-custom");
             root.check("colours: apps still get the theme on screen", Pointer.launchEnvironment()["XCURSOR_THEME"] === "grassfield-cursors-custom");
+            root.rem = Pointer.builder.removals;
             // Reset Color: back to the session theme, then the custom theme is deleted.
             root.mark = root.requests.length;
             Pointer.outlineColor = "#ffffff";
             Pointer.fillColor = "#000000";
-            root.waitFor(() => Pointer.appliedTheme === "gf-test" && Pointer.builder.removals === 1 && !Pointer.builder.removing, 4000);
+            root.waitFor(() => Pointer.appliedTheme === "gf-test" && Pointer.builder.removals === root.rem + 1 && !Pointer.builder.removing, 4000);
         },
         function () {
             root.check("reset: session theme requested", root.requests.length === root.mark + 1 && root.last() === "/setcursor gf-test 28");
             root.check("reset: no custom theme for new apps", Pointer.launchEnvironment()["XCURSOR_THEME"] === undefined);
+            // A real session after a login with the custom theme on disk (the session environment names it) and the
+            // stored colours of that theme: the stamp matches, nothing is built, the custom theme is asked for once.
+            root.mark = root.requests.length;
+            root.builds = Pointer.builder.started;
+            root.run(["sh", "-c", "d=\"$1\"; mkdir -p \"$d/grassfield-cursors-custom\"; touch \"$d/grassfield-cursors-custom/manifest.hl\"; echo '#ffeedd #112233' > \"$d/grassfield-cursors-custom/colors\"", "sh", root.sock + ".icons"], () => {
+                Pointer.theme = "grassfield-cursors-custom";
+                Pointer.builder.dirty = true;
+                Pointer.outlineColor = "#ffeedd";
+                Pointer.fillColor = "#112233";
+                // The shell reads the stamp when it starts (here: again, the directory changed under it).
+                Pointer.builder.iconsDir = "";
+                Pointer.builder.iconsDir = root.sock + ".icons";
+                Pointer.compositorReset();
+                idle.start();
+            });
+        },
+        function () {
+            root.check("login: the custom theme of matching colours is requested without a build", root.requests.length === root.mark + 1 && root.last() === "/setcursor grassfield-cursors-custom 28" && Pointer.builder.started === root.builds);
+            root.check("login: the session theme in the environment is not what is wanted for the default colours", Pointer.baseTheme === "grassfield-cursors");
+            // Reset Colour: the packaged theme is requested although the environment says custom, then the theme is deleted.
+            root.mark = root.requests.length;
+            root.rem = Pointer.builder.removals;
+            Pointer.outlineColor = "#ffffff";
+            Pointer.fillColor = "#000000";
+            root.waitFor(() => Pointer.appliedTheme === "grassfield-cursors" && !Pointer.builder.removing && Pointer.builder.removals === root.rem + 1, 5000);
+        },
+        function () {
+            root.check("login reset: the packaged theme is requested (" + root.last() + ")", root.requests.length === root.mark + 1 && root.last() === "/setcursor grassfield-cursors 28");
+            root.run(["sh", "-c", "test -e \"$1\"/grassfield-cursors-custom; echo $?", "sh", root.sock + ".icons"], () => root.advance());
+        },
+        function () {
+            root.check("login reset: the custom theme is gone", root.out.trim() === "1");
+            // A real session start with default colours and a custom theme left on disk (stale, or from before a reset
+            // that never ran): the compositor gets the packaged theme, the directory goes.
+            root.rem = Pointer.builder.removals;
+            root.mark = root.requests.length;
+            root.run(["sh", "-c", "d=\"$1\"; mkdir -p \"$d/grassfield-cursors-custom\"; touch \"$d/grassfield-cursors-custom/manifest.hl\"; echo '#aa0000 #0000aa' > \"$d/grassfield-cursors-custom/colors\"", "sh", root.sock + ".icons"], () => {
+                Pointer.theme = "grassfield-cursors-custom";
+                Pointer.builder.dirty = true;
+                Pointer.compositorReset();
+                root.waitFor(() => Pointer.appliedTheme === "grassfield-cursors" && !Pointer.builder.removing && Pointer.builder.removals === root.rem + 1, 5000);
+            });
+        },
+        function () {
+            root.check("login with defaults: the packaged theme is requested once (" + root.last() + ")", root.requests.length === root.mark + 1 && root.last() === "/setcursor grassfield-cursors 28");
+            root.run(["sh", "-c", "test -e \"$1\"/grassfield-cursors-custom; echo $?", "sh", root.sock + ".icons"], () => root.advance());
+        },
+        function () {
+            root.check("login with defaults: the custom theme directory is gone", root.out.trim() === "1");
+            // The settings were not read yet (colours not known): nothing is deleted.
+            root.run(["sh", "-c", "d=\"$1\"; mkdir -p \"$d/grassfield-cursors-custom\"; touch \"$d/grassfield-cursors-custom/manifest.hl\"", "sh", root.sock + ".icons"], () => {
+                root.rem = Pointer.builder.removals;
+                Pointer.colorsKnown = false;
+                Pointer.builder.dirty = true;
+                Pointer.theme = "grassfield-cursors";
+                Pointer.compositorReset();
+                idle.start();
+            });
+        },
+        function () {
+            root.check("settings not read: the custom theme is not removed", Pointer.builder.removals === root.rem);
+            Pointer.colorsKnown = true;
+            root.waitFor(() => Pointer.builder.removals === root.rem + 1 && !Pointer.builder.removing, 4000);
+        },
+        function () {
+            root.check("settings read: now it is removed", Pointer.builder.removals === root.rem + 1);
             root.finish();
         }
     ]
+    property int builds: 0
+    property int rem: 0
+
+    // Runs a command, then continues with `next`; its stdout is in `out`.
+    property string out: ""
+    function run(argv: var, next: var): void {
+        runner.next = next;
+        runner.command = argv;
+        runner.running = true;
+    }
+
+    Process {
+        id: runner
+        property var next: null
+        stdout: StdioCollector {
+            id: runnerOut
+            onStreamFinished: {
+                root.out = runnerOut.text;
+                const continuation = runner.next;
+                runner.next = null;
+                if (continuation)
+                    continuation();
+            }
+        }
+    }
 
     function waitFor(predicate: var, ms: int): void {
         wait = predicate;
@@ -273,6 +366,7 @@ ShellRoot {
     Component.onCompleted: {
         Pointer.socketPath = root.sock;
         Pointer.theme = "gf-test";
+        Pointer.colorsKnown = true;
         // The Claude Code sandbox has no Unix sockets: the fake server cannot listen, the test is skipped there.
         server.active = true;
         probe.start();

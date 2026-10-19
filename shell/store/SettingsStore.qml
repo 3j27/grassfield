@@ -330,6 +330,28 @@ Scope {
         file.reload();
     }
 
+    // The adapter keeps the old value of a key that is no longer in the file (a reload only assigns the keys it finds), so
+    // a pointer key deleted by hand (or by a reset elsewhere) would leave the old size or colour active while the Settings
+    // app shows the default. A missing key is the default: put it back after each load (unsaved local changes go on top
+    // again in reapplyDirty). A file that cannot be parsed is left alone.
+    function resetMissingPointerKeys(text: string): void {
+        let parsed = null;
+        try {
+            parsed = text.trim() === "" ? {} : JSON.parse(text);
+        } catch (e) {
+            return;
+        }
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+            return;
+        const pointer = parsed.pointer !== null && typeof parsed.pointer === "object" && !Array.isArray(parsed.pointer) ? parsed.pointer : {};
+        if (!("size" in pointer))
+            config.pointer.size = PointerSize.DEFAULT;
+        if (!("outlineColor" in pointer))
+            config.pointer.outlineColor = PointerColors.DEFAULT_OUTLINE;
+        if (!("fillColor" in pointer))
+            config.pointer.fillColor = PointerColors.DEFAULT_FILL;
+    }
+
     Timer {
         id: saveTimer
         interval: root.saveDelay
@@ -398,6 +420,7 @@ Scope {
         onSaved: root.saved()
         onLoaded: {
             root.checkText(file.text());
+            root.resetMissingPointerKeys(file.text());
             root.reapplyDirty();
             root.loadedFile();
         }

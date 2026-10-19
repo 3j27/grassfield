@@ -17,6 +17,8 @@ Item {
     property var report: ({})
     // "building" | "ready" | "failed" for the chosen colours, "" when the shell did not say.
     readonly property string result: root.report.state !== undefined && String(root.report.outline).toLowerCase() === root.outline && String(root.report.fill).toLowerCase() === root.fill ? String(root.report.state) : ""
+    // The kind of failure ("builder", "tool:NAME", "folder", "failed"): the pane says it in its own language.
+    readonly property string code: root.result === "failed" && typeof root.report.code === "string" ? root.report.code.substring(0, 64) : ""
     readonly property string reason: root.result === "failed" && typeof root.report.reason === "string" ? root.report.reason.substring(0, 160) : ""
 
     visible: false

@@ -45,6 +45,15 @@ Item {
     }
     Component.onCompleted: root.syncHsv(root.shown)
 
+    // The typed field shows the colour: whatever changed it (a swatch, the square, the slider, the host), except the text
+    // the user is typing, which already names this colour (a complete "#0f0" stays as typed).
+    onShownChanged: {
+        if (PointerColors.parseTyped(hexField.text) !== root.shown)
+            hexField.text = root.shown;
+    }
+    // The typed colour field (tests).
+    readonly property alias hexInput: hexField
+
     function syncHsv(c: string): void {
         const hsv = PointerColors.toHsv(c);
         if (!hsv)
@@ -349,8 +358,8 @@ Item {
                         font.pixelSize: Tokens.typographyBodySize
                         Accessible.role: Accessible.EditableText
                         Accessible.name: qsTr("Colour (#rrggbb)")
-                        // Follows the colour unless the user is typing in it.
-                        text: root.shown
+                        // Follows the colour (see root.onShownChanged); not a binding: assigning `text` below would break it.
+                        Component.onCompleted: text = root.shown
                         // A complete colour is applied as it is typed; anything else changes nothing.
                         onTextEdited: {
                             const c = PointerColors.parseTyped(text);

@@ -110,6 +110,26 @@
         <translation>Accessibilité</translation>
     </message>
     <message>
+        <source>The pointer colours could not be applied. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>The pointer colours could not be applied: the cursor builder is not installed. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: le générateur de curseurs n’est pas installé. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>The pointer colours could not be applied: there is no folder for the custom pointer theme. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: il n’y a pas de dossier pour le thème de pointeur personnalisé. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>The pointer colours could not be applied: %1 is not installed. The pointer is unchanged.</source>
+        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: %1 n’est pas installé. Le pointeur n’a pas changé.</translation>
+    </message>
+    <message>
+        <source>Details: %1</source>
+        <translation>Détails&#xa0;: %1</translation>
+    </message>
+    <message>
         <source>Pointer</source>
         <translation>Pointeur</translation>
     </message>
@@ -148,10 +168,6 @@
     <message>
         <source>Green</source>
         <translation>Vert</translation>
-    </message>
-    <message>
-        <source>The pointer colours could not be applied: %1. The pointer is unchanged.</source>
-        <translation>Les couleurs du pointeur n’ont pas pu être appliquées&#xa0;: %1. Le pointeur n’a pas changé.</translation>
     </message>
     <message>
         <source>Applying the new pointer colours…</source>
