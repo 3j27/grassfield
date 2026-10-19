@@ -103,11 +103,12 @@ ShellRoot {
             root.check("no refresh without the capability", Pointer.refreshed === 0);
             Capabilities.features = ["cursor-refresh"];
             Capabilities.pluginPresent = true;
+            root.check("a request delivered before the capability was known is redrawn when it arrives", Pointer.refreshed === 1);
             Pointer.size = 76;
             root.waitFor(() => Pointer.applied === 76, 3000);
         },
         function () {
-            root.check("refresh sent after the delivered size with the capability", Pointer.refreshed === 1);
+            root.check("refresh sent after the delivered size with the capability", Pointer.refreshed === 2);
             Capabilities.pluginPresent = false;
             // Retries run out: stops sending (no busy loop), a new size starts a new series.
             server.active = false;

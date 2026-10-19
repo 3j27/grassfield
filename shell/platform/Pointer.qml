@@ -226,11 +226,32 @@ Singleton {
     }
 
     // Asks the plugin to redraw the cursor (gfc/1 "cursor-refresh"); nothing when the plugin does not have it.
+    // A request delivered before the plugin answered its hello (the shell asks at login, the capability list arrives a
+    // moment later) is redrawn as soon as the capability is known; without the plugin it never is.
     function refresh(): void {
-        if (!Capabilities.has("cursor-refresh"))
+        if (!Capabilities.has("cursor-refresh")) {
+            root.refreshPending = true;
             return;
+        }
+        root.refreshPending = false;
         Hyprland.dispatch(Minimized.cursorRefreshCall());
         root.refreshed++;
+    }
+
+    property bool refreshPending: false
+
+    Connections {
+        target: Capabilities
+
+        function onFeaturesChanged(): void {
+            if (root.refreshPending && Capabilities.has("cursor-refresh"))
+                root.refresh();
+        }
+
+        function onPluginPresentChanged(): void {
+            if (root.refreshPending && Capabilities.has("cursor-refresh"))
+                root.refresh();
+        }
     }
 
     function socketConnected(id: int): void {
