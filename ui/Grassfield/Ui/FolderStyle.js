@@ -305,8 +305,8 @@ function isEmoji(glyph) {
 // (`prefersLighter`) and the plate allows, until it reaches the minimum contrast against the plate. The plate is MEASURED,
 // once per icon file and size bucket and independent of the colour, the icon mode and the appearance: FolderPlate reads
 // the RAW icon's pixels under the symbol (`sampleBox`), and the plate of any combination is then computed from those
-// samples by the same shader arithmetic as Qt's MultiEffect (`effectSamples`: the icon mode, then the folder colour,
-// `plateThrough`), so a new colour, mode or appearance never needs another measure. The estimate (`plateOf`) only serves
+// samples by the arithmetic of the icon shader for a plate-less pixel (`modeSamples`) and of Qt's MultiEffect for the folder
+// colour (`effectSamples`; `plateThrough`), so a new colour, mode or appearance never needs another measure. The estimate (`plateOf`) only serves
 // until the samples are known, and when they cannot be read (no icon).
 
 function rgbOf(color) {

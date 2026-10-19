@@ -5,7 +5,8 @@ import QtQuick
 // constants calibrated for one icon theme. The RAW icon's pixels under the symbol are read once per (icon file, size
 // bucket) as a small grid of samples (FolderStyle.sampleBox, by one FolderIcon at a time, application wide); the plate of any
 // combination of icon mode, folder colour and appearance is then computed from those samples (FolderStyle.plateThrough:
-// the arithmetic of the MultiEffect shaders), so a new colour or mode never costs another read. No grab of the visible icon.
+// the icon shader's arithmetic for a plate-less pixel and the MultiEffect arithmetic of the folder colour), so a new colour or
+// mode never costs another read. No grab of the visible icon.
 QtObject {
     id: root
 
@@ -14,7 +15,7 @@ QtObject {
     property int revision: 0
     // The raw key being read now, "" when none: one read at a time in the whole application.
     property string busy: ""
-    // Bound on the cache; cleared when exceeded, read again on demand.
+    // Bound on the cache; past it the least recently used quarter is evicted, read again on demand.
     readonly property int limit: 512
     // Number of raw reads stored (tests).
     property int count: 0

@@ -43,6 +43,14 @@ B. A fixed palette of prebuilt accent variants only.
   brightness, contrast) could not reach the macOS 26 look (a white plate only went from 248 to 210 in Dark; Tinted gave a
   bright tint-coloured plate), so the shader separates plate and glyph per pixel (plate colour from probes inside the
   icon, membership by colour distance) and maps each mode (algorithm and limits: docs/specs/ui.md, "Icon shader").
+  **System plate (owner decision 2026-10-19, macOS 26 model: nothing may vanish):** in every mode except `default`, an icon
+  whose own plate is not a rounded square filling its box (a logo, a mascot, a page, a round icon, a folder) is drawn smaller
+  (`iconMode.sysGlyphScale` 0.72) on a system plate, a squircle (`sysPlateInset` 0.04, `sysPlateRadius` 0.225) in graphite
+  (Dark), glass (Clear, smoked over the bare wallpaper and at material transparency 0.8 and above) or the tint (Tinted),
+  with an edge highlight; an icon with its own rounded-square plate keeps it, recoloured. The plate analysis (dominant
+  colour clusters of 16 probes, the corner and edge-midpoint test of the own plate) runs once per icon texture in a 2x1 pass
+  (`icon_analysis.frag`), not per pixel: Files with 1000 folders scrolls as smoothly in an effect mode as in default. The
+  folder colour (below) recolours the artwork only, not the system plate.
   Effects exist only when the mode is not `default` and only for icons that are shown: one effect item per visible icon
   (not one shared pass per surface: a container layer would redraw labels, highlights and indicators through the effect). Phase 2 (later, own review):
   a generated tinted theme for third-party apps, regenerated in the background.
