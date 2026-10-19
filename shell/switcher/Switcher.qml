@@ -20,6 +20,8 @@ Scope {
     property var session: Model.idle()
     readonly property string phase: session.phase
     readonly property bool shown: session.phase === "shown"
+    // The panel is up (ExclusiveSurfaces closes the other full-attention surfaces when it opens).
+    readonly property bool open: shown
     readonly property int selected: session.selected
     // Apps in frozen MRU order for this session: {key, name, icon, entry, windows, stamp}.
     property var apps: []

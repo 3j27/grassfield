@@ -69,7 +69,8 @@ ShellRoot {
         }
 
         function unlock(): string {
-            console.info("foreign-locker: unlocking on request");
+            // Epoch ms of the release, compared with the shell log by tests/security/reload_locked.sh (unlocked window).
+            console.info("foreign-locker: unlocking on request at " + Date.now());
             sessionLock.locked = false;
             quitTimer.start();
             return "unlocked";

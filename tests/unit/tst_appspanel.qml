@@ -158,6 +158,51 @@ TestCase {
         verify(!Model.atFirstRow(7, 7));
     }
 
+    // ---- selection and launch (the ring rule) ------------------------------------------------
+
+    function test_returnLaunchesOnlyAVisibleSelection() {
+        // Repro of the review: Utilities chip, Down, Right x6, Up, Up leaves the grid for the field with selected = 6
+        // and no ring: Return must not launch it.
+        compare(Model.launchIndex("search", false, false, 6, 20), -1);
+        // The grid with the keyboard owning the selection launches it.
+        compare(Model.launchIndex("grid", true, false, 6, 20), 6);
+        // A query makes the ring visible everywhere but in the chips (where Return selects the chip).
+        compare(Model.launchIndex("search", false, true, 0, 20), 0);
+        compare(Model.launchIndex("chips", false, true, 0, 20), -1);
+        compare(Model.launchIndex("chips", true, false, 3, 20), -1);
+        // Nothing selected, or out of range: nothing.
+        compare(Model.launchIndex("search", false, true, -1, 20), -1);
+        compare(Model.launchIndex("grid", true, false, 20, 20), -1);
+        compare(Model.launchIndex("grid", true, false, 0, 0), -1);
+    }
+
+    function test_leavingTheGridDropsTheSelectionExceptTheFirstResult() {
+        // The field with a query selects the first result (Return launches it), without a query nothing.
+        compare(Model.selectionForZone("search", true, 5), 0);
+        compare(Model.selectionForZone("search", true, 0), -1);
+        compare(Model.selectionForZone("search", false, 5), -1);
+        compare(Model.selectionForZone("chips", true, 5), -1);
+        compare(Model.selectionForZone("chips", false, 5), -1);
+    }
+
+    function test_selectionFollowsItsAppWhenTheListChanges() {
+        const items = [{id: "a"}, {id: "b"}, {id: "c"}];
+        compare(Model.indexOfId(items, "b"), 1);
+        // An app inserted before it moves its index, the selection follows the app.
+        compare(Model.indexOfId([{id: "x"}].concat(items), "b"), 2);
+        // The app is gone: nothing is selected.
+        compare(Model.indexOfId([{id: "a"}, {id: "c"}], "b"), -1);
+        compare(Model.indexOfId(items, ""), -1);
+    }
+
+    function test_documentViewerIsProductivity() {
+        // Evince: Office + Viewer + Graphics must not land in Creativity.
+        compare(Model.categoryOf(["GNOME", "GTK", "Office", "Viewer", "Graphics", "2DGraphics", "VectorGraphics"]), "productivity");
+        // An image viewer (no Office) stays in Creativity, a game is still a game.
+        compare(Model.categoryOf(["Graphics", "2DGraphics", "Viewer"]), "creativity");
+        compare(Model.categoryOf(["Game", "Office", "Viewer"]), "games");
+    }
+
     // ---- filtering --------------------------------------------------------------------------
 
     function test_searchSpansEveryCategory() {

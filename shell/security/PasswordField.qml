@@ -14,6 +14,10 @@ FocusScope {
     property color placeholderColor: Appearance.colors.textSecondary
     property color fillColor: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
     property color focusColor: Appearance.colors.accent
+    // Selection (Shift+arrows, Ctrl+A) as in every other text field of the shell and on macOS, where it follows the
+    // accent (highlight) colour: the accent behind the dots, drawn in the text colour made for it (gate A2).
+    property color selectionColor: Appearance.colors.accent
+    property color selectedTextColor: Appearance.colors.accentText
     property real radius: Tokens.radiusControl
     property int fontSize: Tokens.typographyBodySize
     // Return-arrow button inside the field, shown once something is typed (lock screen).
@@ -82,8 +86,8 @@ FocusScope {
         passwordMaskDelay: 0
         inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase | (root.reveal ? 0 : Qt.ImhHiddenText)
         color: root.textColor
-        selectionColor: root.focusColor
-        selectedTextColor: root.textColor
+        selectionColor: root.selectionColor
+        selectedTextColor: root.selectedTextColor
         font.family: Appearance.fontFamily
         font.pixelSize: root.fontSize
         verticalAlignment: TextInput.AlignVCenter

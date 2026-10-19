@@ -70,7 +70,9 @@ already running (`--keep`, `just nested-up`) is left alone.
 Surfaces: `menubar`, `systemmenu`, `appmenu`, `controlcenter`, `notificationcenter` (3 test notifications,
 opened by a click on the clock), `dock` (magnification 1.7, pointer at x=927), `search` (query "files"), `apps`
 (page 1), `overview` (4 foot windows), `lock` (never typed into; the nested instance is torn down afterwards
-because a locked nested session cannot be unlocked without a password), `settings` (Appearance page), `files`,
+because a locked nested session cannot be unlocked without a password; in dev the lock shows "dev: password checks
+disabled" under the field: PAM is suppressed unless `GRASSFIELD_DEV_ALLOW_PAM=1`, which no automated test sets, see
+docs/specs/security.md "Test safety"), `settings` (Appearance page), `files`,
 `titlebar` (plugin titlebar of a foot window; needs `compositor/build/grassfield-compositor.so`).
 Each is captured for `en` and `fr`: baseline file names are `<surface>.<lang>.png` (26 files).
 

@@ -24,7 +24,7 @@ Closes F1 gap 19 (`docs/testing/f1-reference-gaps.md`): the macOS Cmd+Tab model,
   `switcher.commitDelayMs` so the panel's keyboard grab is released first.
 - **SW6** Pointer: moving over a tile selects it (not when the panel appears under a still pointer), a click activates it, a
   click outside cancels.
-- **SW7** Opening the switcher closes Search, Overview, Apps and any popup.
+- **SW7** Opening the switcher closes Search, Overview, Apps and any popup, and opening one of them cancels the switcher (`ExclusiveSurfaces` in shell.qml; the controller exposes `open`).
 - **SW8** SUPER+` activates the next window of the focused app (`windows cycleApp`; minimized windows are skipped). ALT+TAB
   keeps cycling windows of the active stage (ST10).
 

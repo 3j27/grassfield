@@ -12,6 +12,12 @@ GridView {
     // True while the keyboard (or a search) owns the selection ring.
     property bool ringVisible: false
 
+    // Keep the scroll position when `items` is replaced (the installed apps changed), otherwise the view
+    // returns to the top (a filter).
+    property bool keepScroll: false
+    // True once the cell pool has been filled by warmPool().
+    property bool warmed: false
+
     signal activated(var item)
 
     clip: true
@@ -33,8 +39,30 @@ GridView {
     // The list is replaced in two steps (empty, then the new items): a filter reorders and drops most rows,
     // and rebinding the few pooled cells in view is much cheaper than diffing and moving every row.
     onItemsChanged: {
+        const y = contentY;
         scriptModel.values = [];
         scriptModel.values = items;
+        if (keepScroll) {
+            forceLayout();
+            contentY = Math.max(0, Math.min(y, contentHeight + topMargin + bottomMargin - height));
+        }
+    }
+
+    // Fills the pool of cells without painting anything. The first change of a freshly built view destroys the
+    // cells of the first layout and creates a second screenful (about 55 ms for 200 entries, offscreen), which
+    // the first keystroke would pay. forceLayout() does that now: the owner calls it while the window is not
+    // yet shown (idle time after the list is built), so neither the opening nor a keystroke pays. Once per view.
+    function warmPool(): void {
+        if (warmed || items.length < 2)
+            return;
+        warmed = true;
+        scriptModel.values = items;
+        forceLayout();
+        scriptModel.values = [];
+        scriptModel.values = items.slice().reverse();
+        forceLayout();
+        scriptModel.values = items;
+        forceLayout();
     }
 
     delegate: AppsCell {

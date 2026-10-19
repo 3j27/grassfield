@@ -25,6 +25,8 @@ sRGB, as Qt does. Backdrops:
   lock-field     lock + the dark password field fill (shadow colour at lock.fieldFillOpacity)
   lock-avatar    lock + the light avatar disc (dark-palette fill at lock.avatarFillOpacity)
   lock-submit    lock-field + the return arrow disc (text colour at material.highlightOpacity, and x2 when hovered: worst of the two)
+  lock-selection the opaque dark-palette accent band behind selected dots in the password field (Shift+arrows, Ctrl+A); the band
+                 itself is checked against lock-field as a graphic (3:1)
                  The lock model is checked against LockView.qml and PasswordField.qml (test_lock_model_matches_the_qml); the text
                  shadow is decoration and not counted.
 The role table is cross-checked against the QML (tests/visual/qml_scan.py, a structural scan: palette aliases, colors["textSecondary"],
@@ -50,7 +52,7 @@ contrast = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(contrast)
 
 TRANSPARENCIES = (0.0, 0.25, 0.4, 0.6)
-LOCK_BACKDROPS = ("lock", "lock-field", "lock-avatar", "lock-submit")
+LOCK_BACKDROPS = ("lock", "lock-field", "lock-avatar", "lock-submit", "lock-selection")
 BAR_TONES = ("bar-light-tone", "bar-dark-tone")
 APPEARANCES = ("dark", "light")
 THRESHOLD = {"text": 4.5, "large": 3.0, "icon": 3.0}
@@ -139,6 +141,9 @@ def backdrops(tok, role, appearance, t, wallpaper):
         return [over(tok.color("colors", appearance, "fieldFill"), tok.path("desktopIcon.renameFillOpacity"), wallpaper)]
     if kind == "desktop-label":
         return [over(tok.color("darkColors", appearance, "shadow"), tok.path("desktopIcon.labelShadowOpacity"), wallpaper)]
+    if kind == "lock-selection":
+        # Opaque band: whatever lies under it (field, scrim, wallpaper) is hidden.
+        return [tok.color("darkColors", appearance, "accent")]
     if kind in LOCK_BACKDROPS:
         shadow = tok.color("darkColors", appearance, "shadow")
         base = over(shadow, tok.path("lock.dimOpacity"), wallpaper)
@@ -391,11 +396,15 @@ class ContrastTokens(unittest.TestCase):
                      "textColor: root.colors.text",
                      "placeholderColor: root.colors.textSecondary",
                      "fillColor: Appearance.withAlpha(root.colors.shadow, Tokens.lockFieldFillOpacity)",
-                     "focusColor: Appearance.withAlpha(root.colors.text, Tokens.lockFocusRingOpacity)"):
+                     "focusColor: Appearance.withAlpha(root.colors.text, Tokens.lockFocusRingOpacity)",
+                     "selectionColor: root.colors.accent\n",
+                     "selectedTextColor: root.colors.accentText\n"):
             self.assertIn(line, view)
         for line in ("color: Appearance.withAlpha(root.textColor, submitMouse.containsMouse ? Tokens.materialHighlightOpacity * 2"
                      " : Tokens.materialHighlightOpacity)",
-                     "color: root.textColor\n        selectionColor: root.focusColor",
+                     "color: root.textColor\n        selectionColor: root.selectionColor\n        selectedTextColor: root.selectedTextColor\n",
+                     "property color selectionColor: Appearance.colors.accent\n",
+                     "property color selectedTextColor: Appearance.colors.accentText\n",
                      "color: root.placeholderColor",
                      "color: root.fillColor",
                      "border.color: root.focusColor"):
@@ -409,6 +418,21 @@ class ContrastTokens(unittest.TestCase):
         for at in alerts:
             block = view[view.rfind("Text {", 0, at):at]
             self.assertNotIn("layer.", block)
+
+    def test_lock_password_selection(self):
+        # R12 review #3 residual: a selection in the lock's password field drew white dots on the focus ring colour (white at
+        # lock.focusRingOpacity), 1.7-2.1:1. As on macOS and in every other field of the shell, the selection is now the accent
+        # band with accent-text dots: readable (4.5:1) and the band visible against the field (3:1) over every wallpaper colour.
+        dots = next(r for r in self.roles if r["id"] == "lock password selection (dots on the accent band)")
+        band = next(r for r in self.roles if r["id"] == "lock password selection band against the field")
+        old = {"fg": "darkColors.text", "backdrop": "lock-field", "kind": "text"}
+        for wp in WALLPAPER_COLORS:
+            self.assertGreaterEqual(role_ratio(self.tok, dots, "dark", 0.25, wp), 4.5, wp)
+            self.assertGreaterEqual(role_ratio(self.tok, band, "dark", 0.25, wp), 3.0, wp)
+            # Negative control: the old rendering (white dots on the white focus-ring band over the field) stays below 3:1.
+            field = backdrops(self.tok, old, "dark", 0.25, wp)[0]
+            ring = over(self.tok.color("darkColors", "dark", "text"), self.tok.path("lock.focusRingOpacity"), field)
+            self.assertLess(wcag(self.tok.color("darkColors", "dark", "text"), ring), 3.0, wp)
 
     def test_cross_check_selftest_component_instance_with_opacity(self):
         # An instance of a component that contains text, given an opacity, is a text item with that opacity.

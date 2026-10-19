@@ -110,15 +110,15 @@ ShellRoot {
     NotificationCenter {}
     OsdWindow {}
     Search {
-        id: search
+        id: searchSurface
     }
     AuthAgent {}
     Idle {}
     Overview {
-        id: overview
+        id: overviewSurface
     }
     AppsController {
-        id: apps
+        id: appsSurface
     }
     Switcher {
         id: switcher
@@ -127,17 +127,14 @@ ShellRoot {
         controller: switcher
     }
 
-    // Opening the app switcher closes Search, Overview and Apps (one full-screen surface at a time).
-    Connections {
-        target: switcher
-
-        function onShownChanged(): void {
-            if (!switcher.shown)
-                return;
-            search.hide();
-            overview.hide();
-            apps.hide();
-        }
+    // Opening Overview, Apps, Search or the app switcher closes the others: the keyboard follows the visible top surface.
+    ExclusiveSurfaces {
+        surfaces: [
+            {target: overviewSurface, close: () => overviewSurface.requestClose()},
+            {target: appsSurface, close: () => appsSurface.hide()},
+            {target: searchSurface, close: () => searchSurface.hide()},
+            {target: switcher, close: () => switcher.cancel()}
+        ]
     }
 
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
