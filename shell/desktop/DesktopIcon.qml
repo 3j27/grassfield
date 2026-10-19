@@ -15,6 +15,9 @@ Item {
     required property string name
     required property bool isDir
     required property string filePath
+    // The folder's own colour setting ("" = the global folder colour) and symbol (Customize Folder in Files).
+    property string folderColor: ""
+    property string folderGlyph: ""
     property bool selected: false
     property bool renaming: false
     // Reason of the last refused rename ("" when none), shown by the field.
@@ -88,11 +91,31 @@ Item {
         width: root.iconSize
         height: root.iconSize
 
-        TintedIcon {
+        // A folder follows the folder colour and shows its symbol (FolderIcon); anything else is a plain icon.
+        Loader {
             anchors.fill: parent
-            size: root.iconSize
             visible: !(root.thumbnail && thumb.status === Image.Ready)
-            source: Quickshell.iconPath(root.iconTheme, "text-x-generic")
+            sourceComponent: root.isDir && !root.launcher ? folderIcon : plainIcon
+        }
+
+        Component {
+            id: plainIcon
+
+            TintedIcon {
+                size: root.iconSize
+                source: Quickshell.iconPath(root.iconTheme, "text-x-generic")
+            }
+        }
+
+        Component {
+            id: folderIcon
+
+            FolderIcon {
+                size: root.iconSize
+                source: Quickshell.iconPath(root.iconTheme, "text-x-generic")
+                folderColor: root.folderColor
+                folderGlyph: root.folderGlyph
+            }
         }
 
         Image {

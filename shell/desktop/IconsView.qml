@@ -503,6 +503,8 @@ FocusScope {
             name: modelData.name
             isDir: modelData.isDir
             filePath: modelData.path
+            folderColor: files.folderStyle(modelData.name).color
+            folderGlyph: files.folderStyle(modelData.name).glyph
             x: root.rectOf(modelData.name).x
             y: root.rectOf(modelData.name).y
             selected: root.selected[modelData.name] === true

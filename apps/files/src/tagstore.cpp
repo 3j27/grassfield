@@ -191,4 +191,77 @@ bool write(const QString &path, const QStringList &tags, QString *error)
     return writeRaw(path, TagLogic::serialize(tags), error);
 }
 
+ReadResult readAttr(const QString &path, const char *attr, QByteArray *value, QString *error)
+{
+    value->clear();
+    const QByteArray p = QFile::encodeName(path);
+    auto fail = [&](int e) {
+        if (error)
+            *error = QString::fromLocal8Bit(std::strerror(e));
+        return unsupported(e) ? ReadResult::Unsupported : ReadResult::Failed;
+    };
+    if (p.isEmpty())
+        return fail(ENOENT);
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const ssize_t size = ::lgetxattr(p.constData(), attr, nullptr, 0);
+        if (size < 0) {
+            if (errno == ENODATA)
+                return ReadResult::NoData;
+            return fail(errno);
+        }
+        if (size == 0)
+            return ReadResult::NoData;
+        if (size > kMaxValue)
+            return fail(E2BIG);
+        QByteArray data(int(size), Qt::Uninitialized);
+        const ssize_t n = ::lgetxattr(p.constData(), attr, data.data(), size_t(data.size()));
+        if (n >= 0) {
+            *value = data.left(int(n));
+            return ReadResult::Ok;
+        }
+        if (errno == ENODATA)
+            return ReadResult::NoData;
+        if (errno != ERANGE)
+            return fail(errno);
+    }
+    return fail(EAGAIN);
+}
+
+ReadResult quickReadAttr(const QString &path, const char *attr, QByteArray *value)
+{
+    value->clear();
+    const QByteArray p = QFile::encodeName(path);
+    char buffer[512];
+    const ssize_t n = ::lgetxattr(p.constData(), attr, buffer, sizeof buffer);
+    if (n > 0) {
+        *value = QByteArray(buffer, int(n));
+        return ReadResult::Ok;
+    }
+    if (n == 0 || errno == ENODATA)
+        return ReadResult::NoData;
+    if (errno == ERANGE)
+        return readAttr(path, attr, value);
+    return unsupported(errno) ? ReadResult::Unsupported : ReadResult::Failed;
+}
+
+bool writeAttr(const QString &path, const char *attr, const QByteArray &value, QString *error, int *errnoOut)
+{
+    const QByteArray p = QFile::encodeName(path);
+    int rc = 0;
+    if (value.isEmpty()) {
+        rc = ::lremovexattr(p.constData(), attr);
+        if (rc != 0 && errno == ENODATA)
+            rc = 0;
+    } else {
+        rc = ::lsetxattr(p.constData(), attr, value.constData(), size_t(value.size()), 0);
+    }
+    if (rc != 0) {
+        if (error)
+            *error = QString::fromLocal8Bit(std::strerror(errno));
+        if (errnoOut)
+            *errnoOut = errno;
+    }
+    return rc == 0;
+}
+
 } // namespace TagStore

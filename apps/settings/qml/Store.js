@@ -28,7 +28,8 @@ const DEFAULTS = {
     "hotCorners.bottomLeft": "none",
     "hotCorners.bottomRight": "none",
     "icons.mode": "default",
-    "icons.tint": "accent"
+    "icons.tint": "accent",
+    "icons.folderColor": "theme"
 };
 
 const CORNER_ACTIONS = ["none", "overview", "notifications", "apps", "lock"];
@@ -57,7 +58,9 @@ const RULES = {
     "hotCorners.bottomRight": {type: "enum", values: CORNER_ACTIONS},
     "icons.mode": {type: "enum", values: ["default", "dark", "clear", "tinted"]},
     // "accent" or a #rrggbb colour (schema `pattern`).
-    "icons.tint": {type: "tint"}
+    "icons.tint": {type: "tint"},
+    // "theme", "accent" or a #rrggbb colour (schema `pattern`).
+    "icons.folderColor": {type: "folderColor"}
 };
 
 // Error message for an invalid value, or "" when the value is acceptable for the key.
@@ -70,6 +73,8 @@ function validate(path, value) {
         return rule.values.indexOf(value) >= 0 ? "" : path + ": expected one of " + rule.values.join(", ");
     case "tint":
         return Ui.IconModes.validTint(value) ? "" : path + ": expected accent or a #rrggbb colour";
+    case "folderColor":
+        return Ui.FolderStyle.validColor(value) ? "" : path + ": expected theme, accent or a #rrggbb colour";
     case "boolean":
         return typeof value === "boolean" ? "" : path + ": expected true or false";
     case "integer":

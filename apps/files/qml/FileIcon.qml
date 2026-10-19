@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 
@@ -10,6 +11,10 @@ Item {
     property string thumbnail: ""
     property string emblem: ""
     property int size: Tokens.filesIconSize
+    // A folder: its own colour setting ("" = the global folder colour) and symbol (FolderIcon).
+    property bool isDir: false
+    property string folderColor: ""
+    property string folderGlyph: ""
 
     implicitWidth: size
     implicitHeight: size
@@ -17,12 +22,33 @@ Item {
     Accessible.ignored: true
 
     // The type icon follows the icon appearance mode (ADR-0014); thumbnails are content and are never tinted.
-    TintedIcon {
+    // A folder icon follows the folder colour and shows its symbol; any other file the plain icon.
+    Loader {
         anchors.fill: parent
-        size: root.size
-        oversample: Tokens.filesThumbnailOversample
-        source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
         visible: thumb.status !== Image.Ready
+        sourceComponent: root.isDir ? folderIcon : fileIcon
+    }
+
+    Component {
+        id: fileIcon
+
+        TintedIcon {
+            size: root.size
+            oversample: Tokens.filesThumbnailOversample
+            source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
+        }
+    }
+
+    Component {
+        id: folderIcon
+
+        FolderIcon {
+            size: root.size
+            oversample: Tokens.filesThumbnailOversample
+            source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
+            folderColor: root.folderColor
+            folderGlyph: root.folderGlyph
+        }
     }
 
     Image {

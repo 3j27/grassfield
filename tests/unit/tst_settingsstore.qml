@@ -78,7 +78,7 @@ TestCase {
                 compare(r.min, s.minimum, path);
             if (s.maximum !== undefined)
                 compare(r.max, s.maximum, path);
-            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" ? "string" : r.type, s.type, path);
+            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" ? "string" : r.type, s.type, path);
             // Defaults satisfy their own rule.
             compare(Store.validate(path, Store.DEFAULTS[path]), "", path);
         }

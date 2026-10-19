@@ -159,6 +159,9 @@ FocusScope {
                         anchors.horizontalCenter: parent.horizontalCenter
                         size: Tokens.filesPreviewIconSize
                         iconName: root.previewInfo ? root.previewInfo.iconName : ""
+                        isDir: root.previewInfo ? root.previewInfo.isDir : false
+                        folderColor: root.previewInfo ? root.previewInfo.folderColor : ""
+                        folderGlyph: root.previewInfo ? root.previewInfo.folderGlyph : ""
                         thumbnail: root.previewInfo ? root.previewInfo.thumbnail : ""
                     }
 
@@ -322,6 +325,8 @@ FocusScope {
                 required property string emblem
                 required property bool selected
                 required property bool isDir
+                required property string folderColor
+                required property string folderGlyph
                 required property bool hidden
                 required property var tagColors
 
@@ -353,6 +358,9 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     size: Tokens.filesListIconSize
                     iconName: entry.iconName
+                    isDir: entry.isDir
+                    folderColor: entry.folderColor
+                    folderGlyph: entry.folderGlyph
                     emblem: entry.emblem
                 }
 

@@ -23,7 +23,9 @@ add_executable(grassfield-files
     src/filelogic.cpp src/filelogic.h
     src/taglogic.cpp src/taglogic.h
     src/tagstore.cpp src/tagstore.h
-    src/tagsearch.cpp src/tagsearch.h)
+    src/tagsearch.cpp src/tagsearch.h
+    src/folderstylelogic.cpp src/folderstylelogic.h
+    src/folderstylestore.cpp src/folderstylestore.h)
 target_include_directories(grassfield-files PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(grassfield-files PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::DBus
@@ -42,7 +44,8 @@ find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
     add_executable(files-unit-tests ../../tests/unit/files/tst_filelogic.cpp ../../tests/unit/files/tst_previewqueue.cpp
-        ../../tests/unit/files/tst_tags.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp)
+        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp
+        src/folderstylelogic.cpp src/folderstylestore.cpp)
     target_include_directories(files-unit-tests PRIVATE src)
     target_link_libraries(files-unit-tests PRIVATE Qt6::Core GTest::gtest GTest::gtest_main)
     add_test(NAME files-unit-tests COMMAND files-unit-tests)

@@ -69,6 +69,12 @@ ShellRoot {
         value: Settings.iconTint
     }
 
+    Binding {
+        target: Appearance
+        property: "folderColorSetting"
+        value: Settings.folderColor
+    }
+
     // One degraded-mode notice when the compositor extension never answered; withdrawn if it loads later.
     property string degradedNoticeKey: ""
 
