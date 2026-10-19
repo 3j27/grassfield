@@ -49,15 +49,20 @@
    {"name": "banner time", "box": [1868, 44, 26, 10], "kind": "text"}
   ],
   "notificationcenter": [
-   {"name": "title capsule: Notifications", "box": [1576, 50, 96, 16], "kind": "text"},
-   {"name": "title capsule: Clear All", "box": [1828, 52, 52, 12], "kind": "text"},
-   {"name": "card 1 group name", "box": [1572, 101, 106, 13], "kind": "text"},
-   {"name": "card 1 Clear", "box": [1821, 102, 34, 12], "kind": "text"},
-   {"name": "card 1 title", "box": [1616, 131, 114, 13], "kind": "text"},
-   {"name": "card 1 body", "box": [1616, 152, 182, 12], "kind": "text"},
-   {"name": "card 1 time", "box": [1848, 131, 22, 10], "kind": "text"},
-   {"name": "card 2 group name", "box": [1572, 215, 36, 13], "kind": "text"},
-   {"name": "footer Edit Widgets", "box": [1792, 1046, 70, 11], "kind": "text"}
+   {"name": "card 1 group name", "box": [1572, 59, 58, 13], "kind": "text"},
+   {"name": "card 1 title", "box": [1616, 90, 100, 13], "kind": "text"},
+   {"name": "card 1 body", "box": [1616, 110, 188, 12], "kind": "text"},
+   {"name": "card 1 time", "box": [1868, 90, 26, 10], "kind": "text"},
+   {"name": "card 2 group name", "box": [1572, 173, 30, 13], "kind": "text"},
+   {"name": "footer Edit Widgets", "box": [1682, 278, 70, 11], "kind": "text"}
+  ],
+  "notificationcenterhover": [
+   {"name": "card x glyph (pointer on the card)", "box": [1558, 39, 10, 10], "kind": "icon"},
+   {"name": "group x glyph, collapsed (pointer on the card)", "box": [1876, 59, 10, 10], "kind": "icon"}
+  ],
+  "notificationcenterclear": [
+   {"name": "card x glyph (pointer on the group x)", "box": [1558, 39, 10, 10], "kind": "icon"},
+   {"name": "group Clear All pill text (pointer on the group x)", "box": [1839, 58, 45, 13], "kind": "text"}
   ],
   "apps": [
    {"name": "search placeholder", "box": [591, 226, 46, 13], "kind": "text"},
