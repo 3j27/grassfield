@@ -38,10 +38,22 @@ function key(outline, fill) {
     return isDefault(outline, fill) ? "" : normalizeOutline(outline) + "|" + normalizeFill(fill);
 }
 
-// The theme the compositor should use for the colours, given the theme the session selected: the session theme for the
-// default pair, the regenerated one otherwise.
+// The theme the compositor should use for the colours, given the theme the session selected: the packaged theme for the
+// default pair, the regenerated one otherwise. It follows the stored colours only, never the session environment: a
+// session that was started with the custom theme (it was on disk at login) still goes back to the packaged theme when the
+// colours are the defaults. A theme that is not ours (a session that does not use Grassfield's cursors) is left alone.
 function themeFor(outline, fill, sessionTheme) {
-    return isDefault(outline, fill) ? sessionTheme : CUSTOM_THEME;
+    if (!isDefault(outline, fill))
+        return CUSTOM_THEME;
+    return baseTheme(sessionTheme);
+}
+
+// The theme for the default colours: the packaged one, whatever Grassfield theme the session started with; "" when the
+// session has no cursor theme at all (nothing to ask the compositor for); a foreign theme stays as it is.
+function baseTheme(sessionTheme) {
+    if (typeof sessionTheme !== "string" || sessionTheme === "")
+        return "";
+    return sessionTheme === CUSTOM_THEME ? BASE_THEME : sessionTheme;
 }
 
 // ---- regeneration (branding/cursors/build.sh) ----
@@ -63,14 +75,26 @@ function iconsDir(override, dataHome, home, dev) {
     return "";
 }
 
+// File inside the custom theme that names the colours it was built for: one line "#outline #fill" (build.sh writes it).
+function stampPath(dir) {
+    return typeof dir === "string" && dir !== "" ? dir + "/" + CUSTOM_THEME + "/colors" : "";
+}
+
+// The colour key of a stamp file's text ("" when it is missing, empty or not exactly two #rrggbb colours).
+function parseStamp(text) {
+    const m = /^(#[0-9a-fA-F]{6}) (#[0-9a-fA-F]{6})\s*$/.exec(String(text || ""));
+    return m ? key(m[1], m[2]) : "";
+}
+
 // Argument vector that builds the custom theme, [] for an invalid colour, script or directory. No shell is involved:
-// every value is one argv element (the colours are validated, the theme name is fixed).
+// every value is one argv element (the colours are validated, the theme name is fixed). setsid makes the build the
+// leader of its own process group, so the shell can stop the build and everything it started (kill -- -PID).
 function buildCommand(script, dir, outline, fill) {
     if (typeof script !== "string" || script === "" || typeof dir !== "string" || dir === "")
         return [];
     if (!validColor(outline) || !validColor(fill))
         return [];
-    return ["bash", script, "--out", dir, "--name", CUSTOM_THEME, "--outline", outline.toLowerCase(), "--fill", fill.toLowerCase()];
+    return ["setsid", "bash", script, "--out", dir, "--name", CUSTOM_THEME, "--outline", outline.toLowerCase(), "--fill", fill.toLowerCase()];
 }
 
 // Argument vector that deletes the custom theme (Reset Color).
@@ -78,6 +102,21 @@ function removeCommand(script, dir) {
     if (typeof script !== "string" || script === "" || typeof dir !== "string" || dir === "")
         return [];
     return ["bash", script, "--remove", "--out", dir, "--name", CUSTOM_THEME];
+}
+
+// Argument vector that deletes the work directories of builds that are no longer running (startup).
+function cleanCommand(script, dir) {
+    if (typeof script !== "string" || script === "" || typeof dir !== "string" || dir === "")
+        return [];
+    return ["bash", script, "--clean", "--out", dir, "--name", CUSTOM_THEME];
+}
+
+// Argument vector that stops a process group (the build and its children): `kill -s SIGNAL -- -PID`. [] unless the
+// signal is TERM (15) or KILL (9) and the PID is a plain number above 1.
+function groupSignalCommand(signal, pid) {
+    if ((signal !== 15 && signal !== 9) || typeof pid !== "number" || !Number.isInteger(pid) || pid <= 1)
+        return [];
+    return ["kill", "-s", signal === 15 ? "TERM" : "KILL", "--", "-" + pid];
 }
 
 // One short line for the Settings pane from what a failed build printed: the last non-empty line of stderr, at most 160
@@ -88,6 +127,16 @@ function failureReason(exitCode, stderrText) {
     const lines = String(stderrText || "").split("\n").map(l => l.replace(/[\u0000-\u001f\u007f]/g, " ").trim()).filter(l => l !== "");
     const last = lines.length > 0 ? lines[lines.length - 1] : "";
     return last !== "" ? last.substring(0, 160) : "the cursor builder failed (exit " + exitCode + ")";
+}
+
+// What kind of failure it was, for the Settings pane to say in its own language: "builder" (no script: exit 127),
+// "tool:NAME" (build.sh: "cursors: NAME not found"), "failed" otherwise. (The tool's own message is shown apart.)
+function failureCode(exitCode, stderrText) {
+    if (exitCode === 127)
+        return "builder";
+    const lines = String(stderrText || "").split("\n").map(l => l.trim()).filter(l => l !== "");
+    const m = /^cursors: ([A-Za-z0-9_-]+) not found$/.exec(lines.length > 0 ? lines[lines.length - 1] : "");
+    return m ? "tool:" + m[1] : "failed";
 }
 
 // ---- build scheduling: one build at a time, the newest colours win ----
@@ -146,7 +195,8 @@ function terminating(state) {
     return next;
 }
 
-// The build process ended. A terminated build produced nothing worth keeping; a finished one is built or failed.
+// The build process ended. A finished one is built or failed. A terminated build (or one that failed half-way) may have
+// replaced the theme just before it stopped: what is on disk is not known until the stamp is read (onDisk).
 function exited(state, ok) {
     const next = copy(state);
     if (!state.terminating) {
@@ -155,8 +205,18 @@ function exited(state, ok) {
         else
             next.failed = state.running;
     }
+    if (state.terminating || !ok)
+        next.built = "";
     next.running = "";
     next.terminating = false;
+    return next;
+}
+
+// The stamp of the theme on disk was read: `diskKey` is the colour pair it was built for ("" = no theme, or no stamp).
+// The theme counts as built only for exactly that pair.
+function onDisk(state, diskKey) {
+    const next = copy(state);
+    next.built = typeof diskKey === "string" ? diskKey : "";
     return next;
 }
 

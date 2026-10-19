@@ -642,6 +642,8 @@ QtObject {
     readonly property int settingsPointerBuildTimeoutMs: 60000
     // estimate: shell, wait for a cancelled build to stop on SIGTERM before it is killed
     readonly property int settingsPointerBuildKillMs: 3000
+    // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted
+    readonly property int settingsPointerSettingsWaitMs: 3000
     // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged
     readonly property int settingsColorWriteMs: 120
     // estimate: Settings colour well, side of the round well in a row

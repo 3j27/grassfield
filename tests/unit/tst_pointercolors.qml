@@ -16,7 +16,7 @@ TestCase {
         compare(PointerColors.CUSTOM_THEME, "grassfield-cursors-custom");
         // The defaults are what branding/cursors/build.sh uses without --fill/--outline.
         const build = PointerColors.buildCommand("/s/build.sh", "/icons", PointerColors.DEFAULT_OUTLINE, PointerColors.DEFAULT_FILL);
-        compare(build.length, 10);
+        compare(build.length, 11);
     }
 
     function test_validColor() {
@@ -54,6 +54,29 @@ TestCase {
         compare(PointerColors.themeFor("#ffff00", "#ff0000", ""), "grassfield-cursors-custom");
     }
 
+    // The theme for the default colours follows the colours, not the session environment: a login with the custom theme
+    // on disk (the old cursor.lua exported it) still means the packaged theme once the colours are the defaults.
+    function test_baseThemeNotFromTheSession() {
+        compare(PointerColors.baseTheme("grassfield-cursors"), "grassfield-cursors");
+        compare(PointerColors.baseTheme("grassfield-cursors-custom"), "grassfield-cursors");
+        compare(PointerColors.themeFor("#ffffff", "#000000", "grassfield-cursors-custom"), "grassfield-cursors");
+        // No session theme: nothing to ask for. A theme that is not ours is kept.
+        compare(PointerColors.baseTheme(""), "");
+        compare(PointerColors.baseTheme(undefined), "");
+        compare(PointerColors.baseTheme("Adwaita"), "Adwaita");
+    }
+
+    function test_stamp() {
+        compare(PointerColors.stampPath("/icons"), "/icons/grassfield-cursors-custom/colors");
+        compare(PointerColors.stampPath(""), "");
+        compare(PointerColors.parseStamp("#ffff00 #ff0000\n"), "#ffff00|#ff0000");
+        compare(PointerColors.parseStamp("#FFFF00 #FF0000"), "#ffff00|#ff0000");
+        // The default pair never has a custom theme: its stamp is "no custom theme".
+        compare(PointerColors.parseStamp("#ffffff #000000\n"), "");
+        for (const bad of ["", "garbage", "#ffff00", "#ffff00 #ff0000 #00ff00", "#ffff00\n#ff0000", "ffff00 ff0000", "#ffff00 red", "#ffff0080 #ff0000", null, undefined])
+            compare(PointerColors.parseStamp(bad), "", "parseStamp(" + JSON.stringify(bad) + ")");
+    }
+
     function test_iconsDir() {
         compare(PointerColors.iconsDir("/dev/icons", "/xdg", "/home/u", true), "/dev/icons");
         compare(PointerColors.iconsDir("", "/xdg", "/home/u", false), "/xdg/icons");
@@ -67,11 +90,11 @@ TestCase {
 
     function test_buildCommand() {
         const c = PointerColors.buildCommand("/usr/share/grassfield/cursors/build.sh", "/home/u/.local/share/icons", "#FFFF00", "#FF0000");
-        compare(c, ["bash", "/usr/share/grassfield/cursors/build.sh", "--out", "/home/u/.local/share/icons", "--name", "grassfield-cursors-custom", "--outline", "#ffff00", "--fill", "#ff0000"]);
+        compare(c, ["setsid", "bash", "/usr/share/grassfield/cursors/build.sh", "--out", "/home/u/.local/share/icons", "--name", "grassfield-cursors-custom", "--outline", "#ffff00", "--fill", "#ff0000"]);
         // Paths with spaces stay one element each (no shell).
         const sp = PointerColors.buildCommand("/a b/build.sh", "/c d/icons", "#ffff00", "#ff0000");
-        compare(sp[1], "/a b/build.sh");
-        compare(sp[3], "/c d/icons");
+        compare(sp[2], "/a b/build.sh");
+        compare(sp[4], "/c d/icons");
         // Nothing is built from a colour that is not #rrggbb (no injection through a stored value), a missing script or directory.
         compare(PointerColors.buildCommand("/s", "/d", "#ff0000; rm -rf /", "#000000"), []);
         compare(PointerColors.buildCommand("/s", "/d", "#ff0000", "$(id)"), []);
@@ -87,6 +110,31 @@ TestCase {
         compare(PointerColors.removeCommand("/s/build.sh", "/icons"), ["bash", "/s/build.sh", "--remove", "--out", "/icons", "--name", "grassfield-cursors-custom"]);
         compare(PointerColors.removeCommand("", "/icons"), []);
         compare(PointerColors.removeCommand("/s/build.sh", ""), []);
+    }
+
+    function test_cleanCommand() {
+        compare(PointerColors.cleanCommand("/s/build.sh", "/icons"), ["bash", "/s/build.sh", "--clean", "--out", "/icons", "--name", "grassfield-cursors-custom"]);
+        compare(PointerColors.cleanCommand("", "/icons"), []);
+        compare(PointerColors.cleanCommand("/s/build.sh", ""), []);
+    }
+
+    // Stopping a build signals its process group; only TERM and KILL, only a real PID.
+    function test_groupSignalCommand() {
+        compare(PointerColors.groupSignalCommand(15, 4242), ["kill", "-s", "TERM", "--", "-4242"]);
+        compare(PointerColors.groupSignalCommand(9, 4242), ["kill", "-s", "KILL", "--", "-4242"]);
+        for (const pid of [0, 1, -5, 1.5, "42", null, undefined, NaN])
+            compare(PointerColors.groupSignalCommand(15, pid), [], "pid " + String(pid));
+        for (const sig of [1, 2, 0, "15", null])
+            compare(PointerColors.groupSignalCommand(sig, 4242), [], "signal " + String(sig));
+    }
+
+    function test_failureCode() {
+        compare(PointerColors.failureCode(127, "bash: /x: No such file or directory"), "builder");
+        compare(PointerColors.failureCode(1, "cursors: rsvg-convert not found\n"), "tool:rsvg-convert");
+        compare(PointerColors.failureCode(1, "noise\ncursors: hyprcursor-util not found"), "tool:hyprcursor-util");
+        compare(PointerColors.failureCode(1, "cursors: rendering x failed twice"), "failed");
+        compare(PointerColors.failureCode(2, ""), "failed");
+        compare(PointerColors.failureCode(1, "cursors: ../x not found"), "failed");
     }
 
     function test_failureReason() {
@@ -177,8 +225,32 @@ TestCase {
         s = PointerColors.want(s, "#1|#1");
         compare(PointerColors.decide(s), "terminate");
         s = PointerColors.exited(PointerColors.terminating(s), false);
+        // A cancelled build may have replaced the theme just before it stopped: nothing is known until the stamp is read.
+        compare(s.built, "");
+        s = PointerColors.onDisk(s, "#1|#1");
         compare(s.built, "#1|#1");
         compare(PointerColors.decide(s), "none");
+    }
+
+    // A, then B cancelled, then A again: what counts is the stamp on disk, never a counter.
+    function test_scheduleKeyedByStamp() {
+        // The stamp says the cancelled build did not get to replace the theme: A is still built.
+        let s = PointerColors.exited(PointerColors.started(PointerColors.want(PointerColors.initialState(), "#a|#a")), true);
+        s = PointerColors.want(s, "#b|#b");
+        s = PointerColors.started(s);
+        s = PointerColors.want(s, "#a|#a");
+        s = PointerColors.exited(PointerColors.terminating(s), false);
+        s = PointerColors.onDisk(s, "#a|#a");
+        compare(PointerColors.decide(s), "none");
+        // The cancelled build did replace it just before: B is on disk, so A is built again.
+        s = PointerColors.exited(PointerColors.terminating(PointerColors.started(PointerColors.want(s, "#b|#b"))), false);
+        s = PointerColors.want(s, "#a|#a");
+        s = PointerColors.onDisk(s, "#b|#b");
+        compare(s.built, "#b|#b");
+        compare(PointerColors.decide(s), "start");
+        // A failed build of other colours leaves the stamp as it was; a missing stamp is no theme.
+        s = PointerColors.onDisk(s, "");
+        compare(PointerColors.decide(s), "start");
     }
 
     function test_scheduleForgetsDeletedTheme() {

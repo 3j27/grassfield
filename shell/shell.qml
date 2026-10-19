@@ -96,6 +96,13 @@ ShellRoot {
         value: Settings.pointerFillColor
     }
 
+    // The colours are the stored ones only once the file is read (a custom theme from an earlier session is kept until then).
+    Binding {
+        target: Pointer
+        property: "colorsKnown"
+        value: Settings.loaded
+    }
+
     Binding {
         target: Pointer
         property: "statusPath"

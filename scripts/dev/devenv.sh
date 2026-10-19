@@ -27,8 +27,16 @@ if [[ -f $_gf_dev_root/.dev/share/icons/grassfield-cursors/manifest.hl ]]; then
     _gf_cursor_size=$(jq -r 'if (.pointer.size | type) == "number" and .pointer.size == (.pointer.size | floor) and .pointer.size >= 24 and .pointer.size <= 96 then .pointer.size else 24 end' "$_gf_dev_root/.dev/config/grassfield.json" 2>/dev/null || true)
   fi
   [[ $_gf_cursor_size =~ ^[0-9]+$ ]] || _gf_cursor_size=24
-  export HYPRCURSOR_THEME=grassfield-cursors HYPRCURSOR_SIZE=$_gf_cursor_size
-  export XCURSOR_THEME=grassfield-cursors XCURSOR_SIZE=$_gf_cursor_size
+  # GRASSFIELD_CURSOR_THEME=grassfield-cursors-custom (nested-up.sh/shell-run.sh --cursor-theme) starts the shell as a real
+  # session would after a login with the custom theme on disk (the session environment names it); only the two Grassfield
+  # themes are accepted, and the custom one only if it exists under .dev/share/icons (never anything of the owner's).
+  _gf_cursor_theme=grassfield-cursors
+  if [[ ${GRASSFIELD_CURSOR_THEME:-} == grassfield-cursors-custom && -f $_gf_dev_root/.dev/share/icons/grassfield-cursors-custom/manifest.hl ]]; then
+    _gf_cursor_theme=grassfield-cursors-custom
+  fi
+  export HYPRCURSOR_THEME=$_gf_cursor_theme HYPRCURSOR_SIZE=$_gf_cursor_size
+  export XCURSOR_THEME=$_gf_cursor_theme XCURSOR_SIZE=$_gf_cursor_size
+  unset _gf_cursor_theme
   case ":${XCURSOR_PATH:-}:" in
     *":$_gf_dev_root/.dev/share/icons:"*) ;;
     *) export XCURSOR_PATH="$_gf_dev_root/.dev/share/icons:${XCURSOR_PATH:-~/.local/share/icons:~/.icons:/usr/share/icons}" ;;

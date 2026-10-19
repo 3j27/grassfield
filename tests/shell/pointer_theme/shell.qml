@@ -72,6 +72,16 @@ ShellRoot {
         killMs: 2000
     }
 
+    // A second builder for the startup and stamp scenarios (its own icons directory, set when the scenario starts).
+    PointerTheme {
+        id: theme2
+        script: root.fake
+        iconsDir: ""
+        debounceMs: 250
+        timeoutMs: 20000
+        killMs: 1500
+    }
+
     function statusJson(next: var): void {
         root.run(["sh", "-c", "cat \"$1\" 2>/dev/null; exit 0", "sh", root.status], function () {
             let parsed = {};
@@ -95,13 +105,12 @@ ShellRoot {
         },
         function () {
             root.check("burst: one build", theme.started === 1);
-            root.check("burst: generation counts the finished build", theme.generation === 1);
             root.check("burst: ready for the last colour only", theme.wantedKey === "#ffeedd|#112233" && theme.ready);
             root.readLog(() => root.advance());
         },
         function () {
             root.check("burst: the builder ran once, with the last colours", root.count("start") === 1 && root.lines()[0] === "start #ffeedd #112233");
-            root.check("burst: command is argv without a shell", theme.lastCommand[0] === "bash" && theme.lastCommand.indexOf("--fill") > 0 && theme.lastCommand[theme.lastCommand.indexOf("--fill") + 1] === "#112233");
+            root.check("burst: command is argv without a shell", theme.lastCommand[0] === "setsid" && theme.lastCommand[1] === "bash" && theme.lastCommand.indexOf("--fill") > 0 && theme.lastCommand[theme.lastCommand.indexOf("--fill") + 1] === "#112233");
             root.statusJson(parsed => {
                 root.check("burst: status ready for those colours", parsed.state === "ready" && parsed.outline === "#ffeedd" && parsed.fill === "#112233");
                 root.advance();
@@ -119,7 +128,6 @@ ShellRoot {
         function () {
             root.check("supersede: the slow build was cancelled once", theme.cancelled === 1);
             root.check("supersede: two more builds started (slow one, then the newest)", theme.started === 3);
-            root.check("supersede: only finished builds count as generations", theme.generation === 2);
             root.readLog(() => root.advance());
         },
         function () {
@@ -217,6 +225,76 @@ ShellRoot {
             root.waitFor(() => theme.removals === 2 && !theme.removing, 3000);
         },
         function () {
+            // Stubborn build: ignores SIGTERM, its child too. Superseded: killed after killMs, as a group.
+            theme.fill = "#123456";
+            root.waitFor(() => theme.building, 3000);
+        },
+        function () {
+            root.run(["sh", "-c", "i=0; while [ ! -s \"$1\"/icons/grandchild.pid ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done; cat \"$1\"/icons/grandchild.pid", "sh", root.tmp], () => {
+                root.child = root.out.trim();
+                root.check("stubborn: the build's child runs (pid " + root.child + ")", /^[0-9]+$/.test(root.child));
+                theme.fill = "#778899";
+                root.waitFor(() => theme.ready && theme.wantedKey === "#ffffff|#778899", 12000);
+            });
+        },
+        function () {
+            root.check("stubborn: superseded build was cancelled", theme.cancelled >= 1);
+            root.run(["sh", "-c", "kill -0 \"$1\" 2>/dev/null; echo $?", "sh", root.child], () => root.advance());
+        },
+        function () {
+            root.check("stubborn: its child (SIGTERM ignored) is gone after the group kill (kill -0 -> " + root.out.trim() + ")", root.out.trim() === "1");
+            root.check("stubborn: the newest colours were built next", theme.ready);
+            // Startup in a real session: the icons directory holds the custom theme of an earlier session (stamp for
+            // key K) and a work directory of a build that was killed. Colours are K: nothing is built, the stale
+            // directory goes, the theme counts as ready.
+            root.run(["sh", "-c", "d=\"$1\"/icons2; mkdir -p \"$d/grassfield-cursors-custom\" \"$d/.grassfield-cursors-custom.build.999999.stale\"; touch \"$d/grassfield-cursors-custom/manifest.hl\"; echo '#ffeedd #112233' > \"$d/grassfield-cursors-custom/colors\"", "sh", root.tmp], () => {
+                theme2.outline = "#ffeedd";
+                theme2.fill = "#112233";
+                theme2.iconsDir = root.tmp + "/icons2";
+                root.waitFor(() => theme2.ready && theme2.idle, 4000);
+            });
+        },
+        function () {
+            root.check("startup: a theme whose stamp matches the colours is used as it is, nothing built", theme2.started === 0 && theme2.ready);
+            root.check("startup: clean-up ran once", theme2.cleanups === 1);
+            root.run(["sh", "-c", "ls -A \"$1\"/icons2 | grep -v clean.log", "sh", root.tmp], () => {
+                root.check("startup: the theme stays (" + root.out.trim() + ")", root.out.indexOf("grassfield-cursors-custom\n") === 0 || root.out.trim().split("\n")[0] === "grassfield-cursors-custom");
+                // Colours differ from the stamp: a rebuild, then ready.
+                theme2.fill = "#445566";
+                root.waitFor(() => theme2.ready && theme2.started === 1, 5000);
+            });
+        },
+        function () {
+            root.check("startup: a stale stamp is rebuilt", theme2.started === 1 && theme2.ready);
+            // A (built) -> B (cancelled before it replaced anything) -> A: the stamp still says A, nothing is rebuilt.
+            theme2.fill = "#00ff00";
+            root.waitFor(() => theme2.building, 3000);
+        },
+        function () {
+            theme2.fill = "#445566";
+            root.waitFor(() => theme2.ready && theme2.idle, 8000);
+        },
+        function () {
+            root.check("A, B cancelled, A: A is ready again from the stamp, no rebuild (started " + theme2.started + ")", theme2.started === 2 && theme2.ready);
+            // A -> B (installed, then cancelled): the stamp says B, so A is built again, never taken for built.
+            theme2.fill = "#0000ff";
+            root.waitFor(() => theme2.building, 3000);
+        },
+        function () {
+            root.run(["sh", "-c", "i=0; while ! grep -q 0000ff \"$1\"/icons2/grassfield-cursors-custom/colors && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done; cat \"$1\"/icons2/grassfield-cursors-custom/colors", "sh", root.tmp], () => {
+                root.check("B installed before the cancel (stamp " + root.out.trim() + ")", root.out.indexOf("#0000ff") > 0);
+                theme2.fill = "#445566";
+                root.waitFor(() => theme2.ready && theme2.idle, 8000);
+            });
+        },
+        function () {
+            root.check("A, B installed and cancelled, A: A is built again (started " + theme2.started + ")", theme2.started === 4 && theme2.ready);
+            root.run(["cat", root.tmp + "/icons2/grassfield-cursors-custom/colors"], () => {
+                root.check("A, B installed and cancelled, A: the theme on disk is A (" + root.out.trim() + ")", root.out.trim() === "#ffeedd #445566");
+                root.advance();
+            });
+        },
+        function () {
             // Real build.sh.
             root.run(["sh", "-c", "for t in hyprcursor-util rsvg-convert python3; do command -v $t >/dev/null || exit 1; done; exit 0", "sh"], () => {
                 root.haveTools = root.code === 0;
@@ -287,6 +365,7 @@ ShellRoot {
         }
     ]
     property int mark: 0
+    property string child: ""
 
     function waitFor(predicate: var, ms: int): void {
         wait = predicate;

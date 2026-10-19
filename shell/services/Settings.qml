@@ -37,6 +37,8 @@ Singleton {
     readonly property string iconTint: store.iconTint
     readonly property string folderColor: store.folderColor
 
+    // grassfield.json has been read at least once.
+    readonly property bool loaded: store.loaded
     readonly property int pointerSize: store.pointerSize
     readonly property string pointerOutlineColor: store.pointerOutlineColor
     readonly property string pointerFillColor: store.pointerFillColor
