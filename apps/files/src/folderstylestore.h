@@ -16,7 +16,9 @@
 // $XDG_CONFIG_HOME/grassfield), used when the attribute cannot be written: a filesystem without user attributes (FAT,
 // exFAT, NTFS, some network mounts), a read-only folder or volume, an immutable folder. Entries are keyed by the cleaned
 // absolute path (a move outside Files loses them; the attribute does not), written atomically (QSaveFile, mode 0600).
-// An entry wins over the attribute (it is the user's explicit choice on this machine). A store that cannot be parsed is
+// An entry wins over the attribute (it is the user's explicit choice on this machine). Entries follow Files' renames and
+// moves of the folder; entries of folders that vanished are pruned whenever the store is written; at most
+// kMaxFallbackEntries entries. A store that cannot be parsed is
 // never overwritten (writes that need it are refused with a reason). Format:
 //   {"version":1,"serial":N,"folders":{"/abs/path":{"color":"#rrggbb","glyph":"x"}}}
 // `serial` also moves on every successful attribute write: it is the change signal for other processes (the desktop
@@ -27,6 +29,10 @@
 class FolderStyleStore
 {
 public:
+    // The most entries the store takes. Entries beyond it that are already in a file are kept, never dropped on a write;
+    // a new entry is refused with a reason once the store is full (after entries of vanished folders are pruned).
+    static constexpr int kMaxFallbackEntries = 20000;
+
     explicit FolderStyleStore(const QString &fallbackFile = QString());
 
     void setFallbackFile(const QString &file);
@@ -47,6 +53,12 @@ public:
     // Sets the folder's look to exactly `style` (empty = reset: attribute removed, entry dropped).
     Result write(const QString &path, const FolderStyleLogic::Style &style);
 
+    // Files moved or renamed a folder: the entry of `from` (and of the folders under it) now belongs to `to`. True when
+    // the store changed. Moves done outside Files are not seen: those entries are pruned at the next write.
+    bool moveEntries(const QString &from, const QString &to);
+    // Files created a folder at `path`: an old entry for that path must not apply to it.
+    bool dropEntry(const QString &path);
+
     // Reads the fallback store again when its file changed on disk (another process). True when the entries changed.
     bool reload();
     int fallbackCount() const;
@@ -57,6 +69,7 @@ private:
     void ensureLoaded() const;
     bool loadFile() const;
     bool saveFile(QString *error);
+    void pruneGone();
     static QString keyFor(const QString &path);
 
     QString m_file;

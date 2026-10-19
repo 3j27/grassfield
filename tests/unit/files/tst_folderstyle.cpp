@@ -97,6 +97,42 @@ TEST(FolderStyleLogic, GlyphIsOneGraphemeCluster)
     EXPECT_EQ(FolderStyleLogic::normalizeGlyph(QString(QChar(0x07))), QString());
 }
 
+// The symbol rule's shared vectors: ui/Grassfield/Ui/FolderStyle.js normalizeGlyph must give the same answers
+// (tests/unit/tst_foldercolors.qml test_glyphRuleSharedVectors holds the same table).
+TEST(FolderStyleLogic, GlyphRuleSharedVectors)
+{
+    struct Vector {
+        const char *input;
+        const char *expected;
+    };
+    const Vector vectors[] = {
+        {"\xF0\x9F\x8E\xB5", "\xF0\x9F\x8E\xB5"},                                      // music note
+        {"\xE2\x9D\xA4\xEF\xB8\x8F", "\xE2\x9D\xA4\xEF\xB8\x8F"},                      // heart + VS16
+        {"\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7", "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7"},  // flag FR
+        {"\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7\xF0\x9F\x87\xAB", "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7"}, // 3 regional indicators
+        {"1\xEF\xB8\x8F\xE2\x83\xA3", "1\xEF\xB8\x8F\xE2\x83\xA3"},                      // keycap 1
+        {"e\xCC\x81x", "e\xCC\x81"},                                                   // e + acute, then a letter
+        {"WWWWWWWWWWWWWWWW", "W"},                                                        // sixteen letters: one cluster
+        {"Holiday photos", "H"},
+        {"a\xE2\x80\xAE", "a"},                                                         // a, then RLO: the cluster ends before it
+        {"\xE2\x80\xAE" "a", ""},                                                       // RLO first
+        {"\xE2\x80\x8E" "a", ""},                                                       // LRM first
+        {"a\xE2\x80\x8B", "a"},                                                         // zero width space is a break
+        {"\x01" "a", ""},                                                                 // control first
+        {"  \xE2\x98\x85  ", "\xE2\x98\x85"},                                          // trimmed
+        {"\xEF\xBF\xBD", ""},                                                           // replacement character
+    };
+    for (const Vector &v : vectors) {
+        EXPECT_EQ(FolderStyleLogic::normalizeGlyph(QString::fromUtf8(v.input)), QString::fromUtf8(v.expected)) << v.input;
+    }
+    // Over the cap (more than 16 UTF-16 units in one cluster): nothing.
+    QString zalgo = QStringLiteral("e");
+    for (int i = 0; i < 16; ++i)
+        zalgo += QChar(0x0301);
+    EXPECT_EQ(FolderStyleLogic::normalizeGlyph(zalgo), QString());
+    EXPECT_EQ(FolderStyleLogic::normalizeGlyph(zalgo.left(16)), zalgo.left(16));
+}
+
 TEST(FolderStyleLogic, ParseAndSerializeRoundTrip)
 {
     const Style s = style("#FF9500", "\xF0\x9F\x8E\xB5");
@@ -137,6 +173,12 @@ TEST(FolderStyleLogic, ApplyKeepsUnknownKeys)
     EXPECT_TRUE(FolderStyleLogic::apply(QByteArray("{\"v\":1,\"color\":\"#ff0000\"}"), Style()).isEmpty());
     // Garbage is replaced.
     EXPECT_EQ(FolderStyleLogic::parse(FolderStyleLogic::apply(QByteArray("garbage"), style("accent"))).color, QStringLiteral("accent"));
+}
+
+TEST(FolderStyleLogic, OversizedValueIsNotEdited)
+{
+    EXPECT_FALSE(FolderStyleLogic::tooLargeToEdit(QByteArray(4096, 'x')));
+    EXPECT_TRUE(FolderStyleLogic::tooLargeToEdit(QByteArray(4097, 'x')));
 }
 
 // ---- store ----
@@ -349,4 +391,144 @@ TEST(FolderStyleStore, ThousandFoldersCostLittleWithoutCustomisation)
     RecordProperty("read1000_plain_us", plain);
     RecordProperty("read1000_100customised_us", mixed);
     std::printf("folder style: 1000 folders read in %lld us (none customised), %lld us (100 customised)\n", (long long)plain, (long long)mixed);
+}
+
+TEST(FolderStyleStore, OversizedAttributeIsNotReplaced)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    FolderStyleStore store(dir->filePath(QStringLiteral("cfg/folder-styles.json")));
+    const QString folder = makeFolder(*dir, QStringLiteral("big"));
+    const QByteArray p = QFile::encodeName(folder);
+    const QByteArray big = "{\"v\":2,\"future\":\"" + QByteArray(5000, 'z') + "\"}";
+    if (::lsetxattr(p.constData(), FolderStyleLogic::attributeName(), big.constData(), size_t(big.size()), 0) != 0)
+        GTEST_SKIP() << "this filesystem does not take a 5 KB attribute";
+    const auto r = store.write(folder, style("#00ff00"));
+    EXPECT_FALSE(r.ok);
+    EXPECT_FALSE(r.error.isEmpty());
+    EXPECT_FALSE(store.write(folder, Style()).ok) << "a reset would remove the unknown keys too";
+    QByteArray raw;
+    ASSERT_EQ(TagStore::readAttr(folder, FolderStyleLogic::attributeName(), &raw), TagStore::ReadResult::Ok);
+    EXPECT_EQ(raw, big) << "the stored value is untouched";
+}
+
+TEST(FolderStyleStore, ResetOnAReadOnlyFolderWithAnAttributeDropsTheEntryAndSaysWhy)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    FolderStyleStore store(dir->filePath(QStringLiteral("cfg/folder-styles.json")));
+    const QString folder = makeFolder(*dir, QStringLiteral("attr-then-ro"));
+    ASSERT_TRUE(store.write(folder, style("#e5484d")).ok); // the attribute, written while writable
+    ASSERT_EQ(::chmod(QFile::encodeName(folder).constData(), 0555), 0);
+    ASSERT_TRUE(store.write(folder, style("#00ff00")).fellBack); // now only the per-user entry can change
+    EXPECT_EQ(store.fallbackCount(), 1);
+    const auto r = store.write(folder, Style());
+    ::chmod(QFile::encodeName(folder).constData(), 0755);
+    EXPECT_FALSE(r.ok) << "the attribute can't be removed: the reset fails with the reason";
+    EXPECT_FALSE(r.error.isEmpty());
+    EXPECT_TRUE(r.changed) << "the entry is gone, views must refresh";
+    EXPECT_EQ(store.fallbackCount(), 0) << "no entry is left behind";
+    EXPECT_EQ(store.read(folder).color, QStringLiteral("#e5484d")) << "the folder's own attribute shows";
+}
+
+TEST(FolderStyleStore, EntriesFollowRenamesAndAreNotInheritedByNewFolders)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
+    FolderStyleStore store(file);
+    const QString a = makeFolder(*dir, QStringLiteral("a"));
+    const QString sub = makeFolder(*dir, QStringLiteral("a/sub"));
+    ::chmod(QFile::encodeName(sub).constData(), 0555);
+    ::chmod(QFile::encodeName(a).constData(), 0555);
+    ASSERT_TRUE(store.write(a, style("#e5484d")).fellBack);
+    ASSERT_TRUE(store.write(sub, style("#3fae5a", "A")).fellBack);
+    ::chmod(QFile::encodeName(a).constData(), 0755);
+    const QString b = dir->filePath(QStringLiteral("b"));
+    ASSERT_TRUE(QDir().rename(a, b));
+    EXPECT_TRUE(store.moveEntries(a, b));
+    EXPECT_EQ(store.read(b).color, QStringLiteral("#e5484d"));
+    EXPECT_EQ(store.read(b + QStringLiteral("/sub")).color, QStringLiteral("#3fae5a")) << "folders under it follow";
+    EXPECT_TRUE(store.read(a).isEmpty());
+    EXPECT_EQ(store.fallbackCount(), 2);
+    EXPECT_FALSE(store.moveEntries(a, b)) << "nothing left to move";
+
+    // A folder that goes away outside Files: its entry is pruned at the next write, and a new folder at that path is plain.
+    ::chmod(QFile::encodeName(b + QStringLiteral("/sub")).constData(), 0755);
+    ASSERT_TRUE(QDir(b).removeRecursively());
+    const QString other = makeFolder(*dir, QStringLiteral("other"));
+    ::chmod(QFile::encodeName(other).constData(), 0555);
+    ASSERT_TRUE(store.write(other, style("#8e5bea")).fellBack);
+    ::chmod(QFile::encodeName(other).constData(), 0755);
+    EXPECT_EQ(store.fallbackCount(), 1) << "the entries of the vanished folders are pruned";
+    makeFolder(*dir, QStringLiteral("b"));
+    EXPECT_TRUE(store.read(b).isEmpty()) << "a new folder at an old path does not inherit the look";
+
+    // Files creating a folder drops an old entry as well.
+    ::chmod(QFile::encodeName(b).constData(), 0555);
+    ASSERT_TRUE(store.write(b, style("#f5883b")).fellBack);
+    ::chmod(QFile::encodeName(b).constData(), 0755);
+    EXPECT_TRUE(store.dropEntry(b));
+    EXPECT_TRUE(store.read(b).isEmpty());
+    EXPECT_FALSE(store.dropEntry(b));
+}
+
+TEST(FolderStyleStore, EntriesOfAnUnpluggedVolumeAreKept)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
+    QDir().mkpath(dir->filePath(QStringLiteral("cfg")));
+    QFile f(file);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write("{\"version\":1,\"serial\":3,\"folders\":{\"/run/media/nobody/GF-TEST-STICK/Photos\":{\"color\":\"#e5484d\"}}}");
+    f.close();
+    FolderStyleStore store(file);
+    const QString folder = makeFolder(*dir, QStringLiteral("ro"));
+    ::chmod(QFile::encodeName(folder).constData(), 0555);
+    ASSERT_TRUE(store.write(folder, style("#3fae5a")).fellBack);
+    ::chmod(QFile::encodeName(folder).constData(), 0755);
+    EXPECT_EQ(store.fallbackCount(), 2);
+    EXPECT_EQ(store.read(QStringLiteral("/run/media/nobody/GF-TEST-STICK/Photos")).color, QStringLiteral("#e5484d"));
+}
+
+TEST(FolderStyleStore, TheCapIsExplicitAndNothingIsDroppedSilently)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
+    QDir().mkpath(dir->filePath(QStringLiteral("cfg")));
+    const int total = FolderStyleStore::kMaxFallbackEntries + 50;
+    QByteArray json = "{\"version\":1,\"serial\":1,\"folders\":{";
+    for (int i = 0; i < total; ++i) {
+        if (i)
+            json += ',';
+        json += "\"/run/media/nobody/GF-TEST-STICK/f" + QByteArray::number(i) + "\":{\"color\":\"#e5484d\"}";
+    }
+    json += "}}";
+    QFile f(file);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(json);
+    f.close();
+    FolderStyleStore store(file);
+    EXPECT_EQ(store.fallbackCount(), total) << "a file over the cap is read whole";
+    // A new entry is refused with a reason ...
+    const QString folder = makeFolder(*dir, QStringLiteral("ro"));
+    ::chmod(QFile::encodeName(folder).constData(), 0555);
+    const auto refused = store.write(folder, style("#3fae5a"));
+    ::chmod(QFile::encodeName(folder).constData(), 0755);
+    EXPECT_FALSE(refused.ok);
+    EXPECT_FALSE(refused.error.isEmpty());
+    // ... and a write that does save the file (an attribute write whose entry is dropped) keeps every other entry.
+    FolderStyleStore again(file);
+    EXPECT_EQ(again.fallbackCount(), total) << "nothing was dropped";
+    const QString plain = makeFolder(*dir, QStringLiteral("plain"));
+    ::chmod(QFile::encodeName(plain).constData(), 0555);
+    EXPECT_FALSE(again.write(plain, style("#3fae5a")).ok) << "still full";
+    ::chmod(QFile::encodeName(plain).constData(), 0755);
+    EXPECT_TRUE(again.dropEntry(QStringLiteral("/run/media/nobody/GF-TEST-STICK/f0")));
+    EXPECT_EQ(FolderStyleStore(file).fallbackCount(), total - 1) << "only the entry asked for is gone";
 }
