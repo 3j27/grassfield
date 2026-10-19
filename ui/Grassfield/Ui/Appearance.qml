@@ -13,6 +13,10 @@ QtObject {
     property string iconMode: "default"
     property string iconTintSetting: "accent"
 
+    // A sample app icon (an SVG shipped with this module) for the icon appearance previews: it goes through the same
+    // TintedIcon pipeline as every icon.
+    readonly property url iconSampleSource: Qt.resolvedUrl("samples/icon-sample.svg")
+
     // Derived values.
     // Tint of the Tinted icon mode: the chosen colour, the accent by default.
     readonly property color iconTint: IconModes.tintColor(iconTintSetting, colors.accent)

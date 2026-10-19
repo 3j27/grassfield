@@ -190,6 +190,8 @@ QtObject {
     readonly property int dockIndicatorSize: 4
     // task spec default; user value in grassfield.json dock.magnification
     readonly property real dockMagnificationMax: 1.6
+    // dock.magnification is clamped to 2.5 (SettingsStore, Settings contract): a tile icon is decoded at the largest size it is ever drawn, so magnification never upscales it
+    readonly property real dockIconOversample: 2.5
     // task spec: cosine falloff over about 3 icons each side
     readonly property int dockMagnificationRadius: 3
     // estimate: pointer hot strip in px when autohidden
@@ -916,32 +918,48 @@ QtObject {
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
 
-    // ADR-0014: Dark mode, MultiEffect saturation (-1..1): colours kept as they are
-    readonly property real iconModeDarkSaturation: 0.0
-    // ADR-0014: Dark mode, MultiEffect brightness: a small lift that keeps the dark parts readable after the darkening. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeDarkBrightness: 0.1
-    // ADR-0014: Dark mode, MultiEffect contrast: keeps the glyph readable on the darker plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeDarkContrast: 0.6
-    // ADR-0014: Dark mode, strength of the black colorization (multiplies every channel by 1 - this, hue kept). Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeDarkColorization: 0.4
-    // ADR-0014: Dark mode, colour the icon is darkened towards
-    readonly property string iconModeDarkShade: "#000000"
-    // ADR-0014: Clear mode, fully desaturated
-    readonly property real iconModeClearSaturation: -1.0
-    // ADR-0014: Clear mode, lighter. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeClearBrightness: 0.1
-    // ADR-0014: Clear mode, keeps the glyph readable on the grey plate. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeClearContrast: 0.4
-    // ADR-0014: Clear mode, translucent over the material; A2 keeps meaningful icons at 3:1 or more (measured)
-    readonly property real iconModeClearOpacity: 0.78
-    // ADR-0014: Tinted mode, saturation: 0 (MultiEffect desaturates after colorizing, so -1 would grey the tint out; the colorization already maps luminance to the tint)
-    readonly property real iconModeTintedSaturation: 0.0
-    // ADR-0014: Tinted mode, lifts the shadows so the ramp starts above black. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeTintedBrightness: 0.3
-    // ADR-0014: Tinted mode, spreads the luminance over the ramp. Chosen so that icons that have 3:1 between glyph and plate by default keep it (A2, measured on 32 WhiteSur icons: scratch sweep, docs/specs/ui.md).
-    readonly property real iconModeTintedContrast: 0.7
-    // ADR-0014: Tinted mode, strength of the tint (0..1)
-    readonly property real iconModeTintedColorization: 1.0
+    // ADR-0014 shader: colour distance (RGB 0..1) from the estimated plate colour below which a pixel is plate. Chosen on 29 WhiteSur icons (docs/specs/ui.md, icon shader).
+    readonly property real iconModePlateToleranceLow: 0.25
+    // ADR-0014 shader: colour distance above which a pixel is glyph (between the two: a soft edge). Chosen on 29 WhiteSur icons; a white glyph on a blue plate is about 0.8 away, a plate gradient about 0.2.
+    readonly property real iconModePlateToleranceHigh: 0.5
+    // ADR-0014 shader: mean opacity of the plate probes below which the icon has no plate (a logo on transparency: every pixel is glyph)
+    readonly property real iconModePlateAlphaLow: 0.35
+    // ADR-0014 shader: mean opacity of the plate probes from which the icon has a full plate
+    readonly property real iconModePlateAlphaHigh: 0.7
+    // ADR-0014 shader: width in logical pixels of the edge highlight that keeps a dark plate visible on a dark material (macOS 26 icons have a specular rim)
+    readonly property real iconModeRimWidth: 1.0
+    // ADR-0014 Dark: luma (sRGB 0..1) the plate is darkened to (near-black graphite, hue kept); plates already darker are kept. macOS 26 Dark plates are near black.
+    readonly property real iconModeDarkPlateLuma: 0.13
+    // ADR-0014 Dark: luma a black glyph on a light plate becomes (neutral glyphs invert, coloured glyphs keep their colour)
+    readonly property real iconModeDarkGlyphLuma: 0.92
+    // ADR-0014 Dark: how much dark coloured glyphs on a light plate are brightened so they stay vivid on the dark plate (0 = not at all)
+    readonly property real iconModeDarkGlyphBoost: 0.8
+    // ADR-0014 Dark: opacity of the white edge highlight in the dark appearance; chosen with the A2 test (docs/specs/ui.md) so the plate outline stays visible on the dark material
+    readonly property real iconModeDarkRim: 0.22
+    // ADR-0014 Clear: opacity of the white glass plate in the dark appearance (the material shows through)
+    readonly property real iconModeClearPlateAlphaDark: 0.22
+    // ADR-0014 Clear: opacity of the dark glass plate in the light appearance (the material shows through)
+    readonly property real iconModeClearPlateAlphaLight: 0.14
+    // ADR-0014 Clear: luma of the glyph in the dark appearance (near white)
+    readonly property real iconModeClearInkDark: 0.97
+    // ADR-0014 Clear: luma of the glyph in the light appearance (near black)
+    readonly property real iconModeClearInkLight: 0.14
+    // ADR-0014 Clear: how much of the glyph's own shading is kept (0 = a flat silhouette, 1 = full range)
+    readonly property real iconModeClearDetail: 0.5
+    // ADR-0014 Clear: opacity of the glyph-coloured edge highlight of the glass plate
+    readonly property real iconModeClearRim: 0.3
+    // ADR-0014 Tinted, dark appearance: the plate is the tint colour at this fraction of its brightness (a dark tinted plate, macOS 26)
+    readonly property real iconModeTintedPlateScale: 0.3
+    // ADR-0014 Tinted, light appearance: the plate is the tint colour mixed this far to white (a light tinted plate)
+    readonly property real iconModeTintedPlateMixLight: 0.82
+    // ADR-0014 Tinted, dark appearance: the glyph is the tint colour mixed this far to white so it stays luminous on the dark plate
+    readonly property real iconModeTintedGlyphLift: 0.2
+    // ADR-0014 Tinted, light appearance: the glyph is the tint colour at this fraction of its brightness (dark enough on the light plate)
+    readonly property real iconModeTintedGlyphShadeLight: 0.55
+    // ADR-0014 Tinted: how much of the glyph's own shading is kept (0 = flat tint colour, 1 = full range)
+    readonly property real iconModeTintedDetail: 0.45
+    // ADR-0014 Tinted: opacity of the glyph-coloured edge highlight of the plate
+    readonly property real iconModeTintedRim: 0.25
     // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)
     readonly property int iconModePreviewSize: 56
     // estimate: Settings icon mode picker, tile width
@@ -952,14 +970,8 @@ QtObject {
     readonly property int iconModePreviewRadius: 10
     // estimate: Settings icon mode picker, gap between tiles
     readonly property int iconModePreviewGap: 12
-    // own sample icon of the mode previews: top of the plate gradient
-    readonly property string iconModeSampleTop: "#4DA3FF"
-    // own sample icon of the mode previews: bottom of the plate gradient
-    readonly property string iconModeSampleBottom: "#2B4BD8"
-    // own sample icon of the mode previews: plate corner radius over its edge
-    readonly property real iconModeSampleRadius: 0.22
-    // own sample icon of the mode previews: glyph on the plate
-    readonly property string iconModeSampleGlyph: "#FFFFFF"
+    // estimate: Settings icon mode picker, gap between a tile and its keyboard focus ring (the selection ring is the tile border, so the two stay distinct)
+    readonly property int iconModePreviewFocusGap: 2
     // own picks, not copied: swatches of the Tinted icon colour (blue, purple, pink, red, orange, yellow, green, graphite); the accent is the first swatch
     readonly property var iconModeTintColors: ["#3E7BFA", "#8E5BEA", "#E25AA1", "#E5484D", "#F5883B", "#E6B422", "#3FAE5A", "#8A8F98"]
 

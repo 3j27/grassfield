@@ -411,6 +411,7 @@ Scope {
                                     id: appIcon
                                     visible: tile.isApp
                                     size: win.iconSize
+                                    oversample: Tokens.dockIconOversample
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
