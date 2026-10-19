@@ -42,8 +42,12 @@ pids=()
 check() {
   if [[ $2 == 0 ]]; then echo "PASS $1"; else echo "FAIL $1"; fails=1; fi
 }
-ipc() { "$root/tests/visual/ipc.sh" "$@"; }
-ptr() { "$root/scripts/dev/pointer.sh" "$@" >/dev/null; }
+# The helper scripts validate the nested session on every call (pidfile.sh) and, with several agents loading the host,
+# that validation sometimes fails transiently before anything is sent: retry such a call (nothing was injected).
+retry() { local i; for i in 1 2 3 4 5 6; do "$@" && return 0; sleep 0.4; done; return 1; }
+ipc() { retry "$root/tests/visual/ipc.sh" "$@"; }
+ptr() { retry "$root/scripts/dev/pointer.sh" "$@" >/dev/null; }
+kb() { retry "$root/scripts/dev/keys.sh" "$@"; }
 status() { ipc overview status; }
 active_title() { "$root/scripts/nestctl" activewindow -j | jq -r '.title // ""'; }
 active_monitor() { "$root/scripts/nestctl" activewindow -j | jq -r '.monitor // -1'; }
@@ -111,10 +115,10 @@ open_overview() {
 type_into() { # <title>: type a line, expect it in the window's file
   local t=$1 tag=$2
   sleep 0.4   # keyboard enter after the close
-  "$root/scripts/dev/keys.sh" "$tag" -k Return
+  kb "$tag" -k Return
   wait_for 3 grep -q "$tag" "$out/$t.txt" && return 0
   # Diagnostic only (the check still fails): were the keys lost, or is the window not receiving at all?
-  "$root/scripts/dev/keys.sh" "R$tag" -k Return
+  kb "R$tag" -k Return
   if wait_for 3 grep -q "R$tag" "$out/$t.txt"; then echo "note: $t: first typing lost, second arrived; active=$(active_title)"; else echo "note: $t: second typing lost too; active=$(active_title)"; fi
   return 1
 }
@@ -126,7 +130,22 @@ click_on() { # <title>
   ptr output "$o" abs $((x + 2)) $((y + 2)) sleep 300 click
 }
 
+# WAYLAND-1 is a host window: the owner's window manager may resize it during a run (then points fall off the output and
+# the run proves nothing). The sizes are recorded at the start and compared at the end: a changed size makes the run INVALID.
+mon_sizes() { "$root/scripts/nestctl" monitors -j | jq -r '[.[] | "\(.name)=\(.width)x\(.height)"] | sort | join(" ")'; }
+size_guard() {
+  local now
+  now=$(mon_sizes)
+  if [[ $now != "$start_sizes" ]]; then echo "INVALID RUN: the host resized an output during the run (start: $start_sizes; end: $now): rerun"; fails=1; fi
+}
+
 setup() {
+  start_sizes=$(mon_sizes)
+  echo "outputs: $start_sizes"
+  if "$root/scripts/nestctl" monitors -j | jq -e 'any(.[]; .width < 900 or .height < 600)' >/dev/null; then
+    echo "INVALID RUN: an output is smaller than 900x600 (the host window manager resized the nested window): rerun"
+    exit 4
+  fi
   spawn_foot A WAYLAND-1
   spawn_foot B GF-REF
   "$root/scripts/nestctl" clients -j | jq -c '.[] | select(.title == "A" or .title == "B") | {title, mon: .monitor, ws: .workspace.id}'
@@ -221,7 +240,7 @@ ptr_on() { ptr output "$(out_of "$1")" abs $park; sleep 0.3; }
 # KEYBOARD (not activewindow) is what is verified. Prints where it went when it did not.
 keys_arrive() {
   local t=$1 tag=$2 where
-  "$root/scripts/dev/keys.sh" "$tag" -k Return
+  kb "$tag" -k Return
   if ! wait_for 3 grep -qx "$tag" "$out/$t.txt"; then
     where=$(grep -lx "$tag" "$out"/*.txt 2>/dev/null | xargs -r -n1 basename | tr '\n' ' ')
     echo "note: '$tag' did not reach $t (went to: ${where:-nowhere}; active=$(active_title))"
@@ -235,7 +254,7 @@ keys_arrive() {
 close_via() {
   local path=$1 o=$2 h
   case $path in
-    esc) "$root/scripts/dev/keys.sh" -k Escape ;;
+    esc) kb -k Escape ;;
     ipc) ipc overview close >/dev/null ;;
     toggle) ipc overview toggle >/dev/null ;;
     backdrop)
@@ -276,7 +295,7 @@ t_loop() {
     pre=$(active_title)
     open_overview
     if (( i % 4 < 2 )); then
-      "$root/scripts/dev/keys.sh" -k Escape; mode=Esc
+      kb -k Escape; mode=Esc
     else
       ipc overview close >/dev/null; mode=IPC
     fi
@@ -306,9 +325,9 @@ t_drop() {
       open_overview
       tag="d${d}i${i}r$RANDOM"
       if (( d > 0 )); then
-        "$root/scripts/dev/keys.sh" -k Escape -s "$d" "$tag" -k Return
+        kb -k Escape -s "$d" "$tag" -k Return
       else
-        "$root/scripts/dev/keys.sh" -k Escape "$tag" -k Return
+        kb -k Escape "$tag" -k Return
       fi
       sleep 0.7
       if grep -qx "$tag" "$out/$prev.txt"; then
@@ -356,4 +375,5 @@ case $mode in
   all) t_click; t_hover; t_loop; t_paths; t_backdrop; t_drop; t_drag ;;   # drag last: it moves A and B to another Space
   *) echo "usage: $0 [click|hover|drag|loop|paths|backdrop|drop|all]" >&2; exit 2 ;;
 esac
+size_guard
 exit "$fails"
