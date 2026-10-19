@@ -225,7 +225,8 @@ if (( ! measure_only )); then
         vs_ipc controlcenter appearance "$appearance" >/dev/null
         vs_ipc controlcenter transparency "$tr" >/dev/null
         vs_sleep 1.5
-        want desktop && cap desktop
+        # Always captured: every other surface is checked against it (differs); it is only MEASURED with --surfaces desktop.
+        cap desktop
         need_notif center false
         if want systemmenu; then
           vs_ipc menubar open system GF-REF >/dev/null; cap systemmenu; vs_ipc menubar close >/dev/null
