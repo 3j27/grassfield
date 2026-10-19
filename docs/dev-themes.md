@@ -15,7 +15,7 @@ Nothing here touches the owner's system: every theme lives under `.dev/share/ico
   shell (Quickshell) and for the Grassfield apps. Without the theme nothing changes (hicolor and the system theme stay
   as the fallback chain).
 - Limit: Grassfield's own UI glyphs (`branding/icons/symbolic`) are not theme icons; only app and file icons (Dock,
-  Apps, Search) follow the theme.
+  Apps, Search) follow the theme. They also follow the icon appearance mode (`icons.mode`: default, dark, clear, tinted; docs/specs/ui.md), which is applied by the renderer and works on any theme, WhiteSur or the hicolor fallback.
 
 ## Grassfield cursors
 
