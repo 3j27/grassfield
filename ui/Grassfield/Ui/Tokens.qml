@@ -1049,7 +1049,7 @@ QtObject {
     // ADR-0014 Dark: luma a dark coloured glyph on a light plate is scaled up to (kept vivid on the dark plate); with darkGlyphBoost
     readonly property real iconModeDarkGlyphFloor: 0.5
     // ADR-0014 Dark: opacity of the white edge highlight in the dark appearance; chosen with the A2 test (docs/specs/ui.md) so the plate outline stays visible on the dark material
-    readonly property real iconModeDarkRim: 0.65
+    readonly property real iconModeDarkRim: 0.8
     // ADR-0014 Clear: opacity of the white glass plate in the dark appearance (the material shows through)
     readonly property real iconModeClearPlateAlphaDark: 0.22
     // ADR-0014 Clear: opacity of the dark glass plate in the light appearance (the material shows through)

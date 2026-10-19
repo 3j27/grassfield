@@ -205,23 +205,23 @@ TestCase {
         };
     }
 
-    // Remaining limits, measured (worst value over every size, appearance and background; docs/specs/ui.md "Icon shader").
-    // They are logged, not failed. Clear and Tinted have none except the first two rows' near misses: every icon sits on a
-    // system plate there. Dark keeps the icon's own structure (macOS Dark adds no plate), so an icon without a plate keeps
-    // the outline it has, and an icon of two plate colours or hue-only details loses some inside contrast:
-    //   breeze text editor (white page, grey frame) Dark: outside 1.51 (default 9.18; the darkened page is close to the
-    //     dark material, its frame is a 1 px grey line).
-    //   Nautilus (two-colour split plate) Dark: inside 2.26 (default 5.64, floor 2.9), outside 1.87 at 16 px.
-    //   kdenlive (thin blue bars, no plate) Dark: inside 2.0 (default 3.5), outside 2.2; Tinted at 16 px outside 2.49 (floor 2.6).
-    //   full-bleed-logo (mascot blob) Dark: inside 1.89, outside 1.97 at 24 px.
-    //   breeze calculator Dark on the desktop (1.86 vs 2.65), mpv/Evince/white page/VLC Dark on the desktop (2.5-2.8 vs floor 2.9).
-    //   hicolor LibreOffice writer/calc/impress on the desktop: Tinted outside 2.64, Clear (calc) 2.79 (floor 2.9).
+    // Remaining limits, measured (worst value over every size, appearance and background, against the floor; docs/specs/ui.md
+    // "Icon shader"). They are logged, not failed. Clear and Tinted have none among the sizes 24-48 except the two LibreOffice
+    // desktop rows; every icon sits on a system plate in all three modes, Dark included.
+    //   breeze text editor Dark, 16-32 px: outside 1.84 (default 9.1; a white page with a thin grey frame: the darkened page
+    //     and the dark system plate are close to each other and to the dark material, and the frame is a 1 px line).
+    //   kdenlive at 16 px (thin bars): Dark outside 2.61, Tinted outside 2.49 (floor 2.9).
+    //   mascot blob Dark, inside 2.57 (default 3.43, floor 3.09): its holes show the dark plate behind.
+    //   LibreOffice writer/calc Dark at 24 px light window: inside 2.42-2.73 (default 3.1, floor 2.79), outside 2.85 (floor 2.9).
+    //   LibreOffice writer/calc/impress Tinted on the desktop over the green hill colour: outside 2.64 (floor 2.9; the icon's
+    //     own plate has a soft edge, so the rim is weak).
+    //   Nautilus (two-colour split plate) Dark: inside 2.26 at 24 px and 2.65 on the desktop (default 5.64-6.56, floor 2.9),
+    //     outside 2.7 at 32 px; VLC Dark on the desktop over grey: outside 2.82 (floor 2.9).
     readonly property var knownLimits: [
-        "breeze:accessories-text-editor dark E", "whitesur:org.gnome.Nautilus dark I", "whitesur:org.gnome.Nautilus dark E",
-        "hicolor:kdenlive dark I", "hicolor:kdenlive dark E", "hicolor:kdenlive tinted E", "full-bleed-logo dark I", "full-bleed-logo dark E",
-        "breeze:accessories-calculator dark E", "hicolor:mpv dark E", "hicolor:org.gnome.Evince dark E", "white-page-document dark E",
-        "whitesur:vlc dark E", "hicolor:libreoffice-calc clear E", "hicolor:libreoffice-calc tinted E",
-        "hicolor:libreoffice-impress tinted E", "hicolor:libreoffice-writer tinted E"
+        "breeze:accessories-text-editor dark E", "hicolor:kdenlive dark E", "hicolor:kdenlive tinted E", "full-bleed-logo dark I",
+        "hicolor:libreoffice-calc dark E", "hicolor:libreoffice-writer dark I", "hicolor:libreoffice-calc tinted E",
+        "hicolor:libreoffice-impress tinted E", "hicolor:libreoffice-writer tinted E", "whitesur:org.gnome.Nautilus dark I",
+        "whitesur:org.gnome.Nautilus dark E", "whitesur:vlc dark E"
     ]
 
     function isKnownLimit(name, mode, rule) {
