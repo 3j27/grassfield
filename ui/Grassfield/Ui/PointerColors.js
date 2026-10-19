@@ -134,13 +134,13 @@ function failureReason(exitCode, stderrText, home) {
 }
 
 // Writes the home folder as "~" (only where it is a whole path prefix: followed by "/" or the end, after a space or the
-// start or a quote or a colon). No home (or "/"): unchanged.
+// start or a quote of any kind, straight or curly, or a colon). No home (or "/"): unchanged.
 function tildeHome(text, home) {
     const h = typeof home === "string" ? home.replace(/\/+$/, "") : "";
     if (h === "" || h.charAt(0) !== "/")
         return text;
     const escaped = h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return text.replace(new RegExp("(^|[\\s'\"=:(])" + escaped + "(?=/|$|[\\s'\":)])", "g"), "$1~");
+    return text.replace(new RegExp("(^|[\\s'\"`\u2018\u2019\u201a\u201c\u201d\u00ab\u00bb\u2039\u203a=:(])" + escaped + "(?=/|$|[\\s'\"`\u2018\u2019\u201a\u201c\u201d\u00ab\u00bb\u2039\u203a:,;)])", "g"), "$1~");
 }
 
 // What kind of failure it was, for the Settings pane to say in its own language: "builder" (no script: exit 127),
