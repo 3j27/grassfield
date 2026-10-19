@@ -208,6 +208,13 @@ QtObject {
     readonly property real dockMinimizedBadgeScale: 0.4
     // estimate, pending F1 measurement from design/reference
     readonly property real dockTrashIconScale: 0.6
+    // Dock fidelity pass: the shelf holds icons only (no text), so it is more translucent than the A2 text clamp; real blur
+    // behind it. Reference: shelf a few percent lighter than its backdrop with a visible rim (gs-016-031).
+    readonly property real dockTintAlpha: 0.42
+    // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge)
+    readonly property real dockHighlightOpacity: 0.34
+    // Dock fidelity pass: 1 px rim, white in both appearances (glass edge)
+    readonly property real dockRimOpacity: 0.34
 
     // task spec: pointer dwell before a hot corner fires
     readonly property int hotCornerDwellMs: 150

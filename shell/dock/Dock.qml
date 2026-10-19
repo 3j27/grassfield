@@ -345,6 +345,10 @@ Scope {
                     x: (win.width - width) / 2
                     y: win.height - Tokens.dockBottomMargin - height + (win.revealed ? 0 : height + Tokens.dockBottomMargin + shadowMargin)
                     radius: Tokens.radiusDock
+                    tintAlphaOverride: Tokens.dockTintAlpha
+                    highlightOpacity: Tokens.dockHighlightOpacity
+                    borderOpacity: Tokens.dockRimOpacity
+                    borderColor: Appearance.colors.materialHighlight
 
                     Behavior on y {
                         NumberAnimation {
@@ -461,10 +465,23 @@ Scope {
                                     }
                                 }
 
-                                // Trash: own symbolic icon on a rounded tile.
+                                // Trash: the icon theme's user-trash / user-trash-full (never hand-drawn), in the user's icon
+                                // mode; a symbolic glyph on a rounded tile when the theme has neither.
+                                TintedIcon {
+                                    id: trashThemed
+                                    readonly property string themed: Quickshell.iconPath(Trash.empty ? "user-trash" : "user-trash-full", true)
+                                    visible: tile.isTrash && themed !== ""
+                                    size: win.iconSize
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: win.indicatorArea
+                                    source: tile.isTrash ? themed : ""
+                                }
+
                                 Rectangle {
                                     id: trashIcon
-                                    visible: tile.isTrash
+                                    visible: tile.isTrash && trashThemed.themed === ""
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     radius: Tokens.radiusDockIcon * tile.tileScale
