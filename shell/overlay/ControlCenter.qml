@@ -4,12 +4,13 @@ import Grassfield.Ui
 import qs.notifications
 import qs.services
 import qs.overlay.controlcenter
+import "controlcenter/Model.js" as Model
 
 // Quick Settings (spec controlcenter.md; internal name Control Center): floating glass modules on a
 // 4-column grid, the macOS model. Every module is its own frosted surface (no shared panel): the
 // Overlay window reads `surfaces` and gives each one a blur region. Wi-Fi, Bluetooth and Airplane
 // Mode are 2x1 capsules at the left; Do Not Disturb and Now Playing (2x2, only while a player runs)
-// sit at the right; Display, Keyboard Brightness and Sound are 4x1 slider modules; Appearance is a
+// sit at the right (the modules are declared in row order, so Tab follows rows, not columns); Display, Keyboard Brightness and Sound are 4x1 slider modules; Appearance is a
 // capsule. Opening Wi-Fi, Bluetooth, Sound or Appearance replaces the grid with one detail module
 // (back button in its header); Esc goes back, then closes. Values come live from the services.
 FocusScope {
@@ -85,13 +86,49 @@ FocusScope {
             Popups.close();
     }
 
+    // Keyboard (macOS model): Up/Down move focus to the module above or below, Left/Right to the control beside;
+    // a slider changes with Left/Right only while it has focus (verticalKeys is off for them), so walking the
+    // grid with Down never changes a value. Keys a control did not handle reach these handlers.
+    Keys.onUpPressed: event => event.accepted = gridNavigate(root.Window.window ? root.Window.window.activeFocusItem : null, 0, -1)
+    Keys.onDownPressed: event => event.accepted = gridNavigate(root.Window.window ? root.Window.window.activeFocusItem : null, 0, 1)
+    Keys.onLeftPressed: event => {
+        if (expanded !== "") {
+            collapse();
+            event.accepted = true;
+        }
+    }
+
+    function collectTargets(node: Item, out: var): void {
+        for (const child of node.children) {
+            if (!child.visible)
+                continue;
+            if (child.activeFocusOnTab && child.enabled)
+                out.push(child);
+            collectTargets(child, out);
+        }
+    }
+
+    // Moves focus from `from` towards (dx, dy) over the visible focusable controls (Model.navTarget).
+    function gridNavigate(from: Item, dx: int, dy: int): bool {
+        const targets = [];
+        collectTargets(root, targets);
+        const rects = targets.map(t => {
+            const p = t.mapToItem(root, 0, 0);
+            return {x: p.x, y: p.y, w: t.width, h: t.height};
+        });
+        const i = Model.navTarget(rects, targets.indexOf(from), dx, dy);
+        if (i < 0)
+            return false;
+        targets[i].forceActiveFocus();
+        return true;
+    }
+
     // Scanning only while the list is on screen.
     readonly property bool scanWanted: expanded === "wifi" && Connectivity.wifiEnabled
     onScanWantedChanged: Connectivity.setScanning(scanWanted)
 
     Component.onDestruction: {
         Connectivity.setScanning(false);
-        Audio.devRestore();
     }
 
     Timer {
@@ -160,6 +197,23 @@ FocusScope {
         }
 
         Module {
+            id: dnd
+            x: 2 * root.pitch
+            cols: 2
+
+            RadioRow {
+                width: parent.width
+                height: parent.height
+                inset: root.diskInset
+                iconName: "moon"
+                title: qsTr("Do Not Disturb")
+                subtitle: Notifications.dnd ? qsTr("On") : qsTr("Off")
+                on: Notifications.dnd
+                onToggled: Notifications.setDnd(!Notifications.dnd)
+            }
+        }
+
+        Module {
             id: bluetooth
             y: root.pitch
             cols: 2
@@ -178,42 +232,6 @@ FocusScope {
                 expanded: root.expanded === "bluetooth"
                 onToggled: BluetoothState.setEnabled(!BluetoothState.enabled)
                 onExpandToggled: root.toggleSection("bluetooth")
-            }
-        }
-
-        Module {
-            id: airplane
-            y: 2 * root.pitch
-            // Full width while no player takes the 2x2 slot at the right.
-            cols: Media.available ? 2 : 4
-
-            RadioRow {
-                width: parent.width
-                height: parent.height
-                inset: root.diskInset
-                iconName: "airplane"
-                title: qsTr("Airplane Mode")
-                subtitle: Connectivity.airplane ? qsTr("Wi-Fi and Bluetooth off") : qsTr("Off")
-                on: Connectivity.airplane
-                available: Connectivity.airplaneAvailable
-                onToggled: Connectivity.setAirplane(!Connectivity.airplane)
-            }
-        }
-
-        Module {
-            id: dnd
-            x: 2 * root.pitch
-            cols: 2
-
-            RadioRow {
-                width: parent.width
-                height: parent.height
-                inset: root.diskInset
-                iconName: "moon"
-                title: qsTr("Do Not Disturb")
-                subtitle: Notifications.dnd ? qsTr("On") : qsTr("Off")
-                on: Notifications.dnd
-                onToggled: Notifications.setDnd(!Notifications.dnd)
             }
         }
 
@@ -245,6 +263,25 @@ FocusScope {
                 expanded: root.expanded === "appearance"
                 onToggled: root.toggleSection("appearance")
                 onExpandToggled: root.toggleSection("appearance")
+            }
+        }
+
+        Module {
+            id: airplane
+            y: 2 * root.pitch
+            // Full width while no player takes the 2x2 slot at the right.
+            cols: Media.available ? 2 : 4
+
+            RadioRow {
+                width: parent.width
+                height: parent.height
+                inset: root.diskInset
+                iconName: "airplane"
+                title: qsTr("Airplane Mode")
+                subtitle: Connectivity.airplane ? qsTr("Wi-Fi and Bluetooth off") : qsTr("Off")
+                on: Connectivity.airplane
+                available: Connectivity.airplaneAvailable
+                onToggled: Connectivity.setAirplane(!Connectivity.airplane)
             }
         }
 
@@ -280,14 +317,20 @@ FocusScope {
                     }
 
                     Slider {
+                        id: displaySlider
                         trackHeight: Tokens.controlSliderTrackCompact
+                        verticalKeys: false
                         width: parent.width - displayIcon.width - parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Display brightness")
                         value: Brightness.level
                         onMoved: v => {
-                            if (!Brightness.setLevel(v) && Brightness.devSession)
-                                root.showDevNote();
+                            // A refused change (dev guard, no device) snaps the slider back to the real value.
+                            if (!Brightness.setLevel(v)) {
+                                displaySlider.reset();
+                                if (Brightness.devSession)
+                                    root.showDevNote();
+                            }
                         }
                     }
                 }
@@ -319,14 +362,19 @@ FocusScope {
                     }
 
                     Slider {
+                        id: kbdSlider
                         trackHeight: Tokens.controlSliderTrackCompact
+                        verticalKeys: false
                         width: parent.width - kbdIcon.width - parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Keyboard brightness")
                         value: Brightness.kbdLevel
                         onMoved: v => {
-                            if (!Brightness.setKbdLevel(v) && Brightness.devSession)
-                                root.showDevNote();
+                            if (!Brightness.setKbdLevel(v)) {
+                                kbdSlider.reset();
+                                if (Brightness.devSession)
+                                    root.showDevNote();
+                            }
                         }
                     }
                 }
@@ -375,12 +423,17 @@ FocusScope {
                     }
 
                     Slider {
+                        id: volumeSlider
                         trackHeight: Tokens.controlSliderTrackCompact
+                        verticalKeys: false
                         width: parent.width - mute.width - soundChevron.width - 2 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Output volume")
                         value: Audio.volume
-                        onMoved: v => Audio.setVolume(v)
+                        onMoved: v => {
+                            if (!Audio.setVolume(v))
+                                volumeSlider.reset();
+                        }
                     }
 
                     NavItem {
@@ -392,9 +445,12 @@ FocusScope {
                         Accessible.checkable: true
                         Accessible.checked: root.expanded === "sound"
                         onActivated: root.toggleSection("sound")
+                        handlesArrow: true
                         onArrow: direction => {
                             if (direction > 0)
                                 root.open("sound");
+                            else
+                                soundChevron.navigate(-1, 0);
                         }
 
                         Icon {
@@ -466,6 +522,7 @@ FocusScope {
                     ringRadius: width / 2
                     accessibleName: qsTr("Back")
                     onActivated: root.collapse()
+                    handlesArrow: true
                     onArrow: direction => {
                         if (direction < 0)
                             root.collapse();

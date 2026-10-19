@@ -2,14 +2,14 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Pipewire
-import "../overlay/controlcenter/Model.js" as Model
 
 // Default output (PipeWire through Quickshell). volume is 0..1 (values above 1 are not offered).
 Singleton {
     id: root
 
-    readonly property var sink: Pipewire.defaultAudioSink
+    readonly property var sink: sinkOverride !== null ? sinkOverride : Pipewire.defaultAudioSink
     // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): an output at 50 percent, not muted.
     readonly property bool ready: VisualFixtures.active || (sink !== null && sink.audio !== null)
     readonly property real volume: VisualFixtures.active ? 0.5 : (ready ? sink.audio.volume : 0)
@@ -42,65 +42,85 @@ Singleton {
     }
     readonly property var source: Pipewire.defaultAudioSource
 
-    // In a GRASSFIELD_DEV session the volume may only move within +-5 percent of where it was
-    // (devBaseline, restored by devRestore()); the default device is never switched.
+    // GRASSFIELD_DEV: a nested session runs on the owner's machine, so NOTHING here may change the real audio
+    // (volume, mute, default output or input, key steps). Every write to the backend goes through
+    // backendWrite(), the single exit: in a dev session it logs, signals devSuppressed and returns false
+    // before any backend object is touched (no exception path, whatever `ready` is). backendWrites counts the
+    // writes that were really made (tests/shell/audio_dev_guard.sh proves it stays 0 in dev).
     readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
-    property real devBaseline: -1
+    property int backendWrites: 0
     signal devSuppressed(string what)
 
-    function setVolume(value: real): void {
-        if (!ready || VisualFixtures.active)
-            return;
-        let v = Math.max(0, Math.min(1, value));
+    // Test hook: a stand-in for the default sink (an object with audio.volume and audio.muted). Never set in the shell.
+    property var sinkOverride: null
+
+    function backendWrite(what: string, write: var): bool {
         if (devSession) {
-            if (devBaseline < 0)
-                devBaseline = volume;
-            v = Model.devVolume(devBaseline, v, 0.05);
+            console.info("dev guard: audio " + what + " suppressed");
+            devSuppressed(what);
+            return false;
         }
-        sink.audio.volume = v;
-        if (devSession)
-            devRestoreTimer.restart();
+        backendWrites++;
+        write();
+        return true;
     }
 
-    // The +-5 percent clamp applies to every caller (Control Center, volume menu, menu bar scroll);
-    // the volume goes back to the baseline when it has been left alone for a while, and when the
-    // shell exits (best effort: a killed shell cannot restore, the drift is at most 5 percent).
-    Timer {
-        id: devRestoreTimer
-        interval: 5000
-        onTriggered: root.devRestore()
-    }
-
-    Component.onDestruction: devRestore()
-
-    function devRestore(): void {
-        if (devSession && devBaseline >= 0 && ready)
-            sink.audio.volume = devBaseline;
-        devBaseline = -1;
+    // Returns true when the backend was written (false: refused by the dev guard).
+    function setVolume(value: real): bool {
+        return backendWrite("volume", () => {
+            if (ready && !VisualFixtures.active)
+                sink.audio.volume = Math.max(0, Math.min(1, value));
+        });
     }
 
     function selectSource(node: var): void {
-        if (devSession) {
-            console.info("dev guard: input device switch suppressed");
-            devSuppressed("input device");
-            return;
-        }
-        Pipewire.preferredDefaultAudioSource = node;
+        backendWrite("input device", () => {
+            Pipewire.preferredDefaultAudioSource = node;
+        });
     }
 
-    function adjust(delta: real): void {
-        setVolume(volume + delta);
+    function adjust(delta: real): bool {
+        return setVolume(volume + delta);
     }
 
-    function toggleMute(): void {
-        if (!ready)
-            return;
-        if (devSession) {
-            console.info("dev guard: mute toggle suppressed");
-            devSuppressed("mute");
-            return;
+    function toggleMute(): bool {
+        return backendWrite("mute", () => {
+            if (ready && !VisualFixtures.active)
+                sink.audio.muted = !sink.audio.muted;
+        });
+    }
+
+    // Volume keys (volume up|down|mute IPC): wpctl on the default sink, 5 percent steps, never above 100.
+    function keyStep(direction: string): bool {
+        let args;
+        switch (direction) {
+        case "up":
+            args = ["set-volume", "-l", "1", "@DEFAULT_AUDIO_SINK@", "5%+"];
+            break;
+        case "down":
+            args = ["set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"];
+            break;
+        case "mute":
+            args = ["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"];
+            break;
+        default:
+            console.warn("audio: unknown volume command", direction);
+            return false;
         }
-        sink.audio.muted = !sink.audio.muted;
+        return backendWrite("key " + direction, () => {
+            keyProcess.command = ["wpctl"].concat(args);
+            keyProcess.running = true;
+        });
+    }
+
+    signal keyFinished
+
+    Process {
+        id: keyProcess
+        onRunningChanged: {
+            if (!running)
+                root.keyFinished();
+        }
     }
 
     function describe(node: var): string {
@@ -108,12 +128,9 @@ Singleton {
     }
 
     function select(node: var): void {
-        if (devSession) {
-            console.info("dev guard: output device switch suppressed");
-            devSuppressed("output device");
-            return;
-        }
-        Pipewire.preferredDefaultAudioSink = node;
+        backendWrite("output device", () => {
+            Pipewire.preferredDefaultAudioSink = node;
+        });
     }
 
     // Nodes must be tracked to expose their audio properties.

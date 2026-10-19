@@ -210,6 +210,48 @@ QtObject {
     readonly property real dockMinimizedBadgeScale: 0.4
     // estimate, pending F1 measurement from design/reference
     readonly property real dockTrashIconScale: 0.6
+    // Dock fidelity pass: the shelf holds icons only (no text), so it is more translucent than the A2 text clamp; real blur behind it (reference gs-016-031: shelf a few percent lighter than its backdrop)
+    readonly property real dockTintAlpha: 0.42
+    // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge)
+    readonly property real dockHighlightOpacity: 0.34
+    // Dock fidelity pass: 1 px rim, white in both appearances (glass edge)
+    readonly property real dockRimOpacity: 0.34
+    // macOS convention: at most three recent applications
+    readonly property int dockRecentMax: 3
+    // estimate: launch bounce rise in px (half an icon)
+    readonly property int dockBounceHeight: 24
+    // estimate: one up-and-down hop of the launch bounce, ms
+    readonly property int dockBounceDuration: 420
+    // estimate: the launch bounce stops after this long without a window, ms
+    readonly property int dockLaunchTimeout: 12000
+    // estimate: transparent room above the shelf for a dragged icon and the poof
+    readonly property int dockDragArea: 128
+    // estimate: px above the shelf top (icon centre) from which a dropped tile leaves the Dock
+    readonly property int dockDragOutDistance: 56
+    // estimate: removal puff, ms
+    readonly property int dockPoofDuration: 420
+    // estimate: final diameter of each puff circle, px
+    readonly property int dockPoofSize: 56
+    // estimate: notification badge height and minimum width
+    readonly property int dockBadgeSize: 20
+    // estimate: how far the badge sticks out of the icon corner, px
+    readonly property int dockBadgeOverhang: 5
+    // estimate: starting opacity of the removal puff
+    readonly property real dockPoofOpacity: 0.5
+    // estimate: centre circle of the puff, fraction of poofSize
+    readonly property real dockPoofCoreScale: 0.7
+    // estimate: outer circles of the puff, fraction of poofSize
+    readonly property real dockPoofPuffScale: 0.4
+    // estimate: circles start at this fraction of their size and grow by one more
+    readonly property real dockPoofGrowFrom: 0.5
+    // estimate: accent fill of a tile under a file drag
+    readonly property real dockDropHighlightOpacity: 0.28
+    // reference gs-014-019: icon menu tail base ~19 px
+    readonly property int dockMenuTailWidth: 19
+    // reference gs-014-019: icon menu tail height ~12.6 px
+    readonly property int dockMenuTailHeight: 13
+    // reference gs-014-019: tail tip 16 above the shelf top
+    readonly property int dockMenuTailGap: 16
 
     // task spec: pointer dwell before a hot corner fires
     readonly property int hotCornerDwellMs: 150
@@ -298,6 +340,12 @@ QtObject {
     readonly property int panelAboutLabelWidth: 100
     // F1 gap 6: 36-pt icon disk of a 2x1 module
     readonly property int panelCcIconButton: 36
+    // estimate: Wi-Fi join button in a 34-pt list row (kept at its pre-36 size)
+    readonly property int panelCcJoinButton: 30
+    // estimate: Now Playing transport button in the Quick Settings 2x2 module (kept at its pre-36 size)
+    readonly property int panelCcTransportButton: 26
+    // estimate: transport button of the Now Playing desktop widget (kept at its pre-36 size)
+    readonly property int panelWidgetTransportButton: 22
     // estimate: list row in an expanded Control Center section
     readonly property int panelCcRowHeight: 34
     // estimate: chevron glyph size
@@ -374,8 +422,6 @@ QtObject {
     readonly property int notificationCenterWidth: 344
     // F1 gap 7: right inset and offset below the bar 15 +-1 (same as the banners)
     readonly property int notificationCenterInset: 16
-    // estimate: title capsule of the Notifications column
-    readonly property int notificationCenterHeaderHeight: 36
     // F1 gap 7: edit-widgets pill 87 x 23
     readonly property int notificationCenterPillWidth: 87
     // F1 gap 7: edit-widgets pill 87 x 23

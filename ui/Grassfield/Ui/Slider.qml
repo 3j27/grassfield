@@ -10,6 +10,9 @@ Item {
     property real stepSize: 0.05
     property string accessibleName: ""
     property color fillColor: Appearance.colors.accent
+    // Up/Down change the value too. Quick Settings turns this off: there the vertical arrows move focus between
+    // modules (macOS model), and a focused slider changes with Left/Right, Home/End only.
+    property bool verticalKeys: true
     // Track thickness; Quick Settings passes controlSliderTrackCompact.
     property real trackHeight: Tokens.controlSliderTrack
 
@@ -46,15 +49,20 @@ Item {
         moved(next);
     }
 
+    // Drops the held user value: the slider shows `value` again (a host that refused the change calls this).
+    function reset(): void {
+        local = NaN;
+    }
+
     function nudge(direction: int): void {
         commit(shown + direction * stepSize * (to - from));
     }
 
     Keys.onPressed: event => {
-        if (event.key === Qt.Key_Left || event.key === Qt.Key_Down) {
+        if (event.key === Qt.Key_Left || (verticalKeys && event.key === Qt.Key_Down)) {
             nudge(-1);
             event.accepted = true;
-        } else if (event.key === Qt.Key_Right || event.key === Qt.Key_Up) {
+        } else if (event.key === Qt.Key_Right || (verticalKeys && event.key === Qt.Key_Up)) {
             nudge(1);
             event.accepted = true;
         } else if (event.key === Qt.Key_Home) {

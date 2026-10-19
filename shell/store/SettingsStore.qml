@@ -34,6 +34,7 @@ Scope {
     readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
     readonly property real dockMagnification: clampNumber(config.dock.magnification, 1, 2.5, 1.6)
     readonly property var dockPinned: stringList(config.dock.pinned)
+    readonly property var dockRecent: stringList(config.dock.recent)
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
     readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
@@ -84,6 +85,11 @@ Scope {
         property real magnification: 1.6
         property bool magnificationEnabled: false
         property bool autohide: false
+        // Recently launched apps that are not pinned, newest first (owned by the Dock), and whether to show them.
+        property var recent: []
+        property bool showRecents: true
+        // Minimized windows go into their app's tile instead of getting a tile of their own.
+        property bool minimizeIntoApp: false
     }
 
     component WindowsConfig: JsonObject {
@@ -150,6 +156,10 @@ Scope {
 
     function setDockPinned(list: var): void {
         change("dock.pinned", list);
+    }
+
+    function setDockRecent(list: var): void {
+        change("dock.recent", stringList(list));
     }
 
     // corner: topLeft | topRight | bottomLeft | bottomRight.

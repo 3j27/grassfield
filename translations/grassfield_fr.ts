@@ -1476,6 +1476,22 @@
         <translation>Masquer automatiquement le Dock</translation>
     </message>
     <message>
+        <source>Show recent applications in the Dock</source>
+        <translation>Afficher les applications récentes dans le Dock</translation>
+    </message>
+    <message>
+        <source>Apps opened from the Dock that are not kept in it appear after the separator.</source>
+        <translation>Les apps ouvertes depuis le Dock et non conservées dans celui-ci apparaissent après le séparateur.</translation>
+    </message>
+    <message>
+        <source>Minimize windows into application icon</source>
+        <translation>Réduire les fenêtres dans l’icône de l’application</translation>
+    </message>
+    <message>
+        <source>Off: each minimized window gets its own tile next to the Trash.</source>
+        <translation>Désactivé : chaque fenêtre réduite a sa propre icône près de la Corbeille.</translation>
+    </message>
+    <message>
         <source>Menu Bar</source>
         <translation>Barre des menus</translation>
     </message>
@@ -1636,6 +1652,14 @@
         <source>%1, running</source>
         <translation>%1, en cours d’exécution</translation>
     </message>
+    <message>
+        <source>, %1 notifications</source>
+        <translation>, %1 notifications</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Retirer</translation>
+    </message>
 </context>
 <context>
     <name>DockMenu</name>
@@ -1652,12 +1676,32 @@
         <translation>Ouvrir</translation>
     </message>
     <message>
+        <source>Options</source>
+        <translation>Options</translation>
+    </message>
+    <message>
         <source>Remove from Dock</source>
         <translation>Retirer du Dock</translation>
     </message>
     <message>
         <source>Keep in Dock</source>
         <translation>Garder dans le Dock</translation>
+    </message>
+    <message>
+        <source>Open at Login</source>
+        <translation>Ouvrir à la connexion</translation>
+    </message>
+    <message>
+        <source>Show in Files</source>
+        <translation>Afficher dans Fichiers</translation>
+    </message>
+    <message>
+        <source>Show All Windows</source>
+        <translation>Afficher toutes les fenêtres</translation>
+    </message>
+    <message>
+        <source>Hide</source>
+        <translation>Masquer</translation>
     </message>
     <message>
         <source>Quit</source>
@@ -2776,14 +2820,6 @@
     <message>
         <source>Notifications</source>
         <translation>Notifications</translation>
-    </message>
-    <message>
-        <source>Notifications, Do Not Disturb on</source>
-        <translation>Notifications, Ne pas déranger activé</translation>
-    </message>
-    <message>
-        <source>Do Not Disturb</source>
-        <translation>Ne pas déranger</translation>
     </message>
     <message>
         <source>Clear All</source>

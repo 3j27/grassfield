@@ -62,6 +62,26 @@ SettingsPage {
                 onToggled: c => root.store.set("dock.autohide", c)
             }
         }
+
+        SettingsRow {
+            title: qsTr("Show recent applications in the Dock")
+            subtitle: qsTr("Apps opened from the Dock that are not kept in it appear after the separator.")
+            Toggle {
+                accessibleName: qsTr("Show recent applications in the Dock")
+                checked: root.store.value("dock.showRecents")
+                onToggled: c => root.store.set("dock.showRecents", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Minimize windows into application icon")
+            subtitle: qsTr("Off: each minimized window gets its own tile next to the Trash.")
+            Toggle {
+                accessibleName: qsTr("Minimize windows into application icon")
+                checked: root.store.value("dock.minimizeIntoApp")
+                onToggled: c => root.store.set("dock.minimizeIntoApp", c)
+            }
+        }
     }
 
     SettingsGroup {
