@@ -149,6 +149,7 @@ Window {
 
                 SwatchRow {
                     id: swatches
+                    objectName: "swatches"
                     x: Tokens.filesInfoLabelWidth + Tokens.spacingSm - Tokens.menuItemPadding
                     width: parent.width - x
                     accessibleName: qsTr("Folder colour")
@@ -197,7 +198,9 @@ Window {
 
                     TextInput {
                         id: hexField
+                        objectName: "hexField"
                         TextCursor {}
+                        activeFocusOnTab: true
                         anchors.fill: parent
                         anchors.leftMargin: Tokens.spacingSm
                         anchors.rightMargin: Tokens.spacingSm
@@ -250,11 +253,17 @@ Window {
 
                 FocusScope {
                     id: glyphGrid
+                    objectName: "glyphGrid"
                     x: Tokens.filesInfoLabelWidth + Tokens.spacingSm
                     width: parent.width - x
                     height: grid.height
                     activeFocusOnTab: true
                     property int current: -1
+                    // Tab lands on the chosen symbol (else the first) with the focus ring, like the swatches.
+                    onActiveFocusChanged: {
+                        if (activeFocus && current < 0)
+                            current = Math.max(0, root.glyphChoices.indexOf(root.glyph));
+                    }
                     readonly property int columns: Tokens.folderIconPickerGlyphColumns
                     Accessible.role: Accessible.Grouping
                     Accessible.name: qsTr("Symbol")
@@ -354,13 +363,15 @@ Window {
 
                     TextInput {
                         id: glyphField
+                        objectName: "glyphField"
                         TextCursor {}
+                        activeFocusOnTab: true
                         anchors.fill: parent
                         anchors.leftMargin: Tokens.spacingSm
                         anchors.rightMargin: Tokens.spacingSm
                         verticalAlignment: TextInput.AlignVCenter
                         clip: true
-                        maximumLength: 24
+                        maximumLength: 32
                         color: Appearance.colors.text
                         selectionColor: Appearance.colors.accent
                         selectedTextColor: Appearance.colors.accentText
@@ -368,7 +379,14 @@ Window {
                         font.pixelSize: Tokens.typographyBodySize
                         Accessible.role: Accessible.EditableText
                         Accessible.name: qsTr("Other symbol or emoji")
-                        onTextEdited: root.glyph = text.trim()
+                        // The field holds one symbol (one grapheme cluster, the rule Files saves with): what is typed
+                        // or pasted is cut to it at once, so the preview is what Done saves.
+                        onTextEdited: {
+                            const kept = FolderStyle.normalizeGlyph(text);
+                            if (text !== kept)
+                                text = kept;
+                            root.glyph = kept;
+                        }
 
                         Text {
                             textFormat: Text.PlainText

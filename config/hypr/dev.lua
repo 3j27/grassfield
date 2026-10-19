@@ -43,4 +43,6 @@ hl.config({
   misc = { disable_watchdog_warning = true },
   ecosystem = { no_update_news = true, no_donation_nag = true },
   debug = { disable_logs = false },
+  -- Never write the cursor theme/size into gsettings: the owner's dconf database is shared with the nested session.
+  cursor = { sync_gsettings_theme = false },
 })

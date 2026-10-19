@@ -224,6 +224,19 @@
           "description": "Colour of every folder icon: \"theme\" keeps the icon theme's own colour, \"accent\" follows the accent colour, else a #rrggbb colour. A folder's own colour (Customize Folder) wins."
         }
       }
+    },
+    "pointer": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Pointer (Settings > Accessibility > Pointer, ADR-0014).",
+      "properties": {
+        "size": {
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 96,
+          "description": "Cursor size in pixels (the macOS slider Normal to Large). Applied live by the shell; the XCursor fallback uses the nearest of 24, 32, 48, 64, 96."
+        }
+      }
     }
   }
 }

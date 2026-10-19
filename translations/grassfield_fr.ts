@@ -104,6 +104,33 @@
     </message>
 </context>
 <context>
+    <name>AccessibilityPage</name>
+    <message>
+        <source>Accessibility</source>
+        <translation>Accessibilité</translation>
+    </message>
+    <message>
+        <source>Pointer</source>
+        <translation>Pointeur</translation>
+    </message>
+    <message>
+        <source>The pointer changes size as you drag. Apps that are already open keep their size until they are restarted.</source>
+        <translation>Le pointeur change de taille pendant que vous faites glisser. Les apps déjà ouvertes gardent leur taille jusqu’à leur redémarrage.</translation>
+    </message>
+    <message>
+        <source>Pointer size</source>
+        <translation>Taille du pointeur</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normale</translation>
+    </message>
+    <message>
+        <source>Large</source>
+        <translation>Grande</translation>
+    </message>
+</context>
+<context>
     <name>AppAboutPanel</name>
     <message>
         <source>About %1</source>
@@ -2059,6 +2086,29 @@
     </message>
 </context>
 <context>
+    <name>FolderStyleStore</name>
+    <message>
+        <source>the per-user folder style store (%1) can’t be read; it is left as it is</source>
+        <translation>le fichier personnel des aspects de dossiers (%1) est illisible ; il est laissé tel quel</translation>
+    </message>
+    <message>
+        <source>not a folder on this computer</source>
+        <translation>pas un dossier de cet ordinateur</translation>
+    </message>
+    <message>
+        <source>the look stored on the folder is too large to edit safely; it is left as it is</source>
+        <translation>l’aspect enregistré sur le dossier est trop volumineux pour être modifié sans risque ; il est laissé tel quel</translation>
+    </message>
+    <message>
+        <source>%1 (the look saved for your account only was removed; the look stored on the folder stays)</source>
+        <translation>%1 (l’aspect enregistré pour votre compte uniquement a été retiré ; celui enregistré sur le dossier reste)</translation>
+    </message>
+    <message>
+        <source>the list of folders customized for your account only is full (%1 folders); reset some of them first</source>
+        <translation>la liste des dossiers personnalisés pour votre compte uniquement est pleine (%1 dossiers) ; réinitialisez-en quelques-uns d’abord</translation>
+    </message>
+</context>
+<context>
     <name>ForceQuitPanel</name>
     <message>
         <source>Force Quit Applications</source>
@@ -2741,6 +2791,14 @@
     <message>
         <source>dark light theme transparency material motion icons tint</source>
         <translation>sombre clair thème transparence matière animation apparence icônes teinte</translation>
+    </message>
+    <message>
+        <source>Accessibility</source>
+        <translation>Accessibilité</translation>
+    </message>
+    <message>
+        <source>pointer cursor size mouse large</source>
+        <translation>pointeur curseur taille souris grand grande</translation>
     </message>
     <message>
         <source>Desktop &amp; Dock</source>

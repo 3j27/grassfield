@@ -24,7 +24,12 @@ Item {
 
     readonly property string setting: FolderStyle.effectiveColor(root.folderColor, root.globalColor)
     readonly property bool recolored: FolderStyle.recolors(root.setting)
-    readonly property bool hasGlyph: root.folderGlyph !== ""
+    // The symbol as kept by the shared rule (one grapheme cluster, no control or bidi characters).
+    readonly property string glyph: FolderStyle.normalizeGlyph(root.folderGlyph)
+    readonly property bool hasGlyph: root.glyph !== ""
+    readonly property bool glyphIsEmoji: FolderStyle.isEmoji(root.glyph)
+    // The engraved shade of the folder colour (opaque).
+    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.mode, root.tint, Tokens)
     // Its own hex colour, else the global colour (which is the accent for "accent").
     readonly property color folderTint: FolderStyle.colorOf(root.setting, Appearance.colors.accent)
 
@@ -47,17 +52,41 @@ Item {
         }
     }
 
-    // The symbol is drawn over the effect: emoji keep their colours.
-    Text {
-        objectName: "glyph"
+    // The symbol is drawn over the effect, clipped to the icon (a hostile value cannot draw outside it). Emoji keep their
+    // own colours and are opaque (their colour glyphs ignore `color`; a text-presentation fallback uses the shade); a
+    // plain symbol is an engraved shade of the folder's colour (A2: >= 3:1 against the plate) with a light edge under it.
+    Item {
+        id: glyphBox
+        objectName: "glyphBox"
+        anchors.fill: parent
+        clip: true
         visible: root.hasGlyph
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: root.height * Tokens.folderIconGlyphCenterY - height / 2
-        width: root.width
-        horizontalAlignment: Text.AlignHCenter
-        text: root.folderGlyph
-        textFormat: Text.PlainText
-        color: Tokens.folderIconGlyphColor
-        font.pixelSize: Math.max(1, Math.round(root.size * Tokens.folderIconGlyphScale))
+
+        Text {
+            objectName: "glyphHighlight"
+            visible: !root.glyphIsEmoji
+            x: glyphText.x
+            y: glyphText.y + Math.max(1, Math.round(root.size * Tokens.folderIconGlyphHighlightOffset))
+            width: glyphText.width
+            horizontalAlignment: Text.AlignHCenter
+            text: glyphText.text
+            textFormat: Text.PlainText
+            color: Tokens.folderIconGlyphHighlight
+            font.pixelSize: glyphText.font.pixelSize
+        }
+
+        Text {
+            id: glyphText
+            objectName: "glyph"
+            y: root.height * Tokens.folderIconGlyphCenterY - height / 2
+            width: root.width
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            maximumLineCount: 1
+            text: root.glyph
+            textFormat: Text.PlainText
+            color: root.glyphColor
+            font.pixelSize: Math.max(1, Math.round(root.size * Tokens.folderIconGlyphScale))
+        }
     }
 }

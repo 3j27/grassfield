@@ -48,5 +48,8 @@
     "mode": "default",
     "tint": "accent",
     "folderColor": "theme"
+  },
+  "pointer": {
+    "size": 24
   }
 }

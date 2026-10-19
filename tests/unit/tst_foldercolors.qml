@@ -13,6 +13,7 @@ TestCase {
     height: 200
 
     function cleanup() {
+        Appearance.dark = true;
         Appearance.folderColorSetting = "theme";
         Appearance.iconMode = "default";
     }
@@ -56,7 +57,9 @@ TestCase {
         compare(FolderStyle.parse("not json").color, "");
         compare(FolderStyle.parse('{"color":"red"}').color, "");
         compare(FolderStyle.parse('[1]').glyph, "");
-        compare(FolderStyle.parse('{"glyph":"a very long pasted sentence"}').glyph, "");
+        compare(FolderStyle.parse('{"glyph":"a very long pasted sentence"}').glyph, "a", "one cluster, as Files keeps it");
+        compare(FolderStyle.parse('{"glyph":"WWWWWWWWWWWWWWWW"}').glyph, "W");
+        compare(FolderStyle.parse('{"glyph":"\u202e"}').glyph, "", "a bidi mark is no symbol");
     }
 
     function test_getfattrOutput() {
@@ -116,6 +119,9 @@ TestCase {
         for (let i = 0; i < parent.children.length; i++) {
             if (parent.children[i].objectName === name)
                 return parent.children[i];
+            const deeper = child(parent.children[i], name);
+            if (deeper)
+                return deeper;
         }
         return null;
     }
@@ -176,5 +182,129 @@ TestCase {
         compare(icon.mode, "dark");
         Appearance.folderColorSetting = "#e5484d";
         compare(icon.recolored, true);
+    }
+
+    // The symbol rule's shared vectors: FolderStyleLogic::normalizeGlyph (tests/unit/files/tst_folderstyle.cpp,
+    // GlyphRuleSharedVectors) answers the same.
+    function test_glyphRuleSharedVectors() {
+        const music = "\u{1F3B5}", heart = "\u2764\uFE0F", fr = "\u{1F1EB}\u{1F1F7}", keycap = "1\uFE0F\u20E3", eAcute = "e\u0301";
+        const vectors = [
+            [music, music], [heart, heart], [fr, fr], [fr + "\u{1F1EB}", fr], [keycap, keycap], [eAcute + "x", eAcute],
+            ["WWWWWWWWWWWWWWWW", "W"], ["Holiday photos", "H"], ["a\u202e", "a"], ["\u202ea", ""], ["\u200ea", ""], ["a\u200b", "a"],
+            ["\u0001a", ""], ["  \u2605  ", "\u2605"], ["\uFFFD", ""]
+        ];
+        for (const v of vectors)
+            compare(FolderStyle.normalizeGlyph(v[0]), v[1], JSON.stringify(v[0]));
+        const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
+        compare(FolderStyle.normalizeGlyph(family + "x"), family);
+        const thumbs = "\u{1F44D}\u{1F3FD}";
+        compare(FolderStyle.normalizeGlyph(thumbs + "x"), thumbs);
+        let zalgo = "e";
+        for (let i = 0; i < 16; i++)
+            zalgo += "\u0301";
+        compare(FolderStyle.normalizeGlyph(zalgo), "", "over 16 UTF-16 units");
+        compare(FolderStyle.normalizeGlyph(zalgo.slice(0, 16)), zalgo.slice(0, 16));
+    }
+
+    function test_emojiOrPlainSymbol() {
+        compare(FolderStyle.isEmoji("\u{1F3B5}"), true);
+        compare(FolderStyle.isEmoji("\u2764\uFE0F"), true);
+        compare(FolderStyle.isEmoji("\u2B50"), true);
+        compare(FolderStyle.isEmoji("\u2705"), true);
+        compare(FolderStyle.isEmoji("\u2605"), false);
+        compare(FolderStyle.isEmoji("\u266A"), false);
+        compare(FolderStyle.isEmoji("A"), false);
+    }
+
+    // A hostile value cannot draw outside the icon: the symbol is one cluster and is clipped to the icon box.
+    function test_hostileGlyphStaysInsideTheIcon() {
+        const icon = createTemporaryObject(iconComponent, testCase, {folderGlyph: "WWWWWWWWWWWWWWWW"});
+        compare(icon.glyph, "W");
+        const box = child(icon, "glyphBox");
+        verify(box.clip, "clipped");
+        compare(box.width, icon.width);
+        compare(box.height, icon.height);
+        const glyph = child(icon, "glyph");
+        verify(glyph.width <= icon.width);
+        icon.folderGlyph = "\u202eevil";
+        compare(icon.hasGlyph, false, "a bidi override is no symbol");
+    }
+
+    // Emoji keep their colours and are opaque; a plain symbol is an engraved, opaque shade of the folder colour.
+    function test_emojiOpaquePlainSymbolEngraved() {
+        const icon = createTemporaryObject(iconComponent, testCase, {folderColor: "#e5484d", folderGlyph: "\u{1F3B5}"});
+        const glyph = child(icon, "glyph");
+        compare(icon.glyphIsEmoji, true);
+        compare(Qt.color(glyph.color).a, 1, "no alpha on an emoji");
+        icon.folderGlyph = "\u2605";
+        compare(icon.glyphIsEmoji, false);
+        compare(Qt.color(glyph.color).a, 1);
+        // A darker shade of the same hue: red stays red.
+        const c = Qt.color(glyph.color);
+        verify(c.r >= c.g && c.r >= c.b, "same hue");
+        verify(c.r < Qt.color("#e5484d").r, "darker than the folder colour");
+    }
+
+    function contrast(a, b) {
+        return FolderStyle.contrastRatio(FolderStyle.rgbOf(a), FolderStyle.rgbOf(b));
+    }
+
+    // A2: a plain symbol reaches 3:1 against the folder plate (icons >= 3:1, docs/testing/visual.md). The model of the
+    // plate (the folder colour times the mode's measured factor) is checked for the seven tag colours, the accent, the theme
+    // colour and custom hexes (white, black, yellow), in light and dark appearance and in the four icon modes (Tinted
+    // with the accent and with custom icon tints).
+    function test_glyphContrastModel() {
+        const tints = ["#e5484d", "#f5883b", "#e6b422", "#3fae5a", "#3e7bfa", "#8e5bea", "#8a8f98", "#ffffff", "#000000", "#ffd60a", "#7f7f7f", "#00ff00", "#0000ff"];
+        const modeTints = ["accent", "#e5484d", "#3e7bfa", "#8a8f98", "#ffd60a"];
+        for (const dark of [true, false]) {
+            Appearance.dark = dark;
+            const all = tints.concat([String(Appearance.colors.accent)]);
+            for (const mode of ["default", "dark", "clear", "tinted"]) {
+                for (const mt of modeTints) {
+                    const modeTint = mt === "accent" ? String(Appearance.colors.accent) : mt;
+                    if (mode !== "tinted" && mt !== "accent")
+                        continue;
+                    for (const tint of all) {
+                        const plate = FolderStyle.plateOf(true, tint, mode, modeTint, Tokens);
+                        const shade = FolderStyle.glyphShade(true, tint, mode, modeTint, Tokens);
+                        const r = FolderStyle.contrastRatio(FolderStyle.rgbOf(shade), plate);
+                        verify(r >= Tokens.folderIconGlyphMinContrast, "tint " + tint + " " + mode + "/" + mt + (dark ? " dark" : " light") + ": " + r.toFixed(2));
+                    }
+                    const themePlate = FolderStyle.plateOf(false, "", mode, modeTint, Tokens);
+                    const themeShade = FolderStyle.glyphShade(false, "", mode, modeTint, Tokens);
+                    verify(FolderStyle.contrastRatio(FolderStyle.rgbOf(themeShade), themePlate) >= Tokens.folderIconGlyphMinContrast, "theme " + mode + "/" + mt);
+                }
+            }
+        }
+    }
+
+    // The plates MEASURED in nested captures (tests/visual/folder_glyph_contrast.py, before this change, Files icon view,
+    // 64 px icons, Tinted with the accent of the appearance): the shade chosen for that folder colour and mode reaches 3:1
+    // against the real plate.
+    function test_glyphContrastAgainstMeasuredPlates() {
+        const dk = String(Tokens.colorDark.accent), lt = String(Tokens.colorLight.accent);
+        const measured = [
+            // tint (null = the theme's own folder), mode, icon tint, measured plate
+            ["#e5484d", "default", dk, "#e0474b"], ["#3e7bfa", "default", dk, "#3d78f5"], ["#f5883b", "default", dk, "#f0853a"], ["#e6b422", "default", dk, "#e1b021"],
+            ["#3fae5a", "default", dk, "#3eaa58"], ["#8e5bea", "default", dk, "#8b59e5"], ["#8a8f98", "default", dk, "#878c95"], ["#ffffff", "default", dk, "#fafafa"],
+            ["#000000", "default", dk, "#000000"], ["#ffd60a", "default", dk, "#fad20a"], [null, "default", dk, "#a4caee"],
+            ["#e5484d", "dark", dk, "#b5393d"], ["#3e7bfa", "dark", dk, "#3161c6"], ["#ffffff", "dark", dk, "#cacaca"], [null, "dark", dk, "#7fa3c6"],
+            ["#e5484d", "tinted", dk, "#cb4044"], ["#3e7bfa", "tinted", dk, "#376dde"], ["#ffffff", "tinted", dk, "#e2e2e2"], [null, "tinted", dk, "#63df86"],
+            ["#e5484d", "tinted", lt, "#80282b"], ["#3e7bfa", "tinted", lt, "#23458c"], ["#f5883b", "tinted", lt, "#894c21"], ["#e6b422", "tinted", lt, "#816513"],
+            ["#3fae5a", "tinted", lt, "#236232"], ["#8e5bea", "tinted", lt, "#503383"], ["#8a8f98", "tinted", lt, "#4d5055"], ["#ffffff", "tinted", lt, "#8f8f8f"],
+            ["#ffd60a", "tinted", lt, "#8f7806"], [null, "tinted", lt, "#2f934f"],
+            ["#000000", "clear", dk, "#060708"], ["#000000", "clear", lt, "#353636"], ["#e5484d", "clear", dk, "#e34c52"], ["#e5484d", "clear", lt, "#ff7b80"],
+            ["#ffffff", "clear", lt, "#ffffff"], ["#ffd60a", "clear", lt, "#ffff40"]
+        ];
+        for (const m of measured) {
+            const shade = FolderStyle.glyphShade(m[0] !== null, m[0] === null ? "" : m[0], m[1], m[2], Tokens);
+            const r = contrast(shade, m[3]);
+            verify(r >= Tokens.folderIconGlyphMinContrast, String(m[0]) + " " + m[1] + ": " + shade + " on " + m[3] + " = " + r.toFixed(2));
+        }
+    }
+
+    function test_blackFolderGetsALightSymbol() {
+        const shade = Qt.color(FolderStyle.glyphShade(true, "#000000", "default", "#4daf69", Tokens));
+        verify(shade.r > 0.3, "lightened: " + shade);
     }
 }

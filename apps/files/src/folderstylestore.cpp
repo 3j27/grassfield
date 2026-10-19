@@ -2,6 +2,7 @@
 
 #include "tagstore.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -10,6 +11,7 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 
+#include <algorithm>
 #include <cerrno>
 #include <sys/stat.h>
 
@@ -18,12 +20,23 @@ using FolderStyleLogic::Style;
 namespace
 {
 constexpr qint64 kMaxFileSize = 4 * 1024 * 1024;
-constexpr int kMaxEntries = 20000;
 
 bool isRealFolder(const QString &path)
 {
     struct stat st;
     return ::lstat(QFile::encodeName(path).constData(), &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+// Whether `path` is gone for good: its parent folder exists and it is not a folder (a link or file now counts as gone,
+// the look belonged to a folder). A path whose parent is missing too (an unplugged volume, a folder that is not
+// mounted) is not gone: the entry waits for the volume.
+bool isGone(const QString &path)
+{
+    struct stat st;
+    if (::lstat(QFile::encodeName(path).constData(), &st) == 0)
+        return !S_ISDIR(st.st_mode);
+    const QString parent = QFileInfo(path).absolutePath();
+    return ::lstat(QFile::encodeName(parent).constData(), &st) == 0 && S_ISDIR(st.st_mode);
 }
 
 qint64 stampOf(const QString &file)
@@ -82,7 +95,8 @@ bool FolderStyleStore::loadFile() const
     const QJsonObject root = doc.object();
     m_serial = qint64(root.value(QStringLiteral("serial")).toDouble());
     const QJsonObject folders = root.value(QStringLiteral("folders")).toObject();
-    for (auto it = folders.begin(); it != folders.end() && m_entries.size() < kMaxEntries; ++it) {
+    // Every entry is kept (the file is at most kMaxFileSize): a store over the cap is never cut when it is written back.
+    for (auto it = folders.begin(); it != folders.end(); ++it) {
         const QJsonObject o = it.value().toObject();
         Style style;
         style.color = FolderStyleLogic::normalizeColor(o.value(QStringLiteral("color")).toString());
@@ -139,12 +153,89 @@ Style FolderStyleStore::read(const QString &path) const
     return FolderStyleLogic::parse(raw);
 }
 
+// Entries of folders that no longer exist (deleted, renamed or moved outside Files, replaced by a file): a new folder at
+// an old path must not inherit a look. One lstat per entry, only when the store is written.
+void FolderStyleStore::pruneGone()
+{
+    QStringList gone;
+    for (auto it = m_entries.begin(); it != m_entries.end();) {
+        if (isGone(it.key())) {
+            gone.append(it.key() + QLatin1Char('/'));
+            it = m_entries.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // The folders under a vanished one went with it (their own parent is missing too, which alone does not tell an
+    // unplugged volume from a deleted tree).
+    if (gone.isEmpty())
+        return;
+    for (auto it = m_entries.begin(); it != m_entries.end();) {
+        const QString key = it.key();
+        const bool under = std::any_of(gone.cbegin(), gone.cend(), [&key](const QString &g) { return key.startsWith(g); });
+        if (under)
+            it = m_entries.erase(it);
+        else
+            ++it;
+    }
+}
+
+bool FolderStyleStore::moveEntries(const QString &from, const QString &to)
+{
+    const QString a = keyFor(from);
+    const QString b = keyFor(to);
+    if (a == b || a.isEmpty() || b.isEmpty())
+        return false;
+    m_loaded = true;
+    loadFile();
+    if (m_broken)
+        return false;
+    const QString prefix = a.endsWith(QLatin1Char('/')) ? a : a + QLatin1Char('/');
+    QHash<QString, Style> moved;
+    for (auto it = m_entries.begin(); it != m_entries.end();) {
+        if (it.key() == a || it.key().startsWith(prefix)) {
+            moved.insert(b + it.key().mid(a.size()), *it);
+            it = m_entries.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (moved.isEmpty())
+        return false;
+    // Whatever was at the destination is replaced: it belonged to a folder that is gone.
+    for (auto it = moved.cbegin(); it != moved.cend(); ++it)
+        m_entries.insert(it.key(), *it);
+    ++m_serial;
+    QString error;
+    if (!saveFile(&error)) {
+        loadFile();
+        return false;
+    }
+    return true;
+}
+
+bool FolderStyleStore::dropEntry(const QString &path)
+{
+    m_loaded = true;
+    loadFile();
+    if (m_broken || m_entries.remove(keyFor(path)) == 0)
+        return false;
+    ++m_serial;
+    QString error;
+    if (!saveFile(&error)) {
+        loadFile();
+        return false;
+    }
+    return true;
+}
+
 bool FolderStyleStore::saveFile(QString *error)
 {
     if (m_broken) {
-        *error = QStringLiteral("the per-user folder style store (%1) can’t be read; it is left as it is").arg(m_file);
+        *error = QCoreApplication::translate("FolderStyleStore", "the per-user folder style store (%1) can’t be read; it is left as it is").arg(m_file);
         return false;
     }
+    pruneGone();
     QJsonObject folders;
     for (auto it = m_entries.cbegin(); it != m_entries.cend(); ++it) {
         QJsonObject o;
@@ -182,7 +273,7 @@ FolderStyleStore::Result FolderStyleStore::write(const QString &path, const Styl
     style.color = FolderStyleLogic::normalizeColor(wanted.color);
     style.glyph = FolderStyleLogic::normalizeGlyph(wanted.glyph);
     if (!isRealFolder(path)) {
-        result.error = QStringLiteral("not a folder on this computer");
+        result.error = QCoreApplication::translate("FolderStyleStore", "not a folder on this computer");
         return result;
     }
     // Another process may have changed the store: decide from the file as it is now.
@@ -201,6 +292,12 @@ FolderStyleStore::Result FolderStyleStore::write(const QString &path, const Styl
         useFallback = true;
         break;
     case TagStore::ReadResult::Ok:
+        if (FolderStyleLogic::tooLargeToEdit(stored)) {
+            // Editing would replace a value this version can't read: it could hold a newer version's keys.
+            result.error = QCoreApplication::translate("FolderStyleStore", "the look stored on the folder is too large to edit safely; it is left as it is");
+            return result;
+        }
+        break;
     case TagStore::ReadResult::NoData:
         break;
     }
@@ -234,7 +331,19 @@ FolderStyleStore::Result FolderStyleStore::write(const QString &path, const Styl
             return result;
         }
         if (style.isEmpty()) {
-            // A reset needs the attribute removed: the store can't hide it.
+            // A reset needs the attribute removed: the store can't hide it, so the reset fails with the reason. The
+            // entry saved for this account is dropped anyway (the user asked to reset it, it can be removed), and
+            // the message says what is left.
+            if (m_entries.remove(key) > 0) {
+                ++m_serial;
+                QString ignored;
+                if (saveFile(&ignored)) {
+                    result.changed = true;
+                    reason = QCoreApplication::translate("FolderStyleStore", "%1 (the look saved for your account only was removed; the look stored on the folder stays)").arg(reason);
+                } else {
+                    loadFile();
+                }
+            }
             result.error = reason;
             return result;
         }
@@ -242,10 +351,19 @@ FolderStyleStore::Result FolderStyleStore::write(const QString &path, const Styl
     }
 
     // Fallback store.
-    if (style.isEmpty())
+    if (style.isEmpty()) {
         m_entries.remove(key);
-    else
+    } else {
+        if (!m_entries.contains(key) && m_entries.size() >= kMaxFallbackEntries) {
+            pruneGone();
+            if (m_entries.size() >= kMaxFallbackEntries) {
+                // Nothing is evicted behind the user's back: a full store refuses a new entry and says why.
+                result.error = QCoreApplication::translate("FolderStyleStore", "the list of folders customized for your account only is full (%1 folders); reset some of them first").arg(kMaxFallbackEntries);
+                return result;
+            }
+        }
         m_entries.insert(key, style);
+    }
     ++m_serial;
     QString error;
     if (!saveFile(&error)) {

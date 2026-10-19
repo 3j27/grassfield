@@ -518,10 +518,13 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
             f->expect(url, false);
     });
     if (cut) {
-        connect(job, &KJob::result, this, [job] {
+        connect(job, &KJob::result, this, [this, job, urls, destination] {
             // A cut selection is consumed by its paste.
-            if (!job->error())
-                QGuiApplication::clipboard()->clear();
+            if (job->error())
+                return;
+            QGuiApplication::clipboard()->clear();
+            for (const QUrl &u : urls)
+                styleMoved(u, childUrl(destination, u.fileName()));
         });
     }
     track(job, countText(cut ? tr("Moving 1 item…") : tr("Copying 1 item…"), cut ? tr("Moving %1 items…") : tr("Copying %1 items…"), urls.size()));
@@ -588,6 +591,9 @@ void FilesApp::newFolder(const QUrl &directory, QObject *folder)
             emit operationFailed(job->errorString());
             return;
         }
+        // A look left at this path by a folder that went away outside Files must not apply to the new folder.
+        if (url.isLocalFile())
+            m_folderStyles.dropEntry(url.toLocalFile());
         if (auto *f = asFolder(target))
             f->expect(url, true);
     });
@@ -612,14 +618,27 @@ void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
     attachDelegate(job);
     KIO::FileUndoManager::self()->recordJob(KIO::FileUndoManager::Rename, {url}, destination, job);
     QPointer<QObject> target = folder;
-    connect(job, &KJob::result, this, [this, job, destination, target] {
+    connect(job, &KJob::result, this, [this, job, url, destination, target] {
         if (job->error()) {
             emit operationFailed(job->errorString());
             return;
         }
+        styleMoved(url, destination);
         if (auto *f = asFolder(target))
             f->expect(destination, false);
     });
+}
+
+// Files moved or renamed a folder: its look follows (the attribute travels by itself; the per-user entry is keyed by path).
+void FilesApp::styleMoved(const QUrl &from, const QUrl &to)
+{
+    if (!from.isLocalFile() || !to.isLocalFile())
+        return;
+    if (m_folderStyles.moveEntries(from.toLocalFile(), to.toLocalFile())) {
+        ++m_folderStyleRevision;
+        emit folderStyleRevisionChanged();
+        emit allFolderStylesChanged();
+    }
 }
 
 void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
@@ -692,6 +711,14 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
     for (const QUrl &u : std::as_const(sources)) {
         if (auto *f = asFolder(target))
             f->expect(childUrl(dest, u.fileName()), false);
+    }
+    if (!copy) {
+        connect(job, &KJob::result, this, [this, job, sources, dest] {
+            if (job->error())
+                return;
+            for (const QUrl &u : sources)
+                styleMoved(u, childUrl(dest, u.fileName()));
+        });
     }
     track(job, countText(copy ? tr("Copying 1 item…") : tr("Moving 1 item…"), copy ? tr("Copying %1 items…") : tr("Moving %1 items…"), sources.size()));
 }
@@ -940,6 +967,9 @@ QVariantMap FilesApp::changeFolderStyles(const QList<QUrl> &urls, const FolderSt
         if (!r.ok) {
             failed.append(url.fileName());
             reason = r.error;
+            // A failed reset can still have dropped the entry saved for this account: the views show it.
+            if (r.changed)
+                changed.append(url);
             continue;
         }
         fellBack = fellBack || r.fellBack;

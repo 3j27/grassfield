@@ -3,7 +3,7 @@
 # live, draws them into the shell's strip tiles, blocks their input and swaps a stage into the centre, without resizing,
 # moving or configuring any client.
 #
-# Usage: tests/compositor/stages.sh [check]              functional scenario (default)
+# Usage: tests/compositor/stages.sh [check] [--plugin PATH]  functional scenario (default; PATH: the build loaded, see below)
 #        tests/compositor/stages.sh perf [seconds]       CPU of the nested Hyprland, 3 stages x 3 foot windows, each phase
 #                                                        `seconds` long (default 30), plus the special-workspace
 #                                                        alternative (windows parked, not rendered)
@@ -27,22 +27,41 @@
 # second fixture instance with GF_STAGES_ROLE=exclusive); minimizing the only window of the active stage gives the
 # keyboard to the next stage's front window, never to the minimized window (12b); Hyprland's window cycling stays within
 # the active stage (12c). R13 counter-review of 17208af: after a swap under an Exclusive layer Hyprland's active window is
-# the new front window and a window dispatcher (close) never reaches the strip window (8c); a menu of the active stage's
-# window keeps its keys, and closes when its window goes to the strip without losing a key (8d, a third fixture instance
-# with GF_STAGES_ROLE=popup); a request for a strip window on another Desktop still brings its stage forward, a Desktop
-# switch back keeps the active stage (8e).
+# never the strip window and a window dispatcher (close) never reaches it (8c); a menu of the active stage's window keeps
+# its keys, and closes when its window goes to the strip without losing a key (8d, a third fixture instance with
+# GF_STAGES_ROLE=popup); a request for a strip window on another Desktop still brings its stage forward, a Desktop switch
+# back keeps the active stage (8e). R13 counter-review #3 of e9ebc7f (the plugin may focus nothing while an Exclusive layer
+# holds the keyboard): no window focus and no focused-monitor change under the layer (8c, the pointer on the other output
+# first when there are two); a swap under the layer with a special workspace open keeps every key at the layer and the
+# special workspace open (8f); a stage of a Desktop not shown activated under the layer switches nothing and focuses
+# nothing (8g); a polkit-like dialog (GF_STAGES_ROLE=polkit: full-output Overlay, Exclusive, password field) keeps every
+# key, and the activated stage gets the keyboard when it ends (8h).
 # Screenshots (grim -o OUTPUT): .dev/stages/run-<timestamp>/. Exit: 0 PASS, 1 FAIL, 2 usage or environment error.
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
-mode=${1:-check}
-perf_secs=${2:-30}
+# --plugin PATH: the build loaded in the nested session for this run (default compositor/build/grassfield-compositor.so),
+# e.g. a pre-fix build loaded through scripts/nestctl plugin load to show that the checks discriminate; step 15 unloads
+# and loads that same file.
+plugin=$root/compositor/build/grassfield-compositor.so
+args=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --plugin) plugin=${2:?--plugin needs a path}; shift ;;
+    *) args+=("$1") ;;
+  esac
+  shift
+done
+mode=${args[0]:-check}
+perf_secs=${args[1]:-30}
+usage="usage: stages.sh [check|perf [seconds]] [--plugin PATH]"
 case $mode in
   check) ;;
-  perf) [[ $perf_secs =~ ^[1-9][0-9]*$ ]] || { echo "usage: stages.sh [check|perf [seconds]]" >&2; exit 2; } ;;
-  *) echo "usage: stages.sh [check|perf [seconds]]" >&2; exit 2 ;;
+  perf) [[ $perf_secs =~ ^[1-9][0-9]*$ ]] || { echo "$usage" >&2; exit 2; } ;;
+  *) echo "$usage" >&2; exit 2 ;;
 esac
+[[ -f $plugin ]] || { echo "stages: no plugin build at $plugin" >&2; exit 2; }
 
 out=GF-REF
 sock=$(cat "$dev/nested.wayland" 2>/dev/null || true)
@@ -56,7 +75,6 @@ hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
-plugin=$root/compositor/build/grassfield-compositor.so
 if [[ -z $sock || -z $sig || -z $hypr_pid ]] || ! kill -0 "$hypr_pid" 2>/dev/null; then
   echo "stages: no nested instance (run scripts/dev/nested-up.sh)" >&2
   exit 2
@@ -103,6 +121,7 @@ cleanup() {
   [[ -n $fixture_pid ]] && kill "$fixture_pid" 2>/dev/null
   [[ -n $exclusive_pid ]] && kill "$exclusive_pid" 2>/dev/null
   [[ -n ${popup_pid:-} ]] && kill "$popup_pid" 2>/dev/null
+  [[ -n ${polkit_pid:-} ]] && kill "$polkit_pid" 2>/dev/null
   nestctl dispatch 'hl.plugin.grassfield.stages([[{"op":"off","durationMs":0}]])' >/dev/null 2>&1
   nestctl dispatch 'hl.plugin.grassfield.config("stagesEnabled", "false")' >/dev/null 2>&1
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
@@ -133,6 +152,9 @@ config() { nestctl dispatch "hl.plugin.grassfield.config(\"$1\", \"$2\")" >>"$lo
 
 read -r mon_x mon_y mon_w mon_h < <(nestctl -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
 [[ -n ${mon_w:-} ]] || { echo "stages: output $out not found" >&2; exit 2; }
+# With two outputs, 8c moves the pointer to the other one first (Hyprland focuses that monitor): the focused monitor must not
+# change while an Exclusive layer holds the keyboard.
+other_out=$(nestctl -j monitors | jq -r --arg o "$out" '[.[] | select(.name != $o and (.disabled | not))][0].name // ""')
 
 # Strip geometry (layout coordinates): the strip surface on the left edge, four tiles in it.
 strip_json=$(jq -nc --argjson x "$mon_x" --argjson y "$mon_y" '{x: $x, y: ($y + 60), w: 220, h: 860}')
@@ -183,6 +205,30 @@ stop_exclusive() {
   wait "$exclusive_pid" 2>/dev/null
   exclusive_pid=""
 }
+# A fourth fixture instance (role polkit): what the shell's authentication dialog is to Hyprland (a full-output Overlay
+# surface with Exclusive keyboard interactivity and a password field); it logs every key its field gets; Escape releases it
+# as the dialog ends (keyboard None, unmapped 400 ms later).
+pklog=$run/polkit.log
+polkit_pid=""
+start_polkit() {
+  : >"$pklog"
+  GF_STAGES_ROLE=polkit GF_STAGES_OUTPUT=$out WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig DBUS_SESSION_BUS_ADDRESS=$fixture_bus \
+    setsid "$root/scripts/dev/isolated.sh" --name stages-polkit qs -p "$root/tests/compositor/stages-fixture" --no-color >"$pklog" 2>&1 </dev/null &
+  polkit_pid=$!
+  local i
+  for i in $(seq 1 50); do
+    grep -q "\[stages-fixture\] polkit dialog shown" "$pklog" 2>/dev/null && break
+    sleep 0.1
+  done
+  sleep 0.5
+  grep -q "\[stages-fixture\] polkit dialog shown" "$pklog"
+}
+stop_polkit() {
+  [[ -n $polkit_pid ]] || return 0
+  kill "$polkit_pid" 2>/dev/null
+  wait "$polkit_pid" 2>/dev/null
+  polkit_pid=""
+}
 # A third fixture instance: an app window whose click opens a menu (an xdg_popup with a grab); it logs the menu opening and
 # closing and every key the window and the menu receive.
 popuplog=$run/popup.log
@@ -210,6 +256,22 @@ wait_log() { # <log> <text> <tries of 50 ms>
   return 1
 }
 client_mapped() { nestctl -j clients 2>/dev/null | jq -e --arg a "$1" 'any(.[]; .address == $a and .mapped)' >/dev/null; }
+focused_monitor() { nestctl -j monitors 2>/dev/null | jq -r '[.[] | select(.focused)][0].name // ""'; }
+special_of() { nestctl -j monitors 2>/dev/null | jq -r --arg o "$out" '.[] | select(.name == $o) | .specialWorkspace.name // ""'; }
+shown_ws() { nestctl -j monitors 2>/dev/null | jq -r --arg o "$out" '.[] | select(.name == $o) | .activeWorkspace.id'; }
+event_lines() { sleep 0.2; grep -ac "" "$events"; } # socat writes with a short delay
+events_since() { tail -n +"$(($1 + 1))" "$events"; } # <line count before>
+# How many key lines of a fixture log name one of <characters> (each test types its own letters into a freshly started
+# fixture); polls 1 s for Quickshell's late log lines.
+layer_got() { # <log> <prefix> <characters>
+  local n=0 i
+  for i in $(seq 1 20); do
+    n=$(grep -cE "\[stages-fixture\] $2 [$3]\$" "$1" 2>/dev/null)
+    ((n >= ${#3})) && break
+    sleep 0.05
+  done
+  echo "${n:-0}"
+}
 active_window() { nestctl -j activewindow 2>/dev/null | jq -r '.address // ""'; }
 cap_since() { tail -c +"$(($2 + 1))" "$1" | cat -v | head -c 120; } # <capture> <size before>: bytes typed since
 
@@ -583,13 +645,14 @@ capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
 check "8b swap while an Exclusive layer holds the keyboard: kept when the layer closes, the keys go to the new stage (b3)" $? \
   "layer got $ex_keys key line(s) while open; active $(active_id) (expected $sb); b3 got '$capb_new', c3 got '$capc_new'"
 
-# 8c. window actions after a swap under an Exclusive layer target the new stage's front window, never the strip window
-# (R13 counter-review of 17208af: Hyprland's active window stayed on the outgoing window, hidden in the strip, and
-# hl.dsp.window.close() closed it). Two disposable capture windows of new apps: g (newest, active, holds the keyboard)
-# and f (tile 0). Under the layer, f's stage is activated: Hyprland's active window (what window key bindings, window
-# dispatchers and the shell's menu bar act on) must be f; the close dispatcher closes f, g (in the strip at that moment)
-# survives; with f gone g's stage is active again and g becomes the active window behind the layer; when the layer
-# closes, g gets the keys.
+# 8c. window actions after a swap under an Exclusive layer never reach the strip window (R13 counter-review of 17208af:
+# Hyprland's active window stayed on the outgoing window, hidden in the strip, and hl.dsp.window.close() closed it), and the
+# plugin focuses nothing while the layer holds the keyboard (R13 counter-review #3 of e9ebc7f). Two disposable capture
+# windows of new apps: g (newest, active, holds the keyboard) and f (tile 0). Under the layer, f's stage is activated:
+# Hyprland's active window is not g (there is none: f takes the focus when the layer is gone), no activewindowv2 names g
+# or f while the layer is up, the focused monitor does not change (with two outputs the pointer first goes to the other
+# output, which Hyprland then focuses), the layer keeps the keys and the window dispatcher hl.dsp.window.close() closes no
+# window; when the layer closes, f gets the keys and g nothing.
 cap_f=$run/capture-f.cap cap_g=$run/capture-g.cap
 p=$(foot_capture gf-stage-f "$cap_f"); pids+=("$p"); pid_f=$p
 addr_f=$(address_of "$p")
@@ -603,34 +666,197 @@ start_exclusive
 ex_rc=$?
 keys x9
 sleep 0.4
+if [[ -n $other_out ]]; then # the focused monitor becomes the other output (a pointer motion; the layer keeps the keyboard)
+  timeout 20 "$root/scripts/dev/pointer.sh" output "$other_out" abs 40 40 sleep 100 >>"$log" 2>&1
+  sleep 0.3
+fi
+mon0=$(focused_monitor)
 sf=$(stage_of "$addr_f")
+ev0=$(event_lines)
 a0=$(st_count '"active":'"$sf"',')
 stages "{\"op\":\"activate\",\"stage\":$sf}"
 wait_st '"active":'"$sf"',' "$a0" 2000
 sw_rc=$?
 sleep 0.6
 aw_swap=$(active_window)
-awv2_swap=$(grep -a "activewindowv2>>" "$events" | tail -n 1 | sed 's/.*>>//')
+mon1=$(focused_monitor)
 g_strip=$(in_active "$addr_g" && echo no || echo yes)
+capf0=$(stat -c %s "$cap_f"); capg0=$(stat -c %s "$cap_g")
+keys uc
+sleep 0.4
 nestctl dispatch 'hl.dsp.window.close()' >>"$log" 2>&1
 sleep 1
 f_left=$(client_mapped "$addr_f" && echo yes || echo no)
 g_left=$(client_mapped "$addr_g" && echo yes || echo no)
-aw_close=$(active_window)
+ex1=$(layer_got "$exlog" key uc)
+capf_mid=$(cap_since "$cap_f" "$capf0"); capg_mid=$(cap_since "$cap_g" "$capg0")
+focus_ev=$(events_since "$ev0" | grep -acE " activewindowv2>>($(hexof "$addr_g")|$(hexof "$addr_f"))$")
+mon_ev=$(events_since "$ev0" | grep -ac ' focusedmon>>') # Hyprland's focused monitor changed (even for a moment)
 stop_exclusive
 sleep 1
-capg0=$(stat -c %s "$cap_g")
+capf1=$(stat -c %s "$cap_f")
 keys k9
 sleep 0.4
-capg_new=$(cap_since "$cap_g" "$capg0")
-[[ $ex_rc == 0 && $sw_rc == 0 && $aw_swap == "$addr_f" && $awv2_swap == "$(hexof "$addr_f")" && $g_strip == yes ]]
-check "8c swap under an Exclusive layer: Hyprland's active window is the new stage's front window (f), never the strip window (g)" $? \
-  "active window $aw_swap, last activewindowv2 $awv2_swap (f $addr_f, g $addr_g); g in the strip: $g_strip"
-[[ $f_left == no && $g_left == yes && $aw_close == "$addr_g" && $capg_new == *k9* ]] && in_active "$addr_g"
-check "8c hl.dsp.window.close() under the layer closes the front window (f); the strip window (g) survives, comes forward and gets the keys after the layer" $? \
-  "f mapped after close: $f_left, g mapped: $g_left; active window $aw_close; g got '$capg_new'"
+capf_new=$(cap_since "$cap_f" "$capf1"); capg_new=$(cap_since "$cap_g" "$capg0")
+((ex_rc == 0 && sw_rc == 0 && ex1 >= 1 && focus_ev == 0 && mon_ev == 0)) && [[ $aw_swap != "$addr_g" && $g_strip == yes && $mon1 == "$mon0" && -z $capf_mid && -z $capg_mid ]]
+check "8c swap under an Exclusive layer: Hyprland's active window is never the strip window (g), no window focus while the layer is up, the focused monitor stays, the layer keeps the keys" $? \
+  "active window '$aw_swap' (f $addr_f, g $addr_g); g in the strip: $g_strip; activewindowv2 naming f or g under the layer: $focus_ev; focused monitor $mon0 -> $mon1, focusedmon events: $mon_ev; layer got $ex1 of the 2 keys; f got '$capf_mid', g got '$capg_mid'"
+[[ $g_left == yes && $f_left == yes && $capf_new == *k9* && -z $capg_new ]] && in_active "$addr_f"
+check "8c hl.dsp.window.close() under the layer closes no window (the strip window g survives); after the layer the new stage's front window (f) gets the keys" $? \
+  "f mapped after close: $f_left, g mapped: $g_left; f got '$capf_new', g got '$capg_new'"
 kill "$pid_g" "$pid_f" 2>/dev/null
 sleep 0.8
+pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 100 # back on $out
+
+# 8f. an Exclusive layer, a special workspace and a swap (R13 counter-review #3 of e9ebc7f, reproduced: the plugin's focus
+# closed the special workspace and the next keys went to the swap's window instead of the layer). A capture window s on a
+# special workspace holds the keyboard (b active, c3 in the strip), the layer takes the keyboard, c's stage is activated:
+# the layer gets the keys, no window gets one, the special workspace stays open and no window focus happens while the layer
+# is up. After the layer, Hyprland's restore (s) keeps the keyboard and the special workspace stays open (nothing is closed
+# after the fact); closing the special workspace then gives the keyboard to the activated stage's front window (c3), never
+# to the strip window (b3).
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_b3\" })" >>"$log" 2>&1
+sleep 0.5
+cap_s=$run/capture-s.cap
+p=$(foot_capture gf-stage-s "$cap_s"); pids+=("$p"); pid_s=$p
+addr_s=$(address_of "$p")
+sleep 0.5
+nestctl dispatch "hl.dsp.window.move({ workspace = \"special:gf-st\", follow = false, window = \"address:$addr_s\" })" >>"$log" 2>&1
+sleep 0.4
+nestctl dispatch 'hl.dsp.workspace.toggle_special("gf-st")' >>"$log" 2>&1
+sleep 0.6
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_s\" })" >>"$log" 2>&1
+sleep 0.4
+sp0=$(special_of)
+sc=$(stage_of "$addr_c3")
+start_exclusive
+ex_rc=$?
+keys x1
+sleep 0.4
+mon0=$(focused_monitor)
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c"); caps0=$(stat -c %s "$cap_s")
+ev0=$(event_lines)
+a0=$(st_count '"active":'"$sc"',')
+stages "{\"op\":\"activate\",\"stage\":$sc}"
+wait_st '"active":'"$sc"',' "$a0" 2000
+sw_rc=$?
+sleep 0.6
+keys vq
+sleep 0.4
+ex1=$(layer_got "$exlog" key vq)
+sp1=$(special_of); mon1=$(focused_monitor)
+capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0"); caps_new=$(cap_since "$cap_s" "$caps0")
+focus_ev=$(events_since "$ev0" | grep -acE ' (activewindowv2>>[0-9a-f]+|focusedmon>>.*)$')
+((ex_rc == 0 && sw_rc == 0 && ex1 >= 1 && focus_ev == 0)) && [[ $sp0 == special:gf-st && $sp1 == special:gf-st && $mon1 == "$mon0" && -z $capb_new && -z $capc_new && -z $caps_new ]] \
+  && in_active "$addr_c3"
+check "8f Exclusive layer + special workspace + activate: the layer keeps every key, the special workspace stays open, no window focus" $? \
+  "special $sp0 -> $sp1; layer got $ex1 of the 2 keys; window or monitor focus events under the layer: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new', s got '$caps_new'"
+stop_exclusive
+sleep 1
+sp2=$(special_of)
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c"); caps0=$(stat -c %s "$cap_s")
+keys k6
+sleep 0.4
+capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0"); caps_new=$(cap_since "$cap_s" "$caps0")
+[[ $sp2 == special:gf-st && $caps_new == *k6* && -z $capc_new && -z $capb_new ]]
+check "8f after the layer: the special workspace stays open and its window (Hyprland's restore) gets the keys" $? \
+  "special $sp2; s got '$caps_new', c3 got '$capc_new', b3 got '$capb_new'"
+nestctl dispatch 'hl.dsp.workspace.toggle_special("gf-st")' >>"$log" 2>&1
+sleep 1
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+keys k7
+sleep 0.4
+capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
+[[ -z $(special_of) && $capc_new == *k7* && -z $capb_new ]] && in_active "$addr_c3"
+check "8f the special workspace closed: the activated stage's front window (c3) gets the keys, the strip window (b3) nothing" $? \
+  "special '$(special_of)'; c3 got '$capc_new', b3 got '$capb_new'"
+kill "$pid_s" 2>/dev/null
+sleep 0.6
+
+# 8g. a stage of a Desktop that is not shown, activated under an Exclusive layer (R13 counter-review #3 of e9ebc7f: the
+# keyboard went to that window for a moment while Hyprland switched Desktops under the layer). b3 holds the keyboard (b
+# active, c3 in the strip), the layer takes it, Desktop 9 is shown under the layer, then c's stage is activated: the
+# Desktop shown stays 9, no Desktop switch and no window focus happen while the layer is up, the focused monitor stays,
+# the layer gets the keys and no window one. After the layer, back on the Desktop, c3 (its active stage's front window)
+# gets the keys and b3 nothing.
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_b3\" })" >>"$log" 2>&1
+sleep 0.5
+ws_g=$(shown_ws)
+sc=$(stage_of "$addr_c3") # read while the Desktop is shown (the event describes the shown Desktop)
+start_exclusive
+ex_rc=$?
+keys x2
+sleep 0.4
+nestctl dispatch 'hl.dsp.focus({ workspace = "9" })' >>"$log" 2>&1
+sleep 0.8
+ws9=$(shown_ws)
+mon0=$(focused_monitor)
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+ev0=$(event_lines)
+stages "{\"op\":\"activate\",\"stage\":$sc}"
+sleep 1
+keys wr
+sleep 0.4
+ex1=$(layer_got "$exlog" key wr)
+ws1=$(shown_ws); mon1=$(focused_monitor)
+capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
+moves=$(events_since "$ev0" | grep -acE ' (workspace|workspacev2|focusedmon|focusedmonv2)>>| activewindowv2>>[0-9a-f]+$')
+((ex_rc == 0 && ex1 >= 1 && moves == 0)) && [[ $ws9 == 9 && $ws1 == 9 && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
+check "8g a stage of a Desktop not shown activated under an Exclusive layer: no Desktop switch, no window focus, the layer keeps every key" $? \
+  "Desktop $ws_g -> $ws9 -> $ws1; focus or Desktop events under the layer: $moves; focused monitor $mon0 -> $mon1; layer got $ex1 of the 2 keys; b3 got '$capb_new', c3 got '$capc_new'"
+stop_exclusive
+sleep 0.8
+nestctl dispatch "hl.dsp.focus({ workspace = \"$ws_g\" })" >>"$log" 2>&1
+sleep 1
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+keys k5
+sleep 0.4
+capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
+[[ $(shown_ws) == "$ws_g" && $capc_new == *k5* && -z $capb_new ]] && in_active "$addr_c3"
+check "8g after the layer, back on the Desktop: the activated stage's front window (c3) gets the keys, b3 nothing" $? \
+  "Desktop $(shown_ws); c3 got '$capc_new', b3 got '$capb_new'; active stage $(active_id), stage of c3 $(stage_of "$addr_c3")"
+
+# 8h. a polkit-like dialog (stages-fixture role polkit: a full-output Overlay surface with Exclusive keyboard interactivity
+# and a password field, as shell/security/polkit/AuthAgent.qml) is up while a stage is activated: every key goes to its
+# field, none to a window, Hyprland's active window is never the strip window; when the dialog ends as the real one does
+# (keyboard interactivity None, then unmapped), the activated stage's front window gets the keys.
+nestctl dispatch "hl.dsp.focus({ window = \"address:$addr_b3\" })" >>"$log" 2>&1
+sleep 0.5
+sc=$(stage_of "$addr_c3")
+start_polkit
+pk_rc=$?
+keys pw
+sleep 0.4
+mon0=$(focused_monitor)
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+ev0=$(event_lines)
+a0=$(st_count '"active":'"$sc"',')
+stages "{\"op\":\"activate\",\"stage\":$sc}"
+wait_st '"active":'"$sc"',' "$a0" 2000
+sw_rc=$?
+sleep 0.6
+aw=$(active_window)
+keys secret
+sleep 0.4
+pk1=$(layer_got "$pklog" "polkit key" secrt)
+mon1=$(focused_monitor)
+capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
+focus_ev=$(events_since "$ev0" | grep -acE ' (activewindowv2>>[0-9a-f]+|focusedmon>>.*)$')
+((pk_rc == 0 && sw_rc == 0 && pk1 >= 5 && focus_ev == 0)) && [[ $aw != "$addr_b3" && $mon1 == "$mon0" && -z $capb_new && -z $capc_new ]]
+check "8h polkit-like dialog: a stage activated under it, every key goes to its password field, none to a window; the active window is never the strip window" $? \
+  "field got $pk1 of the 6 keys; active window '$aw' (b3 $addr_b3); window or monitor focus events under the dialog: $focus_ev; focused monitor $mon0 -> $mon1; b3 got '$capb_new', c3 got '$capc_new'"
+keys -k Escape
+wait_log "$pklog" "polkit hidden" 40
+sleep 0.8
+capb0=$(stat -c %s "$cap_b"); capc0=$(stat -c %s "$cap_c")
+keys k4
+sleep 0.4
+capb_new=$(cap_since "$cap_b" "$capb0"); capc_new=$(cap_since "$cap_c" "$capc0")
+grep -q "\[stages-fixture\] polkit released" "$pklog" && [[ $capc_new == *k4* && -z $capb_new ]] && in_active "$addr_c3"
+check "8h the dialog ends (keyboard None, then unmapped): the activated stage's front window (c3) gets the keys, b3 nothing" $? \
+  "c3 got '$capc_new', b3 got '$capb_new'"
+stop_polkit
+sleep 0.6
 
 # 8d. a menu (xdg_popup with a grab) of the active stage's window keeps its keys; when that window goes to the strip its
 # menu closes at once, as a click outside it would, and every key goes to the new stage (R13 counter-review of 17208af:

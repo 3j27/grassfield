@@ -31,8 +31,11 @@ fixtures() {
   setattr "$SB/Travel" '{"v":1,"color":"#e25aa1","glyph":"✈️"}'
   setattr "$SB/Archive" '{"v":1,"color":"#8a8f98"}'
   setattr "$SB/Pictures" '{"v":1,"glyph":"📷"}'
+  # A hostile attribute: sixteen letters (one cluster by the shared rule) must not draw outside the icon.
+  mkdir -p "$SB/Hostile"
+  setattr "$SB/Hostile" '{"v":1,"color":"#3e7bfa","glyph":"WWWWWWWWWWWWWWWW"}'
   # Desktop sandbox of the shell: two customised folders.
-  mkdir -p "$DESK/Work" "$DESK/Music"
+  mkdir -p "$DESK/Work" "$DESK/Music" "$DESK/Projects"
   setattr "$DESK/Work" '{"v":1,"color":"#f5883b","glyph":"💼"}'
   setattr "$DESK/Projects" '{"v":1,"color":"#8e5bea"}'
 }
