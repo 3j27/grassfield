@@ -31,6 +31,7 @@ namespace gf::gfc {
     inline constexpr std::string_view kLuaAppmenu     = "appmenu";    // hl.plugin.grassfield.appmenu(address): re-posts its appmenu event
     inline constexpr std::string_view kLuaOverview    = "overview";   // hl.plugin.grassfield.overview(json): live window transforms
     inline constexpr std::string_view kLuaStages      = "stages";     // hl.plugin.grassfield.stages(json): Stages (behind config stagesEnabled)
+    inline constexpr std::string_view kLuaCursorRefresh = "cursor_refresh"; // hl.plugin.grassfield.cursor_refresh(): redraw the pointer at its size
 
     // What a shell sends through Hyprland.dispatch() to call a plugin verb.
     std::string luaDispatchRequest(std::string_view verb);
@@ -51,12 +52,15 @@ namespace gf::gfc {
     // Control Center toggle); "stages" only while the feature flag config stagesEnabled is true (the shell shows its strip).
     inline constexpr std::string_view kFeatureStagesAvailable = "stages-available";
     inline constexpr std::string_view kFeatureStages          = "stages";
+    // hl.plugin.grassfield.cursor_refresh(): the pointer on screen is drawn again at the size Hyprland holds (after the
+    // shell's `setcursor <theme> <size>`), same shape, same place (Settings > Accessibility > Pointer, ADR-0014).
+    inline constexpr std::string_view kFeatureCursorRefresh = "cursor-refresh";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
-    // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available).
+    // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh.
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
-                                           bool stagesEnabled = false);
+                                           bool stagesEnabled = false, bool cursorRefresh = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key only.
     inline constexpr std::string_view kConfigTitlebarDoubleClick = "titlebarDoubleClick";

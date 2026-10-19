@@ -1,6 +1,7 @@
 #include "Ipc.hpp"
 
 #include "AppmenuServer.hpp"
+#include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
 #include "Minimize.hpp"
 #include "Overview.hpp"
@@ -146,10 +147,14 @@ namespace gf::ipc {
         return state().luaStagesRegistered && state().luaConfigRegistered && stager::ready();
     }
 
+    bool cursorRefreshAvailable() {
+        return state().luaCursorRefreshRegistered && cursorRefresh::ready();
+    }
+
     namespace {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
-                                                stagesAvailable(), stager::enabled());
+                                                stagesAvailable(), stager::enabled(), cursorRefreshAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -320,6 +325,10 @@ namespace gf::ipc {
             });
         }
 
+        void cursorRefreshNoThrow() noexcept {
+            guarded("hl.plugin.grassfield.cursor_refresh", [] { cursorRefresh::request(); });
+        }
+
         // Pushes the result of hl.dsp.no_op() so that `hl.dispatch(hl.plugin.grassfield.hello())` (what
         // `hyprctl dispatch` / Quickshell's Hyprland.dispatch() evaluate under the Lua config) succeeds.
         // Pushes nothing if the dispatcher can't be obtained. Only trivially destructible values live in
@@ -404,6 +413,14 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
+        // hl.plugin.grassfield.cursor_refresh(): the pointer on screen is drawn again at the size Hyprland holds now (the
+        // shell calls it after its `setcursor <theme> <size>` was answered "ok"); same shape, same place. No argument
+        // (any is ignored, nothing is read from Lua); rate-limited in core/CursorRefresh (FR39-FR40).
+        int luaCursorRefresh(lua_State* L) {
+            cursorRefreshNoThrow();
+            return pushNoOpDispatcher(L);
+        }
+
         std::string hyprctlGrassfield(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             // Same JSON for both output formats: the payload is already machine-readable.
             std::string out;
@@ -442,6 +459,7 @@ namespace gf::ipc {
         s.luaAppmenuRegistered  = appmenuServer::ready() && addLua(gfc::kLuaAppmenu, luaAppmenu); // only with the global
         s.luaOverviewRegistered = overviewer::ready() && addLua(gfc::kLuaOverview, luaOverview);  // only with the render hooks
         s.luaStagesRegistered   = stager::ready() && addLua(gfc::kLuaStages, luaStages);          // only with its listeners
+        s.luaCursorRefreshRegistered = cursorRefresh::ready() && addLua(gfc::kLuaCursorRefresh, luaCursorRefresh); // only with a renderer
         bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
@@ -462,6 +480,7 @@ namespace gf::ipc {
         removeLua(s.luaAppmenuRegistered, gfc::kLuaAppmenu);
         removeLua(s.luaOverviewRegistered, gfc::kLuaOverview);
         removeLua(s.luaStagesRegistered, gfc::kLuaStages);
+        removeLua(s.luaCursorRefreshRegistered, gfc::kLuaCursorRefresh);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();
