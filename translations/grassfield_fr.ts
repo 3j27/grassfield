@@ -2379,6 +2379,14 @@
         <source>Crash recovery unavailable: the lock state could not be saved.</source>
         <translation>Récupération après plantage indisponible&#xa0;: l’état du verrouillage n’a pas pu être enregistré.</translation>
     </message>
+    <message>
+        <source>dev: password checks disabled</source>
+        <translation>dev&#xa0;: vérification du mot de passe désactivée</translation>
+    </message>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
 </context>
 <context>
     <name>LockController</name>
@@ -3371,6 +3379,13 @@
     <message>
         <source>unsupported contract version: %1</source>
         <translation>version de contrat non prise en charge&#xa0;: %1</translation>
+    </message>
+</context>
+<context>
+    <name>SwitcherWindow</name>
+    <message>
+        <source>Application Switcher</source>
+        <translation>Sélecteur d’applications</translation>
     </message>
 </context>
 <context>

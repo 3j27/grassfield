@@ -163,12 +163,12 @@ below are scaled to Grassfield's 48-pt tile, taking the visible body as about 80
 
 | Metric | Reference | Grassfield | Δ | Severity |
 |---|---|---|---|---|
-| Organisation | floating panel, 844 ± 1 wide, radius ~28 ± 2, top ~190: header with title and a more-menu, 7 category chips (~23 tall), a recents row, then an alphabetical scrolling grid; grid/list view option | full-screen paged grid, page dots, folders | — | missing (reorganisation) |
-| Columns | 7 | 7 at 1080p (`apps.cellWidthScale`) | 0 | match |
-| Cell | 114.7 x 101.6 ± 1 | 2.2 x 96 by 1.55 x 96 ≈ 211 x 149 | +96 / +47 | large |
-| Icon | 62 visible (~76 canvas) | `apps.iconSize` 96 | +20-34 | large |
-| Label | ~12 | `apps.labelSize` 12 | 0 | match |
-| Search | typing turns the panel into a list with 56-pt rows (same as Search), plus a store-search fallback row | `apps.searchHeight` 30 pill at the top centre, filters the grid | — | missing |
+| Organisation | floating panel, 844 ± 1 wide, radius ~28 ± 2, top ~190: header with title and a more-menu, 7 category chips (~23 tall), a recents row, then an alphabetical scrolling grid; grid/list view option | floating panel (`launcher.panelWidth` 844, `launcher.panelRadius` 28, `launcher.topFraction` 0.18), search field, 6 category chips, alphabetical scrolling grid; no header, recents row or list view (not requested) | — | match (layout), missing (header, recents, list view) |
+| Columns | 7 | 7 (`launcher.columns`) | 0 | match |
+| Cell | 114.7 x 101.6 ± 1 | `launcher.cellHeight` 102, cell width = grid width / 7 ≈ 115 | 0 | match |
+| Icon | 62 visible (~76 canvas) | `launcher.iconSize` 62 | 0 | match |
+| Label | ~12 | `launcher.labelSize` 12 | 0 | match |
+| Search | typing filters the grid in place (macOS 26; an earlier note of a 56-pt-row list is superseded); a store-search fallback row | `launcher.searchHeight` 36 capsule at the top of the panel, filters the grid in place (ranked by `shell/search/Ranking.js`) | — | match (filtering), missing (store row) |
 
 ### Overview (macOS Mission Control)
 
@@ -380,8 +380,8 @@ Ordered by how often the surface is seen, then by how cheap the change is. "Toke
     - Change: menubar confirmation dialogs, Files sheets, polkit (security review required).
 14. **Apps launcher layout.** An 844-pt floating panel with radius 28 instead of a full-screen paged grid. It has category
     chips, a recents row, an alphabetical scrolling 7-column grid (115 x 102 cells, 62-pt visible icons) and a grid/list
-    option; search becomes a 56-pt-row list. Change: tokens `apps.*`, `shell/launchpad/`, `docs/specs/apps.md`. This is
-    a UX change: owner decision.
+    option; typing filters the grid in place. Change: tokens `launcher.*`, `shell/launchpad/`, `docs/specs/apps.md`. This is
+    a UX change: owner decision (done 2026-10-19).
 15. **Overview spaces bar.** Thumbnails 138 x 90 (from 168 x 104), gap 32 (from 14), names under the thumbnails, a
     full-width tinted band, a 32-pt round add button 18 from the edge. Change: tokens `overview.tile*`,
     `shell/overview/OverviewWindow.qml`.

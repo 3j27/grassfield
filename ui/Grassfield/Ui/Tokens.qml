@@ -909,6 +909,39 @@ QtObject {
     readonly property real launcherScrollbarOpacity: 0.5
     // estimate: time the scroll indicator stays after the last scroll
     readonly property int launcherScrollbarIdleMs: 800
+    // estimate: shortest scroll indicator, in indicator widths
+    readonly property int launcherScrollbarMinLengthFactor: 4
+    // estimate: "No results" label, distance from the grid top as a fraction of the grid height
+    readonly property real launcherEmptyOffsetFraction: 0.33
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
+
+    // F1 gap 19: icons about 104 pt
+    readonly property int switcherIconSize: 104
+    // F1 gap 19: icon pitch about 134 pt
+    readonly property int switcherPitch: 134
+    // F1 gap 19: selection square about 123 pt
+    readonly property int switcherSelectionSize: 123
+    // estimate: corner radius of the selection square (F1: rounded square, about a fifth of its side)
+    readonly property int switcherSelectionRadius: 26
+    // F1 gap 19: panel radius about 30
+    readonly property int switcherPanelRadius: 30
+    // estimate: panel inner margin around the tile grid
+    readonly property int switcherPadding: 14
+    // estimate: app name under the selected icon
+    readonly property int switcherNameSize: 15
+    // estimate: tile grid to app name
+    readonly property int switcherNameGap: 8
+    // estimate: app name line
+    readonly property int switcherNameHeight: 22
+    // estimate: smallest gap between the panel and the screen sides; more apps wrap to a new row
+    readonly property int switcherEdgeMargin: 32
+    // task (macOS model): the panel appears after this long with the modifier held, or at a second Tab; a quick press-release switches without it
+    readonly property int switcherShowDelayMs: 150
+    // estimate: the panel unmaps (releasing its keyboard grab) this long before the chosen app is activated, so the compositor's focus restore cannot override the activation
+    readonly property int switcherCommitDelayMs: 40
+    // estimate: if the compositor left the switcher key map and no release request arrived within this time, the switcher commits itself
+    readonly property int switcherBackstopMs: 250
+    // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
+    readonly property real switcherFadeScale: 0.96
 }

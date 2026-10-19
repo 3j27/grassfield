@@ -7,8 +7,8 @@ import "Ranking.js" as Ranking
 // first rendered frame ("open"), and from a query change (ranking + model update) to the next rendered
 // frame ("keystroke"), over a typing and erasing sequence. Run by scripts/dev/test.sh:
 // `qs -p tests/shell/apps_panel_perf` (offscreen); prints the numbers and "apps-panel-perf: PASS" or FAIL.
-// AppsGrid.qml, AppsCell.qml and Ranking.js are symlinks to shell/. The budgets are deliberately loose
-// (a loaded host or software rendering is slower than the nested session); the numbers are the evidence.
+// AppsGrid.qml, AppsCell.qml and Ranking.js are symlinks to shell/. The budgets are the spec's: open <= 300 ms (P3),
+// keystroke p95 and first keystroke <= 50 ms (P4); the numbers are the evidence.
 ShellRoot {
     id: root
 
@@ -41,6 +41,8 @@ ShellRoot {
         }
         records = recs;
         allItems = items;
+        // As AppsController does when the list is built: the first keystroke must not pay for the preparation.
+        Ranking.warm(recs);
     }
 
     function itemsFor(q: string): var {
@@ -66,8 +68,11 @@ ShellRoot {
         const fails = [];
         if (openMs > 300)
             fails.push("open " + openMs + " ms > 300");
-        if (p95 > 250)
-            fails.push("keystroke p95 " + p95 + " ms > 250");
+        // P4: a keystroke costs at most 50 ms (p95), and so does the first one after the panel was built.
+        if (p95 > 50)
+            fails.push("keystroke p95 " + p95 + " ms > 50");
+        if (keyMs[0] > 50)
+            fails.push("first keystroke " + keyMs[0] + " ms > 50");
         console.info(fails.length === 0 ? "apps-panel-perf: PASS" : "apps-panel-perf: FAIL " + fails.join("; "));
         Qt.quit();
     }
@@ -132,8 +137,10 @@ ShellRoot {
     Component.onCompleted: {
         build();
         Qt.callLater(() => {
-            root.t0 = Date.now();
+            // Idle time after the list is built (before the window is ever shown): fill the cell pool, as AppsWindow does.
             grid.items = root.allItems;
+            grid.warmPool();
+            root.t0 = Date.now();
             win.visible = true;
         });
     }

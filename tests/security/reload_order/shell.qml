@@ -66,6 +66,27 @@ ShellRoot {
         check("Lock.qml-locked-bound-to-intent", /WlSessionLock \{[^}]*locked: persist\.intent/.test(text));
         // The restored old intent must not downgrade a lock taken in Component.onCompleted (R12 re-review).
         check("Lock.qml-intent-never-downgraded", /onLoaded: \{\s*intent = intent \|\| controller\.locked;/.test(text));
+        // relock() releases the lock object before requesting a new one (not atomic): its only caller is
+        // checkOwnership() on Machine.ownershipAction "relock", i.e. a confirmed "unlocked" answer (R12 review #3: the
+        // lock() fast path relocked on one stale answer and keys reached a window).
+        const code = text.replace(/\/\/[^\n]*/g, "");
+        const calls = code.match(/[^\w.]relock\(/g) || [];
+        check("Lock.qml-relock-defined-once", (code.match(/function relock\(/g) || []).length === 1);
+        check("Lock.qml-relock-single-caller", calls.length === 2); // the definition and one call
+        check("Lock.qml-relock-only-on-confirmed-answer", /else if \(action === "relock"\)\s*relock\(/.test(code));
+        const lockFn = code.slice(code.indexOf("function lock(reason"), code.indexOf("function engage("));
+        check("Lock.qml-lock-never-relocks", lockFn.length > 0 && lockFn.indexOf("relock(") === -1);
+        // Defence in depth (R12 review #3 MAJOR): PAM is suppressed in a dev session unless GRASSFIELD_DEV_ALLOW_PAM=1.
+        // ...and the lock shows it (a GRASSFIELD_DEV leaking into a real session is visible; the lock still fails closed).
+        check("Lock.qml-dev-hint-on-lock", /controller\.pamSuppressed \? qsTr\("dev: password checks disabled"\)/.test(code));
+        check("Lock.qml-dev-pam-suppressed",/controller\.pamSuppressed = Quickshell\.env\("GRASSFIELD_DEV"\) === "1" && Quickshell\.env\("GRASSFIELD_DEV_ALLOW_PAM"\) !== "1";/.test(code));
+        // A lock inherited at start keeps the 100 ms check until relock() or release(): a foreign locker under this lock
+        // can release it while this surface keeps the keyboard (R12 counter-review of 620f08c), so keyboard focus must not
+        // end the suspicion. inheritedLock = false appears exactly in relock() and release().
+        const clears = code.match(/inheritedLock = false;/g) || [];
+        const relockFn = code.slice(code.indexOf("function relock("), code.indexOf("function checkOwnership("));
+        const releaseFn = code.slice(code.indexOf("function release("), code.indexOf("function writeMarker("));
+        check("Lock.qml-inherited-lock-cleared-only-by-relock-and-release", clears.length === 2 && relockFn.indexOf("inheritedLock = false;") !== -1 && releaseFn.indexOf("inheritedLock = false;") !== -1);
         report();
     }
 
