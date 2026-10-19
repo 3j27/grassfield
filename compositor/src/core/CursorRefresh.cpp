@@ -30,7 +30,7 @@ namespace gf::cursor {
     std::string loggableName(std::string_view name) {
         constexpr size_t kMax  = 48;
         const auto       plain = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'; };
-        if (name.empty() || name.size() > kMax || !std::ranges::all_of(name, plain))
+        if (name.size() > kMax || !std::ranges::all_of(name, plain))
             return "<other>";
         return std::string{name};
     }

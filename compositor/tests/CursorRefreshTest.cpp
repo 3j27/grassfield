@@ -52,17 +52,19 @@ TEST(CursorRefresh, AShownNamedShapeIsRedrawnUnchanged) {
 }
 
 // A forced setCursorFromName ignores Hyprland's hidden state (IHyprRenderer::setCursorFromName, 0.56.2): calling it while
-// the pointer is hidden (keyboard, touch, timeout, or a client's null surface) would show it. Never.
+// Hyprland hides the pointer (keyboard, touch, tablet, timeout conditions) would show it. Never.
 TEST(CursorRefresh, AHiddenPointerIsNeverShown) {
     auto state  = shownNamed("default");
     state.shown = false;
     EXPECT_EQ(decide(state), Outcome::Hidden);
-    state.fromSurface = true; // a client hid it with a null surface
+    state.fromSurface = true;
     state.name        = "";
     EXPECT_EQ(decide(state), Outcome::Hidden);
 }
 
 // A client's own cursor surface carries its own image and size: nothing to redraw, and never replaced by a theme shape.
+// A client that hides its pointer (foot's hide-when-typing: wl_pointer.set_cursor without a surface) reads like this too
+// on 0.56.2 (nested run: surf set, no name, shouldRenderCursor() still true), so it stays hidden.
 TEST(CursorRefresh, AClientSurfaceIsLeftAlone) {
     SCursorState state{.shown = true, .fromSurface = true, .outputs = true, .name = ""};
     EXPECT_EQ(decide(state), Outcome::ClientSurface);
@@ -90,7 +92,7 @@ TEST(CursorRefresh, LoggedNamesArePlain) {
     EXPECT_EQ(loggableName("default"), "default");
     EXPECT_EQ(loggableName("left_ptr"), "left_ptr");
     EXPECT_EQ(loggableName("nwse-resize"), "nwse-resize");
-    EXPECT_EQ(loggableName(""), "<other>");
+    EXPECT_EQ(loggableName(""), "") << "no named shape (after a client surface)";
     EXPECT_EQ(loggableName("a\nb"), "<other>");
     EXPECT_EQ(loggableName("x y"), "<other>");
     EXPECT_EQ(loggableName("\xc3\xa9"), "<other>");

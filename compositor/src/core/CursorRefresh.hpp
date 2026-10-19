@@ -43,7 +43,8 @@ namespace gf::cursor {
     // A stable word for logs: "redraw", "hidden", "client-surface", "no-shape", "no-output".
     std::string_view outcomeName(Outcome outcome);
 
-    // A shape name as it may appear in a log line: up to 48 characters of [A-Za-z0-9_-]; anything else is "<other>".
+    // A shape name as it may appear in a log line: up to 48 characters of [A-Za-z0-9_-] (or empty: no named shape);
+    // anything else is "<other>".
     std::string      loggableName(std::string_view name);
 
     // Rate limit for refresh requests (the verb is reachable by any local client through the hyprctl socket). The first
