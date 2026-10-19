@@ -1,6 +1,5 @@
 import QtQuick
 import QtTest
-import Grassfield.Ui
 import "../../apps/settings/qml"
 
 // Settings colour well: the typed #rrggbb field follows the colour however it changes (swatch, host, typing).
