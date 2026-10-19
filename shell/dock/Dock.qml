@@ -488,7 +488,7 @@ Scope {
                             radius: width / 2
                             x: win.poofX + Math.cos(angle) * reach - width / 2
                             y: win.poofY + Math.sin(angle) * reach - height / 2
-                            color: Appearance.withAlpha(Appearance.colors.text, Tokens.dockPoofOpacity * (1 - win.poofProgress))
+                            color: Appearance.withAlpha(Appearance.colors.materialHighlight, Tokens.dockPoofOpacity * (1 - win.poofProgress))
                         }
                     }
                 }

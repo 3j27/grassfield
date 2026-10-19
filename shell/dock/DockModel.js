@@ -211,7 +211,7 @@ function bounceKeys(launching, items, now, timeoutMs) {
         if (now - launching[key] > timeoutMs)
             continue;
         const item = items.find(it => it.kind === "app" && it.key === key);
-        if (item && item.windows.length > 0)
+        if (!item || item.windows.length > 0)
             continue;
         out[key] = launching[key];
     }
