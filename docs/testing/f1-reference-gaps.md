@@ -190,7 +190,7 @@ below are scaled to Grassfield's 48-pt tile, taking the visible body as about 80
 
 | Metric | Reference | Grassfield | Δ | Severity |
 |---|---|---|---|---|
-| Surface | centred frosted panel: ~104-pt visible icons (128 canvas) at ~134 pitch, ~123 rounded-square selection with the name below, radius ~30 ± 4 | not implemented ("the coming app switcher", stages.md) | — | missing |
+| Surface | centred frosted panel: ~104-pt visible icons (128 canvas) at ~134 pitch, ~123 rounded-square selection with the name below, radius ~30 ± 4 | `shell/switcher` (`switcher.iconSize` 104, `pitch` 134, `selectionSize` 123, `panelRadius` 30), spec `docs/specs/switcher.md` | 0 | match |
 
 ### Desktop
 
@@ -395,8 +395,11 @@ Ordered by how often the surface is seen, then by how cheap the change is. "Toke
 18. **Controls.** Slider track 6 in Settings and 4 in Quick Settings, with a pill knob of about 21 x 16 (`control.sliderTrack`,
     `control.sliderKnob`). Push buttons 24 tall. Light separators about half as dark: `material.separatorOpacity` light
     ≈ 0.08 (non-text, so outside the A2 text-contrast scope).
-19. **App switcher (missing surface).** Centred frosted panel: ~104-pt icons at a ~134 pitch, a ~123 selection square
-    with the name below, radius ~30. It needs a spec; `docs/specs/stages.md` already expects it.
+19. **App switcher (implemented, 2026-10-19).** Centred frosted panel: ~104-pt icons at a ~134 pitch, a ~123 selection
+    square with the name below, radius ~30. Spec `docs/specs/switcher.md`, code `shell/switcher/`. Release detection
+    redesigned after review (no key map: an exclusive-keyboard surface plus a release bind in the default map); the real
+    gesture is verified in nested with the virtual keyboard (`tests/tools/vkbd`, `tests/shell/switcher/nested.sh`). Not
+    verified: real hardware (L2), the session lock.
 20. **Tiling popover (missing).** Shown on green-button hover: four halves, Fill & Arrange layouts, Full Screen and move to
     display; 230 x 251, radius 12, 26-pt glyphs at a 52 pitch. Change: compositor hover hook plus a shell popover. This is
     a compositor gate: nested only, C1-C3.

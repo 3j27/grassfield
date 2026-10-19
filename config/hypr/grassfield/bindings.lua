@@ -23,7 +23,8 @@ end
 --
 -- Every request carries a hold id (one per physical hold of SUPER): `next` and `release` are separate `qs ipc`
 -- processes that can arrive in either order after a quick tap, and the shell orders them by id.
-local switcher_id = 0
+-- Ids start from the clock, so that a config reload (a new Lua state) never reuses ids the shell has already seen.
+local switcher_id = os.time()
 local switcher_held = false
 
 local function switcher_request(request)
@@ -76,7 +77,9 @@ bind("SUPER + mouse:273", "Resize window", hl.dsp.window.resize(), { mouse = tru
 bind("SUPER + TAB", "Switch application", switcher_request("next"), { repeating = true })
 bind("SUPER + SHIFT + TAB", "Switch to the previous application", switcher_request("previous"), { repeating = true })
 for _, key in ipairs({ "SUPER + Super_L", "SUPER + Super_R", "Super_L", "Super_R" }) do
-  bind(key, "Activate the selected application", switcher_release, { release = true, non_consuming = true })
+  -- transparent: Hyprland shadows every bind whose key is still down once another bind fired (shadowKeybinds), so
+  -- without it the SUPER release would be ignored after SUPER+TAB.
+  bind(key, "Activate the selected application", switcher_release, { release = true, non_consuming = true, transparent = true })
 end
 -- The key above Tab (grave on a US layout, ² on AZERTY): bound by keycode, so it works on every layout.
 bind("SUPER + code:49", "Next window of the application", shell("windows", "cycleApp"))

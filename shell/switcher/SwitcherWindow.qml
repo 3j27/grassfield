@@ -70,15 +70,13 @@ Variants {
 
             // Tab and Q/H are binds of the compositor config (they never reach a client); the rest comes through the grab.
             focus: true
-            Keys.onReleased: event => {
-                // The modifier release (the compositor config's release bind is the second path).
+            Keys.onReleased: event => {                // The modifier release (the compositor config's release bind is the second path).
                 if (event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R || event.key === Qt.Key_Meta) {
                     event.accepted = true;
                     root.controller.release("");
                 }
             }
-            Keys.onPressed: event => {
-                event.accepted = true;
+            Keys.onPressed: event => {                event.accepted = true;
                 switch (event.key) {
                 case Qt.Key_Escape:
                     root.controller.cancel();
