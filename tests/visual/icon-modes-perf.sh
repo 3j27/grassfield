@@ -118,6 +118,7 @@ apps() { # apps MODE
   report "$kind" apps "$OUT/$kind.apps.log"
 }
 
+export GRASSFIELD_RENDER_TIMING=1   # the shell restarted by vs_session logs its frames (the Apps measurement)
 vs_session
 vs_reset
 printf '{"version":1,"appearance":"dark","icons":{"folderColor":"theme","mode":"default"}}\n' > "$VS_DEV/config/grassfield.json"
