@@ -209,7 +209,7 @@ Scope {
             return;
         const code = root.pendingExit;
         root.pendingExit = -1;
-        root.finishBuild(code === 0, PointerColors.failureReason(code, root.buildErrors), PointerColors.failureCode(code, root.buildErrors));
+        root.finishBuild(code === 0, PointerColors.failureReason(code, root.buildErrors, Quickshell.env("HOME")), PointerColors.failureCode(code, root.buildErrors));
     }
 
     function finishBuild(ok: bool, reason: string, code: string): void {
