@@ -1030,6 +1030,8 @@ QtObject {
     readonly property int iconModePreviewGap: 12
     // estimate: Settings icon mode picker, gap between a tile and its keyboard focus ring (the selection ring is the tile border, so the two stay distinct)
     readonly property int iconModePreviewFocusGap: 2
+    // own pick: the blue of the Theme folder colour swatch (Settings and Files Customize Folder); the same blue as the top of the sample icon plate
+    readonly property string iconModeSampleTop: "#4DA3FF"
     // own picks, not copied: swatches of the Tinted icon colour (blue, purple, pink, red, orange, yellow, green, graphite); the accent is the first swatch
     readonly property var iconModeTintColors: ["#3E7BFA", "#8E5BEA", "#E25AA1", "#E5484D", "#F5883B", "#E6B422", "#3FAE5A", "#8A8F98"]
 
