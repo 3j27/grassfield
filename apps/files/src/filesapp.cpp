@@ -885,14 +885,14 @@ QString FilesApp::folderStyleUnavailable(const QList<QUrl> &urls) const
         return tr("Nothing is selected.");
     for (const QUrl &url : urls) {
         if (url.scheme() == QLatin1String("trash"))
-            return tr("Folders in the Trash can’t be customised.");
+            return tr("Folders in the Trash can’t be customized.");
         if (!url.isLocalFile())
-            return tr("Folders can be customised on this computer only.");
+            return tr("Folders can be customized on this computer only.");
         const QFileInfo info(url.toLocalFile());
         if (info.isSymLink())
-            return tr("Links can’t be customised.");
+            return tr("Links can’t be customized.");
         if (!info.isDir())
-            return tr("Only folders can be customised.");
+            return tr("Only folders can be customized.");
     }
     return QString();
 }

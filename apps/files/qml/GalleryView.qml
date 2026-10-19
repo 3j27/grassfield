@@ -140,6 +140,8 @@ FocusScope {
             required property string emblem
             required property bool canPreview
             required property bool isDir
+            required property string folderColor
+            required property string folderGlyph
 
             readonly property bool renaming: root.tab.isRenaming(root.model, page.url)
             readonly property real boxWidth: Math.max(0, page.width - 2 * Tokens.filesGalleryPreviewMargin)
@@ -181,6 +183,9 @@ FocusScope {
                     visible: large.status !== Image.Ready
                     size: Math.max(Tokens.filesIconSize, Math.min(Tokens.filesGalleryIconSize, box.width, box.height))
                     iconName: page.iconName
+                    isDir: page.isDir
+                    folderColor: page.folderColor
+                    folderGlyph: page.folderGlyph
                     thumbnail: page.thumbnail
                     emblem: page.emblem
                 }
@@ -289,6 +294,8 @@ FocusScope {
             required property string emblem
             required property bool selected
             required property bool isDir
+            required property string folderColor
+            required property string folderGlyph
             required property bool canPreview
             required property bool hidden
             required property var tagColors
@@ -322,6 +329,9 @@ FocusScope {
                 anchors.centerIn: parent
                 size: Tokens.filesGalleryStripIconSize
                 iconName: cell.iconName
+                isDir: cell.isDir
+                folderColor: cell.folderColor
+                folderGlyph: cell.folderGlyph
                 thumbnail: cell.thumbnail
                 emblem: cell.emblem
             }

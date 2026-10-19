@@ -332,6 +332,15 @@ FocusScope {
             root.win.showInfo(m.info(rows[i]));
     }
 
+    function customizeSelection(): void {
+        const m = root.activeFolder;
+        const rows = m.selectedRows();
+        if (rows.length === 0 || !rows.every(r => m.isDirAt(r)))
+            return;
+        const info = m.info(rows[0]);
+        root.win.customizeFolders(m.selectedUrls(), rows.length === 1 ? info.name : qsTr("%1 Folders").arg(rows.length), info.iconName);
+    }
+
     function glance(): void {
         const urls = root.selection();
         if (urls.length > 0)
@@ -493,6 +502,8 @@ FocusScope {
         items.push({id: "trash", text: qsTr("Move to Trash"), shortcut: qsTr("Ctrl+Backspace"), enabled: editable});
         items.push({separator: true});
         items.push({id: "info", text: qsTr("Get Info"), shortcut: qsTr("Ctrl+I")});
+        if (rows.every(r => model.isDirAt(r)))
+            items.push({id: "customize", text: qsTr("Customize Folder…"), enabled: root.app.folderStyleUnavailable(model.selectedUrls()) === ""});
         items.push({id: "rename", text: qsTr("Rename"), shortcut: qsTr("F2"), enabled: count === 1 && editable});
         items.push({id: "duplicate", text: qsTr("Duplicate"), shortcut: qsTr("Ctrl+D"), enabled: model.writable});
         items.push({id: "glance", text: count === 1 ? qsTr("Glance at “%1”").arg(name) : qsTr("Glance at %1 Items").arg(count), shortcut: qsTr("Space")});
@@ -602,6 +613,9 @@ FocusScope {
             break;
         case "info":
             root.getInfo();
+            break;
+        case "customize":
+            root.customizeSelection();
             break;
         case "glance":
             root.glance();

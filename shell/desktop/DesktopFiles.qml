@@ -269,6 +269,70 @@ Scope {
         onTriggered: root.rebuild()
     }
 
+    // ---- folder looks (Customize Folder in Files; docs/specs/files.md) ------------------------------------
+
+    // {path: {color, glyph}} from the attribute user.grassfield.folder of the desktop's folders (read with getfattr, one
+    // process for all of them; without it the folders just show the global colour), and from the per-user fallback
+    // store folder-styles.json next to grassfield.json (FileView; its serial also moves on every attribute write by
+    // Files, so one watch covers both).
+    property var folderAttributes: ({})
+    property var folderStore: ({})
+    readonly property string configDir: {
+        const dev = Quickshell.env("GRASSFIELD_CONFIG_HOME");
+        if (dev)
+            return dev;
+        const xdgConfig = Quickshell.env("XDG_CONFIG_HOME");
+        return (xdgConfig ? xdgConfig : home + "/.config") + "/grassfield";
+    }
+
+    // The look of a desktop item by name ({color, glyph}, empty fields for files and folders without one).
+    function folderStyle(name: string): var {
+        return FolderStyle.lookup(path(name), folderStore, folderAttributes);
+    }
+
+    onEntriesChanged: styleRefresh.restart()
+
+    Timer {
+        id: styleRefresh
+        interval: 150
+        onTriggered: {
+            const paths = root.entries.filter(e => e.isDir).map(e => root.path(e.name));
+            if (paths.length === 0) {
+                root.folderAttributes = ({});
+                return;
+            }
+            if (attributes.running)
+                styleRefresh.restart();
+            else {
+                attributes.command = ["getfattr", "-h", "-d", "-e", "hex", "-m", "^user\\.grassfield\\.folder$", "--absolute-names", "--"].concat(paths);
+                attributes.running = true;
+            }
+        }
+    }
+
+    Process {
+        id: attributes
+        stdout: StdioCollector {
+            onStreamFinished: root.folderAttributes = FolderStyle.parseGetfattr(text)
+        }
+        stderr: StdioCollector {}
+    }
+
+    FileView {
+        id: styleStore
+        path: root.configDir + "/folder-styles.json"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const r = FolderStyle.parseStore(styleStore.text());
+            root.folderStore = r.folders;
+            // A write by Files (attribute or store): read the attributes of the shown folders again.
+            styleRefresh.restart();
+        }
+        onLoadFailed: root.folderStore = ({})
+    }
+
     Process {
         id: xdg
         command: ["xdg-user-dir", "DESKTOP"]

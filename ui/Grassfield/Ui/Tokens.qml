@@ -725,6 +725,12 @@ QtObject {
     readonly property int filesInfoIconSize: 64
     // estimate: Files app (docs/specs/files.md)
     readonly property int filesInfoLabelWidth: 100
+    // estimate: Customize Folder window (macOS 26 style panel: preview, colour row, symbol grid)
+    readonly property int filesCustomizeWindowWidth: 440
+    // estimate: Customize Folder, custom colour and symbol fields
+    readonly property int filesCustomizeHexWidth: 140
+    // estimate: Customize Folder, time the per-user storage note stays before the window closes
+    readonly property int filesCustomizeNoteMs: 1800
     // estimate: Go to Folder and confirmation sheets
     readonly property int filesSheetWidth: 420
     // estimate: pause that starts a new type-to-select search

@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // A folder icon: a TintedIcon (icon appearance mode, unchanged) recoloured with the folder colour, plus an optional
@@ -23,6 +24,7 @@ Item {
 
     readonly property string setting: FolderStyle.effectiveColor(root.folderColor, root.globalColor)
     readonly property bool recolored: FolderStyle.recolors(root.setting)
+    readonly property bool hasGlyph: root.folderGlyph !== ""
     // Its own hex colour, else the global colour (which is the accent for "accent").
     readonly property color folderTint: FolderStyle.colorOf(root.setting, Appearance.colors.accent)
 
@@ -33,6 +35,7 @@ Item {
 
     TintedIcon {
         id: icon
+        objectName: "icon"
         anchors.fill: parent
         source: root.source
         size: root.size
@@ -46,7 +49,8 @@ Item {
 
     // The symbol is drawn over the effect: emoji keep their colours.
     Text {
-        visible: root.folderGlyph !== ""
+        objectName: "glyph"
+        visible: root.hasGlyph
         anchors.horizontalCenter: parent.horizontalCenter
         y: root.height * Tokens.folderIconGlyphCenterY - height / 2
         width: root.width
