@@ -309,7 +309,7 @@ window, so it is not counted as evidence either way).
    that holds the keyboard, or takes it when a layer surface lets go: while an Exclusive layer holds the keyboard after a
    swap Hyprland has **no active window** (ST24: no `activewindow`, no foreign-toplevel `activated`), so the menu bar
    should name `front.app` while Stages is on and Hyprland names no window (macOS keeps naming the frontmost app); the
-   Desktop and Search keep their own names when they hold the keyboard. `disabled`: flag off; `no-strip`: the strip
+   Desktop and Search keep their own names when they hold the keyboard. Shell side (menubar.md, `shell/platform/StagesFront.js`): used only while Stages is on (`on:true`), Hyprland names no window and the front window still exists; display only (window commands greyed); cleared by an active window, `on:false`, plugin gone or the window closing. `disabled`: flag off; `no-strip`: the strip
    surface is missing, not Top/Overlay, or does not cover the tiles with its box and input region; `unknown`: the stage
    or window no longer exists (refresh from the next event); `interrupted`: the strip surface went away or the monitors
    changed: re-send `op:on`; `unavailable`: the plugin unloads (hide the strip).
