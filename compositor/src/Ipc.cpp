@@ -5,10 +5,12 @@
 #include "DesktopFocus.hpp"
 #include "Minimize.hpp"
 #include "Overview.hpp"
+#include "OverviewFocus.hpp"
 #include "Plugin.hpp"
 #include "Stages.hpp"
 #include "core/Minimize.hpp"
 #include "core/Overview.hpp"
+#include "core/OverviewFocus.hpp"
 #include "core/Protocol.hpp"
 #include "core/Stages.hpp"
 
@@ -151,10 +153,14 @@ namespace gf::ipc {
         return state().luaCursorRefreshRegistered && cursorRefresh::ready();
     }
 
+    bool overviewFocusAvailable() {
+        return state().luaOverviewFocusRegistered && overviewFocus::ready();
+    }
+
     namespace {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
-                                                stagesAvailable(), stager::enabled(), cursorRefreshAvailable());
+                                                stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -325,6 +331,26 @@ namespace gf::ipc {
             });
         }
 
+        // Copied out of Lua like the overview payload (fixed-size, trivially destructible), one byte over the limit.
+        using SOverviewFocusPayload = SLuaString<gf::overviewfocus::kMaxPayloadBytes + 1>;
+
+        void overviewFocusNoThrow(const SOverviewFocusPayload& payload) noexcept {
+            guarded("hl.plugin.grassfield.overview_focus", [&] {
+                if (!payload.ok) {
+                    logRequest(Log::WARN, "overview focus: rejected: the argument must be a JSON string of at most {} bytes", gf::overviewfocus::kMaxPayloadBytes);
+                    overviewFocus::refuse();
+                    return;
+                }
+                const auto request = gf::overviewfocus::parseRequest(payload.view());
+                if (!request) {
+                    logRequest(Log::WARN, "overview focus: rejected: {}", request.error());
+                    overviewFocus::refuse();
+                    return;
+                }
+                overviewFocus::request(*request);
+            });
+        }
+
         void cursorRefreshNoThrow() noexcept {
             guarded("hl.plugin.grassfield.cursor_refresh", [] { cursorRefresh::request(); });
         }
@@ -421,6 +447,15 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
+        // hl.plugin.grassfield.overview_focus(json): what gets the keyboard when the Overview closes (docs/specs/overview.md
+        // "Close focus"). Untrusted: parsed and validated strictly (core/OverviewFocus.*), the window and the Desktop
+        // compared with the live ones when the focus is made.
+        int luaOverviewFocus(lua_State* L) {
+            const auto payload = readString<gf::overviewfocus::kMaxPayloadBytes + 1>(L, 1);
+            overviewFocusNoThrow(payload);
+            return pushNoOpDispatcher(L);
+        }
+
         std::string hyprctlGrassfield(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             // Same JSON for both output formats: the payload is already machine-readable.
             std::string out;
@@ -460,6 +495,7 @@ namespace gf::ipc {
         s.luaOverviewRegistered = overviewer::ready() && addLua(gfc::kLuaOverview, luaOverview);  // only with the render hooks
         s.luaStagesRegistered   = stager::ready() && addLua(gfc::kLuaStages, luaStages);          // only with its listeners
         s.luaCursorRefreshRegistered = cursorRefresh::ready() && addLua(gfc::kLuaCursorRefresh, luaCursorRefresh); // only with a renderer
+        s.luaOverviewFocusRegistered = overviewFocus::ready() && addLua(gfc::kLuaOverviewFocus, luaOverviewFocus);   // only with its listeners
         bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
@@ -481,6 +517,7 @@ namespace gf::ipc {
         removeLua(s.luaOverviewRegistered, gfc::kLuaOverview);
         removeLua(s.luaStagesRegistered, gfc::kLuaStages);
         removeLua(s.luaCursorRefreshRegistered, gfc::kLuaCursorRefresh);
+        removeLua(s.luaOverviewFocusRegistered, gfc::kLuaOverviewFocus);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();

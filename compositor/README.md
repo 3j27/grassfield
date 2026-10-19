@@ -22,8 +22,13 @@ Hyprland plugin for the Grassfield session (master-prompt §5.6):
   animated (`docs/specs/stages.md`);
 - cursor refresh (feature `cursor-refresh`, ADR-0014): after the shell's `setcursor <theme> <size>`, a pointer that does
   not move is drawn again at the new size, same shape, same place (FR39-FR40);
+- overview close focus (feature `overview-focus`, owner decision 2026-10-19 batch 5): the shell names what gets the
+  keyboard when the Overview closes (the window or Desktop chosen, the window remembered at open, or none); the plugin
+  focuses it once no Exclusive layer surface is left, checked again then, through Hyprland's own focus path; a press after
+  the request wins; outcome events (FR41-FR43, `docs/specs/overview.md` "Close focus"); the deferred-focus decisions are
+  shared with Stages (`DeferredFocus.*`);
 - shell IPC `gfc/1`: capabilities event on Hyprland's socket2, `hl.plugin.grassfield.{hello, minimize,
-  restore, config, appmenu, overview, stages, cursor_refresh}()`, `hyprctl grassfield`.
+  restore, config, appmenu, overview, stages, cursor_refresh, overview_focus}()`, `hyprctl grassfield`.
 
 Spec: [`docs/specs/compositor.md`](../docs/specs/compositor.md).
 
@@ -112,7 +117,7 @@ scripts/dev/pointer.sh output GF-REF abs 960 250 down drag 700 400 up   # drag a
 ```
 
 Startup log line (in `$XDG_RUNTIME_DIR/hypr/<nested instance>/hyprland.log`):
-`[grassfield] grassfield-compositor 0.7.1-stages initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
+`[grassfield] grassfield-compositor 0.8.0-ovfocus initialised on Hyprland v0.56.2 (commit …), ABI hash match`.
 Hyprland buffers this log file: later lines can take a long time to appear.
 
 ## Soak (gate C1, nested only)
@@ -182,6 +187,14 @@ over the desktop and a still I-beam over foot, 24 → 48 → 96 → 24 px throug
 `setcursor` + refresh): size, shape, place, a pointer foot hides while typing stays hidden, a flood, unload/load.
 `cursor_refresh.sh baseline` on `nested-up.sh --no-plugin` (C2); `cursor_refresh.sh stress [seconds]` next to `soak.sh`.
 
+Overview close focus (nested only, FR41-FR43): `tests/compositor/overview_focus.sh` — the headless pair GF-REF + GF-REF2
+(WAYLAND-1 disabled for the run), foot capture windows, the stand-in `tests/compositor/overview-focus-fixture` (an
+Exclusive Overlay chrome per output released in a given order, a polkit-like dialog; Quickshell IPC target `ovf`) and the
+foreign locker: the window active at open, a window on the other output, the current Desktop, a Desktop on the other
+output, another Desktop, closed and minimized targets, a press beside the remaining chrome, a dialog during the close,
+invalid payloads and a flood, unload while waiting, the lock (nothing typed). `overview_focus.sh baseline` against an older
+build or a `--no-plugin` session (C2); `--plugin PATH` names the build loaded.
+
 Zoom restore (FR8 regression, nested only): `tests/compositor/zoom_restore.sh` — double-click, click + zoom
 button and a drag on a maximized titlebar; PASS (exit 0) = the zoom toggle always restores the floating
 geometry and a drag un-zooms the window under the pointer.
@@ -238,6 +251,8 @@ feature list is posted so the shell returns to its fallbacks.
 | plugin → shell | socket2 event at unload | `grassfield>>{"v":"gfc/1","type":"capabilities","features":[]}` |
 | (no verb) | feature `desktop-focus` | click-to-focus policy for `grassfield-desktop-icons` on pointer presses |
 | shell → plugin | `hl.plugin.grassfield.cursor_refresh()` (feature `cursor-refresh`) after `setcursor` answered `ok` | the pointer drawn again at the new size, same shape, same place; rate-limited |
+| shell → plugin | `hl.plugin.grassfield.overview_focus("<json>")` (feature `overview-focus`) when the Overview starts closing | `{"target":"window","address":"0x…"}`, `{"target":"workspace","workspace":N}`, `{"target":"remembered","address":"0x…","workspace":N?}`, `{"target":"none"}`, each with `"id":N?`; validated |
+| plugin → shell | socket2 event, overview focus outcome | `grassfield>>{"v":"gfc/1","type":"overview-focus","outcome":"pending\|focused\|fallback\|timeout\|refused\|superseded\|unavailable\|invalid","target":"…","id":N}` (+ `"address"`, `"workspace"`, `"reason"`) |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dispatch is evaluated as
@@ -251,16 +266,21 @@ There is no `grassfield:hello` dispatcher: under Hyprland's Lua config every dis
   validation, easing, frames, snapshot texture boxes), `Appmenu.*` (D-Bus name / object path validation,
   per-surface registrations and the events they produce), `Overview.*` (strict payload reader and validation,
   interpolation, overview event JSON, chrome rule, focus causes, damage steps), `DesktopFocus.*` (desktop focus
-  decision table, layer classification, pending grant), `CursorRefresh.*` (cursor refresh decision, request rate gate).
+  decision table, layer classification, pending grant), `CursorRefresh.*` (cursor refresh decision, request rate gate),
+  `DeferredFocus.*` (focus reasons, press records and the refusal gate shared by Stages and the overview focus),
+  `OverviewFocus.*` (overview focus request parsing, gate, target plan, front window order, outcome events).
 - `src/` — Hyprland glue: `main.cpp` (entry points, ABI check, event bus listeners, unload), `Titlebar.*`
   (decoration, drawing, input), `Ipc.*` (socket2 events, Lua functions, hyprctl command), `Minimize.*`
   (hidden state, snapshots, render hooks), `AppmenuServer.*` (the `org_kde_kwin_appmenu_manager` global, its
   resources, window listeners, unload policy), `Overview.*` (window transformers, damage, failsafes), `DesktopFocus.*`
   (button and layer commit listeners, keyboard focus moves), `Surfaces.*` (wl_surface -> window / layer owner),
-  `CursorRefresh.*` (re-applies Hyprland's last named cursor shape with force, trailing-refresh timer).
+  `CursorRefresh.*` (re-applies Hyprland's last named cursor shape with force, trailing-refresh timer),
+  `DeferredFocus.*` (Hyprland's refusal checks, keyboard holder, press context, reason mapping, coalesced event-loop
+  attempt; shared by Stages and the overview focus), `OverviewFocus.*` (the overview focus request, layer commit watches,
+  bound timer, focus through Hyprland's path).
 - `protocols/appmenu.xml` — KDE's appmenu protocol, version 2 (LGPL-2.1-or-later, upstream notice kept).
 - `tests/` — GoogleTest unit tests for `src/core/`. Nested scenarios (repository root):
   `tests/compositor/soak.sh`, `tests/compositor/input_consistency.sh`, `tests/compositor/zoom_restore.sh`,
   `tests/compositor/minimize.sh`, `tests/compositor/double_click_setting.sh`, `tests/compositor/appmenu.sh`,
   `tests/compositor/event_flood.sh`, `tests/compositor/overview.sh`, `tests/compositor/desktop_focus.sh`,
-  `tests/compositor/stages.sh`, `tests/compositor/cursor_refresh.sh`.
+  `tests/compositor/stages.sh`, `tests/compositor/cursor_refresh.sh`, `tests/compositor/overview_focus.sh`.

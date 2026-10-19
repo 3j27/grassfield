@@ -320,6 +320,81 @@ No key ever reached the wrong window at any setting. With 0 ms the release compl
 keyboard; the only loss left is for keys sent in the same millisecond as Esc (the 0 ms row), before the chrome has handled
 the key at all.
 
+### Close focus (plugin `overview-focus`, owner decision 2026-10-19 batch 5)
+Counter-review of the fix pass 2 (FAIL): with two outputs Esc still lost the keyboard (the holder released before the
+other chromes' `None` commits landed; Hyprland refuses a refocus while any Exclusive layer exists, "refocusLastWindow:
+ignoring, exclusive LS present", and retries nothing when the last one goes), and the protocol `activate` / `focusSpace`
+did nothing for the window Hyprland still counts focused and for the current Desktop. Decision: **the shell names the
+target, grassfield-compositor makes the focus at the moment the last Exclusive layer is gone**; without the plugin the shell
+checks and retries itself (shell side: a later task; until then the shell keeps the "Close and keyboard" path above).
+Plugin side shipped in 0.8.0-ovfocus (`compositor/src/OverviewFocus.*`, `core/OverviewFocus.*`, on the deferred focus shared
+with Stages: `DeferredFocus.*`, `core/DeferredFocus.*`; requirements `docs/specs/compositor.md` FR41-FR43).
+
+Shell contract (for the integration):
+1. **Capability** `overview-focus` (gfc/1). Without it nothing changes: the shell keeps its own path.
+2. **When.** As the close starts (Esc, a window or Desktop chosen, backdrop, IPC close, toggle), before the chromes drop to
+   `None`, send once through `Hyprland.dispatch` (guarded like every verb: add `overview_focus` to `Minimized.pluginVerbs`;
+   the Lua name has an underscore) `hl.plugin.grassfield.overview_focus("<json>")`, the JSON built from validated pieces:
+   - a window chosen: `{"target":"window","address":"0x…"}`;
+   - a Desktop tile chosen, or the Desktop created with "+" while open: `{"target":"workspace","workspace":N}`;
+   - no choice, a window remembered at open: `{"target":"remembered","address":"0x…","workspace":N}` (its Desktop at open);
+   - no choice and nothing remembered (the desktop or nothing had the keyboard): `{"target":"none"}`;
+   - optional `"id":N` (0..2^32-1), echoed in the events. At most 512 bytes; a field the target does not use is refused.
+   Then release the chromes as now and send `on:false`, but do **not** run the focus action (`Compositor.focusWindow`,
+   `focusSpace`, `activate`): the plugin does it. A request closing for another full-attention surface (Apps, Search: the
+   keyboard belongs to it) sends nothing.
+3. **What the plugin does.** It waits until Hyprland's Exclusive-layer list is empty (every chrome released, no dialog),
+   event driven: commits of every mapped layer surface (watched while it waits: a chrome that drops to `None` while another
+   one is still Exclusive changes nothing else in Hyprland), unmaps, keyboard focus changes, the lock, and before every key
+   (a key typed right after the last release gets the target first). Bounded: 1 s after the request it gives up (outcome
+   `timeout`, Hyprland's choice stands). Then, checked again: the session lock (`refused`, nothing focused); the named
+   window still exists, is not hidden, not minimized (on a special workspace) and its Desktop is shown → Hyprland's own
+   focus (`CFocusState::fullWindowFocus`, reason `DISPATCH_FOCUSWINDOW`, what `hl.dsp.focus({window = …})` runs, without its
+   cursor warp), which also gives the keyboard back to the window Hyprland still counts focused; a Desktop shown → its front
+   window; a Desktop not shown → Hyprland's own switch (`Config::Actions::changeWorkspace`, what `hl.dsp.focus({workspace =
+   …})` runs: the Desktop appears on its own monitor), then its front window; an empty Desktop → no window (Hyprland's active
+   window cleared, the keyboard to nothing unless an `on_demand` layer such as the desktop holds it; that monitor focused).
+   **Fallback** (the window closed, minimized, hidden or moved to a Desktop not shown, the Desktop gone, Hyprland refused the
+   window, or `none`): the front window of the remembered Desktop when it is still shown (macOS: leaving Mission Control
+   returns to the Desktop you were on), else of the Desktop shown on Hyprland's focused monitor (Hyprland moves the monitor
+   focus to the pointer's output when the focused window closes), else no window. **Front window** = the window of that
+   Desktop focused last (Hyprland's focus events since the plugin loaded; macOS: the front-most window is the one activated
+   last), then the stack top down; only windows taking input (never a Stages strip window), not hidden, focusable.
+4. **The user wins.** A press after the request beside every Exclusive layer on a window (Hyprland gives such a press to the
+   remaining Exclusive layer and focuses nothing) makes that window the target (`"target":"press"`); a press while Hyprland
+   accepts window focus, or a user's focus choice of another window (key binding, dispatch, activation), ends the request
+   (`superseded`). A press into a chrome or a dialog changes nothing. A newer request replaces a waiting one.
+5. **Events** `grassfield>>{"v":"gfc/1","type":"overview-focus","outcome":"…","target":"window|workspace|remembered|none|press","id":N}`
+   plus `"address"` (the window that holds the keyboard), `"workspace"` and `"reason"` when known. Outcomes: `pending`,
+   `focused`, `fallback` (reasons `gone`, `minimized`, `hidden`, `not-shown`, `no-workspace`, `none`, `refused-by-hyprland`;
+   no address: no window), `timeout` (`exclusive-layer`), `refused` (`locked`), `superseded` (`press`, `user-focus`),
+   `unavailable` (`unloading`), `invalid`. Coalesced (channel `overview-focus`, latest wins): a state, not a log.
+6. **Without the plugin** (absent, older, unload: capabilities `[]`) the verb does not exist; the guarded call is a no-op and
+   the shell checks and retries (later task). An unload while a request waits posts `unavailable` first.
+
+Evidence (nested Hyprland v0.56.2 commit efb50993, plugin 0.8.0-ovfocus, headless pair GF-REF 1920x1080 + GF-REF2
+1440x900 with WAYLAND-1 disabled, `tests/compositor/overview_focus.sh`, fixture `tests/compositor/overview-focus-fixture`:
+one Exclusive Overlay chrome per output, namespace `grassfield-overview`, released holder first / holder last / together,
+staying mapped or unmapping): **66/66 PASS** on the final build (`.dev/overview-focus/run-20261019-194052-check`, also
+`run-20261019-192909-check`; 53/53 on an earlier script version). Keys (letters only, `scripts/dev/keys.sh`) reached exactly the target in every
+case: the window active at open (still Hyprland's focused window) for the three release orders; a window on the other
+output (chromes staying mapped or unmapping); the current Desktop; a Desktop shown on the other output; another Desktop
+(switched on its monitor); a chosen window closed during the close and a remembered window minimized during the close
+(fallback to the front window, the minimized one got nothing and stayed minimized); a press beside the remaining chrome on
+the other output's window (that window, target `press`); a polkit-like dialog appearing during the close (its field got the
+letters, no window did; outcome `timeout` past the bound; a short dialog: no outcome while it was up, the target after it);
+the session lock during the close (`refused`, no `activewindowv2` naming a window while locked, nothing typed). Hyprland
+logged its `ignoring, exclusive LS present` refusal about 10 times per run (the refocus it gave up, after which the plugin
+focused).
+Comparison (`overview_focus.sh baseline`: the verb absent, the guarded call a no-op, nothing emulates the shell's own focus
+action): the old build 0.7.1-stages **32/44** (`run-20261019-201004-baseline`) and a `--no-plugin` session (C2) **32/44**
+(`run-20261019-200901-baseline`; `hyprctl grassfield` "unknown request", shell log "no compositor plugin reply, running in
+degraded mode", safety checks all PASS): the window on the other output, the Desktop on the other output, another Desktop and
+the press got nothing (the keys went to the last focused window); after a closed or a minimized target the keys were lost;
+the remembered window on the same output and the current Desktop got them (Hyprland's own refocus did it in this fixture).
+Under load: `soak.sh 1260` PASS with `overview_focus.sh stress 1200` alongside (4239 requests at ~4/s, 423 invalid, every one
+answered; no exception), and `stress 180` alone (647 requests, 2 floods of 100 answered with one outcome each).
+
 ### Two outputs and shared drawing (2026-10-18, plugin 0.6.0-stages)
 The chrome rule is relaxed (contract item 2): one Exclusive chrome holding the keyboard, a mapped chrome on every target
 monitor. The drawing code moved to `compositor/src/WindowTransform.*` (shared with Stages, unchanged) and the JSON reader to
