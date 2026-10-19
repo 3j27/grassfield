@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import Grassfield.Ui
 import qs.services
 import qs.widgets
+import "CenterLogic.js" as CenterLogic
 
 // Notifications column (N7, internal Notification Center): the macOS model. No full-height panel:
 // a column of floating glass cards as wide as a banner, at the right under the menu bar, opened from the clock or
@@ -12,8 +13,10 @@ import qs.widgets
 // count and, on hover or focus, "Show Less" and a round x that grows into a "Clear All" pill; the last visible
 // one carries Show All), then the widgets placed there; a footer of an Edit Widgets pill (gallery overlay,
 // docs/specs/widgets.md) and a close circle, centred one spacing.lg below the last card. No permanent global Clear All
-// (macOS 26 model): a card shows a round x at its top-left corner on hover or focus; clearing slides the card out
-// to the right while it fades, then the column reflows. Every card is its own surface with its own blur region
+// (macOS 26 model): a card shows a round x at its top-left corner on hover or focus. A clear takes effect in the
+// model at once (history, "No Notifications", persistence); the column only animates it: the removed cards slide out
+// to the right while they fade (ListView remove transition) and the cards below slide up (displaced), so closing
+// the column mid-animation never loses a clear. Every card is its own surface with its own blur region
 // (registered by the card, see addSurface). Esc or a click outside the cards closes.
 //
 // The window exists per screen but its content (a Loader) only while the Center is open on that
@@ -116,7 +119,7 @@ Variants {
                 anchors.fill: parent
                 radius: height / 2
                 shadowEnabled: false
-                Component.onCompleted: pill.surfaceHost.addSurface(pillSurface, false, Math.floor(height / 2))
+                Component.onCompleted: pill.surfaceHost.addSurface(pillSurface, false, Math.floor(height / 2), null)
             }
 
             Text {
@@ -248,53 +251,79 @@ Variants {
             readonly property var regionList: regions.instances
             // Slides in from the right edge after creation.
             property bool shown: false
-            // Registered glass surfaces: {item, clip (inside the list viewport), radius}. Destroyed items read as null
-            // and are dropped the next time a surface registers or the row count changes.
+            // Registered glass surfaces: {id, item, clip (inside the list viewport), radius, fader (the card whose
+            // opacity the blur follows, or null)}. Destroyed items read as null and are dropped a little after a row
+            // left, and when a surface registers. Every record carries a unique id: Variants ignores (and warns
+            // about) equal values, which dead records ({item: null, ...}) otherwise are.
             property var surfaces: []
+            property int surfaceSeq: 0
             // Counts the frames of a card sliding out or of the column reflowing (their surfaces move without the
             // list geometry changing), so the blur regions follow the cards.
             property int motionTick: 0
             // Anything that moves or resizes a surface without changing its own geometry.
             readonly property real tick: list.contentY + list.contentHeight + list.count + list.height + panel.x + panel.y + motionTick
-            // App whose group is being cleared (its cards slide out together), and the app the pointer is over (group controls).
-            property string leavingApp: ""
-            property bool leavingGroup: false
+            // The app the pointer is over (group controls), and how many hover handlers of each app are active.
             property string hoverApp: ""
+            property var hoverCounts: ({})
 
             Timer {
                 id: hoverRelease
                 interval: Appearance.duration(Tokens.motionFast)
-                onTriggered: host.hoverApp = ""
+                onTriggered: {
+                    if (!CenterLogic.isHovered(host.hoverCounts, host.hoverApp))
+                        host.hoverApp = "";
+                }
             }
 
-            // A pointer on a card of an app group, or leaving it (a short grace covers the gap between two cards).
+            // Drops the records of destroyed cards (their slide-out has ended).
+            Timer {
+                id: pruneSurfaces
+                interval: 2 * Appearance.duration(Tokens.motionNormal) + 1
+                onTriggered: host.surfaces = host.surfaces.filter(r => r.item)
+            }
+
+            // A pointer on a card of an app group (the card or the x on its corner), or leaving it (a short grace
+            // covers the gap between two cards). Counted per hover handler: the x sticks out of the card, so the pointer
+            // can enter the x before it leaves the card or the other way round.
             function hoverCard(app: string, over: bool): void {
+                hoverCounts = CenterLogic.hoverStep(hoverCounts, app, over);
                 if (over) {
                     hoverRelease.stop();
                     hoverApp = app;
-                } else if (hoverApp === app) {
+                } else if (hoverApp === app && !CenterLogic.isHovered(hoverCounts, app)) {
                     hoverRelease.restart();
                 }
             }
 
-            function addSurface(item: Item, clip: bool, radius: real): void {
-                surfaces = surfaces.filter(r => r.item).concat([{item: item, clip: clip, radius: radius}]);
+            function addSurface(item: Item, clip: bool, radius: real, fader: Item): void {
+                surfaceSeq++;
+                surfaces = surfaces.filter(r => r.item).concat([{id: surfaceSeq, item: item, clip: clip, radius: radius, fader: fader}]);
             }
 
-            // Rectangle of a surface in window coordinates, cut to the list viewport for rows.
+            // Rectangle of a surface in window coordinates, cut to the list viewport for rows (left and right too: a card
+            // sliding out stops at the column edge) and shrunk about its centre as its card fades, so the blur never
+            // outlives the glass.
             function rectOf(rec: var): rect {
                 const it = rec.item as Item;
                 if (!it)
                     return Qt.rect(0, 0, 0, 0);
                 const p = it.mapToItem(null, 0, 0);
+                let left = p.x;
+                let right = p.x + it.width;
                 let top = p.y;
                 let bottom = p.y + it.height;
                 if (rec.clip) {
                     const v = list.mapToItem(null, 0, 0);
+                    left = Math.max(left, v.x);
+                    right = Math.min(right, v.x + list.width);
                     top = Math.max(top, v.y);
                     bottom = Math.min(bottom, v.y + list.height);
                 }
-                return Qt.rect(p.x, top, it.width, Math.max(0, bottom - top));
+                const w = Math.max(0, right - left);
+                const h = Math.max(0, bottom - top);
+                const fader = rec.fader as Item;
+                const f = fader ? Math.max(0, Math.min(1, fader.opacity)) : 1;
+                return Qt.rect(left + w * (1 - f) / 2, top + h * (1 - f) / 2, w * f, h * f);
             }
 
             function overSurface(x: real, y: real): bool {
@@ -411,7 +440,34 @@ Variants {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
                     model: Notifications.centerModel
-                    onCountChanged: Qt.callLater(() => host.surfaces = host.surfaces.filter(r => r.item))
+                    onCountChanged: pruneSurfaces.restart()
+                    // The cards below a removed card slide up, the removed cards slide out to the right while they fade
+                    // (the model already changed: this is only the leave animation of delegates the view keeps for it).
+                    displaced: Transition {
+                        NumberAnimation {
+                            property: "y"
+                            duration: Appearance.duration(Tokens.motionNormal)
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
+                        }
+                    }
+                    remove: Transition {
+                        ParallelAnimation {
+                            NumberAnimation {
+                                property: "slide"
+                                to: list.width
+                                duration: Appearance.duration(Tokens.motionNormal)
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.curve
+                            }
+
+                            NumberAnimation {
+                                property: "opacity"
+                                to: 0
+                                duration: Appearance.duration(Tokens.motionNormal)
+                            }
+                        }
+                    }
                     header: Item {
                         width: list.width
                         height: Notifications.count === 0 ? emptyText.implicitHeight + 2 * Tokens.spacingLg + Tokens.notificationBannerGap : 0
@@ -424,7 +480,7 @@ Variants {
                             height: parent.height - Tokens.notificationBannerGap
                             radius: Tokens.radiusBanner
                             shadowEnabled: false
-                            Component.onCompleted: host.addSurface(emptySurface, true, Tokens.radiusBanner)
+                            Component.onCompleted: host.addSurface(emptySurface, true, Tokens.radiusBanner, null)
                         }
 
                         Text {
@@ -441,20 +497,8 @@ Variants {
                     }
                     footer: widgetsArea
 
-                    // Key of the card that takes the focus when the card at `at` (and, for a group, the cards of the same app
-                    // below it) is cleared: the next card, else the previous one, "" when none is left.
-                    function neighbourKey(at: int, app: string, group: bool): string {
-                        const m = Notifications.centerModel;
-                        let j = at + 1;
-                        while (group && j < m.count && m.get(j).appName === app)
-                            j++;
-                        if (j < m.count)
-                            return m.get(j).key;
-                        return at > 0 ? m.get(at - 1).key : "";
-                    }
-
-                    // After a card was cleared with the keyboard: focus goes to the card that took its place (found by key: the
-                    // list drops the cleared delegate only on its next layout), never to an invisible item; the panel when none is left.
+                    // Focus goes to the card with this key (found by key: the removed delegates stay in the view until their leave
+                    // animation ends), never to an invisible item; the panel when none is left.
                     function focusKey(key: string): void {
                         Qt.callLater(() => {
                             // Apply the removal first: the layout it triggers would otherwise take the focus away again.
@@ -493,80 +537,38 @@ Variants {
                         readonly property bool expanded: Notifications.expandedApps[appName] === true
                         // The focusable card (see ListView.focusKey).
                         readonly property Item rowItem: row
-                        // The pointer is over a card of this app, or its group is being cleared.
+                        // The pointer is over a card of this app.
                         readonly property bool groupHot: host.hoverApp === appName
-                        readonly property bool groupLeaving: host.leavingGroup && host.leavingApp === appName
-                        // Sliding out to the right, fading: the end of the slide really clears the entry(ies).
+                        // Slide of the leave animation (list.remove) and whether this delegate is already out of the model.
                         property real slide: 0
-                        property bool leaving: false
-                        property bool clearGroupAtEnd: false
+                        property bool removing: false
 
-                        // Clear this card, or (group) the whole app group, after the slide-out.
-                        function beginLeave(group: bool, refocus: bool): void {
-                            if (leaving)
+                        // Clears this card, or (group) the entries of its app group that exist now. The model changes at once
+                        // (history, "No Notifications", persistence); this delegate only animates out. Everything it needs is
+                        // read first: the clear moves the indices.
+                        function clearCard(group: bool, refocus: bool): void {
+                            if (removing)
                                 return;
-                            leaving = true;
-                            clearGroupAtEnd = group;
-                            if (group) {
-                                host.leavingApp = appName;
-                                host.leavingGroup = true;
-                            }
-                            leaveAnim.refocus = refocus;
-                            leaveAnim.start();
-                        }
-
-                        function finishLeave(): void {
-                            // Read everything first: clearing destroys this delegate.
-                            const next = leaveAnim.refocus ? list.neighbourKey(index, appName, clearGroupAtEnd) : null;
-                            if (clearGroupAtEnd) {
-                                Notifications.clearApp(appName);
-                                host.leavingGroup = false;
-                            } else if (!groupLeaving) {
+                            const at = index;
+                            const app = appName;
+                            if (group)
+                                Notifications.clearKeys(Notifications.keysOf(app));
+                            else
                                 Notifications.clear(key);
-                            }
-                            if (next !== null)
-                                list.focusKey(next);
+                            if (refocus)
+                                list.focusKey(Notifications.focusKeyAfter(at, app));
                         }
 
-                        onGroupLeavingChanged: {
-                            // The other cards of the group slide out with the header card (which clears the group).
-                            if (groupLeaving && !leaving) {
-                                leaving = true;
-                                leaveAnim.refocus = false;
-                                leaveAnim.start();
-                            }
-                        }
+                        // A card on its way out takes no input and gets no focus.
+                        enabled: !removing
+                        ListView.onRemove: item.removing = true
                         onYChanged: host.motionTick++
+                        onOpacityChanged: host.motionTick++
+                        onSlideChanged: host.motionTick++
 
                         transform: Translate {
                             x: item.slide
                         }
-
-                        ParallelAnimation {
-                            id: leaveAnim
-
-                            property bool refocus: false
-
-                            NumberAnimation {
-                                target: item
-                                property: "slide"
-                                to: list.width
-                                duration: Appearance.duration(Tokens.motionNormal)
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.curve
-                            }
-
-                            NumberAnimation {
-                                target: item
-                                property: "opacity"
-                                to: 0
-                                duration: Appearance.duration(Tokens.motionNormal)
-                            }
-
-                            onFinished: item.finishLeave()
-                        }
-
-                        onSlideChanged: host.motionTick++
 
                         width: list.width
                         leftPadding: panel.gutter
@@ -601,7 +603,7 @@ Variants {
                                     row.open();
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
-                                    item.beginLeave(false, true);
+                                    item.clearCard(false, true);
                                     event.accepted = true;
                                 }
                             }
@@ -614,11 +616,16 @@ Variants {
                             HoverHandler {
                                 id: rowHover
                                 onHoveredChanged: host.hoverCard(item.appName, hovered)
+                                // A removed card under the pointer never reports the leave.
+                                Component.onDestruction: {
+                                    if (hovered)
+                                        host.hoverCard(item.appName, false);
+                                }
                             }
 
                             TapHandler {
                                 acceptedButtons: Qt.LeftButton
-                                enabled: row.live && !closeHover.hovered && !item.leaving
+                                enabled: row.live && !closeHover.hovered && !item.removing
                                 onTapped: row.open()
                             }
 
@@ -638,10 +645,10 @@ Variants {
                                 Accessible.name: qsTr("Close")
                                 Accessible.description: item.summary
                                 Accessible.focusable: true
-                                Accessible.onPressAction: item.beginLeave(false, false)
+                                Accessible.onPressAction: item.clearCard(false, false)
                                 Keys.onPressed: event => {
                                     if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                        item.beginLeave(false, true);
+                                        item.clearCard(false, true);
                                         event.accepted = true;
                                     }
                                 }
@@ -655,6 +662,10 @@ Variants {
                                 HoverHandler {
                                     id: closeHover
                                     onHoveredChanged: host.hoverCard(item.appName, hovered)
+                                    Component.onDestruction: {
+                                        if (hovered)
+                                            host.hoverCard(item.appName, false);
+                                    }
                                 }
 
                                 Rectangle {
@@ -675,7 +686,7 @@ Variants {
                                     anchors.fill: parent
                                     enabled: parent.opacity > 0
                                     cursorShape: Qt.ArrowCursor
-                                    onClicked: item.beginLeave(false, false)
+                                    onClicked: item.clearCard(false, false)
                                 }
                             }
 
@@ -707,7 +718,7 @@ Variants {
                                         anchors.fill: parent
                                         radius: Tokens.radiusBanner
                                         shadowEnabled: false
-                                        Component.onCompleted: host.addSurface(cardSurface, true, Tokens.radiusBanner)
+                                        Component.onCompleted: host.addSurface(cardSurface, true, Tokens.radiusBanner, item)
                                     }
 
                                     Column {
@@ -772,9 +783,11 @@ Variants {
                                                 GroupClear {
                                                     id: clearGroup
                                                     anchors.verticalCenter: parent.verticalCenter
+                                                    // A single notification has only its own x (macOS): Clear All needs a group.
+                                                    visible: item.headCount > 1
                                                     active: item.groupHot
                                                     text: qsTr("Clear All")
-                                                    onClicked: item.beginLeave(true, true)
+                                                    onClicked: item.clearCard(true, true)
                                                 }
                                             }
                                         }
@@ -841,7 +854,7 @@ Variants {
                                         Widgets.remove(modelData.uid);
                                         panel.forceActiveFocus();
                                     }
-                                    Component.onCompleted: host.addSurface(tile, true, Tokens.widgetRadius)
+                                    Component.onCompleted: host.addSurface(tile, true, Tokens.widgetRadius, null)
                                     onActiveFocusChanged: {
                                         if (!activeFocus)
                                             return;
@@ -865,6 +878,16 @@ Variants {
                     y: Math.min(list.y + list.height + Tokens.spacingLg, parent.height - height)
                     height: Tokens.notificationCenterCloseDisk
                     spacing: Tokens.spacingSm
+                    onYChanged: host.motionTick++
+
+                    // Glides with the cards when the list shrinks or grows.
+                    Behavior on y {
+                        NumberAnimation {
+                            duration: Appearance.duration(Tokens.motionNormal)
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
+                        }
+                    }
 
                     Pill {
                         surfaceHost: host
@@ -894,7 +917,7 @@ Variants {
                             anchors.fill: parent
                             radius: width / 2
                             shadowEnabled: false
-                            Component.onCompleted: host.addSurface(closeSurface, false, Math.floor(width / 2))
+                            Component.onCompleted: host.addSurface(closeSurface, false, Math.floor(width / 2), null)
                         }
 
                         Icon {

@@ -7,6 +7,7 @@ import Quickshell.Services.Notifications
 import Grassfield.Ui
 import qs.platform
 import qs.services
+import "CenterLogic.js" as CenterLogic
 import "History.js" as History
 import "Sanitizer.js" as Sanitizer
 
@@ -266,13 +267,38 @@ Singleton {
         finish(key);
     }
 
-    function clearApp(appName: string): void {
-        const doomed = history.filter(e => e.appName === appName);
-        doomed.forEach(e => {
-            expireBanner(e.key);
-            finishLive(e.key);
+    // After the model dropped the card that was at slot `at` (or the group of `app`, whose first card was there): the key of
+    // the card that takes the keyboard focus, read from the UPDATED displayed rows (CenterLogic.focusAfterClear).
+    function focusKeyAfter(at: int, app: string): string {
+        const rows = [];
+        for (let i = 0; i < centerStore.count; i++) {
+            const r = centerStore.get(i);
+            rows.push({key: r.key, appName: r.appName});
+        }
+        return CenterLogic.focusAfterClear(rows, at, app);
+    }
+
+    // Keys of the entries of an app right now (the snapshot a group clear acts on).
+    function keysOf(appName: string): var {
+        return history.filter(e => e.appName === appName).map(e => e.key);
+    }
+
+    // Clears exactly these entries (a snapshot taken when the user clicked): an entry of the same app that arrived
+    // since stays. Takes effect at once: history, banners, Center model, persistence.
+    function clearKeys(keys: var): void {
+        const doomed = {};
+        keys.forEach(k => doomed[k] = true);
+        history.forEach(e => {
+            if (doomed[e.key]) {
+                expireBanner(e.key);
+                finishLive(e.key);
+            }
         });
-        setHistory(History.removeApp(history, appName));
+        setHistory(history.filter(e => !doomed[e.key]));
+    }
+
+    function clearApp(appName: string): void {
+        clearKeys(keysOf(appName));
     }
 
     function clearAll(): void {
@@ -836,8 +862,13 @@ Singleton {
                 + " dnd=" + root.dnd + " center=" + root.centerOpen;
         }
 
-        // Test hook: remove every entry (history, banners, Center); the UI has no global Clear All.
+        // Test hook: remove every entry (history, banners, Center); the UI has no global Clear All. Dev and test
+        // sessions only (GRASSFIELD_DEV=1): in a real session nothing outside the shell may wipe the history.
         function clearAll(): void {
+            if (!root.devSession) {
+                console.warn("notifications: clearAll is a test hook (GRASSFIELD_DEV=1 only); refused");
+                return;
+            }
             root.clearAll();
         }
 

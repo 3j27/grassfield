@@ -146,6 +146,20 @@ TestCase {
         // One short line of plain text: control characters are removed, the length is bounded.
         compare(PointerColors.failureReason(1, "a\u001b[31mb\u0007c"), "a [31mb c");
         compare(PointerColors.failureReason(1, "x".repeat(500)).length, 160);
+        // A cut line ends with an ellipsis; a line of exactly 160 is not cut.
+        verify(PointerColors.failureReason(1, "x".repeat(500)).endsWith("…"));
+        compare(PointerColors.failureReason(1, "x".repeat(160)), "x".repeat(160));
+        // The home folder is written "~".
+        compare(PointerColors.failureReason(1, "cursors: cannot write /home/ann/.local/share/icons/.x.build.1: denied", "/home/ann"), "cursors: cannot write ~/.local/share/icons/.x.build.1: denied");
+        compare(PointerColors.failureReason(1, "no such directory '/home/ann'", "/home/ann/"), "no such directory '~'");
+        compare(PointerColors.failureReason(1, "in /home/annabel/x", "/home/ann"), "in /home/annabel/x");
+        compare(PointerColors.failureReason(1, "in /home/ann/x", ""), "in /home/ann/x");
+        compare(PointerColors.failureReason(1, "in /x", "/"), "in /x");
+        // Replaced before the cut: a long home path does not eat the room.
+        const long = "/home/ann/" + "d".repeat(200);
+        const cut = PointerColors.failureReason(1, long, "/home/ann");
+        compare(cut.length, 160);
+        verify(cut.startsWith("~/ddd"));
     }
 
     // ---- build scheduling ----

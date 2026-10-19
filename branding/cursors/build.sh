@@ -97,9 +97,21 @@ descendants() {
 # Stop the children, wait for them, then remove the work directory (retried: a child that is still exiting may be
 # writing into it). Runs on every way out, so no process outlives the build and no directory is left behind.
 cleanup() {
-  local i p
+  local i p procs again
   trap - EXIT
-  for p in $(descendants "$$"); do kill -TERM "$p" 2>/dev/null || true; done
+  # Freeze the whole tree before signalling it: a render subshell whose renderer was just stopped would otherwise start
+  # its retry between the listing and its own signal, and that new renderer would outlive the build (seen under load).
+  # Stopped processes start nothing, so the list is complete once two listings agree; SIGTERM is then acted on first
+  # when they resume.
+  procs=$(descendants "$$")
+  for i in 1 2 3 4 5; do
+    for p in $procs; do kill -STOP "$p" 2>/dev/null || true; done
+    again=$(descendants "$$")
+    [[ $again == "$procs" ]] && break
+    procs=$again
+  done
+  for p in $procs; do kill -TERM "$p" 2>/dev/null || true; done
+  for p in $procs; do kill -CONT "$p" 2>/dev/null || true; done
   wait 2>/dev/null || true
   for i in 1 2 3 4 5 6 7 8 9 10; do
     rm -rf -- "$work" 2>/dev/null || true

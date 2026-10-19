@@ -161,13 +161,65 @@ Singleton {
         }
     }
 
-    // Whether `entry` can open the dropped local paths: file field code in Exec and a matching MimeType. `lenient` (while
-    // hovering): paths whose type the name does not tell are let through, the drop resolves them.
-    function canOpen(entry: var, paths: var, lenient: bool): bool {
-        return !!entry && DockModel.acceptsFiles(entry, paths, mimeData, null, lenient === true);
+    // Real types ({path: type}) of the paths hovered by a drag, looked up off the UI path with dock/file-types.sh (a folder
+    // may carry an extension, so every path is looked at) and cached for the drag: cleared a moment after the last tile is left.
+    property var hoverTypes: ({})
+    property var hoverWanted: []
+
+    Process {
+        id: hoverScan
+        property var paths: []
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const found = DockModel.parseResolved(hoverScan.paths, text);
+                root.hoverTypes = Object.assign({}, root.hoverTypes, found);
+            }
+        }
+        onRunningChanged: {
+            if (!running)
+                root.scanHover();
+        }
     }
 
-    // Drop jobs waiting for the real types of folders and extensionless files ({entry, paths, unresolved}).
+    function scanHover(): void {
+        if (hoverScan.running)
+            return;
+        const todo = DockModel.unknownPaths(hoverWanted, hoverTypes).slice(0, 32);
+        hoverWanted = [];
+        if (todo.length === 0)
+            return;
+        hoverScan.paths = todo;
+        hoverScan.command = ["timeout", "10", "sh", Quickshell.shellPath("dock/file-types.sh")].concat(todo);
+        hoverScan.running = true;
+    }
+
+    Timer {
+        id: hoverClear
+        interval: 1500
+        onTriggered: root.hoverTypes = ({})
+    }
+
+    // A drag entered a tile: start resolving the real types of its paths (nothing runs for a tile that opens nothing).
+    function hoverEnter(entry: var, paths: var): void {
+        hoverClear.stop();
+        if (DockModel.dropVerdict(entry, paths, mimeData, null) === "no")
+            return;
+        hoverWanted = hoverWanted.concat(DockModel.unknownPaths(paths, hoverTypes));
+        scanHover();
+    }
+
+    // A drag left a tile or was dropped: forget the cached types shortly after (a drag over the next tile reuses them).
+    function hoverLeave(): void {
+        hoverClear.restart();
+    }
+
+    // "yes" / "no" / "pending" for the tile of `entry` and the hovered `paths` (reads hoverTypes: bindings update when
+    // the lookup finishes).
+    function hoverVerdict(entry: var, paths: var): string {
+        return DockModel.dropVerdict(entry, paths, mimeData, hoverTypes);
+    }
+
+    // Drop jobs waiting for the real types of the paths ({entry, paths}), only when the drop came before the lookup finished.
     property var typeJobs: []
     property var typeJob: null
 
@@ -178,7 +230,7 @@ Singleton {
                 const job = root.typeJob;
                 root.typeJob = null;
                 if (job)
-                    root.openWith(job.entry, job.paths, DockModel.parseResolved(job.unresolved, text));
+                    root.openWith(job.entry, job.paths, DockModel.parseResolved(job.paths, text));
                 root.nextTypeJob();
             }
         }
@@ -189,23 +241,23 @@ Singleton {
             return;
         typeJob = typeJobs[0];
         typeJobs = typeJobs.slice(1);
-        typeScan.command = ["timeout", "10", "sh", Quickshell.shellPath("dock/file-types.sh")].concat(typeJob.unresolved);
+        typeScan.command = ["timeout", "10", "sh", Quickshell.shellPath("dock/file-types.sh")].concat(typeJob.paths);
         typeScan.running = true;
     }
 
-    // Files dropped on an app tile: opened at once when the file names decide, otherwise (folders, extensionless files) after
-    // their real types are resolved off the UI path, for these paths only. True when the drop is accepted.
+    // Files dropped on an app tile. The real types looked up while hovering decide at once: "yes" opens, "no" refuses (the
+    // drag source gets a cancel). Only a drop that came before the lookup finished (or from a source that hands its data over
+    // at the drop) is accepted and resolved afterwards. True when the drop is accepted.
     function dropOnApp(entry: var, paths: var): bool {
         if (!entry || !paths || paths.length === 0)
             return false;
-        if (canOpen(entry, paths, false))
-            return openWith(entry, paths, null);
-        const unresolved = DockModel.unresolvedPaths(paths, mimeData);
-        if (unresolved.length === 0 || !canOpen(entry, paths, true))
+        const verdict = DockModel.dropVerdict(entry, paths, mimeData, hoverTypes);
+        hoverLeave();
+        if (verdict === "yes")
+            return openWith(entry, paths, hoverTypes);
+        if (verdict === "no" || typeJobs.length >= 4)
             return false;
-        if (typeJobs.length >= 4)
-            return false;
-        typeJobs = typeJobs.concat([{entry: entry, paths: Array.from(paths), unresolved: unresolved}]);
+        typeJobs = typeJobs.concat([{entry: entry, paths: Array.from(paths)}]);
         nextTypeJob();
         return true;
     }
