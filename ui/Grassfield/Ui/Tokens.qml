@@ -10,7 +10,7 @@ QtObject {
         text: "#F5F5F7",  // estimate, pending F1 measurement from design/reference
         textSecondary: "#DCDCE4",  // A2: was #B8B8C0; 4.5:1 or more on every material backdrop up to transparency 0.6 over a white wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#4FB36B",  // own Grassfield green, not copied
-        indicator: "#FFFFFF",  // Dock fidelity fix: running dot over a shelf darker than dock.indicatorDarkAbove (pure white, 3:1 or more up to relative luminance 0.30)
+        indicator: "#FFFFFF",  // Dock fidelity fix: running dot, pure white in dark mode like macOS; the per-appearance shelf tint (dock.tintAlphaDark) keeps it at 3:1 or more over any backdrop
         hover: "#FFFFFF",  // estimate; drawn at hoverOpacity
         materialTint: "#1D1F24",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
@@ -33,7 +33,7 @@ QtObject {
         text: "#1B1B1F",  // estimate, pending F1 measurement from design/reference
         textSecondary: "#3A3A42",  // A2: was #55555D; 4.5:1 or more on every material backdrop up to transparency 0.6 over a black wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
         accent: "#26763F",  // own Grassfield green, not copied
-        indicator: "#000000",  // Dock fidelity fix: running dot over a shelf lighter than dock.indicatorDarkAbove (pure black, 3:1 or more from relative luminance 0.10)
+        indicator: "#000000",  // Dock fidelity fix: running dot, pure black in light mode like macOS; the per-appearance shelf tint (dock.tintAlphaLight) keeps it at 3:1 or more over any backdrop
         hover: "#000000",  // estimate; drawn at hoverOpacity
         materialTint: "#F3F4F6",  // estimate, pending F1 measurement from design/reference
         materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
