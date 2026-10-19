@@ -240,9 +240,11 @@ function isEmoji(glyph) {
 }
 
 // ---- Colour of a plain symbol (A2: icons >= 3:1) ----
-// The recoloured folder plate under the symbol is close to the folder colour (measured, tokens folderIconPlate*); the
-// symbol is that colour darkened in its hue until it reaches the minimum contrast against the plate, and lightened only
-// when even black cannot (a black or very dark folder).
+// The symbol is the plate's colour darkened in its hue until it reaches the minimum contrast against the plate, and
+// lightened only when even black cannot (a black or very dark folder). The plate is MEASURED from the folder icon as it
+// is drawn (theme, size, icon mode and colour included): FolderPlate reads the pixels under the symbol once per
+// combination and passes them here (`plateFromPixels`). The estimate below (`plateOf`) only serves when no measure is
+// possible (no window, icon not loaded); it was calibrated on one icon theme and is never used for a measured icon.
 
 function rgbOf(color) {
     if (color !== null && typeof color === "object")
@@ -340,12 +342,14 @@ function lightestPlateOf(plate, mode, tokens) {
 }
 
 // The colour (#rrggbb) of a plain symbol on a folder of colour `tint` (or the theme's own colour when !recolored) in
-// icon mode `mode` with icon tint `modeTint`.
-function glyphShade(recolored, tint, mode, modeTint, tokens) {
-    const plate = plateOf(recolored, tint, mode, modeTint, tokens);
-    const lightest = lightestPlateOf(plate, mode, tokens);
+// icon mode `mode` with icon tint `modeTint`. `measured`: the plate read from the drawn icon ({dark, light, hue}, see
+// plateFromPixels), else the estimate.
+function glyphShade(recolored, tint, mode, modeTint, tokens, measured) {
+    const hasMeasure = measured !== undefined && measured !== null && measured.dark !== undefined;
+    const plate = hasMeasure ? measured.dark : plateOf(recolored, tint, mode, modeTint, tokens);
+    const lightest = hasMeasure ? measured.light : lightestPlateOf(plate, mode, tokens);
     const target = tokens.folderIconGlyphMinContrast + tokens.folderIconGlyphContrastMargin;
-    const hueRgb = rgbOf(mode === "tinted" && !recolored ? modeTint : (recolored ? tint : tokens.folderIconThemePlate));
+    const hueRgb = recolored ? rgbOf(tint) : (hasMeasure ? measured.hue : rgbOf(mode === "tinted" ? modeTint : tokens.folderIconThemePlate));
     const hsl = toHsl(hueRgb);
     const at = l => fromHsl([hsl[0], hsl[1], l]);
     // Darker: the lightest shade (largest l) in the hue that reaches the target against the darkest plate.
@@ -372,4 +376,49 @@ function glyphShade(recolored, tint, mode, modeTint, tokens) {
             lo = mid;
     }
     return hexOf(at(hi));
+}
+
+// The plate under a symbol read from rendered pixels: `data` = RGBA bytes (straight alpha, row after row, `width` wide),
+// the box [x0, x1) x [y0, y1) (the symbol's box). Every pixel is composited over black and over white (a translucent
+// icon, Clear mode, shows an unknown backdrop): `dark` = the mean of the darkest quarter over black, `light` = the mean
+// of the lightest quarter over white, `hue` = the mean colour weighted by alpha. All rgb 0..1. null when the box holds
+// no pixel or only transparent ones.
+function plateFromPixels(data, width, height, x0, y0, x1, y1) {
+    const xa = Math.max(0, Math.floor(x0)), xb = Math.min(width, Math.ceil(x1));
+    const ya = Math.max(0, Math.floor(y0)), yb = Math.min(height, Math.ceil(y1));
+    const over = [];
+    const sum = [0, 0, 0];
+    let weight = 0;
+    for (let y = ya; y < yb; y++) {
+        for (let x = xa; x < xb; x++) {
+            const i = 4 * (y * width + x);
+            const a = data[i + 3] / 255;
+            const c = [data[i] / 255, data[i + 1] / 255, data[i + 2] / 255];
+            over.push({dark: [c[0] * a, c[1] * a, c[2] * a], light: [c[0] * a + 1 - a, c[1] * a + 1 - a, c[2] * a + 1 - a]});
+            for (let k = 0; k < 3; k++)
+                sum[k] += c[k] * a;
+            weight += a;
+        }
+    }
+    if (over.length === 0 || weight <= 0)
+        return null;
+    const quarter = list => {
+        const n = Math.max(1, Math.ceil(list.length / 4));
+        const m = [0, 0, 0];
+        for (let i = 0; i < n; i++) {
+            for (let k = 0; k < 3; k++)
+                m[k] += list[i][k] / n;
+        }
+        return m;
+    };
+    const byDark = over.map(o => o.dark).sort((p, q) => relativeLuminance(p) - relativeLuminance(q));
+    const byLight = over.map(o => o.light).sort((p, q) => relativeLuminance(q) - relativeLuminance(p));
+    return {dark: quarter(byDark), light: quarter(byLight), hue: [sum[0] / weight, sum[1] / weight, sum[2] / weight]};
+}
+
+// The symbol's box in a square icon image of edge `size`: [x0, y0, x1, y1] (tokens glyphScale, glyphCenterY).
+function glyphBox(size, tokens) {
+    const half = size * tokens.folderIconGlyphScale / 2;
+    const cy = size * tokens.folderIconGlyphCenterY;
+    return [size / 2 - half, cy - half, size / 2 + half, cy + half];
 }
