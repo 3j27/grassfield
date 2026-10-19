@@ -5,7 +5,7 @@
 // Record: {toplevel, address, appId, title}.
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh"];
+var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -89,6 +89,54 @@ function overviewCall(request) {
     // The JSON text as a Lua string literal: only backslash and double quote need escaping (no control characters).
     const lua = "\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"";
     return guardedPluginCall("overview", [lua]);
+}
+
+// hl.plugin.grassfield.overview_focus(json) (gfc/1 capability "overview-focus", docs/specs/overview.md "Close focus"):
+// `target` is {kind: "window", address} | {kind: "workspace", workspace} | {kind: "remembered", address, workspace?} |
+// {kind: "none"}; `id` (optional) 0..2^32-1 is echoed in the plugin's events. Built from validated pieces (hex address,
+// positive integer Desktop ids only: never a special workspace) and quoted as a Lua string; "" when anything is invalid
+// (callers must not dispatch it). A field the target does not use is never produced.
+function overviewFocusCall(target, id) {
+    if (!target)
+        return "";
+    const body = {};
+    switch (target.kind) {
+    case "window":
+    case "remembered": {
+        const hex = normalizeAddress(target.address);
+        if (hex === "")
+            return "";
+        body.target = target.kind;
+        body.address = "0x" + hex;
+        if (target.kind === "remembered" && target.workspace !== undefined && target.workspace !== null) {
+            if (!/^[1-9][0-9]{0,8}$/.test(String(target.workspace)))
+                return "";
+            body.workspace = Number(target.workspace);
+        }
+        break;
+    }
+    case "workspace":
+        if (!/^[1-9][0-9]{0,8}$/.test(String(target.workspace)))
+            return "";
+        body.target = "workspace";
+        body.workspace = Number(target.workspace);
+        break;
+    case "none":
+        body.target = "none";
+        break;
+    default:
+        return "";
+    }
+    if (id !== undefined && id !== null) {
+        const n = Number(id);
+        if (!Number.isInteger(n) || n < 0 || n > 4294967295)
+            return "";
+        body.id = n;
+    }
+    const json = JSON.stringify(body);
+    if (json.length > 512)
+        return "";
+    return guardedPluginCall("overview_focus", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
 }
 
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.

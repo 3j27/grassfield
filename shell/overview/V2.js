@@ -119,15 +119,142 @@ function releaseDone(held, settled, forced) {
     return forced === true || (!held && settled === true);
 }
 
-// What to focus when the overview closes without a chosen window. `previous` is {address, workspaceId} of the window
-// that was active when it opened (null when none, or the desktop had the keyboard); `live` the addresses of the windows
-// that exist now; `stayOnSpace` the id of a Desktop created with "+" while open (the shell switched to it: staying there
-// is the choice). Returns {kind: "space", id} | {kind: "window", address, workspaceId} | {kind: "none"} (Hyprland's own
-// choice stands).
-function restorePlan(previous, live, stayOnSpace) {
+// What the close asks to be focused, one value for both modes (docs/specs/overview.md "Close focus"). `choice` is what
+// the user did: null (no choice: Esc, toggle, IPC, backdrop), {kind: "window", address}, {kind: "space", id},
+// {kind: "none"} (the plugin ended the overview itself: a Desktop switch, the lock) or {kind: "other"} (another
+// full-attention surface took the keyboard: nothing at all is requested). `previous` is {address, workspaceId} of the
+// window that was active when the overview opened (null when none, or the desktop had the keyboard); `stayOnSpace` the id
+// of a Desktop created with "+" while open (the shell switched to it: staying there is the choice).
+// Returns {kind: "skip"} | {kind: "none"} | {kind: "window", address} | {kind: "workspace", workspace} |
+// {kind: "remembered", address, workspace?}: the plugin's `overview_focus` targets, plus "skip". `ended: true` marks the
+// none of an overview the plugin ended itself (the shell fallback then focuses the Desktop now shown, as the plugin does).
+function closeTarget(choice, previous, stayOnSpace) {
+    if (choice && choice.kind === "other")
+        return {kind: "skip"};
+    if (choice && choice.kind === "none")
+        return {kind: "none", ended: true};
+    if (choice && choice.kind === "window" && choice.address)
+        return {kind: "window", address: choice.address};
+    if (choice && choice.kind === "space" && choice.id > 0)
+        return {kind: "workspace", workspace: Math.floor(choice.id)};
     if (stayOnSpace > 0)
-        return {kind: "space", id: stayOnSpace};
-    if (previous && previous.address && (live || []).indexOf(previous.address) >= 0)
-        return {kind: "window", address: previous.address, workspaceId: previous.workspaceId};
+        return {kind: "workspace", workspace: Math.floor(stayOnSpace)};
+    if (previous && previous.address) {
+        const out = {kind: "remembered", address: previous.address};
+        if (previous.workspaceId > 0)
+            out.workspace = Math.floor(previous.workspaceId);
+        return out;
+    }
     return {kind: "none"};
+}
+
+// Without the plugin capability (C2): what the shell focuses itself for a target. `live` are the addresses of the windows
+// that exist now, `minimized` the addresses the shell has minimized (a minimized window never gets focus: it is not
+// shown). `focusedWorkspace` is the id of the Desktop on Hyprland's focused monitor. Returns {kind: "window", address} |
+// {kind: "space", id} | {kind: "none"} (Hyprland's own choice stands).
+function fallbackPlan(target, live, minimized, focusedWorkspace) {
+    const exists = a => (live || []).indexOf(a) >= 0 && (minimized || []).indexOf(a) < 0;
+    switch (target ? target.kind : "") {
+    case "window":
+    case "remembered":
+        return exists(target.address) ? {kind: "window", address: target.address} : {kind: "none"};
+    case "workspace":
+        return {kind: "space", id: target.workspace};
+    case "none":
+        // The overview ended by a Desktop switch: whatever is now shown gets the keyboard (a switch while the chromes
+        // held it leaves it on no surface).
+        return target.ended === true && focusedWorkspace > 0 ? {kind: "space", id: focusedWorkspace} : {kind: "none"};
+    }
+    return {kind: "none"};
+}
+
+// Whether the focus a fallback attempt asked for holds: `goal` is {address} (that window must be the active one) or
+// {workspace} (that Desktop must be the focused one); `active` is {address, workspaceId} or null, `focusedWorkspace` the id.
+function focusHolds(goal, active, focusedWorkspace) {
+    if (!goal)
+        return true;
+    if (goal.address)
+        return !!active && active.address === goal.address;
+    return goal.workspace > 0 && focusedWorkspace === goal.workspace;
+}
+
+// Delay before the check after attempt `n` (0-based): the base doubles with each attempt, so a slow compositor gets a few
+// quick retries and then fewer.
+function retryDelay(n, base) {
+    return base * Math.pow(2, Math.min(Math.max(n, 0), 6));
+}
+
+// ---- Selection across outputs ----
+
+// The window an arrow key starts from when nothing is selected: the window that was active when the overview opened
+// (macOS), wherever it is, else the first window of the first output that has one. `screens` is [{name, addresses}]
+// in output order. Returns the address, "" for no window at all.
+function startSelection(previous, screens) {
+    const list = screens || [];
+    if (previous && previous.address && list.some(s => s.addresses.indexOf(previous.address) >= 0))
+        return previous.address;
+    const first = list.find(s => s.addresses.length > 0);
+    return first ? first.addresses[0] : "";
+}
+
+// The output an arrow key moves to when no window lies that way on the current one: the nearest output whose near edge
+// is beyond this one's far edge, ties broken by the closest centre on the other axis. `screens` is
+// [{name, x, y, w, h}] in layout coordinates, `dir` left | right | up | down. "" for none.
+function adjacentScreen(screens, from, dir) {
+    const cur = (screens || []).find(s => s.name === from);
+    if (!cur)
+        return "";
+    const horizontal = dir === "left" || dir === "right";
+    let best = "";
+    let bestScore = Infinity;
+    for (const s of screens) {
+        if (s.name === from)
+            continue;
+        let gap;
+        if (dir === "right")
+            gap = s.x - (cur.x + cur.w);
+        else if (dir === "left")
+            gap = cur.x - (s.x + s.w);
+        else if (dir === "down")
+            gap = s.y - (cur.y + cur.h);
+        else
+            gap = cur.y - (s.y + s.h);
+        if (gap < 0)
+            continue;
+        const across = horizontal ? Math.abs((s.y + s.h / 2) - (cur.y + cur.h / 2)) : Math.abs((s.x + s.w / 2) - (cur.x + cur.w / 2));
+        const score = gap * 4 + across;
+        if (score < bestScore) {
+            best = s.name;
+            bestScore = score;
+        }
+    }
+    return best;
+}
+
+// The window an arrow key lands on when it enters an output from the side it left: `rects` is [{id, x, y, w, h}] in the
+// output's own coordinates of size `area` {w, h}; `crossFrac` the position (0..1) along the other axis of the window it
+// came from. Prefers the rectangle nearest that position, then the one nearest the entered edge. "" for none.
+function entryWindow(rects, dir, crossFrac, area) {
+    const horizontal = dir === "left" || dir === "right";
+    let best = "";
+    let bestScore = Infinity;
+    for (const r of rects || []) {
+        const cross = horizontal ? (r.y + r.h / 2) / area.h : (r.x + r.w / 2) / area.w;
+        // Moving right arrives at the left edge, and so on.
+        let edge;
+        if (dir === "right")
+            edge = r.x / area.w;
+        else if (dir === "left")
+            edge = 1 - (r.x + r.w) / area.w;
+        else if (dir === "down")
+            edge = r.y / area.h;
+        else
+            edge = 1 - (r.y + r.h) / area.h;
+        const score = Math.abs(cross - crossFrac) * 2 + edge;
+        if (score < bestScore) {
+            best = r.id;
+            bestScore = score;
+        }
+    }
+    return best;
 }

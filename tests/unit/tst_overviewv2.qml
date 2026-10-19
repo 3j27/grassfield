@@ -201,29 +201,134 @@ TestCase {
         compare(log, [false, false, true]);
     }
 
-    // ---- what a close without a chosen window focuses ----
+    // ---- close target: one value for the plugin request and the shell fallback ----
 
-    function test_restorePlanReturnsToThePreviouslyActiveWindow() {
-        const plan = V2.restorePlan({address: "0xa", workspaceId: 3}, ["0xb", "0xa"], 0);
-        compare(plan.kind, "window");
-        compare(plan.address, "0xa");
-        compare(plan.workspaceId, 3);
+    readonly property var prev: ({address: "0xa", workspaceId: 3})
+
+    function test_closeTargetWindowChosen() {
+        compare(V2.closeTarget({kind: "window", address: "0xb"}, prev, 0), {kind: "window", address: "0xb"});
+        // A chosen window wins over the "+" Desktop and the remembered window.
+        compare(V2.closeTarget({kind: "window", address: "0xb"}, prev, 7), {kind: "window", address: "0xb"});
     }
 
-    function test_restorePlanWindowGoneLeavesHyprlandsChoice() {
-        compare(V2.restorePlan({address: "0xa", workspaceId: 3}, ["0xb"], 0).kind, "none");
-        compare(V2.restorePlan({address: "0xa", workspaceId: 3}, [], 0).kind, "none");
-        compare(V2.restorePlan({address: "0xa", workspaceId: 3}, null, 0).kind, "none");
+    function test_closeTargetDesktopChosen() {
+        compare(V2.closeTarget({kind: "space", id: 2}, prev, 0), {kind: "workspace", workspace: 2});
+        compare(V2.closeTarget({kind: "space", id: 0}, null, 0), {kind: "none"}, "an invalid Desktop is no choice");
     }
 
-    function test_restorePlanNothingRememberedLeavesHyprlandsChoice() {
-        compare(V2.restorePlan(null, ["0xa"], 0).kind, "none");
-        compare(V2.restorePlan({address: "", workspaceId: 1}, ["0xa"], 0).kind, "none");
+    function test_closeTargetNoChoiceReturnsToTheRememberedWindow() {
+        compare(V2.closeTarget(null, prev, 0), {kind: "remembered", address: "0xa", workspace: 3});
+        compare(V2.closeTarget(null, {address: "0xa", workspaceId: 0}, 0), {kind: "remembered", address: "0xa"});
     }
 
-    function test_restorePlanStaysOnADesktopCreatedWhileOpen() {
-        const plan = V2.restorePlan({address: "0xa", workspaceId: 3}, ["0xa"], 7);
-        compare(plan.kind, "space");
-        compare(plan.id, 7);
+    function test_closeTargetNoChoiceNothingRememberedIsNone() {
+        // The desktop held the keyboard at open, or no window did.
+        compare(V2.closeTarget(null, null, 0), {kind: "none"});
+        compare(V2.closeTarget(null, {address: "", workspaceId: 1}, 0), {kind: "none"});
     }
+
+    function test_closeTargetStaysOnADesktopCreatedWhileOpen() {
+        compare(V2.closeTarget(null, prev, 7), {kind: "workspace", workspace: 7});
+    }
+
+    function test_closeTargetEndedByThePluginIsNone() {
+        compare(V2.closeTarget({kind: "none"}, prev, 7), {kind: "none", ended: true}, "interrupted: the plugin's fallback decides");
+    }
+
+    function test_closeTargetAnotherSurfaceSendsNothing() {
+        compare(V2.closeTarget({kind: "other"}, prev, 0).kind, "skip");
+        compare(V2.closeTarget({kind: "other"}, null, 7).kind, "skip");
+    }
+
+    // ---- without the plugin: what the shell focuses itself ----
+
+    function test_fallbackPlanFocusesAWindowThatExists() {
+        compare(V2.fallbackPlan({kind: "window", address: "0xb"}, ["0xa", "0xb"], []), {kind: "window", address: "0xb"});
+        compare(V2.fallbackPlan({kind: "remembered", address: "0xa", workspace: 3}, ["0xa"], []), {kind: "window", address: "0xa"});
+    }
+
+    function test_fallbackPlanSkipsAGoneOrMinimizedWindow() {
+        compare(V2.fallbackPlan({kind: "remembered", address: "0xa"}, ["0xb"], []).kind, "none", "closed");
+        compare(V2.fallbackPlan({kind: "remembered", address: "0xa"}, ["0xa"], ["0xa"]).kind, "none", "minimized");
+        compare(V2.fallbackPlan({kind: "window", address: "0xa"}, ["0xa"], ["0xa"]).kind, "none");
+        compare(V2.fallbackPlan({kind: "window", address: "0xa"}, null, null).kind, "none");
+    }
+
+    function test_fallbackPlanDesktopAndNone() {
+        compare(V2.fallbackPlan({kind: "workspace", workspace: 4}, [], []), {kind: "space", id: 4});
+        compare(V2.fallbackPlan({kind: "none"}, ["0xa"], []).kind, "none");
+        compare(V2.fallbackPlan({kind: "skip"}, ["0xa"], []).kind, "none");
+        compare(V2.fallbackPlan(null, ["0xa"], []).kind, "none");
+    }
+
+    function test_fallbackPlanEndedByThePluginFocusesTheShownDesktop() {
+        compare(V2.fallbackPlan({kind: "none", ended: true}, [], [], 5), {kind: "space", id: 5});
+        compare(V2.fallbackPlan({kind: "none", ended: true}, [], [], 0).kind, "none");
+        compare(V2.fallbackPlan({kind: "none"}, [], [], 5).kind, "none", "no remembered window: Hyprland's choice stands");
+    }
+
+    function test_focusHolds() {
+        verify(V2.focusHolds({address: "0xa"}, {address: "0xa", workspaceId: 1}, 1));
+        verify(!V2.focusHolds({address: "0xa"}, {address: "0xb", workspaceId: 1}, 1));
+        verify(!V2.focusHolds({address: "0xa"}, null, 1));
+        verify(V2.focusHolds({workspace: 2}, null, 2));
+        verify(!V2.focusHolds({workspace: 2}, null, 1));
+        verify(V2.focusHolds(null, null, 1), "no goal: nothing to hold");
+    }
+
+    function test_retryDelayDoublesAndIsBounded() {
+        compare(V2.retryDelay(0, 60), 60);
+        compare(V2.retryDelay(1, 60), 120);
+        compare(V2.retryDelay(3, 60), 480);
+        compare(V2.retryDelay(99, 60), 60 * 64);
+        compare(V2.retryDelay(-1, 60), 60);
+    }
+
+    // ---- selection across outputs ----
+
+    function test_startSelectionIsTheWindowActiveAtOpenOnAnyOutput() {
+        const screens = [{name: "A", addresses: ["0x1", "0x2"]}, {name: "B", addresses: ["0x3"]}];
+        compare(V2.startSelection({address: "0x3", workspaceId: 1}, screens), "0x3", "active on the second output");
+        compare(V2.startSelection({address: "0x2", workspaceId: 1}, screens), "0x2");
+    }
+
+    function test_startSelectionFallsBackToTheFirstWindow() {
+        const screens = [{name: "A", addresses: []}, {name: "B", addresses: ["0x3", "0x4"]}];
+        compare(V2.startSelection(null, screens), "0x3");
+        compare(V2.startSelection({address: "0xgone", workspaceId: 1}, screens), "0x3");
+        compare(V2.startSelection(null, [{name: "A", addresses: []}]), "");
+        compare(V2.startSelection(null, null), "");
+    }
+
+    readonly property var pair: [{name: "A", x: 0, y: 0, w: 1920, h: 1080}, {name: "B", x: 1920, y: 0, w: 1440, h: 900}]
+
+    function test_adjacentScreenSideBySide() {
+        compare(V2.adjacentScreen(pair, "A", "right"), "B");
+        compare(V2.adjacentScreen(pair, "B", "left"), "A");
+        compare(V2.adjacentScreen(pair, "A", "left"), "");
+        compare(V2.adjacentScreen(pair, "A", "up"), "");
+        compare(V2.adjacentScreen(pair, "A", "down"), "", "side by side: no output below");
+        compare(V2.adjacentScreen(pair, "nope", "right"), "");
+    }
+
+    function test_adjacentScreenPicksTheNearestOnThatSide() {
+        const three = [{name: "A", x: 0, y: 0, w: 1000, h: 800}, {name: "B", x: 1000, y: 0, w: 1000, h: 800}, {name: "C", x: 2000, y: 0, w: 1000, h: 800}, {name: "D", x: 0, y: 800, w: 1000, h: 800}];
+        compare(V2.adjacentScreen(three, "A", "right"), "B");
+        compare(V2.adjacentScreen(three, "C", "left"), "B");
+        compare(V2.adjacentScreen(three, "A", "down"), "D");
+        compare(V2.adjacentScreen(three, "D", "up"), "A");
+    }
+
+    function test_entryWindowArrivesAtTheNearEdgeNearestTheSameHeight() {
+        const area = {w: 1000, h: 800};
+        const rects = [{id: "tl", x: 0, y: 0, w: 300, h: 300}, {id: "tr", x: 600, y: 0, w: 300, h: 300}, {id: "bl", x: 0, y: 450, w: 300, h: 300}, {id: "br", x: 600, y: 450, w: 300, h: 300}];
+        compare(V2.entryWindow(rects, "right", 0.2, area), "tl", "moving right arrives on the left edge, top row");
+        compare(V2.entryWindow(rects, "right", 0.8, area), "bl", "bottom row");
+        compare(V2.entryWindow(rects, "left", 0.2, area), "tr", "moving left arrives on the right edge");
+        compare(V2.entryWindow(rects, "left", 0.8, area), "br");
+        compare(V2.entryWindow(rects, "down", 0.2, area), "tl", "moving down arrives on the top row");
+        compare(V2.entryWindow(rects, "up", 0.8, area), "br", "moving up arrives on the bottom row");
+        compare(V2.entryWindow([], "right", 0.5, area), "");
+    }
+
 }

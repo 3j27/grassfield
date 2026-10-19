@@ -626,6 +626,38 @@ Singleton {
         return dispatchRequest(Minimized.focusWindowRequest(address));
     }
 
+    // hl.plugin.grassfield.overview_focus (feature "overview-focus"): the compositor focuses the target once the last
+    // Exclusive layer is gone. False when the request is invalid (nothing is dispatched).
+    function overviewFocus(target: var): bool {
+        return dispatchRequest(Minimized.overviewFocusCall(target));
+    }
+
+    // Addresses of the windows the shell minimized (never given the focus).
+    function minimizedAddresses(): var {
+        return root.minimized.map(r => r.address);
+    }
+
+    // The window of a Desktop focused last, else its first window ("" for an empty Desktop): minimized and unmapped windows
+    // never count.
+    function frontWindowOn(id: int): string {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        const parked = minimizedAddresses();
+        let best = "";
+        let bestStamp = -1;
+        for (let i = 0; i < all.length; i++) {
+            const top = all[i];
+            const data = top.lastIpcObject;
+            if (!top.workspace || top.workspace.id !== id || !top.wayland || parked.indexOf(top.address) >= 0 || (data && (data.mapped === false || data.hidden === true)))
+                continue;
+            const stamp = recency.has(top.wayland) ? recency.get(top.wayland) : 0;
+            if (stamp > bestStamp) {
+                best = top.address;
+                bestStamp = stamp;
+            }
+        }
+        return best;
+    }
+
     // Move a window to a Space without following it (the address is validated by moveRequest).
     function moveToSpace(address: string, id: int): bool {
         if (!(id > 0))
