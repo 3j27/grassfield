@@ -232,6 +232,36 @@ Singleton {
         return commands.length > 0;
     }
 
+    // Work started by a popup menu that closes at once (the popup, and any Process it owns, is destroyed when it closes):
+    // owned by this singleton, or detached, so that it survives the menu (Dock menu: Open at Login, Show in Files).
+    function writeAutostart(path: string, text: string): void {        Quickshell.execDetached(["sh", Quickshell.shellPath("overlay/write-autostart.sh"), path, text]);
+    }
+
+    function removeAutostart(path: string): void {
+        Quickshell.execDetached(["rm", "-f", "--", path]);
+    }
+
+    // Opens the folder of an executable (`command -v`, `readlink -f`) in Files (through the dev open policy in a dev session).
+    function revealExecutable(program: string): void {
+        if (program === "" || reveal.running)
+            return;
+        reveal.program = program;
+        reveal.running = true;
+    }
+
+    Process {
+        id: reveal
+        property string program: ""
+        command: ["sh", "-c", 'p=$(command -v -- "$1") && dirname -- "$(readlink -f -- "$p")"', "sh", program]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const dir = text.trim();
+                if (dir !== "")
+                    root.openDetached(["gio", "open", dir]);
+            }
+        }
+    }
+
     // Dev open policy (ADR-0011, scripts/dev/open-policy.sh): folders open in Grassfield Files, files Preview can show
     // in Grassfield Preview, both started directly with the isolated environment; everything else is refused. Set by
     // scripts/dev/shell-run.sh. Without it a dev session opens nothing.

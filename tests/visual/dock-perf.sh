@@ -33,12 +33,17 @@ cpu() {
   awk -v a="$a" -v b="$b" -v hz="$hz" -v s="$1" 'BEGIN { printf "%.1f", (b - a) / hz / s * 100 }'
 }
 
+# Desktop entries for the test apps (dev only, .dev is ignored): apps without an entry never reach the recents code.
+mkdir -p "$VS_DEV/share/applications"
+for i in $(seq 1 8); do
+  printf '[Desktop Entry]\nType=Application\nName=GF Perf %s\nExec=true\nIcon=text-x-generic\n' "$i" > "$VS_DEV/share/applications/gfperf$i.desktop"
+done
 vs_session en
 vs_reset dark 0.25
 cfg=$VS_DEV/config
 events=$VS_STATE/perf-events.log
 fail=0
-printf '%-8s %-14s %s\n' apps "CPU %% (%ss)" "grassfield.json writes (open + close)"
+printf '%-8s %-14s %s\n' apps "CPU % (${secs}s)" "grassfield.json writes (open + close)"
 for n in 0 4 6 8; do
   : > "$events"
   inotifywait -m -q -e close_write -e moved_to --format '%f' "$cfg" > "$events" 2>/dev/null &
