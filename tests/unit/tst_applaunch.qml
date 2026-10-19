@@ -71,4 +71,37 @@ TestCase {
         verify(text.indexOf("Icon=my-app\n") > 0 && text.indexOf("Terminal=false\n") > 0);
         compare(AppLaunch.execQuote("a$b"), '"a\\$b"');
     }
+
+    // Hostile names and arguments: nothing can add a key or a line to the autostart file; backslashes follow the Desktop
+    // Entry escape rules (the string escape after the quoting rule); control characters in Exec are refused.
+    function test_autostartHostile() {
+        const lines = t => t.split("\n").filter(l => l !== "");
+        const bad = AppLaunch.autostartText({name: "Evil\nHidden=true\nExec=rm", icon: "i\rHidden=true", command: ["/bin/x"], runInTerminal: false});
+        compare(lines(bad).filter(l => l.startsWith("Hidden=")).length, 0);
+        compare(lines(bad).length, 6, "Entry, Type, Name, Exec, Icon, Terminal: no line is added");
+        verify(bad.indexOf("Name=Evil\\nHidden=true\\nExec=rm\n") > 0);
+        compare(AppLaunch.autostartText({name: "x", command: ["/bin/x", "a\nHidden=true"]}), "");
+        compare(AppLaunch.autostartText({name: "x", command: ["/bin/x", "a\u0000b"]}), "");
+        compare(AppLaunch.autostartText({name: "x", command: ["/bin/x", "a\u001b[0m"]}), "");
+        compare(AppLaunch.autostartText({name: "x", command: ["%f"]}), "");
+        // one literal backslash in a quoted argument is four backslashes in the file (quoting rule, then string escape)
+        const bs = AppLaunch.autostartText({name: "a\\b", command: ["/bin/x", "c\\d"]});
+        verify(bs.indexOf("Name=a\\\\b\n") > 0, bs);
+        verify(bs.indexOf('Exec=/bin/x "c\\\\\\\\d"\n') > 0, bs);
+        // empty, spaced, quoted and shell-looking arguments are quoted
+        const q = AppLaunch.autostartText({name: "x", command: ["/bin/x", "", "a b", "q\"z", "$(id)", "it's"]});
+        compare(AppLaunch.autostartText({name: "x", command: ["/bin/x", "t\tx"]}), "", "a tab in Exec is a control character");
+        verify(q.indexOf('Exec=/bin/x "" "a b" "q\\\\"z" "\\\\$(id)" "it\'s"\n') > 0, q);
+    }
+
+    function test_autostartFileNames() {
+        compare(AppLaunch.autostartFile("/d/autostart", "org.x.App"), "/d/autostart/org.x.App.desktop");
+        compare(AppLaunch.autostartFile("/d/autostart", "../evil"), "");
+        compare(AppLaunch.autostartFile("/d/autostart", "a/b"), "");
+        compare(AppLaunch.autostartFile("/d/autostart", ".hidden"), "");
+        compare(AppLaunch.autostartFile("/d/autostart", "a\nb"), "");
+        compare(AppLaunch.autostartFile("/d/autostart", ""), "");
+        compare(AppLaunch.autostartFile("/d/autostart", "x".repeat(300)), "");
+        compare(AppLaunch.autostartFile("", "x"), "");
+    }
 }

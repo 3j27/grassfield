@@ -28,6 +28,33 @@ Singleton {
         }
     }
 
+    // Relative luminance of the wallpaper under the Dock shelf, per output (reported by the wallpaper like the bar strip).
+    // The running dots of the Dock take the tone that keeps 3:1 or more against the shelf (see dotToneFor).
+    property var dockWallLuminances: ({})
+
+    function reportDock(output: string, lum: real): void {
+        const next = Object.assign({}, dockWallLuminances);
+        next[output] = lum;
+        dockWallLuminances = next;
+    }
+
+    // "light" (white dot) or "dark" (black dot) for the shelf of `output`: its relative luminance is the tint (`tint`, at
+    // `alpha`) over the wallpaper measured under it (a dark wallpaper until measured).
+    function dotToneFor(output: string, tint: color, alpha: real): string {
+        const wall = dockWallLuminances[output] !== undefined ? dockWallLuminances[output] : 0;
+        return Logic.dotTone(Logic.shelfLuminance(wall, {r: tint.r, g: tint.g, b: tint.b}, alpha), Tokens.dockIndicatorDarkAbove);
+    }
+
+    // Relative luminance of a QML colour.
+    function colorLuminance(c: color): real {
+        return Logic.luminance(c.r, c.g, c.b);
+    }
+
+    // Luminance of the rows of RGBA bytes from `from` to the end of a `width` x height grab, central `span` of the columns.
+    function dockLuminance(bytes: var, width: int, from: int, rows: int, span: real): real {
+        return Logic.regionLuminance(bytes, width, from, rows, span);
+    }
+
     function toneOf(output: string): string {
         return tones[output] || "light";
     }

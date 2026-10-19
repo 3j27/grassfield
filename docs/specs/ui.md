@@ -30,6 +30,9 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.magnificationEnabled` | bool | false | Dock |
 | `menubar.showBackground` | bool | false | Menu bar (transparent unless true) |
 | `dock.autohide` | bool | false | Dock |
+| `dock.recent` | string[] (desktop entry ids, newest first, at most `dock.recentMax` 3) | `[]` (owned by the Dock; written only when the list changes) | Dock |
+| `dock.showRecents` | bool | true | Dock, Settings |
+| `dock.minimizeIntoApp` | bool | false | Dock, Settings |
 | `notifications.dnd` | bool | false | Notifications (banners suppressed except critical), menu bar moon |
 | `notifications.previews` | `"always"` \| `"unlocked"` \| `"never"` | `"unlocked"` | Notifications (`never` hides bodies) |
 | `icons.mode` | `"default"` \| `"dark"` \| `"clear"` \| `"tinted"` | `"default"` | `Appearance.iconMode` (ADR-0014; the ADR names it `appearance.iconMode`, see Icon appearance modes) |

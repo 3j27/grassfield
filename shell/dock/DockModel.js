@@ -114,9 +114,32 @@ function pushRecent(recent, id, max) {
     return list.slice(0, max);
 }
 
+// Recent applications update (idempotent): the apps that were running (`previous`, keys) and are not any more (`now`,
+// keys) and that are not kept in the Dock (`pinned`, keys) go to the front of `recent`, newest first, at most `max`.
+// A function of the two running sets and the old list only: an app that is still running is never added (it shows as a
+// running tile), so the cap evicting a key can not make it "new" again, and an unchanged running set returns `recent`.
+function recentsAfter(recent, previous, now, pinned, max) {
+    const nowSet = {};
+    (now ? now : []).forEach(k => {
+        nowSet[k] = true;
+    });
+    const kept = {};
+    (pinned ? pinned : []).forEach(k => {
+        kept[k] = true;
+    });
+    let list = (recent ? recent : []).slice(0, max);
+    for (const key of (previous ? previous : [])) {
+        if (nowSet[key] || kept[key])
+            continue;
+        list = pushRecent(list, key, max);
+    }
+    return list;
+}
+
 // Recent apps that are neither pinned nor running, resolved through `lookup`, appended to the app list
-// ({kind: "app", recent: true, windows: [], pinned: false}). `apps` is the result of merge().
-function withRecents(apps, recent, lookup, max) {
+// ({kind: "app", recent: true, windows: [], pinned: false}). `apps` is the result of merge(). `listed` (optional) is a
+// predicate on the desktop entry: NoDisplay / hidden entries are never shown as recents.
+function withRecents(apps, recent, lookup, max, listed) {
     const have = {};
     apps.forEach(a => {
         have[a.key] = true;
@@ -127,9 +150,12 @@ function withRecents(apps, recent, lookup, max) {
         if (added >= max)
             break;
         const entry = lookup(id);
-        if (!entry || have[entry.id])
+        if (!entry || have[entry.id] || (listed && !listed(entry)))
             continue;
         have[entry.id] = true;
+        // macOS: the recent applications are their own section, set off by a divider.
+        if (added === 0)
+            out.push({kind: "separator", divider: true});
         added++;
         out.push({kind: "app", key: entry.id, name: entry.name, icon: entry.icon, entry: entry, windows: [], pinned: false, recent: true});
     }
@@ -160,12 +186,22 @@ function reorder(items, from, to) {
     return {changed: pinned.join("\n") !== pinnedBefore.join("\n"), pinned: pinned};
 }
 
-// Slot a dragged tile would take: the index of the tile center nearest to x (centers of the app tiles only).
-function dropSlot(centers, appCount, x) {
+// Item indices of the app tiles (the recent applications divider sits between app tiles).
+function appIndices(items) {
+    const out = [];
+    items.forEach((it, i) => {
+        if (it.kind === "app")
+            out.push(i);
+    });
+    return out;
+}
+
+// Slot a dragged tile would take: the position in the app list (items at `indices`) whose tile center is nearest to x.
+function dropSlot(centers, indices, x) {
     let best = 0;
     let dist = Infinity;
-    for (let i = 0; i < appCount && i < centers.length; i++) {
-        const d = Math.abs(centers[i] - x);
+    for (let i = 0; i < indices.length && indices[i] < centers.length; i++) {
+        const d = Math.abs(centers[indices[i]] - x);
         if (d < dist) {
             dist = d;
             best = i;
@@ -179,28 +215,120 @@ function draggedOut(y, threshold) {
     return y < -threshold;
 }
 
-// Open this app with dropped files: the entry command with Exec field codes replaced (%f %u: the first target; %F %U:
-// all of them); when the command has no file field code the targets are appended. Targets are local paths or URIs.
-function commandWithFiles(command, targets) {
-    const files = Array.from(targets || []).map(String);
-    const out = [];
-    let used = false;
-    for (const raw of Array.from(command || [])) {
-        const a = String(raw);
-        if (a === "%F" || a === "%U") {
-            used = true;
-            files.forEach(f => out.push(f));
-        } else if (a === "%f" || a === "%u") {
-            used = true;
-            if (files.length > 0)
-                out.push(files[0]);
-        } else if (/^%[a-zA-Z]$/.test(a)) {
-            continue;
-        } else {
-            out.push(a.replace(/%(.)/g, (m, c) => c === "%" ? "%" : ""));
+// ---- Files dropped on an app tile ----
+// macOS model: a tile accepts a drop only when the app can open that kind of document. Here: the Exec line has a file field
+// code (%f %F %u %U, Desktop Entry spec) AND the entry's MimeType matches the type of every dropped file (an entry without
+// MimeType accepts nothing).
+
+// Parsed output of dock/mime-data.sh: {entries: {id: [mime]}, suffix: {".ext": [mime]}, names: {"name": [mime]},
+// parents: {mime: [mime]}, aliases: {alias: mime}, ready}.
+function parseMimeData(text) {
+    const out = {entries: {}, suffix: {}, names: {}, parents: {}, aliases: {}, ready: false};
+    for (const raw of String(text || "").split("\n")) {
+        const f = raw.replace(/\r$/, "").split("\t");
+        if (f[0] === "E" && f.length >= 3) {
+            out.entries[f[1]] = f[2].split(";").filter(m => m !== "");
+        } else if (f[0] === "G" && f.length >= 2) {
+            const g = f[1].split(":");
+            if (g.length < 3 || g.indexOf("cs", 3) >= 0)
+                continue;
+            const glob = g[2];
+            if (glob.startsWith("*.") && !/[*?\[]/.test(glob.substring(1))) {
+                const k = glob.substring(1).toLowerCase();
+                (out.suffix[k] = out.suffix[k] || []).push(g[1]);
+            } else if (!/[*?\[]/.test(glob)) {
+                const k = glob.toLowerCase();
+                (out.names[k] = out.names[k] || []).push(g[1]);
+            }
+        } else if (f[0] === "S" && f.length >= 2) {
+            const p = f[1].split(/\s+/);
+            if (p.length === 2)
+                (out.parents[p[0]] = out.parents[p[0]] || []).push(p[1]);
+        } else if (f[0] === "A" && f.length >= 2) {
+            const p = f[1].split(/\s+/);
+            if (p.length === 2) {
+                out.aliases[p[0]] = p[1];
+                (out.aliases["<" + p[1]] = out.aliases["<" + p[1]] || []).push(p[0]);
+            }
         }
     }
-    return used ? out : out.concat(files);
+    out.ready = Object.keys(out.suffix).length > 0;
+    return out;
+}
+
+// MIME types of a file name (by name only, longest matching extension first): the matched types, their parents
+// (subclasses; text/* is a subclass of text/plain) and aliases. [] when the name matches no pattern.
+function mimeTypesOf(path, data) {
+    const name = String(path).replace(/\/+$/, "").replace(/^.*\//, "").toLowerCase();
+    let found = data.names[name] ? data.names[name] : [];
+    for (let i = 1; found.length === 0 && i < name.length; i++) {
+        if (name[i] === "." && data.suffix[name.substring(i)])
+            found = data.suffix[name.substring(i)];
+    }
+    const all = {};
+    const queue = found.slice();
+    while (queue.length > 0) {
+        const m = queue.shift();
+        if (all[m])
+            continue;
+        all[m] = true;
+        (data.parents[m] ? data.parents[m] : []).forEach(x => queue.push(x));
+        if (m.startsWith("text/") && m !== "text/plain")
+            queue.push("text/plain");
+        // Alias -> canonical name, and canonical -> its aliases ("<name" keys).
+        if (typeof data.aliases[m] === "string")
+            queue.push(data.aliases[m]);
+        (data.aliases["<" + m] ? data.aliases["<" + m] : []).forEach(x => queue.push(x));
+    }
+    return Object.keys(all);
+}
+
+function hasFileCode(command) {
+    return Array.from(command || []).some(a => /%[fFuU]/.test(String(a).replace(/%%/g, "")));
+}
+
+// The tile of `entry` ({id, command}) accepts the dropped `paths`: file field code in Exec and, for every file, a MimeType
+// of the entry that equals one of the file's types (or matches "type/*").
+function acceptsFiles(entry, paths, data) {
+    if (!entry || !data || !data.ready || !paths || paths.length === 0 || !hasFileCode(entry.command))
+        return false;
+    const declared = data.entries[entry.id];
+    if (!declared || declared.length === 0)
+        return false;
+    return paths.every(p => {
+        const types = mimeTypesOf(p, data);
+        return types.some(t => declared.some(d => d === t || (d.endsWith("/*") && t.startsWith(d.substring(0, d.length - 1)))));
+    });
+}
+
+// file:// URI of a local path (%u %U get URIs, %f %F paths).
+function fileUri(path) {
+    return "file://" + String(path).split("/").map(encodeURIComponent).join("/");
+}
+
+// Commands that open `files` (local paths) with an entry command, field codes substituted per the Desktop Entry spec:
+// %F %U expand to all files in one command; %f %u (single) give one command per file; other codes are dropped and "%%" is a
+// literal percent. [] when the command has no file field code (nothing is ever appended to the command line).
+function commandsForFiles(command, files) {
+    const list = Array.from(files || []).map(String);
+    const args = Array.from(command || []).map(String);
+    if (list.length === 0 || !hasFileCode(args))
+        return [];
+    const build = group => {
+        const out = [];
+        for (const a of args) {
+            if (a === "%F" || a === "%U") {
+                group.forEach(f => out.push(a === "%U" ? fileUri(f) : f));
+            } else if (/^%[a-zA-Z]$/.test(a) && "fFuU".indexOf(a[1]) < 0) {
+                continue;
+            } else {
+                out.push(a.replace(/%(.)/g, (m, c) => c === "%" ? "%" : (c === "f" || c === "F" ? group[0] : (c === "u" || c === "U" ? fileUri(group[0]) : ""))));
+            }
+        }
+        return out;
+    };
+    const multi = args.some(a => a === "%F" || a === "%U");
+    return multi ? [build(list)] : list.map(f => build([f]));
 }
 
 // Launch bounce: tiles that were launched and have no window yet. `launching` maps key -> start (ms); entries older
