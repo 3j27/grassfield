@@ -92,12 +92,15 @@ function surfaceRect(rect, realWidth, band, screenX, screenY, offsetY) {
 // {screenName: "exclusive" | "none"}. While open every chrome is Exclusive: Hyprland sends pointer input to Exclusive
 // layers only, so a None chrome would be dead to hover, click and drag. Hyprland gives the keyboard to ONE of the
 // chromes (measured: not reliably the pointer's output) and the shell handles keys on any chrome. Every chrome is None
-// while releasing (before the close completes) and when closed; the close then waits for every one to have committed
-// (releaseDone) and focuses the remembered window itself (restorePlan).
-function keyboardPlan(screens, phase) {
+// when closed; the close then waits for every one to have committed (releaseDone) and focuses the remembered window
+// itself (restorePlan).
+// While releasing, `keep` (the output of the chrome that holds the keyboard, "" for none) stays Exclusive until every other
+// chrome has committed None: the holder is released LAST, so that no Exclusive layer remains at the moment Hyprland
+// refocuses (released first, its refocus is refused and never retried).
+function keyboardPlan(screens, phase, keep) {
     const plan = {};
     for (const name of screens || [])
-        plan[name] = phase === "open" ? "exclusive" : "none";
+        plan[name] = phase === "open" || (phase === "releasing" && keep === name) ? "exclusive" : "none";
     return plan;
 }
 

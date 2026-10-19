@@ -159,6 +159,19 @@ TestCase {
 
     // ---- release sequencing ----
 
+    // The holder is released last: first every other chrome None while the holder stays Exclusive, then all None.
+    function test_keyboardPlanReleasesTheHolderLast() {
+        const first = V2.keyboardPlan(["WAYLAND-1", "GF-REF"], "releasing", "GF-REF");
+        compare(first["GF-REF"], "exclusive");
+        compare(first["WAYLAND-1"], "none");
+        const second = V2.keyboardPlan(["WAYLAND-1", "GF-REF"], "releasing", "");
+        compare(second["GF-REF"], "none");
+        compare(second["WAYLAND-1"], "none");
+        // `keep` only matters while releasing.
+        compare(V2.keyboardPlan(["a"], "closed", "a").a, "none");
+        compare(V2.keyboardPlan(["a", "b"], "open", "a").b, "exclusive");
+    }
+
     // Every chrome commits None on its own: the close completes only when no chrome reports the keyboard and the settle
     // pause since the last change has elapsed; the bound ends the wait whatever the reports say.
     function test_releaseDoneWaitsForEveryChromeAndTheSettlePause() {

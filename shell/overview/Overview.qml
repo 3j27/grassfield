@@ -81,6 +81,7 @@ Scope {
         retryTimer.stop();
         releaseTimer.stop();
         releaseBound.stop();
+        keepScreen = "";
         pending = null;
         stage = "closed";
     }
@@ -215,7 +216,10 @@ Scope {
         if (d.close && !switchingSpace) {
             live = false;
             closing = true;
-            hide();
+            // The keyboard leaving the chrome ends the plugin's overview as soon as the release starts: that is the
+            // shell's own close in progress, which must still run its action (a focus), not be cut short.
+            if (!releasing)
+                hide();
         } else if (d.close) {
             live = false;
         }
@@ -249,14 +253,19 @@ Scope {
 
     // True between releasing the exclusive keyboard grab and the pending action.
     readonly property bool releasing: stage === "releasing"
-    // Keyboard mode of every output's chrome (V2.keyboardPlan): all Exclusive while open, all None once releasing.
-    readonly property var keyboardPlan: V2.keyboardPlan(Quickshell.screens.map(s => s.name), stage)
+    // Output whose chrome is kept Exclusive during the first part of the release (the holder, released last).
+    property string keepScreen: ""
+    // Keyboard mode of every output's chrome (V2.keyboardPlan): all Exclusive while open; releasing: all None but the
+    // holder, then all None.
+    readonly property var keyboardPlan: V2.keyboardPlan(Quickshell.screens.map(s => s.name), stage, keepScreen)
     property var pending: null
 
-    // Close Overview, then focus something. While a chrome is Exclusive Hyprland refuses to focus a window, and it
-    // retries nothing once the last chrome commits, so the order is: every chrome drops to keyboard None; the close waits
-    // until no chrome reports the keyboard and the settle pause has passed (V2.releaseDone, bounded by releaseBound);
-    // then on:false is sent, the action runs and the chromes hide. `action` is the user's choice (a window, a Desktop);
+    // Close Overview, then focus something. Each output's chrome commits its keyboard mode on its own; while any chrome is
+    // Exclusive Hyprland refuses to refocus a window ("ignoring, exclusive LS present") and retries nothing when the last
+    // one commits. So the order is: every chrome but the holder drops to None; after the settle pause the holder drops
+    // too (nothing Exclusive is left when Hyprland refocuses); the close waits until no chrome reports the keyboard and the
+    // settle pause has passed again (V2.releaseDone, bounded by releaseBound); then on:false is sent, the action runs and
+    // the chromes hide. `action` is the user's choice (a window, a Desktop);
     // null means no choice: the window that was active at open, or the Desktop created with "+", gets the keyboard
     // (V2.restorePlan); a window that no longer exists leaves Hyprland's choice.
     property bool releaseSettled: false
@@ -266,9 +275,15 @@ Scope {
             return;
         pending = action;
         releaseSettled = false;
+        keepScreen = holderScreen();
         stage = "releasing";
         releaseTimer.restart();
         releaseBound.restart();
+    }
+
+    // Output of the chrome that holds the keyboard ("" for none).
+    function holderScreen(): string {
+        return Object.keys(chromeActive).find(k => chromeActive[k]) || "";
     }
 
     function tryFinishRelease(forced: bool): void {
@@ -279,6 +294,7 @@ Scope {
     function finishRelease(): void {
         releaseTimer.stop();
         releaseBound.stop();
+        keepScreen = "";
         const action = pending;
         pending = null;
         try {
@@ -304,6 +320,13 @@ Scope {
         id: releaseTimer
         interval: Tokens.overviewReleaseSettleMs
         onTriggered: {
+            if (root.keepScreen !== "") {
+                // The other chromes have committed: release the holder, then wait for it.
+                root.keepScreen = "";
+                root.releaseSettled = false;
+                releaseTimer.restart();
+                return;
+            }
             root.releaseSettled = true;
             root.tryFinishRelease(false);
         }
