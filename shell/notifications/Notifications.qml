@@ -193,6 +193,7 @@ Singleton {
 
     function closeCenter(): void {
         centerOpen = false;
+        freshKeys = ({});
         if (Object.keys(expandedApps).length > 0) {
             expandedApps = ({});
             syncShown();
@@ -504,10 +505,31 @@ Singleton {
         evicted.forEach(k => removeFromCenter(k));
         syncRemovals(1);
         addToCenter(entry);
+        if (centerOpen) {
+            freshKeys[entry.key] = true;
+            freshTimer.restart();
+        }
         syncShown();
         // Dismissing a live notification costs ~5 ms in the server; after the Notify reply went out.
         if (evicted.length > 0)
             Qt.callLater(() => evicted.forEach(k => finishLive(k)));
+    }
+
+    // Keys of the entries that arrived while the Center is open (for the card's entrance animation, taken once by its
+    // delegate). They expire a second after the last arrival and when the Center closes: a card created later (scrolled in,
+    // revealed by "Show All") never animates in.
+    property var freshKeys: ({})
+
+    function takeFresh(key: string): bool {
+        const fresh = freshKeys[key] === true;
+        delete freshKeys[key];
+        return fresh;
+    }
+
+    Timer {
+        id: freshTimer
+        interval: 1000
+        onTriggered: root.freshKeys = ({})
     }
 
     function updateEntry(key: string, entry: var): void {
