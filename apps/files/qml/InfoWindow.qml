@@ -140,15 +140,17 @@ Window {
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
                     }
-
-                    // Folders: the colour and symbol of this folder (the same window as the context menu's).
-                    Button {
-                        visible: root.info.isDir
-                        text: qsTr("Customize Folder…")
-                        enabled: root.customizeReason === ""
-                        onClicked: root.customize()
-                    }
                 }
+            }
+
+            // Folders: the colour and symbol of this folder (the same window as the context menu's). Under the name, on the
+            // full width of the panel: the button sizes to its text, whatever the language (the French label is long).
+            Button {
+                visible: root.info.isDir
+                height: visible ? implicitHeight : 0
+                text: qsTr("Customize Folder…")
+                enabled: root.customizeReason === ""
+                onClicked: root.customize()
             }
 
             Rectangle {

@@ -1031,8 +1031,28 @@ QtObject {
     readonly property real folderIconGlyphScale: 0.34
     // estimate: vertical centre of the symbol over the icon height (the body of the folder, below the flap)
     readonly property real folderIconGlyphCenterY: 0.62
-    // estimate: colour of a symbol drawn on the folder (a darker, translucent emboss); emoji keep their own colours
-    readonly property string folderIconGlyphColor: "#73000000"
+    // A2 (icons >= 3:1): a plain symbol is an engraved shade of the folder's own colour (macOS 26), darkened in the colour's hue until it reaches this contrast against the plate
+    readonly property real folderIconGlyphMinContrast: 3.0
+    // measured safety over the minimum (the plate is estimated from the colour, the real one differs by a few percent)
+    readonly property real folderIconGlyphContrastMargin: 0.3
+    // measured on the recoloured folder plate under the symbol (nested captures, tests/visual/folder_glyph_contrast.py): plate over the folder colour, icon mode default and clear
+    readonly property real folderIconPlateDefault: 0.96
+    // measured: plate over the folder colour in the Dark icon mode
+    readonly property real folderIconPlateDark: 0.78
+    // measured (two icon tints, dark and light appearance): plate over the folder colour in the Tinted icon mode = base + slope x relative luminance of the icon tint
+    readonly property real folderIconPlateTintedBase: 0.37
+    // measured: see plateTintedBase
+    readonly property real folderIconPlateTintedSlope: 1.5
+    // measured: in the Tinted icon mode the theme's own folder plate is the icon tint times this
+    readonly property real folderIconThemeTintedGain: 1.27
+    // measured: in the Clear icon mode a dark plate lets the backdrop through (a black folder over a light backdrop): the lightest plate over the colour, as a share of the way to white
+    readonly property real folderIconClearLift: 0.22
+    // measured: plate of the icon theme's own folder under the symbol (default mode, current theme of the reference session)
+    readonly property string folderIconThemePlate: "#a4caee"
+    // estimate: 1 px light edge under an engraved symbol (the engraved look)
+    readonly property string folderIconGlyphHighlight: "#40ffffff"
+    // estimate: offset of that edge over the icon edge (at least 1 px)
+    readonly property real folderIconGlyphHighlightOffset: 0.016
     // estimate: Customize Folder, symbol suggestions per row
     readonly property int folderIconPickerGlyphColumns: 8
     // estimate: Customize Folder, side of one symbol suggestion

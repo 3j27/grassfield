@@ -2,7 +2,7 @@
 # Captures of the Customize Folder flow (context menu, the window, Get Info) for docs/specs/files.md. Not a regression
 # scenario: it writes .dev/visual/folder-colours/<name>.<lang>.png. BARE command, like tests/visual/folder-colours.sh.
 #
-#   tests/visual/folder-colours-ui.sh [en|fr] [stage]    stage: menu | window | info | all (default all)
+#   tests/visual/folder-colours-ui.sh [en|fr] [stage]    stage: menu | window | keys | info | all (default all)
 #
 # Folders it touches live under .dev/visual/ only.
 source "$(dirname "$0")/lib.sh"
@@ -40,6 +40,23 @@ vs_wait_clients 2
 vs_sleep 2
 VS_NOPARK=1 shot fc-customize
 [[ $STAGE == window ]] && exit 0
+if [[ $STAGE == keys ]]; then
+  # Keyboard only: Tab walks swatches, hex field, symbol grid (focus ring on the first symbol), symbol field, Reset, Cancel, Done.
+  key -k Tab
+  key -k Tab
+  key -k Tab
+  VS_NOPARK=1 shot fc-keys-grid
+  key -k Tab
+  key 'Holiday photos'
+  VS_NOPARK=1 shot fc-keys-field
+  key -k Tab
+  key -k Tab
+  key -k Tab
+  VS_NOPARK=1 shot fc-keys-done
+  key -k Escape
+  vs_sleep 1
+  exit 0
+fi
 # Window at x 740-1180, y 261-761 on GF-REF: red swatch, the music note, Done.
 click 930 430
 click 946 529
