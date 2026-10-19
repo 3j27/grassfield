@@ -130,7 +130,7 @@ ShellRoot {
     // Opening Overview, Apps, Search or the app switcher closes the others: the keyboard follows the visible top surface.
     ExclusiveSurfaces {
         surfaces: [
-            {target: overviewSurface, close: () => overviewSurface.requestClose()},
+            {target: overviewSurface, close: () => overviewSurface.requestCloseForOther()},
             {target: appsSurface, close: () => appsSurface.hide()},
             {target: searchSurface, close: () => searchSurface.hide()},
             {target: switcher, close: () => switcher.cancel()}

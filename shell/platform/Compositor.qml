@@ -588,6 +588,37 @@ Singleton {
             dispatchRequest(Minimized.focusRequest(Math.floor(id)));
     }
 
+    // The window with the keyboard now, as {address, workspaceId} (null when none, or when Hyprland's data has no
+    // workspace for it yet). Remembered by Overview when it opens.
+    function activeWindow(): var {
+        const top = hyprlandToplevel(focusedToplevel);
+        if (!top || !top.workspace || top.workspace.id <= 0)
+            return null;
+        return {
+            address: top.address,
+            workspaceId: top.workspace.id
+        };
+    }
+
+    // Addresses of the windows that exist now.
+    function windowAddresses(): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        return all.map(t => t.address);
+    }
+
+    // Focuses a window by address, with its Space when that is not the one shown: the Space of the window as it is now.
+    // False when the window does not exist (or has no protocol handle yet): nothing changes.
+    function focusWindow(address: string): bool {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        const top = all.find(t => t.address === address);
+        if (!top || !top.wayland)
+            return false;
+        if (top.workspace && top.workspace.id > 0 && !top.workspace.active)
+            focusSpace(top.workspace.id);
+        activate(top.wayland);
+        return true;
+    }
+
     // Move a window to a Space without following it (the address is validated by moveRequest).
     function moveToSpace(address: string, id: int): bool {
         if (!(id > 0))

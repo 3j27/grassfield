@@ -23,8 +23,12 @@ Scope {
     // `releasing` derive from it, so no state between releasing and closed can read as open.
     property string stage: "closed"
     readonly property bool open: stage !== "closed"
-    // Output whose overlay holds the keyboard (focused output when opened).
-    property string keyScreen: ""
+    // The window that had the keyboard when the overview opened ({address, workspaceId}, null for none, or when the
+    // desktop had it): a close without a chosen window returns to it (macOS: leaving Mission Control without choosing
+    // brings back the window and the Desktop you were on).
+    property var previous: null
+    // A Desktop created with "+" while open (the shell switched to it): closing without a choice stays there.
+    property int stayOnSpace: 0
 
     // v2 branch point: false while the compositor transforms the real windows. Thumbnails when the plugin has no
     // `overview` feature (now or at the time of this open), or when this open fell back (refusal, full-screen window,
@@ -56,7 +60,8 @@ Scope {
     function show(): void {
         if (open)
             return;
-        keyScreen = Compositor.focusedScreenName;
+        previous = DesktopState.holdsKeyboard ? null : Compositor.activeWindow();
+        stayOnSpace = 0;
         Compositor.refreshSpaces();
         phase = "idle";
         live = false;
@@ -74,6 +79,9 @@ Scope {
         closeV2();
         chromeWait.stop();
         retryTimer.stop();
+        releaseTimer.stop();
+        releaseBound.stop();
+        pending = null;
         stage = "closed";
     }
 
@@ -156,14 +164,16 @@ Scope {
         const next = Object.assign({}, chromeActive);
         next[screenName] = active;
         chromeActive = next;
-        // Every chrome is Exclusive: keyScreen follows the one Hyprland gives the keyboard to.
-        if (active && open)
-            keyScreen = screenName;
     }
 
     onChromeHeldChanged: {
         if (chromeHeld && open && !thumbnailMode && !live)
             sendLayout();
+        // The keyboard moved between chromes while releasing: wait again for the ones still to commit.
+        if (releasing) {
+            releaseSettled = false;
+            releaseTimer.restart();
+        }
     }
     onOpenChanged: {
         if (open)
@@ -243,38 +253,78 @@ Scope {
     readonly property var keyboardPlan: V2.keyboardPlan(Quickshell.screens.map(s => s.name), stage)
     property var pending: null
 
-    // Close Overview and focus something. While the overlay holds the keyboard exclusively the
-    // compositor refocuses the previous window (and its workspace) when the overlay goes away,
-    // undoing the action; so the grab is released first and the action runs shortly after.
+    // Close Overview, then focus something. While a chrome is Exclusive Hyprland refuses to focus a window, and it
+    // retries nothing once the last chrome commits, so the order is: every chrome drops to keyboard None; the close waits
+    // until no chrome reports the keyboard and the settle pause has passed (V2.releaseDone, bounded by releaseBound);
+    // then on:false is sent, the action runs and the chromes hide. `action` is the user's choice (a window, a Desktop);
+    // null means no choice: the window that was active at open, or the Desktop created with "+", gets the keyboard
+    // (V2.restorePlan); a window that no longer exists leaves Hyprland's choice.
+    property bool releaseSettled: false
+
     function closeAnd(action: var): void {
-        // Every chrome drops to keyboard None first (releaseTimer); only then on:false is sent, the target window is
-        // activated and the chromes hide, so no Exclusive layer remains when Hyprland refocuses.
-        if (stage === "closed")
+        if (stage !== "open")
             return;
         pending = action;
+        releaseSettled = false;
         stage = "releasing";
         releaseTimer.restart();
+        releaseBound.restart();
+    }
+
+    function tryFinishRelease(forced: bool): void {
+        if (releasing && V2.releaseDone(chromeHeld, releaseSettled, forced))
+            finishRelease();
+    }
+
+    function finishRelease(): void {
+        releaseTimer.stop();
+        releaseBound.stop();
+        const action = pending;
+        pending = null;
+        try {
+            closeV2();
+            if (action)
+                action();
+            else
+                restoreFocus();
+        } finally {
+            hide();
+        }
+    }
+
+    function restoreFocus(): void {
+        const plan = V2.restorePlan(previous, Compositor.windowAddresses(), stayOnSpace);
+        if (plan.kind === "space")
+            Compositor.focusSpace(plan.id);
+        else if (plan.kind === "window")
+            Compositor.focusWindow(plan.address);
     }
 
     Timer {
         id: releaseTimer
-        interval: 80
+        interval: Tokens.overviewReleaseSettleMs
         onTriggered: {
-            const action = root.pending;
-            root.pending = null;
-            try {
-                root.closeV2();
-                if (action)
-                    action();
-            } finally {
-                root.hide();
-            }
+            root.releaseSettled = true;
+            root.tryFinishRelease(false);
         }
+    }
+
+    Timer {
+        id: releaseBound
+        interval: Tokens.overviewReleaseBoundMs
+        onTriggered: root.tryFinishRelease(true)
+    }
+
+    // Close because another full-attention surface opened (ExclusiveSurfaces): the keyboard belongs to that surface, so
+    // nothing is focused here.
+    function requestCloseForOther(): void {
+        if (stage === "open")
+            closeAnd(() => {});
     }
 
     // Close from outside (IPC, shortcut): same path as Esc, the keyboard is released before the close completes.
     function requestClose(): void {
-        if (open && !releasing)
+        if (stage === "open")
             closeAnd(null);
     }
 
