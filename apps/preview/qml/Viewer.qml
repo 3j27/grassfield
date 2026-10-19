@@ -287,6 +287,7 @@ Window {
 
             TextInput {
                 id: searchInput
+                TextCursor {}
                 anchors {
                     left: searchIcon.right
                     leftMargin: Tokens.spacingSm
