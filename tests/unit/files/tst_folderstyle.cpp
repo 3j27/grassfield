@@ -12,7 +12,10 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QTemporaryDir>
+#include <QThread>
 
 #include <memory>
 #include <sys/stat.h>
@@ -454,6 +457,7 @@ TEST(FolderStyleStore, EntriesFollowRenamesAndAreNotInheritedByNewFolders)
         GTEST_SKIP() << "root ignores permissions";
     const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
     FolderStyleStore store(file);
+    store.setMountsForTests(FolderStyleStore::Mounts::parse("1 0 0:1 / / rw - ext4 /dev/x rw\n", ""));
     const QString a = makeFolder(*dir, QStringLiteral("a"));
     const QString sub = makeFolder(*dir, QStringLiteral("a/sub"));
     ::chmod(QFile::encodeName(sub).constData(), 0555);
@@ -477,7 +481,9 @@ TEST(FolderStyleStore, EntriesFollowRenamesAndAreNotInheritedByNewFolders)
     ::chmod(QFile::encodeName(other).constData(), 0555);
     ASSERT_TRUE(store.write(other, style("#8e5bea")).fellBack);
     ::chmod(QFile::encodeName(other).constData(), 0755);
-    EXPECT_EQ(store.fallbackCount(), 1) << "the entries of the vanished folders are pruned";
+    store.startPrune(true);
+    store.waitForPrune();
+    EXPECT_EQ(store.fallbackCount(), 1) << "the entries of the vanished folders are pruned (by the worker)";
     makeFolder(*dir, QStringLiteral("b"));
     EXPECT_TRUE(store.read(b).isEmpty()) << "a new folder at an old path does not inherit the look";
 
@@ -547,4 +553,162 @@ TEST(FolderStyleStore, TheCapIsExplicitAndNothingIsDroppedSilently)
     ::chmod(QFile::encodeName(plain).constData(), 0755);
     EXPECT_TRUE(again.dropEntry(QStringLiteral("/run/media/nobody/GF-TEST-STICK/f0")));
     EXPECT_EQ(FolderStyleStore(file).fallbackCount(), total - 1) << "only the entry asked for is gone";
+}
+
+// ---- pruning: which entries may be looked at, and where ----
+
+TEST(FolderStyleStore, MountTableDecidesWhatMayBePruned)
+{
+    const QByteArray mountinfo =
+        "1 0 8:1 / / rw - ext4 /dev/sda1 rw\n"
+        "2 1 0:50 / /mnt/nas rw - nfs4 server:/export rw\n"
+        "3 1 8:17 / /run/media/me/STICK rw - vfat /dev/sdb1 rw\n"
+        "4 1 8:33 / /data rw - btrfs /dev/sdc rw\n"
+        "5 1 0:60 / /mnt/with\\040space rw - fuse.sshfs me@host: rw\n"
+        "6 1 8:49 / /mnt/disk2 rw - ext4 /dev/sdd1 rw\n";
+    const QByteArray fstab = "# comment\n/dev/sde1 /mnt/usb ext4 defaults 0 2\n/dev/sdc /data btrfs defaults 0 0\n\n";
+    const auto m = FolderStyleStore::Mounts::parse(mountinfo, fstab);
+    EXPECT_TRUE(m.isLocalAndMounted(QStringLiteral("/home/u/Projects")));
+    EXPECT_TRUE(m.isLocalAndMounted(QStringLiteral("/data/x")));
+    EXPECT_TRUE(m.isLocalAndMounted(QStringLiteral("/mnt/disk2/x"))) << "a fixed disk that is mounted";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/mnt/nas/Photos"))) << "network";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/mnt/with space/x"))) << "FUSE (and an escaped mount point)";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/run/media/me/STICK/x"))) << "removable filesystem";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/run/media/me/OTHER/x"))) << "a stick that is not plugged in";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/mnt/usb/x"))) << "an fstab mount point that is not mounted";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/mnt/unknown/x"))) << "under /mnt but no mount: kept";
+    EXPECT_FALSE(m.isLocalAndMounted(QStringLiteral("/media/disk/x")));
+    EXPECT_FALSE(FolderStyleStore::Mounts().isLocalAndMounted(QStringLiteral("/home/u"))) << "no mount table, no stat";
+}
+
+TEST(FolderStyleStore, PruningStatsOnlyLocalEntriesAndOnlyOffTheGuiThread)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
+    QDir().mkpath(dir->filePath(QStringLiteral("cfg")));
+    const QString goneLocal = dir->filePath(QStringLiteral("vanished"));
+    const QString aliveLocal = makeFolder(*dir, QStringLiteral("alive"));
+    QByteArray json = "{\"version\":1,\"serial\":1,\"folders\":{";
+    const QStringList keys = {goneLocal, aliveLocal, QStringLiteral("/mnt/nas/Photos"), QStringLiteral("/mnt/nas/Gone/Deeper"),
+                              QStringLiteral("/mnt/usb/Photos"), QStringLiteral("/run/media/me/STICK/Music")};
+    for (int i = 0; i < keys.size(); ++i)
+        json += (i ? "," : "") + QByteArray("\"") + keys.at(i).toUtf8() + "\":{\"color\":\"#e5484d\"}";
+    json += "}}";
+    QFile f(file);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(json);
+    f.close();
+
+    QMutex lock;
+    QStringList statted;
+    bool onGuiThread = false;
+    const QThread *gui = QThread::currentThread();
+    FolderStyleStore::setStatObserverForTests([&](const QString &path) {
+        QMutexLocker l(&lock);
+        statted.append(path);
+        onGuiThread = onGuiThread || QThread::currentThread() == gui;
+    });
+    FolderStyleStore store(file);
+    store.setMountsForTests(FolderStyleStore::Mounts::parse(
+        "1 0 8:1 / / rw - ext4 /dev/sda1 rw\n2 1 0:50 / /mnt/nas rw - nfs4 server:/export rw\n3 1 8:17 / /run/media/me/STICK rw - vfat /dev/sdb1 rw\n", ""));
+    EXPECT_EQ(store.fallbackCount(), 6);
+    store.startPrune(true);
+    store.waitForPrune();
+    FolderStyleStore::setStatObserverForTests(nullptr);
+    EXPECT_FALSE(onGuiThread) << "a store entry is never statted on the GUI thread";
+    for (const QString &p : statted)
+        EXPECT_TRUE(p.startsWith(dir->path())) << "only local entries are looked at: " << p.toStdString();
+    EXPECT_EQ(store.fallbackCount(), 5) << "only the vanished local folder is pruned";
+    FolderStyleStore again(file);
+    EXPECT_TRUE(again.read(goneLocal).isEmpty());
+    EXPECT_EQ(again.read(QStringLiteral("/mnt/nas/Photos")).color, QStringLiteral("#e5484d")) << "network entries are kept";
+    EXPECT_EQ(again.read(QStringLiteral("/mnt/nas/Gone/Deeper")).color, QStringLiteral("#e5484d"));
+    EXPECT_EQ(again.read(QStringLiteral("/mnt/usb/Photos")).color, QStringLiteral("#e5484d")) << "an empty fixed mount point is kept";
+    EXPECT_EQ(again.read(QStringLiteral("/run/media/me/STICK/Music")).color, QStringLiteral("#e5484d"));
+    EXPECT_EQ(again.read(aliveLocal).color, QStringLiteral("#e5484d"));
+}
+
+TEST(FolderStyleStore, ARefusedNewEntryFindsRoomOnceVanishedFoldersArePruned)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
+    QDir().mkpath(dir->filePath(QStringLiteral("cfg")));
+    QByteArray json = "{\"version\":1,\"serial\":1,\"folders\":{";
+    for (int i = 0; i < FolderStyleStore::kMaxFallbackEntries; ++i) {
+        if (i)
+            json += ',';
+        json += "\"" + dir->filePath(QStringLiteral("gone%1").arg(i)).toUtf8() + "\":{\"color\":\"#e5484d\"}";
+    }
+    json += "}}";
+    QFile f(file);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(json);
+    f.close();
+    FolderStyleStore store(file);
+    store.setMountsForTests(FolderStyleStore::Mounts::parse("1 0 8:1 / / rw - ext4 /dev/sda1 rw\n", ""));
+    const QString folder = makeFolder(*dir, QStringLiteral("ro"));
+    ::chmod(QFile::encodeName(folder).constData(), 0555);
+    EXPECT_FALSE(store.write(folder, style("#3fae5a")).ok) << "full: refused now";
+    store.waitForPrune();
+    EXPECT_EQ(store.fallbackCount(), 0) << "the vanished folders were pruned in the background";
+    EXPECT_TRUE(store.write(folder, style("#3fae5a")).ok) << "room now";
+    ::chmod(QFile::encodeName(folder).constData(), 0755);
+}
+
+TEST(FolderStyleStore, AStoreOverTheByteLimitIsNeverWritten)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    const QString file = dir->filePath(QStringLiteral("cfg/folder-styles.json"));
+    QDir().mkpath(dir->filePath(QStringLiteral("cfg")));
+    // Long paths (a few KB each) fill the 4 MiB the reader accepts long before 20000 entries.
+    QByteArray json = "{\"version\":1,\"serial\":1,\"folders\":{";
+    int n = 0;
+    while (json.size() < 4 * 1024 * 1024 - 3400) {
+        if (n)
+            json += ',';
+        json += "\"/run/media/nobody/L/" + QByteArray::number(n) + QByteArray(3000, 'x') + "\":{\"color\":\"#e5484d\"}";
+        ++n;
+    }
+    json += "}}";
+    ASSERT_LT(json.size(), 4 * 1024 * 1024);
+    QFile f(file);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(json);
+    f.close();
+    FolderStyleStore store(file);
+    ASSERT_EQ(store.fallbackCount(), n);
+    // Entries that would push the file over the limit: refused with a reason, the file untouched and still readable.
+    QStringList folders;
+    const auto big = [&] {
+        for (int i = 0; i < 60; ++i)
+            folders.append(makeFolder(*dir, QStringLiteral("ro%1").arg(i)));
+    };
+    big();
+    bool refused = false;
+    QString reason;
+    for (const QString &folder : folders) {
+        ::chmod(QFile::encodeName(folder).constData(), 0555);
+        const auto r = store.write(folder, style("#3fae5a", "A"));
+        ::chmod(QFile::encodeName(folder).constData(), 0755);
+        if (!r.ok) {
+            refused = true;
+            reason = r.error;
+            break;
+        }
+    }
+    store.waitForPrune();
+    EXPECT_TRUE(refused) << "a store that would not be read back is refused";
+    EXPECT_FALSE(reason.isEmpty());
+    QFile after(file);
+    ASSERT_TRUE(after.open(QIODevice::ReadOnly));
+    EXPECT_LE(after.size(), 4 * 1024 * 1024) << "never written over the limit";
+    FolderStyleStore reader(file);
+    EXPECT_FALSE(reader.fallbackBroken());
+    EXPECT_GE(reader.fallbackCount(), n);
 }
