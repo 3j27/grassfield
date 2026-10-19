@@ -1037,8 +1037,14 @@ QtObject {
     readonly property real folderIconPlateDefault: 0.96
     // measured: plate over the folder colour in the Dark icon mode
     readonly property real folderIconPlateDark: 0.78
-    // measured: plate over the folder colour in the Tinted icon mode
-    readonly property real folderIconPlateTinted: 0.88
+    // measured (two icon tints, dark and light appearance): plate over the folder colour in the Tinted icon mode = base + slope x relative luminance of the icon tint
+    readonly property real folderIconPlateTintedBase: 0.37
+    // measured: see plateTintedBase
+    readonly property real folderIconPlateTintedSlope: 1.5
+    // measured: in the Tinted icon mode the theme's own folder plate is the icon tint times this
+    readonly property real folderIconThemeTintedGain: 1.27
+    // measured: in the Clear icon mode a dark plate lets the backdrop through (a black folder over a light backdrop): the lightest plate over the colour, as a share of the way to white
+    readonly property real folderIconClearLift: 0.22
     // measured: plate of the icon theme's own folder under the symbol (default mode, current theme of the reference session)
     readonly property string folderIconThemePlate: "#a4caee"
     // estimate: 1 px light edge under an engraved symbol (the engraved look)

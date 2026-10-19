@@ -29,7 +29,7 @@ Item {
     readonly property bool hasGlyph: root.glyph !== ""
     readonly property bool glyphIsEmoji: FolderStyle.isEmoji(root.glyph)
     // The engraved shade of the folder colour (opaque).
-    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.mode, Tokens)
+    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.mode, root.tint, Tokens)
     // Its own hex colour, else the global colour (which is the accent for "accent").
     readonly property color folderTint: FolderStyle.colorOf(root.setting, Appearance.colors.accent)
 

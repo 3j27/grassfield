@@ -251,46 +251,60 @@ TestCase {
 
     // A2: a plain symbol reaches 3:1 against the folder plate (icons >= 3:1, docs/testing/visual.md). The model of the
     // plate (the folder colour times the mode's measured factor) is checked for the seven tag colours, the accent, the theme
-    // colour and custom hexes (white, black, yellow), in light and dark appearance and in the four icon modes.
+    // colour and custom hexes (white, black, yellow), in light and dark appearance and in the four icon modes (Tinted
+    // with the accent and with custom icon tints).
     function test_glyphContrastModel() {
         const tints = ["#e5484d", "#f5883b", "#e6b422", "#3fae5a", "#3e7bfa", "#8e5bea", "#8a8f98", "#ffffff", "#000000", "#ffd60a", "#7f7f7f", "#00ff00", "#0000ff"];
+        const modeTints = ["accent", "#e5484d", "#3e7bfa", "#8a8f98", "#ffd60a"];
         for (const dark of [true, false]) {
             Appearance.dark = dark;
             const all = tints.concat([String(Appearance.colors.accent)]);
             for (const mode of ["default", "dark", "clear", "tinted"]) {
-                for (const tint of all) {
-                    const plate = FolderStyle.plateOf(true, tint, mode, Tokens);
-                    const shade = FolderStyle.glyphShade(true, tint, mode, Tokens);
-                    const r = FolderStyle.contrastRatio(FolderStyle.rgbOf(shade), plate);
-                    verify(r >= Tokens.folderIconGlyphMinContrast, "tint " + tint + " " + mode + (dark ? " dark" : " light") + ": " + r.toFixed(2));
+                for (const mt of modeTints) {
+                    const modeTint = mt === "accent" ? String(Appearance.colors.accent) : mt;
+                    if (mode !== "tinted" && mt !== "accent")
+                        continue;
+                    for (const tint of all) {
+                        const plate = FolderStyle.plateOf(true, tint, mode, modeTint, Tokens);
+                        const shade = FolderStyle.glyphShade(true, tint, mode, modeTint, Tokens);
+                        const r = FolderStyle.contrastRatio(FolderStyle.rgbOf(shade), plate);
+                        verify(r >= Tokens.folderIconGlyphMinContrast, "tint " + tint + " " + mode + "/" + mt + (dark ? " dark" : " light") + ": " + r.toFixed(2));
+                    }
+                    const themePlate = FolderStyle.plateOf(false, "", mode, modeTint, Tokens);
+                    const themeShade = FolderStyle.glyphShade(false, "", mode, modeTint, Tokens);
+                    verify(FolderStyle.contrastRatio(FolderStyle.rgbOf(themeShade), themePlate) >= Tokens.folderIconGlyphMinContrast, "theme " + mode + "/" + mt);
                 }
-                const themePlate = FolderStyle.plateOf(false, "", mode, Tokens);
-                const themeShade = FolderStyle.glyphShade(false, "", mode, Tokens);
-                verify(FolderStyle.contrastRatio(FolderStyle.rgbOf(themeShade), themePlate) >= Tokens.folderIconGlyphMinContrast, "theme " + mode);
             }
         }
     }
 
     // The plates MEASURED in nested captures (tests/visual/folder_glyph_contrast.py, before this change, Files icon view,
-    // 64 px icons): the shade chosen for that folder colour and mode reaches 3:1 against the real plate.
+    // 64 px icons, Tinted with the accent of the appearance): the shade chosen for that folder colour and mode reaches 3:1
+    // against the real plate.
     function test_glyphContrastAgainstMeasuredPlates() {
+        const dk = String(Tokens.colorDark.accent), lt = String(Tokens.colorLight.accent);
         const measured = [
-            // tint (null = the theme's own folder), mode, measured plate
-            ["#e5484d", "default", "#e0474b"], ["#3e7bfa", "default", "#3d78f5"], ["#f5883b", "default", "#f0853a"], ["#e6b422", "default", "#e1b021"],
-            ["#3fae5a", "default", "#3eaa58"], ["#8e5bea", "default", "#8b59e5"], ["#8a8f98", "default", "#878c95"], ["#ffffff", "default", "#fafafa"],
-            ["#000000", "default", "#000000"], ["#ffd60a", "default", "#fad20a"], [null, "default", "#a4caee"],
-            ["#e5484d", "dark", "#b5393d"], ["#3e7bfa", "dark", "#3161c6"], ["#ffffff", "dark", "#cacaca"], [null, "dark", "#7fa3c6"],
-            ["#e5484d", "tinted", "#cb4044"], ["#3e7bfa", "tinted", "#376dde"], ["#ffffff", "tinted", "#e2e2e2"]
+            // tint (null = the theme's own folder), mode, icon tint, measured plate
+            ["#e5484d", "default", dk, "#e0474b"], ["#3e7bfa", "default", dk, "#3d78f5"], ["#f5883b", "default", dk, "#f0853a"], ["#e6b422", "default", dk, "#e1b021"],
+            ["#3fae5a", "default", dk, "#3eaa58"], ["#8e5bea", "default", dk, "#8b59e5"], ["#8a8f98", "default", dk, "#878c95"], ["#ffffff", "default", dk, "#fafafa"],
+            ["#000000", "default", dk, "#000000"], ["#ffd60a", "default", dk, "#fad20a"], [null, "default", dk, "#a4caee"],
+            ["#e5484d", "dark", dk, "#b5393d"], ["#3e7bfa", "dark", dk, "#3161c6"], ["#ffffff", "dark", dk, "#cacaca"], [null, "dark", dk, "#7fa3c6"],
+            ["#e5484d", "tinted", dk, "#cb4044"], ["#3e7bfa", "tinted", dk, "#376dde"], ["#ffffff", "tinted", dk, "#e2e2e2"], [null, "tinted", dk, "#63df86"],
+            ["#e5484d", "tinted", lt, "#80282b"], ["#3e7bfa", "tinted", lt, "#23458c"], ["#f5883b", "tinted", lt, "#894c21"], ["#e6b422", "tinted", lt, "#816513"],
+            ["#3fae5a", "tinted", lt, "#236232"], ["#8e5bea", "tinted", lt, "#503383"], ["#8a8f98", "tinted", lt, "#4d5055"], ["#ffffff", "tinted", lt, "#8f8f8f"],
+            ["#ffd60a", "tinted", lt, "#8f7806"], [null, "tinted", lt, "#2f934f"],
+            ["#000000", "clear", dk, "#060708"], ["#000000", "clear", lt, "#353636"], ["#e5484d", "clear", dk, "#e34c52"], ["#e5484d", "clear", lt, "#ff7b80"],
+            ["#ffffff", "clear", lt, "#ffffff"], ["#ffd60a", "clear", lt, "#ffff40"]
         ];
         for (const m of measured) {
-            const shade = FolderStyle.glyphShade(m[0] !== null, m[0] === null ? "" : m[0], m[1], Tokens);
-            const r = contrast(shade, m[2]);
-            verify(r >= Tokens.folderIconGlyphMinContrast, String(m[0]) + " " + m[1] + ": " + shade + " on " + m[2] + " = " + r.toFixed(2));
+            const shade = FolderStyle.glyphShade(m[0] !== null, m[0] === null ? "" : m[0], m[1], m[2], Tokens);
+            const r = contrast(shade, m[3]);
+            verify(r >= Tokens.folderIconGlyphMinContrast, String(m[0]) + " " + m[1] + ": " + shade + " on " + m[3] + " = " + r.toFixed(2));
         }
     }
 
     function test_blackFolderGetsALightSymbol() {
-        const shade = Qt.color(FolderStyle.glyphShade(true, "#000000", "default", Tokens));
+        const shade = Qt.color(FolderStyle.glyphShade(true, "#000000", "default", "#4daf69", Tokens));
         verify(shade.r > 0.3, "lightened: " + shade);
     }
 }
