@@ -49,6 +49,41 @@ TestCase {
         compare(CenterLogic.focusAfterClear(rows("mail:m1 cal:c1"), 2, "chat"), "c1");
     }
 
+    // The focused card left the displayed rows (focusAfterGone).
+    function test_goneArrivalPushedTheThirdCardOut() {
+        // mail m3 m2 m1 collapsed (3 shown), a new mail m4 arrives: m1 is pushed out; the card in its slot (rank 2) is m2
+        compare(CenterLogic.focusAfterGone(rows("mail:m3 mail:m2 mail:m1 cal:c1"), rows("mail:m4 mail:m3 mail:m2 cal:c1"), "m1"), "m2");
+        // the group moved to the top: same rank, not the same absolute slot
+        compare(CenterLogic.focusAfterGone(rows("cal:c1 mail:m3 mail:m2 mail:m1"), rows("mail:m4 mail:m3 mail:m2 cal:c1"), "m1"), "m2");
+    }
+
+    function test_goneShowLessOnTheFifthCardFocusesTheLastDisplayed() {
+        const before = rows("mail:m6 mail:m5 mail:m4 mail:m3 mail:m2 mail:m1 cal:c1");
+        const after = rows("mail:m6 mail:m5 mail:m4 cal:c1");
+        compare(CenterLogic.focusAfterGone(before, after, "m2"), "m4");
+        compare(CenterLogic.focusAfterGone(before, after, "m1"), "m4");
+    }
+
+    function test_goneRemovedCardTakesTheSlotOfTheOneRevealed() {
+        // m3 removed from a collapsed group: m4 was revealed into its slot
+        compare(CenterLogic.focusAfterGone(rows("mail:m1 mail:m2 mail:m3 cal:c1"), rows("mail:m1 mail:m2 mail:m4 cal:c1"), "m3"), "m4");
+        // middle card removed, nothing to reveal: the card that moved up
+        compare(CenterLogic.focusAfterGone(rows("mail:m1 mail:m2 mail:m3 cal:c1"), rows("mail:m1 mail:m3 cal:c1"), "m2"), "m3");
+        // last card of the group removed, nothing to reveal: the group's new last card
+        compare(CenterLogic.focusAfterGone(rows("mail:m1 mail:m2 cal:c1"), rows("mail:m1 cal:c1"), "m2"), "m1");
+    }
+
+    function test_goneGroupFocusesTheNextGroupsFirstCardThenThePrevious() {
+        compare(CenterLogic.focusAfterGone(rows("mail:m1 mail:m2 cal:c1 cal:c2"), rows("cal:c1 cal:c2"), "m2"), "c1");
+        compare(CenterLogic.focusAfterGone(rows("mail:m1 cal:c1 cal:c2"), rows("mail:m1 cal:c2"), "c1"), "c2");
+        compare(CenterLogic.focusAfterGone(rows("mail:m1 cal:c1"), rows("mail:m1"), "c1"), "m1");
+        compare(CenterLogic.focusAfterGone(rows("mail:m1"), [], "m1"), "");
+    }
+
+    function test_goneUnknownKeyIsNotAMove() {
+        compare(CenterLogic.focusAfterGone(rows("mail:m1"), rows("mail:m1"), "zz"), undefined);
+    }
+
     // The x sticks out of the card: the pointer can enter it before it leaves the card, or after; the group stays hot.
     function test_hoverCountsKeepTheGroupWhileAnyPartIsHovered() {
         let c = {};
