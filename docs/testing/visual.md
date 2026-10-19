@@ -70,8 +70,8 @@ already running (`--keep`, `just nested-up`) is left alone.
 Contrast surfaces of the Dock (`contrast.sh --surfaces dock,dockdrag`, captured last in each combination with two foot windows
 `gfdockA`/`gfdockB` that are closed again): `dock` (running dots, the tooltip capsule of the hovered tile, the notification
 badge count) and `dockdrag` (the "Remove" capsule while the pinned foot tile is dragged up; it is brought back to its slot
-before the release, so nothing is removed). The dot follows the appearance (white in dark, black in light) over a shelf tint alpha per appearance (`dock.tintAlphaDark/Light`), 3:1 or more over any backdrop by computation (tst_bartone.qml), measured in the contrast run at
-the values in the report, also over a white and a black window under an autohidden shelf (`docs/testing/dock-fixpass2.md`).
+before the release, so nothing is removed). The dot tone follows the shelf luminance (`BarTone.dotToneFor`), measured at 5.1:1
+or more over white, black and noise in light and dark, transparency 0.25 and 0.6.
 
 Surfaces: `menubar`, `systemmenu`, `appmenu`, `controlcenter` (Quick Settings modules), `controlcenter-detail` (the Wi-Fi
 module opened by a click on its text), `notificationcenter` (3 test notifications, the floating column,
