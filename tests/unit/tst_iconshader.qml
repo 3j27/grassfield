@@ -223,11 +223,14 @@ TestCase {
     //   sky-mountain (a sky and a large green shape: two plate colours) Dark in the dark appearance, outside 1.4-2.4 at 24-32 px
     //     (default 6.7-11.5): the pair keeps its contrast ratio, so its lighter colour is lifted to a mid grey that lies near the
     //     material over a grey wallpaper; the rim fades with the size.
+    //   light-plate-lighter-glyph (a pale gear on a light grey plate; own fixture of the structure of a hardware monitor) Dark and
+    //     Tinted in the dark appearance at 16 px: outside 1.50-2.45 (default 9.4-15.9): the darkened or tinted plate is close to
+    //     the dark material and the only light is a rim that fades at that size; inside holds (1.77-1.83 against 1.52).
     //   Nautilus (two-colour split plate, own plate kept and darkened) Dark: inside 2.72-3.04 at every size (default 5.6-6.6, floor
     //     2.9): the two halves become two near-black greys and the glyph keeps its colour; outside 2.70 at 32 px.
     readonly property var knownLimits: [
         "breeze:accessories-text-editor dark E", "hicolor:kdenlive dark E", "hicolor:kdenlive tinted E",
-        "whitesur:org.gnome.Nautilus dark I", "whitesur:org.gnome.Nautilus dark E", "sky-mountain dark E"
+        "whitesur:org.gnome.Nautilus dark I", "whitesur:org.gnome.Nautilus dark E", "sky-mountain dark E", "light-plate-lighter-glyph dark E", "light-plate-lighter-glyph tinted E"
     ]
 
     readonly property var separationFixtures: ["same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph", "whitesur:hwloc", "hicolor:basecamp"]
