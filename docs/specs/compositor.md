@@ -6,7 +6,8 @@ live transforms (feature 4, Mission Control v2: the plugin side; spike and shell
 R13 fixes 2026-10-18) and the desktop focus policy (feature `desktop-focus`, FR30-FR32, ADR-0012 amendment; v2
 `desktop-focus-v2`) implemented; Stages prototype behind a feature flag (features `stages-available` / `stages`,
 FR33-FR38, ADR-0013, spec `docs/specs/stages.md`; input guards after the R13 review of 46b3e9b; active window, menus
-and focus reasons after the R13 counter-review of 17208af; no focus under an Exclusive layer after the R13 counter-review #3 of e9ebc7f). Plugin 0.6.3-stages.
+and focus reasons after the R13 counter-review of 17208af; no focus under an Exclusive layer after the R13 counter-review #3 of e9ebc7f); cursor
+refresh for the pointer size (feature `cursor-refresh`, FR39-FR40, ADR-0014). Plugin 0.7.0-cursor.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -72,10 +73,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 - **FR9** At load and on `hl.plugin.grassfield.hello()` the plugin posts the socket2 event
   `grassfield>>{"v":"gfc/1","type":"capabilities","features":[...]}`: `decorations` always; `minimize` only
   when the `minimize`/`restore` Lua functions and the minimize render hooks registered; `config` only when the
-  `config` Lua function registered; `appmenu` (FR18), `overview` (FR29), `desktop-focus` + `desktop-focus-v2` (FR31) and
-  `stages-available` (FR33) likewise; `stages` only while its flag is on (FR33)
-  (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available"]` when
-  everything works and the flag is off).
+  `config` Lua function registered; `appmenu` (FR18), `overview` (FR29), `desktop-focus` + `desktop-focus-v2` (FR31),
+  `stages-available` (FR33) and `cursor-refresh` (FR40) likewise; `stages` only while its flag is on (FR33)
+  (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh"]`
+  when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
@@ -278,6 +279,24 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   active window (`CFocusState::resetWindowFocus` plus Hyprland's "no active window" notifications, keyboard holder,
   monitor, Desktop and special workspace untouched) and the incoming front window is focused once the layer released the
   keyboard, checked again then. Decision logic pure: `activeWindowAction`, `pendingFocusAction`, `focusOrigin`.
+- **FR39** Cursor refresh (Settings › Accessibility › Pointer, ADR-0014; `docs/specs/settings.md` Pointer):
+  `hl.plugin.grassfield.cursor_refresh()` (no argument; any argument is ignored and nothing is read from Lua; returns
+  `hl.dsp.no_op()`) draws the pointer on screen again at the size Hyprland holds now. The shell calls it after its
+  `setcursor <theme> <size>` was answered `ok`: Hyprland 0.56.2's `CCursorManager::changeTheme` loads the theme at the new
+  size but leaves the image on screen until a client sets a shape again. The plugin re-applies the image Hyprland shows the
+  way `IHyprRenderer::setCursorHidden(false)` does (read from the 0.56.2 binary):
+  `IHyprRenderer::setCursorFromName(m_lastCursorData.name, true)` (same name, same shape index, image loaded again from the
+  theme at its current size; the pointer position is not touched). Only when the decision (`core/CursorRefresh`, pure) is
+  `redraw`: Hyprland renders the pointer (`shouldRenderCursor()`; a forced `setCursorFromName` bypasses Hyprland's hidden
+  state, so it is never called while the pointer is hidden), the last image is not a client's own surface
+  (`m_lastCursorData.surf` empty: a client surface carries its own image and size, and a client that hid its pointer with
+  `wl_pointer.set_cursor` without a surface reads like this on 0.56.2), a named shape is recorded (no guessed default) and
+  at least one monitor exists. Otherwise nothing is done (`hidden`, `client-surface`, `no-shape`, `no-output`).
+- **FR40** Cursor refresh rate and lifecycle: the first request of a quiet period runs at once; requests within 25 ms of the
+  last run are folded into one trailing run when the interval ends (a Hyprland event loop timer), so the last size is
+  always drawn and a flood costs at most one run per 25 ms. Log lines through the request log budget: one when the outcome
+  or the shape changes and at 1, 10, 100, … runs or folded requests. `cursor-refresh` is advertised when the Lua function
+  registered and Hyprland's renderer exists; `PLUGIN_EXIT` removes the timer and the Lua function.
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -321,6 +340,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | FR38 (R13 review of 46b3e9b) | unit `StagesInput.*` (pointer guard decisions, keyboard after a leave, strip focus origin), `DesktopFocusTarget.PointerFocusOnABlockedWindowIsStale`; nested `stages.sh` 5b (click without motion after a swap), 7b (after a new window), 8b (swap under an Exclusive layer), 12b (minimize the only window of the active stage), 12c (`cycle_next` stays in the active stage); `minimize.sh stages`; `soak.sh 660 stages` | L0 / L1 | 2026-10-18, plugin 0.6.1-stages, Hyprland v0.56.2 (efb50993): stages.sh 45/45, `minimize.sh stages` PASS (O gets the keys after A, alone in the active stage, is minimized), soak PASS; the pre-fix build fbacf15 fails the 5b, 8b and 12b sequences (scratch probe, `docs/specs/stages.md` acceptance) |
 | FR38 (R13 counter-review of 17208af) | unit `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`, `StagesInput.OnlyRealUserFocusIsAChoice`, `StagesInput.ADesktopSwitchRestoringItsLastWindowIsNotAChoice`; nested `stages.sh` 8c (window actions after a swap under an Exclusive layer), 8d (strip menus), 8e (`WORKSPACE_CHANGE`) | L0 / L1 | 2026-10-19, plugin 0.6.2-stages: stages.sh 51/51 (twice); the pre-fix build b7f0c3d fails 8c (both checks) and 8d (the swap check) in the same session (`.dev/stages/run-20261019-081839-check`) |
 | FR38 (R13 counter-review #3 of e9ebc7f) | unit `StagesInput.UnderAnExclusiveLayerTheActiveStripWindowIsOnlyCleared`, `StagesInput.ADeferredFocusWaitsForTheLayerAndIsCheckedAgain`, `StagesInput.HyprlandsActiveWindowNeverStaysOnAStripWindow`; nested `stages.sh` 8c (no window or monitor focus under an Exclusive layer, `close()` closes no window), 8f (special workspace), 8g (Desktop not shown), 8h (polkit-like dialog) | L0 / L1 | 2026-10-19, plugin 0.6.3-stages: stages.sh 58/58 on two outputs (three runs) and GF-REF only; the pre-fix build ffdef45 51/58 in the same session (8c, 8f, 8g, 8h first check; `.dev/stages/run-20261019-130127-check`, `run-20261019-130612-check`); `soak.sh 1260 stages` and `soak.sh 1260` PASS |
+| FR39-FR40 | unit `CursorRefresh.*` (12); nested `tests/compositor/cursor_refresh.sh check` / `baseline` / `stress` | L0 / L1 | 2026-10-19, plugin 0.7.0-cursor, Hyprland v0.56.2 (efb50993), theme grassfield-cursors: `check` **PASS** 3 runs (`.dev/cursor-refresh/run-20261019-153210-check` final): a still arrow over the desktop 15×21 → 29×41 → 57×82 → 15×21 px (heights ×1.95 / ×3.9, back to the identical first image, 0 px differ), a still I-beam over foot 10×20 → 20×40 → 38×78 → 10×20, w/h kept (arrow 0.71, I-beam 0.50), `cursorpos` unchanged, image anchored at the hotspot; foot's hide-when-typing pointer stays hidden after a size change and a refresh (plugin outcome `client-surface`), shown again by a motion at the size applied meanwhile; 30 calls at 10/s + a 1000-call flood: 2 runs for the flood, `1/10/100 request(s) folded` logged, same image; unload: features `[]`, the still pointer keeps 24 px; load: grows again. `baseline` on `nested-up.sh --no-plugin` **PASS**: `hyprctl grassfield` "unknown request", 0 `[grassfield]` log lines, shell "ready degraded", every size sent (`pointer /setcursor grassfield-cursors N`), no script error, the still pointer keeps 24 px at 48/96, also after desktop → Dock → desktop, and shows 96 after an I-beam round trip. `stress 880` next to `soak.sh 900`: 7499 calls, 250 size changes, 0 failed (see C1) |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
 
 ## Interfaces / contracts (versions)
@@ -345,6 +365,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | `hl.plugin.grassfield.config("stagesEnabled", "true"\|"false")` | FR33 |
 | shell → plugin | `hl.plugin.grassfield.stages("<json>")` | `{"op":"on"\|"off"\|"activate"\|"move"\|"merge",…}` (FR34; contract `docs/specs/stages.md`) |
 | plugin → shell | socket2 event `grassfield` (Stages state) | `{"v":"gfc/1","type":"stages","on":bool,"monitors":[…]}` (+ `"reason"`; FR36) |
+| shell → plugin | `hl.plugin.grassfield.cursor_refresh()` (feature `cursor-refresh`), after the shell's `setcursor <theme> <size>` was answered `ok` | the pointer is drawn again at that size, same shape, same place (FR39-FR40); no event |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 The shell sends every verb guarded (`local p = hl.plugin and hl.plugin.grassfield; if p and p.<verb> then
@@ -639,6 +660,16 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   only read (Hyprland's refusal condition) and `CLayerSurface::onUnmap` emits `layer.closed` before Hyprland's refocus
   (read from the v0.56.2 sources). Desktop focus v2: `CViewHitTester::{layerPopupSurfaceAt, layerSurfaceAt, windowSurfaceAt}`,
   `CMonitor::m_layerSurfaceLayers`, `State::monitorState()->query().vec()`, `IView::aliveAndVisible`.
+- Cursor refresh (plugin 0.7.0-cursor, read from the 0.56.2 headers `render/Renderer.hpp`, `pointer/cursor/CursorManager.hpp`,
+  `pointer/PointerManager.hpp`; exported symbols checked with `nm -D /usr/bin/Hyprland`; behaviour read from the stripped
+  binary with `objdump -d`, no source used): `IHyprRenderer::{setCursorFromName(name, force), shouldRenderCursor(),
+  m_lastCursorData.{name, surf}}` (public), `Pointer::Cursor::mgr()`, `Pointer::mgr()`, `State::monitorState()->monitors()`,
+  `CEventLoopManager::{addTimer, removeTimer}`. `setCursorFromName`: sets `m_cursorHasSurface`; returns when the name is
+  unchanged and not forced; assigns the name (self-assignment safe), updates the shape index (timer reset only when it
+  changes), resets `surf`; returns when `m_cursorHidden` and not forced; then `CCursorManager::setCursorFromName(name)`
+  (theme lookup at the size of the last `changeTheme`). `setCursorHidden(false)`: `surf` → `setCursorSurface(surf, hotspot,
+  true)`, else a non-empty name → `setCursorFromName(name, true)`, else `setCursorFromName("left_ptr", true)`.
+  `shouldRenderCursor()` = `!m_cursorHidden && m_cursorHasSurface` (both protected).
 - GCC 16.2.1, C++23. Lua 5.5 headers (Hyprland links `liblua.so.5.5`). GoogleTest 1.18.0 for tests.
 - Quickshell 0.3.1 for the IPC spike.
 
@@ -668,6 +699,11 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
 - Without `stages-available` (plugin absent, mismatched, its listeners failed): no Stages at all; Quick Settings hides the
   toggle. With it but the flag off: `stages` is not advertised and the verb refuses (`disabled`). A monitor without the
   shell's strip surface: its windows are shown normally.
+- Without `cursor-refresh` (plugin absent, mismatched, an older plugin, or withdrawn at unload): the shell still sends
+  `setcursor` and sends no refresh (`shell/platform/Pointer.qml` checks the capability; the call is guarded anyway); the
+  pointer keeps its previous size until the shape name changes: entering another surface that sets the same shape
+  (desktop → Dock, both `default`) is not enough, since `setCursorFromName` returns for an unchanged name. Measured:
+  `tests/compositor/cursor_refresh.sh baseline` and the unload step of `check`.
 
 ## Automated tests · Manual verification steps
 
@@ -689,7 +725,9 @@ Nested scenarios: `tests/compositor/minimize.sh [repeats]` (FR6, FR14–FR17), `
 `tests/compositor/desktop_focus.sh [check | baseline | race | stale]` (FR30-FR32; fixture `tests/compositor/desktop-focus-fixture`),
 `tests/compositor/stages.sh [check | perf [seconds]]` (FR33-FR37; fixture `tests/compositor/stages-fixture`).
 Unit tests also cover the desktop focus policy (`DesktopFocus*`: decision table, layer classification, pending grant,
-press target source) and Stages (`Stages*`: model, request validation, thumbnail geometry, events, flag).
+press target source), Stages (`Stages*`: model, request validation, thumbnail geometry, events, flag) and the cursor
+refresh (`CursorRefresh.*`: verb and feature names as the shell sends them, advertised list, decision table, log names,
+rate gate). Nested: `tests/compositor/cursor_refresh.sh [check | baseline | stress [seconds]]` (FR39-FR40).
 
 Manual (L1, nested only):
 
@@ -783,6 +821,13 @@ Manual (L1, nested only):
   PASS (`.dev/soak-20261019-133750.log`: 771 rounds, 96 minimize pairs, RSS 160.7 MB flat, no core dump, 0 exceptions).
   The Stages-on run used the build before the version-string change (code identical); the Stages-off run, the final
   `stages.sh` run and C2 used the 0.6.3-stages build.
+  Plugin 0.7.0-cursor (cursor refresh, 2026-10-19, Hyprland v0.56.2 commit efb50993): `soak.sh 900` → PASS, exit 0 (log
+  `.dev/soak-20261019-151502.log`: 546 rounds, 137 drags, 69 abandoned, 136 zoom pairs, 68 cancels, 68 closes, 68 minimize
+  pairs all animated, 0 skipped; RSS 152.7 → 162.2 MB from round 100 to 500 → 160.8 MB at the end; no core dump; 0 grassfield
+  exceptions; 320 seat warnings as designed) with `cursor_refresh.sh stress 880` running at the same time (7499 verb calls
+  at 10/s, 250 `pointer.size` changes through the shell, 0 failed calls, `cursor-refresh` still advertised); then on the
+  same build `overview.sh` 32/32, `desktop_focus.sh` 26/26, `minimize.sh` PASS, `cursor_refresh.sh check` PASS. C2:
+  `nested-up.sh --no-plugin` → `cursor_refresh.sh baseline` PASS (FR39-FR40 row).
   **Nested Hyprland losses (C1 investigation).** The reviewer's `soak.sh 1260 stages` on e9ebc7f lost the nested Hyprland
   at round 554 (10:46:19). Findings: its log ends mid-stream with no shutdown line (a SIGTERM stop logs "Hyprland
   received signal 15" and "Hyprland has reached the end", as 60+ other nested logs of that day did), no crash report, no
