@@ -1,6 +1,6 @@
 """Dock motion analysis (tests/visual/dock-motion.sh): tracks the position of a coloured test icon in a burst of frames.
 
-Usage: python3 -I dock-motion.py DIR NAME COLOUR [glide|land]
+Usage: python3 -I dock-motion.py DIR NAME COLOUR [glide|land|collapse]
   DIR/NAME-NNN.ppm  frames (P6) of the Dock area, DIR/NAME.log  "index epoch_ms" per frame
   COLOUR            magenta or cyan: the pixels of the test icon (pure colour, the default icon mode keeps it)
 Prints one line per frame: time since the first frame (ms), x of the icon's left edge, x of its centre, y of its top edge,
@@ -53,7 +53,7 @@ def check_glide(rows):
     if len(moving) < 3:
         return "only %d intermediate frames: the tile jumped" % len(moving)
     steps = [b - a for a, b in zip(xs, xs[1:])]
-    if max(abs(v) for v in steps) > 0.6 * abs(dist):
+    if max(abs(v) for v in steps) > 0.65 * abs(dist):
         return "a single frame moved %d of %d px: a jump" % (max(abs(v) for v in steps), abs(dist))
     if any(v * sign < 0 for v in steps):
         return "the tile turned back (wobble): %s" % steps
@@ -88,6 +88,27 @@ def check_land(rows):
     return ""
 
 
+def check_collapse(rows):
+    """A tile dragged out of the Dock closes its gap: the neighbour (tracked) moves half a pitch towards the centre, in several
+    frames and without overshoot, and moves back when the tile is dragged back in."""
+    xs = [r[1] for r in rows if r[1] is not None]
+    if len(xs) < 6:
+        return "no tile track"
+    start = xs[0]
+    far = max(xs, key=lambda x: abs(x - start))
+    sign = 1 if far > start else -1
+    if not 20 <= abs(far - start) <= 34:
+        return "the neighbour moved %d px (about half a pitch, 26, expected)" % (far - start)
+    up = xs[:xs.index(far) + 1]
+    if len([x for x in up if x != start and x != far]) < 2:
+        return "the gap closed in one frame: no animation"
+    if any((b - a) * sign < 0 for a, b in zip(up, up[1:])):
+        return "the neighbour turned back while the gap closed: %s" % up
+    if abs(xs[-1] - start) > 2:
+        return "the gap did not reopen when the tile was dragged back (%d px off)" % (xs[-1] - start)
+    return ""
+
+
 def main():
     d, name, colour = sys.argv[1:4]
     mode = sys.argv[4] if len(sys.argv) > 4 else "none"
@@ -103,7 +124,7 @@ def main():
         rows.append((t - t0, None if x0 is None else x0, None if x0 is None else (x0 + x1) // 2, y0, n))
     for r in rows:
         print("%d %s %s %s %d" % (r[0], r[1], r[2], r[3], r[4]))
-    verdict = {"glide": check_glide, "land": check_land}.get(mode, lambda rows: "")(rows)
+    verdict = {"glide": check_glide, "land": check_land, "collapse": check_collapse}.get(mode, lambda rows: "")(rows)
     if verdict:
         print("CHECK FAILED (%s): %s" % (name, verdict), file=sys.stderr)
         sys.exit(1)

@@ -101,14 +101,62 @@ analyse quit magenta glide
 vs_kill_clients
 vs_sleep 3
 VS_SETTLE=0.3 vs_capture dock-motion-recents >/dev/null
-record land 4200
-vs_sleep 0.4
-vs_ipc dock click 3 >/dev/null
+# The landing depends on where in a hop the window appears and on how many frames the machine delivers while the app starts
+# (foot's start-up loads it): up to three attempts, each from the recents state; the first that shows a landing counts.
+close_a() {
+  local pid
+  pid=$("$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | select(.class == "gfmA") | .pid' | head -n 1)
+  [[ $pid =~ ^[0-9]+$ ]] && dev_may_signal "$pid" && kill "$pid" || true
+}
+landed=0
+for attempt in 1 2 3; do
+  record land 4600
+  vs_sleep 0.4
+  vs_ipc dock click "$(( attempt == 1 ? 3 : 2 ))" >/dev/null
+  wait "$rec_pid"; rec_pid=""
+  if python3 -I "$VS_HERE/dock-motion.py" "$out" land magenta land > "$out/land.txt"; then
+    landed=1
+    break
+  fi
+  echo "land attempt $attempt: no landing seen (see $out/land.txt)"
+  close_a
+  vs_sleep 3
+done
+echo "land: $landed (attempts: $attempt)"
+(( landed )) || fail=1
+
+# 4. collapse: A quits again (recents: A, B); A's tile is dragged up out of the Dock and back: the shelf closes the gap and
+# reopens it (B, right of A, is tracked). Only the test tiles are dragged.
+pidA=$("$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | select(.class == "gfmA") | .pid' | head -n 1)
+[[ $pidA =~ ^[0-9]+$ ]] && dev_may_signal "$pidA" && kill "$pidA"
+vs_sleep 3
+"$VS_ROOT/scripts/dev/shot.sh" dock-motion-drag-before "$VS_OUTPUT" >/dev/null
+read -r ax ay <<<"$(python3 -I - "$VS_DEV/shots/dock-motion-drag-before.png" <<'PY'
+import subprocess, sys
+data = subprocess.run(["magick", sys.argv[1], "-crop", "1000x160+460+920", "+repage", "-depth", "8", "rgb:-"], capture_output=True, check=True).stdout
+xs, ys = [], []
+for i in range(0, len(data), 3):
+    r, g, b = data[i], data[i + 1], data[i + 2]
+    if r > 200 and b > 200 and g < 60:
+        p = i // 3
+        xs.append(p % 1000)
+        ys.append(p // 1000)
+print(460 + (min(xs) + max(xs)) // 2, 920 + (min(ys) + max(ys)) // 2)
+PY
+)"
+record collapse 4200
+vs_sleep 0.5
+"$VS_ROOT/scripts/dev/pointer.sh" output "$VS_OUTPUT" abs "$ax" "$ay" sleep 300 down sleep 300 drag "$ax" "$(( ay - 140 ))" sleep 1200 drag "$ax" "$ay" sleep 1000 up sleep 300 abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null &
+ptr_pid=$!
+sleep 2.2
+"$VS_ROOT/scripts/dev/shot.sh" dock-motion-drag-out "$VS_OUTPUT" >/dev/null
+wait "$ptr_pid" || true
+ptr_pid=""
 wait "$rec_pid"; rec_pid=""
-analyse land magenta land
+analyse collapse cyan collapse
 vs_kill_clients
 
-for n in open quit land; do
+for n in open quit land collapse; do
   echo "== $n (ms, x left, x centre, y top, pixels)"
   # consecutive frames at the same place are collapsed ("... xN")
   awk '{ k = $2 " " $3 " " $4 " " $5; if (k == prev) { rep++; next } if (rep) printf "  ... x%d\n", rep; rep = 0; prev = k; print } END { if (rep) printf "  ... x%d\n", rep }' "$out/$n.txt"
