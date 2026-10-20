@@ -1681,6 +1681,22 @@
         <translation>%1x</translation>
     </message>
     <message>
+        <source>Minimize windows using</source>
+        <translation>Réduire les fenêtres avec</translation>
+    </message>
+    <message>
+        <source>With Reduce Motion on, windows fade instead.</source>
+        <translation>Avec «&#xa0;Réduire les animations&#xa0;», les fenêtres s’estompent à la place.</translation>
+    </message>
+    <message>
+        <source>Genie Effect</source>
+        <translation>Effet Génie</translation>
+    </message>
+    <message>
+        <source>Scale Effect</source>
+        <translation>Effet d’échelle</translation>
+    </message>
+    <message>
         <source>Automatically hide the Dock</source>
         <translation>Masquer automatiquement le Dock</translation>
     </message>

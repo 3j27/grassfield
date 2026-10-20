@@ -55,6 +55,17 @@ SettingsPage {
         }
 
         SettingsRow {
+            title: qsTr("Minimize windows using")
+            subtitle: qsTr("With Reduce Motion on, windows fade instead.")
+            Picker {
+                accessibleName: qsTr("Minimize windows using")
+                model: [{id: "genie", text: qsTr("Genie Effect")}, {id: "scale", text: qsTr("Scale Effect")}]
+                value: root.store.value("dock.minimizeEffect")
+                onPicked: id => root.store.set("dock.minimizeEffect", id)
+            }
+        }
+
+        SettingsRow {
             title: qsTr("Automatically hide the Dock")
             Toggle {
                 accessibleName: qsTr("Automatically hide the Dock")

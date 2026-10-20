@@ -192,12 +192,18 @@ Singleton {
     // Settings the titlebars honor; pushed after the capabilities handshake (and again on each
     // capabilities event, e.g. a reloaded plugin) and whenever they change.
     readonly property string titlebarDoubleClick: Settings.titlebarDoubleClick
+    // The minimize animation (Settings dock.minimizeEffect); Reduce Motion replaces it with a quick fade in place, as
+    // macOS does. Without the plugin the fallback minimize has no animation at all.
+    readonly property string minimizeEffect: Settings.reduceMotion ? "fade" : Settings.dockMinimizeEffect
 
     onTitlebarDoubleClickChanged: pushPluginConfig()
+    onMinimizeEffectChanged: pushPluginConfig()
 
     function pushPluginConfig(): void {
         if (Capabilities.has("config") && dispatchRequest(Minimized.configCall("titlebarDoubleClick", root.titlebarDoubleClick)))
             console.info("grassfield: compositor setting titlebarDoubleClick =", root.titlebarDoubleClick);
+        if (Capabilities.has("minimize-effect") && dispatchRequest(Minimized.configCall("minimizeEffect", root.minimizeEffect)))
+            console.info("grassfield: compositor setting minimizeEffect =", root.minimizeEffect);
     }
 
     Connections {

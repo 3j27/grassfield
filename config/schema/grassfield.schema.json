@@ -88,6 +88,13 @@
         },
         "minimizeIntoApp": {
           "type": "boolean"
+        },
+        "minimizeEffect": {
+          "type": "string",
+          "enum": [
+            "genie",
+            "scale"
+          ]
         }
       }
     },
