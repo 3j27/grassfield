@@ -1,5 +1,5 @@
 # ADR-0015: Unified toolbar for Grassfield apps: the shared UI framework draws the window controls, the plugin steps aside per window
-Status: Proposed (research only, 2026-10-20; no nested spike run yet) · Date: 2026-10-20 · Decider: owner
+Status: Proposed, owner answers recorded (2026-10-20); accepted once the nested spike passes · Date: 2026-10-20 · Decider: owner
 
 ## Context
 
@@ -311,6 +311,16 @@ Status: Proposed (research only, 2026-10-20; no nested spike run yet) · Date: 2
 - B's single advantage, one renderer for every light, is recovered by three measures: one token source, a parity check,
   and the plugin parity slice (Q2).
 - Implementation starts only after the spike below passes and the owner answers Q1-Q6.
+
+### Owner answers (2026-10-20)
+- Q1: (a) option D, grassfield-ui draws the lights inside the app.
+- Q2: (a) the plugin parity slice ships before or with the first app.
+- Q3: (a) every grassfield-ui window: the main windows of Files, Settings and Preview in the `unified` style, Get Info
+  and Customize Folder in the `titlebar` style; KIO and widget dialogs keep the plugin titlebar.
+- Q6: (a) Qt private API accepted, isolated in one helper header in `apps/`; the apps are rebuilt with each Qt minor.
+- Q4: open until spike steps 4-6 report (native paths first).
+- Q5: (a) radius 26 for unified-toolbar windows, 12 for titlebar-style windows, following the macOS model (integrator
+  choice under the owner's "macOS model first" rule; judged at the F1 review).
 
 ## Test plan (option D)
 - **L0.**
