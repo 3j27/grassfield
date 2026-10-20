@@ -144,9 +144,14 @@ holds only `icon-theme='grassfield-icons'`.
 WhiteSur icon theme (optional package `grassfield-whitesur-icons`, built by `makepkg` from a pinned upstream commit):
 - upstream: https://github.com/vinceliuice/WhiteSur-icon-theme, author per its `AUTHORS`: Vince Liuice; commit
   `73d8040da51a9ed74e47c7366e7e9ff437601a5c`;
-- licence: GPL-3.0 (`COPYING`; whether "only" or "or later" is to VERIFY in the upstream README);
-- data files read by Qt, GTK and KDE, not linked and not modified; nothing of it is in this repository: it is fetched at
-  build time, and the PKGBUILD runs upstream's `install.sh` only while its SHA-256 is the reviewed one;
+- licence: GPL-3.0-only. Upstream ships only `COPYING` (the unmodified GPL version 3 text); no file carries a copyright
+  or "or later" notice (checked at the pin), so no "or later" grant exists;
+- data files read by Qt, GTK and KDE, not linked; nothing of it is in this repository: it is fetched at build time
+  (checksummed `git archive` of the pinned commit), and the PKGBUILD runs upstream's `install.sh` (with `-p`, in a clean
+  environment) only while its SHA-256 is the reviewed one. **Modification, to be noted under GPL-3.0:** the package
+  removes the Apple logo files upstream ships (`start-here*` in places/ and status/, `folder-apple*`, about 12 files and
+  the links to them) and the `icon-theme.cache` files. `packaging/arch/whitesur-guard.sh` does it and fails the build if a
+  known Apple logo remains (ADR-0017). No Apple logo is shipped or displayed;
 - `COPYING`, `AUTHORS` and a `SOURCE` line (URL and commit) are installed in `/usr/share/licenses/grassfield-whitesur-icons/`;
   the PKGBUILD reproduces the package from that commit;
 - the theme's metadata contains the words "MacOSX", and its name alludes to an Apple product name. Grassfield displays

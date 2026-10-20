@@ -1,12 +1,15 @@
 # ADR-0017: WhiteSur as the default app icon theme of the Grassfield session (optional), selected per session
-Status: Proposed (owner decision 2026-10-20, batch 10; design only, nothing implemented) · Date: 2026-10-20 · Decider: owner
+Status: Accepted (owner decision 2026-10-20, batch 10); implemented in slices I0-I3 and I5 (slice I4, the icon-mode retune, is not part of this fix); Apple-logo handling amended 2026-10-20 (pkgrel 5, see "Apple logo" below) · Date: 2026-10-20 · Decider: owner
 
 ## Context
 
 ### Owner decision (2026-10-20, docs/STATE.md:125-126)
 WhiteSur, the GPL-3.0 macOS-inspired icon theme, becomes the default app icon theme of the Grassfield session as an
-**optional** dependency. Owner statement: it contains no Apple files. The trade-dress resemblance stays on the
-legal-review list (docs/legal/). Earlier decisions that this one builds on or changes:
+**optional** dependency. Owner statement: it contains no Apple files. **That statement was not true of upstream's
+default install** (the independent review of merge 7cdbd68 found the Apple logo as `start-here`, `start-here-symbolic`
+and `folder-apple`, with 27 names linking to it); it is true of what Grassfield builds and ships since pkgrel 5, and
+the build enforces it (see "Apple logo" below). The trade-dress resemblance of the app icons stays on the legal-review
+list (docs/legal/). Earlier decisions that this one builds on or changes:
 - ADR-0014 (Proposed): WhiteSur is the base icon theme for the internal phase, "a dependency of the session package
   ... never copied into the repository". Grassfield sets the theme for its session and shell "(Quickshell's IconTheme
   pragma or QT_ICON_THEME/environment, whichever the installed version supports — verify)".
@@ -163,8 +166,8 @@ Quickshell's `//@ pragma IconTheme`: existence not verified for 0.3.1, and not n
 - The vendored, pinned split package `grassfield-whitesur-icons`, optional for `grassfield-desktop`, with `provides`
   and `conflicts` as above. Pin updates follow the `whitesur.sh` procedure: read the new `install.sh` in full, update
   both hashes, re-run the measurements of ui.md:53. Dev keeps `scripts/dev/whitesur.sh` on the same pin.
-- Icon caches: the package runs no cache tool itself. It relies on the gtk-update-icon-cache pacman hook if one is
-  installed (VERIFY); otherwise it ships the cache that `install.sh` built.
+- Icon caches: the package ships no `icon-theme.cache` (they would list removed icons); the gtk-update-icon-cache pacman
+  hook builds them on the target.
 - Uninstall: removing the package makes the session fall back to Adwaita through the wrapper. No configuration to
   undo.
 
@@ -360,6 +363,27 @@ package command.
   - Breeze icons can appear for names WhiteSur lacks (unless 4b).
 - **Re-verify on updates:** Qt minor versions (the variable), uwsm (env file lookup), dconf (profile rules), and any pin
   bump of WhiteSur (icon names used by the shell, the measurements of ui.md:53).
+
+## Apple logo (amendment 2026-10-20, review of merge 7cdbd68)
+Hard rule: no Apple assets or Apple-trademark artwork in the UI or in any package. Upstream WhiteSur at the pin ships
+the Apple logo (viewed by rendering the SVGs): `places/{16,22,24,scalable}/start-here.svg`,
+`places/scalable/start-here-symbolic.svg`, `places/16/folder-apple.svg`, `places/symbolic/folder-apple-symbolic.svg`,
+`status/{16,22,24}/start-here-symbolic.svg`, `status/32/start-here.svg` and `status/symbolic-budgie/...`, with 27 icon
+names linked to them (`start-here-kde*`, `xfce4-whiskermenu`, ...).
+- `install.sh -p` ("Replaces Apple logo with KDE Plasma logo") copies `plasma/` over the places/ start-here files only. It
+  does NOT replace the `status/` logos, `folder-apple` or the budgie one, so `-p` alone is not enough.
+- **Enforcement** (`packaging/arch/whitesur-guard.sh`, list `packaging/arch/whitesur-apple-logos.txt` derived from the
+  pinned checkout with `whitesur-guard.sh list`): `build()` runs install.sh with `-p` in a clean environment, then
+  `clean` removes every file that matches a known logo (whole-file SHA-256, the start of its path data which survives
+  the recolouring of the dark variant, or the names `folder-apple*` and `*apple-logo*`) and every dangling symlink,
+  then `check` FAILS the build if any remains. `package_grassfield-whitesur-icons()` runs `check` again on the packaged
+  tree. The names then resolve to the KDE Plasma logo or to nothing (start-here falls back to the next theme).
+  `scripts/dev/whitesur.sh` runs the same guard, and its stamp (`<pin>-noapple1`) rejects installs made before it.
+  `tests/shell/whitesur_guard.sh` tests the guard on fixtures.
+- Not removed (generic artwork, not the logo): the `phone-apple-iphone`, `computer-apple-ipad`, `*-ipod-touch`, Apple
+  Wallet pass and disk-image MIME icons, whose artwork is a generic phone, tablet, player, document and disc. The
+  trade-dress question stays with counsel (visual-review E27).
+- A pin change requires re-viewing the new logos and regenerating the list.
 
 ## Spike I0 results (2026-10-20, implementation session)
 Scratch files under `.dev/spikes/i0` and the automated tests `tests/shell/icon_theme.sh`, `tests/shell/dconf_profile.sh`.
