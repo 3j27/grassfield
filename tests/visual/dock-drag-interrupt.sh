@@ -78,6 +78,8 @@ kill_class() {
     dev_may_signal "$pid" && kill "$pid"
   done
 }
+trig_none() { :; }
+end_none() { :; }
 trig_overview() { vs_ipc overview open; }
 end_overview() { vs_ipc overview close; sleep 1.5; }
 trig_apps() { vs_ipc apps open; }
