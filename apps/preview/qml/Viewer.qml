@@ -2,8 +2,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 
-// Grassfield Preview: toolbar (sidebar, zoom, rotate, pages, search), sidebar (file list when several
-// files are open, page thumbnails for PDF) and the view of the current file. Nothing is ever written.
+// Grassfield Preview: floating toolbar (sidebar, title and "n of N", previous/next, zoom, rotate, info, search), thumbnail
+// sidebar (the files of the folder when several are open, page thumbnails for PDF) and the view of the current file.
+// Nothing is ever written: zoom, rotation and page are properties of the view.
 Window {
     id: win
 
@@ -12,17 +13,33 @@ Window {
     // The registrar is there (kept up to date by src/main.cpp): the window exports its menus to the global menu bar.
     required property bool globalMenu
 
-    property int current: 0
-    property bool sidebarOpen: true
+    property int current: win.backend.startIndex
+    // Several files named on the command line show their list at once; the folder of a single image starts without it.
+    property bool sidebarOpen: !win.backend.browsing
     property bool searchOpen: false
+    property bool infoOpen: false
+    property bool slideshow: false
+    property bool slideshowPaused: false
     readonly property int fileCount: win.backend.files.length
+    readonly property bool canGoPrevious: win.current > 0
+    readonly property bool canGoNext: win.current < win.fileCount - 1
     readonly property var view: content.view
     readonly property bool isPdf: content.info.kind === "pdf" && content.info.ok === true
     readonly property bool hasSidebar: win.fileCount > 1 || win.isPdf
     readonly property bool showSidebar: win.sidebarOpen && win.hasSidebar
     readonly property int pages: win.view ? win.view.pageCount : 1
+    readonly property bool onImage: content.info.kind === "image" && content.info.ok === true
+    // Second line of the title: the position among the files, then the page of a document.
+    readonly property string subtitle: {
+        const parts = [];
+        if (win.fileCount > 1)
+            parts.push(qsTr("%1 of %2").arg(win.current + 1).arg(win.fileCount));
+        if (win.pages > 1)
+            parts.push(qsTr("Page %1 of %2").arg((win.view?.currentPage ?? 0) + 1).arg(win.pages));
+        return parts.join("  ·  ");
+    }
 
-    title: content.info.name ? content.info.name.replace(/[\r\n]+/g, "\u23CE") : qsTr("Preview")
+    title: content.info.name ? content.info.name.replace(/[\r\n]+/g, "⏎") : qsTr("Preview")
     width: Tokens.previewWindowWidth
     height: Tokens.previewWindowHeight
     minimumWidth: Tokens.previewWindowMinWidth
@@ -34,9 +51,11 @@ Window {
         backend: win.backend
     }
 
+    // Previous or next file of the list (no wrap, like a file manager); a slideshow keeps its own timer.
     function go(delta: int): void {
-        if (win.fileCount > 1)
-            win.current = (win.current + delta + win.fileCount) % win.fileCount;
+        const next = Math.max(0, Math.min(win.fileCount - 1, win.current + delta));
+        if (next !== win.current)
+            win.current = next;
     }
 
     function openSearch(): void {
@@ -53,6 +72,23 @@ Window {
             win.view.forceActiveFocus();
     }
 
+    function toggleSlideshow(): void {
+        if (win.slideshow) {
+            win.endSlideshow();
+            return;
+        }
+        if (win.fileCount < 2)
+            return;
+        win.slideshowPaused = false;
+        win.slideshow = true;
+        win.visibility = Window.FullScreen;
+    }
+
+    function endSlideshow(): void {
+        win.slideshow = false;
+        win.visibility = Window.Windowed;
+    }
+
     onCurrentChanged: {
         if (win.searchOpen)
             win.closeSearch();
@@ -64,6 +100,19 @@ Window {
         active: win.globalMenu
         sourceComponent: GlobalMenu {
             win: win
+        }
+    }
+
+    // A slideshow shows each file for a while, then stops after the last one.
+    Timer {
+        interval: Tokens.previewSlideshowInterval
+        repeat: true
+        running: win.slideshow && !win.slideshowPaused
+        onTriggered: {
+            if (win.canGoNext)
+                win.go(1);
+            else
+                win.endSlideshow();
         }
     }
 
@@ -96,9 +145,21 @@ Window {
         onActivatedAmbiguously: win.view.previousMatch()
     }
     Shortcut {
-        sequence: "Ctrl+Shift+S"
+        sequences: ["Ctrl+Alt+2", "Ctrl+Shift+S"]
+        enabled: win.hasSidebar
         onActivated: win.sidebarOpen = !win.sidebarOpen
         onActivatedAmbiguously: win.sidebarOpen = !win.sidebarOpen
+    }
+    Shortcut {
+        sequence: "Ctrl+I"
+        onActivated: win.infoOpen = !win.infoOpen
+        onActivatedAmbiguously: win.infoOpen = !win.infoOpen
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+F"
+        enabled: win.fileCount > 1
+        onActivated: win.toggleSlideshow()
+        onActivatedAmbiguously: win.toggleSlideshow()
     }
     Shortcut {
         sequence: "Ctrl+R"
@@ -148,25 +209,33 @@ Window {
         onActivated: win.go(1)
         onActivatedAmbiguously: win.go(1)
     }
+    // Page Up and Down turn the pages of a multi-page image; on any other image they go to the previous and next file.
     Shortcut {
         sequence: "PgUp"
-        enabled: content.info.kind === "image" && win.pages > 1
-        onActivated: win.view.goToPage(win.view.currentPage - 1)
+        enabled: win.onImage && !searchInput.activeFocus && (win.pages > 1 || win.fileCount > 1)
+        onActivated: win.pages > 1 ? win.view.goToPage(win.view.currentPage - 1) : win.go(-1)
     }
     Shortcut {
         sequence: "PgDown"
-        enabled: content.info.kind === "image" && win.pages > 1
-        onActivated: win.view.goToPage(win.view.currentPage + 1)
+        enabled: win.onImage && !searchInput.activeFocus && (win.pages > 1 || win.fileCount > 1)
+        onActivated: win.pages > 1 ? win.view.goToPage(win.view.currentPage + 1) : win.go(1)
     }
     Shortcut {
         sequence: "Space"
-        enabled: (content.info.kind === "audio" || content.info.kind === "video") && !searchInput.activeFocus
-        onActivated: win.view.togglePlay()
+        enabled: (content.info.kind === "audio" || content.info.kind === "video" || win.slideshow) && !searchInput.activeFocus
+        onActivated: win.slideshow ? win.slideshowPaused = !win.slideshowPaused : win.view.togglePlay()
     }
     Shortcut {
         sequence: "Esc"
-        enabled: win.searchOpen
-        onActivated: win.closeSearch()
+        enabled: win.searchOpen || win.infoOpen || win.slideshow
+        onActivated: {
+            if (win.slideshow)
+                win.endSlideshow();
+            else if (win.infoOpen)
+                win.infoOpen = false;
+            else
+                win.closeSearch();
+        }
     }
 
     // ---- toolbar ---------------------------------------------------------------------------------
@@ -174,169 +243,296 @@ Window {
     Item {
         id: toolbar
         width: parent.width
-        height: Tokens.previewToolbarHeight
+        height: win.slideshow ? 0 : Tokens.previewToolbarHeight
+        visible: !win.slideshow
+        z: 2
 
-        Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: 1
-            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
-        }
-
-        ToolButton {
-            id: sidebarButton
+        ToolbarGroup {
+            id: sidebarGroup
             x: Tokens.spacingMd
             anchors.verticalCenter: parent.verticalCenter
             visible: win.hasSidebar
-            text: qsTr("Sidebar")
-            onClicked: win.sidebarOpen = !win.sidebarOpen
+
+            ToolButton {
+                glyph: "sidebar"
+                label: qsTr("Thumbnails")
+                checkable: true
+                checked: win.showSidebar
+                onClicked: win.sidebarOpen = !win.sidebarOpen
+            }
+        }
+
+        // Title and subtitle ("3 of 12", "Page 2 of 8"): the same place as the macOS toolbar.
+        Column {
+            id: titleBlock
+            anchors {
+                left: sidebarGroup.visible ? sidebarGroup.right : parent.left
+                leftMargin: Tokens.spacingMd
+                right: tools.left
+                rightMargin: Tokens.spacingMd
+                verticalCenter: parent.verticalCenter
+            }
+            visible: width > 0
+
+            Text {
+                width: parent.width
+                elide: Text.ElideMiddle
+                textFormat: Text.PlainText
+                text: win.title
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyMenuSize
+                font.weight: Tokens.typographyMenuBoldWeight
+                Accessible.role: Accessible.Heading
+                Accessible.name: text
+            }
+            Text {
+                width: parent.width
+                visible: text !== ""
+                elide: Text.ElideRight
+                textFormat: Text.PlainText
+                text: win.subtitle
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
         }
 
         Row {
             id: tools
-            anchors.centerIn: parent
-            spacing: Tokens.spacingSm
-
-            ToolButton {
-                text: "−"
-                label: qsTr("Zoom Out")
-                enabled: win.view?.canZoom ?? false
-                onClicked: win.view.zoomOut()
-            }
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                width: Tokens.previewToolbarButtonSize * 1.5
-                horizontalAlignment: Text.AlignHCenter
-                textFormat: Text.PlainText
-                text: win.view?.zoomLabel ?? ""
-                color: Appearance.colors.textSecondary
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyCaptionSize
-                Accessible.role: Accessible.StaticText
-                Accessible.name: qsTr("Zoom %1").arg(text)
-            }
-            ToolButton {
-                text: "+"
-                label: qsTr("Zoom In")
-                enabled: win.view?.canZoom ?? false
-                onClicked: win.view.zoomIn()
-            }
-            ToolButton {
-                text: qsTr("Fit")
-                label: qsTr("Fit to Window")
-                enabled: win.view?.canZoom ?? false
-                onClicked: win.view.fit()
-            }
-            ToolButton {
-                text: qsTr("Rotate")
-                label: qsTr("Rotate Right")
-                enabled: win.view?.canRotate ?? false
-                onClicked: win.view.rotate(1)
-            }
-            ToolButton {
-                visible: win.pages > 1
-                text: "‹"
-                label: qsTr("Previous Page")
-                enabled: (win.view?.currentPage ?? 0) > 0
-                onClicked: win.view.goToPage(win.view.currentPage - 1)
-            }
-            Text {
-                visible: win.pages > 1
-                anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.PlainText
-                text: qsTr("%1 / %2").arg((win.view?.currentPage ?? 0) + 1).arg(win.pages)
-                color: Appearance.colors.textSecondary
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyCaptionSize
-                Accessible.role: Accessible.StaticText
-                Accessible.name: qsTr("Page %1 of %2").arg((win.view?.currentPage ?? 0) + 1).arg(win.pages)
-            }
-            ToolButton {
-                visible: win.pages > 1
-                text: "›"
-                label: qsTr("Next Page")
-                enabled: (win.view?.currentPage ?? 0) < win.pages - 1
-                onClicked: win.view.goToPage(win.view.currentPage + 1)
-            }
-        }
-
-        // Search field (PDF).
-        Rectangle {
-            id: searchBox
             anchors {
                 right: parent.right
                 rightMargin: Tokens.spacingMd
                 verticalCenter: parent.verticalCenter
             }
-            visible: win.view?.canSearch ?? false
-            width: Tokens.previewSearchWidth
-            height: Tokens.previewToolbarButtonSize
-            radius: Tokens.radiusControl
-            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-            border.width: searchInput.activeFocus ? Tokens.controlFocusRing : 0
-            border.color: Appearance.colors.accent
+            spacing: Tokens.spacingMd
 
-            Icon {
-                id: searchIcon
-                name: "search"
-                size: Tokens.menuIconSize
-                color: Appearance.colors.textSecondary
-                x: Tokens.spacingSm
-                anchors.verticalCenter: parent.verticalCenter
+            ToolbarGroup {
+                visible: win.fileCount > 1
+
+                ToolButton {
+                    glyph: "chevronLeft"
+                    label: qsTr("Previous")
+                    enabled: win.canGoPrevious
+                    onClicked: win.go(-1)
+                }
+                ToolButton {
+                    glyph: "chevronRight"
+                    label: qsTr("Next")
+                    enabled: win.canGoNext
+                    onClicked: win.go(1)
+                }
+                ToolButton {
+                    glyph: "play"
+                    label: qsTr("Slideshow")
+                    onClicked: win.toggleSlideshow()
+                }
             }
 
-            TextInput {
-                id: searchInput
-                TextCursor {}
-                anchors {
-                    left: searchIcon.right
-                    leftMargin: Tokens.spacingSm
-                    right: matches.left
-                    rightMargin: Tokens.spacingSm
-                    verticalCenter: parent.verticalCenter
+            ToolbarGroup {
+                visible: win.view?.canZoom ?? false
+
+                ToolButton {
+                    glyph: "zoomOut"
+                    label: qsTr("Zoom Out")
+                    onClicked: win.view.zoomOut()
                 }
-                clip: true
-                color: Appearance.colors.text
-                selectionColor: Appearance.colors.accent
-                selectedTextColor: Appearance.colors.accentText
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyMenuSize
-                Accessible.role: Accessible.EditableText
-                Accessible.name: qsTr("Search in document")
-                Keys.onPressed: event => {
-                    if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && win.view) {
-                        if (event.modifiers & Qt.ShiftModifier)
-                            win.view.previousMatch();
-                        else
-                            win.view.nextMatch();
-                        event.accepted = true;
+                ToolButton {
+                    glyph: "fit"
+                    label: qsTr("Zoom to Fit")
+                    onClicked: win.view.fit()
+                }
+                ToolButton {
+                    glyph: "zoomIn"
+                    label: qsTr("Zoom In")
+                    onClicked: win.view.zoomIn()
+                }
+            }
+
+            ToolbarGroup {
+                visible: win.view?.canRotate ?? false
+
+                ToolButton {
+                    glyph: "rotateLeft"
+                    label: qsTr("Rotate Left")
+                    onClicked: win.view.rotate(-1)
+                }
+                ToolButton {
+                    glyph: "rotateRight"
+                    label: qsTr("Rotate Right")
+                    onClicked: win.view.rotate(1)
+                }
+            }
+
+            ToolbarGroup {
+                ToolButton {
+                    glyph: "info"
+                    label: qsTr("Info")
+                    checkable: true
+                    checked: win.infoOpen
+                    onClicked: win.infoOpen = !win.infoOpen
+                }
+            }
+
+            // Search (PDF): a circle that opens into a field.
+            Item {
+                id: searchBox
+                visible: win.view?.canSearch ?? false
+                width: win.searchOpen ? Tokens.previewSearchWidth : Tokens.previewToolbarCapsuleHeight
+                height: Tokens.previewToolbarCapsuleHeight
+
+                Material {
+                    anchors.fill: parent
+                    radius: height / 2
+                }
+
+                ToolButton {
+                    anchors.centerIn: parent
+                    visible: !win.searchOpen
+                    glyph: "search"
+                    label: qsTr("Search in document")
+                    onClicked: win.openSearch()
+                }
+
+                Glyph {
+                    id: searchIcon
+                    visible: win.searchOpen
+                    kind: "search"
+                    color: Appearance.colors.textSecondary
+                    x: Tokens.spacingMd
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                TextInput {
+                    id: searchInput
+                    TextCursor {}
+                    visible: win.searchOpen
+                    anchors {
+                        left: searchIcon.right
+                        leftMargin: Tokens.spacingSm
+                        right: matches.left
+                        rightMargin: Tokens.spacingSm
+                        verticalCenter: parent.verticalCenter
+                    }
+                    clip: true
+                    color: Appearance.colors.text
+                    selectionColor: Appearance.colors.accent
+                    selectedTextColor: Appearance.colors.accentText
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyMenuSize
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: qsTr("Search in document")
+                    Keys.onPressed: event => {
+                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && win.view) {
+                            if (event.modifiers & Qt.ShiftModifier)
+                                win.view.previousMatch();
+                            else
+                                win.view.nextMatch();
+                            event.accepted = true;
+                        }
+                    }
+                    Keys.onEscapePressed: win.closeSearch()
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: searchInput.text === ""
+                        textFormat: Text.PlainText
+                        text: qsTr("Search")
+                        color: Appearance.colors.textSecondary
+                        font: searchInput.font
                     }
                 }
-                Keys.onEscapePressed: win.closeSearch()
 
                 Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: searchInput.text === "" && !searchInput.activeFocus
+                    id: matches
+                    anchors {
+                        right: parent.right
+                        rightMargin: Tokens.spacingMd
+                        verticalCenter: parent.verticalCenter
+                    }
+                    visible: win.searchOpen && searchInput.text !== ""
                     textFormat: Text.PlainText
-                    text: qsTr("Search")
+                    text: win.view && win.view.matches !== undefined ? qsTr("%1 found").arg(win.view.matches) : ""
                     color: Appearance.colors.textSecondary
-                    font: searchInput.font
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyCaptionSize
                 }
             }
+        }
+    }
 
-            Text {
-                id: matches
-                anchors {
-                    right: parent.right
-                    rightMargin: Tokens.spacingSm
-                    verticalCenter: parent.verticalCenter
+    // ---- info -------------------------------------------------------------------------------------
+
+    Item {
+        id: info
+        z: 3
+        visible: win.infoOpen && !win.slideshow
+        x: win.width - width - Tokens.spacingMd
+        y: toolbar.height
+        width: Tokens.previewInfoWidth
+        height: infoRows.height + 2 * Tokens.spacingMd
+        Accessible.role: Accessible.Pane
+        Accessible.name: qsTr("Info")
+
+        Material {
+            anchors.fill: parent
+            radius: Tokens.radiusMenu
+        }
+
+        Column {
+            id: infoRows
+            x: Tokens.spacingMd
+            y: Tokens.spacingMd
+            width: parent.width - 2 * Tokens.spacingMd
+
+            Repeater {
+                model: {
+                    const i = content.info;
+                    const rows = [[qsTr("Name"), i.name ?? ""], [qsTr("Kind"), i.type ?? ""]];
+                    if (i.width !== undefined && i.height !== undefined)
+                        rows.push([qsTr("Dimensions"), qsTr("%1 × %2 pixels").arg(i.width).arg(i.height)]);
+                    rows.push([qsTr("Size"), i.size ?? ""], [qsTr("Modified"), i.modified ?? ""], [qsTr("Where"), i.folder ?? ""]);
+                    return rows;
                 }
-                visible: searchInput.text !== ""
-                textFormat: Text.PlainText
-                text: win.view && win.view.matches !== undefined ? qsTr("%1 found").arg(win.view.matches) : ""
-                color: Appearance.colors.textSecondary
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyCaptionSize
+
+                Item {
+                    id: infoRow
+
+                    required property var modelData
+
+                    width: infoRows.width
+                    height: Tokens.previewInfoRowHeight
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: qsTr("%1: %2").arg(infoRow.modelData[0]).arg(infoRow.modelData[1])
+
+                    Text {
+                        id: infoLabel
+                        width: Tokens.previewInfoWidth / 3
+                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
+                        textFormat: Text.PlainText
+                        text: infoRow.modelData[0]
+                        color: Appearance.colors.textSecondary
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyCaptionSize
+                    }
+                    Text {
+                        anchors {
+                            left: infoLabel.right
+                            leftMargin: Tokens.spacingSm
+                            right: parent.right
+                            verticalCenter: parent.verticalCenter
+                        }
+                        elide: Text.ElideMiddle
+                        textFormat: Text.PlainText
+                        text: infoRow.modelData[1].replace(/[\r\n]+/g, "⏎")
+                        color: Appearance.colors.text
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyCaptionSize
+                    }
+                }
             }
         }
     }
@@ -350,101 +546,155 @@ Window {
             bottom: parent.bottom
             left: parent.left
         }
-        width: win.showSidebar ? Tokens.previewSidebarWidth : 0
-        visible: win.showSidebar
+        width: win.showSidebar && !win.slideshow ? Tokens.previewSidebarWidth + Tokens.spacingSm : 0
+        visible: width > 0
         clip: true
 
+        // A floating panel inset from the window edges (macOS 26).
         Rectangle {
-            anchors.right: parent.right
-            width: 1
-            height: parent.height
-            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
-        }
-
-        // Files, when several were opened.
-        ListView {
-            id: fileList
+            id: panel
             anchors {
-                top: parent.top
-                left: parent.left
-                right: parent.right
-                margins: Tokens.spacingSm
+                fill: parent
+                leftMargin: Tokens.spacingSm
+                bottomMargin: Tokens.spacingSm
             }
-            height: win.fileCount > 1 ? (win.isPdf ? Math.min(contentHeight, parent.height / 3) : parent.height - 2 * Tokens.spacingSm) : 0
-            visible: win.fileCount > 1
+            radius: Tokens.radiusPanel
+            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+            border.width: 1
+            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
             clip: true
-            model: win.backend.files
-            currentIndex: win.current
-            Accessible.role: Accessible.List
-            Accessible.name: qsTr("Files")
 
-            delegate: Item {
-                id: row
+            // Files: thumbnails of the images, names of the other kinds. Beside the page thumbnails of a PDF they are
+            // a short list of names.
+            ListView {
+                id: fileList
 
-                required property int index
-                required property var modelData
+                readonly property bool compact: win.isPdf
 
-                width: fileList.width
-                height: Tokens.previewSidebarItemHeight
-                Accessible.role: Accessible.ListItem
-                Accessible.name: row.modelData.name
-                Accessible.selected: row.index === win.current
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Tokens.radiusControl
-                    color: row.index === win.current ? Appearance.colors.accent : (rowMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                    margins: Tokens.spacingSm
                 }
-                Text {
-                    anchors {
-                        fill: parent
-                        leftMargin: Tokens.spacingSm
-                        rightMargin: Tokens.spacingSm
+                height: win.fileCount > 1 ? (fileList.compact ? Math.min(contentHeight, panel.height / 3) : panel.height - 2 * Tokens.spacingSm) : 0
+                visible: win.fileCount > 1
+                clip: true
+                spacing: Tokens.spacingXs
+                model: win.backend.files
+                currentIndex: win.current
+                highlightMoveDuration: 0
+                Accessible.role: Accessible.List
+                Accessible.name: qsTr("Files")
+
+                onCurrentIndexChanged: fileList.positionViewAtIndex(fileList.currentIndex, ListView.Contain)
+                Component.onCompleted: fileList.positionViewAtIndex(fileList.currentIndex, ListView.Center)
+
+                delegate: Item {
+                    id: row
+
+                    required property int index
+                    required property var modelData
+                    readonly property bool selected: row.index === win.current
+                    readonly property real cellHeight: Math.round(Tokens.previewThumbnailWidth * 3 / 4)
+
+                    width: fileList.width
+                    height: fileList.compact ? Tokens.previewSidebarItemHeight : row.cellHeight + labelText.implicitHeight + 3 * Tokens.spacingSm
+                    Accessible.role: Accessible.ListItem
+                    Accessible.name: row.modelData.name
+                    Accessible.selected: row.selected
+
+                    // Selection: a rounded accent plate around thumbnail and name (compact: the row).
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: fileList.compact ? Tokens.radiusControl : Tokens.radiusMenu
+                        color: row.selected ? Appearance.colors.accent : (rowMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
                     }
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideMiddle
-                    textFormat: Text.PlainText
-                    maximumLineCount: 1
-                    // A file name may contain line breaks: keep one line, shown as the return symbol.
-                    text: row.modelData.name.replace(/[\r\n]+/g, "\u23CE")
-                    color: row.index === win.current ? Appearance.colors.accentText : Appearance.colors.text
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyMenuSize
-                }
-                MouseArea {
-                    id: rowMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: win.current = row.index
+
+                    Item {
+                        id: thumb
+                        visible: !fileList.compact
+                        x: (parent.width - width) / 2
+                        y: Tokens.spacingSm
+                        width: Tokens.previewThumbnailWidth
+                        height: row.cellHeight
+
+                        Image {
+                            anchors.fill: parent
+                            visible: row.modelData.kind === "image"
+                            // Decoded at its size by the provider (image://preview/thumb), twice for a sharp edge.
+                            source: row.modelData.kind === "image" && !fileList.compact ? "image://preview/thumb/" + row.index : ""
+                            sourceSize: Qt.size(width * 2, height * 2)
+                            asynchronous: true
+                            cache: true
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            mipmap: true
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: row.modelData.kind !== "image"
+                            radius: Tokens.radiusControl
+                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                        }
+                    }
+
+                    Text {
+                        id: labelText
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            leftMargin: Tokens.spacingSm
+                            rightMargin: Tokens.spacingSm
+                            top: fileList.compact ? undefined : thumb.bottom
+                            topMargin: Tokens.spacingXs
+                            verticalCenter: fileList.compact ? parent.verticalCenter : undefined
+                        }
+                        horizontalAlignment: fileList.compact ? Text.AlignLeft : Text.AlignHCenter
+                        elide: Text.ElideMiddle
+                        textFormat: Text.PlainText
+                        maximumLineCount: 1
+                        // A file name may contain line breaks: keep one line, shown as the return symbol.
+                        text: row.modelData.name.replace(/[\r\n]+/g, "⏎")
+                        color: row.selected ? Appearance.colors.accentText : Appearance.colors.text
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: fileList.compact ? Tokens.typographyMenuSize : Tokens.typographyCaptionSize
+                    }
+                    MouseArea {
+                        id: rowMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: win.current = row.index
+                    }
                 }
             }
-        }
 
-        Loader {
-            id: thumbs
-            anchors {
-                top: fileList.bottom
-                topMargin: Tokens.spacingSm
-                bottom: parent.bottom
-                left: parent.left
-                right: parent.right
-                margins: Tokens.spacingSm
+            Loader {
+                id: thumbs
+                anchors {
+                    top: fileList.bottom
+                    topMargin: Tokens.spacingSm
+                    bottom: parent.bottom
+                    left: parent.left
+                    right: parent.right
+                    margins: Tokens.spacingSm
+                }
+                active: win.isPdf && win.view !== null
+                source: "Thumbnails.qml"
             }
-            active: win.isPdf && win.view !== null
-            source: "Thumbnails.qml"
-        }
 
-        Binding {
-            target: thumbs.item
-            property: "document"
-            value: win.view?.document
-            when: thumbs.item !== null && win.view !== null
-        }
-        Binding {
-            target: thumbs.item
-            property: "pdfView"
-            value: win.view
-            when: thumbs.item !== null && win.view !== null
+            Binding {
+                target: thumbs.item
+                property: "document"
+                value: win.view?.document
+                when: thumbs.item !== null && win.view !== null
+            }
+            Binding {
+                target: thumbs.item
+                property: "pdfView"
+                value: win.view
+                when: thumbs.item !== null && win.view !== null
+            }
         }
     }
 

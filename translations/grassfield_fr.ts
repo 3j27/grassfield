@@ -2300,8 +2300,20 @@
         <translation>Survol</translation>
     </message>
     <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Previous</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
         <source>%1 of %2</source>
         <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Next</source>
+        <translation>Suivant</translation>
     </message>
     <message>
         <source>Open with Preview</source>
@@ -2511,14 +2523,6 @@
         <translation>Présentation</translation>
     </message>
     <message>
-        <source>Hide Sidebar</source>
-        <translation>Masquer la barre latérale</translation>
-    </message>
-    <message>
-        <source>Show Sidebar</source>
-        <translation>Afficher la barre latérale</translation>
-    </message>
-    <message>
         <source>Actual Size</source>
         <translation>Taille réelle</translation>
     </message>
@@ -2537,6 +2541,30 @@
     <message>
         <source>Go</source>
         <translation>Aller</translation>
+    </message>
+    <message>
+        <source>Hide Thumbnails</source>
+        <translation>Masquer les vignettes</translation>
+    </message>
+    <message>
+        <source>Show Thumbnails</source>
+        <translation>Afficher les vignettes</translation>
+    </message>
+    <message>
+        <source>Hide Info</source>
+        <translation>Masquer les informations</translation>
+    </message>
+    <message>
+        <source>Show Info</source>
+        <translation>Afficher les informations</translation>
+    </message>
+    <message>
+        <source>Stop Slideshow</source>
+        <translation>Arrêter le diaporama</translation>
+    </message>
+    <message>
+        <source>Slideshow</source>
+        <translation>Diaporama</translation>
     </message>
     <message>
         <source>Previous Page</source>
@@ -3483,6 +3511,10 @@
         <translation>Affiche un Survol flottant des fichiers (Espace ou Échap le ferme).</translation>
     </message>
     <message>
+        <source>Show file number &lt;n&gt; of the given files first (0 is the first).</source>
+        <translation>Afficher d’abord le fichier numéro &lt;n&gt; des fichiers donnés (0 est le premier).</translation>
+    </message>
+    <message>
         <source>Local files or file: URLs.</source>
         <translation>Fichiers locaux ou URL file:.</translation>
     </message>
@@ -3971,52 +4003,52 @@
         <translation>Visionneuse</translation>
     </message>
     <message>
-        <source>Sidebar</source>
-        <translation>Barre latérale</translation>
-    </message>
-    <message>
         <source>Zoom Out</source>
         <translation>Zoom arrière</translation>
-    </message>
-    <message>
-        <source>Zoom %1</source>
-        <translation>Zoom %1</translation>
     </message>
     <message>
         <source>Zoom In</source>
         <translation>Zoom avant</translation>
     </message>
     <message>
-        <source>Fit</source>
-        <translation>Ajuster</translation>
-    </message>
-    <message>
-        <source>Fit to Window</source>
-        <translation>Ajuster à la fenêtre</translation>
-    </message>
-    <message>
-        <source>Rotate</source>
-        <translation>Pivoter</translation>
-    </message>
-    <message>
         <source>Rotate Right</source>
         <translation>Pivoter à droite</translation>
-    </message>
-    <message>
-        <source>Previous Page</source>
-        <translation>Page précédente</translation>
-    </message>
-    <message>
-        <source>%1 / %2</source>
-        <translation>%1 / %2</translation>
     </message>
     <message>
         <source>Page %1 of %2</source>
         <translation>Page %1 sur %2</translation>
     </message>
     <message>
-        <source>Next Page</source>
-        <translation>Page suivante</translation>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Thumbnails</source>
+        <translation>Vignettes</translation>
+    </message>
+    <message>
+        <source>Previous</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Next</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Slideshow</source>
+        <translation>Diaporama</translation>
+    </message>
+    <message>
+        <source>Zoom to Fit</source>
+        <translation>Ajuster à la fenêtre</translation>
+    </message>
+    <message>
+        <source>Rotate Left</source>
+        <translation>Pivoter à gauche</translation>
+    </message>
+    <message>
+        <source>Info</source>
+        <translation>Informations</translation>
     </message>
     <message>
         <source>Search in document</source>
@@ -4029,6 +4061,38 @@
     <message>
         <source>%1 found</source>
         <translation>%1 trouvés</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Dimensions</source>
+        <translation>Dimensions</translation>
+    </message>
+    <message>
+        <source>%1 × %2 pixels</source>
+        <translation>%1 × %2 pixels</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation>Modifié le</translation>
+    </message>
+    <message>
+        <source>Where</source>
+        <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation>%1 : %2</translation>
     </message>
     <message>
         <source>Files</source>

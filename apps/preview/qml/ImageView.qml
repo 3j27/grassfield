@@ -111,6 +111,17 @@ Item {
             }
         }
 
+        // Double click toggles between Zoom to Fit and Actual Size (macOS Preview).
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            onDoubleTapped: {
+                if (root.fitMode && root.fitScale < 1)
+                    root.actualSize();
+                else
+                    root.fit();
+            }
+        }
+
         PinchHandler {
             target: null
             onScaleChanged: delta => root.setZoom(root.viewScale * delta)
