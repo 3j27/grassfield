@@ -8,8 +8,9 @@ R13 fixes 2026-10-18) and the desktop focus policy (feature `desktop-focus`, FR3
 FR33-FR38, ADR-0013, spec `docs/specs/stages.md`; input guards after the R13 review of 46b3e9b; active window, menus
 and focus reasons after the R13 counter-review of 17208af; no focus under an Exclusive layer after the R13 counter-review #3 of e9ebc7f); cursor
 refresh for the pointer size (feature `cursor-refresh`, FR39-FR40, ADR-0014); the focus after the Overview closes (feature
-`overview-focus`, FR41-FR43, owner decision 2026-10-19 batch 5; its deferred-focus core shared with Stages). Plugin
-0.8.0-ovfocus.
+`overview-focus`, FR41-FR43, owner decision 2026-10-19 batch 5; its deferred-focus core shared with Stages); the Genie
+minimize effect, the Scale effect and the Reduce Motion fade (feature `minimize-effect`, FR44-FR46, Track B3, owner
+defect #6). Plugin 0.9.0-genie.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -22,9 +23,12 @@ Code: `compositor/`. Build and run: `compositor/README.md`.
   buttons, truncated with an ellipsis when too long.
 - Dragging the titlebar moves the window; double-clicking it performs the user's chosen action (default: zoom).
 - Buttons act on mouse-up over the same button (press, move away, release = cancel).
-- Minimize: the window shrinks into its own tile in the Dock, right of the separator ("Scale" effect: the
-  window shrinks uniformly while it moves, accelerating; "Genie" bends it into the tile), in about a third of
-  a second; clicking the tile plays it backwards and makes the window key again.
+- Minimize: the window goes into its own tile in the Dock, right of the separator. System Settings > Desktop & Dock
+  > "Minimize windows using": "Genie Effect" (the default: the window's bottom is pulled into the tile through a
+  curved funnel, its sides pinch toward the tile's width, then the whole window slides down into it, about half a
+  second) or "Scale Effect" (the window shrinks uniformly while it moves, accelerating, about a third of a second).
+  Clicking the tile plays the effect backwards and makes the window key again. Shift held plays it in slow motion.
+  With Reduce Motion the window fades instead of moving.
 
 ## Purpose and non-goals
 
@@ -33,8 +37,7 @@ macOS-like titlebars on floating windows, and that the shell can discover the pl
 IPC under Hyprland's Lua config (input for ADR-0007). M2: real minimize with an animation toward the Dock
 tile rectangle the shell sends (ADR-0002), and the user's double-click setting.
 
-Non-goals: the "Genie" warp (the animation is the "Scale" effect: uniform shrink + move; a genie would need a
-mesh-deformed texture draw, which Hyprland's pass elements do not offer), hover glyphs and inactive-state
+Non-goals: hover glyphs and inactive-state
 buttons, appearance switching, tiled windows, CSD negotiation; for the overview: the layout, labels, Desktops bar and
 input (the shell), transforming popups; for appmenu: reading or
 rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B, ADR-0008), the
@@ -76,8 +79,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `grassfield>>{"v":"gfc/1","type":"capabilities","features":[...]}`: `decorations` always; `minimize` only
   when the `minimize`/`restore` Lua functions and the minimize render hooks registered; `config` only when the
   `config` Lua function registered; `appmenu` (FR18), `overview` (FR29), `desktop-focus` + `desktop-focus-v2` (FR31),
-  `stages-available` (FR33), `cursor-refresh` (FR40) and `overview-focus` (FR43) likewise; `stages` only while its flag is on
-  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus"]`
+  `stages-available` (FR33), `cursor-refresh` (FR40) and `overview-focus` (FR43) likewise; `minimize-effect` (FR45) with
+  `minimize` and `config`; `stages` only while its flag is on
+  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect"]`
   when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
@@ -96,20 +100,22 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   compared with the live windows, rectangle finite, 1–1024 px per side and fully inside one monitor); the
   function always returns `hl.dsp.no_op()`. An invalid address is ignored; an invalid rectangle means "no
   animation". The window is snapshotted, moved to `special:minimized` at once (same hidden state as the
-  shell's fallback), and its snapshot shrinks uniformly (aspect ratio kept, centered in the tile) and moves
-  into the tile in 300 ms with an ease-in curve (cubic Bézier 0.4, 0, 1, 1), fading out over the last 20 %.
+  shell's fallback), and its snapshot animates into the tile with the configured effect (FR44-FR46). Scale: it
+  shrinks uniformly (aspect ratio kept, centered in the tile) and moves into the tile in 300 ms with an ease-in curve
+  (cubic Bézier 0.4, 0, 1, 1), fading out over the last 20 %.
   Then `grassfield>>{"v":"gfc/1","type":"minimized","address":"<hex>"}` is posted (at once without
   animation). A window already on `special:minimized` is left alone.
 - **FR15** `hl.plugin.grassfield.restore(address, x, y, w, h)`: same validation. A window on
   `special:minimized` moves back to the focused monitor's active workspace at its floating geometry (Hyprland
   keeps it on the special workspace), is focused and raised at once, and stays transparent while its snapshot
-  grows from the tile to its box in 300 ms (ease-out, the time-reverse of FR14's curve, fading in over the
-  first 20 %); then it is shown and `{"type":"restored"}` is posted. A restore during a minimize animation
-  (or a minimize during a restore) completes the running one first; a minimize interrupting a restore starts
-  from the restore's current box.
+  plays the configured effect backwards (Scale: grows from the tile to its box in 300 ms, ease-out, the time-reverse
+  of FR14's curve, fading in over the first 20 %); then it is shown and `{"type":"restored"}` is posted. A restore
+  during a minimize animation (or a minimize during a restore) completes the running one first; a Scale minimize
+  interrupting a restore starts from the restore's current box, a Genie one (either way) from the shape on screen.
 - **FR16** `hl.plugin.grassfield.config(key, value)`: allowlist `titlebarDoubleClick` = `zoom` | `minimize` |
-  `none` (exact strings); anything else is rejected (logged, no change); returns `hl.dsp.no_op()`. The shell
-  pushes the setting after each capabilities event and whenever Settings change.
+  `none`, `stagesEnabled` (FR33) and `minimizeEffect` = `genie` | `scale` | `fade` (FR45) (exact strings); anything
+  else is rejected (logged, no change); returns `hl.dsp.no_op()`. The shell pushes the settings after each
+  capabilities event and whenever Settings change.
 - **FR17** Minimize robustness: a window closed during its animation drops the animation (no event); a
   monitor removed or the monitor layout changing completes every animation at once; unloading the plugin
   completes every animation (a restoring window is made visible, minimized windows stay on
@@ -349,6 +355,38 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   records, the refusal gate) and `DeferredFocus.*` (Hyprland's refusal checks, keyboard holder, cursor on an Exclusive layer,
   press context, reason mapping, coalesced event-loop attempt); Stages uses them unchanged (same conditions, order and doLater
   semantics; `gf::stages` keeps aliases).
+- **FR44** Genie effect (the default; `core/Genie.*`, drawn by `GenieDraw.*`): the window's visible box goes into its
+  visible box fitted into the Dock tile (`fitInside`) in 500 ms. Model in the Dock frame (axis along = toward the Dock
+  edge, across = parallel to it): each window row (fraction v) lies between the far edge (window top) and the near edge
+  (window bottom); the near edge travels to the tile's far side over the first 50 % (ease-in-out cubic), the far edge
+  slides to the tile's near side from 25 % to the end (ease-in quad). A funnel gives each depth its span across: the
+  window's span above the window's far edge, the tile's from the tile's near side on, a smoothstep S-curve between;
+  spans blend from the window's own span into the funnel over the first 40 % (the sides pinch, then the body slides
+  down through the neck). Progress 0 is exactly the window, 1 exactly the target, every point moves monotonically
+  (along: toward the Dock; across: toward its end place), rows never cross and never invert. The Dock edge is the side
+  of the tile's monitor closest to the tile (bottom today; top, left and right use the same math). The snapshot is drawn
+  on a 32 x 96 quad mesh (96 along the curved sides) covering the window's full box (shadow included, clipped to the
+  snapshot) with a GLES 3 textured shader, opacity 1 until the last 15 % (minimize) / from the first 15 % (restore).
+  A restore is the minimize played backwards (progress 1 -> 0, same curves). Genie is used only when it can be drawn:
+  GL renderer, the custom element drawn (FR46), the snapshot's monitor untransformed, the tile's far side beyond the
+  window's far edge (`isGenieGeometry`); otherwise that animation runs the Scale effect.
+- **FR45** Effect setting (`dock.minimizeEffect`, Settings > Desktop & Dock > "Minimize windows using"):
+  `hl.plugin.grassfield.config("minimizeEffect", "genie" | "scale" | "fade")`, accepted only while `minimize` is available;
+  the feature `minimize-effect` tells the shell the key exists (older plugins reject it, so the shell sends it only
+  then). The shell sends `fade` while `accessibility.reduceMotion` is on (macOS Reduce Motion: no genie, no movement):
+  the snapshot fades out (minimize) or in (restore) at the window's own place in 100 ms (`Tokens.motionReducedMax`),
+  linearly. Default before any push: `genie`. A change applies to the next animation (a running one keeps its effect).
+  Shift held on any keyboard (`getModsFromAllKBs() & HL_MODIFIER_SHIFT`) when an animation starts plays it 10 times
+  slower (macOS Shift-click slow motion), for every effect.
+- **FR46** Genie drawing safety: the element (type `EK_CUSTOM`, `draw()` called by Hyprland while it renders the pass,
+  after the windows and before the top layers) scissors every draw to the frame's damage (nothing is drawn outside it),
+  saves and restores the GL program, vertex array, array buffer, active texture and 2D texture bindings around its draw,
+  and goes through Hyprland's cache-aware blend and scissor calls. Its GL objects (program, vertex array, vertex and index
+  buffers) are created at the first draw and deleted at unload with Hyprland's EGL context current. A shader compile or
+  link failure, or 10 Genie elements added without a single `draw()` call, disables Genie for the plugin's life (one
+  error line) and the running Genie animations continue as Scale ones. Each finished animation logs one timing line
+  (own log budget, FR24): effect, duration, frames on the snapshot's monitor, frame interval avg / max, CPU time per
+  frame (render.preChecks -> RENDER_POST) avg / max, longest Genie draw (CPU).
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -395,7 +433,8 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | FR36, FR38 (R13 counter-review #4 of 0.6.3-stages) | unit `StagesInput.ARefocusAtTheCursorWithoutAPressIsNotAClick`, `APressIsAClickWhileHyprlandHandlesIt`, `APressBesideAnExclusiveLayerChoosesTheWindowPressed`, `ADeferredFocusFallsBackToTheFrontWindowNow`, `StagesEvents.TheFrontWindowAndItsApp`, `ClientTextIsSanitized`; nested `stages.sh` 8i (refocus at the cursor over an unrelated window, the stage's back window, empty desktop; remembered window closed; a click beside the layer or just after it wins; `front` in the event) and 8c (a focus-matched window rule rechecked) | L0 / L1 | 2026-10-19, plugin 0.6.4-stages, Hyprland v0.56.2 (efb50993): stages.sh **66/66** on the headless pair GF-REF + GF-REF2 (`.dev/stages/run-20261019-165827-check`) and on GF-REF only (`run-20261019-170037-check`), WAYLAND-1 disabled; the pre-fix build 3a1a7a8 (0.6.3-stages) **60/66** in the same session (`run-20261019-170310-check`: 8c rule, 8i(a) both checks, 8i(b), 8i(d), 8i(e) just after); after the merge with cursor-refresh (plugin 0.7.1-stages): 66/66 on the pair (`run-20261019-174116-check`) and GF-REF only (`run-20261019-174322-check`); `soak.sh 1260 stages` PASS (735 rounds, 92 minimize/restore pairs through the Dock, Hyprland exit status 0 only at `nested-down.sh`); details in `docs/specs/stages.md` "Fix pass 4" |
 | FR39-FR40 | unit `CursorRefresh.*` (12); nested `tests/compositor/cursor_refresh.sh check` / `baseline` / `stress` | L0 / L1 | 2026-10-19, plugin 0.7.0-cursor, Hyprland v0.56.2 (efb50993), theme grassfield-cursors: `check` **PASS** 3 runs (`.dev/cursor-refresh/run-20261019-153210-check` final): a still arrow over the desktop 15×21 → 29×41 → 57×82 → 15×21 px (heights ×1.95 / ×3.9, back to the identical first image, 0 px differ), a still I-beam over foot 10×20 → 20×40 → 38×78 → 10×20, w/h kept (arrow 0.71, I-beam 0.50), `cursorpos` unchanged, image anchored at the hotspot; foot's hide-when-typing pointer stays hidden after a size change and a refresh (plugin outcome `client-surface`), shown again by a motion at the size applied meanwhile; 30 calls at 10/s + a 1000-call flood: 2 runs for the flood, `1/10/100 request(s) folded` logged, same image; unload: features `[]`, the still pointer keeps 24 px; load: grows again. `baseline` on `nested-up.sh --no-plugin` **PASS**: `hyprctl grassfield` "unknown request", 0 `[grassfield]` log lines, shell "ready degraded", every size sent (`pointer /setcursor grassfield-cursors N`), no script error, the still pointer keeps 24 px at 48/96, also after desktop → Dock → desktop, and shows 96 after an I-beam round trip. `stress 880` next to `soak.sh 900`: 7499 calls, 250 size changes, 0 failed (see C1) |
 | FR41-FR43 | unit `OverviewFocus*` (request validation, gate, target plan, fallback Desktop, front window order, presses, user focus, events, capability: 11), `DeferredFocus*` (3; the Stages cases run through the aliases); nested `tests/compositor/overview_focus.sh check` / `baseline` / `stress`; `stages.sh`, `overview.sh`, `desktop_focus.sh`, `minimize.sh`, `soak.sh` (C1) | L0 / L1 | 2026-10-19, plugin 0.8.0-ovfocus, Hyprland v0.56.2 (efb50993): `check` **66/66 PASS** on the headless pair GF-REF + GF-REF2, WAYLAND-1 disabled (`.dev/overview-focus/run-20261019-194052-check`, final build; `run-20261019-192909-check`): letters reach exactly the target for the window active at open (three release orders), a window on the other output (chromes mapped or unmapping), the current Desktop, a Desktop on the other output, another Desktop, a closed and a minimized target (fallback), a press beside the remaining chrome, a polkit-like dialog during the close (its field gets the letters, `timeout`; a short one: the target after it), the lock (`refused`, nothing typed, no window focused); invalid payloads, a 300-request flood (one outcome), unload while waiting (`unavailable`, reload advertises the feature). `baseline` (the verb a no-op): old build 0.7.1-stages and `--no-plugin` both **32/44**, safety PASS (`run-20261019-201004-baseline`, `run-20261019-200901-baseline`): the targets on the other output, another Desktop and the press get nothing, keys lost after a closed or minimized target. Regressions on the same builds: `stages.sh` **66/66** (pair, `.dev/stages/run-20261019-193039-check`; final build with GF-REF + WAYLAND-1, `run-20261019-200634-check`), `overview.sh` 32/32, `desktop_focus.sh` 26/26, `minimize.sh` PASS |
-| FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`) |
+| FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`). Runtime unload mid-animation: verified 2026-10-20 by `tests/compositor/genie.sh` step 5 (FR44-FR46 row) |
+| FR44-FR46 | unit `GenieEdge.*`, `GenieGeometry.*` (exact window at 0, exact target at 1, inside the bounds, monotonic, rows never cross, genie not scale midway, only toward the Dock), `GenieMesh.*`, `GenieTiming.*`, `MinimizeEffect.*`; QML `tst_minimized` `configCallMinimizeEffect`; nested `tests/compositor/genie.sh` (shape of captures, timing, unload / load mid-animation), `genie.sh c2` (C2) | L0 / L1 | 2026-10-20, plugin 0.9.0-genie, Hyprland v0.56.2 (efb50993), headless GF-REF 1920x1080@60 on i915, host load 9-18 (other agents' sessions): unit 248/248; `genie.sh` **PASS** (`.dev/genie/run-20261020-163707`): genie minimize 4 of 5 slow-motion captures classified genie (funnel, top 4-7x wider than the neck), restore 4 of 5; scale 0 genie (3 + 5 rectangles); Reduce Motion: every footprint at the window's own box, move -> event 101 / 102 ms; unload 1 s into a slow genie minimize: Hyprland alive, window on `special:minimized`; reload advertises `minimize-effect`; unload 1 s into a slow genie restore: window fully shown at its place; no core dump, 0 exceptions. Timing at normal speed, no capture: genie 10 animations / 310 frames, frame interval mean 16.9 ms, worst 20.2 ms (0 frames over 25 ms), Genie draw CPU 0.35-5.0 ms; scale 6 / 114 frames worst 18.9 ms; fade 6 / 42 worst 19.8 ms. Captures (grim screencopy) stalled the nested compositor for 0.4-3.8 s per capture burst with every effect, hence slow motion for the captures. Two multi-second frames without captures were seen in genie rounds (3.0 s in `run-20261020-162322`, 1 of 10; 2.2 s in `.dev/minimize/run-20261020-171057`, 1 of 20) under that load; cause not isolated. `genie.sh c2 993 1032` **PASS** (`.dev/genie/run-20261020-172150`, `nested-up.sh --no-plugin`): `hyprctl grassfield` "unknown request", shell degraded, SUPER+M parks the window, the Dock tile restores it. `minimize.sh 20`: FAIL twice under load (`run-20261020-171057`: 3 events late beyond 3 s, the shell answering minimize-requests 1.4-1.5 s late; `run-20261020-172302`: the nested shell vanished without a core dump or a log line between 17:24:09 and 17:24:12, next to an i915 GPU hang of another nested Hyprland reported at 17:24:16 ("Resetting rcs0 for preemption time out"), with 6 fence timeouts on this instance); to be rerun on a quiet GPU, with `soak.sh 300` (not run) |
 
 ## Interfaces / contracts (versions)
 
@@ -409,6 +448,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | Lua function `hl.plugin.grassfield.hello()` via `Hyprland.dispatch("hl.plugin.grassfield.hello()")` | re-posts capabilities |
 | shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` (Dock tile, layout px, integers) | FR14 / FR15 |
 | shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | FR16 |
+| shell → plugin | `hl.plugin.grassfield.config("minimizeEffect", "genie"\|"scale"\|"fade")` (only with feature `minimize-effect`) | FR45 |
 | plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}`; `"service":"","path":""` = no menu (FR20–FR22) |
 | shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's appmenu event (FR22) |
 | client → plugin | Wayland global `org_kde_kwin_appmenu_manager` v2 (`create(new_id, wl_surface)`, `release` since 2); `org_kde_kwin_appmenu.set_address(s, s)`, `release` | FR18–FR21 |
@@ -585,7 +625,18 @@ Chosen in Hyprland 0.56.2 after reading its headers and the v0.56.2 sources of `
   planes, but Hyprland would then hold objects whose vtable lives in the plugin: unloading safely needs
   `clear()` (drops Hyprland's own fadeouts) or relying on `cleanupForMonitor`; the plugin-owned pass element
   keeps every pointer on the plugin side.
-- **Genie warp: out of scope** (a deformed mesh draw is not available through pass elements).
+- **Genie (Track B3): a custom pass element with its own GLES 3 draw.** Hyprland 0.56.2's `IPassElement` has
+  `ePassElementType::EK_CUSTOM` and a virtual `draw()`; the element renderer's `drawCustom` calls it while it renders
+  the pass, in order (measured in nested: the element's draw runs every frame of the animation and lands between the
+  windows and the top layers, like the Scale `CTexPassElement`). `draw()` uploads this frame's mesh (positions as
+  fractions of the element's pixel box, mapped to clip space by `IHyprRenderer::projectBoxToTarget`, the same box
+  projection Hyprland gives its textured quads; texture coordinates into the snapshot, sampled top-down) and issues one
+  `glDrawElements` per damage rectangle, scissored with `CHyprOpenGLImpl::scissor`. The mesh is computed in `core/`
+  at each tick (render.preChecks) in layout coordinates and converted per monitor at `RENDER_POST_WINDOWS`; damage is
+  the mesh's box. Rejected: slicing the snapshot into hundreds of `CTexPassElement` strips (one textured rectangle per
+  row band: staircase edges, hundreds of draws per frame); a window transformer (`IWindowTransformer`) (it needs the
+  window rendered every frame, the window is already on `special:minimized`); drawing at `RENDER_LAST_MOMENT` (above
+  the menu bar and the Dock, and outside the pass's damage tracking).
 
 Crash safety: arguments are copied out of Lua with non-raising calls before any C++ work (Lua errors
 longjmp); every hook runs in `gf::guarded`; windows are looked up by comparing addresses, held as weak
@@ -638,7 +689,11 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
   `Desktop::focusState()->monitor()`, `CWindow::{alpha(WINDOW_ALPHA_MOVE_TO_WORKSPACE |
   WINDOW_ALPHA_MOVE_FROM_WORKSPACE), getWindowMainSurfaceBox, getWindowExtentsUnified, geometricBox(GOAL),
   positionAnimation, sizeAnimation}`, `CEventLoopTimer` with `g_pEventLoopManager->{addTimer, removeTimer}`,
-  `Time::steadyNow`. Behavior read from the v0.56.2 sources (data, see "Minimize (M2): mechanism").
+  `Time::steadyNow`. Genie (FR44-FR46): `IPassElement` (`EK_CUSTOM`, `draw()`, `boundingBox`, `opaqueRegion`),
+  `IHyprRenderer::{projectBoxToTarget, disableScissor, m_renderData.damage, addPassElement}`,
+  `Render::GL::g_pHyprOpenGL->{blend, scissor(const pixman_box32*), makeEGLCurrent}`, `ITexture::{m_texID, bind, unbind,
+  setTexParameter}`, `g_pInputManager->getModsFromAllKBs()` with `HL_MODIFIER_SHIFT`, `render.stage` `RENDER_POST`; GLES 3
+  (`libGLESv2`, already loaded by Hyprland) for the program, buffers and vertex array. Behavior read from the v0.56.2 sources (data, see "Minimize (M2): mechanism").
   Desktop focus (FR30-FR32) and the overview R13 fixes, read from the 0.56.2 headers: `g_pSeatManager->{m_state.keyboardFocus,
   m_state.pointerFocus, m_seatGrab->m_keyboard}`, `CWLSurfaceResource::m_role` with `SURFACE_ROLE_SUBSURFACE` /
   `CSubsurfaceRole::m_subsurface` / `CWLSubsurfaceResource::m_parent`, `Desktop::View::CWLSurface::fromResource()->view()`,
@@ -759,6 +814,9 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
 - Minimize without the `minimize` feature (plugin absent, mismatched, or its hooks failed): the shell parks
   the window on `special:minimized` itself (no animation) and restores it from there; same hidden state, so
   windows minimized either way stay restorable after the plugin comes or goes.
+- Genie unavailable (Vulkan renderer, shader failure, custom elements not drawn, transformed monitor, tile behind the
+  window): that animation uses the Scale effect (FR44, FR46). A plugin without `minimize-effect` (older build): the shell
+  sends no `minimizeEffect` and the plugin keeps its own animation.
 - Minimize without a Dock (no shell, or no target rectangle): the shell sends an empty rectangle and the
   plugin minimizes/restores without animation; with no shell at all, the minimize button only posts
   `minimize-request` and nothing happens (there would be no way to restore the window).
@@ -809,7 +867,10 @@ pass 31458f5 (recents, dividers) had made the computed tile drift), `tests/compo
 `tests/fixtures/build.sh`), `tests/compositor/event_flood.sh [requests...]` (FR24; needs grassfield-shell),
 `tests/compositor/overview.sh [check | perf [seconds]]` (FR25-FR29; fixture `tests/compositor/overview-fixture`),
 `tests/compositor/desktop_focus.sh [check | baseline | race | stale]` (FR30-FR32; fixture `tests/compositor/desktop-focus-fixture`),
-`tests/compositor/stages.sh [check | perf [seconds]]` (FR33-FR37; fixture `tests/compositor/stages-fixture`).
+`tests/compositor/stages.sh [check | perf [seconds]]` (FR33-FR37; fixture `tests/compositor/stages-fixture`),
+`tests/compositor/genie.sh [timing N | c2 [X Y]]` (FR44-FR46: effects, shape of slow-motion captures classified by
+`tests/compositor/genie_shape.py`, frame timing, unload / load mid-animation; `c2`: the fallback without the plugin).
+Unit tests `Genie*` and `MinimizeEffect.*` cover the genie geometry, mesh, timing and the effect allowlist.
 Unit tests also cover the desktop focus policy (`DesktopFocus*`: decision table, layer classification, pending grant,
 press target source), Stages (`Stages*`: model, request validation, thumbnail geometry, events, flag) and the cursor
 refresh (`CursorRefresh.*`: verb and feature names as the shell sends them, advertised list, decision table, log names,
@@ -959,7 +1020,12 @@ Manual (L1, nested only):
   request (`timeout`) and Hyprland's own refocus decides when it closes. The activation order behind the front window starts
   at the plugin load (before it, and after a reload, the stack order is used). A touch or tablet press during the close counts
   as a press into the Exclusive layer (it never retargets). Stages on during a close focus was not exercised in nested.
-- Minimize uses the "Scale" effect; there is no "Genie" warp.
+- Genie (FR44): the window bends under the menu bar and the Dock (drawn before the top layers, like the Scale effect),
+  so its neck disappears behind the Dock's material instead of pouring over the tile; the snapshot is sampled without
+  colour management (correct on SDR outputs; an HDR output would show the window's colours unconverted during the
+  0.5 s) and without mipmaps (the shrunk end of the funnel can shimmer slightly); each mesh quad is two affine
+  triangles (no visible seam at 32 x 96). A rotated or flipped snapshot monitor, a Dock tile behind the window's top
+  edge, or the Vulkan renderer use the Scale effect instead.
 - The animation shows a snapshot taken at the start: a window that changes while it animates (video) is
   frozen for 300 ms; translucent windows are drawn without their blur during the animation (Hyprland renders
   snapshots without blur).

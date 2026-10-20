@@ -143,6 +143,11 @@ mid-animation, screenshots of the animation; PASS (exit 0) = window hidden on `s
 `minimized` event and a Dock tile, restored at its geometry and focused with a `restored` event, every round
 completed, Hyprland alive without core dump.
 
+Minimize effects (nested only, plugin + shell): `tests/compositor/genie.sh [timing N | c2 [X Y]]` — Genie, Scale and
+Reduce Motion (fade) through the dev settings file, slow-motion (Shift) captures classified by
+`tests/compositor/genie_shape.py`, the plugin's frame timing lines, plugin unload / load mid-animation; `c2` in a
+session started with `nested-up.sh --no-plugin` checks the shell's fallback. Run it bare, with the relative path.
+
 Double-click setting (nested only, plugin + shell): `tests/compositor/double_click_setting.sh` — rewrites the dev
 settings file (`.dev/config/grassfield.json`, restored at exit) to `minimize`, `none`, `zoom` and double-clicks a
 titlebar; PASS (exit 0) = minimized, unchanged, maximized then restored.
