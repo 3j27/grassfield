@@ -9,7 +9,7 @@ FR33-FR38, ADR-0013, spec `docs/specs/stages.md`; input guards after the R13 rev
 and focus reasons after the R13 counter-review of 17208af; no focus under an Exclusive layer after the R13 counter-review #3 of e9ebc7f); cursor
 refresh for the pointer size (feature `cursor-refresh`, FR39-FR40, ADR-0014); the focus after the Overview closes (feature
 `overview-focus`, FR41-FR43, owner decision 2026-10-19 batch 5; its deferred-focus core shared with Stages). Plugin
-0.8.0-ovfocus.
+0.8.1-clickfocus (click focus for Hyprland's focused window without the keyboard, FR30 (d)).
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -233,7 +233,16 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   workspace switch (`workspace.active`) (R13 review of 5706cbd: a late commit must not take the keyboard from what a key
   binding, a dispatch, a new window or a workspace switch chose). (c) Nothing else: no hover handling, presses on other
   `grassfield-*` layers, on popups, during a keyboard grab, an Exclusive layer or the session lock change nothing.
-  Decision logic pure (`core/DesktopFocus.*`: press table, target source, pending grant).
+  (d) Click focus for Hyprland's focused window (real-session bug 2026-10-20, packages 0.4.0-3, plugin 0.8.1-clickfocus):
+  a press on the window Hyprland counts as its focused window (`Desktop::focusState()->window()`) while the seat keyboard
+  is not on it (its surface, a subsurface or one of its popups) gives it the keyboard, any button, with the same refusal
+  rules as (a). Hyprland 0.56.2 refocuses on a click only when the clicked window is not its focused window; after a
+  session unlock with the pointer off the windows (desktop, menu bar) it keeps its last window focused while the keyboard
+  is on no surface, so a click on that window did nothing (`tests/compositor/click_focus.sh lock`). When Hyprland's focus
+  state still names the window's surface, `fullWindowFocus` returns early: the state is reset first
+  (`CFocusState::resetWindowFocus`) and the focus made again (`gf::deferredFocus::focusWindow`, shared with the
+  titlebar; never while Hyprland refuses window focus). The titlebar's own press focus (FR7) tests the keyboard holder,
+  not `isWindowActive`. Decision logic pure (`core/DesktopFocus.*`: press table, target source, pending grant).
 - **FR31** `desktop-focus` is advertised only when its listeners registered. `PLUGIN_EXIT` removes the button, layer,
   commit and focus listeners and any pending grant before the other teardown steps; the keyboard stays where it is.
 - **FR32** Withdrawal: after every hook is removed, `PLUGIN_EXIT` posts `{"v":"gfc/1","type":"capabilities","features":[]}`

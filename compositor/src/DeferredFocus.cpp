@@ -31,6 +31,29 @@ namespace gf::deferredFocus {
         return sessionLocked() || exclusiveLayerMapped();
     }
 
+    bool windowHoldsKeyboard(const PHLWINDOW& w) {
+        const auto fs = Desktop::focusState();
+        return w && fs && fs->window() == w && gf::surfaces::ownerOf(gf::surfaces::keyboardFocus()).window == w;
+    }
+
+    bool focusWindow(const PHLWINDOW& w, Desktop::eFocusReason reason, bool* stateReset) {
+        if (stateReset)
+            *stateReset = false;
+        const auto fs = Desktop::focusState();
+        if (!fs || !w || !w->m_isMapped || windowFocusRefused())
+            return false;
+        if (windowHoldsKeyboard(w))
+            return true;
+        fs->fullWindowFocus(w, reason);
+        if (!windowHoldsKeyboard(w) && fs->window() == w && !windowFocusRefused()) {
+            if (stateReset)
+                *stateReset = true;
+            fs->resetWindowFocus();
+            fs->fullWindowFocus(w, reason);
+        }
+        return windowHoldsKeyboard(w);
+    }
+
     SP<CWLSurfaceResource> keyboardHolder() {
         const auto fs = Desktop::focusState();
         if (auto surface = fs ? fs->surface() : nullptr)
