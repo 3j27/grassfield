@@ -35,10 +35,8 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
 | v2 spike | live transforms: mechanism, layering, input, CPU, cleanup (`tests/compositor/overview.sh check`, `perf`) | L1 |
 
 ## Known limitations
-- Contrast (A2, open finding): the Desktops bar captions use `textSecondary` on the black dim over the wallpaper, not on
-  Material, so the exact token calculation (`tests/visual/test_contrast_tokens.py`) lists them as an exempt role
-  ("overview captions") and `contrast.sh` has no Overview surface. Their ratio is not measured; fix by measuring the
-  Overview surface with the glyph mask, or by moving the captions to the primary text colour.
+- Contrast: the Desktops bar is a Material band (full width, 164 pt with the menu bar, hairline under it) and its names use the
+  primary text colour on it, so the old "overview captions" exemption is gone (the window count captions were removed).
 - v1 shows thumbnails, not the real windows moving; real-window transforms need the plugin (v2).
 - v2 (plugin side): popups are not transformed, full-screen windows are not transformed, fractional scales and
   rotated outputs are not verified (see "Shell contract" item 8).
@@ -514,3 +512,11 @@ layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (
   (the plugin renders into a monitor-sized buffer); fractional scales and rotated outputs are not verified; when the plugin
   reports fewer windows than sent (ineligible ones) their hit areas still sit at the layout rect; Desktops bar tiles of other
   Desktops have no capture; Ctrl+Up is the owner's binding (not in the dev config: IPC `overview toggle` was used).
+
+## Mission Control finish (B1, 2026-10-20)
+- Desktops bar: full-width Material band from the menu bar to 164 pt, thumbnails 138 x 90 centred with the Desktop name under
+  each (13 pt), round 32 add button 18 pt from the right edge (tokens `overview.barHeight`, `tileLabelGap`, `addEdgeInset`).
+- Defect #10: the window that was active at open carries the accent ring and its name label at once (`OverviewWindow.marked`:
+  hover or keys' selection, else the remembered window); Return with nothing chosen activates it.
+- Side-by-side sheets against gs-066-145 (local only): geometry of band, thumbnails, names and add button matches within 2 pt.
+  Desktop thumbnails still show the app icon, not a capture of the Desktop (needs plugin support, not done).
