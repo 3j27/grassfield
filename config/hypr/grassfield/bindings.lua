@@ -102,6 +102,9 @@ bind("SUPER + RETURN", "Terminal", hl.dsp.exec_cmd("xdg-terminal-exec"))
 
 -- Shell surfaces (handled by grassfield-shell IPC targets)
 bind("SUPER + SPACE", "Search", shell("search", "toggle"))
+-- Apps (macOS 26: the Apps key F4 / the Launchpad key on Apple keyboards, docs/specs/apps.md A11).
+bind("F4", "Apps", shell("apps", "toggle"))
+bind("XF86LaunchA", "Apps", shell("apps", "toggle"))
 bind("CTRL + UP", "Overview", shell("overview", "toggle"))
 bind("SUPER + CTRL + Q", "Lock screen", shell("lock", "lock"))
 bind("SUPER + N", "Notification Center", shell("notifications", "toggleCenter"))
@@ -122,3 +125,6 @@ bind("XF86MonBrightnessDown", "Brightness down", shell("brightness", "down"), { 
 hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
 hl.gesture({ fingers = 3, direction = "up", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call overview open") end })
 hl.gesture({ fingers = 3, direction = "down", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call overview close") end })
+-- Apps: pinch with the thumb and three fingers opens it, spreading them closes it (macOS 26, docs/specs/apps.md A11).
+hl.gesture({ fingers = 4, direction = "pinchin", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call apps open") end })
+hl.gesture({ fingers = 4, direction = "pinchout", action = function() hl.exec_cmd("qs ipc " .. shell_selector .. " call apps close") end })

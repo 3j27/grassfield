@@ -700,6 +700,10 @@
 <context>
     <name>Bindings</name>
     <message>
+        <source>Apps</source>
+        <translation>Apps</translation>
+    </message>
+    <message>
         <source>Super</source>
         <translation>Super</translation>
     </message>
@@ -1840,6 +1844,10 @@
     <message>
         <source>Trash</source>
         <translation>Corbeille</translation>
+    </message>
+    <message>
+        <source>Apps</source>
+        <translation>Apps</translation>
     </message>
     <message>
         <source>Trash, empty</source>

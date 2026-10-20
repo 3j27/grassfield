@@ -163,7 +163,9 @@ ShellRoot {
     DesktopIcons {}
     DesktopWidgets {}
     MenuBar {}
-    Dock {}
+    Dock {
+        onAppsRequested: appsSurface.toggle()
+    }
     Overlay {}
     Banners {}
     NotificationCenter {}
