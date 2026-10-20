@@ -206,10 +206,76 @@ Scope {
 
     Component.onCompleted: rebuild()
 
+    // Drag-out removal follows "cancel on interruption": anything that can take the pointer or the focus during a tile drag marks the
+    // drag interrupted (win.dragInterrupted), and an interrupted drag never removes its tile (it glides back). Events only. The
+    // Dock's own drag feedback (Remove label, puff, tooltip) is inside its window and reports none of these.
+    function interruptDrag(): void {
+        const all = windows.instances;
+        for (let i = 0; i < all.length; i++) {
+            if (all[i].dragFrom >= 0)
+                all[i].dragInterrupted = true;
+        }
+    }
+
+    onKeyboardModeChanged: interruptDrag()
+
+    // A shell full-attention surface opened (Search, Apps, switcher, popup host, Notification Center, widget menu, Overview).
+    Connections {
+        target: FocusReturn
+
+        function onSurfaceOpened(name: string): void {
+            root.interruptDrag();
+        }
+
+        function onSurfaceClosed(name: string): void {
+            root.interruptDrag();
+        }
+
+        // The session lock.
+        function onLockedChanged(): void {
+            root.interruptDrag();
+        }
+    }
+
+    // Any shell popup (Dock menu, menu-bar menus, Control Center, ...) opening, switching or closing.
+    Connections {
+        target: Popups
+
+        function onKindChanged(): void {
+            root.interruptDrag();
+        }
+    }
+
+    // Windows, workspaces, monitors and layers of the session (Hyprland events, relayed by the platform layer).
+    Connections {
+        target: Compositor
+
+        function onInterrupted(event: string): void {
+            root.interruptDrag();
+        }
+
+        function onFocusedToplevelChanged(): void {
+            root.interruptDrag();
+        }
+
+        function onFocusedScreenNameChanged(): void {
+            root.interruptDrag();
+        }
+    }
+
+    Connections {
+        target: Quickshell
+
+        function onScreensChanged(): void {
+            root.interruptDrag();
+        }
+    }
+
     Connections {
         target: Compositor.toplevels
 
         function onValuesChanged(): void {
+            root.interruptDrag();
             root.rebuild();
         }
     }
@@ -361,31 +427,31 @@ Scope {
             readonly property real dragOutReach: Tokens.dockPadding + iconSize / 2 + Tokens.dockDragOutDistance
             readonly property bool dragOut: dragFrom >= 0 && dragDy < -dragOutReach
             // Set ONLY by the drag handler when the pointer button is really released (exclusive grab ended by a release event)
-            // away from the drop zone. Every other end of a drag (cancelled or stolen grab, a shell surface opening, windows or
-            // outputs changing, Esc, quit) leaves it false: the tile glides back and stays pinned.
+            // away from the drop zone. Every other end of a drag (cancelled or stolen grab) leaves it false.
             property bool releasedOutside: false
-            // Wall-clock stamps (ms) of the last pointer release seen by the drag handler and of the last time the window lost the
-            // pointer. A release that comes together with the loss of the pointer is Qt's synthesized one (another surface took
-            // the pointer: Overview, Search, a menu...), not the user's.
-            property real releaseAt: 0
-            property real hoverLostAt: 0
-            readonly property bool releasedWithPointerLoss: Math.abs(hoverLostAt - releaseAt) <= Tokens.motionFast
+            // Set by root.interruptDrag() and by a cancelled or stolen grab, cleared when a drag starts: something took the pointer or
+            // the focus during the drag (a shell surface, a popup, the lock, a window, workspace or monitor event, Esc in keyboard
+            // mode). Qt then ends the drag with a synthesized release that looks real, so an interrupted drag never removes: the
+            // tile glides back.
+            property bool dragInterrupted: false
             readonly property bool dragRemovable: dragFrom >= 0 && !!root.items[dragFrom] && (root.items[dragFrom].pinned || root.items[dragFrom].recent === true) && root.items[dragFrom].windows.length === 0
             property real poofX: 0
             property real poofY: 0
             property real poofProgress: 1
 
-            // A tile is removed only when releasedOutside was set by a positive release event outside the Dock's drop zone and the
-            // live drag offset agrees. A release inside the shelf never removes (macOS).
+            // A tile is removed only when ALL hold: releasedOutside was set by a positive release event outside the Dock's drop zone,
+            // the live drag offset agrees, the item can be removed and the drag was not interrupted. A release inside the shelf never
+            // removes (macOS).
             function finishDrag(tileItem: Item): void {
                 const from = dragFrom;
                 const all = root.items;
                 const item = all[from];
-                const out = releasedOutside && !releasedWithPointerLoss && dragOut && dragRemovable;
+                const out = releasedOutside && !dragInterrupted && dragOut && dragRemovable;
                 const dragOutNotReleased = !out && dragOut && dragRemovable;
                 const slot = dragSlot;
                 const fromApp = dragFromApp;
                 releasedOutside = false;
+                dragInterrupted = false;
                 // mapToItem already includes the tile's drag translation (its Translate transform): adding dragDx/dragDy put the puff off the window.
                 const cx = tileItem.mapToItem(area, tileItem.width / 2, win.iconSize / 2).x;
                 const cy = tileItem.mapToItem(area, 0, win.iconSize / 2).y;
@@ -656,10 +722,6 @@ Scope {
 
                 HoverHandler {
                     id: areaHover
-                    onHoveredChanged: {
-                        if (!hovered)
-                            win.hoverLostAt = Date.now();
-                    }
                     // Using the pointer leaves keyboard mode (focus returns to the app).
                     onPointChanged: {
                         if (hovered)
@@ -1158,28 +1220,21 @@ Scope {
                                     target: null
                                     cursorShape: Qt.ClosedHandCursor
                                     // The one positive release signal: the exclusive grab ends with a Released event point (state 8,
-                                    // QEventPoint::Released) that is FRESH. A cancelled or stolen grab, or an `active` change alone,
-                                    // is not a release. When another surface takes the pointer during the drag (a window or a shell
-                                    // surface opening), Qt later ends the drag with a synthesized release that carries the timestamp of
-                                    // the last real event and the stale position: it lags the wall clock by far more than the real
-                                    // thing, and is refused.
-                                    property real gripWall: 0
-                                    property real gripStamp: 0
+                                    // QEventPoint::Released). A cancelled or stolen grab, or an `active` change alone, is not a release
+                                    // and marks the drag interrupted. When something takes the pointer during the drag Qt ends it with
+                                    // a synthesized release that looks real: only win.dragInterrupted (events) tells it apart.
                                     onGrabChanged: (transition, point) => {
-                                        if (transition === PointerDevice.GrabExclusive) {
-                                            gripWall = Date.now();
-                                            gripStamp = point.timestamp;
-                                        } else if (win.dragFrom === tile.index && transition === PointerDevice.UngrabExclusive && point.state === 8) {
-                                            const lag = (Date.now() - gripWall) - (point.timestamp - gripStamp);
-                                            if (lag <= Tokens.motionFast) {
-                                                win.releaseAt = Date.now();
-                                                win.releasedOutside = point.scenePosition.y - point.scenePressPosition.y < -win.dragOutReach;
-                                            }
-                                        }
+                                        if (win.dragFrom !== tile.index)
+                                            return;
+                                        if (transition === PointerDevice.UngrabExclusive && point.state === 8)
+                                            win.releasedOutside = point.scenePosition.y - point.scenePressPosition.y < -win.dragOutReach;
+                                        else if (transition === PointerDevice.CancelGrabExclusive || transition === PointerDevice.UngrabExclusive)
+                                            win.dragInterrupted = true;
                                     }
                                     onActiveChanged: {
                                         if (active) {
                                             win.releasedOutside = false;
+                                            win.dragInterrupted = false;
                                             win.dragSnap = false;
                                             win.dragFrom = tile.index;
                                             win.dragDx = 0;
