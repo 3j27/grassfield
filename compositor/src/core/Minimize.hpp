@@ -76,6 +76,9 @@ namespace gf::minimize {
     // nullopt unless key is kConfigMinimizeEffect and value is exactly "genie", "scale" or "fade".
     std::optional<Effect> parseEffect(std::string_view key, std::string_view value);
 
+    // Shift held when a minimize or restore starts plays it in slow motion, as on macOS (any effect).
+    inline constexpr double kSlowMotionFactor = 10.0;
+
     struct Frame {
         Box   box;           // where the window's visible box is drawn (layout coordinates)
         float alpha = 1.F;   // snapshot opacity

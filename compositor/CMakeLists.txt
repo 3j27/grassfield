@@ -16,7 +16,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland pixman-1 libdrm)
+pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland pixman-1 libdrm glesv2) # glesv2: the Genie draw (GenieDraw.cpp)
 pkg_check_modules(LUA REQUIRED lua) # headers only: symbols resolve from Hyprland's liblua at load time
 
 # Pure logic, no Hyprland includes (unit-testable).
@@ -39,7 +39,7 @@ add_library(gfprotocols OBJECT ${GF_PROTO_DIR}/appmenu.cpp)
 target_link_libraries(gfprotocols PRIVATE PkgConfig::HYPRLAND)
 set_target_properties(gfprotocols PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden)
 
-add_library(grassfield-compositor SHARED src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp src/WindowTransform.cpp src/Stages.cpp src/CursorRefresh.cpp src/DeferredFocus.cpp src/OverviewFocus.cpp $<TARGET_OBJECTS:gfprotocols>)
+add_library(grassfield-compositor SHARED src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp src/WindowTransform.cpp src/Stages.cpp src/CursorRefresh.cpp src/DeferredFocus.cpp src/OverviewFocus.cpp src/GenieDraw.cpp $<TARGET_OBJECTS:gfprotocols>)
 target_link_libraries(grassfield-compositor PRIVATE gfcore PkgConfig::HYPRLAND)
 target_include_directories(grassfield-compositor PRIVATE ${LUA_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_options(grassfield-compositor PRIVATE -Wall -Wextra)

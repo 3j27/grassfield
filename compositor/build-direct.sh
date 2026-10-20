@@ -11,7 +11,7 @@ what=${1:-all}
 core_srcs=(src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp
   src/core/EventThrottle.cpp src/core/Overview.cpp src/core/DesktopFocus.cpp src/core/Json.cpp src/core/Stages.cpp src/core/CursorRefresh.cpp
   src/core/DeferredFocus.cpp src/core/OverviewFocus.cpp src/core/Genie.cpp)
-glue_srcs=(src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp src/WindowTransform.cpp src/Stages.cpp src/CursorRefresh.cpp src/DeferredFocus.cpp src/OverviewFocus.cpp)
+glue_srcs=(src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp src/WindowTransform.cpp src/Stages.cpp src/CursorRefresh.cpp src/DeferredFocus.cpp src/OverviewFocus.cpp src/GenieDraw.cpp)
 plugin_srcs=("${glue_srcs[@]}" "${core_srcs[@]}")
 test_srcs=(tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp
   tests/EventThrottleTest.cpp tests/OverviewTest.cpp tests/DesktopFocusTest.cpp tests/StagesTest.cpp tests/CursorRefreshTest.cpp
@@ -40,9 +40,9 @@ protocols() {
 
 # Lua symbols are resolved at load time from Hyprland's own liblua (5.5): only Lua's headers are needed.
 # shellcheck disable=SC2207
-plugin_flags=(-std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm) $(pkg-config --cflags lua))
+plugin_flags=(-std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm glesv2) $(pkg-config --cflags lua))
 # shellcheck disable=SC2207
-plugin_libs=($(pkg-config --libs hyprland pixman-1 libdrm))
+plugin_libs=($(pkg-config --libs hyprland pixman-1 libdrm glesv2))
 # Pure logic only (src/core): no Hyprland headers, no compositor needed.
 # shellcheck disable=SC2207
 test_flags=(-std=c++23 -O0 -g -Wall -Wextra -Isrc $(pkg-config --cflags gtest_main))

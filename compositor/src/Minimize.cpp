@@ -1,7 +1,9 @@
 #include "Minimize.hpp"
 
+#include "GenieDraw.hpp"
 #include "Ipc.hpp"
 #include "Plugin.hpp"
+#include "core/Genie.hpp"
 #include "core/Protocol.hpp"
 
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
@@ -10,8 +12,10 @@
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/MiscFunctions.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/render/Framebuffer.hpp>
@@ -26,6 +30,7 @@
 #include <chrono>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -37,21 +42,47 @@ namespace {
     // The hidden state. Same name as the shell's fallback (shell/platform/Compositor.qml minimizedWorkspace).
     constexpr std::string_view MINIMIZED_WORKSPACE = "special:minimized";
 
-    // Completes animations whose frames stopped (no monitor rendered): longer than any animation.
-    constexpr auto WATCHDOG_DELAY = std::chrono::milliseconds(450);
+    // Completes animations whose frames stopped (no monitor rendered): longer than any animation (Genie: 500 ms).
+    constexpr auto WATCHDOG_DELAY = std::chrono::milliseconds(600);
+
+    // A Genie element is a custom pass element: if Hyprland never draws one (not one draw after this many were added),
+    // Genie is disabled and the Scale effect takes over.
+    constexpr uint64_t GENIE_UNDRAWN_LIMIT = 10;
+
+    // Frame timing of an animation on its snapshot's monitor (the plugin's own measure, logged at the end): interval
+    // between two frames of that monitor (render.preChecks) and the CPU time of each frame (render.preChecks to the
+    // RENDER_POST stage), plus the longest Genie draw (CPU time of its GL calls).
+    struct STiming {
+        std::optional<Time::steady_tp> lastFrame;
+        std::optional<Time::steady_tp> frameStart;
+        int                            frames      = 0;
+        double                         sumInterval = 0, maxInterval = 0; // ms
+        int                            rendered    = 0;
+        double                         sumRender = 0, maxRender = 0; // ms
+        double                         maxDrawMicros = 0;
+    };
 
     struct SAnimation {
-        mz::Kind                 kind = mz::Kind::Minimize;
-        PHLWINDOWREF             window;
-        uint64_t                 address = 0;
-        SP<Render::IFramebuffer> snapshot;
-        mz::SSnapshotGeometry    geometry; // visible box (titlebar + border + surface) in the snapshot
-        mz::Box                  full;     // with every decoration extent (shadow): what gets damaged
-        mz::Box                  from;
-        mz::Box                  to;
-        Time::steady_tp          start;
-        mz::Frame                frame;
-        mz::Box                  damaged; // last damaged visual box (layout)
+        mz::Kind                     kind   = mz::Kind::Minimize;
+        mz::Effect                   effect = mz::Effect::Scale; // what runs (Genie only when it can be drawn)
+        PHLWINDOWREF                 window;
+        uint64_t                     address = 0;
+        SP<Render::IFramebuffer>     snapshot;
+        mz::SSnapshotGeometry        geometry; // visible box (titlebar + border + surface) in the snapshot
+        mz::Box                      full;     // with every decoration extent (shadow): what gets damaged
+        mz::Box                      from;     // Scale: the box at the start and at the end
+        mz::Box                      to;
+        mz::Box                      tileFit; // where the window ends: its visible box fitted into the Dock tile
+        mz::Edge                     edge = mz::Edge::Bottom;
+        mz::Box                      region; // Genie: the full box inside the snapshot, what the mesh covers (layout)
+        Time::steady_tp              start;
+        double                       timeScale = 1.0; // kSlowMotionFactor when Shift was held at the start
+        mz::Frame                    frame;
+        double                       progress = 0; // Genie: 0 window .. 1 tile
+        std::vector<mz::SMeshVertex> mesh;         // Genie: this frame's mesh (layout)
+        mz::Box                      damaged;      // last damaged visual box (layout)
+        uintptr_t                    monitorKey = 0; // the snapshot's monitor (timing only: compared, never dereferenced)
+        STiming                      timing;
     };
 
     struct SMinimizeState {
@@ -59,9 +90,15 @@ namespace {
         std::vector<SAnimation>          animations;
         std::vector<CHyprSignalListener> listeners;
         SP<CEventLoopTimer>              watchdog;
+        // Settings dock.minimizeEffect (fade while Reduce Motion is on), pushed by the shell. Genie is macOS's default.
+        mz::Effect effect     = mz::Effect::Genie;
+        uint64_t   genieAdded = 0; // Genie elements handed to Hyprland since load
+        uintptr_t  renderingKey = 0; // monitor of the latest render.preChecks (frame timing; compared, never dereferenced)
         // The Dock rectangle line of each minimize has a budget of its own (20 at once, then 2 per second; spec FR24):
         // tests read it, and the shared request budget is often spent by titlebar and Stages lines during a soak.
         gf::events::CLogLimiter targetLog{20, std::chrono::milliseconds(500)};
+        // The timing line at the end of each animation (same budget, its own).
+        gf::events::CLogLimiter timingLog{20, std::chrono::milliseconds(500)};
     };
 
     // Constructed on first use inside a guarded call (R13). Emptied by stop() before dlclose.
@@ -147,10 +184,28 @@ namespace {
         return fb;
     }
 
+    const char* effectName(mz::Effect effect) {
+        switch (effect) {
+            case mz::Effect::Genie: return "genie";
+            case mz::Effect::Scale: return "scale";
+            case mz::Effect::Fade: return "fade";
+        }
+        return "?";
+    }
+
+    // Where the animation is drawn this frame (layout): the mesh's box for Genie, the mapped full box otherwise.
+    mz::Box visualBox(const SAnimation& a) {
+        if (a.effect == mz::Effect::Genie) {
+            const mz::Box b = mz::meshBounds(a.mesh);
+            return mz::Box{b.x - 2.0, b.y - 2.0, b.w + 4.0, b.h + 4.0};
+        }
+        return mz::mapBox(a.full, a.geometry.visible, a.frame.box);
+    }
+
     void damage(SAnimation& a) {
         if (!g_pHyprRenderer)
             return;
-        const mz::Box visual = mz::mapBox(a.full, a.geometry.visible, a.frame.box);
+        const mz::Box visual = visualBox(a);
         if (a.damaged.w > 0 && a.damaged.h > 0)
             g_pHyprRenderer->damageBox(toCBox(a.damaged));
         g_pHyprRenderer->damageBox(toCBox(visual));
@@ -166,8 +221,25 @@ namespace {
             g_pHyprRenderer->damageWindow(w);
     }
 
+    // One line per finished animation with its frame timing (tests and the soak read it; a log budget of its own).
+    void logTiming(const SAnimation& a, double elapsedMs) {
+        const auto& t = a.timing;
+        if (t.frames == 0)
+            return;
+        const auto held = st().timingLog.admit(gf::events::Clock::now());
+        if (!held)
+            return;
+        gf::log(Log::INFO,
+                "minimize {:x}: {} {} in {:.0f} ms, {} frames, frame interval avg {:.1f} max {:.1f} ms, frame cpu avg {:.2f} max {:.2f} ms, genie draw max {:.0f} us{}",
+                a.address, effectName(a.effect), a.kind == mz::Kind::Minimize ? "minimize" : "restore", elapsedMs, t.frames,
+                t.frames > 1 ? t.sumInterval / (t.frames - 1) : 0.0, t.maxInterval, t.rendered > 0 ? t.sumRender / t.rendered : 0.0, t.maxRender, t.maxDrawMicros,
+                *held > 0 ? std::format(" ({} similar line(s) held back)", *held) : std::string{});
+    }
+
     // Ends an animation: final state, snapshot dropped, optional event. `a` is erased by the caller.
     void complete(SAnimation& a, bool postEvent) {
+        if (postEvent)
+            logTiming(a, std::chrono::duration<double, std::milli>(Time::steadyNow() - a.start).count());
         if (g_pHyprRenderer && a.damaged.w > 0)
             g_pHyprRenderer->damageBox(toCBox(a.damaged));
         const auto w = a.window.lock();
@@ -199,6 +271,85 @@ namespace {
         }
     }
 
+    // Genie mesh of this frame (layout coordinates).
+    void updateMesh(SAnimation& a) {
+        const mz::CGenie genie{a.geometry.visible, a.tileFit, a.edge};
+        mz::genieMesh(genie, a.geometry.visible, a.region, a.progress, mz::kGenieAcross, mz::kGenieAlong, a.mesh);
+    }
+
+    // The frame of `a` after elapsedMs, for its effect.
+    void step(SAnimation& a, double elapsedMs) {
+        switch (a.effect) {
+            case mz::Effect::Genie: {
+                const auto g = mz::genieFrameAt(a.kind, elapsedMs);
+                a.progress   = g.progress;
+                a.frame      = mz::Frame{.box = a.geometry.visible, .alpha = g.alpha, .done = g.done};
+                updateMesh(a);
+                return;
+            }
+            case mz::Effect::Fade: a.frame = mz::fadeFrameAt(a.kind, a.geometry.visible, elapsedMs); return;
+            case mz::Effect::Scale: a.frame = mz::frameAt(a.kind, a.from, a.to, elapsedMs); return;
+        }
+    }
+
+    // Hyprland never drew a Genie element: Genie is disabled and running Genie animations become Scale ones.
+    void checkGenieDrawn() {
+        auto& s = st();
+        if (s.genieAdded < GENIE_UNDRAWN_LIMIT || gf::genie::drawnCount() > 0)
+            return;
+        gf::genie::disable("Hyprland did not draw the custom pass elements");
+        for (auto& a : s.animations) {
+            if (a.effect != mz::Effect::Genie)
+                continue;
+            a.effect = mz::Effect::Scale;
+            a.from   = a.kind == mz::Kind::Minimize ? a.geometry.visible : a.tileFit;
+            a.to     = a.kind == mz::Kind::Minimize ? a.tileFit : a.geometry.visible;
+            a.mesh.clear();
+        }
+    }
+
+    // Frame timing on the snapshot's monitor (render.preChecks of that monitor). Hyprland renders one monitor at a time:
+    // the RENDER_POST stage that follows belongs to the monitor of the latest render.preChecks.
+    void frameStarted(const PHLMONITOR& mon, Time::steady_tp now) {
+        const auto key    = reinterpret_cast<uintptr_t>(mon.get());
+        st().renderingKey = key;
+        for (auto& a : st().animations) {
+            if (a.monitorKey != key)
+                continue;
+            auto& t = a.timing;
+            if (t.lastFrame) {
+                const double interval = std::chrono::duration<double, std::milli>(now - *t.lastFrame).count();
+                t.sumInterval += interval;
+                t.maxInterval = std::max(t.maxInterval, interval);
+            }
+            t.lastFrame  = now;
+            t.frameStart = now;
+            ++t.frames;
+        }
+    }
+
+    // RENDER_POST (the frame is rendered, Genie draws included, and submitted): the frame's CPU time since the
+    // render.preChecks of its monitor.
+    void frameEnded() {
+        auto& all = st().animations;
+        if (all.empty())
+            return;
+        const auto   key   = std::exchange(st().renderingKey, 0);
+        const auto   now   = Time::steadyNow();
+        const double drawn = gf::genie::takeMaxDrawMicros();
+        for (auto& a : all) {
+            auto& t = a.timing;
+            if (a.monitorKey != key || !t.frameStart)
+                continue;
+            const double ms = std::chrono::duration<double, std::milli>(now - *t.frameStart).count();
+            t.frameStart.reset();
+            t.sumRender += ms;
+            t.maxRender = std::max(t.maxRender, ms);
+            ++t.rendered;
+            t.maxDrawMicros = std::max(t.maxDrawMicros, drawn);
+        }
+    }
+
     // One step of every animation; called before each monitor frame (render.preChecks, like Hyprland's
     // Animation::mgr()->frameTick()) and by the watchdog. Damages the old and new boxes, which also schedules
     // the next frame on the monitors they touch.
@@ -206,6 +357,7 @@ namespace {
         auto& all = st().animations;
         if (all.empty())
             return;
+        checkGenieDrawn();
         const auto now = Time::steadyNow();
         for (auto it = all.begin(); it != all.end();) {
             const auto w = it->window.lock();
@@ -216,8 +368,7 @@ namespace {
                 it = all.erase(it);
                 continue;
             }
-            const double elapsedMs = std::chrono::duration<double, std::milli>(now - it->start).count();
-            it->frame              = mz::frameAt(it->kind, it->from, it->to, elapsedMs);
+            step(*it, std::chrono::duration<double, std::milli>(now - it->start).count() / it->timeScale);
             damage(*it);
             if (it->frame.done) {
                 complete(*it, true);
@@ -247,12 +398,52 @@ namespace {
         s.watchdog->updateTimeout(WATCHDOG_DELAY);
     }
 
-    void startAnimation(SAnimation&& a) {
-        a.start = Time::steadyNow();
-        a.frame = mz::frameAt(a.kind, a.from, a.to, 0.0);
+    // Shift held on any keyboard (macOS: Shift-click plays the minimize in slow motion).
+    bool shiftHeld() {
+        return g_pInputManager && (g_pInputManager->getModsFromAllKBs() & HL_MODIFIER_SHIFT) != 0;
+    }
+
+    // `elapsedMs`: where the animation starts, in animation time (an interrupted Genie continues from the shape on
+    // screen). Slow motion when Shift is held now.
+    void startAnimation(SAnimation&& a, double elapsedMs = 0.0) {
+        a.timeScale = shiftHeld() ? mz::kSlowMotionFactor : 1.0;
+        (void)gf::genie::takeMaxDrawMicros(); // a draw of an earlier animation is not this one's
+        a.start     = Time::steadyNow() - std::chrono::duration_cast<Time::steady_dur>(std::chrono::duration<double, std::milli>(elapsedMs * a.timeScale));
+        step(a, elapsedMs);
         damage(a);
         st().animations.push_back(std::move(a));
         armWatchdog();
+    }
+
+    // The Genie mesh of `a` on the monitor being rendered: positions in its pixels, texture coordinates in the snapshot.
+    // With Hyprland's box projection the snapshot texture is sampled top-down (t = 0 at the monitor's top edge;
+    // measured in nested: 1 - t drew the window upside down).
+    void drawGenie(const SAnimation& a, const SP<Render::ITexture>& tex, const PHLMONITOR& mon) {
+        if (a.mesh.empty())
+            return;
+        const auto&          g     = a.geometry;
+        const mz::Box&       v     = g.visible;
+        const double         scale = mon->m_scale;
+        gf::genie::SDrawData data;
+        data.tex    = tex;
+        data.across = mz::kGenieAcross;
+        data.along  = mz::kGenieAlong;
+        data.alpha  = a.frame.alpha;
+        data.vertices.reserve(a.mesh.size() * 4);
+        for (const auto& m : a.mesh) {
+            const double sx = v.x + (m.u * v.w), sy = v.y + (m.v * v.h); // the source point (layout)
+            data.vertices.push_back(static_cast<float>((m.x - mon->m_position.x) * scale));
+            data.vertices.push_back(static_cast<float>((m.y - mon->m_position.y) * scale));
+            data.vertices.push_back(static_cast<float>(g.texW > 0 ? ((sx - g.monitorX) * g.monitorScale) / g.texW : 0.0));
+            data.vertices.push_back(static_cast<float>(g.texH > 0 ? ((sy - g.monitorY) * g.monitorScale) / g.texH : 0.0));
+        }
+        const mz::Box b    = mz::meshBounds(a.mesh);
+        data.logicalBounds = CBox{b.x - mon->m_position.x, b.y - mon->m_position.y, b.w, b.h}.expand(1.0);
+        data.pixelBounds   = CBox{data.logicalBounds}.scale(scale).round();
+        if (data.pixelBounds.w < 1 || data.pixelBounds.h < 1)
+            return;
+        ++st().genieAdded;
+        g_pHyprRenderer->addPassElement(makeUnique<gf::genie::CGenieElement>(std::move(data)));
     }
 
     // Draws every animation that touches the monitor being rendered. RENDER_POST_WINDOWS: after the windows,
@@ -272,9 +463,13 @@ namespace {
             const auto tex = a.snapshot->getTexture();
             if (!tex)
                 continue;
-            const mz::Box visual = mz::mapBox(a.full, a.geometry.visible, a.frame.box);
+            const mz::Box visual = visualBox(a);
             if (!mz::intersects(visual, monBox))
                 continue;
+            if (a.effect == mz::Effect::Genie) {
+                drawGenie(a, tex, mon);
+                continue;
+            }
             const mz::Box texBox = mz::textureBox(a.geometry, a.frame.box, mon->m_position.x, mon->m_position.y, mon->m_scale);
 
             CTexPassElement::SRenderData data;
@@ -336,6 +531,60 @@ namespace {
                                      .texW         = mon->m_transformedSize.x,
                                      .texH         = mon->m_transformedSize.y};
     }
+
+    // The monitor box (layout) that holds the centre of `rect`.
+    std::optional<mz::Box> monitorBoxAt(const mz::Box& rect) {
+        const double cx = rect.x + (rect.w / 2.0), cy = rect.y + (rect.h / 2.0);
+        for (const auto& m : monitorBoxes()) {
+            if (cx >= m.x && cx < m.x + m.w && cy >= m.y && cy < m.y + m.h)
+                return m;
+        }
+        return std::nullopt;
+    }
+
+    mz::Box intersection(const mz::Box& a, const mz::Box& b) {
+        const double x0 = std::max(a.x, b.x), y0 = std::max(a.y, b.y);
+        const double x1 = std::min(a.x + a.w, b.x + b.w), y1 = std::min(a.y + a.h, b.y + b.h);
+        return x1 > x0 && y1 > y0 ? mz::Box{x0, y0, x1 - x0, y1 - y0} : mz::Box{};
+    }
+
+    // The effect an animation runs: the configured one, except that Genie needs the GL drawing, an untransformed
+    // snapshot monitor and a Dock tile toward the Dock edge from the window (core isGenieGeometry); Scale otherwise.
+    mz::Effect effectFor(const mz::SSnapshotGeometry& geometry, const mz::Box& tile, const mz::Box& tileFit, const PHLMONITOR& mon, mz::Edge& edge) {
+        const auto wanted = st().effect;
+        if (wanted != mz::Effect::Genie)
+            return wanted;
+        if (!gf::genie::available() || mon->m_transform != WL_OUTPUT_TRANSFORM_NORMAL)
+            return mz::Effect::Scale;
+        const auto tileMonitor = monitorBoxAt(tile);
+        if (!tileMonitor)
+            return mz::Effect::Scale;
+        edge = mz::dockEdge(tile, *tileMonitor);
+        return mz::isGenieGeometry(geometry.visible, tileFit, edge) ? mz::Effect::Genie : mz::Effect::Scale;
+    }
+
+    // A minimize (window -> tile) or restore (tile -> window) animation of `w` toward / from the Dock tile.
+    SAnimation makeAnimation(mz::Kind kind, const PHLWINDOW& w, uint64_t address, SP<Render::IFramebuffer>&& snapshot, const mz::SSnapshotGeometry& geometry,
+                             const mz::Box& full, const mz::Box& tile, const PHLMONITOR& mon) {
+        SAnimation a;
+        a.kind     = kind;
+        a.window   = w;
+        a.address  = address;
+        a.snapshot = std::move(snapshot);
+        a.geometry = geometry;
+        a.full     = full;
+        a.tileFit  = mz::fitInside(geometry.visible, tile);
+        a.effect   = effectFor(geometry, tile, a.tileFit, mon, a.edge);
+        a.from     = kind == mz::Kind::Minimize ? geometry.visible : a.tileFit;
+        a.to       = kind == mz::Kind::Minimize ? a.tileFit : geometry.visible;
+        // The mesh covers what the snapshot holds of the window (its shadow may leave the monitor).
+        const double scale = geometry.monitorScale > 0 ? geometry.monitorScale : 1.0;
+        a.region           = intersection(full, mz::Box{geometry.monitorX, geometry.monitorY, geometry.texW / scale, geometry.texH / scale});
+        if (a.effect == mz::Effect::Genie && (a.region.w <= 0 || a.region.h <= 0))
+            a.effect = mz::Effect::Scale;
+        a.monitorKey = reinterpret_cast<uintptr_t>(mon.get());
+        return a;
+    }
 } // namespace
 
 namespace gf::minimizer {
@@ -346,10 +595,18 @@ namespace gf::minimizer {
             return false;
         auto& ev = bus->m_events;
         auto& l  = st().listeners;
-        l.push_back(ev.render.preChecks.listen([](const PHLMONITOR& /*monitor*/) { gf::guarded("minimize tick", [] { tick(); }); }));
+        l.push_back(ev.render.preChecks.listen([](const PHLMONITOR& monitor) {
+            gf::guarded("minimize tick", [&] {
+                if (monitor)
+                    frameStarted(monitor, Time::steadyNow());
+                tick();
+            });
+        }));
         l.push_back(ev.render.stage.listen([](eRenderStage stage) {
             if (stage == RENDER_POST_WINDOWS)
                 gf::guarded("minimize draw", [] { draw(); });
+            else if (stage == RENDER_POST)
+                gf::guarded("minimize frame timing", [] { frameEnded(); });
         }));
         l.push_back(ev.window.close.listen([](const PHLWINDOW& w) { gf::guarded("minimize window.close", [&] { cancelFor(w); }); }));
         // Monitor changes: positions and scales captured with the snapshots are stale; finish at once.
@@ -369,10 +626,19 @@ namespace gf::minimizer {
                 g_pEventLoopManager->removeTimer(s.watchdog);
             s.watchdog.reset();
         }
+        gf::genie::release(); // GL objects deleted with Hyprland's context current, before dlclose
     }
 
     bool ready() {
         return st().ready;
+    }
+
+    void setEffect(mz::Effect effect) {
+        st().effect = effect;
+    }
+
+    mz::Effect effect() {
+        return st().effect;
     }
 
     std::optional<mz::Box> validTarget(const mz::Box& rect) {
@@ -400,10 +666,13 @@ namespace gf::minimizer {
                         *held > 0 ? std::format(" ({} similar line(s) held back)", *held) : std::string{});
         }
 
-        // A restore still animating: the new animation starts where that one is.
+        // A restore still animating: the new animation starts where that one is (Scale: its box; Genie: its shape).
         std::optional<mz::Box> from;
+        std::optional<double>  genieProgress;
         if (auto running = takeAnimation(w)) {
-            if (running->kind == mz::Kind::Restore)
+            if (running->kind == mz::Kind::Restore && running->effect == mz::Effect::Genie)
+                genieProgress = running->progress;
+            else if (running->kind == mz::Kind::Restore)
                 from = running->frame.box;
             complete(*running, true);
         }
@@ -427,17 +696,13 @@ namespace gf::minimizer {
             postState(mz::Kind::Minimize, address);
             return;
         }
-        startAnimation(SAnimation{.kind     = mz::Kind::Minimize,
-                                  .window   = w,
-                                  .address  = address,
-                                  .snapshot = std::move(snapshot),
-                                  .geometry = geometry,
-                                  .full     = full,
-                                  .from     = from.value_or(geometry.visible),
-                                  .to       = mz::fitInside(geometry.visible, *target),
-                                  .start    = {},
-                                  .frame    = {},
-                                  .damaged  = {}});
+        auto   a       = makeAnimation(mz::Kind::Minimize, w, address, std::move(snapshot), geometry, full, *target, mon);
+        double elapsed = 0.0;
+        if (a.effect == mz::Effect::Genie && genieProgress)
+            elapsed = mz::genieElapsedFor(mz::Kind::Minimize, *genieProgress);
+        else if (a.effect == mz::Effect::Scale && from)
+            a.from = *from;
+        startAnimation(std::move(a), elapsed);
     }
 
     void restore(uint64_t address, std::optional<mz::Box> target) {
@@ -446,8 +711,13 @@ namespace gf::minimizer {
             gf::logRequest(Log::WARN, "restore: no mapped window {:x}", address);
             return;
         }
-        if (auto running = takeAnimation(w))
+        // A Genie minimize still animating: the restore plays it backwards from the shape on screen.
+        std::optional<double> genieProgress;
+        if (auto running = takeAnimation(w)) {
+            if (running->kind == mz::Kind::Minimize && running->effect == mz::Effect::Genie)
+                genieProgress = running->progress;
             complete(*running, true);
+        }
         if (!onMinimizedWorkspace(w)) {
             gf::logRequest(Log::DEBUG, "restore: window {:x} is not minimized", address);
             return;
@@ -491,18 +761,11 @@ namespace gf::minimizer {
         if (g_pHyprRenderer)
             g_pHyprRenderer->damageWindow(w);
 
-        const auto geometry = snapshotGeometry(w, mon);
-        startAnimation(SAnimation{.kind     = mz::Kind::Restore,
-                                  .window   = w,
-                                  .address  = address,
-                                  .snapshot = std::move(snapshot),
-                                  .geometry = geometry,
-                                  .full     = fullBox(w),
-                                  .from     = mz::fitInside(geometry.visible, *target),
-                                  .to       = geometry.visible,
-                                  .start    = {},
-                                  .frame    = {},
-                                  .damaged  = {}});
+        auto   a       = makeAnimation(mz::Kind::Restore, w, address, std::move(snapshot), snapshotGeometry(w, mon), fullBox(w), *target, mon);
+        double elapsed = 0.0;
+        if (a.effect == mz::Effect::Genie && genieProgress)
+            elapsed = mz::genieElapsedFor(mz::Kind::Restore, *genieProgress);
+        startAnimation(std::move(a), elapsed);
     }
 
 } // namespace gf::minimizer

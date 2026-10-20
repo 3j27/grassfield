@@ -137,6 +137,10 @@ namespace gf::ipc {
         return s.luaMinimizeRegistered && s.luaRestoreRegistered && minimizer::ready();
     }
 
+    bool minimizeEffectAvailable() {
+        return minimizeAvailable() && state().luaConfigRegistered;
+    }
+
     bool appmenuAvailable() {
         return state().luaAppmenuRegistered && appmenuServer::ready();
     }
@@ -160,7 +164,7 @@ namespace gf::ipc {
     namespace {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
-                                                stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable());
+                                                stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -263,10 +267,20 @@ namespace gf::ipc {
                         postCapabilities(); // "stages" appears or goes away
                     return;
                 }
+                if (key.ok && value.ok && key.view() == minimize::kConfigMinimizeEffect) {
+                    const auto effect = minimize::parseEffect(key.view(), value.view());
+                    if (!effect || !minimizeEffectAvailable()) {
+                        logRequest(Log::WARN, "config: rejected ({} = genie|scale|fade, and only while minimize is available)", minimize::kConfigMinimizeEffect);
+                        return;
+                    }
+                    minimizer::setEffect(*effect);
+                    logRequest(Log::INFO, "config: {} = {}", minimize::kConfigMinimizeEffect, value.view());
+                    return;
+                }
                 const auto action = key.ok && value.ok ? gfc::parseDoubleClickAction(key.view(), value.view()) : std::nullopt;
                 if (!action) {
-                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none and {} = true|false are accepted)", gfc::kConfigTitlebarDoubleClick,
-                               gf::stages::kConfigStagesEnabled);
+                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none, {} = true|false and {} = genie|scale|fade are accepted)",
+                               gfc::kConfigTitlebarDoubleClick, gf::stages::kConfigStagesEnabled, minimize::kConfigMinimizeEffect);
                     return;
                 }
                 state().doubleClickAction = *action;
