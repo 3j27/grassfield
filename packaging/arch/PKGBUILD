@@ -66,12 +66,12 @@ package_grassfield-desktop() {
   root=$(_root)
 
   install -d "$pkgdir/usr/share/grassfield"
-  cp -a "$root/shell" "$pkgdir/usr/share/grassfield/shell"
+  cp -a --no-preserve=ownership "$root/shell" "$pkgdir/usr/share/grassfield/shell"
   find "$pkgdir/usr/share/grassfield/shell" \( -name '.qmlls.ini' -o -name '*.qmlc' \) -delete
 
   # Design system as a regular QML module; icons copied into the module (repo symlink resolved).
   install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui"
-  cp -a "$root/ui/Grassfield/Ui/." "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/"
+  cp -a --no-preserve=ownership "$root/ui/Grassfield/Ui/." "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/"
   rm -f "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -m644 "$root"/branding/icons/symbolic/*.svg "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons/"
@@ -104,7 +104,7 @@ package_grassfield-desktop() {
 
   # grassfield-cursors: /usr/share/icons/grassfield-cursors/{index.theme,manifest.hl,hyprcursors,cursors}
   install -d "$pkgdir/usr/share/icons"
-  cp -a "$srcdir/icons/grassfield-cursors" "$pkgdir/usr/share/icons/grassfield-cursors"
+  cp -a --no-preserve=ownership "$srcdir/icons/grassfield-cursors" "$pkgdir/usr/share/icons/grassfield-cursors"
   install -Dm644 "$root/branding/cursors/build.sh" "$pkgdir/usr/share/grassfield/cursors/build.sh"
   install -Dm644 "$root/branding/cursors/xcursor-pack.py" "$pkgdir/usr/share/grassfield/cursors/xcursor-pack.py"
   install -Dm644 "$root/branding/cursors/cursors.tsv" "$pkgdir/usr/share/grassfield/cursors/cursors.tsv"
