@@ -41,6 +41,7 @@ Scope {
     readonly property var dockRecent: stringList(config.dock.recent)
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
+    readonly property string accentColor: Accent.normalize(config.accent.color)
     readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
     readonly property string iconTint: IconModes.validTint(config.icons.tint) ? config.icons.tint : "accent"
     readonly property string folderColor: FolderStyle.normalizeColor(config.icons.folderColor)
@@ -124,6 +125,11 @@ Scope {
         property bool showBackground: false
     }
 
+    component AccentConfig: JsonObject {
+        // multicolor | blue | purple | pink | red | orange | yellow | green | graphite (Settings > Appearance > Accent colour).
+        property string color: "multicolor"
+    }
+
     component IconsConfig: JsonObject {
         // default | dark | clear | tinted (ADR-0014): app and file icons only.
         property string mode: "default"
@@ -194,6 +200,10 @@ Scope {
 
     function setMenubarShowBackground(value: bool): void {
         change("menubar.showBackground", value);
+    }
+
+    function setAccentColor(value: string): void {
+        change("accent.color", Accent.normalize(value));
     }
 
     function setIconMode(value: string): void {
@@ -389,6 +399,7 @@ Scope {
         property HotCornersConfig hotCorners: HotCornersConfig {}
         property DesktopConfig desktop: DesktopConfig {}
         property MenubarConfig menubar: MenubarConfig {}
+        property AccentConfig accent: AccentConfig {}
         property IconsConfig icons: IconsConfig {}
         property PointerConfig pointer: PointerConfig {}
     }
