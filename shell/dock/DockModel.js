@@ -93,7 +93,7 @@ function withoutFiles(pinned) {
 
 // Splits the merged apps into the fixed Files tile and the rest. The tile is {kind: "files", key: "files", name, icon,
 // entry, windows, pinned: true, fixed: true}: it carries the windows of Files (the running dot, minimize into the tile,
-// Show All Windows) and exists even when the desktop entry is missing (entry null: a click then opens the home folder
+// Show All Windows), always draws our own icon (an installed older desktop entry may still name a generic one) and exists even when the desktop entry is missing (entry null: a click then opens the home folder
 // through the open policy). `lookup` resolves desktop entries.
 function splitFiles(apps, lookup) {
     const entry = lookup ? lookup(FILES_ID) : null;
@@ -107,7 +107,7 @@ function splitFiles(apps, lookup) {
         rest.push(a);
     }
     const files = {kind: "files", key: "files", name: entry && entry.name ? entry.name : "Files",
-        icon: entry && entry.icon ? entry.icon : "org.grassfield.Files", entry: entry ? entry : null, windows: windows, pinned: true, fixed: true};
+        icon: "org.grassfield.Files", entry: entry ? entry : null, windows: windows, pinned: true, fixed: true};
     return {files: files, rest: rest};
 }
 
