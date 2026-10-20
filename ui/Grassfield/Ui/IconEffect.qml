@@ -27,16 +27,9 @@ ShaderEffect {
     readonly property var params: IconModes.effect(root.mode, root.tint)
 
     // Shader uniforms (names match shaders/icon.frag).
-    // A child item (not a bare property object) so that it lives in the same window as the effect; it is not drawn
-    // itself (the effect draws its texture).
-    ShaderEffectSource {
-        id: textureSource
-        visible: false
-        sourceItem: root.source
-        smooth: true
-        mipmap: true
-    }
-    readonly property var iconTexture: textureSource
+    // The effect samples the Image's own texture (its texture provider, mipmapped by the Image): no offscreen pass per icon. The
+    // hidden Image still gets its texture, because an effect that uses an item as a source keeps it rendered.
+    readonly property var iconTexture: root.source
     readonly property real dark: root.darkAppearance ? 1 : 0
     // Over the bare wallpaper (desktop icons); for Clear also over a material that lets so much of it through (transparency at its
     // end) that the icon is over the wallpaper: the look that holds on any wallpaper brightness.
