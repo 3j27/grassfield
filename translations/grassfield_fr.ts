@@ -358,6 +358,18 @@
         <translation>Fenêtres, menus et panneaux clairs ou sombres.</translation>
     </message>
     <message>
+        <source>Accent colour</source>
+        <translation>Couleur d’accentuation</translation>
+    </message>
+    <message>
+        <source>Colour of buttons, selections, toggles and focus rings in the shell and in the apps. Multicolour is the Grassfield green. The highlight colour follows the accent.</source>
+        <translation>Couleur des boutons, des sélections, des interrupteurs et des anneaux de focus dans le shell et dans les apps. Multicolore est le vert Grassfield. La couleur de surbrillance suit l’accent.</translation>
+    </message>
+    <message>
+        <source>Multicolour</source>
+        <translation>Multicolore</translation>
+    </message>
+    <message>
         <source>Light</source>
         <translation>Clair</translation>
     </message>

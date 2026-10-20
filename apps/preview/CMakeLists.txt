@@ -24,6 +24,7 @@ target_compile_definitions(grassfield-preview PRIVATE
 install(TARGETS grassfield-preview RUNTIME DESTINATION bin)
 install(DIRECTORY qml/ DESTINATION share/grassfield/preview/qml FILES_MATCHING PATTERN "*.qml" PATTERN "*.js" PATTERN "*.svg")
 install(FILES org.grassfield.Preview.desktop DESTINATION share/applications)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../branding/icons/apps/org.grassfield.Preview.svg DESTINATION share/icons/hicolor/scalable/apps)
 
 # Unit tests of the pure logic (gtest), also run by scripts/dev/test.sh through build-direct.sh --tests.
 find_package(GTest)

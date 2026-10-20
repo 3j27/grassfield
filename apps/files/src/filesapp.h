@@ -31,6 +31,8 @@ class FilesApp : public QObject
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
     Q_PROPERTY(bool devSession READ devSession CONSTANT)
     Q_PROPERTY(bool reduceMotion READ reduceMotion NOTIFY appearanceChanged)
+    // accent.color: multicolor (the Grassfield green), blue, purple, pink, red, orange, yellow, green or graphite.
+    Q_PROPERTY(QString accentColor READ accentColor NOTIFY appearanceChanged)
     Q_PROPERTY(QString iconMode READ iconMode NOTIFY appearanceChanged)
     Q_PROPERTY(QString iconTint READ iconTint NOTIFY appearanceChanged)
     // icons.folderColor: "theme", "accent" or "#rrggbb" (every folder icon).
@@ -69,6 +71,7 @@ public:
     bool devSession() const { return qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1"); }
     bool reduceMotion() const { return m_reduceMotion; }
     // Icon appearance (ADR-0014): default | dark | clear | tinted, and "accent" or #rrggbb.
+    QString accentColor() const { return m_accentColor; }
     QString iconMode() const { return m_iconMode; }
     QString iconTint() const { return m_iconTint; }
     QString folderColor() const { return m_folderColor; }
@@ -224,6 +227,7 @@ private:
     QFileSystemWatcher m_watcher;
     bool m_dark = true;
     bool m_reduceMotion = false;
+    QString m_accentColor = QStringLiteral("multicolor");
     QString m_iconMode = QStringLiteral("default");
     QString m_iconTint = QStringLiteral("accent");
     QString m_folderColor = QStringLiteral("theme");

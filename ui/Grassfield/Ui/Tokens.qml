@@ -51,6 +51,46 @@ QtObject {
         destructiveText: "#FFFFFF"  // text and icons on the destructive fill (5.7:1, computed)
     })
 
+    // color roles, accentDark appearance
+    readonly property var colorAccentDark: ({
+        blue: "#5AA2FF",  // own dark-appearance value of the blue accent (appearance.accent), not copied; fills, selections and focus rings
+        blueText: "#06182E",  // text and icons on the blue accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        purple: "#B48CF2",  // own dark-appearance value of the purple accent (appearance.accent), not copied; fills, selections and focus rings
+        purpleText: "#1E0A3A",  // text and icons on the purple accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        pink: "#F07AB0",  // own dark-appearance value of the pink accent (appearance.accent), not copied; fills, selections and focus rings
+        pinkText: "#3A0820",  // text and icons on the pink accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        red: "#F2766E",  // own dark-appearance value of the red accent (appearance.accent), not copied; fills, selections and focus rings
+        redText: "#3A0804",  // text and icons on the red accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        orange: "#F5A04A",  // own dark-appearance value of the orange accent (appearance.accent), not copied; fills, selections and focus rings
+        orangeText: "#331800",  // text and icons on the orange accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        yellow: "#F2D14B",  // own dark-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings
+        yellowText: "#2B2300",  // text and icons on the yellow accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        green: "#8BD34E",  // own dark-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings
+        greenText: "#10240A",  // text and icons on the green accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        graphite: "#A0A4AE",  // own dark-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings
+        graphiteText: "#121316"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+    })
+
+    // color roles, accentLight appearance
+    readonly property var colorAccentLight: ({
+        blue: "#1F5FCC",  // own light-appearance value of the blue accent (appearance.accent), not copied; fills, selections and focus rings
+        blueText: "#FFFFFF",  // text and icons on the blue accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        purple: "#7A3FC4",  // own light-appearance value of the purple accent (appearance.accent), not copied; fills, selections and focus rings
+        purpleText: "#FFFFFF",  // text and icons on the purple accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        pink: "#C2306F",  // own light-appearance value of the pink accent (appearance.accent), not copied; fills, selections and focus rings
+        pinkText: "#FFFFFF",  // text and icons on the pink accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        red: "#C0302A",  // own light-appearance value of the red accent (appearance.accent), not copied; fills, selections and focus rings
+        redText: "#FFFFFF",  // text and icons on the red accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        orange: "#964D08",  // own light-appearance value of the orange accent (appearance.accent), not copied; fills, selections and focus rings
+        orangeText: "#FFFFFF",  // text and icons on the orange accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        yellow: "#E0B000",  // own light-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings
+        yellowText: "#241C00",  // text and icons on the yellow accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        green: "#3A7512",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings
+        greenText: "#FFFFFF",  // text and icons on the green accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+        graphite: "#5C616B",  // own light-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings
+        graphiteText: "#FFFFFF"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
+    })
+
     // generic family: code and plain text views (Preview)
     readonly property string typographyMonoFamily: "monospace"
     // ADR-0003 candidate (OFL); owner installs it

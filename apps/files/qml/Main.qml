@@ -31,6 +31,12 @@ QtObject {
             property: "reduceMotion"
             value: root.app.reduceMotion
         },
+        // Accent colour (accent.color): live like the rest.
+        Binding {
+            target: Appearance
+            property: "accentSetting"
+            value: root.app.accentColor
+        },
         // Icon appearance (ADR-0014): file and app icons follow the shell live.
         Binding {
             target: Appearance

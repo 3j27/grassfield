@@ -30,6 +30,8 @@ class PreviewApp : public QObject
     Q_PROPERTY(QStringList errors READ errors CONSTANT)
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
     Q_PROPERTY(bool reduceMotion READ reduceMotion NOTIFY appearanceChanged)
+    // accent.color: multicolor (the Grassfield green), blue, purple, pink, red, orange, yellow, green or graphite.
+    Q_PROPERTY(QString accentColor READ accentColor NOTIFY appearanceChanged)
 
 public:
     PreviewApp(const QStringList &paths, const QStringList &errors, bool glance, int startIndex = 0, bool browsing = false, QObject *parent = nullptr);
@@ -49,6 +51,7 @@ public:
     QStringList errors() const { return m_errors; }
     bool dark() const { return m_dark; }
     bool reduceMotion() const { return m_reduceMotion; }
+    QString accentColor() const { return m_accentColor; }
 
     // Path of file `index` for the image provider (render thread): empty when out of range.
     QString pathAt(int index) const;
@@ -85,6 +88,7 @@ private:
     QThread *m_worker = nullptr;
     bool m_dark = true;
     bool m_reduceMotion = false;
+    QString m_accentColor = QStringLiteral("multicolor");
     QFileSystemWatcher m_watcher;
 };
 

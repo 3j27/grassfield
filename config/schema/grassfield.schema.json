@@ -197,6 +197,28 @@
         }
       }
     },
+    "accent": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Accent colour (Settings > Appearance > Accent colour). A nested `appearance.accent` cannot exist in contract version 1, where `appearance` is a string (the same reason as the `icons` keys, ADR-0014).",
+      "properties": {
+        "color": {
+          "type": "string",
+          "enum": [
+            "multicolor",
+            "blue",
+            "purple",
+            "pink",
+            "red",
+            "orange",
+            "yellow",
+            "green",
+            "graphite"
+          ],
+          "description": "\"multicolor\" keeps each surface's own colour, for Grassfield the Grassfield green (default); the others replace the accent of menus, selections, toggles, focus rings and the Tinted and folder colours that follow it. The highlight colour (text selection) follows the accent."
+        }
+      }
+    },
     "icons": {
       "type": "object",
       "additionalProperties": false,

@@ -339,6 +339,13 @@ Singleton {
     // scripts/dev/shell-run.sh. Without it a dev session opens nothing.
     readonly property string openPolicy: Quickshell.env("GRASSFIELD_OPEN_POLICY") || ""
 
+    // A real Grassfield session opens every folder in Grassfield Files, whatever the user's default handler is (macOS: the
+    // Finder is the file manager of the system). `gio open` and `xdg-open` argv become services/open-real.sh calls there;
+    // a dev session keeps the open policy and gets the argv back unchanged.
+    function folderAware(argv: var): var {
+        return AppLaunch.folderAwareArgv(argv, Quickshell.shellPath("services/open-real.sh"), realSession);
+    }
+
     // Runs a helper command. Helpers that open a file in an application (gio open, xdg-open, gtk-launch) follow the
     // dev open policy in a dev session: GIO never starts an app there (a D-Bus activatable default handler such as
     // Nautilus would run in the owner's session with the owner's profile). Other helpers (gio trash) get the isolated
@@ -346,11 +353,12 @@ Singleton {
     function openDetached(argv: var): void {
         if (!devSession) {
             const environment = launchEnvironment();
+            const open = folderAware(argv);
             if (Object.keys(environment).length === 0)
-                Quickshell.execDetached(scoped(argv));
+                Quickshell.execDetached(scoped(open));
             else
                 Quickshell.execDetached({
-                    "command": scoped(argv),
+                    "command": scoped(open),
                     "environment": environment
                 });
             return;
