@@ -74,7 +74,7 @@ The build leaves `packaging/arch/src`, `packaging/arch/pkg` and `*.pkg.tar.zst` 
 2. Press Ctrl+Alt+F3 and log in with your user and password.
 3. Run exactly the line of the session file:
    ```bash
-   uwsm start -e -D Hyprland:Grassfield -N Grassfield -C "Grassfield Desktop" -- Hyprland --config /usr/share/grassfield/hypr/session.lua
+   uwsm start -e -D Hyprland:Grassfield -N Grassfield -C "Grassfield Desktop" -- start-hyprland -- --config /usr/share/grassfield/hypr/session.lua
    ```
 4. Back to Omarchy: Grassfield menu (leaf) > Log Out. Then either `reboot` from the TTY (autologin brings the normal
    Omarchy session back) or Ctrl+Alt+F1 or F2 for the greeter and log in (it picks the "uwsm" Hyprland session).
@@ -97,8 +97,8 @@ Undo (from Grassfield's terminal, SUPER+RETURN, or a TTY): `sudo cp ~/autologin.
 Open a terminal first: **SUPER+RETURN** (`xdg-terminal-exec`). Keep it for recovery. Tick each line; note what you saw.
 Gate names are the owner L2 items of `docs/STATE.md` (L3, L5, P1, P3, P5, R2, R3, bindings/gestures).
 
-- [ ] Session comes up: menu bar, Dock, wallpaper in under ~10 s. A banner "started without start-hyprland" may show
-      (the session runs `Hyprland` directly); cosmetic.
+- [ ] Session comes up: menu bar, Dock, wallpaper in under ~10 s. Hyprland runs under `start-hyprland` (its watchdog,
+      as in Omarchy's own session entry), so no "started without start-hyprland" banner should show; note it if one does.
 - [ ] Lock: SUPER+CTRL+Q locks. A wrong password stays locked. The real password unlocks. Idle lock after 5 min.
       Use at most 2 wrong attempts.
 - [ ] Idle and sleep: wait for the idle lock; then Grassfield menu > Sleep, wake: it must be locked. Closing the lid does the same.
