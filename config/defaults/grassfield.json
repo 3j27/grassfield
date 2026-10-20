@@ -44,6 +44,9 @@
   "menubar": {
     "showBackground": false
   },
+  "accent": {
+    "color": "multicolor"
+  },
   "icons": {
     "mode": "default",
     "tint": "accent",
