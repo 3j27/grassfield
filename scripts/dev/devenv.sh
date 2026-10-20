@@ -30,6 +30,12 @@ if [[ -f $_gf_icon_src ]]; then
   unset _gf_icon_dst
 fi
 unset _gf_icon_src
+# This tree's QML modules (Grassfield.Ui, the built Grassfield.I18n) always win over the packaged ones that an installed
+# grassfield-desktop puts in /usr/lib/qt6/qml/Grassfield (QML_IMPORT_PATH comes before the default import path).
+case ":${QML_IMPORT_PATH:-}:" in
+  *":$_gf_dev_root/ui:"*) ;;
+  *) export QML_IMPORT_PATH="$_gf_dev_root/ui:$_gf_dev_root/.dev/build/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" ;;
+esac
 if [[ -d $_gf_dev_root/.dev/share/icons ]]; then
   case ":${XDG_DATA_DIRS:-}:" in
     *":$_gf_dev_root/.dev/share:"*) ;;
