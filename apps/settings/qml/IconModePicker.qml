@@ -3,7 +3,7 @@ import QtQuick
 import Grassfield.Ui
 
 // The icon appearance picker (macOS 26 layout): four tiles, each showing a sample icon through the same TintedIcon that
-// draws every app and file icon (same shader, same plate detection), so a tile is what icons get. model: [{id, text}];
+// draws every app and file icon (same shader: the system plate and the fixed recolour), so a tile is what icons get. model: [{id, text}];
 // value is the selected id; picked(id) on user change.
 // One focus stop like Segmented: Left/Right (and Up/Down) move the choice. The selection is an accent border on the
 // tile; the keyboard focus is a separate ring in the text colour, set off from the tile by a gap.

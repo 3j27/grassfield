@@ -1022,11 +1022,11 @@ QtObject {
     readonly property real iconModeRimWidth: 1.5
     // ADR-0014 shader: icon size (logical px) from which the edge highlight has its full width and opacity; it shrinks and fades below
     readonly property int iconModeRimFullSize: 48
-    // ADR-0014 Clear/Tinted: the system plate every icon sits on is inset by this fraction of the icon box on each side (macOS 26 plates leave a small margin)
+    // ADR-0014 Dark/Clear/Tinted: the system plate every icon sits on is inset by this fraction of the icon box on each side (macOS 26 plates leave a small margin)
     readonly property real iconModeSysPlateInset: 0.04
-    // ADR-0014 Clear/Tinted: corner radius of the system plate over its side (macOS squircle proportion, about 22.5 percent)
+    // ADR-0014 Dark/Clear/Tinted: corner radius of the system plate over its side (macOS squircle proportion, about 22.5 percent)
     readonly property real iconModeSysPlateRadius: 0.225
-    // ADR-0014 Clear/Tinted: scale of an icon without its own plate sitting on the system plate (macOS 26 shrinks artwork into the plate)
+    // ADR-0014 Dark/Clear/Tinted: scale of the artwork of every icon sitting on the system plate (macOS 26 shrinks artwork into the plate)
     readonly property real iconModeSysGlyphScale: 0.72
     // ADR-0014 Clear over the bare wallpaper (desktop icons): opacity of the smoked glass plate, strong so that white ink and the plate edge hold on a white and on a black wallpaper
     readonly property real iconModeClearPlateAlphaWallpaper: 0.7
@@ -1038,7 +1038,7 @@ QtObject {
     readonly property real iconModeRimInner: 0.8
     // ADR-0014 Dark: factor of the rim opacity in the light appearance (a white rim on a light material would glare)
     readonly property real iconModeDarkRimLight: 0.25
-    // ADR-0014 Dark: luma (sRGB 0..1) the plate is darkened to (near-black graphite, hue kept); plates already darker are kept. macOS 26 Dark plates are near black.
+    // ADR-0014 Dark: lightness (sRGB 0..1) of the graphite system plate; macOS 26 Dark plates are near black.
     readonly property real iconModeDarkPlateLuma: 0.13
     // ADR-0014 Dark: the artwork keeps this share of its colour (1 = unchanged, 0 = grey): a modest desaturation, colour identity kept
     readonly property real iconModeDarkArtSaturation: 0.85

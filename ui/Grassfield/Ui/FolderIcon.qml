@@ -187,7 +187,7 @@ Item {
 
         objectName: "glyphBox"
         anchors.fill: parent
-        // In an icon mode the folder (no plate of its own) shrinks to sit on the system plate (the shader's sysGlyphScale):
+        // In an icon mode the folder shrinks to sit on the system plate (the shader's sysGlyphScale):
         // the symbol follows it. Not when the shader failed and the plain icon is drawn.
         scale: root.modeName !== "default" && !icon.effectFailed ? Tokens.iconModeSysGlyphScale : 1
         transformOrigin: Item.Center

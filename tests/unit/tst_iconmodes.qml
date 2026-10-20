@@ -187,4 +187,17 @@ TestCase {
         tryVerify(() => icon.effectItem.status !== ShaderEffect.Uncompiled || icon.effectFailed === false, 500, "status settles or stays uncompiled");
         compare(icon.plainVisible, icon.effectFailed);
     }
+
+    // Files rows over an accent fill (selected, focused) pass overAccent down to the icon they draw (FileIcon -> TintedIcon/FolderIcon).
+    function test_filesIconPassesOverAccent() {
+        const c = Qt.createComponent(Qt.resolvedUrl("../../apps/files/qml/FileIcon.qml"));
+        compare(c.status, Component.Ready, c.errorString());
+        for (const dir of [false, true]) {
+            const o = createTemporaryObject(c, testCase, {overAccent: true, isDir: dir});
+            verify(o);
+            verify(o.children[0].item.overAccent, "the icon of a " + (dir ? "folder" : "file") + " row follows the accent fill");
+            o.overAccent = false;
+            verify(!o.children[0].item.overAccent);
+        }
+    }
 }

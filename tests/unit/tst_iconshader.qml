@@ -760,4 +760,90 @@ TestCase {
             }
         }
     }
+
+    // A selected, focused row of Files (list and columns: accent fill, icons of Tokens.filesListIconSize) draws FileIcon with overAccent:
+    // the best pixel of the icon (a folder and a document) has at least 3:1 against the accent in every mode and both appearances (the
+    // merge base had 3.77:1 in Clear, the wiring missing gave 2.01:1).
+    Component {
+        id: accentCell
+
+        Rectangle {
+            id: acell
+
+            required property string cellMode
+            required property url cellSource
+            required property bool cellFolder
+            readonly property var inner: cellFolder ? folderPart : filePart
+
+            width: 40
+            height: 40
+            color: Appearance.colors.accent
+
+            FolderIcon {
+                id: folderPart
+                anchors.centerIn: parent
+                visible: acell.cellFolder
+                size: Tokens.filesListIconSize
+                source: acell.cellSource
+                mode: acell.cellMode
+                darkAppearance: Appearance.dark
+                overAccent: true
+            }
+
+            TintedIcon {
+                id: filePart
+                anchors.centerIn: parent
+                visible: !acell.cellFolder
+                size: Tokens.filesListIconSize
+                source: acell.cellSource
+                mode: acell.cellMode
+                darkAppearance: Appearance.dark
+                overAccent: true
+            }
+        }
+    }
+
+    function test_a2_filesSelectedRow() {
+        if (board.GraphicsInfo.api === GraphicsInfo.Software)
+            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+        const failures = [];
+        const wasDark = Appearance.dark;
+        board.visible = false;
+        const sources = [[true, Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/places/scalable/folder.svg")], [false, testCase.fixtureDir + "white-page-document.svg"],
+                         [false, testCase.fixtureDir + "blue-plate-white-glyph.svg"]];
+        let measured = 0;
+        for (const dark of [true, false]) {
+            Appearance.dark = dark;
+            for (const mode of ["dark", "clear", "tinted"]) {
+                for (const src of sources) {
+                    const cell = createTemporaryObject(accentCell, testCase, {cellMode: mode, cellSource: src[1], cellFolder: src[0]});
+                    verify(cell);
+                    tryVerify(() => cell.inner.status === Image.Ready || cell.inner.status === Image.Error, 3000);
+                    if (cell.inner.status !== Image.Ready) {
+                        cell.destroy();
+                        continue;
+                    }
+                    wait(300);
+                    const img = grabImage(cell);
+                    const bg = Qt.color(Appearance.colors.accent);
+                    let best = 1;
+                    for (let y = 0; y < 40; y++) {
+                        for (let x = 0; x < 40; x++)
+                            best = Math.max(best, ratio(luminance(img.pixel(x, y)), luminance(bg)));
+                    }
+                    measured++;
+                    const label = `files row ${src[0] ? "folder" : String(src[1]).split("/").pop()} ${mode} ${dark ? "dark" : "light"}: best pixel ${best.toFixed(2)}`;
+                    console.log("A2 " + label);
+                    if (best < 3)
+                        failures.push(label);
+                    cell.destroy();
+                }
+            }
+        }
+        Appearance.dark = wasDark;
+        board.visible = true;
+        verify(measured >= 12, "measured " + measured);
+        if (failures.length > 0)
+            fail(failures.length + " failures:\n" + failures.join("\n"));
+    }
 }
