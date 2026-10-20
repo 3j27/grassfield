@@ -62,6 +62,20 @@ namespace gf::minimize {
         Restore,  // tile -> window box, ease-out, fades in at the start
     };
 
+    // The minimize effect (Settings dock.minimizeEffect, pushed by the shell with hl.plugin.grassfield.config):
+    // Genie (macOS default, core/Genie.*), Scale (uniform shrink into the tile, frameAt) or Fade (Reduce Motion: the
+    // window fades out where it is, fadeFrameAt; the shell sends it while accessibility.reduceMotion is on).
+    enum class Effect : uint8_t {
+        Genie,
+        Scale,
+        Fade,
+    };
+
+    inline constexpr std::string_view kConfigMinimizeEffect = "minimizeEffect";
+
+    // nullopt unless key is kConfigMinimizeEffect and value is exactly "genie", "scale" or "fade".
+    std::optional<Effect> parseEffect(std::string_view key, std::string_view value);
+
     struct Frame {
         Box   box;           // where the window's visible box is drawn (layout coordinates)
         float alpha = 1.F;   // snapshot opacity
@@ -77,6 +91,13 @@ namespace gf::minimize {
 
     // State of an animation from `from` to `to` after elapsedMs (negative elapsed = start).
     Frame frameAt(Kind kind, const Box& from, const Box& to, double elapsedMs);
+
+    // Reduce Motion: a quick fade in place, no movement (Tokens.motionReducedMax, docs/specs/ui.md).
+    inline constexpr double kFadeDurationMs = 100.0;
+
+    // State of a Fade animation of the window box `box` after elapsedMs: the box never moves; alpha goes 1 -> 0
+    // (Minimize) or 0 -> 1 (Restore), linearly.
+    Frame fadeFrameAt(Kind kind, const Box& box, double elapsedMs);
 
     // The affine map that sends `src` onto `dst` (per-axis scale + translation), applied to `inner`
     // (e.g. the window's full box with its shadow, for damage).

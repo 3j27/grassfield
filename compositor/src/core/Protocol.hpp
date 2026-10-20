@@ -59,15 +59,20 @@ namespace gf::gfc {
     // hl.plugin.grassfield.overview_focus(json): the shell names what gets the keyboard when the Overview closes; the plugin
     // focuses it once no Exclusive layer surface is left (docs/specs/overview.md "Close focus", owner decision batch 5).
     inline constexpr std::string_view kFeatureOverviewFocus = "overview-focus";
+    // hl.plugin.grassfield.config("minimizeEffect", "genie" | "scale" | "fade") is accepted: the minimize animation follows
+    // Settings dock.minimizeEffect (macOS "Minimize windows using"), "fade" while Reduce Motion is on. Advertised with
+    // minimize and config; a shell pushes the key only when it sees this feature (older plugins reject the key).
+    inline constexpr std::string_view kFeatureMinimizeEffect = "minimize-effect";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
-    // overview-focus.
+    // overview-focus, minimize-effect.
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
-                                           bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false);
+                                           bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false);
 
-    // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key only.
+    // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, stagesEnabled
+    // (core/Stages.hpp) and minimizeEffect (core/Minimize.hpp).
     inline constexpr std::string_view kConfigTitlebarDoubleClick = "titlebarDoubleClick";
 
     // What a double-click on a titlebar's drag area does (Settings windows.titlebarDoubleClick).
