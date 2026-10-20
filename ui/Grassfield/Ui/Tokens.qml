@@ -548,8 +548,16 @@ QtObject {
     readonly property int overviewTileHeight: 90
     // F1 gap 15: thumbnail gap 32
     readonly property int overviewTileGap: 32
-    // estimate: Spaces bar below the menu bar
-    readonly property int overviewBarTopMargin: 12
+    // F1 gap 15 (gs-066-145): thumbnail top 42 pt from the screen top, minus the 24 menu bar
+    readonly property int overviewBarTopMargin: 18
+    // F1 gap 15 (gs-066-145): full-width band 164 pt tall from the screen top (+-1), minus the 24 menu bar the surface starts below
+    readonly property int overviewBarHeight: 140
+    // F1 gap 15 (gs-066-145): 13 pt Desktop name under the thumbnail
+    readonly property int overviewTileLabelHeight: 18
+    // F1 gap 15 (gs-066-145): thumbnail bottom to name top, about 8 pt
+    readonly property int overviewTileLabelGap: 8
+    // F1 gap 15 (meas-B): add-space button 18 pt from the right screen edge
+    readonly property int overviewAddEdgeInset: 18
     // estimate: app icons in a Space tile
     readonly property int overviewTileIconSize: 24
     // estimate: icons shown per Space tile

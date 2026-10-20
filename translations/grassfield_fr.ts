@@ -3270,14 +3270,6 @@
         <source>Desktop %1</source>
         <translation>Bureau %1</translation>
     </message>
-    <message>
-        <source>1 window</source>
-        <translation>1 fenêtre</translation>
-    </message>
-    <message>
-        <source>%1 windows</source>
-        <translation>%1 fenêtres</translation>
-    </message>
 </context>
 <context>
     <name>PasswordField</name>
