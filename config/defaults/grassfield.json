@@ -11,9 +11,9 @@
   },
   "dock": {
     "pinned": [
-      "foot",
       "chromium",
-      "org.gnome.Nautilus"
+      "foot",
+      "org.grassfield.Settings"
     ],
     "magnification": 1.6,
     "magnificationEnabled": false,

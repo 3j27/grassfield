@@ -404,4 +404,90 @@ TestCase {
         const moved = DockModel.diffKeys(["app:x", "app:y", "sep", "trash"], ["app:y", "sep", "app:x", "trash"]);
         verify(moved.every(o => o.op === "move"));
     }
+
+    // ---- the two fixed tiles: Files, then Apps ----
+
+    readonly property var filesEntry: ({id: "org.grassfield.Files", name: "Files", icon: "system-file-manager"})
+
+    function lookupWithFiles(id) {
+        return DockModel.isFilesId(id) ? filesEntry : lookup(id);
+    }
+
+    function kinds(items) {
+        return items.map(i => i.kind === "app" || i.kind === "files" ? i.kind + ":" + i.key : i.kind).join(",");
+    }
+
+    function build(pinned, running, minimized) {
+        const apps = DockModel.merge(DockModel.withoutFiles(pinned), running, lookupWithFiles);
+        const split = DockModel.splitFiles(apps, lookupWithFiles);
+        return DockModel.withFixed(split.files, DockModel.withTail(split.rest, minimized ? minimized : []));
+    }
+
+    function test_filesAndAppsAreTheFirstTwoTiles() {
+        const items = build(["chromium", "foot"], []);
+        compare(kinds(items), "files:files,apps,app:chromium,app:foot,separator,trash");
+        compare(items[0].fixed, true);
+        compare(items[0].pinned, true);
+        compare(items[0].name, "Files");
+        compare(items[0].icon, "system-file-manager");
+        compare(items[0].entry.id, "org.grassfield.Files");
+    }
+
+    function test_filesTileCannotBeRemovedOrDuplicated() {
+        // A stored Files id (with or without .desktop) gives no second tile and the tile stays when the list is emptied.
+        compare(kinds(build(["org.grassfield.Files", "foot", "org.grassfield.Files.desktop"], [])), "files:files,apps,app:foot,separator,trash");
+        compare(kinds(build([], [])), "files:files,apps,separator,trash");
+        compare(DockModel.withoutFiles(["org.grassfield.Files", "foot", "ORG.grassfield.Files"]).join(","), "foot,ORG.grassfield.Files");
+        compare(DockModel.withoutFiles(undefined).length, 0);
+        // The tile is not an app tile: reorder, drag slots and unpin never see it.
+        const items = build(["chromium", "foot"], []);
+        compare(DockModel.appIndices(items).join(","), "2,3");
+        const r = DockModel.reorder(items, 0, 1);
+        compare(r.pinned.join(","), "foot,chromium");
+        compare(DockModel.unpin(["org.grassfield.Files", "foot"], "foot").join(","), "org.grassfield.Files");
+    }
+
+    function test_filesTileCarriesTheWindows() {
+        const items = build(["foot"], [{appId: "org.grassfield.Files", ref: "f1"}, {appId: "foot", ref: "t1"}, {appId: "org.grassfield.Files", ref: "f2"}]);
+        compare(kinds(items), "files:files,apps,app:foot,separator,trash");
+        compare(items[0].windows.join(","), "f1,f2");
+        compare(items[2].windows.join(","), "t1");
+    }
+
+    function test_filesTileWithoutDesktopEntry() {
+        const split = DockModel.splitFiles([], id => null);
+        compare(split.files.entry, null);
+        compare(split.files.name, "Files");
+        compare(split.files.icon, "system-file-manager");
+        compare(split.files.kind, "files");
+    }
+
+    function test_filesTileKeepsMinimizedTilesAndTrashAfterIt() {
+        const min = [{kind: "minimized", key: "min:1"}];
+        compare(kinds(build(["foot"], [], min)), "files:files,apps,app:foot,separator,minimized,trash");
+    }
+
+    function test_tileKeysAndBounce() {
+        compare(DockModel.tileKey({kind: "files", key: "files"}), "files:files");
+        compare(DockModel.tileKey({kind: "apps", key: "grid"}), "apps:grid");
+        const items = build(["foot"], []);
+        const kept = DockModel.bounceKeys({files: Date.now(), foot: Date.now()}, items, Date.now(), 10000);
+        compare(Object.keys(kept).sort().join(","), "files,foot");
+        const running = build(["foot"], [{appId: "org.grassfield.Files", ref: "f"}]);
+        compare(Object.keys(DockModel.bounceKeys({files: Date.now()}, running, Date.now(), 10000)).length, 0);
+    }
+
+    function test_defaultPinsMigrate() {
+        compare(DockModel.migratePinned(["foot", "chromium", "org.gnome.Nautilus"]).join(","), "chromium,foot,org.grassfield.Settings");
+        // A customised list, even a small variation of the old default, is not touched.
+        compare(DockModel.migratePinned(["foot", "chromium", "org.gnome.Nautilus", "kate"]).join(","), "foot,chromium,org.gnome.Nautilus,kate");
+        compare(DockModel.migratePinned(["chromium", "foot"]).join(","), "chromium,foot");
+        compare(DockModel.migratePinned([]).length, 0);
+        compare(DockModel.migratePinned(undefined).length, 0);
+        compare(DockModel.DEFAULT_PINNED.join(","), "chromium,foot,org.grassfield.Settings");
+    }
+
+    function test_oldWithAppsStillWorks() {
+        compare(DockModel.withApps([{kind: "app", key: "a"}])[0].kind, "apps");
+    }
 }

@@ -37,7 +37,13 @@ Scope {
     readonly property real transparency: clampNumber(config.material.transparency, 0, 1, 0.25)
     readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
     readonly property real dockMagnification: clampNumber(config.dock.magnification, 1, 2.5, 1.6)
-    readonly property var dockPinned: stringList(config.dock.pinned)
+    // The default list of the first releases (a file written by them holds it) reads as the current default: Files is the
+    // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
+    // user's own, is returned as it is. Nothing is written back.
+    readonly property var dockPinned: {
+        const list = stringList(config.dock.pinned);
+        return list.join("\n") === "foot\nchromium\norg.gnome.Nautilus" ? ["chromium", "foot", "org.grassfield.Settings"] : list;
+    }
     readonly property var dockRecent: stringList(config.dock.recent)
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
@@ -90,7 +96,7 @@ Scope {
     }
 
     component DockConfig: JsonObject {
-        property var pinned: ["foot", "chromium", "org.gnome.Nautilus"]
+        property var pinned: ["chromium", "foot", "org.grassfield.Settings"]
         property real magnification: 1.6
         property bool magnificationEnabled: false
         property bool autohide: false
