@@ -1,12 +1,16 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "CenterLogic.js" as CenterLogic
 
 // The list of the Notifications column (NotificationCenter.qml): the cards grouped by app, newest first. Keyboard focus belongs
-// to the cards (never to the view's current item), Tab and Shift+Tab walk them in visual order, a card that leaves the
-// displayed rows hands its focus on (Notifications.centerFocusMoved). Layout positions are always the model's: a card whose
-// place changed only animates a visual offset back to 0. Its own file so that the tests (tests/shell/notif_center_list) run
-// this very component.
+// to the cards and their controls (never to the view's current item), Tab and Shift+Tab walk them in visual order.
+// ONE focus invariant covers the whole column (resolveFocus): the element that holds the keyboard focus never disappears from
+// under it. Whatever changes the model or the visibility of a control (arrivals, closes, expiries, Show All / Show Less, the
+// sender's actions going away...), a resolver runs once per event-loop turn after the change and, when the focused element is
+// gone, hidden or disabled, moves the focus to the nearest focusable element of the CURRENT layout; no event carries focus logic
+// of its own. Layout positions are always the model's: a card whose place changed only animates a visual offset back to 0. Its
+// own file so that the tests (tests/shell/notif_center_list) run this very component.
 
 ListView {
     id: list
@@ -14,7 +18,7 @@ ListView {
     // The surface host (the column): blur surfaces (addSurface) and the hovered group (hoverApp, hoverCard).
     required property var host
     // The column's focus scope: its gutter (room left of the cards for their x) and the focus fallback.
-    required property Item panel
+    required property var panel
     // The first and the last Tab stop after the list (Edit Widgets, the close circle).
     required property Item editTarget
     required property Item closeTarget
@@ -57,6 +61,12 @@ ListView {
         Accessible.focusable: true
         Accessible.onPressAction: ctl.clicked()
         Keys.onPressed: event => {
+            // A hidden control never acts, whatever still holds the focus; the key is swallowed (it would otherwise bubble up to
+            // the card and act there).
+            if (!ctl.visible || !ctl.enabled) {
+                event.accepted = true;
+                return;
+            }
             if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                 ctl.clicked();
                 event.accepted = true;
@@ -134,7 +144,7 @@ ListView {
     boundsBehavior: Flickable.StopAtBounds
     objectName: "notificationList"
     model: Notifications.centerModel
-    // Keyboard focus belongs to the cards (focusKey), never to the view's current item: the view moves
+    // Keyboard focus belongs to the cards and their controls, never to the view's current item: the view moves
     // focus onto the current delegate whenever a row is inserted or removed at or above it, which took it
     // off the focused card.
     currentIndex: -1
@@ -197,56 +207,242 @@ ListView {
         }
     }
 
-    // Focus goes to the card with this key (found by key: the removed delegates stay in the view until their leave
-    // animation ends), never to an invisible item; the panel when none is left.
-    function focusKey(key: string): void {
-        Qt.callLater(() => {
-            // Apply the removal first: the layout it triggers would otherwise take the focus away again.
-            list.forceLayout();
-            for (let pass = 0; key !== "" && pass < 2; pass++) {
-                for (let i = 0; i < list.count; i++) {
-                    const it = list.itemAtIndex(i);
-                    if (it && it.key === key && it.rowItem && !it.removing) {
-                        it.rowItem.forceActiveFocus();
-                        return;
-                    }
-                }
-                // Not built (outside the viewport and its buffer): bring it in, once.
-                const at = Notifications.shownKeys.indexOf(key);
-                if (at < 0)
-                    break;
-                list.positionViewAtIndex(at, ListView.Contain);
-                list.forceLayout();
-            }
-            list.panel.forceActiveFocus();
-        });
+    // ---- The focus invariant ----
+    // The focus target is a stable identity, never an item: {key (card), role, app, rank (card's rank in its group), cidx}.
+    // Roles: "card", "close" (the x), "clearGroup" (header Clear All), "showLess", "showAll", "more", "action:<id>".
+    // null while the focus is outside the cards (panel, Edit Widgets, the close circle: those are left alone).
+    property var focusId: null
+    // The displayed rows ({key, appName}) as of the last settled state: only the visual neighbourhood of a card that is
+    // gone (what exists now always comes from the model, never from here).
+    property var snapRows: []
+    // A control the focus must go to once it exists ({app, role}): Show All hands the focus to Show Less and back (macOS
+    // keeps the focus on the stack control).
+    property var intent: null
+    property bool resolveQueued: false
+
+    // The displayed rows now, in display order.
+    function shownRows(): var {
+        const out = [];
+        for (let i = 0; i < Notifications.centerModel.count; i++) {
+            const r = Notifications.centerModel.get(i);
+            out.push({key: r.key, appName: r.appName});
+        }
+        return out;
     }
 
-    // Focus goes to the Show Less (head card of the group) or Show All (its last displayed card) control of an app
-    // group, the one that replaces the control just used (macOS keeps the focus on the stack control); to the
-    // card `fallback` when that control does not exist.
-    function focusControl(app: string, showLess: bool, fallback: string): void {
-        Qt.callLater(() => {
-            list.forceLayout();
+    function rankIn(rows: var, key: string): int {
+        const at = rows.findIndex(r => r.key === key);
+        if (at < 0)
+            return 0;
+        let rank = 0;
+        for (let i = 0; i < at; i++) {
+            if (rows[i].appName === rows[at].appName)
+                rank++;
+        }
+        return rank;
+    }
+
+    // The delegate showing `key` (not one on its way out); with `bringIn`, one outside the viewport and its buffer is built.
+    // The delegate at an index and the item that holds the keyboard focus, as untyped values: the delegates carry roles and
+    // functions of their own (key, removing, controls...) that a QQuickItem type does not declare.
+    function at(i: int): var {
+        return list.itemAtIndex(i);
+    }
+
+    function activeItem(): var {
+        return list.Window.activeFocusItem;
+    }
+
+    function delegateFor(key: string, bringIn: bool): var {
+        for (let pass = 0; pass < 2; pass++) {
             for (let i = 0; i < list.count; i++) {
-                const it = list.itemAtIndex(i);
-                if (!it || it.removing || it.appName !== app)
-                    continue;
-                const ctl = showLess ? it.showLessCtl : it.toggleCtl;
-                if (ctl && ctl.visible) {
-                    ctl.forceActiveFocus();
-                    return;
-                }
+                const it = list.at(i);
+                if (it && it.key === key && !it.removing)
+                    return it;
             }
-            list.focusKey(fallback);
-        });
+            const at = bringIn ? list.shownRows().findIndex(r => r.key === key) : -1;
+            if (at < 0)
+                break;
+            list.positionViewAtIndex(at, ListView.Contain);
+            list.forceLayout();
+        }
+        return null;
     }
 
-    // Tells the model which card holds the keyboard focus, so that it can move the focus when that card
-    // leaves the displayed rows (an arrival pushing it out of a collapsed group, Show Less, an expiry...).
-    function trackFocus(): void {
-        const d = list.focusedDelegate();
-        Notifications.centerFocusKey = d && !d.removing ? d.key : "";
+    // Visible, enabled (a card on its way out is disabled): what a key may act on and focus may rest on.
+    function usable(it: var): bool {
+        return it !== null && it !== undefined && it.visible && it.enabled;
+    }
+
+    // The control `role` of the delegate `d`, or null when it does not exist or is not usable now.
+    function controlOf(d: var, role: string): var {
+        for (const c of d.controls()) {
+            if (c.role === role)
+                return list.usable(c.item) ? c.item : null;
+        }
+        return null;
+    }
+
+    // The usable item an identity stands for now, or null.
+    function itemOf(who: var): var {
+        const d = list.delegateFor(who.key, false);
+        return d ? list.controlOf(d, who.role) : null;
+    }
+
+    // The identity of the focus when it is on a card or one of its controls (usable or not), else null.
+    function identityOf(f: var): var {
+        for (let p = f; p; p = p.parent) {
+            if (p.rowItem === undefined || p.key === undefined)
+                continue;
+            // An item that is none of the card's controls (the focus scope a destroyed button left it on) names no element: lost.
+            let role = "";
+            let cidx = -1;
+            let n = 0;
+            for (const c of p.controls()) {
+                const content = c.role === "more" || c.role.startsWith("action:");
+                if (c.item === f) {
+                    role = c.role;
+                    cidx = content ? n : -1;
+                    break;
+                }
+                if (content)
+                    n++;
+            }
+            return {key: p.key, role: role, app: p.appName, rank: 0, cidx: cidx};
+        }
+        return null;
+    }
+
+    // The focus moved (or something it sat on went away): remember where it is.
+    function noteFocus(): void {
+        let who = list.identityOf(list.activeItem());
+        if (who && who.role === "" && list.focusId !== null && list.focusId.key === who.key)
+            who = list.focusId;
+        if (who) {
+            // The settled rows are the "before" of the next change, unless one is already waiting to be resolved.
+            if (!list.resolveQueued)
+                list.snapRows = list.shownRows();
+            who.rank = list.rankIn(list.snapRows, who.key);
+            list.focusId = who;
+            if (!list.itemOf(who))
+                list.queueResolve();
+        } else if (list.focusId !== null) {
+            // Focus left the cards on purpose, or fell off a hidden or destroyed item: only the second is repaired.
+            if (list.itemOf(list.focusId))
+                list.focusId = null;
+            else
+                list.queueResolve();
+        }
+    }
+
+    // The focus is taken to be on this card, whatever holds it now (accessibility paths that act on a card: the clear that
+    // follows moves the focus on from there).
+    function adopt(key: string, app: string): void {
+        list.snapRows = list.shownRows();
+        list.focusId = {key: key, role: "card", app: app, rank: list.rankIn(list.snapRows, key), cidx: -1};
+    }
+
+    // Show All and Show Less hand the focus to each other.
+    function handoff(app: string, role: string): void {
+        list.intent = {app: app, role: role};
+        list.queueResolve();
+    }
+
+    // Runs the resolver once per event-loop turn, however many changes happened in it.
+    function queueResolve(): void {
+        if (list.resolveQueued)
+            return;
+        list.resolveQueued = true;
+        Qt.callLater(list.resolveFocus);
+    }
+
+    // The control an intent names, if it exists now.
+    function intentTarget(intent: var): var {
+        for (let i = 0; i < list.count; i++) {
+            const d = list.at(i);
+            if (!d || d.removing || d.appName !== intent.app)
+                continue;
+            const c = list.controlOf(d, intent.role);
+            if (c)
+                return c;
+        }
+        return null;
+    }
+
+    // Where the focus goes when the element `who` is gone, hidden or disabled: in the current layout, the same group's slot,
+    // else the same card, else the next group, the previous one; null when no card is left.
+    function nearestTo(who: var): var {
+        let d = list.delegateFor(who.key, true);
+        if (!d) {
+            // The card left the displayed rows (any number of changes since the last settled state).
+            const rows = list.shownRows();
+            const key = CenterLogic.focusAfterGone({key: who.key, app: who.app, rank: who.rank}, list.snapRows.map(r => r.key), rows);
+            d = key !== "" ? list.delegateFor(key, true) : null;
+            if (!d)
+                return null;
+            // A stack control moves with its group: the one that takes its place keeps the focus. Anything destructive or
+            // sender-defined (x, Clear All, actions) never lands under the focus by itself: the card does.
+            if (who.role === "showAll" || who.role === "showLess") {
+                const c = list.controlOf(d, who.role);
+                if (c)
+                    return c;
+            }
+            return list.controlOf(d, "card");
+        }
+        if (who.cidx >= 0) {
+            // The sender's buttons: the one now at the place of the lost one (More revealing the rest lands on the first
+            // revealed button), else the card.
+            const own = d.controls().filter(c => (c.role === "more" || c.role.startsWith("action:")) && list.usable(c.item));
+            if (own.length > 0)
+                return own[Math.min(who.cidx, own.length - 1)].item;
+        }
+        return list.controlOf(d, "card");
+    }
+
+    // The focus goes to the panel: whatever holds it inside the list lets go first (the panel's focus scope would otherwise keep
+    // the child that already holds it).
+    function releaseFocus(): void {
+        const chain = [];
+        for (let it = list.activeItem(); it && it !== list.panel; it = it.parent)
+            chain.push(it);
+        chain.forEach(it => it.focus = false);
+        list.panel.forceActiveFocus();
+    }
+
+    // The resolver: once per turn after any model or visibility change. If the focused element is still there it does nothing;
+    // otherwise the focus moves, visibly, to the nearest element that is.
+    function resolveFocus(): void {
+        list.resolveQueued = false;
+        const win = list.Window.window;
+        const intent = list.intent;
+        list.intent = null;
+        if (!win)
+            return;
+        // Apply the model changes first: the layout they trigger would otherwise move the focus again afterwards.
+        list.forceLayout();
+        const who = list.focusId;
+        if (who === null)
+            return;
+        const cur = list.itemOf(who);
+        if (cur) {
+            if (cur.activeFocus)
+                list.snapRows = list.shownRows();
+            else
+                list.focusId = null;
+            return;
+        }
+        let target = intent ? list.intentTarget(intent) : null;
+        if (!target)
+            target = list.nearestTo(who);
+        if (target) {
+            target.forceActiveFocus();
+            list.focusId = list.identityOf(target);
+            list.focusId.rank = list.rankIn(list.shownRows(), list.focusId.key);
+        } else {
+            list.focusId = null;
+            list.releaseFocus();
+        }
+        list.snapRows = list.shownRows();
     }
 
     Connections {
@@ -254,22 +450,39 @@ ListView {
         ignoreUnknownSignals: true
 
         function onActiveFocusItemChanged(): void {
-            list.trackFocus();
+            list.noteFocus();
         }
     }
 
+    // Any change of the displayed rows or of what a row shows (a control hidden by a role change).
     Connections {
-        target: Notifications
+        target: Notifications.centerModel
 
-        function onCenterFocusMoved(key: string): void {
-            list.focusKey(key);
+        function onRowsInserted(): void {
+            list.queueResolve();
+        }
+
+        function onRowsRemoved(): void {
+            list.queueResolve();
+        }
+
+        function onRowsMoved(): void {
+            list.queueResolve();
+        }
+
+        function onDataChanged(): void {
+            list.queueResolve();
+        }
+
+        function onModelReset(): void {
+            list.queueResolve();
         }
     }
 
-    Component.onDestruction: Notifications.centerFocusKey = ""
+    Component.onCompleted: list.snapRows = list.shownRows()
     // The card (delegate) that holds the keyboard focus, or its x or buttons: null when the focus is elsewhere.
-    function focusedDelegate(): Item {
-        for (let f = list.Window.activeFocusItem; f; f = f.parent) {
+    function focusedDelegate(): var {
+        for (let f = list.activeItem(); f; f = f.parent) {
             if (f.rowItem !== undefined && f.key !== undefined)
                 return f;
         }
@@ -280,7 +493,7 @@ ListView {
     // sit above the older ones), so Tab and Shift+Tab are stepped here whenever they would leave a card:
     // the regions are the cards top to bottom (their index), then the widgets (index count), then the
     // footer controls. Inside a card Qt's own order (card, x, buttons) is right and is kept.
-    function regionOf(it: Item): int {
+    function regionOf(it: var): int {
         for (let p = it; p; p = p.parent) {
             if (p.rowItem !== undefined && p.key !== undefined && p.removing === false)
                 return p.index;
@@ -291,7 +504,7 @@ ListView {
     }
 
     // The last item of the chain that stays in region r, from `from`.
-    function lastIn(from: Item, r: int): Item {
+    function lastIn(from: var, r: int): var {
         let cur = from;
         for (let n = 0; n < 64; n++) {
             const nx = cur.nextItemInFocusChain(true);
@@ -303,7 +516,7 @@ ListView {
     }
 
     // The item Tab (forward) or Shift+Tab enters region t at; null when there is no such region.
-    function regionEntry(t: int, forward: bool): Item {
+    function regionEntry(t: int, forward: bool): var {
         if (t < 0 || t > list.count)
             return null;
         if (t === list.count) {
@@ -312,11 +525,11 @@ ListView {
                 return null;
             return forward ? nx : list.lastIn(nx, list.count);
         }
-        let d = list.itemAtIndex(t);
+        let d = list.at(t);
         if (!d) {
             list.positionViewAtIndex(t, ListView.Contain);
             list.forceLayout();
-            d = list.itemAtIndex(t);
+            d = list.at(t);
         }
         if (!d || d.removing)
             return null;
@@ -326,7 +539,7 @@ ListView {
     // Moves the focus one step in visual order. Where Qt's own next item is the right one (inside a card,
     // between the footer controls) that item is focused, exactly as Qt does for Tab.
     function tabStep(forward: bool): void {
-        const f = list.Window.activeFocusItem;
+        const f = list.activeItem();
         if (!f)
             return;
         const reason = forward ? Qt.TabFocusReason : Qt.BacktabFocusReason;
@@ -382,7 +595,7 @@ ListView {
         required property int toggleCount
 
         readonly property bool expanded: Notifications.expandedApps[appName] === true
-        // The focusable card (see ListView.focusKey).
+        // The focusable card.
         readonly property Item rowItem: row
         // The pointer is over a card of this app.
         readonly property bool groupHot: list.host.hoverApp === appName
@@ -395,28 +608,40 @@ ListView {
         // The Show Less and Show All controls of this card (set by the card body).
         property Item showLessCtl: null
         property Item toggleCtl: null
+        property Item clearGroupCtl: null
+        property var contentCtl: null
+
+        // The focusable items of this card in Tab order, usable or not: {role, item}. The focus resolver
+        // (NotificationList.resolveFocus) names focus targets by key and role, never by item.
+        function controls(): var {
+            const out = [
+                {role: "card", item: row},
+                {role: "close", item: closeButton}
+            ];
+            if (showLessCtl)
+                out.push({role: "showLess", item: showLessCtl});
+            if (clearGroupCtl)
+                out.push({role: "clearGroup", item: clearGroupCtl});
+            if (contentCtl)
+                out.push(...contentCtl.focusItems());
+            if (toggleCtl)
+                out.push({role: "showAll", item: toggleCtl});
+            return out;
+        }
 
         // Clears this card, or (group) the entries of its app group that exist now. The model changes at once
-        // (history, "No Notifications", persistence); this delegate only animates out. Everything it needs is
-        // read first: the clear moves the indices. The focus moves to the next card when it was on the cleared
-        // card (or any card of the cleared group) or when `refocus` (keyboard and accessibility paths); a
-        // focus on another card stays where it is.
+        // (history, "No Notifications", persistence); this delegate only animates out. Where the focus goes is
+        // the resolver's (it was on this card or its group: it moves on; accessibility paths with the focus
+        // elsewhere (`refocus`) move it to the card that follows; a focus on another card stays).
         function clearCard(group: bool, refocus: bool): void {
             if (removing)
                 return;
-            const at = index;
-            const app = appName;
-            const held = list.focusedDelegate();
-            const lost = held !== null && (group ? held.appName === app : held === item);
-            const moves = Notifications.focusMoves;
+            if (refocus && list.focusedDelegate() === null)
+                list.adopt(key, appName);
             if (group)
-                Notifications.clearKeys(Notifications.keysOf(app));
+                Notifications.clearKeys(Notifications.keysOf(appName));
             else
                 Notifications.clear(key);
-            // The model already moved the focus when it left the displayed rows (centerFocusMoved); this is
-            // for the paths where the focus was not on the card (accessibility actions).
-            if ((refocus || lost) && Notifications.focusMoves === moves)
-                list.focusKey(Notifications.focusKeyAfter(at, app));
         }
 
         // A card on its way out takes no input and gets no focus.
@@ -424,6 +649,7 @@ ListView {
         ListView.onRemove: {
             enter.stop();
             item.removing = true;
+            list.queueResolve();
         }
         Component.onCompleted: {
             if (Notifications.takeFresh(key))
@@ -686,11 +912,12 @@ ListView {
                                     capsule: true
                                     text: qsTr("Show Less")
                                     Component.onCompleted: item.showLessCtl = showLess
+                                    onVisibleChanged: list.queueResolve()
                                     onClicked: {
                                         const kbd = showLess.activeFocus;
                                         Notifications.setExpanded(item.appName, false);
                                         if (kbd)
-                                            list.focusControl(item.appName, false, item.key);
+                                            list.handoff(item.appName, "showAll");
                                     }
 
                                     Behavior on opacity {
@@ -706,6 +933,8 @@ ListView {
                                     // A single notification has only its own x (macOS): Clear All needs a group.
                                     visible: item.headCount > 1
                                     active: item.groupHot
+                                    Component.onCompleted: item.clearGroupCtl = clearGroup
+                                    onVisibleChanged: list.queueResolve()
                                     text: qsTr("Clear All")
                                     onClicked: item.clearCard(true, false)
                                 }
@@ -715,6 +944,8 @@ ListView {
                         NotificationContent {
                             id: rowContent
                             width: parent.width
+                            Component.onCompleted: item.contentCtl = rowContent
+                            onControlsChanged: list.queueResolve()
                             summary: item.summary
                             appName: item.appName
                             urgency: item.urgency
@@ -737,11 +968,12 @@ ListView {
                                 capsule: true
                                 text: qsTr("Show All (%1)").arg(item.toggleCount)
                                 Component.onCompleted: item.toggleCtl = toggle
+                                onVisibleChanged: list.queueResolve()
                                 onClicked: {
                                     const kbd = toggle.activeFocus;
                                     Notifications.setExpanded(item.appName, true);
                                     if (kbd)
-                                        list.focusControl(item.appName, true, item.key);
+                                        list.handoff(item.appName, "showLess");
                                 }
                             }
                         }

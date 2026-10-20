@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtTest
 import Quickshell
 import Quickshell.Services.Notifications
 import qs.notifications
@@ -14,6 +15,10 @@ import qs.notifications
 //  - tabStep: Tab and Shift+Tab in visual order, also after arrivals (creation order differs); focusedDelegate;
 //  - clearCard refocus (accessibility path); Show All / Show Less hand the focus to the other control;
 //  - the layout converges to the model layout after toggles (no stale offset), also when toggled mid-animation;
+//  - the focus invariant (NotificationList.resolveFocus): a focused CONTROL that gets hidden (Clear All after an arrival or after
+//    the app closes the other card, Show Less, Show All, More, the sender's actions), several changes in one event-loop turn,
+//    the expiry of the focused card: the focus lands on a visible, enabled element and Return acts on that; keys never act on a
+//    hidden control; a seeded random sequence of arrivals, closes, expiries, toggles and clears with the focus anywhere;
 //  - bumpTick coalesces a frame's bumps; takeFresh animates an arrival once and never a card that is merely revealed.
 // Prints "notif-center-list: PASS" or the failures.
 ShellRoot {
@@ -93,9 +98,17 @@ ShellRoot {
             failures.push(name);
     }
 
-    function add(app: string): string {
+    // Real key events to the window's focus item.
+    TestCase {
+        id: keys
+
+        name: "keys"
+        when: false
+    }
+
+    function add(app: string, extra: var): string {
         seq++;
-        const e = {
+        const e = Object.assign({
             key: "t-" + seq,
             nid: -1,
             appName: app,
@@ -110,7 +123,7 @@ ShellRoot {
             resident: false,
             actions: [],
             restored: false
-        };
+        }, extra ? extra : {});
         Notifications.addEntry(e);
         return e.key;
     }
@@ -152,6 +165,88 @@ ShellRoot {
         return d !== null && !d.removing && d.enabled && root.shownKeys().indexOf(d.key) >= 0;
     }
 
+    // The usable control `role` of the card `key` (null when it does not exist or is hidden).
+    function ctl(key: string, role: string): Item {
+        const d = list.delegateFor(key, false);
+        return d ? list.controlOf(d, role) : null;
+    }
+
+    function focusCtl(key: string, role: string): bool {
+        const c = root.ctl(key, role);
+        if (!c)
+            return false;
+        c.forceActiveFocus();
+        return win.activeFocusItem === c;
+    }
+
+    function ident(): var {
+        return list.identityOf(win.activeFocusItem);
+    }
+
+    // The focus is on a card or a control of a card that exists, is visible and enabled, and is displayed.
+    function onUsable(): bool {
+        const f = win.activeFocusItem;
+        const id = list.identityOf(f);
+        return id !== null && list.itemOf(id) === f && f.visible && f.enabled && root.shownKeys().indexOf(id.key) >= 0;
+    }
+
+    // No hidden or disabled control of a displayed card holds the focus.
+    function noHiddenFocus(): bool {
+        for (let i = 0; i < list.count; i++) {
+            const d = list.itemAtIndex(i);
+            if (!d || d.removing)
+                continue;
+            for (const c of d.controls()) {
+                if (!list.usable(c.item) && c.item.activeFocus)
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    // Keys of the displayed cards of an app, top to bottom.
+    function shownOf(app: string): var {
+        return Notifications.centerModel.count === 0 ? [] : root.shownKeys().filter(k => {
+            const e = Notifications.entryFor(k);
+            return e !== null && e.appName === app;
+        });
+    }
+
+    // Every usable focus target of the column right now: [{item}] of cards and controls.
+    function targets(): var {
+        const out = [];
+        for (let i = 0; i < list.count; i++) {
+            const d = list.itemAtIndex(i);
+            if (!d || d.removing)
+                continue;
+            for (const c of d.controls()) {
+                if (list.usable(c.item))
+                    out.push(c.item);
+            }
+        }
+        return out;
+    }
+
+    // The focus is on the column's panel.
+    function atPanel(): bool {
+        return win.activeFocusItem === panel;
+    }
+
+    function resetAll(): void {
+        Notifications.clearKeys(Notifications.history.map(e => e.key));
+        Notifications.centerOpen = true;
+        list.releaseFocus();
+    }
+
+    // A scene: reset, build, act (the focus is set and the change made in ONE event-loop turn), check.
+    function scene(build, act, verify): void {
+        const s = {};
+        step(() => root.resetAll(), 350);
+        step(() => build(s), 350);
+        step(() => act(s), 200);
+        step(() => verify(s), 50);
+    }
+
     // Every non-leaving delegate sits right under the one above it and carries no visual offset left.
     function layoutOk(): bool {
         let prev = null;
@@ -188,12 +283,12 @@ ShellRoot {
             root.check("setup: shown order", root.shownKeys().join() === [k.m5, k.m4, k.m3, k.cal].join());
             root.check("setup: layout settled", root.layoutOk());
             // focusedDelegate: null while the focus is on the panel, the card while it is on the card or its x.
-            panel.forceActiveFocus();
+            list.releaseFocus();
             root.check("focusedDelegate: none on the panel", list.focusedDelegate() === null);
             root.check("focus card", root.focusCard(k.m4));
             list.tabStep(true);
             root.check("focusedDelegate: card or its x", root.held() === k.m4 && root.card(k.m4).rowItem.activeFocus === false);
-            root.check("tracked key follows the focus", Notifications.centerFocusKey === k.m4);
+            root.check("tracked identity follows the focus", list.focusId !== null && list.focusId.key === k.m4 && list.focusId.role === "close");
         }, 50);
 
         // 1. An arrival pushes the focused 3rd card out of the collapsed group: focus goes to the card in its slot.
@@ -205,7 +300,7 @@ ShellRoot {
             root.check("1: m3 left the rows", root.shownKeys().indexOf(k.m3) < 0);
             root.check("1: focus is on a live card", root.focusIsLive());
             root.check("1: focus is on the card now in that slot (m4)", root.held() === k.m4);
-            root.check("1: tracked key", Notifications.centerFocusKey === k.m4);
+            root.check("1: tracked identity", list.focusId !== null && list.focusId.key === k.m4);
         }, 50);
 
         // 2. Show Less hides the focused 5th card (expanded group m6 m5 m4 m3 m2 m1).
@@ -265,7 +360,7 @@ ShellRoot {
 
         // 7. Accessibility path: the focus is elsewhere, the card is cleared with refocus: focus lands on a card.
         step(() => {
-            panel.forceActiveFocus();
+            list.releaseFocus();
             root.card(k.m5).clearCard(false, true);
         }, 250);
         step(() => {
@@ -436,9 +531,291 @@ ShellRoot {
         }, 300);
         step(() => {
             root.check("12: everything cleared", Notifications.count === 0 && list.count === 0);
-            root.check("12: no card holds the focus", list.focusedDelegate() === null && Notifications.centerFocusKey === "");
-            root.check("12: the panel has it", panel.activeFocus);
+            root.check("12: no card holds the focus", list.focusedDelegate() === null && list.focusId === null);
+            root.check("12: the panel has it", root.atPanel());
         }, 50);
+
+        // ---- The focus invariant: a focused CONTROL that gets hidden, several changes in one turn, expiries ----
+        const CLOSED = NotificationCloseReason.CloseRequested;
+        const mailBy = n => {
+            const out = [];
+            for (let i = 0; i < n; i++)
+                out.push(root.add("mail", {nid: 500 + root.seq}));
+            return out;
+        };
+
+        // 13. Clear All focused on a group of two, a Mail notification arrives: Clear All moves to the new head card; the focus
+        // goes to the old head card (visible ring), Return opens that card and leaves the arrival and the rest alone.
+        root.scene(s => {
+            s.m = mailBy(2);
+        }, s => {
+            root.check("13: focus Clear All of the head", root.focusCtl(s.m[1], "clearGroup"));
+            s.m.push(root.add("mail"));
+        }, s => {
+            root.check("13: arrival is the new head", root.shownOf("mail")[0] === s.m[2]);
+            root.check("13: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("13: on the old head card, ring visible", root.held() === s.m[1] && root.ident().role === "card" && root.card(s.m[1]).rowItem.activeFocus);
+            keys.keyClick(Qt.Key_Return);
+            root.check("13: Return did not clear the group nor the arrival", Notifications.entryFor(s.m[2]) !== null && Notifications.entryFor(s.m[0]) !== null);
+            root.check("13: Return acted on the focused card only", Notifications.entryFor(s.m[1]) === null && Notifications.keysOf("mail").length === 2);
+        });
+
+        // 14. Show Less focused on an expanded group, an arrival moves Show Less to the new head card.
+        root.scene(s => {
+            s.m = mailBy(4);
+            Notifications.setExpanded("mail", true);
+        }, s => {
+            root.check("14: focus Show Less", root.focusCtl(s.m[3], "showLess"));
+            s.m.push(root.add("mail"));
+        }, s => {
+            root.check("14: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("14: on the old head card", root.held() === s.m[3] && root.ident().role === "card");
+            root.check("14: nothing was collapsed or cleared by it", Notifications.keysOf("mail").length === 5 && Notifications.expandedApps.mail === true);
+        });
+
+        // 15. Show All (n) focused, the hidden 4th card closes: the group has three cards, Show All is gone.
+        root.scene(s => {
+            s.m = mailBy(4);
+        }, s => {
+            root.check("15: focus Show All", root.focusCtl(s.m[1], "showAll"));
+            Notifications.closed(s.m[0], CLOSED);
+        }, s => {
+            root.check("15: Show All is gone", root.ctl(s.m[1], "showAll") === null);
+            root.check("15: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("15: on the card that carried it", root.held() === s.m[1] && root.ident().role === "card");
+        });
+
+        // 16. Show Less focused, the expanded group shrinks to three cards: Show Less is gone.
+        root.scene(s => {
+            s.m = mailBy(4);
+            Notifications.setExpanded("mail", true);
+        }, s => {
+            root.check("16: focus Show Less", root.focusCtl(s.m[3], "showLess"));
+            Notifications.closed(s.m[0], CLOSED);
+        }, s => {
+            root.check("16: Show Less is gone", root.ctl(s.m[3], "showLess") === null);
+            root.check("16: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("16: on the head card", root.held() === s.m[3] && root.ident().role === "card");
+        });
+
+        // 17. Clear All focused on a group of two, the app closes the other card: no group left to clear.
+        root.scene(s => {
+            s.m = mailBy(2);
+        }, s => {
+            root.check("17: focus Clear All", root.focusCtl(s.m[1], "clearGroup"));
+            Notifications.closed(s.m[0], CLOSED);
+        }, s => {
+            root.check("17: Clear All is gone", root.ctl(s.m[1], "clearGroup") === null);
+            root.check("17: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("17: on the remaining card", root.held() === s.m[1] && root.ident().role === "card");
+            keys.keyClick(Qt.Key_Return);
+            root.check("17: Return acts on the card only", Notifications.count === 0);
+        });
+
+        // 18. Show All focused, an arrival pushes its card out of the collapsed group: the Show All now in that slot keeps it.
+        root.scene(s => {
+            s.m = mailBy(4);
+        }, s => {
+            root.check("18: focus Show All", root.focusCtl(s.m[1], "showAll"));
+            s.m.push(root.add("mail"));
+        }, s => {
+            root.check("18: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("18: on the Show All of the new third card", root.held() === s.m[2] && root.ident().role === "showAll");
+        });
+
+        // 19. B2: two arrivals in ONE turn with the focus on the third card.
+        root.scene(s => {
+            s.m = mailBy(3);
+            s.c = root.add("cal");
+        }, s => {
+            root.check("19: focus the third card", root.focusCtl(s.m[0], "card"));
+            s.m.push(root.add("mail"));
+            s.m.push(root.add("mail"));
+        }, s => {
+            root.check("19: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("19: on the card now in that slot, not the panel", root.held() === s.m[2] && win.activeFocusItem !== panel && !root.atPanel());
+        });
+
+        // 20. B1: the app closes the focused card and its neighbour in ONE turn.
+        root.scene(s => {
+            s.m = mailBy(4);
+            s.c = root.add("cal");
+        }, s => {
+            root.check("20: focus the second card", root.focusCtl(s.m[2], "card"));
+            Notifications.closed(s.m[2], CLOSED);
+            Notifications.closed(s.m[1], CLOSED);
+        }, s => {
+            root.check("20: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("20: on the card now in that slot (the revealed one)", root.held() === s.m[0] && win.activeFocusItem !== panel && !root.atPanel());
+        });
+
+        // 21. Three changes in one turn on the x of a card: a group clear of another app, an arrival, an expiry.
+        root.scene(s => {
+            s.m = mailBy(3);
+            s.c = [root.add("cal"), root.add("cal")];
+            s.o = root.add("other");
+        }, s => {
+            root.check("21: focus the x of a card", root.focusCtl(s.c[0], "close"));
+            Notifications.clearKeys(Notifications.keysOf("mail"));
+            s.o2 = root.add("other");
+            Notifications.closed(s.o, CLOSED);
+            Notifications.closed(s.c[0], CLOSED);
+        }, s => {
+            root.check("21: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("21: on the remaining card of its group", root.held() === s.c[1] && root.ident().role === "card");
+        });
+
+        // 22. The only card of a group (the middle one: chat, cal, mail) is closed by the app while the focus is on its x: the next
+        // group's first card (visual order), not the first row, not the panel.
+        root.scene(s => {
+            s.m = mailBy(2);
+            s.c = root.add("cal");
+            s.h = root.add("chat");
+        }, s => {
+            root.check("22: order chat, cal, mail", root.shownKeys().join() === [s.h, s.c, s.m[1], s.m[0]].join());
+            root.check("22: focus the x of the cal card", root.focusCtl(s.c, "close"));
+            Notifications.closed(s.c, CLOSED);
+        }, s => {
+            root.check("22: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("22: on the next group's first card", root.held() === s.m[1] && root.ident().role === "card");
+        });
+
+        // 23. More hides itself while focused: the focus lands on the first button it revealed; Return then acts on it.
+        root.scene(s => {
+            s.k = root.add("act", {nid: 7, actions: [1, 2, 3, 4, 5].map(i => ({id: "a" + i, text: "Action " + i}))});
+        }, s => {
+            root.check("23: five buttons, More shown", root.ctl(s.k, "more") !== null && root.ctl(s.k, "action:a3") !== null && root.ctl(s.k, "action:a4") === null);
+            root.check("23: focus More", root.focusCtl(s.k, "more"));
+            keys.keyClick(Qt.Key_Return);
+        }, s => {
+            root.check("23: More is gone, the rest shown", root.ctl(s.k, "more") === null && root.ctl(s.k, "action:a5") !== null);
+            root.check("23: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("23: on the first revealed button", root.ident().key === s.k && root.ident().role === "action:a4");
+        });
+
+        // 24. The sender's notification expires while an action button holds the focus: the buttons vanish, the focus goes to the card.
+        root.scene(s => {
+            s.k = root.add("act", {nid: 8, actions: [{id: "yes", text: "Yes"}, {id: "no", text: "No"}]});
+        }, s => {
+            root.check("24: focus an action", root.focusCtl(s.k, "action:no"));
+            Notifications.closed(s.k, NotificationCloseReason.Expired);
+        }, s => {
+            root.check("24: the buttons are gone", root.ctl(s.k, "action:no") === null && Notifications.entryFor(s.k) !== null);
+            root.check("24: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("24: on the card", root.held() === s.k && root.ident().role === "card");
+        });
+
+        // 25. The same-id update by the app (actions replaced) with the focus on an action: the card keeps it.
+        root.scene(s => {
+            s.k = root.add("act", {nid: 9, actions: [{id: "yes", text: "Yes"}, {id: "no", text: "No"}]});
+        }, s => {
+            root.check("25: focus an action", root.focusCtl(s.k, "action:no"));
+            const e = Notifications.entryFor(s.k);
+            Notifications.updateEntry(s.k, Object.assign({}, e, {actions: [{id: "yes", text: "Yes"}]}));
+        }, s => {
+            root.check("25: the replaced action is gone", root.ctl(s.k, "action:no") === null);
+            root.check("25: focus is on a usable element, on that card", root.onUsable() && root.held() === s.k);
+        });
+
+        // 26. A key never acts on a hidden control, even before the resolver ran: hide the focused Clear All and press Return.
+        root.scene(s => {
+            s.m = mailBy(2);
+        }, s => {
+            const c = root.ctl(s.m[1], "clearGroup");
+            root.check("26: focus Clear All", root.focusCtl(s.m[1], "clearGroup"));
+            c.visible = false;
+            keys.keyClick(Qt.Key_Return);
+            keys.keyClick(Qt.Key_Space);
+            s.cleared = Notifications.keysOf("mail").length !== 2;
+        }, s => {
+            root.check("26: neither Return nor Space acted on the hidden control", !s.cleared);
+            root.check("26: the focus left it", root.noHiddenFocus());
+        });
+
+        // 27. Property: seeded random turns (arrivals, closes, expiries, toggles, clears; 1 to 3 per turn) with the focus anywhere.
+        // After every turn the focus is on a usable element (the panel when no card is left), or where it was put outside the cards.
+        step(() => root.resetAll(), 450);
+        let state = 20261020;
+        const rnd = n => {
+            state = (state * 1103515245 + 12345) % 2147483648;
+            return Math.floor(state / 65536) % n;
+        };
+        const apps = ["mail", "cal", "chat"];
+        const live = ["a", "b", "c", "d", "e"];
+        const P = {bad: 0, log: [], desc: "", outside: null, moved: 0, inList: 0, held: null};
+        for (let t = 0; t < 80; t++) {
+            step(() => {
+                // The focus first: any card control, the panel, Edit Widgets.
+                const all = root.targets();
+                const pick = rnd(all.length + 3);
+                P.outside = null;
+                if (pick < all.length) {
+                    all[pick].forceActiveFocus();
+                    P.held = all[pick];
+                } else if (pick === all.length) {
+                    list.releaseFocus();
+                    P.outside = panel;
+                } else {
+                    editStub.forceActiveFocus();
+                    P.outside = editStub;
+                }
+                const had = Notifications.centerModel.count;
+                const n = 1 + rnd(3);
+                const desc = [];
+                for (let i = 0; i < n; i++) {
+                    const op = rnd(8);
+                    const app = apps[rnd(apps.length)];
+                    const mine = Notifications.history.map(e => e.key);
+                    if (op <= 2 || mine.length === 0) {
+                        const na = rnd(5);
+                        root.add(app, na > 0 && rnd(2) === 0 ? {nid: 100 + root.seq, actions: live.slice(0, na).map(a => ({id: a, text: "Do " + a}))} : {});
+                        desc.push("arrive:" + app);
+                    } else if (op === 3) {
+                        Notifications.closed(mine[rnd(mine.length)], CLOSED);
+                        desc.push("close");
+                    } else if (op === 4) {
+                        Notifications.closed(mine[rnd(mine.length)], NotificationCloseReason.Expired);
+                        desc.push("expire");
+                    } else if (op === 5) {
+                        Notifications.setExpanded(app, Notifications.expandedApps[app] !== true);
+                        desc.push("toggle:" + app);
+                    } else if (op === 6) {
+                        Notifications.clearKeys(Notifications.keysOf(app));
+                        desc.push("clearGroup:" + app);
+                    } else {
+                        Notifications.clear(mine[rnd(mine.length)]);
+                        desc.push("clear");
+                    }
+                }
+                P.desc = "turn " + t + " pick " + pick + "/" + all.length + " cards " + had + ": " + desc.join(",");
+            }, 100);
+            step(() => {
+                let ok;
+                if (P.outside !== null)
+                    ok = P.outside === panel ? root.atPanel() : win.activeFocusItem === P.outside;
+                else if (Notifications.centerModel.count === 0)
+                    ok = root.atPanel();
+                else
+                    ok = root.onUsable();
+                ok = ok && root.noHiddenFocus();
+                if (P.outside === null) {
+                    P.inList++;
+                    if (win.activeFocusItem !== P.held)
+                        P.moved++;
+                }
+                if (!ok) {
+                    P.bad++;
+                    if (P.log.length < 4)
+                        P.log.push(P.desc + " f=" + win.activeFocusItem + " id=" + JSON.stringify(root.ident()));
+                }
+            }, 5);
+        }
+        step(() => {
+            console.log("notif-center-list: property turns with the focus in the cards: " + P.inList + ", focus moved by the resolver: " + P.moved);
+            root.check("27: the invariant held after every random turn (" + P.bad + " bad): " + P.log.join(" | "), P.bad === 0);
+            root.check("27: the random turns really moved the focus", P.moved >= 10);
+            root.resetAll();
+        }, 450);
     }
 
     Timer {
