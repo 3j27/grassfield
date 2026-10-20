@@ -14,12 +14,13 @@ while [[ $# -gt 0 ]]; do
     --no-plugin) export GRASSFIELD_NO_PLUGIN=1 ;;
     --visual-fixtures) export GRASSFIELD_VISUAL_FIXTURES=1 ;;  # test hooks and fixed values (shell/services/VisualFixtures.qml, dev only)
     --render-timing) export GRASSFIELD_RENDER_TIMING=1 ;;  # Qt scene graph frame timing in .dev/shell.log (QSG_RENDER_TIMING)
+    --unit-env) export GRASSFIELD_UNIT_ENV=1 ;;  # shell with grassfield-shell.service's own variables (shell-run.sh --unit-env)
     --lang) export GRASSFIELD_LANG=${2:?--lang needs a value}; shift ;;
     --desktop-dir) export GRASSFIELD_DESKTOP_DIR=${2:?--desktop-dir needs a path}; shift ;;
     --menu-bridge) export GRASSFIELD_MENU_BRIDGE=${2:?--menu-bridge needs a path}; shift ;;
     --desktop-screen) export GRASSFIELD_DESKTOP_SCREEN=${2:?--desktop-screen needs an output name}; shift ;;
     --cursor-theme) export GRASSFIELD_CURSOR_THEME=${2:?--cursor-theme needs a theme name}; shift ;;
-    -h|--help) echo "usage: nested-up.sh [--cursor-theme grassfield-cursors-custom] [--session-bus] [--no-plugin] [--render-timing] [--visual-fixtures] [--lang LL] [--desktop-dir PATH] [--desktop-screen NAME] [--menu-bridge PATH]"; exit 0 ;;
+    -h|--help) echo "usage: nested-up.sh [--cursor-theme grassfield-cursors-custom] [--session-bus] [--no-plugin] [--render-timing] [--unit-env] [--visual-fixtures] [--lang LL] [--desktop-dir PATH] [--desktop-screen NAME] [--menu-bridge PATH]"; exit 0 ;;
     *) echo "nested-up: unknown option $1" >&2; exit 2 ;;
   esac
   shift
