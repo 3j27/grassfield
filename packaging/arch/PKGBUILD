@@ -7,7 +7,7 @@
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor)
 pkgver=0.4.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
@@ -66,12 +66,12 @@ package_grassfield-desktop() {
   root=$(_root)
 
   install -d "$pkgdir/usr/share/grassfield"
-  cp -a "$root/shell" "$pkgdir/usr/share/grassfield/shell"
+  cp -a --no-preserve=ownership "$root/shell" "$pkgdir/usr/share/grassfield/shell"
   find "$pkgdir/usr/share/grassfield/shell" \( -name '.qmlls.ini' -o -name '*.qmlc' \) -delete
 
   # Design system as a regular QML module; icons copied into the module (repo symlink resolved).
   install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui"
-  cp -a "$root/ui/Grassfield/Ui/." "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/"
+  cp -a --no-preserve=ownership "$root/ui/Grassfield/Ui/." "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/"
   rm -f "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -d "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons"
   install -m644 "$root"/branding/icons/symbolic/*.svg "$pkgdir/usr/lib/qt6/qml/Grassfield/Ui/icons/"
@@ -91,6 +91,9 @@ package_grassfield-desktop() {
 
   install -Dm644 "$root/packaging/wayland-sessions/grassfield.desktop" "$pkgdir/usr/share/wayland-sessions/grassfield.desktop"
   install -Dm644 "$root/packaging/systemd/grassfield-shell.service" "$pkgdir/usr/lib/systemd/user/grassfield-shell.service"
+  # Omarchy's sleep-lock unit must stay inert inside the Grassfield session (the Omarchy shell it talks to is not running there).
+  install -Dm644 "$root/packaging/systemd/omarchy-sleep-lock.service.d/10-grassfield.conf" \
+    "$pkgdir/usr/lib/systemd/user/omarchy-sleep-lock.service.d/10-grassfield.conf"
   # Menu bridge: /usr/bin/grassfield-menu-bridge, /usr/lib/systemd/user/grassfield-menu-bridge.service,
   # /usr/share/dbus-1/interfaces/org.grassfield.MenuBridge1.xml (started by the session's autostart.lua).
   DESTDIR="$pkgdir" cmake --install "$srcdir/menu-bridge-build"
@@ -104,7 +107,7 @@ package_grassfield-desktop() {
 
   # grassfield-cursors: /usr/share/icons/grassfield-cursors/{index.theme,manifest.hl,hyprcursors,cursors}
   install -d "$pkgdir/usr/share/icons"
-  cp -a "$srcdir/icons/grassfield-cursors" "$pkgdir/usr/share/icons/grassfield-cursors"
+  cp -a --no-preserve=ownership "$srcdir/icons/grassfield-cursors" "$pkgdir/usr/share/icons/grassfield-cursors"
   install -Dm644 "$root/branding/cursors/build.sh" "$pkgdir/usr/share/grassfield/cursors/build.sh"
   install -Dm644 "$root/branding/cursors/xcursor-pack.py" "$pkgdir/usr/share/grassfield/cursors/xcursor-pack.py"
   install -Dm644 "$root/branding/cursors/cursors.tsv" "$pkgdir/usr/share/grassfield/cursors/cursors.tsv"

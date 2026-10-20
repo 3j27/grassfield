@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Grassfield
 Comment=Grassfield Desktop on Hyprland, built for Omarchy
-Exec=uwsm start -e -D Hyprland:Grassfield -N Grassfield -C "Grassfield Desktop" -- Hyprland --config /usr/share/grassfield/hypr/session.lua
+Exec=uwsm start -e -D Hyprland:Grassfield -N Grassfield -C "Grassfield Desktop" -- start-hyprland -- --config /usr/share/grassfield/hypr/session.lua
 TryExec=uwsm
 DesktopNames=Hyprland;Grassfield
 Type=Application
