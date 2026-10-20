@@ -129,6 +129,7 @@ vs_ipc overview open >/dev/null
 sleep 1.2
 key -k Return
 wait_for 5 closed; check "reopen: the first Return closes the overview" $?
+closed || echo "  status after the reopen Return: $(status | jq -c '{open, phase, live, chromeHeld, thumbnailMode}') (active=$(active_title))" >&2
 sleep 0.8
 act=$(active_title)
 [[ $act == 'Terminal 1' || $act == 'Terminal 2' ]]; check "reopen: a window is active after the close (active=$act)" $?
