@@ -27,6 +27,7 @@ Scope {
     // desktop had it): a close without a chosen window returns to it (macOS: leaving Mission Control without choosing
     // brings back the window and the Desktop you were on).
     property var previous: null
+    readonly property string previousAddress: previous && previous.address ? previous.address : ""
     // A Desktop created with "+" while open (the shell switched to it): closing without a choice stays there.
     property int stayOnSpace: 0
 
@@ -422,10 +423,12 @@ Scope {
             const owner = windows.instances.find(w => w.screenName === spaceScreen);
             if (owner)
                 owner.activateTile(spaceFocus);
-        } else if (selected !== "") {
-            const owner = windowOf(selected);
+        } else {
+            // Nothing chosen yet: Return takes the window the ring shows, the one active at open.
+            const key = selected !== "" ? selected : previousAddress;
+            const owner = key !== "" ? windowOf(key) : null;
             if (owner)
-                owner.activateWindow(selected);
+                owner.activateWindow(key);
         }
     }
 
