@@ -75,6 +75,22 @@ function openRequest(argv) {
     return null;
 }
 
+// Real-session open policy (docs/specs/files.md, "Default file manager"): `gio open T...` and `xdg-open T` become
+// `bash <script> <opener> T...`, where the script (services/open-real.sh) opens every folder in Grassfield Files and hands
+// the rest to the opener. Any other command (gtk-launch, gio trash, ...) and a dev session (`enabled` false, the dev open
+// policy applies) are returned unchanged.
+function folderAwareArgv(argv, script, enabled) {
+    const a = Array.from(argv || []).map(String);
+    if (!enabled)
+        return a;
+    const name = a.length > 0 ? a[0].replace(/^.*\//, "") : "";
+    if (name === "gio" && a[1] === "open" && a.length > 2)
+        return ["bash", script, "gio"].concat(a.slice(2));
+    if (name === "xdg-open" && a.length > 1)
+        return ["bash", script, "xdg-open"].concat(a.slice(1));
+    return a;
+}
+
 // Directory of the user's autostart entries (XDG): `<appsHome>/config/autostart` in a dev session (never the owner's
 // own), else `$XDG_CONFIG_HOME/autostart` or `~/.config/autostart`.
 function autostartDir(devSession, appsHome, xdgConfigHome, home) {
