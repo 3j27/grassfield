@@ -540,7 +540,7 @@ Variants {
                                 textFormat: Text.PlainText
                                 color: Appearance.colors.text
                                 font.family: Appearance.fontFamily
-                                font.pixelSize: Tokens.typographyTitleSize * 1.5
+                                font.pixelSize: Tokens.typographyTitleSize * 2
                                 font.weight: Tokens.typographySmallWeight
                             }
                         }

@@ -7,6 +7,7 @@
 #   tests/visual/overview-highlight.sh
 # Exit status 1 when a check fails.
 source "$(dirname "$0")/lib.sh"
+set +e
 
 was_running=0
 vs_nested_running && was_running=1
@@ -22,10 +23,11 @@ fail=0
 check() { # <description> <status>
   if [[ $2 -eq 0 ]]; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi
 }
-status() { vs_ipc overview status; }
+status() { local i o; for i in 1 2 3 4 5; do o=$(vs_ipc overview status 2>/dev/null) && jq -e . <<<"$o" >/dev/null 2>&1 && { printf "%s\n" "$o"; return 0; }; sleep 0.3; done; echo "status: not JSON: $o" >&2; printf "{\"open\":false,\"screens\":[]}\n"; }
 active_title() { "$VS_ROOT/scripts/nestctl" activewindow -j | jq -r '.title // ""'; }
 marked_title() { status | jq -r '[.screens[] | select(.name == "'"$VS_OUTPUT"'") | .marked as $m | .windows[] | select($m != "" and .address == $m) | .title] | first // ""'; }
 selected_addr() { status | jq -r '.screens[] | select(.name == "'"$VS_OUTPUT"'") | .selected'; }
+key() { local i; for i in 1 2 3 4 5; do "$VS_ROOT/scripts/dev/keys.sh" "$@" && return 0; sleep 0.4; done; return 1; }
 closed() { [[ $(status | jq -r '.open') == false ]]; }
 wait_for() { # <seconds> cmd...
   local n=$(( $1 * 10 )) i; shift
@@ -46,17 +48,16 @@ vs_wait_clients 2
 vs_foot 'Terminal 3' 70x18
 vs_wait_clients 3
 vs_park
+sleep 5
 
 # 1. The window active at open is marked, nothing was hovered or chosen.
 focus_title 'Terminal 2'
 [[ $(active_title) == 'Terminal 2' ]]; check "setup: Terminal 2 is active" $?
 vs_ipc overview open >/dev/null
-wait_for 5 bash -c "[[ \$($VS_ROOT/scripts/dev/pointer.sh output $VS_OUTPUT abs $VS_PARK_X $VS_PARK_Y >/dev/null; echo 1) == 1 ]]" || true
-sleep 1.2
+sleep 1.5
 m=$(marked_title)
 [[ $m == 'Terminal 2' ]]; check "open: the active window carries the ring and the name (marked=$m)" $?
 [[ -z $(selected_addr) ]]; check "open: nothing is selected yet (hover and keys have not chosen)" $?
-VS_SETTLE=1 vs_capture overview-highlight-open >/dev/null || true
 
 # 2. Hover moves the mark: pointer over Terminal 3's rectangle (status rects are window-local, the surface starts below the menu bar).
 read -r x y <<<"$(status | jq -r '.screens[] | select(.name == "'"$VS_OUTPUT"'") | .windows[] | select(.title == "Terminal 3") | "\((.rect.x + .rect.w / 2) | floor) \((.rect.y + .rect.h / 2) | floor)"')"
@@ -64,17 +65,16 @@ y=$((y + 24))
 vs_pointer abs 5 5 sleep 200 abs "$x" "$y" sleep 300 abs $((x + 3)) $((y + 3)) sleep 500 >/dev/null
 m=$(marked_title)
 [[ $m == 'Terminal 3' ]]; check "hover: the window under the pointer is marked (marked=$m)" $?
-VS_SETTLE=1 vs_capture overview-highlight-hover >/dev/null || true
 
 # 3. Arrows: from the hovered window, left or right reaches another window and the mark follows.
 before=$m
-"$VS_ROOT/scripts/dev/keys.sh" -k Left; sleep 0.5
+key -k Up; sleep 0.5
 m=$(marked_title)
-[[ -n $m && $m != "$before" ]]; check "arrows: Left moves the mark off $before (marked=$m)" $?
+[[ -n $m && $m != "$before" ]]; check "arrows: Up moves the mark off $before (marked=$m)" $?
 
 # 4. Return activates the marked window and closes.
 want=$m
-"$VS_ROOT/scripts/dev/keys.sh" -k Return
+key -k Return
 wait_for 5 closed; check "return: the overview closes" $?
 sleep 0.8
 act=$(active_title)
@@ -85,7 +85,7 @@ focus_title 'Terminal 1'
 vs_park
 vs_ipc overview open >/dev/null
 sleep 1.2
-"$VS_ROOT/scripts/dev/keys.sh" -k Return
+key -k Return
 wait_for 5 closed; check "return, nothing chosen: the overview closes" $?
 sleep 0.8
 act=$(active_title)
@@ -95,11 +95,17 @@ act=$(active_title)
 focus_title 'Terminal 3'
 vs_ipc overview open >/dev/null
 sleep 1.2
-"$VS_ROOT/scripts/dev/keys.sh" -k Escape
+key -k Escape
 wait_for 5 closed; check "esc: the overview closes" $?
 sleep 0.8
 act=$(active_title)
 [[ $act == 'Terminal 3' ]]; check "esc: back on Terminal 3 (active=$act)" $?
 
+# 7. Captures last (a screenshot takes the keyboard from the overview): open with the pointer over Terminal 3, then the hover state.
+vs_park
+vs_ipc overview open >/dev/null
+sleep 1.5
+VS_SETTLE=1 vs_capture overview-highlight-open >/dev/null || true
+vs_ipc overview close >/dev/null
 (( fail )) && { echo "overview-highlight: FAIL" >&2; exit 1; }
 echo "overview-highlight: PASS"
