@@ -64,6 +64,7 @@ res() {
     pass=$((pass + 1))
   else
     failn=$((failn + 1))
+    cp "$VS_DEV/shell.log" "$VS_DEV/shell.fail.$failn.log" 2>/dev/null
   fi
   echo "$(date +%T) $1 expect=$2 got=$3 $ok"
 }
@@ -100,8 +101,9 @@ trig_windowclose() { kill_class gfwin; }
 end_windowclose() { sleep 1; }
 trig_appquit() { kill_class gfdockB; }
 end_appquit() { vs_spawn foot --app-id gfdockB; sleep 3; }
-trig_workspace() { "$VS_ROOT/scripts/nestctl" dispatch 'hl.dsp.focus({ workspace = "2" })'; }
-end_workspace() { "$VS_ROOT/scripts/nestctl" dispatch 'hl.dsp.focus({ workspace = "1" })'; sleep 1; }
+# GF-REF sits on Space 2 (vs_canonical_workspaces): the switch goes to Space 3 and back.
+trig_workspace() { "$VS_ROOT/scripts/nestctl" dispatch 'hl.dsp.focus({ workspace = "3" })'; }
+end_workspace() { "$VS_ROOT/scripts/nestctl" dispatch 'hl.dsp.focus({ workspace = "2" })'; sleep 1; }
 trig_banner() { DBUS_SESSION_BUS_ADDRESS=$(bus) notify-send -a gfdockB -t 3000 Interrupt "Banner during a drag"; }
 end_banner() { sleep 3.5; }
 trig_lock() { vs_ipc lock lock; }
@@ -174,6 +176,26 @@ case $mode in
       fn "fn_leave_reenter_r$r" drag $FX 500 sleep 300 drag $FX 880 up sleep 300 $park
       fn "fn_leave_reenter_fast_r$r" drag $FX 900 sleep 300 abs $FX 800 abs $FX 880 up sleep 300 $park
       fn "fn_inside_window_r$r" drag $FX 880 sleep 500 up sleep 300 $park
+    done
+    ;;
+  race)
+    # The release comes 0-50 ms around the opening of Search while the tile is held ABOVE the Dock window: a release that reaches
+    # the drag handler before the interruption event must not remove. The trigger is started at a swept delay (the ipc call has
+    # its own latency); the real offset (release minus first interruption, ms, from the DBG lines of the shell log when present) is
+    # printed per trial.
+    for k in $(seq 0 $((${2:-20} - 1))); do
+      restore
+      delay=$(awk -v k="$k" 'BEGIN { printf "%.3f", '"${4:-1.80}"' + k * 0.025 }')
+      vs_pointer $P drag $FX $ABOVE sleep 1500 up sleep 300 $park >/dev/null &
+      ptr_pid=$!
+      sleep "$delay"
+      "trig_${3:-search}" >/dev/null 2>&1
+      wait "$ptr_pid"
+      ptr_pid=""
+      sleep 1.2
+      off=$(awk '/DBG active/ && $NF == "true" { i = 0; r = 0 } /DBG interrupt/ && !i { i = $NF } /DBG grab/ && $(NF-3) == 2 && $(NF-2) == 8 { r = $(NF-4) } END { if (i && r) print r - i; else print "n/a" }' "$VS_DEV/shell.log")
+      res "race_${3:-search}_k${k}_delay${delay}_release_minus_open=${off}ms" kept "$(pinned)"
+      "end_${3:-search}" >/dev/null 2>&1
     done
     ;;
   lock)
