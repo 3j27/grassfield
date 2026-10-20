@@ -41,9 +41,16 @@ Variants {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-overlay"
-        // Everything except the menu bar strip receives input.
+        // Everything except the menu bar strip receives input while a popup is open; nothing once it closed: the surface
+        // stays mapped a moment for the keyboard release, and a click in that moment belongs to the window under it.
         // qmllint disable missing-type
-        mask: Region {
+        mask: win.open ? openMask : passThrough
+        // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
+        // qmllint enable missing-type
+
+        Region {
+            id: openMask
             width: win.width
             height: win.height
 
@@ -53,9 +60,10 @@ Variants {
                 intersection: Intersection.Subtract
             }
         }
-        // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
-        // qmllint enable missing-type
+
+        Region {
+            id: passThrough
+        }
 
         KeyboardRelease {
             id: release

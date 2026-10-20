@@ -47,6 +47,9 @@ Variants {
         WlrLayershell.keyboardFocus: grabbing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-switcher"
         // qmllint disable missing-type
+        // The whole surface takes input during the switch; nothing once it ended: it stays mapped a moment for the
+        // keyboard release, and a click then belongs to the window under it.
+        mask: win.grabbing ? null : passThrough
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blur : null
         // qmllint enable missing-type
 
@@ -54,6 +57,10 @@ Variants {
             id: blur
             item: panel
             radius: Tokens.switcherPanelRadius
+        }
+
+        Region {
+            id: passThrough
         }
 
         KeyboardRelease {

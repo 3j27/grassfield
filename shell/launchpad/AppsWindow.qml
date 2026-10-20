@@ -46,6 +46,9 @@ Variants {
         WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-apps"
         // qmllint disable missing-type
+        // The whole surface takes input while shown; nothing once it closed: it stays mapped for the fade and the keyboard
+        // release, and a click then belongs to the window under it (never to a tile that is fading out).
+        mask: shown ? null : passThrough
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && shown ? blur : null
         // qmllint enable missing-type
 
@@ -53,6 +56,10 @@ Variants {
             id: blur
             item: frame
             radius: Tokens.launcherPanelRadius
+        }
+
+        Region {
+            id: passThrough
         }
 
         KeyboardRelease {

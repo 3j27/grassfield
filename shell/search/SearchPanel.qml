@@ -42,8 +42,20 @@ Variants {
         WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-search"
         // qmllint disable missing-type
-        // Everything except the menu bar strip receives input.
-        mask: Region {
+        // Everything except the menu bar strip receives input while shown; nothing once it closed: the surface stays mapped
+        // a moment for the keyboard release (and the fade), and a click in that moment belongs to the window under it.
+        mask: win.shown ? openMask : passThrough
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blur : null
+        // qmllint enable missing-type
+
+        Region {
+            id: blur
+            item: panel
+            radius: Tokens.radiusSearch
+        }
+
+        Region {
+            id: openMask
             width: win.width
             height: win.height
 
@@ -53,13 +65,9 @@ Variants {
                 intersection: Intersection.Subtract
             }
         }
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blur : null
-        // qmllint enable missing-type
 
         Region {
-            id: blur
-            item: panel
-            radius: Tokens.radiusSearch
+            id: passThrough
         }
 
         KeyboardRelease {
