@@ -20,6 +20,9 @@ Scope {
 
     // [{kind, key, name, icon, entry, windows, pinned}], rebuilt when apps/toplevels/pins change.
     property var items: []
+
+    // The first tile is "Apps" (macOS 26: Launchpad became Apps and keeps its Dock tile). The shell root opens the panel.
+    signal appsRequested
     // Tiles are a keyed list model updated by diffing (DockModel.diffKeys) so a delegate survives a rebuild and its animations
     // (glide, launch bounce and landing) keep running. A delegate reads its item from itemByKey by its key.
     property var itemByKey: ({})
@@ -127,7 +130,7 @@ Scope {
         const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
         const all = windows.instances;
         all.forEach(w => w.captureLayout());
-        setItems(DockModel.withTail(shown, tail));
+        setItems(DockModel.withApps(DockModel.withTail(shown, tail)));
         all.forEach(w => w.playLayout());
         pruneLaunching();
     }
@@ -175,6 +178,10 @@ Scope {
 
     function activateItem(item: var): void {
         keyboardMode = false;
+        if (item.kind === "apps") {
+            root.appsRequested();
+            return;
+        }
         if (item.kind === "trash") {
             Trash.open();
             Trash.refresh();
@@ -737,10 +744,11 @@ Scope {
                                 readonly property real tileScale: win.scaleList[index] !== undefined ? win.scaleList[index] : 1
                                 readonly property bool isApp: modelData.kind === "app"
                                 readonly property bool isTrash: modelData.kind === "trash"
+                                readonly property bool isAppsTile: modelData.kind === "apps"
                                 readonly property bool isSeparator: modelData.kind === "separator"
                                 readonly property bool isMinimized: modelData.kind === "minimized"
                                 readonly property bool running: isApp && modelData.windows.length > 0
-                                readonly property string label: isTrash ? qsTr("Trash") : (isApp || isMinimized ? modelData.name : "")
+                                readonly property string label: isTrash ? qsTr("Trash") : isAppsTile ? qsTr("Apps") : (isApp || isMinimized ? modelData.name : "")
                                 readonly property real iconPx: win.iconSize * tileScale
                                 readonly property bool dragging: win.dragFrom === index
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
@@ -826,7 +834,7 @@ Scope {
                                 }
                                 activeFocusOnTab: !isSeparator
                                 Accessible.role: isSeparator ? Accessible.Separator : Accessible.Button
-                                Accessible.name: isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? (badge === 1 ? qsTr(", 1 notification") : qsTr(", %1 notifications").arg(badge)) : "")))
+                                Accessible.name: isAppsTile ? qsTr("Apps") : isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? (badge === 1 ? qsTr(", 1 notification") : qsTr(", %1 notifications").arg(badge)) : "")))
                                 Accessible.focusable: !isSeparator
                                 Accessible.ignored: isSeparator
                                 Accessible.onPressAction: root.activateItem(modelData)
@@ -998,6 +1006,25 @@ Scope {
                                         anchors.centerIn: parent
                                         size: Math.round(tile.iconPx * Tokens.dockTrashIconScale)
                                         name: Trash.empty ? "trash" : "trash-full"
+                                    }
+                                }
+
+                                // Apps: a rounded tile with the grid glyph (our own symbolic icon, no borrowed artwork).
+                                Rectangle {
+                                    id: appsTileIcon
+                                    visible: tile.isAppsTile
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    radius: Tokens.radiusDockIcon * tile.tileScale
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: win.indicatorArea
+                                    color: Appearance.colors.accent
+
+                                    Icon {
+                                        anchors.centerIn: parent
+                                        size: Math.round(tile.iconPx * Tokens.dockTrashIconScale)
+                                        name: "apps"
+                                        color: Appearance.colors.accentText
                                     }
                                 }
 

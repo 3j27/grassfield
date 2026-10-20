@@ -87,6 +87,20 @@ TestCase {
         compare(Placements.parse("{not json").state.center.length, 0);
     }
 
+    // macOS model: Notification Center shows the Calendar widget on the first day; the parsed empty state stays empty so
+    // that a user who removed every widget keeps it that way.
+    function test_firstRunShowsCalendar() {
+        const s = Placements.firstRun();
+        compare(s.version, 1);
+        compare(s.center.length, 2);
+        compare(s.center[0].id, "calendar");
+        compare(s.center[0].size, "medium");
+        compare(s.center[1].id, "clock");
+        compare(s.desktop.length, 0);
+        compare(Placements.parse(Placements.serialize(Placements.remove(Placements.remove(s, "calendar-1"), "clock-1"))).state.center.length, 0);
+        compare(Placements.parse("").state.center.length, 0);
+    }
+
     function test_removeAndResize() {
         let s = Placements.addCenter(Placements.empty(), "battery", "small");
         s = Placements.setSize(s, "battery-1", "medium", null);

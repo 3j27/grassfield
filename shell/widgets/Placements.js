@@ -11,6 +11,13 @@ function empty() {
     return {version: VERSION, center: [], desktop: []};
 }
 
+// The state of an account that never edited its widgets (no widgets.json, or an empty one): the macOS model, where the
+// Calendar and Clock widgets are in the Notification Center from the first day. Held in memory only until the first
+// change, which writes the whole state. A file that exists with a state (even "center": []) is the user's.
+function firstRun() {
+    return addCenter(addCenter(empty(), "calendar", "medium"), "clock", "small");
+}
+
 function clone(state) {
     return JSON.parse(JSON.stringify(state));
 }
