@@ -260,16 +260,76 @@ ShellRoot {
     }
 
     // ---- the random turns ----
-    property var st: ({bad: 0, log: [], desc: "", turns: 0, inList: 0, moved: 0, keys: 0, prevActive: null, outside: null, checked: false})
+    property var st: ({bad: 0, log: [], desc: "", turns: 0, inList: 0, moved: 0, keys: 0, prevActive: null, outside: null, checked: false, oracle: null, skip: false, oracleTurns: 0, oracleBad: 0, activation: false, tab2: false})
 
     function press(code: int): void {
         root.st.keys++;
+        if (code === Qt.Key_Space || code === Qt.Key_Return || code === Qt.Key_Enter)
+            root.st.activation = true;
         if (code === Qt.Key_Tab)
             list.tabStep(true);
         else if (code === Qt.Key_Backtab)
             list.tabStep(false);
         else
             keys.keyClick(code);
+    }
+
+    // ---- the successor oracle: a small reference model of where the focus must be after a turn ----
+    // Taken when the column is settled (after the first keys of the turn): the identity of the focused element (card key, role,
+    // position among the sender's buttons, group and rank in its group, all read from the rows as they are THEN) and the displayed
+    // keys. After the turn: the focus must be on that very element when it is still there, visible and enabled; else (rule): on the
+    // card's remaining sender button at the same position or on the card; if the card left the rows, on the card now in the same
+    // slot of the same group (clamped), else on the first card after the old place that is still displayed, else the nearest
+    // before it, else the first row, else the panel. Show All / Show Less keep their role in the slot.
+    function takeOracle(): var {
+        const f = root.ident();
+        if (f === null)
+            return null;
+        const rows = list.shownRows();
+        return {key: f.key, role: f.role, cidx: f.cidx, app: f.app, rank: list.rankIn(rows, f.key), before: rows.map(r => r.key)};
+    }
+
+    function usableRole(d: var, role: string): bool {
+        return d !== null && d.controls().some(c => c.role === role && list.usable(c.item));
+    }
+
+    // {key, role} the focus must be on, or null for the panel.
+    function expectedTarget(O: var): var {
+        const rows = list.shownRows();
+        const inRows = k => rows.some(r => r.key === k);
+        if (inRows(O.key)) {
+            const d = list.delegateFor(O.key, true);
+            if (root.usableRole(d, O.role))
+                return {key: O.key, role: O.role};
+            if (O.cidx >= 0 && d !== null) {
+                const own = d.controls().filter(c => (c.role === "more" || c.role.startsWith("action:")) && list.usable(c.item));
+                if (own.length > 0)
+                    return {key: O.key, role: own[Math.min(O.cidx, own.length - 1)].role};
+            }
+            return {key: O.key, role: "card"};
+        }
+        const grp = rows.filter(r => r.appName === O.app);
+        let key = "";
+        if (grp.length > 0) {
+            key = grp[Math.min(O.rank, grp.length - 1)].key;
+        } else {
+            const at = O.before.indexOf(O.key);
+            for (let i = at + 1; at >= 0 && i < O.before.length && key === ""; i++) {
+                if (inRows(O.before[i]))
+                    key = O.before[i];
+            }
+            for (let i = at - 1; at >= 0 && i >= 0 && key === ""; i--) {
+                if (inRows(O.before[i]))
+                    key = O.before[i];
+            }
+            if (key === "" && rows.length > 0)
+                key = rows[0].key;
+        }
+        if (key === "")
+            return null;
+        if ((O.role === "showAll" || O.role === "showLess") && root.usableRole(list.delegateFor(key, true), O.role))
+            return {key: key, role: O.role};
+        return {key: key, role: "card"};
     }
 
     // Where the focus stands once the keys and the changes of the turn are in, before the resolver ran: in the cards or not.
@@ -312,6 +372,18 @@ ShellRoot {
         if (ok && !root.noHiddenFocus()) {
             ok = false;
             why = "a hidden control holds the focus";
+        }
+        // The exact successor.
+        if (ok && P.oracle !== null && !P.skip) {
+            P.oracleTurns++;
+            const e = root.expectedTarget(P.oracle);
+            const got = root.ident();
+            const same = e === null ? root.atPanel() : (got !== null && got.key === e.key && got.role === e.role);
+            if (!same) {
+                P.oracleBad++;
+                ok = false;
+                why = "wrong successor: expected " + JSON.stringify(e) + " (from " + P.oracle.role + " rank " + P.oracle.rank + " cidx " + P.oracle.cidx + ")";
+            }
         }
         if (!ok) {
             P.bad++;
@@ -373,6 +445,13 @@ ShellRoot {
                         root.press(codes[k]);
                         desc.push("key " + codeNames[k]);
                     }
+                    // The column is settled here (the keys ran the event loop): the oracle reads the identity and the rows.
+                    P.activation = false;
+                    P.tab2 = false;
+                    P.skip = false;
+                    P.oracle = root.takeOracle();
+                    if (P.oracle !== null && (P.oracle.role === "showAll" || P.oracle.role === "showLess"))
+                        P.skip = true;
                     // 1 to 4 changes in one turn.
                     const n = 1 + rnd(4);
                     for (let i = 0; i < n; i++) {
@@ -429,6 +508,8 @@ ShellRoot {
                         const k = rnd(codes.length);
                         root.press(codes[k]);
                         desc.push("key " + codeNames[k]);
+                        if (codes[k] === Qt.Key_Tab || codes[k] === Qt.Key_Backtab)
+                            P.skip = true;
                     }
                     P.desc = "seed " + seed + " turn " + t + ": " + desc.join(", ");
                     root.snapshotFocus();
@@ -438,9 +519,11 @@ ShellRoot {
         }
         step(() => {
             root.verifyTurn();
+            console.log("notif-center-random: oracle checked " + P.oracleTurns + " turns, wrong successors " + P.oracleBad);
             console.log("notif-center-random: " + P.turns + " turns, " + P.inList + " with the focus in the cards, focus moved " + P.moved + ", keys " + P.keys + ", violations " + P.bad);
             root.check("every random turn kept the invariant (" + P.bad + " violations): " + P.log.join(" | "), P.bad === 0);
             root.check("at least 500 turns ran", P.turns >= 500);
+            root.check("the oracle judged at least 150 turns", P.oracleTurns >= 150);
             root.check("the focus really moved in the random turns", P.moved >= 50);
         }, 5);
     }
