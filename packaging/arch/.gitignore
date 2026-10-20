@@ -1,0 +1,5 @@
+# makepkg output when the owner builds in place (cd packaging/arch && makepkg -si)
+/src/
+/pkg/
+/*.pkg.tar.*
+/*.log
