@@ -4,6 +4,7 @@
 
 #include <QCollator>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QLocale>
@@ -219,14 +220,14 @@ static bool wantedByName(const QFileInfo &info, BrowseKinds kinds)
         || name == QLatin1String("application/ogg") || name.startsWith(QLatin1String("text/")) || mime.inherits(QStringLiteral("text/plain"));
 }
 
-Browse browseFolder(const QString &path, BrowseKinds kinds, const SortSpec &sort)
+Browse browseFolder(const QString &path, BrowseKinds kinds, const SortSpec &sort, const std::atomic_bool *cancel)
 {
     Browse out;
     out.paths << path;
     const QFileInfo self(path);
     if (!self.isFile())
         return out;
-    const QDir dir = self.absoluteDir();
+    const QString selfPath = self.absoluteFilePath();
     QLocale locale;
     if (locale.language() == QLocale::C)
         locale = QLocale(QLocale::English, QLocale::UnitedStates);
@@ -238,24 +239,30 @@ Browse browseFolder(const QString &path, BrowseKinds kinds, const SortSpec &sort
         QString path;
         FileLogic::SortEntry entry;
     };
-    QList<Item> items;
     const QMimeDatabase db;
-    const QFileInfoList list = dir.entryInfoList(QDir::Files | QDir::Readable | QDir::NoDotAndDotDot, QDir::NoSort);
-    // A folder of tens of thousands of files is not browsed whole: the first entries are enough for a window.
-    constexpr int kMaxScanned = 20000;
-    for (const QFileInfo &info : list) {
-        if (items.size() >= kMaxScanned)
-            break;
-        const QString p = info.absoluteFilePath();
-        const bool isSelf = p == self.absoluteFilePath();
-        if (!isSelf && (info.fileName().startsWith(QLatin1Char('.')) || !wantedByName(info, kinds)))
-            continue;
+    const auto makeItem = [&db](const QFileInfo &info) {
         FileLogic::SortEntry e;
         e.name = info.fileName();
         e.kind = db.mimeTypeForFile(info, QMimeDatabase::MatchExtension).comment();
         e.modified = info.lastModified();
         e.size = info.size();
-        items.append({p, e});
+        return Item{info.absoluteFilePath(), e};
+    };
+    // The opened file is always part of the list at its sorted position, hidden or unreadable or not (an unreadable one
+    // shows its error in place); the other files must be regular (symlinks followed), readable, visible and of a wanted kind.
+    QList<Item> items;
+    items.append(makeItem(self));
+    // A folder of tens of thousands of files is not browsed whole: the first entries are enough for a window.
+    constexpr int kMaxScanned = 20000;
+    QDirIterator it(self.absolutePath(), QDir::Files | QDir::NoDotAndDotDot);
+    while (it.hasNext() && items.size() < kMaxScanned) {
+        if (cancel && cancel->load(std::memory_order_relaxed))
+            return out;
+        it.next();
+        const QFileInfo info = it.fileInfo();
+        if (info.absoluteFilePath() == selfPath || info.fileName().startsWith(QLatin1Char('.')) || !wantedByName(info, kinds) || !info.isReadable())
+            continue;
+        items.append(makeItem(info));
     }
     if (items.size() < 2)
         return out;
@@ -265,7 +272,7 @@ Browse browseFolder(const QString &path, BrowseKinds kinds, const SortSpec &sort
     });
     int at = 0;
     for (int i = 0; i < items.size(); ++i)
-        if (items.at(i).path == self.absoluteFilePath())
+        if (items.at(i).path == selfPath)
             at = i;
     int first = 0;
     int count = items.size();
