@@ -1,11 +1,18 @@
 #include "previewlogic.h"
 
+#include "filelogic.h"
+
+#include <QCollator>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLocale>
 #include <QMimeDatabase>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QUrl>
+
+#include <algorithm>
 
 namespace preview {
 
@@ -196,6 +203,93 @@ Arguments resolveArguments(const QStringList &args, const QString &cwd)
         out.paths << path;
     }
     return out;
+}
+
+// Quick, name-based test (no file contents are read for the other files of a folder).
+static bool wantedByName(const QFileInfo &info, BrowseKinds kinds)
+{
+    const QMimeDatabase db;
+    const QMimeType mime = db.mimeTypeForFile(info, QMimeDatabase::MatchExtension);
+    const QString name = mime.name();
+    if (name.startsWith(QLatin1String("image/")))
+        return true;
+    if (kinds == BrowseKinds::ImagesOnly)
+        return false;
+    return name == QLatin1String("application/pdf") || name.startsWith(QLatin1String("video/")) || name.startsWith(QLatin1String("audio/"))
+        || name == QLatin1String("application/ogg") || name.startsWith(QLatin1String("text/")) || mime.inherits(QStringLiteral("text/plain"));
+}
+
+Browse browseFolder(const QString &path, BrowseKinds kinds, const SortSpec &sort)
+{
+    Browse out;
+    out.paths << path;
+    const QFileInfo self(path);
+    if (!self.isFile())
+        return out;
+    const QDir dir = self.absoluteDir();
+    QLocale locale;
+    if (locale.language() == QLocale::C)
+        locale = QLocale(QLocale::English, QLocale::UnitedStates);
+    QCollator collator(locale);
+    collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+
+    struct Item {
+        QString path;
+        FileLogic::SortEntry entry;
+    };
+    QList<Item> items;
+    const QMimeDatabase db;
+    const QFileInfoList list = dir.entryInfoList(QDir::Files | QDir::Readable | QDir::NoDotAndDotDot, QDir::NoSort);
+    // A folder of tens of thousands of files is not browsed whole: the first entries are enough for a window.
+    constexpr int kMaxScanned = 20000;
+    for (const QFileInfo &info : list) {
+        if (items.size() >= kMaxScanned)
+            break;
+        const QString p = info.absoluteFilePath();
+        const bool isSelf = p == self.absoluteFilePath();
+        if (!isSelf && (info.fileName().startsWith(QLatin1Char('.')) || !wantedByName(info, kinds)))
+            continue;
+        FileLogic::SortEntry e;
+        e.name = info.fileName();
+        e.kind = db.mimeTypeForFile(info, QMimeDatabase::MatchExtension).comment();
+        e.modified = info.lastModified();
+        e.size = info.size();
+        items.append({p, e});
+    }
+    if (items.size() < 2)
+        return out;
+    const auto key = FileLogic::SortKey(qBound(0, sort.key, 3));
+    std::stable_sort(items.begin(), items.end(), [&](const Item &a, const Item &b) {
+        return FileLogic::compareEntries(a.entry, b.entry, key, sort.descending, sort.foldersFirst, collator) < 0;
+    });
+    int at = 0;
+    for (int i = 0; i < items.size(); ++i)
+        if (items.at(i).path == self.absoluteFilePath())
+            at = i;
+    int first = 0;
+    int count = items.size();
+    if (count > kMaxFiles) {
+        first = qBound(0, at - kMaxFiles / 2, count - kMaxFiles);
+        count = kMaxFiles;
+    }
+    out.paths.clear();
+    for (int i = first; i < first + count; ++i)
+        out.paths << items.at(i).path;
+    out.index = at - first;
+    // Keep the caller's spelling of the opened path (the caller already resolved it).
+    out.paths[out.index] = path;
+    return out;
+}
+
+SortSpec filesSortSpec()
+{
+    QSettings settings(QStringLiteral("Grassfield"), QStringLiteral("Files"));
+    SortSpec spec;
+    spec.key = qBound(0, settings.value(QStringLiteral("view/sortKey"), 0).toInt(), 3);
+    spec.descending = settings.value(QStringLiteral("view/sortDescending"), false).toBool();
+    spec.foldersFirst = settings.value(QStringLiteral("view/foldersFirst"), true).toBool();
+    return spec;
 }
 
 } // namespace preview

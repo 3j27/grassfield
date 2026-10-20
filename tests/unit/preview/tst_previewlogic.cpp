@@ -182,3 +182,74 @@ TEST(PreviewLogic, SystemPathsRefused)
     EXPECT_TRUE(a.paths.isEmpty());
     EXPECT_EQ(a.errors.size(), 2);
 }
+
+namespace {
+QStringList names(const QStringList &paths)
+{
+    QStringList out;
+    for (const QString &p : paths)
+        out << QFileInfo(p).fileName();
+    return out;
+}
+} // namespace
+
+TEST(PreviewLogic, BrowseFolderUsesTheFilesOrder)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    // Numeric, case-insensitive name order (what Grassfield Files shows), images only, hidden files left out.
+    for (const char *n : {"img10.png", "img2.png", "Img1.png", ".hidden.png", "notes.txt", "photo.jpg"})
+        touch(dir, QString::fromLatin1(n));
+    QDir(dir.path()).mkdir(QStringLiteral("sub.png"));
+    const QString opened = dir.filePath(QStringLiteral("img2.png"));
+    const Browse b = browseFolder(opened, BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(names(b.paths), (QStringList{QStringLiteral("Img1.png"), QStringLiteral("img2.png"), QStringLiteral("img10.png"), QStringLiteral("photo.jpg")}));
+    EXPECT_EQ(b.index, 1);
+    EXPECT_EQ(b.paths.at(b.index), opened);
+}
+
+TEST(PreviewLogic, BrowseFolderHonoursDirectionAndKinds)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    for (const char *n : {"a.png", "b.png", "c.txt"})
+        touch(dir, QString::fromLatin1(n));
+    SortSpec descending;
+    descending.descending = true;
+    const Browse images = browseFolder(dir.filePath(QStringLiteral("a.png")), BrowseKinds::ImagesOnly, descending);
+    EXPECT_EQ(names(images.paths), (QStringList{QStringLiteral("b.png"), QStringLiteral("a.png")}));
+    EXPECT_EQ(images.index, 1);
+    // A Glance browses every kind it can show.
+    const Browse all = browseFolder(dir.filePath(QStringLiteral("a.png")), BrowseKinds::Previewable, SortSpec{});
+    EXPECT_EQ(names(all.paths), (QStringList{QStringLiteral("a.png"), QStringLiteral("b.png"), QStringLiteral("c.txt")}));
+}
+
+TEST(PreviewLogic, BrowseFolderKeepsTheOpenedFileEvenIfAlone)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString only = touch(dir, QStringLiteral("only.png"));
+    const Browse b = browseFolder(only, BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(b.paths, QStringList{only});
+    EXPECT_EQ(b.index, 0);
+    // A hidden file opened on purpose stays in the list.
+    const QString hidden = touch(dir, QStringLiteral(".h.png"));
+    const Browse h = browseFolder(hidden, BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_TRUE(h.paths.contains(hidden));
+}
+
+TEST(PreviewLogic, BrowseFolderIsAWindowOfAtMostMaxFiles)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    for (int i = 0; i < kMaxFiles + 60; ++i)
+        touch(dir, QStringLiteral("p%1.png").arg(i, 4, 10, QLatin1Char('0')));
+    const QString opened = dir.filePath(QStringLiteral("p0100.png"));
+    const Browse b = browseFolder(opened, BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(b.paths.size(), kMaxFiles);
+    EXPECT_EQ(b.paths.at(b.index), opened);
+    const Browse first = browseFolder(dir.filePath(QStringLiteral("p0000.png")), BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(first.index, 0);
+    const Browse last = browseFolder(dir.filePath(QStringLiteral("p0259.png")), BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(last.index, kMaxFiles - 1);
+}

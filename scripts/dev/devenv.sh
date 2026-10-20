@@ -1,22 +1,48 @@
 #!/usr/bin/env bash
 # Dev-only environment (sourced by nested-up.sh, shell-run.sh and isolated.sh; never by anything that touches the
 # owner's session). Puts <repo>/.dev/share first in XDG_DATA_DIRS so that dev processes find the icon and cursor
-# themes provisioned there (scripts/dev/whitesur.sh, branding/cursors/build.sh), and, when WhiteSur is installed,
-# selects it for every Qt process (Quickshell and the Grassfield apps) through QT_QPA_SYSTEM_ICON_THEME.
-# Without .dev/share/icons/WhiteSur nothing changes: the current icons keep working (no hard dependency in dev).
+# themes provisioned there (scripts/dev/whitesur.sh, branding/cursors/build.sh, the Grassfield wrapper icon theme), and
+# selects the Grassfield icon theme for every Qt process (see below).
+# WhiteSur stays optional in dev: the wrapper falls back to Adwaita without it.
 # The Grassfield cursor theme (branding/cursors/build.sh, ADR-0014), when built under .dev/share/icons, is selected the
 # way config/hypr/grassfield/cursor.lua selects it for Hyprland and its children (exec_cmd, Xwayland): the shell, the
 # private bus and the apps are started outside Hyprland and would not see those variables otherwise.
 # Only the environment of the calling process and its children is changed.
 
+# A dev process never inherits the live session it was started from (the owner may run a real Grassfield session, and a
+# terminal started from it carries that session's and grassfield-shell.service's variables): GRASSFIELD_SESSION=1 marks a
+# packaged session (it turns the test hooks off and the real-session launch path on), QS_DISABLE_FILE_WATCHER and
+# QS_NO_RELOAD_POPUP belong to the shell unit (shell-run.sh --unit-env sets them on purpose), the rest is systemd and
+# uwsm bookkeeping of the live session's units.
+unset GRASSFIELD_SESSION QS_DISABLE_FILE_WATCHER QS_NO_RELOAD_POPUP INVOCATION_ID JOURNAL_STREAM SYSTEMD_EXEC_PID \
+  MANAGERPID MANAGERPIDFDID UWSM_FINALIZE_VARNAMES UWSM_WAIT_VARNAMES
+
 _gf_dev_root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
+# The Grassfield app icon theme (ADR-0017): the wrapper theme (branding/icons/theme/index.theme: Grassfield's own icons,
+# then WhiteSur, then Adwaita and hicolor) is copied to .dev/share/icons/grassfield-icons, with the one real directory
+# GTK needs, and selected for every Qt process (Quickshell and the Grassfield apps) through QT_QPA_SYSTEM_ICON_THEME, as
+# /usr/share/uwsm/env-grassfield does in the real session. With or without a dev WhiteSur (scripts/dev/whitesur.sh): no
+# WhiteSur resolves through Adwaita.
+_gf_icon_src=$_gf_dev_root/branding/icons/theme/index.theme
+if [[ -f $_gf_icon_src ]]; then
+  _gf_icon_dst=$_gf_dev_root/.dev/share/icons/grassfield-icons
+  { mkdir -p "$_gf_icon_dst/scalable/apps" && { cmp -s "$_gf_icon_src" "$_gf_icon_dst/index.theme" || cp -f "$_gf_icon_src" "$_gf_icon_dst/index.theme"; }; } 2>/dev/null || true
+  unset _gf_icon_dst
+fi
+unset _gf_icon_src
+# This tree's QML modules (Grassfield.Ui, the built Grassfield.I18n) always win over the packaged ones that an installed
+# grassfield-desktop puts in /usr/lib/qt6/qml/Grassfield (QML_IMPORT_PATH comes before the default import path).
+case ":${QML_IMPORT_PATH:-}:" in
+  *":$_gf_dev_root/ui:"*) ;;
+  *) export QML_IMPORT_PATH="$_gf_dev_root/ui:$_gf_dev_root/.dev/build/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" ;;
+esac
 if [[ -d $_gf_dev_root/.dev/share/icons ]]; then
   case ":${XDG_DATA_DIRS:-}:" in
     *":$_gf_dev_root/.dev/share:"*) ;;
     *) export XDG_DATA_DIRS="$_gf_dev_root/.dev/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" ;;
   esac
-  if [[ -f $_gf_dev_root/.dev/share/icons/WhiteSur/index.theme ]]; then
-    export QT_QPA_SYSTEM_ICON_THEME=WhiteSur
+  if [[ -f $_gf_dev_root/.dev/share/icons/grassfield-icons/index.theme ]]; then
+    export QT_QPA_SYSTEM_ICON_THEME=grassfield-icons
   fi
 fi
 if [[ -f $_gf_dev_root/.dev/share/icons/grassfield-cursors/manifest.hl ]]; then

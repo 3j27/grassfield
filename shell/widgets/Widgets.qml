@@ -132,7 +132,7 @@ Singleton {
             console.warn("widgets: " + path + " is not a version 1 widgets file; keeping a copy as widgets.json.bak and starting empty");
             Quickshell.execDetached(["cp", "-p", path, path + ".bak"]);
         }
-        placements = r.state;
+        placements = r.ok && text.trim() === "" ? Placements.firstRun() : r.state;
         loaded = true;
         for (const screen of Quickshell.screens)
             fitScreen(screen.name);
@@ -156,7 +156,10 @@ Singleton {
         printErrors: false
         atomicWrites: true
         onLoaded: root.load(file.text())
-        onLoadFailed: root.loaded = true
+        onLoadFailed: {
+            root.placements = Placements.firstRun();
+            root.loaded = true;
+        }
     }
 
     Timer {

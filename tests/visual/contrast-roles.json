@@ -85,7 +85,7 @@
     {"file": "shell/launchpad/AppsWindow.qml", "class": "opacity-dynamic", "count": 4},
     {"file": "shell/notifications/Banner.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/notifications/NotificationList.qml", "class": "opacity-dynamic", "count": 2},
-    {"file": "shell/overview/OverviewWindow.qml", "class": "opacity-dynamic", "count": 4},
+    {"file": "shell/overview/OverviewWindow.qml", "class": "opacity-dynamic", "count": 3},
     {"file": "shell/search/SearchPanel.qml", "class": "opacity-dynamic", "count": 6},
     {"file": "ui/Grassfield/Ui/Tooltip.qml", "class": "opacity-dynamic", "count": 1}
   ]},
@@ -117,9 +117,6 @@
   {"id": "idle dim layer (no text)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text",
    "exempt": "the idle dim fades the session to the shadow colour for the last seconds before the lock and draws no text of its own",
    "sites": [{"file": "shell/security/idle/Idle.qml", "class": "backdrop", "count": 1}]},
-  {"id": "overview captions (dim over wallpaper)", "fg": "colors.textSecondary", "backdrop": "material", "kind": "text",
-   "exempt": "Overview Spaces strip sits on a black dim over the wallpaper, not on material: outside the A2 scope of this pass, known limitation in docs/specs/overview.md",
-   "sites": [{"file": "shell/overview/OverviewWindow.qml", "class": "secondary", "count": 1}]},
   {"id": "disabled text", "fg": "colors.textSecondary", "opacity": ["material.disabledOpacity"], "backdrop": "material", "kind": "text",
    "exempt": "disabled or inactive component: exempt from WCAG 1.4.3",
    "sites": [

@@ -26,7 +26,7 @@ trap 'exit 130' INT TERM
 
 vs_session en
 vs_reset dark 0.25
-FOOT_X=875 DOCK_Y=1032 UP_Y=900
+FOOT_X=${FOOT_X:-901} DOCK_Y=1032 UP_Y=900
 cfg=$VS_DEV/config/grassfield.json
 
 # Same tiles as the contrast harness: pinned foot, then the two running test apps.

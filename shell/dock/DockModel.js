@@ -59,6 +59,12 @@ function withTail(apps, minimized) {
     return apps.concat([{kind: "separator"}], minimized ? minimized : [], [{kind: "trash"}]);
 }
 
+// The fixed first tile, "Apps" (macOS 26: Launchpad became Apps and keeps its Dock tile). Not an app: never pinned,
+// dragged, removed or counted by the drag and reorder logic (they filter on kind "app").
+function withApps(items) {
+    return [{kind: "apps", key: "grid"}].concat(items);
+}
+
 function pin(pinned, id) {
     const list = (pinned ? pinned : []).slice();
     return list.indexOf(id) === -1 ? list.concat([id]) : list;

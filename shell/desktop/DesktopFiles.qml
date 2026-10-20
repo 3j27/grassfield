@@ -170,7 +170,7 @@ Scope {
             openAsText(p);
             return;
         }
-        run(["gio", "open", p], "open", null, Apps.openEnvironment());
+        run(Apps.scoped(["gio", "open", p]), "open", null, Apps.openEnvironment());
     }
 
     function openAsText(p: string): void {

@@ -548,8 +548,16 @@ QtObject {
     readonly property int overviewTileHeight: 90
     // F1 gap 15: thumbnail gap 32
     readonly property int overviewTileGap: 32
-    // estimate: Spaces bar below the menu bar
-    readonly property int overviewBarTopMargin: 12
+    // F1 gap 15 (gs-066-145): thumbnail top 42 pt from the screen top, minus the 24 menu bar
+    readonly property int overviewBarTopMargin: 18
+    // F1 gap 15 (gs-066-145): full-width band 164 pt tall from the screen top (+-1), minus the 24 menu bar the surface starts below
+    readonly property int overviewBarHeight: 140
+    // F1 gap 15 (gs-066-145): 13 pt Desktop name under the thumbnail
+    readonly property int overviewTileLabelHeight: 18
+    // F1 gap 15 (gs-066-145): thumbnail bottom to name top, about 8 pt
+    readonly property int overviewTileLabelGap: 8
+    // F1 gap 15 (meas-B): add-space button 18 pt from the right screen edge
+    readonly property int overviewAddEdgeInset: 18
     // estimate: app icons in a Space tile
     readonly property int overviewTileIconSize: 24
     // estimate: icons shown per Space tile
@@ -906,14 +914,14 @@ QtObject {
     readonly property int previewWindowMinWidth: 480
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewWindowMinHeight: 320
-    // estimate: Preview app (docs/specs/preview.md)
-    readonly property int previewSidebarWidth: 168
-    // estimate: Preview app (docs/specs/preview.md)
-    readonly property int previewToolbarHeight: 44
+    // gs-092-232: floating thumbnail panel about 216 px wide at 1.0585 px/pt (about 204 pt) +-4
+    readonly property int previewSidebarWidth: 204
+    // gs-092-232: glass capsule groups about 38 tall floating in a band of about 52 (capsule height plus 2 x spacing md)
+    readonly property int previewToolbarHeight: 52
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewToolbarButtonSize: 28
-    // estimate: Preview app (docs/specs/preview.md)
-    readonly property int previewThumbnailWidth: 112
+    // gs-092-232: thumbnail about 150 px wide at 1.0585 px/pt (about 140 pt) inside the 204-pt panel
+    readonly property int previewThumbnailWidth: 140
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewSidebarItemHeight: 28
     // estimate: Preview app (docs/specs/preview.md)
@@ -942,8 +950,8 @@ QtObject {
     readonly property int previewGlanceVideoHeight: 480
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewGlanceMediaHeight: 220
-    // estimate: Preview app (docs/specs/preview.md)
-    readonly property int previewGlanceHeaderHeight: 40
+    // F1 reference (meas-B, gs-015-029): Quick Look header strip 38 +-1
+    readonly property int previewGlanceHeaderHeight: 38
     // estimate: time after its creation during which a Glance follows the output it is mapped on (the compositor reports it within a frame or two); later output changes are user moves
     readonly property int previewGlancePlacementMs: 1000
     // estimate: Preview app (docs/specs/preview.md)
@@ -956,6 +964,24 @@ QtObject {
     readonly property int previewCodeFontSize: 12
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewControlsHeight: 40
+    // gs-092-232: toolbar capsule groups about 38 tall (meas-B ~38 +-2); 36 = 28-pt buttons + 2 x spacing xs, same as the Files capsules
+    readonly property int previewToolbarCapsuleHeight: 36
+    // estimate: glyph size inside a 28-pt toolbar button (same as files.toolbarIconSize)
+    readonly property int previewToolbarIconSize: 16
+    // F1 reference (meas-B, gs-019-035): inspector panel about 248 +-3 wide
+    readonly property int previewInfoWidth: 248
+    // F1 reference (meas-B, gs-019-035): inspector info rows 23
+    readonly property int previewInfoRowHeight: 23
+    // F1 reference (meas-B, gs-015-029): Quick Look close glyph circle 13 +-1
+    readonly property int previewGlanceGlyphSize: 13
+    // F1 reference (meas-B, gs-015-029): glyph circle pitch 20
+    readonly property int previewGlanceGlyphPitch: 20
+    // F1 reference (meas-B, gs-015-029): the open-with capsule about 135 x 24 +-2
+    readonly property int previewGlanceOpenButtonHeight: 24
+    // F1 reference (meas-B, gs-015-029): content inset about 5 +-1.5
+    readonly property int previewGlanceContentInset: 5
+    // estimate: time one image stays in a slideshow
+    readonly property int previewSlideshowInterval: 3000
 
     // F1 reference (docs/testing/f1-reference-gaps.md, Apps launcher): panel 844 +-1 pt wide (2x capture)
     readonly property int launcherPanelWidth: 844

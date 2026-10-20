@@ -136,6 +136,24 @@ Pointer, `grassfield-cursors-custom` under `$XDG_DATA_HOME/icons`, owner decisio
 dependencies of `grassfield-desktop` (declared in `packaging/arch/PKGBUILD`); they are used as separate programs, nothing
 of them is linked or copied. The generated custom theme is derived from the same CC-BY-SA-4.0 templates.
 
+App icon theme (ADR-0017): `grassfield-icons` (`/usr/share/icons/grassfield-icons`, `branding/icons/theme/index.theme`,
+Grassfield's own file) is a wrapper whose own directory holds no icon yet; it inherits `WhiteSur,Adwaita,hicolor`. The
+session selects it with `QT_QPA_SYSTEM_ICON_THEME` (uwsm `env-grassfield`) and, for GTK, a locked dconf database that
+holds only `icon-theme='grassfield-icons'`.
+
+WhiteSur icon theme (optional package `grassfield-whitesur-icons`, built by `makepkg` from a pinned upstream commit):
+- upstream: https://github.com/vinceliuice/WhiteSur-icon-theme, author per its `AUTHORS`: Vince Liuice; commit
+  `73d8040da51a9ed74e47c7366e7e9ff437601a5c`;
+- licence: GPL-3.0 (`COPYING`; whether "only" or "or later" is to VERIFY in the upstream README);
+- data files read by Qt, GTK and KDE, not linked and not modified; nothing of it is in this repository: it is fetched at
+  build time, and the PKGBUILD runs upstream's `install.sh` only while its SHA-256 is the reviewed one;
+- `COPYING`, `AUTHORS` and a `SOURCE` line (URL and commit) are installed in `/usr/share/licenses/grassfield-whitesur-icons/`;
+  the PKGBUILD reproduces the package from that commit;
+- the theme's metadata contains the words "MacOSX", and its name alludes to an Apple product name. Grassfield displays
+  neither, except in the licence and acknowledgements text (Settings > About > Acknowledgements).
+- **needs legal review:** the source offer if the package leaves the owner's machine, and the aggregation with the
+  MIT packages.
+
 ## 5a. Unicode character data (derived tables)
 
 `ui/Grassfield/Ui/GraphemeData.js` (shipped with the shell) and `apps/files/src/graphemedata.inc` (compiled into

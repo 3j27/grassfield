@@ -11,9 +11,11 @@ Nothing here touches the owner's system: every theme lives under `.dev/share/ico
   `just whitesur` runs it. Nothing from the theme is committed to this repository.
 - `scripts/dev/nested-up.sh` runs it once when the theme is missing; a failure (offline) only prints a warning.
 - `scripts/dev/devenv.sh` (sourced by `nested-up.sh`, `shell-run.sh` and `isolated.sh`) puts `.dev/share` first in
-  `XDG_DATA_DIRS` and, when WhiteSur is installed, sets `QT_QPA_SYSTEM_ICON_THEME=WhiteSur`, which Qt reads for the
-  shell (Quickshell) and for the Grassfield apps. Without the theme nothing changes (hicolor and the system theme stay
-  as the fallback chain).
+  `XDG_DATA_DIRS`, installs the wrapper theme `grassfield-icons` (`branding/icons/theme/index.theme`: Grassfield's own
+  icons, then WhiteSur, then Adwaita and hicolor) into `.dev/share/icons` and always sets
+  `QT_QPA_SYSTEM_ICON_THEME=grassfield-icons`, which Qt reads for the shell (Quickshell) and the Grassfield apps. Without
+  WhiteSur the wrapper falls back to Adwaita. ADR-0017 replaces the earlier plan (`QT_ICON_THEME`, the Quickshell
+  pragma); the real session sets the same variable through `/usr/share/uwsm/env-grassfield`.
 - Limit: Grassfield's own UI glyphs (`branding/icons/symbolic`) are not theme icons; only app and file icons (Dock,
   Apps, Search) follow the theme. They also follow the icon appearance mode (`icons.mode`: default, dark, clear, tinted; docs/specs/ui.md), which is applied by the renderer and works on any theme, WhiteSur or the hicolor fallback.
 

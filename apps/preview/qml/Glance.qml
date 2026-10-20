@@ -12,14 +12,16 @@ Window {
     // Set by the launcher (src/main.cpp).
     required property var backend
 
-    property int current: 0
+    property int current: win.backend.startIndex
     readonly property int fileCount: win.backend.files.length
+    // "n of N" is shown for files named on the command line (a selection); the folder of one file only has arrows.
+    readonly property bool showCount: win.fileCount > 1 && !win.backend.browsing
     readonly property var view: content.view
     // The window is sized for the content of the first file, like a quick look panel: an image at its native size,
     // scaled down to fit Tokens.previewGlanceScreenFraction of its screen; PDF, text, video and audio at their token
     // sizes (capped the same way). The header comes on top of the content. Later files of a multi-file Glance are
     // fitted into that window.
-    readonly property var firstInfo: win.backend.inspect(0)
+    readonly property var firstInfo: win.backend.inspect(win.backend.startIndex)
     // The screen the size was computed for, and whether the window may still be refitted (see fitToScreen).
     property string sizedFor: ""
     property bool placing: true
@@ -50,8 +52,9 @@ Window {
                 break;
             }
         }
-        return Qt.size(Math.round(Math.max(Tokens.previewGlanceMinWidth, Math.min(maxW, c.width))),
-                       Math.round(Math.max(Tokens.previewGlanceMinHeight, Math.min(maxH, c.height) + Tokens.previewGlanceHeaderHeight)));
+        // The content sits inside an inset on its three free sides, under the header.
+        return Qt.size(Math.round(Math.max(Tokens.previewGlanceMinWidth, Math.min(maxW, c.width) + 2 * Tokens.previewGlanceContentInset)),
+                       Math.round(Math.max(Tokens.previewGlanceMinHeight, Math.min(maxH, c.height) + Tokens.previewGlanceHeaderHeight + Tokens.previewGlanceContentInset)));
     }
 
     // A Wayland client cannot know the output the compositor will map it on: Qt starts with its primary screen and
@@ -126,9 +129,9 @@ Window {
         backend: win.backend
     }
 
+    // Previous or next file; no wrap at the ends (the arrow keys of a file manager).
     function go(delta: int): void {
-        if (win.fileCount > 1)
-            win.current = (win.current + delta + win.fileCount) % win.fileCount;
+        win.current = Math.max(0, Math.min(win.fileCount - 1, win.current + delta));
     }
 
     Shortcut {
@@ -174,33 +177,59 @@ Window {
     }
 
     function openInPreview(): void {
-        win.backend.openInPreview();
+        win.backend.openInPreview(win.current);
         Qt.quit();
     }
+
 
     Item {
         id: header
         width: parent.width
         height: Tokens.previewGlanceHeaderHeight
 
-        Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: 1
-            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+        // Close: a glyph circle at the left (macOS Quick Look), the Space and Esc keys do the same.
+        Item {
+            id: closeButton
+            x: Tokens.spacingMd
+            anchors.verticalCenter: parent.verticalCenter
+            width: Tokens.previewGlanceGlyphSize
+            height: Tokens.previewGlanceGlyphSize
+            activeFocusOnTab: false
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Close")
+            Accessible.onPressAction: Qt.quit()
+
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: Appearance.withAlpha(Appearance.colors.fill, closeMouse.containsMouse ? Tokens.materialFillOpacity * Tokens.materialHoverActiveFactor * 2 : Tokens.materialFillOpacity * Tokens.materialHoverActiveFactor)
+            }
+            Glyph {
+                anchors.centerIn: parent
+                kind: "close"
+                size: parent.width - Tokens.spacingXs
+                color: Appearance.colors.textSecondary
+            }
+            MouseArea {
+                id: closeMouse
+                anchors.fill: parent
+                anchors.margins: -Tokens.spacingXs
+                hoverEnabled: true
+                onClicked: Qt.quit()
+            }
         }
 
         Text {
             anchors {
-                left: parent.left
+                left: closeButton.right
                 leftMargin: Tokens.spacingMd
-                right: counter.left
+                right: nav.left
                 rightMargin: Tokens.spacingMd
                 verticalCenter: parent.verticalCenter
             }
             elide: Text.ElideMiddle
             textFormat: Text.PlainText
-            text: (content.info.name ?? "").replace(/[\r\n]+/g, "\u23CE")
+            text: (content.info.name ?? "").replace(/[\r\n]+/g, "⏎")
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyMenuSize
@@ -209,21 +238,43 @@ Window {
             Accessible.name: text
         }
 
-        Text {
-            id: counter
+        // Previous and next file, with "n of N" for the files of a selection.
+        Row {
+            id: nav
             anchors {
                 right: openButton.left
                 rightMargin: Tokens.spacingMd
                 verticalCenter: parent.verticalCenter
             }
+            spacing: Tokens.spacingXs
             visible: win.fileCount > 1
-            textFormat: Text.PlainText
-            text: qsTr("%1 of %2").arg(win.current + 1).arg(win.fileCount)
-            color: Appearance.colors.textSecondary
-            font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.typographyCaptionSize
-            Accessible.role: Accessible.StaticText
-            Accessible.name: text
+
+            ToolButton {
+                glyph: "chevronLeft"
+                label: qsTr("Previous")
+                enabled: win.current > 0
+                activeFocusOnTab: false
+                onClicked: win.go(-1)
+            }
+            Text {
+                id: counter
+                anchors.verticalCenter: parent.verticalCenter
+                visible: win.showCount
+                textFormat: Text.PlainText
+                text: qsTr("%1 of %2").arg(win.current + 1).arg(win.fileCount)
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
+            ToolButton {
+                glyph: "chevronRight"
+                label: qsTr("Next")
+                enabled: win.current < win.fileCount - 1
+                activeFocusOnTab: false
+                onClicked: win.go(1)
+            }
         }
 
         Button {
@@ -233,7 +284,8 @@ Window {
                 rightMargin: Tokens.spacingMd
                 verticalCenter: parent.verticalCenter
             }
-            height: Tokens.previewToolbarButtonSize
+            height: Tokens.previewGlanceOpenButtonHeight
+            capsule: true
             visible: win.fileCount > 0
             text: qsTr("Open with Preview")
             // Space closes the Glance, never presses this button.
@@ -249,6 +301,9 @@ Window {
             bottom: parent.bottom
             left: parent.left
             right: parent.right
+            leftMargin: Tokens.previewGlanceContentInset
+            rightMargin: Tokens.previewGlanceContentInset
+            bottomMargin: Tokens.previewGlanceContentInset
         }
         backend: win.backend
         fileIndex: win.current
