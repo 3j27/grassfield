@@ -107,7 +107,7 @@ function splitFiles(apps, lookup) {
         rest.push(a);
     }
     const files = {kind: "files", key: "files", name: entry && entry.name ? entry.name : "Files",
-        icon: entry && entry.icon ? entry.icon : "system-file-manager", entry: entry ? entry : null, windows: windows, pinned: true, fixed: true};
+        icon: entry && entry.icon ? entry.icon : "org.grassfield.Files", entry: entry ? entry : null, windows: windows, pinned: true, fixed: true};
     return {files: files, rest: rest};
 }
 

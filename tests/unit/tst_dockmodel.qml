@@ -407,7 +407,7 @@ TestCase {
 
     // ---- the two fixed tiles: Files, then Apps ----
 
-    readonly property var filesEntry: ({id: "org.grassfield.Files", name: "Files", icon: "system-file-manager"})
+    readonly property var filesEntry: ({id: "org.grassfield.Files", name: "Files", icon: "org.grassfield.Files"})
 
     function lookupWithFiles(id) {
         return DockModel.isFilesId(id) ? filesEntry : lookup(id);
@@ -429,7 +429,7 @@ TestCase {
         compare(items[0].fixed, true);
         compare(items[0].pinned, true);
         compare(items[0].name, "Files");
-        compare(items[0].icon, "system-file-manager");
+        compare(items[0].icon, "org.grassfield.Files");
         compare(items[0].entry.id, "org.grassfield.Files");
     }
 
@@ -458,7 +458,7 @@ TestCase {
         const split = DockModel.splitFiles([], id => null);
         compare(split.files.entry, null);
         compare(split.files.name, "Files");
-        compare(split.files.icon, "system-file-manager");
+        compare(split.files.icon, "org.grassfield.Files");
         compare(split.files.kind, "files");
     }
 

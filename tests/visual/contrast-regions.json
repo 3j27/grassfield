@@ -80,13 +80,13 @@
    {"name": "password placeholder (right of the caret, inside the focus ring)", "box": [868, 924, 90, 12], "kind": "text"}
   ],
   "dock": [
-   {"name": "running dot, first test app", "box": [923, 1058, 9, 8], "kind": "icon"},
-   {"name": "running dot, second test app", "box": [975, 1058, 9, 8], "kind": "icon"},
-   {"name": "tooltip label", "box": [898, 973, 58, 16], "kind": "text"},
-   {"name": "notification badge count (second test app)", "box": [990, 1006, 16, 14], "kind": "text"}
+   {"name": "running dot, first test app", "box": [975, 1058, 9, 8], "kind": "icon"},
+   {"name": "running dot, second test app", "box": [1027, 1058, 9, 8], "kind": "icon"},
+   {"name": "tooltip label", "box": [950, 973, 58, 16], "kind": "text"},
+   {"name": "notification badge count (second test app)", "box": [1042, 1006, 16, 14], "kind": "text"}
   ],
   "dockdrag": [
-   {"name": "Remove label", "box": [848, 841, 56, 16], "kind": "text"}
+   {"name": "Remove label", "box": [900, 841, 56, 16], "kind": "text"}
   ]
  }
 }
