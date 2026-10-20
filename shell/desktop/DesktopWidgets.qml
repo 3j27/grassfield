@@ -47,6 +47,13 @@ Variants {
         property point dragOffset: Qt.point(0, 0)
         // Context menu.
         property var menuEntry: null
+        // Key focus returns to the window active when the menu opened (FocusReturn); one name per screen.
+        onMenuEntryChanged: {
+            if (menuEntry !== null)
+                FocusReturn.opened("widgets-menu-" + modelData.name);
+            else
+                FocusReturn.closed("widgets-menu-" + modelData.name, true);
+        }
         property point menuAt: Qt.point(0, 0)
 
         // Cell position of an entry in screen px (no drag offset).
@@ -278,7 +285,9 @@ Variants {
             id: menuWin
 
             screen: scope.modelData
-            visible: scope.menuEntry !== null
+            // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor
+            // with no keyboard focus.
+            visible: menuRelease.mapped
             anchors {
                 top: true
                 bottom: true
@@ -288,8 +297,13 @@ Variants {
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: scope.menuEntry !== null ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-widgets-menu"
+
+            KeyboardRelease {
+                id: menuRelease
+                shown: scope.menuEntry !== null
+            }
 
             MouseArea {
                 anchors.fill: parent

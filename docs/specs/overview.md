@@ -42,6 +42,24 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
 - v1 shows thumbnails, not the real windows moving; real-window transforms need the plugin (v2).
 - v2 (plugin side): popups are not transformed, full-screen windows are not transformed, fractional scales and
   rotated outputs are not verified (see "Shell contract" item 8).
+- Close focus, what is left (R13 follow-up 2026-10-20):
+  - Keys typed in the first ~150 ms after Esc can be lost (the chrome still has the keyboard and ignores them while it
+    releases it), never delivered to a wrong window (drop table in `overview_two_outputs.sh drop`; from 200 ms none is lost).
+  - A click in the first ~250 ms after the close is taken by the chrome: it keeps its input mask for the zoom-out
+    (`overview.motion.slow`, 350 ms); measured, clicks up to ~200 ms after the overview reports closed did not reach the window
+    under them, from ~250 ms they did. Not changed (the mask follows the animation).
+  - Without the plugin (C2) the shell focuses with the Lua dispatch after the release, so there is a gap (the first check is
+    60 ms after the attempt, then 120, 240, ... up to the 1 s bound) in which Hyprland's own choice stands. The retry stops
+    when the focus holds, a window other than the goal and than the one active before the attempt becomes active (a click, a
+    key bind), a Desktop other than the goal is focused, an Exclusive surface opens, the session locks or the bound passes.
+    The shell cannot see pointer motion, clicks or keys by themselves: a click on the window that was already active (or on the
+    target) cannot be told from nothing, and a late refocus Hyprland makes itself within one check interval reads as the user's
+    choice (the retry stops, Hyprland's focus stands). A user focus that lands after the last check (the first one holds)
+    is not undone: only retries, never a later correction, follow a check.
+  - The same return (the window active when the surface opened) runs for Search, Apps, the app switcher (a cancelled session; a
+    commit activates its app), popups and menus, the Notification Center and the desktop widget menu ("Keyboard return of the
+    other Exclusive surfaces" below). Not covered: the polkit dialog (`shell/security/`, its own review), the Dock keyboard mode
+    and the desktop icons (`on_demand`), which do not unmap while dropping the keyboard.
 
 ## v1 implementation (shell/overview/, 2026-10-17)
 - `Overview.qml` (controller + IPC `overview toggle|open|close|status`), `OverviewWindow.qml` (one layer-shell
@@ -287,10 +305,10 @@ remembered window, or none) and then:
    passed since the last change of that report (`V2.releaseDone`): all chromes have committed, so no Exclusive layer remains;
    `overview.releaseBoundMs` (500 ms) bounds the wait whatever happens (a lost event must not leave the overview open);
 3. `on:false`, then the chromes hide. **Without `overview-focus` (C2)** the shell then focuses the target itself
-   (`Overview.startFocus`): `V2.fallbackPlan` keeps a remembered or chosen window that still exists and is not minimized (a
+   (`FocusReturn.startFallback`): `FocusReturn.fallbackPlan` keeps a remembered or chosen window that still exists and is not minimized (a
    minimized window never gets focus), a Desktop becomes its front window (`Compositor.frontWindowOn`: focused last; the
    Desktop itself when empty), anything else nothing (Hyprland's choice stands). The focus is the Lua dispatch (`Compositor.focusWindow`: its Desktop first when not the one
-   shown), then checked (`V2.focusHolds`: the active window, or the focused Desktop) after
+   shown), then checked (`FocusReturn.focusHolds`: the active window, or the focused Desktop) after
    `overview.focusRetryMs` (60 ms, doubling at each retry) and retried until it holds or `overview.focusBoundMs` (1 s) has
    passed. Nothing is focused while the session is locked.
 Another full-attention surface opening (ExclusiveSurfaces: Apps, Search, the switcher) or the lock closes the overview with
@@ -343,7 +361,7 @@ other chromes' `None` commits landed; Hyprland refuses a refocus while any Exclu
 ignoring, exclusive LS present", and retries nothing when the last one goes), and the protocol `activate` / `focusSpace`
 did nothing for the window Hyprland still counts focused and for the current Desktop. Decision: **the shell names the
 target, grassfield-compositor makes the focus at the moment the last Exclusive layer is gone**; without the plugin the shell
-checks and retries itself (shell side shipped: `Overview.closeAnd` / `startFocus`, see "Close and keyboard" above).
+checks and retries itself (shell side shipped: `Overview.closeAnd`, `FocusReturn.startFallback`, see "Close and keyboard" above).
 Plugin side shipped in 0.8.0-ovfocus (`compositor/src/OverviewFocus.*`, `core/OverviewFocus.*`, on the deferred focus shared
 with Stages: `DeferredFocus.*`, `core/DeferredFocus.*`; requirements `docs/specs/compositor.md` FR41-FR43).
 
@@ -387,7 +405,7 @@ Shell contract (for the integration):
    no address: no window), `timeout` (`exclusive-layer`), `refused` (`locked`), `superseded` (`press`, `user-focus`),
    `unavailable` (`unloading`), `invalid`. Coalesced (channel `overview-focus`, latest wins): a state, not a log.
 6. **Without the plugin** (absent, older, unload: capabilities `[]`) the verb does not exist; the guarded call is a no-op and
-   the shell checks and retries (`Overview.startFocus`). An unload while a request waits posts `unavailable` first.
+   the shell checks and retries (`FocusReturn.startFallback`). An unload while a request waits posts `unavailable` first.
 
 Evidence (nested Hyprland v0.56.2 commit efb50993, plugin 0.8.0-ovfocus, headless pair GF-REF 1920x1080 + GF-REF2
 1440x900 with WAYLAND-1 disabled, `tests/compositor/overview_focus.sh`, fixture `tests/compositor/overview-focus-fixture`:
@@ -411,6 +429,34 @@ the press got nothing (the keys went to the last focused window); after a closed
 the remembered window on the same output and the current Desktop got them (Hyprland's own refocus did it in this fixture).
 Under load: `soak.sh 1260` PASS with `overview_focus.sh stress 1200` alongside (4239 requests at ~4/s, 423 invalid, every one
 answered; no exception), and `stress 180` alone (647 requests, 2 floods of 100 answered with one outcome each).
+
+### Keyboard return of the other Exclusive surfaces (R13 follow-up, 2026-10-20)
+Same class of bug as the Overview's: Search was destroyed while Exclusive (`visible: shown`) and Hyprland then names no
+keyboard window although it still reports the previous one active (pointer on another output than the active window: the
+typed keys went nowhere). Apps passed because it fades out mapped with its keyboard already `None`. The rule for every
+Exclusive shell surface (macOS: Spotlight, Launchpad, menus and the switcher give key focus back to the window that was key):
+1. **Release while mapped.** The surface drops to keyboard `None` first and unmaps `focusReturn.releaseHoldMs` (120 ms)
+   later (`shell/platform/KeyboardRelease.qml`: `mapped = shown || holding`). Search, Apps (also for Reduce Motion), the app
+   switcher (a commit's activation follows the unmap, 120 ms later), the popup host (`grassfield-overlay`), the Notification
+   Center and the desktop widget menu use it.
+2. **Return to the remembered window** (`shell/platform/FocusReturn.qml`, singleton). Each surface reports `opened(name)`
+   and `closed(name, restore)` from its controller; the first to open remembers the active window (`Compositor.activeWindow()`,
+   none when the desktop icons hold the keyboard), the decision is taken one event-loop turn after the last holder closed (so
+   a hand-over such as Apps -> Search never fights over the focus: only the last close restores). The Overview is a holder
+   with `restore=false` (it names its own target). Nothing is requested when the lock is up, no window was remembered, or
+   another window is active at the decision (someone chose it); menu items that raise a window call `FocusReturn.skip()`
+   (`AppMenus` "window" and "bringAll", `Notifications.focusSender`), and a switcher commit passes `restore=false`.
+   With the plugin capability `overview-focus`: ONE `{"target":"remembered","address","workspace"}` request (the plugin
+   waits for the last Exclusive layer, and a later user focus supersedes it). Without it (C2): the shell's own focus
+   after the hold, check and retry as described under "Close and keyboard" step 3, shared code (`FocusReturn.js`:
+   `fallbackPlan`, `focusHolds`, `retryDelay`, `userActed`, `checkOutcome`, `restoreTarget`; unit tests
+   `tst_focusreturn.qml`, `tst_overviewv2.qml`). The retry records the active window and Desktop before each attempt and
+   stops, at the next check, when another window than the goal and than that one is active, another Desktop than the goal
+   is focused, any Exclusive surface is open, the lock is up or the bound (1 s) passed.
+Tests: `tests/shell/overview_two_outputs.sh control` (Apps, Search, the switcher, each closed by IPC and by Esc, the pointer
+on either output, either window active, no overview: the window active at open holds the keyboard; with the plugin and with
+`--no-plugin`), `paths` (the same through the Overview's close paths; the Search skip is gone), `clickwins` (a click on the
+other window after the close wins, 10 of 10).
 
 ### Two outputs and shared drawing (2026-10-18, plugin 0.6.0-stages)
 The chrome rule is relaxed (contract item 2): one Exclusive chrome holding the keyboard, a mapped chrome on every target

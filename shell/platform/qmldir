@@ -4,3 +4,5 @@ singleton Capabilities 1.0 Capabilities.qml
 singleton MenuBridge 1.0 MenuBridge.qml
 singleton Pointer 1.0 Pointer.qml
 PointerTheme 1.0 PointerTheme.qml
+singleton FocusReturn 1.0 FocusReturn.qml
+KeyboardRelease 1.0 KeyboardRelease.qml

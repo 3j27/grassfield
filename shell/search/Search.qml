@@ -22,6 +22,13 @@ Scope {
     id: root
 
     property bool open: false
+    // Key focus returns to the window that was active when this opened (FocusReturn), as on macOS.
+    onOpenChanged: {
+        if (open)
+            FocusReturn.opened("search");
+        else
+            FocusReturn.closed("search", true);
+    }
     property string query: ""
     property string screenName: ""
     // Groups [{id, title, items}], the flat rows for the list ({header, title} | {item, itemIndex})

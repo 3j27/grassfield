@@ -25,6 +25,26 @@ Item {
     property real trailingReserve: 0
 
     signal actionTriggered(string actionId)
+    // The set of focusable action buttons changed (the sender's actions went away, More revealed the rest): the Center's focus
+    // resolver (NotificationList.resolveFocus) re-checks where the keyboard focus is.
+    signal controlsChanged
+    // The Flow of action buttons (null unless the entry is live and has buttons).
+    readonly property var actionFlow: actionLoader.item
+
+    // The focusable items of this content in Tab order, usable or not: {role: "action:<id>" or "more", item}.
+    function focusItems(): var {
+        const out = [];
+        const flow = root.actionFlow;
+        if (!flow)
+            return out;
+        for (let i = 0; i < flow.repeater.count; i++) {
+            const b = flow.repeater.itemAt(i);
+            if (b)
+                out.push({role: "action:" + b.modelData.id, item: b});
+        }
+        out.push({role: "more", item: flow.moreButton});
+        return out;
+    }
 
     implicitWidth: Tokens.notificationBannerWidth
     implicitHeight: Math.max(Tokens.notificationBannerIconSize, column.implicitHeight)
@@ -115,10 +135,12 @@ Item {
         // No delegate exists unless the notification is live and has buttons: a sender's labels
         // never instantiate for dead, expired or restored entries.
         Loader {
+            id: actionLoader
             width: parent.width
             active: root.buttons.length > 0
             visible: active
             sourceComponent: actionRow
+            onItemChanged: root.controlsChanged()
         }
     }
 
@@ -130,8 +152,13 @@ Item {
             width: root.width - iconTile.width - Tokens.spacingSm
             spacing: Tokens.spacingSm
             topPadding: Tokens.spacingXs
+            readonly property Repeater repeater: rep
+            readonly property Item moreButton: more
 
             Repeater {
+                id: rep
+                onItemAdded: root.controlsChanged()
+                onItemRemoved: root.controlsChanged()
                 model: root.buttons.slice(0, root.moreOpen ? root.buttons.length : Tokens.notificationMaxActions)
 
                 delegate: Button {
@@ -143,7 +170,9 @@ Item {
             }
 
             Button {
+                id: more
                 visible: !root.moreOpen && root.buttons.length > Tokens.notificationMaxActions
+                onVisibleChanged: root.controlsChanged()
                 text: qsTr("More")
                 onClicked: root.moreOpen = true
             }

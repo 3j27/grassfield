@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.menubar
+import qs.platform
 import qs.services
 
 // Host of every popup (menus, status menus, Control Center, dialogs): one transparent
@@ -26,7 +27,9 @@ Variants {
         readonly property bool open: Popups.active && Popups.screenName === modelData.name
 
         screen: modelData
-        visible: open
+        // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
+        // keyboard focus.
+        visible: release.mapped
         anchors {
             top: true
             bottom: true
@@ -53,6 +56,23 @@ Variants {
         // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
         // qmllint enable missing-type
+
+        KeyboardRelease {
+            id: release
+            shown: win.open
+        }
+
+        // Key focus returns to the window active when the popup opened (FocusReturn); one call per window, idempotent.
+        Connections {
+            target: Popups
+
+            function onActiveChanged(): void {
+                if (Popups.active)
+                    FocusReturn.opened("popup");
+                else
+                    FocusReturn.closed("popup", true);
+            }
+        }
 
         Region {
             id: modulesRegion

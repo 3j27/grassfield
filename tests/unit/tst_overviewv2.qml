@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../shell/overview/V2.js" as V2
+import "../../shell/platform/FocusReturn.js" as FocusReturn
 import "../../shell/overview/Layout.js" as Layout
 
 // Overview v2 shell side (docs/specs/overview.md "Shell contract"): plugin event parsing, what the shell does with
@@ -244,39 +245,39 @@ TestCase {
     // ---- without the plugin: what the shell focuses itself ----
 
     function test_fallbackPlanFocusesAWindowThatExists() {
-        compare(V2.fallbackPlan({kind: "window", address: "0xb"}, ["0xa", "0xb"], []), {kind: "window", address: "0xb"});
-        compare(V2.fallbackPlan({kind: "remembered", address: "0xa", workspace: 3}, ["0xa"], []), {kind: "window", address: "0xa"});
+        compare(FocusReturn.fallbackPlan({kind: "window", address: "0xb"}, ["0xa", "0xb"], []), {kind: "window", address: "0xb"});
+        compare(FocusReturn.fallbackPlan({kind: "remembered", address: "0xa", workspace: 3}, ["0xa"], []), {kind: "window", address: "0xa"});
     }
 
     function test_fallbackPlanSkipsAGoneOrMinimizedWindow() {
-        compare(V2.fallbackPlan({kind: "remembered", address: "0xa"}, ["0xb"], []).kind, "none", "closed");
-        compare(V2.fallbackPlan({kind: "remembered", address: "0xa"}, ["0xa"], ["0xa"]).kind, "none", "minimized");
-        compare(V2.fallbackPlan({kind: "window", address: "0xa"}, ["0xa"], ["0xa"]).kind, "none");
-        compare(V2.fallbackPlan({kind: "window", address: "0xa"}, null, null).kind, "none");
+        compare(FocusReturn.fallbackPlan({kind: "remembered", address: "0xa"}, ["0xb"], []).kind, "none", "closed");
+        compare(FocusReturn.fallbackPlan({kind: "remembered", address: "0xa"}, ["0xa"], ["0xa"]).kind, "none", "minimized");
+        compare(FocusReturn.fallbackPlan({kind: "window", address: "0xa"}, ["0xa"], ["0xa"]).kind, "none");
+        compare(FocusReturn.fallbackPlan({kind: "window", address: "0xa"}, null, null).kind, "none");
     }
 
     function test_fallbackPlanDesktopAndNone() {
-        compare(V2.fallbackPlan({kind: "workspace", workspace: 4}, [], []), {kind: "space", id: 4});
-        compare(V2.fallbackPlan({kind: "none"}, ["0xa"], []).kind, "none");
-        compare(V2.fallbackPlan({kind: "skip"}, ["0xa"], []).kind, "none");
-        compare(V2.fallbackPlan(null, ["0xa"], []).kind, "none");
+        compare(FocusReturn.fallbackPlan({kind: "workspace", workspace: 4}, [], []), {kind: "space", id: 4});
+        compare(FocusReturn.fallbackPlan({kind: "none"}, ["0xa"], []).kind, "none");
+        compare(FocusReturn.fallbackPlan({kind: "skip"}, ["0xa"], []).kind, "none");
+        compare(FocusReturn.fallbackPlan(null, ["0xa"], []).kind, "none");
     }
 
     function test_focusHolds() {
-        verify(V2.focusHolds({address: "0xa"}, {address: "0xa", workspaceId: 1}, 1));
-        verify(!V2.focusHolds({address: "0xa"}, {address: "0xb", workspaceId: 1}, 1));
-        verify(!V2.focusHolds({address: "0xa"}, null, 1));
-        verify(V2.focusHolds({workspace: 2}, null, 2));
-        verify(!V2.focusHolds({workspace: 2}, null, 1));
-        verify(V2.focusHolds(null, null, 1), "no goal: nothing to hold");
+        verify(FocusReturn.focusHolds({address: "0xa"}, {address: "0xa", workspaceId: 1}, 1));
+        verify(!FocusReturn.focusHolds({address: "0xa"}, {address: "0xb", workspaceId: 1}, 1));
+        verify(!FocusReturn.focusHolds({address: "0xa"}, null, 1));
+        verify(FocusReturn.focusHolds({workspace: 2}, null, 2));
+        verify(!FocusReturn.focusHolds({workspace: 2}, null, 1));
+        verify(FocusReturn.focusHolds(null, null, 1), "no goal: nothing to hold");
     }
 
     function test_retryDelayDoublesAndIsBounded() {
-        compare(V2.retryDelay(0, 60), 60);
-        compare(V2.retryDelay(1, 60), 120);
-        compare(V2.retryDelay(3, 60), 480);
-        compare(V2.retryDelay(99, 60), 60 * 64);
-        compare(V2.retryDelay(-1, 60), 60);
+        compare(FocusReturn.retryDelay(0, 60), 60);
+        compare(FocusReturn.retryDelay(1, 60), 120);
+        compare(FocusReturn.retryDelay(3, 60), 480);
+        compare(FocusReturn.retryDelay(99, 60), 60 * 64);
+        compare(FocusReturn.retryDelay(-1, 60), 60);
     }
 
     // ---- selection across outputs ----

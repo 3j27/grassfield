@@ -25,6 +25,18 @@ Scope {
     // The session is running: the surface holds the keyboard (ExclusiveSurfaces closes the other surfaces when it starts).
     readonly property bool active: session.phase !== "idle"
     readonly property bool open: active
+    // Key focus returns to the window active when the session started, unless a commit activates an app (FocusReturn).
+    onActiveChanged: {
+        if (active) {
+            FocusReturn.opened("switcher");
+        } else {
+            // One turn later: a commit sets `target` right after the session state changes.
+            Qt.callLater(() => {
+                if (!root.active)
+                    FocusReturn.closed("switcher", root.target === null);
+            });
+        }
+    }
     readonly property int selected: session.selected
     // Apps in frozen MRU order for this session: {key, name, icon, entry, windows, stamp}.
     property var apps: []

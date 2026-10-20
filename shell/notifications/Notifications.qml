@@ -7,7 +7,6 @@ import Quickshell.Services.Notifications
 import Grassfield.Ui
 import qs.platform
 import qs.services
-import "CenterLogic.js" as CenterLogic
 import "History.js" as History
 import "Sanitizer.js" as Sanitizer
 
@@ -43,11 +42,13 @@ Singleton {
     property int counter: 0
 
     property bool centerOpen: false
-    // Key of the card that holds the keyboard focus in the open column ("" when none; written by the column). When that
-    // card leaves the displayed rows, centerFocusMoved names the card the focus goes to (CenterLogic.focusAfterGone).
-    property string centerFocusKey: ""
-    property int focusMoves: 0
-    signal centerFocusMoved(string key)
+    // Key focus returns to the window active when the center opened (FocusReturn).
+    onCenterOpenChanged: {
+        if (centerOpen)
+            FocusReturn.opened("notification-center");
+        else
+            FocusReturn.closed("notification-center", true);
+    }
     property string centerScreen: ""
 
     // Dev sessions share the owner's session bus; never register there (GRASSFIELD_PRIVATE_BUS=1
@@ -198,7 +199,6 @@ Singleton {
 
     function closeCenter(): void {
         centerOpen = false;
-        centerFocusKey = "";
         freshKeys = ({});
         if (Object.keys(expandedApps).length > 0) {
             expandedApps = ({});
@@ -275,17 +275,6 @@ Singleton {
 
     function clear(key: string): void {
         finish(key);
-    }
-
-    // After the model dropped the card that was at slot `at` (or the group of `app`, whose first card was there): the key of
-    // the card that takes the keyboard focus, read from the UPDATED displayed rows (CenterLogic.focusAfterClear).
-    function focusKeyAfter(at: int, app: string): string {
-        const rows = [];
-        for (let i = 0; i < centerStore.count; i++) {
-            const r = centerStore.get(i);
-            rows.push({key: r.key, appName: r.appName});
-        }
-        return CenterLogic.focusAfterClear(rows, at, app);
     }
 
     // Keys of the entries of an app right now (the snapshot a group clear acts on).
@@ -409,16 +398,6 @@ Singleton {
         }
         const want = {};
         wantKeys.forEach(k => want[k] = true);
-        // The focused card leaves the displayed rows: decide where the focus goes while the old rows are still there.
-        let moveFocusTo;
-        if (centerFocusKey !== "" && !want[centerFocusKey]) {
-            const oldRows = [];
-            for (let i = 0; i < centerStore.count; i++) {
-                const r = centerStore.get(i);
-                oldRows.push({key: r.key, appName: r.appName});
-            }
-            moveFocusTo = CenterLogic.focusAfterGone(oldRows, wantKeys.map((k, i) => ({key: k, appName: wantApps[i]})), centerFocusKey);
-        }
         for (let i = shownKeys.length - 1; i >= 0; i--) {
             if (!want[shownKeys[i]]) {
                 centerStore.remove(i);
@@ -444,10 +423,6 @@ Singleton {
                 centerStore.set(i, wantMeta[i]);
                 shownSig[i] = wantSig[i];
             }
-        }
-        if (moveFocusTo !== undefined) {
-            focusMoves++;
-            centerFocusMoved(moveFocusTo);
         }
     }
 
@@ -495,10 +470,6 @@ Singleton {
     }
 
     function clearCenter(): void {
-        if (centerFocusKey !== "") {
-            focusMoves++;
-            centerFocusMoved("");
-        }
         centerStore.clear();
         centerKeys = [];
         centerApps = [];
@@ -644,8 +615,10 @@ Singleton {
         if (!n.desktopEntry)
             return;
         const list = Compositor.toplevelsFor(n.desktopEntry);
-        if (list && list.length > 0)
+        if (list && list.length > 0) {
+            FocusReturn.skip();
             Compositor.activate(list[0]);
+        }
     }
 
     function actionsOf(n: var): var {
