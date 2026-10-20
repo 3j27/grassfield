@@ -89,6 +89,9 @@ Scope {
     // Tiles launched from the Dock that have no window yet (they bounce): key -> start time (ms).
     property var launching: ({})
 
+    // Time of the last launch click (ms); with the visual fixtures the bounce curve is logged against it (tests/visual/dock-launch.sh).
+    property real launchClickedAt: 0
+
     // Keys of the listed apps that had a window at the previous rebuild (null: no rebuild yet).
     property var previousRunning: null
 
@@ -161,6 +164,7 @@ Scope {
         const click = Launch.click(launching, item.key, Date.now(), Tokens.dockLaunchTimeout);
         if (!click.start)
             return;
+        launchClickedAt = Date.now();
         Apps.launch(item.entry);
         launching = click.launching;
         launchTimer.restart();
@@ -951,6 +955,8 @@ Scope {
 
                                     // Launch bounce: hops until the app has a window (or the launch timeout).
                                     property real lift: 0
+                                    onLiftChanged: if (VisualFixtures.active && root.launchClickedAt > 0 && tile.bouncing)
+                                        console.info("dock-launch: lift", Date.now() - root.launchClickedAt, Math.round(lift * 10) / 10)
                                     transform: Translate {
                                         y: -appIcon.lift
                                     }
@@ -1283,6 +1289,9 @@ Scope {
                                     id: leftTap
                                     enabled: !tile.isSeparator
                                     acceptedButtons: Qt.LeftButton
+                                    // macOS launches on release however long the button was held (the default threshold turns a hold
+                                    // of about half a second into no click at all); moving away still cancels it.
+                                    longPressThreshold: Tokens.dockClickHoldLimit
                                     // macOS: the label goes away on the click and stays away until the pointer leaves the tile.
                                     onPressedChanged: if (pressed)
                                         tile.tipSuppressed = true

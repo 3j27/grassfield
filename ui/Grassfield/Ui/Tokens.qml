@@ -266,6 +266,8 @@ QtObject {
     readonly property int dockBounceDuration: 500
     // estimate: the launch bounce stops after this long without a window, ms
     readonly property int dockLaunchTimeout: 12000
+    // macOS: a click launches however long the button is held; TapHandler longPressThreshold in seconds, set so a long hold still counts as a tap
+    readonly property int dockClickHoldLimit: 3600
     // estimate: transparent room above the shelf for a dragged icon and the poof
     readonly property int dockDragArea: 168
     // estimate: px above the shelf top (icon centre) from which a dropped tile leaves the Dock
