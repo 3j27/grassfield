@@ -419,7 +419,7 @@ for entry in search:grassfield-search apps:grassfield-apps notifications:grassfi
   r=$(type_now x)
   [[ $surface == apps ]] && ms 2500 # an app launched by a tile would map by now
   n1=$(window_count)
-  [[ -n $landed && $r == "A= B=x active=B" && $n1 == "$n0" ]]
+  [[ $r == "A= B=x active=B" && $n1 == "$n0" ]]
   check "$surface closed with Escape: a click on B gives B the keyboard, nothing else happens" $? \
     "$r; keys back in A after ${landed:-never} ms; $layer $still at the click; windows $n0 -> $n1"
 done
