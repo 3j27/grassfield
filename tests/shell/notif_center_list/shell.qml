@@ -242,12 +242,14 @@ ShellRoot {
     }
 
     // A scene: reset, build, act (the focus is set and the change made in ONE event-loop turn), check.
-    function scene(build, act, verify): void {
+    function scene(build, act, verify, final): void {
         const s = {};
         step(() => root.resetAll(), 350);
         step(() => build(s), 350);
         step(() => act(s), 200);
-        step(() => verify(s), 50);
+        step(() => verify(s), final ? 250 : 50);
+        if (final)
+            step(() => final(s), 50);
     }
 
     // Every non-leaving delegate sits right under the one above it and carries no visual offset left.

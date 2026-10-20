@@ -72,10 +72,9 @@ MUTANTS = [
     ('M10 identity rank not refreshed on resolve', NL, '        who.rank = list.rankIn(rows, who.key);\n        list.focusId = who;', '        who.rank = list.focusId !== null && list.focusId.key === who.key ? list.focusId.rank : list.rankIn(rows, who.key);\n        list.focusId = who;', [L, RN]),
     ('M11 settled rows not refreshed on resolve', NL, '        list.focusId = who;\n        list.snapRows = rows;', '        list.focusId = who;', [L]),
     ('M12 Clear All swallows every key while hidden', NL, 'event.accepted = activation;', 'event.accepted = true;', [L]),
-    ('M13 no key-time check in the card handler', NL, 'if (!item.actable(row)) {', 'if (false) {', [L]),
+    ('M13 no key-time check for the card (handler and clearCard)', NL, [('if (!item.actable(row)) {', 'if (false) {'), ('if (removing || !list.liveKey(key))', 'if (removing)')], None, [L]),
     ('M14 no key-time check for sender actions', NL, 'if (item.actable(rowContent))', 'if (true)', [L]),
     ('M15 Return from a stray child opens the card', NL, 'if (open && row.activeFocus)', 'if (open)', [L]),
-    ('M16 clearCard acts on a card that left the rows', NL, 'if (removing || !list.liveKey(key))', 'if (removing)', [L]),
 ]
 
 
@@ -103,11 +102,16 @@ for name, path, a, b, tests in MUTANTS:
         continue
     orig = open(path).read()
     try:
-        if a not in orig:
-            print('MUTANT %s | PATTERN NOT FOUND (update the script)' % name, flush=True)
+        pairs = a if isinstance(a, list) else [(a, b)]
+        mutated = orig
+        missing = [x for x, _ in pairs if x not in mutated]
+        if missing:
+            print('MUTANT %s | PATTERN NOT FOUND (update the script): %s' % (name, missing[0]), flush=True)
             status = 1
             continue
-        open(path, 'w').write(orig.replace(a, b, 1))
+        for x, y in pairs:
+            mutated = mutated.replace(x, y, 1)
+        open(path, 'w').write(mutated)
         for t in tests:
             out = run(t)
             ok = caught(out)
