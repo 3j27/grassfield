@@ -3,10 +3,10 @@
 # default size (72 % x 82 % of the output), centred; a client that arrives with a larger size keeps it; an application
 # that is not a browser keeps the small size it asks for.
 #
-# Usage: tests/integration/window_placement.sh
+# Usage: tests/compositor/window_placement.sh
 # NESTED only: needs scripts/dev/nested-up.sh. Test clients are foot windows through scripts/dev/isolated.sh with the
 # nested socket only (--app-id chromium stands in for a browser that committed a small window); hyprctl is read-only
-# (scripts/nestctl -j clients). No shell runs in the nested session in this test, so the usable area is the whole output.
+# (scripts/nestctl -j clients). The usable area is the output minus the area the shell reserves.
 #
 #   1 foot --app-id chromium, asks 500x350 (no stored geometry): grown to the default size, centred
 #   2 foot --app-id chromium, asks 1500x900 (a size of its own, larger than the default): kept
@@ -36,15 +36,18 @@ say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" | tee -a "$log"; }
 pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log" 2>&1; }
 clients() { timeout 5 "$root/scripts/nestctl" -j clients; }
 
-read -r mon_x mon_y mon_w mon_h < <(timeout 5 "$root/scripts/nestctl" -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
+# reserved is [left, top, right, bottom] in hyprctl's JSON: the area the shell's menu bar and Dock keep.
+read -r mon_x mon_y mon_w mon_h res_l res_t res_r res_b < <(timeout 5 "$root/scripts/nestctl" -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height) \(.reserved[0]) \(.reserved[1]) \(.reserved[2]) \(.reserved[3])"')
 [[ -n ${mon_w:-} ]] || { echo "window_placement: output $out not found" >&2; exit 2; }
+use_w=$((mon_w - res_l - res_r))
+use_h=$((mon_h - res_t - res_b))
 
 pids=()
 cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done; }
 trap cleanup EXIT
 
 open_foot() { # <app-id> <title> <WxH>
-  WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot --app-id "$1" --title "$2" -W "$3" >/dev/null 2>&1 </dev/null &
+  WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot --app-id "$1" --title "$2" -w "$3" sleep 600 >/dev/null 2>&1 </dev/null &
   pids+=("$!")
   sleep 2
 }
@@ -58,12 +61,12 @@ check() { # <label> <0|1> <details>
   if [[ $2 == 0 ]]; then say "  $1: OK   ($3)"; else say "  $1: FAIL ($3)"; fail=1; fi
 }
 centred() { # <x> <y> <w> <h>: window middle within the tolerance of the output middle (the titlebar shifts y a little)
-  near $(($1 + $3 / 2)) $((mon_w / 2)) && near $(($2 + $4 / 2)) $((mon_h / 2 + 20))
+  near $(($1 + $3 / 2)) $((res_l + use_w / 2)) && near $(($2 + $4 / 2)) $((res_t + use_h / 2 + 14))
 }
 
-want_w=$((mon_w * 72 / 100))
-want_h=$((mon_h * 82 / 100))
-say "window_placement: output $out ${mon_w}x${mon_h}, default ${want_w}x${want_h}"
+want_w=$((use_w * 72 / 100))
+want_h=$((use_h * 82 / 100))
+say "window_placement: output $out ${mon_w}x${mon_h}, usable ${use_w}x${use_h}, default ${want_w}x${want_h}"
 pointer abs $((mon_w / 2)) $((mon_h - 150)) sleep 50 # windows open on the output under the pointer
 
 say "1 browser class, asks 500x350"
@@ -84,6 +87,9 @@ open_foot gf-placement-probe gf-place-other 500x350
 read -r x y w h < <(geom gf-place-other)
 [[ -n ${w:-} ]] || { say "setup error: window missing"; exit 2; }
 check "own size kept" "$({ near "$w" 500 && near "$h" 350; } && echo 0 || echo 1)" "got ${w}x${h}, asked 500x350"
+
+"$root/scripts/dev/shot.sh" "window-placement-$stamp" "$out" >>"$log" 2>&1
+say "  capture: $dev/shots/window-placement-$stamp.png"
 
 if ((fail)); then say "window_placement: FAIL (log $log)"; exit 1; fi
 say "window_placement: PASS (log $log)"
