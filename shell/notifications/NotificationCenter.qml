@@ -16,7 +16,7 @@ import "CenterLogic.js" as CenterLogic
 // docs/specs/widgets.md) and a close circle, centred one spacing.lg below the last card. No permanent global Clear All
 // (macOS 26 model): a card shows a round x at its top-left corner on hover or focus. A clear takes effect in the
 // model at once (history, "No Notifications", persistence); the column only animates it: the removed cards slide out
-// to the right while they fade (ListView remove transition) and the cards below slide up (displaced), so closing
+// to the right while they fade (ListView remove transition) and the cards below glide up, so closing
 // the column mid-animation never loses a clear. A card that arrives while the column is open slides in and fades in.
 // Reduce Motion: nothing slides, cards only fade (Appearance.duration caps the fade). Every card is its own surface with its own blur region
 // (registered by the card, see addSurface). Esc or a click outside the cards closes.

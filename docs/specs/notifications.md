@@ -69,7 +69,7 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
 ## Implementation notes (M2)
 - Code: `shell/notifications/` (`Notifications.qml` singleton: server, banner queue, history, IPC; `Banners.qml`/`Banner.qml`;
   `NotificationCenter.qml` (window, footer, widgets) + `NotificationList.qml` (the cards); `NotificationContent.qml`; pure `Sanitizer.js`, `History.js`).
-- Clear model (NotificationCenter.qml): `clearCard(group, refocus)` commits to the model at once: `Notifications.clear(key)` or, for a
+- Clear model (NotificationList.qml): `clearCard(group, refocus)` commits to the model at once: `Notifications.clear(key)` or, for a
   group, `Notifications.clearKeys(Notifications.keysOf(app))` (a snapshot of the keys at the click: a same-app notification that arrives
   later stays). The ListView animates the result: `remove` (the delegate's `slide` to the right + `opacity` to 0), `motion.normal`. The cards below glide by a visual offset: a delegate always sits at the
   layout position the view gives it (the model layout) and, when that `y` changes (a card above arrived, left, or changed height as "Show All" does), adds
@@ -79,8 +79,7 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   card's opacity, so the blur never outlives the glass. Surface records carry a unique id: Variants ignores and warns about equal values, and
   records of destroyed cards ({item: null}) were equal (163 464 "same value specified twice" lines for a 600-notification burst). The list is
   `panel.gutter` (= close size / 3) wider and taller than the column so the x can stick out of the card's corner like the banner's.
-  The keyboard focus after a clear is `Notifications.focusKeyAfter(slot, app)` (pure `CenterLogic.focusAfterClear`) read from the model AFTER
-  the update, applied by key after `forceLayout()`. Hover over the group controls is counted per hover handler (card and the x that sticks
+  Where the keyboard focus goes after a clear is the focus resolver's (below), read from the model AFTER the update. Hover over the group controls is counted per hover handler (card and the x that sticks
   out of it; `CenterLogic.hoverStep`), also decremented when a card is destroyed under the pointer.
   `Notifications.clearAll()` stays as the IPC test hook `clearAll()` only; the UI has no global Clear All. The IPC test hooks `invoke`, `clearAll` and
   `dismissAll` share one gate, `Notifications.testHooks` = `VisualFixtures.active` (`GRASSFIELD_DEV=1` AND `GRASSFIELD_VISUAL_FIXTURES=1`, never with
@@ -94,16 +93,28 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   `Shortcut`s (Tab, Shift+Tab; off while the widget gallery or a widget menu is open) run `ListView.tabStep`, which redirects only where Qt's next
   item would leave the card, and otherwise focuses Qt's own next item. Reduce Motion: see above.
   A group that empties forgets its "Show All" (`expandedApps`, also when the whole Center empties): its next cards arrive collapsed.
-  Focus never stays on a card that is hidden, disabled or removed: the list tells the model which card holds the focus
-  (`Notifications.centerFocusKey`, from `Window.activeFocusItem`), and when `syncShown` drops that card from the displayed rows (an arrival pushing it out
-  of a collapsed group, "Show Less", a collapse, an expiry or removal by the app, a clear, an eviction) it decides, while the old rows still exist,
-  where the focus goes (pure `CenterLogic.focusAfterGone`) and emits `centerFocusMoved(key)`: the card in the same slot of the same group (same rank from
-  the group's top), else the group's last displayed card, else (group gone) the next group's first card, else the previous card, else the panel. A same-id
-  update by the app only changes the card's roles: the delegate and its focus stay. `Show All` used with the keyboard hands the focus to the group's
-  "Show Less"; `Show Less` hands it to "Show All" (macOS keeps the focus on the stack control).
+  One focus invariant for the whole column (macOS model: the focused element never disappears from under the keyboard): the element that
+  holds the focus always exists, is visible and enabled; when it goes away the focus moves, visibly, to the nearest remaining element of the
+  CURRENT layout. The target is an identity, never an item: card key plus control role (`card`, `close` (the x), `clearGroup`, `showLess`,
+  `showAll`, `more`, `action:<id>`), noted by `NotificationList.noteFocus` whenever the focus is on a card or one of its controls
+  (`focusId`, with the card's group and rank). Anything that can change what is shown (the model's `rowsInserted/Removed/Moved/dataChanged/modelReset`,
+  a delegate leaving, a control's `visible`, the sender's actions) calls `queueResolve()`; ONE resolver (`resolveFocus`) runs once per
+  event-loop turn after all of them, however many changes the turn held, applies the layout (`forceLayout()`) and checks the target
+  (`itemOf`: present, visible, enabled). If it is, nothing happens. Otherwise (`nearestTo`): the same card's `card` (a hidden Clear All,
+  Show Less, Show All or x lands on the card that carried it; never on another destructive control), the sender's buttons by position
+  (More revealing the rest lands on the first revealed button), and when the card itself left the displayed rows the pure
+  `CenterLogic.focusAfterGone(lost, oldKeys, rows)`: the card now in the same slot of the same group (same rank, clamped to the group's
+  last displayed card; Show All / Show Less keep their role there), else (group gone) the next group's first card, else the previous
+  card, else the panel (`releaseFocus`). Only `rows` (the model now) says what exists; the settled rows before (`snapRows`) only give
+  the neighbourhood, so nothing acts on a stale or gone key, also after several changes in one turn. A same-id update by the app only
+  changes the card's roles: the delegate and its focus stay. `Show All` used with the keyboard hands the focus to the group's "Show
+  Less"; `Show Less` hands it to "Show All" (an intent the resolver honours, `handoff`). Keys act only on a visible, enabled, focused
+  item: a hidden control still holding the focus swallows Return/Space (`GroupClear`, `Button`) instead of letting them bubble to the card.
   The list is its own component (`NotificationList.qml`, a ListView) so that the tests run the shipped code: the PanelWindow needs a compositor.
-  Tests: `tests/unit/tst_notifcenter.qml` (focus choice incl. `focusAfterGone`, hover counts), `tests/shell/notif_center_list` (the real list in a plain
-  window on the real singleton: focus after arrival, Show Less, collapse, expiry, same-id update, group clear, last card; tabStep order incl. after arrivals;
+  Tests: `tests/unit/tst_notifcenter.qml` (focus choice `focusAfterGone` incl. several changes in one turn, hover counts), `tests/shell/notif_center_list` (the real list in a plain
+  window on the real singleton, real key events through `QtTest.TestCase.keyClick`: focus after arrival, Show Less, collapse, expiry, same-id update, group clear, last card; a focused
+  Clear All / Show Less / Show All / More / action hidden by an arrival, a close, a shrink or the sender expiring; two and three changes in one turn; keys never
+  act on a hidden control; a seeded random sequence of 80 turns with the focus anywhere; tabStep order incl. after arrivals;
   focusedDelegate; clearCard refocus; Show All / Show Less focus handoff; layout invariant after toggles; bumpTick; takeFresh), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
   repeated group clears, focus after Delete in collapsed and expanded groups), `tests/shell/notif_clear/nested.sh` (nested helper, notifications on the nested private bus only).
 - Banners: one layer-shell window (Overlay layer, no keyboard focus) on the first screen only; input and blur follow the cards.
