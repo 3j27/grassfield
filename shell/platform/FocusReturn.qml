@@ -30,7 +30,11 @@ Singleton {
         return Object.keys(holders).length > 0;
     }
 
+    // A full-attention surface just opened (`name`). The Dock's drag listens: such a surface takes the pointer from it.
+    signal surfaceOpened(string name)
+
     function opened(name: string): void {
+        surfaceOpened(name);
         cancelFallback();
         if (!anyOpen())
             previous = DesktopState.holdsKeyboard ? null : Compositor.activeWindow();
