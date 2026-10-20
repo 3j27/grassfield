@@ -69,10 +69,15 @@ Platform.MenuBar {
         title: qsTr("View")
 
         Platform.MenuItem {
-            text: bar.win.sidebarOpen ? qsTr("Hide Sidebar") : qsTr("Show Sidebar")
-            shortcut: "Ctrl+Shift+S"
+            text: bar.win.showSidebar ? qsTr("Hide Thumbnails") : qsTr("Show Thumbnails")
+            shortcut: "Ctrl+Alt+2"
             enabled: bar.win.hasSidebar
             onTriggered: bar.win.sidebarOpen = !bar.win.sidebarOpen
+        }
+        Platform.MenuItem {
+            text: bar.win.infoOpen ? qsTr("Hide Info") : qsTr("Show Info")
+            shortcut: "Ctrl+I"
+            onTriggered: bar.win.infoOpen = !bar.win.infoOpen
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
@@ -98,6 +103,13 @@ Platform.MenuBar {
             shortcut: "Ctrl+-"
             enabled: bar.canZoom
             onTriggered: bar.view.zoomOut()
+        }
+        Platform.MenuSeparator {}
+        Platform.MenuItem {
+            text: bar.win.slideshow ? qsTr("Stop Slideshow") : qsTr("Slideshow")
+            shortcut: "Ctrl+Shift+F"
+            enabled: bar.win.fileCount > 1
+            onTriggered: bar.win.toggleSlideshow()
         }
     }
 
@@ -128,13 +140,13 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Previous File")
             shortcut: "Left"
-            enabled: bar.win.fileCount > 1
+            enabled: bar.win.canGoPrevious
             onTriggered: bar.win.go(-1)
         }
         Platform.MenuItem {
             text: qsTr("Next File")
             shortcut: "Right"
-            enabled: bar.win.fileCount > 1
+            enabled: bar.win.canGoNext
             onTriggered: bar.win.go(1)
         }
     }

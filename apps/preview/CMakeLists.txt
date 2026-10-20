@@ -12,23 +12,25 @@ find_package(Qt6 COMPONENTS Pdf PdfQuick Multimedia)
 add_executable(grassfield-preview
     src/main.cpp
     src/previewapp.cpp src/previewapp.h
-    src/previewlogic.cpp src/previewlogic.h)
-target_include_directories(grassfield-preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    src/previewlogic.cpp src/previewlogic.h
+    # Same sort order as Grassfield Files for the files of a folder (pure Qt Core logic, shared source).
+    ../files/src/filelogic.cpp ../files/src/filelogic.h)
+target_include_directories(grassfield-preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_SOURCE_DIR}/../files/src)
 target_link_libraries(grassfield-preview PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus)
 target_compile_definitions(grassfield-preview PRIVATE
     GRASSFIELD_PREVIEW_VERSION="${PROJECT_VERSION}"
     GRASSFIELD_PREVIEW_QML_DIR="${CMAKE_INSTALL_PREFIX}/share/grassfield/preview/qml")
 
 install(TARGETS grassfield-preview RUNTIME DESTINATION bin)
-install(DIRECTORY qml/ DESTINATION share/grassfield/preview/qml FILES_MATCHING PATTERN "*.qml" PATTERN "*.js")
+install(DIRECTORY qml/ DESTINATION share/grassfield/preview/qml FILES_MATCHING PATTERN "*.qml" PATTERN "*.js" PATTERN "*.svg")
 install(FILES org.grassfield.Preview.desktop DESTINATION share/applications)
 
 # Unit tests of the pure logic (gtest), also run by scripts/dev/test.sh through build-direct.sh --tests.
 find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
-    add_executable(preview-unit-tests ../../tests/unit/preview/tst_previewlogic.cpp src/previewlogic.cpp)
-    target_include_directories(preview-unit-tests PRIVATE src)
+    add_executable(preview-unit-tests ../../tests/unit/preview/tst_previewlogic.cpp src/previewlogic.cpp ../files/src/filelogic.cpp)
+    target_include_directories(preview-unit-tests PRIVATE src ../files/src)
     target_link_libraries(preview-unit-tests PRIVATE Qt6::Core Qt6::Gui GTest::gtest GTest::gtest_main)
     add_test(NAME preview-unit-tests COMMAND preview-unit-tests)
 endif()

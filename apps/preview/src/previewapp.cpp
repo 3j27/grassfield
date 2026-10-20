@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QMimeDatabase>
 #include <QProcess>
 
 namespace {
@@ -39,11 +40,13 @@ QSize displaySize(const QImageReader &reader)
 
 } // namespace
 
-PreviewApp::PreviewApp(const QStringList &paths, const QStringList &errors, bool glance, QObject *parent)
+PreviewApp::PreviewApp(const QStringList &paths, const QStringList &errors, bool glance, int startIndex, bool browsing, QObject *parent)
     : QObject(parent)
     , m_paths(paths)
     , m_errors(errors)
     , m_glance(glance)
+    , m_browsing(browsing)
+    , m_startIndex(qBound(0, startIndex, qMax(0, paths.size() - 1)))
 {
     for (const QString &p : paths) {
         const QFileInfo info(p);
@@ -103,6 +106,9 @@ QVariantMap PreviewApp::inspect(int index) const
     out[QStringLiteral("size")] = sizeText(info.size());
     out[QStringLiteral("frames")] = 1;
     out[QStringLiteral("animated")] = false;
+    out[QStringLiteral("type")] = QMimeDatabase().mimeTypeForFile(path, QMimeDatabase::MatchExtension).comment();
+    out[QStringLiteral("modified")] = QLocale().toString(info.lastModified(), QLocale::ShortFormat);
+    out[QStringLiteral("folder")] = info.absolutePath();
     if (!info.isFile() || !info.isReadable()) {
         out[QStringLiteral("error")] = tr("This file cannot be read.");
         return out;
@@ -183,17 +189,28 @@ QVariantMap PreviewApp::inspect(int index) const
     return out;
 }
 
-void PreviewApp::openInPreview() const
+void PreviewApp::openInPreview(int current) const
 {
     if (m_paths.isEmpty())
         return;
+    current = qBound(0, current, m_paths.size() - 1);
     // GRASSFIELD_PREVIEW_CMD (dev) may carry a --glance flag; the full viewer never gets it.
     QStringList prefix = qEnvironmentVariable("GRASSFIELD_PREVIEW_CMD").split(QLatin1Char(' '), Qt::SkipEmptyParts);
     if (prefix.isEmpty())
         prefix << QCoreApplication::applicationFilePath();
     const QString program = prefix.takeFirst();
     prefix.removeAll(QStringLiteral("--glance"));
-    QProcess::startDetached(program, prefix + QStringList{QStringLiteral("--")} + m_paths);
+    // The folder of one file is browsed again by the viewer; several named files keep their order and the position.
+    QStringList args = prefix;
+    QStringList files;
+    if (m_browsing) {
+        files << m_paths.at(current);
+    } else {
+        files = m_paths;
+        if (current > 0)
+            args << QStringLiteral("--start") << QString::number(current);
+    }
+    QProcess::startDetached(program, args + QStringList{QStringLiteral("--")} + files);
 }
 
 PreviewImageProvider::PreviewImageProvider(const PreviewApp *app)
@@ -205,11 +222,12 @@ PreviewImageProvider::PreviewImageProvider(const PreviewApp *app)
 QImage PreviewImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)
 {
     const int slash = id.indexOf(QLatin1Char('/'));
+    const bool thumbnail = id.startsWith(QLatin1String("thumb/"));
     bool okFrame = false;
     bool okIndex = false;
-    const int frame = id.left(slash).toInt(&okFrame);
+    const int frame = thumbnail ? 0 : id.left(slash).toInt(&okFrame);
     const int index = id.mid(slash + 1).toInt(&okIndex);
-    if (slash < 0 || !okFrame || !okIndex || frame < 0 || index < 0 || index >= m_app->paths().size())
+    if (slash < 0 || (!thumbnail && !okFrame) || !okIndex || frame < 0 || index < 0 || index >= m_app->paths().size())
         return {};
     QImageReader reader(m_app->paths().at(index));
     reader.setAutoTransform(true);
@@ -218,11 +236,23 @@ QImage PreviewImageProvider::requestImage(const QString &id, QSize *size, const 
     const QSize native = displaySize(reader);
     if (native.isValid() && !preview::imageSizeAllowed(native))
         return {};
+    // A thumbnail is decoded at its size where the format can (JPEG scales while decoding): a folder of large photos
+    // stays cheap. The scaled size is for the stored (not yet rotated) image; the rotation keeps the aspect ratio.
+    if (thumbnail && requestedSize.isValid() && !reader.supportsAnimation()) {
+        const QSize raw = reader.size();
+        if (raw.isValid() && (raw.width() > requestedSize.width() || raw.height() > requestedSize.height())) {
+            const bool turned = reader.transformation() & QImageIOHandler::TransformationRotate90;
+            QSize box = requestedSize;
+            if (turned)
+                box.transpose();
+            reader.setScaledSize(raw.scaled(box, Qt::KeepAspectRatio));
+        }
+    }
     QImage image = reader.read();
     if (image.isNull() || !preview::imageSizeAllowed(image.size()))
         return {};
     if (size)
-        *size = image.size();
+        *size = thumbnail && native.isValid() ? native : image.size();
     if (requestedSize.isValid() && (requestedSize.width() < image.width() || requestedSize.height() < image.height()))
         image = image.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     return image;
