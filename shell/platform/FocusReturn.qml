@@ -100,19 +100,11 @@ Singleton {
     property var focusBefore: null
     property int focusAttempt: 0
     property real focusStarted: 0
-    // What was active when the fallback was decided ({address, workspace}): a change before the first attempt is the
-    // user's choice (a click on another window while the surfaces were releasing the keyboard).
-    property var focusOrigin: null
 
     function startFallback(target: var, delayMs: int): void {
         const plan = FR.fallbackPlan(target, Compositor.windowAddresses(), Compositor.minimizedAddresses());
         if (plan.kind === "none" || locked)
             return;
-        const active = Compositor.activeWindow();
-        focusOrigin = {
-            address: active ? active.address : "",
-            workspace: Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : -1
-        };
         focusPlan = plan;
         focusAttempt = 0;
         focusStarted = Date.now();
@@ -174,14 +166,6 @@ Singleton {
             if (root.focusDelayed) {
                 root.focusDelayed = false;
                 if (root.anyOpen()) {
-                    root.focusPlan = null;
-                    return;
-                }
-                // The hold time can be stretched by a busy GUI thread: a window or Desktop the user chose in the meantime
-                // (a click) stands; the late first attempt would take the keyboard back from it.
-                const ws = Compositor.focusedWorkspace ? Compositor.focusedWorkspace.id : -1;
-                if (FR.userActed(FR.planGoal(root.focusPlan), root.focusOrigin, Compositor.activeWindow(), ws)) {
-                    console.info("grassfield-focus: return focus (shell fallback) user before the first attempt");
                     root.focusPlan = null;
                     return;
                 }
