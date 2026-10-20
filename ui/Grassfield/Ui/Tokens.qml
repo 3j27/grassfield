@@ -81,11 +81,11 @@ QtObject {
         pinkText: "#FFFFFF",  // text and icons on the pink accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
         red: "#C0302A",  // own light-appearance value of the red accent (appearance.accent), not copied; fills, selections and focus rings
         redText: "#FFFFFF",  // text and icons on the red accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        orange: "#A85A0A",  // own light-appearance value of the orange accent (appearance.accent), not copied; fills, selections and focus rings
+        orange: "#964D08",  // own light-appearance value of the orange accent (appearance.accent), not copied; fills, selections and focus rings
         orangeText: "#FFFFFF",  // text and icons on the orange accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
         yellow: "#E0B000",  // own light-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings
         yellowText: "#241C00",  // text and icons on the yellow accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        green: "#25833F",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings
+        green: "#1D6E34",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings
         greenText: "#FFFFFF",  // text and icons on the green accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
         graphite: "#5C616B",  // own light-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings
         graphiteText: "#FFFFFF"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)

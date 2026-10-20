@@ -23,6 +23,40 @@ SettingsPage {
     }
 
     SettingsGroup {
+        id: accentGroup
+        caption: qsTr("Accent colour")
+        footnote: qsTr("Colour of buttons, selections, toggles and focus rings in the shell and in the apps. Multicolour is the Grassfield green. The highlight colour follows the accent.")
+
+        readonly property string setting: root.store.value("accent.color")
+        readonly property var names: [qsTr("Multicolour"), qsTr("Blue"), qsTr("Purple"), qsTr("Pink"), qsTr("Red"), qsTr("Orange"), qsTr("Yellow"), qsTr("Green"), qsTr("Graphite")]
+        // One round swatch per accent, in the colour it has in the current appearance; the chosen one is marked.
+        readonly property var model: {
+            const out = [];
+            for (let i = 0; i < Accent.NAMES.length; i++) {
+                const n = Accent.NAMES[i];
+                const base = Appearance.dark ? Tokens.colorDark : Tokens.colorLight;
+                const r = Accent.resolve(n, Appearance.dark, Tokens);
+                out.push({color: r ? r.accent : base.accent, name: accentGroup.names[i], state: accentGroup.setting === n ? 2 : 0});
+            }
+            return out;
+        }
+
+        SettingsRow {
+            title: qsTr("Accent colour")
+            SwatchRow {
+                accessibleName: qsTr("Accent colour")
+                caption: accentGroup.model.filter(m => m.state === 2).map(m => m.name).join("")
+                model: accentGroup.model
+                activeFocusOnTab: true
+                onChosen: index => {
+                    currentIndex = index;
+                    root.store.set("accent.color", Accent.NAMES[index]);
+                }
+            }
+        }
+    }
+
+    SettingsGroup {
         id: iconGroup
         caption: qsTr("Icon appearance")
         footnote: qsTr("Applies to app and file icons in the Dock, Apps, Search, the desktop and Files. Tinted maps each icon to shades of one colour.")
