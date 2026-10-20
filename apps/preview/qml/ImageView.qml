@@ -81,6 +81,7 @@ Item {
                 visible: !(root.info.animated ?? false)
                 source: root.info.url && !root.info.animated ? "image://preview/" + root.currentPage + "/" + root.fileIndex : ""
                 asynchronous: true
+                retainWhileLoading: true
                 cache: false
                 mipmap: true
                 smooth: true

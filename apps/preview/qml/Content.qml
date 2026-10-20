@@ -33,7 +33,15 @@ Item {
     }
 
     // A new file gets a fresh viewer (zoom, rotation and page do not carry over).
+    // The folder listing can move the opened file to another index: the same file keeps its viewer (no flash).
+    property string shownUrl: ""
+    Component.onCompleted: root.shownUrl = String(root.backend.files[root.fileIndex]?.url ?? "")
     onFileIndexChanged: {
+        const url = String(root.backend.files[root.fileIndex]?.url ?? "");
+        const same = url !== "" && url === root.shownUrl;
+        root.shownUrl = url;
+        if (same)
+            return;
         loader.active = false;
         Qt.callLater(() => loader.active = Qt.binding(() => root.info.ok === true));
     }
