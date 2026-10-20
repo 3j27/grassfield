@@ -35,6 +35,8 @@
 #   unlock    lock and unlock with the pointer on the bare desktop, on the menu bar, on window A: a click on A's content (and
 #             on its titlebar) gives A the keyboard
 #   health    Hyprland alive, no grassfield exception in its log
+# Without grassfield-compositor (C2: scripts/nestctl plugin unload, or nested-up.sh --no-plugin) the titlebar cases are
+# skipped (no titlebars) and the unlock clicks are reported only: Hyprland 0.56.2 alone does nothing there (known limit).
 # Logs: .dev/click-focus/run-<timestamp>/.
 set -uo pipefail
 
@@ -178,6 +180,13 @@ check() { # <label> <0|1> [detail]
 
 say "click_focus $mode: run $run, nested pid $hypr_pid ($(nestctl -j version | jq -r .tag), commit $(nestctl -j version | jq -r .commit | cut -c1-8)), $out ${mon_w}x${mon_h}, headless $headless"
 say "plugin: $(nestctl plugin list 2>/dev/null | grep -m1 -i 'version' | tr -s ' ' || echo none); features $(nestctl -j grassfield 2>/dev/null | jq -c .features 2>/dev/null || echo none)"
+# Without grassfield-compositor (C2) there are no titlebars, and the click on Hyprland's focused window after an unlock is
+# Hyprland's own behaviour (it does nothing): those cases are reported, not checked.
+plugin=0
+nestctl -j grassfield 2>/dev/null | jq -e '.features | index("desktop-focus")' >/dev/null 2>&1 && plugin=1
+((plugin)) || say "C2: grassfield-compositor not loaded (or without desktop-focus): titlebar cases skipped, unlock clicks reported only"
+paths=(content)
+((plugin)) && paths+=(titlebar)
 
 pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 50 # windows open on the output under the pointer
 p=$(probe "$cap_a" gf-click-a); pids+=("$p"); win_a=$(address_of "$p")
@@ -302,7 +311,7 @@ client_case() { # <name>
   ms 800
   read -r cx cy cw ch < <(geom "$win_c")
   say "$name: window $win_c ${cw}x${ch}+$cx+$cy class $(nestctl -j clients | jq -r --arg a "$win_c" '.[] | select(.address == $a) | "\(.class) xwayland \(.xwayland)"')"
-  for path in content titlebar; do
+  for path in "${paths[@]}"; do
     focus_a
     # Content: near the left edge, half-way down (clear of the centre buttons of a welcome screen such as Obsidian's).
     if [[ $path == content ]]; then x=$((cx + 30)) y=$((cy + ch / 2)); else x=$((cx + cw / 2)) y=$((cy - 14)); fi
@@ -344,11 +353,13 @@ click_b
 r=$(type_now x)
 [[ $r == "A= B=x active=B" ]]
 check "foot: a click on its content gives it the keyboard" $? "$r"
-focus_a
-read -r x y <<<"$b_bar"; click "$x" "$y"; ms 400
-r=$(type_now x)
-[[ $r == "A= B=x active=B" ]]
-check "foot: a click on its titlebar gives it the keyboard" $? "$r"
+if ((plugin)); then
+  focus_a
+  read -r x y <<<"$b_bar"; click "$x" "$y"; ms 400
+  r=$(type_now x)
+  [[ $r == "A= B=x active=B" ]]
+  check "foot: a click on its titlebar gives it the keyboard" $? "$r"
+fi
 # The nested Hyprland's own X display (its children inherit it); never the owner's.
 nestctl dispatch "hl.dsp.exec_cmd('printf %s \"\$DISPLAY\" > $run/xdisplay')" >>"$log" 2>&1
 ms 800
@@ -422,11 +433,13 @@ for _ in $(seq 1 25); do
   r=$(type_now x)
   [[ $r == A=x* || $r == *B=x* ]] && { landed=$(($(date +%s%3N) - t0)); break; }
 done
-layer_mapped grassfield-overlay && still=mapped || still=unmapped
+# Its input mask can land after its keyboard release when the GUI thread is busy (a click in between is the closing
+# surface's): the next click is made once the menu's surface is gone.
+gone=$(gone_after grassfield-overlay)
 click_b
 r=$(type_now x)
 [[ -n $landed && $r == "A= B=x active=B" ]]
-check "menu closed by a click on B: the next click on B gives B the keyboard" $? "$r; close landed after ${landed:-never} ms; grassfield-overlay $still at the click"
+check "menu closed by a click on B: the next click on B gives B the keyboard" $? "$r; close landed after ${landed:-never} ms; grassfield-overlay unmapped $gone ms later"
 fi
 
 # ---- the menu bar never keeps the keyboard ----
@@ -482,7 +495,7 @@ lock_cycle() { # the foreign locker takes the session lock, then releases it ove
 if wanted unlock; then
 say "== after a session unlock (foreign locker fixture)"
 for where in desktop bar window; do
-  for path in content titlebar; do
+  for path in "${paths[@]}"; do
     focus_a
     case $where in
       desktop) read -r x y <<<"$desk"; pointer abs "$x" "$y" ;;
@@ -500,8 +513,12 @@ for where in desktop bar window; do
     click "$x" "$y"
     ms 400
     r=$(type_now x)
-    [[ $r == "A=x B= active=A" ]]
-    check "unlock with the pointer on the $where: a click on A's $path gives A the keyboard" $? "$r"
+    if ((plugin)); then
+      [[ $r == "A=x B= active=A" ]]
+      check "unlock with the pointer on the $where: a click on A's $path gives A the keyboard" $? "$r"
+    else
+      say "  C2 (known limit, Hyprland 0.56.2): unlock with the pointer on the $where, a click on A's $path: $r"
+    fi
   done
 done
 fi
