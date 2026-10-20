@@ -1,4 +1,5 @@
 #include "filesapp.h"
+#include "appscope.h"
 
 #include "filelogic.h"
 #include "foldermodel.h"
@@ -476,7 +477,7 @@ void FilesApp::glance(const QList<QUrl> &urls)
     const QString program = command.takeFirst();
     command.removeAll(QStringLiteral("--glance"));
     const QStringList args = command + QStringList{QStringLiteral("--glance"), QStringLiteral("--")} + paths;
-    if (!QProcess::startDetached(program, args))
+    if (!grassfield::apps::startApplication(program, args))
         emit operationFailed(tr("Glance could not be started: grassfield-preview was not found."));
 }
 

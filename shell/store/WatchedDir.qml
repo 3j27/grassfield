@@ -36,7 +36,7 @@ QtObject {
         onRunningChanged: {
             if (running || root.path === "")
                 return;
-            if (mkdir.command[2] === root.path)
+            if (root.mkdir.command[2] === root.path)
                 root.doneFor = root.path;
             else
                 root.ensure(); // the path changed while the previous mkdir ran
