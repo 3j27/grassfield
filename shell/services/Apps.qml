@@ -101,9 +101,29 @@ Singleton {
 
     // A GRASSFIELD_DEV session (nested, on the owner's machine) must never start an app with the
     // owner's profiles: apps launched by the shell get their own XDG config, cache, state and data homes
-    // (docs/specs/dock.md, dev notes). Production launches are untouched.
+    // (docs/specs/dock.md, dev notes). Production launches keep the user's environment (and get a scope of their own,
+    // scopedLaunch).
     readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
     readonly property string appsHome: AppLaunch.appsHomeFor(Quickshell.env("GRASSFIELD_STATE_HOME"), Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+
+    // A real Grassfield session (uwsm, GRASSFIELD_SESSION=1, not a dev session) with uwsm's app launcher: every
+    // application the shell starts gets a scope of its own (AppLaunch.scopedArgv), never the shell's unit.
+    readonly property bool realSession: Quickshell.env("GRASSFIELD_SESSION") === "1" && !devSession
+    property bool uwsmApp: false
+    readonly property bool scopedLaunch: realSession && uwsmApp
+
+    Process {
+        running: root.realSession
+        command: ["sh", "-c", "command -v uwsm-app"]
+        stdout: StdioCollector {
+            onStreamFinished: root.uwsmApp = text.trim() !== ""
+        }
+    }
+
+    // argv of an application start: in its own scope in a real session (AppLaunch.scopedArgv).
+    function scoped(argv: var): var {
+        return AppLaunch.scopedArgv(argv, scopedLaunch);
+    }
 
     // Starts a desktop entry or one of its actions. The one launch path of the Dock, Apps, Search and the
     // menus.
@@ -111,8 +131,8 @@ Singleton {
         if (!target)
             return;
         const environment = launchEnvironment();
-        // Nothing to add to the environment of the shell: Quickshell's own execute().
-        if (Object.keys(environment).length === 0) {
+        // Nothing to add to the environment of the shell and no scope to start: Quickshell's own execute().
+        if (Object.keys(environment).length === 0 && !scopedLaunch) {
             target.execute();
             return;
         }
@@ -123,7 +143,7 @@ Singleton {
         if (target.runInTerminal === true)
             command = ["xdg-terminal-exec"].concat(command);
         const context = {
-            "command": command,
+            "command": scoped(command),
             "environment": environment
         };
         if (target.workingDirectory)
@@ -274,7 +294,7 @@ Singleton {
         for (const c of commands) {
             if (c.length === 0)
                 continue;
-            const context = {"command": entry.runInTerminal === true ? ["xdg-terminal-exec"].concat(c) : c};
+            const context = {"command": scoped(entry.runInTerminal === true ? ["xdg-terminal-exec"].concat(c) : c)};
             if (Object.keys(environment).length > 0)
                 context.environment = environment;
             if (entry.workingDirectory)
@@ -322,15 +342,15 @@ Singleton {
     // Runs a helper command. Helpers that open a file in an application (gio open, xdg-open, gtk-launch) follow the
     // dev open policy in a dev session: GIO never starts an app there (a D-Bus activatable default handler such as
     // Nautilus would run in the owner's session with the owner's profile). Other helpers (gio trash) get the isolated
-    // environment. A real session runs the command unchanged.
+    // environment. A real session runs the command unchanged, in a scope of its own (the application it opens lives there).
     function openDetached(argv: var): void {
         if (!devSession) {
             const environment = launchEnvironment();
             if (Object.keys(environment).length === 0)
-                Quickshell.execDetached(argv);
+                Quickshell.execDetached(scoped(argv));
             else
                 Quickshell.execDetached({
-                    "command": argv,
+                    "command": scoped(argv),
                     "environment": environment
                 });
             return;

@@ -155,6 +155,8 @@ Also write down: time of the problem, what you pressed, which monitor.
    (`loginctl session-status <id>` shows Hyprland in its process tree).
 3. Restart the shell, which re-reads the lock marker and shows the lock screen again:
    `systemctl --user restart grassfield-shell.service`. Return with Ctrl+Alt+F1/F2 (the VT of the session).
+   With packages older than 0.4.0-2, applications started from the Dock, Search, Apps or the desktop run inside the
+   shell's unit and this restart closes them (ADR-0011 amendment); from 0.4.0-2 each runs in a scope of its own.
 4. `loginctl unlock-session <id>` exists and its syntax is right, but **Grassfield does not listen for logind's Unlock
    signal** (nothing under `shell/` handles it), so it does not unlock. Do not rely on it.
 5. Last resort, loses open windows: `loginctl terminate-session <id>` (the Grassfield session id from step 2), or `systemctl reboot`.

@@ -29,6 +29,19 @@ non-app helpers (`cp`, `wl-copy`, `systemctl`, `kill`, `gio trash`) and shell-in
 - Field codes are stripped (`AppLaunch.stripFieldCodes`); `Terminal=true` entries go through `xdg-terminal-exec`,
   as `DesktopEntry.execute()` does.
 
+### Amendment 2026-10-20: one scope per application in a real session
+The first real-session run (owner L2) showed every application started from the Dock, Search, Apps, the desktop or
+Settings running inside `grassfield-shell.service` (`/proc/<pid>/cgroup`; their output in the shell's journal). A
+restart or crash of the shell (`Restart=on-failure`, default `KillMode=control-group`) would close all of them: not the
+macOS model, where the Dock quitting never quits an app.
+- In a real session (`GRASSFIELD_SESSION=1`, not a dev session) with `uwsm-app` installed (uwsm is a dependency), the
+  launch path wraps the argv as `uwsm-app -- <argv>` (`AppLaunch.scopedArgv`, `Apps.scoped`): each application gets
+  its own scope in `app-graphical.slice`, as the Omarchy session starts its apps (Omarchy `helpers.lua`). The scope
+  runs the command in the launcher's process context, so the environment the shell adds (pointer size) still applies.
+- `Apps.launch` no longer falls back to `DesktopEntry.execute()` in a real session (it would bypass the scope); the
+  Settings launcher (`SettingsApp`) and the desktop's `gio open` go through `Apps.scoped` too.
+- Dev sessions are unchanged (no scope: the nested apps must not appear in the owner's user manager).
+
 ## Evidence
 - Merge bc382c6: a foot started from the nested Dock had `XDG_CONFIG_HOME=.dev/apps-home/config` (and cache,
   state) in `/proc/<pid>/environ`; reviewer confirmed, and confirmed by code reading that real sessions are

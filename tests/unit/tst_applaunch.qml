@@ -35,6 +35,22 @@ TestCase {
         compare(AppLaunch.appsHomeFor("", "/run"), "/run/grassfield-dev/apps-home");
     }
 
+    function test_scopedArgv() {
+        // A real session: the application runs in a scope of its own through uwsm's app launcher.
+        compare(AppLaunch.scopedArgv(["foot"], true), ["uwsm-app", "--", "foot"]);
+        compare(AppLaunch.scopedArgv(["gio", "open", "/h/a b.txt"], true), ["uwsm-app", "--", "gio", "open", "/h/a b.txt"]);
+        // An argument that looks like an option stays the application's (after "--").
+        compare(AppLaunch.scopedArgv(["-x"], true), ["uwsm-app", "--", "-x"]);
+        // A dev session or no uwsm-app: unchanged; nothing to start: nothing added.
+        compare(AppLaunch.scopedArgv(["foot", "-e", "top"], false), ["foot", "-e", "top"]);
+        compare(AppLaunch.scopedArgv([], true), []);
+        compare(AppLaunch.scopedArgv(undefined, true), []);
+        // The input is not modified.
+        const argv = ["foot"];
+        AppLaunch.scopedArgv(argv, true);
+        compare(argv, ["foot"]);
+    }
+
     function test_fieldCodesAreDropped() {
         compare(AppLaunch.stripFieldCodes(["chromium", "%U"]), ["chromium"]);
         compare(AppLaunch.stripFieldCodes(["foot", "--title", "%c", "%f"]), ["foot", "--title"]);
