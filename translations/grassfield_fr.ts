@@ -700,6 +700,10 @@
 <context>
     <name>Bindings</name>
     <message>
+        <source>Apps</source>
+        <translation>Apps</translation>
+    </message>
+    <message>
         <source>Super</source>
         <translation>Super</translation>
     </message>
