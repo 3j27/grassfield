@@ -537,11 +537,8 @@ function modeSamples(samples, mode, modeTint, dark, tokens) {
     const name = Modes.normalizeMode(mode);
     if (name === "default")
         return samples;
-    const smooth = (a, b, x) => {
-        const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
-        return t * t * (3 - 2 * t);
-    };
-    const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    // The lightness of the relative luminance (linear light at gamma 2.2, encoded again): what the shader maps.
+    const luma = (r, g, b) => Math.pow(0.2126 * Math.pow(r, 2.2) + 0.7152 * Math.pow(g, 2.2) + 0.0722 * Math.pow(b, 2.2), 1 / 2.2);
     const t = rgbOf(modeTint);
     const out = new Array(samples.length);
     for (let i = 0; i < samples.length; i += 4) {
@@ -550,9 +547,8 @@ function modeSamples(samples, mode, modeTint, dark, tokens) {
         let rgb;
         let alpha = samples[i + 3];
         if (name === "dark") {
-            const d = c.map(v => (lc + (v - lc) * tokens.iconModeDarkArtSaturation) * tokens.iconModeDarkArtScale);
-            const lift = tokens.iconModeDarkArtLift * (1 - Math.max(0, Math.min(1, luma(d[0], d[1], d[2]) / tokens.iconModeDarkArtLiftRange)));
-            rgb = d.map(v => v + lift);
+            const d = c.map(v => lc + (v - lc) * tokens.iconModeDarkArtSaturation);
+            rgb = d.map(v => tokens.iconModeDarkArtLift + (tokens.iconModeDarkArtScale - tokens.iconModeDarkArtLift) * v);
         } else if (name === "clear") {
             const ink = dark ? tokens.iconModeClearInkDark : tokens.iconModeClearInkLight;
             rgb = [ink, ink, ink];

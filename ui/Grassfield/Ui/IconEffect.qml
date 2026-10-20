@@ -47,8 +47,11 @@ ShaderEffect {
     readonly property real darkArtSaturation: Tokens.iconModeDarkArtSaturation
     readonly property real darkArtScale: Tokens.iconModeDarkArtScale
     readonly property real darkArtLift: Tokens.iconModeDarkArtLift
-    readonly property real darkArtLiftRange: Tokens.iconModeDarkArtLiftRange
     readonly property real darkRim: Tokens.iconModeDarkRim
+    readonly property real rimInner: Tokens.iconModeRimInner
+    readonly property real darkRimLight: Tokens.iconModeDarkRimLight
+    readonly property real tintedRimMixDark: Tokens.iconModeTintedRimMixDark
+    readonly property real tintedRimShadeLight: Tokens.iconModeTintedRimShadeLight
     readonly property real clearPlateAlphaDark: Tokens.iconModeClearPlateAlphaDark
     readonly property real clearPlateAlphaLight: Tokens.iconModeClearPlateAlphaLight
     readonly property real clearInkDark: Tokens.iconModeClearInkDark

@@ -24,6 +24,8 @@ import Grassfield.Ui
 //   E (outside) the best of outline-vs-background, plate-vs-background and glyph-vs-background >= floor(default's): the
 //               icon stays visible by its edge or by its glyph. Every icon sits on a system plate, so this holds for every
 //               icon except the measured limits below.
+//   N (internal contrast) when the default's lightest and darkest pixels in the middle of the artwork differ by 3:1 or more, so do the
+//               mode's (from 24 px up): a terminal's prompt, a graph on a black plate or a red glyph on a dark one stay readable.
 //   S (separation) artwork of nearly one luminance (a pale sky on a green hill) keeps 85 percent of the default's glyph-vs-plate contrast, or 1.5.
 // The plate is the median luminance of the ring 4 to 8 px (scaled with the size) inside the edge; the glyph is the 2nd or
 // 98th percentile luminance of the core, whichever is farther from the plate; the outline is the 90th percentile of the
@@ -37,7 +39,7 @@ TestCase {
     name: "IconShaderA2"
     visible: true
     when: windowShown
-    width: 1000
+    width: 1250
     height: 780
 
     readonly property int cell: 60
@@ -47,7 +49,9 @@ TestCase {
     readonly property string whitesurDir: Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/apps/scalable/")
     readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo", "dark-plate-light-border", "white-page-document", "same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph"]
     // Includes btop, Disk Usage Analyzer and white-plated icons (Chromium, Firefox, GIMP, Inkscape, Calendar, Notes).
-    readonly property var whitesurNames: ["btop", "disk-usage-analyzer", "chromium", "firefox", "gimp", "inkscape", "org.gnome.Calendar", "accessories-text-editor", "org.gnome.Settings", "spotify", "vlc", "discord", "mpv", "obsidian", "foot", "org.gnome.Nautilus", "visual-studio-code", "hwloc"]
+    readonly property var whitesurNames: ["btop", "disk-usage-analyzer", "chromium", "firefox", "gimp", "inkscape", "org.gnome.Calendar", "accessories-text-editor", "org.gnome.Settings", "spotify", "vlc", "discord", "mpv", "obsidian", "foot", "org.gnome.Nautilus", "visual-studio-code", "hwloc",
+        // Terminals and monitors (dark plates with a light prompt or a coloured graph): the icons whose internal contrast is at risk.
+        "gnome-terminal", "kitty", "konsole", "alacritty", "lxterminal", "bash", "htop", "nvtop", "gnome-system-monitor", "ksysguard", "nvim"]
     // Installed non-WhiteSur theme icons (read in place, never copied into the repo; a missing file is skipped).
     readonly property var systemIcons: [
         ["hicolor:foot", "hicolor/scalable/apps/foot.svg"], ["hicolor:libreoffice-writer", "hicolor/scalable/apps/libreoffice-writer.svg"],
@@ -149,7 +153,7 @@ TestCase {
     }
 
     // Contrast metrics of one rendered cell (a grabbed window image), see the pass rule above.
-    function measure(img, img2, slot, panel, panel2) {
+    function measure(img, img2, slot, panel, panel2, artScale) {
         const half = testCase.iconSize / 2;
         const x0 = Math.round(slot.x + testCase.cell / 2 - half);
         const y0 = Math.round(slot.y + testCase.cell / 2 - half);
@@ -205,6 +209,18 @@ TestCase {
         }
         if (core.length < 8 || ring.length < 8)
             return null;
+        // Internal contrast: the lightest and the darkest pixels of the middle of the artwork (the middle half of the icon in the
+        // default rendering, the same part of it once the artwork is scaled onto the system plate): 98th against 2nd percentile.
+        const half = 0.25 * n * (artScale === undefined ? 1 : artScale);
+        const mid = [];
+        for (let y = 0; y < n; y++) {
+            for (let x = 0; x < n; x++) {
+                if (mask[y * n + x] && Math.abs(x + 0.5 - n / 2) <= half && Math.abs(y + 0.5 - n / 2) <= half)
+                    mid.push(lum[y * n + x]);
+            }
+        }
+        mid.sort((a, b) => a - b);
+        const internal = mid.length >= 16 ? ratio(quantile(mid, 0.98), quantile(mid, 0.02)) : 1;
         ring.sort((a, b) => a - b);
         core.sort((a, b) => a - b);
         // The plate is what lies just inside the edge; the glyph is the core's extreme farther from it.
@@ -219,6 +235,7 @@ TestCase {
         const plateOverPanel = ratio(body, lp);
         const glyphOverPanel = ratio(glyph, lp);
         return {
+            internal: internal,
             inside: ratio(glyph, body),
             outside: Math.max(plateOverPanel, outlineOverPanel, glyphOverPanel),
             plateOverPanel: plateOverPanel,
@@ -288,20 +305,20 @@ TestCase {
             // below 48 px by its own design: it is tested from 48 px only.
             if (testCase.iconSize < 48 && testCase.fixtures[f].name === "same-tone-glyph")
                 continue;
-            const base = measure(img, img2, cells[0], background, inverse);
+            const base = measure(img, img2, cells[0], background, inverse, 1);
             if (base === null)
                 continue;
             for (let m = 1; m < testCase.modes.length; m++) {
                 if (testCase.onlyMode !== "" && testCase.modes[m] !== testCase.onlyMode)
                     continue;
-                const r = measure(img, img2, cells[m], background, inverse);
+                const r = measure(img, img2, cells[m], background, inverse, Tokens.iconModeSysGlyphScale);
                 const label = `${testCase.fixtures[f].name} ${testCase.modes[m]} ${name}`;
                 if (r === null) {
                     failures.push(label + ": nothing drawn");
                     continue;
                 }
                 measured++;
-                const line = `${label}: inside ${r.inside.toFixed(2)} (default ${base.inside.toFixed(2)}), outside ${r.outside.toFixed(2)} (default ${base.outside.toFixed(2)}; plate ${r.plateOverPanel.toFixed(2)} outline ${r.outlineOverPanel.toFixed(2)} glyph ${r.glyphOverPanel.toFixed(2)})`;
+                const line = `${label}: inside ${r.inside.toFixed(2)} (default ${base.inside.toFixed(2)}), internal ${r.internal.toFixed(2)} (default ${base.internal.toFixed(2)}), outside ${r.outside.toFixed(2)} (default ${base.outside.toFixed(2)}; plate ${r.plateOverPanel.toFixed(2)} outline ${r.outlineOverPanel.toFixed(2)} glyph ${r.glyphOverPanel.toFixed(2)})`;
                 console.log("A2 " + line);
                 // At 16 px the edge highlight and the anti-aliasing fill the whole measured ring, so the inside rule starts at 24 px.
                 const name1 = testCase.fixtures[f].name;
@@ -314,6 +331,10 @@ TestCase {
                     failures.push("S " + line);
                 if (r.outside < floorOf(base.outside) && !testCase.isKnownLimit(name1, testCase.modes[m], "E"))
                     failures.push("E " + line);
+                // N (internal contrast): an icon whose default rendering has a light/dark contrast of 3:1 inside keeps 3:1 (less the
+                // rounding margin) in every mode, from 24 px up: the recolouring is monotonic and keeps a minimum slope.
+                if (testCase.iconSize >= 24 && base.internal >= 3 && r.internal < 2.9 && !testCase.isKnownLimit(name1, testCase.modes[m], "N"))
+                    failures.push("N " + line);
             }
         }
         return measured;

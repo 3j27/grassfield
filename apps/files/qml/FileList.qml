@@ -234,6 +234,7 @@ FocusScope {
                 x: Tokens.spacingSm + Tokens.spacingXs
                 anchors.verticalCenter: parent.verticalCenter
                 size: Tokens.filesListIconSize
+                overAccent: row.emphasized
                 iconName: row.iconName
                 isDir: row.isDir
                 folderColor: row.folderColor

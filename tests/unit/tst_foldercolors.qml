@@ -367,12 +367,12 @@ TestCase {
             return Math.abs(rgb[0] - want[0]) <= tol && Math.abs(rgb[1] - want[1]) <= tol && Math.abs(rgb[2] - want[2]) <= tol;
         };
         const dk = String(Tokens.colorDark.accent);
-        // Dark: the artwork darkened and a little desaturated, dark parts lifted (shaders/icon.frag, derived here by hand)
+        // Dark: affine from darkArtLift to darkArtScale over a little desaturated artwork (shaders/icon.frag, derived here by hand)
         const rawRgb = FolderStyle.rgbOf("#74cbf5");
-        const lc = 0.2126 * rawRgb[0] + 0.7152 * rawRgb[1] + 0.0722 * rawRgb[2];
-        const dd = rawRgb.map(v => (lc + (v - lc) * Tokens.iconModeDarkArtSaturation) * Tokens.iconModeDarkArtScale);
-        const ld = 0.2126 * dd[0] + 0.7152 * dd[1] + 0.0722 * dd[2];
-        const darkWant = dd.map(v => v + Tokens.iconModeDarkArtLift * (1 - Math.min(1, ld / Tokens.iconModeDarkArtLiftRange)));
+        const lightness = rgb => Math.pow(0.2126 * Math.pow(rgb[0], 2.2) + 0.7152 * Math.pow(rgb[1], 2.2) + 0.0722 * Math.pow(rgb[2], 2.2), 1 / 2.2);
+        const lc = lightness(rawRgb);
+        const dd = rawRgb.map(v => lc + (v - lc) * Tokens.iconModeDarkArtSaturation);
+        const darkWant = dd.map(v => Tokens.iconModeDarkArtLift + (Tokens.iconModeDarkArtScale - Tokens.iconModeDarkArtLift) * v);
         const darkMode = FolderStyle.plateThrough(raw, "dark", dk, false, "", [0, 0, 0], Tokens, true).dark;
         verify(Math.abs(darkMode[0] - darkWant[0]) < 0.005 && Math.abs(darkMode[1] - darkWant[1]) < 0.005 && Math.abs(darkMode[2] - darkWant[2]) < 0.005, "dark mode " + FolderStyle.hexOf(darkMode));
         // The artwork keeps its hue: still a blue (b > g > r)

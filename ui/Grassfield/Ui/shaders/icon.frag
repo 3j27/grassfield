@@ -7,9 +7,10 @@
 //     in Dark, glass in Clear (light on a dark material, smoked on a light one or over the bare wallpaper), tinted in Tinted.
 //  2. ARTWORK. The icon is drawn scaled down about the centre onto the plate, recoloured by a fixed transform per mode that
 //     depends on the pixel alone (so FolderStyle.modeSamples can repeat it exactly):
-//       Dark   darkened and a little desaturated, very dark parts lifted (a linear ramp that fades out at darkArtLiftRange) so they separate from the graphite plate.
-//       Clear  monochrome ink (light on dark, smoked on light) whose opacity follows the luminance of the artwork.
-//       Tinted the luminance of the artwork mapped onto a two-tone ramp of the tint.
+//       Dark   a little desaturated, then an affine map from darkArtLift (black, so it separates from the graphite plate) to darkArtScale.
+//       Clear  monochrome ink (light on dark, smoked on light) whose opacity follows the lightness of the artwork's luminance.
+//       Tinted the lightness of the artwork's luminance mapped onto a two-tone ramp of the tint.
+//     Every map is increasing and keeps a minimum slope, so the internal contrast of an icon survives (A2 "internal contrast").
 //  3. RIM. A thin edge highlight on the plate, so a dark plate stays visible on a dark material; its width scales with the
 //     icon size (never below a minimum) and it fades on small icons.
 // The folder colour (FolderIcon) recolours the artwork only, after the mode transform: the plate and its rim stay.
@@ -32,7 +33,6 @@ layout(std140, binding = 0) uniform buf {
     float darkArtSaturation;
     float darkArtScale;
     float darkArtLift;
-    float darkArtLiftRange;
     float darkRim;
     float clearPlateAlphaDark;
     float clearPlateAlphaWallpaper;
@@ -41,6 +41,10 @@ layout(std140, binding = 0) uniform buf {
     float clearInkDark;
     float clearInkLight;
     float clearAlphaFloor;
+    float rimInner;
+    float darkRimLight;
+    float tintedRimMixDark;
+    float tintedRimShadeLight;
     float clearPlateAlphaAccent;
     float accentFill;         // 0: none; 1: over a bright accent fill (selected row), 2: over a dark one
     float clearRim;
@@ -60,8 +64,10 @@ layout(std140, binding = 0) uniform buf {
 
 layout(binding = 1) uniform sampler2D iconTexture;
 
-float luma(vec3 c) {
-    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+// Lightness of a colour: its relative luminance (linear light, gamma 2.2) encoded again. A pure red is 0.5 (its luminance is 0.21), not
+// the 0.21 of a weighted sum of coded values: two colours that differ in luminance keep their difference in every mode.
+float lightness(vec3 c) {
+    return pow(dot(pow(c, vec3(2.2)), vec3(0.2126, 0.7152, 0.0722)), 1.0 / 2.2);
 }
 
 void main() {
@@ -73,17 +79,18 @@ void main() {
     // The artwork: the icon texture scaled about the centre by sysGlyphScale. Straight (non-premultiplied) colour.
     vec2 uv = vec2(0.5) + (qt_TexCoord0 - vec2(0.5)) / sysGlyphScale;
     bool inBox = uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
-    vec4 px = inBox ? texture(iconTexture, uv) : vec4(0.0);
+    vec4 px = texture(iconTexture, clamp(uv, vec2(0.0), vec2(1.0))) * (inBox ? 1.0 : 0.0);
     float a = px.a;
     vec3 c = px.rgb / max(a, 0.0001);
-    float L = luma(c);
+    float L = lightness(c);
 
     // Per-mode transform of the artwork: rgb (straight) and the opacity it is drawn with.
     vec3 art;
     float artA = a;
     if (modeIndex < 1.5) {
-        vec3 d = mix(vec3(L), c, darkArtSaturation) * darkArtScale;
-        art = d + vec3(darkArtLift) * (1.0 - clamp(luma(d) / darkArtLiftRange, 0.0, 1.0));
+        // Affine from darkArtLift (black) to darkArtScale (white): monotonic, a minimum slope, black stays darker than light art.
+        vec3 d = mix(vec3(L), c, darkArtSaturation);
+        art = vec3(darkArtLift) + (darkArtScale - darkArtLift) * d;
     } else if (modeIndex < 2.5) {
         // Over an accent fill the ink is the opposite of the fill (light on a bright accent, dark on a dark one).
         bool lightInk = accent ? accentBright : isDark;
@@ -114,7 +121,7 @@ void main() {
     float aa = max(fwidth(sdf), 0.0005);
     float mask = 1.0 - smoothstep(-aa, aa, sdf);
     float inside = -sdf;
-    float band = smoothstep(0.0, aa, inside) * (1.0 - smoothstep(rimUv * 0.8, rimUv * 1.0, inside)) * rimGain;
+    float band = smoothstep(0.0, aa, inside) * (1.0 - smoothstep(rimUv * rimInner, rimUv * 1.0, inside)) * rimGain;
     vec3 plateRgb;
     float plateA;
     vec3 rimRgb;
@@ -123,7 +130,7 @@ void main() {
         plateRgb = vec3(darkPlateLuma);
         plateA = 1.0;
         rimRgb = vec3(1.0);
-        rimK = wall ? 1.0 : darkRim * (isDark ? 1.0 : 0.25);   // over the bare wallpaper the rim is fully opaque (it must read on any wallpaper)
+        rimK = wall ? 1.0 : darkRim * (isDark ? 1.0 : darkRimLight);   // over the bare wallpaper the rim is fully opaque (it must read on any wallpaper)
     } else if (modeIndex < 2.5) {
         // Light glass on a dark material; smoked glass on a light one, and over the bare wallpaper (any brightness).
         bool lightInk = accent ? accentBright : isDark;
@@ -135,7 +142,7 @@ void main() {
         vec3 t = tint.rgb;
         plateRgb = isDark ? t * tintedPlateScale : mix(t, vec3(1.0), tintedPlateMixLight);
         plateA = 1.0;
-        rimRgb = isDark ? mix(t, vec3(1.0), 0.9) : t * 0.6;
+        rimRgb = isDark ? mix(t, vec3(1.0), tintedRimMixDark) : t * tintedRimShadeLight;
         rimK = tintedRim;
     }
     vec4 plateP = vec4(plateRgb * plateA, plateA);
