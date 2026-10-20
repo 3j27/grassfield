@@ -604,13 +604,28 @@ function underlay(mode, modeTint, dark, wall, backdrop, tokens) {
 function plateThrough(samples, mode, modeTint, recolored, tint, backdrop, tokens, dark, wall) {
     const isDark = dark !== false;
     const modeOut = modeSamples(samples, mode, modeTint, isDark, tokens, wall === true);
-    const under = underlay(mode, modeTint, isDark, wall === true, backdrop, tokens);
-    const own = plateSummary(modeOut, under);
-    if (own === null)
-        return null;
-    const out = recolored ? plateSummary(effectSamples(modeOut, effect(tint, tokens)), under) : own;
-    if (out === null)
-        return null;
+    const colourOut = recolored ? effectSamples(modeOut, effect(tint, tokens)) : modeOut;
+    // Over the bare wallpaper a translucent Clear folder shows the wallpaper through its ink, whatever its brightness: the plate under
+    // the symbol is the worst case of a dark and of a light wallpaper (the darkest and the lightest of the two).
+    const backs = wall === true && Modes.normalizeMode(mode) === "clear" ? [rgbOf(tokens.folderIconPlateBackdropDark), rgbOf(tokens.folderIconPlateBackdropLight)] : [backdrop];
+    let own = null, out = null;
+    for (const bd of backs) {
+        const under = underlay(mode, modeTint, isDark, wall === true, bd, tokens);
+        const o = plateSummary(modeOut, under);
+        const c = recolored ? plateSummary(colourOut, under) : o;
+        if (o === null || c === null)
+            return null;
+        if (own === null) {
+            own = o;
+            out = c;
+        } else {
+            // dark: the darker of the two, light: the lighter of the two
+            if (relativeLuminance(c.dark) < relativeLuminance(out.dark))
+                out.dark = c.dark;
+            if (relativeLuminance(c.light) > relativeLuminance(out.light))
+                out.light = c.light;
+        }
+    }
     return {dark: out.dark, light: out.light, hue: out.hue, ref: relativeLuminance(own.mean)};
 }
 
