@@ -115,7 +115,7 @@ end_lock() { :; }
 trial() {
   local trig=$1 hy=$2 style=$3 rel=$4 label=$5 path="" k tail
   if [[ $style == wiggle ]]; then
-    for k in 1 2 3 4 5 6 7 8 9 10; do path="$path drag $((FX + 25)) $hy drag $((FX - 25)) $hy"; done
+    for k in 1 2 3 4 5 6 7 8 9 10; do path="$path drag $((FX + 25)) $hy sleep 100 drag $((FX - 25)) $hy sleep 100"; done
   else
     path="sleep 3000"
   fi
@@ -209,7 +209,7 @@ case $mode in
     esac
     path=""
     if [[ $style == wiggle ]]; then
-      for k in 1 2 3 4 5 6 7 8 9 10; do path="$path drag $((FX + 25)) $hy drag $((FX - 25)) $hy"; done
+      for k in 1 2 3 4 5 6 7 8 9 10; do path="$path drag $((FX + 25)) $hy sleep 100 drag $((FX - 25)) $hy sleep 100"; done
     else
       path="sleep 3000"
     fi

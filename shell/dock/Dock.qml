@@ -220,6 +220,10 @@ Scope {
             root.interruptDrag();
         }
 
+        function onSurfaceClosed(name: string): void {
+            root.interruptDrag();
+        }
+
         // The session lock.
         function onLockedChanged(): void {
             root.interruptDrag();

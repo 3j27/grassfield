@@ -42,9 +42,9 @@ Singleton {
 
     // Something happened in the session that can take the pointer or the focus away from an interaction in progress (the Dock's
     // drag): a window opened or closed, another window, workspace or monitor became active, a monitor came or went, a layer
-    // opened (any client, shell banners included). Over-reporting is intended; `event` is the Hyprland event name.
+    // opened or closed (a surface unmapping hands the pointer back, whatever its client, shell banners included). Over-reporting is intended; `event` is the Hyprland event name.
     signal interrupted(string event)
-    readonly property var interruptingEvents: ["openwindow", "closewindow", "movewindowv2", "activewindowv2", "workspacev2", "createworkspacev2", "destroyworkspacev2", "moveworkspacev2", "activespecialv2", "focusedmonv2", "monitoraddedv2", "monitorremovedv2", "openlayer", "fullscreen"]
+    readonly property var interruptingEvents: ["openwindow", "closewindow", "movewindowv2", "activewindowv2", "workspacev2", "createworkspacev2", "destroyworkspacev2", "moveworkspacev2", "activespecialv2", "focusedmonv2", "monitoraddedv2", "monitorremovedv2", "openlayer", "closelayer", "fullscreen"]
 
     // Windows currently in the hidden-app workspace, as toplevel handles (see hiddenWindows).
     function isHidden(toplevel: var): bool {
