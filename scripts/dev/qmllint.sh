@@ -18,6 +18,15 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 ln -s "$root/shell" "$tmp/qs"
 
-/usr/lib/qt6/bin/qmllint -I ui -I "$root/.dev/build/qml" -I "$tmp" -I /usr/lib/qt6/qml --max-warnings 0 "${files[@]}"
+# Once grassfield-desktop is installed, /usr/lib/qt6/qml/Grassfield holds the PACKAGED Grassfield.Ui and Grassfield.I18n,
+# and qmllint's default import path would resolve them instead of this tree's (new tokens reported as missing). Lint
+# without the default paths (--bare) against Qt's own modules only: a copy of the system QML root without Grassfield.
+sysqml="$tmp/sysqml"
+mkdir "$sysqml"
+for entry in /usr/lib/qt6/qml/*; do
+  [[ ${entry##*/} == Grassfield ]] || ln -s "$entry" "$sysqml/"
+done
+
+/usr/lib/qt6/bin/qmllint --bare -I ui -I "$root/.dev/build/qml" -I "$tmp" -I "$sysqml" --max-warnings 0 "${files[@]}"
 echo "qmllint: ${#files[@]} files, 0 warnings"
 python3 -I "$root/scripts/dev/check-textformat.py"
