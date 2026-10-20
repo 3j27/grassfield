@@ -67,6 +67,22 @@ systemctl --user cat omarchy-sleep-lock.service | tail -4                     # 
 The build leaves `packaging/arch/src`, `packaging/arch/pkg` and `*.pkg.tar.zst` (git-ignored) and writes
 `compositor/build/` in the checkout.
 
+**Icon theme (ADR-0017), from package release 0.4.0-4.** The same `makepkg -si` now builds a third package,
+`grassfield-whitesur-icons` (WhiteSur, GPL-3.0, third party). It downloads one pinned upstream commit
+(github.com, `73d8040…`) and refuses to run its `install.sh` unless that file has the reviewed SHA-256. Accept the
+three packages in pacman's prompt (it provides `whitesur-icon-theme` and conflicts with the AUR packages of that name;
+remove those first if you installed one). Then **log out and log in again**: the icon variables are read at login.
+Nothing is written to `~/.config` or to your dconf database. Check afterwards (read-only):
+
+```bash
+pacman -Q grassfield-whitesur-icons
+cat /usr/share/uwsm/env-grassfield                                  # QT_QPA_SYSTEM_ICON_THEME + DCONF_PROFILE
+systemctl --user show-environment | grep -E 'QT_QPA_SYSTEM_ICON_THEME|DCONF_PROFILE'   # in Grassfield only
+gsettings get org.gnome.desktop.interface icon-theme                # Grassfield: 'grassfield-icons'; Omarchy: unchanged
+```
+Back in the Omarchy session the last command must print your usual theme and `dconf dump /org/gnome/desktop/interface/`
+must be unchanged. In the Grassfield session, changing the icon theme with `gsettings set` fails on purpose (locked key).
+
 ## 4. Log out, enter Grassfield, come back
 
 **Option A (TTY).**
