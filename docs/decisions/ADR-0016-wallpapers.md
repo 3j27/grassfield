@@ -593,6 +593,39 @@ section and attribution (1-1.5 days), O4 reviewer (network and untrusted input) 
 | W9 (optional) | material tint | token calculation; owner screenshots |
 | O1-O4 (step 2) | fetch, scheduler, cache, Settings, attribution | reviewer (network); legal entries; one owner L2 fetch |
 
+## Slice W0 measurements (2026-10-20, nested, Intel UHD 630, 1920x1080, machine load average 5-10 from other agents)
+Method: a throw-away QML spike (not committed) loaded into the nested shell through a temporary IPC hook; frame times from
+`FrameAnimation.frameTime`; CPU and DRM engine time of the shell and of the nested Hyprland from `/proc/<pid>/stat` and
+`/proc/<pid>/fdinfo` (`drm-engine-render`, `drm-engine-video`), every 2 s. Test media generated under `.dev/wallpapers`
+(ffmpeg testsrc2 and mandelbrot, ImageMagick plasma). The nested stack renders through the owner's compositor, so absolute
+numbers are pessimistic and noisy; gates P3, W-V and P1 stay L2 (owner run).
+
+| Question | Result |
+|---|---|
+| Async decode of a 3840x2160 JPEG into a 1920x1080 `sourceSize` (Image `asynchronous`, off the GUI thread) | 89-342 ms to `Ready` (median ~200 ms), 18 samples |
+| Frames during a 1 s crossfade, texture upload on the first fade frame | 60 frames, 70-80 % under 17.7 ms, 12-18 frames over 33 ms, max 140-450 ms |
+| Same, texture upload forced one frame early (opacity 0.004 for 50 ms) | 60 frames, 63-73 % under 17.7 ms, 16-22 frames over 33 ms, max 100-135 ms: no measurable gain |
+| Same stack, static wallpaper, no animation (baseline) | 180 frames in 3 s, 98.9 % under 17.7 ms, max 23 ms |
+| Cost of a crossfade | shell 50-90 % of one core, nested Hyprland 17-30 % CPU and 28-45 % of the render engine while it runs; zero when idle |
+| H.264 1080p30 in the shell (QtMultimedia FFmpeg backend) | hardware decode through VA-API confirmed: video engine 38-40 % busy, QFFmpeg decode thread ~1 % CPU. The shell still used 70-100 % of one core: render thread 38 %, Wayland event thread 26-32 %, main 9 % (presentation through the nested stack, not decode). Not representative of a real session: W-V stays L2 |
+| HEVC 1080p, VP9 1080p | hardware decode too (video engine 31-40 % and 24 %), same CPU profile |
+| AV1 1080p | software decode: 130-155 % of one core, video engine 0 %, and the decoder kept 90-150 % busy for 10+ s after `pause()` |
+| H.264 4K30 | saturates the video engine (86-116 %), the player drops frames, RSS +120 MB (600 MB): a 4K source must be transcoded down to the output size |
+| Paused video | shell 1-2 %, Hyprland 0 % within ~4 s (H.264/VP9/HEVC); frame stays on screen |
+| Playback rate 0.25 | decode drops to 9 % of the video engine; the shell CPU stayed high while frames were presented |
+| Video behind the Dock and menu bar | Hyprland render 27-53 % with the video on the Background layer, 30-43 % with the same video on the Overlay layer: the Dock re-blur is not separable from per-frame compositing cost in this stack |
+| Menu-bar frosted band over a playing video | Hyprland render 25-39 % with the band, 28-53 % without: no measurable cost (24 px strip); screenshot `.dev/shots/w0-band.png` shows the band over the video |
+| Video on the Background layer above the shell wallpaper | a later-mapped Background layer surface draws above the earlier one; ordering after a restart not verified |
+| `grabToImage` of a `VideoOutput` | not measured (poster frames come from the helper's ffmpeg step, option not needed) |
+
+Conclusions: (1) V1b is confirmed: 4K and AV1 sources are unplayable on this GPU, H.264 at output size is hardware decoded.
+(2) The early texture upload does not pay off here; the crossfade cost is the compositor and the full-screen blend, so keep
+the fade short and make it skippable (Reduce Motion, reduced profile). The preload of the next picture still hides the decode.
+(3) Pause is effective for H.264; for software codecs it is not (another reason to transcode).
+(4) One shell crash happened during a later HEVC run (shell gone, no log kept: the restart overwrote it); not reproduced,
+cause unknown, and the video work (W7) must test the crash marker. No i915 fence timeout was visible to this agent (dmesg
+is not readable from the sandbox).
+
 ## Evidence
 Design only. This session read the files cited above with `grep`, `sed -n`, `ls` and a Python one-liner over the schema.
 No nested session, no measurement, no network. Every cost figure above is an ASSUMPTION until slice W0 or an owner L2
