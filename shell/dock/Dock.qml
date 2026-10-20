@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -8,6 +9,7 @@ import qs.notifications
 import qs.platform
 import qs.services
 import "DockModel.js" as DockModel
+import "Launch.js" as Launch
 import "../desktop/IconsLogic.js" as Icons
 import "Magnify.js" as Magnify
 
@@ -155,10 +157,12 @@ Scope {
                 Apps.openDetached(["gio", "open", Quickshell.env("HOME")]);
             return;
         }
+        // A second click while the tile bounces does nothing (no double launch).
+        const click = Launch.click(launching, item.key, Date.now(), Tokens.dockLaunchTimeout);
+        if (!click.start)
+            return;
         Apps.launch(item.entry);
-        const next = Object.assign({}, launching);
-        next[item.key] = Date.now();
-        launching = next;
+        launching = click.launching;
         launchTimer.restart();
         if (!item.pinned && Settings.dockShowRecents && Apps.isListed(item.entry))
             writeRecents(DockModel.pushRecent(Settings.dockRecent, item.key, Tokens.dockRecentMax));
@@ -201,13 +205,11 @@ Scope {
             root.launchItem(item);
             return;
         }
-        // Minimized windows take part only when the app has nothing else (then the click restores one).
-        const visible = item.windows.filter(t => !Compositor.isMinimized(t));
-        const pool = visible.length > 0 ? visible : item.windows;
-        const focused = Compositor.focusedToplevel;
-        const focusedHere = focused !== null && pool.indexOf(focused) >= 0;
-        // Already focused: cycle through this app's windows; otherwise raise the most recent one.
-        Compositor.activate(focusedHere ? Compositor.nextAfter(pool, focused) : Compositor.mostRecent(pool));
+        // macOS: every window of the app comes forward, the most recent one ends focused; with everything minimized, the most
+        // recent one is restored (Launch.activationPlan). A click on the focused app does not cycle its windows.
+        const plan = Launch.activationPlan(item.windows.map(t => Compositor.windowInfo(t)));
+        for (const top of plan)
+            Compositor.activate(top);
     }
 
     Component.onCompleted: rebuild()
@@ -821,6 +823,9 @@ Scope {
                                 readonly property string label: isTrash ? qsTr("Trash") : isAppsTile ? qsTr("Apps") : (isApp || isMinimized ? modelData.name : "")
                                 readonly property real iconPx: win.iconSize * tileScale
                                 readonly property bool dragging: win.dragFrom === index
+                                // The button is held on an app tile: the icon darkens slightly (macOS).
+                                readonly property bool pressedDown: isApp && leftTap.pressed && !dragging
+                                property bool tipSuppressed: false
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
@@ -938,6 +943,12 @@ Scope {
                                     anchors.bottomMargin: win.indicatorArea
                                     source: tile.isApp ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
 
+                                    // Held button: darker by Tokens.dockPressDim (an offscreen layer only while pressed).
+                                    layer.enabled: tile.pressedDown
+                                    layer.effect: MultiEffect {
+                                        brightness: -Tokens.dockPressDim
+                                    }
+
                                     // Launch bounce: hops until the app has a window (or the launch timeout).
                                     property real lift: 0
                                     transform: Translate {
@@ -958,7 +969,7 @@ Scope {
                                         NumberAnimation {
                                             target: appIcon
                                             property: "lift"
-                                            to: Tokens.dockBounceHeight
+                                            to: tile.iconPx * Tokens.dockBounceHeightScale
                                             duration: Tokens.dockBounceDuration / 2
                                             easing.type: Easing.OutQuad
                                         }
@@ -1128,13 +1139,15 @@ Scope {
                                     tail: true
                                     text: tile.dragging ? qsTr("Remove") : tile.label
                                     delay: 0
-                                    shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tileHover.hovered || (tile.activeFocus && root.keyboardMode)) && !Popups.active && win.dragFrom < 0)
+                                    shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tileHover.hovered || (tile.activeFocus && root.keyboardMode)) && !tile.tipSuppressed && !Popups.active && win.dragFrom < 0)
                                     x: (tile.width - width) / 2
                                     y: tile.height - win.indicatorArea - tile.iconPx - Tokens.dockTooltipGap - height
                                 }
 
                                 HoverHandler {
                                     id: tileHover
+                                    onHoveredChanged: if (!hovered)
+                                        tile.tipSuppressed = false
                                     enabled: !tile.isSeparator
                                     cursorShape: Qt.ArrowCursor
                                 }
@@ -1267,8 +1280,12 @@ Scope {
                                 }
 
                                 TapHandler {
+                                    id: leftTap
                                     enabled: !tile.isSeparator
                                     acceptedButtons: Qt.LeftButton
+                                    // macOS: the label goes away on the click and stays away until the pointer leaves the tile.
+                                    onPressedChanged: if (pressed)
+                                        tile.tipSuppressed = true
                                     onTapped: root.activateItem(tile.modelData)
                                 }
 
