@@ -3,6 +3,7 @@
 #include "previewlogic.h"
 
 #include <QCoreApplication>
+#include <QMutexLocker>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -38,6 +39,19 @@ QSize displaySize(const QImageReader &reader)
     return size;
 }
 
+QVariantList filesFor(const QStringList &paths)
+{
+    QVariantList files;
+    for (const QString &p : paths) {
+        const QFileInfo info(p);
+        files.append(QVariantMap{{QStringLiteral("path"), p},
+                                 {QStringLiteral("name"), info.fileName()},
+                                 {QStringLiteral("url"), QUrl::fromLocalFile(p)},
+                                 {QStringLiteral("kind"), preview::kindName(preview::classify(p))}});
+    }
+    return files;
+}
+
 } // namespace
 
 PreviewApp::PreviewApp(const QStringList &paths, const QStringList &errors, bool glance, int startIndex, bool browsing, QObject *parent)
@@ -48,13 +62,8 @@ PreviewApp::PreviewApp(const QStringList &paths, const QStringList &errors, bool
     , m_browsing(browsing)
     , m_startIndex(qBound(0, startIndex, qMax(0, paths.size() - 1)))
 {
-    for (const QString &p : paths) {
-        const QFileInfo info(p);
-        m_files.append(QVariantMap{{QStringLiteral("path"), p},
-                                   {QStringLiteral("name"), info.fileName()},
-                                   {QStringLiteral("url"), QUrl::fromLocalFile(p)},
-                                   {QStringLiteral("kind"), preview::kindName(preview::classify(p))}});
-    }
+    m_files = filesFor(paths);
+    m_firstPath = paths.value(m_startIndex);
     // Appearance follows grassfield.json (read only), like every Grassfield surface.
     const QString file = configFile();
     const QString dir = QFileInfo(file).absolutePath();
@@ -71,6 +80,62 @@ PreviewApp::PreviewApp(const QStringList &paths, const QStringList &errors, bool
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, reread);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, reread);
     readAppearance();
+}
+
+PreviewApp::~PreviewApp()
+{
+    cancelBrowse();
+}
+
+QString PreviewApp::pathAt(int index) const
+{
+    const QMutexLocker lock(&m_lock);
+    return index >= 0 && index < m_paths.size() ? m_paths.at(index) : QString();
+}
+
+void PreviewApp::cancelBrowse()
+{
+    m_cancel = true;
+    if (m_worker) {
+        // The listing checks the flag per directory entry: this returns within moments.
+        m_worker->wait();
+        delete m_worker;
+        m_worker = nullptr;
+    }
+}
+
+void PreviewApp::startBrowse(preview::BrowseKinds kinds)
+{
+    if (m_worker || m_paths.size() != 1)
+        return;
+    const QString path = m_paths.constFirst();
+    m_listing = true;
+    emit listingChanged();
+    // Decided before the window closes: no result is applied after the application started to quit.
+    connect(qApp, &QCoreApplication::aboutToQuit, this, &PreviewApp::cancelBrowse, Qt::DirectConnection);
+    m_worker = QThread::create([this, path, kinds] {
+        const preview::Browse browse = preview::browseFolder(path, kinds, preview::filesSortSpec(), &m_cancel);
+        // The per-file kind (content sniffing) is also off the GUI thread.
+        const QVariantList files = m_cancel ? QVariantList() : filesFor(browse.paths);
+        if (!m_cancel)
+            QMetaObject::invokeMethod(this, [this, browse, files] { applyBrowse(browse, files); }, Qt::QueuedConnection);
+    });
+    m_worker->start();
+}
+
+void PreviewApp::applyBrowse(const preview::Browse &browse, const QVariantList &files)
+{
+    m_listing = false;
+    if (browse.paths.size() > 1) {
+        {
+            const QMutexLocker lock(&m_lock);
+            m_paths = browse.paths;
+        }
+        m_files = files;
+        m_startIndex = browse.index;
+        emit filesChanged();
+    }
+    emit listingChanged();
 }
 
 void PreviewApp::readAppearance()
@@ -92,12 +157,21 @@ void PreviewApp::readAppearance()
 
 QVariantMap PreviewApp::inspect(int index) const
 {
+    return inspectPath(pathAt(index));
+}
+
+QVariantMap PreviewApp::inspectFirst() const
+{
+    return inspectPath(m_firstPath);
+}
+
+QVariantMap PreviewApp::inspectPath(const QString &path) const
+{
     QVariantMap out{{QStringLiteral("ok"), false}};
-    if (index < 0 || index >= m_paths.size()) {
+    if (path.isEmpty()) {
         out[QStringLiteral("error")] = tr("There is no file to show.");
         return out;
     }
-    const QString path = m_paths.at(index);
     const QFileInfo info(path);
     const preview::Kind kind = preview::classify(path);
     out[QStringLiteral("name")] = info.fileName();
@@ -191,9 +265,13 @@ QVariantMap PreviewApp::inspect(int index) const
 
 void PreviewApp::openInPreview(int current) const
 {
-    if (m_paths.isEmpty())
+    const QStringList paths = [this] {
+        const QMutexLocker lock(&m_lock);
+        return m_paths;
+    }();
+    if (paths.isEmpty())
         return;
-    current = qBound(0, current, m_paths.size() - 1);
+    current = qBound(0, current, paths.size() - 1);
     // GRASSFIELD_PREVIEW_CMD (dev) may carry a --glance flag; the full viewer never gets it.
     QStringList prefix = qEnvironmentVariable("GRASSFIELD_PREVIEW_CMD").split(QLatin1Char(' '), Qt::SkipEmptyParts);
     if (prefix.isEmpty())
@@ -204,9 +282,9 @@ void PreviewApp::openInPreview(int current) const
     QStringList args = prefix;
     QStringList files;
     if (m_browsing) {
-        files << m_paths.at(current);
+        files << paths.at(current);
     } else {
-        files = m_paths;
+        files = paths;
         if (current > 0)
             args << QStringLiteral("--start") << QString::number(current);
     }
@@ -227,9 +305,12 @@ QImage PreviewImageProvider::requestImage(const QString &id, QSize *size, const 
     bool okIndex = false;
     const int frame = thumbnail ? 0 : id.left(slash).toInt(&okFrame);
     const int index = id.mid(slash + 1).toInt(&okIndex);
-    if (slash < 0 || (!thumbnail && !okFrame) || !okIndex || frame < 0 || index < 0 || index >= m_app->paths().size())
+    if (slash < 0 || (!thumbnail && !okFrame) || !okIndex || frame < 0 || index < 0)
         return {};
-    QImageReader reader(m_app->paths().at(index));
+    const QString path = m_app->pathAt(index);
+    if (path.isEmpty())
+        return {};
+    QImageReader reader(path);
     reader.setAutoTransform(true);
     if (!reader.canRead() || (frame > 0 && !reader.jumpToImage(frame)))
         return {};
