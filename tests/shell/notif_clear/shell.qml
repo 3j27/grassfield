@@ -3,13 +3,14 @@ import QtQuick
 import Quickshell
 import Grassfield.Ui
 import qs.notifications
+import "notifications/CenterLogic.js" as CenterLogic
 
 // Clear model of the Notifications column on the REAL Notifications singleton (scripts/dev/test.sh: `qs -p tests/shell/notif_clear`,
 // a dev session without the D-Bus server, state under GRASSFIELD_TEST_TMP; see the dev-session marker file).
 // - a clear takes effect in the model at once (history, Center rows), with no animation to wait for;
 // - a group clear acts on a snapshot of keys: an entry of the same app that arrives afterwards stays;
 // - clearing a group twice works (no state is left behind);
-// - the focus after a clear is read from the updated rows: never another app's card while the app still has one;
+// - the focus after a clear is chosen from the updated rows (CenterLogic.focusAfterGone): never another app's card while the app still has one;
 // - the model stays free of duplicated surfaces keys (rows are unique by key).
 // Prints "notif-clear: PASS" or the failures.
 ShellRoot {
@@ -63,12 +64,28 @@ ShellRoot {
         return -1;
     }
 
-    // What the delegate does for Delete on the card `key`: the slot and app first, the clear, then the next focus.
+    function shownRows(): var {
+        const out = [];
+        for (let i = 0; i < Notifications.centerModel.count; i++) {
+            const r = Notifications.centerModel.get(i);
+            out.push({key: r.key, appName: r.appName});
+        }
+        return out;
+    }
+
+    // What the focus resolver does for Delete on the card `key`: the card's group and rank and the settled rows first, the
+    // clear, then the choice from the rows now (CenterLogic.focusAfterGone).
+    function focusAfter(key: string, change: var): string {
+        const before = shownRows();
+        const at = before.findIndex(r => r.key === key);
+        const app = before[at].appName;
+        const rank = before.slice(0, at).filter(r => r.appName === app).length;
+        change();
+        return CenterLogic.focusAfterGone({key: key, app: app, rank: rank}, before.map(r => r.key), shownRows());
+    }
+
     function deleteCard(key: string): string {
-        const at = slotOf(key);
-        const app = Notifications.centerModel.get(at).appName;
-        Notifications.clear(key);
-        return Notifications.focusKeyAfter(at, app);
+        return focusAfter(key, () => Notifications.clear(key));
     }
 
     function appOf(key: string): string {
@@ -134,12 +151,10 @@ ShellRoot {
         check("expanded: first card, the next one of the group", appOf(nextFirst) === "mail" && slotOf(nextFirst) === 0);
 
         // 5. Group clear: the focus goes to the next group, else the previous.
-        const at = 0;
-        Notifications.clearKeys(Notifications.keysOf("mail"));
-        check("group clear: next group's card", Notifications.focusKeyAfter(at, "mail") === Notifications.centerModel.get(0).key
-            && appOf(Notifications.focusKeyAfter(at, "mail")) === "cal");
-        Notifications.clear(Notifications.centerModel.get(0).key);
-        check("last card of all: nothing to focus", Notifications.focusKeyAfter(0, "cal") === "" && Notifications.count === 0);
+        const head = Notifications.centerModel.get(0).key;
+        const afterGroup = focusAfter(head, () => Notifications.clearKeys(Notifications.keysOf("mail")));
+        check("group clear: next group's card", afterGroup === Notifications.centerModel.get(0).key && appOf(afterGroup) === "cal");
+        check("last card of all: nothing to focus", deleteCard(Notifications.centerModel.get(0).key) === "" && Notifications.count === 0);
 
         // 6. Many entries and groups: unique row keys, a group clear is one model change.
         for (let g = 0; g < 10; g++) {

@@ -23,6 +23,12 @@ Item {
     Accessible.onPressAction: root.clicked()
 
     Keys.onPressed: event => {
+        // A hidden or disabled button never acts, whatever still holds the focus; the key is swallowed (it would otherwise bubble
+        // up to a parent that acts on it).
+        if (!root.visible || !root.enabled) {
+            event.accepted = true;
+            return;
+        }
         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             root.clicked();
             event.accepted = true;
