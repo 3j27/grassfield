@@ -551,7 +551,7 @@ function modeSamples(samples, mode, modeTint, dark, tokens) {
         let alpha = samples[i + 3];
         if (name === "dark") {
             const d = c.map(v => (lc + (v - lc) * tokens.iconModeDarkArtSaturation) * tokens.iconModeDarkArtScale);
-            const lift = tokens.iconModeDarkArtLift * (1 - smooth(0, tokens.iconModeDarkArtLiftRange, luma(d[0], d[1], d[2])));
+            const lift = tokens.iconModeDarkArtLift * (1 - Math.max(0, Math.min(1, luma(d[0], d[1], d[2]) / tokens.iconModeDarkArtLiftRange)));
             rgb = d.map(v => v + lift);
         } else if (name === "clear") {
             const ink = dark ? tokens.iconModeClearInkDark : tokens.iconModeClearInkLight;

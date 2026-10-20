@@ -24,7 +24,7 @@ rm -rf "$SB"
 mkdir -p "$SB"/{Documents,Pictures,Music,Projects,Travel,Archive,Plain}
 printf 'hello\n' > "$SB/readme.txt"
 mkdir -p "$VS_DEV/config"
-printf '{"version":1,"icons":{"folderColor":"theme"}}\n' > "$VS_DEV/config/grassfield.json"
+printf '{"version":1,"lock":{"idleMinutes":0},"icons":{"folderColor":"theme"}}\n' > "$VS_DEV/config/grassfield.json"
 vs_sleep 1.5
 vs_spawn "$VS_DEV/build/grassfield-files" "$SB"
 vs_wait_clients 1

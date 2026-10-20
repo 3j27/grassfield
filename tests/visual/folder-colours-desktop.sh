@@ -18,7 +18,7 @@ vs_reset
 mkdir -p "$DESK/Work" "$DESK/Music" "$DESK/Projects"
 for d in Work Music Projects; do setfattr -x user.grassfield.folder "$DESK/$d" 2>/dev/null || true; done
 rm -f "$VS_DEV/config/folder-styles.json"
-printf '{"version":1,"icons":{"folderColor":"theme"}}\n' > "$VS_DEV/config/grassfield.json"
+printf '{"version":1,"lock":{"idleMinutes":0},"icons":{"folderColor":"theme"}}\n' > "$VS_DEV/config/grassfield.json"
 vs_sleep 2
 shot fc-desktop-live-before
 

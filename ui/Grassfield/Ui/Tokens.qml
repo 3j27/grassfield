@@ -1039,11 +1039,11 @@ QtObject {
     // ADR-0014 Dark: the artwork keeps this share of its colour (1 = unchanged, 0 = grey): a modest desaturation, colour identity kept
     readonly property real iconModeDarkArtSaturation: 0.85
     // ADR-0014 Dark: brightness factor of the artwork (a modest darkening so it sits on the graphite plate)
-    readonly property real iconModeDarkArtScale: 0.85
+    readonly property real iconModeDarkArtScale: 0.92
     // ADR-0014 Dark: luma a black part of the artwork is lifted to so that it separates from the graphite plate (macOS 26 dark icons never go black on black)
     readonly property real iconModeDarkArtLift: 0.4
-    // ADR-0014 Dark: luma up to which the lift fades out (wide enough that the transform stays monotonic: no dark part ends up brighter than a lighter one)
-    readonly property real iconModeDarkArtLiftRange: 0.9
+    // ADR-0014 Dark: luma up to which the lift fades out, linearly (never below darkArtLift, so the transform stays monotonic: no dark part ends up brighter than a lighter one); only the dark end is touched, mid tones keep their contrast
+    readonly property real iconModeDarkArtLiftRange: 0.5
     // ADR-0014 Dark: opacity of the white edge highlight in the dark appearance; chosen with the A2 test (docs/specs/ui.md) so the plate outline stays visible on the dark material
     readonly property real iconModeDarkRim: 0.8
     // ADR-0014 Clear: opacity of the white glass plate in the dark appearance (the material shows through)
@@ -1056,6 +1056,8 @@ QtObject {
     readonly property real iconModeClearInkLight: 0.14
     // ADR-0014 Clear: opacity of the ink where the artwork is darkest (light ink) or lightest (smoked ink); the opacity follows the artwork's luminance up to full
     readonly property real iconModeClearAlphaFloor: 0.3
+    // ADR-0014 Clear over the accent fill of a selected row (Search, Force Quit): opacity of the plate, dark on a bright accent and light on a dark one, so that the plate and the ink keep 4.5:1 against the accent (A2 accent row)
+    readonly property real iconModeClearPlateAlphaAccent: 0.9
     // ADR-0014 Clear: opacity of the glyph-coloured edge highlight of the glass plate
     readonly property real iconModeClearRim: 0.9
     // ADR-0014 Tinted, dark appearance: the plate is the tint colour at this fraction of its brightness (a dark tinted plate, macOS 26)
@@ -1063,7 +1065,7 @@ QtObject {
     // ADR-0014 Tinted, light appearance: the plate is the tint colour mixed this far to white (a light tinted plate)
     readonly property real iconModeTintedPlateMixLight: 0.88
     // ADR-0014 Tinted, dark appearance: the artwork's darkest tone is the tint at this fraction of its brightness (lighter than the plate, which is the tint at tintedPlateScale)
-    readonly property real iconModeTintedRampLowDark: 0.55
+    readonly property real iconModeTintedRampLowDark: 0.7
     // ADR-0014 Tinted, dark appearance: the artwork's lightest tone is the tint mixed this far to white
     readonly property real iconModeTintedRampHighDark: 0.8
     // ADR-0014 Tinted, light appearance: the artwork's darkest tone is the tint at this fraction of its brightness (dark on the light plate)
@@ -1072,7 +1074,7 @@ QtObject {
     readonly property real iconModeTintedRampHighLight: 0.0
     // ADR-0014 Tinted: opacity of the glyph-coloured edge highlight of the plate
     readonly property real iconModeTintedRim: 1.0
-    // ADR-0014 Clear: from this material transparency (Control Center slider, 0..1) the wallpaper shows through the window material so much that Clear icons are drawn as over the bare wallpaper (smoked plate, opaque rim); measured with A2 at 1.0 (193 cells below the floor before, 8 after)
+    // ADR-0014 Clear: from this material transparency (Control Center slider, 0..1) the wallpaper shows through the window material so much that Clear icons are drawn as over the bare wallpaper (smoked plate, opaque rim); A2 at 1.0 holds a floor of 2.0 in every mode, tint and size (docs/specs/ui.md)
     readonly property real iconModeWallpaperLikeTransparency: 0.8
     // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)
     readonly property int iconModePreviewSize: 56

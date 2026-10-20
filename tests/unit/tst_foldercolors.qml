@@ -372,8 +372,7 @@ TestCase {
         const lc = 0.2126 * rawRgb[0] + 0.7152 * rawRgb[1] + 0.0722 * rawRgb[2];
         const dd = rawRgb.map(v => (lc + (v - lc) * Tokens.iconModeDarkArtSaturation) * Tokens.iconModeDarkArtScale);
         const ld = 0.2126 * dd[0] + 0.7152 * dd[1] + 0.0722 * dd[2];
-        const x = Math.min(1, ld / Tokens.iconModeDarkArtLiftRange);
-        const darkWant = dd.map(v => v + Tokens.iconModeDarkArtLift * (1 - x * x * (3 - 2 * x)));
+        const darkWant = dd.map(v => v + Tokens.iconModeDarkArtLift * (1 - Math.min(1, ld / Tokens.iconModeDarkArtLiftRange)));
         const darkMode = FolderStyle.plateThrough(raw, "dark", dk, false, "", [0, 0, 0], Tokens, true).dark;
         verify(Math.abs(darkMode[0] - darkWant[0]) < 0.005 && Math.abs(darkMode[1] - darkWant[1]) < 0.005 && Math.abs(darkMode[2] - darkWant[2]) < 0.005, "dark mode " + FolderStyle.hexOf(darkMode));
         // The artwork keeps its hue: still a blue (b > g > r)

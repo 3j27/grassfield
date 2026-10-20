@@ -15,6 +15,8 @@ ShaderEffect {
     property bool darkAppearance: Appearance.dark
     // Drawn over the bare wallpaper (desktop icons): a look that holds on any wallpaper brightness.
     property bool wallpaper: false
+    // Drawn over the accent fill of a selected row: 0 no, 1 a bright accent, 2 a dark one (the plate and the ink are the opposite of it).
+    property real accentFill: 0
     // The folder colour step (FolderIcon): the artwork is recoloured in the shader, before the system plate is drawn,
     // so the plate and its rim keep their look. Not used when "recolor" is false.
     property bool recolor: false
@@ -38,7 +40,7 @@ ShaderEffect {
     readonly property real dark: root.darkAppearance ? 1 : 0
     // Over the bare wallpaper (desktop icons); for Clear also over a material that lets so much of it through (transparency at its
     // end) that the icon is over the wallpaper: the look that holds on any wallpaper brightness.
-    readonly property real overWallpaper: (root.wallpaper || (root.params.index === 2 && Appearance.effectiveTransparency >= Tokens.iconModeWallpaperLikeTransparency)) ? 1 : 0
+    readonly property real overWallpaper: (root.wallpaper || (root.params.index === 2 && root.accentFill < 0.5 && Appearance.effectiveTransparency >= Tokens.iconModeWallpaperLikeTransparency)) ? 1 : 0
     readonly property real clearPlateAlphaWallpaper: Tokens.iconModeClearPlateAlphaWallpaper
     readonly property real sysPlateInset: Tokens.iconModeSysPlateInset
     readonly property real sysPlateRadius: Tokens.iconModeSysPlateRadius
@@ -59,6 +61,7 @@ ShaderEffect {
     readonly property real clearInkDark: Tokens.iconModeClearInkDark
     readonly property real clearInkLight: Tokens.iconModeClearInkLight
     readonly property real clearAlphaFloor: Tokens.iconModeClearAlphaFloor
+    readonly property real clearPlateAlphaAccent: Tokens.iconModeClearPlateAlphaAccent
     readonly property real clearRim: Tokens.iconModeClearRim
     readonly property real tintedPlateScale: Tokens.iconModeTintedPlateScale
     readonly property real tintedPlateMixLight: Tokens.iconModeTintedPlateMixLight

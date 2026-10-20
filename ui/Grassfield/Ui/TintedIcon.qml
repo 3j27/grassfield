@@ -14,8 +14,15 @@ Item {
     // Overridable per use (previews); the settings value otherwise.
     property string mode: Appearance.iconMode
     property color tint: Appearance.iconTint
+    // Drawn over the accent fill of a selected row (Search, Force Quit): the plate and the ink are then the opposite of the fill
+    // (the row's text colour, `accentText`, says whether the accent is bright or dark), not those of the appearance.
+    property bool overAccent: false
     // Clear and Tinted draw differently on a light and a dark material.
     property bool darkAppearance: Appearance.dark
+    // The accent is bright when its text is dark (Appearance.colors.accentText).
+    readonly property bool accentBright: Qt.color(Appearance.colors.accentText).hslLightness < 0.5
+    // What the effect draws for: the appearance, or over a bright accent fill the dark plates of a dark material.
+    readonly property bool inkDark: root.overAccent ? root.accentBright : root.darkAppearance
     // Drawn over the bare wallpaper (desktop icons) rather than a window material.
     property bool overWallpaper: false
     // The folder colour (FolderIcon), applied by the effect to the artwork only; drawn by the owner's layer in default mode.
@@ -77,8 +84,9 @@ Item {
             source: image
             mode: root.mode
             tint: root.tint
-            darkAppearance: root.darkAppearance
+            darkAppearance: root.inkDark
             wallpaper: root.overWallpaper
+            accentFill: root.overAccent ? (root.accentBright ? 1 : 2) : 0
             recolor: root.recolor
             recolorTint: root.recolorTint
             nominalSize: root.size

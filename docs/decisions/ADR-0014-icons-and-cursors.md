@@ -37,20 +37,25 @@ A. **Grassfield SVG sources → hyprcursor theme (SVG) + XCursor fallback built 
 B. A fixed palette of prebuilt accent variants only.
 
 ## Decision (proposed)
-- **Icons: option 3, phased.** Phase 1 = option 1: `TintedIcon` with modes `default` (unchanged), `dark` (darker plate,
-  luminance compressed, contrast kept), `clear` (desaturated, lighter, translucent over the material), `tinted`
-  (a dark tinted plate with a tint-coloured glyph, a light tinted plate with a dark tint glyph in the light appearance; alpha kept). Implemented with a custom `qsb` fragment shader (`ui/Grassfield/Ui/shaders/icon.frag`): MultiEffect (colorization, saturation,
-  brightness, contrast) could not reach the macOS 26 look (a white plate only went from 248 to 210 in Dark; Tinted gave a
-  bright tint-coloured plate), so the shader separates plate and glyph per pixel (plate colour from probes inside the
-  icon, membership by colour distance) and maps each mode (algorithm and limits: docs/specs/ui.md, "Icon shader").
-  **System plate (owner decision 2026-10-19, macOS 26 model: nothing may vanish):** in every mode except `default`, an icon
-  whose own plate is not a rounded square filling its box (a logo, a mascot, a page, a round icon, a folder) is drawn smaller
-  (`iconMode.sysGlyphScale` 0.72) on a system plate, a squircle (`sysPlateInset` 0.04, `sysPlateRadius` 0.225) in graphite
-  (Dark), glass (Clear, smoked over the bare wallpaper and at material transparency 0.8 and above) or the tint (Tinted),
-  with an edge highlight; an icon with its own rounded-square plate keeps it, recoloured. The plate analysis (dominant
-  colour clusters of 16 probes, the corner and edge-midpoint test of the own plate) runs once per icon texture in a 2x1 pass
-  (`icon_analysis.frag`), not per pixel: Files with 1000 folders scrolls as smoothly in an effect mode as in default. The
-  folder colour (below) recolours the artwork only, not the system plate.
+- **Icons: option 3, phased.** Phase 1 = option 1: `TintedIcon` with modes `default` (unchanged), `dark`, `clear` and `tinted`,
+  implemented with a custom `qsb` fragment shader (`ui/Grassfield/Ui/shaders/icon.frag`): MultiEffect (colorization,
+  saturation, brightness, contrast) could not reach the macOS 26 look (a white plate only went from 248 to 210 in Dark; Tinted
+  gave a bright tint-coloured plate), so the shader draws a plate and recolours the artwork per mode (algorithm and limits:
+  docs/specs/ui.md, "Icon shader").
+  **System plate for every icon (owner decision 2026-10-20, replaces the plate-detecting design of 2026-10-19; macOS model:
+  an icon that is not made for a mode gets the system plate, none is analysed):** in `dark`, `clear` and `tinted` every
+  app or file icon is drawn scaled down (`iconMode.sysGlyphScale` 0.72) on a squircle plate (`sysPlateInset` 0.04,
+  `sysPlateRadius` 0.225) that is graphite in Dark, glass in Clear (light glass on a dark material, smoked glass on a light one,
+  over the bare wallpaper and at material transparency 0.8 and above) and tinted in Tinted, with a thin edge highlight that scales
+  with the icon size (at least 1.5 px, fading below 48 px). The artwork is recoloured by a fixed transform per mode that
+  depends on the pixel alone: Dark darkens and slightly desaturates it and lifts very dark parts so they separate from the
+  graphite (colour identity kept), Clear turns it into monochrome ink (light in the dark appearance, smoked in the light one)
+  whose opacity follows its luminance, Tinted maps its luminance onto a two-tone ramp of the tint. There is NO per-icon
+  analysis: no probes, no clustering, no plate or stroke detection, no analysis pass. This is one cheap fragment shader (a
+  few texture reads), so it compiles in milliseconds, costs the same on every icon and cannot misread an icon (the previous
+  design's halos, wedges and slow cold compile came from guessing). Accepted cost: an icon's own plate is no longer kept,
+  so a macOS-style icon shows its plate inside the system plate, as macOS shows non-conforming icons. The folder colour
+  (below) recolours the artwork only, not the system plate.
   Effects exist only when the mode is not `default` and only for icons that are shown: one effect item per visible icon
   (not one shared pass per surface: a container layer would redraw labels, highlights and indicators through the effect). Phase 2 (later, own review):
   a generated tinted theme for third-party apps, regenerated in the background.

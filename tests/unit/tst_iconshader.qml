@@ -10,7 +10,10 @@ import Grassfield.Ui
 //
 // Scenarios: (a) windows, appearance light/dark x wallpaper black/grey/white under the default material, icon sizes 16,
 // 24, 32 and 48; (b) the desktop, icons over the bare wallpaper (black, grey, white and the default wallpaper's sky and
-// hill colours), always styled for the wallpaper (darkAppearance) as DesktopIcon does, at 48.
+// hill colours), always styled for the wallpaper (darkAppearance) as DesktopIcon does, at 48; (c) the material at transparency 1.0 in
+// every mode (floor 2.0), at 16, 24 and 48; (d) Tinted with a bright yellow and a pink tint, over the material and at transparency 1.0;
+// (e) the accent fill of a selected row (Search, Force Quit); (f) the folder model against the rendered pixels, a black folder on
+// black, the missing-shader fallback.
 // Rules, per icon and mode in dark/clear/tinted:
 //   floor(d) = 2.9 (3:1 less a rounding margin) when the default rendering has d >= 3, else 0.9 * d (never more than
 //              10 percent worse than default).
@@ -19,11 +22,13 @@ import Grassfield.Ui
 //               and Tinted are monochrome (a glyph differing from its plate only by hue loses that difference), so their
 //               floor is min(2, 0.9 * default) instead of 3.
 //   E (outside) the best of outline-vs-background, plate-vs-background and glyph-vs-background >= floor(default's): the
-//               icon stays visible by its edge or by its glyph. In Clear and Tinted every icon without its own plate
-//               sits on a system plate, so this holds for every icon, with no exemption.
+//               icon stays visible by its edge or by its glyph. Every icon sits on a system plate, so this holds for every
+//               icon except the measured limits below.
+//   S (separation) artwork of nearly one luminance (a pale sky on a green hill) keeps 85 percent of the default's glyph-vs-plate contrast, or 1.5.
 // The plate is the median luminance of the ring 4 to 8 px (scaled with the size) inside the edge; the glyph is the 2nd or
 // 98th percentile luminance of the core, whichever is farther from the plate; the outline is the 90th percentile of the
-// contrast of the pixels of the 2 px edge band (a maximum would let a few pixels carry an invisible edge).
+// contrast of the pixels of the edge band (the plate's inset, its rim and one pixel of antialiasing: 3 to 4 px; a maximum would let a few
+// pixels carry an invisible edge).
 // Contrast is the WCAG ratio of relative luminances. It needs a GPU scene graph (ShaderEffect does not run on the
 // software renderer used by the offscreen platform): the test skips there; scripts/dev/test-icons.sh runs it in the
 // nested session.
@@ -69,6 +74,12 @@ TestCase {
     property color panelColor: "#202024"
     property bool darkPass: true
     property bool wallpaperPass: false
+    // The icons are drawn over the accent fill of a selected row (Search, Force Quit).
+    property bool accentPass: false
+    // The Tinted colour of the board.
+    property color tintColor: "#3E7BFA"
+    // The material at transparency 1.0: the wallpaper shows through, a floor of 2.0 holds (all modes).
+    property bool transparentPass: false
 
     Item {
         id: board
@@ -99,9 +110,10 @@ TestCase {
                     size: testCase.iconSize
                     source: testCase.fixtures[slot.fixture].url
                     mode: testCase.modes[slot.modeIndex]
-                    tint: "#3E7BFA"
+                    tint: testCase.tintColor
                     darkAppearance: testCase.darkPass
                     overWallpaper: testCase.wallpaperPass
+                    overAccent: testCase.accentPass
                 }
             }
         }
@@ -166,11 +178,16 @@ TestCase {
         const at = (x, y) => x < 0 || y < 0 || x >= n || y >= n ? false : mask[y * n + x];
         const u = n / 48;
         const d2 = Math.max(1, Math.round(2 * u));
+        // The outline band holds the plate's edge highlight: the system plate is inset from the box by iconMode.sysPlateInset, the rim has
+        // its width in logical pixels (at least rimMinWidth) and one more pixel is antialiasing (3 to 4 px). The 2 px band that
+        // separates the ring from the edge (d2) saw only the antialiased edge pixel of the plate and never the rim, whatever its contrast.
+        const rimPx = Math.max(Tokens.iconModeRimMinWidth, Tokens.iconModeRimWidth * Math.min(1, n / Tokens.iconModeRimFullSize));
+        const dr = Math.max(2, Math.round(Tokens.iconModeSysPlateInset * n + 1 + rimPx));
         const d4 = Math.max(2, Math.round(4 * u));
         const d8 = Math.max(3, Math.round(8 * u));
         const ring = [];
         const core = [];
-        const band = [];
+        const rimBand = [];
         for (let y = 0; y < n; y++) {
             for (let x = 0; x < n; x++) {
                 if (!mask[y * n + x])
@@ -178,9 +195,9 @@ TestCase {
                 const e2 = at(x - d2, y) && at(x + d2, y) && at(x, y - d2) && at(x, y + d2);
                 const e4 = at(x - d4, y) && at(x + d4, y) && at(x, y - d4) && at(x, y + d4);
                 const e8 = at(x - d8, y) && at(x + d8, y) && at(x, y - d8) && at(x, y + d8);
-                if (!e2)
-                    band.push(lum[y * n + x]);
-                else if (e4 && !e8)
+                if (!(at(x - dr, y) && at(x + dr, y) && at(x, y - dr) && at(x, y + dr)))
+                    rimBand.push(lum[y * n + x]);
+                if (e2 && e4 && !e8)
                     ring.push(lum[y * n + x]);
                 if (e8)
                     core.push(lum[y * n + x]);
@@ -197,7 +214,7 @@ TestCase {
         const glyph = ratio(lo, body) >= ratio(hi, body) ? lo : hi;
         // The outline: the 90th percentile of the contrast of the pixels of the edge band (one stroke pixel in two passes,
         // a few bright pixels on an otherwise invisible edge do not).
-        const bandRatios = band.map(l => ratio(l, lp)).sort((x, y) => x - y);
+        const bandRatios = rimBand.map(l => ratio(l, lp)).sort((x, y) => x - y);
         const outlineOverPanel = bandRatios.length > 0 ? quantile(bandRatios, 0.9) : 1;
         const plateOverPanel = ratio(body, lp);
         const glyphOverPanel = ratio(glyph, lp);
@@ -210,27 +227,26 @@ TestCase {
         };
     }
 
-    // Remaining limits, measured (worst value over every size, appearance and background, against the floor; docs/specs/ui.md
-    // "Icon shader"). They are logged, not failed. Clear and Tinted have none: every icon sits on a system plate in all three modes,
-    // Dark included, and the plate test is a hard ramp (a folder, a page or a mascot is not fuzzily half a plate). What is left is
-    // all in the dark appearance over a LIGHT wallpaper (the material is then mid grey) and is a limit of the measurement:
-    // the "plate" is the median of the ring 4 to 8 px inside the edge and the "outline" the 90th percentile of a band of
-    // 1 px at 16 to 24 px (the antialiased edge pixel of the system plate, whose inset is about 1 px there), so for an icon
-    // without a plate of its own the ring holds its artwork and the band is not the rim. The graphite plate (relative luminance
-    // 0.015 against 0.2 to 0.6 for that material) and the edge highlight are 5 to 8:1 against it by construction.
-    //   breeze text editor Dark, outside 1.84 at 16 px, 2.23 at 32 px (default 9.1; a white page with a thin grey frame).
-    //   kdenlive (thin bars) Dark outside 2.61-2.78 and Tinted outside 2.49-2.53 at 16-32 px (floor 2.9, default 2.9-4.5).
-    //   sky-mountain (a sky and a large green shape: two plate colours) Dark in the dark appearance, outside 1.4-2.4 at 24-32 px
-    //     (default 6.7-11.5): the pair keeps its contrast ratio, so its lighter colour is lifted to a mid grey that lies near the
-    //     material over a grey wallpaper; the rim fades with the size.
-    //   light-plate-lighter-glyph (a pale gear on a light grey plate; own fixture of the structure of a hardware monitor) Dark and
-    //     Tinted in the dark appearance at 16 px: outside 1.50-2.45 (default 9.4-15.9): the darkened or tinted plate is close to
-    //     the dark material and the only light is a rim that fades at that size; inside holds (1.77-1.83 against 1.52).
-    //   Nautilus (two-colour split plate, own plate kept and darkened) Dark: inside 2.72-3.04 at every size (default 5.6-6.6, floor
-    //     2.9): the two halves become two near-black greys and the glyph keeps its colour; outside 2.70 at 32 px.
+    // Remaining limits, measured (worst value over every size, appearance, tint and background, against the floor; docs/specs/ui.md
+    // "Icon shader"). They are logged, not failed. Every icon sits on the system plate in the three modes and its artwork is recoloured by
+    // a fixed per-pixel transform (no analysis), so the limits are those of a uniform plate:
+    //   Dark, the dark appearance over a LIGHT wallpaper at 16 to 48 px (the window material is then a mid grey): the graphite plate is
+    //     only 1.1 to 1.6:1 against it and the edge highlight (white at darkRim) is 2.2 to 2.8:1 in the measured band, so an icon whose
+    //     artwork is dark overall (foot, obs, a dark page border, logos with a near-black glyph) measures 2.2 to 2.9 against a floor of 2.9:
+    //     same-tone-glyph 2.84 (48 px), logo-no-plate 2.86, dark-glyph-no-plate 2.80, dark-plate-light-border 2.53, foot 2.23, obs 2.47.
+    //   Tinted, the dark appearance over a light wallpaper at 16 to 24 px: foot 2.78 and btop 2.25 (the dark tinted plate is 1.5:1 against
+    //     the material); Tinted with a bright tint (yellow) in the light appearance at 32 px: white page 2.35 and Calendar 2.14 (default
+    //     2.4 to 3.8: the pale tinted plate against a dark window).
+    //   Clear and Tinted at 32 px, basecamp (a pale sky and a green hill of nearly the same luminance 0.85 and 0.55): glyph vs plate 1.29
+    //     to 1.43 against 1.71 for the default; one luminance ramp cannot separate two colours of the same luminance.
+    //   Transparency 1.0 (the material is the unblurred wallpaper) at 16 px, floor 2.0: Dark 1.68 to 2.0 (graphite-plate-red-glyph,
+    //     dark-plate-light-border, foot, obs, VS Code), Tinted foot 1.89, Clear graphite-plate-red-glyph 1.85 and foot 1.94 (light
+    //     appearance over a black wallpaper: the smoked plate is invisible on black, only the rim carries).
     readonly property var knownLimits: [
-        "breeze:accessories-text-editor dark E", "hicolor:kdenlive dark E", "hicolor:kdenlive tinted E",
-        "whitesur:org.gnome.Nautilus dark I", "whitesur:org.gnome.Nautilus dark E", "sky-mountain dark E", "light-plate-lighter-glyph dark E", "light-plate-lighter-glyph tinted E"
+        "same-tone-glyph dark E", "logo-no-plate dark E", "dark-glyph-no-plate dark E", "dark-plate-light-border dark E",
+        "whitesur:foot dark E", "whitesur:foot tinted E", "whitesur:foot clear E", "hicolor:obs dark E", "hicolor:btop tinted E",
+        "whitesur:visual-studio-code dark E", "graphite-plate-red-glyph dark E", "graphite-plate-red-glyph clear E",
+        "white-page-document tinted E", "whitesur:org.gnome.Calendar tinted E", "hicolor:basecamp clear S", "hicolor:basecamp tinted S"
     ]
 
     readonly property var separationFixtures: ["same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph", "whitesur:hwloc", "hicolor:basecamp"]
@@ -258,8 +274,8 @@ TestCase {
         const img2 = grabImage(board);
         testCase.panelColor = background;
         // At transparency 1.0 the material is the unblurred wallpaper behind the window: a flat 3:1 is no guarantee over a busy
-        // picture, so that scenario holds a floor of 2.0 for Clear (measured 2.08 to 6 in this pass, 1.0 to 2.2 before it).
-        const floorOf = v => testCase.onlyMode !== "" ? Math.min(2.0, v >= 3 ? 2.9 : 0.9 * v) : (v >= 3 ? 2.9 : 0.9 * v);
+        // picture, so that scenario holds a floor of 2.0 in every mode.
+        const floorOf = v => testCase.transparentPass ? Math.min(2.0, v >= 3 ? 2.9 : 0.9 * v) : (v >= 3 ? 2.9 : 0.9 * v);
         const floorIn = (v, mode) => mode === "dark" ? floorOf(v) : Math.min(2, 0.9 * v);
         let measured = 0;
         for (let f = 0; f < testCase.fixtures.length; f++) {
@@ -320,8 +336,8 @@ TestCase {
     }
 
     // The material at transparency 1.0 (Appearance.transparency, the Control Center slider at its end) lets the wallpaper through:
-    // the icons must hold over a bright wallpaper in the dark appearance and a dark one in the light appearance.
-    // Only this mode is checked while it is set (the transparency scenarios are for Clear).
+    // the icons must hold over a bright wallpaper in the dark appearance and a dark one in the light appearance, in every mode.
+    // `onlyMode`: a scenario that checks one mode only (the tint scenarios are for Tinted).
     property string onlyMode: ""
 
     function runTransparent(size) {
@@ -331,15 +347,107 @@ TestCase {
         let measured = 0;
         const saved = Appearance.transparency;
         Appearance.transparency = 1.0;
-        testCase.onlyMode = "clear";
+        testCase.transparentPass = true;
         testCase.iconSize = size;
         for (const dark of [true, false]) {
             for (const wallpaper of ["#000000", "#808080", "#ffffff"])
                 measured += runScenario(`${size}px ${dark ? "dark" : "light"} window transparency 1.0 wallpaper ${wallpaper}`, dark, materialOver(dark, wallpaper, 1.0), failures);
         }
         Appearance.transparency = saved;
-        testCase.onlyMode = "";
+        testCase.transparentPass = false;
         finishRun(measured, failures);
+    }
+
+    // Tinted with other tints (a bright yellow and a pink): the plate and the ramp follow the tint, so the rules hold for any of
+    // them, over the window material and at transparency 1.0.
+    function runTint(size, color) {
+        if (board.GraphicsInfo.api === GraphicsInfo.Software)
+            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+        const failures = [];
+        let measured = 0;
+        testCase.iconSize = size;
+        testCase.tintColor = color;
+        testCase.onlyMode = "tinted";
+        for (const dark of [true, false]) {
+            for (const wallpaper of ["#000000", "#808080", "#ffffff"])
+                measured += runScenario(`${size}px ${dark ? "dark" : "light"} window tint ${color} wallpaper ${wallpaper}`, dark, materialOver(dark, wallpaper), failures);
+        }
+        const saved = Appearance.transparency;
+        Appearance.transparency = 1.0;
+        testCase.transparentPass = true;
+        for (const dark of [true, false]) {
+            for (const wallpaper of ["#000000", "#808080", "#ffffff"])
+                measured += runScenario(`${size}px ${dark ? "dark" : "light"} window tint ${color} transparency 1.0 wallpaper ${wallpaper}`, dark, materialOver(dark, wallpaper, 1.0), failures);
+        }
+        Appearance.transparency = saved;
+        testCase.transparentPass = false;
+        testCase.onlyMode = "";
+        testCase.tintColor = "#3E7BFA";
+        finishRun(measured, failures);
+    }
+
+    function test_a2_tintYellow32() {
+        runTint(32, "#E6B422");
+    }
+
+    function test_a2_tintPink32() {
+        runTint(32, "#E25AA1");
+    }
+
+    // The accent fill of a selected row (Search, Force Quit): the ink follows the row's text colour (TintedIcon.overAccent), so
+    // the plate and the ink are the opposite of the fill. The plate pixel (between the rim and the artwork) has at least 4.5:1 against the
+    // accent in Clear (the old design measured 2.77:1 on main's 5.61:1 there) and 2.5:1 in Dark and Tinted (their plates are the mode's own).
+    function test_a2_accentRow() {
+        if (board.GraphicsInfo.api === GraphicsInfo.Software)
+            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+        const failures = [];
+        let measured = 0;
+        const wasDark = Appearance.dark;
+        testCase.accentPass = true;
+        testCase.iconSize = 32;
+        for (const dark of [true, false]) {
+            Appearance.dark = dark;
+            const accent = Qt.color(Appearance.colors.accent);
+            const name = `32px ${dark ? "dark" : "light"} accent row ${Appearance.colors.accent}`;
+            testCase.darkPass = dark;
+            testCase.wallpaperPass = false;
+            testCase.panelColor = accent;
+            wait(500);
+            waitForRendering(board);
+            const img = grabImage(board);
+            img.save(Qt.resolvedUrl("../../.dev/shots/a2-board-accent-row-" + (dark ? "dark" : "light") + ".png").toString().replace("file://", ""));
+            const inverse = Qt.rgba(1 - accent.r, 1 - accent.g, 1 - accent.b, 1);
+            testCase.panelColor = inverse;
+            wait(300);
+            waitForRendering(board);
+            const img2 = grabImage(board);
+            testCase.panelColor = accent;
+            for (let f = 0; f < testCase.fixtures.length; f++) {
+                for (let m = 1; m < testCase.modes.length; m++) {
+                    const cell = slots.itemAt(f * testCase.modes.length + m);
+                    if (cell === undefined || cell.icon.status !== Image.Ready)
+                        continue;
+                    const r = measure(img, img2, cell, accent, inverse);
+                    if (r === null)
+                        continue;
+                    measured++;
+                    const label = `${testCase.fixtures[f].name} ${testCase.modes[m]} ${name}`;
+                    // The plate itself: a pixel of the plate between its rim and the artwork (3 px inside the icon box, at the middle).
+                    const px = Math.round(cell.x + testCase.cell / 2);
+                    const py = Math.round(cell.y + (testCase.cell - testCase.iconSize) / 2 + 3);
+                    const plateRatio = ratio(luminance(img.pixel(px, py)), luminance(accent));
+                    console.log(`A2 ${label}: plate pixel ${plateRatio.toFixed(2)} (outside ${r.outside.toFixed(2)}: plate ${r.plateOverPanel.toFixed(2)} outline ${r.outlineOverPanel.toFixed(2)} glyph ${r.glyphOverPanel.toFixed(2)})`);
+                    const floor = testCase.modes[m] === "clear" ? 4.5 : 2.5;
+                    if (plateRatio < floor)
+                        failures.push(`A ${label}: plate pixel ${plateRatio.toFixed(2)} < ${floor}`);
+                }
+            }
+        }
+        Appearance.dark = wasDark;
+        testCase.accentPass = false;
+        verify(measured > 100, "measured " + measured);
+        if (failures.length > 0)
+            fail(failures.length + " failures:\n" + failures.join("\n"));
     }
 
     function test_a2_transparent48() {
@@ -355,7 +463,7 @@ TestCase {
     }
 
     function finishRun(measured, failures) {
-        verify(measured > (testCase.onlyMode !== "" ? 50 : 200), "measured " + measured + " icon renderings");
+        verify(measured > (testCase.onlyMode !== "" ? 50 : (testCase.transparentPass ? 150 : 200)), "measured " + measured + " icon renderings");
         if (failures.length > 0)
             fail(failures.length + " failures:\n" + failures.join("\n"));
     }

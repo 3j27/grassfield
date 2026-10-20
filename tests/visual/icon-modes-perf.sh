@@ -65,7 +65,7 @@ run() { # run KIND
   vs_kill_clients
   for i in $(seq 1 40); do [[ $(vs_client_count) -eq 0 ]] && break; sleep 0.5; done
   fixtures
-  printf '{"version":1,"appearance":"dark","icons":{"folderColor":"theme","mode":"%s"}}\n' "$kind" > "$VS_DEV/config/grassfield.json"
+  printf '{"version":1,"appearance":"dark","lock":{"idleMinutes":0},"icons":{"folderColor":"theme","mode":"%s"}}\n' "$kind" > "$VS_DEV/config/grassfield.json"
   vs_sleep 1.5
   sock=$(vs_nested_wayland)
   [[ -f $VS_DEV/bus.address ]] && bus=$(<"$VS_DEV/bus.address")
@@ -121,7 +121,7 @@ apps() { # apps MODE
 export GRASSFIELD_RENDER_TIMING=1   # the shell restarted by vs_session logs its frames (the Apps measurement)
 vs_session
 vs_reset
-printf '{"version":1,"appearance":"dark","icons":{"folderColor":"theme","mode":"default"}}\n' > "$VS_DEV/config/grassfield.json"
+printf '{"version":1,"appearance":"dark","lock":{"idleMinutes":0},"icons":{"folderColor":"theme","mode":"default"}}\n' > "$VS_DEV/config/grassfield.json"
 vs_sleep 1.5
 for kind in $KINDS; do run "$kind"; done
 rm -rf "$SB"

@@ -44,7 +44,7 @@ TestCase {
     function test_shaderTokensInRange() {
         verify(Tokens.iconModeDarkPlateLuma > 0 && Tokens.iconModeDarkPlateLuma < 0.3, "Dark plates are near black");
         verify(Tokens.iconModeDarkArtLift > Tokens.iconModeDarkPlateLuma, "a black part of the artwork is lifted above the plate");
-        verify(Tokens.iconModeDarkArtLift * 1.5 / Tokens.iconModeDarkArtLiftRange <= 1, "the Dark lift keeps the transform monotonic");
+        verify(Tokens.iconModeDarkArtLift <= Tokens.iconModeDarkArtLiftRange, "the Dark lift keeps the transform monotonic");
         verify(Tokens.iconModeClearAlphaFloor > 0 && Tokens.iconModeClearAlphaFloor < 1, "the ink never vanishes entirely");
         verify(Tokens.iconModeTintedRampLowDark > Tokens.iconModeTintedPlateScale, "the artwork is lighter than the dark tinted plate");
         verify(Tokens.iconModeClearPlateAlphaDark > 0 && Tokens.iconModeClearPlateAlphaDark < 0.5, "translucent glass");
