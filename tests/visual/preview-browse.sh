@@ -6,6 +6,19 @@
 source "$(dirname "$0")/lib.sh"
 vs_session
 
+# Same as vs_spawn, but the app's output is kept in .dev/preview.log (QML warnings are the first thing to read).
+vs_spawn() {
+  local sock bus=""
+  sock=$(vs_nested_wayland)
+  [[ -f $VS_DEV/bus.address ]] && bus=$(<"$VS_DEV/bus.address")
+  "$VS_ROOT/scripts/dev/isolated.sh" --name visual --config-home "$VS_DEV/config" --state-home "$VS_DEV/state" -- \
+    env WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="${bus:-}" LC_ALL=en_US.UTF-8 \
+    QT_QPA_PLATFORM=wayland QT_NO_XDG_DESKTOP_PORTAL=1 QML_IMPORT_PATH="$VS_ROOT/ui:$VS_DEV/build/qml" \
+    GRASSFIELD_TRANSLATIONS_DIR="$VS_DEV/translations" GRASSFIELD_LANG="$(<"$VS_STATE/session.lang")" \
+    HYPRLAND_INSTANCE_SIGNATURE="$(<"$VS_DEV/nested.instance")" "$@" >>"$VS_DEV/preview.log" 2>&1 </dev/null &
+  vs_track "$!"
+}
+
 img=$VS_DEV/b2-img
 mkdir -p "$img"
 if [[ ! -f $img/img5.png ]]; then
@@ -20,7 +33,7 @@ check_title() {
   got=$(title_of)
   if [[ $got != "$1" ]]; then echo "FAIL: title '$got', expected '$1'" >&2; fail=1; else echo "PASS: title $got"; fi
 }
-key() { "$VS_ROOT/scripts/dev/keys.sh" "$@"; vs_sleep 0.6; }
+key() { "$VS_ROOT/scripts/dev/keys.sh" "$@"; vs_sleep 1.2; }
 fail=0
 
 vs_reset dark
@@ -28,6 +41,7 @@ vs_spawn "$VS_DEV/build/grassfield-preview" "$img/img2.png"
 vs_wait_clients 1
 vs_sleep 2
 check_title img2.png
+"$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | "client: \(.class) | \(.title) | pid \(.pid) | \(.size)"'
 vs_capture pv-open-dark
 key -k Right
 key -k Right

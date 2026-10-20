@@ -302,6 +302,7 @@ Window {
 
         Row {
             id: tools
+            objectName: "toolsRow"
             anchors {
                 right: parent.right
                 rightMargin: Tokens.spacingMd

@@ -17,6 +17,12 @@ Item {
         anchors.fill: parent
         radius: height / 2
     }
+    // Lifted off the window: a light plate in the light appearance, a lighter tint in the dark one.
+    Rectangle {
+        anchors.fill: parent
+        radius: height / 2
+        color: Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity) : Appearance.withAlpha(Appearance.colors.knob, 1 - Tokens.materialFillOpacity)
+    }
 
     Row {
         id: row

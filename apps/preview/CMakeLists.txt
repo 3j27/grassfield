@@ -22,7 +22,7 @@ target_compile_definitions(grassfield-preview PRIVATE
     GRASSFIELD_PREVIEW_QML_DIR="${CMAKE_INSTALL_PREFIX}/share/grassfield/preview/qml")
 
 install(TARGETS grassfield-preview RUNTIME DESTINATION bin)
-install(DIRECTORY qml/ DESTINATION share/grassfield/preview/qml FILES_MATCHING PATTERN "*.qml" PATTERN "*.js")
+install(DIRECTORY qml/ DESTINATION share/grassfield/preview/qml FILES_MATCHING PATTERN "*.qml" PATTERN "*.js" PATTERN "*.svg")
 install(FILES org.grassfield.Preview.desktop DESTINATION share/applications)
 
 # Unit tests of the pure logic (gtest), also run by scripts/dev/test.sh through build-direct.sh --tests.
