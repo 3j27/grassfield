@@ -35,6 +35,15 @@ function appsHomeFor(stateHome, fallbackBase) {
     return fallbackBase + "/grassfield-dev/apps-home";
 }
 
+// argv of an application started in a scope of its own (app-graphical.slice) through uwsm's app launcher, as the Omarchy
+// session starts its apps. A process the shell starts otherwise stays in the shell's systemd unit, and a restart or a
+// crash of the shell (Restart=on-failure stops the whole control group) takes every such application down with it
+// (macOS: the Dock quitting never quits an app). `scoped` false (a dev session, or no uwsm-app): argv unchanged.
+function scopedArgv(argv, scoped) {
+    const a = Array.from(argv || []);
+    return scoped && a.length > 0 ? ["uwsm-app", "--"].concat(a) : a;
+}
+
 // argv of a desktop entry or action `command` (QStringList): Exec field codes (%f %F %u %U %i %c %k and
 // the deprecated ones) are dropped, "%%" is a literal percent. [] when nothing is left.
 function stripFieldCodes(command) {
