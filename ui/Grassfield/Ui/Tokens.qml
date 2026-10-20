@@ -1043,9 +1043,9 @@ QtObject {
     // ADR-0014 Dark: the artwork keeps this share of its colour (1 = unchanged, 0 = grey): a modest desaturation, colour identity kept
     readonly property real iconModeDarkArtSaturation: 0.85
     // ADR-0014 Dark: lightness the lightest part of the artwork is mapped to (a modest darkening; the map is affine from darkArtLift, so it is monotonic and keeps the internal contrast of the icon)
-    readonly property real iconModeDarkArtScale: 0.92
+    readonly property real iconModeDarkArtScale: 0.97
     // ADR-0014 Dark: lightness the darkest part of the artwork is mapped to (a black part separates a little from the graphite plate; the affine map to darkArtScale keeps black art darker than light art: >= 3:1 where the default has it)
-    readonly property real iconModeDarkArtLift: 0.24
+    readonly property real iconModeDarkArtLift: 0.2
     // ADR-0014 Dark: opacity of the white edge highlight in the dark appearance; chosen with the A2 test (docs/specs/ui.md) so the plate outline stays visible on the dark material
     readonly property real iconModeDarkRim: 0.8
     // ADR-0014 Clear: opacity of the white glass plate in the dark appearance (the material shows through)
@@ -1056,8 +1056,12 @@ QtObject {
     readonly property real iconModeClearInkDark: 0.97
     // ADR-0014 Clear: luma of the glyph in the light appearance (near black)
     readonly property real iconModeClearInkLight: 0.14
-    // ADR-0014 Clear: opacity of the ink where the artwork is darkest (light ink) or lightest (smoked ink); the opacity follows the lightness of the artwork's relative luminance up to full, so a dark art on a darker one stays distinguishable
-    readonly property real iconModeClearAlphaFloor: 0.12
+    // ADR-0014 Clear: lightness of the dark window material the glass sits on (the ink opacity is solved so that the composite is affine in linear light between the glass and the ink: the internal contrast of the artwork survives)
+    readonly property real iconModeClearBackdropDark: 0.12
+    // ADR-0014 Clear: lightness of the light window material the smoked glass sits on
+    readonly property real iconModeClearBackdropLight: 0.96
+    // ADR-0014 Clear: lightness assumed behind the glass over the bare wallpaper and over an accent fill
+    readonly property real iconModeClearBackdropMid: 0.5
     // ADR-0014 Clear over the accent fill of a selected row (Search, Force Quit): opacity of the plate, dark on a bright accent and light on a dark one, so that the plate and the ink keep 4.5:1 against the accent (A2 accent row)
     readonly property real iconModeClearPlateAlphaAccent: 0.9
     // ADR-0014 Clear: opacity of the glyph-coloured edge highlight of the glass plate
@@ -1067,11 +1071,11 @@ QtObject {
     // ADR-0014 Tinted, light appearance: the plate is the tint colour mixed this far to white (a light tinted plate)
     readonly property real iconModeTintedPlateMixLight: 0.88
     // ADR-0014 Tinted, dark appearance: the artwork's darkest tone is the tint at this fraction of its brightness
-    readonly property real iconModeTintedRampLowDark: 0.4
+    readonly property real iconModeTintedRampLowDark: 0.25
     // ADR-0014 Tinted, dark appearance: the artwork's lightest tone is the tint mixed this far to white
     readonly property real iconModeTintedRampHighDark: 0.8
     // ADR-0014 Tinted, light appearance: the artwork's darkest tone is the tint at this fraction of its brightness (dark on the light plate)
-    readonly property real iconModeTintedRampLowLight: 0.25
+    readonly property real iconModeTintedRampLowLight: 0.12
     // ADR-0014 Tinted, light appearance: the artwork's lightest tone is the tint mixed this far to white (a wide ramp keeps the internal contrast of the icon)
     readonly property real iconModeTintedRampHighLight: 0.4
     // ADR-0014 Tinted: opacity of the glyph-coloured edge highlight of the plate

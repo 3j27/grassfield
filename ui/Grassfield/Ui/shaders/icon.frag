@@ -7,7 +7,7 @@
 //     in Dark, glass in Clear (light on a dark material, smoked on a light one or over the bare wallpaper), tinted in Tinted.
 //  2. ARTWORK. The icon is drawn scaled down about the centre onto the plate, recoloured by a fixed transform per mode that
 //     depends on the pixel alone (so FolderStyle.modeSamples can repeat it exactly):
-//       Dark   a little desaturated, then an affine map from darkArtLift (black, so it separates from the graphite plate) to darkArtScale.
+//       Dark   a little desaturated, then an affine map in linear light from darkArtLift (black, so it separates from the graphite plate) to darkArtScale.
 //       Clear  monochrome ink (light on dark, smoked on light) whose opacity follows the lightness of the artwork's luminance.
 //       Tinted the lightness of the artwork's luminance mapped onto a two-tone ramp of the tint.
 //     Every map is increasing and keeps a minimum slope, so the internal contrast of an icon survives (A2 "internal contrast").
@@ -40,7 +40,9 @@ layout(std140, binding = 0) uniform buf {
     float clearPlateAlphaLight;
     float clearInkDark;
     float clearInkLight;
-    float clearAlphaFloor;
+    float clearBackdropDark;
+    float clearBackdropLight;
+    float clearBackdropMid;
     float rimInner;
     float darkRimLight;
     float tintedRimMixDark;
@@ -70,6 +72,16 @@ float lightness(vec3 c) {
     return pow(dot(pow(c, vec3(2.2)), vec3(0.2126, 0.7152, 0.0722)), 1.0 / 2.2);
 }
 
+// Linear-light maps (gamma 2.2): the output luminance is an affine function of the input's, so a ratio of two luminances survives
+// as well as a floor allows (black art mapped to a floor lo against white mapped to hi: (hi + 0.05) / (lo + 0.05) at most).
+vec3 toLinear(vec3 c) {
+    return pow(c, vec3(2.2));
+}
+
+vec3 fromLinear(vec3 c) {
+    return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
+}
+
 void main() {
     bool wall = overWallpaper > 0.5;
     bool accent = accentFill > 0.5;
@@ -82,25 +94,35 @@ void main() {
     vec4 px = texture(iconTexture, clamp(uv, vec2(0.0), vec2(1.0))) * (inBox ? 1.0 : 0.0);
     float a = px.a;
     vec3 c = px.rgb / max(a, 0.0001);
-    float L = lightness(c);
+    vec3 lin = toLinear(c);
+    float Y = dot(lin, vec3(0.2126, 0.7152, 0.0722));   // relative luminance of the artwork pixel
 
     // Per-mode transform of the artwork: rgb (straight) and the opacity it is drawn with.
     vec3 art;
     float artA = a;
     if (modeIndex < 1.5) {
         // Affine from darkArtLift (black) to darkArtScale (white): monotonic, a minimum slope, black stays darker than light art.
-        vec3 d = mix(vec3(L), c, darkArtSaturation);
-        art = vec3(darkArtLift) + (darkArtScale - darkArtLift) * d;
+        vec3 d = mix(vec3(Y), lin, darkArtSaturation);
+        vec3 lo = toLinear(vec3(darkArtLift));
+        art = fromLinear(lo + (toLinear(vec3(darkArtScale)) - lo) * d);
     } else if (modeIndex < 2.5) {
         // Over an accent fill the ink is the opposite of the fill (light on a bright accent, dark on a dark one).
         bool lightInk = accent ? accentBright : isDark;
-        art = vec3(lightInk ? clearInkDark : clearInkLight);
-        artA = a * mix(clearAlphaFloor, 1.0, lightInk ? L : 1.0 - L);
+        float ink = lightInk ? clearInkDark : clearInkLight;
+        art = vec3(ink);
+        // The ink opacity is solved so that the colour on screen is affine in linear light between the glass (black art) and the ink
+        // (white art), the glass being the plate over an assumed material: the contrast between two parts of the artwork survives.
+        float pa = accent ? clearPlateAlphaAccent : (wall ? clearPlateAlphaWallpaper : (isDark ? clearPlateAlphaDark : clearPlateAlphaLight));
+        float pg = accent ? (accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? 1.0 : 0.0);
+        float bd = (accent || wall) ? clearBackdropMid : (isDark ? clearBackdropDark : clearBackdropLight);
+        float under = pg * pa + (1.0 - pa) * bd;
+        float target = mix(pow(under, 2.2), pow(ink, 2.2), lightInk ? Y : 1.0 - Y);
+        artA = a * clamp((pow(target, 1.0 / 2.2) - under) / (ink - under), 0.0, 1.0);
     } else {
         vec3 t = tint.rgb;
         vec3 lo = isDark ? t * tintedRampLowDark : t * tintedRampLowLight;
         vec3 hi = isDark ? mix(t, vec3(1.0), tintedRampHighDark) : mix(t, vec3(1.0), tintedRampHighLight);
-        art = mix(lo, hi, L);
+        art = fromLinear(mix(toLinear(lo), toLinear(hi), Y));
     }
     art = clamp(art, 0.0, 1.0);
     if (folderTint.a > 0.5) {

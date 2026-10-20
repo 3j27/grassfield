@@ -371,8 +371,10 @@ TestCase {
         const rawRgb = FolderStyle.rgbOf("#74cbf5");
         const lightness = rgb => Math.pow(0.2126 * Math.pow(rgb[0], 2.2) + 0.7152 * Math.pow(rgb[1], 2.2) + 0.0722 * Math.pow(rgb[2], 2.2), 1 / 2.2);
         const lc = lightness(rawRgb);
-        const dd = rawRgb.map(v => lc + (v - lc) * Tokens.iconModeDarkArtSaturation);
-        const darkWant = dd.map(v => Tokens.iconModeDarkArtLift + (Tokens.iconModeDarkArtScale - Tokens.iconModeDarkArtLift) * v);
+        const linRaw = rawRgb.map(v => Math.pow(v, 2.2));
+        const yRaw = 0.2126 * linRaw[0] + 0.7152 * linRaw[1] + 0.0722 * linRaw[2];
+        const loL = Math.pow(Tokens.iconModeDarkArtLift, 2.2), hiL = Math.pow(Tokens.iconModeDarkArtScale, 2.2);
+        const darkWant = linRaw.map(v => Math.pow(loL + (hiL - loL) * (yRaw + (v - yRaw) * Tokens.iconModeDarkArtSaturation), 1 / 2.2));
         const darkMode = FolderStyle.plateThrough(raw, "dark", dk, false, "", [0, 0, 0], Tokens, true).dark;
         verify(Math.abs(darkMode[0] - darkWant[0]) < 0.005 && Math.abs(darkMode[1] - darkWant[1]) < 0.005 && Math.abs(darkMode[2] - darkWant[2]) < 0.005, "dark mode " + FolderStyle.hexOf(darkMode));
         // The artwork keeps its hue: still a blue (b > g > r)
@@ -386,13 +388,19 @@ TestCase {
         verify(near(FolderStyle.plateThrough(raw, "default", dk, true, "#ffffff", [0, 0, 0], Tokens).dark, "#e9e9e9", 0.012), "default white");
         // Tinted, dark appearance: the luminance of the artwork on the two-tone ramp of the tint.
         const t = FolderStyle.rgbOf(dk);
-        const want = t.map(v => v * Tokens.iconModeTintedRampLowDark + ((v + (1 - v) * Tokens.iconModeTintedRampHighDark) - v * Tokens.iconModeTintedRampLowDark) * lc);
+        const loT = t.map(v => v * Tokens.iconModeTintedRampLowDark), hiT = t.map(v => v + (1 - v) * Tokens.iconModeTintedRampHighDark);
+        const want = [0, 1, 2].map(q => Math.pow(Math.pow(loT[q], 2.2) + (Math.pow(hiT[q], 2.2) - Math.pow(loT[q], 2.2)) * Math.pow(lc, 2.2), 1 / 2.2));
         const tinted = FolderStyle.plateThrough(raw, "tinted", dk, false, "", [0, 0, 0], Tokens, true).dark;
         verify(Math.abs(tinted[0] - want[0]) < 0.01 && Math.abs(tinted[1] - want[1]) < 0.01 && Math.abs(tinted[2] - want[2]) < 0.01, "tinted theme " + FolderStyle.hexOf(tinted));
         // Clear, dark appearance: a light ink whose opacity follows the luminance, over the glass of the system plate over the backdrop.
-        const inkA = Tokens.iconModeClearAlphaFloor + (1 - Tokens.iconModeClearAlphaFloor) * lc;
-        const glassed = Tokens.iconModeClearPlateAlphaDark;   // white glass over the black backdrop
-        const clearWant = Tokens.iconModeClearInkDark * inkA + glassed * (1 - inkA);
+        // The shader's solve: the composite on screen is affine in linear light between the glass and the ink.
+        const glassed = Tokens.iconModeClearPlateAlphaDark * 1 + (1 - Tokens.iconModeClearPlateAlphaDark) * Tokens.iconModeClearBackdropDark;
+        const yRaw2 = 0.2126 * Math.pow(rawRgb[0], 2.2) + 0.7152 * Math.pow(rawRgb[1], 2.2) + 0.0722 * Math.pow(rawRgb[2], 2.2);
+        const inkL = Tokens.iconModeClearInkDark;
+        const targetS = Math.pow(Math.pow(glassed, 2.2) + (Math.pow(inkL, 2.2) - Math.pow(glassed, 2.2)) * yRaw2, 1 / 2.2);
+        const inkA = (targetS - glassed) / (inkL - glassed);
+        const realGlass = Tokens.iconModeClearPlateAlphaDark;   // white glass over the black test backdrop
+        const clearWant = inkL * inkA + realGlass * (1 - inkA);
         const clear = FolderStyle.plateThrough(raw, "clear", dk, false, "", [0, 0, 0], Tokens, true).dark;
         verify(Math.abs(clear[0] - clearWant) < 0.01 && Math.abs(clear[2] - clearWant) < 0.01, "clear dark " + FolderStyle.hexOf(clear) + " want " + clearWant.toFixed(3));
         // an absent colour is the identity of the default mode

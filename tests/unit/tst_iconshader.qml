@@ -211,11 +211,11 @@ TestCase {
             return null;
         // Internal contrast: the lightest and the darkest pixels of the middle of the artwork (the middle half of the icon in the
         // default rendering, the same part of it once the artwork is scaled onto the system plate): 98th against 2nd percentile.
-        const half = 0.25 * n * (artScale === undefined ? 1 : artScale);
+        const midHalf = 0.25 * n * (artScale === undefined ? 1 : artScale);
         const mid = [];
         for (let y = 0; y < n; y++) {
             for (let x = 0; x < n; x++) {
-                if (mask[y * n + x] && Math.abs(x + 0.5 - n / 2) <= half && Math.abs(y + 0.5 - n / 2) <= half)
+                if (mask[y * n + x] && Math.abs(x + 0.5 - n / 2) <= midHalf && Math.abs(y + 0.5 - n / 2) <= midHalf)
                     mid.push(lum[y * n + x]);
             }
         }

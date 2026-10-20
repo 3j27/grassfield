@@ -382,7 +382,7 @@ function plateOf(recolored, tint, mode, modeTint, tokens, dark, wall) {
     const base = rgbOf(recolored ? tint : tokens.folderIconThemePlate);
     const k = recolored ? tokens.folderIconPlateDefault : 1;
     const isDark = dark !== false;
-    const out = modeSamples([base[0] * k, base[1] * k, base[2] * k, 1], mode, modeTint, isDark, tokens);
+    const out = modeSamples([base[0] * k, base[1] * k, base[2] * k, 1], mode, modeTint, isDark, tokens, wall === true);
     const under = underlay(mode, modeTint, isDark, wall === true, rgbOf(isDark ? tokens.folderIconPlateBackdropDark : tokens.folderIconPlateBackdropLight), tokens);
     return [0, 1, 2].map(q => out[q] * out[3] + under[q] * (1 - out[3]));
 }
@@ -533,7 +533,7 @@ function plateSummary(samples, backdrop) {
 // straight, alpha = the sample's alpha times the mode's opacity (Clear's ink is more or less opaque with the luminance of the
 // artwork). `dark`: the icon is drawn for a dark material (the dark appearance or over the bare wallpaper), `modeTint`: the
 // Tinted colour (#rrggbb).
-function modeSamples(samples, mode, modeTint, dark, tokens) {
+function modeSamples(samples, mode, modeTint, dark, tokens, wall) {
     const name = Modes.normalizeMode(mode);
     if (name === "default")
         return samples;
@@ -547,17 +547,27 @@ function modeSamples(samples, mode, modeTint, dark, tokens) {
         let rgb;
         let alpha = samples[i + 3];
         if (name === "dark") {
-            const d = c.map(v => lc + (v - lc) * tokens.iconModeDarkArtSaturation);
-            rgb = d.map(v => tokens.iconModeDarkArtLift + (tokens.iconModeDarkArtScale - tokens.iconModeDarkArtLift) * v);
+            const lin = c.map(v => Math.pow(v, 2.2));
+            const y = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+            const lo = Math.pow(tokens.iconModeDarkArtLift, 2.2), hi = Math.pow(tokens.iconModeDarkArtScale, 2.2);
+            rgb = lin.map(v => Math.pow(Math.max(0, lo + (hi - lo) * (y + (v - y) * tokens.iconModeDarkArtSaturation)), 1 / 2.2));
         } else if (name === "clear") {
             const ink = dark ? tokens.iconModeClearInkDark : tokens.iconModeClearInkLight;
             rgb = [ink, ink, ink];
-            alpha *= tokens.iconModeClearAlphaFloor + (1 - tokens.iconModeClearAlphaFloor) * (dark ? lc : 1 - lc);
+            // The shader's solve: the composite is affine in linear light between the glass (black art) and the ink (white art).
+            const pa = wall === true ? tokens.iconModeClearPlateAlphaWallpaper : (dark ? tokens.iconModeClearPlateAlphaDark : tokens.iconModeClearPlateAlphaLight);
+            const pg = dark && wall !== true ? 1 : 0;
+            const bd = wall === true ? tokens.iconModeClearBackdropMid : (dark ? tokens.iconModeClearBackdropDark : tokens.iconModeClearBackdropLight);
+            const under = pg * pa + (1 - pa) * bd;
+            const yin = 0.2126 * Math.pow(c[0], 2.2) + 0.7152 * Math.pow(c[1], 2.2) + 0.0722 * Math.pow(c[2], 2.2);
+            const target = Math.pow(under, 2.2) + (Math.pow(ink, 2.2) - Math.pow(under, 2.2)) * (dark ? yin : 1 - yin);
+            alpha *= Math.max(0, Math.min(1, (Math.pow(target, 1 / 2.2) - under) / (ink - under)));
         } else {
             const lo = t.map(v => v * (dark ? tokens.iconModeTintedRampLowDark : tokens.iconModeTintedRampLowLight));
             const mixHigh = dark ? tokens.iconModeTintedRampHighDark : tokens.iconModeTintedRampHighLight;
             const hi = t.map(v => v + (1 - v) * mixHigh);
-            rgb = [0, 1, 2].map(q => lo[q] + (hi[q] - lo[q]) * lc);
+            const y = Math.pow(lc, 2.2);
+            rgb = [0, 1, 2].map(q => Math.pow(Math.pow(lo[q], 2.2) + (Math.pow(hi[q], 2.2) - Math.pow(lo[q], 2.2)) * y, 1 / 2.2));
         }
         out[i] = Math.max(0, Math.min(1, rgb[0]));
         out[i + 1] = Math.max(0, Math.min(1, rgb[1]));
@@ -593,7 +603,7 @@ function underlay(mode, modeTint, dark, wall, backdrop, tokens) {
 // folder (no folder colour), what `prefersLighter` reads. null when there is nothing to read.
 function plateThrough(samples, mode, modeTint, recolored, tint, backdrop, tokens, dark, wall) {
     const isDark = dark !== false;
-    const modeOut = modeSamples(samples, mode, modeTint, isDark, tokens);
+    const modeOut = modeSamples(samples, mode, modeTint, isDark, tokens, wall === true);
     const under = underlay(mode, modeTint, isDark, wall === true, backdrop, tokens);
     const own = plateSummary(modeOut, under);
     if (own === null)
