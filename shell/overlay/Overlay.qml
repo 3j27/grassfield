@@ -70,6 +70,15 @@ Variants {
             shown: win.open
         }
 
+        // Closed but still mapped (the hold): a press the compositor delivered before the empty mask landed (late whenever
+        // the GUI thread was busy) is swallowed here, never handled by the menu item under it.
+        MouseArea {
+            anchors.fill: parent
+            z: 1000
+            visible: !win.open
+            acceptedButtons: Qt.AllButtons
+        }
+
         // Key focus returns to the window active when the popup opened (FocusReturn); one call per window, idempotent.
         Connections {
             target: Popups

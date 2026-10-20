@@ -75,6 +75,15 @@ Variants {
             shown: win.shown
         }
 
+        // Closed but still mapped (the hold): a press the compositor delivered before the empty mask landed (late whenever
+        // the GUI thread was busy) is swallowed here, never handled by the result under it.
+        MouseArea {
+            anchors.fill: parent
+            z: 1000
+            visible: !win.shown
+            acceptedButtons: Qt.AllButtons
+        }
+
         onShownChanged: {
             if (shown) {
                 field.text = root.controller.query;

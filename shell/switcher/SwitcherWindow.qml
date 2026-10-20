@@ -68,6 +68,15 @@ Variants {
             shown: win.grabbing
         }
 
+        // Ended but still mapped (the hold): a press the compositor delivered before the empty mask landed (late whenever the
+        // GUI thread was busy) is swallowed here, never handled by the tile under it.
+        MouseArea {
+            anchors.fill: parent
+            z: 1000
+            visible: !win.grabbing
+            acceptedButtons: Qt.AllButtons
+        }
+
         onGrabbingChanged: {
             if (grabbing)
                 keys.forceActiveFocus();
