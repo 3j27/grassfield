@@ -11,6 +11,8 @@ License of Grassfield-made assets: CC-BY-SA-4.0 (proposed in ADR-0005, pending o
 | `cursors/build.sh`, `cursors/xcursor-pack.py` | Grassfield project (2026-10-19) | Build scripts: render the templates, hyprcursor theme through `hyprcursor-util --create`, XCursor files written by a stdlib packer (xcursorgen is not installed) | MIT (source code, like the repository) |
 | `../shell/desktop/WallpaperArt.qml` (wallpaper artwork, outside `branding/`; listed per ADR-0003) | Grassfield project (drawn by Claude, 2026-10-17, first in 1088f84) | Original procedural artwork ("Grassfield": sky gradient, sun, four layered hills) drawn in QML from constants; no image file, no tracing | Source code: MIT (proposed in ADR-0005); licence of the artwork as an asset pending legal review |
 
+| `icons/theme/index.theme` | Grassfield project (2026-10-20) | The `grassfield-icons` wrapper theme (ADR-0017): metadata only (`Inherits=WhiteSur,Adwaita,hicolor`, one empty directory); contains no icon and nothing of WhiteSur | MIT (configuration file, like the repository) |
+
 Cursor themes built from `cursors/` (`grassfield-cursors`, default black fill and white outline) are generated artefacts; they carry the licence of the sources (CC-BY-SA-4.0).
 
 Icon files are monochrome (`#000`); the shell recolors them with token colors at runtime.

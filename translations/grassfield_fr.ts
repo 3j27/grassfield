@@ -44,6 +44,18 @@
         <translation>Qt</translation>
     </message>
     <message>
+        <source>Acknowledgements</source>
+        <translation>Remerciements</translation>
+    </message>
+    <message>
+        <source>Icon theme</source>
+        <translation>Thème d’icônes</translation>
+    </message>
+    <message>
+        <source>WhiteSur by Vince Liuice, GPL-3.0</source>
+        <translation>WhiteSur par Vince Liuice, GPL-3.0</translation>
+    </message>
+    <message>
         <source>Hardware</source>
         <translation>Matériel</translation>
     </message>

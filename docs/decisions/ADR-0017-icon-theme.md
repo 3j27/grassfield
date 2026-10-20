@@ -361,6 +361,32 @@ package command.
 - **Re-verify on updates:** Qt minor versions (the variable), uwsm (env file lookup), dconf (profile rules), and any pin
   bump of WhiteSur (icon names used by the shell, the measurements of ui.md:53).
 
+## Spike I0 results (2026-10-20, implementation session)
+Scratch files under `.dev/spikes/i0` and the automated tests `tests/shell/icon_theme.sh`, `tests/shell/dconf_profile.sh`.
+No owner file, database or bus was touched; every dconf call ran under `env -i` with a scratch `DCONF_PROFILE` and
+`XDG_CONFIG_HOME`.
+1. **Qt.** `QT_QPA_SYSTEM_ICON_THEME` is read by `QIconLoader::updateSystemTheme` (disassembly of libQt6Gui 6.11.2) and
+   gives `QIcon::themeName() == grassfield-icons`; an empty value is ignored. Only the `generic`/unset platform themes
+   could be run here: the `gtk3` platform theme needs a GDK display (none in the sandbox), so its precedence over the
+   variable is NOT verified in a run (it is by Qt's code order, and by the dev sessions that show WhiteSur). The offscreen
+   platform adds no icon search paths: tests set them from `XDG_DATA_DIRS`.
+2. **dconf (dconf 0.49, no D-Bus available in the sandbox, so reads and lock checks only; writes NOT run).**
+   `DCONF_PROFILE` takes an absolute path. `file-db:<path>` is supported, and the lock table is compiled into it
+   (`dconf compile` of a `.d` directory with `locks/`, or `dconf update`): with `user-db:user` first, `icon-theme` reads
+   `grassfield-icons` even when the user database holds another value, `gsettings writable` says false and
+   `gsettings set` fails with "The key is not writable"; other keys read from the user database and stay writable;
+   without `DCONF_PROFILE` the user's own value is read. **Unsafe cases:** an empty or missing profile gives dconf's
+   "null configuration" (every key at its schema default, the user database ignored); a profile naming a missing file-db
+   only warns and keeps the user database. Hence the readability guard in `env-grassfield`. This system's D-Bus is
+   dbus-broker (`dbus.service` links to `dbus-broker.service`), which can unset variables.
+3. **Wrapper and lookups.** `Inherits=WhiteSur,Adwaita,hicolor` with `Directories=scalable/apps`: Qt, GTK 3 and GTK 4
+   all resolve WhiteSur first, then Adwaita, then hicolor, and skip a missing WhiteSur. Without `Directories`: GTK drops
+   the theme and its parents ("Theme file for wrapper-nodirs has no directories": only hicolor answers); Qt still
+   follows the parents. uwsm 0.26.7 (`/usr/lib/uwsm/prepare-env.sh`) sources `env-<desktop>` from each of
+   `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS` and `XDG_DATA_DIRS`, so `/usr/share/uwsm/env-grassfield` is read.
+4. **Not done:** KF6 app check (slice item 4, no display), Quickshell `iconPath` offscreen (returned empty paths in the
+   sandbox), nested shots.
+
 ## Owner answers (2026-10-20)
 - Distribution: a split package grassfield-whitesur-icons built by makepkg from the pinned upstream commit (nothing
   vendored in the MIT repo); it replaces the 2026-10-19 "WhiteSur only in .dev" rule on this dedicated machine.
