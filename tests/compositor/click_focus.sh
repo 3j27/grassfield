@@ -446,11 +446,19 @@ for round in 1 2 3; do
   done
   [[ $r == "A=x B= active=A" ]]
   check "round $round: after Escape the keys reach A, the window active when the menu opened" $? "$r after $lost lost letter(s)"
+  gone_after grassfield-overlay >/dev/null # a click while it closes is the `closed` section's case
   click_b
   r=$(type_now x)
   [[ $r == "A= B=x active=B" ]]
   check "round $round: a click on B then gives B the keyboard" $? "$r"
 done
+# A click on an empty part of the bar (keyboard None) leaves the keys with the window (macOS: the app stays key).
+focus_a
+click $((mon_w / 2)) 12
+ms 500
+r=$(type_now x)
+[[ $r == "A=x B= active=A" ]]
+check "a click on an empty part of the menu bar leaves the keyboard on A" $? "$r"
 fi
 
 # ---- after a session unlock ----
