@@ -31,6 +31,7 @@ while [[ $# -gt 0 ]]; do
     --menu-bridge) export GRASSFIELD_MENU_BRIDGE=${2:?--menu-bridge needs a path}; shift ;;
     --desktop-screen) export GRASSFIELD_DESKTOP_SCREEN=${2:?--desktop-screen needs an output name}; shift ;;
     --cursor-theme) export GRASSFIELD_CURSOR_THEME=${2:?--cursor-theme needs a theme name}; shift ;;
+    --unit-env) export GRASSFIELD_UNIT_ENV=1 ;;  # the shell gets grassfield-shell.service's own variables (file watcher off, as packaged)
     *) echo "shell-run: unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -140,6 +141,9 @@ plocate_db=""
 # Only this start of the shell has it: a start without the option is quiet again.
 timing=()
 [[ ${GRASSFIELD_RENDER_TIMING:-} == 1 ]] && timing=(QSG_RENDER_TIMING=1)
+# --unit-env: the Environment= line of packaging/systemd/grassfield-shell.service, so that a nested run reproduces the
+# packaged shell (devenv.sh clears these when they are only inherited from a live session).
+[[ ${GRASSFIELD_UNIT_ENV:-} == 1 ]] && timing+=(QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1)
 
 # Grassfield.I18n (ui/i18n) and the compiled catalogs (scripts/dev/i18n-build.sh), rebuilt when stale.
 "$root/ui/i18n/build-direct.sh" >&2
