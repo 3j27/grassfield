@@ -1,0 +1,19 @@
+# Grassfield session environment (ADR-0017). Installed as /usr/share/uwsm/env-grassfield.
+# uwsm sources uwsm/env-<desktop> from $XDG_CONFIG_HOME, $XDG_CONFIG_DIRS and $XDG_DATA_DIRS for each lowercased item of
+# XDG_CURRENT_DESKTOP ("Hyprland:Grassfield" for packaging/wayland-sessions/grassfield.desktop), exports the difference to
+# the systemd user manager and the D-Bus activation environment, and unsets it again at the end of the session.
+# The Omarchy session never sources this file: its XDG_CURRENT_DESKTOP has no Grassfield item.
+# POSIX sh only (uwsm sources it with its own shell).
+
+# Qt (the shell, Grassfield Settings/Files/Preview, every other Qt app): QIconLoader reads this variable before the
+# platform theme's hint, so it wins over QT_QPA_PLATFORMTHEME=gtk3 from Omarchy's environment. An empty value is ignored.
+export QT_QPA_SYSTEM_ICON_THEME=grassfield-icons
+
+# GTK, Electron, Chromium, Firefox and (through xdg-desktop-portal-gtk) Flatpak read the icon theme from dconf. This
+# session profile is the normal user database plus a read-only, locked Grassfield database that holds only
+# icon-theme='grassfield-icons'; nothing is written to the shared database (spike I0: tests/shell/dconf_profile.sh).
+# Only when the profile and its database are readable: a profile dconf cannot open gives the "null configuration"
+# (every GTK setting at its default), so a half-installed package must not set it.
+if [ -r /usr/share/grassfield/dconf/profile ] && [ -r /usr/share/grassfield/dconf/grassfield.db ]; then
+    export DCONF_PROFILE=/usr/share/grassfield/dconf/profile
+fi
