@@ -19,6 +19,17 @@ function fallbackPlan(target, live, minimized) {
     return {kind: "none"};
 }
 
+// The goal of a fallback plan for userActed/focusHolds: {address} for a window, {workspace} for a Desktop, null for none.
+function planGoal(plan) {
+    switch (plan ? plan.kind : "") {
+    case "window":
+        return {address: plan.address};
+    case "space":
+        return {workspace: plan.id};
+    }
+    return null;
+}
+
 // Whether the focus a fallback attempt asked for holds: `goal` is {address} (that window must be the active one) or
 // {workspace} (that Desktop must be the focused one); `active` is {address, workspaceId} or null, `focusedWorkspace` the id.
 function focusHolds(goal, active, focusedWorkspace) {

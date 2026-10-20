@@ -42,6 +42,22 @@ TestCase {
         compare(FR.checkOutcome(goal, {address: "", workspace: 1}, null, 3, 10, 1000, false), "user", "the user switched to another Desktop");
     }
 
+    function test_planGoal() {
+        compare(FR.planGoal({kind: "window", address: "0xa"}), {address: "0xa"});
+        compare(FR.planGoal({kind: "space", id: 3}), {workspace: 3});
+        compare(FR.planGoal({kind: "none"}), null);
+        compare(FR.planGoal(null), null);
+    }
+
+    // Before the first attempt (C2): a click on another window while the closed surface released the keyboard is the
+    // user's choice; the window active when the fallback was decided (still Hyprland's) is not.
+    function test_aClickBeforeTheFirstAttemptIsTheUsersChoice() {
+        const goal = FR.planGoal({kind: "window", address: "0xa"});
+        verify(FR.userActed(goal, {address: "0xa", workspace: 1}, {address: "0xb", workspaceId: 1}, 1));
+        verify(!FR.userActed(goal, {address: "0xa", workspace: 1}, {address: "0xa", workspaceId: 1}, 1));
+        verify(!FR.userActed(goal, {address: "0xa", workspace: 1}, null, 1), "no window reported: the attempt goes ahead");
+    }
+
     function test_noGoalNothingToDo() {
         verify(!FR.userActed(null, {address: "0xb"}, {address: "0xc"}, 1));
         compare(FR.checkOutcome(null, null, null, 1, 0, 1000, false), "holds");
