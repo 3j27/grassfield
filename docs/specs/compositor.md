@@ -1010,3 +1010,21 @@ Manual (L1, nested only):
 - Hyprland itself never releases the buttons of a removed pointer device: after an abandoned drag (device
   destroyed with the button down) it keeps that button as held until that button's next release, with or
   without the plugin. The plugin only ends its own gesture (FR7).
+
+## Session window behaviour (Lua config, not the plugin)
+
+`config/hypr/grassfield/stacking.lua` and `placement.lua`; nested scenarios `tests/compositor/window_stacking.sh` and
+`tests/compositor/window_placement.sh`.
+
+- Stacking: a window that becomes active is raised (`alter_zorder top`) unless it is not floating, full-screen, or on a
+  workspace that shows a full-screen window. Hyprland 0.56 already raises a floating window on a pointer press that
+  changes focus (measured: press on the back window's visible part raises it, with and without the plugin), but not when
+  focus arrives without a press (switcher, Dock, `focus` dispatcher, a program asking for focus): that window stayed behind
+  the other one while being active, and a later press did nothing (no focus change, so no raise). The hook covers it.
+- Placement: a browser window (class list in `placement.lua`) that opens smaller than 72 % x 82 % of the monitor's usable
+  area (output minus the menu bar and Dock) is grown to that size; larger sizes are kept, and the window is centred by
+  Hyprland.
+- **Known limit:** other applications' first windows keep the size they ask for (terminal, Grassfield apps, dialogs,
+  panels). Lua cannot tell a dialog, a popup or a utility panel from a main window (no parent or modal field on
+  `HL.Window`), so a minimum size for every first window would also enlarge those. Widening the rule needs that signal
+  (plugin, or an app class list).
