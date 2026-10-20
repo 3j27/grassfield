@@ -127,10 +127,18 @@ headless_up() {
   monrule "{ output = \"$OUT_B\", mode = \"1440x900@60\", position = \"1920x0\", scale = 1 }"
   sleep 2 # the shell creates its per-output surfaces on the new output
 }
+# True when WAYLAND-1 is in the nested session's active monitor list (a disabled output is not listed there).
+wayland1_enabled() { nestctl monitors -j 2>/dev/null | jq -e 'any(.[]; .name == "WAYLAND-1")' >/dev/null 2>&1; }
 headless_down() {
+  local try
   nestctl output remove "$OUT_B" >/dev/null 2>&1 || true
-  monrule '{ output = "WAYLAND-1", mode = "1440x900", position = "auto", scale = 1 }'
+  # `disabled = false` is what brings WAYLAND-1 back (the rule that disabled it stays in force otherwise).
+  for try in 1 2 3; do
+    monrule '{ output = "WAYLAND-1", disabled = false, mode = "1440x900", position = "auto", scale = 1 }'
+    wayland1_enabled && break
+  done
   monrule "{ output = \"$OUT_A\", mode = \"1920x1080@60\", position = \"auto-right\", scale = 1 }"
+  wayland1_enabled || echo "WARNING: WAYLAND-1 is still disabled in the nested session (nestctl monitors all)"
 }
 
 cleanup() {
@@ -146,6 +154,9 @@ cleanup() {
   [[ -n $socat_pid ]] && kill "$socat_pid" 2>/dev/null
 }
 trap cleanup EXIT
+# WAYLAND-1 comes back on every exit path (a signal ends through exit, which runs cleanup).
+trap 'exit 130' INT HUP
+trap 'exit 143' TERM
 
 stamp_events() { local l; while IFS= read -r l; do printf '%s %s\n' "${EPOCHREALTIME/./}" "$l"; done; }
 socat -u UNIX-CONNECT:"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/.socket2.sock" STDOUT 2>>"$log" </dev/null > >(stamp_events >"$events") &

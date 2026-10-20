@@ -149,36 +149,8 @@ function closeTarget(choice, previous, stayOnSpace) {
     return {kind: "none"};
 }
 
-// Without the plugin capability (C2): what the shell focuses itself for a target. `live` are the addresses of the windows
-// that exist now, `minimized` the addresses the shell has minimized (a minimized window never gets focus: it is not
-// shown). Returns {kind: "window", address} | {kind: "space", id} | {kind: "none"} (Hyprland's own choice stands).
-function fallbackPlan(target, live, minimized) {
-    const exists = a => (live || []).indexOf(a) >= 0 && (minimized || []).indexOf(a) < 0;
-    switch (target ? target.kind : "") {
-    case "window":
-    case "remembered":
-        return exists(target.address) ? {kind: "window", address: target.address} : {kind: "none"};
-    case "workspace":
-        return {kind: "space", id: target.workspace};
-    }
-    return {kind: "none"};
-}
-
-// Whether the focus a fallback attempt asked for holds: `goal` is {address} (that window must be the active one) or
-// {workspace} (that Desktop must be the focused one); `active` is {address, workspaceId} or null, `focusedWorkspace` the id.
-function focusHolds(goal, active, focusedWorkspace) {
-    if (!goal)
-        return true;
-    if (goal.address)
-        return !!active && active.address === goal.address;
-    return goal.workspace > 0 && focusedWorkspace === goal.workspace;
-}
-
-// Delay before the check after attempt `n` (0-based): the base doubles with each attempt, so a slow compositor gets a few
-// quick retries and then fewer.
-function retryDelay(n, base) {
-    return base * Math.pow(2, Math.min(Math.max(n, 0), 6));
-}
+// Without the plugin capability (C2) the shell focuses itself: fallbackPlan, focusHolds, retryDelay and the check live in
+// platform/FocusReturn.js (shared with the Exclusive surfaces).
 
 // ---- Selection across outputs ----
 

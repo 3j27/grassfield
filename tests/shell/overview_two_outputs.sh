@@ -3,7 +3,7 @@
 # session up (`just nested-up`, or `scripts/dev/nested-up.sh --no-plugin` for the thumbnail variant); it starts two
 # foot windows (one per output, through scripts/dev/isolated.sh) and kills only those.
 #
-#   tests/shell/overview_two_outputs.sh [click|hover|drag|loop|backdrop|all]
+#   tests/shell/overview_two_outputs.sh [click|hover|drag|loop|backdrop|control|clickwins|all]
 #
 # click     (1) overview open with B active: a click on A's rect on the other output focuses A and A gets typed keys; reverse.
 # hover     (2) hover selects the window under the pointer on both outputs.
@@ -18,6 +18,9 @@
 #               ExclusiveSurfaces), with the
 #               pointer on either output and either window active at open: the window active at open holds the KEYBOARD
 #               (typed keys arrive in that exact window and in no other).
+# control    Apps / Search / the switcher closed by IPC and by Esc, no overview: the window active at open holds the keyboard
+#               (pointer on either output, either window active; also run with --no-plugin, C2). Not part of `all`.
+# clickwins  the user's click on the other window 0..450 ms after Esc wins over the shell's focus return (10 times).
 # backdrop  (4) a click on empty space of the other output closes the overview.
 # drop      (5) keys typed D ms after Esc (one injector process, exact delay): never in the wrong window; from 200 ms all
 #               arrive in the previously active window. Prints the drop table. Part of `all`.
@@ -312,9 +315,6 @@ t_paths() {
     for prev in A B; do
       for o in $OUT_A $OUT_B; do
         n=$((n + 1))
-        # Search itself loses the keyboard when it closes with the pointer on the other output than the active window
-        # (`control`: same loss without the overview): not the overview's business, skipped here and reported.
-        if [[ $path == search && $o != "$(out_of "$prev")" ]]; then echo "SKIP paths: search, pointer on $o, $prev active: Search alone loses the keyboard there (see control)"; continue; fi
         focus "$prev"
         ptr output "$o" abs $park; sleep 0.3
         pre=$(active_title)
@@ -329,10 +329,12 @@ t_paths() {
 }
 
 # control: the same Apps / Search / switcher round trip WITHOUT the overview (what the paths above would give if the overview
-# had nothing to do with it): after the surface closes, which window holds the keyboard.
+# had nothing to do with it): after the surface closes, which window holds the keyboard. Each surface is closed by its IPC
+# close and by Esc typed into it (the path a user takes); the key must arrive in the window that was active when the surface
+# opened and in no other.
 t_control() {
   local path prev o n=0
-  for path in apps search switcher; do
+  for path in apps search switcher apps-esc search-esc switcher-esc; do
     for prev in A B; do
       for o in $OUT_A $OUT_B; do
         n=$((n + 1))
@@ -350,7 +352,38 @@ close_via_surface() {
     apps) ipc apps open >/dev/null; sleep 1; ipc apps close >/dev/null; sleep 0.8 ;;
     search) ipc search open "" >/dev/null; sleep 1; ipc search close >/dev/null; sleep 0.8 ;;
     switcher) ipc switcher next t >/dev/null; sleep 1; ipc switcher cancel >/dev/null; sleep 0.8 ;;
+    apps-esc) ipc apps open >/dev/null; sleep 1; kb -k Escape; sleep 0.8 ;;
+    search-esc) ipc search open "" >/dev/null; sleep 1; kb -k Escape; sleep 0.8 ;;
+    switcher-esc) ipc switcher next t >/dev/null; sleep 1; kb -k Escape; sleep 0.8 ;;
   esac
+}
+
+# clickwins: the user's click wins over the shell's focus return (C2 retry or the plugin request). A is active, the pointer
+# rests on B's output; the overview opens and closes with Esc (the focus goes back to A); 400 + D ms after it reports closed
+# (D = 0 .. 450, ten values; the shell's focus return is bounded by 1 s) a click on B must leave B active and B alone must get
+# the keys. Both the plugin request and the C2 retry check at the moment they run; the shell log says how each one ended.
+t_clickwins() {
+  local i d act tag px py geo
+  # The centre of B's window, relative to its output (the click must land on the window itself, which is small).
+  geo=$(nc clients -j | jq -r --arg t B --argjson mons "$(nc monitors -j)" '.[] | select(.title == $t) as $w | ($mons[] | select(.id == $w.monitor)) as $m | "\((($w.at[0] + $w.size[0] / 2) - $m.x) | floor) \((($w.at[1] + $w.size[1] / 2) - $m.y) | floor)"' | head -1)
+  read -r px py <<<"$geo"
+  [[ -n $px ]] || { check "clickwins: B's window centre found" 1; return; }
+  for i in 0 1 2 3 4 5 6 7 8 9; do
+    d=$((i * 50))
+    focus A
+    ptr output $OUT_B abs $park; sleep 0.3
+    open_overview
+    kb -k Escape
+    wait_for 5 overview_closed
+    # The chrome keeps its input mask for the zoom-out (overview.motion.slow, 350 ms): a click earlier than that is the chrome's
+    # (measured: clicks up to ~200 ms after the close are taken by it, from ~250 ms they reach B), not the focus return's.
+    sleep 0.4
+    ptr output $OUT_B abs $((px + 1)) $((py + 1)) sleep "$d" click
+    sleep 1.2
+    act=$(active_title)
+    tag="W$i$RANDOM"
+    keys_arrive B "$tag"; check "clickwins: click on B 400+${d} ms after the close wins (active=$act): B alone gets the keys" $?
+  done
 }
 
 # selected_title: title of the window the overview shows as selected (any output), "" for none.
@@ -574,12 +607,13 @@ case $mode in
   shots) focus A; open_overview; for o in $OUT_A $OUT_B; do "$root/scripts/dev/shot.sh" "ovt-$o" "$o"; done; ipc overview close >/dev/null ;;
   paths) t_paths ;;
   control) t_control ;;
+  clickwins) t_clickwins ;;
   arrows) t_arrows ;;
   desktop) t_desktop ;;
   interrupt) t_interrupt ;;
   # drag, desktop and interrupt last: they move windows to other Spaces (ensure_spares puts A and B back first)
-  all) t_click; t_hover; t_arrows; t_loop; t_paths; t_backdrop; t_drop; t_drag; t_desktop; t_interrupt ;;
-  *) echo "usage: $0 [click|hover|arrows|drag|loop|paths|backdrop|drop|desktop|interrupt|all]" >&2; exit 2 ;;
+  all) t_click; t_hover; t_arrows; t_loop; t_paths; t_clickwins; t_backdrop; t_drop; t_drag; t_desktop; t_interrupt ;;
+  *) echo "usage: $0 [click|hover|arrows|drag|loop|paths|control|clickwins|backdrop|drop|desktop|interrupt|all]" >&2; exit 2 ;;
 esac
 size_guard
 exit "$fails"

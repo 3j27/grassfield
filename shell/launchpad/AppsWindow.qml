@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.platform
 import qs.services
 import "Model.js" as Model
 
@@ -30,7 +31,9 @@ Variants {
         property real progress: shown ? 1 : 0
 
         screen: modelData
-        visible: shown || progress > 0.001
+        // Never unmapped in the same turn that drops the keyboard (also with Reduce Motion, where the fade is instant):
+        // a layer destroyed while Exclusive leaves the compositor with no keyboard focus.
+        visible: release.mapped || progress > 0.001
         anchors {
             top: true
             bottom: true
@@ -50,6 +53,11 @@ Variants {
             id: blur
             item: frame
             radius: Tokens.launcherPanelRadius
+        }
+
+        KeyboardRelease {
+            id: release
+            shown: win.shown
         }
 
         Behavior on progress {

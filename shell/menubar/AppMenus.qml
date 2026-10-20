@@ -125,9 +125,11 @@ Singleton {
             Compositor.moveToplevelToSpace(ctx.focusedWindow, item.space);
             break;
         case "bringAll":
+            FocusReturn.skip();
             Compositor.bringAllToFront(appId);
             break;
         case "window":
+            FocusReturn.skip();
             Compositor.activate(item.ref);
             break;
         }

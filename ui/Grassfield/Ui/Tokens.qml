@@ -1140,4 +1140,7 @@ QtObject {
     readonly property int switcherLayerWaitMs: 250
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real switcherFadeScale: 0.96
+
+    // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it
+    readonly property int focusReturnReleaseHoldMs: 120
 }
