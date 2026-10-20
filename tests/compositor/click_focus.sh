@@ -37,6 +37,9 @@
 #   health    Hyprland alive, no grassfield exception in its log
 # Without grassfield-compositor (C2: scripts/nestctl plugin unload, or nested-up.sh --no-plugin) the titlebar cases are
 # skipped (no titlebars) and the unlock clicks are reported only: Hyprland 0.56.2 alone does nothing there (known limit).
+# Timing: a closed surface's keyboard release and empty input mask land when the shell's GUI thread commits them; in a
+# loaded nested session that took seconds, and in C2 the shell's focus-return retry, delayed the same way, can take the
+# keyboard back from a window clicked in the meantime (known C2 limit).
 # Logs: .dev/click-focus/run-<timestamp>/.
 set -uo pipefail
 
