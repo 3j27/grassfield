@@ -3102,9 +3102,23 @@
         <translation>Notifications</translation>
     </message>
     <message>
-        <source>Clear All</source>
-        <translation>Tout effacer</translation>
+        <source>Close</source>
+        <translation>Fermer</translation>
     </message>
+    <message>
+        <source>Edit Widgets</source>
+        <translation>Modifier les widgets</translation>
+    </message>
+</context>
+<context>
+    <name>NotificationContent</name>
+    <message>
+        <source>More</source>
+        <translation>Plus</translation>
+    </message>
+</context>
+<context>
+    <name>NotificationList</name>
     <message>
         <source>No Notifications</source>
         <translation>Aucune notification</translation>
@@ -3118,19 +3132,12 @@
         <translation>Afficher moins</translation>
     </message>
     <message>
+        <source>Clear All</source>
+        <translation>Tout effacer</translation>
+    </message>
+    <message>
         <source>Show All (%1)</source>
         <translation>Tout afficher (%1)</translation>
-    </message>
-    <message>
-        <source>Edit Widgets</source>
-        <translation>Modifier les widgets</translation>
-    </message>
-</context>
-<context>
-    <name>NotificationContent</name>
-    <message>
-        <source>More</source>
-        <translation>Plus</translation>
     </message>
 </context>
 <context>
