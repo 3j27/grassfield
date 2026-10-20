@@ -104,4 +104,59 @@ if python3 -c 'import gi; gi.require_version("Gtk","3.0")' 2>/dev/null && python
 else
   echo "SKIP: GTK icon resolution (PyGObject with Gtk 3 and 4 missing)"
 fi
+
+# ---- Fallback after the Apple-artwork filter (owner decision 2026-10-20, ADR-0017): a name whose WhiteSur icon was
+# removed (or whose link dangled) resolves to Adwaita or Breeze through the grassfield-icons wrapper, not to nothing and
+# not to WhiteSur. GTK 3 and 4, no display.
+removed_names="computer display system-file-manager preferences-system input-mouse phone"
+if python3 -c 'import gi; gi.require_version("Gtk","3.0")' 2>/dev/null && python3 -c 'import gi; gi.require_version("Gtk","4.0")' 2>/dev/null \
+   && [[ -d /usr/share/icons/Adwaita ]]; then
+  guard=$root/packaging/arch/whitesur-guard.sh
+  # (1) A fixture WhiteSur holding Apple artwork under those names: the guard removes it, the names fall back.
+  fixd=$tmp/fallback
+  mkdir -p "$fixd/icons/WhiteSur/apps/scalable" "$fixd/icons/grassfield-icons/scalable/apps"
+  python3 -I "$root/tests/shell/whitesur_fixtures.py" "$tmp/fallback-fx"
+  printf '[Icon Theme]\nName=WhiteSur\nInherits=hicolor,breeze\nDirectories=apps/scalable\n\n[apps/scalable]\nSize=128\nMinSize=8\nMaxSize=512\nType=Scalable\nContext=Applications\n' \
+    >"$fixd/icons/WhiteSur/index.theme"
+  for n in computer system-file-manager input-mouse; do cp "$tmp/fallback-fx/logo-in-icon.svg" "$fixd/icons/WhiteSur/apps/scalable/$n.svg"; done
+  ln -s computer.svg "$fixd/icons/WhiteSur/apps/scalable/display.svg"
+  printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>\n' >"$fixd/icons/WhiteSur/apps/scalable/preferences-system.svg"
+  cp "$tmp/fallback-fx/circle.svg" "$fixd/icons/WhiteSur/apps/scalable/phone.svg"
+  printf 'name\tphone\ttest: an Apple product silhouette\nname\tpreferences-system\ttest: an Apple app mark\n' >"$fixd/blocklist.txt"
+  cp "$fixd/icons/WhiteSur/apps/scalable/preferences-system.svg" "$fixd/icons/WhiteSur/apps/scalable/benign-app.svg"
+  for t in Adwaita breeze hicolor; do [[ -d /usr/share/icons/$t ]] && ln -s "/usr/share/icons/$t" "$fixd/icons/$t"; done
+  cp "$theme" "$fixd/icons/grassfield-icons/index.theme"
+  gtk() { env -i PATH="$PATH" HOME="$tmp" XDG_RUNTIME_DIR="$tmp" GSETTINGS_BACKEND=memory python3 -I "$root/tests/shell/icon_probe_gtk.py" "$1" "$fixd/icons" grassfield-icons "${@:2}" 2>/dev/null; }
+  before=$(gtk 3 $removed_names benign-app)
+  desc="fixture before the filter: the names resolve to WhiteSur ($(tr '\n' ' ' <<<"$before" | cut -c1-120))"
+  check bash -c '[[ $(grep -c "=WhiteSur/" <<<"$1") -ge 6 ]]' _ "$before"
+  GRASSFIELD_WHITESUR_BLOCKLIST=$fixd/blocklist.txt "$guard" clean "$fixd/icons/WhiteSur" >/dev/null
+  for v in 3 4; do
+    after=$(gtk "$v" $removed_names benign-app)
+    desc="GTK$v after the filter: the six names fall back to Adwaita or Breeze, an untouched icon stays in WhiteSur ($(tr '\n' ' ' <<<"$after" | cut -c1-200))"
+    check bash -c 'for n in $2; do grep -qE "^$n=(Adwaita|breeze)/" <<<"$1" || exit 1; done; grep -qx "benign-app=WhiteSur/apps/scalable/benign-app.svg" <<<"$1"' _ "$after" "$removed_names"
+  done
+
+  # (2) The real package tree, when it is built (makepkg under .dev/ or GRASSFIELD_WHITESUR_TREE=<.../usr/share/icons>).
+  tree=${GRASSFIELD_WHITESUR_TREE:-}
+  [[ -n $tree ]] || for c in "$root/.dev/build/grassfield/pkg/grassfield-whitesur-icons/usr/share/icons"; do [[ -d $c/WhiteSur ]] && tree=$c; done
+  if [[ -n $tree && -d $tree/WhiteSur ]]; then
+    real=$tmp/real
+    mkdir -p "$real/icons/grassfield-icons/scalable/apps"
+    for t in WhiteSur WhiteSur-light WhiteSur-dark; do ln -s "$tree/$t" "$real/icons/$t"; done
+    for t in Adwaita breeze hicolor; do [[ -d /usr/share/icons/$t ]] && ln -s "/usr/share/icons/$t" "$real/icons/$t"; done
+    cp "$theme" "$real/icons/grassfield-icons/index.theme"
+    for v in 3 4; do
+      out=$(env -i PATH="$PATH" HOME="$tmp" XDG_RUNTIME_DIR="$tmp" GSETTINGS_BACKEND=memory python3 -I "$root/tests/shell/icon_probe_gtk.py" "$v" "$real/icons" grassfield-icons $removed_names folder firefox 2>/dev/null)
+      desc="GTK$v on the real filtered package tree: the six names are not WhiteSur ($(tr '\n' ' ' <<<"$out" | cut -c1-260))"
+      check bash -c 'for n in $2; do grep -qE "^$n=(Adwaita|breeze|hicolor)/" <<<"$1" || exit 1; done' _ "$out" "$removed_names"
+      desc="GTK$v on the real filtered package tree: WhiteSur still serves the icons that were kept (folder)"
+      check grep -qE '^folder=WhiteSur' <<<"$out"
+    done
+  else
+    echo "SKIP: fallback on the real package tree (build the package under .dev/ or set GRASSFIELD_WHITESUR_TREE)"
+  fi
+else
+  echo "SKIP: icon fallback after the Apple-artwork filter (PyGObject with Gtk 3 and 4, or Adwaita, missing)"
+fi
 exit "$fail"

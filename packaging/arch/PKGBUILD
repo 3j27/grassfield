@@ -8,7 +8,7 @@
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor grassfield-whitesur-icons)
 pkgver=0.4.0
-pkgrel=5
+pkgrel=6
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
@@ -20,8 +20,9 @@ options=(!debug)
 # WhiteSur icon theme (third party, GPL-3.0). Same pin and reviewed install.sh as scripts/dev/whitesur.sh: update both
 # together, after reading the new install.sh in full. Integrity: the commit id (makepkg checks it out by id), the
 # SHA-256 of the `git archive` of that commit below (pacman 7.1 calc_checksum_git), and the SHA-256 of install.sh that
-# build() verifies before running it. The Apple-logo guard (whitesur-guard.sh, ADR-0017) must be re-derived on a pin
-# change: whitesur-guard.sh list <checkout> > whitesur-apple-logos.txt, after viewing the logos.
+# build() verifies before running it. The Apple-artwork guard (whitesur-guard.sh, whitesur-detect.py, ADR-0017) must be
+# re-derived on a pin change: whitesur-guard.sh list <checkout> > whitesur-apple-logos.txt after viewing the logos, and the
+# whole new tree reviewed on contact sheets for Apple trademark artwork (whitesur-blocklist.txt).
 _whitesur_commit=73d8040da51a9ed74e47c7366e7e9ff437601a5c
 _whitesur_install_sha256=295fdee31bead5e6b184b82a1b6341e6096ab3ea59ed5f30416f6c707cc945d1
 source=("whitesur-icon-theme::git+https://github.com/vinceliuice/WhiteSur-icon-theme.git#commit=${_whitesur_commit}")
@@ -60,8 +61,13 @@ build() {
   [[ $actual == "$_whitesur_install_sha256" ]] || { echo "WhiteSur install.sh changed ($actual): review it before updating the pin" >&2; return 1; }
   install -d "$srcdir/whitesur-home" "$srcdir/whitesur-icons"
   # Clean environment: install.sh reads DESKTOP_SESSION, bold, plasma, alternative and black from it. -p ("Replaces Apple
-  # logo with KDE Plasma logo") swaps the places/ logos but NOT the status/ ones nor folder-apple, so the guard below
-  # removes every remaining Apple logo and its links, then fails the build if one is still present (ADR-0017).
+  # logo with KDE Plasma logo") swaps only the places/ start-here logos. The guard below then FILTERS the theme (owner
+  # decision 2026-10-20): it removes every icon that shows the Apple logo (perceptual match of any drawable part of any
+  # SVG or embedded PNG with the reference logo masks, so a logo inside an iMac or a mouse is found, whatever the colour
+  # or the path syntax), every icon of the curated blocklist (Apple trademark artwork and product silhouettes that no
+  # logo detector can see: Finder, App Store, Safari, ...), the icons that share a basename with one, and the links left
+  # dangling. The names it removes fall back to Adwaita and Breeze through the grassfield-icons wrapper. The build FAILS
+  # when anything it knows is still present (ADR-0017). Legal review is still required before a public release.
   env -i PATH=/usr/bin HOME="$srcdir/whitesur-home" XDG_DATA_HOME="$srcdir/whitesur-home/.local/share" LC_ALL=C \
     /usr/bin/bash "$srcdir/whitesur-icon-theme/install.sh" -p -d "$srcdir/whitesur-icons" >/dev/null
   # The gtk-update-icon-cache pacman hook builds the caches on the target; these would list the removed icons.
