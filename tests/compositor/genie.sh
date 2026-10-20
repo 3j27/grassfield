@@ -5,6 +5,9 @@
 # Usage: tests/compositor/genie.sh            the whole scenario (steps 1-6)
 #        tests/compositor/genie.sh timing N   only N minimize + restore pairs per effect (genie, scale, fade) at normal
 #                                             speed, no capture: the plugin's frame timing lines, then health
+#        tests/compositor/genie.sh c2 [X Y]   gate C2, in a session started with nested-up.sh --no-plugin: SUPER+M parks
+#                                             the window (shell fallback); with X Y (the Dock tile on the output) a click
+#                                             there restores it
 # NESTED only: needs scripts/dev/nested-up.sh with grassfield-compositor loaded (features "minimize" and
 # "minimize-effect") and grassfield-shell running. Settings change through the dev settings file
 # (.dev/config/grassfield.json, the nested shell's GRASSFIELD_CONFIG_HOME; restored at exit), which the shell pushes to
@@ -30,11 +33,18 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 dev=$root/.dev
 out=${GENIE_OUTPUT:-GF-REF}
 timing_only=0
+c2=0
 pairs=5
+usage="usage: genie.sh [timing N | c2 [TILE_X TILE_Y]]"
 case "${1:-}" in
   "") ;;
-  timing) [[ ${2:-} =~ ^[1-9][0-9]*$ ]] || { echo "usage: genie.sh [timing N]" >&2; exit 2; }; timing_only=1 pairs=$2 ;;
-  *) echo "usage: genie.sh [timing N]" >&2; exit 2 ;;
+  timing) [[ ${2:-} =~ ^[1-9][0-9]*$ ]] || { echo "$usage" >&2; exit 2; }; timing_only=1 pairs=$2 ;;
+  c2)
+    c2=1
+    c2_tile_x=${2:-} c2_tile_y=${3:-}
+    [[ -z $c2_tile_x || ($c2_tile_x =~ ^[0-9]+$ && $c2_tile_y =~ ^[0-9]+$) ]] || { echo "$usage" >&2; exit 2; }
+    ;;
+  *) echo "$usage" >&2; exit 2 ;;
 esac
 
 # shellcheck source=../../scripts/dev/pidfile.sh
@@ -54,9 +64,14 @@ done
 
 query() { HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j "$1"; } # read-only queries only
 features() { query grassfield | jq -r '.features | join(",")' 2>/dev/null; }
-[[ ,$(features), == *,minimize-effect,* ]] || { echo "genie: the loaded plugin does not advertise \"minimize-effect\"" >&2; exit 2; }
-grep -q "grassfield: compositor setting minimizeEffect" "$dev/shell.log" 2>/dev/null \
-  || { echo "genie: the shell has not pushed minimizeEffect yet (see .dev/shell.log)" >&2; exit 2; }
+if ((c2)); then
+  [[ -z $(features) ]] || { echo "genie c2: the plugin is loaded (start the session with scripts/dev/nested-up.sh --no-plugin)" >&2; exit 2; }
+  grep -q "running in degraded mode" "$dev/shell.log" 2>/dev/null || { echo "genie c2: the shell is not in degraded mode yet" >&2; exit 2; }
+else
+  [[ ,$(features), == *,minimize-effect,* ]] || { echo "genie: the loaded plugin does not advertise \"minimize-effect\"" >&2; exit 2; }
+  grep -q "grassfield: compositor setting minimizeEffect" "$dev/shell.log" 2>/dev/null \
+    || { echo "genie: the shell has not pushed minimizeEffect yet (see .dev/shell.log)" >&2; exit 2; }
+fi
 
 run=$dev/genie/run-$(date +%Y%m%d-%H%M%S)
 mkdir -p "$run/frames"
@@ -275,7 +290,7 @@ timing_rounds() { # <label> <n>
 }
 
 say "genie: nested pid $hypr_pid, output $out ${mon_w}x${mon_h}, features $(features)"
-set_settings genie false
+((c2)) || set_settings genie false
 pointer abs $((mon_w / 2)) $((mon_h / 3)) sleep 50
 WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot >/dev/null 2>&1 </dev/null &
 a_pid=$!
@@ -290,6 +305,38 @@ to_minimized="^[0-9]+ movewindowv2>>$hex,-?[0-9]+,special:minimized\$"
 to_workspace="^[0-9]+ movewindowv2>>$hex,[0-9]+,$ws0\$"
 say "  setup: A $addr ${w0}x${h0} at ($x0,$y0) on workspace $ws0"
 WAYLAND_DISPLAY=$sock grim -t ppm -o "$out" "$run/with-window.ppm" 2>>"$log"
+
+if ((c2)); then
+  # C2: no plugin. SUPER+M (the shell's `windows minimize`) parks A on special:minimized at once (the shell's fallback,
+  # no animation); a click on its Dock tile (TILE_X TILE_Y on the output: the tile the plugin run logged for the same
+  # layout) moves it back. Nothing of the plugin is involved.
+  say "C2: minimize without the plugin (shell fallback)"
+  moves=$(move_count "$to_minimized")
+  timeout 20 "$root/tests/tools/vkbd/vkbd.sh" down Super_L tap m up Super_L >>"$log" 2>&1
+  for _ in $(seq 1 60); do (($(move_count "$to_minimized") > moves)) && break; sleep 0.05; done
+  sleep 0.3
+  read -r _ _ _ _ _ ws < <(client "$a_pid")
+  [[ $ws == special:minimized ]]
+  check "C2: SUPER+M parks A on special:minimized" $? "workspace $ws"
+  n=$(grep -c "grassfield>>" "$events")
+  [[ $n == 0 ]]
+  check "C2: no grassfield event" $? "$n"
+  if [[ -n ${c2_tile_x:-} ]]; then
+    pointer abs "$c2_tile_x" "$c2_tile_y" sleep 400
+    pointer abs "$c2_tile_x" "$c2_tile_y" sleep 40 click
+    sleep 1
+    read -r _ x y w h ws < <(client "$a_pid")
+    [[ $ws == "$ws0" && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
+    check "C2: a click on the Dock tile restores A" $? "${w}x${h} at ($x,$y) on $ws"
+  else
+    say "  C2 restore: NOT VERIFIED (no tile position given)"
+  fi
+  kill -0 "$hypr_pid" 2>/dev/null
+  check "C2: nested Hyprland alive" $? "pid $hypr_pid"
+  if ((fail == 0)); then say "genie c2: PASS"; else say "genie c2: FAIL"; fi
+  say "genie c2: run $run"
+  exit "$fail"
+fi
 
 if ((timing_only)); then
   say "timing: $pairs minimize + restore pairs per effect at normal speed, no capture"
