@@ -163,9 +163,9 @@ overlay() {
   fail "$name did not show on GF-REF after three attempts"
 }
 
-# Dock tile centres on GF-REF with the dock of this run (pinned foot, then the two test apps, separator, Trash): the pinned
+# Dock tile centres on GF-REF with the dock of this run (Apps tile, pinned foot, then the two test apps, separator, Trash): the pinned
 # tile and the two running ones (their dots, tooltip and badge). Magnification is off, so the layout is the unscaled one.
-DOCK_X_FOOT=875 DOCK_X_A=927 DOCK_X_B=979 DOCK_Y=1032
+DOCK_X_FOOT=901 DOCK_X_A=953 DOCK_X_B=1005 DOCK_Y=1032
 
 # dock_surface: two running test apps (foot windows with distinct app ids: running dots), a notification for one of them (the
 # badge), the pointer on the first (its tooltip) -> "dock"; the pinned foot tile pressed and dragged up (its "Remove" label) ->
