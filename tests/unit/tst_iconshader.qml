@@ -233,7 +233,7 @@ TestCase {
     //   Dark, the dark appearance over a LIGHT wallpaper at 16 to 48 px (the window material is then a mid grey): the graphite plate is
     //     only 1.1 to 1.6:1 against it and the edge highlight (white at darkRim) is 2.2 to 2.8:1 in the measured band, so an icon whose
     //     artwork is dark overall (foot, obs, a dark page border, logos with a near-black glyph) measures 2.2 to 2.9 against a floor of 2.9:
-    //     same-tone-glyph 2.84 (48 px), logo-no-plate 2.86, dark-glyph-no-plate 2.80, dark-plate-light-border 2.53, foot 2.23, obs 2.47.
+    //     same-tone-glyph 2.84 (48 px), kdenlive 2.45 (16-24 px), logo-no-plate 2.86, dark-glyph-no-plate 2.80, dark-plate-light-border 2.53, foot 2.23, obs 2.47.
     //   Tinted, the dark appearance over a light wallpaper at 16 to 24 px: foot 2.78 and btop 2.25 (the dark tinted plate is 1.5:1 against
     //     the material); Tinted with a bright tint (yellow) in the light appearance at 32 px: white page 2.35 and Calendar 2.14 (default
     //     2.4 to 3.8: the pale tinted plate against a dark window).
@@ -244,7 +244,7 @@ TestCase {
     //     appearance over a black wallpaper: the smoked plate is invisible on black, only the rim carries).
     readonly property var knownLimits: [
         "same-tone-glyph dark E", "logo-no-plate dark E", "dark-glyph-no-plate dark E", "dark-plate-light-border dark E",
-        "whitesur:foot dark E", "whitesur:foot tinted E", "whitesur:foot clear E", "hicolor:obs dark E", "hicolor:btop tinted E",
+        "whitesur:foot dark E", "whitesur:foot tinted E", "whitesur:foot clear E", "hicolor:obs dark E", "hicolor:kdenlive dark E", "hicolor:btop tinted E",
         "whitesur:visual-studio-code dark E", "graphite-plate-red-glyph dark E", "graphite-plate-red-glyph clear E",
         "white-page-document tinted E", "whitesur:org.gnome.Calendar tinted E", "hicolor:basecamp clear S", "hicolor:basecamp tinted S"
     ]
