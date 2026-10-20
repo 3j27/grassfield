@@ -38,6 +38,8 @@ int main(int argc, char *argv[])
     parser.addVersionOption();
     const QCommandLineOption glanceOption(QStringLiteral("glance"), QObject::tr("Show a quick, floating look at the files (Space or Esc closes it)."));
     parser.addOption(glanceOption);
+    const QCommandLineOption startOption(QStringLiteral("start"), QObject::tr("Show file number <n> of the given files first (0 is the first)."), QStringLiteral("n"));
+    parser.addOption(startOption);
     parser.addPositionalArgument(QStringLiteral("files"), QObject::tr("Local files or file: URLs."), QStringLiteral("[files...]"));
     parser.process(app);
 
@@ -52,7 +54,22 @@ int main(int argc, char *argv[])
 
     // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the
     // windows down still see it (no TypeError on close).
-    PreviewApp backend(args.paths, args.errors, glance);
+    // One file opened: the other files of its folder can be browsed (previous/next), in the order Grassfield Files shows
+    // them, like the arrow keys of a file manager. The viewer browses images; a Glance every kind it can show.
+    QStringList paths = args.paths;
+    int start = qMax(0, parser.value(startOption).toInt());
+    bool browsing = false;
+    if (paths.size() == 1) {
+        const preview::Kind kind = preview::classify(paths.constFirst());
+        if (glance ? kind != preview::Kind::Unsupported : kind == preview::Kind::Image) {
+            const preview::Browse browse = preview::browseFolder(paths.constFirst(), glance ? preview::BrowseKinds::Previewable : preview::BrowseKinds::ImagesOnly,
+                                                                 preview::filesSortSpec());
+            paths = browse.paths;
+            start = browse.index;
+            browsing = paths.size() > 1;
+        }
+    }
+    PreviewApp backend(paths, args.errors, glance, start, browsing);
 
     QQmlApplicationEngine engine;
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
