@@ -9,6 +9,14 @@
 # private bus and the apps are started outside Hyprland and would not see those variables otherwise.
 # Only the environment of the calling process and its children is changed.
 
+# A dev process never inherits the live session it was started from (the owner may run a real Grassfield session, and a
+# terminal started from it carries that session's and grassfield-shell.service's variables): GRASSFIELD_SESSION=1 marks a
+# packaged session (it turns the test hooks off and the real-session launch path on), QS_DISABLE_FILE_WATCHER and
+# QS_NO_RELOAD_POPUP belong to the shell unit (shell-run.sh --unit-env sets them on purpose), the rest is systemd and
+# uwsm bookkeeping of the live session's units.
+unset GRASSFIELD_SESSION QS_DISABLE_FILE_WATCHER QS_NO_RELOAD_POPUP INVOCATION_ID JOURNAL_STREAM SYSTEMD_EXEC_PID \
+  MANAGERPID MANAGERPIDFDID UWSM_FINALIZE_VARNAMES UWSM_WAIT_VARNAMES
+
 _gf_dev_root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
 if [[ -d $_gf_dev_root/.dev/share/icons ]]; then
   case ":${XDG_DATA_DIRS:-}:" in
