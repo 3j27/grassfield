@@ -58,7 +58,7 @@ Observations for counsel (no conclusion):
 | `grassfield-desktop` | QML shell (`/usr/share/grassfield/shell`), `Grassfield.Ui` QML module + 40 SVG icons, `Grassfield.I18n` QML plugin `.so` + `.qm` catalogues, Hyprland Lua session config, JSON defaults and schema, session `.desktop`, systemd user units, `grassfield-menu-bridge`, `grassfield-settings`, `grassfield-files`, `grassfield-preview` binaries and their QML, `.desktop` files, README, `BRANDING.md` | this repository only |
 | `grassfield-compositor` | `/usr/lib/grassfield/grassfield-compositor.so` (Hyprland plugin) | this repository, compiled against Hyprland headers, with code generated from `compositor/protocols/appmenu.xml` |
 
-| `grassfield-whitesur-icons` (optional, ADR-0017) | the WhiteSur icon theme, three variants, plus `COPYING`, `AUTHORS`, `SOURCE` | upstream commit `73d8040…` fetched at build time; GPL-3.0 data, not in this repository |
+| `grassfield-whitesur-icons` (optional, ADR-0017) | the WhiteSur icon theme, three variants, plus `COPYING`, `AUTHORS`, `SOURCE` | upstream commit `73d8040…` fetched at build time; GPL-3.0-only data, not in this repository; no Apple logo (build guard, ADR-0017) |
 
 Everything else (Hyprland, Quickshell, Qt, KF6, fonts) is a declared dependency installed from the Arch/Omarchy
 repositories; Grassfield does not redistribute it today. The ISO (M6) changes that (section 6).
@@ -92,7 +92,7 @@ repositories; Grassfield does not redistribute it today. The ISO (M6) changes th
 | 21 | googletest 1.18.0 | `makedepends`; unit tests of plugin, bridge, Files, Preview; test binaries built in `check()` | BSD-3-Clause, "Copyright 2008, Google Inc." | notice only if test binaries were distributed | not packaged (VERIFIED: the package functions and the CMake `install()` rules install no test binary) |
 | 22 | wlr-virtual-pointer protocol (test tool) | `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml`, "reconstructed from the request signatures" of Hyprland's generated header | upstream notice in `/usr/include/hyprland/protocols/wlr-virtual-pointer-unstable-v1.hpp`: MIT, "Copyright © 2019 Josef Gajdusek" | MIT notice if distributed | test-only, not packaged; no notice in the reconstructed file |
 | 23 | uwsm 0.26.7 | session launcher in `grassfield.desktop` `Exec=` | MIT | none (separate program) | dependency |
-| 24 | WhiteSur icon theme (commit `73d8040…`, optional package `grassfield-whitesur-icons`) | icon theme data read by Qt and GTK; built from the pinned upstream commit, not modified, not in the repository | GPL-3.0 per `COPYING` (version qualifier to verify); author per `AUTHORS`: Vince Liuice | GPL-3.0: licence text, corresponding source (the repository at that commit) for any distribution | licence files installed by the package; G12; needs legal review |
+| 24 | WhiteSur icon theme (commit `73d8040…`, optional package `grassfield-whitesur-icons`) | icon theme data read by Qt and GTK; built from the pinned upstream commit (checksummed), Apple-logo files removed by the build guard, not in the repository | GPL-3.0-only (`COPYING` is the plain version 3 text, no "or later" notice anywhere at the pin); author per `AUTHORS`: Vince Liuice; modified by the package: Apple-logo files and icon caches removed (ADR-0017 guard) | GPL-3.0: licence text, corresponding source (the repository at that commit) for any distribution | licence files installed by the package; G12; needs legal review |
 
 ### 4.2 Hyprland and its libraries (rows 1, 2, 5)
 
