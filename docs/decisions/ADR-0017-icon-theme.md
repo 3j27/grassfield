@@ -360,3 +360,12 @@ package command.
   - Breeze icons can appear for names WhiteSur lacks (unless 4b).
 - **Re-verify on updates:** Qt minor versions (the variable), uwsm (env file lookup), dconf (profile rules), and any pin
   bump of WhiteSur (icon names used by the shell, the measurements of ui.md:53).
+
+## Owner answers (2026-10-20)
+- Distribution: a split package grassfield-whitesur-icons built by makepkg from the pinned upstream commit (nothing
+  vendored in the MIT repo); it replaces the 2026-10-19 "WhiteSur only in .dev" rule on this dedicated machine.
+- `grassfield-icons` stays Grassfield's app icon theme: Grassfield's own icons first (drawn over time), then WhiteSur,
+  then Breeze/Adwaita/hicolor. The 41 symbolic system icons are unchanged.
+- GTK/Electron/Flatpak: session dconf profile with a locked icon-theme key, after spike I0.
+- Other questions: the recommended options (wrapper fallback accepting Breeze, base WhiteSur in both appearances,
+  Acknowledgements in Settings > About).

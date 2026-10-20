@@ -621,3 +621,11 @@ run measures it.
   time-of-day pictures, screen savers.
 - **Revisit:** the video option if W0 shows copy-back decoding or instability, or if legal advice rejects FFmpeg in the
   shell process; then go to V2.
+
+## Owner answers (2026-10-20)
+- Step 1 local first, step 2 NASA APOD and Wikimedia Commons (owner batch 10).
+- APOD days under copyright: shown with the credit line (needs legal review before any public release).
+- Wikimedia User-Agent contact: chapdel.kamga2@gmail.com (owner-provided).
+- All other questions: the recommended options, taken as integrator decisions under "macOS model first" (helper
+  process, transcode once, pause rules, still on the lock, automatic frosted menu-bar band, tint later, 14-day /
+  200 MiB cache, Qt Quick Dialogs picker). The owner can revisit any of them.
