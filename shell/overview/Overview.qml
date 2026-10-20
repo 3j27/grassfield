@@ -373,14 +373,20 @@ Scope {
             }
             return;
         }
-        const owner = windowOf(selected);
-        if (!owner) {
-            selected = V2.startSelection(previous, all.map(w => ({
+        // Nothing selected: the ring is on the window that was active at open, so the first arrow starts from it and
+        // moves to its neighbour (macOS); selecting that same window would change nothing visible.
+        if (selected === "") {
+            const start = V2.startSelection(previous, all.map(w => ({
                         name: w.screenName,
                         addresses: w.winKeys
                     })));
-            return;
+            if (start === "" || !windowOf(start))
+                return;
+            selected = start;
         }
+        const owner = windowOf(selected);
+        if (!owner)
+            return;
         const next = owner.neighborOf(selected, dir);
         if (next !== "") {
             selected = next;
@@ -421,15 +427,23 @@ Scope {
     function activateSelection(): void {
         if (spaceFocus >= 0) {
             const owner = windows.instances.find(w => w.screenName === spaceScreen);
-            if (owner)
+            if (owner) {
                 owner.activateTile(spaceFocus);
+                return;
+            }
         } else {
             // Nothing chosen yet: Return takes the window the ring shows, the one active at open.
             const key = selected !== "" ? selected : previousAddress;
             const owner = key !== "" ? windowOf(key) : null;
-            if (owner)
+            if (owner) {
                 owner.activateWindow(key);
+                return;
+            }
         }
+        // Nothing the ring could show (no window was active at open, or it is gone, or the Desktops bar owner is gone):
+        // Return closes, as Esc does (macOS: Return with nothing chosen leaves Mission Control). Before this it did
+        // nothing, and the next Return was the one that closed.
+        closeAnd(null);
     }
 
     Timer {
