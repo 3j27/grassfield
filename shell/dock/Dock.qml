@@ -349,6 +349,13 @@ Scope {
             return JSON.stringify(Settings.dockPinned);
         }
 
+        // Keys of the tiles in order (JSON list), the index `click` takes (fixtures only).
+        function tiles(): string {
+            if (!VisualFixtures.active)
+                return "[]";
+            return JSON.stringify(root.items.map(i => i.key !== undefined ? i.key : i.kind));
+        }
+
         function hover(x: real): void {
             root.testPointerX = x;
         }

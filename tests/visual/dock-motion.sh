@@ -115,7 +115,8 @@ landed=0
 for attempt in 1 2 3; do
   record land 4600
   vs_sleep 0.4
-  vs_ipc dock click "$(( attempt == 1 ? 3 : 2 ))" >/dev/null
+  # The tile of gfmA by its key (the index moves with the fixed Files and Apps tiles).
+  vs_ipc dock click "$(vs_ipc dock tiles | jq 'index("gfmA")')" >/dev/null
   wait "$rec_pid"; rec_pid=""
   if python3 -I "$VS_HERE/dock-motion.py" "$out" land magenta land > "$out/land.txt"; then
     landed=1
