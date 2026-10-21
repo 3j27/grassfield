@@ -27,14 +27,17 @@ SF Pro and SF Symbols are Apple-licensed and must not be used or redistributed.
     Omarchy's later in-place `assign` of Liberation Sans over `sans-serif` lands behind Inter. The generic names stay in
     the list, so the CJK, Arabic and emoji alias chains still fire. These are family-name aliases only; no Apple font is
     used or shipped (needs legal review: see E29 in docs/legal/visual-review.md).
-  - Missing families: a family that is not installed (Segoe UI, Cantarell, ...) falls back to Inter. One rule appends a
-    weak Inter to patterns that name no generic family; because the system rules give such a family the default
-    `system-ui` and Omarchy's rules then put a strong Liberation Sans behind it, a second rule after the include puts a
-    strong Inter just before that `system-ui`. Known serif, mono and sans names carry their own generic and are not
-    touched (Georgia stays Liberation Serif). `monospace`, `serif`, Helvetica, Arial, Times New Roman and Courier New are
-    not touched: the terminal font stays the user's, and metric-compatible substitutes keep documents laid out.
-    Finding of the test (tests/shell/fontconfig_session.sh): a strong append alone breaks serif fallbacks and the
-    `default` metric aliases (Arimo), and a weak one alone loses to Omarchy's strong Liberation Sans; hence the pair.
+  - What resolves to Inter: the generic `sans-serif`, `system-ui`, the Apple system names above, and the "UI" families that
+    45-latin.conf and 40-nonlatin.conf map to `system-ui` (Segoe UI, Cantarell, Adwaita Sans, Noto Sans UI, the script
+    "... UI" fonts); a rule after the include puts a strong Inter just before that `system-ui`.
+  - Documented limitation: any other family that is not installed and is asked for by name (Roboto, Verdana, Ubuntu,
+    Open Sans, ...) gets `sans-serif` from 49-sansserif, which Omarchy's 50-omarchy.conf rewrites to a strong Liberation
+    Sans, so it resolves to whatever the system gives it (Liberation Sans under Omarchy). Fixing that would need a rule
+    between 49-sansserif and 50-omarchy, that is a private conf.d generated at login, which is not worth it here. It only
+    affects GTK and Qt apps that ask for a missing font by name; Chromium and Firefox skip missing named families and fall
+    through to the generic. The test pins it (Roboto, Verdana, Ubuntu equal the system result).
+  - Not touched: `monospace`, `serif`, Helvetica, Arial, Times New Roman, Courier New and Georgia (the terminal font stays
+    the user's, and metric-compatible substitutes keep documents laid out). A real family earlier in a list keeps its place.
   - Optical size: a request whose first family is Inter and whose `pixelsize` is >= 20 gets Inter Display first.
     Requests without a pixel size (some Qt paths) stay on Inter text.
   - Rendering: antialias on, `hintslight`, `rgba none`, `lcdfilter none` (grayscale, sharp on 1x). Closest to the

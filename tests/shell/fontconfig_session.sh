@@ -10,8 +10,8 @@ set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 conf=${GRASSFIELD_FONTCONF:-$root/packaging/fontconfig/fonts.conf}
 fail=0
-if ! command -v fc-match >/dev/null || [[ -z $(fc-list 'Inter' family 2>/dev/null) ]]; then
-  echo "SKIP: fontconfig session (fc-match or the Inter font missing)"
+if ! command -v fc-match >/dev/null || ! command -v fc-list >/dev/null; then
+  echo "SKIP: fontconfig session (fc-match or fc-list missing)"
   exit 0
 fi
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/fontconfig-session.XXXXXX")
@@ -31,10 +31,13 @@ XML
 [[ -r $omarchy_default ]] && cp "$omarchy_default" "$tmp/omarchy/.config/fontconfig/conf.d/50-omarchy.conf"
 
 mode=none
-fc() { # fc-match args... in the scratch home of the current mode
+fcx() { # tool args... in the scratch home of the current mode, nothing else from the caller's environment
+  local tool=$1; shift
   env -i PATH="$PATH" HOME="$tmp/$mode" XDG_CONFIG_HOME="$tmp/$mode/.config" XDG_CACHE_HOME="$tmp/$mode/.cache" \
-    "${FCENV[@]}" fc-match "$@"
+    "${FCENV[@]}" "$tool" "$@"
 }
+fc() { fcx fc-match "$@"; }
+fl() { FCENV=(); fcx fc-list "$@"; }
 sys() { FCENV=(); fc "$1" family | head -1; }
 ses_fc() { FCENV=(FONTCONFIG_FILE="$conf"); fc "$@"; }
 ses() { ses_fc "$1" family | head -1; }
@@ -46,6 +49,7 @@ same() { # pattern: unchanged against the system configuration
   local a b; a=$(sys "$1"); b=$(ses "$1")
   if [[ $a == "$b" ]]; then echo "PASS: [$mode] $1 unchanged -> $b"; else echo "FAIL: [$mode] $1 -> $b, system gives $a"; fail=1; fi
 }
+if [[ -z $(fl Inter family) ]]; then echo "SKIP: fontconfig session (Inter font missing)"; exit 0; fi
 for mode in none omarchy; do
   # Inter
   is 'sans\-serif' Inter
@@ -79,6 +83,12 @@ for mode in none omarchy; do
   same 'Noto Sans,BlinkMacSystemFont'
   is 'Noto Serif,system\-ui' 'Noto Serif'
   is 'Noto Sans,\-apple\-system' 'Noto Sans'
+  # Documented limitation (ADR-0003): a family that is not installed and not one of the system-ui "UI" names gets
+  # sans-serif from 49-sansserif, which Omarchy rewrites to Liberation Sans. It keeps what the system gives it.
+  same Roboto
+  same Verdana
+  same Ubuntu
+  is Roboto 'Liberation Sans'
   # unchanged
   same monospace
   same serif
@@ -136,7 +146,7 @@ for mode in none omarchy; do
   </match>
 </fontconfig>
 HOOK
-  if [[ -n $(fc-list 'Noto Sans' family) ]]; then
+  if [[ -n $(fl 'Noto Sans' family) ]]; then
     is 'sans\-serif' 'Noto Sans'
     rend=$(ses_fc -v 'sans\-serif' | grep -E '^\s+(hintstyle|rgba):' | tr -s ' \n' ' ')
     case $rend in *"hintstyle: 3"*"rgba: 1"*) echo "PASS: [$mode] the user hook wins over the rendering settings" ;; *) echo "FAIL: [$mode] hook rendering: $rend"; fail=1 ;; esac
