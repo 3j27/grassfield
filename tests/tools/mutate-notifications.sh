@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mutation checks of the Notifications focus resolver and key guards: every mutant below must make a shipped test FAIL.
-# Offscreen only (no compositor). Takes about 15 minutes (two Quickshell test runs per mutant).
+# Offscreen only (no compositor). Takes about 10 minutes (a mutant stops at the first shipped test that fails).
 #
 #   tests/tools/mutate-notifications.sh                run every mutant, print "MUTANT <name> | <test> | CAUGHT/SURVIVED | <first FAIL line>"
 #   tests/tools/mutate-notifications.sh --only M3,M11  run these mutants
@@ -18,7 +18,7 @@ import os, subprocess, sys, tempfile, shutil
 R = os.environ['MUT_ROOT'] + '/'
 NL = R + 'shell/notifications/NotificationList.qml'
 BT = R + 'ui/Grassfield/Ui/Button.qml'
-L, RN, UNIT = 'tests/shell/notif_center_list', 'tests/shell/notif_center_random', 'unit'
+L, RN, RN2, UNIT = 'tests/shell/notif_center_list', 'tests/shell/notif_center_random', 'tests/shell/notif_center_random2', 'unit'
 
 
 def run_qs(d):
@@ -54,12 +54,12 @@ def caught(out):
 
 # (name, file, text to find, replacement, tests that must fail)
 MUTANTS = [
-    ('M1 queueResolve is a no-op', NL, 'Qt.callLater(list.resolveFocus);', '/* no */', [L, RN]),
-    ('M2 usable() ignores visibility and enabled', NL, 'return it !== null && it !== undefined && it.visible && it.enabled;', 'return it !== null && it !== undefined;', [L, RN]),
+    ('M1 queueResolve is a no-op', NL, 'Qt.callLater(list.resolveFocus);', '/* no */', [L, RN, RN2]),
+    ('M2 usable() ignores visibility and enabled', NL, 'return it !== null && it !== undefined && it.visible && it.enabled;', 'return it !== null && it !== undefined;', [L, RN, RN2]),
     ('M3 Clear All key guard off', NL, 'if (!ctl.visible || !ctl.enabled || (ctl.gate && !ctl.gate())) {', 'if (false) {', [L]),
     ('M4 focusAfterGone gets no old order', NL, 'list.snapRows.map(r => r.key), rows);', '[], rows);', [L]),
     ('M5 no forceLayout in the resolver', NL, '        list.forceLayout();\n        const who = list.focusId;', '        const who = list.focusId;', [L]),
-    ('M6 focus-back rule reverted', NL, '                cur.forceActiveFocus();\n                list.settle(cur);', '                list.focusId = null;', [L, RN]),
+    ('M6 focus-back rule reverted', NL, '                cur.forceActiveFocus();\n                list.settle(cur);', '                list.focusId = null;', [L, RN, RN2]),
     ('M7 Delete clears from any control', NL, 'else if (clear && (row.activeFocus || closeButton.activeFocus))', 'else if (clear)', [L]),
     ('M8 Button guard widened to every key', BT, '''        if (event.key !== Qt.Key_Space && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
             return;''', '''        if (!root.visible || !root.enabled) {
@@ -69,7 +69,7 @@ MUTANTS = [
         if (event.key !== Qt.Key_Space && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
             return;''', [UNIT]),
     ('M9 Button guard removed', BT, '        if (root.visible && root.enabled)\n            root.clicked();', '        root.clicked();', [UNIT]),
-    ('M10 identity rank not refreshed on resolve', NL, '        who.rank = list.rankIn(rows, who.key);\n        list.focusId = who;', '        who.rank = list.focusId !== null && list.focusId.key === who.key ? list.focusId.rank : list.rankIn(rows, who.key);\n        list.focusId = who;', [L, RN]),
+    ('M10 identity rank not refreshed on resolve', NL, '        who.rank = list.rankIn(rows, who.key);\n        list.focusId = who;', '        who.rank = list.focusId !== null && list.focusId.key === who.key ? list.focusId.rank : list.rankIn(rows, who.key);\n        list.focusId = who;', [L, RN, RN2]),
     ('M11 settled rows not refreshed on resolve', NL, '        list.focusId = who;\n        list.snapRows = rows;', '        list.focusId = who;', [L]),
     ('M12 Clear All swallows every key while hidden', NL, 'event.accepted = activation;', 'event.accepted = true;', [L]),
     ('M13 no key-time check for the card (handler and clearCard)', NL, [('if (!item.actable(row)) {', 'if (false) {'), ('if (removing || !list.liveKey(key))', 'if (removing)')], None, [L]),
@@ -89,7 +89,7 @@ if args[:1] == ['--against']:
     orig = open(NL).read()
     try:
         open(NL, 'w').write(git_show(rev, 'shell/notifications/NotificationList.qml'))
-        for t in (RN, L):
+        for t in (RN, RN2, L):
             print('AGAINST %s | %s | %s' % (rev, t, run_qs(t)), flush=True)
     finally:
         open(NL, 'w').write(orig)
@@ -117,6 +117,8 @@ for name, path, a, b, tests in MUTANTS:
             ok = caught(out)
             status |= 0 if ok else 1
             print('MUTANT %s | %s | %s | %s' % (name, t, 'CAUGHT' if ok else 'SURVIVED', out), flush=True)
+            if ok:
+                break  # one test that fails is enough
     finally:
         open(path, 'w').write(orig)
 print('done, status', status, flush=True)

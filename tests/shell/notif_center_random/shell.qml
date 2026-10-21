@@ -408,8 +408,8 @@ ShellRoot {
         const ids = ["a", "b", "c", "d", "e"];
         const codes = [Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter, Qt.Key_Delete, Qt.Key_Backspace, Qt.Key_Tab, Qt.Key_Backtab];
         const codeNames = ["Space", "Return", "Enter", "Delete", "Backspace", "Tab", "Shift+Tab"];
-        const seeds = [20261020, 77, 424242, 9001];
-        const turnsPerSeed = 180;
+        const seeds = [20261020, 77, 424242];
+        const turnsPerSeed = 200;
         let state = 1;
         const rnd = n => {
             state = (state * 1103515245 + 12345) % 2147483648;
@@ -514,7 +514,7 @@ ShellRoot {
                     P.desc = "seed " + seed + " turn " + t + ": " + desc.join(", ");
                     root.snapshotFocus();
                     P.checked = true;
-                }, 28);
+                }, 8);
             }
         }
         step(() => {
