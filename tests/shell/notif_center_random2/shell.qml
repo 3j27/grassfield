@@ -410,7 +410,7 @@ ShellRoot {
         const ids = ["a", "b", "c", "d", "e"];
         const codes = [Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter, Qt.Key_Delete, Qt.Key_Backspace, Qt.Key_Tab, Qt.Key_Backtab];
         const codeNames = ["Space", "Return", "Enter", "Delete", "Backspace", "Tab", "Shift+Tab"];
-        const seeds = [100, 200, 300];
+        const seeds = [9001, 31337, 555];
         const turnsPerSeed = 200;
         let state = 1;
         const rnd = n => {
