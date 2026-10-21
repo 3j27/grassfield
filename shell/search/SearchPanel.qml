@@ -42,17 +42,9 @@ Variants {
         WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-search"
         // qmllint disable missing-type
-        // Everything except the menu bar strip receives input.
-        mask: Region {
-            width: win.width
-            height: win.height
-
-            Region {
-                width: win.width
-                height: Tokens.menubarHeight
-                intersection: Intersection.Subtract
-            }
-        }
+        // Everything except the menu bar strip receives input while shown; nothing once it closed: the surface stays mapped
+        // a moment for the keyboard release (and the fade), and a click in that moment belongs to the window under it.
+        mask: win.shown ? openMask : passThrough
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blur : null
         // qmllint enable missing-type
 
@@ -62,9 +54,34 @@ Variants {
             radius: Tokens.radiusSearch
         }
 
+        Region {
+            id: openMask
+            width: win.width
+            height: win.height
+
+            Region {
+                width: win.width
+                height: Tokens.menubarHeight
+                intersection: Intersection.Subtract
+            }
+        }
+
+        Region {
+            id: passThrough
+        }
+
         KeyboardRelease {
             id: release
             shown: win.shown
+        }
+
+        // Closed but still mapped (the hold): a press the compositor delivered before the empty mask landed (late whenever
+        // the GUI thread was busy) is swallowed here, never handled by the result under it.
+        MouseArea {
+            anchors.fill: parent
+            z: 1000
+            visible: !win.shown
+            acceptedButtons: Qt.AllButtons
         }
 
         onShownChanged: {

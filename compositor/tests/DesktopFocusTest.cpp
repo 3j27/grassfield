@@ -66,6 +66,44 @@ TEST(DesktopFocusPolicy, WindowThatCannotTakeFocusOrAlreadyHasItIsLeftAlone) {
     EXPECT_EQ(onPress(keyboardOn(SurfaceKind::Desktop), p), Action::None);
 }
 
+// Real-session bug (owner, 0.4.0-3): Hyprland 0.56.2 refocuses on a click only when the clicked window is not its focused
+// window. After a session unlock with the pointer off the windows its last window stays its focused window while the
+// keyboard is on no surface, so a click on that window did nothing (tests/compositor/click_focus.sh lock).
+TEST(DesktopFocusPolicy, PressOnHyprlandsFocusedWindowWithoutTheKeyboardFocusesIt) {
+    Press p           = onWindow();
+    p.targetIsFocused = true;
+    for (const auto holder : ALL_KINDS)
+        EXPECT_EQ(onPress(keyboardOn(holder), p), Action::FocusWindow) << kindName(holder);
+    EXPECT_EQ(onPress(keyboardOn(SurfaceKind::None), onWindow(false)), Action::None) << "not Hyprland's focused window: Hyprland's own click focus";
+    Press right           = onWindow(false);
+    right.targetIsFocused = true;
+    EXPECT_EQ(onPress(keyboardOn(SurfaceKind::None), right), Action::FocusWindow) << "any button, as Hyprland's click-to-focus";
+}
+
+TEST(DesktopFocusPolicy, HyprlandsFocusedWindowThatHasTheKeyboardOrCannotTakeItIsLeftAlone) {
+    Press p             = onWindow();
+    p.targetIsFocused   = true;
+    p.targetHasKeyboard = true; // its surface, a subsurface or one of its popups
+    for (const auto holder : {SurfaceKind::Window, SurfaceKind::WindowPopup})
+        EXPECT_EQ(onPress(keyboardOn(holder), p), Action::None) << kindName(holder);
+    p                   = onWindow();
+    p.targetIsFocused   = true;
+    p.windowFocusable   = false;
+    EXPECT_EQ(onPress(keyboardOn(SurfaceKind::None), p), Action::None);
+}
+
+TEST(DesktopFocusPolicy, HyprlandsFocusedWindowWaitsForLockGrabAndExclusiveLayers) {
+    Press p           = onWindow();
+    p.targetIsFocused = true;
+    for (int flag = 0; flag < 3; ++flag) {
+        Seat seat           = keyboardOn(SurfaceKind::None);
+        seat.locked         = flag == 0;
+        seat.keyboardGrab   = flag == 1;
+        seat.exclusiveLayer = flag == 2;
+        EXPECT_EQ(onPress(seat, p), Action::None) << flag;
+    }
+}
+
 // (2) of the review: a left press on the desktop gives it the keyboard without any pointer motion.
 TEST(DesktopFocusPolicy, LeftPressOnOnDemandDesktopFocusesItNow) {
     for (const auto holder : ALL_KINDS) {
