@@ -6,7 +6,7 @@ Status: Proposed (owner request 2026-10-19; applied provisionally) · Date: 2026
 The owner wants icons and cursors as Grassfield capabilities: icons with a live tint like the macOS 26 icon appearance
 modes (Default, Dark, Clear, Tinted) and Material You themed icons, and Grassfield's own cursor set with an adjustable
 accent and size. Owner decisions (2026-10-19, docs/STATE.md):
-- Base icon theme for the internal phase: WhiteSur (third-party, GPL-3.0, a macOS-style theme), shipped as a package
+- Base icon theme for the internal phase (superseded: WhiteSur was dropped on 2026-10-21, the base is now Grassfield's own icons, Breeze, Adwaita, hicolor, ADR-0017; the text that follows is the history): WhiteSur (third-party, GPL-3.0, a macOS-style theme), shipped as a package
   dependency and never vendored into this MIT repository; a designer replaces it with Grassfield's own set in 6–8 months.
   Apple's own icons are never used (hard rule). docs/legal/visual-review.md E27 must be reviewed again before any
   public release.
@@ -65,8 +65,8 @@ B. A fixed palette of prebuilt accent variants only.
   already a string key in contract version 1.) Settings › Appearance gets the mode and tint controls (macOS 26
   layout). Folder colours (owner request 2026-10-19) are a separate step, `icons.folderColor` (`theme|accent|#rrggbb`, default `theme`) and a per-folder colour and symbol (docs/specs/ui.md, docs/specs/files.md), so the mode effects stay untouched. The shell and Grassfield apps react live.
 - Base theme: Grassfield sets the icon theme name for its session and for the shell (Quickshell's IconTheme pragma or
-  `QT_ICON_THEME`/environment, whichever the installed version supports — verify), with WhiteSur first and the
-  freedesktop fallback chain (`hicolor`, then the system theme) for missing icons. Packaging: WhiteSur is a dependency of
+  `QT_ICON_THEME`/environment, whichever the installed version supports — verify), with (then) WhiteSur first and the
+  freedesktop fallback chain (`hicolor`, then the system theme) for missing icons. Packaging (then): WhiteSur was a dependency of
   the session package with its licence noted in THIRD_PARTY.md; never copied into the repository. Dev sessions use it
   only if the owner installed it.
 - **Cursors: option A.** `branding/cursors/` holds the original SVG sources (CC-BY-SA-4.0 like the other Grassfield
@@ -105,6 +105,6 @@ B. A fixed palette of prebuilt accent variants only.
 ## Consequences
 - New shared component, a committed compiled shader (`scripts/dev/build-shaders.sh`, checked by `just check`) and settings keys; every icon call site moves to `TintedIcon` (one effect item per visible icon).
 - New asset folder `branding/cursors/` and build steps (hyprcursor-util and XCursor generation as build dependencies).
-- GPL-3.0 WhiteSur is a separate package; the ISO (M6) must ship its source offer and licence; public release needs the
+- (Historical, WhiteSur dropped 2026-10-21) GPL-3.0 WhiteSur was a separate package; the ISO (M6) must ship its source offer and licence; public release needs the
   E27 legal review again.
 - Limits: tinted third-party icons are approximations; running GTK/Qt apps keep their cursor until restarted.

@@ -1183,9 +1183,9 @@ QtObject {
 
     // folder colours: MultiEffect saturation (0: the colorization alone sets the hue; MultiEffect desaturates after colorizing)
     readonly property real folderIconSaturation: 0.0
-    // folder colours: lifts the shading so the recoloured body keeps the lightness of the theme's folder (tuned on WhiteSur folders in the nested session, docs/specs/ui.md)
+    // folder colours: lifts the shading so the recoloured body keeps the lightness of the theme's folder (tuned on the former base theme's folders, re-checked on the Breeze folder in the nested session 2026-10-21: symbols 96/96 and 288/288 cells at 3:1, docs/specs/files.md)
     readonly property real folderIconBrightness: 0.15
-    // folder colours: keeps the flap and the body distinct after the colour mapping (tuned on WhiteSur folders)
+    // folder colours: keeps the flap and the body distinct after the colour mapping (tuned on the former base theme's folders, re-checked on the Breeze folder: flap and body stay distinct)
     readonly property real folderIconContrast: 0.25
     // folder colours: strength of the colour (0..1): the luminance of the folder is mapped onto the colour, shape and shading kept
     readonly property real folderIconColorization: 1.0
