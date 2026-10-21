@@ -428,34 +428,16 @@ Scope {
         onSaved: root.saved()
     }
 
-    // Quickshell's FileView watches a path through the kernel's inotify and cannot watch inside a directory that does
-    // not exist when the path is set: on a fresh account (no ~/.config/grassfield yet) the file created later by
-    // grassfield-settings would never be noticed, and no Settings change would apply until the shell restarted. The
-    // directory is therefore created first and the FileView gets its path only afterwards.
-    property bool dirReady: false
-
-    function ensureDir(): void {
-        dirReady = false;
-        if (configDir !== "")
-            ensureDirProcess.running = true;
-    }
-
-    onConfigDirChanged: ensureDir()
-    Component.onCompleted: ensureDir()
-
-    Process {
-        id: ensureDirProcess
-        command: ["mkdir", "-p", root.configDir]
-        onRunningChanged: {
-            // A failed mkdir (read-only home) still lets the watch be tried.
-            if (!running && root.configDir !== "")
-                root.dirReady = true;
-        }
+    // The directory is created first and the FileView gets its path only afterwards: a FileView cannot watch inside a
+    // directory that does not exist yet (see WatchedDir), so on a fresh account no Settings change would apply.
+    WatchedDir {
+        id: watchedDir
+        path: root.configDir
     }
 
     FileView {
         id: file
-        path: root.configDir !== "" && root.dirReady ? root.configDir + "/grassfield.json" : ""
+        path: watchedDir.ready ? root.configDir + "/grassfield.json" : ""
         watchChanges: true
         printErrors: false
         atomicWrites: true

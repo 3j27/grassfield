@@ -112,12 +112,43 @@ Singleton {
     property bool uwsmApp: false
     readonly property bool scopedLaunch: realSession && uwsmApp
 
+    // The detection of uwsm-app is asynchronous (a Process), so an application started in the first moments of the shell
+    // would escape its scope. Every application start therefore goes through whenScopeKnown(): it runs at once when the
+    // answer is known (always in a dev session) and is queued until the answer arrives otherwise.
+    property bool scopeKnown: !realSession
+    property var scopeWaiting: []
+
+    function whenScopeKnown(fn: var): void {
+        if (scopeKnown)
+            fn();
+        else
+            scopeWaiting = scopeWaiting.concat([fn]);
+    }
+
+    function settleScope(): void {
+        if (scopeKnown)
+            return;
+        scopeKnown = true;
+        const waiting = scopeWaiting;
+        scopeWaiting = [];
+        for (const fn of waiting)
+            fn();
+    }
+
     Process {
         running: root.realSession
         command: ["sh", "-c", "command -v uwsm-app"]
         stdout: StdioCollector {
-            onStreamFinished: root.uwsmApp = text.trim() !== ""
+            onStreamFinished: {
+                root.uwsmApp = text.trim() !== "";
+                root.settleScope();
+            }
         }
+        // sh could not even start: launches must not wait for ever (they start unscoped).
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: root.settleScope()
+        // qmllint enable signal-handler-parameters
     }
 
     // argv of an application start: in its own scope in a real session (AppLaunch.scopedArgv).
@@ -130,6 +161,10 @@ Singleton {
     function launch(target: var): void {
         if (!target)
             return;
+        whenScopeKnown(() => root.launchNow(target));
+    }
+
+    function launchNow(target: var): void {
         const environment = launchEnvironment();
         // Nothing to add to the environment of the shell and no scope to start: Quickshell's own execute().
         if (Object.keys(environment).length === 0 && !scopedLaunch) {
@@ -291,16 +326,18 @@ Singleton {
             return false;
         const commands = DockModel.commandsForFiles(DockModel.entryArgs(entry), files);
         const environment = launchEnvironment();
-        for (const c of commands) {
-            if (c.length === 0)
-                continue;
-            const context = {"command": scoped(entry.runInTerminal === true ? ["xdg-terminal-exec"].concat(c) : c)};
-            if (Object.keys(environment).length > 0)
-                context.environment = environment;
-            if (entry.workingDirectory)
-                context.workingDirectory = entry.workingDirectory;
-            Quickshell.execDetached(context);
-        }
+        whenScopeKnown(() => {
+            for (const c of commands) {
+                if (c.length === 0)
+                    continue;
+                const context = {"command": root.scoped(entry.runInTerminal === true ? ["xdg-terminal-exec"].concat(c) : c)};
+                if (Object.keys(environment).length > 0)
+                    context.environment = environment;
+                if (entry.workingDirectory)
+                    context.workingDirectory = entry.workingDirectory;
+                Quickshell.execDetached(context);
+            }
+        });
         return commands.length > 0;
     }
 
@@ -354,15 +391,38 @@ Singleton {
         if (!devSession) {
             const environment = launchEnvironment();
             const open = folderAware(argv);
-            if (Object.keys(environment).length === 0)
-                Quickshell.execDetached(scoped(open));
-            else
-                Quickshell.execDetached({
-                    "command": scoped(open),
-                    "environment": environment
-                });
+            whenScopeKnown(() => {
+                if (Object.keys(environment).length === 0)
+                    Quickshell.execDetached(root.scoped(open));
+                else
+                    Quickshell.execDetached({
+                        "command": root.scoped(open),
+                        "environment": environment
+                    });
+            });
             return;
         }
+        devOpen(argv);
+    }
+
+    // A short helper that is not an application (gio trash): never in a scope of its own, only an application is. Same
+    // isolated environment and dev policy as openDetached.
+    function runHelper(argv: var): void {
+        if (devSession) {
+            devOpen(argv);
+            return;
+        }
+        const environment = launchEnvironment();
+        if (Object.keys(environment).length === 0)
+            Quickshell.execDetached(argv);
+        else
+            Quickshell.execDetached({
+                "command": argv,
+                "environment": environment
+            });
+    }
+
+    function devOpen(argv: var): void {
         const request = AppLaunch.openRequest(argv);
         if (request === null) {
             Quickshell.execDetached({

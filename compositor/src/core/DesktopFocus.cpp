@@ -167,4 +167,27 @@ namespace gf::desktopfocus {
         return m_surface;
     }
 
+    UnlockStep unlockStep(const UnlockSeat& seat) {
+        if (seat.locked || seat.windowFocusRefused)
+            return UnlockStep::Done;
+        switch (seat.holder) {
+            case KeyboardHolder::Known: return UnlockStep::Done;
+            case KeyboardHolder::Unknown: return UnlockStep::Wait;
+            case KeyboardHolder::None: return seat.windowFocusable ? UnlockStep::Focus : UnlockStep::Done;
+        }
+        return UnlockStep::Done;
+    }
+
+    void CUnlockRefocus::arm(TimePoint now) {
+        m_deadline = now + kUnlockRefocusWindow;
+    }
+
+    void CUnlockRefocus::cancel() {
+        m_deadline.reset();
+    }
+
+    bool CUnlockRefocus::armed(TimePoint now) const {
+        return m_deadline.has_value() && now <= *m_deadline;
+    }
+
 } // namespace gf::desktopfocus

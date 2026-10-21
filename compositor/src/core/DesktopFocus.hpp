@@ -144,6 +144,51 @@ namespace gf::desktopfocus {
     std::string_view focusEventName(FocusEvent event);
     std::string_view grantUpdateName(GrantUpdate update);
 
+    // ---- The keyboard back after an unlock (macOS model: the window that was key has the keys again, no click) ----
+    // Hyprland 0.56.2 refocuses at the cursor after an unlock: with the pointer off the windows (desktop, menu bar) its last
+    // window stays its focused window while the keyboard is on no surface. Within kUnlockRefocusWindow of the unlock, the
+    // glue gives that window the keyboard as soon as no surface holds it; anything else that holds the keyboard by then
+    // (a window, a layer surface, an Exclusive layer) is left alone.
+    inline constexpr std::chrono::milliseconds kUnlockRefocusWindow{1000};
+    // While the lock surface still holds the keyboard after the unlock (Wait), the attempt is made again this often: the
+    // lock surface's destruction drops the keyboard without any focus event (measured, Hyprland 0.56.2).
+    inline constexpr std::chrono::milliseconds kUnlockRetryInterval{50};
+
+    // What holds the keyboard when an unlock refocus is considered.
+    enum class KeyboardHolder : uint8_t {
+        None,    // no surface
+        Known,   // a window, a layer surface or one of their popups
+        Unknown, // a surface of neither (the lock surface, still alive for a moment after the unlock)
+    };
+
+    struct UnlockSeat {
+        bool           locked             = false; // the session is locked (again)
+        bool           windowFocusRefused = false; // Hyprland refuses window focus now (an Exclusive layer)
+        KeyboardHolder holder             = KeyboardHolder::None;
+        bool           windowFocusable    = false; // Hyprland's focused window exists, is mapped, visible, on a shown Desktop
+    };
+
+    enum class UnlockStep : uint8_t {
+        Focus, // give Hyprland's focused window the keyboard now
+        Wait,  // try again on the next keyboard focus change (the lock surface still holds it)
+        Done,  // nothing to do: someone holds the keyboard, a lock, an Exclusive layer, or no window to focus
+    };
+
+    // Never while locked, never past an Exclusive layer, never from a surface that holds the keyboard.
+    UnlockStep unlockStep(const UnlockSeat& seat);
+
+    // The refocus an unlock armed, until it is carried out, a press or a new decision ends it, or kUnlockRefocusWindow
+    // elapses.
+    class CUnlockRefocus {
+      public:
+        void arm(TimePoint now);
+        void cancel();
+        bool armed(TimePoint now) const;
+
+      private:
+        std::optional<TimePoint> m_deadline;
+    };
+
     // The desktop surface that a press armed (AwaitOnDemand), until it commits on_demand, another press arrives, the
     // keyboard focus changes by any other path, the surface goes away or kGrantWindow elapses. Surfaces are opaque ids
     // (compared, never dereferenced).
