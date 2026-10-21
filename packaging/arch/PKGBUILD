@@ -119,6 +119,8 @@ package_grassfield-desktop() {
   # The empty scalable/apps directory is required: GTK drops a theme without a Directories entry, with its Inherits.
   install -Dm644 "$root/branding/icons/theme/index.theme" "$pkgdir/usr/share/icons/grassfield-icons/index.theme"
   install -d "$pkgdir/usr/share/icons/grassfield-icons/scalable/apps"
+  # Own generic phone, tablet and media player glyphs under the names of the Apple device pictures of Breeze and Adwaita (E27).
+  install -Dm644 "$root"/branding/icons/theme/scalable/devices/*.svg -t "$pkgdir/usr/share/icons/grassfield-icons/scalable/devices"
   # Session environment for uwsm (Grassfield desktop name only): Qt icon theme, the GTK dconf profile and the fontconfig file.
   install -Dm644 "$root/packaging/uwsm/env-grassfield" "$pkgdir/usr/share/uwsm/env-grassfield"
   install -Dm644 "$root/packaging/dconf/profile" "$pkgdir/usr/share/grassfield/dconf/profile"

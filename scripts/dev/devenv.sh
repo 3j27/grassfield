@@ -18,14 +18,16 @@ unset GRASSFIELD_SESSION QS_DISABLE_FILE_WATCHER QS_NO_RELOAD_POPUP INVOCATION_I
 
 _gf_dev_root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
 # The Grassfield app icon theme (ADR-0017): the wrapper theme (branding/icons/theme/index.theme: Grassfield's own icons,
-# then Breeze, Adwaita and hicolor) is copied to .dev/share/icons/grassfield-icons, with the one real directory
-# GTK needs, and selected for every Qt process (Quickshell and the Grassfield apps) through QT_QPA_SYSTEM_ICON_THEME, as
+# then Breeze, Adwaita and hicolor) is copied to .dev/share/icons/grassfield-icons, with the real directories
+# GTK needs and its own device glyphs, and selected for every Qt process (Quickshell and the Grassfield apps) through QT_QPA_SYSTEM_ICON_THEME, as
 # /usr/share/uwsm/env-grassfield does in the real session. Dev processes resolve every other icon through Breeze and
 # Adwaita (both installed with Omarchy).
 _gf_icon_src=$_gf_dev_root/branding/icons/theme/index.theme
 if [[ -f $_gf_icon_src ]]; then
   _gf_icon_dst=$_gf_dev_root/.dev/share/icons/grassfield-icons
-  { mkdir -p "$_gf_icon_dst/scalable/apps" && { cmp -s "$_gf_icon_src" "$_gf_icon_dst/index.theme" || cp -f "$_gf_icon_src" "$_gf_icon_dst/index.theme"; }; } 2>/dev/null || true
+  { mkdir -p "$_gf_icon_dst/scalable/apps" "$_gf_icon_dst/scalable/devices" && { cmp -s "$_gf_icon_src" "$_gf_icon_dst/index.theme" || cp -f "$_gf_icon_src" "$_gf_icon_dst/index.theme"; }; } 2>/dev/null || true
+  # Grassfield's own device glyphs that shadow the Apple device pictures of Breeze and Adwaita (E27).
+  cp -f "$_gf_dev_root"/branding/icons/theme/scalable/devices/*.svg "$_gf_icon_dst/scalable/devices/" 2>/dev/null || true
   unset _gf_icon_dst
 fi
 unset _gf_icon_src
