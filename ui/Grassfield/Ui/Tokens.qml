@@ -1098,6 +1098,8 @@ QtObject {
     readonly property real iconModeRimWidth: 1.5
     // ADR-0014 shader: icon size (logical px) from which the edge highlight has its full width and opacity; it shrinks and fades below
     readonly property int iconModeRimFullSize: 48
+    // ADR-0014 (integrator decision 2026-10-22, the macOS model: small icons stay legible): icon edge in logical pixels below which the icon appearance modes do not apply and the Default artwork is drawn in every mode (list rows, menus, the sidebar: a plate and a recolour made json, cpp, txt, sh and csv the same tile at 16 px)
+    readonly property int iconModeMinSize: 24
     // ADR-0014 Dark/Clear/Tinted: the system plate every icon sits on is inset by this fraction of the icon box on each side (macOS 26 plates leave a small margin)
     readonly property real iconModeSysPlateInset: 0.04
     // ADR-0014 Dark/Clear/Tinted: corner radius of the system plate over its side (macOS squircle proportion, about 22.5 percent)

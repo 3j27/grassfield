@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Sample app icon of the icon appearance previews (Settings > Appearance). Drawn for Grassfield (MIT, like the code):
-     a blue rounded-square plate with a white glyph, so that every mode has a plate and a glyph to work on. -->
+     a blue person glyph WITHOUT a tile of its own (every mode draws its system plate under it, so a tile here would make a plate
+     inside a plate), with a light and a dark part so that every mode has something to recolour. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
   <defs>
-    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4DA3FF"/>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6DB6FF"/>
       <stop offset="1" stop-color="#2B4BD8"/>
     </linearGradient>
   </defs>
-  <rect x="6" y="6" width="116" height="116" rx="27" fill="url(#plate)"/>
-  <circle cx="64" cy="58" r="23" fill="#FFFFFF"/>
-  <path d="M28 104 C28 84 44 80 64 80 C84 80 100 84 100 104 L100 106 L28 106 Z" fill="#FFFFFF"/>
+  <circle cx="64" cy="36" r="26" fill="url(#body)"/>
+  <path d="M10 118 C10 86 32 72 64 72 C96 72 118 86 118 118 L118 122 L10 122 Z" fill="url(#body)"/>
+  <circle cx="64" cy="36" r="9" fill="#FFFFFF" fill-opacity="0.85"/>
 </svg>

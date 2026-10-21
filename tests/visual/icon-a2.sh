@@ -25,7 +25,7 @@ overall=0
 for fn in "${cases[@]}"; do
   done_case=0
   for ((try = 1; try <= attempts; try++)); do
-    out=$(timeout -k 10 "$limit" "$root/scripts/dev/isolated.sh" --name a2 env WAYLAND_DISPLAY="$DEV_NESTED_SOCK" QT_QPA_PLATFORM=wayland \
+    out=$(timeout -k 10 "$limit" "$root/scripts/dev/isolated.sh" --name a2 env WAYLAND_DISPLAY="$DEV_NESTED_SOCK" QT_QPA_PLATFORM=wayland QML_XHR_ALLOW_FILE_READ=1 \
       /usr/lib/qt6/bin/qmltestrunner -import "$root/ui" -input "$root/tests/unit/tst_iconshader.qml" "IconShaderA2::$fn" 2>&1)
     status=$?
     # A stall: killed by the watchdog, or no result at all (the runner died before reporting).

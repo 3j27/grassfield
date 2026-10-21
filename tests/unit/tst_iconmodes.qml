@@ -200,4 +200,22 @@ TestCase {
             verify(!o.children[0].item.overAccent);
         }
     }
+
+    // Below iconMode.minSize (16 px list rows, menus) every mode draws the Default artwork: no effect item, no plate, the plain image at its
+    // own size (tests/visual/icon-a2.sh checks the pixels of a 16 px Tinted icon against Default).
+    function test_smallIconsDrawTheDefaultArtwork() {
+        verify(Tokens.iconModeMinSize > 16 && Tokens.iconModeMinSize <= 24);
+        for (const mode of ["dark", "clear", "tinted"]) {
+            const small = createTemporaryObject(iconComponent, testCase, {mode: mode, size: 16});
+            verify(small);
+            compare(small.modeActive, false, mode + " at 16 px");
+            compare(small.effectiveMode, "default");
+            compare(small.effectActive, false);
+            compare(small.plainVisible, true, "the plain icon is what is drawn");
+            const big = createTemporaryObject(iconComponent, testCase, {mode: mode, size: Tokens.iconModeMinSize});
+            verify(big);
+            compare(big.modeActive, true, mode + " at the minimum size");
+            compare(big.effectiveMode, mode);
+        }
+    }
 }

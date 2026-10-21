@@ -246,34 +246,62 @@ TestCase {
         };
     }
 
-    // Remaining limits, measured on Breeze, Adwaita (hicolor) and the own fixtures (2026-10-21; tests/visual/icon-a2.sh, worst value over every
-    // size, appearance, tint and background, against the floor; docs/specs/ui.md "Icon shader"). They are logged, not failed. Every icon
-    // sits on the system plate and its artwork is recoloured by a fixed per-pixel map (no analysis); the E (outside) limits are all
-    // plates of the mode's own colour against a mid-grey material at 16 px (Tinted in the dark appearance: the dark tinted plate is
-    // 1.3-1.5:1 against it and the rim fades at that size), plus two Clear/Dark cases:
-    //   Tinted, dark appearance, 16 px (outside 1.89-1.98 against defaults of 3.0-6.7): photolayoutseditor, preferences-system/systemsettings
-    //     (Breeze's blue tiles), utilities-terminal, dark-plate-light-border, hicolor obs; light-plate-lighter-glyph in the light appearance
-    //     1.76; graphite-plate-red-glyph 24 px 2.81.
-    //   Dark, preferences-system and systemsettings at 16 px 2.67 (default 9.85).
-    //   Clear, light appearance at 16 px: hicolor obs 1.95 (default 2.65), white-page-document 2.88 (default 3.69), graphite-plate-red-glyph 1.94.
-    //   Also (second run, 16-32 px, transparency 1.0 and Tinted yellow/pink in the light appearance): obs Dark 1.95, graphite-plate-red-glyph Dark 1.75,
-    //   dark-plate-light-border Dark 2.00, white-page-document Tinted yellow 1.92, Breeze text editor Tinted pink 1.93, kdenlive Tinted 24 px 2.47; basecamp Clear
-    //   inside 1.45 at 32 px (S floor 1.45).
-    // N (internal contrast) has no exemption under its tiers (a default pair of 7:1 and more keeps 1.5:1, of 3:1 and more 1.3:1): measured
-    // minima 1.31 (Nautilus, Clear 32 px) and 1.52-1.53 for the strong pairs (kcalc, obs, calculator in Clear at 24 px). I and S: no failure.
-    readonly property var knownLimits: [
-        "breeze48:photolayoutseditor tinted E", "breeze48:preferences-system dark E", "breeze48:preferences-system tinted E",
-        "breeze48:systemsettings dark E", "breeze48:systemsettings tinted E", "breeze48:utilities-terminal tinted E",
-        "dark-plate-light-border tinted E", "graphite-plate-red-glyph tinted E", "hicolor:obs clear E", "hicolor:obs tinted E",
-        "light-plate-lighter-glyph tinted E", "white-page-document clear E",
-        "hicolor:kdenlive tinted E", "hicolor:obs dark E", "white-page-document tinted E", "graphite-plate-red-glyph dark E",
-        "graphite-plate-red-glyph clear E", "dark-plate-light-border dark E", "breeze:accessories-text-editor tinted E", "hicolor:basecamp clear S"
-    ]
+    // Remaining limits (tests/fixtures/icons/a2-limits.json, the one source of the table in docs/specs/ui.md; tests/shell/a2_limits_doc.sh checks
+    // that the two agree). Each is scoped to one cell: rule, icon, mode, size, appearance, scenario, tint and transparency (the key is the rule
+    // and the label of the A2 line), and holds its measured value: the cell fails below it minus 0.1 (a regression) and an exemption whose cell
+    // no longer violates its rule is stale and fails too. Below iconMode.minSize no rule applies (the Default artwork is drawn: rule D).
+    property var limitTable: null
+
+    function limitOf(key) {
+        if (testCase.limitTable === null) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl("../fixtures/icons/a2-limits.json"), false);
+            xhr.send();
+            const out = {};
+            if (xhr.responseText.length > 0) {
+                for (const e of JSON.parse(xhr.responseText).limits)
+                    out[e.key] = e.value;
+            }
+            testCase.limitTable = out;
+        }
+        return testCase.limitTable[key];
+    }
+
+    // Per-mode tiers of rule N: [a default pair of 7:1 or more, of 3:1 or more]. Measured lowest values of the strong pairs: Dark 2.54, Tinted
+    // 2.18, Clear 1.52; of the weaker: Dark 1.62, Tinted 1.50, Clear 1.31. Clear is the mode that gives contrast away to show dark glyphs.
+    readonly property var internalTiers: ({dark: [2.3, 1.5], tinted: [1.9, 1.4], clear: [1.5, 1.3]})
 
     readonly property var separationFixtures: ["same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph", "hicolor:basecamp"]
 
-    function isKnownLimit(name, mode, rule) {
-        return knownLimits.indexOf(name + " " + mode + " " + rule) >= 0;
+    readonly property int rowIconSize: Math.max(Tokens.iconModeMinSize, Tokens.filesListIconSize)
+
+    // One rule check: `value` is the metric, `violated` whether it is below its floor. A scoped exemption holds the measured value.
+    function judge(rule, label, line, value, violated, failures) {
+        const key = rule + " " + label;
+        const lim = testCase.limitOf(key);
+        if (lim === undefined) {
+            if (violated)
+                failures.push(rule + " " + line);
+            return;
+        }
+        if (!violated)
+            failures.push("stale exemption " + key + " (the cell holds now: " + value.toFixed(2) + ", exempted at " + lim + ")");
+        else if (value < lim - 0.1)
+            failures.push("regressed " + key + ": " + value.toFixed(2) + " below the exempted " + lim + " by more than 0.1");
+    }
+
+    // Rule D (below iconMode.minSize): the icon of every mode is the Default artwork, pixel for pixel (within the 8 bits of the grab).
+    function regionDiff(img, a, b) {
+        const n = testCase.iconSize;
+        let worst = 0;
+        for (let y = 0; y < n; y++) {
+            for (let x = 0; x < n; x++) {
+                const ca = img.pixel(Math.round(a.x + testCase.cell / 2 - n / 2) + x, Math.round(a.y + testCase.cell / 2 - n / 2) + y);
+                const cb = img.pixel(Math.round(b.x + testCase.cell / 2 - n / 2) + x, Math.round(b.y + testCase.cell / 2 - n / 2) + y);
+                worst = Math.max(worst, Math.abs(ca.r - cb.r), Math.abs(ca.g - cb.g), Math.abs(ca.b - cb.b));
+            }
+        }
+        return worst;
     }
 
     // One rendering of the whole board over a flat background colour; the icon of every fixture in every mode is
@@ -309,6 +337,18 @@ TestCase {
             // below 48 px by its own design: it is tested from 48 px only.
             if (testCase.iconSize < 48 && testCase.fixtures[f].name === "same-tone-glyph")
                 continue;
+            if (testCase.iconSize < Tokens.iconModeMinSize) {
+                for (let m = 1; m < testCase.modes.length; m++) {
+                    if (testCase.onlyMode !== "" && testCase.modes[m] !== testCase.onlyMode)
+                        continue;
+                    const d = testCase.regionDiff(img, cells[0], cells[m]);
+                    measured++;
+                    console.log(`A2 D ${testCase.fixtures[f].name} ${testCase.modes[m]} ${name}: the Default artwork, largest channel difference ${(d * 255).toFixed(1)}/255`);
+                    if (d > 3 / 255)
+                        failures.push(`D ${testCase.fixtures[f].name} ${testCase.modes[m]} ${name}: a ${testCase.iconSize} px icon is not the Default artwork (${(d * 255).toFixed(1)}/255 off)`);
+                }
+                continue;
+            }
             const base = measure(img, img2, cells[0], background, inverse, 1);
             if (base === null)
                 continue;
@@ -324,22 +364,17 @@ TestCase {
                 measured++;
                 const line = `${label}: inside ${r.inside.toFixed(2)} (default ${base.inside.toFixed(2)}), internal ${r.internal.toFixed(2)} (default ${base.internal.toFixed(2)}), outside ${r.outside.toFixed(2)} (default ${base.outside.toFixed(2)}; plate ${r.plateOverPanel.toFixed(2)} outline ${r.outlineOverPanel.toFixed(2)} glyph ${r.glyphOverPanel.toFixed(2)})`;
                 console.log("A2 " + line);
-                // At 16 px the edge highlight and the anti-aliasing fill the whole measured ring, so the inside rule starts at 24 px.
                 const name1 = testCase.fixtures[f].name;
-                if (testCase.iconSize >= 24 && base.inside >= 2 && r.inside < floorIn(base.inside, testCase.modes[m]) && !testCase.isKnownLimit(name1, testCase.modes[m], "I"))
-                    failures.push("I " + line);
+                const mode1 = testCase.modes[m];
+                testCase.judge("I", label, line, r.inside, base.inside >= 2 && r.inside < floorIn(base.inside, mode1), failures);
                 // Artwork that is only a little different from its plate (a same-hue glyph, a mountain on a sky, a pale gear on a light
                 // plate) must not vanish into it in any mode: its glyph-vs-plate contrast keeps 85 percent of the default's, or 1.5.
-                if (testCase.iconSize >= 24 && testCase.separationFixtures.indexOf(name1) >= 0 && base.inside >= 1.2
-                        && r.inside < Math.min(1.5, 0.85 * base.inside) && !testCase.isKnownLimit(name1, testCase.modes[m], "S"))
-                    failures.push("S " + line);
-                if (r.outside < floorOf(base.outside) && !testCase.isKnownLimit(name1, testCase.modes[m], "E"))
-                    failures.push("E " + line);
-                // N (internal contrast): an icon whose default rendering has a light/dark contrast of 7:1 or more inside keeps 1.5:1, of 3:1 or more
-                // keeps 1.3:1, in every mode from 24 px up (the maps are monotonic with a minimum slope; a dark monochrome glyph must also stand
-                // out from the plate, which costs part of the contrast between black and mid-grey art: tests/unit/tst_iconcontrast.qml).
-                if (testCase.iconSize >= 24 && base.internal >= 3 && r.internal < (base.internal >= 7 ? 1.5 : 1.3) && !testCase.isKnownLimit(name1, testCase.modes[m], "N"))
-                    failures.push("N " + line);
+                testCase.judge("S", label, line, r.inside, testCase.separationFixtures.indexOf(name1) >= 0 && base.inside >= 1.2 && r.inside < Math.min(1.5, 0.85 * base.inside), failures);
+                testCase.judge("E", label, line, r.outside, r.outside < floorOf(base.outside), failures);
+                // N (internal contrast), per-mode tiers (internalTiers): the maps are monotonic with a minimum slope; a dark monochrome glyph must
+                // also stand out from the plate, which costs part of the contrast between black and mid-grey art (tests/unit/tst_iconcontrast.qml).
+                const tier = testCase.internalTiers[mode1][base.internal >= 7 ? 0 : 1];
+                testCase.judge("N", label, line, r.internal, base.internal >= 3 && r.internal < tier, failures);
             }
         }
         return measured;
@@ -788,7 +823,7 @@ TestCase {
                 id: folderPart
                 anchors.centerIn: parent
                 visible: acell.cellFolder
-                size: Tokens.filesListIconSize
+                size: testCase.rowIconSize
                 source: acell.cellSource
                 mode: acell.cellMode
                 darkAppearance: Appearance.dark
@@ -799,7 +834,7 @@ TestCase {
                 id: filePart
                 anchors.centerIn: parent
                 visible: !acell.cellFolder
-                size: Tokens.filesListIconSize
+                size: testCase.rowIconSize
                 source: acell.cellSource
                 mode: acell.cellMode
                 darkAppearance: Appearance.dark
@@ -831,13 +866,21 @@ TestCase {
                     wait(300);
                     const img = grabImage(cell);
                     const bg = Qt.color(Appearance.colors.accent);
-                    let best = 1;
+                    // A robust statistic: the mean contrast of the top 20 percent of the icon's own pixels (those that differ from the accent), so
+                    // that a stray pixel cannot carry a failing icon.
+                    const rs = [];
                     for (let y = 0; y < 40; y++) {
-                        for (let x = 0; x < 40; x++)
-                            best = Math.max(best, ratio(luminance(img.pixel(x, y)), luminance(bg)));
+                        for (let x = 0; x < 40; x++) {
+                            const c = img.pixel(x, y);
+                            if (Math.max(Math.abs(c.r - bg.r), Math.abs(c.g - bg.g), Math.abs(c.b - bg.b)) > 0.02)
+                                rs.push(ratio(luminance(c), luminance(bg)));
+                        }
                     }
+                    rs.sort((p, q) => q - p);
+                    const top = rs.slice(0, Math.max(1, Math.ceil(rs.length * 0.2)));
+                    const best = top.reduce((p, q) => p + q, 0) / top.length;
                     measured++;
-                    const label = `files row ${src[0] ? "folder" : String(src[1]).split("/").pop()} ${mode} ${dark ? "dark" : "light"}: best pixel ${best.toFixed(2)}`;
+                    const label = `files row ${src[0] ? "folder" : String(src[1]).split("/").pop()} ${mode} ${dark ? "dark" : "light"}: mean of the top 20 percent pixels ${best.toFixed(2)}`;
                     console.log("A2 " + label);
                     // Dark keeps its graphite plate on both fills (2.8:1 against the dark accent of the light appearance): 2.5, as the accent row.
                     if (best < (mode === "dark" ? 2.5 : 3))

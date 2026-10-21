@@ -40,7 +40,10 @@ Item {
     // The compiled icon shader; if it fails to load the icon is drawn as it is (the default look), see effectFailed.
     property url shaderUrl: Qt.resolvedUrl("shaders/icon.frag.qsb")
 
-    readonly property bool modeActive: IconModes.normalizeMode(root.mode) !== "default"
+    // The icon appearance modes apply from iconMode.minSize up; below it (16 px rows, menus) the Default artwork is drawn in every mode.
+    readonly property bool modeActive: IconModes.normalizeMode(root.mode) !== "default" && root.size >= Tokens.iconModeMinSize
+    // The mode that is drawn: the setting, or "default" below the minimum size.
+    readonly property string effectiveMode: root.modeActive ? IconModes.normalizeMode(root.mode) : "default"
     // The effect item of an effect mode while the icon is shown, else null/false (tests, diagnostics).
     readonly property Item effectItem: effectLoader.item as Item
     readonly property bool effectActive: effectLoader.active

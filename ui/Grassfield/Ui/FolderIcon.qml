@@ -33,7 +33,7 @@ Item {
     readonly property bool glyphIsEmoji: FolderStyle.isEmoji(root.glyph)
     // The appearance the icon is drawn for (over an accent fill: the polarity opposite to the fill).
     readonly property bool inkDark: icon.inkDark
-    readonly property string modeName: IconModes.normalizeMode(root.mode)
+    readonly property string modeName: icon.effectiveMode
     // The plate under the symbol (FolderPlate): the raw icon's pixels under it are read once per icon file and size bucket
     // (never per colour), the plate of this icon's mode, colour and appearance is computed from them. A plain symbol is
     // shaded against it. undefined until read, null when it could not be (the estimate of FolderStyle serves, and serves
