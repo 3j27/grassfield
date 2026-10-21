@@ -117,7 +117,9 @@ Run-time use without copying: `config/hypr/grassfield/omarchy.lua` requires Omar
 Inter 4.1 (package `inter-font`): SIL OFL 1.1, "Copyright (c) 2016 The Inter Project Authors
 (https://github.com/rsms/inter)" (`/usr/share/licenses/inter-font/LICENSE.txt`); pacman says `OFL-1.1-RFN`.
 Referenced by family name, not bundled or modified. Noto Sans is the fallback family (OFL-1.1-no-RFN per pacman).
-No font file is in this repository.
+No font file is in this repository. The session fontconfig (`packaging/fontconfig/fonts.conf`, ADR-0003) only names
+Inter and Inter Display; the `SF Pro*`, `-apple-system` and `BlinkMacSystemFont` entries are aliases that resolve to Inter, and
+no Apple font is used, shipped or required.
 
 ## 5. Icons and wallpaper
 

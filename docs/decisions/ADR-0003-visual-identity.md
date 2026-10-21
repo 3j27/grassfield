@@ -16,6 +16,30 @@ SF Pro and SF Symbols are Apple-licensed and must not be used or redistributed.
 - **UI font**: Inter (text) with Inter Display for ≥ 20 px; fallback chain `Inter, Noto Sans, sans-serif`.
   Monospace: the generic `monospace` family (`Tokens.typographyMonoFamily`); JetBrains Mono is not used
   (not installed, no reference in the code). Owner installs `inter-font`.
+- **Session-wide font (owner request 2026-10-21, "a free font close to macOS's")**: Inter everywhere in the Grassfield
+  session, not only in Grassfield's own UI. Nothing is vendored: `inter-font` stays a package dependency.
+  - `packaging/fontconfig/fonts.conf` (installed as `/usr/share/grassfield/fontconfig/fonts.conf`) is selected through
+    `FONTCONFIG_FILE` by `packaging/uwsm/env-grassfield` (readability-guarded; the Omarchy session never sets it). It
+    first includes `/etc/fonts/fonts.conf`, so the user's own fontconfig and Omarchy's rules still load, then maps
+    `sans-serif` ("Sans", "Sans Serif" included), `system-ui`, `-apple-system`, `BlinkMacSystemFont`, `SF Pro`,
+    `SF Pro Text` and `.AppleSystemUIFont` to Inter and `SF Pro Display` to Inter Display. These are family-name
+    aliases only; no Apple font is used or shipped (legal review item with the visual-review list).
+    Omarchy's strong `sans-serif` -> Liberation Sans assignment is overridden, but an explicit Liberation Sans request
+    (recognised by the Arimo alias that 30-metric-aliases adds) is not. `monospace`, `serif`, Helvetica and Arial are not
+    touched: the terminal font stays the user's, and metric-compatible substitutes keep documents laid out.
+  - Optical size: a request whose first family is Inter and whose `pixelsize` is >= 20 gets Inter Display first.
+    Requests without a pixel size (some Qt paths) stay on Inter text.
+  - Rendering: antialias on, `hintslight`, `rgba none`, `lcdfilter none` (grayscale, sharp on 1x). Closest to the
+    reference's grayscale text without LCD fringes.
+  - GTK: `packaging/dconf/grassfield.d/10-fonts.conf` sets `font-name` and `document-font-name` to `Inter 10` (10 pt = 13.3
+    px at 96 dpi, the reference's 13 px body; Adwaita's 11 pt would be 14.7 px), `font-antialiasing` grayscale,
+    `font-hinting` slight. Defaults, not locks (only icon-theme is locked). Qt: its generic theme asks for "Sans Serif"
+    (fontconfig, now Inter) and `QT_QPA_PLATFORMTHEME=gtk3` reads `font-name`; nothing else is needed.
+  - Tracking: Inter's "dynamic metrics" (rsms.me/inter lab, `InterDynamicTracking`, text family): tracking in em =
+    -0.0223 + 0.185 * e^(-0.1745 * px) (display family: -0.015 + 0.17 * e^(-0.12 * px), not used yet).
+    `Tokens.typographyTracking{A,B,C}` and `Appearance.tracking(px)`; applied in Grassfield.Ui's Button, MenuItem,
+    Tooltip and SwatchRow. There is no central Text component, so other call sites keep Qt's default tracking.
+  Evidence: tests/shell/fontconfig_session.sh, tests/shell/dconf_profile.sh.
 - **Icons**: Grassfield's own line icon set in `branding/icons/` (SVG, CC-BY-SA-4.0 or CC0 — decided in
   ADR-0005), style: rounded caps, 1.5 px stroke at 16 px, optical alignment like the macOS menu bar. App
   icons come from the user's icon theme; Grassfield ships no app icons that imitate Apple's.
