@@ -698,6 +698,16 @@ QtObject {
     readonly property int settingsPointerBuildTimeoutMs: 60000
     // estimate: shell, wait for a cancelled build to stop on SIGTERM before it is killed
     readonly property int settingsPointerBuildKillMs: 3000
+    // ADR-0016: Settings > Wallpaper, thumbnails per row (macOS: 4)
+    readonly property int settingsWallpaperTileColumns: 4
+    // estimate: Settings > Wallpaper, gap between thumbnails
+    readonly property int settingsWallpaperTileGap: 12
+    // estimate: Settings > Wallpaper, thumbnail corner radius
+    readonly property int settingsWallpaperTileRadius: 6
+    // estimate: Settings > Wallpaper, height of the preview of the current wallpaper (width follows the display's aspect ratio)
+    readonly property int settingsWallpaperPreviewHeight: 170
+    // ADR-0016: width in pixels of the cached thumbnails the helper writes (about 2.6 times the tile width, sharp on a 2x display)
+    readonly property int settingsWallpaperThumbWidth: 320
     // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted
     readonly property int settingsPointerSettingsWaitMs: 3000
     // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged
@@ -1210,6 +1220,21 @@ QtObject {
     readonly property int switcherLayerWaitMs: 250
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real switcherFadeScale: 0.96
+
+    // ADR-0016: crossfade between two pictures of a carousel (macOS: ASSUMPTION, check against design/reference); Reduce Motion shortens it to motion.reducedMax
+    readonly property int wallpaperCrossfadeMs: 1000
+    // ADR-0016: a grassfield-wallpaper prepare that runs longer than this is killed (a 24 MP JPEG takes under a second)
+    readonly property int wallpaperToolTimeoutMs: 30000
+    // ADR-0016: a folder listing that runs longer than this is killed (a hung network mount never blocks the shell)
+    readonly property int wallpaperListTimeoutMs: 10000
+    // ADR-0016: quiet time after the last settings change before a picture is prepared (a colour well dragged for a second makes one job)
+    readonly property int wallpaperChangeDebounceMs: 250
+    // ADR-0016 (owner answers): LRU cap of the prepared-picture cache, 512 MiB
+    readonly property int wallpaperCacheMaxBytes: 536870912
+    // ADR-0016: pictures read from one folder
+    readonly property int wallpaperMaxListEntries: 10000
+    // ADR-0016: quiet time before the carousel position is written to the state file
+    readonly property int wallpaperStateWriteMs: 500
 
     // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it
     readonly property int focusReturnReleaseHoldMs: 120

@@ -187,6 +187,7 @@ int cmdPrepare(const QStringList &args)
                      {QStringLiteral("width"), composed.width()},
                      {QStringLiteral("height"), composed.height()},
                      {QStringLiteral("source"), a.positional},
+                     {QStringLiteral("real"), real},
                      {QStringLiteral("mean"), meanColor(composed)},
                      {QStringLiteral("strip"), stripStats(composed, rows)}};
     if (!writeAtomic(sidecar, QJsonDocument(meta).toJson(QJsonDocument::Compact)))

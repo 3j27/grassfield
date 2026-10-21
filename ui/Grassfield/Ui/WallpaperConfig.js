@@ -385,10 +385,17 @@ function sizeArg(width, height) {
 
 // Argument vector (no shell) for `prepare`. `--` ends the options, so a path can never be read as an option. Returns
 // null for an invalid input (relative path, control characters, bad fit or colour).
-function prepareArgs(helper, src, width, height, fit, color, outDir) {
+// `stripRows` (the menu bar's height in output pixels) and `cacheMaxBytes` are optional (0 or undefined: the helper's own).
+function prepareArgs(helper, src, width, height, fit, color, outDir, stripRows, cacheMaxBytes) {
     if (!validPath(src) || !validPath(outDir) || !oneOf(FITS, fit) || !validColor(color))
         return null;
-    return [helper, "prepare", "--size", sizeArg(width, height), "--fit", fit, "--color", color.toLowerCase(), "--out", outDir, "--", src];
+    const args = [helper, "prepare", "--size", sizeArg(width, height), "--fit", fit, "--color", color.toLowerCase(), "--out", outDir];
+    if (stripRows > 0)
+        args.push("--strip-rows", String(Math.max(1, Math.min(512, Math.round(stripRows)))));
+    if (cacheMaxBytes > 0)
+        args.push("--cache-max-bytes", String(Math.round(cacheMaxBytes)));
+    args.push("--", src);
+    return args;
 }
 
 function thumbArgs(helper, src, width, outDir) {
@@ -428,4 +435,59 @@ function contrast(a, b) {
 // black text over the darkest ones.
 function stripContrast(p5, p95) {
     return {white: contrast(1, Math.max(0, Math.min(1, p95))), black: contrast(0, Math.max(0, Math.min(1, p5)))};
+}
+
+// ---- paths of the shell and the dev guard (ADR-0016 sections 1 and 2) ----
+
+// A path with "." and ".." segments and repeated slashes resolved, lexically (no symlinks); "" for a relative path.
+function normalizePath(path) {
+    if (typeof path !== "string" || path.charAt(0) !== "/")
+        return "";
+    const out = [];
+    for (const part of path.split("/")) {
+        if (part === "" || part === ".")
+            continue;
+        if (part === "..")
+            out.pop();
+        else
+            out.push(part);
+    }
+    return "/" + out.join("/");
+}
+
+// True when `path` is `dir` or below it (both normalized first).
+function isUnder(path, dir) {
+    const p = normalizePath(path);
+    const d = normalizePath(dir);
+    if (p === "" || d === "")
+        return false;
+    return p === d || p.indexOf(d === "/" ? "/" : d + "/") === 0;
+}
+
+// "" when `path` may be used as a wallpaper source in this session. A dev session (GRASSFIELD_DEV=1) accepts only paths
+// under <repo>/.dev/, so that no photo of the owner can appear in a nested capture (ADR-0016 section 1).
+function sourceProblem(path, dev, repoRoot) {
+    const why = pathProblem(path);
+    if (why !== "")
+        return why;
+    if (dev && !isUnder(path, repoRoot + "/.dev"))
+        return "outside-dev";
+    return "";
+}
+
+// env = {dev, repoRoot, home, xdgCache, picturesDir}: where the helper, its cache and the pictures section live.
+function toolPath(env) {
+    return env.dev ? env.repoRoot + "/.dev/build/grassfield-wallpaper" : "/usr/lib/grassfield/grassfield-wallpaper";
+}
+
+function cacheRoot(env) {
+    if (env.dev)
+        return env.repoRoot + "/.dev/cache/wallpapers";
+    return (env.xdgCache ? env.xdgCache : env.home + "/.cache") + "/grassfield/wallpapers";
+}
+
+function picturesRoot(env) {
+    if (env.dev)
+        return env.picturesDir ? env.picturesDir : env.repoRoot + "/.dev/wallpapers";
+    return env.picturesDir ? env.picturesDir : env.home + "/Pictures";
 }

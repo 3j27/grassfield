@@ -44,6 +44,18 @@ Singleton {
         return Logic.meanLuminance(bytes);
     }
 
+    // The strip statistics the wallpaper helper wrote next to a prepared picture (ADR-0016: {all: {mean, p5, p95}, ...}).
+    // The tone follows the mean, as for every other wallpaper; the percentile decision and the automatic band come with W6.
+    function reportStrip(output: string, strip: var): void {
+        if (strip && strip.all && typeof strip.all.mean === "number")
+            report(output, strip.all.mean);
+    }
+
+    // A plain colour wallpaper (`color` source).
+    function reportColor(output: string, color: color): void {
+        report(output, Logic.luminance(color.r, color.g, color.b));
+    }
+
     // Luminance of a strip of a vertical gradient from colour `top` towards colour `next` (QML colours), the strip reaching
     // the fraction `reach` of the way (the procedural artwork: its top is a known gradient, nothing is sampled).
     function reportGradient(output: string, top: color, next: color, reach: real): void {

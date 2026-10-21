@@ -337,6 +337,35 @@ TestCase {
         compare(WallpaperConfig.reasonOf(-1), "failed");
     }
 
+    function test_devGuard() {
+        const repo = "/w/repo";
+        compare(WallpaperConfig.sourceProblem("/w/repo/.dev/wallpapers/a.jpg", true, repo), "");
+        compare(WallpaperConfig.sourceProblem("/w/repo/.dev", true, repo), "");
+        compare(WallpaperConfig.sourceProblem("/home/u/Pictures/a.jpg", true, repo), "outside-dev");
+        compare(WallpaperConfig.sourceProblem("/w/repo/.dev/../secret.jpg", true, repo), "outside-dev", "dot-dot is resolved first");
+        compare(WallpaperConfig.sourceProblem("/w/repo/.devious/a.jpg", true, repo), "outside-dev", "a sibling with the same prefix");
+        compare(WallpaperConfig.sourceProblem("/w/repo/.dev//wallpapers/./a.jpg", true, repo), "");
+        compare(WallpaperConfig.sourceProblem("/home/u/Pictures/a.jpg", false, repo), "", "outside dev every absolute path is allowed");
+        compare(WallpaperConfig.sourceProblem("rel.jpg", false, repo), "not-absolute");
+        compare(WallpaperConfig.normalizePath("/a/b/../c//d/."), "/a/c/d");
+        compare(WallpaperConfig.normalizePath("/.."), "/");
+        compare(WallpaperConfig.normalizePath("a"), "");
+        verify(WallpaperConfig.isUnder("/a/b", "/a"));
+        verify(!WallpaperConfig.isUnder("/ab", "/a"));
+    }
+
+    function test_environmentPaths() {
+        const dev = {dev: true, repoRoot: "/w/repo", home: "/home/u", xdgCache: "", picturesDir: ""};
+        compare(WallpaperConfig.toolPath(dev), "/w/repo/.dev/build/grassfield-wallpaper");
+        compare(WallpaperConfig.cacheRoot(dev), "/w/repo/.dev/cache/wallpapers");
+        compare(WallpaperConfig.picturesRoot(dev), "/w/repo/.dev/wallpapers");
+        const prod = {dev: false, repoRoot: "/w/repo", home: "/home/u", xdgCache: "", picturesDir: ""};
+        compare(WallpaperConfig.toolPath(prod), "/usr/lib/grassfield/grassfield-wallpaper");
+        compare(WallpaperConfig.cacheRoot(prod), "/home/u/.cache/grassfield/wallpapers");
+        compare(WallpaperConfig.cacheRoot(Object.assign({}, prod, {xdgCache: "/x/cache"})), "/x/cache/grassfield/wallpapers");
+        compare(WallpaperConfig.picturesRoot(Object.assign({}, prod, {picturesDir: "/home/u/Bilder"})), "/home/u/Bilder");
+    }
+
     function test_stripContrast() {
         const black = WallpaperConfig.stripContrast(0, 0);
         fuzzyCompare(black.white, 21, 1e-9);

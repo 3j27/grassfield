@@ -10,3 +10,5 @@ DesktopIcons 1.0 DesktopIcons.qml
 IconsView 1.0 IconsView.qml
 DesktopIcon 1.0 DesktopIcon.qml
 IconMenu 1.0 IconMenu.qml
+WallpaperFeed 1.0 WallpaperFeed.qml
+WallpaperJob 1.0 WallpaperJob.qml

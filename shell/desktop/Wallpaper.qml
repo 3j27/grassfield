@@ -132,6 +132,13 @@ Scope {
                         probe.loadImage(imageUrl);
                     return;
                 }
+                // A prepared picture reports its own statistics at the middle of its crossfade (toneMid).
+                if (feed.imageUrl !== "")
+                    return;
+                if (feed.cfg.source === "color") {
+                    BarTone.reportColor(win.modelData.name, Qt.color(feed.cfg.color));
+                    return;
+                }
                 if (height > 0) {
                     BarTone.reportGradient(win.modelData.name, Qt.color(artwork.art.skyTop), Qt.color(artwork.art.skyMid), Tokens.menubarHeight / (0.55 * height));
                 }
@@ -167,6 +174,151 @@ Scope {
             WallpaperArt {
                 id: artwork
                 anchors.fill: parent
+                // Nothing to draw once a picture covers it.
+                visible: !(win.shown !== null && win.shown.opacity >= 1 && win.incoming === null)
+            }
+
+            // The colour source (and the colour of Fit, Center and Tile is baked into the prepared picture).
+            Rectangle {
+                anchors.fill: parent
+                color: feed.cfg.color
+                opacity: feed.cfg.source === "color" ? 1 : 0
+                visible: opacity > 0
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs
+                    }
+                }
+            }
+
+            // What the output shows: the helper's prepared picture (ADR-0016), crossfaded to the next one. Two images: the
+            // one on screen and the one that loads (asynchronously, off the GUI thread) and fades in once it is ready.
+            WallpaperFeed {
+                id: feed
+                screenInfo: win.modelData
+                onImageUrlChanged: win.show(feed.imageUrl)
+                onStatusChanged: Qt.callLater(win.measure)
+            }
+
+            property Image shown: null
+            property Image incoming: null
+            property bool fadePending: false
+
+            Image {
+                id: imgA
+                anchors.fill: parent
+                opacity: 0
+                asynchronous: true
+                cache: false
+                smooth: false
+                fillMode: Image.Stretch
+                sourceSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
+                onStatusChanged: win.imageStatus(imgA)
+            }
+
+            Image {
+                id: imgB
+                anchors.fill: parent
+                opacity: 0
+                asynchronous: true
+                cache: false
+                smooth: false
+                fillMode: Image.Stretch
+                sourceSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
+                onStatusChanged: win.imageStatus(imgB)
+            }
+
+            function show(url: string): void {
+                finishFade();
+                if (url === "") {
+                    if (shown !== null) {
+                        fadeAway.target = shown;
+                        fadeAway.restart();
+                    }
+                    Qt.callLater(measure);
+                    return;
+                }
+                incoming = shown === imgA ? imgB : imgA;
+                incoming.opacity = 0;
+                incoming.source = url;
+                fadePending = true;
+                if (incoming.status === Image.Ready)
+                    beginFade();
+            }
+
+            function imageStatus(img: Image): void {
+                if (img !== incoming || !fadePending)
+                    return;
+                if (img.status === Image.Ready) {
+                    beginFade();
+                } else if (img.status === Image.Error) {
+                    // The previous wallpaper stays.
+                    console.warn("wallpaper: cannot load " + img.source);
+                    fadePending = false;
+                    img.source = "";
+                    incoming = null;
+                }
+            }
+
+            function beginFade(): void {
+                fadePending = false;
+                fadeAway.stop();
+                const ms = Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs;
+                fadeIn.duration = ms;
+                fadeIn.target = incoming;
+                toneMid.interval = ms / 2;
+                toneMid.restart();
+                fadeIn.restart();
+            }
+
+            // A fade in flight is completed at once when the next change arrives.
+            function finishFade(): void {
+                if (!fadeIn.running && incoming === null)
+                    return;
+                fadePending = false;
+                fadeIn.stop();
+                fadeAway.stop();
+                if (incoming !== null) {
+                    incoming.opacity = 1;
+                    completeFade();
+                }
+            }
+
+            function completeFade(): void {
+                if (shown !== null && shown !== incoming) {
+                    shown.opacity = 0;
+                    shown.source = "";
+                }
+                shown = incoming;
+                incoming = null;
+            }
+
+            NumberAnimation {
+                id: fadeIn
+                property: "opacity"
+                from: 0
+                to: 1
+                onFinished: win.completeFade()
+            }
+
+            NumberAnimation {
+                id: fadeAway
+                property: "opacity"
+                to: 0
+                duration: Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs
+                onFinished: {
+                    if (win.shown !== null && win.shown.opacity === 0) {
+                        win.shown.source = "";
+                        win.shown = null;
+                    }
+                }
+            }
+
+            // The bar's tone switches at the middle of the crossfade, from the incoming picture's own statistics.
+            Timer {
+                id: toneMid
+                onTriggered: if (VisualFixtures.wallpaperFile === "")
+                    BarTone.reportStrip(win.modelData.name, feed.strip)
             }
 
             Image {
