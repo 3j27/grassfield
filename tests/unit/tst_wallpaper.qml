@@ -1,9 +1,8 @@
 import QtQuick
 import QtTest
 import Grassfield.Ui
-import "../../apps/settings/qml/Store.js" as Store
 
-// Wallpaper settings and rules (ADR-0016, ui/Grassfield/Ui/Wallpaper.js): validation, defaults, display matching,
+// Wallpaper settings and rules (ADR-0016, ui/Grassfield/Ui/WallpaperConfig.js): validation, defaults, display matching,
 // per-display resolution, the carousel order, the pause policy, the helper's argument vectors and the failure ids.
 // Schema parity lives in tst_settingsstore.
 TestCase {
@@ -12,6 +11,24 @@ TestCase {
     readonly property var panel: ({name: "eDP-1", model: "LGD", serial: "123"})
     readonly property var panelMoved: ({name: "DP-3", model: "LGD", serial: "123"})
     readonly property var other: ({name: "HDMI-A-1", model: "", serial: ""})
+
+    // The module, the schema and the default file agree (Store.js's literals are checked against the schema by
+    // tst_settingsstore).
+    function test_schemaParity() {
+        function read(rel) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl(rel), false);
+            xhr.send();
+            return JSON.parse(xhr.responseText);
+        }
+        const props = read("../../config/schema/grassfield.schema.json").properties.wallpaper.properties;
+        compare(props.source.enum, WallpaperConfig.SOURCES);
+        compare(props.fit.enum, WallpaperConfig.FITS);
+        compare(props.interval.enum, WallpaperConfig.INTERVAL_NAMES);
+        compare(Object.keys(props).sort(), Object.keys(WallpaperConfig.WALLPAPER_DEFAULTS).sort());
+        compare(Object.keys(props.outputs.items.properties).sort(), ["color", "display", "fit", "interval", "path", "shuffle", "source"]);
+        compare(read("../../config/defaults/grassfield.json").wallpaper, WallpaperConfig.WALLPAPER_DEFAULTS);
+    }
 
     function test_defaults() {
         const n = WallpaperConfig.normalize(undefined);
@@ -332,25 +349,5 @@ TestCase {
         // The crossover of the two tones is around 0.179.
         const mid = WallpaperConfig.stripContrast(0.179, 0.179);
         verify(Math.abs(mid.white - mid.black) < 0.05);
-    }
-
-    // The Settings rules (apps/settings/qml/Store.js) accept what this module accepts.
-    function test_storeRules() {
-        compare(Store.validate("wallpaper.source", "folder"), "");
-        verify(Store.validate("wallpaper.source", "online") !== "");
-        compare(Store.validate("wallpaper.path", ""), "");
-        compare(Store.validate("wallpaper.path", "/a/b"), "");
-        verify(Store.validate("wallpaper.path", "a/b") !== "");
-        verify(Store.validate("wallpaper.path", "/a\nb") !== "");
-        verify(Store.validate("wallpaper.path", 5) !== "");
-        compare(Store.validate("wallpaper.fit", "tile"), "");
-        verify(Store.validate("wallpaper.interval", "2s") !== "");
-        compare(Store.validate("wallpaper.outputs", []), "");
-        verify(Store.validate("wallpaper.outputs", [{}]) !== "");
-        compare(Store.validate("wallpaper.shuffle", false), "");
-        verify(Store.validate("wallpaper.videoOnBattery", "no") !== "");
-        const r = Store.setValue('{"version":1,"wallpaper":{"fit":"tile"}}', "wallpaper.source", "color");
-        verify(r.ok, r.error);
-        compare(JSON.parse(r.text).wallpaper, {fit: "tile", source: "color"});
     }
 }

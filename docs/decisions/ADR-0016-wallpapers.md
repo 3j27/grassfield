@@ -179,7 +179,7 @@ Option A2 (helper process), V1b for video, C1 for the lock and D1 for the menu b
 - **Display identity.** Serial and model when the serial is not empty, else the connector name. The shell (`ShellScreen`)
   and the Settings app (`QScreen`) see the same three strings. An override for a display that is not connected stays
   stored and applies again when it is.
-- **Validation.** One pure module, `ui/Grassfield/Ui/Wallpaper.js` (like `PointerColors.js`): defaults, validation,
+- **Validation.** One pure module, `ui/Grassfield/Ui/WallpaperConfig.js` (like `PointerColors.js`): defaults, validation,
   per-display resolution, the carousel order, the pause policy, the helper's argument vectors and the failure reasons.
   `Store.js` gets one rule type per key (`wallpaperOutputs` for the array). The shell's `SettingsStore` reads through the
   same module. `tst_settingsstore` checks parity with the schema. An invalid hand edit reads as the default and is never

@@ -42,7 +42,7 @@ const REASONS = {
     127: "helper-missing"
 };
 
-function isObject(v) {
+function isPlainObject(v) {
     return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
@@ -106,7 +106,7 @@ function validColor(value) {
 }
 
 function validDisplay(d) {
-    if (!isObject(d))
+    if (!isPlainObject(d))
         return false;
     for (const key of Object.keys(d)) {
         if (["name", "model", "serial"].indexOf(key) < 0)
@@ -121,7 +121,7 @@ function validDisplay(d) {
 
 // Reason ("" when valid) for one overrides entry: {display: {name, model, serial}, source?, path?, color?, fit?, interval?, shuffle?}.
 function outputProblem(entry) {
-    if (!isObject(entry))
+    if (!isPlainObject(entry))
         return "not-an-object";
     const known = ["display", "source", "path", "color", "fit", "interval", "shuffle"];
     for (const key of Object.keys(entry)) {
@@ -209,7 +209,7 @@ function normalizeOutputs(list) {
 // A stored "wallpaper" object (any JSON) to the complete, valid settings. Each invalid field reads as its default.
 // A source that needs a path (file, folder, video) without a valid one reads as the built-in artwork.
 function normalize(raw) {
-    const r = isObject(raw) ? raw : {};
+    const r = isPlainObject(raw) ? raw : {};
     const out = {
         source: oneOf(SOURCES, r.source) ? r.source : WALLPAPER_DEFAULTS.source,
         path: validPath(r.path) ? r.path : WALLPAPER_DEFAULTS.path,

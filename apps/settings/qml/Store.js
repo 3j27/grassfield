@@ -34,13 +34,13 @@ const DEFAULTS = {
     "pointer.size": Ui.PointerSize.DEFAULT,
     "pointer.outlineColor": Ui.PointerColors.DEFAULT_OUTLINE,
     "pointer.fillColor": Ui.PointerColors.DEFAULT_FILL,
-    "wallpaper.source": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.source,
-    "wallpaper.path": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.path,
-    "wallpaper.color": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.color,
-    "wallpaper.fit": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.fit,
-    "wallpaper.interval": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.interval,
-    "wallpaper.shuffle": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.shuffle,
-    "wallpaper.videoOnBattery": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.videoOnBattery,
+    "wallpaper.source": "builtin",
+    "wallpaper.path": "",
+    "wallpaper.color": "#000000",
+    "wallpaper.fit": "fill",
+    "wallpaper.interval": "1h",
+    "wallpaper.shuffle": true,
+    "wallpaper.videoOnBattery": false,
     "wallpaper.outputs": []
 };
 
@@ -80,13 +80,14 @@ const RULES = {
     // #rrggbb (schema `pattern`), any colour: like macOS there is no contrast guard.
     "pointer.outlineColor": {type: "pointerColor"},
     "pointer.fillColor": {type: "pointerColor"},
-    // ADR-0016: the path rules (absolute, no control characters, 4096 bytes) and the outputs array live in
-    // ui/Grassfield/Ui/Wallpaper.js, shared with the shell's reader.
-    "wallpaper.source": {type: "enum", values: Ui.WallpaperConfig.SOURCES},
+    // ADR-0016: the lists and defaults are literals (tst_wallpaper checks them against the schema and
+    // ui/Grassfield/Ui/WallpaperConfig.js); the path and outputs rules are WallpaperConfig functions, looked up only
+    // when a value is checked (a JS .import of a newer module than the installed one fails at load).
+    "wallpaper.source": {type: "enum", values: ["builtin", "color", "file", "folder", "video"]},
     "wallpaper.path": {type: "wallpaperPath"},
     "wallpaper.color": {type: "pointerColor"},
-    "wallpaper.fit": {type: "enum", values: Ui.WallpaperConfig.FITS},
-    "wallpaper.interval": {type: "enum", values: Ui.WallpaperConfig.INTERVAL_NAMES},
+    "wallpaper.fit": {type: "enum", values: ["fill", "fit", "stretch", "center", "tile"]},
+    "wallpaper.interval": {type: "enum", values: ["login", "5s", "1m", "5m", "15m", "30m", "1h", "1d"]},
     "wallpaper.shuffle": {type: "boolean"},
     "wallpaper.videoOnBattery": {type: "boolean"},
     "wallpaper.outputs": {type: "wallpaperOutputs"}

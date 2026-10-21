@@ -107,6 +107,28 @@ TestCase {
         verify(Store.validate("bogus.key", 1) !== "");
     }
 
+    // Wallpaper rules (ADR-0016): the Settings store accepts what ui/Grassfield/Ui/WallpaperConfig.js accepts.
+    // (Kept here, not in tst_wallpaper: a test file that imports Grassfield.Ui itself makes Store.js resolve a second,
+    // possibly older installed copy of the module for its own .import.)
+    function test_wallpaperRules() {
+        compare(Store.validate("wallpaper.source", "folder"), "");
+        verify(Store.validate("wallpaper.source", "online") !== "");
+        compare(Store.validate("wallpaper.path", ""), "");
+        compare(Store.validate("wallpaper.path", "/a/b"), "");
+        verify(Store.validate("wallpaper.path", "a/b") !== "");
+        verify(Store.validate("wallpaper.path", "/a\nb") !== "");
+        verify(Store.validate("wallpaper.path", 5) !== "");
+        compare(Store.validate("wallpaper.fit", "tile"), "");
+        verify(Store.validate("wallpaper.interval", "2s") !== "");
+        compare(Store.validate("wallpaper.outputs", []), "");
+        verify(Store.validate("wallpaper.outputs", [{}]) !== "");
+        compare(Store.validate("wallpaper.shuffle", false), "");
+        verify(Store.validate("wallpaper.videoOnBattery", "no") !== "");
+        const r = Store.setValue('{"version":1,"wallpaper":{"fit":"tile"}}', "wallpaper.source", "color");
+        verify(r.ok, r.error);
+        compare(JSON.parse(r.text).wallpaper, {fit: "tile", source: "color"});
+    }
+
     function test_setValuePreservesOtherKeys() {
         const before = {version: 1, appearance: "dark", dock: {pinned: ["foot", "x"], magnification: 1.6}, extra: {a: [1, 2]}};
         const r = Store.setValue(JSON.stringify(before), "dock.autohide", true);
