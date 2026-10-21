@@ -6,18 +6,39 @@
 #   tests/tools/mutate-notifications.sh --only M3,M11  run these mutants
 #   tests/tools/mutate-notifications.sh --against REV  run the focus tests against shell/notifications/NotificationList.qml of git revision
 #                                                      REV (violation counts of an older implementation)
-# The source files are restored after every mutant (also on interruption). Exit 0 when every mutant was caught, 1 otherwise.
+# Mutants are applied to a scratch copy under .dev/ (removed on exit and on INT/TERM); the working tree is never edited,
+# so an interrupted run leaves nothing behind. Exit 0 when every mutant was caught, 1 otherwise.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
 export MUT_ROOT=$root
 unset QT_QPA_PLATFORMTHEME
 exec python3 -I - "$@" <<'PY'
-import os, subprocess, sys, tempfile, shutil
+import atexit, os, signal, subprocess, sys, tempfile, shutil
 
 R = os.environ['MUT_ROOT'] + '/'
-NL = R + 'shell/notifications/NotificationList.qml'
-BT = R + 'ui/Grassfield/Ui/Button.qml'
+# Mutants and old revisions are applied to a scratch copy of shell/, ui/ and the tests (S), never to the working tree: an
+# interruption (INT, TERM, even KILL) cannot leave a mutant in the sources. The compiled plugins and translations stay in R.
+os.makedirs(R + '.dev', exist_ok=True)
+S = tempfile.mkdtemp(prefix='mutate-', dir=R + '.dev') + '/'
+for d in ('shell', 'ui'):
+    shutil.copytree(R + d, S + d, symlinks=True)
+os.makedirs(S + 'tests/shell')
+os.makedirs(S + 'tests/unit')
+for d in ('notif_center_list', 'notif_center_random', 'notif_center_random2'):
+    shutil.copytree(R + 'tests/shell/' + d, S + 'tests/shell/' + d, symlinks=True)
+shutil.copy(R + 'tests/unit/tst_buttonkeys.qml', S + 'tests/unit/')
+
+
+def cleanup(*_):
+    shutil.rmtree(S.rstrip('/'), ignore_errors=True)
+
+
+atexit.register(cleanup)
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+signal.signal(signal.SIGINT, lambda *_: sys.exit(130))
+NL = S + 'shell/notifications/NotificationList.qml'
+BT = S + 'ui/Grassfield/Ui/Button.qml'
 L, RN, RN2, UNIT = 'tests/shell/notif_center_list', 'tests/shell/notif_center_random', 'tests/shell/notif_center_random2', 'unit'
 
 
@@ -27,10 +48,10 @@ def run_qs(d):
         os.makedirs(tmp + '/runtime', mode=0o700)
         os.makedirs(tmp + '/cache', mode=0o700)
         env = {k: v for k, v in os.environ.items() if k not in ('WAYLAND_DISPLAY', 'HYPRLAND_INSTANCE_SIGNATURE', 'QT_QPA_PLATFORMTHEME', 'DBUS_SESSION_BUS_ADDRESS')}
-        env.update(QT_QPA_PLATFORM='offscreen', QML_IMPORT_PATH=R + 'ui:' + R + '.dev/build/qml', GRASSFIELD_TRANSLATIONS_DIR=R + '.dev/translations',
+        env.update(QT_QPA_PLATFORM='offscreen', QML_IMPORT_PATH=S + 'ui:' + R + '.dev/build/qml', GRASSFIELD_TRANSLATIONS_DIR=R + '.dev/translations',
                    GRASSFIELD_LANG='en', XDG_RUNTIME_DIR=tmp + '/runtime', XDG_CACHE_HOME=tmp + '/cache', GRASSFIELD_DEV='1',
                    GRASSFIELD_STATE_HOME=tmp + '/state', GRASSFIELD_CONFIG_HOME=tmp + '/config')
-        r = subprocess.run(['timeout', '150', 'qs', '-p', R + d, '--no-color'], capture_output=True, text=True, env=env, cwd=R)
+        r = subprocess.run(['timeout', '150', 'qs', '-p', S + d, '--no-color'], capture_output=True, text=True, env=env, cwd=S)
         lines = [l for l in (r.stdout + r.stderr).splitlines() if 'notif-center-' in l]
         return lines[-1].strip()[:240] if lines else 'NO RESULT (exit %d): %s' % (r.returncode, (r.stdout + r.stderr)[-160:])
     finally:
@@ -40,7 +61,7 @@ def run_qs(d):
 def run_unit():
     env = dict(os.environ, QML_XHR_ALLOW_FILE_READ='1', QT_QPA_PLATFORM='offscreen')
     env.pop('QT_QPA_PLATFORMTHEME', None)
-    r = subprocess.run(['/usr/lib/qt6/bin/qmltestrunner', '-import', 'ui', '-input', 'tests/unit/tst_buttonkeys.qml'], cwd=R, capture_output=True, text=True, env=env)
+    r = subprocess.run(['/usr/lib/qt6/bin/qmltestrunner', '-import', 'ui', '-input', 'tests/unit/tst_buttonkeys.qml'], cwd=S, capture_output=True, text=True, env=env)
     return '; '.join(l for l in r.stdout.splitlines() if l.startswith('FAIL') or l.startswith('Totals'))[:240]
 
 
