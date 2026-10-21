@@ -4,7 +4,7 @@ import Quickshell
 import Grassfield.Ui
 import qs.services
 
-// What one output's wallpaper shows, decided from the settings (ADR-0016). Not a surface: Wallpaper.qml draws `imageUrl`.
+// What one output's wallpaper shows, decided from the settings (ADR-0016). Not a surface: Wallpaper.qml draws `display`.
 //   - source builtin / color: no picture (`imageUrl` ""), the artwork or the colour is drawn.
 //   - source file: grassfield-wallpaper prepares the picture at this output's physical size and fit (the shell decodes only
 //     the helper's own output), `imageUrl` names the prepared file, `strip` holds the menu bar strip statistics.
@@ -18,17 +18,19 @@ Scope {
 
     required property var screenInfo
 
-    readonly property real scale: screenInfo.devicePixelRatio > 0 ? screenInfo.devicePixelRatio : 1
-    readonly property int pixelWidth: Math.max(1, Math.round(screenInfo.width * scale))
-    readonly property int pixelHeight: Math.max(1, Math.round(screenInfo.height * scale))
-    readonly property var display: ({
-            name: screenInfo.name,
-            model: screenInfo.model,
-            serial: screenInfo.serialNumber
+    // An output that is removed leaves its feed alive for a moment with a null screen: every use is guarded.
+    readonly property string outputName: screenInfo ? screenInfo.name : ""
+    readonly property real scale: screenInfo && screenInfo.devicePixelRatio > 0 ? screenInfo.devicePixelRatio : 1
+    readonly property int pixelWidth: Math.max(1, Math.round((screenInfo ? screenInfo.width : 0) * scale))
+    readonly property int pixelHeight: Math.max(1, Math.round((screenInfo ? screenInfo.height : 0) * scale))
+    readonly property var outputIdentity: ({
+            name: outputName,
+            model: screenInfo ? screenInfo.model : "",
+            serial: screenInfo ? screenInfo.serialNumber : ""
         })
-    readonly property string displayKey: WallpaperConfig.displayKey(display)
+    readonly property string displayKey: WallpaperConfig.displayKey(outputIdentity)
     // Effective settings of this output.
-    readonly property var cfg: WallpaperConfig.resolve(Settings.wallpaper, display)
+    readonly property var cfg: WallpaperConfig.resolve(Settings.wallpaper, outputIdentity)
     readonly property string cfgKey: JSON.stringify([cfg, pixelWidth, pixelHeight])
 
     // builtin | color | preparing | ready | error
@@ -36,6 +38,10 @@ Scope {
     // Failure id (WallpaperConfig.reasonOf ids, plus folder-unavailable, folder-empty, all-failed, outside-dev, invalid-path,
     // helper-missing, timeout): translated by the Settings app.
     property string reason: ""
+    // What the output is to show, as the slot model of Wallpaper.qml takes it: {kind: "art" | "color" | "picture", color, url,
+    // strip}. Replaced as a whole on every SUCCESSFUL outcome only (the artwork, a colour, a prepared picture); a failure
+    // or a pending preparation never changes it, so the screen keeps whatever it shows.
+    property var display: ({kind: "art", color: "", url: "", strip: null})
     // file: URL of the prepared picture, "" for the artwork or a colour.
     property string imageUrl: ""
     property string currentFile: ""
@@ -120,7 +126,7 @@ Scope {
 
     // ---- states ----
     function publish(): void {
-        WallpaperState.report(screenInfo.name, {
+        WallpaperState.report(outputName, {
             state: status,
             reason: reason,
             source: cfg.source,
@@ -141,12 +147,13 @@ Scope {
         files = [];
         identity = "";
         currentSrc = "";
+        display = {kind: state === "color" ? "color" : "art", color: state === "color" ? cfg.color : "", url: "", strip: null};
         publish();
     }
 
     function fail(why: string): void {
         // The journal keeps every failure (the owner reads it in a live session), the Settings pane shows the reason.
-        console.warn("wallpaper: " + screenInfo.name + ": " + why + (currentSrc !== "" ? " (" + currentSrc + ")" : ""));
+        console.warn("wallpaper: " + outputName + ": " + why + (currentSrc !== "" ? " (" + currentSrc + ")" : ""));
         status = "error";
         reason = why;
         publish();
@@ -303,6 +310,7 @@ Scope {
                 currentFile = o.file;
                 strip = o.strip || null;
                 imageUrl = "file://" + o.file;
+                display = {kind: "picture", color: "", url: imageUrl, strip: strip};
                 status = "ready";
                 reason = "";
                 publish();

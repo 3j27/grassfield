@@ -8,6 +8,7 @@ that lies on the straight line between the two colours (a crossfade of two opaqu
 close to either end. A hard cut (the review finding: the incoming picture faded in underneath the opaque old one) has none.
 
 Usage: fade_blend.py FRAMES.txt R,G,B R,G,B ...      fade_blend.py --selftest
+       fade_blend.py --between FRAMES.txt R,G,B R,G,B to|from   (one transition: only the two contents and their blends show)
        fade_blend.py --only-pictures FRAMES.txt R,G,B ...   (every capture must be a picture or a blend of two: nothing else shows)
 """
 import math
@@ -80,6 +81,23 @@ def foreign(frames, pures):
     return bad
 
 
+def between(frames, a, b, final):
+    """A transition from content a to content b: every capture is a, b, or a point on the line between them (a crossfade of
+    the two); never a third colour (the artwork or the bare window showing through). The last capture is `final` (b, or a
+    when the change must fail and keep what is on screen). Returns the list of problems."""
+    problems = []
+    for i, f in enumerate(frames):
+        if dist(f, a) >= PURE and dist(f, b) >= PURE and to_segment(f, a, b)[0] >= LINE:
+            problems.append("capture %d is a third thing: %s" % (i, f))
+    if not frames:
+        problems.append("no capture")
+    else:
+        end = b if final == "to" else a
+        if dist(frames[-1], end) >= PURE:
+            problems.append("the last capture %s is not %s" % (frames[-1], final))
+    return problems
+
+
 def selftest():
     red, green, blue = (255, 0, 0), (0, 255, 0), (0, 0, 255)
     pures = [red, green, blue]
@@ -101,6 +119,12 @@ def selftest():
     assert foreign([red, mix(red, green, 0.5), green], pures) == []
     assert foreign([red, (15, 42, 63), green], pures) == [1]
     assert foreign([(15, 42, 63), (130, 20, 30), red, green], pures) == [], "the start from the artwork is not foreign"
+    art = (47, 95, 90)
+    assert between([red, red, mix(red, green, 0.4), green, green], red, green, "to") == []
+    assert between([red, red, red], red, green, "to") != [], "never arrived"
+    assert between([red, red, red], red, green, "from") == [], "a failure keeps what was on screen"
+    assert between([red, art, green], red, green, "to") != [], "the artwork showed between the two"
+    assert between([red, mix(red, art, 0.5), art, green], red, green, "to") != []
     print("fade_blend selftest: ok")
 
 
@@ -108,6 +132,14 @@ def main(argv):
     if argv[:1] == ["--selftest"]:
         selftest()
         return 0
+    if argv[:1] == ["--between"]:
+        frames = [tuple(int(v) for v in line.split()) for line in open(argv[1]) if line.strip()]
+        a, b = (tuple(int(v) for v in x.split(",")) for x in argv[2:4])
+        problems = between(frames, a, b, argv[4])
+        for p in problems:
+            print(p)
+        print("%d captures, %d problem(s)" % (len(frames), len(problems)))
+        return 1 if problems or len(frames) < 6 else 0
     only = argv[:1] == ["--only-pictures"]
     if only:
         argv = argv[1:]

@@ -12,3 +12,4 @@ DesktopIcon 1.0 DesktopIcon.qml
 IconMenu 1.0 IconMenu.qml
 WallpaperFeed 1.0 WallpaperFeed.qml
 WallpaperJob 1.0 WallpaperJob.qml
+WallpaperSlot 1.0 WallpaperSlot.qml

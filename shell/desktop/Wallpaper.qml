@@ -120,7 +120,7 @@ Scope {
             }
             exclusionMode: ExclusionMode.Ignore
             focusable: false
-            color: artwork.art.skyTop
+            color: slotA.art.skyTop
             WlrLayershell.layer: WlrLayer.Background
             WlrLayershell.namespace: "grassfield-wallpaper"
 
@@ -129,9 +129,10 @@ Scope {
                     PointerTracker.report(win.modelData.name, point.position.x, point.position.y)
             }
 
-            // The strip under this output's menu bar decides the bar's foreground (BarTone, per output): measured when the
-            // wallpaper or the output changes, never per frame. The artwork's top is a known gradient (sky), an image is
-            // grabbed into a small canvas and averaged. Nothing is shown of the canvas (it sits under the wallpaper).
+            // The strip under this output's menu bar decides the bar's foreground (BarTone, per output): reported when a
+            // wallpaper becomes dominant (reportTone: the artwork's known gradient, a colour's luminance, a picture's strip
+            // statistics from the helper), never per frame. The dev image override (VisualFixtures.wallpaperFile) is grabbed
+            // into a small canvas and averaged instead. Nothing is shown of the canvas (it sits under the wallpaper).
             readonly property string imageFile: VisualFixtures.wallpaperFile
             readonly property string imageUrl: imageFile !== "" ? "file://" + imageFile : ""
             function measure(): void {
@@ -142,16 +143,8 @@ Scope {
                         probe.loadImage(imageUrl);
                     return;
                 }
-                // A prepared picture reports its own statistics when it dominates its crossfade (toneMid) or is complete.
-                if (feed.imageUrl !== "")
-                    return;
-                if (feed.cfg.source === "color") {
-                    BarTone.reportColor(win.modelData.name, Qt.color(feed.cfg.color));
-                    return;
-                }
-                if (height > 0) {
-                    BarTone.reportGradient(win.modelData.name, Qt.color(artwork.art.skyTop), Qt.color(artwork.art.skyMid), Tokens.menubarHeight / (0.55 * height));
-                }
+                // The override is gone (or never was): the bar follows what is on screen.
+                reportTone(shownDesc);
             }
             onImageFileChanged: Qt.callLater(measure)
             onHeightChanged: Qt.callLater(measure)
@@ -181,155 +174,131 @@ Scope {
                 }
             }
 
-            WallpaperArt {
-                id: artwork
-                anchors.fill: parent
-                // Nothing to draw (and no per-frame work for it) while a full picture is behind: not even during a crossfade
-                // from one picture to the next.
-                visible: !(win.shown !== null && win.shown.opacity >= 1)
-            }
-
-            // The colour source (and the colour of Fit, Center and Tile is baked into the prepared picture).
-            Rectangle {
-                anchors.fill: parent
-                color: feed.cfg.color
-                opacity: feed.cfg.source === "color" ? 1 : 0
-                visible: opacity > 0
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: Settings.reduceMotion ? 0 : Tokens.wallpaperCrossfadeMs
-                    }
-                }
-            }
-
-            // What the output shows: the helper's prepared picture (ADR-0016), crossfaded to the next one. Two images: `shown`
-            // is on screen and complete; `incoming` loads (asynchronously, off the GUI thread) at opacity 0 and fades in over
-            // it once it is Image.Ready. An image that is not Ready is never made visible, and a newer request replaces a
-            // pending one without touching what is on screen: the picture on screen stays until the next one can take over.
+            // What the output is to show (the artwork, a colour, a prepared picture), decided from the settings.
             WallpaperFeed {
                 id: feed
                 screenInfo: win.modelData
-                onImageUrlChanged: win.show(feed.imageUrl)
-                onStatusChanged: Qt.callLater(win.measure)
+                onDisplayChanged: win.show(feed.display)
             }
 
-            property Image shown: null
-            property Image incoming: null
-            // Menu bar strip statistics of the picture on screen and of the one being loaded.
-            property var shownStrip: null
-            property var incomingStrip: null
-            property string pendingUrl: ""
+            // ---- ONE two-slot model for every kind of wallpaper (the artwork, a colour, a picture) ----
+            // `shown` is the slot on screen, `incoming` the one being prepared. Rules, the same for every kind:
+            //   - the incoming slot is on top (z 2), the shown one below (z 1) and fully visible until the fade completes;
+            //   - the incoming slot becomes visible only when it is ready: the artwork and a colour at once, a picture once
+            //     its Image is Ready (decoded off the GUI thread); a request replaces a pending one in the same slot;
+            //   - it crossfades over the outgoing slot (one fixed length; a plain switch with Reduce Motion);
+            //   - a failure (a picture that cannot be decoded, a file the helper refused) keeps whatever is on screen;
+            //   - nothing else sets the opacity of a layer from the REQUESTED state: only the fade does.
+            property WallpaperSlot shown: slotA
+            property WallpaperSlot incoming: null
+            property var shownDesc: ({kind: "art", color: "", url: "", strip: null})
+            property var pendingDesc: null
             property bool fadePending: false
 
-            Image {
-                id: imgA
-                anchors.fill: parent
-                opacity: 0
-                asynchronous: true
-                cache: false
-                smooth: false
-                fillMode: Image.Stretch
-                sourceSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
-                onStatusChanged: win.imageStatus(imgA)
+            WallpaperSlot {
+                id: slotA
+                z: 1
+                opacity: 1
+                pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
+                onPictureLoaded: win.slotLoaded(slotA)
+                onPictureFailed: win.slotFailed(slotA)
             }
 
-            Image {
-                id: imgB
-                anchors.fill: parent
-                opacity: 0
-                asynchronous: true
-                cache: false
-                smooth: false
-                fillMode: Image.Stretch
-                sourceSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
-                onStatusChanged: win.imageStatus(imgB)
+            WallpaperSlot {
+                id: slotB
+                z: 1
+                pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
+                onPictureLoaded: win.slotLoaded(slotB)
+                onPictureFailed: win.slotFailed(slotB)
             }
 
-            function show(url: string): void {
-                // A fade in flight is complete at once: its picture is Ready (a fade only starts then).
+            function sameContent(a: var, b: var): bool {
+                return a.kind === b.kind && (a.kind !== "color" || a.color === b.color) && (a.kind !== "picture" || a.url === b.url);
+            }
+
+            function show(desc: var): void {
+                // A fade in flight is complete at once: its content is ready (a fade only starts then).
                 if (fadeIn.running)
                     finishFade();
-                if (url === "") {
+                if (sameContent(desc, shownDesc)) {
                     cancelPending();
-                    if (shown !== null) {
-                        fadeAway.target = shown;
-                        fadeAway.restart();
-                    }
-                    Qt.callLater(measure);
                     return;
                 }
                 if (incoming === null) {
-                    incoming = shown === imgA ? imgB : imgA;
-                    // The incoming image is the one on top (the two items alternate, and the one declared first would
-                    // otherwise fade in underneath the opaque other: a hard cut on every other change).
-                    if (shown !== null)
-                        shown.z = 1;
+                    incoming = shown === slotA ? slotB : slotA;
+                    shown.z = 1;
                     incoming.z = 2;
                     incoming.opacity = 0;
                 }
-                // A newer request replaces the pending one in the same image; the picture on screen is not touched.
-                pendingUrl = url;
-                incomingStrip = feed.strip;
+                // A newer request replaces the pending one in the same slot; what is on screen is not touched.
+                pendingDesc = desc;
                 fadePending = true;
-                // Dev hook `wallpaper loadDelay <ms>`: the decode is started late, to test changes that arrive faster than it.
-                if (root.loadDelayMs > 0) {
-                    loadTimer.restart();
+                incoming.kind = desc.kind;
+                if (desc.kind === "color")
+                    incoming.color = desc.color;
+                if (desc.kind === "picture") {
+                    // Dev hook `wallpaper loadDelay <ms>`: the decode is started late, to test changes that arrive faster.
+                    if (root.loadDelayMs > 0)
+                        loadTimer.restart();
+                    else
+                        startLoad();
                 } else {
-                    incoming.source = url;
-                    if (incoming.status === Image.Ready)
-                        beginFade();
+                    loadTimer.stop();
+                    incoming.url = "";
+                    beginFade();
                 }
+            }
+
+            function startLoad(): void {
+                if (incoming === null || pendingDesc === null || pendingDesc.kind !== "picture")
+                    return;
+                incoming.url = pendingDesc.url;
+                if (incoming.pictureReady)
+                    beginFade();
             }
 
             Timer {
                 id: loadTimer
                 interval: root.loadDelayMs
-                onTriggered: {
-                    if (win.incoming === null)
-                        return;
-                    win.incoming.source = win.pendingUrl;
-                    if (win.incoming.status === Image.Ready)
-                        win.beginFade();
-                }
+                onTriggered: win.startLoad()
             }
 
-            // The pending request goes away (back to the artwork or a colour): what is on screen stays as it is.
+            // The pending request goes away (the screen already shows what is wanted): what is on screen stays as it is.
             function cancelPending(): void {
                 loadTimer.stop();
                 fadePending = false;
+                pendingDesc = null;
                 if (incoming !== null) {
-                    incoming.source = "";
+                    incoming.url = "";
                     incoming.opacity = 0;
                     incoming = null;
                 }
             }
 
-            function imageStatus(img: Image): void {
-                if (img !== incoming || !fadePending)
-                    return;
-                if (img.status === Image.Ready) {
+            function slotLoaded(slot: WallpaperSlot): void {
+                if (slot === incoming && fadePending && pendingDesc !== null && pendingDesc.kind === "picture")
                     beginFade();
-                } else if (img.status === Image.Error) {
-                    // The previous wallpaper stays.
-                    console.warn("wallpaper: cannot load " + img.source);
-                    fadePending = false;
-                    img.source = "";
-                    incoming = null;
-                }
             }
 
-            // The incoming picture is Ready. One fixed crossfade (macOS: a crossfade of fixed length); Reduce Motion: a plain
+            function slotFailed(slot: WallpaperSlot): void {
+                if (slot !== incoming || !fadePending)
+                    return;
+                // The previous wallpaper stays.
+                console.warn("wallpaper: cannot load " + slot.url);
+                cancelPending();
+            }
+
+            // The incoming slot is ready. One fixed crossfade (macOS: a crossfade of fixed length); Reduce Motion: a plain
             // switch. P3 for the fade is measured on real hardware with real frame timing (owner L2, docs/specs/desktop.md).
             function beginFade(): void {
                 fadePending = false;
-                fadeAway.stop();
                 const ms = Settings.reduceMotion ? 0 : Tokens.wallpaperCrossfadeMs;
                 if (ms === 0) {
                     incoming.opacity = 1;
                     completeFade();
                     return;
                 }
-                // The bar's tone follows the new picture once it dominates (60 % of the fade).
+                // The bar's tone follows the new wallpaper once it dominates (60 % of the fade), whatever its kind.
                 toneMid.interval = ms * 0.6;
                 toneMid.restart();
                 fadeIn.duration = ms;
@@ -340,7 +309,6 @@ Scope {
             // A fade in flight is completed at once when the next change arrives.
             function finishFade(): void {
                 fadeIn.stop();
-                fadeAway.stop();
                 if (incoming !== null) {
                     incoming.opacity = 1;
                     completeFade();
@@ -349,20 +317,28 @@ Scope {
 
             function completeFade(): void {
                 toneMid.stop();
-                if (shown !== null && shown !== incoming) {
-                    shown.opacity = 0;
-                    shown.source = "";
-                }
+                const old = shown;
                 shown = incoming;
-                shownStrip = incomingStrip;
+                shownDesc = pendingDesc;
                 incoming = null;
-                // The tone of the picture that is on screen now.
-                reportTone(shownStrip);
+                pendingDesc = null;
+                if (old !== shown) {
+                    old.opacity = 0;
+                    old.url = "";
+                }
+                // The tone of the wallpaper that is on screen now.
+                reportTone(shownDesc);
             }
 
-            function reportTone(strip: var): void {
-                if (VisualFixtures.wallpaperFile === "")
-                    BarTone.reportStrip(win.modelData.name, strip);
+            function reportTone(desc: var): void {
+                if (VisualFixtures.wallpaperFile !== "" || !win.modelData)
+                    return;
+                if (desc.kind === "picture")
+                    BarTone.reportStrip(win.modelData.name, desc.strip);
+                else if (desc.kind === "color")
+                    BarTone.reportColor(win.modelData.name, Qt.color(desc.color));
+                else if (height > 0)
+                    BarTone.reportGradient(win.modelData.name, Qt.color(slotA.art.skyTop), Qt.color(slotA.art.skyMid), Tokens.menubarHeight / (0.55 * height));
             }
 
             NumberAnimation {
@@ -373,29 +349,16 @@ Scope {
                 onFinished: win.completeFade()
             }
 
-            NumberAnimation {
-                id: fadeAway
-                property: "opacity"
-                to: 0
-                duration: Settings.reduceMotion ? 0 : Tokens.wallpaperCrossfadeMs
-                onFinished: {
-                    if (win.shown !== null && win.shown.opacity === 0) {
-                        win.shown.source = "";
-                        win.shown = null;
-                        win.shownStrip = null;
-                    }
-                }
-            }
-
-            // The bar's tone switches when the incoming picture dominates (60 % of the crossfade), from its own statistics.
+            // The bar's tone switches when the incoming wallpaper dominates (60 % of the crossfade).
             Timer {
                 id: toneMid
-                onTriggered: win.reportTone(win.incomingStrip)
+                onTriggered: if (win.pendingDesc !== null)
+                    win.reportTone(win.pendingDesc)
             }
 
             Image {
                 anchors.fill: parent
-                // On top of the two picture images (z 1 and 2): the contrast run covers whatever the wallpaper shows.
+                // On top of the two slots (z 1 and 2): the contrast run covers whatever the wallpaper shows.
                 z: 10
                 visible: VisualFixtures.wallpaperFile !== ""
                 source: VisualFixtures.wallpaperFile !== "" ? "file://" + VisualFixtures.wallpaperFile : ""
