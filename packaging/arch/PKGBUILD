@@ -152,9 +152,10 @@ package_grassfield-desktop() {
   # The empty scalable/apps directory is required: GTK drops a theme without a Directories entry, with its Inherits.
   install -Dm644 "$root/branding/icons/theme/index.theme" "$pkgdir/usr/share/icons/grassfield-icons/index.theme"
   install -d "$pkgdir/usr/share/icons/grassfield-icons/scalable/apps"
-  # Session environment for uwsm (Grassfield desktop name only): Qt icon theme and the GTK dconf profile.
+  # Session environment for uwsm (Grassfield desktop name only): Qt icon theme, the GTK dconf profile and the fontconfig file.
   install -Dm644 "$root/packaging/uwsm/env-grassfield" "$pkgdir/usr/share/uwsm/env-grassfield"
   install -Dm644 "$root/packaging/dconf/profile" "$pkgdir/usr/share/grassfield/dconf/profile"
+  install -Dm644 "$root/packaging/fontconfig/fonts.conf" "$pkgdir/usr/share/grassfield/fontconfig/fonts.conf"
   dconf compile "$srcdir/grassfield.db" "$root/packaging/dconf/grassfield.d"
   install -Dm644 "$srcdir/grassfield.db" "$pkgdir/usr/share/grassfield/dconf/grassfield.db"
 
