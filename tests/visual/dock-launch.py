@@ -95,7 +95,9 @@ def badge(held, rest):
     print("badge: red pixels outside the icon square: %d held (dimmed icon), %d at rest" % (nh, nr))
     if bh is not None and br is not None:
         print("badge: icon mean while held %.0f, at rest %.0f" % (bh["mean"], br["mean"]))
-    return 0 if nr >= 15 and nh >= 0.8 * nr else 1
+    dark = bh is not None and br is not None and bh["mean"] < br["mean"] * 0.95
+    print("badge: the icon is %s while held" % ("darker" if dark else "NOT darker"))
+    return 0 if nr >= 15 and nh >= 0.8 * nr and dark else 1
 
 
 def locate(path, colour):
@@ -117,7 +119,7 @@ def locate(path, colour):
     print(260 + (b["x0"] + b["x1"]) // 2, 880 + (b["y0"] + b["y1"]) // 2)
 
 
-def launch(d, name, colour):
+def launch(d, name, colour, nobounce=False):
     import os
     log = [l.split() for l in open(os.path.join(d, name + ".log")).read().split("\n") if l.strip()]
     events = dict(l.split() for l in open(os.path.join(d, name + ".events")).read().split("\n") if l.strip())
@@ -135,7 +137,7 @@ def launch(d, name, colour):
         print("events: pressed at %d, released at %d (shell clock), held %d ms" % (down, up, up - down))
         # The click was meant to be 250 ms: a hold near the menu threshold (550 ms) means the host stalled, not that the Dock is wrong.
         if up - down >= 500:
-            print("STALL: the shell measured a hold of %d ms for a click of about 250 ms (menu threshold 550 ms): host stall, rerun" % (up - down))
+            print("STALL: the shell measured a hold of %d ms for a click of about 250 ms (menu threshold 550 ms; seen 275-465 ms while grim records): host stall, rerun" % (up - down))
             return 2
     rows = []
     for idx, t0, t1 in log:
@@ -151,6 +153,7 @@ def launch(d, name, colour):
     xc = (ref["x0"] + ref["x1"]) // 2
     below = ref["y1"] + 2
     fail = 0
+    slowcap = False
     print("rest: top y=%d icon %d px, rest mean %.0f, frames %d, frame interval %d ms" % (top, size, ref["mean"], len(rows), sorted(b["t"] - a["t"] for a, b in zip(rows, rows[1:]))[len(rows) // 2]))
 
     # Frames captured entirely while the button was held (the capture started 60 ms after the press, ended before the release).
@@ -161,8 +164,7 @@ def launch(d, name, colour):
         print("press: brightest held frame mean %.0f against %.0f at rest (%d frames fully inside the hold): %s" % (mean, ref["mean"], len(held), "darker" if ok else "NOT darker"))
         fail |= not ok
     else:
-        print("press: no frame fully inside the hold")
-        fail = 1
+        print("press: no frame fully inside the hold (grim is too slow for a hold of %d ms here); the dimming is asserted by the badge part, which takes its frame at a chosen time" % (up - down))
 
     after = [r for r in rows if r["t"] >= up]
     seen_px = max((top - r["box"]["y0"] for r in after if r["box"]), default=0)
@@ -178,10 +180,10 @@ def launch(d, name, colour):
     peak = max((v for _, v in curve), default=0)
     first = next((t for t, v in curve if v > 0.5), None)
     print("start: the first lifted frame is %s ms after the click (shell, scene graph; one display frame more on screen)" % first)
-    fail |= first is None or first > 100
+    fail |= (not nobounce) and (first is None or first > 100)
     ratio = peak / size
     print("rise: highest lift %.1f px = %.2f of the icon (%d px); curve samples %d" % (peak, ratio, size, len(curve)))
-    fail |= not 0.25 <= ratio <= 0.45
+    fail |= (not nobounce) and (not 0.25 <= ratio <= 0.45)
     maxima = []
     for i in range(1, len(curve) - 1):
         if curve[i][1] >= 0.9 * peak and curve[i][1] >= curve[i - 1][1] and curve[i][1] > curve[i + 1][1]:
@@ -190,10 +192,10 @@ def launch(d, name, colour):
     gaps = [b[0] - a[0] for a, b in zip(curve, curve[1:]) if b[0] < (maxima[-1] if maxima else 0)]
     biggest = max(gaps, default=0)
     print("curve: largest gap between two frames of the shell during the bounce %d ms (a frame is 16 ms)" % biggest)
-    stalled = biggest > 150
+    stalled = biggest > 100
     periods = [b - a for a, b in zip(maxima, maxima[1:])]
     print("period: maxima at %s ms, between them %s ms" % (maxima, periods))
-    fail |= not periods or not all(430 <= p <= 570 for p in periods)
+    fail |= (not nobounce) and (not periods or not all(430 <= p <= 570 for p in periods))
     # Up and down: time from 0 to the peak and back (ease out up, ease in down).
     if len(maxima) >= 2:
         i0 = next(i for i, (t, v) in enumerate(curve) if t >= maxima[0] and v >= 0.9 * peak)
@@ -213,7 +215,8 @@ def launch(d, name, colour):
         mapped = int(open(mpath).read().split()[0]) - up
         gap = None if seen is None else seen - mapped
         print("map: the window showed up in the compositor %d ms after the click; the dot was first seen %s ms after the window (a frame is %d ms, the poll 30-60 ms)" % (mapped, gap, sorted(b["t"] - a["t"] for a, b in zip(rows, rows[1:]))[len(rows) // 2]))
-        fail |= gap is None or gap > 700
+        interval_ms = sorted(b["t"] - a["t"] for a, b in zip(rows, rows[1:]))[len(rows) // 2]
+        fail |= gap is None or gap > 300 + 2 * interval_ms
     end = rows[-1]["box"]
     settled = end is not None and end["y0"] == top
     print("end: icon %s" % ("at rest" if settled else "still lifted (y0 %s)" % (end["y0"] if end else None)))
@@ -233,4 +236,4 @@ if __name__ == "__main__":
     if sys.argv[1] == "locate":
         locate(sys.argv[2], sys.argv[3])
     else:
-        sys.exit(launch(sys.argv[2], sys.argv[3], sys.argv[4]))
+        sys.exit(launch(sys.argv[2], sys.argv[3], sys.argv[4], len(sys.argv) > 5 and sys.argv[5] == "nobounce"))

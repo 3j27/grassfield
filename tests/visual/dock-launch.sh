@@ -57,6 +57,19 @@ kill_class() { # a test window by class (its own process, started by this script
   done
 }
 count_class() { nest clients -j | jq --arg c "$1" '[.[] | select(.class == $c)] | length'; }
+# Closes every window of the classes and waits until none shows up for 4 s: an app started by an earlier part (the slow gfLA opens its
+# window 1-3 s after its click) must not appear in the middle of the next one.
+quiet() {
+  local c n=0 any
+  while (( n < 4 )); do
+    any=0
+    for c in "$@"; do
+      if [[ $(count_class "$c") -gt 0 ]]; then any=1; kill_class "$c"; fi
+    done
+    if (( any )); then n=0; else n=$((n + 1)); fi
+    sleep 1
+  done
+}
 active_class() { nest activewindow -j | jq -r '.class // ""'; }
 wait_count() { # CLASS N SECONDS
   local i
@@ -123,6 +136,14 @@ locate() { # COLOUR -> "x y"
   python3 -I "$VS_HERE/dock-launch.py" locate "$VS_DEV/shots/dock-launch-locate.png" "$1"
 }
 
+# Centre "x y" of the tile of an app key, from the Dock itself (no screenshot; the magnification is off).
+# The tile of the app is in the Dock (running or recent), or it is made a recent app: a part run alone, or after a stall, still has it.
+ensure_recent() { # CLASS
+  vs_ipc dock tiles | jq -e --arg k "$1" 'index($k)' >/dev/null && return 0
+  make_recent "$1" magenta
+}
+tile_xy() { vs_ipc dock centre "$(vs_ipc dock tiles | jq --arg k "$1" 'index($k)')" "$VS_OUTPUT"; }
+
 if want launch || want reduced; then
   make_recent gfLA magenta
 fi
@@ -130,7 +151,7 @@ fi
 # One launch from the recents tile of gfLA, frames until 4 s after the click. $1 = part name.
 launch_gfLA() {
   local name=$1 x y
-  read -r x y <<<"$(locate magenta)"
+  read -r x y <<<"$(tile_xy gfLA)"
   echo "$name: tile at $x,$y"
   REGION="$(( OX + x - 110 )),$(( OY + 940 )) 220x130"
   vs_pointer abs "$x" "$y" >/dev/null
@@ -158,10 +179,25 @@ launch_gfLA() {
   tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch:" > "$out/$name.curve"
 }
 
+# launch_gfLA + analysis, up to three attempts: a host stall (status 2: the shell measured a hold or frame gaps that are not the ones
+# asked for) starts again from the recents state; three stalls in a row are reported as a stall. Leaves the status in $st.
+launch_retry() { # NAME [nobounce]
+  local name=$1
+  for attempt in 1 2 3; do
+    launch_gfLA "$name"
+    python3 -I "$VS_HERE/dock-launch.py" launch "$out" "$name" magenta "${2:-}" > "$out/$name-analysis.txt"
+    st=$?
+    cat "$out/$name-analysis.txt"
+    [[ $st -ne 2 ]] && break
+    echo "$name: attempt $attempt stalled, again"
+    quiet gfLA
+    sleep 3
+  done
+}
+
 if want launch; then
-  launch_gfLA launch
-  python3 -I "$VS_HERE/dock-launch.py" launch "$out" launch magenta | tee "$out/launch.txt"
-  check "launch: bounce, press, dot" "${PIPESTATUS[0]}"
+  launch_retry launch
+  check "launch: bounce, press, dot (attempt $attempt)" "$st"
   sleep 1
   [[ $(active_class) == gfLA ]]; RC=$?
   check "launch: the new window has the focus (active: $(active_class))" $RC
@@ -174,7 +210,7 @@ if want double; then
   kill_class gfLA
   wait_count gfLA 0 5
   sleep 2.5
-  read -r x y <<<"$(locate magenta)"
+  read -r x y <<<"$(tile_xy gfLA)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   vs_pointer click sleep 120 click >/dev/null
@@ -196,7 +232,7 @@ if want forward || want minimized; then
   sleep 2
   [[ $(active_class) == gfLA ]]; RC=$?
   check "forward: setup, gfLA in front (active: $(active_class))" $RC
-  read -r x y <<<"$(locate cyan)"
+  read -r x y <<<"$(tile_xy gfLB)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   vs_pointer click >/dev/null
@@ -217,15 +253,19 @@ fi
 
 if want minimized; then
   # Minimize every gfLB window (the focused one, then the next).
-  for i in 1 2 3; do
-    [[ $(active_class) == gfLB ]] || break
+  for i in 1 2 3 4; do
+    left=$(nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name != "special:minimized")] | length')
+    [[ $left -eq 0 ]] && break
+    # Focus a window of gfLB that is still there (the focus may have gone to another app after the first one), then minimize it.
+    [[ $(active_class) == gfLB ]] || nest dispatch "hl.dsp.focus({window = 'class:^gfLB\$'})" >/dev/null 2>&1
+    sleep 0.6
     vs_ipc windows minimize >/dev/null
-    sleep 1.2
+    sleep 1.5
   done
   min=$(nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name == "special:minimized")] | length')
   [[ $min -eq 2 ]]; RC=$?
   check "minimized: setup, both gfLB windows minimized (found $min)" $RC
-  read -r x y <<<"$(locate cyan)"
+  read -r x y <<<"$(tile_xy gfLB)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   vs_pointer click >/dev/null
@@ -237,11 +277,10 @@ if want minimized; then
 fi
 
 if want reopen; then
-  kill_class gfLB
-  kill_class gfLA
+  quiet gfLB gfLA
   wait_count gfLB 0 5
   sleep 3
-  read -r x y <<<"$(locate cyan)"
+  read -r x y <<<"$(tile_xy gfLB)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   vs_pointer click >/dev/null
@@ -261,7 +300,7 @@ if want desktop; then
   sleep 1.5
   [[ $(nest activeworkspace -j | jq -r .id) != "$ws_a" ]]; RC=$?
   check "desktop: setup, gfLA on Desktop $ws_a, another Desktop shown" $RC
-  read -r x y <<<"$(locate magenta)"
+  read -r x y <<<"$(tile_xy gfLA)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   vs_pointer click >/dev/null
@@ -273,32 +312,42 @@ fi
 
 if want badge; then
   # The press-dim layer must not clip a badge that overhangs the icon: a tile with a badge, button held, frame taken while held.
-  kill_class gfLA
-  kill_class gfLB
+  quiet gfLA gfLB
   wait_count gfLA 0 5
   sleep 3
   DBUS_SESSION_BUS_ADDRESS=$(<"$VS_DEV/bus.address") notify-send -a "GF Launch A" -t 0 "Badge test" "One notification."
   sleep 2
-  read -r x y <<<"$(locate magenta)"
+  ensure_recent gfLA
+  read -r x y <<<"$(tile_xy gfLA)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   REGION="$(( OX + x - 60 )),$(( OY + 960 )) 120x90"
   WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-rest.png"
-  ( sleep 0.2; WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-held.png"; ) &
-  vs_pointer down sleep 350 up >/dev/null
+  # The frame is taken when the Dock reports the press (not at a guessed delay), 80 ms later, inside a 420 ms hold.
+  bmark=$(wc -l < "$VS_DEV/shell.log")
+  (
+    for _ in $(seq 1 200); do
+      if tail -n +"$(( bmark + 1 ))" "$VS_DEV/shell.log" | grep -q "dock-launch: pressed true"; then break; fi
+      sleep 0.01
+    done
+    sleep 0.08
+    WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-held.png"
+  ) &
+  vs_pointer down sleep 420 up >/dev/null
   wait
   python3 -I "$VS_HERE/dock-launch.py" badge "$out/badge-held.png" "$out/badge-rest.png"; RC=$?
-  check "badge: the held (dimmed) icon still shows the whole badge" $RC
+  check "badge: the held icon is darker and still shows the whole badge" $RC
   kill_class gfLA
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
 fi
 
 if want hold; then
-  kill_class gfLA
-  kill_class gfLB
+  quiet gfLA gfLB
   wait_count gfLA 0 5
   sleep 5
-  read -r x y <<<"$(locate magenta)"
+  ensure_recent gfLA
+  read -r x y <<<"$(tile_xy gfLA)"
+  echo "hold: gfLA tile at $x,$y; tiles $(vs_ipc dock tiles)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   # A hold under the menu threshold is a click: it launches, no menu.
@@ -315,10 +364,12 @@ if want hold; then
   kill_class gfLA
   wait_count gfLA 0 5
   sleep 5
-  read -r x y <<<"$(locate magenta)"
+  ensure_recent gfLA
+  read -r x y <<<"$(tile_xy gfLA)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   # A hold over it opens the Dock menu on the pressed tile and the release launches nothing.
+  "$VS_ROOT/scripts/dev/shot.sh" dock-launch-locate "$VS_OUTPUT" >/dev/null
   cp "$VS_DEV/shots/dock-launch-locate.png" "$out/hold-before.png"
   mark=$(wc -l < "$VS_DEV/shell.log")
   vs_pointer down sleep 900 up >/dev/null
@@ -340,8 +391,7 @@ fi
 if want holdtiles; then
   # A hold of 900 ms on a tile WITHOUT a Dock menu still clicks on release (like a right click does nothing there): Apps, Trash, a
   # minimized window. (An app tile gives its menu, see `hold`.) The Dock logs `tap` for a click and `menu-by-hold` for a menu.
-  kill_class gfLA
-  kill_class gfLB
+  quiet gfLA gfLB
   sleep 3
   tile_centre() { vs_ipc dock centre "$1" "$VS_OUTPUT"; } # INDEX -> "x y"
   hold_tile() { # NAME INDEX: hold 900 ms, then the Dock log lines of that hold in $out/holdtiles-NAME.txt
@@ -382,15 +432,11 @@ if want holdtiles; then
 fi
 
 if want reduced; then
-  kill_class gfLA
-  kill_class gfLB
+  quiet gfLA gfLB
   sleep 5
   vs_ipc controlcenter reduceMotion true >/dev/null
   sleep 0.5
-  launch_gfLA reduced
-  # No bounce: no frame with the icon lifted; the dot still appears.
-  python3 -I "$VS_HERE/dock-launch.py" launch "$out" reduced magenta > "$out/reduced-analysis.txt" || true
-  grep -E "^(frames|dot|map)" "$out/reduced-analysis.txt"
+  launch_retry reduced nobounce
   ! grep -q "dock-launch: lift" "$out/reduced.curve"; RC=$?
   check "reduced: no bounce with Reduce Motion (bounce samples logged: $(grep -c "dock-launch: lift" "$out/reduced.curve"))" $RC
   grep -q "^dot: .*first seen [0-9]" "$out/reduced-analysis.txt"; RC=$?
