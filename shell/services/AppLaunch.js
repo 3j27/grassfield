@@ -35,6 +35,15 @@ function appsHomeFor(stateHome, fallbackBase) {
     return fallbackBase + "/grassfield-dev/apps-home";
 }
 
+// argv of an application started in a scope of its own (app-graphical.slice) through uwsm's app launcher, as the Omarchy
+// session starts its apps. A process the shell starts otherwise stays in the shell's systemd unit, and a restart or a
+// crash of the shell (Restart=on-failure stops the whole control group) takes every such application down with it
+// (macOS: the Dock quitting never quits an app). `scoped` false (a dev session, or no uwsm-app): argv unchanged.
+function scopedArgv(argv, scoped) {
+    const a = Array.from(argv || []);
+    return scoped && a.length > 0 ? ["uwsm-app", "--"].concat(a) : a;
+}
+
 // argv of a desktop entry or action `command` (QStringList): Exec field codes (%f %F %u %U %i %c %k and
 // the deprecated ones) are dropped, "%%" is a literal percent. [] when nothing is left.
 function stripFieldCodes(command) {
@@ -64,6 +73,22 @@ function openRequest(argv) {
     if (name === "gtk-launch")
         return a.length > 2 ? {"targets": a.slice(2)} : {"refuse": "application launch"};
     return null;
+}
+
+// Real-session open policy (docs/specs/files.md, "Default file manager"): `gio open T...` and `xdg-open T` become
+// `bash <script> <opener> T...`, where the script (services/open-real.sh) opens every folder in Grassfield Files and hands
+// the rest to the opener. Any other command (gtk-launch, gio trash, ...) and a dev session (`enabled` false, the dev open
+// policy applies) are returned unchanged.
+function folderAwareArgv(argv, script, enabled) {
+    const a = Array.from(argv || []).map(String);
+    if (!enabled)
+        return a;
+    const name = a.length > 0 ? a[0].replace(/^.*\//, "") : "";
+    if (name === "gio" && a[1] === "open" && a.length > 2)
+        return ["bash", script, "gio"].concat(a.slice(2));
+    if (name === "xdg-open" && a.length > 1)
+        return ["bash", script, "xdg-open"].concat(a.slice(1));
+    return a;
 }
 
 // Directory of the user's autostart entries (XDG): `<appsHome>/config/autostart` in a dev session (never the owner's

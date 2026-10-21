@@ -15,8 +15,8 @@ cxxflags=(-std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC)
 
 if [[ ${1:-} == "--tests" ]]; then
   # shellcheck disable=SC2046
-  g++ "${cxxflags[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core Qt6Gui) \
-    "$root/tests/unit/preview/tst_previewlogic.cpp" "$here/src/previewlogic.cpp" \
+  g++ "${cxxflags[@]}" -I"$here/src" -I"$here/../files/src" $(pkg-config --cflags Qt6Core Qt6Gui) \
+    "$root/tests/unit/preview/tst_previewlogic.cpp" "$here/src/previewlogic.cpp" "$here/../files/src/filelogic.cpp" \
     $(pkg-config --libs Qt6Core Qt6Gui) -lgtest -lgtest_main -pthread \
     -o "$out/preview-unit-tests"
   echo "built $out/preview-unit-tests"
@@ -36,9 +36,9 @@ moc=/usr/lib/qt6/moc
 
 # shellcheck disable=SC2046
 g++ "${cxxflags[@]}" "${defs[@]}" \
-  -I"$here/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" \
+  -I"$here/src" -I"$here/../files/src" -I"$here/.." -I"$root/ui/i18n" -I"$out" \
   $(pkg-config --cflags Qt6Gui Qt6Qml Qt6Quick Qt6DBus) \
-  "$here/src/main.cpp" "$here/src/previewapp.cpp" "$here/src/previewlogic.cpp" "$out/moc_previewapp.cpp" \
+  "$here/src/main.cpp" "$here/src/previewapp.cpp" "$here/src/previewlogic.cpp" "$here/../files/src/filelogic.cpp" "$out/moc_previewapp.cpp" \
   $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick Qt6DBus) \
   -o "$out/grassfield-preview"
 echo "built $out/grassfield-preview"

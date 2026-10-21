@@ -47,6 +47,9 @@ Variants {
         WlrLayershell.keyboardFocus: grabbing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-switcher"
         // qmllint disable missing-type
+        // The whole surface takes input during the switch; nothing once it ended: it stays mapped a moment for the
+        // keyboard release, and a click then belongs to the window under it.
+        mask: win.grabbing ? null : passThrough
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blur : null
         // qmllint enable missing-type
 
@@ -56,9 +59,22 @@ Variants {
             radius: Tokens.switcherPanelRadius
         }
 
+        Region {
+            id: passThrough
+        }
+
         KeyboardRelease {
             id: release
             shown: win.grabbing
+        }
+
+        // Ended but still mapped (the hold): a press the compositor delivered before the empty mask landed (late whenever the
+        // GUI thread was busy) is swallowed here, never handled by the tile under it.
+        MouseArea {
+            anchors.fill: parent
+            z: 1000
+            visible: !win.grabbing
+            acceptedButtons: Qt.AllButtons
         }
 
         onGrabbingChanged: {

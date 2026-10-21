@@ -86,7 +86,7 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   `GRASSFIELD_SESSION=1`; `nested-up.sh` and `shell-run.sh` take `--visual-fixtures`), else they answer `refused: <name> is a test hook` and change nothing
   (`tests/shell/notif_hooks.sh`).
   Keyboard focus is independent of the view: the ListView has `currentIndex: -1`, no highlight following and no key navigation (a current item
-  made the view move the focus onto that delegate on any insert or removal at or above it); focus moves only by key (`focusKey`). A clear keeps the
+  made the view move the focus onto that delegate on any insert or removal at or above it); focus moves only by key (Tab, `tabStep`) and by the resolver below. A clear keeps the
   focus on another card, and moves it (next card rule above) when it was on the cleared card, any card of a cleared group, or on the keyboard and
   accessibility paths (the x's accessibility press behaves like Space on it). Tab and Shift+Tab follow the visual order (top to bottom, then the widgets, then Edit Widgets and the close circle; inside a card: card, x, buttons):
   Qt's focus chain follows delegate CREATION order (newer cards sit above older ones) and moves the focus before any parent sees the key, so two
@@ -108,14 +108,20 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   card, else the panel (`releaseFocus`). Only `rows` (the model now) says what exists; the settled rows before (`snapRows`) only give
   the neighbourhood, so nothing acts on a stale or gone key, also after several changes in one turn. A same-id update by the app only
   changes the card's roles: the delegate and its focus stay. `Show All` used with the keyboard hands the focus to the group's "Show
-  Less"; `Show Less` hands it to "Show All" (an intent the resolver honours, `handoff`). Keys act only on a visible, enabled, focused
-  item: a hidden control still holding the focus swallows Return/Space (`GroupClear`, `Button`) instead of letting them bubble to the card.
+  Less"; `Show Less` hands it to "Show All" (an intent the resolver honours, `handoff`). A focus that Qt drops onto the list, its content or
+  the panel (the button that held it was rebuilt by a same-id update, or the card left the displayed rows and came back in the same turn) while its
+  identity still names a visible, enabled element is given back to that element (`noteFocus` queues the resolver, `resolveFocus` calls
+  `forceActiveFocus`); a focus that went to Edit Widgets or the close circle is the user leaving and is forgotten (`focusId = null`; `releaseFocus` is the
+  explicit leave). Keys act only on a visible, enabled, focused item: a hidden control still holding the focus swallows its ACTIVATION keys
+  (Return, Enter, Space; `GroupClear`, the shared `Button`) instead of letting them bubble to the card, and every other key (Escape above all)
+  propagates, so a Button hidden by its parent never blocks Escape (the polkit dialog uses the same Button). Delete and Backspace clear a card
+  only when the card itself or its x holds the focus; on Show All, More, an action or Clear All they do nothing.
   The list is its own component (`NotificationList.qml`, a ListView) so that the tests run the shipped code: the PanelWindow needs a compositor.
   Tests: `tests/unit/tst_notifcenter.qml` (focus choice `focusAfterGone` incl. several changes in one turn, hover counts), `tests/shell/notif_center_list` (the real list in a plain
   window on the real singleton, real key events through `QtTest.TestCase.keyClick`: focus after arrival, Show Less, collapse, expiry, same-id update, group clear, last card; a focused
   Clear All / Show Less / Show All / More / action hidden by an arrival, a close, a shrink or the sender expiring; two and three changes in one turn; keys never
-  act on a hidden control; a seeded random sequence of 80 turns with the focus anywhere; tabStep order incl. after arrivals;
-  focusedDelegate; clearCard refocus; Show All / Show Less focus handoff; layout invariant after toggles; bumpTick; takeFresh), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
+  act on a hidden control; case "same-id update drops another action under the focused action" and case "pushed out and brought back in one turn"; Delete and Backspace only on the card and its x; a seeded random sequence of 80 turns with the focus anywhere; tabStep order incl. after arrivals;
+  focusedDelegate; clearCard refocus; Show All / Show Less focus handoff; layout invariant after toggles; bumpTick; takeFresh), `tests/shell/notif_center_random` (the same list, 540 seeded turns in 3 seeds of 1 to 4 changes: arrivals, closes, expiries, same-id updates adding or dropping actions, x, Clear All, Show All / Show Less, More; focus on every control or outside the cards; real Space, Return, Enter, Delete, Backspace and Tab, Shift+Tab before and after the changes; the invariant is asserted after every turn), `tests/unit/tst_buttonkeys.qml` (the Button guard: activation keys swallowed while hidden, Escape and other keys propagate), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
   repeated group clears, focus after Delete in collapsed and expanded groups), `tests/shell/notif_clear/nested.sh` (nested helper, notifications on the nested private bus only).
 - Banners: one layer-shell window (Overlay layer, no keyboard focus) on the first screen only; input and blur follow the cards.
   Timeout: `expire_timeout` (seconds), -1 = 5 s, 0 and critical = never. Expiry only hides the banner: the entry stays in the Center

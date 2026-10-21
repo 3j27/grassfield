@@ -1,5 +1,6 @@
 #include "Titlebar.hpp"
 
+#include "DeferredFocus.hpp"
 #include "Ipc.hpp"
 #include "Plugin.hpp"
 #include "core/PointerGesture.hpp"
@@ -199,9 +200,12 @@ namespace {
 
     // Focus without Config::Actions::focus(): that action warps the cursor to the window middle when the
     // pointer is outside the client surface (measured in S2), which breaks clicks and drags on the bar.
+    // Whether the window holds the keyboard decides, not whether Hyprland counts it active: after a session
+    // unlock with the pointer off the windows, Hyprland still counts its last window active while the keyboard
+    // is on no surface (tests/compositor/click_focus.sh).
     void focusAndRaise(const PHLWINDOW& w) {
-        if (const auto focus = Desktop::focusState(); focus && !focus->isWindowActive(w))
-            focus->fullWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
+        if (!gf::deferredFocus::windowHoldsKeyboard(w))
+            gf::deferredFocus::focusWindow(w, Desktop::FOCUS_REASON_CLICK);
         logIfFailed("raise", Config::Actions::alterZOrder("top", w));
     }
 } // namespace

@@ -27,4 +27,10 @@ Item {
         property: "reduceMotion"
         value: root.backend.reduceMotion
     }
+
+    Binding {
+        target: Appearance
+        property: "accentSetting"
+        value: root.backend.accentColor
+    }
 }

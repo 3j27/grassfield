@@ -34,6 +34,17 @@ namespace gf::deferredFocus {
     // of a sessionlock / an exclusive ls"). The plugin then never asks for one (R13 counter-review #3 of e9ebc7f).
     bool windowFocusRefused();
 
+    // Hyprland counts `w` as its focused window and the seat's keyboard is on `w` (its main surface, a subsurface or a popup).
+    bool windowHoldsKeyboard(const PHLWINDOW& w);
+
+    // Gives `w` the keyboard through Hyprland's own window focus (CFocusState::fullWindowFocus, with every rule Hyprland
+    // applies: no_focus, a modal child, X11 windows that refuse focus). It also works for the window Hyprland still counts as
+    // focused while the keyboard is elsewhere: fullWindowFocus returns early when Hyprland's focus state still names that
+    // window's surface, so the state is reset (CFocusState::resetWindowFocus, what Hyprland does when its focused window
+    // unmaps) and the focus made again. Nothing is asked while Hyprland refuses window focus (lock, Exclusive layer).
+    // `stateReset` (optional) tells whether the reset was needed. True when `w` holds the keyboard afterwards.
+    bool focusWindow(const PHLWINDOW& w, Desktop::eFocusReason reason, bool* stateReset = nullptr);
+
     // The surface that holds the keyboard as Hyprland sees it: its focus surface; else the seat's keyboard focus; else,
     // while an Exclusive layer is mapped, that layer (Hyprland resets its focus surface when its focused window closes,
     // CWindow::onUnmap, and refuses the next window while the layer is mapped: the layer keeps the keys). Read only.

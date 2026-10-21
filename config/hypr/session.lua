@@ -17,6 +17,11 @@ hl.env("GRASSFIELD_SESSION", "1")
 require("grassfield.core")
 require("grassfield.autostart")
 
+-- Hyprland would write cursor-theme/cursor-size into the owner's dconf (org.gnome.desktop.interface), a database shared
+-- with the Omarchy session. Never touch it from this session; the theme reaches clients through XCURSOR_* (cursor.lua).
+-- GTK applications keep whatever theme dconf already holds.
+hl.config({ cursor = { sync_gsettings_theme = false } })
+
 -- Optional compositor extension (ADR-0009). Loaded at parse time (Hyprland applies the plugin list right
 -- after parsing). A build for another Hyprland ABI is refused by the plugin itself; the shell then runs in
 -- degraded mode and notifies once (§5.6).

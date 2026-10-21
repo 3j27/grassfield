@@ -23,16 +23,13 @@ Item {
     Accessible.onPressAction: root.clicked()
 
     Keys.onPressed: event => {
-        // A hidden or disabled button never acts, whatever still holds the focus; the key is swallowed (it would otherwise bubble
-        // up to a parent that acts on it).
-        if (!root.visible || !root.enabled) {
-            event.accepted = true;
+        if (event.key !== Qt.Key_Space && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
             return;
-        }
-        if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+        // A hidden or disabled button never acts, whatever still holds the focus; its activation keys are swallowed (they would
+        // otherwise bubble up to a parent that acts on them). Every other key (Escape above all) propagates.
+        if (root.visible && root.enabled)
             root.clicked();
-            event.accepted = true;
-        }
+        event.accepted = true;
     }
 
     Rectangle {
@@ -61,6 +58,7 @@ Item {
         color: root.primary ? Appearance.colors.accentText : (root.destructive ? Appearance.colors.danger : Appearance.colors.text)
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyMenuSize
+        font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
         font.weight: Tokens.typographyMenuWeight
     }
 

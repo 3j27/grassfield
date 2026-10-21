@@ -1,5 +1,6 @@
 # ADR-0014: Icon appearance modes with live tint, and Grassfield's own cursor set
 Status: Proposed (owner request 2026-10-19; applied provisionally) · Date: 2026-10-19 · Decider: owner
+See ADR-0017 for the WhiteSur distribution, the session theme selection and the Apple-logo guard (it supersedes the "pragma / QT_ICON_THEME" plan here).
 
 ## Context
 The owner wants icons and cursors as Grassfield capabilities: icons with a live tint like the macOS 26 icon appearance

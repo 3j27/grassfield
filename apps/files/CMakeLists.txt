@@ -38,15 +38,16 @@ target_compile_definitions(grassfield-files PRIVATE
 install(TARGETS grassfield-files RUNTIME DESTINATION bin)
 install(DIRECTORY qml/ DESTINATION share/grassfield/files/qml FILES_MATCHING PATTERN "*.qml" PATTERN "*.js")
 install(FILES org.grassfield.Files.desktop DESTINATION share/applications)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../branding/icons/apps/org.grassfield.Files.svg DESTINATION share/icons/hicolor/scalable/apps)
 
 # Unit tests of the pure logic (gtest), also run by scripts/dev/test.sh through build-direct.sh --tests.
 find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
     add_executable(files-unit-tests ../../tests/unit/files/tst_filelogic.cpp ../../tests/unit/files/tst_previewqueue.cpp
-        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp
+        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_appscope.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp
         src/folderstylelogic.cpp src/folderstylestore.cpp)
-    target_include_directories(files-unit-tests PRIVATE src)
+    target_include_directories(files-unit-tests PRIVATE src ..)
     target_link_libraries(files-unit-tests PRIVATE Qt6::Core GTest::gtest GTest::gtest_main)
     add_test(NAME files-unit-tests COMMAND files-unit-tests)
 endif()

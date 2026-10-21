@@ -732,6 +732,63 @@ ShellRoot {
             root.check("26: the focus left it", root.noHiddenFocus());
         });
 
+        // 28. Case 1a: the app replaces its notification (same id) and drops ANOTHER action while an action button holds the focus: the
+        // buttons are rebuilt, the focus falls to their Loader; it goes back to the button (ring), and Return neither opens the card nor
+        // closes the column.
+        root.scene(s => {
+            s.k = root.add("act", {nid: 11, actions: [{id: "a", text: "A"}, {id: "b", text: "B"}, {id: "c", text: "C"}]});
+        }, s => {
+            root.check("28: focus action b", root.focusCtl(s.k, "action:b"));
+            const e = Notifications.entryFor(s.k);
+            Notifications.updateEntry(s.k, Object.assign({}, e, {actions: [{id: "b", text: "B"}, {id: "c", text: "C"}]}));
+            s.count = Notifications.count;
+        }, s => {
+            root.check("28: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("28: on the button b, ring visible", root.ident() !== null && root.ident().key === s.k && root.ident().role === "action:b" && win.activeFocusItem.activeFocus);
+            keys.keyClick(Qt.Key_Return);
+            root.check("28: Return did not open the card nor close the column", Notifications.count === s.count && Notifications.centerOpen);
+            keys.keyClick(Qt.Key_Delete);
+            root.check("28: Delete on a button does nothing", Notifications.count === s.count);
+        });
+
+        // 29. Case 1b: an arrival pushes the focused card out of the collapsed group and an app close brings it back in, in ONE turn:
+        // the focus does not fall to the list; Delete clears that card.
+        root.scene(s => {
+            s.m = mailBy(3);
+            s.c = root.add("cal");
+        }, s => {
+            root.check("29: focus the third card", root.focusCtl(s.m[0], "card"));
+            s.m.push(root.add("mail"));
+            Notifications.closed(s.m[1], CLOSED);
+        }, s => {
+            root.check("29: the card is displayed again", root.shownKeys().indexOf(s.m[0]) >= 0);
+            root.check("29: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+            root.check("29: not on the list or the panel", win.activeFocusItem !== list && !root.atPanel());
+            keys.keyClick(Qt.Key_Delete);
+            root.check("29: Delete acts on a card", Notifications.count === 3 && Notifications.entryFor(s.m[0]) === null);
+        });
+
+        // 30. Delete and Backspace act only on the card and its x: on Clear All, Show All and an action they do nothing.
+        root.scene(s => {
+            s.m = mailBy(4);
+            s.k = root.add("act", {nid: 12, actions: [{id: "a", text: "A"}]});
+        }, s => {
+            s.n = Notifications.count;
+            root.check("30: focus Show All", root.focusCtl(s.m[1], "showAll"));
+            keys.keyClick(Qt.Key_Delete);
+            keys.keyClick(Qt.Key_Backspace);
+            root.check("30: focus Clear All", root.focusCtl(s.m[3], "clearGroup"));
+            keys.keyClick(Qt.Key_Delete);
+            root.check("30: focus an action", root.focusCtl(s.k, "action:a"));
+            keys.keyClick(Qt.Key_Backspace);
+            s.same = Notifications.count === s.n;
+        }, s => {
+            root.check("30: nothing was cleared by Delete or Backspace on those controls", s.same && Notifications.count === 5);
+            root.check("30: Delete on the x clears its card", root.focusCtl(s.k, "close"));
+            keys.keyClick(Qt.Key_Delete);
+            root.check("30: that card is gone", Notifications.entryFor(s.k) === null && Notifications.count === 4);
+        });
+
         // 27. Property: seeded random turns (arrivals, closes, expiries, toggles, clears; 1 to 3 per turn) with the focus anywhere.
         // After every turn the focus is on a usable element (the panel when no card is left), or where it was put outside the cards.
         step(() => root.resetAll(), 450);

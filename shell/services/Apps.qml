@@ -101,18 +101,73 @@ Singleton {
 
     // A GRASSFIELD_DEV session (nested, on the owner's machine) must never start an app with the
     // owner's profiles: apps launched by the shell get their own XDG config, cache, state and data homes
-    // (docs/specs/dock.md, dev notes). Production launches are untouched.
+    // (docs/specs/dock.md, dev notes). Production launches keep the user's environment (and get a scope of their own,
+    // scopedLaunch).
     readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
     readonly property string appsHome: AppLaunch.appsHomeFor(Quickshell.env("GRASSFIELD_STATE_HOME"), Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+
+    // A real Grassfield session (uwsm, GRASSFIELD_SESSION=1, not a dev session) with uwsm's app launcher: every
+    // application the shell starts gets a scope of its own (AppLaunch.scopedArgv), never the shell's unit.
+    readonly property bool realSession: Quickshell.env("GRASSFIELD_SESSION") === "1" && !devSession
+    property bool uwsmApp: false
+    readonly property bool scopedLaunch: realSession && uwsmApp
+
+    // The detection of uwsm-app is asynchronous (a Process), so an application started in the first moments of the shell
+    // would escape its scope. Every application start therefore goes through whenScopeKnown(): it runs at once when the
+    // answer is known (always in a dev session) and is queued until the answer arrives otherwise.
+    property bool scopeKnown: !realSession
+    property var scopeWaiting: []
+
+    function whenScopeKnown(fn: var): void {
+        if (scopeKnown)
+            fn();
+        else
+            scopeWaiting = scopeWaiting.concat([fn]);
+    }
+
+    function settleScope(): void {
+        if (scopeKnown)
+            return;
+        scopeKnown = true;
+        const waiting = scopeWaiting;
+        scopeWaiting = [];
+        for (const fn of waiting)
+            fn();
+    }
+
+    Process {
+        running: root.realSession
+        command: ["sh", "-c", "command -v uwsm-app"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.uwsmApp = text.trim() !== "";
+                root.settleScope();
+            }
+        }
+        // sh could not even start: launches must not wait for ever (they start unscoped).
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: root.settleScope()
+        // qmllint enable signal-handler-parameters
+    }
+
+    // argv of an application start: in its own scope in a real session (AppLaunch.scopedArgv).
+    function scoped(argv: var): var {
+        return AppLaunch.scopedArgv(argv, scopedLaunch);
+    }
 
     // Starts a desktop entry or one of its actions. The one launch path of the Dock, Apps, Search and the
     // menus.
     function launch(target: var): void {
         if (!target)
             return;
+        whenScopeKnown(() => root.launchNow(target));
+    }
+
+    function launchNow(target: var): void {
         const environment = launchEnvironment();
-        // Nothing to add to the environment of the shell: Quickshell's own execute().
-        if (Object.keys(environment).length === 0) {
+        // Nothing to add to the environment of the shell and no scope to start: Quickshell's own execute().
+        if (Object.keys(environment).length === 0 && !scopedLaunch) {
             target.execute();
             return;
         }
@@ -123,7 +178,7 @@ Singleton {
         if (target.runInTerminal === true)
             command = ["xdg-terminal-exec"].concat(command);
         const context = {
-            "command": command,
+            "command": scoped(command),
             "environment": environment
         };
         if (target.workingDirectory)
@@ -271,16 +326,18 @@ Singleton {
             return false;
         const commands = DockModel.commandsForFiles(DockModel.entryArgs(entry), files);
         const environment = launchEnvironment();
-        for (const c of commands) {
-            if (c.length === 0)
-                continue;
-            const context = {"command": entry.runInTerminal === true ? ["xdg-terminal-exec"].concat(c) : c};
-            if (Object.keys(environment).length > 0)
-                context.environment = environment;
-            if (entry.workingDirectory)
-                context.workingDirectory = entry.workingDirectory;
-            Quickshell.execDetached(context);
-        }
+        whenScopeKnown(() => {
+            for (const c of commands) {
+                if (c.length === 0)
+                    continue;
+                const context = {"command": root.scoped(entry.runInTerminal === true ? ["xdg-terminal-exec"].concat(c) : c)};
+                if (Object.keys(environment).length > 0)
+                    context.environment = environment;
+                if (entry.workingDirectory)
+                    context.workingDirectory = entry.workingDirectory;
+                Quickshell.execDetached(context);
+            }
+        });
         return commands.length > 0;
     }
 
@@ -319,22 +376,53 @@ Singleton {
     // scripts/dev/shell-run.sh. Without it a dev session opens nothing.
     readonly property string openPolicy: Quickshell.env("GRASSFIELD_OPEN_POLICY") || ""
 
+    // A real Grassfield session opens every folder in Grassfield Files, whatever the user's default handler is (macOS: the
+    // Finder is the file manager of the system). `gio open` and `xdg-open` argv become services/open-real.sh calls there;
+    // a dev session keeps the open policy and gets the argv back unchanged.
+    function folderAware(argv: var): var {
+        return AppLaunch.folderAwareArgv(argv, Quickshell.shellPath("services/open-real.sh"), realSession);
+    }
+
     // Runs a helper command. Helpers that open a file in an application (gio open, xdg-open, gtk-launch) follow the
     // dev open policy in a dev session: GIO never starts an app there (a D-Bus activatable default handler such as
     // Nautilus would run in the owner's session with the owner's profile). Other helpers (gio trash) get the isolated
-    // environment. A real session runs the command unchanged.
+    // environment. A real session runs the command unchanged, in a scope of its own (the application it opens lives there).
     function openDetached(argv: var): void {
         if (!devSession) {
             const environment = launchEnvironment();
-            if (Object.keys(environment).length === 0)
-                Quickshell.execDetached(argv);
-            else
-                Quickshell.execDetached({
-                    "command": argv,
-                    "environment": environment
-                });
+            const open = folderAware(argv);
+            whenScopeKnown(() => {
+                if (Object.keys(environment).length === 0)
+                    Quickshell.execDetached(root.scoped(open));
+                else
+                    Quickshell.execDetached({
+                        "command": root.scoped(open),
+                        "environment": environment
+                    });
+            });
             return;
         }
+        devOpen(argv);
+    }
+
+    // A short helper that is not an application (gio trash): never in a scope of its own, only an application is. Same
+    // isolated environment and dev policy as openDetached.
+    function runHelper(argv: var): void {
+        if (devSession) {
+            devOpen(argv);
+            return;
+        }
+        const environment = launchEnvironment();
+        if (Object.keys(environment).length === 0)
+            Quickshell.execDetached(argv);
+        else
+            Quickshell.execDetached({
+                "command": argv,
+                "environment": environment
+            });
+    }
+
+    function devOpen(argv: var): void {
         const request = AppLaunch.openRequest(argv);
         if (request === null) {
             Quickshell.execDetached({

@@ -35,6 +35,37 @@ TestCase {
         compare(AppLaunch.appsHomeFor("", "/run"), "/run/grassfield-dev/apps-home");
     }
 
+    function test_folderAwareArgv() {
+        const s = "/usr/share/grassfield/shell/services/open-real.sh";
+        // A real session: gio open and xdg-open go through the folder policy, scoped afterwards by the caller.
+        compare(AppLaunch.folderAwareArgv(["gio", "open", "/h/a b"], s, true), ["bash", s, "gio", "/h/a b"]);
+        compare(AppLaunch.folderAwareArgv(["/usr/bin/gio", "open", "/a", "/b"], s, true), ["bash", s, "gio", "/a", "/b"]);
+        compare(AppLaunch.folderAwareArgv(["xdg-open", "/h/x.txt"], s, true), ["bash", s, "xdg-open", "/h/x.txt"]);
+        compare(AppLaunch.folderAwareArgv(["gio", "open", "trash:///"], s, true), ["bash", s, "gio", "trash:///"]);
+        // Anything else, a dev session and an empty request stay as they are.
+        compare(AppLaunch.folderAwareArgv(["gtk-launch", "x", "/f"], s, true), ["gtk-launch", "x", "/f"]);
+        compare(AppLaunch.folderAwareArgv(["gio", "trash", "--", "/f"], s, true), ["gio", "trash", "--", "/f"]);
+        compare(AppLaunch.folderAwareArgv(["gio", "open"], s, true), ["gio", "open"]);
+        compare(AppLaunch.folderAwareArgv(["gio", "open", "/h"], s, false), ["gio", "open", "/h"]);
+        compare(AppLaunch.folderAwareArgv(undefined, s, true), []);
+    }
+
+    function test_scopedArgv() {
+        // A real session: the application runs in a scope of its own through uwsm's app launcher.
+        compare(AppLaunch.scopedArgv(["foot"], true), ["uwsm-app", "--", "foot"]);
+        compare(AppLaunch.scopedArgv(["gio", "open", "/h/a b.txt"], true), ["uwsm-app", "--", "gio", "open", "/h/a b.txt"]);
+        // An argument that looks like an option stays the application's (after "--").
+        compare(AppLaunch.scopedArgv(["-x"], true), ["uwsm-app", "--", "-x"]);
+        // A dev session or no uwsm-app: unchanged; nothing to start: nothing added.
+        compare(AppLaunch.scopedArgv(["foot", "-e", "top"], false), ["foot", "-e", "top"]);
+        compare(AppLaunch.scopedArgv([], true), []);
+        compare(AppLaunch.scopedArgv(undefined, true), []);
+        // The input is not modified.
+        const argv = ["foot"];
+        AppLaunch.scopedArgv(argv, true);
+        compare(argv, ["foot"]);
+    }
+
     function test_fieldCodesAreDropped() {
         compare(AppLaunch.stripFieldCodes(["chromium", "%U"]), ["chromium"]);
         compare(AppLaunch.stripFieldCodes(["foot", "--title", "%c", "%f"]), ["foot", "--title"]);

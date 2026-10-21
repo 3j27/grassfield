@@ -26,6 +26,8 @@ SettingsPage {
             omarchy: SysInfo.osLabel(osRelease),
             hyprland: root.pacman(["hyprland"]),
             quickshell: root.pacman(["quickshell", "quickshell-git"]),
+            // The package of this project or the AUR package it conflicts with: WhiteSur is the theme in use either way.
+            whitesur: root.pacman(["grassfield-whitesur-icons", "whitesur-icon-theme", "whitesur-icon-theme-git"]),
             cpu: SysInfo.cpu(root.backend.readText("/proc/cpuinfo").text),
             memory: SysInfo.memoryBytes(root.backend.readText("/proc/meminfo").text),
             gpu: SysInfo.gpus(root.backend.run(["lspci"]))
@@ -72,6 +74,18 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Qt")
             valueText: root.backend.qtVersion
+        }
+    }
+
+    // Third-party components that the session shows (ADR-0017, licences-audit G10). The licence texts are installed
+    // under /usr/share/licenses/<package>/.
+    SettingsGroup {
+        caption: qsTr("Acknowledgements")
+        visible: (root.info.whitesur ?? "") !== ""
+
+        SettingsRow {
+            title: qsTr("Icon theme")
+            valueText: qsTr("WhiteSur by Vince Liuice, GPL-3.0")
         }
     }
 

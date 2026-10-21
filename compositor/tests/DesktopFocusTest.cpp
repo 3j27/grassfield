@@ -66,6 +66,44 @@ TEST(DesktopFocusPolicy, WindowThatCannotTakeFocusOrAlreadyHasItIsLeftAlone) {
     EXPECT_EQ(onPress(keyboardOn(SurfaceKind::Desktop), p), Action::None);
 }
 
+// Real-session bug (owner, 0.4.0-3): Hyprland 0.56.2 refocuses on a click only when the clicked window is not its focused
+// window. After a session unlock with the pointer off the windows its last window stays its focused window while the
+// keyboard is on no surface, so a click on that window did nothing (tests/compositor/click_focus.sh lock).
+TEST(DesktopFocusPolicy, PressOnHyprlandsFocusedWindowWithoutTheKeyboardFocusesIt) {
+    Press p           = onWindow();
+    p.targetIsFocused = true;
+    for (const auto holder : ALL_KINDS)
+        EXPECT_EQ(onPress(keyboardOn(holder), p), Action::FocusWindow) << kindName(holder);
+    EXPECT_EQ(onPress(keyboardOn(SurfaceKind::None), onWindow(false)), Action::None) << "not Hyprland's focused window: Hyprland's own click focus";
+    Press right           = onWindow(false);
+    right.targetIsFocused = true;
+    EXPECT_EQ(onPress(keyboardOn(SurfaceKind::None), right), Action::FocusWindow) << "any button, as Hyprland's click-to-focus";
+}
+
+TEST(DesktopFocusPolicy, HyprlandsFocusedWindowThatHasTheKeyboardOrCannotTakeItIsLeftAlone) {
+    Press p             = onWindow();
+    p.targetIsFocused   = true;
+    p.targetHasKeyboard = true; // its surface, a subsurface or one of its popups
+    for (const auto holder : {SurfaceKind::Window, SurfaceKind::WindowPopup})
+        EXPECT_EQ(onPress(keyboardOn(holder), p), Action::None) << kindName(holder);
+    p                   = onWindow();
+    p.targetIsFocused   = true;
+    p.windowFocusable   = false;
+    EXPECT_EQ(onPress(keyboardOn(SurfaceKind::None), p), Action::None);
+}
+
+TEST(DesktopFocusPolicy, HyprlandsFocusedWindowWaitsForLockGrabAndExclusiveLayers) {
+    Press p           = onWindow();
+    p.targetIsFocused = true;
+    for (int flag = 0; flag < 3; ++flag) {
+        Seat seat           = keyboardOn(SurfaceKind::None);
+        seat.locked         = flag == 0;
+        seat.keyboardGrab   = flag == 1;
+        seat.exclusiveLayer = flag == 2;
+        EXPECT_EQ(onPress(seat, p), Action::None) << flag;
+    }
+}
+
 // (2) of the review: a left press on the desktop gives it the keyboard without any pointer motion.
 TEST(DesktopFocusPolicy, LeftPressOnOnDemandDesktopFocusesItNow) {
     for (const auto holder : ALL_KINDS) {
@@ -278,6 +316,49 @@ TEST(DesktopFocusGrant, ANewPressAfterACancelArmsAgain) {
     EXPECT_EQ(g.onFocusEvent(FocusEvent::WorkspaceChanged, std::nullopt, t0 + 5ms), GrantUpdate::Cancelled);
     g.arm(7, t0 + 100ms);
     EXPECT_TRUE(g.onCommit(7, Interactivity::OnDemand, t0 + 116ms));
+}
+
+// After an unlock (FR30 (e), macOS model): Hyprland's focused window gets the keyboard back when no surface holds it.
+TEST(DesktopFocusUnlock, FocusesWhenNoSurfaceHoldsTheKeyboard) {
+    UnlockSeat seat;
+    seat.windowFocusable = true;
+    EXPECT_EQ(unlockStep(seat), UnlockStep::Focus);
+    seat.windowFocusable = false;
+    EXPECT_EQ(unlockStep(seat), UnlockStep::Done) << "no window to give it to (none, unmapped, on a hidden Desktop)";
+}
+
+TEST(DesktopFocusUnlock, NeverTakesTheKeyboardFromAHolder) {
+    UnlockSeat seat;
+    seat.windowFocusable = true;
+    seat.holder          = KeyboardHolder::Known;
+    EXPECT_EQ(unlockStep(seat), UnlockStep::Done) << "a window or a layer surface took it: theirs";
+    seat.holder = KeyboardHolder::Unknown;
+    EXPECT_EQ(unlockStep(seat), UnlockStep::Wait) << "the lock surface still holds it: wait for it to let go";
+}
+
+TEST(DesktopFocusUnlock, NeverWhileLockedOrPastAnExclusiveLayer) {
+    for (const auto holder : {KeyboardHolder::None, KeyboardHolder::Unknown}) {
+        UnlockSeat seat;
+        seat.windowFocusable = true;
+        seat.holder          = holder;
+        seat.locked          = true;
+        EXPECT_EQ(unlockStep(seat), UnlockStep::Done) << "locked again";
+        seat.locked             = false;
+        seat.windowFocusRefused = true;
+        EXPECT_EQ(unlockStep(seat), UnlockStep::Done) << "an Exclusive layer (a dialog at the unlock)";
+    }
+}
+
+TEST(DesktopFocusUnlock, ArmedOnlyWithinItsWindow) {
+    const auto     t0 = Clock::now();
+    CUnlockRefocus refocus;
+    EXPECT_FALSE(refocus.armed(t0));
+    refocus.arm(t0);
+    EXPECT_TRUE(refocus.armed(t0));
+    EXPECT_TRUE(refocus.armed(t0 + kUnlockRefocusWindow));
+    EXPECT_FALSE(refocus.armed(t0 + kUnlockRefocusWindow + std::chrono::milliseconds(1)));
+    refocus.cancel();
+    EXPECT_FALSE(refocus.armed(t0)) << "a press or a decision ends it";
 }
 
 TEST(DesktopFocusNames, AreStable) {

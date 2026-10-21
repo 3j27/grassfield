@@ -61,10 +61,10 @@ ListView {
         Accessible.focusable: true
         Accessible.onPressAction: ctl.clicked()
         Keys.onPressed: event => {
-            // A hidden control never acts, whatever still holds the focus; the key is swallowed (it would otherwise bubble up to
-            // the card and act there).
+            // A hidden control never acts, whatever still holds the focus; its activation keys are swallowed (they would otherwise
+            // bubble up to the card and act there), every other key (Escape...) propagates.
             if (!ctl.visible || !ctl.enabled) {
-                event.accepted = true;
+                event.accepted = event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter;
                 return;
             }
             if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -327,12 +327,19 @@ ListView {
             if (!list.itemOf(who))
                 list.queueResolve();
         } else if (list.focusId !== null) {
-            // Focus left the cards on purpose, or fell off a hidden or destroyed item: only the second is repaired.
-            if (list.itemOf(list.focusId))
+            // Focus left the cards on purpose (Edit Widgets, the close circle: forget it), or Qt dropped it onto the list or the
+            // panel because the item that held it was destroyed or rebuilt: the resolver gives it back.
+            const f = list.activeItem();
+            if (f && !list.droppedFocus(f) && list.identityOf(f) === null)
                 list.focusId = null;
             else
                 list.queueResolve();
         }
+    }
+
+    // The focus sits where Qt leaves it when the item that held it goes away: the list, its content or the panel.
+    function droppedFocus(f: var): bool {
+        return f === list || f === list.contentItem || f === list.panel;
     }
 
     // The focus is taken to be on this card, whatever holds it now (accessibility paths that act on a card: the clear that
@@ -402,6 +409,8 @@ ListView {
     // The focus goes to the panel: whatever holds it inside the list lets go first (the panel's focus scope would otherwise keep
     // the child that already holds it).
     function releaseFocus(): void {
+        // An explicit leave: nothing to give back.
+        list.focusId = null;
         const chain = [];
         for (let it = list.activeItem(); it && it !== list.panel; it = it.parent)
             chain.push(it);
@@ -425,10 +434,17 @@ ListView {
             return;
         const cur = list.itemOf(who);
         if (cur) {
-            if (cur.activeFocus)
+            const f = list.activeItem();
+            if (cur.activeFocus) {
                 list.snapRows = list.shownRows();
-            else
+            } else if (f && (list.droppedFocus(f) || list.identityOf(f) !== null)) {
+                // The element is still there but the focus fell off it (its button was rebuilt by an update, the card left the rows
+                // and came back in the same turn): give it back, so the ring is on it.
+                cur.forceActiveFocus();
+                list.snapRows = list.shownRows();
+            } else {
                 list.focusId = null;
+            }
             return;
         }
         let target = intent ? list.intentTarget(intent) : null;
@@ -743,7 +759,9 @@ ListView {
                     row.open();
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
-                    item.clearCard(false, true);
+                    // Only the card itself and its x clear it: on Show All, More, an action or Clear All the key does nothing.
+                    if (row.activeFocus || closeButton.activeFocus)
+                        item.clearCard(false, true);
                     event.accepted = true;
                 }
             }
