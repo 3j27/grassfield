@@ -14,7 +14,7 @@ url="https://grassfield.invalid"
 # Grassfield's own code is MIT (ADR-0005, accepted by the owner 2026-10-18; root LICENSE, installed by both packages).
 # Third-party notices: THIRD_PARTY.md, installed under /usr/share/licenses/<package>/.
 license=(MIT)
-makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf gtk3 git)
+makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf)
 options=(!debug)
 
 _root() { realpath "$startdir/../.."; }
