@@ -1,5 +1,6 @@
 #include "DesktopFocus.hpp"
 
+#include "DeferredFocus.hpp"
 #include "Plugin.hpp"
 #include "Surfaces.hpp"
 #include "Titlebar.hpp"
@@ -180,14 +181,12 @@ namespace {
     // Hyprland's own click focus, with every rule Hyprland applies (no_focus window rule, a modal child, the session lock,
     // an Exclusive layer, X11 windows that refuse focus); returns whether the window holds the keyboard afterwards.
     // Hyprland's click path skips a window it still counts as focused (ADR-0012 spike row 2), but fullWindowFocus does
-    // not: CFocusState::rawWindowFocus returns early only when the requested surface is the focused surface, and the
-    // desktop holds it here (Hyprland 0.56.2 source, read as data; 22/22 grants in desktop_focus.sh). The surface focus is
-    // never forced (R13 review of 5706cbd): when Hyprland refuses, the keyboard stays where it is.
-    bool focusWindow(const PHLWINDOW& w) {
-        const auto focus = Desktop::focusState();
-        if (!focus || !w)
-            return false;
-        focus->fullWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
+    // not: CFocusState::rawWindowFocus returns early only when the requested surface is the focused surface (Hyprland
+    // 0.56.2 source, read as data; 22/22 grants in desktop_focus.sh); when Hyprland's focus state still names the window's
+    // surface although the keyboard left it, the state is reset first (gf::deferredFocus::focusWindow). The surface focus
+    // is never forced (R13 review of 5706cbd): when Hyprland refuses, the keyboard stays where it is.
+    bool focusWindow(const PHLWINDOW& w, bool& stateReset) {
+        gf::deferredFocus::focusWindow(w, Desktop::FOCUS_REASON_CLICK, &stateReset);
         return keyboardOnWindow(w);
     }
 
@@ -233,8 +232,10 @@ namespace {
         press.target  = target.kind;
         press.primary = e.button == BTN_LEFT;
         if (target.kind == df::SurfaceKind::Window) {
+            const auto focus        = Desktop::focusState();
             press.windowFocusable   = windowFocusable(target.window);
-            press.targetHasKeyboard = keyboard.kind == df::SurfaceKind::Window && keyboard.window == target.window;
+            press.targetHasKeyboard = (keyboard.kind == df::SurfaceKind::Window || keyboard.kind == df::SurfaceKind::WindowPopup) && keyboard.window == target.window;
+            press.targetIsFocused   = focus && target.window && focus->window() == target.window;
         } else if (target.kind == df::SurfaceKind::Desktop) {
             press.interactivity     = interactivityOf(target.layer);
             press.targetHasKeyboard = keyboard.kind == df::SurfaceKind::Desktop && keyboard.layer == target.layer;
@@ -243,10 +244,13 @@ namespace {
         const auto action = df::onPress(seat, press);
         if (action == df::Action::FocusWindow) {
             // One line per grant, the refusal included (request log budget).
-            const bool granted = focusWindow(target.window);
-            gf::logRequest(granted ? Log::DEBUG : Log::INFO, "desktop-focus: press (button {:#x}) on window {:x} ({}) while the keyboard is on the desktop -> {}", e.button,
-                           reinterpret_cast<uintptr_t>(target.window.get()), pointerFocusName(focusState),
-                           granted ? "keyboard to the window" : "refused by Hyprland (no_focus rule, modal child or another focus rule): the keyboard stays where it is");
+            bool       stateReset = false;
+            const bool granted    = focusWindow(target.window, stateReset);
+            gf::logRequest(granted ? Log::DEBUG : Log::INFO, "desktop-focus: press (button {:#x}) on window {:x} ({}{}) while the keyboard is on {} -> {}{}", e.button,
+                           reinterpret_cast<uintptr_t>(target.window.get()), pointerFocusName(focusState), press.targetIsFocused ? ", Hyprland's focused window" : "",
+                           df::kindName(keyboard.kind),
+                           granted ? "keyboard to the window" : "refused by Hyprland (no_focus rule, modal child or another focus rule): the keyboard stays where it is",
+                           stateReset ? " (Hyprland's focus state still named the window: reset)" : "");
             return;
         }
         if (action != df::Action::None || keyboard.kind == df::SurfaceKind::Desktop)

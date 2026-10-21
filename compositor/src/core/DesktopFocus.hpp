@@ -8,6 +8,10 @@
 // Rules (only on button presses; hover never moves the keyboard):
 //   - a press on a normal window while the desktop holds the keyboard gives that window the keyboard, also when Hyprland
 //     still counts it as its focused window (Hyprland 0.56.2 then ignores the click and the desktop kept the keys);
+//   - a press on the window Hyprland counts as its focused window while the keyboard is not on it (on no surface after a
+//     session unlock with the pointer off the windows, on a shell layer surface that took it) gives that window the
+//     keyboard: Hyprland 0.56.2 refocuses on a click only when the clicked window is not its focused window, so the click
+//     did nothing and the window stayed without the keys (macOS: a click on a window makes it key);
 //   - a left press on the desktop surface gives it the keyboard at once when it is on_demand, or as soon as it commits
 //     on_demand after the press (the shell switches None -> OnDemand on that press), without any pointer motion; that
 //     pending grant is dropped when anything else moves the keyboard first (a key binding, a new window, a workspace
@@ -65,8 +69,9 @@ namespace gf::desktopfocus {
         SurfaceKind   target            = SurfaceKind::None; // what the press lands on
         Interactivity interactivity     = Interactivity::None; // of the target layer surface (Desktop only)
         bool          primary           = false;               // left button
-        bool          targetHasKeyboard = false;               // the target surface already holds the keyboard
+        bool          targetHasKeyboard = false;               // the target surface (a Window target: or one of its popups) already holds the keyboard
         bool          windowFocusable   = false;               // Window target: mapped, visible, may take focus
+        bool          targetIsFocused   = false;               // Window target: Hyprland counts it as its focused window
     };
 
     enum class Action : uint8_t {

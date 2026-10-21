@@ -299,6 +299,15 @@ Variants {
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.keyboardFocus: scope.menuEntry !== null ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-widgets-menu"
+            // The whole surface takes input while the menu is open; nothing once it closed: it stays mapped a moment for
+            // the keyboard release, and a click then belongs to the window under it.
+            // qmllint disable missing-type
+            mask: scope.menuEntry !== null ? null : menuPassThrough
+            // qmllint enable missing-type
+
+            Region {
+                id: menuPassThrough
+            }
 
             KeyboardRelease {
                 id: menuRelease
