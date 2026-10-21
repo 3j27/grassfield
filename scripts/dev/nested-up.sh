@@ -31,12 +31,6 @@ dev=$root/.dev
 # A record written inside the sandbox's PID namespace names another process on the host (incident 2026-10-18).
 dev_require_host nested-up
 mkdir -p "$dev/state" "$dev/config" "$dev/shots"
-# WhiteSur icons for dev sessions only (ADR-0014): provisioned once under .dev/share (GitHub, pinned commit), then
-# selected for the nested tree by devenv.sh. Failure is not fatal: the current icons keep working.
-# whitesur.sh returns at once when its stamp (written after a complete install) names the pinned commit, and runs
-# again for a partial install or another commit; its network steps have time limits.
-"$root/scripts/dev/whitesur.sh" \
-  || echo "nested-up: WhiteSur not provisioned (continuing with the current icons; retry: scripts/dev/whitesur.sh)" >&2
 # shellcheck source=devenv.sh
 . "$root/scripts/dev/devenv.sh"
 

@@ -117,7 +117,9 @@ Run-time use without copying: `config/hypr/grassfield/omarchy.lua` requires Omar
 Inter 4.1 (package `inter-font`): SIL OFL 1.1, "Copyright (c) 2016 The Inter Project Authors
 (https://github.com/rsms/inter)" (`/usr/share/licenses/inter-font/LICENSE.txt`); pacman says `OFL-1.1-RFN`.
 Referenced by family name, not bundled or modified. Noto Sans is the fallback family (OFL-1.1-no-RFN per pacman).
-No font file is in this repository.
+No font file is in this repository. The session fontconfig (`packaging/fontconfig/fonts.conf`, ADR-0003) only names
+Inter and Inter Display; the `SF Pro*`, `-apple-system`, `BlinkMacSystemFont` and `.AppleSystemUIFont` entries are aliases that resolve to Inter, and
+no Apple font is used, shipped or required.
 
 ## 5. Icons and wallpaper
 
@@ -127,7 +129,7 @@ No Apple asset is used. Authorship by an AI assistant and the licence choice: **
 
 Cursors (ADR-0014): the `grassfield-cursors` theme (hyprcursor SVG theme plus XCursor fallback, installed under
 `/usr/share/icons/grassfield-cursors`) is generated at package build time from Grassfield's own templates in
-`branding/cursors/` (CC-BY-SA-4.0 proposed, listed in `BRANDING.md`). No file of Adwaita, Yaru, WhiteSur or capitaine is
+`branding/cursors/` (CC-BY-SA-4.0 proposed, listed in `BRANDING.md`). No file of Adwaita, Yaru or capitaine is
 used; only cursor names (a vocabulary shared by CSS and X11) were read from installed themes. The build uses
 `hyprcursor-util` (BSD-3-Clause), `rsvg-convert` (librsvg, LGPL-2.1-or-later) and Python as build tools; the XCursor
 writer is Grassfield's own stdlib script. The runtime regeneration for the pointer colours (Settings > Accessibility >
@@ -136,35 +138,21 @@ Pointer, `grassfield-cursors-custom` under `$XDG_DATA_HOME/icons`, owner decisio
 dependencies of `grassfield-desktop` (declared in `packaging/arch/PKGBUILD`); they are used as separate programs, nothing
 of them is linked or copied. The generated custom theme is derived from the same CC-BY-SA-4.0 templates.
 
-App icon theme (ADR-0017): `grassfield-icons` (`/usr/share/icons/grassfield-icons`, `branding/icons/theme/index.theme`,
-Grassfield's own file) is a wrapper whose own directory holds no icon yet; it inherits `WhiteSur,Adwaita,hicolor`. The
-session selects it with `QT_QPA_SYSTEM_ICON_THEME` (uwsm `env-grassfield`) and, for GTK, a locked dconf database that
-holds only `icon-theme='grassfield-icons'`.
+App icon theme (ADR-0017, amended 2026-10-21): `grassfield-icons` (`/usr/share/icons/grassfield-icons`,
+`branding/icons/theme/index.theme`, Grassfield's own file) is a wrapper whose own directory holds no icon yet; it inherits
+`breeze,Adwaita,hicolor`. The session selects it with `QT_QPA_SYSTEM_ICON_THEME` (uwsm `env-grassfield`) and, for GTK, a
+locked dconf database that holds only `icon-theme='grassfield-icons'`.
 
-WhiteSur icon theme (optional package `grassfield-whitesur-icons`, built by `makepkg` from a pinned upstream commit):
-- upstream: https://github.com/vinceliuice/WhiteSur-icon-theme, author per its `AUTHORS`: Vince Liuice; commit
-  `73d8040da51a9ed74e47c7366e7e9ff437601a5c`;
-- licence: GPL-3.0-only. Upstream ships only `COPYING` (the unmodified GPL version 3 text); no file carries a copyright
-  or "or later" notice (checked at the pin), so no "or later" grant exists;
-- data files read by Qt, GTK and KDE, not linked; nothing of it is in this repository: it is fetched at build time
-  (checksummed `git archive` of the pinned commit), and the PKGBUILD runs upstream's `install.sh` (with `-p`, in a clean
-  environment) only while its SHA-256 is the reviewed one. **Modification, to be noted under GPL-3.0:** the package
-  FILTERS the theme (owner decision
-  2026-10-20): it removes every icon that shows the Apple logo (found by a perceptual detector, also inside larger icons
-  such as the iMac and Magic Mouse icons; the 12 logo files `start-here*` and `folder-apple*` and 22 more files at the
-  pin), every icon of a curated blocklist (Apple app icons that WhiteSur reproduces, such as Finder, App Store, Safari,
-  Xcode, iCloud and the System Preferences gear, and iPhone, iPad and iPod silhouettes; 126 names and 103 drawings), the
-  icons that share a name with them, the links left dangling (about 350 files and 1600 links in all) and the
-  `icon-theme.cache` files. `packaging/arch/whitesur-guard.sh` and `whitesur-detect.py` do it and fail the build if
-  anything they know remains (ADR-0017). This is a statement about what the detector and a review by eye on contact
-  sheets found, not a proof that no Apple artwork remains; the style imitation of the other icons and the review stay
-  with counsel (visual-review E27);
-- `COPYING`, `AUTHORS` and a `SOURCE` line (URL and commit) are installed in `/usr/share/licenses/grassfield-whitesur-icons/`;
-  the PKGBUILD reproduces the package from that commit;
-- the theme's metadata contains the words "MacOSX", and its name alludes to an Apple product name. Grassfield displays
-  neither, except in the licence and acknowledgements text (Settings > About > Acknowledgements).
-- **needs legal review:** the source offer if the package leaves the owner's machine, and the aggregation with the
-  MIT packages.
+Runtime theme dependencies (installed by pacman, read by Qt and GTK as data; nothing of them is vendored, copied or
+modified by Grassfield):
+- Breeze icon theme (`breeze-icons`, a dependency of `grassfield-desktop`): KDE's own icon art; pacman licence field
+  LGPL-3.0-or-later and LGPL-2.1-only;
+- Adwaita icon theme (`adwaita-icon-theme`, installed with GTK and Omarchy): GNOME's own icon art; pacman licence field
+  CC-BY-SA-3.0 OR LGPL-3.0-only;
+- hicolor (`hicolor-icon-theme`): the freedesktop fallback.
+Their licence texts ship with their packages. The WhiteSur icon theme was evaluated and dropped on 2026-10-21 (ADR-0017
+amendment): nothing of it is installed, fetched, filtered or referenced at runtime. **needs legal review:** the
+aggregation of these data packages with the MIT packages of this project, as for any dependency.
 
 ## 5a. Unicode character data (derived tables)
 

@@ -1,11 +1,11 @@
 [Icon Theme]
 Name=Grassfield
-Comment=Grassfield app icon theme: Grassfield's own icons first, then WhiteSur (when installed), then Adwaita and hicolor
+Comment=Grassfield app icon theme: Grassfield's own icons first, then Breeze, Adwaita and hicolor
 # Lookup order (depth first; Qt and GTK append hicolor last, and skip a parent that is not installed):
 #   1. this theme's own directories (empty until the designer adds icons),
-#   2. WhiteSur and its own parents (hicolor, breeze) when grassfield-whitesur-icons is installed,
+#   2. Breeze (KDE, installed with Omarchy; its own parents follow it),
 #   3. Adwaita, then hicolor.
-Inherits=WhiteSur,Adwaita,hicolor
+Inherits=breeze,Adwaita,hicolor
 # Not offered by theme pickers of other sessions. A session names the theme explicitly (ADR-0017).
 Hidden=true
 # GTK drops a theme whose index.theme has no Directories key, together with its Inherits (spike I0, ADR-0017): keep one
