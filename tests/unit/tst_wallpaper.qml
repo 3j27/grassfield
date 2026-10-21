@@ -337,6 +337,19 @@ TestCase {
         compare(WallpaperConfig.reasonOf(-1), "failed");
     }
 
+    // Cases both implementations (this module and apps/settings/qml/Store.js, tst_settingsstore) must answer alike.
+    function test_sharedRuleCases() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("fixtures/wallpaper-rules.json"), false);
+        xhr.send();
+        const cases = JSON.parse(xhr.responseText);
+        verify(cases.paths.length > 10);
+        for (const c of cases.paths)
+            compare(WallpaperConfig.pathProblem(c[0]), c[1], JSON.stringify(c[0]).substring(0, 60));
+        for (const c of cases.outputs)
+            compare(WallpaperConfig.outputsProblem(c[0]) === "", c[1], JSON.stringify(c[0]).substring(0, 100));
+    }
+
     function test_devGuard() {
         const repo = "/w/repo";
         compare(WallpaperConfig.sourceProblem("/w/repo/.dev/wallpapers/a.jpg", true, repo), "");

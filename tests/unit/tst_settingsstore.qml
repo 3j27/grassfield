@@ -110,6 +110,31 @@ TestCase {
     // Wallpaper rules (ADR-0016): the Settings store accepts what ui/Grassfield/Ui/WallpaperConfig.js accepts.
     // (Kept here, not in tst_wallpaper: a test file that imports Grassfield.Ui itself makes Store.js resolve a second,
     // possibly older installed copy of the module for its own .import.)
+    function test_wallpaperRuleCases() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("fixtures/wallpaper-rules.json"), false);
+        xhr.send();
+        const cases = JSON.parse(xhr.responseText);
+        for (const c of cases.paths) {
+            // The store also accepts "" (no path): the other cases are the module's.
+            compare(Store.validate("wallpaper.path", c[0]) === "", c[1] === "" || c[0] === "", JSON.stringify(c[0]).substring(0, 60));
+        }
+        for (const c of cases.outputs)
+            compare(Store.validate("wallpaper.outputs", c[0]) === "", c[1], JSON.stringify(c[0]).substring(0, 100));
+    }
+
+    function test_setValuesWritesAllKeysAtOnce() {
+        const r = Store.setValues('{"version":1,"wallpaper":{"fit":"tile"},"dock":{"autohide":true}}', {"wallpaper.source": "folder", "wallpaper.path": "/p"});
+        verify(r.ok, r.error);
+        compare(JSON.parse(r.text), {version: 1, wallpaper: {fit: "tile", source: "folder", path: "/p"}, dock: {autohide: true}});
+        // One bad value: nothing is written.
+        const bad = Store.setValues('{"version":1}', {"wallpaper.source": "folder", "wallpaper.path": "relative"});
+        verify(!bad.ok);
+        verify(!Store.setValues('{"version":1}', {"wallpaper.nope": 1}).ok);
+        compare(JSON.parse(Store.setValues("", {"wallpaper.source": "color", "wallpaper.color": "#112233"}).text), {version: 1, wallpaper: {source: "color", color: "#112233"}});
+        verify(!Store.setValues("{", {"wallpaper.source": "color"}).ok, "a malformed file is refused");
+    }
+
     function test_wallpaperRules() {
         compare(Store.validate("wallpaper.source", "folder"), "");
         verify(Store.validate("wallpaper.source", "online") !== "");

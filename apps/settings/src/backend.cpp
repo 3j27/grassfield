@@ -10,6 +10,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QScreen>
+#include <QStandardPaths>
 #include <QTimer>
 
 #include "systemguard.h"
@@ -82,6 +83,31 @@ Backend::Backend(QObject *parent)
 {
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, &Backend::onPath);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &Backend::onPath);
+    if (m_dev) {
+        // The dev binary sits in <worktree>/.dev/build: the helper next to it, the cache and the pictures under .dev.
+        const QString dev = QDir(QCoreApplication::applicationDirPath() + QStringLiteral("/..")).canonicalPath();
+        m_devRoot = QFileInfo(dev).dir().absolutePath();
+        m_wallpaperTool = QCoreApplication::applicationDirPath() + QStringLiteral("/grassfield-wallpaper");
+        m_wallpaperCache = dev + QStringLiteral("/cache/wallpapers");
+        const QString pictures = qEnvironmentVariable("GRASSFIELD_PICTURES_DIR");
+        m_picturesDir = pictures.isEmpty() ? dev + QStringLiteral("/wallpapers") : pictures;
+    } else {
+        m_wallpaperTool = QStringLiteral("/usr/lib/grassfield/grassfield-wallpaper");
+        const QString xdg = qEnvironmentVariable("XDG_CACHE_HOME");
+        m_wallpaperCache = (xdg.isEmpty() ? QDir::homePath() + QStringLiteral("/.cache") : xdg) + QStringLiteral("/grassfield/wallpapers");
+        const QString pictures = qEnvironmentVariable("GRASSFIELD_PICTURES_DIR");
+        m_picturesDir = pictures.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) : pictures;
+    }
+}
+
+QString Backend::wallpaperStatusFile() const
+{
+    return QFileInfo(m_configFile).absolutePath() + QStringLiteral("/wallpaper-state.json");
+}
+
+QString Backend::wallpaperRecentFile() const
+{
+    return QFileInfo(m_configFile).absolutePath() + QStringLiteral("/wallpaper-recent.json");
 }
 
 Backend::~Backend()

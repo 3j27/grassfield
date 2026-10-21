@@ -50,6 +50,10 @@ bool isReadOnlyQuery(const QStringList &argv)
             && (args.at(1) == QLatin1String("hyprland") || args.at(1) == QLatin1String("quickshell") || args.at(1) == QLatin1String("quickshell-git"));
     if (program == QLatin1String("lspci"))
         return args.isEmpty();
+    // Wallpaper helper (ADR-0016): listing, thumbnails (cache files only) and the format list. It validates its own
+    // arguments; the program must be the helper by absolute path.
+    if (program.startsWith(QLatin1Char('/')) && program.endsWith(QLatin1String("/grassfield-wallpaper")))
+        return !args.isEmpty() && (args.at(0) == QLatin1String("list") || args.at(0) == QLatin1String("thumb") || args.at(0) == QLatin1String("formats"));
     return false;
 }
 
