@@ -110,7 +110,10 @@ if args[:1] == ['--against']:
     orig = open(NL).read()
     try:
         open(NL, 'w').write(git_show(rev, 'shell/notifications/NotificationList.qml'))
+        only_t = args[2] if len(args) > 2 else ''  # optional substring of the test directory, e.g. random2
         for t in (RN, RN2, L):
+            if only_t not in t:
+                continue
             print('AGAINST %s | %s | %s' % (rev, t, run_qs(t)), flush=True)
     finally:
         open(NL, 'w').write(orig)
