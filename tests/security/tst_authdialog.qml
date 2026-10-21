@@ -10,6 +10,8 @@ TestCase {
     id: test
 
     name: "AuthDialog"
+    // Shown: a Button of a hidden window is effectively hidden and (shared Button key guard) never activates.
+    visible: true
     when: windowShown
     width: 600
     height: 600
@@ -105,6 +107,18 @@ TestCase {
         keyClick(Qt.Key_Escape);
         compare(flow.cancels, 1);
         compare(flow.submitted.length, 1);
+    }
+
+    // The sheet's Buttons are visible here and activate from the keyboard (Cancel with Return; Allow once the field is filled).
+    function test_6_visibleButtonsActivateFromTheKeyboard() {
+        const cancel = findExact(dialog, "Cancel");
+        verify(cancel !== null);
+        verify(cancel.visible, "the Cancel button is visible");
+        const before = flow.cancels;
+        cancel.forceActiveFocus();
+        verify(cancel.activeFocus);
+        keyClick(Qt.Key_Return);
+        compare(flow.cancels, before + 1);
     }
 
     function findExact(item, value) {
