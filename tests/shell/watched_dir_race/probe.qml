@@ -25,7 +25,10 @@ ShellRoot {
 
     Process {
         id: check
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
         onExited: code => {
+            // qmllint enable signal-handler-parameters
             console.log(code === 0 ? "watched-dir: PASS ready for " + dir.path : "watched-dir: FAIL ready before the directory of " + dir.path + " exists");
             Qt.quit();
         }
