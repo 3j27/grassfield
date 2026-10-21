@@ -5,7 +5,7 @@ import Grassfield.Ui
 
 // Gate A2 for the icon appearance modes (ADR-0014, docs/specs/ui.md "Icon shader"): every mode keeps an icon
 // recognisable against what is behind it, in both appearances and at every list/grid size. The real pipeline draws real
-// images (own SVG fixtures of tests/fixtures/icons, WhiteSur icons when .dev has them, installed hicolor/breeze icons
+// images (own SVG fixtures of tests/fixtures/icons, installed breeze and hicolor icons
 // read in place) through TintedIcon and the shader; the rendered pixels are measured.
 //
 // Scenarios: (a) windows, appearance light/dark x wallpaper black/grey/white under the default material, icon sizes 16,
@@ -46,13 +46,15 @@ TestCase {
     property int iconSize: 48
     readonly property int rowsPerGroup: 12
     readonly property string fixtureDir: Qt.resolvedUrl("../fixtures/icons/")
-    readonly property string whitesurDir: Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/apps/scalable/")
+    readonly property string breezeDir: "file:///usr/share/icons/breeze/apps/48/"
     readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo", "dark-plate-light-border", "white-page-document", "same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph"]
-    // Includes btop, Disk Usage Analyzer and white-plated icons (Chromium, Firefox, GIMP, Inkscape, Calendar, Notes).
-    readonly property var whitesurNames: ["btop", "disk-usage-analyzer", "chromium", "firefox", "gimp", "inkscape", "org.gnome.Calendar", "accessories-text-editor", "org.gnome.Settings", "spotify", "vlc", "discord", "mpv", "obsidian", "foot", "org.gnome.Nautilus", "visual-studio-code", "hwloc",
-        // Terminals and monitors (dark plates with a light prompt or a coloured graph): the icons whose internal contrast is at risk.
-        "gnome-terminal", "kitty", "konsole", "alacritty", "lxterminal", "bash", "htop", "nvtop", "gnome-system-monitor", "ksysguard", "nvim"]
-    // Installed non-WhiteSur theme icons (read in place, never copied into the repo; a missing file is skipped).
+    // The base theme of the session is Breeze, then Adwaita and hicolor (ADR-0017): Breeze app icons read in place, never copied into the repo
+    // (a missing file is skipped). Includes the terminals and monitors (dark plates with a light prompt or a coloured graph) whose internal
+    // contrast is at risk, white-plated icons, tile-shaped icons (the plate must not double them) and plain glyphs.
+    readonly property var breezeNames: ["utilities-terminal", "utilities-system-monitor", "utilities-energy-monitor", "kcalc", "kate", "okular", "system-file-manager",
+        "internet-web-browser", "preferences-system", "office-calendar", "kmail", "help-browser", "systemsettings", "system-software-update", "kphotoalbum",
+        "plasma-browser-integration", "system-run", "office-address-book", "photolayoutseditor", "kimagemapeditor"]
+    // Installed hicolor/breeze theme icons (read in place, never copied into the repo; a missing file is skipped).
     readonly property var systemIcons: [
         ["hicolor:foot", "hicolor/scalable/apps/foot.svg"], ["hicolor:libreoffice-writer", "hicolor/scalable/apps/libreoffice-writer.svg"],
         ["hicolor:libreoffice-calc", "hicolor/scalable/apps/libreoffice-calc.svg"], ["hicolor:libreoffice-impress", "hicolor/scalable/apps/libreoffice-impress.svg"],
@@ -68,8 +70,8 @@ TestCase {
         const out = [];
         for (const n of ownNames)
             out.push({name: n, url: fixtureDir + n + ".svg"});
-        for (const n of whitesurNames)
-            out.push({name: "whitesur:" + n, url: whitesurDir + n + ".svg"});
+        for (const n of breezeNames)
+            out.push({name: "breeze48:" + n, url: breezeDir + n + ".svg"});
         for (const e of systemIcons)
             out.push({name: e[0], url: "file:///usr/share/icons/" + e[1]});
         return out;
@@ -261,12 +263,12 @@ TestCase {
     //     appearance over a black wallpaper: the smoked plate is invisible on black, only the rim carries).
     readonly property var knownLimits: [
         "same-tone-glyph dark E", "logo-no-plate dark E", "dark-glyph-no-plate dark E", "dark-plate-light-border dark E",
-        "whitesur:foot dark E", "whitesur:foot tinted E", "whitesur:foot clear E", "hicolor:obs dark E", "hicolor:kdenlive dark E", "hicolor:btop tinted E",
-        "whitesur:visual-studio-code dark E", "graphite-plate-red-glyph dark E", "graphite-plate-red-glyph clear E",
-        "white-page-document tinted E", "whitesur:org.gnome.Calendar tinted E", "hicolor:basecamp clear S", "hicolor:basecamp tinted S"
+        "hicolor:foot dark E", "hicolor:foot tinted E", "hicolor:foot clear E", "hicolor:obs dark E", "hicolor:kdenlive dark E", "hicolor:btop tinted E",
+        "graphite-plate-red-glyph dark E", "graphite-plate-red-glyph clear E",
+        "white-page-document tinted E", "hicolor:basecamp clear S", "hicolor:basecamp tinted S"
     ]
 
-    readonly property var separationFixtures: ["same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph", "whitesur:hwloc", "hicolor:basecamp"]
+    readonly property var separationFixtures: ["same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph", "hicolor:basecamp"]
 
     function isKnownLimit(name, mode, rule) {
         return knownLimits.indexOf(name + " " + mode + " " + rule) >= 0;
@@ -521,7 +523,7 @@ TestCase {
     // folder in every mode, appearance and surface. The box under the symbol is read from the icon drawn in default mode
     // (the raw icon), run through the model and compared with the mean colour of the same box in the mode's rendering
     // (the folder shrinks to the system plate by sysGlyphScale about the centre).
-    readonly property var folderUrls: [Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/places/scalable/folder.svg"),
+    readonly property var folderUrls: [Qt.resolvedUrl("file:///usr/share/icons/breeze/places/64/folder.svg"),
                                        Qt.resolvedUrl("fixtures/folder-light.svg"), Qt.resolvedUrl("fixtures/folder-dark.svg")]
 
     Component {
@@ -650,7 +652,7 @@ TestCase {
                 id: blackFolderIcon
                 anchors.centerIn: parent
                 size: 96
-                source: Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/places/scalable/folder.svg")
+                source: Qt.resolvedUrl("file:///usr/share/icons/breeze/places/64/folder.svg")
                 folderColor: "#000000"
                 mode: holder.holderMode
                 darkAppearance: testCase.darkPass
@@ -675,7 +677,7 @@ TestCase {
                     if (holder.folder.status !== Image.Ready) {
                         holder.destroy();
                         board.visible = true;
-                        skip("WhiteSur folder icon is not provisioned in .dev");
+                        skip("the Breeze folder icon is not installed");
                     }
                     wait(400);
                     const img = grabImage(holder);
@@ -809,7 +811,7 @@ TestCase {
         const failures = [];
         const wasDark = Appearance.dark;
         board.visible = false;
-        const sources = [[true, Qt.resolvedUrl("../../.dev/share/icons/WhiteSur/places/scalable/folder.svg")], [false, testCase.fixtureDir + "white-page-document.svg"],
+        const sources = [[true, Qt.resolvedUrl("file:///usr/share/icons/breeze/places/64/folder.svg")], [false, testCase.fixtureDir + "white-page-document.svg"],
                          [false, testCase.fixtureDir + "blue-plate-white-glyph.svg"]];
         let measured = 0;
         for (const dark of [true, false]) {

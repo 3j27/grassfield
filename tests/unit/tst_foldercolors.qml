@@ -300,7 +300,7 @@ TestCase {
             // tint (null = the theme's own folder), mode, icon tint, measured plate
             ["#e5484d", "default", dk, "#e0474b"], ["#3e7bfa", "default", dk, "#3d78f5"], ["#f5883b", "default", dk, "#f0853a"], ["#e6b422", "default", dk, "#e1b021"],
             ["#3fae5a", "default", dk, "#3eaa58"], ["#8e5bea", "default", dk, "#8b59e5"], ["#8a8f98", "default", dk, "#878c95"], ["#ffffff", "default", dk, "#fafafa"],
-            ["#000000", "default", dk, "#000000"], ["#ffd60a", "default", dk, "#fad20a"], [null, "default", dk, "#a4caee"],
+            ["#000000", "default", dk, "#000000"], ["#ffd60a", "default", dk, "#fad20a"], [null, "default", dk, "#3daee9"],
             ["#e5484d", "dark", dk, "#b5393d"], ["#3e7bfa", "dark", dk, "#3161c6"], ["#ffffff", "dark", dk, "#cacaca"], [null, "dark", dk, "#7fa3c6"],
             ["#e5484d", "tinted", dk, "#cb4044"], ["#3e7bfa", "tinted", dk, "#376dde"], ["#ffffff", "tinted", dk, "#e2e2e2"], [null, "tinted", dk, "#63df86"],
             ["#e5484d", "tinted", lt, "#80282b"], ["#3e7bfa", "tinted", lt, "#23458c"], ["#f5883b", "tinted", lt, "#894c21"], ["#e6b422", "tinted", lt, "#816513"],
@@ -356,7 +356,7 @@ TestCase {
         compare(FolderStyle.plateSummary([], [0, 0, 0]), null);
     }
 
-    // The WhiteSur folder plate under the symbol as measured on the raw icon (nested capture, default mode, theme colour):
+    // A folder plate under the symbol as measured on a raw icon (nested capture, default mode; the sample colour below):
     // #74cbf5. Default is the identity; a recolour is Qt's MultiEffect arithmetic (checked against the compiled shader). The
     // icon modes are shaders/icon.frag for a pixel of a plate-less icon (a folder is one): the expected values are derived
     // here by hand from the shader's formulas, and tests/unit/tst_iconshader.qml compares the model with the rendered pixels.
@@ -407,7 +407,7 @@ TestCase {
         verify(near(FolderStyle.plateThrough(raw, "default", dk, false, "", [0, 0, 0], Tokens).dark, "#74cbf5", 0.003), "default theme");
     }
 
-    // A flat plate of the WhiteSur blue as raw samples.
+    // A flat plate of a folder blue as raw samples.
     readonly property var flatRaw: {
         const out = [];
         for (let i = 0; i < 16; i++)

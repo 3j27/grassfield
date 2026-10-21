@@ -1197,8 +1197,8 @@ QtObject {
     readonly property real folderIconGlyphContrastMargin: 0.3
     // estimate, only used when the plate cannot be measured (FolderPlate): plate over the folder colour (measured on the fallback theme, tests/visual/folder_glyph_contrast.py), icon mode default and clear
     readonly property real folderIconPlateDefault: 0.96
-    // estimate, only used when the plate cannot be measured (FolderPlate): plate of the fallback icon theme folder under the symbol (default mode); the symbol shade otherwise follows the measured plate, any theme
-    readonly property string folderIconThemePlate: "#a4caee"
+    // estimate, only used when the plate cannot be measured (FolderPlate): plate of the base icon theme folder (Breeze, flat #3daee9 under the symbol) in default mode; the symbol shade otherwise follows the measured plate, any theme
+    readonly property string folderIconThemePlate: "#3daee9"
     // A2 design rule: in the Tinted icon mode the symbol is engraved lighter when the mode's own folder plate (the theme's folder through the mode) has a relative luminance below this (a lighter shade reaches 3.3:1 on plates up to about 0.268), darker otherwise; Default, Dark and Clear darker (a Dark folder keeps its colour on the dark system plate)
     readonly property real folderIconGlyphLighterBelow: 0.25
     // estimate: samples per axis of the grid read under the symbol from the raw icon (the plate of every colour, mode and appearance is computed from them)
