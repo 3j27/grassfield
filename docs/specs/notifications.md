@@ -108,20 +108,32 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   card, else the panel (`releaseFocus`). Only `rows` (the model now) says what exists; the settled rows before (`snapRows`) only give
   the neighbourhood, so nothing acts on a stale or gone key, also after several changes in one turn. A same-id update by the app only
   changes the card's roles: the delegate and its focus stay. `Show All` used with the keyboard hands the focus to the group's "Show
-  Less"; `Show Less` hands it to "Show All" (an intent the resolver honours, `handoff`). A focus that Qt drops onto the list, its content or
-  the panel (the button that held it was rebuilt by a same-id update, or the card left the displayed rows and came back in the same turn) while its
-  identity still names a visible, enabled element is given back to that element (`noteFocus` queues the resolver, `resolveFocus` calls
-  `forceActiveFocus`); a focus that went to Edit Widgets or the close circle is the user leaving and is forgotten (`focusId = null`; `releaseFocus` is the
-  explicit leave). Keys act only on a visible, enabled, focused item: a hidden control still holding the focus swallows its ACTIVATION keys
-  (Return, Enter, Space; `GroupClear`, the shared `Button`) instead of letting them bubble to the card, and every other key (Escape above all)
-  propagates, so a Button hidden by its parent never blocks Escape (the polkit dialog uses the same Button). Delete and Backspace clear a card
-  only when the card itself or its x holds the focus; on Show All, More, an action or Clear All they do nothing.
+  Less"; `Show Less` hands it to "Show All" (an intent the resolver honours, `handoff`).
+  What Qt does with the focus when the item that held it goes away, and what the code does about it (`noteFocus`, `resolveFocus`): a
+  sender button rebuilt by a same-id update puts the focus on the card's actions `Loader` (a focus scope inside the card: `identityOf`
+  names no control for it, role `""`, and keeps the previous identity); a card that left the displayed rows and came back in the same turn
+  (or was destroyed) puts it on the list, its content item or the panel (`droppedFocus`). In both cases, if the identity still names a
+  visible, enabled element, the resolver gives the focus back to it (`forceActiveFocus`, so the ring is drawn); otherwise it moves it as
+  above. A focus on Edit Widgets or the close circle is the user leaving and is forgotten (`focusId = null`; `releaseFocus`, which also
+  drops the identity, is the explicit leave to the panel).
+  The identity is kept current: on every resolve, whether or not the focus moved, `settle(item)` rebuilds it from the layout as it is
+  then (`rank` in the group, `cidx` among the sender's buttons) and takes the displayed rows as the new "before" (`snapRows`): a card that
+  stays while others arrive or leave around it changes slot, and the successor of a later removal is computed from the slot it has now.
+  Keys act only on an element that can be acted on RIGHT NOW: every key handler (the card, its x, Clear All, Show All / Show Less, the sender's
+  buttons through `actionTriggered`, `clearCard`) checks at key time, synchronously, with the delegate's `actable(item)`: the item is
+  visible and enabled and the card is one of the displayed rows (`liveKey`, read from the model, which changes at once; the delegates only
+  follow at the next layout). A key that arrives in the same turn as a change, before the resolver ran, on an element that change took
+  away does nothing (it is swallowed: it would otherwise bubble to the card) and the resolver is queued. A hidden control still holding
+  the focus swallows only its ACTIVATION keys (Return, Enter, Space; `GroupClear`, the shared `Button`), and every other key (Escape above
+  all) propagates, so a Button hidden by its parent never blocks Escape (the polkit dialog uses the same Button). Return opens a card only
+  when the card itself holds the focus (not from a stray child such as the actions Loader). Delete and Backspace clear a card only when the
+  card itself or its x holds the focus; on Show All, More, an action or Clear All they do nothing.
   The list is its own component (`NotificationList.qml`, a ListView) so that the tests run the shipped code: the PanelWindow needs a compositor.
   Tests: `tests/unit/tst_notifcenter.qml` (focus choice `focusAfterGone` incl. several changes in one turn, hover counts), `tests/shell/notif_center_list` (the real list in a plain
   window on the real singleton, real key events through `QtTest.TestCase.keyClick`: focus after arrival, Show Less, collapse, expiry, same-id update, group clear, last card; a focused
   Clear All / Show Less / Show All / More / action hidden by an arrival, a close, a shrink or the sender expiring; two and three changes in one turn; keys never
-  act on a hidden control; case "same-id update drops another action under the focused action" and case "pushed out and brought back in one turn"; Delete and Backspace only on the card and its x; a seeded random sequence of 80 turns with the focus anywhere; tabStep order incl. after arrivals;
-  focusedDelegate; clearCard refocus; Show All / Show Less focus handoff; layout invariant after toggles; bumpTick; takeFresh), `tests/shell/notif_center_random` (the same list, 540 seeded turns in 3 seeds of 1 to 4 changes: arrivals, closes, expiries, same-id updates adding or dropping actions, x, Clear All, Show All / Show Less, More; focus on every control or outside the cards; real Space, Return, Enter, Delete, Backspace and Tab, Shift+Tab before and after the changes; the invariant is asserted after every turn), `tests/unit/tst_buttonkeys.qml` (the Button guard: activation keys swallowed while hidden, Escape and other keys propagate), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
+  act on a hidden control; case "same-id update drops another action under the focused action" and case "pushed out and brought back in one turn"; Delete and Backspace only on the card and its x; the identity rank following the layout (focus the 2nd card, an arrival, Delete: the card that slid into the slot), the settled order following the layout, Escape through a hidden Clear All, keys in the same turn as the change that took the element away (Delete on a pushed-out card, Space on a sender action of a card that left, Return on the stray Loader); a seeded random sequence of 80 turns with the focus anywhere; tabStep order incl. after arrivals;
+  focusedDelegate; clearCard refocus; Show All / Show Less focus handoff; layout invariant after toggles; bumpTick; takeFresh), `tests/shell/notif_center_random` and `notif_center_random2` (the same list, 1200 seeded turns in 6 seeds, split over two tests for the 60 s limit of test.sh of 1 to 4 changes: arrivals, closes, expiries, same-id updates adding or dropping actions, x, Clear All, Show All / Show Less, More; focus on every control or outside the cards; real Space, Return, Enter, Delete, Backspace and Tab, Shift+Tab before and after the changes; the invariant is asserted after every turn, plus a SUCCESSOR ORACLE: a reference model that reads the focused identity and the displayed rows when the column is settled and names the exact element the focus must be on after the turn; keys come both before and after the changes, so some meet the state the changes left before the resolver ran), `tests/tools/mutate-notifications.sh` (15 mutants of the resolver and the key guards, every one must fail a shipped test; `--against REV` runs the focus tests against an older NotificationList.qml), `tests/visual/notification-focus.sh` (nested: the ring after a same-id update; fails when no ring is drawn on the expected button), `tests/unit/tst_buttonkeys.qml` (the Button guard: activation keys swallowed while hidden, Escape and other keys propagate), `tests/shell/notif_clear` (real singleton: immediate clear, snapshot,
   repeated group clears, focus after Delete in collapsed and expanded groups), `tests/shell/notif_clear/nested.sh` (nested helper, notifications on the nested private bus only).
 - Banners: one layer-shell window (Overlay layer, no keyboard focus) on the first screen only; input and blur follow the cards.
   Timeout: `expire_timeout` (seconds), -1 = 5 s, 0 and critical = never. Expiry only hides the banner: the entry stays in the Center
