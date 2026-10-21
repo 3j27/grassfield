@@ -160,9 +160,11 @@ Variants {
         // opens, so opening does not pay for a new surface and its first frame.
         readonly property bool active: shown || progress > 0.001
         visible: true
-        // Input only while shown: during the close animation (and however long a busy GUI thread stretches it) a click
-        // belongs to the window under it, as when any other full-screen surface closed.
-        mask: shown ? null : emptyMask
+        // Input only while the stage is "open": from the moment a close starts (the "releasing" stage, which `shown` still
+        // counts as open, then the close animation, however long a busy GUI thread stretches them) a click belongs to the
+        // window under it, as when any other full-screen surface closed (R13 finding M1 on 0f3adf7).
+        readonly property bool takesInput: root.controller.stage === "open"
+        mask: takesInput ? null : emptyMask
         anchors {
             top: true
             bottom: true
@@ -385,12 +387,13 @@ Variants {
             readonly property bool chromeActive: Window.active
             onChromeActiveChanged: root.controller.onChromeChanged(win.screenName, chromeActive)
 
-            // Closing (the animation runs): a press the compositor delivered before the empty mask landed (late whenever
-            // the GUI thread was busy) is swallowed here, never choosing the thumbnail under it.
+            // Closing (releasing, then the animation): a press the compositor still delivered here, before the empty mask
+            // landed (late whenever the GUI thread was busy), is swallowed, never choosing the thumbnail under it. It never
+            // stands between a click and a window: once the empty mask landed no press reaches this surface.
             MouseArea {
                 anchors.fill: parent
                 z: 1000
-                visible: !win.shown
+                visible: !win.takesInput
                 acceptedButtons: Qt.AllButtons
             }
 

@@ -29,11 +29,15 @@
 #             XWayland: with foot A holding the keyboard, a click on the client's content, then on its titlebar, gives it
 #             the keyboard (client's wl_keyboard enter, Hyprland's active window; Chromium: the typed letter reaches its page)
 #   closed    Search, Apps, Notification Center, Overview, a menu (Escape) and a menu closed by a click outside (that click is
-#             the menu's, as on macOS): 300 ms after the close a click on window B gives B the keyboard, no app is launched
+#             the menu's, as on macOS): once the keys are back in A, a click on window B gives B the keyboard (a second click
+#             when the first fell between the keyboard release and the empty input mask) and no app is launched; a click on
+#             another window while the Overview is still "releasing" (dev hook holdNextRelease) reaches it
 #   menubar   a menu opened from the bar and closed with Escape while the pointer rests on the bar: the keys reach the window
-#             that was active (not the bar), and a click on another window works
-#   unlock    lock and unlock with the pointer on the bare desktop, on the menu bar, on window A: a click on A's content (and
-#             on its titlebar) gives A the keyboard
+#             that was active (not the bar), and a click on another window works; a click on the bare bar keeps the keys
+#   layer     an on-demand layer surface of another client (tests/compositor/click-focus-fixture) took the keyboard while
+#             Hyprland still counts A focused: a click on A's content (and on its titlebar) gives A the keyboard
+#   unlock    lock and unlock with the pointer on the bare desktop, on the menu bar, on window A: the keys reach A with no
+#             click (plugin 0.8.2), and a click on A's content (and on its titlebar) gives A the keyboard
 #   health    Hyprland alive, no grassfield exception in its log
 # Without grassfield-compositor (C2: scripts/nestctl plugin unload, or nested-up.sh --no-plugin) the titlebar cases are
 # skipped (no titlebars) and the unlock clicks are reported only: Hyprland 0.56.2 alone does nothing there (known limit).
@@ -52,12 +56,12 @@ sections=()
 for arg in "$@"; do
   case $arg in
     check | unmap) mode=$arg ;;
-    clients | closed | menubar | unlock) sections+=("$arg") ;;
+    clients | closed | menubar | layer | unlock) sections+=("$arg") ;;
     --headless) headless_wanted=1 ;;
-    *) echo "usage: click_focus.sh [check [clients|closed|menubar|unlock]...|unmap] [--headless]" >&2; exit 2 ;;
+    *) echo "usage: click_focus.sh [check [clients|closed|menubar|layer|unlock]...|unmap] [--headless]" >&2; exit 2 ;;
   esac
 done
-((${#sections[@]})) || sections=(clients closed menubar unlock)
+((${#sections[@]})) || sections=(clients closed menubar layer unlock)
 wanted() { [[ " ${sections[*]} " == *" $1 "* ]]; }
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
@@ -79,6 +83,16 @@ nestctl() { timeout 10 "$root/scripts/nestctl" "$@"; }
 pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log" 2>&1; }
 keys() { timeout 10 "$root/scripts/dev/keys.sh" "$@" >>"$log" 2>&1; }
 ipc() { timeout 5 "$root/tests/visual/ipc.sh" "$@" >>"$log" 2>&1; }
+ipcq() { timeout 5 "$root/tests/visual/ipc.sh" "$@" 2>>"$log"; } # its answer on stdout
+wait_for() { # <ms> <command...>: true once the command succeeds (polled every 100 ms), false after <ms>
+  local limit=$1 t0
+  shift
+  t0=$(date +%s%3N)
+  until "$@"; do
+    (($(date +%s%3N) - t0 > limit)) && return 1
+    ms 100
+  done
+}
 ms() { sleep "$(awk -v m="$1" 'BEGIN { printf "%.3f", m / 1000 }')"; }
 click() { pointer abs "$1" "$2" sleep 150 click; }
 
@@ -168,6 +182,28 @@ type_now() {
   ms 400
   printf 'A=%s B=%s active=%s' "$(cap_new "$cap_a" "$mark_a")" "$(cap_new "$cap_b" "$mark_b")" "$(name_of "$(active)")"
 }
+# Escape, then letters until one lands in a window: a busy shell may not handle the first key of a surface that just
+# opened, so a lost Escape is sent again every 6 probes (~2.4 s), at most 3 in all. Sets $r (the last probe), $probes (how
+# many were typed) and $landed (ms since the first Escape; "" when no letter landed). True when A got the letter.
+escape_until_a() {
+  local t0 esc=1
+  t0=$(date +%s%3N)
+  landed=""
+  keys -k Escape
+  for ((probes = 1; probes <= 25; probes++)); do
+    r=$(type_now x)
+    if [[ $r == A=*x* || $r == *B=*x* ]]; then
+      landed=$(($(date +%s%3N) - t0))
+      [[ $r == A=*x* ]]
+      return
+    fi
+    if ((probes % 6 == 0 && esc < 3)); then
+      keys -k Escape
+      esc=$((esc + 1))
+    fi
+  done
+  return 1
+}
 
 fail=0 passed=0 total=0
 check() { # <label> <0|1> [detail]
@@ -190,6 +226,26 @@ nestctl -j grassfield 2>/dev/null | jq -e '.features | index("desktop-focus")' >
 ((plugin)) || say "C2: grassfield-compositor not loaded (or without desktop-focus): titlebar cases skipped, unlock clicks reported only"
 paths=(content)
 ((plugin)) && paths+=(titlebar)
+
+# Anchor devices for the whole run (as tests/compositor/minimize.sh): a virtual pointer and a virtual keyboard that only wait,
+# so the seat keeps both capabilities while pointer.sh and keys.sh add and remove their own devices. Without any keyboard
+# device Hyprland refuses every keyboard focus ("setKeyboardFocus without a valid keyboard") and every key check fails.
+"$root/scripts/dev/pointer.sh" output "$out" sleep 3600000 >>"$log" 2>&1 &
+pids+=($!)
+"$root/scripts/dev/keys.sh" -s 3600000 >>"$log" 2>&1 &
+pids+=($!)
+# Hyprland's log as it is written (read-only hyprctl request; the log file itself is written late).
+follow=$run/hyprland-follow.log
+timeout 3600 stdbuf -oL "$root/scripts/nestctl" rollinglog -f >"$follow" 2>&1 &
+pids+=($!)
+# Read as text: hyprctl's JSON for a virtual pointer can hold a non-numeric value that jq refuses.
+keyboard_names() { nestctl -j devices 2>/dev/null | sed -n '/"keyboards"/,/^\]/p' | sed -n 's/.*"name": "\(.*\)",/\1/p' | tr '\n' ' '; }
+has_keyboard() { [[ -n $(keyboard_names) ]]; }
+if ! wait_for 5000 has_keyboard; then
+  say "setup error: the nested session has no keyboard device (keys could reach no window)"
+  exit 2
+fi
+say "keyboards: $(keyboard_names)"
 
 pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 50 # windows open on the output under the pointer
 p=$(probe "$cap_a" gf-click-a); pids+=("$p"); win_a=$(address_of "$p")
@@ -390,7 +446,18 @@ fi
 # ---- right after a full-attention surface closed ----
 # The surface stays mapped a moment after it releases the keyboard (shell/platform/KeyboardRelease.qml, longer whenever the
 # shell's GUI thread is busy): it must not catch the click meant for the window under it.
-open_surface() { # <name>
+surface_layer() { # <name> -> its layer namespace
+  case $1 in
+    search) echo grassfield-search ;;
+    apps) echo grassfield-apps ;;
+    notifications) echo grassfield-notification-center ;;
+    overview) echo grassfield-overview-backdrop ;;
+    menu) echo grassfield-overlay ;;
+  esac
+}
+overview_stage() { ipcq overview status | jq -r '"\(.stage) \(.chromeHeld)"' 2>/dev/null; }
+overview_is() { [[ $(overview_stage) == "$1" ]]; }
+open_surface() { # <name>: opened, mapped and (for the Overview) holding the keyboard
   case $1 in
     search) ipc search toggle ;;
     apps) ipc apps toggle ;;
@@ -398,7 +465,11 @@ open_surface() { # <name>
     overview) ipc overview toggle ;;
     menu) ipc menubar open system "$out" ;;
   esac
-  ms 1000
+  if [[ $1 == overview ]]; then # its chrome is mapped all the time (and its backdrop only in v2): the stage tells
+    wait_for 5000 overview_is "open true" || say "  note: the Overview's chrome did not take the keyboard within 5 s ($(overview_stage))"
+  else
+    wait_for 5000 layer_mapped "$(surface_layer "$1")" || say "  note: $1 did not map within 5 s"
+  fi
 }
 if wanted closed; then
 say "== a click on another window right after a surface closed"
@@ -408,23 +479,29 @@ for entry in search:grassfield-search apps:grassfield-apps notifications:grassfi
   focus_a
   open_surface "$surface"
   n0=$(window_count)
-  t0=$(date +%s%3N)
-  keys -k Escape
   # The close has landed once the keys reach A again (the surface released the keyboard and it came back to A); the
   # surface itself may stay mapped longer (the hold, the fade, a busy GUI thread): the click must go through it.
-  landed=""
-  for _ in $(seq 1 25); do
-    r=$(type_now x)
-    [[ $r == A=x* ]] && { landed=$(($(date +%s%3N) - t0)); break; }
-  done
-  layer_mapped "$layer" && still=mapped || still=unmapped
+  escape_until_a
+  if [[ $surface == overview ]]; then
+    still="stage '$(overview_stage)'"
+  else
+    layer_mapped "$layer" && still=mapped || still=unmapped
+  fi
   click_b
   r=$(type_now x)
+  # The keyboard release and the empty input mask are separate commits: a click between them (one frame, seconds when the
+  # shell is busy) is the closing surface's. A second click must then work.
+  first=ok
+  if [[ $r != "A= B=x active=B" ]]; then
+    first="swallowed ($r)"
+    click_b
+    r=$(type_now x)
+  fi
   [[ $surface == apps ]] && ms 2500 # an app launched by a tile would map by now
   n1=$(window_count)
   [[ $r == "A= B=x active=B" && $n1 == "$n0" ]]
   check "$surface closed with Escape: a click on B gives B the keyboard, nothing else happens" $? \
-    "$r; keys back in A after ${landed:-never} ms; $layer $still at the click; windows $n0 -> $n1"
+    "$r; keys back in A after ${landed:-never} ms; $layer $still at the click; first click $first; windows $n0 -> $n1"
 done
 # A click outside an open menu closes it and is the menu's (macOS); the next click on that window gives it the keyboard.
 focus_a
@@ -432,9 +509,12 @@ open_surface menu
 click_b 0
 landed=""
 t0=$(date +%s%3N)
-for _ in $(seq 1 25); do
+for ((p = 1; p <= 25; p++)); do
   r=$(type_now x)
-  [[ $r == A=x* || $r == *B=x* ]] && { landed=$(($(date +%s%3N) - t0)); break; }
+  [[ $r == A=*x* || $r == *B=*x* ]] && { landed=$(($(date +%s%3N) - t0)); break; }
+  # A menu that just opened may not have its input region yet when the shell is busy: the click went past it and the menu
+  # still holds the keys. Clicked again, as a user would.
+  ((p % 6 == 0)) && click_b 0
 done
 # Its input mask can land after its keyboard release when the GUI thread is busy (a click in between is the closing
 # surface's): the next click is made once the menu's surface is gone.
@@ -443,6 +523,35 @@ click_b
 r=$(type_now x)
 [[ -n $landed && $r == "A= B=x active=B" ]]
 check "menu closed by a click on B: the next click on B gives B the keyboard" $? "$r; close landed after ${landed:-never} ms; grassfield-overlay unmapped $gone ms later"
+# The Overview while it releases the keyboard (R13 finding M1 on 0f3adf7): its stage stays "releasing" until every chrome
+# committed None, and the chrome kept its full-screen input all that time. Held 3 s by the dev hook, so that the click
+# lands in that stage once the chromes no longer hold the keyboard.
+focus_a
+open_surface overview
+held=$(ipcq overview holdNextRelease 8000)
+keys -k Escape
+# A lost Escape (a busy shell) is sent again while the Overview still reads as open.
+for _ in 1 2 3; do
+  wait_for 2500 overview_is "releasing false" && break
+  [[ $(overview_stage) == open* ]] && keys -k Escape
+done
+# Reported: whether the keys are back in A before the click (Hyprland's refocus or the plugin's request done).
+back=""
+for ((i = 1; i <= 4; i++)); do
+  r=$(type_now x)
+  [[ $r == A=*x* ]] && { back=$i; break; }
+done
+at_click=$(overview_stage)
+click_b
+after_click=$(overview_stage)
+r=$(type_now x)
+# With the plugin (v2) a press while its focus request waits is recorded and the plugin focuses the window under it, so B
+# gets the keyboard even when the chrome swallowed the click; in thumbnail mode and without the plugin (C2) only the
+# chrome's input region decides: there this case fails on the pre-fix mask (input while the stage is not "closed").
+[[ $held == held && $at_click == "releasing false" && $after_click == releasing* && $r == "A= B=x active=B" ]]
+check "overview releasing (chromes released, stage held): a click on B gives B the keyboard" $? \
+  "$r; hold $held; keys back in A after ${back:-no} probe(s); stage at the click '$at_click', after it '$after_click'"
+wait_for 6000 overview_is "closed false" || say "  note: the Overview did not finish closing ($(overview_stage))"
 fi
 
 # ---- the menu bar never keeps the keyboard ----
@@ -451,17 +560,11 @@ say "== a menu opened from the bar and closed with Escape while the pointer rest
 for round in 1 2 3; do
   focus_a
   click 150 12 # a title of the bar (the app's menus): opens its menu, the pointer stays on the bar
-  ms 900
-  keys -k Escape
-  # Letters are typed until they land in a window (lost ones went to the bar or nowhere); the first that lands must be A's.
-  lost=0
-  for _ in $(seq 1 25); do
-    r=$(type_now x)
-    [[ $r == A=x* || $r == *B=x* ]] && break
-    lost=$((lost + 1))
-  done
-  [[ $r == "A=x B= active=A" ]]
-  check "round $round: after Escape the keys reach A, the window active when the menu opened" $? "$r after $lost lost letter(s)"
+  wait_for 5000 layer_mapped grassfield-overlay || say "  note: the menu did not open within 5 s"
+  # Letters are typed until they land in a window (lost ones went to the menu, the bar or nowhere); the first that lands
+  # must be A's.
+  escape_until_a
+  check "round $round: after Escape the keys reach A, the window active when the menu opened" $? "$r after $((probes - 1)) lost letter(s)"
   gone_after grassfield-overlay >/dev/null # a click while it closes is the `closed` section's case
   click_b
   r=$(type_now x)
@@ -475,6 +578,49 @@ ms 500
 r=$(type_now x)
 [[ $r == "A=x B= active=A" ]]
 check "a click on an empty part of the menu bar leaves the keyboard on A" $? "$r"
+fi
+
+# ---- a layer surface of another client took the keyboard ----
+# tests/compositor/click-focus-fixture: an on_demand layer surface (Top layer) that takes the keyboard when clicked, while
+# Hyprland keeps A as its focused window. A click on A must give A the keyboard (FR30 (d); Hyprland 0.56.2 alone does
+# nothing: A is already its focused window).
+if wanted layer; then
+say "== a layer surface of another client (on_demand) took the keyboard"
+fixlog=$run/fixture.log
+: >"$fixlog"
+WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig GF_CF_OUTPUT=$out DBUS_SESSION_BUS_ADDRESS=$bus \
+  setsid "$root/scripts/dev/isolated.sh" --name click-focus-fixture qs -p "$root/tests/compositor/click-focus-fixture" --no-color \
+  >>"$fixlog" 2>&1 </dev/null &
+fixture_pid=$!
+pids+=("$fixture_pid")
+if ! wait_for 8000 layer_mapped click-focus-fixture; then
+  check "layer fixture: mapped" 1 "see $fixlog"
+else
+  fix_x=$((mon_w - 40 - 110)) fix_y=$((300 + 60))
+  for path in "${paths[@]}"; do
+    focus_a
+    click "$fix_x" "$fix_y"
+    ms 300
+    k0=$(grep -ac "\[cf-fixture\] key" "$fixlog")
+    r0=$(type_now x)
+    k1=$(grep -ac "\[cf-fixture\] key" "$fixlog")
+    say "  fixture clicked: keys to the fixture $((k1 - k0)), $r0"
+    if [[ $path == content ]]; then read -r x y <<<"$a_in"; else read -r x y <<<"$a_bar"; fi
+    click "$x" "$y"
+    ms 400
+    r=$(type_now x)
+    if ((plugin)); then
+      [[ $((k1 - k0)) -ge 1 && $r0 == "A= B= active=A" && $r == "A=x B= active=A" ]]
+      check "a layer surface took the keyboard, Hyprland still counts A focused: a click on A's $path gives A the keyboard" $? \
+        "fixture got $((k1 - k0)) key(s), then $r0; after the click $r"
+    else
+      say "  C2 (known limit, Hyprland 0.56.2): fixture got $((k1 - k0)) key(s) ($r0); a click on A's $path: $r"
+    fi
+  done
+fi
+kill "$fixture_pid" 2>/dev/null
+layer_gone() { ! layer_mapped "$1"; }
+wait_for 3000 layer_gone click-focus-fixture || say "  note: the fixture is still mapped"
 fi
 
 # ---- after a session unlock ----
@@ -509,9 +655,21 @@ for where in desktop bar window; do
       check "unlock with the pointer on the $where: the session was locked" 1 "foreign locker did not lock"
       continue
     fi
-    ms 1200
-    r=$(type_now x)
-    say "  unlock with the pointer on the $where: keys right after the unlock: $r (Hyprland's own behaviour, informational)"
+    # macOS model: the window active before the lock has the keys again with no click (plugin 0.8.2: refocus after the
+    # unlock; Hyprland 0.56.2 alone leaves the keyboard on no surface when the pointer is off the windows). Letters are
+    # typed until one lands in a window (max 25 x 400 ms); none lost is not required (the unlock is asynchronous).
+    lost=0
+    for _ in $(seq 1 25); do
+      r=$(type_now x)
+      [[ $r == A=x* || $r == *B=x* ]] && break
+      lost=$((lost + 1))
+    done
+    if ((plugin)); then
+      [[ $r == "A=x B= active=A" ]]
+      check "unlock with the pointer on the $where: the keys reach A with no click" $? "$r after $lost lost letter(s)"
+    else
+      say "  C2: unlock with the pointer on the $where, keys with no click: $r after $lost lost letter(s)"
+    fi
     if [[ $path == content ]]; then read -r x y <<<"$a_in"; else read -r x y <<<"$a_bar"; fi
     click "$x" "$y"
     ms 400
@@ -532,6 +690,9 @@ check "Hyprland alive" $?
 exc=$(tail -n +"$((log0 + 1))" "$hyprlog" 2>/dev/null | grep -a "\[grassfield\]" | grep -aic "exception" || true)
 ((exc == 0))
 check "no grassfield exception in the nested log" $? "$exc line(s)"
+nokbd=$(grep -ac "without a valid keyboard" "$follow" || true)
+((nokbd == 0))
+check "the seat always had a keyboard (no 'setKeyboardFocus without a valid keyboard')" $? "$nokbd line(s)"
 
 say "click_focus: $passed/$total PASS (log $log)"
 ((fail)) && exit 1

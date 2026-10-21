@@ -100,6 +100,7 @@ Scope {
         retryTimer.stop();
         releaseTimer.stop();
         releaseBound.stop();
+        testReleaseHold.stop();
         keepScreen = "";
         pending = null;
         stage = "closed";
@@ -319,6 +320,8 @@ Scope {
         stage = "releasing";
         releaseTimer.restart();
         releaseBound.restart();
+        testReleaseHoldMs = testReleaseHoldNext; // dev hook, armed for this close only
+        testReleaseHoldNext = 0;
     }
 
     // Output of the chrome that holds the keyboard ("" for none).
@@ -327,6 +330,15 @@ Scope {
     }
 
     function tryFinishRelease(forced: bool): void {
+        if (testReleaseHold.running)
+            return;
+        if (releasing && testReleaseHoldMs > 0 && (forced || !chromeHeld)) {
+            // Dev hook: the release would end now; it stays in its "releasing" stage that much longer.
+            testReleaseHold.interval = testReleaseHoldMs;
+            testReleaseHoldMs = 0;
+            testReleaseHold.restart();
+            return;
+        }
         if (releasing && V2.releaseDone(chromeHeld, releaseSettled, forced))
             finishRelease();
     }
@@ -468,6 +480,17 @@ Scope {
         onTriggered: root.tryFinishRelease(true)
     }
 
+    // Dev-only test hook (holdNextRelease): the next close, when its release would end (the chromes let go of the keyboard,
+    // or the bound), stays "releasing" this much longer, then finishes as the bound would. 0: no hold (always, outside a
+    // nested dev session).
+    property int testReleaseHoldNext: 0
+    property int testReleaseHoldMs: 0
+
+    Timer {
+        id: testReleaseHold
+        onTriggered: root.tryFinishRelease(true)
+    }
+
     // Close because another full-attention surface opened (ExclusiveSurfaces): the keyboard belongs to that surface, so
     // nothing is focused here.
     function requestCloseForOther(): void {
@@ -506,7 +529,17 @@ Scope {
             root.requestClose();
         }
 
-        // Test hook: JSON {open, thumbnailMode, profile, screens: [{name, windows: [{address,
+        // Dev-only test hook (GRASSFIELD_DEV=1 in a nested dev session; tests/compositor/click_focus.sh): the next close stays
+        // in its "releasing" stage at least `ms` (1 to 10000), so that a click during the release can be tested. Refused
+        // otherwise.
+        function holdNextRelease(ms: int): string {
+            if (Quickshell.env("GRASSFIELD_DEV") !== "1" || Quickshell.env("GRASSFIELD_SESSION") === "1" || ms < 1 || ms > 10000)
+                return "refused";
+            root.testReleaseHoldNext = ms;
+            return "held";
+        }
+
+        // Test hook: JSON {open, stage, thumbnailMode, profile, screens: [{name, windows: [{address,
         // appId, title, real, rect}], spaces, selected}]}. Rects are window-local pixels.
         function status(): string {
             const screens = [];
@@ -515,6 +548,7 @@ Scope {
                 screens.push(all[i].statusData());
             return JSON.stringify({
                 open: root.open,
+                stage: root.stage,
                 thumbnailMode: root.thumbnailMode,
                 phase: root.phase,
                 live: root.live,
