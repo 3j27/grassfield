@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Grassfield Settings: an original tile with three slider rails in the Grassfield green. CC-BY-SA-4.0, see branding/LICENSES.md. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A4F59"/>
+      <stop offset="1" stop-color="#2B2E35"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="104" height="104" rx="26" fill="url(#tile)"/>
+  <g stroke-linecap="round" stroke-width="7">
+    <path d="M34 44h60M34 64h60M34 84h60" stroke="#FFFFFF" stroke-opacity=".28" fill="none"/>
+    <path d="M34 44h28M34 64h46M34 84h20" stroke="#4FB36B" fill="none"/>
+  </g>
+  <g fill="#FFFFFF">
+    <circle cx="66" cy="44" r="9"/>
+    <circle cx="84" cy="64" r="9"/>
+    <circle cx="58" cy="84" r="9"/>
+  </g>
+</svg>

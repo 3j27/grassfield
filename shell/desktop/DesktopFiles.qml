@@ -171,7 +171,7 @@ Scope {
             openAsText(p);
             return;
         }
-        Apps.whenScopeKnown(() => root.run(Apps.scoped(["gio", "open", p]), "open", null, Apps.openEnvironment()));
+        Apps.whenScopeKnown(() => root.run(Apps.scoped(Apps.folderAware(["gio", "open", p])), "open", null, Apps.openEnvironment()));
     }
 
     function openAsText(p: string): void {

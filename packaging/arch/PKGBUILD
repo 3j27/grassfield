@@ -2,13 +2,13 @@
 # Local package build from this repository. grassfield-desktop and grassfield-compositor need no download; the optional
 # grassfield-whitesur-icons fetches ONE pinned upstream commit (WhiteSur icon theme, GPL-3.0, ADR-0017):
 #   cd packaging/arch && makepkg -si        (owner runs it; installs with sudo through pacman)
-# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor
+# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-whitesur-icons
 # Never constrain the hyprland version here (ADR-0009, master-prompt §5.6).
 
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor grassfield-whitesur-icons)
 pkgver=0.4.0
-pkgrel=4
+pkgrel=6
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
@@ -18,12 +18,15 @@ license=(MIT)
 makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf gtk3 git)
 options=(!debug)
 # WhiteSur icon theme (third party, GPL-3.0). Same pin and reviewed install.sh as scripts/dev/whitesur.sh: update both
-# together, after reading the new install.sh in full. A source repository cannot carry a checksum (SKIP): integrity is
-# the commit id (makepkg checks it out by id) plus the SHA-256 of install.sh that build() verifies before running it.
+# together, after reading the new install.sh in full. Integrity: the commit id (makepkg checks it out by id), the
+# SHA-256 of the `git archive` of that commit below (pacman 7.1 calc_checksum_git), and the SHA-256 of install.sh that
+# build() verifies before running it. The Apple-artwork guard (whitesur-guard.sh, whitesur-detect.py, ADR-0017) must be
+# re-derived on a pin change: whitesur-guard.sh list <checkout> > whitesur-apple-logos.txt after viewing the logos, and the
+# whole new tree reviewed on contact sheets for Apple trademark artwork (whitesur-blocklist.txt).
 _whitesur_commit=73d8040da51a9ed74e47c7366e7e9ff437601a5c
 _whitesur_install_sha256=295fdee31bead5e6b184b82a1b6341e6096ab3ea59ed5f30416f6c707cc945d1
 source=("whitesur-icon-theme::git+https://github.com/vinceliuice/WhiteSur-icon-theme.git#commit=${_whitesur_commit}")
-sha256sums=('SKIP')
+sha256sums=('e4c97aa6258e86360a5387e71a42d61c39389a56de6e67c0dfedf8213fdf639a')
 
 _root() { realpath "$startdir/../.."; }
 
@@ -57,8 +60,20 @@ build() {
   actual=$(sha256sum "$srcdir/whitesur-icon-theme/install.sh" | cut -d' ' -f1)
   [[ $actual == "$_whitesur_install_sha256" ]] || { echo "WhiteSur install.sh changed ($actual): review it before updating the pin" >&2; return 1; }
   install -d "$srcdir/whitesur-home" "$srcdir/whitesur-icons"
-  env HOME="$srcdir/whitesur-home" XDG_DATA_HOME="$srcdir/whitesur-home/.local/share" \
-    bash "$srcdir/whitesur-icon-theme/install.sh" -d "$srcdir/whitesur-icons" >/dev/null
+  # Clean environment: install.sh reads DESKTOP_SESSION, bold, plasma, alternative and black from it. -p ("Replaces Apple
+  # logo with KDE Plasma logo") swaps only the places/ start-here logos. The guard below then FILTERS the theme (owner
+  # decision 2026-10-20): it removes every icon that shows the Apple logo (perceptual match of any drawable part of any
+  # SVG or embedded PNG with the reference logo masks, so a logo inside an iMac or a mouse is found, whatever the colour
+  # or the path syntax), every icon of the curated blocklist (Apple trademark artwork and product silhouettes that no
+  # logo detector can see: Finder, App Store, Safari, ...), the icons that share a basename with one, and the links left
+  # dangling. The names it removes fall back to Adwaita and Breeze through the grassfield-icons wrapper. The build FAILS
+  # when anything it knows is still present (ADR-0017). Legal review is still required before a public release.
+  env -i PATH=/usr/bin HOME="$srcdir/whitesur-home" XDG_DATA_HOME="$srcdir/whitesur-home/.local/share" LC_ALL=C \
+    /usr/bin/bash "$srcdir/whitesur-icon-theme/install.sh" -p -d "$srcdir/whitesur-icons" >/dev/null
+  # The gtk-update-icon-cache pacman hook builds the caches on the target; these would list the removed icons.
+  find "$srcdir/whitesur-icons" -name icon-theme.cache -delete
+  "$startdir/whitesur-guard.sh" clean "$srcdir/whitesur-icons"
+  "$startdir/whitesur-guard.sh" check "$srcdir/whitesur-icons"
 }
 
 check() {
@@ -153,7 +168,9 @@ package_grassfield-desktop() {
 package_grassfield-whitesur-icons() {
   pkgdesc="WhiteSur icon theme, pinned upstream commit (third party, GPL-3.0), optional app icons of the Grassfield session"
   arch=(any)
+  # Upstream ships COPYING (GPL version 3, unmodified text) and no "or later" notice in any file: GPL-3.0-only.
   license=(GPL-3.0-only)
+  options=(!strip)
   url="https://github.com/vinceliuice/WhiteSur-icon-theme"
   depends=()
   provides=(whitesur-icon-theme)
@@ -161,6 +178,8 @@ package_grassfield-whitesur-icons() {
   install -d "$pkgdir/usr/share/icons"
   cp -a --no-preserve=ownership "$srcdir/whitesur-icons/WhiteSur" "$srcdir/whitesur-icons/WhiteSur-light" \
     "$srcdir/whitesur-icons/WhiteSur-dark" "$pkgdir/usr/share/icons/"
+  # Second check on the packaged tree itself (the three theme folders link into each other: checked together).
+  "$startdir/whitesur-guard.sh" check "$pkgdir/usr/share/icons"
   install -Dm644 "$srcdir/whitesur-icon-theme/COPYING" "$pkgdir/usr/share/licenses/grassfield-whitesur-icons/COPYING"
   install -Dm644 "$srcdir/whitesur-icon-theme/AUTHORS" "$pkgdir/usr/share/licenses/grassfield-whitesur-icons/AUTHORS"
   printf '%s\n' "Source: https://github.com/vinceliuice/WhiteSur-icon-theme at commit ${_whitesur_commit}" \

@@ -720,6 +720,20 @@ Singleton {
         return best;
     }
 
+    // What the Dock needs to plan a click on a running app (dock/Launch.js activationPlan): minimized, on the focused
+    // Desktop (a window parked by hide() counts as here: activate() brings it back), and its focus recency.
+    function windowInfo(toplevel: var): var {
+        const top = hyprlandToplevel(toplevel);
+        const parked = top && top.workspace && (top.workspace.name === hiddenWorkspace || top.workspace.name === minimizedWorkspace);
+        const here = !top || !top.workspace || !root.focusedWorkspace || parked || top.workspace.id === root.focusedWorkspace.id;
+        return {
+            "ref": toplevel,
+            "minimized": isMinimized(toplevel),
+            "here": here,
+            "stamp": recency.has(toplevel) ? recency.get(toplevel) : 0
+        };
+    }
+
     // Window after `current` in list order (wraps); the first one if current is not in the list.
     function nextAfter(list: var, current: var): var {
         if (list.length === 0)

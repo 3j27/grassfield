@@ -29,7 +29,7 @@ trap 'exit 130' INT TERM
 
 vs_session en || exit 1
 vs_reset dark 0.25
-FX=${FX:-901}
+FX=${FX:-927}
 DY=1032
 ABOVE=600   # above the Dock window (top edge y=830)
 INSIDE=900  # inside the window, above the shelf

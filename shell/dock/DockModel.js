@@ -65,6 +65,57 @@ function withApps(items) {
     return [{kind: "apps", key: "grid"}].concat(items);
 }
 
+// ---- The fixed Files tile (macOS: the Finder is always the first tile and cannot be removed) ----
+
+// Desktop entry id of Grassfield Files.
+const FILES_ID = "org.grassfield.Files";
+
+// Default pinned list of the first releases: it reads as the current default (the shell store applies the same rule).
+const OLD_DEFAULT_PINNED = ["foot", "chromium", "org.gnome.Nautilus"];
+const DEFAULT_PINNED = ["chromium", "foot", "org.grassfield.Settings"];
+
+// Pinned list as the Dock reads it: the old default list becomes the new default, any other list is left as it is.
+function migratePinned(pinned) {
+    const list = pinned ? pinned : [];
+    return list.length === OLD_DEFAULT_PINNED.length && list.every((id, i) => id === OLD_DEFAULT_PINNED[i]) ? DEFAULT_PINNED.slice() : list;
+}
+
+// True for the id of Grassfield Files, with or without the ".desktop" suffix.
+function isFilesId(id) {
+    const s = String(id === undefined || id === null ? "" : id).replace(/\.desktop$/, "");
+    return s === FILES_ID;
+}
+
+// The pinned list without Files: its tile is fixed, a stored id would only make a second tile.
+function withoutFiles(pinned) {
+    return (pinned ? pinned : []).filter(id => !isFilesId(id));
+}
+
+// Splits the merged apps into the fixed Files tile and the rest. The tile is {kind: "files", key: "files", name, icon,
+// entry, windows, pinned: true, fixed: true}: it carries the windows of Files (the running dot, minimize into the tile,
+// Show All Windows), always draws our own icon (an installed older desktop entry may still name a generic one) and exists even when the desktop entry is missing (entry null: a click then opens the home folder
+// through the open policy). `lookup` resolves desktop entries.
+function splitFiles(apps, lookup) {
+    const entry = lookup ? lookup(FILES_ID) : null;
+    const rest = [];
+    let windows = [];
+    for (const a of apps) {
+        if (a.kind === "app" && (isFilesId(a.key) || (a.entry && isFilesId(a.entry.id)))) {
+            windows = windows.concat(a.windows);
+            continue;
+        }
+        rest.push(a);
+    }
+    const files = {kind: "files", key: "files", name: entry && entry.name ? entry.name : "Files",
+        icon: "org.grassfield.Files", entry: entry ? entry : null, windows: windows, pinned: true, fixed: true};
+    return {files: files, rest: rest};
+}
+
+// The two fixed tiles, Files then Apps, before everything else.
+function withFixed(files, items) {
+    return [files, {kind: "apps", key: "grid"}].concat(items);
+}
+
 function pin(pinned, id) {
     const list = (pinned ? pinned : []).slice();
     return list.indexOf(id) === -1 ? list.concat([id]) : list;
@@ -475,7 +526,7 @@ function bounceKeys(launching, items, now, timeoutMs) {
     for (const key of Object.keys(launching ? launching : {})) {
         if (now - launching[key] > timeoutMs)
             continue;
-        const item = items.find(it => it.kind === "app" && it.key === key);
+        const item = items.find(it => (it.kind === "app" || it.kind === "files") && it.key === key);
         if (!item || item.windows.length > 0)
             continue;
         out[key] = launching[key];

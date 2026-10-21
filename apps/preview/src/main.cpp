@@ -1,10 +1,14 @@
 #include <QCommandLineParser>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QQuickWindow>
 #include <QGuiApplication>
 #include <QImageReader>
 #include <QQmlApplicationEngine>
 #include <QTextStream>
 #include <QUrl>
+
+#include <memory>
 
 #include "translationloader.h"
 #include "globalmenu.h"
@@ -20,6 +24,8 @@
 
 int main(int argc, char *argv[])
 {
+    QElapsedTimer t0; // GRASSFIELD_PREVIEW_TIMING=1 prints the time to the first frame and to the folder list on stderr
+    t0.start();
     // QtPdf's views are Qt Quick Controls; the Basic style draws nothing of its own that we do not restyle.
     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE"))
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
@@ -56,20 +62,12 @@ int main(int argc, char *argv[])
     // windows down still see it (no TypeError on close).
     // One file opened: the other files of its folder can be browsed (previous/next), in the order Grassfield Files shows
     // them, like the arrow keys of a file manager. The viewer browses images; a Glance every kind it can show.
-    QStringList paths = args.paths;
-    int start = qMax(0, parser.value(startOption).toInt());
-    bool browsing = false;
-    if (paths.size() == 1) {
-        const preview::Kind kind = preview::classify(paths.constFirst());
-        if (glance ? kind != preview::Kind::Unsupported : kind == preview::Kind::Image) {
-            const preview::Browse browse = preview::browseFolder(paths.constFirst(), glance ? preview::BrowseKinds::Previewable : preview::BrowseKinds::ImagesOnly,
-                                                                 preview::filesSortSpec());
-            paths = browse.paths;
-            start = browse.index;
-            browsing = paths.size() > 1;
-        }
-    }
-    PreviewApp backend(paths, args.errors, glance, start, browsing);
+    // The opened file is shown at once; the folder is listed in a worker thread and the arrows and "n of N" follow.
+    const bool browsing = args.paths.size() == 1 && (glance ? preview::classify(args.paths.constFirst()) != preview::Kind::Unsupported
+                                                             : preview::classify(args.paths.constFirst()) == preview::Kind::Image);
+    // --start <n> only applies to the files named on the command line.
+    PreviewApp backend(args.paths, args.errors, glance, browsing ? 0 : qMax(0, parser.value(startOption).toInt()), browsing);
+    const preview::BrowseKinds browseKinds = glance ? preview::BrowseKinds::Previewable : preview::BrowseKinds::ImagesOnly;
 
     QQmlApplicationEngine engine;
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
@@ -100,5 +98,28 @@ int main(int argc, char *argv[])
     // The registrar may appear later (an app started before the bridge) or restart: the viewer's menus follow it.
     if (!glance)
         grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
+    // The folder is listed after the first frame: the opened file never waits for it (the listing shares the MIME
+    // database lock with the GUI thread, so it must not compete with the first render).
+    if (browsing) {
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
+        if (window) {
+            auto started = std::make_shared<bool>(false);
+            QObject::connect(window, &QQuickWindow::frameSwapped, &backend, [&backend, browseKinds, started, &t0] {
+                if (*started)
+                    return;
+                *started = true;
+                if (qEnvironmentVariableIsSet("GRASSFIELD_PREVIEW_TIMING"))
+                    fprintf(stderr, "TIMING first-frame %lld ms\n", static_cast<long long>(t0.elapsed()));
+                backend.startBrowse(browseKinds);
+            });
+        } else {
+            backend.startBrowse(browseKinds);
+        }
+        if (qEnvironmentVariableIsSet("GRASSFIELD_PREVIEW_TIMING"))
+            QObject::connect(&backend, &PreviewApp::listingChanged, &backend, [&t0, &backend] {
+                if (!backend.listing())
+                    fprintf(stderr, "TIMING list-ready %lld ms files=%d\n", static_cast<long long>(t0.elapsed()), static_cast<int>(backend.files().size()));
+            });
+    }
     return app.exec();
 }

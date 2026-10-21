@@ -59,6 +59,12 @@ ShellRoot {
 
     Binding {
         target: Appearance
+        property: "accentSetting"
+        value: Settings.accentColor
+    }
+
+    Binding {
+        target: Appearance
         property: "iconMode"
         value: Settings.iconMode
     }

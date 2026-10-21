@@ -83,6 +83,12 @@ Window {
         value: cfg.value("accessibility.reduceMotion")
     }
 
+    Binding {
+        target: Appearance
+        property: "accentSetting"
+        value: cfg.value("accent.color")
+    }
+
     // Icon appearance (ADR-0014): the previews and any app icon follow the file live.
     Binding {
         target: Appearance

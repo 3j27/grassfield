@@ -179,7 +179,13 @@ void FilesApp::readAppearance()
     static const QRegularExpression folderHex(QStringLiteral("^(theme|accent|#[0-9a-fA-F]{6})$"));
     if (!folderHex.match(folderColor).hasMatch())
         folderColor = QStringLiteral("theme");
-    if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint || folderColor != m_folderColor) {
+    // Accent colour: same names as ui/Grassfield/Ui/Accent.js; anything else reads as the default.
+    QString accent = root.value(QStringLiteral("accent")).toObject().value(QStringLiteral("color")).toString();
+    if (!QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
+                     QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(accent))
+        accent = QStringLiteral("multicolor");
+    if (dark != m_dark || reduce != m_reduceMotion || mode != m_iconMode || tint != m_iconTint || folderColor != m_folderColor || accent != m_accentColor) {
+        m_accentColor = accent;
         m_folderColor = folderColor;
         m_dark = dark;
         m_reduceMotion = reduce;
