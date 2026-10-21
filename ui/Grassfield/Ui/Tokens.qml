@@ -1233,7 +1233,7 @@ QtObject {
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real switcherFadeScale: 0.96
 
-    // ADR-0016: crossfade between two pictures of a carousel (macOS: ASSUMPTION, check against design/reference); Reduce Motion shortens it to motion.reducedMax
+    // ADR-0016: the fixed crossfade between two wallpapers of any kind (artwork, colour, picture; macOS: ASSUMPTION, check against design/reference); Reduce Motion makes it a plain switch
     readonly property int wallpaperCrossfadeMs: 1000
     // ADR-0016: a grassfield-wallpaper prepare that runs longer than this is killed (a 24 MP JPEG takes under a second)
     readonly property int wallpaperToolTimeoutMs: 30000

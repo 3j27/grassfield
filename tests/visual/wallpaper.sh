@@ -58,7 +58,7 @@ a=$(magick "$VS_SHOTS/wallpaper-desktop-after-restart.$VS_LANG.png" -crop 400x30
 b=$(magick "$VS_SHOTS/wallpaper-desktop-before.$VS_LANG.png" -crop 400x300+300+300 +repage -format '%#' info:)
 check "the desktop differs from the artwork after the restart" test "$a" != "$b"
 
-# Idle cost of a still picture against the artwork: CPU ticks of the shell over 20 s, after the startup work has settled.
+# Idle cost of a still picture against the artwork: CPU ticks of the shell over 30 s, after the startup work has settled.
 cpu_of() { # seconds
   local pid t0 t1
   pid=$(dev_live_pid "$VS_DEV/shell.pid")
@@ -68,13 +68,14 @@ cpu_of() { # seconds
   awk -v a="$t0" -v b="$t1" -v s="$1" 'BEGIN {printf "%.2f", (b-a)/100/s*100}'
 }
 sleep 15
-cpu_pic=$(cpu_of 20)
-echo "idle CPU of the shell with a still picture: $cpu_pic % of one core over 20 s"
+cpu_pic=$(cpu_of 30)
+echo "idle CPU of the shell with a still picture: $cpu_pic % of one core over 30 s"
 jq '.wallpaper.source = "builtin"' "$cfg" > "$cfg.new" && mv "$cfg.new" "$cfg"
 sleep 15
-cpu_art=$(cpu_of 20)
-echo "idle CPU of the shell with the artwork: $cpu_art % of one core over 20 s"
-check "a still picture costs no more than the artwork plus 0.3 points (picture $cpu_pic %, artwork $cpu_art %)" awk -v p="$cpu_pic" -v a="$cpu_art" 'BEGIN {exit !(p <= a + 0.3)}'
+cpu_art=$(cpu_of 30)
+echo "idle CPU of the shell with the artwork: $cpu_art % of one core over 30 s"
+# A margin of one point and an absolute ceiling: under load from other processes a 30 s window varies by a few tenths.
+check "a still picture costs no more than the artwork plus 1 point and stays under 2 % (picture $cpu_pic %, artwork $cpu_art %)" awk -v p="$cpu_pic" -v a="$cpu_art" 'BEGIN {exit !(p <= a + 1.0 && p < 2.0)}'
 
 vs_kill_clients
 exit $fail

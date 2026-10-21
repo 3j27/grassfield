@@ -238,10 +238,12 @@ Scope {
                     incoming.color = desc.color;
                 if (desc.kind === "picture") {
                     // Dev hook `wallpaper loadDelay <ms>`: the decode is started late, to test changes that arrive faster.
-                    if (root.loadDelayMs > 0)
+                    if (root.loadDelayMs > 0) {
+                        console.info("wallpaper: decode of the next picture delayed by " + root.loadDelayMs + " ms (dev hook)");
                         loadTimer.restart();
-                    else
+                    } else {
                         startLoad();
+                    }
                 } else {
                     loadTimer.stop();
                     incoming.url = "";

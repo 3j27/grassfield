@@ -69,5 +69,17 @@ for name in pair threshold blocks photolike; do
   magick "$VS_SHOTS/legibility-$name.$VS_LANG.png" -crop 1920x40+0+0 +repage "$VS_SHOTS/legibility-$name-bar.$VS_LANG.png"
 done
 
+# The dev override (contrast runs): while it covers the wallpaper the bar follows it; once it is cleared the bar follows what
+# is on screen again (review finding: it kept the override's tone). The artwork's sky is dark, so its tone is light.
+jq '.wallpaper = {source: "builtin"}' "$cfg" > "$cfg.new" && mv "$cfg.new" "$cfg"
+vs_sleep 3
+check "the artwork gives the light tone" test "$(field tone)" = light
+vs_wallpaper "$pics/light.png"
+vs_sleep 2
+check "a white override gives the dark tone" test "$(field tone)" = dark
+vs_wallpaper ""
+vs_sleep 2
+check "the override cleared: the bar follows the artwork again (light)" test "$(field tone)" = light
+
 check "no QML error in the shell log" test "$(grep -cE 'TypeError|ReferenceError|Binding loop' "$VS_DEV/shell.log")" = 0
 exit $fail
