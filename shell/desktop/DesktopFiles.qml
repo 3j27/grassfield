@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
 import qs.services
+import qs.store
 import "IconsLogic.js" as Logic
 
 // The desktop folder as a model (one instance, owned by DesktopIcons), the persisted icon slots, and every file operation of the desktop
@@ -170,7 +171,7 @@ Scope {
             openAsText(p);
             return;
         }
-        run(Apps.scoped(Apps.folderAware(["gio", "open", p])), "open", null, Apps.openEnvironment());
+        Apps.whenScopeKnown(() => root.run(Apps.scoped(Apps.folderAware(["gio", "open", p])), "open", null, Apps.openEnvironment()));
     }
 
     function openAsText(p: string): void {
@@ -318,9 +319,15 @@ Scope {
         stderr: StdioCollector {}
     }
 
+    // The config directory may not exist yet on a fresh account; the watch needs it (WatchedDir).
+    WatchedDir {
+        id: configWatch
+        path: root.configDir
+    }
+
     FileView {
         id: styleStore
-        path: root.configDir + "/folder-styles.json"
+        path: configWatch.ready ? root.configDir + "/folder-styles.json" : ""
         watchChanges: true
         printErrors: false
         onFileChanged: reload()

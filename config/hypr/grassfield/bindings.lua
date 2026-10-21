@@ -102,8 +102,7 @@ bind("SUPER + RETURN", "Terminal", hl.dsp.exec_cmd("xdg-terminal-exec"))
 
 -- Shell surfaces (handled by grassfield-shell IPC targets)
 bind("SUPER + SPACE", "Search", shell("search", "toggle"))
--- Apps (macOS 26: the Apps key F4 / the Launchpad key on Apple keyboards, docs/specs/apps.md A11).
-bind("F4", "Apps", shell("apps", "toggle"))
+-- Apps (the dedicated Apps / Launchpad media key; plain F4 stays with the applications, docs/specs/apps.md A11).
 bind("XF86LaunchA", "Apps", shell("apps", "toggle"))
 bind("CTRL + UP", "Overview", shell("overview", "toggle"))
 bind("SUPER + CTRL + Q", "Lock screen", shell("lock", "lock"))

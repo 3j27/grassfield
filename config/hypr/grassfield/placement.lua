@@ -4,8 +4,9 @@
 -- Every new window floats (windows.lua) and Hyprland gives a floating window the size its client committed. A browser
 -- that has no stored geometry commits a small one, so it opened as a small window.
 --   * Hyprland already centres a new floating window (over its parent for a dialog); no rule overrides that.
---   * A browser window smaller than the default below is grown to it. Size is only ever raised, so a size the browser
---     restores from its own state is kept; popups have an empty title when they open and are skipped.
+--   * The first window of a browser that is smaller than the default below is grown to it. Size is only ever raised, so
+--     a size the browser restores from its own state is kept. Popups (empty title), dialogs and any later window of an
+--     application (a sibling already mapped), Picture-in-Picture and pinned or xdg-tagged windows are skipped.
 -- Other applications decide their own size (Grassfield apps, terminals, dialogs, panels).
 
 -- Fraction of the monitor's usable area. The window never covers the whole screen.
@@ -51,11 +52,35 @@ local function usable_size(monitor)
   return width, height
 end
 
+-- Hyprland's Lua window object exposes no parent, transient-for or modal field (hl.meta.lua), so "not a dialog" is
+-- inferred: a dialog, a popup or a second window belongs to an application that already has a mapped window.
+local function has_sibling(window)
+  local class = (window.class or ""):lower()
+  for _, other in ipairs(hl.get_windows({ mapped = true }) or {}) do
+    if other.address ~= window.address and (other.class or ""):lower() == class then
+      return true
+    end
+  end
+  return false
+end
+
+-- Picture-in-Picture, utility and tagged windows keep the size they ask for.
+local function is_auxiliary(window)
+  local title = ((window.title or "") .. " " .. (window.initial_title or "")):lower()
+  if title:find("picture[- ]in[- ]picture") then
+    return true
+  end
+  return window.pinned == true or (window.xdg_tag or "") ~= ""
+end
+
 local function grow(window)
   if not window or not window.floating or window.fullscreen ~= 0 then
     return
   end
   if not LARGE_CLASSES[(window.class or ""):lower()] or (window.title or "") == "" then
+    return
+  end
+  if is_auxiliary(window) or has_sibling(window) then
     return
   end
   local monitor = window.monitor

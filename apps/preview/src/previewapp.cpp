@@ -1,6 +1,7 @@
 #include "previewapp.h"
 
 #include "previewlogic.h"
+#include "appscope.h"
 
 #include <QCoreApplication>
 #include <QMutexLocker>
@@ -295,7 +296,7 @@ void PreviewApp::openInPreview(int current) const
         if (current > 0)
             args << QStringLiteral("--start") << QString::number(current);
     }
-    QProcess::startDetached(program, args + QStringList{QStringLiteral("--")} + files);
+    grassfield::apps::startApplication(program, args + QStringList{QStringLiteral("--")} + files);
 }
 
 PreviewImageProvider::PreviewImageProvider(const PreviewApp *app)
