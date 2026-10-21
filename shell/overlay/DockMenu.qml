@@ -9,7 +9,7 @@ import "../dock/DockModel.js" as DockModel
 import "../services/AppLaunch.js" as AppLaunch
 
 // Dock item context menu. Payload (Popups.data): key, entry (DesktopEntry or null),
-// pinned, running, windows (toplevel handles). Keep in Dock / Remove from Dock persist to grassfield.json.
+// pinned, fixed (the Files tile), running, windows (toplevel handles). Keep in Dock / Remove from Dock persist to grassfield.json.
 PopupMenu {
     id: root
 
@@ -48,12 +48,16 @@ PopupMenu {
     // a kept app that is not running has "Remove from Dock" and no "Keep in Dock"; a recent app that is not kept has "Keep in Dock".
     function optionItems(): var {
         const items = [];
-        if (info.running === true || info.pinned !== true)
-            items.push({id: "keep", text: qsTr("Keep in Dock"), checked: info.pinned === true, enabled: info.pinned === true || entry !== null});
-        else
-            items.push({id: "remove", text: qsTr("Remove from Dock")});
+        // The fixed Files tile (like the Finder's) is always in the Dock: no Keep or Remove, and no "Show in Files" on Files itself.
+        if (info.fixed !== true) {
+            if (info.running === true || info.pinned !== true)
+                items.push({id: "keep", text: qsTr("Keep in Dock"), checked: info.pinned === true, enabled: info.pinned === true || entry !== null});
+            else
+                items.push({id: "remove", text: qsTr("Remove from Dock")});
+        }
         items.push({id: "login", text: qsTr("Open at Login"), checked: autostart, enabled: entry !== null});
-        items.push({id: "reveal", text: qsTr("Show in Files"), enabled: entry !== null});
+        if (info.fixed !== true)
+            items.push({id: "reveal", text: qsTr("Show in Files"), enabled: entry !== null});
         return items;
     }
 

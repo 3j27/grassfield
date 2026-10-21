@@ -11,6 +11,8 @@
 #   1 foot --app-id chromium, asks 500x350 (no stored geometry): grown to the default size, centred
 #   2 foot --app-id chromium, asks 1500x900 (a size of its own, larger than the default): kept
 #   3 foot --app-id gf-placement-probe, asks 500x350: kept (not a browser)
+#   4 a second chromium-class window (stands in for a dialog: Hyprland's Lua window has no parent field), asks 420x300: kept
+#   5 a firefox-class window titled "Picture-in-Picture" with no other firefox window, asks 480x270: kept
 # Sizes are compared with a tolerance of 24 px (foot rounds to its cell grid).
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Log: .dev/window-placement/run-<timestamp>.log.
 set -uo pipefail
@@ -87,6 +89,18 @@ open_foot gf-placement-probe gf-place-other 500x350
 read -r x y w h < <(geom gf-place-other)
 [[ -n ${w:-} ]] || { say "setup error: window missing"; exit 2; }
 check "own size kept" "$({ near "$w" 500 && near "$h" 350; } && echo 0 || echo 1)" "got ${w}x${h}, asked 500x350"
+
+say "4 browser class with a window already open (a dialog), asks 420x300"
+open_foot chromium gf-place-dialog 420x300
+read -r x y w h < <(geom gf-place-dialog)
+[[ -n ${w:-} ]] || { say "setup error: window missing"; exit 2; }
+check "dialog size kept" "$({ near "$w" 420 && near "$h" 300; } && echo 0 || echo 1)" "got ${w}x${h}, asked 420x300"
+
+say "5 Picture-in-Picture of a browser class with no other window, asks 480x270"
+open_foot firefox "Picture-in-Picture" 480x270
+read -r x y w h < <(geom "Picture-in-Picture")
+[[ -n ${w:-} ]] || { say "setup error: window missing"; exit 2; }
+check "Picture-in-Picture size kept" "$({ near "$w" 480 && near "$h" 270; } && echo 0 || echo 1)" "got ${w}x${h}, asked 480x270"
 
 "$root/scripts/dev/shot.sh" "window-placement-$stamp" "$out" >>"$log" 2>&1
 say "  capture: $dev/shots/window-placement-$stamp.png"

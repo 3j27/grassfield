@@ -1,12 +1,18 @@
 # ADR-0017: WhiteSur as the default app icon theme of the Grassfield session (optional), selected per session
-Status: Proposed (owner decision 2026-10-20, batch 10; design only, nothing implemented) · Date: 2026-10-20 · Decider: owner
+Status: Accepted (owner decision 2026-10-20, batch 10); implemented in slices I0-I3 and I5 (slice I4, the icon-mode retune, is not part of this fix); Apple-artwork handling amended 2026-10-20 (pkgrel 5: logo files; pkgrel 6: perceptual detector and blocklist, see "Apple artwork" below) · Date: 2026-10-20 · Decider: owner
 
 ## Context
 
 ### Owner decision (2026-10-20, docs/STATE.md:125-126)
 WhiteSur, the GPL-3.0 macOS-inspired icon theme, becomes the default app icon theme of the Grassfield session as an
-**optional** dependency. Owner statement: it contains no Apple files. The trade-dress resemblance stays on the
-legal-review list (docs/legal/). Earlier decisions that this one builds on or changes:
+**optional** dependency. Owner statement: it contains no Apple files.
+**That statement was not true of upstream's default install**, and a first guard (pkgrel 5, byte matching of 12 logo
+files) did not make it true: the counter-review of merge de09465 found the Apple logo in 22 more files (iMac and Magic
+Mouse icons, the menu-bar window icons, the iPod-mini frames), Apple app icons reproduced 1:1 (Finder, App Store, Xcode,
+iCloud, Safari, System Preferences) and iPhone/iPod silhouettes. Owner decision 2026-10-20 ("filtered WhiteSur"): keep
+WhiteSur for the internal phase but FILTER it; what the filter removes and how is in "Apple artwork" below. The claim is
+limited to what the detector and the review prove, not "nothing Apple". The trade-dress resemblance of the remaining
+app icons stays on the legal-review list (docs/legal/). Earlier decisions that this one builds on or changes:
 - ADR-0014 (Proposed): WhiteSur is the base icon theme for the internal phase, "a dependency of the session package
   ... never copied into the repository". Grassfield sets the theme for its session and shell "(Quickshell's IconTheme
   pragma or QT_ICON_THEME/environment, whichever the installed version supports — verify)".
@@ -163,8 +169,8 @@ Quickshell's `//@ pragma IconTheme`: existence not verified for 0.3.1, and not n
 - The vendored, pinned split package `grassfield-whitesur-icons`, optional for `grassfield-desktop`, with `provides`
   and `conflicts` as above. Pin updates follow the `whitesur.sh` procedure: read the new `install.sh` in full, update
   both hashes, re-run the measurements of ui.md:53. Dev keeps `scripts/dev/whitesur.sh` on the same pin.
-- Icon caches: the package runs no cache tool itself. It relies on the gtk-update-icon-cache pacman hook if one is
-  installed (VERIFY); otherwise it ships the cache that `install.sh` built.
+- Icon caches: the package ships no `icon-theme.cache` (they would list removed icons); the gtk-update-icon-cache pacman
+  hook builds them on the target.
 - Uninstall: removing the package makes the session fall back to Adwaita through the wrapper. No configuration to
   undo.
 
@@ -360,6 +366,67 @@ package command.
   - Breeze icons can appear for names WhiteSur lacks (unless 4b).
 - **Re-verify on updates:** Qt minor versions (the variable), uwsm (env file lookup), dconf (profile rules), and any pin
   bump of WhiteSur (icon names used by the shell, the measurements of ui.md:53).
+
+## Apple artwork (amendments 2026-10-20: review of merge 7cdbd68, then counter-review of merge de09465)
+Hard rule: no Apple assets or Apple-trademark artwork in the UI or in any package. Owner decision 2026-10-20: WhiteSur
+stays for the internal phase, filtered; every icon that shows the Apple logo, an Apple product's trademark artwork or an
+Apple product silhouette is removed; the names that pointed at it fall back to Adwaita/Breeze through `grassfield-icons`;
+the build FAILS if any known one remains; Grassfield's own app icons come from another work item; legal review is still
+required before any public release.
+
+What upstream WhiteSur at the pin ships (found by rendering, by IoU comparison and by viewing contact sheets):
+- the Apple logo as `start-here*`, `folder-apple*` (12 files, with 27 names linked to them), and inside 22 more files
+  (`devices/{16,22,24}/multimedia-player-ipod-mini-blue`, `apps/scalable/preferences-desktop-icons`, the iMac of
+  `computer`, `video-television`, `putty`, `variety*`, `accessories-system-cleaner`, `xwaylandvideobridge`, the Magic Mouse
+  of `input-mouse`, `preferences-desktop-mouse`, `preferences-desktop-peripherals`, the menu bar of
+  `preferences-system-windows`, `remote-desktop`), reachable through about 100 names (`computer`, `display`, `monitor`,
+  `system`, `edit-clear`, ...);
+- Apple app icons reproduced 1:1 and reused for generic names (`file-manager` is Finder and `system-file-manager`,
+  `org.gnome.Nautilus`, ... resolve to it; `softwarecenter` is the App Store; `jockey` is Xcode; `preferences-system` is the
+  System Preferences gear; Safari, iCloud, Dictionary, Podcasts, Music, Photos, Calendar, Contacts, Messages, Time Machine,
+  Chess, Photo Booth, QuickTime, Activity Monitor, Font Book, TextEdit, Stickies, Reminders, Terminal, Clock, Weather,
+  Voice Memos), the Apple Music note and the QuickTime and Xcode art on the generic `audio-x-generic`, `video-x-generic`,
+  `text-x-makefile` document icons, the AirPlay mark, the Swift logo, and the iPhone, iPad and iPod silhouettes.
+
+Enforcement (`packaging/arch/whitesur-guard.sh`, `whitesur-detect.py`, `whitesur-apple-logos.txt`, `whitesur-blocklist.txt`):
+- `build()` runs install.sh with `-p` in a clean environment, then `clean`, then `check` on the build tree;
+  `package_grassfield-whitesur-icons()` runs `check` again on the packaged tree; `scripts/dev/whitesur.sh` runs the same
+  guard (stamp `<pin>-noapple2`, so installs made before the detector are rebuilt). `check` fails on any hit and on any
+  dangling symlink; a detector that can not run (no reference masks, no python3) fails the guard, it never reads as "no hit".
+- Layers, all in the guard: file names (`folder-apple*`, `*apple-logo*`); whole-file SHA-256 and path-data prefixes of the 12
+  upstream logo files (cheap, byte-level); **the perceptual detector**; **the curated blocklist**.
+- **Perceptual detector** (standard-library Python): every drawable part of every SVG of the three variants (each shape
+  element, each run of 1 to 3 sub-paths, each run of 2 to 3 sibling elements, each group of at most 12 elements, with
+  transforms) is filled, cropped to its bounding box, scaled into a 64x64 grid and compared by intersection-over-union with
+  4 reference masks (the Apple logo, its folder variant, the App Store "A" and the Finder face outline, derived from the
+  pinned checkout by `whitesur-guard.sh list`) in all 8 rotations and mirrors; alpha PNGs embedded in an SVG are compared
+  the same way (opaque pixels, and pixels that differ from the border colour). Threshold 0.88 (tuned on the data: the 22
+  logo files and the 12 known files score 0.935 to 1.0, the best non-logo of 20335 files scores 0.835; the margin is
+  small, so the threshold is tested on fixtures and re-checked on a pin change). The path syntax (`m` or `M`, relative or
+  absolute, arcs or curves), the colour, the size and the position do not matter. 36 files are found this way in the
+  unfiltered tree. The App Store "A" glyph is found inside the `folder-templates*` icons too.
+- **Blocklist** (`whitesur-blocklist.txt`, a reason on every entry): 126 icon names (every size and variant of that name,
+  links included) and 103 colour-normalised drawing hashes (the same drawing under another name, recoloured). Method: the
+  whole package, 10799 distinct drawings of the three variants, was viewed on contact sheets (docs/legal/visual-review.md
+  E27 lists the sheets) and every Apple app icon, hardware silhouette or mark found was listed; `whitesur-detect.py derive`
+  produces the hashes and the copies' names. A hash entry follows links: a listed name that is only a link lists the file it
+  points at.
+- **Fallback.** `clean` removes the hits, every file or link with the basename of a hit, the links left dangling and, in
+  every folder, every other file or link whose name was the name of a dangling link (so `display` does not resolve to another
+  WhiteSur icon), until stable. On the pin this removes about 350 regular files and 1600 links of the three variants. The
+  names then fall back to Breeze or Adwaita through the wrapper (`tests/shell/icon_theme.sh` checks `computer`, `display`,
+  `system-file-manager`, `preferences-system`, `input-mouse`, `phone` resolve to Breeze; `display` is in neither Breeze nor Adwaita, so it resolves to nothing and never to WhiteSur; on a fixture and on the built package tree).
+- **Limits, stated.** Not detected: logos drawn only as strokes, logos tilted by an angle that is not a multiple of 90
+  degrees, logos inside an opaque raster or a JPEG, and any Apple artwork that is neither a logo shape nor on the blocklist.
+  The review is by eye on contact sheets of one drawing per icon name: it proves what is listed, not that nothing else
+  exists. The remaining app icons imitate the macOS style (squircle, gradients); that trade-dress question stays with counsel
+  (visual-review E27). Generic artwork kept on purpose: the pkpass ticket, the disk image, laptops, keyboards, trackpads,
+  monitors and the generic outlined symbolic phones.
+- `tests/shell/whitesur_guard.sh` tests the guard (rewritten `m`/`M` path, recoloured, mirrored, rotated, body and leaf as two
+  elements, a small logo inside a larger icon, an embedded PNG, generic shapes that must pass, the blocklist, fail-closed,
+  alias removal); `tests/shell/whitesur_package.sh` scans the built package tree when it exists.
+- A pin change requires re-viewing the new tree, regenerating the list (`whitesur-guard.sh list`) and re-deriving the
+  blocklist.
 
 ## Spike I0 results (2026-10-20, implementation session)
 Scratch files under `.dev/spikes/i0` and the automated tests `tests/shell/icon_theme.sh`, `tests/shell/dconf_profile.sh`.

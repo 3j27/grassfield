@@ -21,7 +21,7 @@ Window {
     // scaled down to fit Tokens.previewGlanceScreenFraction of its screen; PDF, text, video and audio at their token
     // sizes (capped the same way). The header comes on top of the content. Later files of a multi-file Glance are
     // fitted into that window.
-    readonly property var firstInfo: win.backend.inspect(win.backend.startIndex)
+    readonly property var firstInfo: win.backend.inspectFirst()
     // The screen the size was computed for, and whether the window may still be refitted (see fitToScreen).
     property string sizedFor: ""
     property bool placing: true

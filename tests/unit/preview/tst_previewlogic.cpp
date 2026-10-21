@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 
 #include "previewlogic.h"
@@ -252,4 +253,121 @@ TEST(PreviewLogic, BrowseFolderIsAWindowOfAtMostMaxFiles)
     EXPECT_EQ(first.index, 0);
     const Browse last = browseFolder(dir.filePath(QStringLiteral("p0259.png")), BrowseKinds::ImagesOnly, SortSpec{});
     EXPECT_EQ(last.index, kMaxFiles - 1);
+}
+
+namespace {
+QStringList baseNames(const QStringList &paths)
+{
+    QStringList out;
+    for (const QString &p : paths)
+        out << QFileInfo(p).fileName();
+    return out;
+}
+QStringList abcd(const QTemporaryDir &dir)
+{
+    QStringList paths;
+    for (const char *n : {"a.png", "b.png", "c.png", "d.png"})
+        paths << touch(dir, QString::fromLatin1(n));
+    return paths;
+}
+const QStringList kAbcd{QStringLiteral("a.png"), QStringLiteral("b.png"), QStringLiteral("c.png"), QStringLiteral("d.png")};
+} // namespace
+
+TEST(PreviewLogic, BrowseFolderHiddenOpenedFileIsListedAtItsSortedPosition)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    abcd(dir);
+    const QString hidden = touch(dir, QStringLiteral(".b0.png"));
+    const Browse b = browseFolder(hidden, BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(b.paths.size(), 5);
+    ASSERT_GE(b.index, 0);
+    ASSERT_LT(b.index, b.paths.size());
+    EXPECT_EQ(b.paths.at(b.index), hidden);
+    // The visible files keep their order and none of them is replaced by the opened one.
+    QStringList others = baseNames(b.paths);
+    others.removeAt(b.index);
+    EXPECT_EQ(others, kAbcd);
+    // From a visible file the hidden one stays out.
+    EXPECT_EQ(baseNames(browseFolder(dir.filePath(QStringLiteral("a.png")), BrowseKinds::ImagesOnly, SortSpec{}).paths), kAbcd);
+}
+
+TEST(PreviewLogic, BrowseFolderUnreadableOpenedFileKeepsItsPlace)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QStringList files = abcd(dir);
+    for (int i = 0; i < files.size(); ++i) {
+        ASSERT_TRUE(QFile::setPermissions(files.at(i), QFileDevice::Permissions()));
+        if (QFileInfo(files.at(i)).isReadable())
+            GTEST_SKIP() << "permissions are not enforced (running as root)";
+        const Browse b = browseFolder(files.at(i), BrowseKinds::ImagesOnly, SortSpec{});
+        EXPECT_EQ(baseNames(b.paths), kAbcd) << i;
+        EXPECT_EQ(b.index, i);
+        EXPECT_EQ(b.paths.at(b.index), files.at(i));
+        QFile::setPermissions(files.at(i), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    }
+}
+
+TEST(PreviewLogic, BrowseFolderSkipsUnreadableSiblings)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QStringList files = abcd(dir);
+    ASSERT_TRUE(QFile::setPermissions(files.at(2), QFileDevice::Permissions()));
+    if (QFileInfo(files.at(2)).isReadable())
+        GTEST_SKIP() << "permissions are not enforced (running as root)";
+    const Browse b = browseFolder(files.at(1), BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(baseNames(b.paths), (QStringList{QStringLiteral("a.png"), QStringLiteral("b.png"), QStringLiteral("d.png")}));
+    EXPECT_EQ(b.index, 1);
+    QFile::setPermissions(files.at(2), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+}
+
+TEST(PreviewLogic, BrowseFolderFollowsSymlinksToFilesAndSkipsBrokenOnes)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QStringList files = abcd(dir);
+    ASSERT_TRUE(QFile::link(files.at(0), dir.filePath(QStringLiteral("link-to-a.png"))));
+    ASSERT_TRUE(QFile::link(dir.filePath(QStringLiteral("missing.png")), dir.filePath(QStringLiteral("broken.png"))));
+    const Browse b = browseFolder(files.at(3), BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(baseNames(b.paths), (QStringList{QStringLiteral("a.png"), QStringLiteral("b.png"), QStringLiteral("c.png"), QStringLiteral("d.png"),
+                                               QStringLiteral("link-to-a.png")}));
+    // A symlink can be the opened file; it keeps its own spelling.
+    const QString link = dir.filePath(QStringLiteral("link-to-a.png"));
+    const Browse l = browseFolder(link, BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(l.paths.at(l.index), link);
+    EXPECT_EQ(l.paths.size(), 5);
+    // A broken symlink is not a file: nothing to browse.
+    const QString broken = dir.filePath(QStringLiteral("broken.png"));
+    const Browse x = browseFolder(broken, BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(x.paths, QStringList{broken});
+}
+
+TEST(PreviewLogic, BrowseFolderFileThatDisappearsWhileBrowsing)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QStringList files = abcd(dir);
+    EXPECT_EQ(browseFolder(files.at(1), BrowseKinds::ImagesOnly, SortSpec{}).paths.size(), 4);
+    // A sibling goes away: the next listing is without it and the opened file keeps a valid index.
+    ASSERT_TRUE(QFile::remove(files.at(2)));
+    const Browse b = browseFolder(files.at(1), BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(baseNames(b.paths), (QStringList{QStringLiteral("a.png"), QStringLiteral("b.png"), QStringLiteral("d.png")}));
+    EXPECT_EQ(b.paths.at(b.index), files.at(1));
+    // The opened file itself goes away: only its path is returned (the viewer shows its error in place).
+    ASSERT_TRUE(QFile::remove(files.at(1)));
+    const Browse gone = browseFolder(files.at(1), BrowseKinds::ImagesOnly, SortSpec{});
+    EXPECT_EQ(gone.paths, QStringList{files.at(1)});
+    EXPECT_EQ(gone.index, 0);
+}
+
+TEST(PreviewLogic, BrowseFolderCanBeCancelled)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QStringList files = abcd(dir);
+    const std::atomic_bool cancel{true};
+    const Browse b = browseFolder(files.at(1), BrowseKinds::ImagesOnly, SortSpec{}, &cancel);
+    EXPECT_EQ(b.paths, QStringList{files.at(1)});
 }

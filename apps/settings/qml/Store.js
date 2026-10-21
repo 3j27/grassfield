@@ -27,6 +27,7 @@ const DEFAULTS = {
     "hotCorners.topRight": "none",
     "hotCorners.bottomLeft": "none",
     "hotCorners.bottomRight": "none",
+    "accent.color": "multicolor",
     "icons.mode": "default",
     "icons.tint": "accent",
     "icons.folderColor": "theme",
@@ -67,6 +68,8 @@ const RULES = {
     "hotCorners.topRight": {type: "enum", values: CORNER_ACTIONS},
     "hotCorners.bottomLeft": {type: "enum", values: CORNER_ACTIONS},
     "hotCorners.bottomRight": {type: "enum", values: CORNER_ACTIONS},
+    // Accent colour; the names mirror ui/Grassfield/Ui/Accent.js NAMES (tests/unit/tst_accent.qml checks the parity).
+    "accent.color": {type: "enum", values: ["multicolor", "blue", "purple", "pink", "red", "orange", "yellow", "green", "graphite"]},
     "icons.mode": {type: "enum", values: ["default", "dark", "clear", "tinted"]},
     // "accent" or a #rrggbb colour (schema `pattern`).
     "icons.tint": {type: "tint"},

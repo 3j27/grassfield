@@ -15,9 +15,15 @@ namespace gf::desktopfocus {
 
         switch (press.target) {
             case SurfaceKind::Window:
-                // The case Hyprland misses: the desktop holds the keyboard and the click is on a window (also the one
-                // Hyprland still counts as focused). Any button, as Hyprland's own click-to-focus.
-                if (seat.keyboard == SurfaceKind::Desktop && press.windowFocusable && !press.targetHasKeyboard)
+                // Any button, as Hyprland's own click-to-focus.
+                if (!press.windowFocusable || press.targetHasKeyboard)
+                    return Action::None;
+                // The desktop holds the keyboard and the click is on a window (also the one Hyprland still counts as focused).
+                if (seat.keyboard == SurfaceKind::Desktop)
+                    return Action::FocusWindow;
+                // The case Hyprland misses: it refocuses on a click only when the clicked window is not its focused window, so
+                // a click on its focused window while the keyboard is elsewhere (no surface, a layer surface) did nothing.
+                if (press.targetIsFocused)
                     return Action::FocusWindow;
                 return Action::None;
 
@@ -159,6 +165,29 @@ namespace gf::desktopfocus {
 
     std::optional<uint64_t> CPendingGrant::surface() const {
         return m_surface;
+    }
+
+    UnlockStep unlockStep(const UnlockSeat& seat) {
+        if (seat.locked || seat.windowFocusRefused)
+            return UnlockStep::Done;
+        switch (seat.holder) {
+            case KeyboardHolder::Known: return UnlockStep::Done;
+            case KeyboardHolder::Unknown: return UnlockStep::Wait;
+            case KeyboardHolder::None: return seat.windowFocusable ? UnlockStep::Focus : UnlockStep::Done;
+        }
+        return UnlockStep::Done;
+    }
+
+    void CUnlockRefocus::arm(TimePoint now) {
+        m_deadline = now + kUnlockRefocusWindow;
+    }
+
+    void CUnlockRefocus::cancel() {
+        m_deadline.reset();
+    }
+
+    bool CUnlockRefocus::armed(TimePoint now) const {
+        return m_deadline.has_value() && now <= *m_deadline;
     }
 
 } // namespace gf::desktopfocus

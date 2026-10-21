@@ -33,6 +33,7 @@ Singleton {
     readonly property bool dockShowRecents: store.data.dock.showRecents
     readonly property bool dockMinimizeIntoApp: store.data.dock.minimizeIntoApp
 
+    readonly property string accentColor: store.accentColor
     readonly property string iconMode: store.iconMode
     readonly property string iconTint: store.iconTint
     readonly property string folderColor: store.folderColor

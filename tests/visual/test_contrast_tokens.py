@@ -277,6 +277,23 @@ def declared_sites(roles):
     return out
 
 
+class AccentTokens(Tokens):
+    """The token reader with one `accent.color` applied (mirror of ui/Grassfield/Ui/Accent.js): accent and accentText come
+    from color.accentDark / color.accentLight, every other role is unchanged."""
+
+    def __init__(self, data, accent):
+        super().__init__(data)
+        self.accent = accent
+
+    def color(self, palette, appearance, name):
+        if self.accent != "multicolor" and name in ("accent", "accentText"):
+            fixed = {"darkColors": "dark", "lightColors": "light"}
+            ap = fixed.get(palette, appearance)
+            key = self.accent + ("Text" if name == "accentText" else "")
+            return hex_rgb(self.path("color.accent%s.%s" % (ap.capitalize(), key)))
+        return super().color(palette, appearance, name)
+
+
 class ContrastTokens(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -474,6 +491,34 @@ class ContrastTokens(unittest.TestCase):
         # Glyphs (icons) are held to the same ratio by the text roles; the thresholds follow from the pure foregrounds.
         self.assertEqual(self.tok.color("darkColors", "dark", "barText"), (255, 255, 255))
         self.assertEqual(self.tok.color("lightColors", "dark", "barText"), (0, 0, 0))
+
+    ACCENTS = ("multicolor", "blue", "purple", "pink", "red", "orange", "yellow", "green", "graphite")
+
+    def test_every_accent_passes_the_accent_roles(self):
+        # appearance.accent: every accent, both appearances, every role that puts text or a graphic on the accent fill
+        # (text 4.5:1, the lock band 3:1 against its field) over every wallpaper colour and transparency.
+        ids = ("accent text on accent", "search selected subtitle on accent", "apps selected chip text",
+               "lock password selection (dots on the accent band)", "lock password selection band against the field")
+        roles = [r for r in self.roles if r["id"] in ids]
+        self.assertEqual(len(roles), len(ids))
+        for accent in self.ACCENTS:
+            tok = AccentTokens(self.tok.data, accent)
+            for role in roles:
+                need = THRESHOLD[role["kind"]]
+                for ap in APPEARANCES:
+                    for t in TRANSPARENCIES:
+                        for wp in WALLPAPER_COLORS:
+                            r = role_ratio(tok, role, ap, t, wp)
+                            if r is not None:
+                                self.assertGreaterEqual(r, need, "%s / %s / %s t=%s wp=%s: %.2f:1" % (accent, role["id"], ap, t, wp, r))
+
+    def test_accent_token_groups_are_complete(self):
+        for group in ("accentDark", "accentLight"):
+            roles = self.tok.data["color"][group]
+            for name in self.ACCENTS[1:]:
+                self.assertIn(name, roles)
+                self.assertIn(name + "Text", roles)
+            self.assertEqual(len(roles), 2 * (len(self.ACCENTS) - 1))
 
     def test_selection_highlight_text_both_appearances(self):
         accent = next(r for r in self.roles if r["id"] == "accent text on accent")

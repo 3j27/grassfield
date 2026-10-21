@@ -15,6 +15,7 @@ JsonSafety 1.0 JsonSafety.js
 SwatchRow 1.0 SwatchRow.qml
 TintedIcon 1.0 TintedIcon.qml
 IconEffect 1.0 IconEffect.qml
+Accent 1.0 Accent.js
 IconModes 1.0 IconModes.js
 FolderStyle 1.0 FolderStyle.js
 singleton FolderPlate 1.0 FolderPlate.qml

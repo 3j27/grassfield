@@ -37,10 +37,17 @@ Scope {
     readonly property real transparency: clampNumber(config.material.transparency, 0, 1, 0.25)
     readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
     readonly property real dockMagnification: clampNumber(config.dock.magnification, 1, 2.5, 1.6)
-    readonly property var dockPinned: stringList(config.dock.pinned)
+    // The default list of the first releases (a file written by them holds it) reads as the current default: Files is the
+    // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
+    // user's own, is returned as it is. Nothing is written back.
+    readonly property var dockPinned: {
+        const list = stringList(config.dock.pinned);
+        return list.join("\n") === "foot\nchromium\norg.gnome.Nautilus" ? ["chromium", "foot", "org.grassfield.Settings"] : list;
+    }
     readonly property var dockRecent: stringList(config.dock.recent)
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
+    readonly property string accentColor: Accent.normalize(config.accent.color)
     readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
     readonly property string iconTint: IconModes.validTint(config.icons.tint) ? config.icons.tint : "accent"
     readonly property string folderColor: FolderStyle.normalizeColor(config.icons.folderColor)
@@ -101,7 +108,7 @@ Scope {
     }
 
     component DockConfig: JsonObject {
-        property var pinned: ["foot", "chromium", "org.gnome.Nautilus"]
+        property var pinned: ["chromium", "foot", "org.grassfield.Settings"]
         property real magnification: 1.6
         property bool magnificationEnabled: false
         property bool autohide: false
@@ -134,6 +141,11 @@ Scope {
     component MenubarConfig: JsonObject {
         // false: the bar is transparent like macOS 26/27; true restores the frosted material band.
         property bool showBackground: false
+    }
+
+    component AccentConfig: JsonObject {
+        // multicolor | blue | purple | pink | red | orange | yellow | green | graphite (Settings > Appearance > Accent colour).
+        property string color: "multicolor"
     }
 
     component IconsConfig: JsonObject {
@@ -219,6 +231,10 @@ Scope {
 
     function setMenubarShowBackground(value: bool): void {
         change("menubar.showBackground", value);
+    }
+
+    function setAccentColor(value: string): void {
+        change("accent.color", Accent.normalize(value));
     }
 
     function setIconMode(value: string): void {
@@ -433,6 +449,7 @@ Scope {
         property HotCornersConfig hotCorners: HotCornersConfig {}
         property DesktopConfig desktop: DesktopConfig {}
         property MenubarConfig menubar: MenubarConfig {}
+        property AccentConfig accent: AccentConfig {}
         property IconsConfig icons: IconsConfig {}
         property PointerConfig pointer: PointerConfig {}
         property WallpaperJson wallpaper: WallpaperJson {}
@@ -456,34 +473,16 @@ Scope {
         onSaved: root.saved()
     }
 
-    // Quickshell's FileView watches a path through the kernel's inotify and cannot watch inside a directory that does
-    // not exist when the path is set: on a fresh account (no ~/.config/grassfield yet) the file created later by
-    // grassfield-settings would never be noticed, and no Settings change would apply until the shell restarted. The
-    // directory is therefore created first and the FileView gets its path only afterwards.
-    property bool dirReady: false
-
-    function ensureDir(): void {
-        dirReady = false;
-        if (configDir !== "")
-            ensureDirProcess.running = true;
-    }
-
-    onConfigDirChanged: ensureDir()
-    Component.onCompleted: ensureDir()
-
-    Process {
-        id: ensureDirProcess
-        command: ["mkdir", "-p", root.configDir]
-        onRunningChanged: {
-            // A failed mkdir (read-only home) still lets the watch be tried.
-            if (!running && root.configDir !== "")
-                root.dirReady = true;
-        }
+    // The directory is created first and the FileView gets its path only afterwards: a FileView cannot watch inside a
+    // directory that does not exist yet (see WatchedDir), so on a fresh account no Settings change would apply.
+    WatchedDir {
+        id: watchedDir
+        path: root.configDir
     }
 
     FileView {
         id: file
-        path: root.configDir !== "" && root.dirReady ? root.configDir + "/grassfield.json" : ""
+        path: watchedDir.ready ? root.configDir + "/grassfield.json" : ""
         watchChanges: true
         printErrors: false
         atomicWrites: true
