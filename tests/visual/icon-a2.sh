@@ -9,7 +9,7 @@
 # (GRASSFIELD_ICONS_TIMEOUT seconds, default 240, then SIGKILL after 10 s) and a stalled attempt is retried
 # (GRASSFIELD_ICONS_ATTEMPTS, default 4): a stall costs one case, not the whole run. A real failure (a FAIL line) is never retried.
 #
-#   scripts/dev/test-icons.sh
+#   tests/visual/icon-a2.sh
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)

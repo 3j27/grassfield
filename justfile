@@ -52,7 +52,7 @@ test:
 
 # Gate A2 for the icon modes on a GPU scene graph, as a client of the nested session (ask).
 test-icons:
-    scripts/dev/test-icons.sh
+    tests/visual/icon-a2.sh
 
 # Nested dev session (ask).
 nested-up:

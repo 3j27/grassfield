@@ -32,7 +32,7 @@ import Grassfield.Ui
 // contrast of the pixels of the edge band (the plate's inset, its rim and one pixel of antialiasing: 3 to 4 px; a maximum would let a few
 // pixels carry an invisible edge).
 // Contrast is the WCAG ratio of relative luminances. It needs a GPU scene graph (ShaderEffect does not run on the
-// software renderer used by the offscreen platform): the test skips there; scripts/dev/test-icons.sh runs it in the
+// software renderer used by the offscreen platform): the test skips there; tests/visual/icon-a2.sh runs it in the
 // nested session.
 TestCase {
     id: testCase
@@ -343,11 +343,11 @@ TestCase {
     }
 
     // One size of the windows scenarios (both appearances x three wallpapers), or the desktop. Each is a test function of its
-    // own so that scripts/dev/test-icons.sh runs them one per process, each under a time limit and retried when the renderer
+    // own so that tests/visual/icon-a2.sh runs them one per process, each under a time limit and retried when the renderer
     // stalls (GPU shared with other nested sessions): a stall costs one case, not the whole run.
     function runSize(size) {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
-            skip("needs a GPU scene graph (ShaderEffect does not run on the software renderer): scripts/dev/test-icons.sh");
+            skip("needs a GPU scene graph (ShaderEffect does not run on the software renderer): tests/visual/icon-a2.sh");
         const failures = [];
         let measured = 0;
         testCase.iconSize = size;
@@ -365,7 +365,7 @@ TestCase {
 
     function runTransparent(size) {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
-            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+            skip("needs a GPU scene graph: tests/visual/icon-a2.sh");
         const failures = [];
         let measured = 0;
         const saved = Appearance.transparency;
@@ -385,7 +385,7 @@ TestCase {
     // them, over the window material and at transparency 1.0.
     function runTint(size, color) {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
-            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+            skip("needs a GPU scene graph: tests/visual/icon-a2.sh");
         const failures = [];
         let measured = 0;
         testCase.iconSize = size;
@@ -422,7 +422,7 @@ TestCase {
     // accent in Clear (the old design measured 2.77:1 on main's 5.61:1 there) and 2.5:1 in Dark and Tinted (their plates are the mode's own).
     function test_a2_accentRow() {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
-            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+            skip("needs a GPU scene graph: tests/visual/icon-a2.sh");
         const failures = [];
         let measured = 0;
         const wasDark = Appearance.dark;
@@ -510,7 +510,7 @@ TestCase {
     // The desktop: bare wallpaper, always styled for it (DesktopIcon passes darkAppearance), also when the windows are light.
     function test_a2_desktop() {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
-            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+            skip("needs a GPU scene graph: tests/visual/icon-a2.sh");
         const failures = [];
         let measured = 0;
         testCase.iconSize = 48;
@@ -577,7 +577,7 @@ TestCase {
 
     function test_folderModelMatchesTheShader() {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
-            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+            skip("needs a GPU scene graph: tests/visual/icon-a2.sh");
         const failures = [];
         let compared = 0;
         const tint = "#3E7BFA";
@@ -663,7 +663,7 @@ TestCase {
 
     function test_blackFolderKeepsItsPlateOnBlack() {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
-            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+            skip("needs a GPU scene graph: tests/visual/icon-a2.sh");
         const failures = [];
         board.visible = false;
         for (const dark of [true, false]) {
@@ -705,7 +705,7 @@ TestCase {
     // A missing shader must not make an icon vanish: the plain image is drawn, at the icon's own size and place.
     function test_missingShaderDrawsThePlainIcon() {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
-            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+            skip("needs a GPU scene graph: tests/visual/icon-a2.sh");
         testCase.iconSize = 48;
         testCase.darkPass = true;
         testCase.panelColor = "#202024";
@@ -807,7 +807,7 @@ TestCase {
 
     function test_a2_filesSelectedRow() {
         if (board.GraphicsInfo.api === GraphicsInfo.Software)
-            skip("needs a GPU scene graph: scripts/dev/test-icons.sh");
+            skip("needs a GPU scene graph: tests/visual/icon-a2.sh");
         const failures = [];
         const wasDark = Appearance.dark;
         board.visible = false;

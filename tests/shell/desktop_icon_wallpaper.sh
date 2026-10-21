@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Desktop icons are drawn over the bare wallpaper, not over a window material: their icon appearance effect must be
 # styled for the wallpaper (dark palette, strong glass) whatever the window appearance (A2, docs/specs/ui.md "Icon shader").
-# Offline source check; the rendering is measured by tests/unit/tst_iconshader.qml (scripts/dev/test-icons.sh).
+# Offline source check; the rendering is measured by tests/unit/tst_iconshader.qml (tests/visual/icon-a2.sh).
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 f=$root/shell/desktop/DesktopIcon.qml
