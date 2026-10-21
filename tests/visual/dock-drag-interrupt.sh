@@ -88,7 +88,7 @@ trig_search() { vs_ipc search open files; }
 end_search() { vs_ipc search close; sleep 1; }
 trig_switcher() { vs_ipc switcher next ""; }
 end_switcher() { vs_ipc switcher cancel; sleep 1; }
-trig_dockmenu() { vs_ipc dock menu 1 GF-REF; }
+trig_dockmenu() { vs_ipc dock menu "$(vs_ipc dock tiles | jq 'index("foot")')" GF-REF; } # the pinned foot tile by its key: the index moves with the fixed tiles
 end_dockmenu() { vs_ipc menubar close; sleep 1; }
 trig_ncenter() { vs_ipc notifications toggleCenter; }
 end_ncenter() { vs_ipc notifications toggleCenter; sleep 1; }

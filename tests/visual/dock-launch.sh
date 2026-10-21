@@ -11,6 +11,8 @@
 #   desktop   a window on another Desktop: a click switches to that Desktop and focuses it
 #   hold      a press under 550 ms is a click (launches), a press over it opens the Dock menu and launches nothing
 #   holdtiles a 900 ms hold on the Apps tile, the Trash tile and a minimized-window tile (no Dock menu) still clicks on release
+#   interrupt a press that another surface interrupts clicks nothing (Trash held while Apps opens, app tile pressed while Apps opens)
+#   rightclick a right press opens the Dock menu at once, however long it is held
 #   reduced   Reduce Motion on: no bounce, the dot still appears
 # Run as a BARE command (reference machine only). The nested session this script starts is torn down on exit.
 #   tests/visual/dock-launch.sh [part ...]     all parts by default
@@ -39,7 +41,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 parts=("$@")
-(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles reduced)
+(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles interrupt rightclick reduced)
 want() { local p; for p in "${parts[@]}"; do [[ $p == "$1" ]] && return 0; done; return 1; }
 
 mkdir -p "$out" "$VS_DEV/share/applications" "$VS_DEV/share/gflaunch"
@@ -144,6 +146,22 @@ ensure_recent() { # CLASS
 }
 tile_xy() { vs_ipc dock centre "$(vs_ipc dock tiles | jq --arg k "$1" 'index($k)')" "$VS_OUTPUT"; }
 
+# Closes any open Dock menu, popup or overlay and asserts that none is open: a menu left by an earlier part would take the next click.
+clean_state() { # PART
+  local i
+  for i in 1 2 3; do
+    vs_ipc apps close >/dev/null 2>&1
+    vs_ipc search close >/dev/null 2>&1
+    vs_ipc overview close >/dev/null 2>&1
+    [[ -z $(vs_ipc dock popup) ]] && break
+    vs_ipc menubar close >/dev/null 2>&1
+    sleep 0.5
+    [[ -z $(vs_ipc dock popup) ]] || { vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" click >/dev/null; sleep 0.5; }
+  done
+  [[ -z $(vs_ipc dock popup) ]]; RC=$?
+  check "$1: clean state, no menu or overlay open before the part (popup: '$(vs_ipc dock popup)')" $RC
+}
+
 if want launch || want reduced; then
   make_recent gfLA magenta
 fi
@@ -196,6 +214,7 @@ launch_retry() { # NAME [nobounce]
 }
 
 if want launch; then
+  clean_state launch
   launch_retry launch
   check "launch: bounce, press, dot (attempt $attempt)" "$st"
   sleep 1
@@ -207,6 +226,7 @@ if want launch; then
 fi
 
 if want double; then
+  clean_state double
   kill_class gfLA
   wait_count gfLA 0 5
   sleep 2.5
@@ -221,6 +241,7 @@ if want double; then
 fi
 
 if want forward || want minimized; then
+  clean_state forward
   kill_class gfLA
   vs_sleep 1
   vs_spawn foot --app-id gfLB
@@ -277,6 +298,7 @@ if want minimized; then
 fi
 
 if want reopen; then
+  clean_state reopen
   quiet gfLB gfLA
   wait_count gfLB 0 5
   sleep 3
@@ -290,6 +312,7 @@ if want reopen; then
 fi
 
 if want desktop; then
+  clean_state desktop
   nest dispatch 'hl.dsp.focus({ workspace = "3" })' >/dev/null
   sleep 1
   vs_spawn foot --app-id gfLA
@@ -311,37 +334,54 @@ if want desktop; then
 fi
 
 if want badge; then
-  # The press-dim layer must not clip a badge that overhangs the icon: a tile with a badge, button held, frame taken while held.
-  quiet gfLA gfLB
-  wait_count gfLA 0 5
-  sleep 3
-  DBUS_SESSION_BUS_ADDRESS=$(<"$VS_DEV/bus.address") notify-send -a "GF Launch A" -t 0 "Badge test" "One notification."
-  sleep 2
-  ensure_recent gfLA
-  read -r x y <<<"$(tile_xy gfLA)"
-  vs_pointer abs "$x" "$y" >/dev/null
-  sleep 0.7
-  REGION="$(( OX + x - 60 )),$(( OY + 960 )) 120x90"
-  WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-rest.png"
-  # The frame is taken when the Dock reports the press (not at a guessed delay), 80 ms later, inside a 420 ms hold.
-  bmark=$(wc -l < "$VS_DEV/shell.log")
-  (
-    for _ in $(seq 1 200); do
-      if tail -n +"$(( bmark + 1 ))" "$VS_DEV/shell.log" | grep -q "dock-launch: pressed true"; then break; fi
-      sleep 0.01
-    done
-    sleep 0.08
-    WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-held.png"
-  ) &
-  vs_pointer down sleep 420 up >/dev/null
-  wait
-  python3 -I "$VS_HERE/dock-launch.py" badge "$out/badge-held.png" "$out/badge-rest.png"; RC=$?
-  check "badge: the held icon is darker and still shows the whole badge" $RC
-  kill_class gfLA
+  clean_state badge
+  # The press-dim layer must not clip a badge that overhangs the icon: a tile with a badge, button down, frame taken while held. The
+  # press is 250 ms (a click, clearly under dock.menuHold). grim starts 20 ms after the Dock reports the press; the frame counts only
+  # when its start lies inside the press by the shell's own press and release times (else the attempt is repeated, up to five times).
+  RC=2
+  for attempt in 1 2 3 4 5; do
+    quiet gfLA gfLB
+    DBUS_SESSION_BUS_ADDRESS=$(<"$VS_DEV/bus.address") notify-send -a "GF Launch A" -t 0 "Badge test" "One notification."
+    sleep 2
+    ensure_recent gfLA
+    read -r x y <<<"$(tile_xy gfLA)"
+    vs_pointer abs "$x" "$y" >/dev/null
+    sleep 0.7
+    REGION="$(( OX + x - 60 )),$(( OY + 960 )) 120x90"
+    WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-rest.png"
+    bmark=$(wc -l < "$VS_DEV/shell.log")
+    rm -f "$out/badge-grim0"
+    (
+      for _ in $(seq 1 200); do
+        if tail -n +"$(( bmark + 1 ))" "$VS_DEV/shell.log" | grep -q "dock-launch: pressed true"; then break; fi
+        sleep 0.01
+      done
+      sleep 0.02
+      date +%s%3N > "$out/badge-grim0"
+      WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-held.png"
+    ) &
+    vs_pointer down sleep 250 up >/dev/null
+    wait
+    sleep 0.5
+    tail -n +"$(( bmark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/badge-log.txt"
+    bdown=$(awk '/pressed true/ {print $NF; exit}' "$out/badge-log.txt")
+    bup=$(awk '/pressed false/ {print $NF; exit}' "$out/badge-log.txt")
+    g0=$(<"$out/badge-grim0")
+    if [[ -n $bdown && -n $bup && $g0 -ge $bdown && $g0 -le $(( bup - 20 )) ]]; then
+      python3 -I "$VS_HERE/dock-launch.py" badge "$out/badge-held.png" "$out/badge-rest.png"; RC=$?
+      break
+    fi
+    echo "badge: attempt $attempt: grim started at $g0, outside the press ($bdown .. $bup): the frame does not count, again"
+    RC=2
+  done
+  check "badge: the held icon is darker and still shows the whole badge (attempt $attempt)" $RC
+  ! grep -q "menu-by-hold" "$out/badge-log.txt"; RC=$?
+  check "badge: the 250 ms press opened no menu (log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/badge-log.txt" | tr '\n' ' '))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
 fi
 
 if want hold; then
+  clean_state hold
   quiet gfLA gfLB
   wait_count gfLA 0 5
   sleep 5
@@ -352,14 +392,14 @@ if want hold; then
   sleep 0.7
   # A hold under the menu threshold is a click: it launches, no menu.
   mark=$(wc -l < "$VS_DEV/shell.log")
-  vs_pointer down sleep 300 up >/dev/null
+  vs_pointer down sleep 200 up >/dev/null
   wait_count gfLA 1 12; RC=$?
-  check "hold: 300 ms is a click, the app starts (windows: $(count_class gfLA))" $RC
+  check "hold: 200 ms is a click, the app starts (windows: $(count_class gfLA))" $RC
   tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/hold-short.txt"
   grep -q "dock-launch: tap" "$out/hold-short.txt" && ! grep -q menu-by-hold "$out/hold-short.txt"; RC=$?
   # A hold near the menu threshold is a host stall (the shell measures the real duration), not a Dock failure.
   [[ $RC -ne 0 && $(press_ms "$out/hold-short.txt") -ge 500 ]] && RC=2
-  check "hold: 300 ms logged a tap and no menu ($(tr '\n' ' ' < "$out/hold-short.txt" | sed 's/[0-9]\{13\}//g'))" $RC
+  check "hold: 200 ms logged a tap and no menu ($(tr '\n' ' ' < "$out/hold-short.txt" | sed 's/[0-9]\{13\}//g'))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
   kill_class gfLA
   wait_count gfLA 0 5
@@ -388,7 +428,80 @@ if want hold; then
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" click >/dev/null
 fi
 
+if want interrupt; then
+  clean_state interrupt
+  # macOS: a press that something else interrupts does nothing. Qt ends such a press with a release while the button is still down and
+  # fires the tap: the Dock refuses it (dock-launch: tap-refused-interrupted), like an interrupted drag.
+  quiet gfLA gfLB
+  ensure_recent gfLA
+  # (a) the Trash tile held for 2 s, the Apps panel opened by IPC 0.6 s into the hold.
+  read -r cx cy <<<"$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("trash")')" "$VS_OUTPUT")"
+  vs_pointer abs "$cx" "$cy" >/dev/null
+  sleep 0.7
+  m=$(wc -l < "$VS_DEV/shell.log")
+  ( sleep 0.6; vs_ipc apps open >/dev/null ) &
+  vs_pointer down sleep 2000 up >/dev/null
+  wait
+  sleep 1
+  tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/interrupt-trash.txt"
+  grep -q "tap-refused-interrupted" "$out/interrupt-trash.txt" && ! grep -q "dock-launch: tap [0-9]" "$out/interrupt-trash.txt"; RC=$?
+  check "interrupt: Trash held, Apps opened during the hold: the release clicks nothing (log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/interrupt-trash.txt" | tr '\n' ' '))" $RC
+  vs_ipc apps close >/dev/null
+  sleep 1.5
+  clean_state interrupt
+  # (b) the app tile pressed for 450 ms, the Apps panel opened at once: the release does not start the app. A hold the shell measures at
+  # 500 ms or more opened the menu instead and proves a stall (retried by the part, then FAIL).
+  RC=1
+  for attempt in 1 2 3; do
+    quiet gfLA gfLB
+    ensure_recent gfLA
+    read -r x y <<<"$(tile_xy gfLA)"
+    vs_pointer abs "$x" "$y" >/dev/null
+    sleep 0.7
+    m=$(wc -l < "$VS_DEV/shell.log")
+    ( vs_ipc apps open >/dev/null ) &
+    vs_pointer down sleep 450 up >/dev/null
+    wait
+    sleep 3
+    tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/interrupt-app.txt"
+    vs_ipc apps close >/dev/null
+    sleep 1.5
+    if grep -q "menu-by-hold" "$out/interrupt-app.txt" && [[ $(press_ms "$out/interrupt-app.txt") -ge 500 ]]; then
+      echo "interrupt: attempt $attempt: the shell measured a hold of $(press_ms "$out/interrupt-app.txt") ms (menu hold): host stall, again"
+      RC=2
+      clean_state interrupt
+      continue
+    fi
+    grep -q "tap-refused-interrupted" "$out/interrupt-app.txt" && ! grep -q "dock-launch: tap [0-9]" "$out/interrupt-app.txt" && [[ $(count_class gfLA) -eq 0 ]]; RC=$?
+    break
+  done
+  check "interrupt: app tile pressed, Apps opened during the press: nothing starts (windows: $(count_class gfLA); log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/interrupt-app.txt" | tr '\n' ' '))" $RC
+  quiet gfLA gfLB
+fi
+
+if want rightclick; then
+  clean_state rightclick
+  # macOS: a secondary click opens the Dock menu on the press, however long the button is held (Qt's 0.8 s long press used to decide).
+  quiet gfLA gfLB
+  ensure_recent gfLA
+  read -r x y <<<"$(tile_xy gfLA)"
+  vs_pointer abs "$x" "$y" >/dev/null
+  sleep 0.7
+  m=$(wc -l < "$VS_DEV/shell.log")
+  rt0=$(date +%s%3N)
+  vs_pointer rdown sleep 1200 rup >/dev/null
+  tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: menu-by-right-press" > "$out/rightclick.txt"
+  rts=$(awk '{print $NF; exit}' "$out/rightclick.txt")
+  [[ -n $rts && $(( rts - rt0 )) -lt 700 ]]; RC=$?
+  check "rightclick: the menu opened on the press, not after the 1.2 s hold (${rts:+$(( rts - rt0 ))} ms after the start of the process)" $RC
+  [[ $(vs_ipc dock popup) == dock ]]; RC=$?
+  check "rightclick: the Dock menu is open after the release (popup: '$(vs_ipc dock popup)')" $RC
+  vs_ipc menubar close >/dev/null
+  sleep 0.5
+fi
+
 if want holdtiles; then
+  clean_state holdtiles
   # A hold of 900 ms on a tile WITHOUT a Dock menu still clicks on release (like a right click does nothing there): Apps, Trash, a
   # minimized window. (An app tile gives its menu, see `hold`.) The Dock logs `tap` for a click and `menu-by-hold` for a menu.
   quiet gfLA gfLB
@@ -432,6 +545,7 @@ if want holdtiles; then
 fi
 
 if want reduced; then
+  clean_state reduced
   quiet gfLA gfLB
   sleep 5
   vs_ipc controlcenter reduceMotion true >/dev/null

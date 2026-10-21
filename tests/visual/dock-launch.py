@@ -126,14 +126,22 @@ def launch(d, name, colour, nobounce=False):
     down, up = int(events["down"]), int(events["up"])
     # The press and the release as the Dock's tap handler saw them ("dock-launch: pressed true|false EPOCH-MS", same clock).
     cpath0 = os.path.join(d, name + ".curve")
+    seen_press = seen_release = False
     if os.path.exists(cpath0):
         for l in open(cpath0):
             if "dock-launch: pressed" in l:
                 f = l.split("dock-launch: pressed")[1].split()
                 if f[0] == "true":
                     down = int(f[1])
+                    seen_press = True
                 else:
                     up = int(f[1])
+                    seen_release = True
+    if not (seen_press and seen_release):
+        # The label "stall" is only for what the shell's own timing proves: without its press and release lines nothing is proved.
+        print("FAIL: the Dock logged no press and release (pressed true / false) for this click: the click did not reach the tile")
+        return 1
+    if True:
         print("events: pressed at %d, released at %d (shell clock), held %d ms" % (down, up, up - down))
         # The click was meant to be 250 ms: a hold near the menu threshold (550 ms) means the host stalled, not that the Dock is wrong.
         if up - down >= 500:
@@ -195,7 +203,7 @@ def launch(d, name, colour, nobounce=False):
     stalled = biggest > 100
     periods = [b - a for a, b in zip(maxima, maxima[1:])]
     print("period: maxima at %s ms, between them %s ms" % (maxima, periods))
-    fail |= (not nobounce) and (not periods or not all(430 <= p <= 570 for p in periods))
+    period_fail = (not nobounce) and (not periods or not all(430 <= p <= 570 for p in periods))
     # Up and down: time from 0 to the peak and back (ease out up, ease in down).
     if len(maxima) >= 2:
         i0 = next(i for i, (t, v) in enumerate(curve) if t >= maxima[0] and v >= 0.9 * peak)
@@ -221,9 +229,12 @@ def launch(d, name, colour, nobounce=False):
     settled = end is not None and end["y0"] == top
     print("end: icon %s" % ("at rest" if settled else "still lifted (y0 %s)" % (end["y0"] if end else None)))
     fail |= not settled
-    if fail and stalled:
-        print("STALL: the shell itself skipped frames for %d ms during the bounce: host stall, rerun" % biggest)
+    # A skipped-frame stall of the shell itself (proved by its own frame gaps) explains a wrong hop period and nothing else: any other
+    # failed check is a failure, with or without a stall.
+    if period_fail and stalled and not fail:
+        print("STALL: the shell itself skipped frames for %d ms during the bounce (the hop period is off for that reason only): rerun" % biggest)
         return 2
+    fail |= period_fail
     print("RESULT " + ("FAIL" if fail else "PASS"))
     return 1 if fail else 0
 

@@ -221,7 +221,12 @@ Scope {
     // Drag-out removal follows "cancel on interruption": anything that can take the pointer or the focus during a tile drag marks the
     // drag interrupted (win.dragInterrupted), and an interrupted drag never removes its tile (it glides back). Events only. The
     // Dock's own drag feedback (Remove label, puff, tooltip) is inside its window and reports none of these.
+    // Counts every interruption: a press that sees it change before its release was interrupted (something else took the pointer or the
+    // focus while the button was down, Qt then ends the press with a synthesized release) and never clicks, like an interrupted drag.
+    property int interruptions: 0
+
     function interruptDrag(): void {
+        interruptions++;
         const all = windows.instances;
         for (let i = 0; i < all.length; i++) {
             if (all[i].dragFrom >= 0)
@@ -337,7 +342,7 @@ Scope {
         }
     }
 
-    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre>. autohide, magnify, click
+    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup>. autohide, magnify, click
     // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert.
     IpcHandler {
         target: "dock"
@@ -347,6 +352,11 @@ Scope {
             if (!VisualFixtures.active)
                 return "[]";
             return JSON.stringify(Settings.dockPinned);
+        }
+
+        // Kind of the open shell popup ("" when none; fixtures only): tests close menus before a part.
+        function popup(): string {
+            return VisualFixtures.active ? Popups.kind : "";
         }
 
         // Keys of the tiles in order (JSON list), the index `click` takes (fixtures only).
@@ -861,6 +871,8 @@ Scope {
                                 property bool tipSuppressed: false
                                 // The Dock menu was opened by holding the button: the release is not a click.
                                 property bool menuByHold: false
+                                // root.interruptions when the button went down (the press is refused when it changed).
+                                property int pressMark: 0
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
@@ -1336,6 +1348,7 @@ Scope {
                                         if (pressed) {
                                             tile.tipSuppressed = true;
                                             tile.menuByHold = false;
+                                            tile.pressMark = root.interruptions;
                                         }
                                     }
                                     onLongPressed: if (tile.isApp) {
@@ -1344,7 +1357,15 @@ Scope {
                                             console.info("dock-launch: menu-by-hold", Date.now());
                                         win.openMenu(tile.index);
                                     }
-                                    onTapped: if (!tile.menuByHold) {
+                                    onTapped: {
+                                        if (tile.menuByHold)
+                                            return;
+                                        // Interrupted press (a surface, popup, window or focus change while the button was down): nothing happens.
+                                        if (root.interruptions !== tile.pressMark) {
+                                            if (VisualFixtures.active)
+                                                console.info("dock-launch: tap-refused-interrupted", Date.now());
+                                            return;
+                                        }
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: tap", Date.now());
                                         root.activateItem(tile.modelData);
@@ -1354,7 +1375,12 @@ Scope {
                                 TapHandler {
                                     enabled: tile.isApp
                                     acceptedButtons: Qt.RightButton
-                                    onTapped: win.openMenu(tile.index)
+                                    // macOS: a secondary click opens the Dock menu on the press, however long the button is held.
+                                    onPressedChanged: if (pressed) {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: menu-by-right-press", Date.now());
+                                        win.openMenu(tile.index);
+                                    }
                                 }
                             }
                         }
