@@ -40,7 +40,7 @@ while ((SECONDS < 45)); do
 done
 captured=$(wc -l < "$VS_DEV/fade-frames.txt")
 echo "captures: $captured in 45 s"
-python3 -I "$VS_HERE/fade_blend.py" "$VS_DEV/fade-frames.txt" 255,0,0 0,255,0 0,0,255 255,255,0 | tee "$VS_DEV/fade-blend.txt"
+python3 -I "$VS_HERE/fade_blend.py" "$VS_DEV/fade-frames.txt" 255,0,0 0,255,0 0,0,255 255,255,0 | tee "$VS_DEV/fade-blend.txt" || true
 check "every change of four in a row is a blend of the old and the new picture" python3 -I "$VS_HERE/fade_blend.py" "$VS_DEV/fade-frames.txt" 255,0,0 0,255,0 0,0,255 255,255,0
 check "nothing but the pictures and their blends shows (no artwork, no bare window)" python3 -I "$VS_HERE/fade_blend.py" --only-pictures "$VS_DEV/fade-frames.txt" 255,0,0 0,255,0 0,0,255 255,255,0
 blank=$(awk '$1 + $2 + $3 < 15 {n++} END {print n + 0}' "$VS_DEV/fade-frames.txt")

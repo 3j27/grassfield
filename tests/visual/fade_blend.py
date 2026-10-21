@@ -67,8 +67,13 @@ def analyse(frames, pures):
 def foreign(frames, pures):
     """Captures that are neither a picture nor a blend of two pictures (the bare window or the artwork showing through)."""
     bad = []
+    started = False
     for i, f in enumerate(frames):
         near = min(dist(f, p) for p in pures)
+        # Until the first picture is on screen the artwork (or its fade into the first picture) is what shows.
+        if not started:
+            started = near < PURE
+            continue
         on_line = min(to_segment(f, a, b)[0] for a in pures for b in pures)
         if near >= PURE and on_line >= LINE:
             bad.append(i)
@@ -95,6 +100,7 @@ def selftest():
     # Foreign captures: the artwork (a dark blue) between two pictures.
     assert foreign([red, mix(red, green, 0.5), green], pures) == []
     assert foreign([red, (15, 42, 63), green], pures) == [1]
+    assert foreign([(15, 42, 63), (130, 20, 30), red, green], pures) == [], "the start from the artwork is not foreign"
     print("fade_blend selftest: ok")
 
 
