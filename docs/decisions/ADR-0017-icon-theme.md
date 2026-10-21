@@ -1,5 +1,5 @@
 # ADR-0017: WhiteSur as the default app icon theme of the Grassfield session (optional), selected per session
-Status: Accepted (owner decision 2026-10-20, batch 10); implemented in slices I0-I3 and I5 (slice I4, the icon-mode retune, is not part of this fix); Apple-artwork handling amended 2026-10-20 (pkgrel 5: logo files; pkgrel 6: perceptual detector and blocklist, see "Apple artwork" below) · Date: 2026-10-20 · Decider: owner
+Status: Proposed (applied provisionally; amended 2026-10-21: WhiteSur dropped, see "Amendment 2026-10-21" at the end). Earlier status: Accepted (owner decision 2026-10-20, batch 10); implemented in slices I0-I3 and I5 (slice I4, the icon-mode retune, is not part of this fix); Apple-artwork handling amended 2026-10-20 (pkgrel 5: logo files; pkgrel 6: perceptual detector and blocklist, see "Apple artwork" below) · Date: 2026-10-20 · Decider: owner
 
 ## Context
 
@@ -139,8 +139,8 @@ Quickshell's `//@ pragma IconTheme`: existence not verified for 0.3.1, and not n
   schema exists (above). Rejected unless the spike proves otherwise (cheap to test).
 - **G-C. A session dconf profile** (`DCONF_PROFILE`, set only in the Grassfield session):
   - **G-C1, read-only overlay**: `user-db:user` first (every key reads and writes the normal database, shared with
-    Omarchy), then a Grassfield database built at package time holding **only** `icon-theme='grassfield-icons'` with a
-    **lock** on that key. Profile path and database form: `file-db:/usr/share/grassfield/dconf/grassfield.db`
+    Omarchy), then a Grassfield database built at package time holding `icon-theme='grassfield-icons'` with a
+    **lock** on that key (the only lock), plus the unlocked font defaults added later by ADR-0003 (`10-fonts.conf`). Profile path and database form: `file-db:/usr/share/grassfield/dconf/grassfield.db`
     (`dconf compile` at build time), or `system-db:grassfield` (`/etc/dconf/db/grassfield.d` plus `locks/`, compiled by
     `dconf update`) if file databases do not honour locks. Nothing is written to the user's database; the key cannot be
     changed inside this session.
@@ -462,3 +462,32 @@ No owner file, database or bus was touched; every dconf call ran under `env -i` 
 - GTK/Electron/Flatpak: session dconf profile with a locked icon-theme key, after spike I0.
 - Other questions: the recommended options (wrapper fallback accepting Breeze, base WhiteSur in both appearances,
   Acknowledgements in Settings > About).
+
+## Amendment 2026-10-21: WhiteSur dropped; the chain is own icons, Breeze, Adwaita, hicolor
+Status of this amendment: Proposed (applied provisionally). Decider: integrator, recorded in docs/STATE.md. It supersedes
+every WhiteSur decision above (distribution, the split package, the Apple-artwork guard, the Acknowledgements row).
+
+- **What happened.** The filtered WhiteSur package was reviewed four times (the review of merge 7cdbd68, the
+  counter-review of de09465, and further passes in the fix series, the last one "counter-review #4 FAIL" in
+  docs/STATE.md). Each pass found more Apple app-icon artwork left after the guard. Filtering a theme whose purpose is to
+  imitate macOS does not converge: every pin change needs a new full review by eye. The package was withheld on
+  2026-10-21 and is now removed.
+- **New chain.** `grassfield-icons` inherits `breeze,Adwaita,hicolor` after its own (so far nearly empty) directory:
+  Grassfield's own icons, then Breeze (KDE art, `breeze-icons`, now a dependency of `grassfield-desktop`), then Adwaita
+  (GNOME art, installed with GTK and Omarchy), then hicolor. All are original KDE/GNOME art installed by pacman; nothing
+  is vendored. The locked dconf profile (`icon-theme='grassfield-icons'`, GTK) and `QT_QPA_SYSTEM_ICON_THEME` (Qt) are
+  unchanged. Dev sessions use the same chain through devenv.sh.
+- **Papirus considered and rejected.** It would be a new dependency (owner approval needed), and it ships brand logos,
+  Apple ones included, which cannot be filtered in a system package we do not build.
+- **The shape.** The macOS 26 rounded-square look will come from the shell's system plate (ADR-0014), drawn by the shell
+  around any icon, not from a theme. That is a separate pass and not part of this amendment.
+- **Removed.** `grassfield-whitesur-icons`, `packaging/arch/whitesur-{guard.sh,detect.py,blocklist.txt,apple-logos.txt}`,
+  `scripts/dev/whitesur.sh` (and `just whitesur`), the About page Acknowledgements row, the four whitesur_* tests and the
+  WhiteSur fixtures. The perceptual detector was deleted rather than repurposed: its logo masks were derived from the
+  WhiteSur checkout, and re-deriving them for Grassfield's own three icons costs more than a review by eye.
+- **Tests.** `tests/shell/icon_theme.sh` (Breeze, Adwaita, hicolor order in Qt and GTK 3/4, plus the installed themes),
+  `tests/shell/no_whitesur.sh` (the wrapper never inherits WhiteSur; no tracked file outside docs and licence notices
+  mentions it). `tests/shell/dconf_profile.sh` is unchanged: it does not depend on the chain.
+- **Consequence.** Icons that Breeze and Adwaita lack fall to a generic icon until the system plate and Grassfield's own
+  icons cover them. needs legal review before any public release (no claim that Breeze or Adwaita contain nothing that
+  resembles an Apple icon).
