@@ -85,10 +85,6 @@ scenario name:
 pointer *args:
     scripts/dev/pointer.sh {{args}}
 
-# Provision the WhiteSur icon theme into .dev/share/icons (dev sessions only; GitHub, pinned commit).
-whitesur *args:
-    scripts/dev/whitesur.sh {{args}}
-
 # Build the Grassfield cursor theme into .dev/share/icons/grassfield-cursors (hyprcursor + XCursor).
 cursors *args:
     branding/cursors/build.sh {{args}}
