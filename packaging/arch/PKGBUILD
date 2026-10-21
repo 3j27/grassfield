@@ -6,7 +6,12 @@
 # Never constrain the hyprland version here (ADR-0009, master-prompt §5.6).
 
 pkgbase=grassfield
-pkgname=(grassfield-desktop grassfield-compositor grassfield-whitesur-icons)
+# grassfield-whitesur-icons is WITHHELD (integrator decision 2026-10-21, docs/STATE.md): four counter-reviews each found
+# more Apple app-icon artwork left after filtering, so it is not built unless GRASSFIELD_WITH_WHITESUR=1 is set for a
+# review build. Without it the grassfield-icons wrapper resolves app icons through Breeze and Adwaita.
+_with_whitesur=${GRASSFIELD_WITH_WHITESUR:-0}
+pkgname=(grassfield-desktop grassfield-compositor)
+[[ $_with_whitesur == 1 ]] && pkgname+=(grassfield-whitesur-icons)
 pkgver=0.4.0
 pkgrel=6
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
@@ -25,8 +30,12 @@ options=(!debug)
 # whole new tree reviewed on contact sheets for Apple trademark artwork (whitesur-blocklist.txt).
 _whitesur_commit=73d8040da51a9ed74e47c7366e7e9ff437601a5c
 _whitesur_install_sha256=295fdee31bead5e6b184b82a1b6341e6096ab3ea59ed5f30416f6c707cc945d1
-source=("whitesur-icon-theme::git+https://github.com/vinceliuice/WhiteSur-icon-theme.git#commit=${_whitesur_commit}")
-sha256sums=('e4c97aa6258e86360a5387e71a42d61c39389a56de6e67c0dfedf8213fdf639a')
+source=()
+sha256sums=()
+if [[ $_with_whitesur == 1 ]]; then
+  source+=("whitesur-icon-theme::git+https://github.com/vinceliuice/WhiteSur-icon-theme.git#commit=${_whitesur_commit}")
+  sha256sums+=('e4c97aa6258e86360a5387e71a42d61c39389a56de6e67c0dfedf8213fdf639a')
+fi
 
 _root() { realpath "$startdir/../.."; }
 
@@ -54,6 +63,7 @@ build() {
   # Grassfield cursors (ADR-0014): hyprcursor SVG theme + XCursor fallback from branding/cursors.
   "$(_root)/branding/cursors/build.sh" --out "$srcdir/icons"
 
+  [[ $_with_whitesur == 1 ]] || return 0
   # WhiteSur (ADR-0017): run the reviewed upstream install.sh into a scratch directory with a scratch HOME. It copies
   # folders, creates symlinks and runs gtk-update-icon-cache; it only runs while its hash is the reviewed one.
   local actual
