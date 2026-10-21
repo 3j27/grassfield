@@ -155,14 +155,44 @@ function closeTarget(choice, previous, stayOnSpace) {
 // ---- Selection across outputs ----
 
 // The window an arrow key starts from when nothing is selected: the window that was active when the overview opened
-// (macOS), wherever it is, else the first window of the first output that has one. `screens` is [{name, addresses}]
-// in output order. Returns the address, "" for no window at all.
+// (macOS), wherever it is, else the first window in reading order of the first output that has one. `screens` is
+// [{name, addresses, rects}] in output order; `rects` is the laid-out thumbnail rectangles [{id, x, y, w, h}] of that
+// output (the coordinates the ring uses; without them the order of `addresses`). Returns the address, "" for no window.
 function startSelection(previous, screens) {
     const list = screens || [];
     if (previous && previous.address && list.some(s => s.addresses.indexOf(previous.address) >= 0))
         return previous.address;
     const first = list.find(s => s.addresses.length > 0);
-    return first ? first.addresses[0] : "";
+    if (!first)
+        return "";
+    const order = readingOrder((first.rects || []).filter(r => first.addresses.indexOf(r.id) >= 0));
+    return order.length > 0 ? order[0] : first.addresses[0];
+}
+
+// Ids of laid-out rectangles in reading order: rows from top to bottom, left to right inside a row. A rectangle belongs
+// to the current row when its vertical centre lies within the row's first (topmost) rectangle, so thumbnails of
+// different heights that sit side by side read as one row.
+function readingOrder(rects) {
+    const rest = (rects || []).slice().sort((a, b) => a.y - b.y || a.x - b.x);
+    const out = [];
+    while (rest.length > 0) {
+        const head = rest[0];
+        const row = rest.filter(r => r.y + r.h / 2 <= head.y + head.h);
+        for (const r of row)
+            rest.splice(rest.indexOf(r), 1);
+        row.sort((a, b) => a.x - b.x);
+        for (const r of row)
+            out.push(r.id);
+    }
+    return out;
+}
+
+// True when the first arrow starts from the window active at open (it carries the ring, so the arrow moves on to its
+// neighbour). False when nothing was active (e.g. the desktop held the keyboard): the first arrow then selects the
+// first window in reading order itself, as macOS does.
+function startFromActive(previous, screens) {
+    const list = screens || [];
+    return !!(previous && previous.address && list.some(s => s.addresses.indexOf(previous.address) >= 0));
 }
 
 // The output an arrow key moves to when no window lies that way on the current one: the nearest output whose near edge
