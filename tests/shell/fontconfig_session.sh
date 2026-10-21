@@ -39,6 +39,12 @@ same Arial
 same serif
 same 'Liberation Sans'
 same 'DejaVu Sans'
+# A real family that comes first in a list is never overtaken by an alias behind it (GTK passes CSS lists as one pattern).
+same 'monospace,system\-ui'
+same 'Noto Serif,system\-ui'
+same 'Noto Sans,\-apple\-system'
+same 'JetBrainsMono Nerd Font,SF Pro'
+same 'Noto Sans,BlinkMacSystemFont'
 if [[ $(sys sans-serif) != Inter ]]; then echo "PASS: without FONTCONFIG_FILE sans-serif is still $(sys sans-serif)"; else
   echo "NOTE: the system configuration already resolves sans-serif to Inter"; fi
 rend=$(FONTCONFIG_FILE="$conf" fc-match -v sans-serif | grep -E '^\s+(antialias|hintstyle|rgba|lcdfilter):' | tr -s ' \n' ' ')
@@ -51,4 +57,31 @@ if grep -v '^\s*<!--' "$conf" | grep -qiE '<string>(monospace|Helvetica|Arial)</
 env_ok=$(grep -c 'FONTCONFIG_FILE=/usr/share/grassfield/fontconfig/fonts.conf' "$root/packaging/uwsm/env-grassfield" || true)
 if [[ $env_ok == 1 ]] && grep -q '^if \[ -r /usr/share/grassfield/fontconfig/fonts.conf \]; then' "$root/packaging/uwsm/env-grassfield"; then
   echo "PASS: env-grassfield exports FONTCONFIG_FILE behind a readability test"; else echo "FAIL: env-grassfield FONTCONFIG_FILE guard"; fail=1; fi
+# User hook ~/.config/grassfield/fonts.conf (XDG_CONFIG_HOME) is the last rule and wins over Inter and the rendering.
+xdg=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/fontconfig-hook.XXXXXX")
+trap 'rm -rf "$xdg"' EXIT
+mkdir -p "$xdg/grassfield"
+cat >"$xdg/grassfield/fonts.conf" <<'HOOK'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <match target="pattern">
+    <test name="family" qual="any"><string>sans-serif</string></test>
+    <edit name="family" mode="prepend_first" binding="strong"><string>Noto Sans</string></edit>
+  </match>
+  <match target="font">
+    <edit name="hintstyle" mode="assign"><const>hintfull</const></edit>
+    <edit name="rgba" mode="assign"><const>rgb</const></edit>
+  </match>
+</fontconfig>
+HOOK
+if [[ -n $(fc-list 'Noto Sans' family) ]]; then
+  got=$(XDG_CONFIG_HOME="$xdg" FONTCONFIG_FILE="$conf" fc-match sans-serif family | head -1)
+  if [[ $got == "Noto Sans" ]]; then echo "PASS: the user hook wins over Inter -> $got"; else echo "FAIL: hook family -> $got"; fail=1; fi
+  rend=$(XDG_CONFIG_HOME="$xdg" FONTCONFIG_FILE="$conf" fc-match -v sans-serif | grep -E '^\s+(hintstyle|rgba):' | tr -s ' \n' ' ')
+  case $rend in *"hintstyle: 3"*"rgba: 1"*) echo "PASS: the user hook wins over the rendering settings" ;; *) echo "FAIL: hook rendering: $rend"; fail=1 ;; esac
+else echo "SKIP: user hook (Noto Sans missing)"; fi
+if grep -q '<include ignore_missing="yes" prefix="xdg">grassfield/fonts.conf</include>' "$conf" \
+   && [[ $(grep -n '<include\|</fontconfig>' "$conf" | tail -2 | head -1) == *grassfield/fonts.conf* ]]; then
+  echo "PASS: the user hook include is the last element"; else echo "FAIL: user hook include missing or not last"; fail=1; fi
 exit "$fail"

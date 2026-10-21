@@ -10,8 +10,8 @@
 export QT_QPA_SYSTEM_ICON_THEME=grassfield-icons
 
 # GTK, Electron, Chromium, Firefox and (through xdg-desktop-portal-gtk) Flatpak read the icon theme from dconf. This
-# session profile is the normal user database plus a read-only, locked Grassfield database that holds only
-# icon-theme='grassfield-icons'; nothing is written to the shared database (spike I0: tests/shell/dconf_profile.sh).
+# session profile is the normal user database plus a read-only Grassfield database that holds the locked
+# icon-theme='grassfield-icons' and the unlocked font defaults of ADR-0003 (10-fonts.conf); nothing is written to the shared database (spike I0: tests/shell/dconf_profile.sh).
 # Only when the profile and its database are readable: a profile dconf cannot open gives the "null configuration"
 # (every GTK setting at its default), so a half-installed package must not set it.
 if [ -r /usr/share/grassfield/dconf/profile ] && [ -r /usr/share/grassfield/dconf/grassfield.db ]; then
