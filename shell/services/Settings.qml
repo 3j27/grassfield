@@ -46,6 +46,9 @@ Singleton {
     readonly property string pointerOutlineColor: store.pointerOutlineColor
     readonly property string pointerFillColor: store.pointerFillColor
 
+    // Wallpaper settings (ADR-0016), complete and valid; see ui/Grassfield/Ui/Wallpaper.js.
+    readonly property var wallpaper: store.wallpaper
+
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick

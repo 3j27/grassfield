@@ -32,7 +32,15 @@ const DEFAULTS = {
     "icons.folderColor": "theme",
     "pointer.size": Ui.PointerSize.DEFAULT,
     "pointer.outlineColor": Ui.PointerColors.DEFAULT_OUTLINE,
-    "pointer.fillColor": Ui.PointerColors.DEFAULT_FILL
+    "pointer.fillColor": Ui.PointerColors.DEFAULT_FILL,
+    "wallpaper.source": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.source,
+    "wallpaper.path": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.path,
+    "wallpaper.color": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.color,
+    "wallpaper.fit": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.fit,
+    "wallpaper.interval": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.interval,
+    "wallpaper.shuffle": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.shuffle,
+    "wallpaper.videoOnBattery": Ui.WallpaperConfig.WALLPAPER_DEFAULTS.videoOnBattery,
+    "wallpaper.outputs": []
 };
 
 const CORNER_ACTIONS = ["none", "overview", "notifications", "apps", "lock"];
@@ -68,7 +76,17 @@ const RULES = {
     "pointer.size": {type: "integer", min: Ui.PointerSize.MIN, max: Ui.PointerSize.MAX},
     // #rrggbb (schema `pattern`), any colour: like macOS there is no contrast guard.
     "pointer.outlineColor": {type: "pointerColor"},
-    "pointer.fillColor": {type: "pointerColor"}
+    "pointer.fillColor": {type: "pointerColor"},
+    // ADR-0016: the path rules (absolute, no control characters, 4096 bytes) and the outputs array live in
+    // ui/Grassfield/Ui/Wallpaper.js, shared with the shell's reader.
+    "wallpaper.source": {type: "enum", values: Ui.WallpaperConfig.SOURCES},
+    "wallpaper.path": {type: "wallpaperPath"},
+    "wallpaper.color": {type: "pointerColor"},
+    "wallpaper.fit": {type: "enum", values: Ui.WallpaperConfig.FITS},
+    "wallpaper.interval": {type: "enum", values: Ui.WallpaperConfig.INTERVAL_NAMES},
+    "wallpaper.shuffle": {type: "boolean"},
+    "wallpaper.videoOnBattery": {type: "boolean"},
+    "wallpaper.outputs": {type: "wallpaperOutputs"}
 };
 
 // Error message for an invalid value, or "" when the value is acceptable for the key.
@@ -85,6 +103,13 @@ function validate(path, value) {
         return Ui.FolderStyle.validColor(value) ? "" : path + ": expected theme, accent or a #rrggbb colour";
     case "pointerColor":
         return Ui.PointerColors.validColor(value) ? "" : path + ": expected a #rrggbb colour";
+    case "wallpaperPath":
+        // "" (no path) is valid: the source then reads as the built-in artwork.
+        return value === "" || Ui.WallpaperConfig.validPath(value) ? "" : path + ": expected an absolute path without control characters (at most 4096 bytes)";
+    case "wallpaperOutputs": {
+        const why = Ui.WallpaperConfig.outputsProblem(value);
+        return why === "" ? "" : path + ": " + why;
+    }
     case "boolean":
         return typeof value === "boolean" ? "" : path + ": expected true or false";
     case "integer":

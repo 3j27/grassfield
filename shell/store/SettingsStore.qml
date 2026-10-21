@@ -47,6 +47,18 @@ Scope {
     readonly property int pointerSize: PointerSize.fromStored(config.pointer.size)
     readonly property string pointerOutlineColor: PointerColors.normalizeOutline(config.pointer.outlineColor)
     readonly property string pointerFillColor: PointerColors.normalizeFill(config.pointer.fillColor)
+    // The wallpaper settings, complete and valid (WallpaperConfig.normalize: an invalid field reads as its default).
+    // The shell only reads them; the Settings app writes them.
+    readonly property var wallpaper: WallpaperConfig.normalize({
+        source: config.wallpaper.source,
+        path: config.wallpaper.path,
+        color: config.wallpaper.color,
+        fit: config.wallpaper.fit,
+        interval: config.wallpaper.interval,
+        shuffle: config.wallpaper.shuffle,
+        videoOnBattery: config.wallpaper.videoOnBattery,
+        outputs: config.wallpaper.outputs
+    })
     readonly property int lockIdleMinutes: Math.round(clampNumber(config.lock.idleMinutes, 0, 240, 5))
 
     // Array-like (the adapter hands out a QVariantList) to a plain array of non-empty strings.
@@ -140,6 +152,19 @@ Scope {
         // #rrggbb colours of the pointer (outline white, fill black = the packaged theme). Vars for the same reason.
         property var outlineColor: "#ffffff"
         property var fillColor: "#000000"
+    }
+
+    component WallpaperJson: JsonObject {
+        // Vars, not typed properties: a hand-edited file may hold anything, and WallpaperConfig.normalize decides
+        // what is valid (a typed property would coerce 1 or "false" into a valid value first).
+        property var source: "builtin"
+        property var path: ""
+        property var color: "#000000"
+        property var fit: "fill"
+        property var interval: "1h"
+        property var shuffle: true
+        property var videoOnBattery: false
+        property var outputs: []
     }
 
     component NotificationsConfig: JsonObject {
@@ -355,6 +380,25 @@ Scope {
             config.pointer.outlineColor = PointerColors.DEFAULT_OUTLINE;
         if (!("fillColor" in pointer))
             config.pointer.fillColor = PointerColors.DEFAULT_FILL;
+        // Same for the wallpaper group (ADR-0016): removing a key, or the whole object, reads as the defaults.
+        const wp = parsed.wallpaper !== null && typeof parsed.wallpaper === "object" && !Array.isArray(parsed.wallpaper) ? parsed.wallpaper : {};
+        const d = WallpaperConfig.WALLPAPER_DEFAULTS;
+        if (!("source" in wp))
+            config.wallpaper.source = d.source;
+        if (!("path" in wp))
+            config.wallpaper.path = d.path;
+        if (!("color" in wp))
+            config.wallpaper.color = d.color;
+        if (!("fit" in wp))
+            config.wallpaper.fit = d.fit;
+        if (!("interval" in wp))
+            config.wallpaper.interval = d.interval;
+        if (!("shuffle" in wp))
+            config.wallpaper.shuffle = d.shuffle;
+        if (!("videoOnBattery" in wp))
+            config.wallpaper.videoOnBattery = d.videoOnBattery;
+        if (!("outputs" in wp))
+            config.wallpaper.outputs = [];
     }
 
     Timer {
@@ -391,6 +435,7 @@ Scope {
         property MenubarConfig menubar: MenubarConfig {}
         property IconsConfig icons: IconsConfig {}
         property PointerConfig pointer: PointerConfig {}
+        property WallpaperJson wallpaper: WallpaperJson {}
     }
 
     // Fresh read of the file for the merge (the watched FileView may lag behind an external write).

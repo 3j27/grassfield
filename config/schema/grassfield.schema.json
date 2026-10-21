@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://grassfield.invalid/schema/grassfield-1.json",
   "title": "grassfield.json (contract version 1)",
-  "description": "User configuration of Grassfield Desktop. Unknown keys are ignored by the shell; migrations are explicit (master-prompt \u00a75.3).",
+  "description": "User configuration of Grassfield Desktop. Unknown keys are ignored by the shell; migrations are explicit (master-prompt §5.3).",
   "type": "object",
   "required": [
     "version"
@@ -245,6 +245,138 @@
           "type": "string",
           "pattern": "^#[0-9a-fA-F]{6}$",
           "description": "Pointer fill colour (#rrggbb). The default #000000 is the packaged cursor theme."
+        }
+      }
+    },
+    "wallpaper": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Wallpaper (Settings > Wallpaper, ADR-0016). Invalid values read as the defaults.",
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "builtin",
+            "color",
+            "file",
+            "folder",
+            "video"
+          ],
+          "description": "builtin = the Grassfield artwork; color = a plain colour; file = one picture; folder = a carousel of the pictures of one folder; video = a looping video (played only while the pause rules allow it)."
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute path (no control characters, at most 4096 bytes) of the picture, folder or video; checked by the stores, not by the schema."
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "#rrggbb: the plain colour, and the backdrop of fit, centre and tile."
+        },
+        "fit": {
+          "type": "string",
+          "enum": [
+            "fill",
+            "fit",
+            "stretch",
+            "center",
+            "tile"
+          ],
+          "description": "How a picture fills the screen (a video uses fill or fit only)."
+        },
+        "interval": {
+          "type": "string",
+          "enum": [
+            "login",
+            "5s",
+            "1m",
+            "5m",
+            "15m",
+            "30m",
+            "1h",
+            "1d"
+          ],
+          "description": "Folder only: when the picture changes (login = once, when the shell starts)."
+        },
+        "shuffle": {
+          "type": "boolean",
+          "description": "Folder only: random order, no repeat until every picture was shown; false = name order."
+        },
+        "videoOnBattery": {
+          "type": "boolean",
+          "description": "Video only: keep playing on battery power."
+        },
+        "outputs": {
+          "type": "array",
+          "description": "Per-display overrides (at most 16); omitted fields come from the top level. An override of a display that is not connected stays stored.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "display": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "A display: model and serial when the serial is not empty, else the connector name.",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "serial": {
+                    "type": "string"
+                  }
+                }
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "builtin",
+                  "color",
+                  "file",
+                  "folder",
+                  "video"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "fit": {
+                "type": "string",
+                "enum": [
+                  "fill",
+                  "fit",
+                  "stretch",
+                  "center",
+                  "tile"
+                ]
+              },
+              "interval": {
+                "type": "string",
+                "enum": [
+                  "login",
+                  "5s",
+                  "1m",
+                  "5m",
+                  "15m",
+                  "30m",
+                  "1h",
+                  "1d"
+                ]
+              },
+              "shuffle": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "display"
+            ]
+          }
         }
       }
     }

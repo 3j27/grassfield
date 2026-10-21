@@ -22,3 +22,4 @@ FolderEffect 1.0 FolderEffect.qml
 FolderIcon 1.0 FolderIcon.qml
 PointerSize 1.0 PointerSize.js
 PointerColors 1.0 PointerColors.js
+WallpaperConfig 1.0 Wallpaper.js
