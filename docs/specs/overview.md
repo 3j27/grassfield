@@ -81,7 +81,7 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
 - Click a window: focus it and close. The keyboard grab is released before the focus lands (the plugin waits for the last
   Exclusive layer; without it the shell focuses after the release and checks), otherwise Hyprland refocuses the previous
   window (and workspace) when the exclusive layer goes away and undoes the switch.
-- Keyboard: arrows (spatial, across outputs; with a window active at open the first arrow moves from it to its neighbour; with none, e.g. the desktop held the keyboard, the first arrow selects the first window in reading order), Return, Tab/Shift+Tab
+- Keyboard: arrows (spatial, across outputs; with a window active at open the first arrow moves from it to its neighbour; with none, e.g. the desktop held the keyboard, the first arrow selects the first window in reading order of the laid-out thumbnails on the output, top row first, left to right), Return, Tab/Shift+Tab
   cycle windows -> each Desktop tile -> "+", Esc. Up from the top row of windows enters the Desktops bar.
 - Profiles (`material.profile`): full = live `ScreencopyView`; balanced = single frames every
   `overview.balancedIntervalMs` (250 ms; the API has no rate control, so `captureFrame()` on a timer); reduced = one

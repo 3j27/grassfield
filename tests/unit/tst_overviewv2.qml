@@ -296,6 +296,28 @@ TestCase {
         compare(V2.startSelection(null, null), "");
     }
 
+    // Nothing active: the first window in reading order of the laid-out thumbnails, not the first of the toplevel order.
+    function test_nothingActiveSelectsTheFirstWindowInReadingOrder() {
+        // Toplevel order 0x1 (bottom right), 0x2 (bottom left), 0x3 (top right), 0x4 (top left, a taller thumbnail).
+        const rects = [{id: "0x1", x: 700, y: 400, w: 300, h: 200}, {id: "0x2", x: 100, y: 410, w: 300, h: 190},
+                       {id: "0x3", x: 700, y: 50, w: 300, h: 200}, {id: "0x4", x: 100, y: 40, w: 300, h: 260}];
+        const screens = [{name: "A", addresses: ["0x1", "0x2", "0x3", "0x4"], rects: rects}];
+        compare(V2.startSelection(null, screens), "0x4", "top row, leftmost");
+        compare(V2.startSelection({address: "0xgone", workspaceId: 1}, screens), "0x4");
+        compare(V2.startSelection({address: "0x2", workspaceId: 1}, screens), "0x2", "an active window still wins");
+        // The first output that has windows decides; rects of other ids are ignored.
+        const two = [{name: "A", addresses: [], rects: []}, {name: "B", addresses: ["0x1", "0x2", "0x3", "0x4"], rects: rects.concat([{id: "0xzz", x: 0, y: 0, w: 10, h: 10}])}];
+        compare(V2.startSelection(null, two), "0x4");
+    }
+
+    function test_readingOrderRowsTopToBottomThenLeftToRight() {
+        const rects = [{id: "d", x: 500, y: 300, w: 200, h: 100}, {id: "b", x: 300, y: 12, w: 150, h: 90},
+                       {id: "a", x: 20, y: 0, w: 200, h: 120}, {id: "c", x: 100, y: 310, w: 200, h: 100}];
+        compare(V2.readingOrder(rects), ["a", "b", "c", "d"]);
+        compare(V2.readingOrder([]), []);
+        compare(V2.readingOrder(null), []);
+    }
+
     function test_firstArrowStartsFromTheActiveWindowOnly() {
         const screens = [{name: "A", addresses: ["0x1", "0x2"]}, {name: "B", addresses: ["0x3"]}];
         verify(V2.startFromActive({address: "0x2", workspaceId: 1}, screens), "an active window carries the ring: the arrow moves on");

@@ -392,7 +392,8 @@ Scope {
         if (selected === "") {
             const screens = all.map(w => ({
                         name: w.screenName,
-                        addresses: w.winKeys
+                        addresses: w.winKeys,
+                        rects: w.placement.rects
                     }));
             const start = V2.startSelection(previous, screens);
             if (start === "" || !windowOf(start))
