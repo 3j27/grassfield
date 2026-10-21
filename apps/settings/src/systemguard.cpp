@@ -1,5 +1,6 @@
 #include "systemguard.h"
 
+#include <QDir>
 #include <QList>
 #include <QRegularExpression>
 
@@ -50,10 +51,62 @@ bool isReadOnlyQuery(const QStringList &argv)
             && (args.at(1) == QLatin1String("hyprland") || args.at(1) == QLatin1String("quickshell") || args.at(1) == QLatin1String("quickshell-git"));
     if (program == QLatin1String("lspci"))
         return args.isEmpty();
-    // Wallpaper helper (ADR-0016): listing, thumbnails (cache files only) and the format list. It validates its own
-    // arguments; the program must be the helper by absolute path.
-    if (program.startsWith(QLatin1Char('/')) && program.endsWith(QLatin1String("/grassfield-wallpaper")))
-        return !args.isEmpty() && (args.at(0) == QLatin1String("list") || args.at(0) == QLatin1String("thumb") || args.at(0) == QLatin1String("formats"));
+    return false;
+}
+
+namespace {
+
+// An absolute path without control characters, at most 4096 bytes; in a dev session under <devRoot>/.dev.
+bool wallpaperPathOk(const QString &path, const QString &devRoot)
+{
+    if (!path.startsWith(QLatin1Char('/')) || path.toUtf8().size() > 4096)
+        return false;
+    for (const QChar c : path) {
+        const ushort u = c.unicode();
+        if (u <= 0x1f || (u >= 0x7f && u <= 0x9f) || u == 0x2028 || u == 0x2029 || (u >= 0x202a && u <= 0x202e) || (u >= 0x2066 && u <= 0x2069))
+            return false;
+    }
+    if (devRoot.isEmpty())
+        return true;
+    const QString clean = QDir::cleanPath(path);
+    const QString dev = QDir::cleanPath(devRoot + QStringLiteral("/.dev"));
+    return clean == dev || clean.startsWith(dev + QLatin1Char('/'));
+}
+
+// A decimal number within [min, max], at most 6 characters.
+bool numberIn(const QString &s, int min, int max)
+{
+    if (s.isEmpty() || s.size() > 6)
+        return false;
+    for (const QChar c : s) {
+        if (c < QLatin1Char('0') || c > QLatin1Char('9'))
+            return false;
+    }
+    const int n = s.toInt();
+    return n >= min && n <= max;
+}
+
+} // namespace
+
+bool namesWallpaperTool(const QString &program)
+{
+    return program == QLatin1String("grassfield-wallpaper") || program.endsWith(QLatin1String("/grassfield-wallpaper"));
+}
+
+bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
+{
+    if (argv.size() < 2 || ctx.tool.isEmpty() || !ctx.tool.startsWith(QLatin1Char('/')) || argv.first() != ctx.tool)
+        return false;
+    const QString &sub = argv.at(1);
+    if (sub == QLatin1String("formats"))
+        return argv.size() == 2;
+    if (sub == QLatin1String("list"))
+        return argv.size() == 6 && argv.at(2) == QLatin1String("--max") && numberIn(argv.at(3), 1, 500) && argv.at(4) == QLatin1String("--")
+            && wallpaperPathOk(argv.at(5), ctx.devRoot);
+    if (sub == QLatin1String("thumb"))
+        return argv.size() == 8 && argv.at(2) == QLatin1String("--width") && numberIn(argv.at(3), 16, 1024) && argv.at(4) == QLatin1String("--out")
+            && !ctx.cacheDir.isEmpty() && argv.at(5) == ctx.cacheDir + QStringLiteral("/thumbs") && argv.at(6) == QLatin1String("--")
+            && wallpaperPathOk(argv.at(7), ctx.devRoot);
     return false;
 }
 

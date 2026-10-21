@@ -118,6 +118,25 @@ TestCase {
         compare(WallpaperConfig.outputsProblem(many), "too-many");
     }
 
+    // The JSON adapter hands out a QVariantList as a sequence that is not an Array (review finding: the shell dropped
+    // wallpaper.outputs). A stand-in with a length and indices; the real adapter path is in tests/shell/settings_roundtrip.
+    function test_arrayLikeOutputs() {
+        const like = {length: 2, 0: {display: panel, fit: "tile"}, 1: {display: other, source: "color"}};
+        verify(!Array.isArray(like));
+        compare(WallpaperConfig.outputsProblem(like), "");
+        compare(WallpaperConfig.normalizeOutputs(like).length, 2);
+        const cfg = {source: "folder", path: "/pics", outputs: like};
+        compare(WallpaperConfig.resolve(cfg, panelMoved).fit, "tile");
+        compare(WallpaperConfig.resolve(cfg, other).source, "color");
+        compare(WallpaperConfig.normalize(cfg).outputs.length, 2);
+        compare(WallpaperConfig.outputsProblem({length: 1e9}), "too-many");
+        compare(WallpaperConfig.normalizeOutputs({length: 1e9}).length, 0, "a hostile length reads at most a bounded number of items");
+        compare(WallpaperConfig.outputsProblem({length: -1}), "not-an-array");
+        compare(WallpaperConfig.outputsProblem({length: 1.5}), "not-an-array");
+        compare(WallpaperConfig.outputsProblem({}), "not-an-array");
+        compare(WallpaperConfig.outputsProblem({length: 1, 0: {}}), "entry 0: display");
+    }
+
     function test_normalizeOutputsDropsBadEntries() {
         const many = [];
         for (let i = 0; i < 20; i++)
@@ -250,6 +269,30 @@ TestCase {
         const full = WallpaperConfig.cycleOrder(files, true, 3, "");
         compare(first, full.slice(0, 4));
         compare(cont, full[4]);
+    }
+
+    // Review finding: "login" advanced on every restart of the shell. It advances only for a new login.
+    function test_keepPictureAfterARestart() {
+        const files = ["/p/a.jpg", "/p/b.jpg"];
+        const now = 1000000;
+        // Timed interval: kept until it elapsed.
+        compare(WallpaperConfig.keepPicture({last: "/p/b.jpg", changedAt: now - 1000}, 3600000, now, "", files, null), "/p/b.jpg");
+        compare(WallpaperConfig.keepPicture({last: "/p/b.jpg", changedAt: now - 3600001}, 3600000, now, "", files, null), "");
+        // Login: kept for the same login (compositor instance), advanced for another one or an unknown one.
+        compare(WallpaperConfig.keepPicture({last: "/p/b.jpg", changedAt: 1, loginKey: "inst-1"}, 0, now, "inst-1", files, null), "/p/b.jpg", "a shell restart in the same login");
+        compare(WallpaperConfig.keepPicture({last: "/p/b.jpg", changedAt: 1, loginKey: "inst-1"}, 0, now, "inst-2", files, null), "", "a new login");
+        compare(WallpaperConfig.keepPicture({last: "/p/b.jpg", changedAt: 1, loginKey: "inst-1"}, 0, now, "", files, null), "", "unknown login key");
+        compare(WallpaperConfig.keepPicture({last: "/p/b.jpg", changedAt: 1}, 0, now, "inst-1", files, null), "", "no key stored");
+        // Never kept: vanished, failed this session, no state.
+        compare(WallpaperConfig.keepPicture({last: "/p/gone.jpg", changedAt: now}, 3600000, now, "", files, null), "");
+        compare(WallpaperConfig.keepPicture({last: "/p/b.jpg", changedAt: now}, 3600000, now, "", files, {"/p/b.jpg": true}), "");
+        compare(WallpaperConfig.keepPicture(null, 3600000, now, "", files, null), "");
+        compare(WallpaperConfig.keepPicture({last: 5, changedAt: now}, 3600000, now, "", files, null), "");
+    }
+
+    function test_prepareArgsKeepFiles() {
+        const args = WallpaperConfig.prepareArgs("h", "/a.jpg", 10, 10, "fill", "#000000", "/o", 24, 1000, ["/o/x.jpg", "rel.jpg", "/o/y\nz.jpg", "/o/y.jpg"]);
+        compare(args, ["h", "prepare", "--size", "10x10", "--fit", "fill", "--color", "#000000", "--out", "/o", "--strip-rows", "24", "--cache-max-bytes", "1000", "--keep", "/o/x.jpg", "--keep", "/o/y.jpg", "--", "/a.jpg"]);
     }
 
     function test_advanceSkipsBadAndHandlesEmpty() {

@@ -1,5 +1,9 @@
 .pragma library
 .import Grassfield.Ui 1.0 as Ui
+// The wallpaper rules live in ui/Grassfield/Ui/WallpaperConfig.js, once. They are imported WITHOUT a version: a versioned
+// .import resolves the installed (older) Grassfield.Ui and does not find a module added since, the unversioned one resolves
+// the tree's own (QML_IMPORT_PATH, -import).
+.import Grassfield.Ui as Tree
 
 // grassfield.json (contract version 1) merge and validation logic. Pure functions, no I/O:
 // the caller reads the file, passes its text in and writes the returned text back.
@@ -34,13 +38,13 @@ const DEFAULTS = {
     "pointer.size": Ui.PointerSize.DEFAULT,
     "pointer.outlineColor": Ui.PointerColors.DEFAULT_OUTLINE,
     "pointer.fillColor": Ui.PointerColors.DEFAULT_FILL,
-    "wallpaper.source": "builtin",
-    "wallpaper.path": "",
-    "wallpaper.color": "#000000",
-    "wallpaper.fit": "fill",
-    "wallpaper.interval": "1h",
-    "wallpaper.shuffle": true,
-    "wallpaper.videoOnBattery": false,
+    "wallpaper.source": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.source,
+    "wallpaper.path": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.path,
+    "wallpaper.color": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.color,
+    "wallpaper.fit": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.fit,
+    "wallpaper.interval": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.interval,
+    "wallpaper.shuffle": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.shuffle,
+    "wallpaper.videoOnBattery": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.videoOnBattery,
     "wallpaper.outputs": []
 };
 
@@ -80,121 +84,16 @@ const RULES = {
     // #rrggbb (schema `pattern`), any colour: like macOS there is no contrast guard.
     "pointer.outlineColor": {type: "pointerColor"},
     "pointer.fillColor": {type: "pointerColor"},
-    // ADR-0016: the lists, defaults and the path and outputs rules are local to this file: a JS .import of
-    // ui/Grassfield/Ui/WallpaperConfig.js resolves the INSTALLED Grassfield.Ui (older than this tree) and fails. The tests
-    // keep them in step with that module: tst_wallpaper (schema, lists) and tests/unit/fixtures/wallpaper-rules.json
-    // (cases both implementations must answer alike).
-    "wallpaper.source": {type: "enum", values: ["builtin", "color", "file", "folder", "video"]},
+    // ADR-0016: lists, defaults, path and outputs rules come from ui/Grassfield/Ui/WallpaperConfig.js (one copy).
+    "wallpaper.source": {type: "enum", values: Tree.WallpaperConfig.SOURCES},
     "wallpaper.path": {type: "wallpaperPath"},
     "wallpaper.color": {type: "pointerColor"},
-    "wallpaper.fit": {type: "enum", values: ["fill", "fit", "stretch", "center", "tile"]},
-    "wallpaper.interval": {type: "enum", values: ["login", "5s", "1m", "5m", "15m", "30m", "1h", "1d"]},
+    "wallpaper.fit": {type: "enum", values: Tree.WallpaperConfig.FITS},
+    "wallpaper.interval": {type: "enum", values: Tree.WallpaperConfig.INTERVAL_NAMES},
     "wallpaper.shuffle": {type: "boolean"},
     "wallpaper.videoOnBattery": {type: "boolean"},
     "wallpaper.outputs": {type: "wallpaperOutputs"}
 };
-
-// ---- wallpaper rules (mirror ui/Grassfield/Ui/WallpaperConfig.js: pathProblem, outputsProblem) ----
-
-function wallpaperUtf8Length(s) {
-    let n = 0;
-    for (let i = 0; i < s.length; i++) {
-        const c = s.charCodeAt(i);
-        if (c < 0x80) {
-            n += 1;
-        } else if (c < 0x800) {
-            n += 2;
-        } else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length && s.charCodeAt(i + 1) >= 0xdc00 && s.charCodeAt(i + 1) <= 0xdfff) {
-            n += 4;
-            i++;
-        } else {
-            n += 3;
-        }
-    }
-    return n;
-}
-
-function wallpaperHasForbiddenChar(s) {
-    for (let i = 0; i < s.length; i++) {
-        const c = s.charCodeAt(i);
-        if (c <= 0x1f || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029 || (c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069))
-            return true;
-    }
-    return false;
-}
-
-// "" for an acceptable absolute path, else the reason id.
-function wallpaperPathProblem(path) {
-    if (typeof path !== "string")
-        return "not-a-string";
-    if (path === "")
-        return "empty";
-    if (path.charAt(0) !== "/")
-        return "not-absolute";
-    if (wallpaperHasForbiddenChar(path))
-        return "control-characters";
-    if (wallpaperUtf8Length(path) > 4096)
-        return "too-long";
-    return "";
-}
-
-function wallpaperDisplayKey(d) {
-    return d.serial && d.model ? "s:" + d.model + "|" + d.serial : "n:" + d.name;
-}
-
-function wallpaperOutputProblem(entry) {
-    if (!isObject(entry))
-        return "not-an-object";
-    for (const key of Object.keys(entry)) {
-        if (["display", "source", "path", "color", "fit", "interval", "shuffle"].indexOf(key) < 0)
-            return "unknown key " + key;
-    }
-    const d = entry.display;
-    if (!isObject(d))
-        return "display";
-    for (const key of Object.keys(d)) {
-        if (["name", "model", "serial"].indexOf(key) < 0)
-            return "display";
-    }
-    for (const key of ["name", "model", "serial"]) {
-        if (typeof d[key] !== "string" || d[key].length > 128 || /[\u0000-\u001f\u007f-\u009f]/.test(d[key]))
-            return "display";
-    }
-    if (d.name === "" && !(d.model !== "" && d.serial !== ""))
-        return "display";
-    if ("source" in entry && RULES["wallpaper.source"].values.indexOf(entry.source) < 0)
-        return "source";
-    if ("path" in entry && entry.path !== "" && wallpaperPathProblem(entry.path) !== "")
-        return "path";
-    if ("color" in entry && !Ui.PointerColors.validColor(entry.color))
-        return "color";
-    if ("fit" in entry && RULES["wallpaper.fit"].values.indexOf(entry.fit) < 0)
-        return "fit";
-    if ("interval" in entry && RULES["wallpaper.interval"].values.indexOf(entry.interval) < 0)
-        return "interval";
-    if ("shuffle" in entry && typeof entry.shuffle !== "boolean")
-        return "shuffle";
-    return "";
-}
-
-// "" for a valid outputs array: at most 16 valid entries, no display twice.
-function wallpaperOutputsProblem(list) {
-    if (!Array.isArray(list))
-        return "not-an-array";
-    if (list.length > 16)
-        return "too-many";
-    const seen = {};
-    for (let i = 0; i < list.length; i++) {
-        const why = wallpaperOutputProblem(list[i]);
-        if (why !== "")
-            return "entry " + i + ": " + why;
-        const k = wallpaperDisplayKey(list[i].display);
-        if (seen[k])
-            return "entry " + i + ": duplicate display";
-        seen[k] = true;
-    }
-    return "";
-}
 
 // Error message for an invalid value, or "" when the value is acceptable for the key.
 function validate(path, value) {
@@ -212,9 +111,9 @@ function validate(path, value) {
         return Ui.PointerColors.validColor(value) ? "" : path + ": expected a #rrggbb colour";
     case "wallpaperPath":
         // "" (no path) is valid: the source then reads as the built-in artwork.
-        return value === "" || wallpaperPathProblem(value) === "" ? "" : path + ": expected an absolute path without control characters (at most 4096 bytes)";
+        return value === "" || Tree.WallpaperConfig.pathProblem(value) === "" ? "" : path + ": expected an absolute path without control characters (at most 4096 bytes)";
     case "wallpaperOutputs": {
-        const why = wallpaperOutputsProblem(value);
+        const why = Tree.WallpaperConfig.outputsProblem(value);
         return why === "" ? "" : path + ": " + why;
     }
     case "boolean":

@@ -152,9 +152,17 @@ void Backend::start(const QStringList &argv, const QString &tag, int timeoutMs)
     timer->start(timeoutMs);
 }
 
+// A command that names the wallpaper helper runs only as one of the vectors of systemguard.h::isWallpaperQuery, with the
+// helper at its exact path, in every session.
+bool Backend::wallpaperAllowed(const QStringList &argv) const
+{
+    return grassfield::settings::isWallpaperQuery(argv, {m_wallpaperTool, m_wallpaperCache, m_devRoot});
+}
+
 void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs)
 {
-    if (argv.isEmpty() || (m_dev && !grassfield::settings::isReadOnlyQuery(argv))) {
+    const bool helper = !argv.isEmpty() && grassfield::settings::namesWallpaperTool(argv.first());
+    if (argv.isEmpty() || (helper ? !wallpaperAllowed(argv) : (m_dev && !grassfield::settings::isReadOnlyQuery(argv)))) {
         if (!argv.isEmpty())
             qWarning().noquote() << "dev guard: refused a command that is not a read-only query:" << argv.first();
         emit finished(tag, false, QString());
@@ -241,7 +249,8 @@ QString Backend::writeText(const QString &path, const QString &text) const
 QString Backend::run(const QStringList &argv) const
 {
     // Same allow-list as query(), in every session: nothing else runs through this door.
-    if (argv.isEmpty() || !grassfield::settings::isReadOnlyQuery(argv)) {
+    const bool helper = !argv.isEmpty() && grassfield::settings::namesWallpaperTool(argv.first());
+    if (argv.isEmpty() || !(helper ? wallpaperAllowed(argv) : grassfield::settings::isReadOnlyQuery(argv))) {
         if (!argv.isEmpty())
             qWarning().noquote() << "refused run() of a command that is not a read-only query:" << argv.first();
         return QString();

@@ -73,8 +73,12 @@ ExitCode listFolder(const QString &folder, const QStringList &supported, int max
 // Lower-case suffixes of the picture formats this build can decode, intersected with the formats wanted for wallpapers.
 QStringList supportedSuffixes();
 
-// Removes the oldest files of `dir` (by modification time) until the total is at most `maxBytes`; `keep` is never removed.
-void pruneCache(const QString &dir, qint64 maxBytes, const QString &keep);
+// Removes the oldest files of `dir` (by modification time) until the total is at most `maxBytes`. The files of `keep` (the
+// pictures on screen, the one just written) and their sidecars are never removed, nor is anything younger than a minute.
+void pruneCache(const QString &dir, qint64 maxBytes, const QStringList &keep);
+
+// True when a JPEG file ends with its EOI marker (a truncated file does not).
+bool jpegComplete(const QString &path);
 
 // Writes `data` to `path` through a temporary file in the same directory and a rename (atomic).
 bool writeAtomic(const QString &path, const QByteArray &data);

@@ -122,6 +122,19 @@ ExitCode checkFile(const QString &path, qint64 maxBytes, qint64 *bytes, qint64 *
     return Ok;
 }
 
+bool jpegComplete(const QString &path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    // The EOI marker (FF D9) ends the stream; a file may carry a little data after it (padding, a multi-picture trailer
+    // that itself ends in EOI), so it is searched for in the last 64 KiB.
+    const qint64 window = std::min<qint64>(f.size(), 64 * 1024);
+    if (window < 4 || !f.seek(f.size() - window))
+        return false;
+    return f.read(window).contains(QByteArray("\xff\xd9", 2));
+}
+
 ExitCode probePicture(const QString &path, QSize *size)
 {
     QImageReader reader(path);
@@ -171,6 +184,9 @@ ExitCode loadPicture(const QString &path, const QSize &target, Fit fit, QImage *
         if (scale < 1)
             reader.setScaledSize(QSize(std::max(1, int(std::ceil(shown.width() * scale))), std::max(1, int(std::ceil(shown.height() * scale)))));
     }
+    // A truncated JPEG decodes to a partly grey picture without an error: a JPEG must end with its EOI marker.
+    if (reader.format() == "jpeg" && !jpegComplete(path))
+        return Unreadable;
     QImage img = reader.read();
     if (img.isNull())
         return reader.error() == QImageReader::UnsupportedFormatError ? Unsupported : Unreadable;
@@ -204,9 +220,8 @@ QImage compose(const QImage &src, const QSize &target, Fit fit, const QColor &ba
         p.drawImage(QPoint((target.width() - src.width()) / 2, (target.height() - src.height()) / 2), src);
         break;
     case Fit::Tile:
-        for (int y = 0; y < target.height(); y += src.height())
-            for (int x = 0; x < target.width(); x += src.width())
-                p.drawImage(QPoint(x, y), src);
+        // One textured fill, not one draw per tile (a 1x1 picture over 4K was 8 million draws, 5 s).
+        p.fillRect(QRect(QPoint(0, 0), target), QBrush(src));
         break;
     }
     p.end();
@@ -317,8 +332,14 @@ ExitCode listFolder(const QString &folder, const QStringList &supported, int max
     return Ok;
 }
 
-void pruneCache(const QString &dirPath, qint64 maxBytes, const QString &keep)
+void pruneCache(const QString &dirPath, qint64 maxBytes, const QStringList &keepFiles)
 {
+    // A kept picture keeps its sidecar too (same name, .json).
+    QStringList keep;
+    for (const QString &k : keepFiles) {
+        keep << QFileInfo(k).absoluteFilePath();
+        keep << QFileInfo(k).absolutePath() + QLatin1Char('/') + QFileInfo(k).completeBaseName() + QStringLiteral(".json");
+    }
     QDir dir(dirPath);
     QFileInfoList list = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Time | QDir::Reversed); // oldest first
     qint64 total = 0;
@@ -328,7 +349,7 @@ void pruneCache(const QString &dirPath, qint64 maxBytes, const QString &keep)
     for (const QFileInfo &f : std::as_const(list)) {
         if (total <= maxBytes)
             break;
-        if (f.absoluteFilePath() == keep || f.lastModified() > recent)
+        if (keep.contains(f.absoluteFilePath()) || f.lastModified() > recent)
             continue;
         const qint64 size = f.size();
         if (QFile::remove(f.absoluteFilePath()))

@@ -46,6 +46,23 @@ function isPlainObject(v) {
     return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
+// A list as a real array, or null. The JSON adapter hands out a QVariantList as a sequence object that is not an Array
+// (Array.isArray is false, length and indices work), so any object with a valid length counts; at most `cap` items are
+// read, so that a hostile length is harmless. Every item is validated by its own rules afterwards.
+function asArray(v, cap) {
+    if (Array.isArray(v))
+        return v.slice(0, cap);
+    if (v === null || typeof v !== "object" || typeof v.length !== "number" || v.length < 0 || Math.floor(v.length) !== v.length)
+        return null;
+    const out = [];
+    const n = Math.min(v.length, cap);
+    for (let i = 0; i < n; i++)
+        out.push(v[i]);
+    // The real length is kept visible to the caller through a property (too-many is decided on it).
+    out.realLength = v.length;
+    return out;
+}
+
 function oneOf(list, v) {
     return typeof v === "string" && list.indexOf(v) >= 0;
 }
@@ -146,10 +163,11 @@ function outputProblem(entry) {
 }
 
 // "" when `list` is a valid outputs array (at most MAX_OUTPUTS valid entries, no display twice), else the reason.
-function outputsProblem(list) {
-    if (!Array.isArray(list))
+function outputsProblem(raw) {
+    const list = asArray(raw, MAX_OUTPUTS + 1);
+    if (list === null)
         return "not-an-array";
-    if (list.length > MAX_OUTPUTS)
+    if (list.length > MAX_OUTPUTS || (list.realLength || 0) > MAX_OUTPUTS)
         return "too-many";
     const seen = {};
     for (let i = 0; i < list.length; i++) {
@@ -187,9 +205,10 @@ function cleanOutput(entry) {
 }
 
 // The stored outputs array to the valid entries (an invalid entry or a repeated display is dropped, the list is capped).
-function normalizeOutputs(list) {
+function normalizeOutputs(raw) {
     const out = [];
-    if (!Array.isArray(list))
+    const list = asArray(raw, 1024);
+    if (list === null)
         return out;
     const seen = {};
     for (const entry of list) {
@@ -353,6 +372,19 @@ function advance(files, shuffle, state, bad) {
     return {file: file, state: st};
 }
 
+// The picture a folder wallpaper keeps showing at start instead of advancing (macOS: the wallpaper does not change just
+// because the shell restarted). `state` is the stored {last, changedAt, loginKey}; "" means advance. With a timed interval
+// the picture stays until the interval has elapsed since the last change; with "login" (intervalMs 0) it stays while the
+// login is the same one (`loginKey` names the running login: the compositor's instance, "" when unknown, which always
+// advances). A file that vanished from the folder or failed this session is never kept.
+function keepPicture(state, intervalMs, now, loginKey, files, bad) {
+    if (!state || typeof state.last !== "string" || state.last === "" || files.indexOf(state.last) < 0 || (bad && bad[state.last]))
+        return "";
+    if (intervalMs > 0)
+        return now - (typeof state.changedAt === "number" ? state.changedAt : 0) < intervalMs ? state.last : "";
+    return loginKey !== "" && state.loginKey === loginKey ? state.last : "";
+}
+
 // ---- video pause policy (ADR-0016 section 5; pure, evaluated on every event, never polled) ----
 
 // state = {locked, fullscreen, idle, onBattery, videoOnBattery, reduceMotion, profile}
@@ -386,7 +418,8 @@ function sizeArg(width, height) {
 // Argument vector (no shell) for `prepare`. `--` ends the options, so a path can never be read as an option. Returns
 // null for an invalid input (relative path, control characters, bad fit or colour).
 // `stripRows` (the menu bar's height in output pixels) and `cacheMaxBytes` are optional (0 or undefined: the helper's own).
-function prepareArgs(helper, src, width, height, fit, color, outDir, stripRows, cacheMaxBytes) {
+// `keepFiles` are the prepared pictures on screen: the helper never prunes them from the cache.
+function prepareArgs(helper, src, width, height, fit, color, outDir, stripRows, cacheMaxBytes, keepFiles) {
     if (!validPath(src) || !validPath(outDir) || !oneOf(FITS, fit) || !validColor(color))
         return null;
     const args = [helper, "prepare", "--size", sizeArg(width, height), "--fit", fit, "--color", color.toLowerCase(), "--out", outDir];
@@ -394,6 +427,10 @@ function prepareArgs(helper, src, width, height, fit, color, outDir, stripRows, 
         args.push("--strip-rows", String(Math.max(1, Math.min(512, Math.round(stripRows)))));
     if (cacheMaxBytes > 0)
         args.push("--cache-max-bytes", String(Math.round(cacheMaxBytes)));
+    for (const k of keepFiles || []) {
+        if (validPath(k))
+            args.push("--keep", k);
+    }
     args.push("--", src);
     return args;
 }

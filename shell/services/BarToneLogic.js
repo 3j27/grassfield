@@ -33,8 +33,8 @@ function contrastRatio(a, b) {
 
 // Tone from the luminance distribution of the strip (ADR-0016 section 7): white text is limited by the lightest pixels
 // of the strip (p95), black text by the darkest (p5). The tone with the better worst case wins; the previous tone stays
-// unless the other is better by more than `margin` (no flip-flopping between two similar wallpapers). When even the best
-// tone is below `needed` (4.5:1), `assist` is true: the bar shows the frosted band (macOS's "show menu bar background",
+// unless the other is better by less than `margin` and the previous one reaches `needed` (no flip-flopping between two
+// similar wallpapers). When the CHOSEN tone is below `needed` (4.5:1), `assist` is true: the bar shows the frosted band (macOS's "show menu bar background",
 // switched on for that output) until the wallpaper changes.
 // Returns {tone: "light" | "dark", white, black, best, assist}.
 function stripTone(p5, p95, previous, needed, margin) {
@@ -43,10 +43,13 @@ function stripTone(p5, p95, previous, needed, margin) {
     const white = contrastRatio(1, hi);
     const black = contrastRatio(0, lo);
     let tone = white >= black ? "light" : "dark";
-    if ((previous === "light" || previous === "dark") && previous !== tone && Math.abs(white - black) < margin)
+    // Hysteresis: the previous tone stays only while it still reaches `needed` itself (never keep a tone that fails when the
+    // other one passes).
+    const previousContrast = previous === "light" ? white : black;
+    if ((previous === "light" || previous === "dark") && previous !== tone && Math.abs(white - black) < margin && previousContrast >= needed)
         tone = previous;
     const best = tone === "light" ? white : black;
-    return {tone: tone, white: white, black: black, best: best, assist: Math.max(white, black) < needed};
+    return {tone: tone, white: white, black: black, best: best, assist: best < needed};
 }
 
 // Luminance of a vertical two-stop gradient strip: from colour a (top) towards colour b, the strip covering the fraction

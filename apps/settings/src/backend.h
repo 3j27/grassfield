@@ -73,6 +73,7 @@ signals:
     void suppressed(const QString &what);
 
 private:
+    bool wallpaperAllowed(const QStringList &argv) const;
     void onPath(const QString &path);
     void start(const QStringList &argv, const QString &tag, int timeoutMs);
 

@@ -8,6 +8,16 @@ root=$(git -C "$here" rev-parse --show-toplevel)
 out=$root/.dev/build
 mkdir -p "$out"
 
+if [[ ${1:-} == "--tests" ]]; then
+  # The dev guard of the system sections and the wallpaper helper door (systemguard.cpp): Qt Core only.
+  # shellcheck disable=SC2046
+  g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC -I"$here/src" $(pkg-config --cflags Qt6Core) \
+    "$root/tests/unit/settings/tst_systemguard.cpp" "$here/src/systemguard.cpp" \
+    $(pkg-config --libs Qt6Core) -lgtest -lgtest_main -pthread -o "$out/settings-unit-tests"
+  echo "built $out/settings-unit-tests"
+  exit 0
+fi
+
 defs=()
 if [[ ${1:-} != "--install-paths" ]]; then
   defs+=("-DGRASSFIELD_SETTINGS_QML_DIR=\"$here/qml\"" "-DGRASSFIELD_DEV_BINDINGS=\"$root/config/hypr/grassfield/bindings.lua\"")

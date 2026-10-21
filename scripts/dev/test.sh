@@ -96,6 +96,16 @@ if [[ -f /usr/include/gtest/gtest.h ]]; then
 else
   skip "tests/unit/wallpaper-tool (gtest not installed)"
 fi
+# grassfield-settings dev guard and the wallpaper helper door (exact tool path, exact argument vectors): gtest, built here.
+if [[ -f /usr/include/gtest/gtest.h ]]; then
+  if apps/settings/build-direct.sh --tests >/dev/null; then
+    .dev/build/settings-unit-tests --gtest_brief=1 || status=1
+  else
+    echo "FAIL: building tests/unit/settings"; status=1
+  fi
+else
+  skip "tests/unit/settings (gtest not installed)"
+fi
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards): gtest, built here.
 # The peer-to-peer D-Bus case skips itself inside the sandbox (no Unix sockets).
 if [[ -f /usr/include/gtest/gtest.h ]]; then

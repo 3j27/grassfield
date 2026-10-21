@@ -145,6 +145,8 @@ Scope {
     }
 
     function fail(why: string): void {
+        // The journal keeps every failure (the owner reads it in a live session), the Settings pane shows the reason.
+        console.warn("wallpaper: " + screenInfo.name + ": " + why + (currentSrc !== "" ? " (" + currentSrc + ")" : ""));
         status = "error";
         reason = why;
         publish();
@@ -193,7 +195,7 @@ Scope {
         status = imageUrl === "" ? "preparing" : status;
         reason = "";
         publish();
-        startJob("prepare", WallpaperConfig.prepareArgs(WallpaperState.tool, path, pixelWidth, pixelHeight, cfg.fit, cfg.color, WallpaperState.preparedDir, Tokens.menubarHeight * scale, Tokens.wallpaperCacheMaxBytes), Tokens.wallpaperToolTimeoutMs);
+        startJob("prepare", WallpaperConfig.prepareArgs(WallpaperState.tool, path, pixelWidth, pixelHeight, cfg.fit, cfg.color, WallpaperState.preparedDir, Tokens.menubarHeight * scale, Tokens.wallpaperCacheMaxBytes, WallpaperState.currentFiles()), Tokens.wallpaperToolTimeoutMs);
     }
 
     function startList(): void {
@@ -263,8 +265,10 @@ Scope {
         if (!advanceRequested) {
             if (sameSession) {
                 keep = currentSrc;
-            } else if (sameFolder && typeof state.last === "string" && files.indexOf(state.last) >= 0 && !bad[state.last] && interval > 0 && Date.now() - (state.changedAt || 0) < interval) {
-                keep = state.last;
+            } else if (sameFolder) {
+                // After a shell restart: the same picture while its interval has not elapsed; "login" advances only for a
+                // new login (another compositor instance), never for a restart of the shell within the same one.
+                keep = WallpaperConfig.keepPicture(state, interval, Date.now(), WallpaperState.loginKey, files, bad);
             }
         }
         advanceRequested = false;
@@ -285,6 +289,7 @@ Scope {
         const next = r.state;
         next.folder = cfg.path;
         next.changedAt = Date.now();
+        next.loginKey = WallpaperState.loginKey;
         WallpaperState.setCarousel(displayKey, next);
         label = fileName(r.file);
         startPrepare(r.file);

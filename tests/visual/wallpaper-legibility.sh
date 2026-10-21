@@ -13,6 +13,8 @@ magick -size 1920x1080 xc:black -fill white -draw "rectangle 0,0 959,1079" "$pic
 magick -size 1920x1080 xc:black -fill white -draw "rectangle 0,0 1919,11" "$pics/horizon.png"
 # A threshold wallpaper: luminance 0.17, the crossover of the two tones (menubar.md).
 magick -size 1920x1080 xc:'#767676' "$pics/threshold.png"
+# The hysteresis case of the review: after a light wallpaper (tone dark), two greys that give black 4.42:1 and white 4.61:1.
+magick -size 1920x1080 xc:'#737373' -fill '#757575' -draw "rectangle 960,0 1919,1079" "$pics/pair.png"
 # Large-scale blocks of extreme luminance.
 magick -size 30x17 xc: +noise Random -threshold 50% -scale 6400% -crop 1920x1080+0+0 +repage "$pics/blocks.png"
 # Large-scale noise (a photo-like picture).
@@ -53,14 +55,16 @@ for case in dark:light:false light:dark:false split:any:true horizon:any:true; d
 done
 
 # The rule for every picture: the tone reaches 4.5:1, or the band is on.
-for name in threshold blocks photolike; do
+use light.png
+for name in pair threshold blocks photolike; do
   use "$name.png"
   w=$(field white)
   b=$(field black)
   a=$(field assist)
   t=$(field tone)
   echo "$name: tone=$t assist=$a white=$w black=$b"
-  check "$name: legible or assisted" awk -v w="$w" -v b="$b" -v a="$a" 'BEGIN {best = (w > b ? w : b); exit !(best >= 4.5 || a == "true")}'
+  # The CHOSEN tone must reach 4.5:1 (not the better of the two: hysteresis can keep the other), or the band is on.
+  check "$name: the chosen tone ($t) is legible, or the band is on" awk -v t="$t" -v w="$w" -v b="$b" -v a="$a" 'BEGIN {c = (t == "light" ? w : b); exit !(c >= 4.5 || a == "true")}'
   vs_capture "legibility-$name" >/dev/null
   magick "$VS_SHOTS/legibility-$name.$VS_LANG.png" -crop 1920x40+0+0 +repage "$VS_SHOTS/legibility-$name-bar.$VS_LANG.png"
 done

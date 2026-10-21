@@ -175,7 +175,9 @@ Scope {
                 id: artwork
                 anchors.fill: parent
                 // Nothing to draw once a picture covers it.
-                visible: !(win.shown !== null && win.shown.opacity >= 1 && win.incoming === null)
+                // Nothing to draw (and no per-frame work for it) while a full picture is behind: not even during a crossfade
+                // from one picture to the next.
+                visible: !(win.shown !== null && win.shown.opacity >= 1)
             }
 
             // The colour source (and the colour of Fit, Center and Tile is baked into the prepared picture).
@@ -263,12 +265,76 @@ Scope {
             function beginFade(): void {
                 fadePending = false;
                 fadeAway.stop();
-                const ms = Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs;
-                fadeIn.duration = ms;
-                fadeIn.target = incoming;
+                // The fade adapts to the machine (gate P3): a fade that dropped frames makes the next one short, and the one
+                // after that a plain switch, until a fade runs smoothly again.
+                let ms = Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs;
+                if (!Settings.reduceMotion && fadeDegrade === 1)
+                    ms = Tokens.motionFast;
+                else if (!Settings.reduceMotion && fadeDegrade >= 2)
+                    ms = 0;
+                fadeFrames = 0;
+                fadeSlow = 0;
+                fadeMax = 0;
+                fadeAborted = false;
+                fadeMs = ms;
                 toneMid.interval = ms / 2;
                 toneMid.restart();
+                if (ms === 0) {
+                    // A plain switch: the new picture is complete at once; the next change tries a short fade again.
+                    incoming.opacity = 1;
+                    completeFade();
+                    console.info("wallpaper fade output=" + win.modelData.name + " switched without a fade (frames dropped before)");
+                    fadeDegrade = 1;
+                    return;
+                }
+                fadeIn.duration = ms;
+                fadeIn.target = incoming;
                 fadeIn.restart();
+            }
+
+            property int fadeDegrade: 0
+            property int fadeFrames: 0
+            property int fadeSlow: 0
+            property real fadeMax: 0
+            property int fadeMs: 0
+            property bool fadeAborted: false
+
+            // Frame times while a fade runs (nothing runs outside a fade).
+            function fadeFrame(ms: real): void {
+                fadeFrames++;
+                // The first interval spans the idle time before the fade: not a frame of it.
+                if (fadeFrames === 1)
+                    return;
+                if (ms > 33.4)
+                    fadeSlow++;
+                fadeMax = Math.max(fadeMax, ms);
+                // Three slow frames early in a fade: end it now rather than stutter through the rest.
+                if (fadeSlow >= 3 && fadeFrames <= 12 && !fadeAborted) {
+                    fadeAborted = true;
+                    Qt.callLater(abortFade);
+                }
+            }
+
+            function abortFade(): void {
+                if (!fadeIn.running)
+                    return;
+                fadeIn.stop();
+                if (incoming !== null) {
+                    incoming.opacity = 1;
+                    completeFade();
+                }
+                endFade();
+            }
+
+            // Summary of a fade in the journal (the owner reads it in a live session, tests read it in the nested log).
+            function endFade(): void {
+                fadeDegrade = fadeSlow >= 3 ? Math.min(2, fadeDegrade + 1) : 0;
+                console.info("wallpaper fade output=" + win.modelData.name + " ms=" + fadeMs + " frames=" + (fadeFrames - 1) + " slow=" + fadeSlow + " max=" + fadeMax.toFixed(0) + "ms aborted=" + fadeAborted + " next=" + (fadeDegrade === 0 ? "full" : fadeDegrade === 1 ? "short" : "none"));
+            }
+
+            FrameAnimation {
+                running: fadeIn.running
+                onTriggered: win.fadeFrame(frameTime * 1000)
             }
 
             // A fade in flight is completed at once when the next change arrives.
@@ -298,7 +364,10 @@ Scope {
                 property: "opacity"
                 from: 0
                 to: 1
-                onFinished: win.completeFade()
+                onFinished: {
+                    win.completeFade();
+                    win.endFade();
+                }
             }
 
             NumberAnimation {

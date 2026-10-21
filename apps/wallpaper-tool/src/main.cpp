@@ -42,6 +42,7 @@ int fail(int code, const QString &reason)
 
 struct Args {
     QHash<QString, QString> options;
+    QStringList keeps; // --keep FILE (repeatable): prepared pictures that must survive the cache pruning
     QString positional;
     bool ok = true;
     QString error;
@@ -63,7 +64,10 @@ Args parseArgs(const QStringList &args, const QStringList &known, bool wantPosit
             a.error = QStringLiteral("bad option: ") + s;
             return a;
         }
-        a.options.insert(s.mid(2), args[i + 1]);
+        if (s.mid(2) == QLatin1String("keep"))
+            a.keeps << args[i + 1];
+        else
+            a.options.insert(s.mid(2), args[i + 1]);
         ++i;
     }
     const QStringList rest = args.mid(i);
@@ -123,7 +127,7 @@ QByteArray encode(const QImage &img, const char *format, int quality)
 
 int cmdPrepare(const QStringList &args)
 {
-    const Args a = parseArgs(args, {QStringLiteral("size"), QStringLiteral("fit"), QStringLiteral("color"), QStringLiteral("out"), QStringLiteral("strip-rows"), QStringLiteral("cache-max-bytes")}, true);
+    const Args a = parseArgs(args, {QStringLiteral("size"), QStringLiteral("fit"), QStringLiteral("color"), QStringLiteral("out"), QStringLiteral("strip-rows"), QStringLiteral("cache-max-bytes"), QStringLiteral("keep")}, true);
     if (!a.ok)
         return fail(Usage, a.error);
     QSize target;
@@ -193,7 +197,7 @@ int cmdPrepare(const QStringList &args)
     if (!writeAtomic(sidecar, QJsonDocument(meta).toJson(QJsonDocument::Compact)))
         return fail(WriteFailed, QStringLiteral("cannot write the sidecar"));
     QFile::setPermissions(sidecar, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    pruneCache(out, cap, image);
+    pruneCache(out, cap, a.keeps + QStringList{image});
     meta.insert(QStringLiteral("cached"), false);
     return finish(meta, Ok);
 }
@@ -226,7 +230,7 @@ int cmdThumb(const QStringList &args)
         if (data.isEmpty() || !writeAtomic(image, data))
             return fail(WriteFailed, QStringLiteral("cannot write the thumbnail"));
         QFile::setPermissions(image, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-        pruneCache(out, qint64(64) * 1024 * 1024, image);
+        pruneCache(out, qint64(64) * 1024 * 1024, {image});
     }
     return finish({{QStringLiteral("file"), image}, {QStringLiteral("width"), target.width()}, {QStringLiteral("height"), target.height()}}, Ok);
 }

@@ -208,6 +208,33 @@ TestCase {
         verify(isFinite(Logic.stripTone(-1, 5, "", needed, margin).white));
     }
 
+    // Review finding (A2): after a light wallpaper (tone dark) a mid-grey strip #737373|#757575 gives black 4.42:1 and white
+    // 4.61:1, a difference under the margin. Keeping "dark" showed 4.42:1 without the band; the chosen tone must pass.
+    function test_stripToneHysteresisNeverKeepsAFailingTone() {
+        const lumOf = v => Logic.luminance(v / 255, v / 255, v / 255);
+        const p5 = lumOf(0x73), p95 = lumOf(0x75);
+        const r = Logic.stripTone(p5, p95, "dark", needed, margin);
+        verify(Math.abs(r.white - r.black) < margin, "the case is inside the margin");
+        verify(r.black < needed, "black alone would fail: " + r.black);
+        compare(r.tone, "light", "the passing tone wins over the previous one");
+        verify(!r.assist);
+        verify(r.best >= needed);
+        // Both tones fail: the band, whatever the previous tone.
+        for (const prev of ["light", "dark", ""])
+            verify(Logic.stripTone(0, 1, prev, needed, margin).assist, prev);
+        // The previous tone stays while it passes and the other is only slightly better (0.18: white 4.57, black 4.60).
+        const stay = Logic.stripTone(0.18, 0.18, "light", needed, margin);
+        compare(stay.tone, "light");
+        verify(!stay.assist);
+        compare(Logic.stripTone(0.18, 0.18, "dark", needed, margin).tone, "dark");
+        // Assist always describes the chosen tone.
+        for (const prev of ["light", "dark", ""]) {
+            const c = Logic.stripTone(lumOf(0x74), lumOf(0x74), prev, needed, margin);
+            compare(c.assist, c.best < needed, prev);
+            compare(c.best, c.tone === "light" ? c.white : c.black);
+        }
+    }
+
     // Generated busy wallpapers (the A2 worst cases: split, horizon, threshold, blocks, large-scale noise) as strip
     // statistics: whatever the strip, the bar ends with either a tone that reaches 4.5:1 or the band.
     function test_stripToneEveryStripIsLegibleOrAssisted() {
@@ -220,9 +247,11 @@ TestCase {
             const a = rnd(), b = rnd();
             const p5 = Math.min(a, b), p95 = Math.max(a, b);
             const r = Logic.stripTone(p5, p95, rnd() < 0.5 ? "light" : "dark", needed, margin);
-            // With the band the text is the material's; without it the chosen tone must reach the contrast.
+            // With the band the text is the material's; without it the CHOSEN tone must reach the contrast (not the better of
+            // the two: hysteresis can keep the other one).
             if (!r.assist)
-                verify(Math.max(r.white, r.black) >= needed, "p5 " + p5 + " p95 " + p95);
+                verify((r.tone === "light" ? r.white : r.black) >= needed, "p5 " + p5 + " p95 " + p95 + " previous " + r.tone);
+            compare(r.assist, r.best < needed);
         }
     }
 

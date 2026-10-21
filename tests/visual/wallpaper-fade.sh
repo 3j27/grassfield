@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Crossfade of a folder wallpaper in the nested session (ADR-0016, gate P3 indication): a 5 s carousel runs for 65 s with
+# Reduce Motion off; the shell logs one line per fade ("wallpaper fade ... frames= slow= max="), this script totals them,
+# then captures the output every 0.4 s over several changes to check that no frame is blank.
+# Nested numbers are an indication only (the nested stack renders through the owner's compositor); P3 is an owner L2 run.
+# Usage (bare command): tests/visual/wallpaper-fade.sh
+source "$(dirname "$0")/lib.sh"
+
+pics=$VS_DEV/wallpapers-e2e
+mkdir -p "$pics/set1"
+gen() { [[ -f $pics/$1 ]] || ffmpeg -loglevel error -y -f lavfi -i "$2" -frames:v 1 -q:v 3 "$pics/$1"; }
+gen set1/1.jpg "gradients=s=1920x1080:seed=11:n=3:speed=0"
+gen set1/2.jpg "mandelbrot=size=1920x1080:start_scale=2"
+gen set1/3.jpg "testsrc=size=1920x1080"
+gen set1/4.jpg "gradients=s=1920x1080:seed=5:n=5:speed=0"
+
+fail=0
+check() {
+  local name=$1
+  shift
+  if "$@"; then echo "PASS: $name"; else echo "FAIL: $name"; fail=1; fi
+}
+
+vs_session
+vs_reset
+vs_ipc controlcenter reduceMotion false >/dev/null
+cfg=$VS_DEV/config/grassfield.json
+printf '{"version":1,"accessibility":{"reduceMotion":false},"wallpaper":{"source":"folder","path":"%s","fit":"fill","interval":"5s","shuffle":false}}\n' "$pics/set1" > "$cfg.new"
+mv "$cfg.new" "$cfg"
+
+# Phase 1, no grabs (they load the compositor): 65 s of carousel, then the totals of the fade lines.
+sleep 65
+grep "wallpaper fade" "$VS_DEV/shell.log" | cut -c1-200 | tee "$VS_DEV/fade-log.txt"
+n=$(grep -c "wallpaper fade" "$VS_DEV/shell.log" || true)
+echo "fades logged: $n"
+check "the carousel changed pictures (at least 8 fade lines)" test "$n" -ge 8
+frames=$(grep "wallpaper fade" "$VS_DEV/shell.log" | sed -n 's/.* frames=\([0-9]*\) .*/\1/p' | awk '{s+=$1} END {print s+0}')
+slow=$(grep "wallpaper fade" "$VS_DEV/shell.log" | sed -n 's/.* slow=\([0-9]*\) .*/\1/p' | awk '{s+=$1} END {print s+0}')
+echo "frames during fades: $frames, slow (over 33 ms): $slow"
+awk -v f="$frames" -v s="$slow" 'BEGIN {printf "frames over 33 ms: %.1f %%\n", (f > 0 ? 100 * s / f : 0)}'
+
+# Phase 2: captures every 0.4 s over several changes: none may be blank.
+: > "$VS_DEV/fade-frames.txt"
+blank=0
+for i in $(seq 1 28); do
+  "$VS_ROOT/scripts/dev/shot.sh" "fade-$i" "$VS_OUTPUT" >/dev/null
+  mean=$(magick "$VS_DEV/shots/fade-$i.png" -crop 1920x1000+0+40 +repage -colorspace Gray -format '%[fx:mean]' info:)
+  awk -v m="$mean" 'BEGIN {exit !(m < 0.02)}' && blank=$((blank + 1))
+  echo "$i $mean" >> "$VS_DEV/fade-frames.txt"
+done
+check "no blank capture during the carousel (28 grabs, $blank blank)" test "$blank" = 0
+check "no QML error in the shell log" test "$(grep -cE 'TypeError|ReferenceError|Binding loop' "$VS_DEV/shell.log")" = 0
+exit $fail

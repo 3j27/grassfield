@@ -20,6 +20,23 @@ bool devSession();
 // Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
 
+// The wallpaper helper (ADR-0016) as the Settings > Wallpaper page runs it. Only the helper at its exact path (installed
+// /usr/lib/grassfield/grassfield-wallpaper, or the dev build next to the dev binary), only these argument vectors:
+//   <tool> formats
+//   <tool> list --max <1..500> -- <folder>
+//   <tool> thumb --width <16..1024> --out <cacheDir>/thumbs -- <picture>
+// `folder` and `picture` are absolute paths without control characters (at most 4096 bytes); in a dev session they must lie
+// under <devRoot>/.dev. `--out` is exactly the thumbnail folder of the wallpaper cache: no other value, no traversal.
+// `prepare` is never run by Settings (the shell does). Anything else, also another program called grassfield-wallpaper, is refused.
+struct WallpaperContext {
+    QString tool;     // the helper's absolute path
+    QString cacheDir; // the wallpaper cache root (thumbnails go to <cacheDir>/thumbs)
+    QString devRoot;  // the worktree in a dev session, "" otherwise
+};
+bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx);
+// A program that names the helper (its file name), whatever its directory: such a command is judged by isWallpaperQuery only.
+bool namesWallpaperTool(const QString &program);
+
 // Programs the pages may run as actions in a real session. Anything else is refused.
 bool isActionProgram(const QString &program);
 

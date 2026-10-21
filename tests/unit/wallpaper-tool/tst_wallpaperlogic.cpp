@@ -2,7 +2,10 @@
 
 #include <QBuffer>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QColorSpace>
 #include <QFile>
 #include <QImage>
 #include <QImageWriter>
@@ -341,7 +344,7 @@ TEST(WallpaperTool, PruneKeepsTheNewestAndTheNamedFile)
         f.setFileTime(QDateTime::currentDateTime().addSecs(-3600 + i * 60), QFileDevice::FileModificationTime);
         paths << f.fileName();
     }
-    pruneCache(dir.path(), 2500, paths[0]);
+    pruneCache(dir.path(), 2500, {paths[0]});
     EXPECT_TRUE(QFile::exists(paths[0])) << "the kept file is never removed";
     EXPECT_FALSE(QFile::exists(paths[1])) << "the oldest of the rest goes first";
     EXPECT_TRUE(QFile::exists(paths[3]));
@@ -359,6 +362,127 @@ TEST(WallpaperTool, WriteAtomicLeavesNoTemporaryFile)
     EXPECT_EQ(f.readAll(), QByteArray("{\"a\":1}"));
     EXPECT_EQ(QDir(dir.path()).entryList(QDir::Files).size(), 1);
     EXPECT_FALSE(writeAtomic(dir.filePath(QStringLiteral("missing-dir/x")), "x"));
+}
+
+TEST(WallpaperTool, PruneNeverRemovesThePicturesOnScreen)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    QStringList files;
+    for (int i = 0; i < 4; ++i) {
+        for (const char *ext : {".jpg", ".json"}) {
+            QFile f(dir.filePath(QStringLiteral("k%1%2").arg(i).arg(QLatin1String(ext))));
+            ASSERT_TRUE(f.open(QIODevice::ReadWrite));
+            f.write(QByteArray(1000, 'x'));
+            ASSERT_TRUE(f.flush());
+            ASSERT_TRUE(f.setFileTime(QDateTime::currentDateTime().addSecs(-7200 + i * 60), QFileDevice::FileModificationTime));
+            files << f.fileName();
+        }
+    }
+    // The two oldest pictures are on screen (another output's wallpaper, hours old): they stay, with their sidecars,
+    // although they are the first by age and the cache is far over its cap.
+    pruneCache(dir.path(), 1, {dir.filePath(QStringLiteral("k0.jpg")), dir.filePath(QStringLiteral("k1.jpg"))});
+    for (const char *name : {"k0.jpg", "k0.json", "k1.jpg", "k1.json"})
+        EXPECT_TRUE(QFile::exists(dir.filePath(QString::fromLatin1(name)))) << name;
+    for (const char *name : {"k2.jpg", "k2.json", "k3.jpg", "k3.json"})
+        EXPECT_FALSE(QFile::exists(dir.filePath(QString::fromLatin1(name)))) << name;
+}
+
+TEST(WallpaperTool, ATruncatedJpegIsRefused)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    QImage img(300, 200, QImage::Format_RGB32);
+    QPainter p(&img);
+    for (int y = 0; y < 200; y += 10)
+        p.fillRect(0, y, 300, 10, QColor((y * 7) % 256, (y * 13) % 256, 200));
+    p.end();
+    const QString whole = dir.filePath(QStringLiteral("whole.jpg"));
+    {
+        QImageWriter w(whole, "jpeg");
+        w.setQuality(95);
+        ASSERT_TRUE(w.write(img));
+    }
+    EXPECT_TRUE(jpegComplete(whole));
+    QImage out;
+    EXPECT_EQ(loadPicture(whole, QSize(300, 200), Fit::Fill, &out), Ok);
+
+    QFile f(whole);
+    ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+    const QByteArray bytes = f.readAll();
+    for (const qint64 keep : {bytes.size() / 2, bytes.size() - 2, bytes.size() - 100, qint64(300)}) {
+        QFile cut(dir.filePath(QStringLiteral("cut%1.jpg").arg(keep)));
+        ASSERT_TRUE(cut.open(QIODevice::WriteOnly));
+        cut.write(bytes.left(keep));
+        cut.close();
+        EXPECT_FALSE(jpegComplete(cut.fileName())) << keep;
+        QImage truncated;
+        EXPECT_EQ(loadPicture(cut.fileName(), QSize(300, 200), Fit::Fill, &truncated), Unreadable) << keep;
+        EXPECT_TRUE(truncated.isNull());
+    }
+    // Trailing zero padding after the EOI marker is still a whole picture.
+    QFile padded(dir.filePath(QStringLiteral("padded.jpg")));
+    ASSERT_TRUE(padded.open(QIODevice::WriteOnly));
+    padded.write(bytes + QByteArray(100, '\0'));
+    padded.close();
+    EXPECT_TRUE(jpegComplete(padded.fileName()));
+}
+
+TEST(WallpaperTool, TilingATinyPictureOver4KIsFast)
+{
+    QImage one(1, 1, QImage::Format_RGB32);
+    one.fill(QColor(10, 20, 30));
+    QElapsedTimer t;
+    t.start();
+    const QImage out = compose(one, QSize(3840, 2160), Fit::Tile, QColor(Qt::black));
+    EXPECT_LT(t.elapsed(), 1000) << "took " << t.elapsed() << " ms (5.2 s with one draw per tile)";
+    EXPECT_EQ(out.size(), QSize(3840, 2160));
+    EXPECT_EQ(QColor(out.pixel(3839, 2159)), QColor(10, 20, 30));
+    EXPECT_EQ(QColor(out.pixel(0, 0)), QColor(10, 20, 30));
+    // A 3x2 picture repeats at its own size.
+    QImage six(3, 2, QImage::Format_RGB32);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 3; ++x)
+            six.setPixelColor(x, y, QColor(x * 80, y * 100, 7));
+    const QImage tiled = compose(six, QSize(10, 5), Fit::Tile, QColor(Qt::black));
+    EXPECT_EQ(QColor(tiled.pixel(4, 3)), QColor(1 * 80, 1 * 100, 7));
+    EXPECT_EQ(QColor(tiled.pixel(9, 4)), QColor(0 * 80, 0 * 100, 7));
+}
+
+TEST(WallpaperTool, IccProfileIsConvertedToSrgb)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    // A Display P3 picture: the same numbers mean a different colour than in sRGB.
+    QImage p3(8, 8, QImage::Format_RGB32);
+    p3.fill(QColor(255, 128, 0));
+    p3.setColorSpace(QColorSpace(QColorSpace::DisplayP3));
+    const QString path = dir.filePath(QStringLiteral("p3.png"));
+    ASSERT_TRUE(p3.save(path, "PNG"));
+    QImage reread;
+    ASSERT_TRUE(reread.load(path));
+    if (reread.colorSpace() != QColorSpace(QColorSpace::DisplayP3))
+        GTEST_SKIP() << "this Qt does not keep the embedded profile of a PNG";
+    QImage out;
+    ASSERT_EQ(loadPicture(path, QSize(8, 8), Fit::Fill, &out), Ok);
+    EXPECT_EQ(out.colorSpace(), QColorSpace(QColorSpace::SRgb));
+    const QColor got = out.pixelColor(2, 2);
+    QImage expected = p3;
+    expected.convertToColorSpace(QColorSpace(QColorSpace::SRgb));
+    const QColor want = expected.pixelColor(2, 2);
+    EXPECT_NEAR(got.red(), want.red(), 1);
+    EXPECT_NEAR(got.green(), want.green(), 1);
+    EXPECT_NEAR(got.blue(), want.blue(), 1);
+    // The conversion changed the numbers (P3 orange 255,128,0 is not sRGB 255,128,0).
+    EXPECT_GT(std::abs(got.green() - 128) + std::abs(got.blue() - 0), 2);
+    // An sRGB picture and one without a profile are left as they are.
+    QImage plain(8, 8, QImage::Format_RGB32);
+    plain.fill(QColor(255, 128, 0));
+    const QString plainPath = dir.filePath(QStringLiteral("plain.png"));
+    ASSERT_TRUE(plain.save(plainPath, "PNG"));
+    QImage plainOut;
+    ASSERT_EQ(loadPicture(plainPath, QSize(8, 8), Fit::Fill, &plainOut), Ok);
+    EXPECT_EQ(plainOut.pixelColor(2, 2), QColor(255, 128, 0));
 }
 
 int main(int argc, char **argv)

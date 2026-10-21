@@ -59,6 +59,21 @@ Singleton {
         return o && o.state === "ready" && o.file ? o.file : "";
     }
 
+    // Names the running login: the compositor instance (a restart of the shell within it is not a new login), else the
+    // login session; "" when neither is known (every start counts as a login).
+    readonly property string loginKey: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || Quickshell.env("XDG_SESSION_ID") || ""
+
+    // The prepared pictures on screen, for every output: the helper never prunes them from its cache.
+    function currentFiles(): var {
+        const out = [];
+        for (const name of Object.keys(outputs)) {
+            const f = outputs[name].file;
+            if (typeof f === "string" && f !== "")
+                out.push(f);
+        }
+        return out;
+    }
+
     function carousel(key: string): var {
         const d = saved.displays && saved.displays[key];
         return d && typeof d === "object" ? d : null;

@@ -21,7 +21,7 @@ ShellRoot {
     readonly property string dirBad: base + "/bad"
     readonly property string dirRange: base + "/range"
     readonly property string badText: '{ "appearance": "light", oops'
-    readonly property string keepText: '{"version":1,"appearance":"light","material":{"transparency":0.5,"profile":"full"},"accessibility":{"reduceTransparency":false,"reduceMotion":false},"dock":{"pinned":["a","b"],"magnification":1.2,"magnificationEnabled":true,"autohide":false},"windows":{"titlebarDoubleClick":"minimize"},"notifications":{"dnd":false,"previews":"always"},"lock":{"idleMinutes":17}}'
+    readonly property string keepText: '{"version":1,"appearance":"light","material":{"transparency":0.5,"profile":"full"},"accessibility":{"reduceTransparency":false,"reduceMotion":false},"dock":{"pinned":["a","b"],"magnification":1.2,"magnificationEnabled":true,"autohide":false},"windows":{"titlebarDoubleClick":"minimize"},"notifications":{"dnd":false,"previews":"always"},"lock":{"idleMinutes":17},"wallpaper":{"source":"folder","path":"/pics","outputs":[{"display":{"name":"X-1","model":"","serial":""},"fit":"tile"}]}}'
     readonly property string rangeText: '{"version":1,"icons":{"mode":"neon","tint":"#12345","folderColor":"red"},"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999},"pointer":{"size":7},"wallpaper":{"source":"file","path":"relative","color":"#ABCDEF","fit":7,"interval":"2s","shuffle":"yes","outputs":[{"bad":1}]}}'
     readonly property string dirMerge: base + "/merge"
     readonly property string mergeText: '{"version":1,"appearance":"dark","lock":{"idleMinutes":3},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
@@ -103,6 +103,8 @@ ShellRoot {
                 return;
             done = true;
             root.check("keep loaded profile", keep.data.material.profile === "full");
+            // The adapter's QVariantList is not an Array: the outputs must survive it (review finding).
+            root.check("keep wallpaper outputs through the adapter", keep.wallpaper.outputs.length === 1 && keep.wallpaper.outputs[0].fit === "tile" && keep.wallpaper.source === "folder");
             keep.setNotificationsDnd(true);
             keep.flush();
         }
