@@ -39,10 +39,20 @@ sleep 1.5
 vs_spawn foot --app-id gfdockB
 sleep 3
 vs_park
-pinned() { vs_ipc dock pinned | jq -c .; }
+pinned() { vs_ipc dock pinned 2>/dev/null | jq -c . 2>/dev/null; }
 want='["foot"]'
 echo "start pinned=$(pinned) mode=$mode"
 [[ $(pinned) == "$want" ]] || { echo "dock-drag-interrupt: start state is $(pinned), not $want" >&2; exit 1; }
+# The shell is up (IPC answers) and the Dock shows the pinned tile: a trial that starts before that would test nothing.
+dock_ready() {
+  local i
+  for i in $(seq 1 40); do
+    vs_ipc lock status >/dev/null 2>&1 && vs_ipc dock tiles 2>/dev/null | jq -e 'index("foot") != null' >/dev/null 2>&1 && return 0
+    sleep 0.5
+  done
+  return 1
+}
+# Brings the session back to the start state. Returns 1 when it could not: the trial is then a FAIL, never a pass without a test.
 restore() {
   if [[ $(pinned) != "$want" ]]; then
     vs_session en >/dev/null 2>&1
@@ -53,7 +63,11 @@ restore() {
     sleep 3
     vs_park
   fi
-  [[ $(pinned) == "$want" ]] || echo "  (restore failed: $(pinned))"
+  if ! dock_ready || [[ $(pinned) != "$want" ]]; then
+    echo "  (restore failed: $(pinned 2>/dev/null))"
+    return 1
+  fi
+  return 0
 }
 pass=0
 failn=0
@@ -67,6 +81,10 @@ res() {
     cp "$VS_DEV/shell.log" "$VS_DEV/shell.fail.$failn.log" 2>/dev/null
   fi
   echo "$(date +%T) $1 expect=$2 got=$3 $ok"
+}
+restore_failed() { # LABEL: a trial whose start state could not be restored is a failure, not a pass
+  failn=$((failn + 1))
+  echo "$(date +%T) $1 restore failed, not tested: FAIL"
 }
 P="abs $FX $DY sleep 200 down sleep 200"
 park="abs $VS_PARK_X $VS_PARK_Y"
@@ -126,7 +144,7 @@ trial() {
   else
     tail="drag $FX $DY sleep 150 up sleep 150 $park"
   fi
-  restore
+  restore || { restore_failed "$label"; return; }
   if declare -F "pre_$trig" >/dev/null; then "pre_$trig" >/dev/null 2>&1; fi
   vs_pointer $P drag $FX $hy $path $tail >/dev/null &
   ptr_pid=$!
@@ -151,7 +169,7 @@ pos_run() { # TRIGGER REP: the four positions (+ released-at-held-point above th
 fn() {
   local name=$1
   shift
-  restore
+  restore || { restore_failed "$name"; return; }
   vs_pointer $P "$@" >/dev/null
   sleep 1.3
   res "$name" removed "$(pinned)"
@@ -186,7 +204,7 @@ case $mode in
     # its own latency); the real offset (release minus first interruption, ms, from the DBG lines of the shell log when present) is
     # printed per trial.
     for k in $(seq 0 $((${2:-20} - 1))); do
-      restore
+      restore || { restore_failed "race_${3:-search}_k$k"; continue; }
       delay=$(awk -v k="$k" 'BEGIN { printf "%.3f", '"${4:-1.80}"' + k * 0.025 }')
       vs_pointer $P drag $FX $ABOVE sleep 1500 up sleep 300 $park >/dev/null &
       ptr_pid=$!

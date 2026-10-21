@@ -11,6 +11,7 @@
 #   desktop   a window on another Desktop: a click switches to that Desktop and focuses it
 #   hold      a press under 550 ms is a click (launches), a press over it opens the Dock menu and launches nothing
 #   holdtiles a 900 ms hold on the Apps tile, the Trash tile and a minimized-window tile (no Dock menu) still clicks on release
+#   retitle   eight clicks while the focused window retitles every 20 ms all tap (title and focus events never cancel a click)
 #   interrupt a press that another surface interrupts clicks nothing (Trash held while Apps opens, app tile pressed while Apps opens)
 #   rightclick a right press opens the Dock menu at once, however long it is held
 #   reduced   Reduce Motion on: no bounce, the dot still appears
@@ -41,7 +42,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 parts=("$@")
-(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles interrupt rightclick reduced)
+(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles retitle interrupt rightclick reduced)
 want() { local p; for p in "${parts[@]}"; do [[ $p == "$1" ]] && return 0; done; return 1; }
 
 mkdir -p "$out" "$VS_DEV/share/applications" "$VS_DEV/share/gflaunch"
@@ -273,16 +274,19 @@ if want forward || want minimized; then
 fi
 
 if want minimized; then
-  # Minimize every gfLB window (the focused one, then the next).
-  for i in 1 2 3 4; do
-    left=$(nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name != "special:minimized")] | length')
-    [[ $left -eq 0 ]] && break
-    # Focus a window of gfLB that is still there (the focus may have gone to another app after the first one), then minimize it.
-    [[ $(active_class) == gfLB ]] || nest dispatch "hl.dsp.focus({window = 'class:^gfLB\$'})" >/dev/null 2>&1
-    sleep 0.6
+  # Minimize every gfLB window, one at a time, waiting for each to reach special:minimized (the Dock tile and the focus settle after).
+  minimized_count() { nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name == "special:minimized")] | length'; }
+  for i in 1 2 3 4 5 6; do
+    nmin=$(minimized_count)
+    [[ $nmin -ge 2 ]] && break
+    addr=$(nest clients -j | jq -r '[.[] | select(.class == "gfLB" and .workspace.name != "special:minimized")] | .[0].address // empty')
+    [[ -n $addr ]] || break
+    nest dispatch "hl.dsp.focus({window = 'address:$addr'})" >/dev/null 2>&1
+    for _ in $(seq 1 20); do [[ $(nest activewindow -j | jq -r .address) == "$addr" ]] && break; sleep 0.15; done
     vs_ipc windows minimize >/dev/null
-    sleep 1.5
+    for _ in $(seq 1 25); do [[ $(minimized_count) -gt $nmin ]] && break; sleep 0.2; done
   done
+  sleep 1.5
   min=$(nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name == "special:minimized")] | length')
   [[ $min -eq 2 ]]; RC=$?
   check "minimized: setup, both gfLB windows minimized (found $min)" $RC
@@ -335,11 +339,12 @@ fi
 
 if want badge; then
   clean_state badge
-  # The press-dim layer must not clip a badge that overhangs the icon: a tile with a badge, button down, frame taken while held. The
-  # press is 250 ms (a click, clearly under dock.menuHold). grim starts 20 ms after the Dock reports the press; the frame counts only
-  # when its start lies inside the press by the shell's own press and release times (else the attempt is repeated, up to five times).
+  # The press-dim layer must not clip a badge that overhangs the icon: a tile with a badge, button down, a frame taken while held. The
+  # press is 250 ms (a click, clearly under dock.menuHold). A timed sequence of small frames runs around it; the held frame is one whose
+  # whole capture lies inside the press by the shell's own press and release times (dock-launch.py badgeseq). Without such a frame
+  # nothing is proved and the attempt is repeated (up to six times); a missing press or release line is a FAIL.
   RC=2
-  for attempt in 1 2 3 4 5; do
+  for attempt in 1 2 3 4 5 6; do
     quiet gfLA gfLB
     DBUS_SESSION_BUS_ADDRESS=$(<"$VS_DEV/bus.address") notify-send -a "GF Launch A" -t 0 "Badge test" "One notification."
     sleep 2
@@ -348,33 +353,17 @@ if want badge; then
     vs_pointer abs "$x" "$y" >/dev/null
     sleep 0.7
     REGION="$(( OX + x - 60 )),$(( OY + 960 )) 120x90"
-    WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-rest.png"
     bmark=$(wc -l < "$VS_DEV/shell.log")
-    rm -f "$out/badge-grim0"
-    (
-      for _ in $(seq 1 200); do
-        if tail -n +"$(( bmark + 1 ))" "$VS_DEV/shell.log" | grep -q "dock-launch: pressed true"; then break; fi
-        sleep 0.01
-      done
-      sleep 0.02
-      date +%s%3N > "$out/badge-grim0"
-      WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-held.png"
-    ) &
+    record badgeseq 1700
+    sleep 0.6
     vs_pointer down sleep 250 up >/dev/null
-    wait
-    sleep 0.5
+    wait "$rec_pid"; rec_pid=""
     tail -n +"$(( bmark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/badge-log.txt"
-    bdown=$(awk '/pressed true/ {print $NF; exit}' "$out/badge-log.txt")
-    bup=$(awk '/pressed false/ {print $NF; exit}' "$out/badge-log.txt")
-    g0=$(<"$out/badge-grim0")
-    if [[ -n $bdown && -n $bup && $g0 -ge $bdown && $g0 -le $(( bup - 20 )) ]]; then
-      python3 -I "$VS_HERE/dock-launch.py" badge "$out/badge-held.png" "$out/badge-rest.png"; RC=$?
-      break
-    fi
-    echo "badge: attempt $attempt: grim started at $g0, outside the press ($bdown .. $bup): the frame does not count, again"
-    RC=2
+    python3 -I "$VS_HERE/dock-launch.py" badgeseq "$out" badgeseq "$out/badge-log.txt"; RC=$?
+    [[ $RC -ne 2 ]] && break
+    echo "badge: attempt $attempt proved nothing, again"
   done
-  check "badge: the held icon is darker and still shows the whole badge (attempt $attempt)" $RC
+  check "badge: the icon is darker in a frame inside the press and the whole badge shows (attempt $attempt)" $RC
   ! grep -q "menu-by-hold" "$out/badge-log.txt"; RC=$?
   check "badge: the 250 ms press opened no menu (log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/badge-log.txt" | tr '\n' ' '))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
@@ -426,6 +415,39 @@ if want hold; then
   python3 -I "$VS_HERE/dock-launch.py" menu "$out/hold-menu.png" "$out/hold-before.png" "$x"; RC=$?
   check "hold: the Dock menu is drawn above the pressed tile" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" click >/dev/null
+fi
+
+if want retitle; then
+  clean_state retitle
+  # A focused window that changes its title every 20 ms (a terminal, a browser tab, a player) makes Hyprland send activewindowv2
+  # all the time. Dock clicks must not notice: eight 100 ms clicks on the Trash tile must all tap, none refused.
+  quiet gfLA gfLB gfLR
+  vs_spawn foot --app-id gfLR sh -c 'i=0; while :; do i=$((i + 1)); printf "\033]2;t%s\007" "$i"; sleep 0.02; done'
+  wait_count gfLR 1 10
+  sleep 2
+  [[ $(active_class) == gfLR ]]; RC=$?
+  check "retitle: setup, the retitling window has the focus (active: $(active_class))" $RC
+  title1=$(nest activewindow -j | jq -r .title)
+  sleep 0.3
+  title2=$(nest activewindow -j | jq -r .title)
+  [[ -n $title1 && $title1 != "$title2" ]]; RC=$?
+  check "retitle: the title changes ($title1 -> $title2)" $RC
+  read -r cx cy <<<"$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("trash")')" "$VS_OUTPUT")"
+  vs_pointer abs "$cx" "$cy" >/dev/null
+  sleep 0.7
+  m=$(wc -l < "$VS_DEV/shell.log")
+  for k in 1 2 3 4 5 6 7 8; do
+    vs_pointer down sleep 100 up >/dev/null
+    sleep 0.4
+  done
+  sleep 0.5
+  tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/retitle.txt"
+  taps=$(grep -c "dock-launch: tap [0-9]" "$out/retitle.txt")
+  refused=$(grep -c "tap-refused-interrupted" "$out/retitle.txt")
+  [[ $taps -eq 8 && $refused -eq 0 ]]; RC=$?
+  check "retitle: eight 100 ms clicks while the focused window retitles every 20 ms: $taps taps, $refused refused" $RC
+  vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
+  quiet gfLR
 fi
 
 if want interrupt; then

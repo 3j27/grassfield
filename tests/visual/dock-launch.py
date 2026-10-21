@@ -100,6 +100,35 @@ def badge(held, rest):
     return 0 if nr >= 15 and nh >= 0.8 * nr and dark else 1
 
 
+def badge_seq(d, name, logfile):
+    """Badge check on a timed sequence of frames (DIR/NAME-NNN.ppm, DIR/NAME.log "index t0 t1"): the held frame is one whose whole
+    capture [t0, t1] lies inside the press by the shell's own press and release times (30 ms after the press at the earliest), the
+    rest frame the last one that ended before the press. No such frame: status 2 (nothing proved, the caller repeats)."""
+    import os
+    down = up = None
+    for l in open(logfile):
+        if "dock-launch: pressed" in l:
+            f = l.split("dock-launch: pressed")[1].split()
+            if f[0] == "true" and down is None:
+                down = int(f[1])
+            elif f[0] == "false" and up is None:
+                up = int(f[1])
+    if down is None or up is None:
+        print("badge: the Dock logged no press and release for this click")
+        return 1
+    frames = [l.split() for l in open(os.path.join(d, name + ".log")) if l.strip()]
+    frames = [(int(i), int(t0), int(t1)) for i, t0, t1 in frames]
+    held = [f for f in frames if f[1] >= down + 30 and f[2] <= up]
+    rest = [f for f in frames if f[2] < down]
+    print("badge: press %d..%d ms (shell clock, %d ms), %d frames, %d fully inside the press, %d before it" % (down, up, up - down, len(frames), len(held), len(rest)))
+    if not held or not rest:
+        print("badge: no frame lies entirely inside the press by the shell's timestamps: nothing proved")
+        return 2
+    h, r = held[len(held) // 2], rest[-1]
+    print("badge: held frame %d captured at %d..%d (%d..%d ms after the press), rest frame %d" % (h[0], h[1], h[2], h[1] - down, h[2] - down, r[0]))
+    return badge(os.path.join(d, "%s-%03d.ppm" % (name, h[0])), os.path.join(d, "%s-%03d.ppm" % (name, r[0])))
+
+
 def locate(path, colour):
     import subprocess
     out = subprocess.run(["magick", path, "-crop", "1400x200+260+880", "+repage", "-depth", "8", "ppm:-"], capture_output=True, check=True).stdout
@@ -240,6 +269,8 @@ def launch(d, name, colour, nobounce=False):
 
 
 if __name__ == "__main__":
+    if sys.argv[1] == "badgeseq":
+        sys.exit(badge_seq(sys.argv[2], sys.argv[3], sys.argv[4]))
     if sys.argv[1] == "badge":
         sys.exit(badge(sys.argv[2], sys.argv[3]))
     if sys.argv[1] == "menu":

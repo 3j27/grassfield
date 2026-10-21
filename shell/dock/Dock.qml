@@ -221,17 +221,27 @@ Scope {
     // Drag-out removal follows "cancel on interruption": anything that can take the pointer or the focus during a tile drag marks the
     // drag interrupted (win.dragInterrupted), and an interrupted drag never removes its tile (it glides back). Events only. The
     // Dock's own drag feedback (Remove label, puff, tooltip) is inside its window and reports none of these.
-    // Counts every interruption: a press that sees it change before its release was interrupted (something else took the pointer or the
-    // focus while the button was down, Qt then ends the press with a synthesized release) and never clicks, like an interrupted drag.
-    property int interruptions: 0
-
     function interruptDrag(): void {
-        interruptions++;
         const all = windows.instances;
         for (let i = 0; i < all.length; i++) {
             if (all[i].dragFrom >= 0)
                 all[i].dragInterrupted = true;
         }
+    }
+
+    // CLICK CANCELLATION, its own short list (not the drag-out list above: that one over-cancels on purpose, owner batch 7, and a window
+    // retitling every few milliseconds must not eat Dock clicks). A press on a tile is taken away from the Dock, and its release never
+    // clicks, only when:
+    //   1. a shell surface opens over the Dock (Search, Overview, Apps, the switcher, a Dock or menu-bar menu, Notification Center,
+    //      Control Center): FocusReturn.surfaceOpened, and Popups.kind switching to a popup;
+    //   2. the session locks (FocusReturn.lockedChanged);
+    //   3. Qt cancels the grab or the pointer leaves the tile's handler (TapHandler.canceled / a cancelled grab, in the delegate).
+    // Window titles, focus changes and windows opening or closing are NOT in the list. A tile records clickCancels when its button goes down
+    // and refuses its tap when the value changed.
+    property int clickCancels: 0
+
+    function cancelClicks(): void {
+        clickCancels++;
     }
 
     onKeyboardModeChanged: interruptDrag()
@@ -242,6 +252,7 @@ Scope {
 
         function onSurfaceOpened(name: string): void {
             root.interruptDrag();
+            root.cancelClicks();
         }
 
         function onSurfaceClosed(name: string): void {
@@ -251,6 +262,7 @@ Scope {
         // The session lock.
         function onLockedChanged(): void {
             root.interruptDrag();
+            root.cancelClicks();
         }
     }
 
@@ -260,6 +272,8 @@ Scope {
 
         function onKindChanged(): void {
             root.interruptDrag();
+            if (Popups.kind !== "")
+                root.cancelClicks();
         }
     }
 
@@ -871,8 +885,9 @@ Scope {
                                 property bool tipSuppressed: false
                                 // The Dock menu was opened by holding the button: the release is not a click.
                                 property bool menuByHold: false
-                                // root.interruptions when the button went down (the press is refused when it changed).
+                                // root.clickCancels when the button went down, and whether Qt cancelled the press (the tap is refused then).
                                 property int pressMark: 0
+                                property bool pressCancelled: false
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
@@ -1348,8 +1363,14 @@ Scope {
                                         if (pressed) {
                                             tile.tipSuppressed = true;
                                             tile.menuByHold = false;
-                                            tile.pressMark = root.interruptions;
+                                            tile.pressMark = root.clickCancels;
+                                            tile.pressCancelled = false;
                                         }
+                                    }
+                                    onCanceled: tile.pressCancelled = true
+                                    onGrabChanged: (transition, point) => {
+                                        if (transition === PointerDevice.CancelGrabExclusive || transition === PointerDevice.CancelGrabPassive)
+                                            tile.pressCancelled = true;
                                     }
                                     onLongPressed: if (tile.isApp) {
                                         tile.menuByHold = true;
@@ -1360,8 +1381,8 @@ Scope {
                                     onTapped: {
                                         if (tile.menuByHold)
                                             return;
-                                        // Interrupted press (a surface, popup, window or focus change while the button was down): nothing happens.
-                                        if (root.interruptions !== tile.pressMark) {
+                                        // Press taken away from the Dock (a shell surface or popup opened, the lock, or Qt cancelled it; see root.clickCancels): nothing happens.
+                                        if (root.clickCancels !== tile.pressMark || tile.pressCancelled) {
                                             if (VisualFixtures.active)
                                                 console.info("dock-launch: tap-refused-interrupted", Date.now());
                                             return;
