@@ -274,6 +274,8 @@ QtObject {
     readonly property int dockLaunchTimeout: 12000
     // macOS: pressing and holding a Dock icon about half a second opens its menu (ms); a shorter press is a click
     readonly property int dockMenuHold: 550
+    // estimate: a window opening or closing makes Qt end a held press with a synthesized release (a tap with the button still down); a tap this many ms after such a window event, for a press that began before it, is refused (shell, Dock)
+    readonly property int dockClickWindowGuard: 150
     // tiles without a Dock menu (Apps, Trash, minimized windows): a click launches however long the button is held; TapHandler longPressThreshold in seconds, set so a long hold still counts as a tap
     readonly property int dockClickHoldLimit: 3600
     // estimate: transparent room above the shelf for a dragged icon and the poof

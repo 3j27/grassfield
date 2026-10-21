@@ -29,7 +29,17 @@ trap 'exit 130' INT TERM
 
 vs_session en || exit 1
 vs_reset dark 0.25
-FX=${FX:-927}
+# x of the pinned foot tile, from the Dock itself (a crash-report window or another extra tile moves it; the old fixed 927 did not follow).
+# FX=NNN in the environment still overrides it.
+FX_FORCED=${FX:-}
+refresh_fx() {
+  [[ -n $FX_FORCED ]] && { FX=$FX_FORCED; return 0; }
+  local xy
+  xy=$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("foot")')" "$VS_OUTPUT" 2>/dev/null)
+  [[ $xy =~ ^[0-9]+\ [0-9]+$ ]] || return 1
+  FX=${xy% *}
+}
+FX=927
 DY=1032
 ABOVE=600   # above the Dock window (top edge y=830)
 INSIDE=900  # inside the window, above the shelf
@@ -41,7 +51,13 @@ sleep 3
 vs_park
 pinned() { vs_ipc dock pinned 2>/dev/null | jq -c . 2>/dev/null; }
 want='["foot"]'
-echo "start pinned=$(pinned) mode=$mode"
+dock_ready_start() {
+  local i
+  for i in $(seq 1 40); do vs_ipc dock tiles 2>/dev/null | jq -e 'index("foot") != null' >/dev/null 2>&1 && return 0; sleep 0.5; done
+  return 1
+}
+dock_ready_start && refresh_fx
+echo "start pinned=$(pinned) mode=$mode foot tile x=$FX"
 [[ $(pinned) == "$want" ]] || { echo "dock-drag-interrupt: start state is $(pinned), not $want" >&2; exit 1; }
 # The shell is up (IPC answers) and the Dock shows the pinned tile: a trial that starts before that would test nothing.
 dock_ready() {
@@ -68,6 +84,7 @@ restore() {
       vs_park
     fi
     if dock_ready && [[ $(pinned) == "$want" ]]; then
+      refresh_fx
       return 0
     fi
     echo "  (restore attempt $attempt failed: pinned=$(pinned 2>/dev/null) tiles=$(vs_ipc dock tiles 2>&1 | head -c 120))"

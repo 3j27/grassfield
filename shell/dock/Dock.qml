@@ -240,6 +240,13 @@ Scope {
     // and refuses its tap when the value changed.
     property int clickCancels: 0
 
+    // Time (ms) of the last change of the window list (a window opened or closed). Qt ends a held press with a synthesized release, and a
+    // tap, when a window opens (nested probe: pressed, toplevels-changed, 35 ms later tap + release with grab state 8, no hover or cancel
+    // event, nothing that tells it from a real release). A press that began before such an event and whose tap comes within
+    // Tokens.dockClickWindowGuard of it is refused: it was not finished by the user. A real click that coincides with a window opening
+    // within that time is lost and costs one repeated click.
+    property real lastWindowEvent: 0
+
     function cancelClicks(): void {
         clickCancels++;
     }
@@ -306,6 +313,9 @@ Scope {
         target: Compositor.toplevels
 
         function onValuesChanged(): void {
+            root.lastWindowEvent = Date.now();
+            if (VisualFixtures.active)
+                console.info("dock-launch: toplevels-changed", Date.now());
             root.interruptDrag();
             root.rebuild();
         }
@@ -888,6 +898,7 @@ Scope {
                                 // root.clickCancels when the button went down, and whether Qt cancelled the press (the tap is refused then).
                                 property int pressMark: 0
                                 property bool pressCancelled: false
+                                property real pressTime: 0
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
@@ -1214,8 +1225,12 @@ Scope {
 
                                 HoverHandler {
                                     id: tileHover
-                                    onHoveredChanged: if (!hovered)
-                                        tile.tipSuppressed = false
+                                    onHoveredChanged: {
+                                        if (VisualFixtures.active && leftTap.pressed)
+                                            console.info("dock-launch: hover-while-pressed", hovered, Date.now());
+                                        if (!hovered)
+                                            tile.tipSuppressed = false;
+                                    }
                                     enabled: !tile.isSeparator
                                     cursorShape: Qt.ArrowCursor
                                 }
@@ -1365,10 +1380,17 @@ Scope {
                                             tile.menuByHold = false;
                                             tile.pressMark = root.clickCancels;
                                             tile.pressCancelled = false;
+                                            tile.pressTime = Date.now();
                                         }
                                     }
-                                    onCanceled: tile.pressCancelled = true
+                                    onCanceled: {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: canceled", Date.now());
+                                        tile.pressCancelled = true;
+                                    }
                                     onGrabChanged: (transition, point) => {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: grab", transition, point.state, Date.now());
                                         if (transition === PointerDevice.CancelGrabExclusive || transition === PointerDevice.CancelGrabPassive)
                                             tile.pressCancelled = true;
                                     }
@@ -1385,6 +1407,12 @@ Scope {
                                         if (root.clickCancels !== tile.pressMark || tile.pressCancelled) {
                                             if (VisualFixtures.active)
                                                 console.info("dock-launch: tap-refused-interrupted", Date.now());
+                                            return;
+                                        }
+                                        // A window opened or closed during the press and the release follows it at once: Qt ended the press.
+                                        if (root.lastWindowEvent >= tile.pressTime && Date.now() - root.lastWindowEvent < Tokens.dockClickWindowGuard) {
+                                            if (VisualFixtures.active)
+                                                console.info("dock-launch: tap-refused-window-event", Date.now());
                                             return;
                                         }
                                         if (VisualFixtures.active)

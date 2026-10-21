@@ -12,6 +12,7 @@
 #   hold      a press under 550 ms is a click (launches), a press over it opens the Dock menu and launches nothing
 #   holdtiles a 900 ms hold on the Apps tile, the Trash tile and a minimized-window tile (no Dock menu) still clicks on release
 #   retitle   eight clicks while the focused window retitles every 20 ms all tap (title and focus events never cancel a click)
+#   mapdrop   a window opening during a held press ends it early in Qt: neither a tap nor an activation (Trash, app tile)
 #   interrupt a press that another surface interrupts clicks nothing (Trash held while Apps opens, app tile pressed while Apps opens)
 #   rightclick a right press opens the Dock menu at once, however long it is held
 #   reduced   Reduce Motion on: no bounce, the dot still appears
@@ -42,7 +43,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 parts=("$@")
-(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles retitle interrupt rightclick reduced)
+(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles retitle mapdrop interrupt rightclick reduced)
 want() { local p; for p in "${parts[@]}"; do [[ $p == "$1" ]] && return 0; done; return 1; }
 
 mkdir -p "$out" "$VS_DEV/share/applications" "$VS_DEV/share/gflaunch"
@@ -198,6 +199,33 @@ launch_gfLA() {
   tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch:" > "$out/$name.curve"
 }
 
+# dock_click X Y: a plain click on the tile at X Y. A host stall that holds the press for 500 ms or more (the shell logs it) turns a click
+# into the Dock menu: that is closed and the click repeated (up to four times). The log lines of the delivered click stay in lastclick.txt.
+dock_click() {
+  local a m
+  for a in 1 2 3 4; do
+    vs_pointer abs "$1" "$2" >/dev/null
+    sleep 0.7
+    m=$(wc -l < "$VS_DEV/shell.log")
+    vs_pointer click >/dev/null
+    sleep 0.6
+    tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/lastclick.txt"
+    if grep -q "menu-by-hold" "$out/lastclick.txt"; then
+      if [[ $(press_ms "$out/lastclick.txt") -lt 500 ]]; then
+        echo "dock_click: the click opened a menu with a press of $(press_ms "$out/lastclick.txt") ms: not a host stall"
+        return 1
+      fi
+      echo "dock_click: attempt $a: a host stall held the press for $(press_ms "$out/lastclick.txt") ms and opened the menu: closing it, again"
+      vs_ipc menubar close >/dev/null
+      sleep 0.5
+      [[ -z $(vs_ipc dock popup) ]] || { vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" click >/dev/null; sleep 0.5; }
+      continue
+    fi
+    return 0
+  done
+  return 1
+}
+
 # launch_gfLA + analysis, up to three attempts: a host stall (status 2: the shell measured a hold or frame gaps that are not the ones
 # asked for) starts again from the recents state; three stalls in a row are reported as a stall. Leaves the status in $st.
 launch_retry() { # NAME [nobounce]
@@ -210,6 +238,7 @@ launch_retry() { # NAME [nobounce]
     [[ $st -ne 2 ]] && break
     echo "$name: attempt $attempt stalled, again"
     quiet gfLA
+    clean_state "$name retry $attempt"
     sleep 3
   done
 }
@@ -255,9 +284,7 @@ if want forward || want minimized; then
   [[ $(active_class) == gfLA ]]; RC=$?
   check "forward: setup, gfLA in front (active: $(active_class))" $RC
   read -r x y <<<"$(tile_xy gfLB)"
-  vs_pointer abs "$x" "$y" >/dev/null
-  sleep 0.7
-  vs_pointer click >/dev/null
+  dock_click "$x" "$y"
   sleep 1
   nest clients -j | jq -c '[.[] | {class, focusHistoryID}]' > "$out/forward.txt"
   cat "$out/forward.txt"
@@ -267,13 +294,16 @@ if want forward || want minimized; then
   [[ $top2 -eq 2 ]]; RC=$?
   check "forward: both gfLB windows are the two most recent (found $top2)" $RC
   first=$(nest activewindow -j | jq -r .address)
-  vs_pointer click >/dev/null
+  dock_click "$x" "$y"
   sleep 1
+  grep -q "dock-launch: tap [0-9]" "$out/lastclick.txt"; RC=$?
+  check "forward: the second click was delivered to the tile (tap logged: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/lastclick.txt" | tr '\n' ' '))" $RC
   [[ $(nest activewindow -j | jq -r .address) == "$first" ]]; RC=$?
   check "forward: a second click does not cycle the windows" $RC
 fi
 
 if want minimized; then
+  clean_state minimized
   # Minimize every gfLB window, one at a time, waiting for each to reach special:minimized (the Dock tile and the focus settle after).
   minimized_count() { nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name == "special:minimized")] | length'; }
   for i in 1 2 3 4 5 6; do
@@ -291,9 +321,7 @@ if want minimized; then
   [[ $min -eq 2 ]]; RC=$?
   check "minimized: setup, both gfLB windows minimized (found $min)" $RC
   read -r x y <<<"$(tile_xy gfLB)"
-  vs_pointer abs "$x" "$y" >/dev/null
-  sleep 0.7
-  vs_pointer click >/dev/null
+  dock_click "$x" "$y"
   sleep 2
   min=$(nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name == "special:minimized")] | length')
   [[ $min -eq 1 && $(active_class) == gfLB ]]; RC=$?
@@ -307,9 +335,7 @@ if want reopen; then
   wait_count gfLB 0 5
   sleep 3
   read -r x y <<<"$(tile_xy gfLB)"
-  vs_pointer abs "$x" "$y" >/dev/null
-  sleep 0.7
-  vs_pointer click >/dev/null
+  dock_click "$x" "$y"
   wait_count gfLB 1 10; RC=$?
   check "reopen: a click on the tile of an app with no window starts it again (windows: $(count_class gfLB))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
@@ -328,9 +354,7 @@ if want desktop; then
   [[ $(nest activeworkspace -j | jq -r .id) != "$ws_a" ]]; RC=$?
   check "desktop: setup, gfLA on Desktop $ws_a, another Desktop shown" $RC
   read -r x y <<<"$(tile_xy gfLA)"
-  vs_pointer abs "$x" "$y" >/dev/null
-  sleep 0.7
-  vs_pointer click >/dev/null
+  dock_click "$x" "$y"
   sleep 1.5
   [[ $(nest activeworkspace -j | jq -r .id) == "$ws_a" && $(active_class) == gfLA ]]; RC=$?
   check "desktop: the click switched to Desktop $ws_a and focused gfLA (now $(nest activeworkspace -j | jq -r .id), active $(active_class))" $RC
@@ -448,6 +472,46 @@ if want retitle; then
   check "retitle: eight 100 ms clicks while the focused window retitles every 20 ms: $taps taps, $refused refused" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
   quiet gfLR
+fi
+
+if want mapdrop; then
+  clean_state mapdrop
+  # A window opening during a press makes Qt end the press with a release (and a tap) while the button is still down. A press the Dock
+  # did not finish does nothing: neither a tap nor an activation nor a menu. The sequence the handler sees is kept in the logs.
+  quiet gfLA gfLB gfLM
+  ensure_recent gfLA
+  logs() { sed 's/.*dock-launch: //' "$1" | tr '\n' '|'; }
+  # (a) the Trash tile held for 1 s, a window opens 0.1 s into the hold.
+  read -r cx cy <<<"$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("trash")')" "$VS_OUTPUT")"
+  vs_pointer abs "$cx" "$cy" >/dev/null
+  sleep 0.7
+  m=$(wc -l < "$VS_DEV/shell.log")
+  ( sleep 0.1; vs_spawn foot --app-id gfLM ) &
+  vs_pointer down sleep 1000 up >/dev/null
+  wait
+  sleep 1.5
+  tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch:" > "$out/mapdrop-trash.txt"
+  echo "mapdrop trash: $(logs "$out/mapdrop-trash.txt")"
+  ! grep -q "dock-launch: tap [0-9]" "$out/mapdrop-trash.txt" && grep -q "tap-refused" "$out/mapdrop-trash.txt"; RC=$?
+  check "mapdrop: Trash held 1 s, a window opened 0.1 s in: the early release taps nothing (refused logged)" $RC
+  quiet gfLM
+  # (b) the app tile held for 1 s, a window opens 0.1 s in: the app is not activated and no menu opens.
+  ensure_recent gfLA
+  read -r x y <<<"$(tile_xy gfLA)"
+  vs_pointer abs "$x" "$y" >/dev/null
+  sleep 0.7
+  m=$(wc -l < "$VS_DEV/shell.log")
+  ( sleep 0.1; vs_spawn foot --app-id gfLM ) &
+  vs_pointer down sleep 1000 up >/dev/null
+  wait
+  sleep 3
+  tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch:" > "$out/mapdrop-app.txt"
+  echo "mapdrop app: $(logs "$out/mapdrop-app.txt")"
+  ! grep -q "dock-launch: tap [0-9]" "$out/mapdrop-app.txt"; RC=$?
+  [[ $RC -eq 0 && $(count_class gfLA) -eq 0 ]]; RC=$?
+  check "mapdrop: app tile held 1 s, a window opened 0.1 s in: the app is not activated (gfLA windows: $(count_class gfLA))" $RC
+  vs_ipc menubar close >/dev/null
+  quiet gfLM gfLA
 fi
 
 if want interrupt; then
