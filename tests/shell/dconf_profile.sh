@@ -18,7 +18,7 @@ KEY=org.gnome.desktop.interface
 dconf compile "$tmp/grassfield.db" "$root/packaging/dconf/grassfield.d"
 # The packaged profile names /usr/share/grassfield/dconf/grassfield.db: the scratch copy names the scratch database.
 sed "s|/usr/share/grassfield/dconf/grassfield.db|$tmp/grassfield.db|" "$root/packaging/dconf/profile" >"$tmp/profile"
-printf '[org/gnome/desktop/interface]\nicon-theme='"'"'Yaru-blue'"'"'\ncolor-scheme='"'"'prefer-dark'"'"'\n' >"$tmp/userkf/00.conf"
+printf '[org/gnome/desktop/interface]\nicon-theme='"'"'Yaru-blue'"'"'\ncolor-scheme='"'"'prefer-dark'"'"'\nmonospace-font-name='"'"'User Mono 9'"'"'\n' >"$tmp/userkf/00.conf"
 dconf compile "$tmp/xdg/dconf/user" "$tmp/userkf"
 g() { # PROFILE-or-unset, gsettings args...
   local p=$1; shift
@@ -36,6 +36,12 @@ check bash -c '! "$@"' _ env -i PATH="$PATH" HOME="$tmp/home" XDG_CONFIG_HOME="$
   XDG_DATA_DIRS=/usr/share DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent DCONF_PROFILE="$tmp/profile" gsettings set $KEY icon-theme Adwaita
 desc="with the profile, other keys still come from the user database and stay writable"
 check test "$(g "$tmp/profile" get $KEY color-scheme)" = "'prefer-dark'" -a "$(g "$tmp/profile" writable $KEY color-scheme)" = true
+desc="with the profile, the GTK font defaults are Inter 10, grayscale and slight"
+check test "$(g "$tmp/profile" get $KEY font-name)" = "'Inter 10'" -a "$(g "$tmp/profile" get $KEY document-font-name)" = "'Inter 10'" \
+  -a "$(g "$tmp/profile" get $KEY font-antialiasing)" = "'grayscale'" -a "$(g "$tmp/profile" get $KEY font-hinting)" = "'slight'"
+desc="the font keys are defaults, not locks: still writable with the profile; monospace-font-name keeps the user value"
+check test "$(g "$tmp/profile" writable $KEY font-name)" = true -a "$(g "$tmp/profile" writable $KEY font-hinting)" = true \
+  -a "$(g "$tmp/profile" get $KEY monospace-font-name)" = "'User Mono 9'"
 desc="without DCONF_PROFILE (the Omarchy session) the user's own icon-theme is read and writable"
 check test "$(g "" get $KEY icon-theme)" = "'Yaru-blue'" -a "$(g "" writable $KEY icon-theme)" = true
 # Recorded safety rule (spike I0): an unusable profile means dconf's null configuration (all defaults, user database

@@ -22,6 +22,8 @@ same() { # pattern: unchanged against the system configuration
   if [[ $a == "$b" ]]; then echo "PASS: session $1 unchanged -> $b"; else echo "FAIL: session $1 -> $b, system gives $a"; fail=1; fi
 }
 is sans-serif Inter
+is 'Sans Serif' Inter
+is Sans Inter
 is 'system\-ui' Inter
 is '\-apple\-system' Inter
 is BlinkMacSystemFont Inter
