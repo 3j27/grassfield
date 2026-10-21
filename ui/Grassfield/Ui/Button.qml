@@ -58,6 +58,7 @@ Item {
         color: root.primary ? Appearance.colors.accentText : (root.destructive ? Appearance.colors.danger : Appearance.colors.text)
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyMenuSize
+        font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
         font.weight: Tokens.typographyMenuWeight
     }
 

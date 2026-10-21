@@ -139,8 +139,8 @@ Quickshell's `//@ pragma IconTheme`: existence not verified for 0.3.1, and not n
   schema exists (above). Rejected unless the spike proves otherwise (cheap to test).
 - **G-C. A session dconf profile** (`DCONF_PROFILE`, set only in the Grassfield session):
   - **G-C1, read-only overlay**: `user-db:user` first (every key reads and writes the normal database, shared with
-    Omarchy), then a Grassfield database built at package time holding **only** `icon-theme='grassfield-icons'` with a
-    **lock** on that key. Profile path and database form: `file-db:/usr/share/grassfield/dconf/grassfield.db`
+    Omarchy), then a Grassfield database built at package time holding `icon-theme='grassfield-icons'` with a
+    **lock** on that key (the only lock), plus the unlocked font defaults added later by ADR-0003 (`10-fonts.conf`). Profile path and database form: `file-db:/usr/share/grassfield/dconf/grassfield.db`
     (`dconf compile` at build time), or `system-db:grassfield` (`/etc/dconf/db/grassfield.d` plus `locks/`, compiled by
     `dconf update`) if file databases do not honour locks. Nothing is written to the user's database; the key cannot be
     changed inside this session.

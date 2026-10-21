@@ -10,10 +10,18 @@
 export QT_QPA_SYSTEM_ICON_THEME=grassfield-icons
 
 # GTK, Electron, Chromium, Firefox and (through xdg-desktop-portal-gtk) Flatpak read the icon theme from dconf. This
-# session profile is the normal user database plus a read-only, locked Grassfield database that holds only
-# icon-theme='grassfield-icons'; nothing is written to the shared database (spike I0: tests/shell/dconf_profile.sh).
+# session profile is the normal user database plus a read-only Grassfield database that holds the locked
+# icon-theme='grassfield-icons' and the unlocked font defaults of ADR-0003 (10-fonts.conf); nothing is written to the shared database (spike I0: tests/shell/dconf_profile.sh).
 # Only when the profile and its database are readable: a profile dconf cannot open gives the "null configuration"
 # (every GTK setting at its default), so a half-installed package must not set it.
 if [ -r /usr/share/grassfield/dconf/profile ] && [ -r /usr/share/grassfield/dconf/grassfield.db ]; then
     export DCONF_PROFILE=/usr/share/grassfield/dconf/profile
+fi
+
+# Fonts (ADR-0003): a session fontconfig that includes the system /etc/fonts/fonts.conf (so the user's own
+# fontconfig still loads), and prefers Inter, inserted in place, for sans-serif, system-ui and the macOS web font names, and sets grayscale
+# antialiasing with slight hinting. Read by every fontconfig client (GTK, Qt, Chromium, Electron, Firefox).
+# FONTCONFIG_FILE replaces the system file, so it is exported only when the file is readable.
+if [ -r /usr/share/grassfield/fontconfig/fonts.conf ]; then
+    export FONTCONFIG_FILE=/usr/share/grassfield/fontconfig/fonts.conf
 fi
