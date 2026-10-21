@@ -415,7 +415,7 @@ Enforcement (`packaging/arch/whitesur-guard.sh`, `whitesur-detect.py`, `whitesur
   every folder, every other file or link whose name was the name of a dangling link (so `display` does not resolve to another
   WhiteSur icon), until stable. On the pin this removes about 350 regular files and 1600 links of the three variants. The
   names then fall back to Breeze or Adwaita through the wrapper (`tests/shell/icon_theme.sh` checks `computer`, `display`,
-  `system-file-manager`, `preferences-system`, `input-mouse`, `phone`, on a fixture and on the built package tree).
+  `system-file-manager`, `preferences-system`, `input-mouse`, `phone` resolve to Breeze; `display` is in neither Breeze nor Adwaita, so it resolves to nothing and never to WhiteSur; on a fixture and on the built package tree).
 - **Limits, stated.** Not detected: logos drawn only as strokes, logos tilted by an angle that is not a multiple of 90
   degrees, logos inside an opaque raster or a JPEG, and any Apple artwork that is neither a logo shape nor on the blocklist.
   The review is by eye on contact sheets of one drawing per icon name: it proves what is listed, not that nothing else

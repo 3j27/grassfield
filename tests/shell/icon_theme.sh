@@ -109,6 +109,8 @@ fi
 # removed (or whose link dangled) resolves to Adwaita or Breeze through the grassfield-icons wrapper, not to nothing and
 # not to WhiteSur. GTK 3 and 4, no display.
 removed_names="computer display system-file-manager preferences-system input-mouse phone"
+# Adwaita and Breeze have no icon called `display`: it must resolve to nothing at all, never to WhiteSur.
+fallback_names="computer system-file-manager preferences-system input-mouse phone"
 if python3 -c 'import gi; gi.require_version("Gtk","3.0")' 2>/dev/null && python3 -c 'import gi; gi.require_version("Gtk","4.0")' 2>/dev/null \
    && [[ -d /usr/share/icons/Adwaita ]]; then
   guard=$root/packaging/arch/whitesur-guard.sh
@@ -133,8 +135,8 @@ if python3 -c 'import gi; gi.require_version("Gtk","3.0")' 2>/dev/null && python
   GRASSFIELD_WHITESUR_BLOCKLIST=$fixd/blocklist.txt "$guard" clean "$fixd/icons/WhiteSur" >/dev/null
   for v in 3 4; do
     after=$(gtk "$v" $removed_names benign-app)
-    desc="GTK$v after the filter: the six names fall back to Adwaita or Breeze, an untouched icon stays in WhiteSur ($(tr '\n' ' ' <<<"$after" | cut -c1-200))"
-    check bash -c 'for n in $2; do grep -qE "^$n=(Adwaita|breeze)/" <<<"$1" || exit 1; done; grep -qx "benign-app=WhiteSur/apps/scalable/benign-app.svg" <<<"$1"' _ "$after" "$removed_names"
+    desc="GTK$v after the filter: the five names fall back to Adwaita or Breeze and display never resolves to WhiteSur, an untouched icon stays in WhiteSur ($(tr '\n' ' ' <<<"$after" | cut -c1-200))"
+    check bash -c 'for n in $2; do grep -qE "^$n=(Adwaita|breeze)/" <<<"$1" || exit 1; done; ! grep -q "^display=WhiteSur" <<<"$1"; grep -qx "benign-app=WhiteSur/apps/scalable/benign-app.svg" <<<"$1"' _ "$after" "$fallback_names"
   done
 
   # (2) The real package tree, when it is built (makepkg under .dev/ or GRASSFIELD_WHITESUR_TREE=<.../usr/share/icons>).
@@ -148,8 +150,8 @@ if python3 -c 'import gi; gi.require_version("Gtk","3.0")' 2>/dev/null && python
     cp "$theme" "$real/icons/grassfield-icons/index.theme"
     for v in 3 4; do
       out=$(env -i PATH="$PATH" HOME="$tmp" XDG_RUNTIME_DIR="$tmp" GSETTINGS_BACKEND=memory python3 -I "$root/tests/shell/icon_probe_gtk.py" "$v" "$real/icons" grassfield-icons $removed_names folder firefox 2>/dev/null)
-      desc="GTK$v on the real filtered package tree: the six names are not WhiteSur ($(tr '\n' ' ' <<<"$out" | cut -c1-260))"
-      check bash -c 'for n in $2; do grep -qE "^$n=(Adwaita|breeze|hicolor)/" <<<"$1" || exit 1; done' _ "$out" "$removed_names"
+      desc="GTK$v on the real filtered package tree: the five names resolve to Adwaita or Breeze and display is not WhiteSur ($(tr '\n' ' ' <<<"$out" | cut -c1-260))"
+      check bash -c 'for n in $2; do grep -qE "^$n=(Adwaita|breeze|hicolor)/" <<<"$1" || exit 1; done; ! grep -q "^display=WhiteSur" <<<"$1"' _ "$out" "$fallback_names"
       desc="GTK$v on the real filtered package tree: WhiteSur still serves the icons that were kept (folder)"
       check grep -qE '^folder=WhiteSur' <<<"$out"
     done
