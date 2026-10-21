@@ -176,6 +176,11 @@ Variants {
             id: host
 
             readonly property Item panel: panel
+            // The column's surface holds the keyboard (the compositor sent it the focus after the Exclusive layer
+            // mapped, which is a moment later than the open): reported for the test status line.
+            readonly property bool keyboardHeld: Window.active
+            onKeyboardHeldChanged: Notifications.centerKeyboard = keyboardHeld
+            Component.onDestruction: Notifications.centerKeyboard = false
             // One blur region per glass surface (cards, title capsule, widgets, footer).
             readonly property var regionList: regions.instances
             // Slides in from the right edge after creation.

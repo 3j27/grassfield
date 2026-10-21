@@ -42,6 +42,8 @@ Singleton {
     property int counter: 0
 
     property bool centerOpen: false
+    // The open column's surface has the keyboard (set by its content).
+    property bool centerKeyboard: false
     // Key focus returns to the window active when the center opened (FocusReturn).
     onCenterOpenChanged: {
         if (centerOpen)
@@ -919,7 +921,7 @@ Singleton {
         // Test hook: one-line state.
         function status(): string {
             return "server=" + root.serverState + " history=" + root.count + " banners=" + root.bannerCount
-                + " dnd=" + root.dnd + " center=" + root.centerOpen;
+                + " dnd=" + root.dnd + " center=" + root.centerOpen + " keyboard=" + root.centerKeyboard;
         }
 
         // Test hook: remove every entry (history, banners, Center); the UI has no global Clear All.

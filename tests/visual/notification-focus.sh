@@ -50,10 +50,25 @@ id=$(notify 0 "['a','Reply','b','Mark Read','c','Archive']" | sed -E 's/^\(uint3
 [[ $id =~ ^[0-9]+$ ]] || { echo "notification-focus: no notification id ($id)" >&2; exit 1; }
 vs_sleep 1
 ok=0
+no_keyboard=0
 for attempt in 1 2 3; do
   # Open the column from the clock, then Tab: card, its x, Reply, Mark Read.
   vs_pointer abs 1850 12 sleep 300 click
-  vs_sleep 1
+  # The Exclusive layer maps first and the compositor sends it the keyboard a moment later (late in about 2 of 5 opens):
+  # Tab sent before that goes to the window below. Wait for the column to report the keyboard (`notifications status`).
+  held=0
+  for _ in $(seq 1 50); do
+    if vs_ipc notifications status 2>/dev/null | grep -q ' keyboard=true'; then held=1; break; fi
+    sleep 0.1
+  done
+  if ((!held)); then
+    no_keyboard=$((no_keyboard + 1))
+    echo "notification-focus: keyboard not yet on the column after 5 s (attempt $attempt): not a focus defect, reopening" >&2
+    "$VS_ROOT/scripts/dev/keys.sh" -k Escape
+    vs_sleep 1
+    continue
+  fi
+  vs_sleep 0.3
   for _ in 1 2 3 4; do "$VS_ROOT/scripts/dev/keys.sh" -k Tab; vs_sleep 0.2; done
   # Mark Read: left edge about x 1691 before the update.
   if wait_ring notification-focus-before 1675 1705; then
@@ -64,7 +79,14 @@ for attempt in 1 2 3; do
   "$VS_ROOT/scripts/dev/keys.sh" -k Escape
   vs_sleep 1
 done
-((ok == 1)) || { echo "notification-focus: FAIL: no focus ring on Mark Read before the update" >&2; exit 1; }
+if ((ok != 1)); then
+  if ((no_keyboard == 3)); then
+    echo "notification-focus: INCONCLUSIVE: the keyboard never reached the column in 3 opens (compositor focus, not the focus resolver)" >&2
+  else
+    echo "notification-focus: FAIL: no focus ring on Mark Read before the update" >&2
+  fi
+  exit 1
+fi
 # The app replaces the notification and drops "Reply": the focused button is rebuilt and moves left.
 notify "$id" "['b','Mark Read','c','Archive']" >/dev/null
 vs_sleep 1
