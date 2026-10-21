@@ -54,20 +54,26 @@ dock_ready() {
 }
 # Brings the session back to the start state. Returns 1 when it could not: the trial is then a FAIL, never a pass without a test.
 restore() {
-  if [[ $(pinned) != "$want" ]]; then
-    vs_session en >/dev/null 2>&1
-    sleep 1
-    vs_spawn foot --app-id gfdockA
-    sleep 1.5
-    vs_spawn foot --app-id gfdockB
-    sleep 3
-    vs_park
-  fi
-  if ! dock_ready || [[ $(pinned) != "$want" ]]; then
-    echo "  (restore failed: $(pinned 2>/dev/null))"
-    return 1
-  fi
-  return 0
+  local attempt
+  for attempt in 1 2 3; do
+    if [[ $(pinned) != "$want" ]]; then
+      # Quickshell sometimes crashes within 10 s of a restart (the log then says so: "crashed within 10 seconds of launching"): the
+      # restart is repeated, up to three times, and a restore that never works is a FAIL of the trial.
+      vs_session en > "$VS_DEV/restore.log" 2>&1
+      sleep 1
+      vs_spawn foot --app-id gfdockA
+      sleep 1.5
+      vs_spawn foot --app-id gfdockB
+      sleep 3
+      vs_park
+    fi
+    if dock_ready && [[ $(pinned) == "$want" ]]; then
+      return 0
+    fi
+    echo "  (restore attempt $attempt failed: pinned=$(pinned 2>/dev/null) tiles=$(vs_ipc dock tiles 2>&1 | head -c 120))"
+  done
+  tail -n 4 "$VS_DEV/restore.log" 2>/dev/null | sed 's/^/    restore.log: /'
+  return 1
 }
 pass=0
 failn=0
