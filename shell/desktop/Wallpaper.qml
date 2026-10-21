@@ -21,9 +21,8 @@ Scope {
     readonly property real maxBytes: 64 * 1024 * 1024
     property string pendingFile: ""
     property string outcome: "idle"
-    // The crossfade adapts to dropped frames (WallpaperFeed's picture fades, see beginFade); the dev hook
-    // `qs ipc call wallpaper fade full` turns that off so that a capture test always sees the full fade.
-    property bool fadeAdaptive: true
+    // Dev hook `qs ipc call wallpaper loadDelay <ms>`: the decode of every new picture starts that late (0 = off).
+    property int loadDelayMs: 0
 
     // "" when the path is acceptable for a stat check, else the reason it is refused.
     function pathProblem(path: string): string {
@@ -66,13 +65,11 @@ Scope {
     IpcHandler {
         target: "wallpaper"
 
-        // Dev only: "full" keeps the full crossfade whatever the frame times were, "adaptive" restores the default.
-        function fade(mode: string): string {
+        // Dev only: start the decode of every new picture this many ms late (0 = off).
+        function loadDelay(ms: int): string {
             if (!root.dev)
                 return "refused";
-            if (mode !== "full" && mode !== "adaptive")
-                return "refused: mode must be full or adaptive";
-            root.fadeAdaptive = mode === "adaptive";
+            root.loadDelayMs = Math.max(0, Math.min(5000, ms));
             return "ok";
         }
 
@@ -145,7 +142,7 @@ Scope {
                         probe.loadImage(imageUrl);
                     return;
                 }
-                // A prepared picture reports its own statistics at the middle of its crossfade (toneMid).
+                // A prepared picture reports its own statistics when it dominates its crossfade (toneMid) or is complete.
                 if (feed.imageUrl !== "")
                     return;
                 if (feed.cfg.source === "color") {
@@ -187,7 +184,6 @@ Scope {
             WallpaperArt {
                 id: artwork
                 anchors.fill: parent
-                // Nothing to draw once a picture covers it.
                 // Nothing to draw (and no per-frame work for it) while a full picture is behind: not even during a crossfade
                 // from one picture to the next.
                 visible: !(win.shown !== null && win.shown.opacity >= 1)
@@ -201,13 +197,15 @@ Scope {
                 visible: opacity > 0
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs
+                        duration: Settings.reduceMotion ? 0 : Tokens.wallpaperCrossfadeMs
                     }
                 }
             }
 
-            // What the output shows: the helper's prepared picture (ADR-0016), crossfaded to the next one. Two images: the
-            // one on screen and the one that loads (asynchronously, off the GUI thread) and fades in once it is ready.
+            // What the output shows: the helper's prepared picture (ADR-0016), crossfaded to the next one. Two images: `shown`
+            // is on screen and complete; `incoming` loads (asynchronously, off the GUI thread) at opacity 0 and fades in over
+            // it once it is Image.Ready. An image that is not Ready is never made visible, and a newer request replaces a
+            // pending one without touching what is on screen: the picture on screen stays until the next one can take over.
             WallpaperFeed {
                 id: feed
                 screenInfo: win.modelData
@@ -217,6 +215,10 @@ Scope {
 
             property Image shown: null
             property Image incoming: null
+            // Menu bar strip statistics of the picture on screen and of the one being loaded.
+            property var shownStrip: null
+            property var incomingStrip: null
+            property string pendingUrl: ""
             property bool fadePending: false
 
             Image {
@@ -244,8 +246,11 @@ Scope {
             }
 
             function show(url: string): void {
-                finishFade();
+                // A fade in flight is complete at once: its picture is Ready (a fade only starts then).
+                if (fadeIn.running)
+                    finishFade();
                 if (url === "") {
+                    cancelPending();
                     if (shown !== null) {
                         fadeAway.target = shown;
                         fadeAway.restart();
@@ -253,17 +258,50 @@ Scope {
                     Qt.callLater(measure);
                     return;
                 }
-                incoming = shown === imgA ? imgB : imgA;
-                // The incoming image is always the one on top (the two items alternate, and the one declared first would
-                // otherwise fade in underneath the opaque other: a hard cut on every other change).
-                if (shown !== null)
-                    shown.z = 1;
-                incoming.z = 2;
-                incoming.opacity = 0;
-                incoming.source = url;
+                if (incoming === null) {
+                    incoming = shown === imgA ? imgB : imgA;
+                    // The incoming image is the one on top (the two items alternate, and the one declared first would
+                    // otherwise fade in underneath the opaque other: a hard cut on every other change).
+                    if (shown !== null)
+                        shown.z = 1;
+                    incoming.z = 2;
+                    incoming.opacity = 0;
+                }
+                // A newer request replaces the pending one in the same image; the picture on screen is not touched.
+                pendingUrl = url;
+                incomingStrip = feed.strip;
                 fadePending = true;
-                if (incoming.status === Image.Ready)
-                    beginFade();
+                // Dev hook `wallpaper loadDelay <ms>`: the decode is started late, to test changes that arrive faster than it.
+                if (root.loadDelayMs > 0) {
+                    loadTimer.restart();
+                } else {
+                    incoming.source = url;
+                    if (incoming.status === Image.Ready)
+                        beginFade();
+                }
+            }
+
+            Timer {
+                id: loadTimer
+                interval: root.loadDelayMs
+                onTriggered: {
+                    if (win.incoming === null)
+                        return;
+                    win.incoming.source = win.pendingUrl;
+                    if (win.incoming.status === Image.Ready)
+                        win.beginFade();
+                }
+            }
+
+            // The pending request goes away (back to the artwork or a colour): what is on screen stays as it is.
+            function cancelPending(): void {
+                loadTimer.stop();
+                fadePending = false;
+                if (incoming !== null) {
+                    incoming.source = "";
+                    incoming.opacity = 0;
+                    incoming = null;
+                }
             }
 
             function imageStatus(img: Image): void {
@@ -280,126 +318,51 @@ Scope {
                 }
             }
 
+            // The incoming picture is Ready. One fixed crossfade (macOS: a crossfade of fixed length); Reduce Motion: a plain
+            // switch. P3 for the fade is measured on real hardware with real frame timing (owner L2, docs/specs/desktop.md).
             function beginFade(): void {
                 fadePending = false;
                 fadeAway.stop();
-                // The fade adapts to the machine (gate P3): a fade that dropped frames steps the level down (full, short, plain
-                // switch) and the level stays; the machine may have recovered, so the full fade is tried again after
-                // wallpaperFadeRetryMs. (The dev hook `wallpaper fade full` turns the adaptation off for the captures.)
-                if (!root.fadeAdaptive || (fadeDegrade > 0 && Date.now() - fadeDegradedAt > Tokens.wallpaperFadeRetryMs))
-                    fadeDegrade = 0;
-                let ms = Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs;
-                if (!Settings.reduceMotion && fadeDegrade === 1)
-                    ms = Tokens.motionFast;
-                else if (!Settings.reduceMotion && fadeDegrade >= 2)
-                    ms = 0;
-                fadeFrames = 0;
-                fadeSlow = 0;
-                fadeFast = 0;
-                fadeMax = 0;
-                fadeAborted = false;
-                fadeMs = ms;
-                // The bar's tone follows the new picture once it dominates (60 % of the fade), not at the middle.
-                toneMid.interval = ms * 0.6;
-                toneMid.restart();
+                const ms = Settings.reduceMotion ? 0 : Tokens.wallpaperCrossfadeMs;
                 if (ms === 0) {
-                    // A plain switch: the new picture is complete at once.
                     incoming.opacity = 1;
                     completeFade();
-                    toneMid.stop();
-                    reportTone();
-                    console.info("wallpaper fade output=" + win.modelData.name + " switched without a fade (frames dropped before) frames=0 fast=0 slow=0");
                     return;
                 }
+                // The bar's tone follows the new picture once it dominates (60 % of the fade).
+                toneMid.interval = ms * 0.6;
+                toneMid.restart();
                 fadeIn.duration = ms;
                 fadeIn.target = incoming;
                 fadeIn.restart();
             }
 
-            property int fadeDegrade: 0
-            property int fadeFrames: 0
-            property int fadeSlow: 0
-            property int fadeFast: 0
-            property double fadeDegradedAt: 0
-            property real fadeMax: 0
-            property int fadeMs: 0
-            property bool fadeAborted: false
-
-            // Frame times while a fade runs (nothing runs outside a fade).
-            function fadeFrame(ms: real): void {
-                fadeFrames++;
-                // The first interval spans the idle time before the fade: not a frame of it.
-                if (fadeFrames === 1)
-                    return;
-                if (ms > 33.4)
-                    fadeSlow++;
-                if (ms <= 17.7)
-                    fadeFast++;
-                fadeMax = Math.max(fadeMax, ms);
-                // Three slow frames early in a fade: end it now rather than stutter through the rest.
-                if (root.fadeAdaptive && fadeSlow >= 3 && fadeFrames <= 12 && !fadeAborted) {
-                    fadeAborted = true;
-                    Qt.callLater(abortFade);
-                }
-            }
-
-            function abortFade(): void {
-                if (!fadeIn.running)
-                    return;
-                fadeIn.stop();
-                if (incoming !== null) {
-                    incoming.opacity = 1;
-                    completeFade();
-                }
-                // The new picture is on screen now: the tone does not wait for the timer.
-                toneMid.stop();
-                reportTone();
-                endFade();
-            }
-
-            function reportTone(): void {
-                if (VisualFixtures.wallpaperFile === "")
-                    BarTone.reportStrip(win.modelData.name, feed.strip);
-            }
-
-            // Summary of a fade in the journal (the owner reads it in a live session, tests read it in the nested log).
-            function endFade(): void {
-                // A fade that dropped frames steps the level down (full, short, none) and the level stays: a short fade has
-                // too few frames to prove anything. It is tried again from the top after wallpaperFadeRetryMs.
-                if (fadeSlow >= 3 && !Settings.reduceMotion) {
-                    fadeDegrade = Math.min(2, fadeDegrade + 1);
-                    fadeDegradedAt = Date.now();
-                }
-                console.info("wallpaper fade output=" + win.modelData.name + " ms=" + fadeMs + " frames=" + (fadeFrames - 1) + " fast=" + fadeFast + " slow=" + fadeSlow + " max=" + fadeMax.toFixed(0) + "ms aborted=" + fadeAborted + " next=" + (fadeDegrade === 0 ? "full" : fadeDegrade === 1 ? "short" : "none"));
-            }
-
-            FrameAnimation {
-                running: fadeIn.running
-                onTriggered: win.fadeFrame(frameTime * 1000)
-            }
-
             // A fade in flight is completed at once when the next change arrives.
             function finishFade(): void {
-                if (!fadeIn.running && incoming === null)
-                    return;
-                fadePending = false;
                 fadeIn.stop();
                 fadeAway.stop();
                 if (incoming !== null) {
                     incoming.opacity = 1;
                     completeFade();
-                    toneMid.stop();
-                    reportTone();
                 }
             }
 
             function completeFade(): void {
+                toneMid.stop();
                 if (shown !== null && shown !== incoming) {
                     shown.opacity = 0;
                     shown.source = "";
                 }
                 shown = incoming;
+                shownStrip = incomingStrip;
                 incoming = null;
+                // The tone of the picture that is on screen now.
+                reportTone(shownStrip);
+            }
+
+            function reportTone(strip: var): void {
+                if (VisualFixtures.wallpaperFile === "")
+                    BarTone.reportStrip(win.modelData.name, strip);
             }
 
             NumberAnimation {
@@ -407,21 +370,19 @@ Scope {
                 property: "opacity"
                 from: 0
                 to: 1
-                onFinished: {
-                    win.completeFade();
-                    win.endFade();
-                }
+                onFinished: win.completeFade()
             }
 
             NumberAnimation {
                 id: fadeAway
                 property: "opacity"
                 to: 0
-                duration: Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs
+                duration: Settings.reduceMotion ? 0 : Tokens.wallpaperCrossfadeMs
                 onFinished: {
                     if (win.shown !== null && win.shown.opacity === 0) {
                         win.shown.source = "";
                         win.shown = null;
+                        win.shownStrip = null;
                     }
                 }
             }
@@ -429,11 +390,13 @@ Scope {
             // The bar's tone switches when the incoming picture dominates (60 % of the crossfade), from its own statistics.
             Timer {
                 id: toneMid
-                onTriggered: win.reportTone()
+                onTriggered: win.reportTone(win.incomingStrip)
             }
 
             Image {
                 anchors.fill: parent
+                // On top of the two picture images (z 1 and 2): the contrast run covers whatever the wallpaper shows.
+                z: 10
                 visible: VisualFixtures.wallpaperFile !== ""
                 source: VisualFixtures.wallpaperFile !== "" ? "file://" + VisualFixtures.wallpaperFile : ""
                 fillMode: Image.Stretch

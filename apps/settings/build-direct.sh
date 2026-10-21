@@ -10,11 +10,18 @@ mkdir -p "$out"
 
 if [[ ${1:-} == "--tests" ]]; then
   # The dev guard of the system sections and the wallpaper helper door (systemguard.cpp): Qt Core only.
+  # --asan: the same with -fsanitize=address,undefined (.dev/build/settings-unit-tests-asan).
+  extra=()
+  suffix=""
+  if [[ ${2:-} == "--asan" ]]; then
+    extra=(-g -fsanitize=address,undefined -fno-omit-frame-pointer)
+    suffix="-asan"
+  fi
   # shellcheck disable=SC2046
-  g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC -I"$here/src" $(pkg-config --cflags Qt6Core) \
+  g++ -std=c++17 -O2 -Wall -Wextra -Wno-sfinae-incomplete -fPIC "${extra[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core) \
     "$root/tests/unit/settings/tst_systemguard.cpp" "$here/src/systemguard.cpp" \
-    $(pkg-config --libs Qt6Core) -lgtest -lgtest_main -pthread -o "$out/settings-unit-tests"
-  echo "built $out/settings-unit-tests"
+    $(pkg-config --libs Qt6Core) -lgtest -lgtest_main -pthread -o "$out/settings-unit-tests$suffix"
+  echo "built $out/settings-unit-tests$suffix"
   exit 0
 fi
 

@@ -98,8 +98,9 @@ else
 fi
 # grassfield-settings dev guard and the wallpaper helper door (exact tool path, exact argument vectors): gtest, built here.
 if [[ -f /usr/include/gtest/gtest.h ]]; then
-  if apps/settings/build-direct.sh --tests >/dev/null; then
+  if apps/settings/build-direct.sh --tests >/dev/null && apps/settings/build-direct.sh --tests --asan >/dev/null; then
     .dev/build/settings-unit-tests --gtest_brief=1 || status=1
+    .dev/build/settings-unit-tests-asan --gtest_brief=1 || status=1
   else
     echo "FAIL: building tests/unit/settings"; status=1
   fi

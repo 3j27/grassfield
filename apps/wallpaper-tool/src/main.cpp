@@ -151,6 +151,8 @@ int cmdPrepare(const QStringList &args)
     const bool png = fit == Fit::Center || fit == Fit::Tile;
     const QString image = out + QLatin1Char('/') + key + (png ? QStringLiteral(".png") : QStringLiteral(".jpg"));
     const QString sidecar = out + QLatin1Char('/') + key + QStringLiteral(".json");
+    if (!outDirAllowed(out))
+        return fail(Usage, QStringLiteral("--out must be the wallpaper cache (.../grassfield/wallpapers/prepared or thumbs)"));
     if (!ensureCacheDir(out))
         return fail(WriteFailed, QStringLiteral("cannot create the output folder"));
 
@@ -213,6 +215,8 @@ int cmdThumb(const QStringList &args)
     const QSize target(width, width * 10 / 16);
     const QString key = QStringLiteral("t") + cacheKey(QFileInfo(a.positional).canonicalFilePath(), bytes, mtime, target, Fit::Fill, QColor(Qt::black), 0).mid(1);
     const QString image = out + QLatin1Char('/') + key + QStringLiteral(".jpg");
+    if (!outDirAllowed(out))
+        return fail(Usage, QStringLiteral("--out must be the wallpaper cache (.../grassfield/wallpapers/prepared or thumbs)"));
     if (!ensureCacheDir(out))
         return fail(WriteFailed, QStringLiteral("cannot create the output folder"));
     if (!QFileInfo::exists(image)) {

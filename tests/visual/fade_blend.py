@@ -8,6 +8,7 @@ that lies on the straight line between the two colours (a crossfade of two opaqu
 close to either end. A hard cut (the review finding: the incoming picture faded in underneath the opaque old one) has none.
 
 Usage: fade_blend.py FRAMES.txt R,G,B R,G,B ...      fade_blend.py --selftest
+       fade_blend.py --only-pictures FRAMES.txt R,G,B ...   (every capture must be a picture or a blend of two: nothing else shows)
 """
 import math
 import sys
@@ -63,6 +64,17 @@ def analyse(frames, pures):
     return results
 
 
+def foreign(frames, pures):
+    """Captures that are neither a picture nor a blend of two pictures (the bare window or the artwork showing through)."""
+    bad = []
+    for i, f in enumerate(frames):
+        near = min(dist(f, p) for p in pures)
+        on_line = min(to_segment(f, a, b)[0] for a in pures for b in pures)
+        if near >= PURE and on_line >= LINE:
+            bad.append(i)
+    return bad
+
+
 def selftest():
     red, green, blue = (255, 0, 0), (0, 255, 0), (0, 0, 255)
     pures = [red, green, blue]
@@ -80,6 +92,9 @@ def selftest():
     # A blend that is not on the line (a dip through black) is not a crossfade.
     dip = [red, (30, 30, 30), green]
     assert [ok for *_, ok in analyse(dip, pures)] == [False]
+    # Foreign captures: the artwork (a dark blue) between two pictures.
+    assert foreign([red, mix(red, green, 0.5), green], pures) == []
+    assert foreign([red, (15, 42, 63), green], pures) == [1]
     print("fade_blend selftest: ok")
 
 
@@ -87,8 +102,17 @@ def main(argv):
     if argv[:1] == ["--selftest"]:
         selftest()
         return 0
+    only = argv[:1] == ["--only-pictures"]
+    if only:
+        argv = argv[1:]
     frames = [tuple(int(v) for v in line.split()) for line in open(argv[0]) if line.strip()]
     pures = [tuple(int(v) for v in a.split(",")) for a in argv[1:]]
+    if only:
+        bad = foreign(frames, pures)
+        for i in bad:
+            print("capture %d is neither a picture nor a blend: %s" % (i, frames[i]))
+        print("%d captures, %d foreign" % (len(frames), len(bad)))
+        return 1 if bad or len(frames) < 6 else 0
     results = analyse(frames, pures)
     for a, b, n, ok in results:
         print("change %d -> %d: %d blend capture(s) between, %s" % (a, b, n, "BLENDED" if ok else "HARD CUT"))

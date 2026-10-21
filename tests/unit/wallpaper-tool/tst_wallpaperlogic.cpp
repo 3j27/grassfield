@@ -436,6 +436,18 @@ TEST(WallpaperTool, CacheNamesAreExactlyTheHelpersOwn)
         EXPECT_FALSE(isCacheName(QString::fromLatin1(no))) << no;
 }
 
+TEST(WallpaperTool, OnlyTheWallpaperCacheIsAnOutputFolder)
+{
+    for (const char *ok : {"/home/u/.cache/grassfield/wallpapers/prepared", "/home/u/.cache/grassfield/wallpapers/thumbs", "/x/cache/grassfield/wallpapers/prepared",
+                           "/w/repo/.dev/cache/wallpapers/prepared", "/w/repo/.dev/cache/wallpapers/thumbs", "/a/b/c/cache/wallpapers/thumbs"})
+        EXPECT_TRUE(outDirAllowed(QString::fromLatin1(ok))) << ok;
+    for (const char *no : {"", "victim", "/victim", "/home/u/Documents", "/home/u", "/", "/home/u/.cache/grassfield/wallpapers", "/home/u/.cache/grassfield/wallpapers/other",
+                           "/home/u/.cache/grassfield/wallpapers/prepared/sub", "/home/u/.cache/grassfield/wallpaper/prepared", "/home/u/.cache/other/wallpapers/prepared",
+                           "/home/u/.cache/grassfield/wallpapers/../prepared", "/home/u/Documents/../.cache/grassfield/wallpapers/prepared", "/home/u/.cache/grassfield/wallpapers/./prepared",
+                           "prepared", "wallpapers/prepared", "grassfield/wallpapers/prepared", "/wallpapers/prepared"})
+        EXPECT_FALSE(outDirAllowed(QString::fromLatin1(no))) << no;
+}
+
 TEST(WallpaperTool, AnExistingOutputFolderKeepsItsPermissions)
 {
     QTemporaryDir dir;

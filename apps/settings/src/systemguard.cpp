@@ -64,8 +64,13 @@ QString resolvedPath(const QString &path)
     QString prefix = path;
     QStringList rest;
     while (!QFileInfo::exists(prefix)) {
+        // A symlink that leads nowhere is not a missing name: where it would lead is unknown.
+        if (QFileInfo(prefix).isSymLink())
+            return QString();
         const int i = prefix.lastIndexOf(QLatin1Char('/'));
         if (i <= 0) {
+            // The first component is missing too (it must not be dropped: /nonexistent/<root>/.dev/x is not <root>/.dev/x).
+            rest.prepend(prefix.mid(i + 1));
             prefix = QStringLiteral("/");
             break;
         }

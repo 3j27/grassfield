@@ -1245,8 +1245,6 @@ QtObject {
     readonly property int wallpaperCacheMaxBytes: 536870912
     // ADR-0016: pictures read from one folder
     readonly property int wallpaperMaxListEntries: 10000
-    // ADR-0016 P3: after a crossfade dropped frames the fade stays short (then a plain switch) for this long before the full fade is tried again
-    readonly property int wallpaperFadeRetryMs: 600000
     // ADR-0016: quiet time before the carousel position is written to the state file
     readonly property int wallpaperStateWriteMs: 500
 

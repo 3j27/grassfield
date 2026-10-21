@@ -76,9 +76,14 @@ QStringList supportedSuffixes();
 // A file name the helper itself creates in its cache folders: 32 hex digits and .jpg, .png or .json (thumbnails: a "t" first).
 bool isCacheName(const QString &name);
 
-// Creates the output folder (0700) when it does not exist; a folder that already exists is used as it is, its permissions
-// untouched. False when it cannot be created or is not writable.
+// Creates the output folder with mode 0700 in one mkdir (no check-then-chmod race); a folder that already exists is used as it
+// is, its permissions untouched. False when it cannot be created or is not writable.
 bool ensureCacheDir(const QString &path);
+
+// The only --out folders the helper accepts: <...>/grassfield/wallpapers/{prepared,thumbs} or <...>/cache/wallpapers/{prepared,
+// thumbs}, absolute, no "." or ".." component. The helper owns those folders: it prunes names of its own form in them, so it
+// must never be pointed at any other folder.
+bool outDirAllowed(const QString &out);
 
 // Removes the oldest of the helper's own files (isCacheName; nothing else in the folder, no symlink) of `dir` (by modification time) until the total is at most `maxBytes`. The files of `keep` (the
 // pictures on screen, the one just written) and their sidecars are never removed, nor is anything younger than a minute.

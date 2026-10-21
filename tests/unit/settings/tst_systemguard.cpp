@@ -36,6 +36,8 @@ struct DevTree {
         QFile ok(root + QStringLiteral("/.dev/wallpapers/a.jpg"));
         (void) ok.open(QIODevice::WriteOnly);
         (void) ::symlink(QFile::encodeName(root + QStringLiteral("/outside")).constData(), QFile::encodeName(root + QStringLiteral("/.dev/link")).constData());
+        // A symlink that leads nowhere (yet): the file system will create the target wherever it points.
+        (void) ::symlink(QFile::encodeName(root + QStringLiteral("/outside/not-yet")).constData(), QFile::encodeName(root + QStringLiteral("/.dev/dangling")).constData());
     }
 };
 
@@ -159,6 +161,12 @@ TEST(WallpaperGuard, DevSessionStaysUnderTheWorktreesDevFolder)
     EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev/wallpapers/a.jpg")), d));
     EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev/link/../.dev/wallpapers/a.jpg")), d)) << "through the link and back: really inside";
     EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev/wallpapers/../cache")), d));
+    // A dangling symlink inside .dev, and paths whose first component is missing (the root prefixed by a name that does not exist).
+    EXPECT_FALSE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev/dangling")), d));
+    EXPECT_FALSE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev/dangling/x.jpg")), d));
+    EXPECT_FALSE(isWallpaperQuery(thumb(d.tool, QStringLiteral("320"), out, r + QStringLiteral("/.dev/dangling")), d));
+    EXPECT_FALSE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), QStringLiteral("/nonexistent-first") + r + QStringLiteral("/.dev/x.jpg")), d));
+    EXPECT_FALSE(isWallpaperQuery(thumb(d.tool, QStringLiteral("320"), out, QStringLiteral("/nonexistent-first") + r + QStringLiteral("/.dev/x.jpg")), d));
     // Without a .dev folder nothing is inside it.
     EXPECT_FALSE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), QStringLiteral("/nonexistent-root/.dev/x.jpg")), WallpaperContext{d.tool, d.cacheDir, QStringLiteral("/nonexistent-root")}));
     // The installed helper path is not the dev one.

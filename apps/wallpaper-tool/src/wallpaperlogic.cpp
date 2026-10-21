@@ -19,6 +19,7 @@
 #include <cmath>
 
 #include <sys/stat.h>
+#include <cerrno>
 
 namespace wallpaper {
 
@@ -342,13 +343,30 @@ bool isCacheName(const QString &name)
 
 bool ensureCacheDir(const QString &path)
 {
-    // A folder that exists was not made by the helper: its permissions are not the helper's to change.
-    const bool existed = QFileInfo(path).isDir();
-    if (existed)
-        return QFileInfo(path).isWritable();
-    if (!QDir().mkpath(path))
+    // The folder is created with its final mode by mkdir itself (no window between creating and chmod-ing, no chmod of
+    // something that someone else created in the meantime); an existing folder is used as it is, its mode untouched.
+    if (!QDir().mkpath(QFileInfo(path).absolutePath()))
         return false;
-    return QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    if (::mkdir(QFile::encodeName(path).constData(), 0700) == 0)
+        return true;
+    if (errno != EEXIST)
+        return false;
+    const QFileInfo existing(path);
+    return existing.isDir() && existing.isWritable();
+}
+
+bool outDirAllowed(const QString &out)
+{
+    // The helper owns its cache and nothing else: <...>/grassfield/wallpapers/{prepared,thumbs} (the packaged layout,
+    // $XDG_CACHE_HOME/grassfield/wallpapers) or <...>/cache/wallpapers/{prepared,thumbs} (a dev session's .dev/cache).
+    if (!out.startsWith(QLatin1Char('/')))
+        return false;
+    const QStringList parts = out.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (parts.contains(QStringLiteral("..")) || parts.contains(QStringLiteral(".")) || parts.size() < 4)
+        return false;
+    const int n = parts.size();
+    return (parts[n - 1] == QLatin1String("prepared") || parts[n - 1] == QLatin1String("thumbs")) && parts[n - 2] == QLatin1String("wallpapers")
+        && (parts[n - 3] == QLatin1String("grassfield") || parts[n - 3] == QLatin1String("cache"));
 }
 
 void pruneCache(const QString &dirPath, qint64 maxBytes, const QStringList &keepFiles)
