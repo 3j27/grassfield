@@ -101,6 +101,9 @@ Variants {
             }
         }
 
+        // Every input handler of the center is in CenterContent, unloaded as soon as it closes: a press that reaches the
+        // surface during its keyboard release finds nothing to act on, so no swallowing area is needed here (unlike Search,
+        // Apps, the Overlay, the switcher and the Overview, whose content stays loaded while they close).
         Loader {
             id: content
             anchors.fill: parent
