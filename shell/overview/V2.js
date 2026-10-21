@@ -165,6 +165,14 @@ function startSelection(previous, screens) {
     return first ? first.addresses[0] : "";
 }
 
+// True when the first arrow starts from the window active at open (it carries the ring, so the arrow moves on to its
+// neighbour). False when nothing was active (e.g. the desktop held the keyboard): the first arrow then selects the
+// first window in reading order itself, as macOS does.
+function startFromActive(previous, screens) {
+    const list = screens || [];
+    return !!(previous && previous.address && list.some(s => s.addresses.indexOf(previous.address) >= 0));
+}
+
 // The output an arrow key moves to when no window lies that way on the current one: the nearest output whose near edge
 // is beyond this one's far edge, ties broken by the closest centre on the other axis. `screens` is
 // [{name, x, y, w, h}] in layout coordinates, `dir` left | right | up | down. "" for none.

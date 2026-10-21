@@ -385,16 +385,21 @@ Scope {
             }
             return;
         }
-        // Nothing selected: the ring is on the window that was active at open, so the first arrow starts from it and
-        // moves to its neighbour (macOS); selecting that same window would change nothing visible.
+        // Nothing selected: with a window active at open the ring is on it, so the first arrow starts from it and
+        // moves to its neighbour (macOS); selecting that same window would change nothing visible. With no active
+        // window (the desktop held the keyboard) there is no ring: the first arrow selects the first window in
+        // reading order and stays on it.
         if (selected === "") {
-            const start = V2.startSelection(previous, all.map(w => ({
+            const screens = all.map(w => ({
                         name: w.screenName,
                         addresses: w.winKeys
-                    })));
+                    }));
+            const start = V2.startSelection(previous, screens);
             if (start === "" || !windowOf(start))
                 return;
             selected = start;
+            if (!V2.startFromActive(previous, screens))
+                return;
         }
         const owner = windowOf(selected);
         if (!owner)

@@ -296,6 +296,15 @@ TestCase {
         compare(V2.startSelection(null, null), "");
     }
 
+    function test_firstArrowStartsFromTheActiveWindowOnly() {
+        const screens = [{name: "A", addresses: ["0x1", "0x2"]}, {name: "B", addresses: ["0x3"]}];
+        verify(V2.startFromActive({address: "0x2", workspaceId: 1}, screens), "an active window carries the ring: the arrow moves on");
+        verify(!V2.startFromActive(null, screens), "nothing active: the first arrow selects the first window itself");
+        verify(!V2.startFromActive({address: "0xgone", workspaceId: 1}, screens), "an active window that is not listed");
+        verify(!V2.startFromActive({address: "", workspaceId: 1}, screens));
+        verify(!V2.startFromActive(null, null));
+    }
+
     readonly property var pair: [{name: "A", x: 0, y: 0, w: 1920, h: 1080}, {name: "B", x: 1920, y: 0, w: 1440, h: 900}]
 
     function test_adjacentScreenSideBySide() {
