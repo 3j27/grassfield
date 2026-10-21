@@ -36,8 +36,11 @@ echo "fades logged: $n"
 check "the carousel changed pictures (at least 8 fade lines)" test "$n" -ge 8
 frames=$(grep "wallpaper fade" "$VS_DEV/shell.log" | sed -n 's/.* frames=\([0-9]*\) .*/\1/p' | awk '{s+=$1} END {print s+0}')
 slow=$(grep "wallpaper fade" "$VS_DEV/shell.log" | sed -n 's/.* slow=\([0-9]*\) .*/\1/p' | awk '{s+=$1} END {print s+0}')
-echo "frames during fades: $frames, slow (over 33 ms): $slow"
-awk -v f="$frames" -v s="$slow" 'BEGIN {printf "frames over 33 ms: %.1f %%\n", (f > 0 ? 100 * s / f : 0)}'
+fast=$(grep "wallpaper fade" "$VS_DEV/shell.log" | sed -n 's/.* fast=\([0-9]*\) .*/\1/p' | awk '{s+=$1} END {print s+0}')
+echo "frames during fades: $frames, within 17.7 ms: $fast, over 33 ms: $slow"
+awk -v f="$frames" -v s="$slow" -v q="$fast" 'BEGIN {printf "within 17.7 ms: %.1f %%, over 33 ms: %.1f %%\n", (f > 0 ? 100 * q / f : 0), (f > 0 ? 100 * s / f : 0)}'
+full=$(grep "wallpaper fade" "$VS_DEV/shell.log" | grep -c "ms=1000" || true)
+echo "full-length (1000 ms) fades: $full of $n, the rest were short or plain switches after dropped frames"
 
 # Phase 2: captures every 0.4 s over several changes: none may be blank.
 : > "$VS_DEV/fade-frames.txt"

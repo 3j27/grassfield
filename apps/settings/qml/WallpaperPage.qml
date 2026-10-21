@@ -392,6 +392,7 @@ SettingsPage {
             title: qsTr("Fit")
             Picker {
                 anchors.verticalCenter: parent.verticalCenter
+                implicitWidth: Tokens.settingsWallpaperPickerWidth
                 accessibleName: qsTr("Fit")
                 model: root.fitModel
                 value: root.fit
@@ -417,6 +418,7 @@ SettingsPage {
             title: qsTr("Change picture")
             Picker {
                 anchors.verticalCenter: parent.verticalCenter
+                implicitWidth: Tokens.settingsWallpaperPickerWidth
                 accessibleName: qsTr("Change picture")
                 model: root.intervalModel
                 value: root.interval

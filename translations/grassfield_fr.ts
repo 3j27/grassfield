@@ -4337,7 +4337,7 @@
     </message>
     <message>
         <source>Random order, every picture once before any is repeated.</source>
-        <translation>Ordre aléatoire&#xa0;: chaque image une fois avant qu’une soit répétée.</translation>
+        <translation>Chaque image apparaît une fois avant toute répétition.</translation>
     </message>
     <message>
         <source>Pictures</source>

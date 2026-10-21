@@ -267,6 +267,9 @@ Scope {
                 fadeAway.stop();
                 // The fade adapts to the machine (gate P3): a fade that dropped frames makes the next one short, and the one
                 // after that a plain switch, until a fade runs smoothly again.
+                // The machine may have recovered (a game closed, the load went away): try the full fade again from time to time.
+                if (fadeDegrade > 0 && Date.now() - fadeDegradedAt > Tokens.wallpaperFadeRetryMs)
+                    fadeDegrade = 0;
                 let ms = Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs;
                 if (!Settings.reduceMotion && fadeDegrade === 1)
                     ms = Tokens.motionFast;
@@ -274,17 +277,17 @@ Scope {
                     ms = 0;
                 fadeFrames = 0;
                 fadeSlow = 0;
+                fadeFast = 0;
                 fadeMax = 0;
                 fadeAborted = false;
                 fadeMs = ms;
                 toneMid.interval = ms / 2;
                 toneMid.restart();
                 if (ms === 0) {
-                    // A plain switch: the new picture is complete at once; the next change tries a short fade again.
+                    // A plain switch: the new picture is complete at once.
                     incoming.opacity = 1;
                     completeFade();
-                    console.info("wallpaper fade output=" + win.modelData.name + " switched without a fade (frames dropped before)");
-                    fadeDegrade = 1;
+                    console.info("wallpaper fade output=" + win.modelData.name + " switched without a fade (frames dropped before) frames=0 fast=0 slow=0");
                     return;
                 }
                 fadeIn.duration = ms;
@@ -295,6 +298,8 @@ Scope {
             property int fadeDegrade: 0
             property int fadeFrames: 0
             property int fadeSlow: 0
+            property int fadeFast: 0
+            property double fadeDegradedAt: 0
             property real fadeMax: 0
             property int fadeMs: 0
             property bool fadeAborted: false
@@ -307,6 +312,8 @@ Scope {
                     return;
                 if (ms > 33.4)
                     fadeSlow++;
+                if (ms <= 17.7)
+                    fadeFast++;
                 fadeMax = Math.max(fadeMax, ms);
                 // Three slow frames early in a fade: end it now rather than stutter through the rest.
                 if (fadeSlow >= 3 && fadeFrames <= 12 && !fadeAborted) {
@@ -328,8 +335,13 @@ Scope {
 
             // Summary of a fade in the journal (the owner reads it in a live session, tests read it in the nested log).
             function endFade(): void {
-                fadeDegrade = fadeSlow >= 3 ? Math.min(2, fadeDegrade + 1) : 0;
-                console.info("wallpaper fade output=" + win.modelData.name + " ms=" + fadeMs + " frames=" + (fadeFrames - 1) + " slow=" + fadeSlow + " max=" + fadeMax.toFixed(0) + "ms aborted=" + fadeAborted + " next=" + (fadeDegrade === 0 ? "full" : fadeDegrade === 1 ? "short" : "none"));
+                // A fade that dropped frames steps the level down (full, short, none) and the level stays: a short fade has
+                // too few frames to prove anything. It is tried again from the top after wallpaperFadeRetryMs.
+                if (fadeSlow >= 3 && !Settings.reduceMotion) {
+                    fadeDegrade = Math.min(2, fadeDegrade + 1);
+                    fadeDegradedAt = Date.now();
+                }
+                console.info("wallpaper fade output=" + win.modelData.name + " ms=" + fadeMs + " frames=" + (fadeFrames - 1) + " fast=" + fadeFast + " slow=" + fadeSlow + " max=" + fadeMax.toFixed(0) + "ms aborted=" + fadeAborted + " next=" + (fadeDegrade === 0 ? "full" : fadeDegrade === 1 ? "short" : "none"));
             }
 
             FrameAnimation {

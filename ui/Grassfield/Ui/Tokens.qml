@@ -708,6 +708,8 @@ QtObject {
     readonly property int settingsPointerBuildTimeoutMs: 60000
     // estimate: shell, wait for a cancelled build to stop on SIGTERM before it is killed
     readonly property int settingsPointerBuildKillMs: 3000
+    // estimate: Settings > Wallpaper, width of the Fit and Change picture pickers (French 'Toutes les 15 minutes' did not fit the 150 px picker)
+    readonly property int settingsWallpaperPickerWidth: 210
     // ADR-0016: Settings > Wallpaper, thumbnails per row (macOS: 4)
     readonly property int settingsWallpaperTileColumns: 4
     // estimate: Settings > Wallpaper, gap between thumbnails
@@ -1243,6 +1245,8 @@ QtObject {
     readonly property int wallpaperCacheMaxBytes: 536870912
     // ADR-0016: pictures read from one folder
     readonly property int wallpaperMaxListEntries: 10000
+    // ADR-0016 P3: after a crossfade dropped frames the fade stays short (then a plain switch) for this long before the full fade is tried again
+    readonly property int wallpaperFadeRetryMs: 600000
     // ADR-0016: quiet time before the carousel position is written to the state file
     readonly property int wallpaperStateWriteMs: 500
 
