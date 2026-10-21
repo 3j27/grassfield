@@ -21,9 +21,15 @@ QtObject {
     // The path whose mkdir finished.
     property string doneFor: ""
 
+    // The path the running mkdir was started for (its command is only read at the start, so it cannot be told from
+    // `command` once the path has changed).
+    property string startedFor: ""
+
     function ensure(): void {
         doneFor = "";
-        if (path !== "") {
+        // A mkdir still running for the old path: its end starts the one for the new path.
+        if (path !== "" && !mkdir.running) {
+            root.startedFor = root.path;
             mkdir.command = ["mkdir", "-p", root.path];
             mkdir.running = true;
         }
@@ -36,7 +42,7 @@ QtObject {
         onRunningChanged: {
             if (running || root.path === "")
                 return;
-            if (root.mkdir.command[2] === root.path)
+            if (root.startedFor === root.path)
                 root.doneFor = root.path;
             else
                 root.ensure(); // the path changed while the previous mkdir ran
