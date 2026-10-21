@@ -48,14 +48,54 @@ def box(px, w, h, colour):
 
 
 def dot(px, w, x_centre, y_below, h):
-    """Bright pixels in the strip right below the rest position of the icon (the running dot is white in dark appearance)."""
+    """Bright pixels in the strip right below the icon (the running dot is white in dark appearance): only within 10 px of the
+    icon's centre x, so a running neighbour's dot is not counted."""
     n = 0
     for y in range(y_below, min(h, y_below + 14)):
-        for x in range(0, w):
+        for x in range(max(0, x_centre - 10), min(w, x_centre + 10)):
             r, g, b = px[(y * w + x) * 3:(y * w + x) * 3 + 3]
             if r > 200 and g > 200 and b > 200:
                 n += 1
     return n
+
+
+def menu(after, before, x):
+    """The Dock menu is on screen: many pixels above the Dock, around x, differ from the capture taken before the press."""
+    import subprocess
+    def crop(path):
+        return subprocess.run(["magick", path, "-crop", "360x260+%d+620" % (int(x) - 180), "+repage", "-depth", "8", "rgb:-"], capture_output=True, check=True).stdout
+    a, b = crop(after), crop(before)
+    n = sum(1 for i in range(0, min(len(a), len(b)), 3) if abs(a[i] - b[i]) + abs(a[i + 1] - b[i + 1]) + abs(a[i + 2] - b[i + 2]) > 60)
+    print("menu: %d pixels above the tile differ from the capture before the press" % n)
+    return 0 if n > 4000 else 1
+
+
+def red_outside_icon(path):
+    """Red (badge) pixels outside the magenta icon square, and the icon box."""
+    import subprocess
+    out = subprocess.run(["magick", path, "-depth", "8", "ppm:-"], capture_output=True, check=True).stdout
+    parts = out.split(b"\n", 3)
+    w, h = (int(v) for v in parts[1].split())
+    px = parts[3]
+    b = box(px, w, h, "magenta")
+    if b is None:
+        return None, 0
+    n = 0
+    for y in range(h):
+        for x in range(w):
+            r, g, bl = px[(y * w + x) * 3:(y * w + x) * 3 + 3]
+            if r > 170 and g < 90 and bl < 90 and (x > b["x1"] or y < b["y0"]):
+                n += 1
+    return b, n
+
+
+def badge(held, rest):
+    bh, nh = red_outside_icon(held)
+    br, nr = red_outside_icon(rest)
+    print("badge: red pixels outside the icon square: %d held (dimmed icon), %d at rest" % (nh, nr))
+    if bh is not None and br is not None:
+        print("badge: icon mean while held %.0f, at rest %.0f" % (bh["mean"], br["mean"]))
+    return 0 if nr >= 15 and nh >= 0.8 * nr else 1
 
 
 def locate(path, colour):
@@ -82,11 +122,22 @@ def launch(d, name, colour):
     log = [l.split() for l in open(os.path.join(d, name + ".log")).read().split("\n") if l.strip()]
     events = dict(l.split() for l in open(os.path.join(d, name + ".events")).read().split("\n") if l.strip())
     down, up = int(events["down"]), int(events["up"])
+    # The press and the release as the Dock's tap handler saw them ("dock-launch: pressed true|false EPOCH-MS", same clock).
+    cpath0 = os.path.join(d, name + ".curve")
+    if os.path.exists(cpath0):
+        for l in open(cpath0):
+            if "dock-launch: pressed" in l:
+                f = l.split("dock-launch: pressed")[1].split()
+                if f[0] == "true":
+                    down = int(f[1])
+                else:
+                    up = int(f[1])
+        print("events: pressed at %d, released at %d (shell clock), held %d ms" % (down, up, up - down))
     rows = []
     for idx, t0, t1 in log:
         w, h, px = read_ppm(os.path.join(d, "%s-%03d.ppm" % (name, int(idx))))
         b = box(px, w, h, colour)
-        rows.append({"t": (int(t0) + int(t1)) // 2, "box": b, "px": px, "w": w, "h": h})
+        rows.append({"t": (int(t0) + int(t1)) // 2, "t0": int(t0), "t1": int(t1), "box": b, "px": px, "w": w, "h": h})
     rest = [r for r in rows if r["t"] < down and r["box"]]
     if not rest:
         print("FAIL no frame of the icon at rest before the click")
@@ -98,14 +149,15 @@ def launch(d, name, colour):
     fail = 0
     print("rest: top y=%d icon %d px, rest mean %.0f, frames %d, frame interval %d ms" % (top, size, ref["mean"], len(rows), sorted(b["t"] - a["t"] for a, b in zip(rows, rows[1:]))[len(rows) // 2]))
 
-    held = [r for r in rows if down + 80 < r["t"] < up and r["box"]]
+    # Frames captured entirely while the button was held (the capture started 60 ms after the press, ended before the release).
+    held = [r for r in rows if r["t0"] >= down + 60 and r["t1"] <= up and r["box"]]
     if held:
-        mean = sum(r["box"]["mean"] for r in held) / len(held)
+        mean = max(r["box"]["mean"] for r in held)
         ok = mean < ref["mean"] * 0.95
-        print("press: mean %.0f against %.0f at rest (%d frames held): %s" % (mean, ref["mean"], len(held), "darker" if ok else "NOT darker"))
+        print("press: brightest held frame mean %.0f against %.0f at rest (%d frames fully inside the hold): %s" % (mean, ref["mean"], len(held), "darker" if ok else "NOT darker"))
         fail |= not ok
     else:
-        print("press: no frame while held")
+        print("press: no frame fully inside the hold")
         fail = 1
 
     after = [r for r in rows if r["t"] >= up]
@@ -141,9 +193,11 @@ def launch(d, name, colour):
         rise_t = maxima[0] - first
         print("shape: first lift %d ms, peak at %d ms (up %d ms), back near the ground at %s ms" % (first, maxima[0], rise_t, lows[0] if lows else None))
 
-    dots = [(r["t"] - up, dot(r["px"], r["w"], xc, below + 0, r["h"])) for r in after]
+    def centre(r):
+        return (r["box"]["x0"] + r["box"]["x1"]) // 2 if r["box"] else xc
+    dots = [(r["t"] - up, dot(r["px"], r["w"], centre(r), below, r["h"])) for r in after]
     seen = next((t for t, n in dots if n >= 6), None)
-    before_dot = max((dot(r["px"], r["w"], xc, below, r["h"]) for r in rest), default=0)
+    before_dot = max((dot(r["px"], r["w"], centre(r), below, r["h"]) for r in rest), default=0)
     print("dot: %d bright pixels before the click, first seen %s ms after it" % (before_dot, seen))
     fail |= seen is None or before_dot >= 6
     mpath = os.path.join(d, name + ".map")
@@ -161,6 +215,10 @@ def launch(d, name, colour):
 
 
 if __name__ == "__main__":
+    if sys.argv[1] == "badge":
+        sys.exit(badge(sys.argv[2], sys.argv[3]))
+    if sys.argv[1] == "menu":
+        sys.exit(menu(sys.argv[2], sys.argv[3], sys.argv[4]))
     if sys.argv[1] == "locate":
         locate(sys.argv[2], sys.argv[3])
     else:

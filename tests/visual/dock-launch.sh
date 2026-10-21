@@ -9,6 +9,7 @@
 #   minimized every window of the app minimized: a click restores the most recent one only
 #   reopen    every window closed (the tile stays as a recent app): a click starts the app again
 #   desktop   a window on another Desktop: a click switches to that Desktop and focuses it
+#   hold      a press under 550 ms is a click (launches), a press over it opens the Dock menu and launches nothing
 #   reduced   Reduce Motion on: no bounce, the dot still appears
 # Run as a BARE command (reference machine only). The nested session this script starts is torn down on exit.
 #   tests/visual/dock-launch.sh [part ...]     all parts by default
@@ -37,7 +38,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 parts=("$@")
-(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop reduced)
+(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold reduced)
 want() { local p; for p in "${parts[@]}"; do [[ $p == "$1" ]] && return 0; done; return 1; }
 
 mkdir -p "$out" "$VS_DEV/share/applications" "$VS_DEV/share/gflaunch"
@@ -65,6 +66,10 @@ wait_count() { # CLASS N SECONDS
   return 1
 }
 fail=0
+# Hold of the launch click (ms): under the Dock's menu hold (dock.menuHold, 550 ms), long enough for a few frames of the dimmed icon.
+HOLD=450
+# The status is taken into RC right after the condition ("cond; RC=$?"): `$?` as an argument would be read after the command
+# substitutions of the description, which reset it (checks that always passed).
 check() { # DESCRIPTION CONDITION-EXIT-STATUS
   if [[ $2 -eq 0 ]]; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi
 }
@@ -127,8 +132,9 @@ launch_gfLA() {
   local mark t0
   mark=$(wc -l < "$VS_DEV/shell.log")
   t0=$(date +%s%3N)
+  # Press and release times come from the shell (same epoch clock, logged by the Dock on its tap handler): see dock-launch.py.
   echo "down $t0" > "$out/$name.events"
-  echo "up $(( t0 + 600 + 15 ))" >> "$out/$name.events"
+  echo "up $(( t0 + HOLD + 15 ))" >> "$out/$name.events"
   # The time the window shows up in the compositor (polled), for the dot check.
   rm -f "$out/$name.map"
   (
@@ -137,7 +143,7 @@ launch_gfLA() {
       sleep 0.03
     done
   ) &
-  vs_pointer down sleep 600 up >/dev/null
+  vs_pointer down sleep "$HOLD" up >/dev/null
   wait "$rec_pid"; rec_pid=""
   wait
   tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch:" > "$out/$name.curve"
@@ -148,10 +154,10 @@ if want launch; then
   python3 -I "$VS_HERE/dock-launch.py" launch "$out" launch magenta | tee "$out/launch.txt"
   check "launch: bounce, press, dot" "${PIPESTATUS[0]}"
   sleep 1
-  [[ $(active_class) == gfLA ]]
-  check "launch: the new window has the focus (active: $(active_class))" $?
-  [[ $(count_class gfLA) -eq 1 ]]
-  check "launch: one window" $?
+  [[ $(active_class) == gfLA ]]; RC=$?
+  check "launch: the new window has the focus (active: $(active_class))" $RC
+  [[ $(count_class gfLA) -eq 1 ]]; RC=$?
+  check "launch: one window" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
 fi
 
@@ -164,8 +170,8 @@ if want double; then
   sleep 0.7
   vs_pointer click sleep 120 click >/dev/null
   sleep 5
-  [[ $(count_class gfLA) -eq 1 ]]
-  check "double: two clicks 120 ms apart start one window (found $(count_class gfLA))" $?
+  [[ $(count_class gfLA) -eq 1 ]]; RC=$?
+  check "double: two clicks 120 ms apart start one window (found $(count_class gfLA))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
 fi
 
@@ -179,8 +185,8 @@ if want forward || want minimized; then
   vs_spawn foot --app-id gfLA
   wait_count gfLA 1 10
   sleep 2
-  [[ $(active_class) == gfLA ]]
-  check "forward: setup, gfLA in front (active: $(active_class))" $?
+  [[ $(active_class) == gfLA ]]; RC=$?
+  check "forward: setup, gfLA in front (active: $(active_class))" $RC
   read -r x y <<<"$(locate cyan)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
@@ -188,16 +194,16 @@ if want forward || want minimized; then
   sleep 1
   nest clients -j | jq -c '[.[] | {class, focusHistoryID}]' > "$out/forward.txt"
   cat "$out/forward.txt"
-  [[ $(active_class) == gfLB ]]
-  check "forward: gfLB has the focus (active: $(active_class))" $?
+  [[ $(active_class) == gfLB ]]; RC=$?
+  check "forward: gfLB has the focus (active: $(active_class))" $RC
   top2=$(nest clients -j | jq '[.[] | select(.focusHistoryID <= 1 and .class == "gfLB")] | length')
-  [[ $top2 -eq 2 ]]
-  check "forward: both gfLB windows are the two most recent (found $top2)" $?
+  [[ $top2 -eq 2 ]]; RC=$?
+  check "forward: both gfLB windows are the two most recent (found $top2)" $RC
   first=$(nest activewindow -j | jq -r .address)
   vs_pointer click >/dev/null
   sleep 1
-  [[ $(nest activewindow -j | jq -r .address) == "$first" ]]
-  check "forward: a second click does not cycle the windows" $?
+  [[ $(nest activewindow -j | jq -r .address) == "$first" ]]; RC=$?
+  check "forward: a second click does not cycle the windows" $RC
 fi
 
 if want minimized; then
@@ -208,16 +214,16 @@ if want minimized; then
     sleep 1.2
   done
   min=$(nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name == "special:minimized")] | length')
-  [[ $min -eq 2 ]]
-  check "minimized: setup, both gfLB windows minimized (found $min)" $?
+  [[ $min -eq 2 ]]; RC=$?
+  check "minimized: setup, both gfLB windows minimized (found $min)" $RC
   read -r x y <<<"$(locate cyan)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   vs_pointer click >/dev/null
   sleep 2
   min=$(nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name == "special:minimized")] | length')
-  [[ $min -eq 1 && $(active_class) == gfLB ]]
-  check "minimized: one gfLB window restored and focused, one still minimized (minimized: $min, active: $(active_class))" $?
+  [[ $min -eq 1 && $(active_class) == gfLB ]]; RC=$?
+  check "minimized: one gfLB window restored and focused, one still minimized (minimized: $min, active: $(active_class))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
 fi
 
@@ -230,8 +236,8 @@ if want reopen; then
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   vs_pointer click >/dev/null
-  wait_count gfLB 1 10
-  check "reopen: a click on the tile of an app with no window starts it again (windows: $(count_class gfLB))" $?
+  wait_count gfLB 1 10; RC=$?
+  check "reopen: a click on the tile of an app with no window starts it again (windows: $(count_class gfLB))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
 fi
 
@@ -244,16 +250,80 @@ if want desktop; then
   ws_a=$(nest clients -j | jq -r '.[] | select(.class == "gfLA") | .workspace.id')
   nest dispatch 'hl.dsp.focus({ workspace = "2" })' >/dev/null
   sleep 1.5
-  [[ $(nest activeworkspace -j | jq -r .id) != "$ws_a" ]]
-  check "desktop: setup, gfLA on Desktop $ws_a, another Desktop shown" $?
+  [[ $(nest activeworkspace -j | jq -r .id) != "$ws_a" ]]; RC=$?
+  check "desktop: setup, gfLA on Desktop $ws_a, another Desktop shown" $RC
   read -r x y <<<"$(locate magenta)"
   vs_pointer abs "$x" "$y" >/dev/null
   sleep 0.7
   vs_pointer click >/dev/null
   sleep 1.5
-  [[ $(nest activeworkspace -j | jq -r .id) == "$ws_a" && $(active_class) == gfLA ]]
-  check "desktop: the click switched to Desktop $ws_a and focused gfLA (now $(nest activeworkspace -j | jq -r .id), active $(active_class))" $?
+  [[ $(nest activeworkspace -j | jq -r .id) == "$ws_a" && $(active_class) == gfLA ]]; RC=$?
+  check "desktop: the click switched to Desktop $ws_a and focused gfLA (now $(nest activeworkspace -j | jq -r .id), active $(active_class))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
+fi
+
+if want badge; then
+  # The press-dim layer must not clip a badge that overhangs the icon: a tile with a badge, button held, frame taken while held.
+  kill_class gfLA
+  kill_class gfLB
+  wait_count gfLA 0 5
+  sleep 3
+  DBUS_SESSION_BUS_ADDRESS=$(<"$VS_DEV/bus.address") notify-send -a "GF Launch A" -t 0 "Badge test" "One notification."
+  sleep 2
+  read -r x y <<<"$(locate magenta)"
+  vs_pointer abs "$x" "$y" >/dev/null
+  sleep 0.7
+  REGION="$(( OX + x - 60 )),$(( OY + 960 )) 120x90"
+  WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-rest.png"
+  ( sleep 0.2; WAYLAND_DISPLAY=$sock grim -g "$REGION" "$out/badge-held.png"; ) &
+  vs_pointer down sleep 350 up >/dev/null
+  wait
+  python3 -I "$VS_HERE/dock-launch.py" badge "$out/badge-held.png" "$out/badge-rest.png"; RC=$?
+  check "badge: the held (dimmed) icon still shows the whole badge" $RC
+  kill_class gfLA
+  vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
+fi
+
+if want hold; then
+  kill_class gfLA
+  kill_class gfLB
+  wait_count gfLA 0 5
+  sleep 5
+  read -r x y <<<"$(locate magenta)"
+  vs_pointer abs "$x" "$y" >/dev/null
+  sleep 0.7
+  # A hold under the menu threshold is a click: it launches, no menu.
+  mark=$(wc -l < "$VS_DEV/shell.log")
+  vs_pointer down sleep 300 up >/dev/null
+  wait_count gfLA 1 12; RC=$?
+  check "hold: 300 ms is a click, the app starts (windows: $(count_class gfLA))" $RC
+  tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(tap\|menu-by-hold\)" > "$out/hold-short.txt"
+  grep -q "dock-launch: tap" "$out/hold-short.txt" && ! grep -q menu-by-hold "$out/hold-short.txt"; RC=$?
+  check "hold: 300 ms logged a tap and no menu ($(tr '\n' ' ' < "$out/hold-short.txt" | sed 's/[0-9]\{13\}//g'))" $RC
+  vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
+  kill_class gfLA
+  wait_count gfLA 0 5
+  sleep 5
+  read -r x y <<<"$(locate magenta)"
+  vs_pointer abs "$x" "$y" >/dev/null
+  sleep 0.7
+  # A hold over it opens the Dock menu on the pressed tile and the release launches nothing.
+  cp "$VS_DEV/shots/dock-launch-locate.png" "$out/hold-before.png"
+  mark=$(wc -l < "$VS_DEV/shell.log")
+  vs_pointer down sleep 900 up >/dev/null
+  sleep 0.5
+  "$VS_ROOT/scripts/dev/shot.sh" dock-launch-hold-menu "$VS_OUTPUT" >/dev/null
+  cp "$VS_DEV/shots/dock-launch-hold-menu.png" "$out/hold-menu.png"
+  tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(tap\|menu-by-hold\)" > "$out/hold-long.txt"
+  grep -q menu-by-hold "$out/hold-long.txt" && ! grep -q "dock-launch: tap" "$out/hold-long.txt"; RC=$?
+  check "hold: 900 ms opened the menu and logged no tap ($(tr '\n' ' ' < "$out/hold-long.txt" | sed 's/[0-9]\{13\}//g'))" $RC
+  sleep 3
+  [[ $(count_class gfLA) -eq 0 ]]; RC=$?
+  check "hold: 900 ms launched nothing (windows: $(count_class gfLA))" $RC
+  # The menu is on screen over the tile: bright menu pixels above the Dock (the capture is kept in $out/hold-menu.png to look at).
+  python3 -I "$VS_HERE/dock-launch.py" menu "$out/hold-menu.png" "$out/hold-before.png" "$x"; RC=$?
+  check "hold: the Dock menu is drawn above the pressed tile" $RC
+  vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" click >/dev/null
 fi
 
 if want reduced; then
@@ -266,10 +336,10 @@ if want reduced; then
   # No bounce: no frame with the icon lifted; the dot still appears.
   python3 -I "$VS_HERE/dock-launch.py" launch "$out" reduced magenta > "$out/reduced-analysis.txt" || true
   grep -E "^(frames|dot|map)" "$out/reduced-analysis.txt"
-  [[ ! -s "$out/reduced.curve" ]]
-  check "reduced: no bounce with Reduce Motion (bounce samples logged: $(wc -l < "$out/reduced.curve"))" $?
-  grep -q "^dot: .*first seen [0-9]" "$out/reduced-analysis.txt"
-  check "reduced: the running dot appears" $?
+  ! grep -q "dock-launch: lift" "$out/reduced.curve"; RC=$?
+  check "reduced: no bounce with Reduce Motion (bounce samples logged: $(grep -c "dock-launch: lift" "$out/reduced.curve"))" $RC
+  grep -q "^dot: .*first seen [0-9]" "$out/reduced-analysis.txt"; RC=$?
+  check "reduced: the running dot appears" $RC
   vs_ipc controlcenter reduceMotion false >/dev/null
 fi
 

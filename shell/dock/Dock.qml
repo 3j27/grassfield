@@ -337,7 +337,7 @@ Scope {
         }
     }
 
-    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned>. autohide, magnify, click
+    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles>. autohide, magnify, click
     // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert.
     IpcHandler {
         target: "dock"
@@ -837,6 +837,8 @@ Scope {
                                 // The button is held on an app tile: the icon darkens slightly (macOS).
                                 readonly property bool pressedDown: isApp && leftTap.pressed && !dragging
                                 property bool tipSuppressed: false
+                                // The Dock menu was opened by holding the button: the release is not a click.
+                                property bool menuByHold: false
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
@@ -1003,29 +1005,33 @@ Scope {
                                         duration: Appearance.duration(Tokens.motionNormal)
                                         easing.type: Easing.OutBounce
                                     }
+                                }
 
-                                    // Notification badge (counts from the notification history).
-                                    Rectangle {
-                                        visible: tile.badge > 0
-                                        height: Tokens.dockBadgeSize
-                                        width: Math.max(height, badgeLabel.implicitWidth + Tokens.spacingSm)
-                                        radius: height / 2
-                                        color: Appearance.colors.destructive
-                                        anchors.right: parent.right
-                                        anchors.top: parent.top
-                                        anchors.rightMargin: -Tokens.dockBadgeOverhang
-                                        anchors.topMargin: -Tokens.dockBadgeOverhang
+                                // Notification badge (counts from the notification history). Not a child of the icon: the press-dim layer
+                                // would clip the part that overhangs the icon. It hops with the icon.
+                                Rectangle {
+                                    visible: tile.badge > 0
+                                    transform: Translate {
+                                        y: -appIcon.lift
+                                    }
+                                    height: Tokens.dockBadgeSize
+                                    width: Math.max(height, badgeLabel.implicitWidth + Tokens.spacingSm)
+                                    radius: height / 2
+                                    color: Appearance.colors.destructive
+                                    anchors.right: appIcon.right
+                                    anchors.top: appIcon.top
+                                    anchors.rightMargin: -Tokens.dockBadgeOverhang
+                                    anchors.topMargin: -Tokens.dockBadgeOverhang
 
-                                        Text {
-                                            id: badgeLabel
-                                            textFormat: Text.PlainText
-                                            anchors.centerIn: parent
-                                            text: DockModel.badgeText(tile.badge)
-                                            color: Appearance.colors.destructiveText
-                                            font.family: Appearance.fontFamily
-                                            font.pixelSize: Tokens.typographyCaptionSize
-                                            font.weight: Tokens.typographyMenuBoldWeight
-                                        }
+                                    Text {
+                                        id: badgeLabel
+                                        textFormat: Text.PlainText
+                                        anchors.centerIn: parent
+                                        text: DockModel.badgeText(tile.badge)
+                                        color: Appearance.colors.destructiveText
+                                        font.family: Appearance.fontFamily
+                                        font.pixelSize: Tokens.typographyCaptionSize
+                                        font.weight: Tokens.typographyMenuBoldWeight
                                     }
                                 }
 
@@ -1296,13 +1302,29 @@ Scope {
                                     id: leftTap
                                     enabled: !tile.isSeparator
                                     acceptedButtons: Qt.LeftButton
-                                    // macOS launches on release however long the button was held (the default threshold turns a hold
-                                    // of about half a second into no click at all); moving away still cancels it.
-                                    longPressThreshold: Tokens.dockClickHoldLimit
-                                    // macOS: the label goes away on the click and stays away until the pointer leaves the tile.
-                                    onPressedChanged: if (pressed)
-                                        tile.tipSuppressed = true
-                                    onTapped: root.activateItem(tile.modelData)
+                                    // macOS: a press held past Tokens.dockMenuHold opens the Dock menu and its release launches nothing; a
+                                    // shorter press is a click; a press that turns into a drag is a drag (the drag cancels this handler).
+                                    longPressThreshold: Tokens.dockMenuHold / 1000
+                                    // The label goes away on the press and stays away until the pointer leaves the tile.
+                                    onPressedChanged: {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: pressed", pressed, Date.now());
+                                        if (pressed) {
+                                            tile.tipSuppressed = true;
+                                            tile.menuByHold = false;
+                                        }
+                                    }
+                                    onLongPressed: if (tile.isApp) {
+                                        tile.menuByHold = true;
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: menu-by-hold", Date.now());
+                                        win.openMenu(tile.index);
+                                    }
+                                    onTapped: if (!tile.menuByHold) {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: tap", Date.now());
+                                        root.activateItem(tile.modelData);
+                                    }
                                 }
 
                                 TapHandler {
