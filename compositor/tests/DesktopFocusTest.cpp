@@ -318,6 +318,49 @@ TEST(DesktopFocusGrant, ANewPressAfterACancelArmsAgain) {
     EXPECT_TRUE(g.onCommit(7, Interactivity::OnDemand, t0 + 116ms));
 }
 
+// After an unlock (FR30 (e), macOS model): Hyprland's focused window gets the keyboard back when no surface holds it.
+TEST(DesktopFocusUnlock, FocusesWhenNoSurfaceHoldsTheKeyboard) {
+    UnlockSeat seat;
+    seat.windowFocusable = true;
+    EXPECT_EQ(unlockStep(seat), UnlockStep::Focus);
+    seat.windowFocusable = false;
+    EXPECT_EQ(unlockStep(seat), UnlockStep::Done) << "no window to give it to (none, unmapped, on a hidden Desktop)";
+}
+
+TEST(DesktopFocusUnlock, NeverTakesTheKeyboardFromAHolder) {
+    UnlockSeat seat;
+    seat.windowFocusable = true;
+    seat.holder          = KeyboardHolder::Known;
+    EXPECT_EQ(unlockStep(seat), UnlockStep::Done) << "a window or a layer surface took it: theirs";
+    seat.holder = KeyboardHolder::Unknown;
+    EXPECT_EQ(unlockStep(seat), UnlockStep::Wait) << "the lock surface still holds it: wait for it to let go";
+}
+
+TEST(DesktopFocusUnlock, NeverWhileLockedOrPastAnExclusiveLayer) {
+    for (const auto holder : {KeyboardHolder::None, KeyboardHolder::Unknown}) {
+        UnlockSeat seat;
+        seat.windowFocusable = true;
+        seat.holder          = holder;
+        seat.locked          = true;
+        EXPECT_EQ(unlockStep(seat), UnlockStep::Done) << "locked again";
+        seat.locked             = false;
+        seat.windowFocusRefused = true;
+        EXPECT_EQ(unlockStep(seat), UnlockStep::Done) << "an Exclusive layer (a dialog at the unlock)";
+    }
+}
+
+TEST(DesktopFocusUnlock, ArmedOnlyWithinItsWindow) {
+    const auto     t0 = Clock::now();
+    CUnlockRefocus refocus;
+    EXPECT_FALSE(refocus.armed(t0));
+    refocus.arm(t0);
+    EXPECT_TRUE(refocus.armed(t0));
+    EXPECT_TRUE(refocus.armed(t0 + kUnlockRefocusWindow));
+    EXPECT_FALSE(refocus.armed(t0 + kUnlockRefocusWindow + std::chrono::milliseconds(1)));
+    refocus.cancel();
+    EXPECT_FALSE(refocus.armed(t0)) << "a press or a decision ends it";
+}
+
 TEST(DesktopFocusNames, AreStable) {
     EXPECT_EQ(grantUpdateName(GrantUpdate::Cancelled), "cancelled");
     EXPECT_EQ(grantUpdateName(GrantUpdate::Fulfilled), "fulfilled");
