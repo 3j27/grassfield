@@ -59,6 +59,7 @@ ShaderEffect {
     readonly property real clearBackdropDark: Tokens.iconModeClearBackdropDark
     readonly property real clearBackdropLight: Tokens.iconModeClearBackdropLight
     readonly property real clearBackdropMid: Tokens.iconModeClearBackdropMid
+    readonly property real clearInkFloor: Tokens.iconModeClearInkFloor
     readonly property real clearPlateAlphaAccent: Tokens.iconModeClearPlateAlphaAccent
     readonly property real clearRim: Tokens.iconModeClearRim
     readonly property real tintedPlateScale: Tokens.iconModeTintedPlateScale

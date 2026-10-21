@@ -13,11 +13,13 @@ TestCase {
 
     readonly property real minDefault: 4.5
 
-    // What a pair keeps: a strong pair (7:1 and more in the default rendering: a prompt on a black plate) 3:1 (less 0.1 of rounding); any
-    // pair from 4.5:1 up never collapses to near-invisible (2.3:1). A recolouring that lifts black (the plate must show through) cannot keep
-    // every 3:1 pair: black art raised to the floor of the mode bounds the ratio to black art against mid-grey.
+    // What a pair keeps: a strong pair (7:1 and more in the default rendering: a prompt on a black plate) 1.9:1, any pair from 4.5:1 up 1.5:1.
+    // This is a trade, measured: a dark monochrome glyph (Breeze network-wired, fcitx, zoom: 1.1-1.4:1 on a dark panel) must stand out from the
+    // dark plate by about 2:1 (darkArtLift, tintedRampLowDark, clearInkFloor), and a map that raises black art to a floor cannot keep every 3:1
+    // pair (black art against mid-grey is bounded by the floor). In the light appearance and for strong pairs the contrast stays high
+    // (foot prompt 6.6-10:1, black against white art 3 to 10:1).
     function floorFor(def) {
-        return def >= 7 ? 2.9 : 2.3;
+        return def >= 7 ? 1.9 : 1.5;
     }
     readonly property var colours: [
         "#000000", "#0d0d0d", "#1a1a1a", "#333333", "#555555", "#808080", "#aaaaaa", "#d0d0d0", "#ffffff",

@@ -1121,7 +1121,7 @@ QtObject {
     // ADR-0014 Dark: lightness the lightest part of the artwork is mapped to (a modest darkening; the map is affine from darkArtLift, so it is monotonic and keeps the internal contrast of the icon)
     readonly property real iconModeDarkArtScale: 0.97
     // ADR-0014 Dark: lightness the darkest part of the artwork is mapped to (a black part separates a little from the graphite plate; the affine map to darkArtScale keeps black art darker than light art: >= 3:1 where the default has it)
-    readonly property real iconModeDarkArtLift: 0.2
+    readonly property real iconModeDarkArtLift: 0.32
     // ADR-0014 Dark: opacity of the white edge highlight in the dark appearance; chosen with the A2 test (docs/specs/ui.md) so the plate outline stays visible on the dark material
     readonly property real iconModeDarkRim: 0.8
     // ADR-0014 Clear: opacity of the white glass plate in the dark appearance (the material shows through)
@@ -1138,6 +1138,8 @@ QtObject {
     readonly property real iconModeClearBackdropLight: 0.96
     // ADR-0014 Clear: lightness assumed behind the glass over the bare wallpaper and over an accent fill
     readonly property real iconModeClearBackdropMid: 0.5
+    // ADR-0014 Clear: share of the ink (in linear light, between the glass and the ink) that even black artwork gets, so that a dark monochrome glyph (Breeze network-wired, fcitx: 1.2:1 on a dark panel) stays distinguishable from the glass: about 2:1 against the plate; part of the black-vs-white internal contrast is traded for it
+    readonly property real iconModeClearInkFloor: 0.15
     // ADR-0014 Clear over the accent fill of a selected row (Search, Force Quit): opacity of the plate, dark on a bright accent and light on a dark one, so that the plate and the ink keep 4.5:1 against the accent (A2 accent row)
     readonly property real iconModeClearPlateAlphaAccent: 0.9
     // ADR-0014 Clear: opacity of the glyph-coloured edge highlight of the glass plate
@@ -1147,7 +1149,7 @@ QtObject {
     // ADR-0014 Tinted, light appearance: the plate is the tint colour mixed this far to white (a light tinted plate)
     readonly property real iconModeTintedPlateMixLight: 0.88
     // ADR-0014 Tinted, dark appearance: the artwork's darkest tone is the tint at this fraction of its brightness
-    readonly property real iconModeTintedRampLowDark: 0.25
+    readonly property real iconModeTintedRampLowDark: 0.55
     // ADR-0014 Tinted, dark appearance: the artwork's lightest tone is the tint mixed this far to white
     readonly property real iconModeTintedRampHighDark: 0.8
     // ADR-0014 Tinted, light appearance: the artwork's darkest tone is the tint at this fraction of its brightness (dark on the light plate)

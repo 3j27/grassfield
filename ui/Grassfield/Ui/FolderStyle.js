@@ -560,7 +560,8 @@ function modeSamples(samples, mode, modeTint, dark, tokens, wall) {
             const bd = wall === true ? tokens.iconModeClearBackdropMid : (dark ? tokens.iconModeClearBackdropDark : tokens.iconModeClearBackdropLight);
             const under = pg * pa + (1 - pa) * bd;
             const yin = 0.2126 * Math.pow(c[0], 2.2) + 0.7152 * Math.pow(c[1], 2.2) + 0.0722 * Math.pow(c[2], 2.2);
-            const target = Math.pow(under, 2.2) + (Math.pow(ink, 2.2) - Math.pow(under, 2.2)) * (dark ? yin : 1 - yin);
+            const yEff = tokens.iconModeClearInkFloor + (1 - tokens.iconModeClearInkFloor) * (dark ? yin : 1 - yin);
+            const target = Math.pow(under, 2.2) + (Math.pow(ink, 2.2) - Math.pow(under, 2.2)) * yEff;
             alpha *= Math.max(0, Math.min(1, (Math.pow(target, 1 / 2.2) - under) / (ink - under)));
         } else {
             const lo = t.map(v => v * (dark ? tokens.iconModeTintedRampLowDark : tokens.iconModeTintedRampLowLight));

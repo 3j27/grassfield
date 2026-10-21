@@ -397,7 +397,8 @@ TestCase {
         const glassed = Tokens.iconModeClearPlateAlphaDark * 1 + (1 - Tokens.iconModeClearPlateAlphaDark) * Tokens.iconModeClearBackdropDark;
         const yRaw2 = 0.2126 * Math.pow(rawRgb[0], 2.2) + 0.7152 * Math.pow(rawRgb[1], 2.2) + 0.0722 * Math.pow(rawRgb[2], 2.2);
         const inkL = Tokens.iconModeClearInkDark;
-        const targetS = Math.pow(Math.pow(glassed, 2.2) + (Math.pow(inkL, 2.2) - Math.pow(glassed, 2.2)) * yRaw2, 1 / 2.2);
+        const yEffT = Tokens.iconModeClearInkFloor + (1 - Tokens.iconModeClearInkFloor) * yRaw2;
+        const targetS = Math.pow(Math.pow(glassed, 2.2) + (Math.pow(inkL, 2.2) - Math.pow(glassed, 2.2)) * yEffT, 1 / 2.2);
         const inkA = (targetS - glassed) / (inkL - glassed);
         const realGlass = Tokens.iconModeClearPlateAlphaDark;   // white glass over the black test backdrop
         const clearWant = inkL * inkA + realGlass * (1 - inkA);

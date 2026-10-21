@@ -43,6 +43,7 @@ layout(std140, binding = 0) uniform buf {
     float clearBackdropDark;
     float clearBackdropLight;
     float clearBackdropMid;
+    float clearInkFloor;
     float rimInner;
     float darkRimLight;
     float tintedRimMixDark;
@@ -116,7 +117,8 @@ void main() {
         float pg = accent ? (accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? 1.0 : 0.0);
         float bd = (accent || wall) ? clearBackdropMid : (isDark ? clearBackdropDark : clearBackdropLight);
         float under = pg * pa + (1.0 - pa) * bd;
-        float target = mix(pow(under, 2.2), pow(ink, 2.2), lightInk ? Y : 1.0 - Y);
+        float yEff = clearInkFloor + (1.0 - clearInkFloor) * (lightInk ? Y : 1.0 - Y);
+        float target = mix(pow(under, 2.2), pow(ink, 2.2), yEff);
         artA = a * clamp((pow(target, 1.0 / 2.2) - under) / (ink - under), 0.0, 1.0);
     } else {
         vec3 t = tint.rgb;
