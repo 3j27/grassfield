@@ -41,6 +41,10 @@ build() {
   cmake -S "$(_root)/apps/settings" -B "$srcdir/settings-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/settings-build"
+  # grassfield-wallpaper (ADR-0016): the one-shot helper that parses wallpaper pictures for the shell and Settings.
+  cmake -S "$(_root)/apps/wallpaper-tool" -B "$srcdir/wallpaper-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/wallpaper-build"
   cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/files-build"
@@ -133,6 +137,8 @@ package_grassfield-desktop() {
 
   # Grassfield Settings app (M4).
   DESTDIR="$pkgdir" cmake --install "$srcdir/settings-build"
+  # grassfield-wallpaper: /usr/lib/grassfield/grassfield-wallpaper (run by the shell and Settings, never by the user).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/wallpaper-build"
   # Grassfield Files (M4, KIO).
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
   # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).

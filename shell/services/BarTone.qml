@@ -15,15 +15,20 @@ Singleton {
     // {output name: "light" | "dark"} and {output name: relative luminance}; replaced as a whole on every report.
     property var tones: ({})
     property var luminances: ({})
+    // {output name: true} when neither tone reaches 4.5:1 over that output's strip: the bar shows its frosted band there
+    // (ADR-0016 section 7, the macOS "show menu bar background" switched on automatically). Only a measured picture can.
+    property var assists: ({})
+    // {output name: {white, black}} worst-case contrast of each tone, for the status hook and the journal.
+    property var contrasts: ({})
 
-    // Test hook: qs ipc call bartone status -> JSON {output: {tone, luminance}} (read-only).
+    // Test hook: qs ipc call bartone status -> JSON {output: {tone, luminance, assist, white, black}} (read-only).
     IpcHandler {
         target: "bartone"
 
         function status(): string {
             const out = {};
             for (const name of Object.keys(root.tones))
-                out[name] = {tone: root.tones[name], luminance: root.luminances[name]};
+                out[name] = {tone: root.tones[name], luminance: root.luminances[name], assist: root.assists[name] === true, white: root.contrasts[name] ? root.contrasts[name].white : null, black: root.contrasts[name] ? root.contrasts[name].black : null};
             return JSON.stringify(out);
         }
     }
@@ -32,11 +37,25 @@ Singleton {
         return tones[output] || "light";
     }
 
+    function assistOf(output: string): bool {
+        return assists[output] === true;
+    }
+
+    // A mean luminance (the artwork, a colour, the dev image override): the tone by thresholds, never the band.
     function report(output: string, lum: real): void {
         const next = Object.assign({}, luminances);
         next[output] = lum;
         luminances = next;
         tones = Logic.update(tones, output, lum, Tokens.menubarToneLightBelow, Tokens.menubarToneDarkAbove);
+        setAssist(output, false);
+    }
+
+    function setAssist(output: string, on: bool): void {
+        if ((assists[output] === true) === on)
+            return;
+        const next = Object.assign({}, assists);
+        next[output] = on;
+        assists = next;
     }
 
     // Luminance of a strip from RGBA bytes (a downscaled grab, Canvas getImageData); report() it once the paint is over.
@@ -45,10 +64,23 @@ Singleton {
     }
 
     // The strip statistics the wallpaper helper wrote next to a prepared picture (ADR-0016: {all: {mean, p5, p95}, ...}).
-    // The tone follows the mean, as for every other wallpaper; the percentile decision and the automatic band come with W6.
+    // The tone is the one with the better worst case over the strip's 5th and 95th percentile; with neither reaching 4.5:1
+    // the output gets the frosted band. The decision is logged (the owner reads it in the journal during a live session).
     function reportStrip(output: string, strip: var): void {
-        if (strip && strip.all && typeof strip.all.mean === "number")
-            report(output, strip.all.mean);
+        if (!strip || !strip.all || typeof strip.all.p5 !== "number" || typeof strip.all.p95 !== "number")
+            return;
+        const r = Logic.stripTone(strip.all.p5, strip.all.p95, tones[output] || "", Tokens.menubarToneNeededContrast, Tokens.menubarToneMargin);
+        const lums = Object.assign({}, luminances);
+        lums[output] = strip.all.mean;
+        luminances = lums;
+        const t = Object.assign({}, tones);
+        t[output] = r.tone;
+        tones = t;
+        const c = Object.assign({}, contrasts);
+        c[output] = {white: r.white, black: r.black};
+        contrasts = c;
+        setAssist(output, r.assist);
+        console.info("wallpaper tone=" + r.tone + " worst=" + r.best.toFixed(2) + " assist=" + r.assist + " output=" + output);
     }
 
     // A plain colour wallpaper (`color` source).

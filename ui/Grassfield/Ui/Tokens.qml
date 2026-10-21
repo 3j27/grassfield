@@ -207,6 +207,10 @@ QtObject {
     readonly property real menubarToneLightBelow: 0.175
     // adaptive bar: a bar showing the light foreground switches to dark when the wallpaper strip relative luminance rises above this; white text keeps 4.5:1 or more up to it (0.18). The gap to toneLightBelow is the hysteresis
     readonly property real menubarToneDarkAbove: 0.18
+    // ADR-0016 W6 / gate A2: contrast the bar text needs over the wallpaper strip; below it on both tones the frosted band is shown on that output
+    readonly property real menubarToneNeededContrast: 4.5
+    // ADR-0016 W6: contrast ratio difference below which the bar keeps its previous tone (hysteresis of the percentile decision)
+    readonly property real menubarToneMargin: 0.25
     // adaptive bar: columns of the downscaled grab of the wallpaper strip under the bar
     readonly property int menubarToneSampleColumns: 32
     // adaptive bar: rows of the downscaled grab of the wallpaper strip under the bar

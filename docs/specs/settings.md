@@ -13,7 +13,7 @@ UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section 
 Edit the user-facing keys of `grassfield.json` (contract version 1, master-prompt 5.3) and show read-only system
 information. The feature is called "Settings" (code: `grassfield-settings`, app id `org.grassfield.Settings`).
 Non-goals (v1): pairing and Wi-Fi password entry (in Quick Settings), changing displays, Dock pinned apps (owned by the Dock),
-wallpaper, user accounts, editing shortcuts.
+user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (local pictures, folders and colours; video, online sources and per-display overrides are not in the pane yet).
 
 ## Functional requirements
 1. S1 Native launcher (`apps/settings/src/main.cpp`): `QGuiApplication`, `setDesktopFileName("org.grassfield.Settings")`, name and version, `QQmlApplicationEngine` with `/usr/lib/qt6/qml` (plus `QML_IMPORT_PATH` in dev) so `import Grassfield.Ui` resolves; loads `Main.qml` from `GRASSFIELD_SETTINGS_QML` or the baked-in directory (installed: `/usr/share/grassfield/settings/qml`).
@@ -92,7 +92,8 @@ wallpaper, user accounts, editing shortcuts.
 ## Known limitations
 - Displays is read-only (no write path); Wi-Fi cannot join new secured networks and Bluetooth cannot pair (Quick Settings handles passwords; pairing is deferred). The system panes were verified against recorded tool output and shims, not by acting on real hardware.
 - Appearance offers Light and Dark only: `auto` is accepted by the schema but the shell treats it as dark.
-- Dock pinned apps, shortcuts editing, wallpaper and Auto appearance are not part of v1.
+- Dock pinned apps, shortcuts editing and Auto appearance are not part of v1.
+- Wallpaper (ADR-0016): the pane applies at once through one write of the `wallpaper` keys (`ConfigStore.setMany`). It shows the current wallpaper (the picture the shell prepared, read from `wallpaper-state.json`), Fit, Colour, Change picture and Shuffle for what applies, and grids of 16:10 thumbnails: the Grassfield artwork, the Pictures folder (listing and thumbnails by `grassfield-wallpaper` only, two at a time, never decoded by the app), colours, and the folders and pictures added (`wallpaper-recent.json`, at most 12). "Add Folder…" and "Add Picture…" open Qt Quick Dialogs (the native GTK chooser under the session's platform theme; it does not look like a Grassfield window, and it was not driven in the nested session). Each grid is one focus stop (arrows, Home/End, Return/Space), tiles are radio buttons named after the picture. Not done: the Display picker (per-display overrides), "Play on battery power", the transcode progress row, drag and drop on the preview, Esc handling inside the native pickers, thumbnails in the French pane were not captured. In a dev session choices outside `<repo>/.dev` are refused with a sentence.
 - The Keyboard list shows only literal bindings (no numbered Desktop switchers) and is not refreshed while the app is open.
 - About runs `pacman -Q` and `lspci` once when the page opens (synchronously, 3 s timeout each); on systems without them the value reads "Unknown". The Grassfield version is the Settings app version (the shell's own version string is not exposed).
 - Slider drags write the file on every step (atomic, small); the shell applies each step.

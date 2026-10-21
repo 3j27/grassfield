@@ -1,5 +1,5 @@
 # ADR-0016: Wallpapers: local photo, video and carousel (step 1), online daily pictures (step 2)
-Status: Proposed (owner decisions 2026-10-20, batch 10; design only, nothing implemented) · Date: 2026-10-20 · Decider: owner
+Status: Accepted (owner decisions 2026-10-20, batch 10/11); step 1 implemented through W6 on its branch (see "Implementation notes"), W7 to W9 and step 2 not started · Date: 2026-10-20 · Decider: owner
 
 ## Context
 
@@ -625,6 +625,16 @@ the fade short and make it skippable (Reduce Motion, reduced profile). The prelo
 (4) One shell crash happened during a later HEVC run (shell gone, no log kept: the restart overwrote it); not reproduced,
 cause unknown, and the video work (W7) must test the crash marker. No i915 fence timeout was visible to this agent (dmesg
 is not readable from the sandbox).
+
+## Implementation notes (slices W1 to W6, 2026-10-21)
+Deviations from the text above, each with its reason:
+- **Names.** The shared rules module is `ui/Grassfield/Ui/WallpaperConfig.js`, registered as `WallpaperConfig` (the shell has its own `Wallpaper` type, and a JS library registered under another name than its file is not found by a JS `.import`). The artwork moved to `ui/Grassfield/Ui/GrassfieldArtwork.qml` (registered `GrassfieldArtwork`); `shell/desktop/WallpaperArt.qml` stays as a thin wrapper, because the lock screen (security module, read only here) imports both `Grassfield.Ui` and `qs.desktop` and two types called `WallpaperArt` would be ambiguous.
+- **Store.js keeps its own copy of the path and outputs rules** (and literal lists and defaults). A JS `.import Grassfield.Ui` resolves the installed `/usr/lib/qt6/qml/Grassfield/Ui`, which is older than the tree until the package is rebuilt, so a rule that lived only in the module made every settings write fail. `tests/unit/fixtures/wallpaper-rules.json` holds cases both implementations answer alike (`tst_wallpaper`, `tst_settingsstore`), and `tst_wallpaper` checks lists and defaults against the schema and the default file.
+- **Atomic multi-key writes.** `Store.setValues` and `ConfigStore.setMany` write source and path in one file write, so the shell never sees half a change.
+- **Helper exit codes** (`WallpaperConfig.EXIT`): 2 usage, 3 not found, 4 not a regular file, 5 file too large, 6 picture too large, 7 unreadable, 8 unsupported, 10 write failed; the shell adds 9 (timeout) and 127 (helper missing, checked once with `test -x`). It prints one JSON object on stdout. `prepare` names the picture by a SHA-256 key of the real path, size, mtime, output size, fit, colour and strip rows, and answers from the cache when both files exist. The cache directory is 0700, files 0600, pruned by modification time (oldest first, never the file just written, never anything younger than a minute). SVG is refused on purpose.
+- **Statistics.** The sidecar holds the menu bar strip statistics for the whole width and each half (mean, p5, p95 of the relative luminance, 1024 bins), and the mean colour. `BarTone` uses the whole-width percentiles.
+- **Not done in this pass:** video (W7), the lock still (W8, needs the security engineer), material tint (W9), the 30-second preload of the next picture (the change itself is fast through the helper's cache), the display picker and per-display UI, "Play on battery power", the desktop menu's "Change Wallpaper…", `contrast.sh` through the helper (the A2 wallpapers run in `tests/visual/wallpaper-legibility.sh` instead; `contrast.sh` still uses the dev override), the licence entries (`THIRD_PARTY.md`, G9, E32) that the video work needs.
+- **Measured (nested, loaded machine):** idle CPU of the shell 0.15 % of one core with a picture and with the artwork (`tests/visual/wallpaper.sh`); a thumbnail or a 4K JPEG prepare takes well under a second; the 5-second carousel and the crossfade ran without a blank frame in the captures reviewed (a pixel-level blank check is not automated).
 
 ## Evidence
 Design only. This session read the files cited above with `grep`, `sed -n`, `ls` and a Python one-liner over the schema.

@@ -29,6 +29,14 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.magnification` | number 1–2.5 | 1.6 | Dock |
 | `dock.magnificationEnabled` | bool | false | Dock |
 | `menubar.showBackground` | bool | false | Menu bar (transparent unless true) |
+| `wallpaper.source` | `"builtin"` \| `"color"` \| `"file"` \| `"folder"` \| `"video"` | `"builtin"` | Desktop wallpaper (ADR-0016; `video` is accepted and shows the artwork until W7) |
+| `wallpaper.path` | absolute path (no control characters, at most 4096 bytes) | `""` | the picture, folder or video; a source that needs a path without a valid one reads as `builtin`; in a dev session only paths under `<repo>/.dev` |
+| `wallpaper.color` | `"#rrggbb"` | `"#000000"` | the `color` source and the backdrop of fit, centre and tile |
+| `wallpaper.fit` | `"fill"` \| `"fit"` \| `"stretch"` \| `"center"` \| `"tile"` | `"fill"` | pictures (a video uses fill or fit) |
+| `wallpaper.interval` | `"login"` \| `"5s"` \| `"1m"` \| `"5m"` \| `"15m"` \| `"30m"` \| `"1h"` \| `"1d"` | `"1h"` | folder: when the picture changes |
+| `wallpaper.shuffle` | bool | true | folder: random order, no repeat until all were shown |
+| `wallpaper.videoOnBattery` | bool | false | video (W7) |
+| `wallpaper.outputs` | array (at most 16) of `{display: {name, model, serial}, source?, path?, color?, fit?, interval?, shuffle?}` | `[]` | per-display overrides; read by the shell, no UI yet; an invalid entry is dropped |
 | `dock.autohide` | bool | false | Dock |
 | `dock.recent` | string[] (desktop entry ids, newest first, at most `dock.recentMax` 3) | `[]` (owned by the Dock; written only when the list changes) | Dock |
 | `dock.showRecents` | bool | true | Dock, Settings |

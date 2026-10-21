@@ -158,6 +158,74 @@ TestCase {
         verify(Tokens.dockTintAlphaLight >= 0.4 && Tokens.dockTintAlphaDark >= 0.4);
     }
 
+    // ---- percentile decision and the automatic band (ADR-0016 W6) ----
+    readonly property real needed: Tokens.menubarToneNeededContrast
+    readonly property real margin: Tokens.menubarToneMargin
+
+    function test_stripToneUniformWallpapers() {
+        const dark = Logic.stripTone(0.02, 0.04, "", needed, margin);
+        compare(dark.tone, "light");
+        verify(!dark.assist);
+        verify(dark.white > 10);
+        const light = Logic.stripTone(0.8, 0.9, "", needed, margin);
+        compare(light.tone, "dark");
+        verify(!light.assist);
+        verify(light.black > 12);
+    }
+
+    function test_stripToneSplitWallpaperNeedsTheBand() {
+        // White left, black right: the strip holds both extremes whichever tone is chosen.
+        const split = Logic.stripTone(0, 1, "", needed, margin);
+        verify(split.assist);
+        verify(split.best < 1.1);
+        // A busy mid-range strip.
+        const mid = Logic.stripTone(0.05, 0.6, "", needed, margin);
+        verify(mid.assist, "white over 0.6 is 1.5:1, black over 0.05 is 1.0:1");
+        // A strip that one tone handles: dark photo with a small bright patch (p95 low).
+        const patch = Logic.stripTone(0.01, 0.05, "", needed, margin);
+        verify(!patch.assist);
+    }
+
+    function test_stripToneCrossoverIsTheLimit() {
+        // At the tone crossover (luminance 0.179) both tones give 4.5:1: just enough, no band.
+        const edge = Logic.stripTone(0.179, 0.179, "", needed, margin);
+        verify(edge.best >= 4.5 - 0.05);
+        // 0.16 to 0.19 is the known weak zone of menubar.md: best case ~4.3-4.5, so the band decides by the 4.5 rule.
+        const blue = Logic.stripTone(0.166, 0.166, "", needed, margin);
+        compare(blue.assist, Math.max(blue.white, blue.black) < needed);
+    }
+
+    function test_stripToneHysteresis() {
+        // White and black almost equal: the previous tone stays.
+        const a = Logic.stripTone(0.18, 0.18, "light", needed, margin);
+        const b = Logic.stripTone(0.18, 0.18, "dark", needed, margin);
+        compare(a.tone, "light");
+        compare(b.tone, "dark");
+        // A clear difference overrides the previous tone.
+        compare(Logic.stripTone(0.9, 0.95, "light", needed, margin).tone, "dark");
+        compare(Logic.stripTone(0.0, 0.03, "dark", needed, margin).tone, "light");
+        // Inputs are clamped.
+        verify(isFinite(Logic.stripTone(-1, 5, "", needed, margin).white));
+    }
+
+    // Generated busy wallpapers (the A2 worst cases: split, horizon, threshold, blocks, large-scale noise) as strip
+    // statistics: whatever the strip, the bar ends with either a tone that reaches 4.5:1 or the band.
+    function test_stripToneEveryStripIsLegibleOrAssisted() {
+        let seed = 7;
+        function rnd() {
+            seed = (seed * 1103515245 + 12345) % 2147483648;
+            return seed / 2147483648;
+        }
+        for (let i = 0; i < 500; i++) {
+            const a = rnd(), b = rnd();
+            const p5 = Math.min(a, b), p95 = Math.max(a, b);
+            const r = Logic.stripTone(p5, p95, rnd() < 0.5 ? "light" : "dark", needed, margin);
+            // With the band the text is the material's; without it the chosen tone must reach the contrast.
+            if (!r.assist)
+                verify(Math.max(r.white, r.black) >= needed, "p5 " + p5 + " p95 " + p95);
+        }
+    }
+
     function test_dockDotColoursArePureTones() {
         compare(Tokens.colorDark.indicator, "#FFFFFF");
         compare(Tokens.colorLight.indicator, "#000000");
