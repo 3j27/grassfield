@@ -99,11 +99,12 @@ hl.curve("gfLinear", { type = "bezier", points = { { 0, 0 }, { 1, 1 } } })
 -- Speeds are in Hyprland units (1 = 100 ms).
 hl.animation({ leaf = "global", enabled = true, speed = 3, bezier = "gfDecelerate" })
 hl.animation({ leaf = "border", enabled = true, speed = 2, bezier = "gfStandard" })
-hl.animation({ leaf = "windowsIn", enabled = true, speed = 2.4, bezier = "gfDecelerate", style = "popin 92%" })
-hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.8, bezier = "gfAccelerate", style = "popin 92%" })
+-- macOS: a new window opens with a quick, subtle scale and fade (about 0.2 s); closing is the reverse and shorter (about 0.12 s).
+hl.animation({ leaf = "windowsIn", enabled = true, speed = 2, bezier = "gfDecelerate", style = "popin 94%" })
+hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.2, bezier = "gfAccelerate", style = "popin 96%" })
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 3, bezier = "gfDecelerate" })
 hl.animation({ leaf = "fadeIn", enabled = true, speed = 2, bezier = "gfDecelerate" })
-hl.animation({ leaf = "fadeOut", enabled = true, speed = 1.6, bezier = "gfAccelerate" })
+hl.animation({ leaf = "fadeOut", enabled = true, speed = 1.2, bezier = "gfAccelerate" })
 hl.animation({ leaf = "layersIn", enabled = true, speed = 2, bezier = "gfDecelerate", style = "fade" })
 hl.animation({ leaf = "layersOut", enabled = true, speed = 1.6, bezier = "gfAccelerate", style = "fade" })
 -- Spaces slide horizontally, like swiping between desktops.

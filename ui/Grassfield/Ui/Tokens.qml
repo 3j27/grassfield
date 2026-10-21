@@ -258,12 +258,16 @@ QtObject {
     readonly property real dockRimOpacity: 0.34
     // macOS convention: at most three recent applications
     readonly property int dockRecentMax: 3
-    // estimate: launch bounce rise in px (half an icon)
-    readonly property int dockBounceHeight: 24
-    // estimate: one up-and-down hop of the launch bounce, ms
-    readonly property int dockBounceDuration: 420
+    // macOS 26 launch bounce rises about a third of the icon height (per icon size)
+    readonly property real dockBounceHeightScale: 0.34
+    // macOS: an icon darkens slightly while the mouse button is held (brightness, negative)
+    readonly property real dockPressDim: 0.25
+    // macOS 26: one up-and-down hop of the launch bounce, about 0.5 s (ease out up, ease in down)
+    readonly property int dockBounceDuration: 500
     // estimate: the launch bounce stops after this long without a window, ms
     readonly property int dockLaunchTimeout: 12000
+    // macOS: a click launches however long the button is held; TapHandler longPressThreshold in seconds, set so a long hold still counts as a tap
+    readonly property int dockClickHoldLimit: 3600
     // estimate: transparent room above the shelf for a dragged icon and the poof
     readonly property int dockDragArea: 168
     // estimate: px above the shelf top (icon centre) from which a dropped tile leaves the Dock
