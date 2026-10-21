@@ -23,6 +23,8 @@ check test -z "$hits"
 
 desc="the WhiteSur provisioning and filtering scripts are gone"
 check bash -c 'cd "$1"; for f in scripts/dev/whitesur.sh packaging/arch/whitesur-guard.sh packaging/arch/whitesur-detect.py packaging/arch/whitesur-blocklist.txt packaging/arch/whitesur-apple-logos.txt; do [ ! -e "$f" ] || exit 1; done' _ "$root"
+desc="the PKGBUILD parses (bash -n)"
+check bash -n "$root/packaging/arch/PKGBUILD"
 desc="the PKGBUILD builds no WhiteSur package"
 check bash -c '! grep -qi whitesur "$1/packaging/arch/PKGBUILD"' _ "$root"
 desc="the PKGBUILD depends on breeze-icons (the second step of the icon chain)"
