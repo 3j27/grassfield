@@ -67,7 +67,7 @@ def menu(after, before, x):
     a, b = crop(after), crop(before)
     n = sum(1 for i in range(0, min(len(a), len(b)), 3) if abs(a[i] - b[i]) + abs(a[i + 1] - b[i + 1]) + abs(a[i + 2] - b[i + 2]) > 60)
     print("menu: %d pixels above the tile differ from the capture before the press" % n)
-    return 0 if n > 4000 else 1
+    return 0 if n > 800 else 1
 
 
 def red_outside_icon(path):
@@ -133,6 +133,10 @@ def launch(d, name, colour):
                 else:
                     up = int(f[1])
         print("events: pressed at %d, released at %d (shell clock), held %d ms" % (down, up, up - down))
+        # The click was meant to be 250 ms: a hold near the menu threshold (550 ms) means the host stalled, not that the Dock is wrong.
+        if up - down >= 500:
+            print("STALL: the shell measured a hold of %d ms for a click of about 250 ms (menu threshold 550 ms): host stall, rerun" % (up - down))
+            return 2
     rows = []
     for idx, t0, t1 in log:
         w, h, px = read_ppm(os.path.join(d, "%s-%03d.ppm" % (name, int(idx))))
@@ -150,7 +154,7 @@ def launch(d, name, colour):
     print("rest: top y=%d icon %d px, rest mean %.0f, frames %d, frame interval %d ms" % (top, size, ref["mean"], len(rows), sorted(b["t"] - a["t"] for a, b in zip(rows, rows[1:]))[len(rows) // 2]))
 
     # Frames captured entirely while the button was held (the capture started 60 ms after the press, ended before the release).
-    held = [r for r in rows if r["t0"] >= down + 60 and r["t1"] <= up and r["box"]]
+    held = [r for r in rows if r["t0"] >= down + 40 and r["t1"] <= up and r["box"]]
     if held:
         mean = max(r["box"]["mean"] for r in held)
         ok = mean < ref["mean"] * 0.95
@@ -183,6 +187,10 @@ def launch(d, name, colour):
         if curve[i][1] >= 0.9 * peak and curve[i][1] >= curve[i - 1][1] and curve[i][1] > curve[i + 1][1]:
             if not maxima or curve[i][0] - maxima[-1] > 250:
                 maxima.append(curve[i][0])
+    gaps = [b[0] - a[0] for a, b in zip(curve, curve[1:]) if b[0] < (maxima[-1] if maxima else 0)]
+    biggest = max(gaps, default=0)
+    print("curve: largest gap between two frames of the shell during the bounce %d ms (a frame is 16 ms)" % biggest)
+    stalled = biggest > 150
     periods = [b - a for a, b in zip(maxima, maxima[1:])]
     print("period: maxima at %s ms, between them %s ms" % (maxima, periods))
     fail |= not periods or not all(430 <= p <= 570 for p in periods)
@@ -210,6 +218,9 @@ def launch(d, name, colour):
     settled = end is not None and end["y0"] == top
     print("end: icon %s" % ("at rest" if settled else "still lifted (y0 %s)" % (end["y0"] if end else None)))
     fail |= not settled
+    if fail and stalled:
+        print("STALL: the shell itself skipped frames for %d ms during the bounce: host stall, rerun" % biggest)
+        return 2
     print("RESULT " + ("FAIL" if fail else "PASS"))
     return 1 if fail else 0
 

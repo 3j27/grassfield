@@ -10,6 +10,7 @@
 #   reopen    every window closed (the tile stays as a recent app): a click starts the app again
 #   desktop   a window on another Desktop: a click switches to that Desktop and focuses it
 #   hold      a press under 550 ms is a click (launches), a press over it opens the Dock menu and launches nothing
+#   holdtiles a 900 ms hold on the Apps tile, the Trash tile and a minimized-window tile (no Dock menu) still clicks on release
 #   reduced   Reduce Motion on: no bounce, the dot still appears
 # Run as a BARE command (reference machine only). The nested session this script starts is torn down on exit.
 #   tests/visual/dock-launch.sh [part ...]     all parts by default
@@ -38,7 +39,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 parts=("$@")
-(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold reduced)
+(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles reduced)
 want() { local p; for p in "${parts[@]}"; do [[ $p == "$1" ]] && return 0; done; return 1; }
 
 mkdir -p "$out" "$VS_DEV/share/applications" "$VS_DEV/share/gflaunch"
@@ -66,12 +67,20 @@ wait_count() { # CLASS N SECONDS
   return 1
 }
 fail=0
-# Hold of the launch click (ms): under the Dock's menu hold (dock.menuHold, 550 ms), long enough for a few frames of the dimmed icon.
-HOLD=450
+# Duration (ms) of the press in a file of Dock log lines ("pressed true|false EPOCH-MS").
+press_ms() { awk '/pressed true/ {d = $NF} /pressed false/ {u = $NF} END {print u - d}' "$1"; }
+# Hold of the launch click (ms): well under the Dock's menu hold (dock.menuHold, 550 ms: a host stall of 100 ms made the 450 ms hold
+# a menu hold), long enough for a couple of frames of the dimmed icon. The shell logs the real duration, which is checked.
+HOLD=250
+passed=0
+failed=0
 # The status is taken into RC right after the condition ("cond; RC=$?"): `$?` as an argument would be read after the command
 # substitutions of the description, which reset it (checks that always passed).
+# Status 2 is a host stall (the shell measured a hold that is not the one asked for): reported as such, still a failure.
 check() { # DESCRIPTION CONDITION-EXIT-STATUS
-  if [[ $2 -eq 0 ]]; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi
+  if [[ $2 -eq 0 ]]; then echo "PASS $1"; passed=$((passed + 1))
+  elif [[ $2 -eq 2 ]]; then echo "FAIL (host stall, not a behaviour failure: rerun) $1"; fail=1; failed=$((failed + 1))
+  else echo "FAIL $1"; fail=1; failed=$((failed + 1)); fi
 }
 
 vs_session en
@@ -297,8 +306,10 @@ if want hold; then
   vs_pointer down sleep 300 up >/dev/null
   wait_count gfLA 1 12; RC=$?
   check "hold: 300 ms is a click, the app starts (windows: $(count_class gfLA))" $RC
-  tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(tap\|menu-by-hold\)" > "$out/hold-short.txt"
+  tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/hold-short.txt"
   grep -q "dock-launch: tap" "$out/hold-short.txt" && ! grep -q menu-by-hold "$out/hold-short.txt"; RC=$?
+  # A hold near the menu threshold is a host stall (the shell measures the real duration), not a Dock failure.
+  [[ $RC -ne 0 && $(press_ms "$out/hold-short.txt") -ge 500 ]] && RC=2
   check "hold: 300 ms logged a tap and no menu ($(tr '\n' ' ' < "$out/hold-short.txt" | sed 's/[0-9]\{13\}//g'))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
   kill_class gfLA
@@ -326,6 +337,50 @@ if want hold; then
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" click >/dev/null
 fi
 
+if want holdtiles; then
+  # A hold of 900 ms on a tile WITHOUT a Dock menu still clicks on release (like a right click does nothing there): Apps, Trash, a
+  # minimized window. (An app tile gives its menu, see `hold`.) The Dock logs `tap` for a click and `menu-by-hold` for a menu.
+  kill_class gfLA
+  kill_class gfLB
+  sleep 3
+  tile_centre() { vs_ipc dock centre "$1" "$VS_OUTPUT"; } # INDEX -> "x y"
+  hold_tile() { # NAME INDEX: hold 900 ms, then the Dock log lines of that hold in $out/holdtiles-NAME.txt
+    local cx cy m
+    read -r cx cy <<<"$(tile_centre "$2")"
+    vs_pointer abs "$cx" "$cy" >/dev/null
+    sleep 0.7
+    m=$(wc -l < "$VS_DEV/shell.log")
+    vs_pointer down sleep 900 up >/dev/null
+    sleep 1
+    tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(tap\|menu-by-hold\)" > "$out/holdtiles-$1.txt"
+    vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
+  }
+  idx() { vs_ipc dock tiles | jq "$1"; }
+  hold_tile apps "$(idx 'index("grid")')"
+  grep -q "dock-launch: tap" "$out/holdtiles-apps.txt" && ! grep -q menu-by-hold "$out/holdtiles-apps.txt"; RC=$?
+  check "holdtiles: 900 ms on the Apps tile clicks on release (log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/holdtiles-apps.txt" | tr '\n' ' '))" $RC
+  vs_ipc apps close >/dev/null
+  sleep 1
+  hold_tile trash "$(idx 'index("trash")')"
+  grep -q "dock-launch: tap" "$out/holdtiles-trash.txt" && ! grep -q menu-by-hold "$out/holdtiles-trash.txt"; RC=$?
+  check "holdtiles: 900 ms on the Trash tile clicks on release (log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/holdtiles-trash.txt" | tr '\n' ' '))" $RC
+  # A minimized window: its tile restores the window on a click, held or not.
+  vs_spawn foot --app-id gfLB
+  wait_count gfLB 1 10
+  sleep 2
+  vs_ipc windows minimize >/dev/null
+  sleep 1.5
+  nest clients -j | jq -r '.[] | select(.class == "gfLB") | .workspace.name' > "$out/holdtiles-ws-before.txt"
+  mi=$(idx 'to_entries | map(select(.value | test("^min:"))) | .[0].key')
+  echo "minimized tile index: $mi ($(vs_ipc dock tiles))"
+  hold_tile minimized "$mi"
+  sleep 1.5
+  ws_after=$(nest clients -j | jq -r '.[] | select(.class == "gfLB") | .workspace.name')
+  [[ $(<"$out/holdtiles-ws-before.txt") == "special:minimized" && $ws_after != "special:minimized" && -n $ws_after ]]; RC=$?
+  check "holdtiles: 900 ms on a minimized-window tile restores the window (workspace $(<"$out/holdtiles-ws-before.txt") -> $ws_after; log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/holdtiles-minimized.txt" | tr '\n' ' '))" $RC
+  kill_class gfLB
+fi
+
 if want reduced; then
   kill_class gfLA
   kill_class gfLB
@@ -343,5 +398,5 @@ if want reduced; then
   vs_ipc controlcenter reduceMotion false >/dev/null
 fi
 
-echo "dock-launch: $(( fail ? 1 : 0 )) (0 = all checks passed); frames and logs in $out"
+echo "dock-launch: $passed checks passed, $failed failed (of $(( passed + failed ))); exit $fail; frames and logs in $out"
 exit "$fail"

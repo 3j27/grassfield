@@ -337,7 +337,7 @@ Scope {
         }
     }
 
-    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles>. autohide, magnify, click
+    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre>. autohide, magnify, click
     // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert.
     IpcHandler {
         target: "dock"
@@ -384,6 +384,19 @@ Scope {
         function click(index: int): void {
             if (VisualFixtures.active && root.items[index])
                 root.activateItem(root.items[index]);
+        }
+
+        // Centre "x y" of tile `index` on `screen` in output coordinates (fixtures only; the magnification must be off).
+        function centre(index: int, screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            let win = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    win = all[i];
+            }
+            return win ? win.tileCentre(index) : "";
         }
 
         function keyboard(): void {
@@ -625,6 +638,15 @@ Scope {
                         return;
                     }
                 }
+            }
+
+            // "x y" of the icon centre of tile `index`, in output coordinates (test hook).
+            function tileCentre(index: int): string {
+                const t = tileRepeater.itemAt(index);
+                if (!t)
+                    return "";
+                const p = t.mapToItem(null, t.width / 2, t.height - indicatorArea - t.iconPx / 2);
+                return Math.round(p.x) + " " + Math.round(screen.height - height + p.y);
             }
 
             function openMenu(index: int): void {
@@ -1304,7 +1326,9 @@ Scope {
                                     acceptedButtons: Qt.LeftButton
                                     // macOS: a press held past Tokens.dockMenuHold opens the Dock menu and its release launches nothing; a
                                     // shorter press is a click; a press that turns into a drag is a drag (the drag cancels this handler).
-                                    longPressThreshold: Tokens.dockMenuHold / 1000
+                                    // Only a tile with a Dock menu (apps and Files, the same as a right click) takes the hold; the others
+                                    // (Apps, Trash, minimized windows) keep the click on release however long the button is held, as before.
+                                    longPressThreshold: tile.isApp ? Tokens.dockMenuHold / 1000 : Tokens.dockClickHoldLimit
                                     // The label goes away on the press and stays away until the pointer leaves the tile.
                                     onPressedChanged: {
                                         if (VisualFixtures.active)
