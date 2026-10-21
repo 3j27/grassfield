@@ -18,8 +18,8 @@ if [ -r /usr/share/grassfield/dconf/profile ] && [ -r /usr/share/grassfield/dcon
     export DCONF_PROFILE=/usr/share/grassfield/dconf/profile
 fi
 
-# Fonts (ADR-0003): a session fontconfig that includes the system /etc/fonts/fonts.conf first (so the user's own
-# fontconfig still loads), then prefers Inter for sans-serif, system-ui and the macOS web font names, and sets grayscale
+# Fonts (ADR-0003): a session fontconfig that includes the system /etc/fonts/fonts.conf (so the user's own
+# fontconfig still loads), and prefers Inter, inserted in place, for sans-serif, system-ui and the macOS web font names, and sets grayscale
 # antialiasing with slight hinting. Read by every fontconfig client (GTK, Qt, Chromium, Electron, Firefox).
 # FONTCONFIG_FILE replaces the system file, so it is exported only when the file is readable.
 if [ -r /usr/share/grassfield/fontconfig/fonts.conf ]; then
