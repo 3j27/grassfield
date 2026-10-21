@@ -29,11 +29,15 @@
 #             XWayland: with foot A holding the keyboard, a click on the client's content, then on its titlebar, gives it
 #             the keyboard (client's wl_keyboard enter, Hyprland's active window; Chromium: the typed letter reaches its page)
 #   closed    Search, Apps, Notification Center, Overview, a menu (Escape) and a menu closed by a click outside (that click is
-#             the menu's, as on macOS): 300 ms after the close a click on window B gives B the keyboard, no app is launched
+#             the menu's, as on macOS): once the keys are back in A, a click on window B gives B the keyboard (a second click
+#             when the first fell between the keyboard release and the empty input mask) and no app is launched; a click on
+#             another window while the Overview is still "releasing" (dev hook holdNextRelease) reaches it
 #   menubar   a menu opened from the bar and closed with Escape while the pointer rests on the bar: the keys reach the window
-#             that was active (not the bar), and a click on another window works
-#   unlock    lock and unlock with the pointer on the bare desktop, on the menu bar, on window A: a click on A's content (and
-#             on its titlebar) gives A the keyboard
+#             that was active (not the bar), and a click on another window works; a click on the bare bar keeps the keys
+#   layer     an on-demand layer surface of another client (tests/compositor/click-focus-fixture) took the keyboard while
+#             Hyprland still counts A focused: a click on A's content (and on its titlebar) gives A the keyboard
+#   unlock    lock and unlock with the pointer on the bare desktop, on the menu bar, on window A: the keys reach A with no
+#             click (plugin 0.8.2), and a click on A's content (and on its titlebar) gives A the keyboard
 #   health    Hyprland alive, no grassfield exception in its log
 # Without grassfield-compositor (C2: scripts/nestctl plugin unload, or nested-up.sh --no-plugin) the titlebar cases are
 # skipped (no titlebars) and the unlock clicks are reported only: Hyprland 0.56.2 alone does nothing there (known limit).
