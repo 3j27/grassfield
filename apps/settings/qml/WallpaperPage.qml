@@ -237,7 +237,12 @@ SettingsPage {
                 let file = "";
                 if (ok) {
                     try {
-                        file = JSON.parse(output).file || "";
+                        const o = JSON.parse(output);
+                        // The helper names the picture it really read: in a dev session it must lie inside .dev (a symlink
+                        // there must not show an owner's photo), as the shell checks it. The thumbnail must be in the cache.
+                        const okReal = typeof o.real === "string" && root.problem(o.real) === "";
+                        const okFile = typeof o.file === "string" && WallpaperConfig.isUnder(o.file, root.backend.wallpaperCache);
+                        file = okReal && okFile ? o.file : "";
                     } catch (e) {
                         file = "";
                     }

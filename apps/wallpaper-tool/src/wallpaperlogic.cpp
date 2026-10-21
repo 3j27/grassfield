@@ -11,6 +11,7 @@
 #include <QImageIOHandler>
 #include <QJsonArray>
 #include <QPainter>
+#include <QRegularExpression>
 #include <QSaveFile>
 
 #include <algorithm>
@@ -332,6 +333,24 @@ ExitCode listFolder(const QString &folder, const QStringList &supported, int max
     return Ok;
 }
 
+bool isCacheName(const QString &name)
+{
+    // <32 hex digits>.jpg|png|json; thumbnails start with "t" instead of the first hex digit.
+    static const QRegularExpression re(QStringLiteral("\\A[0-9a-ft][0-9a-f]{31}\\.(jpg|png|json)\\z"));
+    return re.match(name).hasMatch();
+}
+
+bool ensureCacheDir(const QString &path)
+{
+    // A folder that exists was not made by the helper: its permissions are not the helper's to change.
+    const bool existed = QFileInfo(path).isDir();
+    if (existed)
+        return QFileInfo(path).isWritable();
+    if (!QDir().mkpath(path))
+        return false;
+    return QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+}
+
 void pruneCache(const QString &dirPath, qint64 maxBytes, const QStringList &keepFiles)
 {
     // A kept picture keeps its sidecar too (same name, .json).
@@ -340,8 +359,15 @@ void pruneCache(const QString &dirPath, qint64 maxBytes, const QStringList &keep
         keep << QFileInfo(k).absoluteFilePath();
         keep << QFileInfo(k).absolutePath() + QLatin1Char('/') + QFileInfo(k).completeBaseName() + QStringLiteral(".json");
     }
+    // Only the helper's own files are ever counted or removed: --out is given by the caller and may be a folder that holds
+    // something else (review finding: a foreign folder lost its notes and documents). Symlinks are left alone too.
     QDir dir(dirPath);
-    QFileInfoList list = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Time | QDir::Reversed); // oldest first
+    QFileInfoList list;
+    const QFileInfoList all = dir.entryInfoList(QDir::Files | QDir::NoSymLinks | QDir::NoDotAndDotDot, QDir::Time | QDir::Reversed); // oldest first
+    for (const QFileInfo &f : all) {
+        if (isCacheName(f.fileName()))
+            list << f;
+    }
     qint64 total = 0;
     for (const QFileInfo &f : std::as_const(list))
         total += f.size();

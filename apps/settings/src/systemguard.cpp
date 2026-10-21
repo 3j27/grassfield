@@ -1,6 +1,7 @@
 #include "systemguard.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QList>
 #include <QRegularExpression>
 
@@ -56,6 +57,34 @@ bool isReadOnlyQuery(const QStringList &argv)
 
 namespace {
 
+// The real location of a path that may not exist: the longest existing prefix is canonicalised (symlinks and ".." resolved
+// by the file system), the rest is appended. "" when it cannot be resolved or the rest holds "..".
+QString resolvedPath(const QString &path)
+{
+    QString prefix = path;
+    QStringList rest;
+    while (!QFileInfo::exists(prefix)) {
+        const int i = prefix.lastIndexOf(QLatin1Char('/'));
+        if (i <= 0) {
+            prefix = QStringLiteral("/");
+            break;
+        }
+        rest.prepend(prefix.mid(i + 1));
+        prefix = prefix.left(i);
+    }
+    QStringList tail;
+    for (const QString &r : std::as_const(rest)) {
+        if (r == QLatin1String(".."))
+            return QString();
+        if (!r.isEmpty() && r != QLatin1String("."))
+            tail << r;
+    }
+    const QString base = QFileInfo(prefix).canonicalFilePath();
+    if (base.isEmpty())
+        return QString();
+    return tail.isEmpty() ? base : QDir::cleanPath(base + QLatin1Char('/') + tail.join(QLatin1Char('/')));
+}
+
 // An absolute path without control characters, at most 4096 bytes; in a dev session under <devRoot>/.dev.
 bool wallpaperPathOk(const QString &path, const QString &devRoot)
 {
@@ -63,14 +92,15 @@ bool wallpaperPathOk(const QString &path, const QString &devRoot)
         return false;
     for (const QChar c : path) {
         const ushort u = c.unicode();
-        if (u <= 0x1f || (u >= 0x7f && u <= 0x9f) || u == 0x2028 || u == 0x2029 || (u >= 0x202a && u <= 0x202e) || (u >= 0x2066 && u <= 0x2069))
+        if (u <= 0x1f || (u >= 0x7f && u <= 0x9f) || u == 0x061c || u == 0x200e || u == 0x200f || u == 0x2028 || u == 0x2029 || (u >= 0x202a && u <= 0x202e) || (u >= 0x2066 && u <= 0x2069))
             return false;
     }
     if (devRoot.isEmpty())
         return true;
-    const QString clean = QDir::cleanPath(path);
-    const QString dev = QDir::cleanPath(devRoot + QStringLiteral("/.dev"));
-    return clean == dev || clean.startsWith(dev + QLatin1Char('/'));
+    // By the real location, not by the text: a symlink inside .dev (or "link/..") must not lead out of it.
+    const QString dev = QFileInfo(devRoot + QStringLiteral("/.dev")).canonicalFilePath();
+    const QString real = resolvedPath(path);
+    return !dev.isEmpty() && !real.isEmpty() && (real == dev || real.startsWith(dev + QLatin1Char('/')));
 }
 
 // A decimal number within [min, max], at most 6 characters.

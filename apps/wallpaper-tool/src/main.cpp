@@ -85,13 +85,6 @@ Args parseArgs(const QStringList &args, const QStringList &known, bool wantPosit
     return a;
 }
 
-bool makeDir(const QString &dir)
-{
-    if (!QDir().mkpath(dir))
-        return false;
-    return QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
-}
-
 const char *reasonName(int code)
 {
     switch (code) {
@@ -158,7 +151,7 @@ int cmdPrepare(const QStringList &args)
     const bool png = fit == Fit::Center || fit == Fit::Tile;
     const QString image = out + QLatin1Char('/') + key + (png ? QStringLiteral(".png") : QStringLiteral(".jpg"));
     const QString sidecar = out + QLatin1Char('/') + key + QStringLiteral(".json");
-    if (!makeDir(out))
+    if (!ensureCacheDir(out))
         return fail(WriteFailed, QStringLiteral("cannot create the output folder"));
 
     // Cache hit: the sidecar names the picture; both exist.
@@ -220,7 +213,7 @@ int cmdThumb(const QStringList &args)
     const QSize target(width, width * 10 / 16);
     const QString key = QStringLiteral("t") + cacheKey(QFileInfo(a.positional).canonicalFilePath(), bytes, mtime, target, Fit::Fill, QColor(Qt::black), 0).mid(1);
     const QString image = out + QLatin1Char('/') + key + QStringLiteral(".jpg");
-    if (!makeDir(out))
+    if (!ensureCacheDir(out))
         return fail(WriteFailed, QStringLiteral("cannot create the output folder"));
     if (!QFileInfo::exists(image)) {
         QImage src;
@@ -232,7 +225,7 @@ int cmdThumb(const QStringList &args)
         QFile::setPermissions(image, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         pruneCache(out, qint64(64) * 1024 * 1024, {image});
     }
-    return finish({{QStringLiteral("file"), image}, {QStringLiteral("width"), target.width()}, {QStringLiteral("height"), target.height()}}, Ok);
+    return finish({{QStringLiteral("file"), image}, {QStringLiteral("real"), QFileInfo(a.positional).canonicalFilePath()}, {QStringLiteral("width"), target.width()}, {QStringLiteral("height"), target.height()}}, Ok);
 }
 
 int cmdList(const QStringList &args)

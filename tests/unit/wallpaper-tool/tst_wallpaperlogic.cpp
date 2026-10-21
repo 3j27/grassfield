@@ -21,6 +21,12 @@ using namespace wallpaper;
 
 namespace {
 
+// A name the helper itself would give a cache file: 32 hex digits and an extension.
+QString hexName(int i, const char *ext)
+{
+    return QStringLiteral("%1.%2").arg(i, 32, 16, QLatin1Char('0')).arg(QLatin1String(ext));
+}
+
 QString savePng(const QTemporaryDir &dir, const QString &name, const QImage &img)
 {
     const QString path = dir.filePath(name);
@@ -335,7 +341,7 @@ TEST(WallpaperTool, PruneKeepsTheNewestAndTheNamedFile)
     ASSERT_TRUE(dir.isValid());
     QStringList paths;
     for (int i = 0; i < 4; ++i) {
-        QFile f(dir.filePath(QStringLiteral("f%1.bin").arg(i)));
+        QFile f(dir.filePath(hexName(i, "jpg")));
         ASSERT_TRUE(f.open(QIODevice::WriteOnly));
         f.write(QByteArray(1000, 'x'));
         f.close();
@@ -370,8 +376,8 @@ TEST(WallpaperTool, PruneNeverRemovesThePicturesOnScreen)
     ASSERT_TRUE(dir.isValid());
     QStringList files;
     for (int i = 0; i < 4; ++i) {
-        for (const char *ext : {".jpg", ".json"}) {
-            QFile f(dir.filePath(QStringLiteral("k%1%2").arg(i).arg(QLatin1String(ext))));
+        for (const char *ext : {"jpg", "json"}) {
+            QFile f(dir.filePath(hexName(i, ext)));
             ASSERT_TRUE(f.open(QIODevice::ReadWrite));
             f.write(QByteArray(1000, 'x'));
             ASSERT_TRUE(f.flush());
@@ -381,11 +387,77 @@ TEST(WallpaperTool, PruneNeverRemovesThePicturesOnScreen)
     }
     // The two oldest pictures are on screen (another output's wallpaper, hours old): they stay, with their sidecars,
     // although they are the first by age and the cache is far over its cap.
-    pruneCache(dir.path(), 1, {dir.filePath(QStringLiteral("k0.jpg")), dir.filePath(QStringLiteral("k1.jpg"))});
-    for (const char *name : {"k0.jpg", "k0.json", "k1.jpg", "k1.json"})
-        EXPECT_TRUE(QFile::exists(dir.filePath(QString::fromLatin1(name)))) << name;
-    for (const char *name : {"k2.jpg", "k2.json", "k3.jpg", "k3.json"})
-        EXPECT_FALSE(QFile::exists(dir.filePath(QString::fromLatin1(name)))) << name;
+    pruneCache(dir.path(), 1, {dir.filePath(hexName(0, "jpg")), dir.filePath(hexName(1, "jpg"))});
+    for (const QString &name : {hexName(0, "jpg"), hexName(0, "json"), hexName(1, "jpg"), hexName(1, "json")})
+        EXPECT_TRUE(QFile::exists(dir.filePath(name))) << name.toStdString();
+    for (const QString &name : {hexName(2, "jpg"), hexName(2, "json"), hexName(3, "jpg"), hexName(3, "json")})
+        EXPECT_FALSE(QFile::exists(dir.filePath(name))) << name.toStdString();
+}
+
+TEST(WallpaperTool, PruneLeavesForeignFilesAlone)
+{
+    // Review finding: `prepare --out victim --cache-max-bytes 1` deleted the notes and documents of a foreign folder.
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QStringList foreign = {QStringLiteral("notes.txt"), QStringLiteral("thesis.odt"), QStringLiteral("photo.jpg"), QStringLiteral("a.json"),
+                                 QStringLiteral("0123456789abcdef0123456789abcdef"), QStringLiteral("0123456789abcdef0123456789abcdef.txt"),
+                                 QStringLiteral("0123456789abcdef0123456789abcdeg.jpg"), QStringLiteral("0123456789abcdef0123456789abcdef0.jpg"),
+                                 QStringLiteral("T123456789abcdef0123456789abcdef.jpg"), QStringLiteral(".0123456789abcdef0123456789abcdef.jpg")};
+    for (const QString &name : foreign) {
+        QFile f(dir.filePath(name));
+        ASSERT_TRUE(f.open(QIODevice::ReadWrite));
+        f.write(QByteArray(5000, 'x'));
+        ASSERT_TRUE(f.flush());
+        ASSERT_TRUE(f.setFileTime(QDateTime::currentDateTime().addSecs(-86400), QFileDevice::FileModificationTime));
+    }
+    // A symlink with a cache-like name is not followed or removed either.
+    ASSERT_EQ(::symlink("notes.txt", QFile::encodeName(dir.filePath(hexName(9, "jpg"))).constData()), 0);
+    QFile own(dir.filePath(hexName(5, "jpg")));
+    ASSERT_TRUE(own.open(QIODevice::ReadWrite));
+    own.write(QByteArray(5000, 'x'));
+    ASSERT_TRUE(own.flush());
+    ASSERT_TRUE(own.setFileTime(QDateTime::currentDateTime().addSecs(-86400), QFileDevice::FileModificationTime));
+    own.close();
+    pruneCache(dir.path(), 1, {});
+    for (const QString &name : foreign)
+        EXPECT_TRUE(QFile::exists(dir.filePath(name))) << name.toStdString();
+    EXPECT_TRUE(QFileInfo(dir.filePath(hexName(9, "jpg"))).isSymLink());
+    EXPECT_FALSE(QFile::exists(dir.filePath(hexName(5, "jpg")))) << "the helper's own old file is pruned";
+}
+
+TEST(WallpaperTool, CacheNamesAreExactlyTheHelpersOwn)
+{
+    EXPECT_TRUE(isCacheName(hexName(1, "jpg")));
+    EXPECT_TRUE(isCacheName(hexName(1, "png")));
+    EXPECT_TRUE(isCacheName(hexName(1, "json")));
+    EXPECT_TRUE(isCacheName(QStringLiteral("t123456789abcdef0123456789abcdef.jpg")));
+    for (const char *no : {"", "a.jpg", "notes.txt", "0123456789abcdef0123456789abcdef", "0123456789abcdef0123456789abcdef.gif", "0123456789ABCDEF0123456789ABCDEF.jpg",
+                           "0123456789abcdef0123456789abcdef.jpg.bak", "x0123456789abcdef0123456789abcdef.jpg", "0123456789abcdef0123456789abcdef.jpg\n"})
+        EXPECT_FALSE(isCacheName(QString::fromLatin1(no))) << no;
+}
+
+TEST(WallpaperTool, AnExistingOutputFolderKeepsItsPermissions)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString existing = dir.filePath(QStringLiteral("existing"));
+    ASSERT_TRUE(QDir().mkpath(existing));
+    const QFileDevice::Permissions mode = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner | QFileDevice::ReadGroup | QFileDevice::ExeGroup | QFileDevice::ReadOther | QFileDevice::ExeOther;
+    ASSERT_TRUE(QFile::setPermissions(existing, mode));
+    const auto before = QFile::permissions(existing);
+    EXPECT_TRUE(ensureCacheDir(existing));
+    EXPECT_EQ(QFile::permissions(existing), before) << "a folder the helper did not create is not chmodded";
+    EXPECT_TRUE(QFile::permissions(existing).testFlag(QFileDevice::ReadOther)) << "still 0755";
+    const QString fresh = dir.filePath(QStringLiteral("fresh/cache"));
+    EXPECT_TRUE(ensureCacheDir(fresh));
+    const auto freshMode = QFile::permissions(fresh);
+    EXPECT_TRUE(freshMode.testFlag(QFileDevice::ReadOwner) && freshMode.testFlag(QFileDevice::WriteOwner) && freshMode.testFlag(QFileDevice::ExeOwner));
+    EXPECT_FALSE(freshMode.testFlag(QFileDevice::ReadGroup) || freshMode.testFlag(QFileDevice::WriteGroup) || freshMode.testFlag(QFileDevice::ExeGroup) || freshMode.testFlag(QFileDevice::ReadOther) || freshMode.testFlag(QFileDevice::WriteOther) || freshMode.testFlag(QFileDevice::ExeOther)) << "0700";
+    // A path that is a file is refused.
+    QFile file(dir.filePath(QStringLiteral("afile")));
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+    file.close();
+    EXPECT_FALSE(ensureCacheDir(file.fileName()));
 }
 
 TEST(WallpaperTool, ATruncatedJpegIsRefused)

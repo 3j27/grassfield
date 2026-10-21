@@ -47,12 +47,15 @@ function isPlainObject(v) {
 }
 
 // A list as a real array, or null. The JSON adapter hands out a QVariantList as a sequence object that is not an Array
-// (Array.isArray is false, length and indices work), so any object with a valid length counts; at most `cap` items are
+// (Array.isArray is false; length and indices work; its prototype is the sequence's own, not Object.prototype). A plain
+// object, which is what a JSON object such as {"length": 1, "0": {...}} becomes, is NOT a list. At most `cap` items are
 // read, so that a hostile length is harmless. Every item is validated by its own rules afterwards.
 function asArray(v, cap) {
     if (Array.isArray(v))
         return v.slice(0, cap);
-    if (v === null || typeof v !== "object" || typeof v.length !== "number" || v.length < 0 || Math.floor(v.length) !== v.length)
+    if (v === null || typeof v !== "object" || Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)
+        return null;
+    if (typeof v.length !== "number" || v.length < 0 || Math.floor(v.length) !== v.length)
         return null;
     const out = [];
     const n = Math.min(v.length, cap);
@@ -87,12 +90,12 @@ function utf8Length(s) {
 }
 
 // True when `s` holds a control character (C0, DEL, C1), a line or paragraph separator (U+2028, U+2029) or a bidi
-// override or isolate (U+202A-U+202E, U+2066-U+2069). Tested by code, not by a regular expression, so that the source
+// override or isolate (U+202A-U+202E, U+2066-U+2069) or a directional mark (U+200E, U+200F, U+061C). Tested by code, not by a regular expression, so that the source
 // holds no invisible character.
 function hasForbiddenChar(s) {
     for (let i = 0; i < s.length; i++) {
         const c = s.charCodeAt(i);
-        if (c <= 0x1f || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029 || (c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069))
+        if (c <= 0x1f || (c >= 0x7f && c <= 0x9f) || c === 0x061c || c === 0x200e || c === 0x200f || c === 0x2028 || c === 0x2029 || (c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069))
             return true;
     }
     return false;

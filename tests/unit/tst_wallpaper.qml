@@ -120,8 +120,17 @@ TestCase {
 
     // The JSON adapter hands out a QVariantList as a sequence that is not an Array (review finding: the shell dropped
     // wallpaper.outputs). A stand-in with a length and indices; the real adapter path is in tests/shell/settings_roundtrip.
+    function makeSeq(items) {
+        // A prototype of its own, like the adapter's sequence: not Object.prototype, not Array.prototype.
+        const o = Object.create({});
+        o.length = items.length;
+        for (let i = 0; i < items.length; i++)
+            o[i] = items[i];
+        return o;
+    }
+
     function test_arrayLikeOutputs() {
-        const like = {length: 2, 0: {display: panel, fit: "tile"}, 1: {display: other, source: "color"}};
+        const like = makeSeq([{display: panel, fit: "tile"}, {display: other, source: "color"}]);
         verify(!Array.isArray(like));
         compare(WallpaperConfig.outputsProblem(like), "");
         compare(WallpaperConfig.normalizeOutputs(like).length, 2);
@@ -129,12 +138,29 @@ TestCase {
         compare(WallpaperConfig.resolve(cfg, panelMoved).fit, "tile");
         compare(WallpaperConfig.resolve(cfg, other).source, "color");
         compare(WallpaperConfig.normalize(cfg).outputs.length, 2);
-        compare(WallpaperConfig.outputsProblem({length: 1e9}), "too-many");
-        compare(WallpaperConfig.normalizeOutputs({length: 1e9}).length, 0, "a hostile length reads at most a bounded number of items");
-        compare(WallpaperConfig.outputsProblem({length: -1}), "not-an-array");
-        compare(WallpaperConfig.outputsProblem({length: 1.5}), "not-an-array");
+        const huge = makeSeq([]);
+        huge.length = 1e9;
+        compare(WallpaperConfig.outputsProblem(huge), "too-many");
+        compare(WallpaperConfig.normalizeOutputs(huge).length, 0, "a hostile length reads at most a bounded number of items");
+        const negative = makeSeq([]);
+        negative.length = -1;
+        compare(WallpaperConfig.outputsProblem(negative), "not-an-array");
+        const fractional = makeSeq([]);
+        fractional.length = 1.5;
+        compare(WallpaperConfig.outputsProblem(fractional), "not-an-array");
+        compare(WallpaperConfig.outputsProblem(makeSeq([{}])), "entry 0: display");
+    }
+
+    // A JSON object is not a list, whatever keys it has (the schema says array): {"length": 1, "0": {...}} reads as none.
+    function test_aPlainObjectWithALengthIsNotAList() {
+        const hostile = {length: 1, 0: {display: panel, fit: "tile"}};
+        compare(WallpaperConfig.outputsProblem(hostile), "not-an-array");
+        compare(WallpaperConfig.normalizeOutputs(hostile).length, 0);
+        compare(WallpaperConfig.normalize({source: "color", outputs: hostile}).outputs.length, 0);
         compare(WallpaperConfig.outputsProblem({}), "not-an-array");
-        compare(WallpaperConfig.outputsProblem({length: 1, 0: {}}), "entry 0: display");
+        compare(WallpaperConfig.outputsProblem(Object.create(null)), "not-an-array");
+        compare(WallpaperConfig.outputsProblem("abc"), "not-an-array");
+        compare(WallpaperConfig.outputsProblem(7), "not-an-array");
     }
 
     function test_normalizeOutputsDropsBadEntries() {

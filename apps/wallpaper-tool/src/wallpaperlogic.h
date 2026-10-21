@@ -73,7 +73,14 @@ ExitCode listFolder(const QString &folder, const QStringList &supported, int max
 // Lower-case suffixes of the picture formats this build can decode, intersected with the formats wanted for wallpapers.
 QStringList supportedSuffixes();
 
-// Removes the oldest files of `dir` (by modification time) until the total is at most `maxBytes`. The files of `keep` (the
+// A file name the helper itself creates in its cache folders: 32 hex digits and .jpg, .png or .json (thumbnails: a "t" first).
+bool isCacheName(const QString &name);
+
+// Creates the output folder (0700) when it does not exist; a folder that already exists is used as it is, its permissions
+// untouched. False when it cannot be created or is not writable.
+bool ensureCacheDir(const QString &path);
+
+// Removes the oldest of the helper's own files (isCacheName; nothing else in the folder, no symlink) of `dir` (by modification time) until the total is at most `maxBytes`. The files of `keep` (the
 // pictures on screen, the one just written) and their sidecars are never removed, nor is anything younger than a minute.
 void pruneCache(const QString &dir, qint64 maxBytes, const QStringList &keep);
 

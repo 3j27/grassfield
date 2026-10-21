@@ -1,5 +1,12 @@
 #include <gtest/gtest.h>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QTemporaryDir>
+
+#include <unistd.h>
+
 #include "systemguard.h"
 
 using namespace grassfield::settings;
@@ -14,9 +21,34 @@ WallpaperContext installed()
     return {kTool, kCache, QString()};
 }
 
+// A real worktree-like tree: <root>/.dev/{wallpapers,cache}, <root>/outside, and a symlink <root>/.dev/link -> <root>/outside.
+struct DevTree {
+    QTemporaryDir tmp;
+    QString root;
+    DevTree()
+    {
+        root = QFileInfo(tmp.path()).canonicalFilePath();
+        QDir().mkpath(root + QStringLiteral("/.dev/wallpapers"));
+        QDir().mkpath(root + QStringLiteral("/.dev/cache/wallpapers"));
+        QDir().mkpath(root + QStringLiteral("/outside"));
+        QFile secret(root + QStringLiteral("/outside/secret.jpg"));
+        (void) secret.open(QIODevice::WriteOnly);
+        QFile ok(root + QStringLiteral("/.dev/wallpapers/a.jpg"));
+        (void) ok.open(QIODevice::WriteOnly);
+        (void) ::symlink(QFile::encodeName(root + QStringLiteral("/outside")).constData(), QFile::encodeName(root + QStringLiteral("/.dev/link")).constData());
+    }
+};
+
+const DevTree &tree()
+{
+    static const DevTree t;
+    return t;
+}
+
 WallpaperContext dev()
 {
-    return {QStringLiteral("/w/repo/.dev/build/grassfield-wallpaper"), QStringLiteral("/w/repo/.dev/cache/wallpapers"), QStringLiteral("/w/repo")};
+    const QString r = tree().root;
+    return {r + QStringLiteral("/.dev/build/grassfield-wallpaper"), r + QStringLiteral("/.dev/cache/wallpapers"), r};
 }
 
 QStringList list(const QString &tool, const QString &max, const QString &folder)
@@ -37,8 +69,8 @@ TEST(WallpaperGuard, AcceptsTheVectorsThePageUses)
     EXPECT_TRUE(isWallpaperQuery(list(kTool, QStringLiteral("500"), QStringLiteral("/home/u/Pictures")), installed()));
     EXPECT_TRUE(isWallpaperQuery(thumb(kTool, QStringLiteral("320"), kCache + QStringLiteral("/thumbs"), QStringLiteral("/home/u/Pictures/a.jpg")), installed()));
     const WallpaperContext d = dev();
-    EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("500"), QStringLiteral("/w/repo/.dev/wallpapers")), d));
-    EXPECT_TRUE(isWallpaperQuery(thumb(d.tool, QStringLiteral("320"), d.cacheDir + QStringLiteral("/thumbs"), QStringLiteral("/w/repo/.dev/wallpapers/a.jpg")), d));
+    EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("500"), d.devRoot + QStringLiteral("/.dev/wallpapers")), d));
+    EXPECT_TRUE(isWallpaperQuery(thumb(d.tool, QStringLiteral("320"), d.cacheDir + QStringLiteral("/thumbs"), d.devRoot + QStringLiteral("/.dev/wallpapers/a.jpg")), d));
 }
 
 TEST(WallpaperGuard, RefusesAnotherProgramCalledTheSame)
@@ -76,7 +108,8 @@ TEST(WallpaperGuard, ListArgumentsAreExact)
     EXPECT_FALSE(isWallpaperQuery(list(kTool, QStringLiteral("5"), QStringLiteral("relative")), installed()));
     EXPECT_FALSE(isWallpaperQuery(list(kTool, QStringLiteral("5"), QStringLiteral("-rf")), installed()));
     EXPECT_FALSE(isWallpaperQuery(list(kTool, QStringLiteral("5"), QStringLiteral("/a\nb")), installed()));
-    EXPECT_FALSE(isWallpaperQuery(list(kTool, QStringLiteral("5"), QStringLiteral("/a") + QChar(0x202e) + QStringLiteral("b")), installed()));
+    for (const ushort mark : {0x202e, 0x202a, 0x2066, 0x200e, 0x200f, 0x061c, 0x2028, 0x0085})
+        EXPECT_FALSE(isWallpaperQuery(list(kTool, QStringLiteral("5"), QStringLiteral("/a") + QChar(mark) + QStringLiteral("b")), installed())) << mark;
     EXPECT_FALSE(isWallpaperQuery(list(kTool, QStringLiteral("5"), QStringLiteral("/") + QString(5000, QLatin1Char('a'))), installed()));
     QStringList missingDashes = list(kTool, QStringLiteral("5"), ok);
     missingDashes.removeAt(4);
@@ -111,12 +144,23 @@ TEST(WallpaperGuard, DevSessionStaysUnderTheWorktreesDevFolder)
 {
     const WallpaperContext d = dev();
     const QString out = d.cacheDir + QStringLiteral("/thumbs");
-    for (const char *outside : {"/home/u/Pictures", "/w/repo", "/w/repo/.devious/a.jpg", "/w/repo/.dev/../secret.jpg", "/w/other/.dev/a.jpg", "/"}) {
-        EXPECT_FALSE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), QString::fromLatin1(outside)), d)) << outside;
-        EXPECT_FALSE(isWallpaperQuery(thumb(d.tool, QStringLiteral("320"), out, QString::fromLatin1(outside)), d)) << outside;
+    const QString r = d.devRoot;
+    for (const QString &outside : {QStringLiteral("/home/u/Pictures"), r, r + QStringLiteral("/.devious/a.jpg"), r + QStringLiteral("/.dev/../secret.jpg"), r + QStringLiteral("/outside/secret.jpg"),
+                                   QStringLiteral("/"),
+                                   // Through the symlink .dev/link -> outside: by text it is under .dev, in fact it is not.
+                                   r + QStringLiteral("/.dev/link/secret.jpg"), r + QStringLiteral("/.dev/link/new.jpg"), r + QStringLiteral("/.dev/link"), r + QStringLiteral("/.dev/link/../x.jpg"),
+                                   r + QStringLiteral("/.dev/wallpapers/../../outside/secret.jpg"),
+                                   r + QStringLiteral("/.dev/wallpapers/new/../../../outside/new.jpg")}) {
+        EXPECT_FALSE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), outside), d)) << outside.toStdString();
+        EXPECT_FALSE(isWallpaperQuery(thumb(d.tool, QStringLiteral("320"), out, outside), d)) << outside.toStdString();
     }
-    EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), QStringLiteral("/w/repo/.dev")), d));
-    EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), QStringLiteral("/w/repo/.dev//wallpapers/./x")), d));
+    EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev")), d));
+    EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev//wallpapers/./x")), d)) << "a file that does not exist yet, below .dev";
+    EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev/wallpapers/a.jpg")), d));
+    EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev/link/../.dev/wallpapers/a.jpg")), d)) << "through the link and back: really inside";
+    EXPECT_TRUE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), r + QStringLiteral("/.dev/wallpapers/../cache")), d));
+    // Without a .dev folder nothing is inside it.
+    EXPECT_FALSE(isWallpaperQuery(list(d.tool, QStringLiteral("5"), QStringLiteral("/nonexistent-root/.dev/x.jpg")), WallpaperContext{d.tool, d.cacheDir, QStringLiteral("/nonexistent-root")}));
     // The installed helper path is not the dev one.
     EXPECT_FALSE(isWallpaperQuery({kTool, QStringLiteral("formats")}, d));
 }

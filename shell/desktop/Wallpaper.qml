@@ -21,6 +21,9 @@ Scope {
     readonly property real maxBytes: 64 * 1024 * 1024
     property string pendingFile: ""
     property string outcome: "idle"
+    // The crossfade adapts to dropped frames (WallpaperFeed's picture fades, see beginFade); the dev hook
+    // `qs ipc call wallpaper fade full` turns that off so that a capture test always sees the full fade.
+    property bool fadeAdaptive: true
 
     // "" when the path is acceptable for a stat check, else the reason it is refused.
     function pathProblem(path: string): string {
@@ -62,6 +65,16 @@ Scope {
 
     IpcHandler {
         target: "wallpaper"
+
+        // Dev only: "full" keeps the full crossfade whatever the frame times were, "adaptive" restores the default.
+        function fade(mode: string): string {
+            if (!root.dev)
+                return "refused";
+            if (mode !== "full" && mode !== "adaptive")
+                return "refused: mode must be full or adaptive";
+            root.fadeAdaptive = mode === "adaptive";
+            return "ok";
+        }
 
         function set(path: string): string {
             if (!root.dev)
@@ -241,6 +254,11 @@ Scope {
                     return;
                 }
                 incoming = shown === imgA ? imgB : imgA;
+                // The incoming image is always the one on top (the two items alternate, and the one declared first would
+                // otherwise fade in underneath the opaque other: a hard cut on every other change).
+                if (shown !== null)
+                    shown.z = 1;
+                incoming.z = 2;
                 incoming.opacity = 0;
                 incoming.source = url;
                 fadePending = true;
@@ -265,10 +283,10 @@ Scope {
             function beginFade(): void {
                 fadePending = false;
                 fadeAway.stop();
-                // The fade adapts to the machine (gate P3): a fade that dropped frames makes the next one short, and the one
-                // after that a plain switch, until a fade runs smoothly again.
-                // The machine may have recovered (a game closed, the load went away): try the full fade again from time to time.
-                if (fadeDegrade > 0 && Date.now() - fadeDegradedAt > Tokens.wallpaperFadeRetryMs)
+                // The fade adapts to the machine (gate P3): a fade that dropped frames steps the level down (full, short, plain
+                // switch) and the level stays; the machine may have recovered, so the full fade is tried again after
+                // wallpaperFadeRetryMs. (The dev hook `wallpaper fade full` turns the adaptation off for the captures.)
+                if (!root.fadeAdaptive || (fadeDegrade > 0 && Date.now() - fadeDegradedAt > Tokens.wallpaperFadeRetryMs))
                     fadeDegrade = 0;
                 let ms = Settings.reduceMotion ? Tokens.motionReducedMax : Tokens.wallpaperCrossfadeMs;
                 if (!Settings.reduceMotion && fadeDegrade === 1)
@@ -281,12 +299,15 @@ Scope {
                 fadeMax = 0;
                 fadeAborted = false;
                 fadeMs = ms;
-                toneMid.interval = ms / 2;
+                // The bar's tone follows the new picture once it dominates (60 % of the fade), not at the middle.
+                toneMid.interval = ms * 0.6;
                 toneMid.restart();
                 if (ms === 0) {
                     // A plain switch: the new picture is complete at once.
                     incoming.opacity = 1;
                     completeFade();
+                    toneMid.stop();
+                    reportTone();
                     console.info("wallpaper fade output=" + win.modelData.name + " switched without a fade (frames dropped before) frames=0 fast=0 slow=0");
                     return;
                 }
@@ -316,7 +337,7 @@ Scope {
                     fadeFast++;
                 fadeMax = Math.max(fadeMax, ms);
                 // Three slow frames early in a fade: end it now rather than stutter through the rest.
-                if (fadeSlow >= 3 && fadeFrames <= 12 && !fadeAborted) {
+                if (root.fadeAdaptive && fadeSlow >= 3 && fadeFrames <= 12 && !fadeAborted) {
                     fadeAborted = true;
                     Qt.callLater(abortFade);
                 }
@@ -330,7 +351,15 @@ Scope {
                     incoming.opacity = 1;
                     completeFade();
                 }
+                // The new picture is on screen now: the tone does not wait for the timer.
+                toneMid.stop();
+                reportTone();
                 endFade();
+            }
+
+            function reportTone(): void {
+                if (VisualFixtures.wallpaperFile === "")
+                    BarTone.reportStrip(win.modelData.name, feed.strip);
             }
 
             // Summary of a fade in the journal (the owner reads it in a live session, tests read it in the nested log).
@@ -359,6 +388,8 @@ Scope {
                 if (incoming !== null) {
                     incoming.opacity = 1;
                     completeFade();
+                    toneMid.stop();
+                    reportTone();
                 }
             }
 
@@ -395,11 +426,10 @@ Scope {
                 }
             }
 
-            // The bar's tone switches at the middle of the crossfade, from the incoming picture's own statistics.
+            // The bar's tone switches when the incoming picture dominates (60 % of the crossfade), from its own statistics.
             Timer {
                 id: toneMid
-                onTriggered: if (VisualFixtures.wallpaperFile === "")
-                    BarTone.reportStrip(win.modelData.name, feed.strip)
+                onTriggered: win.reportTone()
             }
 
             Image {
