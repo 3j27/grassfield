@@ -58,7 +58,7 @@ Observations for counsel (no conclusion):
 | `grassfield-desktop` | QML shell (`/usr/share/grassfield/shell`), `Grassfield.Ui` QML module + 40 SVG icons, `Grassfield.I18n` QML plugin `.so` + `.qm` catalogues, Hyprland Lua session config, JSON defaults and schema, session `.desktop`, systemd user units, `grassfield-menu-bridge`, `grassfield-settings`, `grassfield-files`, `grassfield-preview` binaries and their QML, `.desktop` files, README, `BRANDING.md` | this repository only |
 | `grassfield-compositor` | `/usr/lib/grassfield/grassfield-compositor.so` (Hyprland plugin) | this repository, compiled against Hyprland headers, with code generated from `compositor/protocols/appmenu.xml` |
 
-| `grassfield-whitesur-icons` (optional, ADR-0017) | the WhiteSur icon theme, three variants, plus `COPYING`, `AUTHORS`, `SOURCE` | upstream commit `73d8040…` fetched at build time; GPL-3.0-only data, not in this repository; no Apple logo (build guard, ADR-0017) |
+| `grassfield-whitesur-icons` (optional, ADR-0017) | the WhiteSur icon theme, three variants, plus `COPYING`, `AUTHORS`, `SOURCE` | upstream commit `73d8040…` fetched at build time; GPL-3.0-only data, not in this repository; filtered: the Apple logo and Apple app-icon and product artwork found by the build guard are removed (ADR-0017); no claim beyond what the detector and the review prove |
 
 Everything else (Hyprland, Quickshell, Qt, KF6, fonts) is a declared dependency installed from the Arch/Omarchy
 repositories; Grassfield does not redistribute it today. The ISO (M6) changes that (section 6).
@@ -92,7 +92,7 @@ repositories; Grassfield does not redistribute it today. The ISO (M6) changes th
 | 21 | googletest 1.18.0 | `makedepends`; unit tests of plugin, bridge, Files, Preview; test binaries built in `check()` | BSD-3-Clause, "Copyright 2008, Google Inc." | notice only if test binaries were distributed | not packaged (VERIFIED: the package functions and the CMake `install()` rules install no test binary) |
 | 22 | wlr-virtual-pointer protocol (test tool) | `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml`, "reconstructed from the request signatures" of Hyprland's generated header | upstream notice in `/usr/include/hyprland/protocols/wlr-virtual-pointer-unstable-v1.hpp`: MIT, "Copyright © 2019 Josef Gajdusek" | MIT notice if distributed | test-only, not packaged; no notice in the reconstructed file |
 | 23 | uwsm 0.26.7 | session launcher in `grassfield.desktop` `Exec=` | MIT | none (separate program) | dependency |
-| 24 | WhiteSur icon theme (commit `73d8040…`, optional package `grassfield-whitesur-icons`) | icon theme data read by Qt and GTK; built from the pinned upstream commit (checksummed), Apple-logo files removed by the build guard, not in the repository | GPL-3.0-only (`COPYING` is the plain version 3 text, no "or later" notice anywhere at the pin); author per `AUTHORS`: Vince Liuice; modified by the package: Apple-logo files and icon caches removed (ADR-0017 guard) | GPL-3.0: licence text, corresponding source (the repository at that commit) for any distribution | licence files installed by the package; G12; needs legal review |
+| 24 | WhiteSur icon theme (commit `73d8040…`, optional package `grassfield-whitesur-icons`) | icon theme data read by Qt and GTK; built from the pinned upstream commit (checksummed), Apple-logo files, Apple app-icon and product artwork removed by the build guard (perceptual detector plus curated blocklist; counsel to confirm what remains), not in the repository | GPL-3.0-only (`COPYING` is the plain version 3 text, no "or later" notice anywhere at the pin); author per `AUTHORS`: Vince Liuice; modified by the package: Apple-logo and Apple trademark artwork files (about 350), the links to them (about 1600) and icon caches removed (ADR-0017 guard) | GPL-3.0: licence text, corresponding source (the repository at that commit) for any distribution | licence files installed by the package; G12; needs legal review |
 
 ### 4.2 Hyprland and its libraries (rows 1, 2, 5)
 
@@ -290,7 +290,8 @@ These are obligations to examine with counsel before any ISO is distributed. Non
    example NVIDIA drivers or apps from Omarchy's default set; ASSUMPTION), check each redistribution licence;
    patent-encumbered codecs in ffmpeg may matter in some jurisdictions.
 9. **Default themes.** Icon and cursor themes on the image must not imitate Apple assets (see visual-review E27,
-   E28). The session default is WhiteSur (ADR-0017, G12): either ship its source with the ISO (GPL-3.0) or leave
+   E28). WhiteSur is filtered (Apple logo, Apple app icons and product silhouettes removed, ADR-0017), but the filter is
+   by detector and review by eye, and the style imitation remains: counsel to confirm before any public release. The session default is WhiteSur (ADR-0017, G12): either ship its source with the ISO (GPL-3.0) or leave
    `grassfield-whitesur-icons` out of it, in which case the session falls back to Adwaita through `grassfield-icons`.
 10. **Trademarks.** Arch Linux and Omarchy names on the image and website ("based on Arch Linux", "built for
     Omarchy" per §14); Hyprland, KDE, Qt names in credits. needs legal review.

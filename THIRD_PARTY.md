@@ -149,9 +149,16 @@ WhiteSur icon theme (optional package `grassfield-whitesur-icons`, built by `mak
 - data files read by Qt, GTK and KDE, not linked; nothing of it is in this repository: it is fetched at build time
   (checksummed `git archive` of the pinned commit), and the PKGBUILD runs upstream's `install.sh` (with `-p`, in a clean
   environment) only while its SHA-256 is the reviewed one. **Modification, to be noted under GPL-3.0:** the package
-  removes the Apple logo files upstream ships (`start-here*` in places/ and status/, `folder-apple*`, about 12 files and
-  the links to them) and the `icon-theme.cache` files. `packaging/arch/whitesur-guard.sh` does it and fails the build if a
-  known Apple logo remains (ADR-0017). No Apple logo is shipped or displayed;
+  FILTERS the theme (owner decision
+  2026-10-20): it removes every icon that shows the Apple logo (found by a perceptual detector, also inside larger icons
+  such as the iMac and Magic Mouse icons; the 12 logo files `start-here*` and `folder-apple*` and 22 more files at the
+  pin), every icon of a curated blocklist (Apple app icons that WhiteSur reproduces, such as Finder, App Store, Safari,
+  Xcode, iCloud and the System Preferences gear, and iPhone, iPad and iPod silhouettes; 126 names and 103 drawings), the
+  icons that share a name with them, the links left dangling (about 350 files and 1600 links in all) and the
+  `icon-theme.cache` files. `packaging/arch/whitesur-guard.sh` and `whitesur-detect.py` do it and fail the build if
+  anything they know remains (ADR-0017). This is a statement about what the detector and a review by eye on contact
+  sheets found, not a proof that no Apple artwork remains; the style imitation of the other icons and the review stay
+  with counsel (visual-review E27);
 - `COPYING`, `AUTHORS` and a `SOURCE` line (URL and commit) are installed in `/usr/share/licenses/grassfield-whitesur-icons/`;
   the PKGBUILD reproduces the package from that commit;
 - the theme's metadata contains the words "MacOSX", and its name alludes to an Apple product name. Grassfield displays
