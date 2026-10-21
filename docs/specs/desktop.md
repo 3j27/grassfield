@@ -68,7 +68,6 @@ The desktop shows the files and folders of the Desktop folder as large icons wit
 - Nested screenshots (`.dev/shots/`): icons, selection, rubber band, inline rename, both context menus, drag onto the Trash (`gio list trash://` shows the file; restored with `gio trash --restore`).
 
 ## Known limitations
-- The menu bar layer is `OnDemand` permanently (`shell/menubar/MenuBar.qml`, outside this module): it takes the keyboard when it maps and when the pointer moves over it.
 - Icons appear on the first screen only. Positions are slots, so a smaller grid re-places icons.
 - Drops from other applications always copy: Qt does not tell Shift (move) from the default action. Not exercised with a real foreign source (no DnD source app in the nested session); the drop path is the same code as the internal one.
 - Get Info, Change Wallpaper and Use Stacks are omitted. No paste, no icon size or sort options, no mounted-volume icons.

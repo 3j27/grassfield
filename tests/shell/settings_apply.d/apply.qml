@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Grassfield.Ui
 import qs.services
 
 // End to end, with the REAL unit environment (packaging/systemd/grassfield-shell.service: QS_DISABLE_FILE_WATCHER=1,
@@ -41,6 +42,11 @@ ShellRoot {
         ["hotCorners.topRight", "notifications", () => Settings.hotCornerTopRight === "notifications"],
         ["hotCorners.bottomLeft", "apps", () => Settings.hotCornerBottomLeft === "apps"],
         ["hotCorners.bottomRight", "lock", () => Settings.hotCornerBottomRight === "lock"],
+        // Accent colour: the setting, then the colour Appearance resolves from it (bound as shell.qml binds it), live.
+        ["accent.color", "purple", () => Settings.accentColor === "purple" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorAccentLight.purple).toLowerCase()],
+        ["accent.color", "orange", () => Settings.accentColor === "orange" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorAccentLight.orange).toLowerCase() && Appearance.colors.accentText.toString().toLowerCase() === String(Tokens.colorAccentLight.orangeText).toLowerCase()],
+        ["accent.color", "neon", () => Settings.accentColor === "multicolor" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorLight.accent).toLowerCase()],
+        ["accent.color", "graphite", () => Settings.accentColor === "graphite" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorAccentLight.graphite).toLowerCase()],
         ["icons.mode", "tinted", () => Settings.iconMode === "tinted"],
         ["icons.tint", "#8e5bea", () => Settings.iconTint === "#8e5bea"],
         ["icons.folderColor", "#8e5bea", () => Settings.folderColor === "#8e5bea"],
@@ -48,6 +54,19 @@ ShellRoot {
         ["pointer.outlineColor", "#ff0000", () => Settings.pointerOutlineColor === "#ff0000"],
         ["pointer.fillColor", "#00ff00", () => Settings.pointerFillColor === "#00ff00"]
     ]
+
+    // As shell.qml: the settings drive Appearance (appearance is "light" from the first step on).
+    Binding {
+        target: Appearance
+        property: "accentSetting"
+        value: Settings.accentColor
+    }
+
+    Binding {
+        target: Appearance
+        property: "dark"
+        value: Settings.dark
+    }
 
     property var doc: ({
             "version": 1

@@ -46,6 +46,9 @@ Variants {
         WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-apps"
         // qmllint disable missing-type
+        // The whole surface takes input while shown; nothing once it closed: it stays mapped for the fade and the keyboard
+        // release, and a click then belongs to the window under it (never to a tile that is fading out).
+        mask: shown ? null : passThrough
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && shown ? blur : null
         // qmllint enable missing-type
 
@@ -55,9 +58,22 @@ Variants {
             radius: Tokens.launcherPanelRadius
         }
 
+        Region {
+            id: passThrough
+        }
+
         KeyboardRelease {
             id: release
             shown: win.shown
+        }
+
+        // Closed but still mapped (the fade, the hold): a press the compositor delivered before the empty mask landed (late
+        // whenever the GUI thread was busy) is swallowed here, never launching the tile under it.
+        MouseArea {
+            anchors.fill: parent
+            z: 1000
+            visible: !win.shown
+            acceptedButtons: Qt.AllButtons
         }
 
         Behavior on progress {

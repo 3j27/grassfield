@@ -35,8 +35,20 @@ wait_for() { # <seconds> cmd...
   return 1
 }
 focus_title() { # focus a window by its title (Lua dispatch through nestctl is not needed: spawn order decides)
-  "$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.focus({window = 'title:^$1\$'})" >/dev/null 2>&1 || true
+  local out
+  out=$("$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.focus({window = 'title:^$1\$'})" 2>&1) || true
   sleep 0.5
+  if [[ $(active_title) != "$1" ]]; then
+    echo "  focus_title '$1' not applied (dispatch said: $out); layers: $("$VS_ROOT/scripts/nestctl" -j layers 2>/dev/null | jq -c '[.. | objects | select(.namespace? != null) | {namespace, ks: .keyboardInteractivity}]' 2>/dev/null)" >&2
+  fi
+}
+
+# Direction key that reaches another window from the marked one: the dominant axis towards the nearest other window.
+direction_off_marked() {
+  status | jq -r '.screens[] | select(.name == "'"$VS_OUTPUT"'") | .marked as $m | (.windows | map(select(.address == $m)) | first) as $a
+    | [.windows[] | select(.address != $m) | {dx: ((.rect.x + .rect.w / 2) - ($a.rect.x + $a.rect.w / 2)), dy: ((.rect.y + .rect.h / 2) - ($a.rect.y + $a.rect.h / 2))}]
+    | sort_by(.dx * .dx + .dy * .dy) | first
+    | if (.dx | fabs) >= (.dy | fabs) then (if .dx < 0 then "Left" else "Right" end) else (if .dy < 0 then "Up" else "Down" end) end'
 }
 
 vs_session en
@@ -68,9 +80,11 @@ m=$(marked_title)
 
 # 3. Arrows: from the hovered window, left or right reaches another window and the mark follows.
 before=$m
-key -k Up; sleep 0.5
+# (Up from the top row enters the Desktops bar and leaves the mark where it is: the key is chosen towards a neighbour.)
+dir=$(direction_off_marked)
+key -k "${dir:-Left}"; sleep 0.5
 m=$(marked_title)
-[[ -n $m && $m != "$before" ]]; check "arrows: Up moves the mark off $before (marked=$m)" $?
+[[ -n $m && $m != "$before" ]]; check "arrows: $dir moves the mark off $before (marked=$m)" $?
 
 # 4. Return activates the marked window and closes.
 want=$m
@@ -87,6 +101,7 @@ vs_ipc overview open >/dev/null
 sleep 1.2
 key -k Return
 wait_for 5 closed; check "return, nothing chosen: the overview closes" $?
+closed || echo "  status after Return: $(status | jq -c '{open, phase, live, chromeHeld}') (active=$(active_title))" >&2
 sleep 0.8
 act=$(active_title)
 [[ $act == 'Terminal 1' ]]; check "return, nothing chosen: Terminal 1 (active at open) stays active (active=$act)" $?
@@ -100,6 +115,35 @@ wait_for 5 closed; check "esc: the overview closes" $?
 sleep 0.8
 act=$(active_title)
 [[ $act == 'Terminal 3' ]]; check "esc: back on Terminal 3 (active=$act)" $?
+
+# 6b. Reopen quickly after a Return with a focus request in between (reviewer repro): the first Return of the new open must
+# close it, and the first arrow key must move the ring.
+focus_title 'Terminal 2'
+vs_park
+vs_ipc overview open >/dev/null
+sleep 1.2
+key -k Return
+wait_for 5 closed
+focus_title 'Terminal 1'
+vs_ipc overview open >/dev/null
+sleep 1.2
+key -k Return
+wait_for 5 closed; check "reopen: the first Return closes the overview" $?
+closed || echo "  status after the reopen Return: $(status | jq -c '{open, phase, live, chromeHeld, thumbnailMode}') (active=$(active_title))" >&2
+sleep 0.8
+act=$(active_title)
+[[ $act == 'Terminal 1' || $act == 'Terminal 2' ]]; check "reopen: a window is active after the close (active=$act)" $?
+focus_title 'Terminal 2'
+vs_park
+vs_ipc overview open >/dev/null
+sleep 1.2
+before=$(marked_title)
+dir=$(direction_off_marked)
+key -k "${dir:-Left}"; sleep 0.5
+m=$(marked_title)
+[[ -n $m && $m != "$before" ]]; check "first arrow ($dir) after open moves the ring off $before (marked=$m)" $?
+vs_ipc overview close >/dev/null
+wait_for 5 closed
 
 # 7. Captures last (a screenshot takes the keyboard from the overview): open with the pointer over Terminal 3, then the hover state.
 vs_park

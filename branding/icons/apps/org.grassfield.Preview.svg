@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Grassfield Preview: an original picture card with a sun and green hills. CC-BY-SA-4.0, see branding/LICENSES.md. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FD0F2"/>
+      <stop offset="1" stop-color="#D8F0FA"/>
+    </linearGradient>
+    <clipPath id="card"><rect x="14" y="22" width="100" height="84" rx="12"/></clipPath>
+  </defs>
+  <rect x="14" y="22" width="100" height="84" rx="12" fill="url(#sky)"/>
+  <g clip-path="url(#card)">
+    <circle cx="90" cy="48" r="11" fill="#FFD64D"/>
+    <path d="M14 94c18-24 38-26 56-8 14-12 30-12 44 2v18H14z" fill="#4FB36B"/>
+    <path d="M14 104c20-14 40-14 60-2 14-6 28-6 40 2v6H14z" fill="#26763F"/>
+  </g>
+  <rect x="14" y="22" width="100" height="84" rx="12" fill="none" stroke="#FFFFFF" stroke-width="5"/>
+</svg>

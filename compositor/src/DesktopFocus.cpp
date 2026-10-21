@@ -1,18 +1,23 @@
 #include "DesktopFocus.hpp"
 
+#include "DeferredFocus.hpp"
 #include "Plugin.hpp"
 #include "Surfaces.hpp"
 #include "Titlebar.hpp"
 #include "core/DesktopFocus.hpp"
 
+#include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/LayerState.hpp>
 #include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/protocols/LayerShell.hpp>
@@ -42,6 +47,9 @@ namespace {
         std::vector<CHyprSignalListener> listeners;
         std::vector<SDesktopLayer>       desktops;
         df::CPendingGrant                pending;
+        df::CUnlockRefocus               unlock;        // the refocus an unlock armed
+        gf::deferredFocus::CLater        unlockAttempt; // its attempt from the event loop (code of this library)
+        SP<CEventLoopTimer>              unlockRetry;   // retries while the lock surface holds the keyboard; removed in stop()
     };
 
     // Constructed on first use inside a guarded call (R13). Emptied by stop() before dlclose.
@@ -180,14 +188,12 @@ namespace {
     // Hyprland's own click focus, with every rule Hyprland applies (no_focus window rule, a modal child, the session lock,
     // an Exclusive layer, X11 windows that refuse focus); returns whether the window holds the keyboard afterwards.
     // Hyprland's click path skips a window it still counts as focused (ADR-0012 spike row 2), but fullWindowFocus does
-    // not: CFocusState::rawWindowFocus returns early only when the requested surface is the focused surface, and the
-    // desktop holds it here (Hyprland 0.56.2 source, read as data; 22/22 grants in desktop_focus.sh). The surface focus is
-    // never forced (R13 review of 5706cbd): when Hyprland refuses, the keyboard stays where it is.
-    bool focusWindow(const PHLWINDOW& w) {
-        const auto focus = Desktop::focusState();
-        if (!focus || !w)
-            return false;
-        focus->fullWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
+    // not: CFocusState::rawWindowFocus returns early only when the requested surface is the focused surface (Hyprland
+    // 0.56.2 source, read as data; 22/22 grants in desktop_focus.sh); when Hyprland's focus state still names the window's
+    // surface although the keyboard left it, the state is reset first (gf::deferredFocus::focusWindow). The surface focus
+    // is never forced (R13 review of 5706cbd): when Hyprland refuses, the keyboard stays where it is.
+    bool focusWindow(const PHLWINDOW& w, bool& stateReset) {
+        gf::deferredFocus::focusWindow(w, Desktop::FOCUS_REASON_CLICK, &stateReset);
         return keyboardOnWindow(w);
     }
 
@@ -219,11 +225,88 @@ namespace {
                        when, keyboardOnLayer(ls) ? "granted" : "NOT granted");
     }
 
+    // Why a window grant did not give the window the keyboard, as far as the plugin can tell.
+    std::string_view refusalReason(bool refusedNow, bool noKeyboard) {
+        if (noKeyboard)
+            return "not granted: the seat has no keyboard device, so no surface can get the keyboard";
+        if (refusedNow)
+            return "not asked: window focus is refused now (session lock or Exclusive layer)";
+        return "refused by Hyprland (no_focus rule, modal child or another focus rule): the keyboard stays where it is";
+    }
+
+    // ---- the keyboard back after an unlock (FR30 (e)) ----
+
+    df::KeyboardHolder holderKind(const SP<CWLSurfaceResource>& surface) {
+        if (!surface)
+            return df::KeyboardHolder::None;
+        const auto owner = gf::surfaces::ownerOf(surface);
+        return owner.window || owner.layer ? df::KeyboardHolder::Known : df::KeyboardHolder::Unknown;
+    }
+
+    void attemptUnlockRefocus();
+
+    void retryUnlockRefocus(bool again) {
+        auto& s = st();
+        if (!again) {
+            if (s.unlockRetry)
+                s.unlockRetry->updateTimeout(std::nullopt);
+            return;
+        }
+        if (!g_pEventLoopManager)
+            return;
+        if (!s.unlockRetry) {
+            s.unlockRetry = makeShared<CEventLoopTimer>(
+                std::nullopt, [](const SP<CEventLoopTimer>& /*self*/, void* /*data*/) { gf::guarded("desktop-focus unlock retry", [] { attemptUnlockRefocus(); }); }, nullptr);
+            g_pEventLoopManager->addTimer(s.unlockRetry);
+        }
+        s.unlockRetry->updateTimeout(std::chrono::duration_cast<std::chrono::milliseconds>(df::kUnlockRetryInterval));
+    }
+
+    void attemptUnlockRefocus() {
+        auto& s = st();
+        if (!s.unlock.armed(df::Clock::now())) {
+            s.unlock.cancel();
+            retryUnlockRefocus(false);
+            return;
+        }
+        const auto      fs = Desktop::focusState();
+        const PHLWINDOW w  = fs ? fs->window() : nullptr;
+        df::UnlockSeat  seat;
+        seat.locked             = gf::deferredFocus::sessionLocked();
+        seat.windowFocusRefused = gf::deferredFocus::exclusiveLayerMapped();
+        seat.holder             = holderKind(keyboardSurface());
+        seat.windowFocusable    = w && windowFocusable(w) && w->m_workspace && w->m_workspace->isVisible();
+        const auto step         = df::unlockStep(seat);
+        if (step == df::UnlockStep::Wait) {
+            retryUnlockRefocus(true); // the lock surface still holds it: again shortly (its destruction sends no event)
+            return;
+        }
+        s.unlock.cancel();
+        retryUnlockRefocus(false);
+        if (step == df::UnlockStep::Done) {
+            gf::logRequest(Log::DEBUG, "desktop-focus: after the unlock: nothing to give back (locked {}, Exclusive layer {}, keyboard on {}, focused window {:x})", seat.locked,
+                           seat.windowFocusRefused, seat.holder == df::KeyboardHolder::Known ? "a window or layer surface" : "no surface",
+                           reinterpret_cast<uintptr_t>(w.get()));
+            return;
+        }
+        bool       stateReset = false;
+        const bool granted    = gf::deferredFocus::focusWindow(w, Desktop::FOCUS_REASON_OTHER, &stateReset);
+        gf::logRequest(granted ? Log::DEBUG : Log::INFO, "desktop-focus: after the unlock the keyboard was on no surface: window {:x} (Hyprland's focused window) -> {}{}",
+                       reinterpret_cast<uintptr_t>(w.get()), granted ? "keyboard to the window" : "refused by Hyprland (no_focus rule or another focus rule)",
+                       stateReset ? " (focus state reset)" : "");
+    }
+
+    void scheduleUnlockRefocus() {
+        st().unlockAttempt.schedule([] { gf::guarded("desktop-focus unlock refocus", [] { attemptUnlockRefocus(); }); });
+    }
+
     void onPress(const IPointer::SButtonEvent& e) {
         if (e.state != WL_POINTER_BUTTON_STATE_PRESSED)
             return;
         auto& s = st();
         s.pending.cancel(); // any press decides afresh
+        s.unlock.cancel();  // after an unlock too: the press is the user's choice
+        retryUnlockRefocus(false);
 
         df::PointerFocus focusState = df::PointerFocus::Live;
         const auto       keyboard   = resolve(keyboardSurface());
@@ -233,8 +316,10 @@ namespace {
         press.target  = target.kind;
         press.primary = e.button == BTN_LEFT;
         if (target.kind == df::SurfaceKind::Window) {
+            const auto focus        = Desktop::focusState();
             press.windowFocusable   = windowFocusable(target.window);
-            press.targetHasKeyboard = keyboard.kind == df::SurfaceKind::Window && keyboard.window == target.window;
+            press.targetHasKeyboard = (keyboard.kind == df::SurfaceKind::Window || keyboard.kind == df::SurfaceKind::WindowPopup) && keyboard.window == target.window;
+            press.targetIsFocused   = focus && target.window && focus->window() == target.window;
         } else if (target.kind == df::SurfaceKind::Desktop) {
             press.interactivity     = interactivityOf(target.layer);
             press.targetHasKeyboard = keyboard.kind == df::SurfaceKind::Desktop && keyboard.layer == target.layer;
@@ -242,11 +327,15 @@ namespace {
 
         const auto action = df::onPress(seat, press);
         if (action == df::Action::FocusWindow) {
-            // One line per grant, the refusal included (request log budget).
-            const bool granted = focusWindow(target.window);
-            gf::logRequest(granted ? Log::DEBUG : Log::INFO, "desktop-focus: press (button {:#x}) on window {:x} ({}) while the keyboard is on the desktop -> {}", e.button,
-                           reinterpret_cast<uintptr_t>(target.window.get()), pointerFocusName(focusState),
-                           granted ? "keyboard to the window" : "refused by Hyprland (no_focus rule, modal child or another focus rule): the keyboard stays where it is");
+            // One line per grant, the refusal included (request log budget), with the reason the plugin can tell.
+            const bool refusedNow = gf::deferredFocus::windowFocusRefused(); // the plugin then asks nothing
+            const bool noKeyboard = !g_pSeatManager || !g_pSeatManager->m_keyboard.lock();
+            bool       stateReset = false;
+            const bool granted    = focusWindow(target.window, stateReset);
+            gf::logRequest(granted ? Log::DEBUG : Log::INFO, "desktop-focus: press (button {:#x}) on window {:x} ({}{}) while the keyboard is on {} -> {}{}", e.button,
+                           reinterpret_cast<uintptr_t>(target.window.get()), pointerFocusName(focusState), press.targetIsFocused ? ", Hyprland's focused window" : "",
+                           df::kindName(keyboard.kind), granted ? std::string_view{"keyboard to the window"} : refusalReason(refusedNow, noKeyboard),
+                           stateReset ? " (Hyprland's focus state still named the window: reset)" : "");
             return;
         }
         if (action != df::Action::None || keyboard.kind == df::SurfaceKind::Desktop)
@@ -319,8 +408,21 @@ namespace gf::desktopFocus {
         // requests, a new window, a workspace switch, Hyprland's refocus after a close). The plugin's own grants run after
         // the grant was consumed (or cancelled by the press), so they find nothing waiting.
         l.push_back(ev.input.keyboard.focus.listen([](const SP<CWLSurfaceResource>& surface) {
-            gf::guarded("desktop-focus keyboard.focus", [&] { onFocusEvent(df::FocusEvent::KeyboardFocus, keyboardLayerId(surface)); });
+            gf::guarded("desktop-focus keyboard.focus", [&] {
+                onFocusEvent(df::FocusEvent::KeyboardFocus, keyboardLayerId(surface));
+                if (st().unlock.armed(df::Clock::now()))
+                    scheduleUnlockRefocus(); // the lock surface let go of the keyboard, or something else took it
+            });
         }));
+        // After an unlock Hyprland refocuses at the cursor only (CSessionLockManager): with the pointer off the windows the
+        // keyboard stays on no surface. Tried from the event loop, after Hyprland's own handling (precedent: Stages).
+        if (g_pSessionLockManager)
+            l.push_back(g_pSessionLockManager->m_events.unlock.listen([] {
+                gf::guarded("desktop-focus unlock", [] {
+                    st().unlock.arm(df::Clock::now());
+                    scheduleUnlockRefocus();
+                });
+            }));
         l.push_back(ev.window.active.listen([](const PHLWINDOW& /*w*/, Desktop::eFocusReason /*reason*/) {
             gf::guarded("desktop-focus window.active", [] { onFocusEvent(df::FocusEvent::WindowActivated, std::nullopt); });
         }));
@@ -332,6 +434,7 @@ namespace gf::desktopFocus {
             if (ls && ls->m_mapped)
                 attach(ls);
         }
+        st().unlockAttempt.clear(); // a start after a previous stop (which cancelled it)
         st().ready = true;
         return true;
     }
@@ -340,6 +443,13 @@ namespace gf::desktopFocus {
         auto& s = st();
         s.ready = false;
         s.pending.cancel();
+        s.unlock.cancel();
+        s.unlockAttempt.cancel(); // its callback is code of this library
+        if (s.unlockRetry) {      // so is the timer's
+            if (g_pEventLoopManager)
+                g_pEventLoopManager->removeTimer(s.unlockRetry);
+            s.unlockRetry.reset();
+        }
         s.listeners.clear();
         s.desktops.clear(); // drops the commit listeners (their callbacks are code of this library)
     }

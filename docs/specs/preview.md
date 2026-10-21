@@ -7,6 +7,10 @@
 - Quick Look is a small floating panel that shows the selected file at once: Space opens it, Space or Esc closes it,
   the arrow keys move between the selected files, a button hands the file to the full viewer.
 
+- A file manager window (Finder) shows the opened image at once, and the arrow keys then walk the other files of its
+  folder in the order of the Finder window. The opened file is always part of that walk at its sorted position, even
+  when it is hidden; unreadable neighbours are skipped; an unreadable opened file shows an error in its place.
+
 ## Purpose and non-goals
 View files without editing them. The viewer is "Preview" (code `grassfield-preview`, app id
 `org.grassfield.Preview`); the quick look is called "Glance" (app id `org.grassfield.Preview.Glance`; never the Apple
@@ -65,10 +69,33 @@ single instance.
     (`apps/globalmenu.h`); otherwise nothing is created and the bar keeps T0. The toolbar stays. The file view is
     clipped (PDF pages never draw over the toolbar).
 
+11. P11 Browsing the folder (Track B2): when one image is opened (a Glance: one file of any kind Preview can show), the
+    other files of its folder can be browsed. The list follows the Grassfield Files order (same comparison: numeric,
+    case-insensitive names; key, direction from `QSettings Grassfield/Files`, read only). Only regular readable
+    visible files of a wanted kind by file name (images for the viewer; every previewable kind for a Glance; symlinks to
+    files followed, broken ones skipped); the opened file is always in the list at its sorted position, hidden or
+    unreadable or not. At most 200 entries (a window around the opened file), at most 20000 directory entries scanned.
+    Left/Right (and Page Up/Page Down on images, the toolbar arrows) move without wrapping; the subtitle shows
+    "n of N"; the sidebar lists the files as thumbnails (decoded at their size by `image://preview/thumb/<index>`),
+    starts closed for a folder and open for several named files; Info (Ctrl+I) shows kind, size, dimensions, date and
+    folder; a slideshow (full screen, `preview.slideshowInterval`) steps through the images and stops after the last;
+    zoom and rotation are view-only. Everything is read only: nothing is ever written.
+12. P12 Asynchronous listing: the opened file is shown immediately. The folder is listed in a worker thread
+    (`PreviewApp::startBrowse`, started after the window's first frame so that it never competes with the first
+    render); the GUI thread never blocks. The arrows and "n of N" appear when the list arrives (`files`, `startIndex`,
+    `listing` change notifications); the viewer stays on the opened file (same file, same viewer, no flash). The
+    listing is cancelled (a flag checked per directory entry, then the thread is joined) when the application quits or
+    the backend is destroyed. `GRASSFIELD_PREVIEW_TIMING=1` prints `TIMING first-frame` and `TIMING list-ready` on
+    stderr. Measured offscreen (software renderer, machine at load 10 of 8 cores), time to the first frame: 1,000
+    images 404-648 ms, 5,000 images 513-708 ms, 20,000 images 313-645 ms (no dependence on the folder size); the list
+    is ready after about 0.6-1.0 s, 1.1-1.7 s and 2.8-4.3 s.
+
 ## Acceptance criteria
 | ID | Test | Level |
 |---|---|---|
-| P1 URL validation, P9 size caps, P5 caps, routing by type | `tests/unit/preview/tst_previewlogic.cpp` (gtest, 9 tests, run by `scripts/dev/test.sh`) | L0 |
+| P1 URL validation, P9 size caps, P5 caps, routing by type, P11 browse list (hidden/unreadable opened file, unreadable siblings, symlinks, a file that disappears, cancel) | `tests/unit/preview/tst_previewlogic.cpp` (gtest, 21 tests, run by `scripts/dev/test.sh`) | L0 |
+| P11-P12 viewer state, list arriving after the opened file | `tests/unit/tst_previewviewer.qml`, `tests/unit/tst_previewlisting.qml` | L0 |
+| P11 browsing with the arrows, rotate/zoom, sidebar, info, Glance arrows | `tests/visual/preview-browse.sh` (nested, standalone) | L1 |
 | lint | `scripts/dev/qmllint.sh` (covers `apps/**`) and `check-textformat.py` | L0 |
 | config | `Hyprland --verify-config` for `dev.lua` and `session.lua` with `GRASSFIELD_CONFIG_DIR` | L0 |
 | P2-P7 | nested screenshots: image + zoom, multi-page TIFF, GIF, PDF with thumbnails, text, binary and 3 MB text notices, video, audio, Glance from Files and from a desktop icon, multi-file Glance, light and dark | L1 |

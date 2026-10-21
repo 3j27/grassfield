@@ -31,6 +31,12 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine engine;
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
+    // addImportPath puts a path before the ones searched so far, so the system directory above would shadow the tree's own
+    // Grassfield.Ui in a dev session (a new token or Appearance property would not exist): add QML_IMPORT_PATH after it, in
+    // reverse so that its first entry is searched first (same as Preview).
+    const QStringList devPaths = qEnvironmentVariable("QML_IMPORT_PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts);
+    for (auto it = devPaths.crbegin(); it != devPaths.crend(); ++it)
+        engine.addImportPath(*it);
 
     // GRASSFIELD_SETTINGS_QML overrides the QML directory (dev); the default is baked in at build time.
     QString qmlDir = qEnvironmentVariable("GRASSFIELD_SETTINGS_QML");

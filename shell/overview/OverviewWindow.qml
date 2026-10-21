@@ -160,7 +160,11 @@ Variants {
         // opens, so opening does not pay for a new surface and its first frame.
         readonly property bool active: shown || progress > 0.001
         visible: true
-        mask: active ? null : emptyMask
+        // Input only while the stage is "open": from the moment a close starts (the "releasing" stage, which `shown` still
+        // counts as open, then the close animation, however long a busy GUI thread stretches them) a click belongs to the
+        // window under it, as when any other full-screen surface closed (R13 finding M1 on 0f3adf7).
+        readonly property bool takesInput: root.controller.stage === "open"
+        mask: takesInput ? null : emptyMask
         anchors {
             top: true
             bottom: true
@@ -382,6 +386,16 @@ Variants {
             // The chrome holds the keyboard (wl_keyboard enter): the compositor accepts the layout from now on.
             readonly property bool chromeActive: Window.active
             onChromeActiveChanged: root.controller.onChromeChanged(win.screenName, chromeActive)
+
+            // Closing (releasing, then the animation): a press the compositor still delivered here, before the empty mask
+            // landed (late whenever the GUI thread was busy), is swallowed, never choosing the thumbnail under it. It never
+            // stands between a click and a window: once the empty mask landed no press reaches this surface.
+            MouseArea {
+                anchors.fill: parent
+                z: 1000
+                visible: !win.takesInput
+                acceptedButtons: Qt.AllButtons
+            }
 
             // Dimmed, blurred backdrop (v1; v2 draws it on its own Bottom-layer surface, this one is transparent but
             // still takes the click). A click on it closes Overview.

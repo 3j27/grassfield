@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -8,6 +9,7 @@ import qs.notifications
 import qs.platform
 import qs.services
 import "DockModel.js" as DockModel
+import "Launch.js" as Launch
 import "../desktop/IconsLogic.js" as Icons
 import "Magnify.js" as Magnify
 
@@ -87,6 +89,9 @@ Scope {
     // Tiles launched from the Dock that have no window yet (they bounce): key -> start time (ms).
     property var launching: ({})
 
+    // Time of the last launch click (ms); with the visual fixtures the bounce curve is logged against it (tests/visual/dock-launch.sh).
+    property real launchClickedAt: 0
+
     // Keys of the listed apps that had a window at the previous rebuild (null: no rebuild yet).
     property var previousRunning: null
 
@@ -115,7 +120,9 @@ Scope {
         const tops = Compositor.toplevels ? Compositor.toplevels.values : [];
         for (let i = 0; i < tops.length; i++)
             running.push({appId: tops[i].appId, ref: tops[i]});
-        const apps = DockModel.merge(Settings.dockPinned, running, Apps.lookup);
+        // Files is the fixed first tile: out of the pinned list and the recents, its windows ride on the fixed tile.
+        const split = DockModel.splitFiles(DockModel.merge(DockModel.withoutFiles(Settings.dockPinned), running, Apps.lookup), Apps.lookup);
+        const apps = split.rest;
         // Apps that were running and quit while not kept in the Dock become "recent" (DockModel.recentsAfter: a pure
         // function of the previous and current running sets, written only when the list really changes).
         const runningKeys = apps.filter(a => a.windows.length > 0 && a.entry && Apps.isListed(a.entry)).map(a => a.key);
@@ -126,11 +133,11 @@ Scope {
         previousRunning = step.previous;
         if (ready && Settings.dockShowRecents)
             writeRecents(step.recent);
-        const shown = ready && Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, Apps.isListed) : apps;
+        const shown = ready && Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, e => Apps.isListed(e) && !DockModel.isFilesId(e.id)) : apps;
         const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
         const all = windows.instances;
         all.forEach(w => w.captureLayout());
-        setItems(DockModel.withApps(DockModel.withTail(shown, tail)));
+        setItems(DockModel.withFixed(split.files, DockModel.withTail(shown, tail)));
         all.forEach(w => w.playLayout());
         pruneLaunching();
     }
@@ -147,12 +154,19 @@ Scope {
     // Starts an app tile: the launch bounce runs until a window appears (or the timeout), and an app that is not kept
     // in the Dock is remembered as a recent application.
     function launchItem(item: var): void {
-        if (!item.entry)
+        if (!item.entry) {
+            // Files without its desktop entry (not installed): its home folder through the open policy.
+            if (item.kind === "files")
+                Apps.openDetached(["gio", "open", Quickshell.env("HOME")]);
             return;
+        }
+        // A second click while the tile bounces does nothing (no double launch).
+        const click = Launch.click(launching, item.key, Date.now(), Tokens.dockLaunchTimeout);
+        if (!click.start)
+            return;
+        launchClickedAt = Date.now();
         Apps.launch(item.entry);
-        const next = Object.assign({}, launching);
-        next[item.key] = Date.now();
-        launching = next;
+        launching = click.launching;
         launchTimer.restart();
         if (!item.pinned && Settings.dockShowRecents && Apps.isListed(item.entry))
             writeRecents(DockModel.pushRecent(Settings.dockRecent, item.key, Tokens.dockRecentMax));
@@ -195,13 +209,11 @@ Scope {
             root.launchItem(item);
             return;
         }
-        // Minimized windows take part only when the app has nothing else (then the click restores one).
-        const visible = item.windows.filter(t => !Compositor.isMinimized(t));
-        const pool = visible.length > 0 ? visible : item.windows;
-        const focused = Compositor.focusedToplevel;
-        const focusedHere = focused !== null && pool.indexOf(focused) >= 0;
-        // Already focused: cycle through this app's windows; otherwise raise the most recent one.
-        Compositor.activate(focusedHere ? Compositor.nextAfter(pool, focused) : Compositor.mostRecent(pool));
+        // macOS: every window of the app comes forward, the most recent one ends focused; with everything minimized, the most
+        // recent one is restored (Launch.activationPlan). A click on the focused app does not cycle its windows.
+        const plan = Launch.activationPlan(item.windows.map(t => Compositor.windowInfo(t)));
+        for (const top of plan)
+            Compositor.activate(top);
     }
 
     Component.onCompleted: rebuild()
@@ -335,6 +347,13 @@ Scope {
             if (!VisualFixtures.active)
                 return "[]";
             return JSON.stringify(Settings.dockPinned);
+        }
+
+        // Keys of the tiles in order (JSON list), the index `click` takes (fixtures only).
+        function tiles(): string {
+            if (!VisualFixtures.active)
+                return "[]";
+            return JSON.stringify(root.items.map(i => i.key !== undefined ? i.key : i.kind));
         }
 
         function hover(x: real): void {
@@ -611,7 +630,7 @@ Scope {
             function openMenu(index: int): void {
                 root.keyboardMode = false;
                 const item = root.items[index];
-                if (!item || item.kind !== "app")
+                if (!item || (item.kind !== "app" && item.kind !== "files"))
                     return;
                 const t = tileRepeater.itemAt(index);
                 const cx = t.mapToItem(null, t.width / 2, 0).x;
@@ -620,6 +639,7 @@ Scope {
                     entry: item.entry,
                     pinned: item.pinned,
                     running: item.windows.length > 0,
+                    fixed: item.fixed === true,
                     windows: item.windows
                 });
             }
@@ -659,7 +679,7 @@ Scope {
                 const mon = Compositor.monitorByName(win.screen.name);
                 if (Settings.dockMinimizeIntoApp && toplevel && mon) {
                     // Minimize into the application icon: the window goes to (and comes from) its app's tile.
-                    const at = root.items.findIndex(it => it.kind === "app" && it.windows.indexOf(toplevel) >= 0);
+                    const at = root.items.findIndex(it => (it.kind === "app" || it.kind === "files") && it.windows.indexOf(toplevel) >= 0);
                     if (at >= 0) {
                         return {
                             x: mon.x + baseCenters[at] - iconSize / 2,
@@ -804,7 +824,8 @@ Scope {
                                 readonly property var modelData: root.itemByKey[tileId] !== undefined ? root.itemByKey[tileId] : ({kind: "", windows: []})
 
                                 readonly property real tileScale: win.scaleList[index] !== undefined ? win.scaleList[index] : 1
-                                readonly property bool isApp: modelData.kind === "app"
+                                readonly property bool isFiles: modelData.kind === "files"
+                                readonly property bool isApp: modelData.kind === "app" || isFiles
                                 readonly property bool isTrash: modelData.kind === "trash"
                                 readonly property bool isAppsTile: modelData.kind === "apps"
                                 readonly property bool isSeparator: modelData.kind === "separator"
@@ -813,6 +834,9 @@ Scope {
                                 readonly property string label: isTrash ? qsTr("Trash") : isAppsTile ? qsTr("Apps") : (isApp || isMinimized ? modelData.name : "")
                                 readonly property real iconPx: win.iconSize * tileScale
                                 readonly property bool dragging: win.dragFrom === index
+                                // The button is held on an app tile: the icon darkens slightly (macOS).
+                                readonly property bool pressedDown: isApp && leftTap.pressed && !dragging
+                                property bool tipSuppressed: false
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
@@ -823,7 +847,7 @@ Scope {
                                         return index > win.dragFrom ? -win.pitch : 0;
                                     const from = win.dragFromApp;
                                     const at = win.appItems.indexOf(index);
-                                    if (from < 0 || at === from || !isApp)
+                                    if (from < 0 || at === from || !isApp || isFiles)
                                         return 0;
                                     const slot = win.dragSlot;
                                     if (from < slot && at > from && at <= slot)
@@ -930,8 +954,16 @@ Scope {
                                     anchors.bottomMargin: win.indicatorArea
                                     source: tile.isApp ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
 
+                                    // Held button: darker by Tokens.dockPressDim (an offscreen layer only while pressed).
+                                    layer.enabled: tile.pressedDown
+                                    layer.effect: MultiEffect {
+                                        brightness: -Tokens.dockPressDim
+                                    }
+
                                     // Launch bounce: hops until the app has a window (or the launch timeout).
                                     property real lift: 0
+                                    onLiftChanged: if (VisualFixtures.active && root.launchClickedAt > 0 && tile.bouncing)
+                                        console.info("dock-launch: lift", Date.now() - root.launchClickedAt, Math.round(lift * 10) / 10)
                                     transform: Translate {
                                         y: -appIcon.lift
                                     }
@@ -950,7 +982,7 @@ Scope {
                                         NumberAnimation {
                                             target: appIcon
                                             property: "lift"
-                                            to: Tokens.dockBounceHeight
+                                            to: tile.iconPx * Tokens.dockBounceHeightScale
                                             duration: Tokens.dockBounceDuration / 2
                                             easing.type: Easing.OutQuad
                                         }
@@ -1120,13 +1152,15 @@ Scope {
                                     tail: true
                                     text: tile.dragging ? qsTr("Remove") : tile.label
                                     delay: 0
-                                    shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tileHover.hovered || (tile.activeFocus && root.keyboardMode)) && !Popups.active && win.dragFrom < 0)
+                                    shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tileHover.hovered || (tile.activeFocus && root.keyboardMode)) && !tile.tipSuppressed && !Popups.active && win.dragFrom < 0)
                                     x: (tile.width - width) / 2
                                     y: tile.height - win.indicatorArea - tile.iconPx - Tokens.dockTooltipGap - height
                                 }
 
                                 HoverHandler {
                                     id: tileHover
+                                    onHoveredChanged: if (!hovered)
+                                        tile.tipSuppressed = false
                                     enabled: !tile.isSeparator
                                     cursorShape: Qt.ArrowCursor
                                 }
@@ -1142,7 +1176,7 @@ Scope {
                                         drop.accept(Qt.MoveAction);
                                         const paths = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
                                         if (paths.length > 0)
-                                            Apps.openDetached(["gio", "trash", "--"].concat(paths)); // isolated trash in dev (ADR-0011)
+                                            Apps.runHelper(["gio", "trash", "--"].concat(paths)); // isolated trash in dev (ADR-0011)
                                     }
                                 }
 
@@ -1216,7 +1250,7 @@ Scope {
                                 // Drag to reorder; dragged far above the shelf it leaves the Dock (poof).
                                 DragHandler {
                                     id: dragHandler
-                                    enabled: tile.isApp
+                                    enabled: tile.isApp && !tile.isFiles
                                     target: null
                                     cursorShape: Qt.ClosedHandCursor
                                     // The one positive release signal: the exclusive grab ends with a Released event point (state 8,
@@ -1259,8 +1293,15 @@ Scope {
                                 }
 
                                 TapHandler {
+                                    id: leftTap
                                     enabled: !tile.isSeparator
                                     acceptedButtons: Qt.LeftButton
+                                    // macOS launches on release however long the button was held (the default threshold turns a hold
+                                    // of about half a second into no click at all); moving away still cancels it.
+                                    longPressThreshold: Tokens.dockClickHoldLimit
+                                    // macOS: the label goes away on the click and stays away until the pointer leaves the tile.
+                                    onPressedChanged: if (pressed)
+                                        tile.tipSuppressed = true
                                     onTapped: root.activateItem(tile.modelData)
                                 }
 

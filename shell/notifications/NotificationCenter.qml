@@ -57,9 +57,21 @@ Variants {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-notification-center"
-        // Everything except the menu bar strip receives input (the clock toggles the panel).
+        // Everything except the menu bar strip receives input while open (the clock toggles the panel); nothing once it
+        // closed: the surface stays mapped a moment for the keyboard release, and a click in that moment belongs to the
+        // window under it.
         // qmllint disable missing-type
-        mask: Region {
+        mask: win.open ? openMask : passThrough
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open && content.item ? blur : null
+        // qmllint enable missing-type
+
+        Region {
+            id: blur
+            regions: content.item ? (content.item as CenterContent).regionList : []
+        }
+
+        Region {
+            id: openMask
             width: win.width
             height: win.height
 
@@ -69,12 +81,9 @@ Variants {
                 intersection: Intersection.Subtract
             }
         }
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open && content.item ? blur : null
-        // qmllint enable missing-type
 
         Region {
-            id: blur
-            regions: content.item ? (content.item as CenterContent).regionList : []
+            id: passThrough
         }
 
         KeyboardRelease {
@@ -92,6 +101,9 @@ Variants {
             }
         }
 
+        // Every input handler of the center is in CenterContent, unloaded as soon as it closes: a press that reaches the
+        // surface during its keyboard release finds nothing to act on, so no swallowing area is needed here (unlike Search,
+        // Apps, the Overlay, the switcher and the Overview, whose content stays loaded while they close).
         Loader {
             id: content
             anchors.fill: parent

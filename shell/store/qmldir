@@ -1,2 +1,3 @@
 module qs.store
 SettingsStore 1.0 SettingsStore.qml
+WatchedDir 1.0 WatchedDir.qml

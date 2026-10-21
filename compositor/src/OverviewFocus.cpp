@@ -193,36 +193,23 @@ namespace {
 
     // ---- focusing ----
 
-    bool holdsKeyboard(const PHLWINDOW& w) {
-        const auto fs = Desktop::focusState();
-        return w && fs && fs->window() == w && gf::surfaces::ownerOf(gf::surfaces::keyboardFocus()).window == w;
-    }
-
     // Hyprland's own window focus: CFocusState::fullWindowFocus, what hl.dsp.focus({ window = … }) runs once the window's
     // Desktop is shown (Config::Actions::focus, read from the 0.56.2 binary: fullWindowFocus with
     // FOCUS_REASON_DISPATCH_FOCUSWINDOW, then a cursor warp, which is not done here: the pointer stays where the user left
-    // it). It also gives the keyboard back to the window Hyprland still counts focused (CFocusState::rawWindowFocus returns
-    // early only when that window's surface already holds the keyboard; the protocol activate does nothing for it). True
-    // when the window holds the keyboard afterwards: Hyprland may refuse it (a no_focus rule, a modal child).
+    // it), through the shared gf::deferredFocus::focusWindow. It also gives the keyboard back to the window Hyprland still
+    // counts focused: its own focus of it under the Exclusive layer (the successor of a window closed under the chrome: "On
+    // closed window, new focused candidate is …", then "Refusing a keyboard focus to a window because of an exclusive ls")
+    // set its focus state and was refused the keyboard, so fullWindowFocus returns early (measured:
+    // tests/compositor/overview_focus.sh case 8); the shared helper resets the state and focuses again. True when the window
+    // holds the keyboard afterwards: Hyprland may refuse it (a no_focus rule, a modal child).
     bool focusWindow(const PHLWINDOW& w, Desktop::eFocusReason reason) {
         const auto fs = Desktop::focusState();
         if (!fs || !w || !w->m_isMapped)
             return false;
-        if (holdsKeyboard(w))
-            return true;
-        fs->fullWindowFocus(w, reason);
-        if (!holdsKeyboard(w) && fs->window() == w && !gf::deferredFocus::windowFocusRefused()) {
-            // Hyprland counts the window focused although the keyboard is elsewhere: its own focus of it under the Exclusive
-            // layer (the successor of a window closed under the chrome: "On closed window, new focused candidate is …",
-            // then "Refusing a keyboard focus to a window because of an exclusive ls") set its focus state and was refused
-            // the keyboard, so fullWindowFocus returns early (measured: tests/compositor/overview_focus.sh case 8). The state
-            // goes back to no window (CFocusState::resetWindowFocus, what Hyprland does when its focused window unmaps) and
-            // the focus is made again, through the same path.
+        bool       stateReset = false;
+        const bool held       = gf::deferredFocus::focusWindow(w, reason, &stateReset);
+        if (stateReset)
             gf::logRequest(Log::DEBUG, "overview focus: Hyprland counted window {:x} focused without the keyboard: focus state reset, focused again", addressOf(w));
-            fs->resetWindowFocus();
-            fs->fullWindowFocus(w, reason);
-        }
-        const bool held = holdsKeyboard(w);
         if (!held) {
             const auto now   = fs->window();
             const auto owner = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus());

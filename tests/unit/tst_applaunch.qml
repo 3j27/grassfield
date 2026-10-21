@@ -35,6 +35,21 @@ TestCase {
         compare(AppLaunch.appsHomeFor("", "/run"), "/run/grassfield-dev/apps-home");
     }
 
+    function test_folderAwareArgv() {
+        const s = "/usr/share/grassfield/shell/services/open-real.sh";
+        // A real session: gio open and xdg-open go through the folder policy, scoped afterwards by the caller.
+        compare(AppLaunch.folderAwareArgv(["gio", "open", "/h/a b"], s, true), ["bash", s, "gio", "/h/a b"]);
+        compare(AppLaunch.folderAwareArgv(["/usr/bin/gio", "open", "/a", "/b"], s, true), ["bash", s, "gio", "/a", "/b"]);
+        compare(AppLaunch.folderAwareArgv(["xdg-open", "/h/x.txt"], s, true), ["bash", s, "xdg-open", "/h/x.txt"]);
+        compare(AppLaunch.folderAwareArgv(["gio", "open", "trash:///"], s, true), ["bash", s, "gio", "trash:///"]);
+        // Anything else, a dev session and an empty request stay as they are.
+        compare(AppLaunch.folderAwareArgv(["gtk-launch", "x", "/f"], s, true), ["gtk-launch", "x", "/f"]);
+        compare(AppLaunch.folderAwareArgv(["gio", "trash", "--", "/f"], s, true), ["gio", "trash", "--", "/f"]);
+        compare(AppLaunch.folderAwareArgv(["gio", "open"], s, true), ["gio", "open"]);
+        compare(AppLaunch.folderAwareArgv(["gio", "open", "/h"], s, false), ["gio", "open", "/h"]);
+        compare(AppLaunch.folderAwareArgv(undefined, s, true), []);
+    }
+
     function test_scopedArgv() {
         // A real session: the application runs in a scope of its own through uwsm's app launcher.
         compare(AppLaunch.scopedArgv(["foot"], true), ["uwsm-app", "--", "foot"]);
