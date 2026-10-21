@@ -20,13 +20,21 @@ SF Pro and SF Symbols are Apple-licensed and must not be used or redistributed.
   session, not only in Grassfield's own UI. Nothing is vendored: `inter-font` stays a package dependency.
   - `packaging/fontconfig/fonts.conf` (installed as `/usr/share/grassfield/fontconfig/fonts.conf`) is selected through
     `FONTCONFIG_FILE` by `packaging/uwsm/env-grassfield` (readability-guarded; the Omarchy session never sets it). It
-    first includes `/etc/fonts/fonts.conf`, so the user's own fontconfig and Omarchy's rules still load, then maps
-    `sans-serif` ("Sans", "Sans Serif" included), `system-ui`, `-apple-system`, `BlinkMacSystemFont`, `SF Pro`,
-    `SF Pro Text` and `.AppleSystemUIFont` to Inter and `SF Pro Display` to Inter Display. These are family-name
-    aliases only; no Apple font is used or shipped (legal review item with the visual-review list).
-    Omarchy's strong `sans-serif` -> Liberation Sans assignment is overridden, but an explicit Liberation Sans request
-    (recognised by the Arimo alias that 30-metric-aliases adds) is not. `monospace`, `serif`, Helvetica and Arial are not
-    touched: the terminal font stays the user's, and metric-compatible substitutes keep documents laid out.
+    includes `/etc/fonts/fonts.conf` (the user's own fontconfig and Omarchy's rules still load). The family rules sit
+    BEFORE that include and insert Inter in place (`mode="prepend"`, just before the matched name) for `sans-serif`
+    ("sans", "Sans Serif" included), `system-ui`, `-apple-system`, `BlinkMacSystemFont`, `SF Pro`, `SF Pro Text` and
+    `.AppleSystemUIFont`, and Inter Display for `SF Pro Display`. A real family earlier in a list keeps its place, and
+    Omarchy's later in-place `assign` of Liberation Sans over `sans-serif` lands behind Inter. The generic names stay in
+    the list, so the CJK, Arabic and emoji alias chains still fire. These are family-name aliases only; no Apple font is
+    used or shipped (needs legal review: see E29 in docs/legal/visual-review.md).
+  - Missing families: a family that is not installed (Segoe UI, Cantarell, ...) falls back to Inter. One rule appends a
+    weak Inter to patterns that name no generic family; because the system rules give such a family the default
+    `system-ui` and Omarchy's rules then put a strong Liberation Sans behind it, a second rule after the include puts a
+    strong Inter just before that `system-ui`. Known serif, mono and sans names carry their own generic and are not
+    touched (Georgia stays Liberation Serif). `monospace`, `serif`, Helvetica, Arial, Times New Roman and Courier New are
+    not touched: the terminal font stays the user's, and metric-compatible substitutes keep documents laid out.
+    Finding of the test (tests/shell/fontconfig_session.sh): a strong append alone breaks serif fallbacks and the
+    `default` metric aliases (Arimo), and a weak one alone loses to Omarchy's strong Liberation Sans; hence the pair.
   - Optical size: a request whose first family is Inter and whose `pixelsize` is >= 20 gets Inter Display first.
     Requests without a pixel size (some Qt paths) stay on Inter text.
   - Rendering: antialias on, `hintslight`, `rgba none`, `lcdfilter none` (grayscale, sharp on 1x). Closest to the
@@ -39,11 +47,11 @@ SF Pro and SF Symbols are Apple-licensed and must not be used or redistributed.
     -0.0223 + 0.185 * e^(-0.1745 * px) (display family: -0.015 + 0.17 * e^(-0.12 * px), not used yet).
     `Tokens.typographyTracking{A,B,C}` and `Appearance.tracking(px)`; applied in Grassfield.Ui's Button, MenuItem,
     Tooltip and SwatchRow. There is no central Text component, so other call sites keep Qt's default tracking.
-  - A name only decides the match when it is the first family (or Omarchy's Liberation Sans stands first for it), so a real
-    font listed before an alias in a GTK/CSS list is never overtaken.
-  - User hook: `~/.config/grassfield/fonts.conf` (`$XDG_CONFIG_HOME`, ignored when missing) is included last and wins over
-    every rule above, family choice and rendering included. The session rules otherwise sit above Omarchy's and the
-    user's own sans-serif, because Inter is part of the Grassfield look (integrator decision 2026-10-21).
+  - User hook: `~/.config/grassfield/fonts.conf` (`$XDG_CONFIG_HOME`, ignored when missing) is the last element and wins
+    over every rule above, family choice and rendering included; it is the supported way to override the session font.
+    Omarchy's in-place `assign` of `sans-serif` does not win over Inter (Inter is part of the Grassfield look,
+    integrator decision 2026-10-21). A user rule in `~/.config/fontconfig` that uses `prepend_first` on `sans-serif` still
+    wins, because it goes to the very front of the list; that is intended, an explicit front-of-list rule is the user's choice.
   Evidence: tests/shell/fontconfig_session.sh, tests/shell/dconf_profile.sh.
 - **Icons**: Grassfield's own line icon set in `branding/icons/` (SVG, CC-BY-SA-4.0 or CC0 — decided in
   ADR-0005), style: rounded caps, 1.5 px stroke at 16 px, optical alignment like the macOS menu bar. App
