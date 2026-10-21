@@ -50,6 +50,6 @@ desc="a missing profile gives the null configuration (GTK defaults), hence the g
 check test "$(g /nonexistent/profile get $KEY color-scheme)" = "'default'"
 desc="env-grassfield exports DCONF_PROFILE only behind a readability test of the profile and its database"
 check bash -c 'grep -q "^if \[ -r /usr/share/grassfield/dconf/profile \] && \[ -r /usr/share/grassfield/dconf/grassfield.db \]; then" "$1" && grep -q "DCONF_PROFILE=/usr/share/grassfield/dconf/profile" "$1"' _ "$root/packaging/uwsm/env-grassfield"
-desc="the source database holds only icon-theme, and locks only that key"
+desc="the icon database (00-icons.conf) holds only icon-theme, and only that key is locked (10-fonts.conf holds unlocked defaults)"
 check bash -c '[ "$(grep -vc "^\[\|^$" "$1/00-icons.conf")" = 1 ] && [ "$(cat "$1/locks/icon-theme")" = /org/gnome/desktop/interface/icon-theme ]' _ "$root/packaging/dconf/grassfield.d"
 exit "$fail"
