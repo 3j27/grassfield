@@ -72,6 +72,12 @@ QtObject {
     readonly property string fontFamily: Qt.fontFamilies().indexOf(Tokens.typographyFamily) !== -1 ? Tokens.typographyFamily : Tokens.typographyFallbackFamily
     readonly property var curve: Tokens.motionCurveStandard
 
+    // Size-dependent tracking of Inter's "dynamic metrics" (the reference's optical tracking): em = a + b * e^(c * px),
+    // returned in pixels for Text.font.letterSpacing. Larger text is set tighter, small text slightly looser.
+    function tracking(pixelSize: real): real {
+        return (Tokens.typographyTrackingA + Tokens.typographyTrackingB * Math.exp(Tokens.typographyTrackingC * pixelSize)) * pixelSize;
+    }
+
     function clamp01(v: real): real {
         return Math.max(0, Math.min(1, v));
     }

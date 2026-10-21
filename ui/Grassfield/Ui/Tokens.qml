@@ -111,6 +111,12 @@ QtObject {
     readonly property int typographyTitleSize: 15
     // estimate, pending F1 measurement from design/reference
     readonly property int typographySmallWeight: 400
+    // Inter dynamic metrics, text family (rsms.me/inter/lab, InterDynamicTracking): tracking in em = a + b * e^(c * size in px)
+    readonly property real typographyTrackingA: -0.0223
+    // Inter dynamic metrics, text family: see trackingA
+    readonly property real typographyTrackingB: 0.185
+    // Inter dynamic metrics, text family: see trackingA
+    readonly property real typographyTrackingC: -0.1745
 
     // estimate
     readonly property int spacingXs: 4

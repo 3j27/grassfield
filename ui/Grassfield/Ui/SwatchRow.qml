@@ -151,5 +151,6 @@ FocusScope {
         color: Appearance.colors.textSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyCaptionSize
+        font.letterSpacing: Appearance.tracking(Tokens.typographyCaptionSize)
     }
 }
