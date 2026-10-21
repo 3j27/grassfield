@@ -364,7 +364,7 @@ fi
 if want badge; then
   clean_state badge
   # The press-dim layer must not clip a badge that overhangs the icon: a tile with a badge, button down, a frame taken while held. The
-  # press is 250 ms (a click, clearly under dock.menuHold). A timed sequence of small frames runs around it; the held frame is one whose
+  # press is 400 ms (a click, under dock.menuHold; long enough for a frame to fit when grim is slow). A timed sequence of small frames runs around it; the held frame is one whose
   # whole capture lies inside the press by the shell's own press and release times (dock-launch.py badgeseq). Without such a frame
   # nothing is proved and the attempt is repeated (up to six times); a missing press or release line is a FAIL.
   RC=2
@@ -380,16 +380,25 @@ if want badge; then
     bmark=$(wc -l < "$VS_DEV/shell.log")
     record badgeseq 1700
     sleep 0.6
-    vs_pointer down sleep 250 up >/dev/null
+    vs_pointer down sleep 400 up >/dev/null
     wait "$rec_pid"; rec_pid=""
     tail -n +"$(( bmark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/badge-log.txt"
+    if grep -q "menu-by-hold" "$out/badge-log.txt"; then
+      # The press is 400 ms, under dock.menuHold (550 ms); the shell measured 550 ms or more: a host stall opened the menu. Again.
+      echo "badge: attempt $attempt: the shell measured a press of $(press_ms "$out/badge-log.txt") ms and the menu opened (host stall), again"
+      [[ $(press_ms "$out/badge-log.txt") -ge 500 ]] || break
+      vs_ipc menubar close >/dev/null
+      sleep 0.5
+      RC=2
+      continue
+    fi
     python3 -I "$VS_HERE/dock-launch.py" badgeseq "$out" badgeseq "$out/badge-log.txt"; RC=$?
     [[ $RC -ne 2 ]] && break
     echo "badge: attempt $attempt proved nothing, again"
   done
   check "badge: the icon is darker in a frame inside the press and the whole badge shows (attempt $attempt)" $RC
   ! grep -q "menu-by-hold" "$out/badge-log.txt"; RC=$?
-  check "badge: the 250 ms press opened no menu (log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/badge-log.txt" | tr '\n' ' '))" $RC
+  check "badge: the 400 ms press opened no menu (log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/badge-log.txt" | tr '\n' ' '))" $RC
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
 fi
 
