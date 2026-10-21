@@ -84,6 +84,18 @@ if [[ -f /usr/include/gtest/gtest.h ]]; then
 else
   skip "tests/unit/preview (gtest not installed)"
 fi
+# grassfield-wallpaper (ADR-0016) logic: untrusted pictures (huge, corrupt, EXIF, FIFO, fit modes), listing, cache: gtest,
+# built here, then again with ASan and UBSan.
+if [[ -f /usr/include/gtest/gtest.h ]]; then
+  if apps/wallpaper-tool/build-direct.sh --tests >/dev/null && apps/wallpaper-tool/build-direct.sh --tests --asan >/dev/null; then
+    QT_QPA_PLATFORM=offscreen .dev/build/wallpaper-unit-tests --gtest_brief=1 || status=1
+    QT_QPA_PLATFORM=offscreen .dev/build/wallpaper-unit-tests-asan --gtest_brief=1 || status=1
+  else
+    echo "FAIL: building tests/unit/wallpaper-tool"; status=1
+  fi
+else
+  skip "tests/unit/wallpaper-tool (gtest not installed)"
+fi
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards): gtest, built here.
 # The peer-to-peer D-Bus case skips itself inside the sandbox (no Unix sockets).
 if [[ -f /usr/include/gtest/gtest.h ]]; then
