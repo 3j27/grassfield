@@ -20,6 +20,36 @@ SettingsPage {
         caption: qsTr("Dock")
 
         SettingsRow {
+            title: qsTr("Size")
+            subtitle: qsTr("The size of the icons in the Dock. You can also drag the divider in the Dock.")
+            Text {
+                textFormat: Text.PlainText
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("Small")
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyBodySize
+            }
+            Slider {
+                width: Tokens.controlSliderDefaultWidth
+                accessibleName: qsTr("Size")
+                from: Tokens.dockSizeMin
+                to: Tokens.dockSizeMax
+                stepSize: 1
+                value: root.store.value("dock.size")
+                onMoved: v => root.store.set("dock.size", Math.round(v))
+            }
+            Text {
+                textFormat: Text.PlainText
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("Large")
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyBodySize
+            }
+        }
+
+        SettingsRow {
             title: qsTr("Magnification")
             subtitle: qsTr("Icons grow under the pointer.")
             Toggle {
@@ -51,6 +81,17 @@ SettingsPage {
                 color: Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Position on screen")
+            subtitle: qsTr("The Dock goes to the edge you choose. With several displays it is on the one where the pointer last reached that edge.")
+            Segmented {
+                accessibleName: qsTr("Position on screen")
+                model: [{id: "left", text: qsTr("Left")}, {id: "bottom", text: qsTr("Bottom")}, {id: "right", text: qsTr("Right")}]
+                value: root.store.value("dock.position")
+                onPicked: id => root.store.set("dock.position", id)
             }
         }
 

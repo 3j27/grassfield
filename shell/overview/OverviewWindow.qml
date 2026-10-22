@@ -8,7 +8,7 @@ import qs.platform
 import qs.services
 import "Layout.js" as Layout
 import "V2.js" as V2
-import "../dock/DockModel.js" as DockModel
+import "../dock/Geometry.js" as DockGeometry
 
 // Overview surface, one per screen: a full-screen layer-shell overlay below the menu bar with a
 // Spaces bar on top and the windows of the output's current workspace laid out.
@@ -75,13 +75,9 @@ Variants {
         // from the screen, never from the window size, which is 0 until the compositor configures
         // the layer surface.
         // The Dock's area (when it takes space) is reserved, as is the menu bar's (the surface starts below it).
-        readonly property int dockReserve: DockModel.reservedHeight({
-            iconSize: Tokens.dockIconSize,
-            padding: Tokens.dockPadding,
-            indicatorSize: Tokens.dockIndicatorSize,
-            spacing: Tokens.dockSpacing,
-            bottomMargin: Tokens.dockBottomMargin
-        }, Settings.dockAutohide)
+        // Only the output that has the Dock (it is on one output at a time).
+        readonly property var dockInsets: Compositor.dockScreenName === "" || Compositor.dockScreenName === modelData.name ? DockGeometry.footprint(Settings.dockPosition, Settings.dockMetrics, Settings.dockAutohide) : ({left: 0, right: 0, bottom: 0})
+        readonly property int dockReserve: dockInsets.bottom
         readonly property var area: Layout.freeArea({
             w: modelData.width,
             h: modelData.height
@@ -90,7 +86,9 @@ Variants {
             barBottom: barBottom,
             margin: Tokens.overviewAreaMargin,
             label: Tokens.overviewLabelHeight,
-            dock: dockReserve
+            dock: dockReserve,
+            dockLeft: dockInsets.left,
+            dockRight: dockInsets.right
         })
         // Layout of `wins`, recomputed only when the inputs change (see relayout()).
         property var placement: ({

@@ -13,7 +13,8 @@ Singleton {
     property string kind: ""
     property string screenName: ""
     // Anchor in screen coordinates. align: "left" (popup's left edge at x, top at y),
-    // "right" (right edge at x), "above" (centered on x, bottom edge at y), "center" (screen centre).
+    // "right" (right edge at x), "above" (centered on x, bottom edge at y), "rightOf" (left edge at x, centered on y: the Dock on
+    // the left edge) and "leftOf" (right edge at x, centered on y: the Dock on the right edge), "center" (screen centre).
     property real anchorX: 0
     property real anchorY: 0
     property string align: "left"

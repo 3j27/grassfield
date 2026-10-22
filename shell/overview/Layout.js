@@ -238,12 +238,14 @@ function layout(rects, area, opts) {
 
 // Free region of one output's chrome surface (surface coordinates, the surface starts below the menu bar): below the
 // Spaces bar, above the Dock (when it takes space) and above the strip for the window label under the bottom row.
-// size {w, h} is the output size; r {menubar, barBottom, margin, label, dock}, dock = 0 for an auto-hidden Dock.
+// size {w, h} is the output size; r {menubar, barBottom, margin, label, dock, dockLeft, dockRight}, dock = the Dock's
+// height at the bottom and dockLeft / dockRight its width on a side edge (0 for an auto-hidden Dock or another edge).
 function freeArea(size, r) {
+    const left = r.dockLeft || 0;
     return {
-        x: r.margin,
+        x: r.margin + left,
         y: r.barBottom + r.margin,
-        w: size.w - 2 * r.margin,
+        w: size.w - 2 * r.margin - left - (r.dockRight || 0),
         h: size.h - r.menubar - r.barBottom - 2 * r.margin - r.label - r.dock
     };
 }
