@@ -3898,6 +3898,21 @@
     </message>
 </context>
 <context>
+    <name>RecentItems</name>
+    <message>
+        <source>Applications</source>
+        <translation>Applications</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Clear Menu</source>
+        <translation>Effacer le menu</translation>
+    </message>
+</context>
+<context>
     <name>Registry</name>
     <message>
         <source>Clock</source>
@@ -4279,6 +4294,10 @@
     <message>
         <source>Settings…</source>
         <translation>Réglages…</translation>
+    </message>
+    <message>
+        <source>Recent Items</source>
+        <translation>Éléments récents</translation>
     </message>
     <message>
         <source>Force Quit…</source>
