@@ -294,6 +294,14 @@ QtObject {
     readonly property real dockPressDim: 0.25
     // macOS 26: one up-and-down hop of the launch bounce, about 0.5 s (ease out up, ease in down)
     readonly property int dockBounceDuration: 500
+    // macOS: an app asking for attention hops again and again with a short rest between hops; one hop (dock.bounceDuration) every this many ms, estimate
+    readonly property int dockAttentionPeriod: 1500
+    // macOS: the attention hop is the launch hop; same rise as dock.bounceHeightScale (fraction of the icon height)
+    readonly property real dockAttentionHeightScale: 0.34
+    // NextKDE and others: an auto-hidden Dock comes out for a moment when an app asks for attention, ms, estimate
+    readonly property int dockAttentionReveal: 3000
+    // estimate: static accent plate behind the icon of an app asking for attention while Reduce Motion is on (no hop)
+    readonly property real dockAttentionHighlightOpacity: 0.35
     // estimate: the launch bounce stops after this long without a window, ms
     readonly property int dockLaunchTimeout: 12000
     // macOS: pressing and holding a Dock icon about half a second opens its menu (ms); a shorter press is a click

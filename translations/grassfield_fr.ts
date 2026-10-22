@@ -1902,6 +1902,10 @@
         <translation>, 1 notification</translation>
     </message>
     <message>
+        <source>, needs attention</source>
+        <translation>, demande votre attention</translation>
+    </message>
+    <message>
         <source>Remove</source>
         <translation>Retirer</translation>
     </message>

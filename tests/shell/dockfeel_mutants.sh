@@ -32,6 +32,8 @@ MUTANTS = [
     ("sampled-not-integrated", MAG, SLOT_OLD, "out.push(scale(centers[i] - pointerX, pitch, max, radiusIcons));"),
     ("ignore-drag", AUTO, "inh.pointer || inh.drag ||", "inh.pointer ||"),
     ("ignore-hold", AUTO, "inh.popup || inh.hold ||", "inh.popup ||"),
+    ("ignore-attention", AUTO, "inh.keyboard || inh.forced || inh.attention);\n}\n\n// Inhibitors other", "inh.keyboard || inh.forced);\n}\n\n// Inhibitors other"),
+    ("attention-no-reveal", AUTO, "return !!(inh.drag || inh.popup || inh.hold || inh.keyboard || inh.forced || inh.attention);", "return !!(inh.drag || inh.popup || inh.hold || inh.keyboard || inh.forced);"),
     ("ignore-popup", AUTO, "inh.drag || inh.popup ||", "inh.drag ||"),
     ("hiding-ignores-inhibitor", AUTO, 'case "hiding":\n        if (busy) {', 'case "hiding":\n        if (false) {'),
     ("no-grace", AUTO, "if (out.timer >= timing.hideGrace) {", "if (true) {"),

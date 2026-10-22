@@ -44,6 +44,16 @@ Singleton {
     // drag): a window opened or closed, another window, workspace or monitor became active, a monitor came or went, a layer
     // opened or closed (a surface unmapping hands the pointer back, whatever its client, shell banners included). Over-reporting is intended; `event` is the Hyprland event name.
     signal interrupted(string event)
+
+    // A window asked for attention (Hyprland's `urgent` event, relayed here: only the platform layer reads compositor events).
+    // `address` is lower-case hex without 0x. The Dock bounces the app's icon until the app is activated.
+    signal attention(string address)
+
+    // Address of a toplevel as Hyprland names it (lower-case hex without 0x), "" when Hyprland does not know it (yet).
+    function addressOf(toplevel: var): string {
+        const top = hyprlandToplevel(toplevel);
+        return top ? Minimized.normalizeAddress(top.address) : "";
+    }
     readonly property var interruptingEvents: ["openwindow", "closewindow", "movewindowv2", "activewindowv2", "workspacev2", "createworkspacev2", "destroyworkspacev2", "moveworkspacev2", "activespecialv2", "focusedmonv2", "monitoraddedv2", "monitorremovedv2", "openlayer", "closelayer", "fullscreen"]
 
     // Windows currently in the hidden-app workspace, as toplevel handles (see hiddenWindows).
@@ -478,6 +488,12 @@ Singleton {
                 const address = Minimized.minimizeRequestAddress(event.data);
                 if (address !== "")
                     root.minimizeByAddress(address);
+                return;
+            }
+            if (event.name === "urgent") {
+                const urgent = Minimized.normalizeAddress(event.data);
+                if (urgent !== "")
+                    root.attention(urgent);
                 return;
             }
             if (root.interruptingEvents.indexOf(event.name) >= 0)
