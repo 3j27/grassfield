@@ -16,6 +16,9 @@ FocusScope {
     // The swatch under the keyboard cursor when the current row is a swatch row.
     property int swatchIndex: 0
     property bool isSubmenu: false
+    // Whether Alt (Option) is down, live while the menu has the keyboard (a host shows its Option variants, macOS Dock menu).
+    // A submenu does not accept the Alt events, so they reach the top-level menu through the item tree.
+    property bool altHeld: false
     property string accessibleName: ""
     // Index of the row whose submenu is open, -1 if none.
     property int openIndex: -1
@@ -123,7 +126,14 @@ FocusScope {
         return "";
     }
 
+    // The Alt key itself decides on its own press and release (whether a toolkit counts a modifier's own press in `modifiers`
+    // varies); any other key reports the modifiers as they are.
+    Keys.onReleased: event => {
+        root.altHeld = event.key === Qt.Key_Alt ? false : (event.modifiers & Qt.AltModifier) !== 0;
+    }
+
     Keys.onPressed: event => {
+        root.altHeld = event.key === Qt.Key_Alt || (event.modifiers & Qt.AltModifier) !== 0;
         const name = root.keyName(event.key);
         if (name === "")
             return;

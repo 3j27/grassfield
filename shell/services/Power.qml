@@ -42,7 +42,8 @@ Singleton {
             Compositor.exitSession();
             return;
         case "forcequit":
-            forceQuit(args.pid);
+            // One pid (the Force Quit panel) or every process of an app (the Dock menu's Option variant).
+            (args.pids ? args.pids : [args.pid]).forEach(p => forceQuit(p));
             return;
         }
         Popups.close();

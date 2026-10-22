@@ -116,6 +116,14 @@ TestCase {
         compare(rows[2].title, "App");
     }
 
+    function test_forceQuitPidsAreDistinctAndPlain() {
+        compare(Launch.forceQuitPids([4242, 4242, 4300]).join(","), "4242,4300");
+        // Unknown (0), init (1), negative and fractional PIDs are never targets.
+        compare(Launch.forceQuitPids([0, 1, -5, 2.5, 77]).join(","), "77");
+        compare(Launch.forceQuitPids([]).length, 0);
+        compare(Launch.forceQuitPids(null).length, 0);
+    }
+
     function test_menuWindowsEmpty() {
         compare(Launch.menuWindows([], 40, "App").length, 0);
         compare(Launch.menuWindows(null, 40, "App").length, 0);

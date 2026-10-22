@@ -1929,8 +1929,24 @@
         <translation>Options</translation>
     </message>
     <message>
+        <source>Hide Others</source>
+        <translation>Masquer les autres</translation>
+    </message>
+    <message>
+        <source>Force Quit</source>
+        <translation>Forcer à quitter</translation>
+    </message>
+    <message>
         <source>Remove from Dock</source>
         <translation>Retirer du Dock</translation>
+    </message>
+    <message>
+        <source>Force quit “%1”?</source>
+        <translation>Forcer «&#xa0;%1&#xa0;» à quitter&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Unsaved changes in this application will be lost.</source>
+        <translation>Les modifications non enregistrées de cette application seront perdues.</translation>
     </message>
     <message>
         <source>Keep in Dock</source>

@@ -52,8 +52,14 @@ PopupMenu {
         });
         items.push({separator: true});
         items.push({id: "showall", text: qsTr("Show All Windows"), enabled: info.running === true});
-        items.push({id: "hide", text: qsTr("Hide"), enabled: info.running === true});
-        items.push({id: "quit", text: qsTr("Quit"), enabled: info.running === true});
+        // Option (Alt) variants, live while the menu is open (macOS): Hide becomes Hide Others, Quit becomes Force Quit.
+        if (altHeld) {
+            items.push({id: "hideOthers", text: qsTr("Hide Others"), enabled: info.running === true && Compositor.othersCount(appId(), Compositor.topologyRevision) > 0});
+            items.push({id: "forcequit", text: qsTr("Force Quit"), enabled: info.running === true});
+        } else {
+            items.push({id: "hide", text: qsTr("Hide"), enabled: info.running === true});
+            items.push({id: "quit", text: qsTr("Quit"), enabled: info.running === true});
+        }
         return items;
     }
 
@@ -117,8 +123,13 @@ PopupMenu {
         }
     }
 
-    Component.onCompleted: if (autostartPath !== "")
-        autostartCheck.running = true
+    Component.onCompleted: {
+        if (autostartPath !== "")
+            autostartCheck.running = true;
+        // Windows opened after the shell started have no process id until Hyprland's list is read again (Force Quit needs it).
+        if (info.running === true)
+            Compositor.refreshToplevels();
+    }
 
     Process {
         id: autostartCheck
@@ -141,6 +152,18 @@ PopupMenu {
         // A window chosen from the list is the focus the user wants: nothing hands it back to the previous window.
         if (item.id === "window")
             FocusReturn.skip();
+        // Force Quit asks first (the same confirmation and kill path as the Grassfield menu's Force Quit…): the confirmation
+        // replaces this menu, nothing is killed before its button.
+        if (item.id === "forcequit") {
+            const pids = Launch.forceQuitPids(data.windows.map(t => Compositor.pidOf(t)));
+            if (pids.length === 0) {
+                console.warn("grassfield-shell: force quit refused, no process id for", appId);
+                Popups.close();
+                return;
+            }
+            Popups.confirm(qsTr("Force quit “%1”?").arg(Apps.nameFor(appId)), qsTr("Unsaved changes in this application will be lost."), qsTr("Force Quit"), "forcequit", {pid: pids[0], pids: pids}, true);
+            return;
+        }
         Popups.close();
         switch (item.id) {
         case "window":
@@ -181,6 +204,10 @@ PopupMenu {
         case "hide":
             if (appId !== "")
                 Compositor.hideApp(appId);
+            break;
+        case "hideOthers":
+            if (appId !== "")
+                Compositor.hideOthers(appId);
             break;
         case "quit":
             data.windows.forEach(t => Compositor.close(t));

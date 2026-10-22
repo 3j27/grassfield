@@ -46,6 +46,17 @@ function activationPlan(windows) {
     return [visible.slice().sort(byRecency).pop().ref];
 }
 
+// Processes to kill for "Force Quit" on an app's tile (Option variant of Quit): the distinct client PIDs of its windows. PIDs that
+// are not plain client processes (unknown 0, init 1, negatives, non-integers) are dropped, as Power.forceQuit refuses them.
+function forceQuitPids(pids) {
+    const out = [];
+    for (const p of pids || []) {
+        if (Number.isInteger(p) && p > 1 && out.indexOf(p) < 0)
+            out.push(p);
+    }
+    return out;
+}
+
 // Window list at the top of an app's Dock menu (macOS): one row per window of the app, the most recent first. Each window is
 // {ref, title, minimized, stamp}; a row is {ref, title (whitespace collapsed, elided to `max` characters, the app name when
 // empty), minimized, checked}. The check goes to the most recently focused window that is not minimized (macOS: the key window);
