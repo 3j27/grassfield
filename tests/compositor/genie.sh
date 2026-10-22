@@ -191,10 +191,24 @@ frames_after_move() { # <regex> <count before> <prefix> <delays...>
   wait "${shots[@]}"
 }
 # Classifies every capture of <prefix> against <reference.ppm>; prints "<funnel> <rect> <none> <other>" and logs each.
+# A garbled capture: a screencopy that came back scrambled (seen on 2026-10-22 after i915 resets on the host: the image
+# reads like tiled memory taken as linear). The menu bar strip (24 rows, never touched by A) then differs from the
+# reference with-window.ppm in more than 20 % of its pixels (the clock changes a few dozen).
+garbled() { # <capture.ppm>
+  local share
+  share=$(magick compare -metric AE -fuzz 2% "$1[${mon_w}x24+0+0]" "$run/with-window.ppm[${mon_w}x24+0+0]" null: 2>&1 | sed -n 's/.*(\([0-9.e+-]*\)).*/\1/p')
+  awk -v s="${share:-1}" 'BEGIN { exit !(s > 0.2) }'
+}
 classify() { # <prefix> <reference.ppm> <limit y>
   local f j g=0 r=0 n=0 o=0
   for f in "$run/frames/$1"-*.ppm; do
     [[ -f $f ]] || continue
+    if garbled "$f"; then
+      echo "    $(basename "$f"): garbled capture, not classified" >>"$log"
+      printf '{"class":"garbled"}\n' >"${f%.ppm}.json"
+      say "  $(basename "$f"): garbled capture (screencopy), not classified"
+      continue
+    fi
     j=$(python3 -I "$root/tests/compositor/genie_shape.py" "$f" "$2" "$x0" "$((y0 - 28))" "$w0" "$((h0 + 28))" "$3")
     echo "    $(basename "$f"): $j" >>"$log"
     printf '%s\n' "$j" >"${f%.ppm}.json"
@@ -214,7 +228,7 @@ in_place() { # <prefix>
   for f in "$run/frames/$1"-*.json; do
     [[ -f $f ]] || continue
     c=$(jq -r '.class' "$f")
-    [[ $c == none ]] && continue
+    [[ $c == none || $c == garbled ]] && continue
     [[ $c == funnel ]] && return 1
     read -r top bottom left right < <(jq -r '"\(.top) \(.bottom) \(.left) \(.right)"' "$f")
     ((top < y0 - 28 - 45 || bottom > y0 + h0 + 45 || bottom < y0 + h0 - 20 || left < x0 - 45 || right > x0 + w0 + 45 || right - left < w0 * 9 / 10)) && return 1
@@ -263,6 +277,30 @@ hold_shift() { # <ms>: Shift down for that long (virtual keyboard of the nested 
   sleep 0.2
 }
 
+# A reference capture of a still output: two captures 0.2 s apart must agree (fewer than 1 % of the pixels differ at a
+# quarter scale); otherwise more are taken, up to 5, until two in a row agree. Measured 2026-10-22: one screencopy of the
+# nested output came back as garbage (run-20261022-130710, fade-min-after.ppm) and failed the fade check.
+stable_capture() { # <out.ppm>
+  local prev="" cur i share
+  for i in 1 2 3 4 5; do
+    cur=${1%.ppm}.try$i.ppm
+    WAYLAND_DISPLAY=$sock grim -t ppm -o "$out" "$cur" 2>>"$log"
+    if [[ -n $prev && -s $prev && -s $cur ]]; then
+      share=$(magick compare -metric AE -fuzz 2% <(magick "$prev" -scale 25% ppm:-) <(magick "$cur" -scale 25% ppm:-) null: 2>&1 | sed -n 's/.*(\([0-9.e+-]*\)).*/\1/p')
+      if awk -v s="${share:-1}" 'BEGIN { exit !(s < 0.01) }'; then
+        mv "$cur" "$1"
+        rm -f "${1%.ppm}".try*.ppm
+        return 0
+      fi
+      say "  reference capture $i differs from the previous one (share ${share:-?}): taken again"
+    fi
+    prev=$cur
+    sleep 0.2
+  done
+  mv "$cur" "$1"
+  say "  reference capture: no two captures agreed; the last one is used"
+}
+
 # One minimize through the titlebar button; with <slow> 1, in slow motion with captures. Sets tx ty limit (the Dock
 # tile) and writes <prefix>-after.ppm (the output once A is minimized).
 minimize_round() { # <prefix> <slow 0|1>
@@ -281,7 +319,7 @@ minimize_round() { # <prefix> <slow 0|1>
   check "$1: minimized event" $? "count $(event_count minimized "$hex"), move -> event $(event_ms "$to_minimized" minimized) ms"
   [[ -n $bpid ]] && wait "$bpid"
   sleep 0.4
-  (($2)) && WAYLAND_DISPLAY=$sock grim -t ppm -o "$out" "$run/$1-after.ppm" 2>>"$log"
+  (($2)) && stable_capture "$run/$1-after.ppm"
   read -r tx ty tile_top < <(dock_tile "$f0")
   [[ -n ${tile_top:-} ]] || { check "$1: the shell's Dock rectangle" 1 "no plugin log line"; return 1; }
   limit=$((tile_top - 16))
@@ -337,7 +375,7 @@ bar_y=$((y0 - 14))
 to_minimized="^[0-9]+ movewindowv2>>$hex,-?[0-9]+,special:minimized\$"
 to_workspace="^[0-9]+ movewindowv2>>$hex,[0-9]+,$ws0\$"
 say "  setup: A $addr ${w0}x${h0} at ($x0,$y0) on workspace $ws0"
-WAYLAND_DISPLAY=$sock grim -t ppm -o "$out" "$run/with-window.ppm" 2>>"$log"
+stable_capture "$run/with-window.ppm"
 
 if ((c2)); then
   # C2: no plugin. SUPER+M (the shell's `windows minimize`) parks A on special:minimized at once (the shell's fallback,
@@ -476,7 +514,7 @@ read -r _ x y w h ws < <(client "$a_pid")
 kill -0 "$hypr_pid" 2>/dev/null && [[ $ws == "$ws0" && $x == "$x0" && $y == "$y0" ]]
 check "unload mid-restore" $? "Hyprland alive, A on $ws at ($x,$y)"
 pointer abs $((x0 + w0 / 2)) $((y0 + h0 / 2)) sleep 300
-WAYLAND_DISPLAY=$sock grim -t ppm -o "$out" "$run/after-unload-restore.ppm" 2>>"$log"
+stable_capture "$run/after-unload-restore.ppm"
 magick "$run/after-unload-restore.ppm" "$run/after-unload-restore.png" 2>>"$log"
 j=$(python3 -I "$root/tests/compositor/genie_shape.py" "$run/after-unload-restore.ppm" "$run/funnel-min-after.ppm" "$x0" "$((y0 - 28))" "$w0" "$((h0 + 28))" "$limit")
 read -r rows left right bottom < <(jq -r '"\(.rows) \(.left // -1) \(.right // -1) \(.bottom // -1)"' <<<"$j")
