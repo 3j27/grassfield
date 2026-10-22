@@ -71,13 +71,20 @@ check() {
 }
 
 BT=ui/Grassfield/Ui/Button.qml
-GUARD="        if (root.visible && root.enabled)
-            root.clicked();"
-check "B1 Button key guard ignores enabled" $BT "$GUARD" "        if (root.visible)
-            root.clicked();"
-check "B2 Button key guard ignores visible" $BT "$GUARD" "        if (root.enabled)
-            root.clicked();"
-check "B3 Button key guard removed" $BT "$GUARD" "        root.clicked();"
+# Button.activate(): the one guard of every activation path (keys, accessibility press, pointer).
+GUARD="        if (!root.visible || !root.enabled)
+            return false;"
+check "B1 Button guard ignores enabled" $BT "$GUARD" "        if (!root.visible)
+            return false;"
+check "B2 Button guard ignores visible" $BT "$GUARD" "        if (!root.enabled)
+            return false;"
+check "B3 Button guard removed" $BT "$GUARD" ""
+check "A1 accessibility press bypasses the guard" $BT \
+  "    Accessible.onPressAction: root.activate()" "    Accessible.onPressAction: root.clicked()"
+check "K1 activation keys bypass the guard" $BT \
+  "        root.activate();
+        event.accepted = true;" "        root.clicked();
+        event.accepted = true;"
 check "D1 Allow stays enabled while the answer is checked" shell/security/polkit/AuthDialog.qml \
   "                enabled: root.model.canSubmit" "                enabled: true"
 check "M1 the model answers twice (no canSubmit check)" shell/security/polkit/AuthDialogModel.qml \

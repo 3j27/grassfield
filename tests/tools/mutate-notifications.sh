@@ -89,7 +89,7 @@ MUTANTS = [
         }
         if (event.key !== Qt.Key_Space && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
             return;''', [UNIT]),
-    ('M9 Button guard removed', BT, '        if (root.visible && root.enabled)\n            root.clicked();', '        root.clicked();', [UNIT]),
+    ('M9 Button guard removed', BT, '        if (!root.visible || !root.enabled)\n            return false;\n', '', [UNIT]),
     ('M10 identity rank not refreshed on resolve', NL, '        who.rank = list.rankIn(rows, who.key);\n        list.focusId = who;', '        who.rank = list.focusId !== null && list.focusId.key === who.key ? list.focusId.rank : list.rankIn(rows, who.key);\n        list.focusId = who;', [L, RN, RN2, RN3]),
     ('M11 settled rows not refreshed on resolve', NL, '        list.focusId = who;\n        list.snapRows = rows;', '        list.focusId = who;', [L]),
     ('M12 Clear All swallows every key while hidden', NL, 'event.accepted = activation;', 'event.accepted = true;', [L]),

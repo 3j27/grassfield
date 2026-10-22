@@ -149,7 +149,7 @@ TestCase {
     // never brings a key to it, so a Button without its `enabled` check passed): the keys are also handed to Allow's
     // handler by `forwarder`, and Allow's activations are counted directly, because the field (busy) and the model
     // (canSubmit) would hide a second activation. Those two must still block a second send when Allow is activated
-    // anyway (an activation that bypasses the key handler, e.g. an accessibility press action).
+    // anyway (code that emits clicked() directly, bypassing Button.activate(); the accessibility press is test_9).
     function test_7_allowSubmitsOnceFromTheKeyboard() {
         dialogModel.cancel();
         const before = flow.submitted.length;
@@ -189,7 +189,7 @@ TestCase {
         compare(allowClicks.count, 1, "a disabled Allow never acts on Return, Enter or Space");
         compare(flow.submitted.length, before + 1);
 
-        // Defence in depth: an activation of the disabled Allow that bypasses its key check still sends nothing. The field
+        // Defence in depth: an activation of the disabled Allow that bypasses its guard still sends nothing. The field
         // is read-only while busy, so text is put into it directly; the field (busy) and the model (canSubmit) must refuse.
         const input = findInput(dialog);
         verify(input !== null);
@@ -236,6 +236,49 @@ TestCase {
         keyClick(Qt.Key_Escape);
         compare(flow.cancels, cancels + 1);
         allow.visible = true;
+    }
+
+    // R12: an assistive technology's press (Accessible.pressAction, the AT-SPI "press" action) answers polkit through Allow
+    // only when Allow is shown and enabled: a disabled Allow (answer being checked) and a hidden one never act, exactly
+    // like the keys. `allow.Accessible.pressAction()` emits the same attached signal Qt's accessibility bridge emits.
+    function test_9_accessibilityPressNeverActsWhenDisabledOrHidden() {
+        dialogModel.cancel();
+        const before = flow.submitted.length;
+        const allow = findExact(dialog, "Allow");
+        verify(allow !== null);
+        allowClicks.target = allow;
+        allowClicks.clear();
+
+        // Control: shown and enabled, the press answers once.
+        dialog.focusField();
+        keyClick(Qt.Key_E);
+        keyClick(Qt.Key_F);
+        verify(allow.visible && allow.enabled, "Allow is shown and enabled");
+        allow.Accessible.pressAction();
+        compare(allowClicks.count, 1, "the press reached Allow");
+        compare(flow.submitted.length, before + 1);
+        compare(flow.submitted[flow.submitted.length - 1], "ef");
+
+        // Disabled while the answer is checked: the press does nothing.
+        verify(!allow.enabled && allow.visible);
+        allow.Accessible.pressAction();
+        compare(allowClicks.count, 1, "a disabled Allow never acts on an accessibility press");
+        compare(flow.submitted.length, before + 1);
+
+        // Hidden although enabled, with a typed password: the press does nothing (it would send "gh").
+        dialogModel.cancel();
+        dialog.focusField();
+        keyClick(Qt.Key_G);
+        keyClick(Qt.Key_H);
+        verify(allow.enabled, "a password is typed: Allow would act if it were shown");
+        allow.visible = false;
+        allow.Accessible.pressAction();
+        compare(allowClicks.count, 1, "a hidden Allow never acts on an accessibility press");
+        compare(flow.submitted.length, before + 1);
+        allow.visible = true;
+
+        allowClicks.target = null;
+        dialogModel.cancel();
     }
 
     function findExact(item, value) {

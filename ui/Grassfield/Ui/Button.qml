@@ -20,15 +20,24 @@ Item {
     Accessible.role: Accessible.Button
     Accessible.name: root.text
     Accessible.focusable: true
-    Accessible.onPressAction: root.clicked()
+    // An assistive technology's press (AT-SPI "press" action) goes through the same guard as the keys and the pointer.
+    Accessible.onPressAction: root.activate()
+
+    // The Button's only way to act, for every activation path (keys, accessibility press, pointer): a hidden or disabled
+    // Button never acts, whatever asks or still holds the focus (R12: the polkit sheet's Allow). Returns whether it acted.
+    function activate(): bool {
+        if (!root.visible || !root.enabled)
+            return false;
+        root.clicked();
+        return true;
+    }
 
     Keys.onPressed: event => {
         if (event.key !== Qt.Key_Space && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
             return;
-        // A hidden or disabled button never acts, whatever still holds the focus; its activation keys are swallowed (they would
+        // A hidden or disabled button never acts (activate()); its activation keys are swallowed all the same (they would
         // otherwise bubble up to a parent that acts on them). Every other key (Escape above all) propagates.
-        if (root.visible && root.enabled)
-            root.clicked();
+        root.activate();
         event.accepted = true;
     }
 
@@ -69,7 +78,7 @@ Item {
         cursorShape: Qt.ArrowCursor
         onClicked: {
             root.forceActiveFocus();
-            root.clicked();
+            root.activate();
         }
     }
 }
