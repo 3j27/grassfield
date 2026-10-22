@@ -59,8 +59,8 @@ namespace gf::gfc {
     // hl.plugin.grassfield.overview_focus(json): the shell names what gets the keyboard when the Overview closes; the plugin
     // focuses it once no Exclusive layer surface is left (docs/specs/overview.md "Close focus", owner decision batch 5).
     inline constexpr std::string_view kFeatureOverviewFocus = "overview-focus";
-    // hl.plugin.grassfield.config("minimizeEffect", "genie" | "scale" | "fade") is accepted: the minimize animation follows
-    // Settings dock.minimizeEffect (macOS "Minimize windows using"), "fade" while Reduce Motion is on. Advertised with
+    // hl.plugin.grassfield.config("minimizeEffect", "funnel" | "shrink" | "fade") is accepted: the minimize animation follows
+    // Settings dock.minimizeEffect ("Minimize animation"), "fade" while Reduce Motion is on. Advertised with
     // minimize and config; a shell pushes the key only when it sees this feature (older plugins reject the key).
     inline constexpr std::string_view kFeatureMinimizeEffect = "minimize-effect";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on

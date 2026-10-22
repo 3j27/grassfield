@@ -1,8 +1,8 @@
 #pragma once
 
-// Genie minimize effect: the geometry of the window bending into its Dock tile (macOS "Genie", the default of
-// System Settings > Desktop & Dock > "Minimize windows using"). Plain C++ with no Hyprland includes, so it is
-// unit-testable (compositor/tests/GenieTest.cpp). The glue (Minimize.cpp, GenieDraw.cpp) draws the window snapshot
+// Funnel minimize effect (internal name: Genie): the geometry of the window bending into its Dock tile, the default of
+// Settings dock.minimizeEffect ("funnel"; comparable to the macOS genie, with its own mesh and curves). Plain C++ with
+// no Hyprland includes, so it is unit-testable (compositor/tests/GenieTest.cpp). The glue (Minimize.cpp, GenieDraw.cpp) draws the window snapshot
 // on the mesh computed here.
 //
 // Model, Dock at the bottom (the other edges use the same math in a rotated frame, see Edge):

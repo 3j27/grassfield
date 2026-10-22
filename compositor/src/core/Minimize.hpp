@@ -63,8 +63,9 @@ namespace gf::minimize {
     };
 
     // The minimize effect (Settings dock.minimizeEffect, pushed by the shell with hl.plugin.grassfield.config):
-    // Genie (macOS default, core/Genie.*), Scale (uniform shrink into the tile, frameAt) or Fade (Reduce Motion: the
-    // window fades out where it is, fadeFrameAt; the shell sends it while accessibility.reduceMotion is on).
+    // Genie = "funnel" (the default, core/Genie.*), Scale = "shrink" (uniform shrink into the tile, frameAt) or
+    // Fade = "fade" (Reduce Motion: the window fades out where it is, fadeFrameAt; the shell sends it while
+    // accessibility.reduceMotion is on).
     enum class Effect : uint8_t {
         Genie,
         Scale,
@@ -73,8 +74,16 @@ namespace gf::minimize {
 
     inline constexpr std::string_view kConfigMinimizeEffect = "minimizeEffect";
 
-    // nullopt unless key is kConfigMinimizeEffect and value is exactly "genie", "scale" or "fade".
+    // nullopt unless key is kConfigMinimizeEffect and value is exactly "funnel", "shrink" or "fade" (the values of Settings
+    // dock.minimizeEffect, Grassfield's own names; the code keeps Genie / Scale as internal identifiers).
     std::optional<Effect> parseEffect(std::string_view key, std::string_view value);
+
+    // Dev fault injection (tests/compositor/genie.sh fault): hl.plugin.grassfield.config("testFault", "funnel-shader") makes
+    // the next funnel draw compile a broken shader. Honoured only in a dev session (GRASSFIELD_DEV=1 in Hyprland's
+    // environment, set by scripts/dev/nested-up.sh); never advertised, rejected like any unknown key otherwise.
+    inline constexpr std::string_view kConfigTestFault       = "testFault";
+    inline constexpr std::string_view kTestFaultFunnelShader = "funnel-shader";
+    bool                              isFunnelShaderFault(std::string_view key, std::string_view value, bool devSession);
 
     // Shift held when a minimize or restore starts plays it in slow motion, as on macOS (any effect).
     inline constexpr double kSlowMotionFactor = 10.0;

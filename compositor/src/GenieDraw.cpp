@@ -11,8 +11,10 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <format>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace gf::genie {
@@ -43,11 +45,18 @@ void main() {
 }
 )";
 
+        // Dev fault injection (injectShaderFault): a fragment shader that cannot compile, so the real failure path runs.
+        constexpr const char* BROKEN_FRAGMENT_SHADER = "#version 300 es\nthis is not a shader (Grassfield dev fault injection)\n";
+
         constexpr GLsizei FLOATS_PER_VERTEX = 4;
 
+        // glGetError calls per check: enough to drain the usual one or two flags, never a loop on a lost context.
+        constexpr int GL_ERROR_CHECK_LIMIT = 8;
+
         struct SGl {
-            bool   failed = false; // disable() ran: never try again
-            bool   ready  = false;
+            bool   failed      = false; // disable() ran: no more funnel draws until the plugin is loaded again
+            bool   shaderFault = false; // injectShaderFault(): the next compile uses BROKEN_FRAGMENT_SHADER
+            bool   ready       = false;
             GLuint program = 0, vao = 0, vbo = 0, ibo = 0;
             GLint  locProj = -1, locTex = -1, locAlpha = -1;
             int    indexAcross = 0, indexAlong = 0;
@@ -61,6 +70,19 @@ void main() {
         SGl& gl() {
             static SGl s;
             return s;
+        }
+
+        // The first pending GL error (GL_NO_ERROR if none); drains at most GL_ERROR_CHECK_LIMIT flags.
+        GLenum firstGlError() {
+            GLenum first = GL_NO_ERROR;
+            for (int i = 0; i < GL_ERROR_CHECK_LIMIT; ++i) {
+                const GLenum err = glGetError();
+                if (err == GL_NO_ERROR)
+                    break;
+                if (first == GL_NO_ERROR)
+                    first = err;
+            }
+            return first;
         }
 
         bool rendererIsGl() {
@@ -137,7 +159,7 @@ void main() {
             if (s.ready)
                 return true;
             const GLuint vs = compile(GL_VERTEX_SHADER, VERTEX_SHADER);
-            const GLuint fs = vs != 0 ? compile(GL_FRAGMENT_SHADER, FRAGMENT_SHADER) : 0;
+            const GLuint fs = vs != 0 ? compile(GL_FRAGMENT_SHADER, s.shaderFault ? BROKEN_FRAGMENT_SHADER : FRAGMENT_SHADER) : 0;
             if (vs == 0 || fs == 0) {
                 if (vs != 0)
                     glDeleteShader(vs);
@@ -200,11 +222,27 @@ void main() {
         return !gl().failed && rendererIsGl();
     }
 
-    void disable(const char* why) {
+    void disable(std::string_view why) {
         auto& s = gl();
         if (!s.failed)
-            gf::log(Log::ERR, "genie: drawing disabled ({}); minimize uses the Scale effect", why);
+            gf::log(Log::ERR, "genie: funnel drawing disabled ({}); minimize uses the shrink effect", why);
         s.failed = true;
+    }
+
+    void reset() {
+        auto& s        = gl();
+        s.failed       = false;
+        s.shaderFault  = false;
+        s.drawn        = 0;
+        s.maxDrawMicro = 0;
+    }
+
+    void injectShaderFault() {
+        auto& s       = gl();
+        s.shaderFault = true;
+        // Objects already made: drop them, so that the next funnel draw compiles (and fails) again.
+        release();
+        gf::log(Log::WARN, "genie: dev fault injection: the next funnel draw compiles a broken shader");
     }
 
     uint64_t drawnCount() {
@@ -250,6 +288,8 @@ void main() {
             if (damage.empty())
                 return;
 
+            // Error flags left by earlier GL work (not ours) are cleared first, so that the check after the draw sees ours.
+            (void)firstGlError();
             const CSavedBindings saved;
             if (!ensureObjects())
                 return;
@@ -289,6 +329,10 @@ void main() {
             });
             g_pHyprRenderer->disableScissor();
             d.tex->unbind();
+            // Any GL error raised by this draw disables the funnel for the plugin's life (one line); running funnel
+            // animations continue as shrink ones (Minimize.cpp checkFunnelUsable).
+            if (const GLenum err = firstGlError(); err != GL_NO_ERROR)
+                disable(std::format("GL error 0x{:x} after a funnel draw", err));
 
             const double micros = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
             s.maxDrawMicro      = std::max(s.maxDrawMicro, micros);
@@ -305,7 +349,7 @@ void main() {
     }
 
     const char* CGenieElement::passName() {
-        return "CGrassfieldGenieElement";
+        return kPassName;
     }
 
     ePassElementType CGenieElement::type() {

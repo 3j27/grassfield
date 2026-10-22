@@ -328,15 +328,26 @@ TEST(GenieTiming, AnInterruptedAnimationContinuesFromTheShapeOnScreen) {
 
 TEST(MinimizeEffect, ConfigAllowlist) {
     EXPECT_EQ(kConfigMinimizeEffect, "minimizeEffect");
-    EXPECT_EQ(parseEffect("minimizeEffect", "genie"), Effect::Genie);
-    EXPECT_EQ(parseEffect("minimizeEffect", "scale"), Effect::Scale);
+    // Grassfield's own value names (Settings dock.minimizeEffect); the internal enum keeps Genie / Scale.
+    EXPECT_EQ(parseEffect("minimizeEffect", "funnel"), Effect::Genie);
+    EXPECT_EQ(parseEffect("minimizeEffect", "shrink"), Effect::Scale);
     EXPECT_EQ(parseEffect("minimizeEffect", "fade"), Effect::Fade);
-    EXPECT_FALSE(parseEffect("minimizeEffect", "Genie"));
-    EXPECT_FALSE(parseEffect("minimizeEffect", "genie "));
+    EXPECT_FALSE(parseEffect("minimizeEffect", "genie")); // never a user-visible value
+    EXPECT_FALSE(parseEffect("minimizeEffect", "scale"));
+    EXPECT_FALSE(parseEffect("minimizeEffect", "Funnel"));
+    EXPECT_FALSE(parseEffect("minimizeEffect", "funnel "));
     EXPECT_FALSE(parseEffect("minimizeEffect", ""));
-    EXPECT_FALSE(parseEffect("minimizeEffect", std::string_view("scale\0", 6)));
-    EXPECT_FALSE(parseEffect("titlebarDoubleClick", "genie"));
-    EXPECT_FALSE(parseEffect("", "scale"));
+    EXPECT_FALSE(parseEffect("minimizeEffect", std::string_view("shrink\0", 7)));
+    EXPECT_FALSE(parseEffect("titlebarDoubleClick", "funnel"));
+    EXPECT_FALSE(parseEffect("", "shrink"));
+}
+
+TEST(MinimizeEffect, FaultInjectionOnlyInADevSession) {
+    EXPECT_TRUE(isFunnelShaderFault("testFault", "funnel-shader", true));
+    EXPECT_FALSE(isFunnelShaderFault("testFault", "funnel-shader", false)); // the installed session never honours it
+    EXPECT_FALSE(isFunnelShaderFault("testFault", "funnel", true));
+    EXPECT_FALSE(isFunnelShaderFault("testFault", "funnel-shader ", true));
+    EXPECT_FALSE(isFunnelShaderFault("minimizeEffect", "funnel-shader", true));
 }
 
 TEST(MinimizeEffect, ReduceMotionFadesInPlace) {

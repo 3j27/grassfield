@@ -108,13 +108,17 @@ namespace gf::minimize {
     std::optional<Effect> parseEffect(std::string_view key, std::string_view value) {
         if (key != kConfigMinimizeEffect)
             return std::nullopt;
-        if (value == "genie")
+        if (value == "funnel")
             return Effect::Genie;
-        if (value == "scale")
+        if (value == "shrink")
             return Effect::Scale;
         if (value == "fade")
             return Effect::Fade;
         return std::nullopt;
+    }
+
+    bool isFunnelShaderFault(std::string_view key, std::string_view value, bool devSession) {
+        return devSession && key == kConfigTestFault && value == kTestFaultFunnelShader;
     }
 
     Frame fadeFrameAt(Kind kind, const Box& box, double elapsedMs) {

@@ -186,8 +186,8 @@ namespace {
 
     const char* effectName(mz::Effect effect) {
         switch (effect) {
-            case mz::Effect::Genie: return "genie";
-            case mz::Effect::Scale: return "scale";
+            case mz::Effect::Genie: return "funnel";
+            case mz::Effect::Scale: return "shrink";
             case mz::Effect::Fade: return "fade";
         }
         return "?";
@@ -229,11 +229,14 @@ namespace {
         const auto held = st().timingLog.admit(gf::events::Clock::now());
         if (!held)
             return;
+        // The speed is stated on every line (tests separate slow-motion animations from normal ones by it, never by their
+        // duration: a normal animation that stalled lasts as long as a slow one).
         gf::log(Log::INFO,
-                "minimize {:x}: {} {} in {:.0f} ms, {} frames, frame interval avg {:.1f} max {:.1f} ms, frame cpu avg {:.2f} max {:.2f} ms, genie draw max {:.0f} us{}",
+                "minimize {:x}: {} {} in {:.0f} ms, {} frames, frame interval avg {:.1f} max {:.1f} ms, frame cpu avg {:.2f} max {:.2f} ms, genie draw max {:.0f} us, "
+                "speed {}{}",
                 a.address, effectName(a.effect), a.kind == mz::Kind::Minimize ? "minimize" : "restore", elapsedMs, t.frames,
                 t.frames > 1 ? t.sumInterval / (t.frames - 1) : 0.0, t.maxInterval, t.rendered > 0 ? t.sumRender / t.rendered : 0.0, t.maxRender, t.maxDrawMicros,
-                *held > 0 ? std::format(" ({} similar line(s) held back)", *held) : std::string{});
+                a.timeScale > 1.0 ? "slow" : "normal", *held > 0 ? std::format(" ({} similar line(s) held back)", *held) : std::string{});
     }
 
     // Ends an animation: final state, snapshot dropped, optional event. `a` is erased by the caller.
@@ -292,19 +295,29 @@ namespace {
         }
     }
 
-    // Hyprland never drew a Genie element: Genie is disabled and running Genie animations become Scale ones.
-    void checkGenieDrawn() {
+    // A running funnel animation goes on as a shrink one from about where it is: the shrink's elapsed time is set to the
+    // same share of its own duration as the funnel's progress (minimize: progress, restore: 1 - progress).
+    void toShrink(SAnimation& a) {
+        const double share = a.kind == mz::Kind::Minimize ? a.progress : 1.0 - a.progress;
+        a.effect           = mz::Effect::Scale;
+        a.from             = a.kind == mz::Kind::Minimize ? a.geometry.visible : a.tileFit;
+        a.to               = a.kind == mz::Kind::Minimize ? a.tileFit : a.geometry.visible;
+        a.mesh.clear();
+        const double elapsedMs = std::clamp(share, 0.0, 1.0) * mz::durationMs(a.kind) * a.timeScale;
+        a.start                = Time::steadyNow() - std::chrono::duration_cast<Time::steady_dur>(std::chrono::duration<double, std::milli>(elapsedMs));
+    }
+
+    // FR46: the funnel cannot be drawn any more (shader compile or link failure, a GL error after a draw, Hyprland never
+    // drawing the custom elements): every running funnel animation continues as a shrink one, never as nothing.
+    void checkFunnelUsable() {
         auto& s = st();
-        if (s.genieAdded < GENIE_UNDRAWN_LIMIT || gf::genie::drawnCount() > 0)
+        if (s.genieAdded >= GENIE_UNDRAWN_LIMIT && gf::genie::drawnCount() == 0)
+            gf::genie::disable("Hyprland did not draw the custom pass elements");
+        if (gf::genie::available())
             return;
-        gf::genie::disable("Hyprland did not draw the custom pass elements");
         for (auto& a : s.animations) {
-            if (a.effect != mz::Effect::Genie)
-                continue;
-            a.effect = mz::Effect::Scale;
-            a.from   = a.kind == mz::Kind::Minimize ? a.geometry.visible : a.tileFit;
-            a.to     = a.kind == mz::Kind::Minimize ? a.tileFit : a.geometry.visible;
-            a.mesh.clear();
+            if (a.effect == mz::Effect::Genie)
+                toShrink(a);
         }
     }
 
@@ -357,7 +370,7 @@ namespace {
         auto& all = st().animations;
         if (all.empty())
             return;
-        checkGenieDrawn();
+        checkFunnelUsable();
         const auto now = Time::steadyNow();
         for (auto it = all.begin(); it != all.end();) {
             const auto w = it->window.lock();
@@ -612,7 +625,10 @@ namespace gf::minimizer {
         // Monitor changes: positions and scales captured with the snapshots are stale; finish at once.
         l.push_back(ev.monitor.removed.listen([](const PHLMONITOR& /*monitor*/) { gf::guarded("minimize monitor.removed", [] { completeAll(true); }); }));
         l.push_back(ev.monitor.layoutChanged.listen([] { gf::guarded("minimize monitor.layoutChanged", [] { completeAll(true); }); }));
-        st().ready = true;
+        // A library pinned at an earlier unload (FR23) keeps its statics: a load starts the funnel afresh.
+        gf::genie::reset();
+        st().genieAdded = 0;
+        st().ready      = true;
         return true;
     }
 
@@ -620,6 +636,14 @@ namespace gf::minimizer {
         auto& s = st();
         s.ready = false;
         s.listeners.clear();
+        // Funnel elements still queued in a render pass would be destroyed (and drawn) after dlclose with their vtable gone:
+        // remove them (CRenderPass::removeAllOfType compares IPassElement::passName). Unload never runs inside a frame, so
+        // the pass is normally empty; this covers a frame that queued them and did not render them.
+        if (g_pHyprRenderer) {
+            g_pHyprRenderer->m_renderPass.removeAllOfType(gf::genie::kPassName);
+            if (auto& current = g_pHyprRenderer->currentPass(); &current != &g_pHyprRenderer->m_renderPass)
+                current.removeAllOfType(gf::genie::kPassName);
+        }
         completeAll(false);
         if (s.watchdog) {
             if (g_pEventLoopManager)
