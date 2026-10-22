@@ -783,6 +783,14 @@ QtObject {
     readonly property real widgetDimBrightness: -0.12
     // estimate: widgets v1, dim transition
     readonly property int widgetDimMs: 300
+    // F1 gap 16 (gs-017-032): gallery panel left 41 from the screen edge, anchored bottom-left
+    readonly property int widgetGalleryInsetLeft: 41
+    // estimate: the single-column gallery (sidebar 241 + previews of the reference do not fit a one-column list); 344 column + room for the size picker
+    readonly property int widgetGalleryWidth: 360
+    // F1 gap 16 (gs-017-032): the gallery covers about 60 percent of the screen height
+    readonly property real widgetGalleryHeightFraction: 0.62
+    // estimate: upper bound of the gallery height
+    readonly property int widgetGalleryMaxHeight: 720
     // estimate: widgets v1, gallery preview row
     readonly property int widgetGalleryRowHeight: 120
     // estimate: widgets v1, size picker segment
