@@ -139,7 +139,17 @@ trig_menubarmenu() { vs_ipc menubar open system GF-REF; }
 end_menubarmenu() { vs_ipc menubar close; sleep 1; }
 trig_windowopen() { vs_spawn foot --app-id gfwin; }
 end_windowopen() { kill_class gfwin; sleep 1.5; }
-pre_windowclose() { vs_spawn foot --app-id gfwin; sleep 2; }
+# The window must be OPEN before the press: a window mapping during the press makes Qt end it (no drag), which the old fixed sleep let
+# happen (those trials passed without ever dragging).
+pre_windowclose() {
+  local i
+  vs_spawn foot --app-id gfwin
+  for i in $(seq 1 60); do
+    [[ $("$VS_ROOT/scripts/nestctl" clients -j | jq '[.[] | select(.class == "gfwin")] | length') -ge 1 ]] && break
+    sleep 0.25
+  done
+  sleep 2
+}
 trig_windowclose() { kill_class gfwin; }
 end_windowclose() { sleep 1; }
 trig_appquit() { kill_class gfdockB; }
@@ -157,22 +167,30 @@ end_lock() { :; }
 # must stay.
 trial() {
   local trig=$1 hy=$2 style=$3 rel=$4 label=$5 path="" k tail
-  if [[ $style == wiggle ]]; then
-    for k in 1 2 3 4 5 6 7 8 9 10; do path="$path drag $((FX + 25)) $hy sleep 100 drag $((FX - 25)) $hy sleep 100"; done
-  else
-    path="sleep 3000"
-  fi
-  if [[ $rel == held ]]; then
-    tail="sleep 150 up sleep 150 $park"
-  else
-    tail="drag $FX $DY sleep 150 up sleep 150 $park"
-  fi
+  # The pointer path is built per attempt, after the pre-step: a window opened by it adds a Dock tile and moves the foot tile
+  # (the old fixed x then pressed between tiles and the "kept" results were vacuous).
+  build_path() {
+    path=""
+    if [[ $style == wiggle ]]; then
+      for k in 1 2 3 4 5 6 7 8 9 10; do path="$path drag $((FX + 25)) $hy sleep 100 drag $((FX - 25)) $hy sleep 100"; done
+    else
+      path="sleep 3000"
+    fi
+    if [[ $rel == held ]]; then
+      tail="sleep 150 up sleep 150 $park"
+    else
+      tail="drag $FX $DY sleep 150 up sleep 150 $park"
+    fi
+    P="abs $FX $DY sleep 200 down sleep 200"
+  }
   # A trial counts only when the shell logged the drag start (dock-launch: drag-start): a pointer that never dragged (released 1-3 ms
   # after the press) proves nothing and is repeated, up to three times, then reported as not tested (FAIL), never as a pass.
   local attempt mark started=0
   for attempt in 1 2 3; do
     restore || { restore_failed "$label"; return; }
     if declare -F "pre_$trig" >/dev/null; then "pre_$trig" >/dev/null 2>&1; fi
+    refresh_fx
+    build_path
     mark=$(wc -l < "$VS_DEV/shell.log")
     vs_pointer $P drag $FX $hy $path $tail >/dev/null &
     ptr_pid=$!
@@ -185,7 +203,7 @@ trial() {
       started=1
       break
     fi
-    echo "  ($label: no drag started on attempt $attempt, not tested: again)"
+    echo "  ($label: no drag started on attempt $attempt, not tested: again; shell log lines of the attempt: $(tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep -c .), dock lines: $(tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch:" | sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' | tr '\n' '|' | cut -c1-200); clients: $("$VS_ROOT/scripts/nestctl" clients -j | jq -r '[.[].class] | join(",")'))"
     "end_$trig" >/dev/null 2>&1
     # the pin may have been touched by nothing; bring the state back
   done
