@@ -23,6 +23,9 @@ enum ExitCode {
     Unsupported = 8,
     Timeout = 9,
     WriteFailed = 10,
+    Network = 11,     // online fetch: no answer, an HTTP error, a refused host or redirect (retried later)
+    Skipped = 12,     // online fetch: today's entry cannot be used (licence, not a picture, no entry); not retried that day
+    BadResponse = 13, // online fetch: a malformed or oversized answer (retried later)
 };
 
 // Caps (the same as Grassfield Preview, docs/specs/preview.md).
