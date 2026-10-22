@@ -72,3 +72,17 @@ The end of every run prints one line per selected layer: `pass fail skip manual`
 A test that starts a nested session only to drive shell QML logic (no compositor behaviour, no capture, no real input)
 belongs in `headless`. Move it, then prove it still catches its bug: apply a temporary mutant of the code under test,
 see it fail, revert it. Record the layer change in `tests/inventory.json`.
+
+## Nested tests that stay nested (reviewed 2026-10-22)
+
+| Test | Why it needs a session |
+|---|---|
+| `tests/shell/apps_nested.sh` | `AppsWindow` is a layer-shell `PanelWindow` with exclusive keyboard focus; under `QT_QPA_PLATFORM=offscreen` Quickshell has no PanelWindow backend ("No PanelWindow backend loaded"). The controller logic is already headless (`tst_appspanel.qml`, `tst_exclusivesurfaces.qml`). |
+| `tests/shell/overview_two_outputs.sh`, `tests/visual/overview-highlight.sh`, `tests/compositor/*.sh`, `tests/integration/global_menus.sh`, `tests/security/reload_locked.sh` | compositor behaviour: plugin, real input, outputs, focus, session lock. |
+| `tests/visual/degraded-notice.sh` | the notice itself is posted by `shell/shell.qml` (not loadable alone) and the test loads and unloads the real plugin. A headless test of `Capabilities` alone would not cover it. |
+| `tests/visual/icon-a2.sh`, `icon-shader-cold.sh`, `icon-modes*-perf.sh`, `icon-modes-switch-memory.sh`, `folder-glyph-perf.sh`, `dock-*` | GPU scene graph (ShaderEffect), frame timing, memory of a live shell. |
+| `tests/apps/files_sandbox.sh` | real keyboard and pointer input into the Files window. |
+
+Moved down: `tests/apps/files_registrar.sh` (nested to headless): the nested session only supplied a Wayland socket; the app
+now runs on the offscreen platform. It needs a private D-Bus daemon (Unix socket), so it SKIPs inside the Claude Code
+sandbox and stays a bare command (`runner: bare`) until it has run on the owner's machine.

@@ -177,7 +177,7 @@
  {"path": "tests/compositor/zoom_restore.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/integration/global_menus.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/integration/menu_bridge_memory.sh", "layer": "headless", "runner": "bare"},
- {"path": "tests/apps/files_registrar.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/apps/files_registrar.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/apps/files_sandbox.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/apps/files_tags_shots.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/accent-live.sh", "layer": "visual", "runner": "bare"},
