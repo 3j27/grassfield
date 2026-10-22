@@ -76,7 +76,8 @@ Singleton {
             othersCount: hasApp ? Compositor.othersCount(appId, rev) : 0,
             hiddenCount: Compositor.hiddenWindows(rev).length,
             spaces: Compositor.spacesOn(Compositor.focusedScreenName, rev).map(s => ({id: s.id})),
-            newSpaceId: Compositor.nextSpaceId()
+            newSpaceId: Compositor.nextSpaceId(),
+            canTile: Compositor.canTile
         };
     }
 
@@ -119,6 +120,9 @@ Singleton {
             break;
         case "fullscreen":
             Compositor.toggleFullscreen(ctx.focusedWindow);
+            break;
+        case "tile":
+            Compositor.tile(ctx.focusedWindow, item.place);
             break;
         case "moveTo":
         case "moveToNew":

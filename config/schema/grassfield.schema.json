@@ -115,6 +115,15 @@
             "minimize",
             "none"
           ]
+        },
+        "tilingEdges": {
+          "type": "boolean"
+        },
+        "tilingMenuBar": {
+          "type": "boolean"
+        },
+        "tilingMargins": {
+          "type": "boolean"
         }
       }
     },

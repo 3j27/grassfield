@@ -5,7 +5,7 @@
 // Record: {toplevel, address, appId, title}.
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus"];
+var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -30,6 +30,17 @@ function windowCall(verb, address, rect) {
     const args = ["\"0x" + hex + "\""];
     [r.x, r.y, r.w, r.h].forEach(n => args.push(String(Math.round(n))));
     return guardedPluginCall(verb, args);
+}
+
+// hl.plugin.grassfield.tile(address, place) (capability "window-tiling", compositor FR49): Window > Move & Resize and
+// the tiling keys. The place is one of these names; "" when anything is invalid (callers must not dispatch it).
+var tilePlaces = ["left", "right", "top", "bottom", "top-left", "top-right", "bottom-left", "bottom-right", "fill", "center", "previous"];
+
+function tileCall(address, place) {
+    const hex = normalizeAddress(address);
+    if (hex === "" || typeof place !== "string" || tilePlaces.indexOf(place) < 0)
+        return "";
+    return guardedPluginCall("tile", ["\"0x" + hex + "\"", "\"" + place + "\""]);
 }
 
 // hl.plugin.grassfield.cursor_refresh() (gfc/1 capability "cursor-refresh"): the plugin redraws the cursor with the
@@ -142,9 +153,13 @@ function overviewFocusCall(target, id) {
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
+// tilingEdges / tilingMenuBar / tilingMargins: Settings windows.tiling* (feature "window-tiling").
 var pluginConfig = {
     titlebarDoubleClick: ["zoom", "minimize", "none"],
-    minimizeEffect: ["funnel", "shrink", "fade"]
+    minimizeEffect: ["funnel", "shrink", "fade"],
+    tilingEdges: ["true", "false"],
+    tilingMenuBar: ["true", "false"],
+    tilingMargins: ["true", "false"]
 };
 
 function configCall(key, value) {

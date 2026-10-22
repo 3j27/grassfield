@@ -186,6 +186,34 @@ SettingsPage {
                 onPicked: id => root.store.set("windows.titlebarDoubleClick", id)
             }
         }
+
+        SettingsRow {
+            title: qsTr("Drag windows to screen edges to tile")
+            subtitle: qsTr("A window dragged to the left or right edge fills that half, to a corner that quarter.")
+            Toggle {
+                accessibleName: qsTr("Drag windows to screen edges to tile")
+                checked: root.store.value("windows.tilingEdges")
+                onToggled: c => root.store.set("windows.tilingEdges", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Drag windows to menu bar to fill screen")
+            Toggle {
+                accessibleName: qsTr("Drag windows to menu bar to fill screen")
+                checked: root.store.value("windows.tilingMenuBar")
+                onToggled: c => root.store.set("windows.tilingMenuBar", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Tiled windows have margins")
+            Toggle {
+                accessibleName: qsTr("Tiled windows have margins")
+                checked: root.store.value("windows.tilingMargins")
+                onToggled: c => root.store.set("windows.tilingMargins", c)
+            }
+        }
     }
 
     SettingsGroup {

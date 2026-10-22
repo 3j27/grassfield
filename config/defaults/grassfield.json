@@ -26,7 +26,10 @@
     "minimizeEffect": "funnel"
   },
   "windows": {
-    "titlebarDoubleClick": "zoom"
+    "titlebarDoubleClick": "zoom",
+    "tilingEdges": true,
+    "tilingMenuBar": true,
+    "tilingMargins": true
   },
   "notifications": {
     "dnd": false,
