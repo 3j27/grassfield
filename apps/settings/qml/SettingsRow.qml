@@ -14,6 +14,12 @@ Item {
     width: parent ? parent.width : implicitWidth
     implicitHeight: Math.max(Tokens.settingsRowHeight, Math.max(labels.implicitHeight, slot.implicitHeight) + 2 * Tokens.spacingSm)
 
+    TextMetrics {
+        id: valueMetrics
+        font: valueLabel.font
+        text: root.valueText
+    }
+
     Accessible.role: root.valueText !== "" ? Accessible.StaticText : Accessible.Grouping
     Accessible.name: root.valueText !== "" ? root.title + ": " + root.valueText : root.title
 
@@ -67,9 +73,12 @@ Item {
         spacing: Tokens.spacingSm
 
         Text {
+            id: valueLabel
             textFormat: Text.PlainText
             visible: root.valueText !== ""
-            width: visible ? Math.min(implicitWidth, root.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg) : 0
+            // The natural width comes from TextMetrics, not from this Text's implicitWidth, which changes as the text
+            // wraps and looped (real session 2026-10-22, "SettingsRow.qml:72: Binding loop detected for property width").
+            width: visible ? Math.min(Math.ceil(valueMetrics.advanceWidth), root.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg) : 0
             text: root.valueText
             wrapMode: Text.Wrap
             horizontalAlignment: Text.AlignRight
