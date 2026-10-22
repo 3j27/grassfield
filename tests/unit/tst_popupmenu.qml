@@ -186,6 +186,119 @@ TestCase {
         compare(activatedSpy.signalArguments[0][0].id, "tag:1");
     }
 
+    // ---- pointer relay: press, drag, release with the pointer held by another surface (the menu bar) ----
+
+    // Centre of the row showing `text`, in scene coordinates (what the menu bar reports).
+    function centreOf(root: Item, text: string): point {
+        const row = textItem(root, text);
+        verify(row !== null, "no row " + text);
+        return row.mapToItem(null, row.width / 2, row.height / 2);
+    }
+
+    function test_relayRowAt() {
+        const m = makeMenu();
+        wait(50);
+        compare(m.rowAt(centreOf(m, "Alpha").x, centreOf(m, "Alpha").y), 0);
+        compare(m.rowAt(centreOf(m, "Gamma").x, centreOf(m, "Gamma").y), 3);
+        compare(m.rowAt(centreOf(m, "Delta").x, centreOf(m, "Delta").y), 4);
+        // A disabled row, the separator and the outside are no row.
+        compare(m.rowAt(centreOf(m, "Beta").x, centreOf(m, "Beta").y), -1);
+        const sep = centreOf(m, "Alpha");
+        compare(m.rowAt(sep.x, sep.y + (centreOf(m, "Beta").y - sep.y) / 2), -1);
+        compare(m.rowAt(-50, -50), -1);
+        compare(m.rowAt(m.mapToItem(null, 0, 0).x + m.width + 40, sep.y), -1);
+        verify(m.containsPoint(sep.x, sep.y));
+        verify(!m.containsPoint(-50, -50));
+    }
+
+    function test_relayTrackHighlightsTheRowUnderThePointer() {
+        const m = makeMenu();
+        wait(50);
+        m.trackPointer(centreOf(m, "Gamma").x, centreOf(m, "Gamma").y);
+        compare(m.currentIndex, 3);
+        m.trackPointer(centreOf(m, "Alpha").x, centreOf(m, "Alpha").y);
+        compare(m.currentIndex, 0);
+        // A disabled row and the outside clear the highlight (the pointer is on no row), nothing runs.
+        m.trackPointer(centreOf(m, "Beta").x, centreOf(m, "Beta").y);
+        compare(m.currentIndex, -1);
+        m.trackPointer(centreOf(m, "Gamma").x, centreOf(m, "Gamma").y);
+        m.trackPointer(-30, -30);
+        compare(m.currentIndex, -1);
+        compare(activatedSpy.count, 0);
+    }
+
+    function test_relayReleaseRunsTheRowUnderThePointer() {
+        const m = makeMenu();
+        wait(50);
+        const p = centreOf(m, "Gamma");
+        m.trackPointer(p.x, p.y);
+        verify(m.releasePointer(p.x, p.y));
+        compare(activatedSpy.count, 1);
+        compare(activatedSpy.signalArguments[0][0].id, "c");
+        compare(closeSpy.count, 0);
+    }
+
+    function test_relayReleaseOutsideARowLeavesTheMenuOpen() {
+        const m = makeMenu();
+        wait(50);
+        const beta = centreOf(m, "Beta");
+        verify(!m.releasePointer(beta.x, beta.y));
+        verify(!m.releasePointer(-20, -20));
+        // Back on the bar title (above the menu): nothing either.
+        verify(!m.releasePointer(m.mapToItem(null, 0, 0).x + 5, m.mapToItem(null, 0, 0).y - 10));
+        compare(activatedSpy.count, 0);
+        compare(closeSpy.count, 0);
+    }
+
+    function test_relaySubmenuRowOpensItAndRunsItsRows() {
+        const m = makeMenu();
+        wait(50);
+        const d = centreOf(m, "Delta");
+        m.trackPointer(d.x, d.y);
+        compare(m.openIndex, 4);
+        wait(100);
+        const sub = m.submenuItem;
+        verify(sub !== null);
+        const one = centreOf(sub, "Delta one");
+        verify(m.containsPoint(one.x, one.y));
+        // The pointer moves into the submenu: its row is highlighted, the parent keeps the open row.
+        m.trackPointer(one.x, one.y);
+        compare(sub.currentIndex, 0);
+        compare(m.currentIndex, 4);
+        compare(m.openIndex, 4);
+        const two = centreOf(sub, "Delta two");
+        m.trackPointer(two.x, two.y);
+        compare(sub.currentIndex, 1);
+        // Released on a submenu row: that row runs.
+        verify(m.releasePointer(two.x, two.y));
+        compare(activatedSpy.count, 1);
+        compare(activatedSpy.signalArguments[0][0].id, "d2");
+    }
+
+    function test_relayReleaseOnASubmenuRowKeepsTheMenuOpen() {
+        const m = makeMenu();
+        wait(50);
+        const d = centreOf(m, "Delta");
+        m.trackPointer(d.x, d.y);
+        wait(100);
+        verify(m.releasePointer(d.x, d.y));
+        compare(activatedSpy.count, 0);
+        compare(m.openIndex, 4);
+        compare(closeSpy.count, 0);
+    }
+
+    function test_relayMovingToAPlainRowClosesTheSubmenu() {
+        const m = makeMenu();
+        wait(50);
+        const d = centreOf(m, "Delta");
+        m.trackPointer(d.x, d.y);
+        compare(m.openIndex, 4);
+        const g = centreOf(m, "Gamma");
+        m.trackPointer(g.x, g.y);
+        compare(m.openIndex, -1);
+        compare(m.currentIndex, 3);
+    }
+
     function test_leftClosesSubmenu() {
         const m = makeMenu();
         keyClick(Qt.Key_Up);

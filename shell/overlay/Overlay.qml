@@ -89,6 +89,24 @@ Variants {
             }
         }
 
+        // Press, drag, release: the bar (or the strip below) holds the pointer while the button is down and reports it
+        // (Popups.trackPointer / releasePointer); the open menu highlights the row under it and runs it on release.
+        Connections {
+            target: Popups
+
+            function onPointerTracked(screen: string, x: real, y: real): void {
+                const menu = holder.item as PopupMenu;
+                if (win.open && menu && screen === win.modelData.name)
+                    menu.trackPointer(x, y);
+            }
+
+            function onPointerReleased(screen: string, x: real, y: real): void {
+                const menu = holder.item as PopupMenu;
+                if (win.open && menu && screen === win.modelData.name)
+                    menu.releasePointer(x, y);
+            }
+        }
+
         Region {
             id: modulesRegion
             regions: moduleRegions.instances
@@ -156,6 +174,15 @@ Variants {
                         bar.pressAt(mouse.x);
                     else
                         Popups.close();
+                }
+                // Held, the pointer stays with this strip when it moves down onto the menu: relay it (press, drag, release).
+                onPositionChanged: mouse => {
+                    if (pressed && mouse.buttons === Qt.LeftButton)
+                        Popups.trackPointer(win.modelData.name, mouse.x, mouse.y);
+                }
+                onReleased: mouse => {
+                    if (mouse.button === Qt.LeftButton)
+                        Popups.releasePointer(win.modelData.name, mouse.x, mouse.y);
                 }
             }
         }

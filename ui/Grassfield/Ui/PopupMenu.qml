@@ -95,6 +95,71 @@ FocusScope {
             root.activated(item.swatches[swatch]);
     }
 
+    // ---- Pointer relay (macOS press, drag, release) ----
+    // The pointer is held by another surface (the menu bar: its implicit grab, while the button that opened this menu is
+    // down), so the rows get no pointer events of their own. That surface reports the pointer here, in the coordinates of
+    // this menu's window (scene), and the menu does what hovering and clicking would do.
+
+    // True when the point is inside this menu or inside its open submenus.
+    function containsPoint(x: real, y: real): bool {
+        const p = root.mapFromItem(null, x, y);
+        if (p.x >= 0 && p.y >= 0 && p.x < root.width && p.y < root.height)
+            return true;
+        const sub = submenuLoader.item as PopupMenu;
+        return sub ? sub.containsPoint(x, y) : false;
+    }
+
+    // Index of the selectable row of this menu under the point, -1 for none (a separator, a disabled row, outside).
+    function rowAt(x: real, y: real): int {
+        const p = root.mapFromItem(null, x, y);
+        for (let i = 0; i < rows.count; i++) {
+            const row = rows.itemAt(i);
+            if (!row || !MenuNav.selectable(root.model[i]))
+                continue;
+            const q = row.mapFromItem(root, p.x, p.y);
+            if (q.x >= 0 && q.y >= 0 && q.x < row.width && q.y < row.height)
+                return i;
+        }
+        return -1;
+    }
+
+    // Highlights the row under the point like a hover (a submenu row opens its submenu, a plain row closes an open one) and
+    // follows the pointer into an open submenu. Off every row the highlight clears, except on the row whose submenu is open.
+    function trackPointer(x: real, y: real): void {
+        const sub = submenuLoader.item as PopupMenu;
+        if (sub && sub.containsPoint(x, y)) {
+            sub.trackPointer(x, y);
+            return;
+        }
+        const i = root.rowAt(x, y);
+        if (i < 0) {
+            if (root.openIndex < 0)
+                root.currentIndex = -1;
+            return;
+        }
+        root.currentIndex = i;
+        if (MenuNav.hasSubmenu(root.model[i])) {
+            if (root.openIndex !== i)
+                root.openSubmenuAt(i, false);
+        } else if (root.openIndex !== -1) {
+            root.openIndex = -1;
+        }
+    }
+
+    // The button was released at the point: the row under it runs (a submenu row opens its submenu and the menu stays open).
+    // Returns false, and does nothing, when the point is on no selectable row (or on a swatch row): the menu stays open.
+    function releasePointer(x: real, y: real): bool {
+        const sub = submenuLoader.item as PopupMenu;
+        if (sub && sub.containsPoint(x, y))
+            return sub.releasePointer(x, y);
+        const i = root.rowAt(x, y);
+        if (i < 0 || MenuNav.hasSwatches(root.model[i]))
+            return false;
+        root.currentIndex = i;
+        root.activateIndex(i);
+        return true;
+    }
+
     // Entering a row with the keyboard starts on its first swatch.
     onCurrentIndexChanged: root.swatchIndex = 0
 

@@ -462,6 +462,26 @@ Scope {
                     PointerTracker.report(win.screen.name, point.position.x, point.position.y)
             }
 
+            // Press, drag, release (macOS): a title opens its menu on the press and the button is still down, so the pointer
+            // stays with this window (implicit grab) as it moves down onto the menu. Relay it to the open menu (it highlights
+            // the row under the pointer) and, on the release, let it run that row; a release on no row leaves the menu open.
+            PointHandler {
+                id: menuDrag
+                property real lastX: 0
+                property real lastY: 0
+                acceptedButtons: Qt.LeftButton
+                onPointChanged: {
+                    lastX = point.scenePosition.x;
+                    lastY = point.scenePosition.y;
+                    if (active)
+                        Popups.trackPointer(win.screen.name, lastX, lastY);
+                }
+                onActiveChanged: {
+                    if (!active)
+                        Popups.releasePointer(win.screen.name, lastX, lastY);
+                }
+            }
+
             // Frame clock of the auto-hide machine: stops while nothing can change (away and idle, or in view and held).
             FrameAnimation {
                 running: AutoHide.active(win.hideMachine, win.hideInhibitors, win.autoHides)
