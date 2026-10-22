@@ -118,8 +118,6 @@ Scope {
             return;
         const focusedAddress = Compositor.focusedToplevel ? Compositor.addressOf(Compositor.focusedToplevel) : "";
         const live = liveAddresses();
-        if (VisualFixtures.active)
-            console.info("dock-attention: settle? focused", focusedAddress, "live", JSON.stringify(live), "urgent", JSON.stringify(Object.keys(attention)), "groups", JSON.stringify(attentionGroups()));
         const next = Attention.settle(attention, attentionGroups(), focusedAddress, live);
         if (next !== attention) {
             attention = next;

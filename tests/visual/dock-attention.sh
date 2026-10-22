@@ -66,6 +66,9 @@ vs_reset dark 0.25
 vs_ipc dock magnify 1 false >/dev/null
 vs_ipc dock autohide false >/dev/null
 vs_ipc controlcenter reduceMotion false >/dev/null
+# The session config has misc.focus_on_activate = true: a bell then FOCUSES the window (no attention state is left to show). The
+# macOS model needs it off (the integrator's config/hypr change); the nested instance is switched here, only this instance.
+nest eval 'hl.config({ misc = { focus_on_activate = false } })' >/dev/null 2>&1 || echo "dock-attention: could not switch focus_on_activate off in the nested instance"
 
 # The window that asks must not have the focus when it does: the plain client is mapped last and keeps it.
 start_pair() { # CLASS DELAY: a bell client, then a plain client that has the focus
