@@ -348,8 +348,8 @@ Variants {
                         width: panel.width - 2 * Tokens.launcherPadding
                         height: Tokens.launcherSearchHeight
                         radius: height / 2
-                        // Dark appearance: a darker inset (the light fill would lift the backdrop under the light placeholder).
-                        color: Appearance.dark ? Appearance.withAlpha(Appearance.colors.shadow, Tokens.launcherSearchInsetOpacity) : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                        // The translucent fill of the material; in dark a little less of it, so the light placeholder keeps 4.5:1.
+                        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.dark ? Tokens.launcherSearchFillOpacityDark : Tokens.materialFillOpacity)
                         border.width: field.activeFocus ? Tokens.controlFocusRing : 0
                         border.color: Appearance.colors.accent
                         Accessible.role: Accessible.Pane

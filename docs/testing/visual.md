@@ -196,7 +196,7 @@ Tokens changed in the A2 pass, and why:
 | `material.bodyOpacity` | 0.85 | removed | notification body drawn at opacity 0.85 measured 4.2-4.4; the rename field backing uses `desktopIcon.renameFillOpacity` |
 | `search.selectedSubtitleOpacity` | 0.8 | 0.9 | subtitle on the accent 4.2-4.4 |
 | `apps.backdropOpacity` | 0.5 | 0.6 | white labels 2.8:1 on a white wallpaper |
-| `apps.searchFillOpacity` | new, 0.25 | | the Apps search field is a darker inset (shadow colour) so its placeholder reaches 4.5:1 |
+| `launcher.searchFillOpacityDark` | new, 0.10 | | the Apps search field keeps the light translucent fill (docs/specs/apps.md, the macOS model) but in the dark appearance at 0.10 instead of `material.fillOpacity` 0.14: placeholder 4.30:1 on a white wallpaper at transparency 0.6 before; an earlier attempt, a darker inset, was rejected as unlike macOS |
 | `desktopIcon.labelShadowOpacity/Blur/OffsetY` | new, 1.0 / 0.22 / 0 | | desktop labels: white text, three stacked soft shadow passes; 4.8:1 measured on a white wallpaper |
 | `lock.dimOpacity` | 0.28 | 0.6 | lock clock 1.83:1 on a white wallpaper; white text on the scrim now 5.27:1 over any wallpaper |
 | `lock.fieldFillOpacity` | 0.22 (white fill) | 0.45 (shadow colour) | placeholder 1.41:1 on a white wallpaper; the field is a dark frosted inset: placeholder (`textSecondary`) 8.59:1, dots and caret 10.75:1, return arrow 3.12:1 when hovered |

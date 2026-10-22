@@ -55,31 +55,87 @@ snap() {
   fail "$name: the nested output kept returning an empty frame"
 }
 
-# snap_stable NAME SETTLE: like snap, then taken again (0.4 s apart, up to 6 times) until two consecutive frames are the same
-# within 150 px: a surface that is still fading in or moving (slow nested frames) is not measured half way. The caller of the
-# four glyph modes only needs the normal capture to be settled; the others are taken after it.
-snap_stable() {
-  local name=$1 settle=$2 try
-  snap "$name" "$settle"
-  for try in 1 2 3 4 5 6; do
-    mv "$dir/$name.en.png" "$dir/$name.prev.png"
-    snap "$name" 0.4
-    if ! differs_q "$dir/$name.prev.png" "$dir/$name.en.png" 150; then rm -f "$dir/$name.prev.png"; return 0; fi
-  done
-  rm -f "$dir/$name.prev.png"
+# ae A B: number of pixels that differ between two captures (2 % fuzz); 0 when compare prints nothing usable.
+ae() {
+  local n
+  n=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1 || true)
+  awk -v n="${n%% *}" 'BEGIN { printf "%d", n + 0 }'
 }
 
-# cap SURFACE [SETTLE]: the surface in the four glyph modes -> $dir/SURFACE{,.hidden,.white,.black}.png
-cap() {
-  local name=$1 settle=${2:-1} m
-  snap_stable "$name" "$settle"
+# snap_stable NAME SETTLE: like snap, then taken again until two consecutive frames agree within 150 px, so that a surface still
+# fading in or moving (slow nested frames) is not measured half way. Bounded in time (SNAP_BUDGET seconds, 60 by default): when
+# no two frames agree it says "unsettled" and returns 1; such a frame is never used. A frame costs 1 to 13 s on a busy host
+# (park, settle, shot), so the time budget bounds the loop, not a count. The pointer is never parked here (cap does it once).
+snap_stable() {
+  local name=$1 settle=$2 t0=$SECONDS
+  VS_NOPARK=1 snap "$name" "$settle"
+  while (( SECONDS - t0 < ${SNAP_BUDGET:-60} )); do
+    mv "$dir/$name.en.png" "$dir/$name.prev.png"
+    VS_NOPARK=1 snap "$name" 0.4
+    if (( $(ae "$dir/$name.prev.png" "$dir/$name.en.png") < 150 )); then rm -f "$dir/$name.prev.png"; return 0; fi
+  done
+  rm -f "$dir/$name.prev.png"
+  echo "contrast: $name: unsettled (no two frames within 150 px in ${SNAP_BUDGET:-60} s)" >&2
+  return 1
+}
+
+# cap_state_ok: the scenario state of the surface (CAP_CHECK, a function name set by the caller: banners still shown, Center
+# still open, session still locked); true without a check. Called before EVERY capture of a set.
+cap_state_ok() { [[ -z ${CAP_CHECK:-} ]] || "$CAP_CHECK"; }
+
+# set_consistent BASE: the captures of one set (BASE.png normal, .hidden, .white, .black, .end = normal again) show the same
+# surface state. The normal frame taken last must equal the first (the state did not end meanwhile); the glyph modes must have
+# been applied (black vs white differ at glyph pixels only, hidden vs normal at the glyphs) and hidden vs white and hidden vs
+# black may differ by no more than the glyph pixels (+150): a banner that expired between two captures shows as a large
+# difference there.
+set_consistent() {
+  local b=$1 end hw hk wk nh n
+  n=$(basename "$b")
+  end=$(ae "$b.png" "$b.end.png")
+  wk=$(ae "$b.white.png" "$b.black.png")
+  hw=$(ae "$b.hidden.png" "$b.white.png")
+  hk=$(ae "$b.hidden.png" "$b.black.png")
+  nh=$(ae "$b.png" "$b.hidden.png")
+  if (( end >= 150 )); then echo "contrast: $n: the state changed during the set (first and last normal frame differ by $end px)" >&2; return 1; fi
+  if (( wk < 20 || nh < 20 )); then echo "contrast: $n: glyph modes not applied (white/black differ by $wk px, hidden/normal by $nh px)" >&2; return 1; fi
+  if (( hw > wk + 150 || hk > wk + 150 )); then echo "contrast: $n: the glyph captures show different states (hidden/white $hw, hidden/black $hk, white/black $wk px)" >&2; return 1; fi
+  return 0
+}
+
+# capture_set NAME SETTLE: one pass over the four glyph modes -> $dir/NAME{,.hidden,.white,.black,.end}.png; 1 when the state
+# was lost, a frame did not settle or the frames disagree.
+capture_set() {
+  local name=$1 settle=$2 m
+  cap_state_ok || { echo "contrast: $name: scenario state lost before the set" >&2; return 1; }
+  snap_stable "$name" "$settle" || return 1
   mv "$dir/$name.en.png" "$dir/$name.png"
   for m in hidden white black; do
+    cap_state_ok || { vs_ipc visual glyphs normal >/dev/null; echo "contrast: $name: scenario state lost before the $m capture" >&2; return 1; }
     vs_ipc visual glyphs "$m" >/dev/null
-    VS_NOPARK=1 snap "$name" 0.5
+    VS_NOPARK=1 snap "$name" 0.8
     mv "$dir/$name.en.png" "$dir/$name.$m.png"
   done
   vs_ipc visual glyphs normal >/dev/null
+  cap_state_ok || { echo "contrast: $name: scenario state lost before the last capture" >&2; return 1; }
+  VS_NOPARK=1 snap "$name" 0.8
+  mv "$dir/$name.en.png" "$dir/$name.end.png"
+  set_consistent "$dir/$name"
+}
+
+# cap SURFACE [SETTLE]: the surface in the four glyph modes -> $dir/SURFACE{,.hidden,.white,.black}.png. The pointer is parked
+# ONCE per set (not per capture; hover surfaces set VS_NOPARK and place it themselves). A set that is not usable (state lost,
+# unsettled, frames that disagree) is redone up to CAP_TRIES times (3); then the run fails "not measured", or with CAP_SOFT=1
+# cap returns 1 and the caller decides: a surface that could not be captured is never passed. A set costs 5 to 7 frames.
+cap() {
+  local name=$1 settle=${2:-1} try
+  for try in $(seq 1 "${CAP_TRIES:-3}"); do
+    if [[ -z ${VS_NOPARK:-} ]]; then vs_park; vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null; vs_sleep 0.2; fi
+    if capture_set "$name" "$settle"; then rm -f "$dir/$name.end.png"; return 0; fi
+    echo "contrast: $name: set $try of ${CAP_TRIES:-3} not usable" >&2
+  done
+  vs_ipc visual glyphs normal >/dev/null
+  if [[ -n ${CAP_SOFT:-} ]]; then return 1; fi
+  fail "$name: not measured (no consistent capture set in ${CAP_TRIES:-3} tries)"
 }
 
 # want SURFACE: true when the surface is selected (--surfaces; all by default).
@@ -120,6 +176,11 @@ need_notif() {
   done
   fail "notifications $key is '$got', expected '$want'"
 }
+
+# State checks for CAP_CHECK (no waiting, no failing: true or false).
+banners_up() { [[ $(notif_state banners) == 2 ]]; }
+center_open() { [[ $(notif_state center) == true ]]; }
+is_locked() { [[ $(vs_ipc lock status 2>/dev/null || true) == locked ]]; }
 
 # center open|closed: the Notification Center is toggled by a click on the menu bar clock (the same path as a user) and
 # its state is read back through IPC; up to three clicks, then fail.
@@ -183,56 +244,50 @@ DOCK_X_FOOT=927 DOCK_X_A=979 DOCK_X_B=1031 DOCK_Y=1032
 
 # dock_surface: two running test apps (foot windows with distinct app ids: running dots), a notification for one of them (the
 # badge), the pointer on the first (its tooltip) -> "dock"; the pinned foot tile pressed and dragged up (its "Remove" label) ->
-# "dockdrag"; the drag comes back to its slot before the release, so nothing is removed from the Dock. The windows are
-# closed again (they would be in the backdrop of the surfaces that follow).
+# "dockdrag"; the held pointer is stopped after the set and the tile is put back on its slot before the release, so nothing is
+# removed from the Dock. The windows are closed and the notifications cleared again (they would be in the backdrop of the
+# surfaces that follow).
 dock_surface() {
-  local m
   # One after the other: the tiles follow the order of the windows (A first, B second).
   vs_spawn foot --app-id gfdockA
   vs_sleep 1.5
   vs_spawn foot --app-id gfdockB
   vs_sleep 2
-  DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a gfdockB -t 20000 "Test" "Badge"
+  DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a gfdockB -t 0 "Test" "Badge"
   vs_sleep 1
   # Hover: the tooltip of the first test tile.
   # (nudged: a hover that arrives while the new windows re-lay the Dock is only seen at the next motion; the tooltip is shown
   # with the pointer at rest, which snap_stable waits for)
   vs_pointer abs $DOCK_X_A $DOCK_Y sleep 300 abs $((DOCK_X_A + 2)) $DOCK_Y sleep 300 abs $DOCK_X_A $DOCK_Y >/dev/null
   vs_sleep 1.5
-  VS_NOPARK=1 snap_stable dock 0.8
-  mv "$dir/dock.en.png" "$dir/dock.png"
-  for m in hidden white black; do
-    vs_ipc visual glyphs "$m" >/dev/null
-    VS_SHOTS=$dir VS_NOPARK=1 VS_SETTLE=0.8 vs_capture dock >/dev/null
-    mv "$dir/dock.en.png" "$dir/dock.$m.png"
-  done
-  vs_ipc visual glyphs normal >/dev/null
-  # Drag: held for the four captures, then back on its slot and released (an unchanged order). A press that the busy shell
-  # never turned into a drag shows no "Remove" label (checked by pixels in the label's place, which is empty in "dock"): the
-  # drag is then waited out and tried again, up to three times.
-  local pointer_pid try
+  VS_NOPARK=1 cap dock 0.8
+  # Drag: the pinned foot tile pressed and dragged up and HELD (the holding pointer process has no timer: it is stopped after the
+  # set, then the tile is put back on its slot and released, an unchanged order). A press that the busy shell never turned into
+  # a drag shows no "Remove" label (checked by pixels in the label's place, which is empty in "dock"), a drag that ended shows
+  # the same through the consistency check of the set: both redo the whole drag, up to three times, then the run fails.
+  local pointer_pid try ok=""
   for try in 1 2 3; do
     "$VS_ROOT/scripts/dev/pointer.sh" output "$VS_OUTPUT" abs $DOCK_X_FOOT $DOCK_Y sleep 400 abs $((DOCK_X_FOOT + 2)) $DOCK_Y sleep 400 abs $DOCK_X_FOOT $DOCK_Y sleep 600 down sleep 300 drag $DOCK_X_FOOT 900 \
-      sleep 25000 drag $DOCK_X_FOOT $DOCK_Y sleep 400 up sleep 300 abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null &
+      sleep 600000 >/dev/null &
     pointer_pid=$!
     vs_sleep 4
-    VS_NOPARK=1 snap_stable dockdrag 0.3
-    mv "$dir/dockdrag.en.png" "$dir/dockdrag.png"
-    magick "$dir/dock.png" -crop 120x50+870+830 +repage "$dir/label-ref.png"
-    magick "$dir/dockdrag.png" -crop 120x50+870+830 +repage "$dir/label-now.png"
-    if differs_q "$dir/label-ref.png" "$dir/label-now.png" 150; then rm -f "$dir/label-ref.png" "$dir/label-now.png"; break; fi
-    rm -f "$dir/label-ref.png" "$dir/label-now.png"
-    wait "$pointer_pid" || true
+    if VS_NOPARK=1 CAP_TRIES=1 CAP_SOFT=1 SNAP_BUDGET=45 cap dockdrag 0.3; then
+      magick "$dir/dock.png" -crop 120x50+870+830 +repage "$dir/label-ref.png"
+      magick "$dir/dockdrag.png" -crop 120x50+870+830 +repage "$dir/label-now.png"
+      if differs_q "$dir/label-ref.png" "$dir/label-now.png" 150; then ok=1; fi
+      rm -f "$dir/label-ref.png" "$dir/label-now.png"
+    fi
+    kill "$pointer_pid" 2>/dev/null || true
+    wait "$pointer_pid" 2>/dev/null || true
+    vs_pointer abs $DOCK_X_FOOT $DOCK_Y sleep 400 up sleep 300 abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
+    [[ -n $ok ]] && break
+    echo "contrast: dockdrag: drag $try of 3 not usable" >&2
+    vs_sleep 2
   done
-  for m in hidden white black; do
-    vs_ipc visual glyphs "$m" >/dev/null
-    VS_SHOTS=$dir VS_NOPARK=1 VS_SETTLE=0.3 vs_capture dockdrag >/dev/null
-    mv "$dir/dockdrag.en.png" "$dir/dockdrag.$m.png"
-  done
-  vs_ipc visual glyphs normal >/dev/null
-  wait "$pointer_pid" || true
+  vs_ipc notifications clearAll >/dev/null
   vs_kill_clients
   vs_park
+  [[ -n $ok ]] || fail "dockdrag: not measured (no usable drag in 3 tries)"
 }
 
 if (( ! measure_only )); then
@@ -269,23 +324,26 @@ if (( ! measure_only )); then
           overlay apps
         fi
         if want banners || want notificationcenter; then
-          # Banners stay up for the four captures (6 s to 15 s on a busy host; 24 s lifetime), then expire before the Notification Center is opened.
+          # The banners never expire (expire_timeout 0: a capture set takes 30 s to 90 s on a busy host, longer than any lifetime) and
+          # are dismissed by the test hook after the set; the set is only taken while both are shown (banners_up, checked before
+          # every capture).
           vs_ipc notifications clearAll >/dev/null
-          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Mail" -t 24000 "Anna Martin" "Are we still on for lunch tomorrow?"
-          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 24000 "Design review" "Starts in 10 minutes in Room 4."
+          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Mail" -t 0 "Anna Martin" "Are we still on for lunch tomorrow?"
+          DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 0 "Design review" "Starts in 10 minutes in Room 4."
           need_notif banners 2
           if want banners; then
-            vs_sleep 1.5; cap banners 0.5
+            vs_sleep 1.5
+            CAP_CHECK=banners_up cap banners 0.5
             differs "$dir/desktop.png" "$dir/banners.png" 2000
           fi
-          # The banners expire (24 s) before the Notification Center is opened; both are checked, not assumed.
-          need_notif banners 0 45
+          vs_ipc notifications dismissAll >/dev/null
+          need_notif banners 0 10
           if want notificationcenter; then
             # A second Calendar card (a short banner, waited out) makes the top group a group of two: a single card has
             # no group controls (no "Clear All"), and the hover cells measure them.
             DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Calendar" -t 1000 "Standup" "Starts in 5 minutes in Room 2."
             need_notif banners 0 45
-            center open; vs_sleep 3; cap notificationcenter
+            center open; vs_sleep 3; CAP_CHECK=center_open cap notificationcenter
             # The column is floating cards (no full-height sheet): a light card on the white wallpaper differs by its text only.
             differs "$dir/desktop.png" "$dir/notificationcenter.png" 600
             # Hover states (macOS model, no permanent Clear All): the pointer on the first card shows its x and the
@@ -294,13 +352,13 @@ if (( ! measure_only )); then
             vs_pointer abs 1730 110 sleep 300 abs 1731 111 sleep 300 abs 1730 110 sleep 300 abs 1731 111 sleep 300 abs 1730 110 \
               sleep 300 abs 1731 111 sleep 300 abs 1730 110 >/dev/null
             vs_sleep 1.5
-            VS_NOPARK=1 cap notificationcenterhover
+            VS_NOPARK=1 CAP_CHECK=center_open cap notificationcenterhover
             vs_pointer abs 1881 65 sleep 300 abs 1882 65 sleep 300 abs 1881 65 sleep 300 abs 1882 66 sleep 300 abs 1881 65 \
               sleep 300 abs 1882 65 sleep 300 abs 1881 65 sleep 300 abs 1882 66 sleep 300 abs 1881 65 sleep 600 \
               abs 1862 73 sleep 300 abs 1863 73 sleep 300 abs 1862 73 >/dev/null
             # (the pointer ends on the lower edge of the pill so the cursor image does not cover the label)
             vs_sleep 1.5
-            VS_NOPARK=1 cap notificationcenterclear
+            VS_NOPARK=1 CAP_CHECK=center_open cap notificationcenterclear
             differs "$dir/notificationcenter.png" "$dir/notificationcenterclear.png" 200
             vs_park
             center closed
@@ -331,7 +389,7 @@ if (( ! measure_only )); then
           vs_ipc controlcenter appearance "$appearance" >/dev/null
           vs_ipc controlcenter transparency "$tr" >/dev/null
           vs_sleep 1.5
-          cap lock
+          CAP_CHECK=is_locked cap lock
           need_locked
           if [[ -f $dir/desktop.png ]]; then
             differs "$dir/desktop.png" "$dir/lock.png" 2000
