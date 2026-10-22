@@ -5,7 +5,7 @@ import Grassfield.Ui
 // The key guard of the shared Button (ui/Grassfield/Ui/Button.qml): a Button that is hidden or disabled while it still holds the
 // keyboard focus never activates, and swallows ONLY its activation keys (Return, Enter, Space) so that they do not bubble up to a
 // parent that acts on them; every other key, Escape above all (the polkit dialog and the Notifications column close on it),
-// propagates to the parents.
+// propagates to the parents. An accessibility press goes through the same guard (Button.activate()).
 TestCase {
     id: tc
 
@@ -32,6 +32,19 @@ TestCase {
 
             text: "Test"
             onClicked: tc.clicks++
+        }
+    }
+
+    // Hands every key to the Button's own handler first and records the keys it did not accept.
+    Item {
+        id: forwarder
+
+        property var reached: []
+
+        Keys.forwardTo: [button]
+        Keys.onPressed: event => {
+            forwarder.reached = forwarder.reached.concat([event.key]);
+            event.accepted = true;
         }
     }
 
@@ -63,8 +76,40 @@ TestCase {
         compare(tc.parentKeys.length, 0);
     }
 
-    // (No case for a disabled Button: Qt takes the focus off a disabled item, so a key never reaches its handler and a test of the
-    // `enabled` half of the guard would prove nothing. The hidden case below does reach it: Qt keeps the focus on a hidden item.)
+    // A disabled Button: Qt takes the focus off a disabled item, so its keys are handed to its handler by `forwarder`
+    // (Keys.forwardTo delivers to the target whether or not it is enabled). Nothing acts, and the activation keys are swallowed:
+    // none comes back to the forwarder's own handler.
+    function test_disabledButtonSwallowsActivationKeys() {
+        button.enabled = false;
+        verify(!button.activeFocus, "Qt takes the focus off a disabled item");
+        forwarder.reached = [];
+        forwarder.forceActiveFocus();
+        verify(forwarder.activeFocus);
+        keyClick(Qt.Key_Return);
+        keyClick(Qt.Key_Space);
+        keyClick(Qt.Key_Enter);
+        compare(tc.clicks, 0);
+        compare(forwarder.reached, [], "the disabled Button's handler received and swallowed them");
+        // Control: the same path reaches an enabled Button, which acts.
+        button.enabled = true;
+        forwarder.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(tc.clicks, 1);
+    }
+
+    // An assistive technology's press (Accessible.pressAction, the AT-SPI "press" action) goes through the same guard: it acts
+    // on a shown, enabled Button only.
+    function test_accessibilityPressHonoursVisibleAndEnabled() {
+        button.Accessible.pressAction();
+        compare(tc.clicks, 1);
+        button.enabled = false;
+        button.Accessible.pressAction();
+        compare(tc.clicks, 1, "a disabled Button never acts on an accessibility press");
+        button.enabled = true;
+        button.visible = false;
+        button.Accessible.pressAction();
+        compare(tc.clicks, 1, "a hidden Button never acts on an accessibility press");
+    }
 
     // Escape (and any other key) from a hidden Button reaches the parent.
     function test_hiddenButtonLetsEscapeAndOtherKeysPropagate() {
