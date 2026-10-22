@@ -21,7 +21,8 @@ shot() { # name -> path
 }
 # Pixels that differ (fuzz 6 %) between two captures, inside a crop "WxH+X+Y".
 diff_px() {
-  magick compare -fuzz 6% -metric AE <(magick "$1" -crop "$3" +repage png:-) <(magick "$2" -crop "$3" +repage png:-) null: 2>&1 | awk '{print int($1)}'
+  # (compare exits 1 when the images differ: not an error here, lib.sh runs with set -e and pipefail)
+  { magick compare -fuzz 6% -metric AE <(magick "$1" -crop "$3" +repage png:-) <(magick "$2" -crop "$3" +repage png:-) null: 2>&1 || true; } | awk '{print int($1)}'
 }
 
 read -r W H < <(magick identify -format '%w %h\n' "$(vs_session >/dev/null; vs_reset >/dev/null; shot nc-slide-probe)")
@@ -35,11 +36,15 @@ for ((n = 1; n <= opens; n++)); do
   vs_session >/dev/null
   vs_reset >/dev/null
   vs_ipc controlcenter reduceMotion false >/dev/null
-  vs_park
+  # The pointer goes to the clock first: the closed reference must not differ by the cursor's own move.
+  vs_pointer abs 1850 12 >/dev/null
+  vs_sleep 0.5
   closed=$(shot nc-slide-closed)
-  vs_ipc notifications toggleCenter >/dev/null
+  # The owner's gesture: a click on the clock of this output's menu bar (the Center opens on the clicked output).
+  vs_pointer abs 1850 12 click >/dev/null &
   frames=()
   for ((k = 0; k < 8; k++)); do frames+=("$(shot "nc-slide-$n-$k")"); done
+  wait
   vs_sleep 1
   open=$(shot nc-slide-open)
   vs_ipc notifications toggleCenter >/dev/null
