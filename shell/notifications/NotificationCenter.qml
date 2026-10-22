@@ -282,6 +282,15 @@ Variants {
             Component.onCompleted: {
                 shown = true;
                 panel.forceActiveFocus();
+                glideStart.restart();
+            }
+
+            // The footer glides with the cards only once the column has slid in: its first layout (the list growing from
+            // nothing) is not a motion.
+            Timer {
+                id: glideStart
+                interval: Appearance.duration(Tokens.motionNormal)
+                onTriggered: panel.glide = true
             }
 
             Variants {
@@ -356,7 +365,12 @@ Variants {
                         Widgets.setSize(entry.uid, action.substring(5));
                 }
 
-                x: host.width - width - Tokens.notificationCenterInset + (host.shown ? 0 : width + Tokens.notificationCenterInset)
+                // Only the slide animates (macOS: the column comes in from the right edge). The column's place follows
+                // the window at once: the window can still be 0 wide when the column is created, and animating x then
+                // swept the column across the whole screen from the left (owner, real session 2026-10-22).
+                property real slideOffset: host.shown ? 0 : width + Tokens.notificationCenterInset
+                property bool glide: false
+                x: host.width - width - Tokens.notificationCenterInset + slideOffset
                 y: Tokens.menubarHeight + Tokens.notificationCenterInset
                 width: Tokens.notificationCenterWidth
                 height: host.height - y - Tokens.notificationCenterInset
@@ -379,7 +393,7 @@ Variants {
                     onActivated: list.tabStep(false)
                 }
 
-                Behavior on x {
+                Behavior on slideOffset {
                     NumberAnimation {
                         duration: Appearance.duration(Tokens.motionNormal)
                         easing.type: Easing.BezierSpline
@@ -458,8 +472,9 @@ Variants {
                     spacing: Tokens.spacingSm
                     onYChanged: list.bumpTick()
 
-                    // Glides with the cards when the list shrinks or grows.
+                    // Glides with the cards when the list shrinks or grows (not during the first layout).
                     Behavior on y {
+                        enabled: panel.glide
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
                             easing.type: Easing.BezierSpline
