@@ -27,6 +27,8 @@ Singleton {
     // Emitted when the listed apps may have changed: entries changed and the hidden list is
     // current again. Search and Apps rebuild their records on it.
     signal listChanged
+    // A desktop entry was launched through launch() (not one of its actions): Recent Items (macOS Apple menu).
+    signal launched(string appId)
 
     // Entry a launcher may show: not NoDisplay, not hidden by OnlyShowIn / NotShowIn.
     function isListed(entry: var): bool {
@@ -172,6 +174,9 @@ Singleton {
     function launch(target: var): void {
         if (!target)
             return;
+        // A desktop entry has a list of actions; an action has none.
+        if (target.actions !== undefined && typeof target.id === "string")
+            root.launched(target.id);
         whenScopeKnown(() => root.launchNow(target));
     }
 

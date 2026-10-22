@@ -118,6 +118,9 @@
   {"id": "idle dim layer (no text)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text",
    "exempt": "the idle dim fades the session to the shadow colour for the last seconds before the lock and draws no text of its own",
    "sites": [{"file": "shell/security/idle/Idle.qml", "class": "backdrop", "count": 1}]},
+  {"id": "menu bar of an output that is not the active one (dimmed, macOS)", "fg": "colors.text", "backdrop": "bar-light-tone", "kind": "text",
+   "exempt": "inactive component: the bar of a display that is not the active one is dimmed to menubar.inactiveOpacity, as macOS does; the active output's bar is at opacity 1 and measured by contrast.sh",
+   "sites": [{"file": "shell/menubar/MenuBar.qml", "class": "opacity-dynamic", "count": 6}]},
   {"id": "disabled text", "fg": "colors.textSecondary", "opacity": ["material.disabledOpacity"], "backdrop": "material", "kind": "text",
    "exempt": "disabled or inactive component: exempt from WCAG 1.4.3",
    "sites": [

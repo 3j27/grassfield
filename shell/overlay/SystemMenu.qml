@@ -3,7 +3,8 @@ import Grassfield.Ui
 import qs.security.lock
 import qs.services
 
-// Grassfield menu (leaf mark): About, Force Quit, Sleep/Restart/Shut Down, Lock Screen, Log Out.
+// Grassfield menu (leaf mark): About, Settings, Recent Items (RecentItems), Force Quit, Sleep/Restart/Shut Down, Lock Screen,
+// Log Out.
 // System Settings launches grassfield-settings (GRASSFIELD_SETTINGS_CMD overrides it in dev). Lock Screen engages the session lock.
 PopupMenu {
     id: root
@@ -15,6 +16,8 @@ PopupMenu {
         {id: "about", text: qsTr("About This Computer")},
         {separator: true},
         {id: "settings", text: qsTr("Settings…")},
+        {separator: true},
+        {id: "recentMenu", text: qsTr("Recent Items"), submenu: RecentItems.menu()},
         {separator: true},
         {id: "forcequit", text: qsTr("Force Quit…")},
         {separator: true},
@@ -31,6 +34,18 @@ PopupMenu {
 
     onActivated: item => {
         switch (item.id) {
+        case "recentApp":
+            Apps.launch(Apps.lookup(item.appId));
+            Popups.close();
+            break;
+        case "recentDocument":
+            Apps.openDetached(["xdg-open", item.path]);
+            Popups.close();
+            break;
+        case "recentClear":
+            RecentItems.clear();
+            Popups.close();
+            break;
         case "about":
             Popups.openCentered("about", {});
             break;
