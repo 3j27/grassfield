@@ -1741,6 +1741,30 @@
         <translation>Désactivé : le fond d’écran apparaît à travers la barre des menus. Activé : la barre est dessinée sur la matière dépolie.</translation>
     </message>
     <message>
+        <source>Automatically hide and show the menu bar</source>
+        <translation>Masquer et afficher automatiquement la barre des menus</translation>
+    </message>
+    <message>
+        <source>A hidden menu bar slides in over the window when the pointer reaches the top edge of the screen.</source>
+        <translation>Une barre des menus masquée glisse par-dessus la fenêtre quand le pointeur atteint le bord supérieur de l’écran.</translation>
+    </message>
+    <message>
+        <source>Always</source>
+        <translation>Toujours</translation>
+    </message>
+    <message>
+        <source>On Desktop Only</source>
+        <translation>Sur le bureau uniquement</translation>
+    </message>
+    <message>
+        <source>In Full Screen Only</source>
+        <translation>En plein écran uniquement</translation>
+    </message>
+    <message>
+        <source>Never</source>
+        <translation>Jamais</translation>
+    </message>
+    <message>
         <source>Desktop</source>
         <translation>Bureau</translation>
     </message>

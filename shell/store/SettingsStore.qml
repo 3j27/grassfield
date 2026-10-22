@@ -48,6 +48,7 @@ Scope {
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string dockMinimizeEffect: ["funnel", "shrink"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "funnel"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
+    readonly property string menubarAutoHide: ["always", "desktop", "fullscreen", "never"].indexOf(config.menubar.autoHide) >= 0 ? config.menubar.autoHide : "fullscreen"
     readonly property string accentColor: Accent.normalize(config.accent.color)
     readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
     readonly property string iconTint: IconModes.validTint(config.icons.tint) ? config.icons.tint : "accent"
@@ -144,6 +145,8 @@ Scope {
     component MenubarConfig: JsonObject {
         // false: the bar is transparent like macOS 26/27; true restores the frosted material band.
         property bool showBackground: false
+        // always | desktop | fullscreen | never: "Automatically hide and show the menu bar" (BarHide.js).
+        property string autoHide: "fullscreen"
     }
 
     component AccentConfig: JsonObject {
@@ -234,6 +237,10 @@ Scope {
 
     function setMenubarShowBackground(value: bool): void {
         change("menubar.showBackground", value);
+    }
+
+    function setMenubarAutoHide(value: string): void {
+        change("menubar.autoHide", ["always", "desktop", "fullscreen", "never"].indexOf(value) >= 0 ? value : "fullscreen");
     }
 
     function setAccentColor(value: string): void {

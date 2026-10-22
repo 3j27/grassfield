@@ -29,6 +29,7 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.magnification` | number 1–2.5 | 1.6 | Dock |
 | `dock.magnificationEnabled` | bool | false | Dock |
 | `menubar.showBackground` | bool | false | Menu bar (transparent unless true) |
+| `menubar.autoHide` | enum `always` \| `desktop` \| `fullscreen` \| `never` | fullscreen | Automatically hide and show the menu bar (macOS: Always, On Desktop Only, In Full Screen Only, Never) |
 | `wallpaper.source` | `"builtin"` \| `"color"` \| `"file"` \| `"folder"` \| `"video"` | `"builtin"` | Desktop wallpaper (ADR-0016; `video` is accepted and shows the artwork until W7) |
 | `wallpaper.path` | absolute path (no control characters, at most 4096 bytes) | `""` | the picture, folder or video; a source that needs a path without a valid one reads as `builtin`; in a dev session only paths under `<repo>/.dev` |
 | `wallpaper.color` | `"#rrggbb"` | `"#000000"` | the `color` source and the backdrop of fit, centre and tile |

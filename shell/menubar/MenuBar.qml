@@ -229,7 +229,7 @@ Scope {
             // Auto-hide (macOS "Automatically hide and show the menu bar", BarHide.js): the Dock's state machine (AutoHide.js) per
             // output. The bar window keeps its size; only the content slides, and only the edge strip takes input while it is
             // away. Over a full-screen window it sits on the overlay layer (Hyprland draws full-screen windows above the top layer).
-            readonly property string hideMode: "fullscreen"
+            readonly property string hideMode: BarHide.normalize(Settings.menubarAutoHide)
             readonly property bool fullscreen: Compositor.fullscreenOn(win.screen.name, Compositor.topologyRevision)
             readonly property bool autoHides: BarHide.hides(hideMode, fullscreen)
             property var hideMachine: AutoHide.create()

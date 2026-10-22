@@ -201,6 +201,16 @@
       "properties": {
         "showBackground": {
           "type": "boolean"
+        },
+        "autoHide": {
+          "type": "string",
+          "enum": [
+            "always",
+            "desktop",
+            "fullscreen",
+            "never"
+          ],
+          "description": "Automatically hide and show the menu bar (Settings > Desktop & Dock > Menu Bar): \"always\" hides it on the desktop and in full screen, \"desktop\" on the desktop only, \"fullscreen\" (default) in full screen only, \"never\" keeps it in view. A hidden bar slides in over the window when the pointer reaches the top edge. Only \"fullscreen\" and \"never\" reserve space for the bar."
         }
       }
     },

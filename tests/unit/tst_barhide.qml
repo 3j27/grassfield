@@ -3,6 +3,7 @@ import QtTest
 import Grassfield.Ui
 import "../../shell/menubar/BarHide.js" as BarHide
 import "../../shell/dock/AutoHide.js" as AutoHide
+import "../../apps/settings/qml/Store.js" as Store
 
 // Menu bar auto-hide, headless (offscreen, no compositor): the policy of the setting (BarHide.js) and the Dock's state
 // machine driven the way MenuBar.qml drives it (one machine per output, the bar's own inhibitors and tokens).
@@ -54,6 +55,23 @@ TestCase {
             compare(BarHide.hides(mode, false), table[mode][0], mode + " on the desktop");
             compare(BarHide.hides(mode, true), table[mode][1], mode + " in full screen");
         }
+    }
+
+    function test_settingsAppAndSchemaAgree() {
+        // The Settings app writes exactly the modes the shell understands, and the default is the shell's.
+        compare(Store.RULES["menubar.autoHide"].values.join(","), BarHide.MODES.join(","));
+        compare(Store.DEFAULTS["menubar.autoHide"], BarHide.DEFAULT_MODE);
+        for (let i = 0; i < BarHide.MODES.length; i++)
+            compare(Store.validate("menubar.autoHide", BarHide.MODES[i]), "");
+        verify(Store.validate("menubar.autoHide", "sometimes") !== "");
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../config/schema/grassfield.schema.json"), false);
+        xhr.send();
+        const prop = JSON.parse(xhr.responseText).properties.menubar.properties.autoHide;
+        compare(prop.enum.join(","), BarHide.MODES.join(","));
+        xhr.open("GET", Qt.resolvedUrl("../../config/defaults/grassfield.json"), false);
+        xhr.send();
+        compare(JSON.parse(xhr.responseText).menubar.autoHide, BarHide.DEFAULT_MODE);
     }
 
     function test_unknownModeIsTheDefault() {
