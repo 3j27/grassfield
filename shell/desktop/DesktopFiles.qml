@@ -40,6 +40,8 @@ Scope {
     property string pendingRename: ""
     // Names with an operation in flight: never pruned meanwhile.
     property var busy: []
+    // New Folder passes over at most this many names that turn out to exist.
+    readonly property int newFolderRetries: 3
     property var releasing: []
     // Last failed operation, for the view (empty when fine).
     property string lastError: ""
@@ -125,17 +127,27 @@ Scope {
         return "";
     }
 
-    // Create "untitled folder" (numbered when taken) and ask the view to rename it.
+    // Create "untitled folder" (numbered when taken) and ask the view to rename it. The listing can lag behind the
+    // folder (a second New Folder before the first is listed, a folder made elsewhere): names still busy count as
+    // taken, and a name that turns out to exist is passed over for the next number (bounded).
     function newFolder(): void {
-        const name = Logic.uniqueName(qsTr("untitled folder"), names);
+        createFolder(names.concat(busy), 0);
+    }
+
+    function createFolder(taken: var, attempt: int): void {
+        const name = Logic.uniqueName(qsTr("untitled folder"), taken);
         pendingRename = name;
         markBusy(name);
         run(["gio", "mkdir", "-p", path(name)], "mkdir", ok => {
             unmarkBusy(name);
-            if (!ok) {
-                pendingRename = "";
-                newFolderFailed();
+            if (ok)
+                return;
+            if (attempt < root.newFolderRetries) {
+                createFolder(taken.concat([name]), attempt + 1);
+                return;
             }
+            pendingRename = "";
+            newFolderFailed();
         });
     }
 
