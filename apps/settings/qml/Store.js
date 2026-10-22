@@ -25,6 +25,8 @@ const DEFAULTS = {
     "desktop.showIcons": true,
     "menubar.showBackground": false,
     "menubar.autoHide": "fullscreen",
+    "menubar.showNowPlaying": true,
+    "menubar.showSearch": true,
     "windows.titlebarDoubleClick": "zoom",
     "notifications.dnd": false,
     "notifications.previews": "unlocked",
@@ -47,6 +49,7 @@ const DEFAULTS = {
     "wallpaper.interval": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.interval,
     "wallpaper.shuffle": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.shuffle,
     "wallpaper.videoOnBattery": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.videoOnBattery,
+    "wallpaper.online.provider": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.online.provider,
     "wallpaper.outputs": []
 };
 
@@ -68,6 +71,8 @@ const RULES = {
     "desktop.showIcons": {type: "boolean"},
     "menubar.showBackground": {type: "boolean"},
     "menubar.autoHide": {type: "enum", values: ["always", "desktop", "fullscreen", "never"]},
+    "menubar.showNowPlaying": {type: "boolean"},
+    "menubar.showSearch": {type: "boolean"},
     "windows.titlebarDoubleClick": {type: "enum", values: ["zoom", "minimize", "none"]},
     "notifications.dnd": {type: "boolean"},
     "notifications.previews": {type: "enum", values: ["always", "unlocked", "never"]},
@@ -96,6 +101,7 @@ const RULES = {
     "wallpaper.interval": {type: "enum", values: Tree.WallpaperConfig.INTERVAL_NAMES},
     "wallpaper.shuffle": {type: "boolean"},
     "wallpaper.videoOnBattery": {type: "boolean"},
+    "wallpaper.online.provider": {type: "enum", values: Tree.WallpaperConfig.ONLINE_PROVIDERS},
     "wallpaper.outputs": {type: "wallpaperOutputs"}
 };
 

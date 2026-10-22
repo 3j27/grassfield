@@ -583,6 +583,41 @@
     </message>
 </context>
 <context>
+    <name>AttributionCard</name>
+    <message>
+        <source>About This Wallpaper</source>
+        <translation>À propos de ce fond d’écran</translation>
+    </message>
+    <message>
+        <source>Author</source>
+        <translation>Auteur</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>Wikimedia Commons</source>
+        <translation>Wikimedia Commons</translation>
+    </message>
+    <message>
+        <source>Licence</source>
+        <translation>Licence</translation>
+    </message>
+    <message>
+        <source>Last updated</source>
+        <translation>Dernière mise à jour</translation>
+    </message>
+    <message>
+        <source>Picture of the Day</source>
+        <translation>Image du jour</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+</context>
+<context>
     <name>AuthDialog</name>
     <message>
         <source>Authentication required</source>
@@ -1765,6 +1800,22 @@
         <translation>Jamais</translation>
     </message>
     <message>
+        <source>Show Now Playing in the menu bar</source>
+        <translation>Afficher « En cours de lecture » dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>While a media player has a track, a button in the menu bar opens its controls.</source>
+        <translation>Tant qu’un lecteur multimédia a un morceau, un bouton de la barre des menus ouvre ses commandes.</translation>
+    </message>
+    <message>
+        <source>Show Search in the menu bar</source>
+        <translation>Afficher la recherche dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>A magnifier button in the menu bar opens Search.</source>
+        <translation>Un bouton en forme de loupe dans la barre des menus ouvre la recherche.</translation>
+    </message>
+    <message>
         <source>Desktop</source>
         <translation>Bureau</translation>
     </message>
@@ -2785,6 +2836,10 @@
         <source>New Folder</source>
         <translation>Nouveau dossier</translation>
     </message>
+    <message>
+        <source>About This Wallpaper</source>
+        <translation>À propos de ce fond d’écran</translation>
+    </message>
 </context>
 <context>
     <name>IconView</name>
@@ -3206,6 +3261,14 @@
         <translation>Fenêtre</translation>
     </message>
     <message>
+        <source>Now Playing: %1</source>
+        <translation>En cours de lecture : %1</translation>
+    </message>
+    <message>
+        <source>Now Playing</source>
+        <translation>En cours de lecture</translation>
+    </message>
+    <message>
         <source>Do Not Disturb is on</source>
         <translation>Ne pas déranger est activé</translation>
     </message>
@@ -3224,6 +3287,10 @@
     <message>
         <source>%1%</source>
         <translation>%1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
     </message>
     <message>
         <source>Quick Settings</source>
@@ -3411,6 +3478,13 @@
     <message>
         <source>Not Playing</source>
         <translation>Pas de lecture</translation>
+    </message>
+</context>
+<context>
+    <name>NowPlayingPopover</name>
+    <message>
+        <source>Now Playing</source>
+        <translation>En cours de lecture</translation>
     </message>
 </context>
 <context>
@@ -4145,6 +4219,13 @@
     </message>
 </context>
 <context>
+    <name>TrayMenu</name>
+    <message>
+        <source>%1 menu</source>
+        <translation>Menu %1</translation>
+    </message>
+</context>
+<context>
     <name>Viewer</name>
     <message>
         <source>Preview</source>
@@ -4424,12 +4505,28 @@
         <translation>Le fond d’écran ne peut pas être affiché.</translation>
     </message>
     <message>
+        <source>Open a link</source>
+        <translation>Ouvrir un lien</translation>
+    </message>
+    <message>
         <source>Grassfield</source>
         <translation>Grassfield</translation>
     </message>
     <message>
+        <source>Picture of the Day (Wikimedia Commons)</source>
+        <translation>Image du jour (Wikimedia Commons)</translation>
+    </message>
+    <message>
         <source>Preparing…</source>
         <translation>Préparation…</translation>
+    </message>
+    <message>
+        <source>Downloading today&apos;s picture…</source>
+        <translation>Téléchargement de l’image du jour…</translation>
+    </message>
+    <message>
+        <source>Waiting for a connection</source>
+        <translation>En attente d’une connexion</translation>
     </message>
     <message>
         <source>%1, shuffled</source>
@@ -4474,6 +4571,54 @@
     <message>
         <source>Random order, every picture once before any is repeated.</source>
         <translation>Chaque image apparaît une fois avant toute répétition.</translation>
+    </message>
+    <message>
+        <source>Online</source>
+        <translation>En ligne</translation>
+    </message>
+    <message>
+        <source>Once a day Grassfield contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org. These services see your IP address.</source>
+        <translation>Une fois par jour, Grassfield contacte commons.wikimedia.org, thumb.wikimedia.org et upload.wikimedia.org. Ces services voient votre adresse IP.</translation>
+    </message>
+    <message>
+        <source>Grassfield will download the Wikimedia Commons Picture of the Day once a day. It contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, and only while you are online on a connection that is not metered. These services see your IP address and the picture you ask for. Nothing is contacted until you choose Use Picture of the Day.</source>
+        <translation>Grassfield télécharge l’image du jour de Wikimedia Commons une fois par jour. Il contacte commons.wikimedia.org, thumb.wikimedia.org et upload.wikimedia.org, uniquement lorsque vous êtes en ligne sur une connexion non limitée. Ces services voient votre adresse IP et l’image demandée. Rien n’est contacté tant que vous ne choisissez pas Utiliser l’image du jour.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Use Picture of the Day</source>
+        <translation>Utiliser l’image du jour</translation>
+    </message>
+    <message>
+        <source>About This Wallpaper</source>
+        <translation>À propos de ce fond d’écran</translation>
+    </message>
+    <message>
+        <source>Title</source>
+        <translation>Titre</translation>
+    </message>
+    <message>
+        <source>Author</source>
+        <translation>Auteur</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>Wikimedia Commons</source>
+        <translation>Wikimedia Commons</translation>
+    </message>
+    <message>
+        <source>Licence</source>
+        <translation>Licence</translation>
+    </message>
+    <message>
+        <source>Last updated</source>
+        <translation>Dernière mise à jour</translation>
     </message>
     <message>
         <source>Pictures</source>

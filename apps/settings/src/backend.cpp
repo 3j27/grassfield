@@ -178,7 +178,7 @@ bool Backend::act(const QString &what, const QStringList &argv, const QString &t
         emit suppressed(what);
         return false;
     }
-    if (argv.isEmpty() || !grassfield::settings::isActionProgram(argv.first())) {
+    if (!grassfield::settings::isAllowedAction(argv)) {
         qWarning().noquote() << "refused an action with an unknown program:" << what;
         return false;
     }

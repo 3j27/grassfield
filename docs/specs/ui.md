@@ -30,13 +30,16 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.magnificationEnabled` | bool | false | Dock |
 | `menubar.showBackground` | bool | false | Menu bar (transparent unless true) |
 | `menubar.autoHide` | enum `always` \| `desktop` \| `fullscreen` \| `never` | fullscreen | Automatically hide and show the menu bar (macOS: Always, On Desktop Only, In Full Screen Only, Never) |
-| `wallpaper.source` | `"builtin"` \| `"color"` \| `"file"` \| `"folder"` \| `"video"` | `"builtin"` | Desktop wallpaper (ADR-0016; `video` is accepted and shows the artwork until W7) |
+| `menubar.showNowPlaying` | bool | true | Now Playing item in the menu bar while a player has a session |
+| `menubar.showSearch` | bool | true | Search item in the menu bar |
+| `wallpaper.source` | `"builtin"` \| `"color"` \| `"file"` \| `"folder"` \| `"video"` \| `"online"` | `"builtin"` | Desktop wallpaper (ADR-0016; `video` is accepted and shows the artwork until W7; `online` needs no path and is off by default: it contacts the network once a day, step 2) |
 | `wallpaper.path` | absolute path (no control characters, at most 4096 bytes) | `""` | the picture, folder or video; a source that needs a path without a valid one reads as `builtin`; in a dev session only paths under `<repo>/.dev` |
 | `wallpaper.color` | `"#rrggbb"` | `"#000000"` | the `color` source and the backdrop of fit, centre and tile |
 | `wallpaper.fit` | `"fill"` \| `"fit"` \| `"stretch"` \| `"center"` \| `"tile"` | `"fill"` | pictures (a video uses fill or fit) |
 | `wallpaper.interval` | `"login"` \| `"5s"` \| `"1m"` \| `"5m"` \| `"15m"` \| `"30m"` \| `"1h"` \| `"1d"` | `"1h"` | folder: when the picture changes |
 | `wallpaper.shuffle` | bool | true | folder: random order, no repeat until all were shown |
 | `wallpaper.videoOnBattery` | bool | false | video (W7) |
+| `wallpaper.online.provider` | `"commons"` | `"commons"` | online source: which daily picture (Wikimedia Commons Picture of the Day; additive in contract version 1, one provider today) |
 | `wallpaper.outputs` | array (at most 16) of `{display: {name, model, serial}, source?, path?, color?, fit?, interval?, shuffle?}` | `[]` | per-display overrides; read by the shell, no UI yet; an invalid entry is dropped |
 | `dock.autohide` | bool | false | Dock |
 | `dock.recent` | string[] (desktop entry ids, newest first, at most `dock.recentMax` 3) | `[]` (owned by the Dock; written only when the list changes) | Dock |

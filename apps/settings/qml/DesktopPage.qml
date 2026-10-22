@@ -118,6 +118,26 @@ SettingsPage {
                 onPicked: id => root.store.set("menubar.autoHide", id)
             }
         }
+
+        SettingsRow {
+            title: qsTr("Show Now Playing in the menu bar")
+            subtitle: qsTr("While a media player has a track, a button in the menu bar opens its controls.")
+            Toggle {
+                accessibleName: qsTr("Show Now Playing in the menu bar")
+                checked: root.store.value("menubar.showNowPlaying")
+                onToggled: c => root.store.set("menubar.showNowPlaying", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Show Search in the menu bar")
+            subtitle: qsTr("A magnifier button in the menu bar opens Search.")
+            Toggle {
+                accessibleName: qsTr("Show Search in the menu bar")
+                checked: root.store.value("menubar.showSearch")
+                onToggled: c => root.store.set("menubar.showSearch", c)
+            }
+        }
     }
 
     SettingsGroup {

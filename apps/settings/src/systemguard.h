@@ -40,6 +40,10 @@ bool namesWallpaperTool(const QString &program);
 // Programs the pages may run as actions in a real session. Anything else is refused.
 bool isActionProgram(const QString &program);
 
+// A whole action command line: an allowed program, and for xdg-open exactly one clean https link (xdg-open hands
+// anything else, a local file or a .desktop entry, to whatever handler claims it).
+bool isAllowedAction(const QStringList &argv);
+
 // A NetworkManager connection UUID.
 bool isUuid(const QString &s);
 

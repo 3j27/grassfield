@@ -211,6 +211,14 @@
             "never"
           ],
           "description": "Automatically hide and show the menu bar (Settings > Desktop & Dock > Menu Bar): \"always\" hides it on the desktop and in full screen, \"desktop\" on the desktop only, \"fullscreen\" (default) in full screen only, \"never\" keeps it in view. A hidden bar slides in over the window when the pointer reaches the top edge. Only \"fullscreen\" and \"never\" reserve space for the bar."
+        },
+        "showNowPlaying": {
+          "type": "boolean",
+          "description": "Show the Now Playing item in the menu bar while a media player has a session (playing, or paused with a track loaded). Default true."
+        },
+        "showSearch": {
+          "type": "boolean",
+          "description": "Show the Search item (magnifier) in the menu bar. Default true."
         }
       }
     },
@@ -299,9 +307,10 @@
             "color",
             "file",
             "folder",
-            "video"
+            "video",
+            "online"
           ],
-          "description": "builtin = the Grassfield artwork; color = a plain colour; file = one picture; folder = a carousel of the pictures of one folder; video = a looping video (played only while the pause rules allow it)."
+          "description": "builtin = the Grassfield artwork; color = a plain colour; file = one picture; folder = a carousel of the pictures of one folder; video = a looping video (played only while the pause rules allow it); online = the daily picture of wallpaper.online.provider (off by default: it contacts the network once a day, ADR-0016 step 2)."
         },
         "path": {
           "type": "string",
@@ -345,6 +354,20 @@
           "type": "boolean",
           "description": "Video only: keep playing on battery power."
         },
+        "online": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Online source only (wallpaper.source = online). Nothing is fetched while another source is chosen.",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "commons"
+              ],
+              "description": "commons = the Wikimedia Commons Picture of the Day (commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, once a day)."
+            }
+          }
+        },
         "outputs": {
           "type": "array",
           "description": "Per-display overrides (at most 16); omitted fields come from the top level. An override of a display that is not connected stays stored.",
@@ -375,7 +398,8 @@
                   "color",
                   "file",
                   "folder",
-                  "video"
+                  "video",
+                  "online"
                 ]
               },
               "path": {

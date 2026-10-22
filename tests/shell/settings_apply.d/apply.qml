@@ -37,6 +37,8 @@ ShellRoot {
         ["menubar.showBackground", true, () => Settings.menubarShowBackground === true],
         ["menubar.autoHide", "always", () => Settings.menubarAutoHide === "always"],
         ["menubar.autoHide", "bogus", () => Settings.menubarAutoHide === "fullscreen"],
+        ["menubar.showNowPlaying", false, () => Settings.menubarShowNowPlaying === false],
+        ["menubar.showSearch", false, () => Settings.menubarShowSearch === false],
         ["windows.titlebarDoubleClick", "minimize", () => Settings.titlebarDoubleClick === "minimize"],
         ["notifications.dnd", true, () => Settings.notificationsDnd === true],
         ["notifications.previews", "never", () => Settings.notificationsPreviews === "never"],

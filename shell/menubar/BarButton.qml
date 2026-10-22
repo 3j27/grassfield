@@ -26,6 +26,9 @@ Item {
     signal activated
     signal entered
     signal scrolled(real delta)
+    signal scrolledHorizontally(real delta)
+    // A press with the right or middle button ("right" | "middle"); the left one is `activated`.
+    signal auxPressed(string button)
 
     implicitWidth: row.implicitWidth + 2 * root.padding
     implicitHeight: Tokens.menubarHeight
@@ -112,8 +115,21 @@ Item {
             root.activated()
     }
 
+    // Right and middle presses (the left button is the TapHandler above).
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton | Qt.MiddleButton
+        cursorShape: Qt.ArrowCursor
+        onPressed: mouse => root.auxPressed(mouse.button === Qt.RightButton ? "right" : "middle")
+    }
+
     WheelHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-        onWheel: event => root.scrolled(event.angleDelta.y)
+        onWheel: event => {
+            if (event.angleDelta.y !== 0)
+                root.scrolled(event.angleDelta.y);
+            if (event.angleDelta.x !== 0)
+                root.scrolledHorizontally(event.angleDelta.x);
+        }
     }
 }

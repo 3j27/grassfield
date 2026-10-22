@@ -160,11 +160,29 @@ grassfield-shell`; the plugin and the Hyprland config did not change since 0.4.0
 - [ ] Settings: no "Binding loop" lines in `journalctl --user -b | grep SettingsGroup` after opening a few panes and
       resizing the window.
 
+**New in 0.4.0-9** (`sudo pacman -U grassfield-desktop-0.4.0-9-x86_64.pkg.tar.zst
+grassfield-compositor-0.4.0-9-x86_64.pkg.tar.zst` from `packaging/arch`, then log out and back in: the plugin (0.10.0-chrome)
+and the Hyprland config changed):
+
+- [ ] Spotify (and any app that restores a large or top-left window): it opens with its title bar below the menu bar
+      and can be moved; a window larger than the screen is made to fit.
+- [ ] Menu bar: a menu opens on the press; with a menu open, moving onto another title or status icon opens that menu
+      without a click; Left/Right in a menu go to the neighbouring menu; no highlight when you only hover.
+- [ ] Notification Center: a click on the clock slides it in from the right edge; nothing sweeps across the screen.
+- [ ] Desktop: right click on the desktop and on an icon: the full macOS-like menus (Paste, Get Info, Change Wallpaper,
+      Edit Widgets, Clean Up By; Open With, Compress, Duplicate, Make Alias...); shortcuts right-aligned; frosted menu.
+- [ ] Window titlebars: macOS 26 size, hover symbols on the three lights, grey lights on inactive windows.
+- [ ] Dock: magnification (if on) is smooth; tooltips after a short dwell; a press-and-hold menu never moves a tile.
+- [ ] Search: Tab reaches the filter chips; "No Results" no longer flashes while the search still runs.
+- [ ] Settings > Wallpaper: the optional "Picture of the Day" (off by default) shows its author, source and licence links.
+
 ## 6. Known issues on main right now
 
 - Search/Apps keyboard focus on two outputs: under a fix pass.
-- Dock: holding a tile does not open its menu yet (use right click); dragging a pinned tile above the Dock while the
-  Overview opens is still under review (it may unpin).
+- Menu bar (0.4.0-9): no icons of third-party apps yet, no Now Playing item (both merged on main after 0.4.0-9: next
+  package), and it stays hidden over a full-screen window (in progress). A second click on an open menu title without
+  moving the pointer at all is ignored (move it a little).
+- Dock: the Dock menu does not list the app's windows yet, and no attention bounce (in progress).
 - Fonts: a GTK/Qt app that asks by name for a font that is not installed (Roboto, Ubuntu, Verdana, ...) gets Liberation
   Sans, not Inter (documented limit; browsers are not affected).
 - Stages are off by default.

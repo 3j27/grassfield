@@ -70,7 +70,7 @@ Pinned, running and recent apps, Trash, launch/focus/cycle, launch bounce, badge
 | Launch bounce | present (this pass) |
 | Notification badges | present (this pass; counts from the notification history) |
 | Click on a running app raises its latest window; all windows minimized: restore | present |
-| Click on the active app | differs: cycles to its next window (macOS does nothing) |
+| Click on the active app | present: nothing changes (no cycling; `tests/visual/dock-macos.sh` active-click PASS 2026-10-22) |
 | Right-click menu: Options (Keep in Dock, Open at Login, Show in Files), Show All Windows, Hide, Quit | present (this pass) |
 | Recent items in the menu (recent documents) | missing (no recent-documents source) |
 | Drag to reorder | present (this pass) |
@@ -81,12 +81,19 @@ Pinned, running and recent apps, Trash, launch/focus/cycle, launch bounce, badge
 | Magnification option, off by default | present |
 | Auto-hide | present |
 | Minimize into app icon (setting + target tile) | present (setting, model and target rect; the animation is plugin work) |
-| Genie / Scale minimize effect choice | missing (plugin) |
+| Genie / Scale minimize effect choice | present (`dock.minimizeEffect` funnel / scale, plugin `minimize-effect`) |
 | Dock position left / right | missing (the layout, hit areas, tooltips and `dockRect` are bottom-only) |
 | Folder / Downloads stack (fan or grid) | missing |
 | Empty Trash from the Dock menu | missing (never in dev; deliberately not added) |
 | Dock shrinks to fit a full screen | missing |
-| Per-app Dock icon bounce for attention requests | missing |
+| Per-app Dock icon bounce for attention requests | missing (no `urgent` handling anywhere in the shell); NextKDE also reveals an auto-hidden Dock for a moment when a window becomes urgent: adopt |
+| The app's windows listed at the top of its Dock menu (check on the main window, mark on minimized ones) | missing (2026-10-22 audit: foot with two windows shows only New Window, New Terminal, Options, Show All Windows, Hide, Quit; `dmo-menu-*.png`) |
+| Option (Alt) variants in the Dock menu: Quit → Force Quit, Hide → Hide Others | missing |
+| Badges and progress set by the app itself (macOS NSDockTile; Linux `com.canonical.Unity.LauncherEntry`: Telegram, Thunderbird, Firefox downloads) | missing: badges come only from the notification history; no progress bar; needs a D-Bus signal listener (no generic D-Bus API in Quickshell 0.3: a bridge, ADR) |
+| Settings: Size slider, Position on screen, Animate opening applications, Show indicators for open applications | missing (Magnification, Minimize using, Double-click title bar, Minimize into app icon, Auto-hide, Show suggested and recent apps are present) |
+| Shortcut to turn hiding on/off (macOS Option-Command-D) | missing (Ctrl+F3 focuses the Dock) |
+| One Dock across displays (macOS: on the display where the pointer last reached the bottom edge) | differs: a Dock on every output (`dmo-wayland1.png`) |
+| Resize the Dock by dragging its separator | missing |
 
 ## Acceptance criteria
 - Screenshots: magnified (hover simulated via IPC), autohide hidden/revealed, item menu (L2). `tests/unit/tst_magnify.qml`, `tst_dockmodel.qml` (L0). Settings round trip `tests/shell/settings_roundtrip` (L1). Dock feel, headless: `tests/unit/tst_dockfeel.qml` drives `Magnify.js` and `AutoHide.js` in 16 ms steps with the real tokens (no jump at slot boundaries, 90 % settle under 220 ms, frame-rate independence, capped dt, no scale reversal in a sweep, full settle on exit, never hides while inhibited, edge dwell reveals); `tests/shell/dockfeel_mutants.sh` runs it against 21 deliberately broken copies and requires each to fail.
