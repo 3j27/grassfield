@@ -153,7 +153,7 @@ Variants {
                 onPressed: mouse => {
                     const bar = Popups.bars[win.modelData.name];
                     if (bar)
-                        bar.pressAt(mouse.x);
+                        bar.pressAt(mouse.x, mouse.button === Qt.RightButton ? "right" : mouse.button === Qt.MiddleButton ? "middle" : "left");
                     else
                         Popups.close();
                 }
@@ -221,6 +221,8 @@ Variants {
                     return appMenu;
                 case "appbridge":
                     return bridgeMenu;
+                case "tray":
+                    return trayMenu;
                 case "volume":
                     return volumeMenu;
                 case "network":
@@ -262,6 +264,12 @@ Variants {
         Component {
             id: bridgeMenu
             BridgeMenu {}
+        }
+
+        // A status item's own menu (StatusNotifierItem, DBusMenu).
+        Component {
+            id: trayMenu
+            TrayMenu {}
         }
 
         Component {

@@ -3,3 +3,6 @@ MenuBar 1.0 MenuBar.qml
 BarButton 1.0 BarButton.qml
 singleton AppMenus 1.0 AppMenus.qml
 BridgeMenu 1.0 BridgeMenu.qml
+singleton TrayHost 1.0 TrayHost.qml
+TrayButton 1.0 TrayButton.qml
+TrayMenuNode 1.0 TrayMenuNode.qml

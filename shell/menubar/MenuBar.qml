@@ -208,7 +208,7 @@ Scope {
 
             // macOS menu tracking: while one of this bar's menus is open, moving onto another title or status item opens
             // its menu without a click. The clock (Notification Center) and the Do Not Disturb indicator are not menus.
-            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter"]
+            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray"]
             readonly property bool tracking: Popups.active && Popups.screenName === win.screen.name && trackedKinds.indexOf(Popups.kind) >= 0
 
             function hoverSwitch(kind: string): void {
@@ -219,6 +219,21 @@ Scope {
             function hoverSwitchBridge(button: Item, menu: var): void {
                 if (win.tracking && !(Popups.kind === "appbridge" && Popups.data.dbusId === menu.dbusId))
                     win.openBridge(button, menu);
+            }
+
+            function hoverSwitchTray(button: Item, item: var): void {
+                if (win.tracking && !(Popups.kind === "tray" && Popups.data.item === item))
+                    win.openTray(button, item);
+            }
+
+            // Opens (or closes, if it is open) a status item's own menu, aligned to the right edge of its button.
+            function openTray(button: Item, item: var): void {
+                if (isOpen("tray") && Popups.data.item === item) {
+                    Popups.close();
+                    return;
+                }
+                const x = button.mapToItem(null, button.width, 0).x;
+                Popups.open("tray", win.screen.name, x, Tokens.menubarHeight, "right", {item: item});
             }
 
             // Left titles that open a menu, in bar order: [{kind, button, menu}] (menu: the bridge entry, else null).
@@ -295,11 +310,15 @@ Scope {
                     b.entered();
             }
 
-            function pressAt(x: real): void {
+            function pressAt(x: real, button: string): void {
                 const b = win.buttonAt(x);
                 if (!b || !b.opensMenu)
                     Popups.close();
-                if (b)
+                if (!b)
+                    return;
+                if (button === "right" || button === "middle")
+                    b.auxPressed(button);
+                else
                     b.activated();
             }
 
@@ -572,6 +591,21 @@ Scope {
                             verticalCenter: parent.verticalCenter
                         }
                         spacing: 0
+
+                        // Third-party status items (StatusNotifierItem), leftmost: macOS keeps them left of the system's.
+                        Repeater {
+                            model: TrayHost.items
+
+                            delegate: TrayButton {
+                                required property var modelData
+
+                                item: modelData
+                                bar: win
+                                tint: win.barTint
+                                shadowed: !win.showBackground
+                                shadowColor: win.barShadow
+                            }
+                        }
 
                         // Do Not Disturb indicator; click turns it off.
                         BarButton {
