@@ -97,8 +97,8 @@ Fidelity pass 2026-10-19 (docs/specs/dock.md): shelf glass material (`dock.tintA
 
 | Metric | Reference | Grassfield | Δ | Severity |
 |---|---|---|---|---|
-| Corner radius, toolbar windows | 26 ± 1.5 | `rounding` 26 (looknfeel.lua default; Grassfield's own windows, org.grassfield.*) | 0 | match |
-| Corner radius, titlebar-only windows | ~13 ± 3 | 12 (window rule `gf-third-party-rounding`, every other class) | −1 | match |
+| Corner radius, toolbar windows | 26 ± 1.5 | 20 (window rule `gf-grassfield-rounding`, org.grassfield.*; the rule maximum on Hyprland 0.56.2, see below) | −6 | small |
+| Corner radius, titlebar-only windows | ~13 ± 3 | `rounding` 12 (looknfeel.lua default, every other window) | −1 | match |
 | Traffic-light diameter | 14 ± 0.5 | `kButtonDiameter` 14 | 0 | match |
 | Gap between lights (pitch) | 9 ± 0.5 (23) | `kButtonSpacing` 9 (23) | 0 | match |
 | Titlebar height, titlebar-only window | ~32 ± 2 | `kTitlebarHeight` 32 | 0 | match |
@@ -113,11 +113,17 @@ Fidelity pass 2026-10-19 (docs/specs/dock.md): shelf glass material (`dock.tintA
 | Tiling popover on green-button hover | Move & Resize (4 halves), Fill & Arrange (fill, 2-up, 3-up, quarters), Full Screen submenu, move to display; 230 x 251, radius 12 | none (Window menu only) | — | missing |
 
 Fidelity pass F2a (2026-10-22): titlebar 32, lights 14 on a 23 pitch with the first centre at (16, 16), hit slop 1/6 of the
-diameter, hover glyphs, radius 26 for org.grassfield.* and 12 for other windows. Measured on GF-REF captures by
+diameter, hover glyphs, radius 20 for org.grassfield.* and 12 for other windows. Measured on GF-REF captures by
 `tests/compositor/chrome.sh` (light centres within 0.05 px of the expected ones, 13.9 px across, 32 bar rows, corner insets
-4 px for radius 12 and 8 px for radius 26). Still open: the toolbar-window light row (unified toolbar, ADR-0015, F2b),
-inactive grey lights, and the content's top corners, which Hyprland 0.56.2 rounds with the window radius (a concave
-titlebar-coloured curve under the bar at radius 26; macOS joins them square).
+4 px for radius 12). Still open: the toolbar-window light row (unified toolbar, ADR-0015, F2b), inactive grey lights, and
+the content's top corners, which Hyprland 0.56.2 rounds with the window radius (a concave titlebar-coloured curve under
+the bar; macOS joins them square).
+
+Radius 26 on Hyprland 0.56.2: a window rule cannot reach it (`rounding` is capped at 20: `Hyprland --verify-config` reports
+"value 26 is more than the maximum of 20"), so 20 with the default `rounding_power` 2.6 is the closest a rule gives. Only
+the global `decoration.rounding` accepts 26: this pass first used it as the default with a rule bringing every other
+window to 12 (commits c7106c9, 306d27f; measured getprop 26, corner inset 8 px). The integrator chose the rule-based 20
+(ADR-0015 spike, step 1); the unified toolbar (ADR-0015) may revisit the radius.
 
 ### Quick Settings (macOS Control Center)
 
@@ -327,8 +333,8 @@ Grassfield's own green on purpose and are not compared.
 Ordered by how often the surface is seen, then by how cheap the change is. "Token" means `ui/tokens/tokens.json`
 (regenerate Tokens.qml with `ui/tools/gen-tokens.py`).
 
-1. **Window corner radius.** (Done in F2a, 2026-10-22: default 26, rule `gf-third-party-rounding` 12; the window rule
-   `rounding` is capped at 20 in Hyprland 0.56.2, hence the default.) Use 26 for Grassfield's own toolbar windows (Settings, Files, Preview); keep ~12-13 for
+1. **Window corner radius.** (F2a, 2026-10-22: rule `gf-grassfield-rounding` 20 for org.grassfield.*, default 12; the
+   window rule `rounding` is capped at 20 in Hyprland 0.56.2, see "Window chrome".) Use 26 for Grassfield's own toolbar windows (Settings, Files, Preview); keep ~12-13 for
    titlebar-only third-party windows. Change: `config/hypr/grassfield/looknfeel.lua` `rounding` plus a window rule for
    the `org.grassfield.*` classes; titlebar drawing in `compositor/src/Titlebar.cpp` follows `w->rounding()`.
 2. **Traffic lights and titlebar.** (Done in F2a, 2026-10-22, with hover glyphs.) Diameter 12 → 14, gap 8 → 9, titlebar 28 → ~32 (low confidence), first centre at

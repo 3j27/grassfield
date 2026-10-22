@@ -1009,8 +1009,8 @@ Manual (L1, nested only):
 - Long titles are clamped to the available width by Hyprland's text renderer; ellipsis behaviour depends on it.
 - The content's rounded top corners are filled with the titlebar color; with `rounding_power` 2.6 a small
   corner curve of the content stays visible instead of a perfectly square joint. Hyprland 0.56.2 rounds all four
-  corners of the surface with one radius (`CSurfacePassElement` has no per-corner rounding), so at radius 26
-  (org.grassfield.* windows) that curve is 26 px: a concave titlebar-coloured corner at the top of the content
+  corners of the surface with one radius (`CSurfacePassElement` has no per-corner rounding), so at radius 20
+  (org.grassfield.* windows) that curve is 20 px: a concave titlebar-coloured corner at the top of the content
   (`.dev/chrome/run-*/settings-corner-*-4x.png`). macOS joins titlebar and content square.
 - The titlebar sits above the client's requested position, so a centered window's titlebar extends 32 px
   above the centered area.

@@ -10,12 +10,12 @@
 #   1 foot A (a third-party window), active, pointer away: the three lights at their centres (+-0.75 px), 14 px across
 #     (+-1), no glyph; the bar GF_TB_HEIGHT rows tall, flush with the window's left edge and the surface (no gap); its
 #     top corners rounded like the window, radius 12 (inset of the first fill pixels on the corner's diagonal 3-5 px; a
-#     square corner gives 0-1, radius 26 gives 8: measured 4 and 8 on Hyprland 0.56.2)
+#     square corner gives 0-1; measured on Hyprland 0.56.2: 4 at radius 12, 8 at radius 26)
 #   2 pointer in the gap between A's close and minimize lights (no light under the cursor image): glyphs on all three
 #     lights (the whole group, macOS); pointer away again: no glyph
 #   3 foot B opened and moved aside (A inactive): pointer on A's close light: glyphs on A's three lights
 #   4 Grassfield Settings (org.grassfield.Settings, when .dev/build/grassfield-settings exists): the same lights and bar,
-#     radius 26 (corner inset 7-10 px), glyphs with the pointer between its minimize and zoom lights
+#     radius 20 (rule gf-grassfield-rounding; corner inset 5-7 px), glyphs with the pointer between its minimize and zoom lights
 # Without grassfield-compositor (C2: nested-up.sh --no-plugin, or scripts/nestctl plugin unload): no titlebar; only the
 # radii are measured, at the surface's own corners (the Lua config alone sets them).
 # Captures, 2x crops of the lights and the corners, measurements: .dev/chrome/run-<timestamp>/.
@@ -89,7 +89,7 @@ crops() { # <name> <x> <y> <w>: 2x crops (nearest neighbour) of the lights and o
 measure() { # <name> <x> <y> <w> -> key=value lines in $run/<name>.txt, loaded into m[...]
   local name=$1 x=$2 y=$3 w=$4 bar=$GF_TB_HEIGHT mid=$GF_TB_MID fill=()
   # Without the plugin there is no titlebar: the corners are where the window's own content colour starts, sampled 16 px in
-  # and 2 px down (inside the corner curve for radius 12 and 26, above the inset sidebar of Grassfield's apps).
+  # and 2 px down (inside the corner curve for radius 12 to 26, above the inset sidebar of Grassfield's apps).
   ((plugin)) || { bar=0 mid=0 fill=("$(magick "$run/$name.ppm" -format "%[hex:p{$((x + 16)),$((y + 2))}]" info: | cut -c1-6)"); }
   python3 -I "$root/tests/compositor/chrome_measure.py" "$run/$name.ppm" "$x" "$y" "$w" "$bar" "$GF_TB_CLOSE_X" "$GF_TB_MIN_X" "$GF_TB_ZOOM_X" "$mid" \
     "${fill[@]}" >"$run/$name.txt" 2>>"$log"
@@ -235,7 +235,7 @@ if [[ -x $settings ]]; then
       check_lights "Settings" "$sx" "$sy"
       check_bar "Settings"
     fi
-    check_corner "Settings (org.grassfield.*)" 7 10 26
+    check_corner "Settings (org.grassfield.*)" 5 7 20
     if ((plugin)); then
       pointer abs $((sx + (GF_TB_MIN_X + GF_TB_ZOOM_X) / 2)) $((sy - GF_TB_MID)) sleep 400
       capture settings-hover
