@@ -89,6 +89,10 @@ scenario name:
 pointer *args:
     scripts/dev/pointer.sh {{args}}
 
+# Compose the grassfield-icons theme (pinned MacTahoe + Pebble, GitHub) into .dev/share/icons (dev sessions only).
+icons *args:
+    scripts/dev/icons.sh {{args}}
+
 # Build the Grassfield cursor theme into .dev/share/icons/grassfield-cursors (hyprcursor + XCursor).
 cursors *args:
     branding/cursors/build.sh {{args}}
