@@ -112,12 +112,12 @@ capture_set() {
   for m in hidden white black; do
     cap_state_ok || { vs_ipc visual glyphs normal >/dev/null; echo "contrast: $name: scenario state lost before the $m capture" >&2; return 1; }
     vs_ipc visual glyphs "$m" >/dev/null
-    VS_NOPARK=1 snap "$name" "${GLYPH_SETTLE:-2}"
+    snap_stable "$name" "${GLYPH_SETTLE:-2}" || { vs_ipc visual glyphs normal >/dev/null; return 1; }
     mv "$dir/$name.en.png" "$dir/$name.$m.png"
   done
   vs_ipc visual glyphs normal >/dev/null
   cap_state_ok || { echo "contrast: $name: scenario state lost before the last capture" >&2; return 1; }
-  VS_NOPARK=1 snap "$name" "${GLYPH_SETTLE:-2}"
+  snap_stable "$name" "${GLYPH_SETTLE:-2}" || return 1
   mv "$dir/$name.en.png" "$dir/$name.end.png"
   set_consistent "$dir/$name"
 }
@@ -125,7 +125,7 @@ capture_set() {
 # cap SURFACE [SETTLE]: the surface in the four glyph modes -> $dir/SURFACE{,.hidden,.white,.black}.png. The pointer is parked
 # ONCE per set (not per capture; hover surfaces set VS_NOPARK and place it themselves). A set that is not usable (state lost,
 # unsettled, frames that disagree) is redone up to CAP_TRIES times (3); then the run fails "not measured", or with CAP_SOFT=1
-# cap returns 1 and the caller decides: a surface that could not be captured is never passed. A set costs 5 to 7 frames.
+# cap returns 1 and the caller decides: a surface that could not be captured is never passed. Every frame of a set (also the glyph modes and the last normal one) goes through snap_stable, which retakes a corrupted frame: a set costs 10 to 14 shots.
 cap() {
   local name=$1 settle=${2:-1} try
   for try in $(seq 1 "${CAP_TRIES:-3}"); do
