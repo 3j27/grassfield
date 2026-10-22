@@ -58,7 +58,7 @@ B. A fixed palette of prebuilt accent variants only.
   so a macOS-style icon shows its plate inside the system plate, as macOS shows non-conforming icons. The folder colour
   (below) recolours the artwork only, not the system plate.
   **Small icons (integrator decision 2026-10-22, the macOS model):** the modes apply only from `iconMode.minSize` (24 px) up; below it
-  (16 px list rows, menus, the sidebar) every mode draws the Default artwork, because a plate and a recolour made small file-type icons the
+  (Files rows and sidebar, Force Quit rows, the Overview pill, the Dock's minimized badge) every mode draws the Default artwork, because a plate and a recolour made small file-type icons the
   same tile (docs/specs/ui.md, "Small icons keep the Default artwork"). Known issue: the first draw of about 100 effects in the Apps panel
   makes one slow frame per opening in the opt-in effect modes (docs/specs/ui.md).
   Effects exist only when the mode is not `default` and only for icons that are shown: one effect item per visible icon

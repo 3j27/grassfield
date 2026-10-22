@@ -12,7 +12,7 @@ import Grassfield.Ui
 // 24, 32 and 48; (b) the desktop, icons over the bare wallpaper (black, grey, white and the default wallpaper's sky and
 // hill colours), always styled for the wallpaper (darkAppearance) as DesktopIcon does, at 48; (c) the material at transparency 1.0 in
 // every mode (floor 2.0), at 16, 24 and 48; (d) Tinted with a bright yellow and a pink tint, over the material and at transparency 1.0;
-// (e) the accent fill of a selected row (Search, Force Quit); (f) the folder model against the rendered pixels, a black folder on
+// (e) the accent fill of a selected row (Search; Force Quit rows are 18 px and never in a mode); (f) the folder model against the rendered pixels, a black folder on
 // black, the missing-shader fallback.
 // Rules, per icon and mode in dark/clear/tinted:
 //   floor(d) = 2.9 (3:1 less a rounding margin) when the default rendering has d >= 3, else 0.9 * d (never more than
@@ -25,7 +25,7 @@ import Grassfield.Ui
 //               icon stays visible by its edge or by its glyph. Every icon sits on a system plate, so this holds for every
 //               icon except the measured limits below.
 //   N (internal contrast) when the default's lightest and darkest pixels in the middle of the artwork differ by 7:1 (3:1) or more, the
-//               mode's keep 1.5:1 (1.3:1), from 24 px up: a terminal's prompt, a graph on a black plate or a red glyph on a dark one stay readable.
+//               mode keeps a per-mode tier (Dark 2.3:1 (1.5:1), Tinted 1.9:1 (1.4:1), Clear 1.45:1 (1.25:1)), from 24 px up: a terminal's prompt, a graph on a black plate or a red glyph on a dark one stay readable.
 //   S (separation) artwork of nearly one luminance (a pale sky on a green hill) keeps 85 percent of the default's glyph-vs-plate contrast, or 1.5.
 // The plate is the median luminance of the ring 4 to 8 px (scaled with the size) inside the edge; the glyph is the 2nd or
 // 98th percentile luminance of the core, whichever is farther from the plate; the outline is the 90th percentile of the
@@ -80,7 +80,7 @@ TestCase {
     property color panelColor: "#202024"
     property bool darkPass: true
     property bool wallpaperPass: false
-    // The icons are drawn over the accent fill of a selected row (Search, Force Quit).
+    // The icons are drawn over the accent fill of a selected row (Search; Force Quit rows are 18 px and never in a mode).
     property bool accentPass: false
     // The Tinted colour of the board.
     property color tintColor: "#3E7BFA"
@@ -248,9 +248,13 @@ TestCase {
 
     // Remaining limits (tests/fixtures/icons/a2-limits.json, the one source of the table in docs/specs/ui.md; tests/shell/a2_limits_doc.sh checks
     // that the two agree). Each is scoped to one cell: rule, icon, mode, size, appearance, scenario, tint and transparency (the key is the rule
-    // and the label of the A2 line), and holds its measured value: the cell fails below it minus 0.1 (a regression) and an exemption whose cell
-    // no longer violates its rule is stale and fails too. Below iconMode.minSize no rule applies (the Default artwork is drawn: rule D).
+    // and the label of the A2 line), and holds its measured value: the cell fails when it measures more than 0.1 away from it in either direction (a
+    // lower value is a regression, a higher one must update the table on purpose), and an exemption whose cell no longer violates its rule is
+    // stale and fails too. A key that no measured cell consumed fails (finishRun: a typo, a removed fixture, a size below iconMode.minSize), and
+    // test_a2_limitKeysAreWellFormed checks the shape of every key. Below iconMode.minSize no rule applies (the Default artwork is drawn: rule D).
     property var limitTable: null
+    property var usedLimitKeys: ({})
+    property var scenariosRun: ({})
 
     function limitOf(key) {
         if (testCase.limitTable === null) {
@@ -268,8 +272,8 @@ TestCase {
     }
 
     // Per-mode tiers of rule N: [a default pair of 7:1 or more, of 3:1 or more]. Measured lowest values of the strong pairs: Dark 2.54, Tinted
-    // 2.18, Clear 1.52; of the weaker: Dark 1.62, Tinted 1.50, Clear 1.31. Clear is the mode that gives contrast away to show dark glyphs.
-    readonly property var internalTiers: ({dark: [2.3, 1.5], tinted: [1.9, 1.4], clear: [1.5, 1.3]})
+    // 2.18, Clear 1.52; of the weaker: Dark 1.62, Tinted 1.50, Clear 1.31; each tier keeps at least 0.05 below the lowest measured value. Clear is the mode that gives contrast away to show dark glyphs.
+    readonly property var internalTiers: ({dark: [2.3, 1.5], tinted: [1.9, 1.4], clear: [1.45, 1.25]})
 
     readonly property var separationFixtures: ["same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph", "hicolor:basecamp"]
 
@@ -279,6 +283,7 @@ TestCase {
     function judge(rule, label, line, value, violated, failures) {
         const key = rule + " " + label;
         const lim = testCase.limitOf(key);
+        testCase.usedLimitKeys[key] = true;
         if (lim === undefined) {
             if (violated)
                 failures.push(rule + " " + line);
@@ -286,8 +291,41 @@ TestCase {
         }
         if (!violated)
             failures.push("stale exemption " + key + " (the cell holds now: " + value.toFixed(2) + ", exempted at " + lim + ")");
-        else if (value < lim - 0.1)
-            failures.push("regressed " + key + ": " + value.toFixed(2) + " below the exempted " + lim + " by more than 0.1");
+        else if (Math.abs(value - lim) > 0.1)
+            failures.push((value < lim ? "regressed " : "improved (update a2-limits.json and ui.md) ") + key + ": measures " + value.toFixed(2) + ", the table holds " + lim + " (more than 0.1 apart)");
+    }
+
+    // The keys of the table whose scenario ran in this process and that no measured cell consumed.
+    function unusedLimitKeys(failures) {
+        testCase.limitOf("");
+        for (const key of Object.keys(testCase.limitTable)) {
+            if (testCase.usedLimitKeys[key] === true)
+                continue;
+            for (const sc of Object.keys(testCase.scenariosRun)) {
+                if (key.endsWith(" " + sc)) {
+                    failures.push("unused limit key (no measured cell matches it): " + key);
+                    break;
+                }
+            }
+        }
+    }
+
+    readonly property var limitKeyShape: /^[EISN] \S+ (dark|clear|tinted) (\d+)px (dark|light) window (tint #[0-9A-F]{6} )?(transparency 1\.0 )?wallpaper #[0-9a-f]{6}$|^[EISN] \S+ (dark|clear|tinted) 48px desktop wallpaper #[0-9a-f]{6}$/
+
+    function test_a2_limitKeysAreWellFormed() {
+        testCase.limitOf("");
+        const bad = [];
+        for (const key of Object.keys(testCase.limitTable)) {
+            const m = testCase.limitKeyShape.exec(key);
+            const size = m === null ? 0 : Number(m[2] !== undefined ? m[2] : 48);
+            const wall = key.slice(key.lastIndexOf("#"));
+            const tint = /tint (#[0-9A-F]{6})/.exec(key);
+            if (m === null || size < Tokens.iconModeMinSize || [24, 32, 48].indexOf(size) < 0 || (tint !== null && ["#E6B422", "#E25AA1"].indexOf(tint[1]) < 0)
+                    || (key.indexOf("desktop") < 0 && ["#000000", "#808080", "#ffffff"].indexOf(wall) < 0))
+                bad.push(key);
+        }
+        if (bad.length > 0)
+            fail("malformed or out-of-scope limit keys: " + bad.join(" | "));
     }
 
     // Rule D (below iconMode.minSize): the icon of every mode is the Default artwork, pixel for pixel (within the 8 bits of the grab).
@@ -310,6 +348,7 @@ TestCase {
         testCase.darkPass = dark;
         testCase.wallpaperPass = overWallpaper === true;
         testCase.panelColor = background;
+        testCase.scenariosRun[name] = true;
         wait(500);
         waitForRendering(board);
         const img = grabImage(board);
@@ -455,7 +494,7 @@ TestCase {
         runTint(32, "#E25AA1");
     }
 
-    // The accent fill of a selected row (Search, Force Quit): the ink follows the row's text colour (TintedIcon.overAccent), so
+    // The accent fill of a selected row (Search; Force Quit rows are 18 px and never in a mode): the ink follows the row's text colour (TintedIcon.overAccent), so
     // the plate and the ink are the opposite of the fill. The plate pixel (between the rim and the artwork) has at least 4.5:1 against the
     // accent in Clear (the old design measured 2.77:1 on main's 5.61:1 there) and 2.5:1 in Dark and Tinted (their plates are the mode's own).
     function test_a2_accentRow() {
@@ -524,6 +563,7 @@ TestCase {
     }
 
     function finishRun(measured, failures) {
+        testCase.unusedLimitKeys(failures);
         verify(measured > (testCase.onlyMode !== "" ? 50 : (testCase.transparentPass ? 150 : 200)), "measured " + measured + " icon renderings");
         if (failures.length > 0)
             fail(failures.length + " failures:\n" + failures.join("\n"));
@@ -801,8 +841,8 @@ TestCase {
         }
     }
 
-    // A selected, focused row of Files (list and columns: accent fill, icons of Tokens.filesListIconSize) draws FileIcon with overAccent:
-    // the best pixel of the icon (a folder and a document) has at least 3:1 against the accent in every mode and both appearances (the
+    // A selected, focused row of Files (list and columns: accent fill, icons of rowIconSize: Tokens.filesListIconSize, at least iconMode.minSize) draws FileIcon with overAccent:
+    // the mean of the top 20 percent of the icon's pixels (a folder and a document) has at least 3:1 (2.5:1 in Dark) against the accent in every mode and both appearances (the
     // merge base had 3.77:1 in Clear, the wiring missing gave 2.01:1).
     Component {
         id: accentCell

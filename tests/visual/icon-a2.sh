@@ -20,7 +20,7 @@ dev_nested_target "$dev" || { echo "test-icons: no nested session of this tree (
 limit=${GRASSFIELD_ICONS_TIMEOUT:-240}
 attempts=${GRASSFIELD_ICONS_ATTEMPTS:-4}
 cases=("$@")
-[[ ${#cases[@]} -gt 0 ]] || cases=(test_a2_size48 test_a2_size32 test_a2_size24 test_a2_size16 test_a2_desktop test_a2_transparent48 test_a2_transparent24 test_a2_transparent16 test_a2_tintYellow32 test_a2_tintPink32 test_a2_accentRow test_a2_filesSelectedRow test_folderModelMatchesTheShader test_blackFolderKeepsItsPlateOnBlack test_missingShaderDrawsThePlainIcon)
+[[ ${#cases[@]} -gt 0 ]] || cases=(test_a2_size48 test_a2_size32 test_a2_size24 test_a2_size16 test_a2_desktop test_a2_transparent48 test_a2_transparent24 test_a2_transparent16 test_a2_tintYellow32 test_a2_tintPink32 test_a2_accentRow test_a2_filesSelectedRow test_a2_limitKeysAreWellFormed test_folderModelMatchesTheShader test_blackFolderKeepsItsPlateOnBlack test_missingShaderDrawsThePlainIcon)
 overall=0
 for fn in "${cases[@]}"; do
   done_case=0
@@ -33,7 +33,8 @@ for fn in "${cases[@]}"; do
       echo "test-icons: $fn attempt $try stalled (exit $status, limit ${limit}s), retrying" >&2
       continue
     fi
-    echo "$out" | grep -E "A2 |^PASS|^FAIL|^SKIP|Totals"
+    echo "$out" | grep -E "A2 " >>"$dev/a2-last.log" || true
+    echo "$out" | grep -E "^PASS|^FAIL|^SKIP|Totals"
     if [[ $status != 0 ]] || grep -qE '^FAIL|^SKIP' <<<"$out"; then
       echo "$out" | sed -n '/failures:/,/Loc:/p' | head -80
       echo "test-icons: $fn FAILED"

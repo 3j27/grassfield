@@ -1067,7 +1067,9 @@ Scope {
 
                                     TintedIcon {
                                         id: minimizedIcon
-                                        size: win.iconSize
+                                        // The drawn nominal size (the badge is a fraction of the tile when the thumbnail shows), so that
+                                        // the minimum size of the icon modes applies to what is on screen.
+                                        size: minimizedTile.live ? Math.round(win.iconSize * Tokens.dockMinimizedBadgeScale) : win.iconSize
                                         // The same decode as the tile's icon: an effect mode decodes at the largest magnification.
                                         oversample: minimizedIcon.modeActive ? Tokens.dockIconOversample : minimizedIcon.defaultOversample
                                         width: minimizedTile.live ? Math.round(parent.width * Tokens.dockMinimizedBadgeScale) : parent.width
