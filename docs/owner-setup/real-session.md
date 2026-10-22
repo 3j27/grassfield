@@ -146,16 +146,31 @@ grassfield-compositor-0.4.0-7-x86_64.pkg.tar.zst` from `packaging/arch`, then lo
 - [ ] Overview: open it with nothing chosen, press Return: it closes; the first arrow key moves the ring.
 - [ ] Notification Center: Tab, Delete and Return keep the focus where you expect after new notifications arrive.
 
+**New in 0.4.0-8** (`sudo pacman -U grassfield-desktop-0.4.0-8-x86_64.pkg.tar.zst
+grassfield-compositor-0.4.0-8-x86_64.pkg.tar.zst` from `packaging/arch`, then log out and in):
+
+- [ ] Login: no "Compositor extension not loaded" banner, titlebars and minimize work at once. If the extension answers
+      late, the shell keeps asking for 5 minutes and recovers by itself (no shell restart needed any more).
+- [ ] Wallpaper: Settings > Wallpaper: the Grassfield artwork, a colour, one of your pictures, a folder carousel. A
+      change crossfades in about a second; the menu bar text stays legible over a light and a dark picture.
+- [ ] Icons: Settings > Appearance > icon style Dark, Clear and Tinted: every app icon at 24 px and above sits on a
+      plate; small list icons keep their own artwork. Note any icon that disappears or turns unreadable.
+- [ ] Desktop: right click > New Folder twice quickly: "untitled folder" and "untitled folder 2", no error.
+- [ ] Settings: no "Binding loop" lines in `journalctl --user -b | grep SettingsGroup` after opening a few panes and
+      resizing the window.
+
 ## 6. Known issues on main right now
 
 - Search/Apps keyboard focus on two outputs: under a fix pass.
 - Dock: holding a tile does not open its menu yet (use right click); dragging a pinned tile above the Dock while the
   Overview opens is still under review (it may unpin).
-- Icon modes (Dark, Clear, Tinted, the plate behind every icon) are not on main yet.
-- Wallpaper choice (Settings > Wallpaper) is not on main yet.
 - Fonts: a GTK/Qt app that asks by name for a font that is not installed (Roboto, Ubuntu, Verdana, ...) gets Liberation
   Sans, not Inter (documented limit; browsers are not affected).
 - Stages are off by default.
+- Not in 0.4.0-8 yet (under review or in progress): Dock hold-to-menu, the minimize funnel effect, the new traffic-light
+  and titlebar size, online daily wallpapers (Wikimedia Commons), the contrast fixes, the unified toolbar for
+  Grassfield apps.
+- Apps search placeholder in dark at high transparency over a white wallpaper is slightly under the contrast target.
 - The notification banner first-show delay is unmeasured on real hardware (you are the measurement).
 - Omarchy's own shell (bar, notifications, launcher, lock) does not run inside Grassfield, by design; Omarchy keybinds
   and `udiskie` automount are not started. GTK applications keep the cursor theme already set in dconf (Grassfield does
