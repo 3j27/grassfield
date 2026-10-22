@@ -1,5 +1,5 @@
 # ADR-0015: Unified toolbar for Grassfield apps: the shared UI framework draws the window controls, the plugin steps aside per window
-Status: Proposed, owner answers recorded (2026-10-20); accepted once the nested spike passes · Date: 2026-10-20 · Decider: owner
+Status: Accepted 2026-10-22 after the nested spike, with integrator decisions on Q4, step 3 and Q5 (see the end) · Date: 2026-10-20 · Decider: owner
 
 ## Context
 
@@ -632,3 +632,22 @@ coverage-weighted centroid within each light's 23-pt cell, checked to ± 0.01 px
   - clang-tidy on the prototype, which is not committed.
 - One spike-only incident: a Hyprland "not responding" dialog (`hyprland-dialog`, ANR manager) appeared once at load
   10.2 during a double-click on fixture A9. That attempt was discarded and repeated; its cause was not identified.
+
+## Integrator decisions after the spike (2026-10-22)
+The owner asked for decisions without questions (2026-10-21, docs/STATE.md); the macOS model decides the open points.
+- **Q4: the spike's split is accepted.** Zoom is native: `gf-no-maximize-event` matches `xdg_tag = "negative:.+"`, and
+  the app sends one maximize request per zoom and never reads Qt's maximized state (step 4 defect). Minimize goes
+  through the plugin bridge (`requestsMinimize` → `minimize-request`, FR6); without the plugin the app greys its
+  minimize light, from the shell's capabilities.
+- **Dragging a zoomed window (step 3).** macOS 26: dragging a window that fills the screen from its toolbar takes it
+  out of that state at its previous size, and the window stays under the pointer at the same place in its toolbar row.
+  So the plugin handles `requestMove` for tagged windows. If the window is zoomed, it restores the remembered box,
+  places it so the grab point keeps its horizontal ratio and the toolbar row stays under the pointer, then starts the
+  move. The 10 px lag of the move (190 for 200) is Qt's drag threshold and stays, as macOS also has a threshold.
+- **Q5, radius 26 (step 1).** Hyprland 0.56.2 rejects `rounding` above 20 in a rule. Tagged windows get 20 with the
+  session's `rounding_power`, the closest native shape, as F2a does for `org.grassfield.*`. A plugin-drawn corner mask
+  is considered only if the owner's F1 review finds the difference visible.
+- **Status:** accepted with these decisions. Next slices, in order:
+  1. plugin parity: the tag rule, `requestMove` un-zoom, the minimize bridge for tagged windows, C2 behaviour;
+  2. the grassfield-ui `WindowControls` / `UnifiedToolbar` components;
+  3. F2b: sidebars and toolbars of Files, Settings and Preview.
