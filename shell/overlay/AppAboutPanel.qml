@@ -12,6 +12,7 @@ Dialog {
     readonly property string appName: entry ? entry.name : (Popups.data.appId ? Popups.data.appId : "")
 
     title: qsTr("About %1").arg(appName)
+    sheet: true
     panelWidth: Tokens.panelAboutWidth
     onRejected: Popups.close()
 

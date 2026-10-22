@@ -349,8 +349,8 @@ QtObject {
     readonly property int controlToggleWidth: 36
     // F1 gap 12: toggle track 36x16
     readonly property int controlToggleHeight: 16
-    // estimate, pending F1 measurement from design/reference
-    readonly property int controlFocusRing: 2
+    // F1 gap 13: focus ring ~3.5, accent (gs sheets, 2x crops)
+    readonly property int controlFocusRing: 3
     // estimate
     readonly property int controlTooltipDelay: 500
     // F1 gap 13: push button minimum width ~64
@@ -365,6 +365,8 @@ QtObject {
     readonly property int controlSliderKnobWidth: 21
     // F1 gap 18: Quick Settings slider track stays 4
     readonly property int controlSliderTrackCompact: 4
+    // F1 gap 13: push button 24 tall (sheets, Force Quit footer)
+    readonly property int controlButtonHeight: 24
     // F1 gap 13: alert capsule buttons 110x28
     readonly property int controlAlertButtonHeight: 28
     // F1 gap 13: gap between alert buttons
@@ -416,6 +418,14 @@ QtObject {
     readonly property int panelPercentWidth: 36
     // estimate: centred dialogs sit this fraction of the screen height above centre
     readonly property real panelDialogRaise: 0.08
+    // F1 gap 13: alert app icon in a ~64 frame at the top left (low confidence)
+    readonly property int panelAlertIconFrame: 64
+    // estimate: glyph inside the 64 alert icon frame
+    readonly property int panelAlertIconGlyph: 48
+    // F1 gap 13: sheet padding 20
+    readonly property int panelSheetPadding: 20
+    // F1 gap 13: sheet footer 64 tall under a full-width hairline
+    readonly property int panelSheetFooterHeight: 64
     // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages)
     readonly property int panelAlertWidth: 260
 

@@ -9,13 +9,15 @@ Item {
     property bool destructive: false
     // Alert style: a capsule, alertButtonHeight tall (a Dialog sets it on its buttons).
     property bool capsule: false
+    // macOS push button: buttonHeight (24) tall instead of the roomier default (a sheet sets it on its buttons).
+    property bool push: false
 
     signal clicked
 
     readonly property bool hovered: mouse.containsMouse
 
     implicitWidth: Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg)
-    implicitHeight: root.capsule ? Tokens.controlAlertButtonHeight : Tokens.menuItemHeight + Tokens.spacingSm
+    implicitHeight: root.capsule ? Tokens.controlAlertButtonHeight : (root.push ? Tokens.controlButtonHeight : Tokens.menuItemHeight + Tokens.spacingSm)
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: root.text

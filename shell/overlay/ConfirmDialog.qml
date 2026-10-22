@@ -9,6 +9,7 @@ Dialog {
 
     readonly property var info: Popups.data
 
+    icon: info.destructive === true ? "power" : "grassfield-logo"
     title: info.title ? info.title : ""
     message: info.message ? info.message : ""
 
