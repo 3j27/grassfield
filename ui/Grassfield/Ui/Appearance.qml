@@ -6,6 +6,9 @@ import QtQuick
 QtObject {
     // User settings (set by the host).
     property bool dark: true
+    // Set by the first icon effect whose shader fails to load: no other icon creates an effect item then (the plain icon is
+    // drawn, and Qt logs the failure once, not once per icon).
+    property bool iconShaderBroken: false
     property real transparency: Tokens.materialDefaultTransparency
     property bool reduceTransparency: false
     property bool reduceMotion: false
@@ -14,6 +17,12 @@ QtObject {
     property string iconTintSetting: "accent"
     // Folder colour (`icons.folderColor`): "theme" (the icon theme's own), "accent" or "#rrggbb".
     property string folderColorSetting: "theme"
+    // Accent colour (`accent.color`): "multicolor" (the Grassfield green) | blue | purple | pink | red | orange | yellow | green | graphite.
+    property string accentSetting: "multicolor"
+
+    // A sample app icon (an SVG shipped with this module) for the icon appearance previews: it goes through the same
+    // TintedIcon pipeline as every icon.
+    readonly property url iconSampleSource: Qt.resolvedUrl("samples/icon-sample.svg")
 
     // Derived values.
     // Tint of the Tinted icon mode: the chosen colour, the accent by default.
@@ -25,11 +34,17 @@ QtObject {
     // Hairline alpha: the light appearance uses a lighter line (F1 gap 18).
     readonly property real separatorOpacity: dark ? Tokens.materialSeparatorOpacity : Tokens.materialSeparatorOpacityLight
     readonly property var colors: devGlyphMode !== "" ? glyphColors(baseColors) : baseColors
-    readonly property var baseColors: dark ? Tokens.colorDark : Tokens.colorLight
+    // The palette of the appearance with the chosen accent applied (accent and accentText), live.
+    readonly property var baseColors: dark ? accentedDark : accentedLight
+    readonly property var accentedDark: Accent.apply(Tokens.colorDark, accentSetting, true, Tokens)
+    readonly property var accentedLight: Accent.apply(Tokens.colorLight, accentSetting, false, Tokens)
     // The dark palette for surfaces that are always dark (Apps), hooked like `colors`.
-    readonly property var darkColors: devGlyphMode !== "" ? glyphColors(Tokens.colorDark) : Tokens.colorDark
+    readonly property var darkColors: devGlyphMode !== "" ? glyphColors(accentedDark) : accentedDark
     // The light palette for surfaces that are always light (the menu bar's dark foreground over a light wallpaper), hooked like `colors`.
-    readonly property var lightColors: devGlyphMode !== "" ? glyphColors(Tokens.colorLight) : Tokens.colorLight
+    readonly property var lightColors: devGlyphMode !== "" ? glyphColors(accentedLight) : accentedLight
+    // Highlight colour (text selection, Automatic as on macOS): it follows the accent.
+    readonly property color highlight: colors.accent
+    readonly property color highlightText: colors.accentText
 
     // Dev-only hook for tests/visual (contrast glyph mask; set by the shell's `visual glyphs <mode>` IPC, which is
     // refused outside GRASSFIELD_DEV; always "" in production). Every text and icon colour (text, textSecondary,
@@ -63,6 +78,12 @@ QtObject {
     // First installed family of the token list (Qt has no per-font fallback list in QML).
     readonly property string fontFamily: Qt.fontFamilies().indexOf(Tokens.typographyFamily) !== -1 ? Tokens.typographyFamily : Tokens.typographyFallbackFamily
     readonly property var curve: Tokens.motionCurveStandard
+
+    // Size-dependent tracking of Inter's "dynamic metrics" (the reference's optical tracking): em = a + b * e^(c * px),
+    // returned in pixels for Text.font.letterSpacing. Larger text is set tighter, small text slightly looser.
+    function tracking(pixelSize: real): real {
+        return (Tokens.typographyTrackingA + Tokens.typographyTrackingB * Math.exp(Tokens.typographyTrackingC * pixelSize)) * pixelSize;
+    }
 
     function clamp01(v: real): real {
         return Math.max(0, Math.min(1, v));

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Test fixture (own drawing): the structure of a project-tool icon: a sky gradient filling the rounded square and a large
+       green shape rising from the bottom edge. Both colours cover many probes of the plate analysis, so the artwork must not
+       be swallowed as a second plate colour. -->
+  <defs>
+    <linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fbdf0"/><stop offset="1" stop-color="#e3effb"/></linearGradient>
+    <linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#63b960"/><stop offset="1" stop-color="#3f9a45"/></linearGradient>
+    <clipPath id="c"><rect x="6" y="6" width="116" height="116" rx="27"/></clipPath>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="27" fill="url(#s)"/>
+  <path clip-path="url(#c)" fill="url(#m)" d="M6 92 C20 70 36 50 52 50 C66 50 70 74 82 74 C96 74 100 40 122 30 L122 122 L6 122 Z"/>
+</svg>

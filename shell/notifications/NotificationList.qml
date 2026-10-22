@@ -46,6 +46,8 @@ ListView {
         id: ctl
 
         property string text: ""
+        // Tells whether the card that carries this control can still be acted on (see the delegate's `actable`).
+        property var gate: null
         // False: invisible and not clickable (focus still shows it).
         property bool active: false
         readonly property bool expanded: gcHover.hovered || ctl.activeFocus
@@ -61,10 +63,14 @@ ListView {
         Accessible.focusable: true
         Accessible.onPressAction: ctl.clicked()
         Keys.onPressed: event => {
-            // A hidden control never acts, whatever still holds the focus; its activation keys are swallowed (they would otherwise
-            // bubble up to the card and act there), every other key (Escape...) propagates.
-            if (!ctl.visible || !ctl.enabled) {
-                event.accepted = event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter;
+            // A hidden control, or one of a card that left the rows in this very turn, never acts, whatever still holds the focus;
+            // its activation keys are swallowed (they would otherwise bubble up to the card and act there) and the resolver is
+            // queued; every other key (Escape...) propagates.
+            if (!ctl.visible || !ctl.enabled || (ctl.gate && !ctl.gate())) {
+                const activation = event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter;
+                event.accepted = activation;
+                if (activation)
+                    list.queueResolve();
                 return;
             }
             if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -436,12 +442,12 @@ ListView {
         if (cur) {
             const f = list.activeItem();
             if (cur.activeFocus) {
-                list.snapRows = list.shownRows();
+                list.settle(cur);
             } else if (f && (list.droppedFocus(f) || list.identityOf(f) !== null)) {
                 // The element is still there but the focus fell off it (its button was rebuilt by an update, the card left the rows
                 // and came back in the same turn): give it back, so the ring is on it.
                 cur.forceActiveFocus();
-                list.snapRows = list.shownRows();
+                list.settle(cur);
             } else {
                 list.focusId = null;
             }
@@ -452,13 +458,29 @@ ListView {
             target = list.nearestTo(who);
         if (target) {
             target.forceActiveFocus();
-            list.focusId = list.identityOf(target);
-            list.focusId.rank = list.rankIn(list.shownRows(), list.focusId.key);
+            list.settle(target);
         } else {
             list.focusId = null;
             list.releaseFocus();
+            list.snapRows = list.shownRows();
         }
-        list.snapRows = list.shownRows();
+    }
+
+    // The focus rests on `item` in the settled layout: its identity is rebuilt from the layout as it is NOW (rank in its group,
+    // position among the sender's buttons: both move when cards arrive or leave around a card that itself stays), and the settled
+    // rows become the "before" of the next change.
+    function settle(item: var): void {
+        const rows = list.shownRows();
+        const who = list.identityOf(item);
+        who.rank = list.rankIn(rows, who.key);
+        list.focusId = who;
+        list.snapRows = rows;
+    }
+
+    // The card `key` is one of the displayed rows now (the model, which changes at once, not the delegates, which follow at the
+    // next layout).
+    function liveKey(key: string): bool {
+        return Notifications.shownKeys.indexOf(key) >= 0;
     }
 
     Connections {
@@ -627,6 +649,13 @@ ListView {
         property Item clearGroupCtl: null
         property var contentCtl: null
 
+        // This card can be acted on through `it` (one of its items) right now: the item is visible and enabled and the card is one
+        // of the displayed rows. Checked by every key handler at key time, since a change of the same turn is applied to the
+        // delegates only by the next layout.
+        function actable(it: var): bool {
+            return !removing && list.usable(it) && list.liveKey(key);
+        }
+
         // The focusable items of this card in Tab order, usable or not: {role, item}. The focus resolver
         // (NotificationList.resolveFocus) names focus targets by key and role, never by item.
         function controls(): var {
@@ -650,7 +679,7 @@ ListView {
         // the resolver's (it was on this card or its group: it moves on; accessibility paths with the focus
         // elsewhere (`refocus`) move it to the card that follows; a focus on another card stays).
         function clearCard(group: bool, refocus: bool): void {
-            if (removing)
+            if (removing || !list.liveKey(key))
                 return;
             if (refocus && list.focusedDelegate() === null)
                 list.adopt(key, appName);
@@ -755,15 +784,23 @@ ListView {
             }
 
             Keys.onPressed: event => {
-                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    row.open();
-                    event.accepted = true;
-                } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
-                    // Only the card itself and its x clear it: on Show All, More, an action or Clear All the key does nothing.
-                    if (row.activeFocus || closeButton.activeFocus)
-                        item.clearCard(false, true);
-                    event.accepted = true;
+                const open = event.key === Qt.Key_Return || event.key === Qt.Key_Enter;
+                const clear = event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace;
+                if (!open && !clear)
+                    return;
+                event.accepted = true;
+                // The card must still be there, visible and displayed (a change of this very turn may have taken it out before the
+                // resolver ran): else nothing happens and the resolver is queued.
+                if (!item.actable(row)) {
+                    list.queueResolve();
+                    return;
                 }
+                // Return opens only when the card itself has the focus (not from a stray child such as the actions Loader); Delete
+                // and Backspace only on the card and its x: on Show All, More, an action or Clear All the key does nothing.
+                if (open && row.activeFocus)
+                    row.open();
+                else if (clear && (row.activeFocus || closeButton.activeFocus))
+                    item.clearCard(false, true);
             }
 
             onActiveFocusChanged: {
@@ -806,8 +843,11 @@ ListView {
                 Accessible.onPressAction: item.clearCard(false, true)
                 Keys.onPressed: event => {
                     if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        item.clearCard(false, true);
                         event.accepted = true;
+                        if (item.actable(closeButton))
+                            item.clearCard(false, true);
+                        else
+                            list.queueResolve();
                     }
                 }
 
@@ -932,6 +972,10 @@ ListView {
                                     Component.onCompleted: item.showLessCtl = showLess
                                     onVisibleChanged: list.queueResolve()
                                     onClicked: {
+                                        if (!item.actable(showLess)) {
+                                            list.queueResolve();
+                                            return;
+                                        }
                                         const kbd = showLess.activeFocus;
                                         Notifications.setExpanded(item.appName, false);
                                         if (kbd)
@@ -951,6 +995,7 @@ ListView {
                                     // A single notification has only its own x (macOS): Clear All needs a group.
                                     visible: item.headCount > 1
                                     active: item.groupHot
+                                    gate: () => item.actable(clearGroup)
                                     Component.onCompleted: item.clearGroupCtl = clearGroup
                                     onVisibleChanged: list.queueResolve()
                                     text: qsTr("Clear All")
@@ -972,7 +1017,12 @@ ListView {
                             body: Notifications.bodyFor(item.bodyHtml)
                             timeText: Notifications.timeFor(item.time)
                             iconSource: Notifications.iconSource(item.image, item.appIcon)
-                            onActionTriggered: actionId => Notifications.invokeAction(item.key, actionId)
+                            onActionTriggered: actionId => {
+                                if (item.actable(rowContent))
+                                    Notifications.invokeAction(item.key, actionId);
+                                else
+                                    list.queueResolve();
+                            }
                         }
 
                         Item {
@@ -988,6 +1038,10 @@ ListView {
                                 Component.onCompleted: item.toggleCtl = toggle
                                 onVisibleChanged: list.queueResolve()
                                 onClicked: {
+                                    if (!item.actable(toggle)) {
+                                        list.queueResolve();
+                                        return;
+                                    }
                                     const kbd = toggle.activeFocus;
                                     Notifications.setExpanded(item.appName, true);
                                     if (kbd)

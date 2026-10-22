@@ -1,0 +1,40 @@
+{
+ "_doc": "A2 limits measured on Breeze, Adwaita and the own fixtures (tests/visual/icon-a2.sh). Key: the rule (E outside, S separation) and the label of the A2 line (icon, mode, size, appearance, scenario, tint, transparency); value: the measured metric of the rule, default: the Default rendering's. docs/specs/ui.md lists the same cells (tests/shell/a2_limits_doc.sh).",
+ "limits": [
+  {
+   "key": "E breeze48:utilities-terminal tinted 24px dark window wallpaper #ffffff",
+   "value": 2.82,
+   "default": 5.3
+  },
+  {
+   "key": "E breeze:accessories-text-editor tinted 32px light window tint #E25AA1 transparency 1.0 wallpaper #808080",
+   "value": 1.93,
+   "default": 2.17
+  },
+  {
+   "key": "E graphite-plate-red-glyph tinted 24px dark window wallpaper #808080",
+   "value": 2.81,
+   "default": 3.11
+  },
+  {
+   "key": "E hicolor:kdenlive tinted 24px dark window wallpaper #ffffff",
+   "value": 2.47,
+   "default": 4.53
+  },
+  {
+   "key": "E hicolor:obs tinted 24px dark window wallpaper #ffffff",
+   "value": 2.6,
+   "default": 6.68
+  },
+  {
+   "key": "E white-page-document tinted 32px light window tint #E6B422 wallpaper #000000",
+   "value": 2.71,
+   "default": 3.77
+  },
+  {
+   "key": "S hicolor:basecamp clear 32px dark window wallpaper #ffffff",
+   "value": 1.45,
+   "default": 1.71
+  }
+ ]
+}

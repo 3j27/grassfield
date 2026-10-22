@@ -62,6 +62,27 @@ Item {
         return true;
     }
 
+    // Set several keys in one write ({dotted key: value}). Returns true when the file was written.
+    function setMany(entries: var): bool {
+        const file = root.backend.readText(root.path);
+        if (file.exists && !file.ok) {
+            root.writeError = qsTr("the file cannot be read");
+            return false;
+        }
+        const result = Store.setValues(file.text, entries);
+        if (!result.ok) {
+            root.writeError = result.error;
+            root.reload();
+            return false;
+        }
+        const failure = root.backend.writeText(root.path, result.text);
+        root.writeError = failure;
+        if (failure !== "")
+            return false;
+        root.reload();
+        return true;
+    }
+
     Component.onCompleted: {
         root.backend.watch(root.path);
         root.reload();

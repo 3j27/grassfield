@@ -27,6 +27,7 @@ Scope {
     // desktop had it): a close without a chosen window returns to it (macOS: leaving Mission Control without choosing
     // brings back the window and the Desktop you were on).
     property var previous: null
+    readonly property string previousAddress: previous && previous.address ? previous.address : ""
     // A Desktop created with "+" while open (the shell switched to it): closing without a choice stays there.
     property int stayOnSpace: 0
 
@@ -99,6 +100,7 @@ Scope {
         retryTimer.stop();
         releaseTimer.stop();
         releaseBound.stop();
+        testReleaseHold.stop();
         keepScreen = "";
         pending = null;
         stage = "closed";
@@ -318,6 +320,8 @@ Scope {
         stage = "releasing";
         releaseTimer.restart();
         releaseBound.restart();
+        testReleaseHoldMs = testReleaseHoldNext; // dev hook, armed for this close only
+        testReleaseHoldNext = 0;
     }
 
     // Output of the chrome that holds the keyboard ("" for none).
@@ -326,6 +330,15 @@ Scope {
     }
 
     function tryFinishRelease(forced: bool): void {
+        if (testReleaseHold.running)
+            return;
+        if (releasing && testReleaseHoldMs > 0 && (forced || !chromeHeld)) {
+            // Dev hook: the release would end now; it stays in its "releasing" stage that much longer.
+            testReleaseHold.interval = testReleaseHoldMs;
+            testReleaseHoldMs = 0;
+            testReleaseHold.restart();
+            return;
+        }
         if (releasing && V2.releaseDone(chromeHeld, releaseSettled, forced))
             finishRelease();
     }
@@ -372,14 +385,26 @@ Scope {
             }
             return;
         }
-        const owner = windowOf(selected);
-        if (!owner) {
-            selected = V2.startSelection(previous, all.map(w => ({
+        // Nothing selected: with a window active at open the ring is on it, so the first arrow starts from it and
+        // moves to its neighbour (macOS); selecting that same window would change nothing visible. With no active
+        // window (the desktop held the keyboard) there is no ring: the first arrow selects the first window in
+        // reading order and stays on it.
+        if (selected === "") {
+            const screens = all.map(w => ({
                         name: w.screenName,
-                        addresses: w.winKeys
-                    })));
-            return;
+                        addresses: w.winKeys,
+                        rects: w.placement.rects
+                    }));
+            const start = V2.startSelection(previous, screens);
+            if (start === "" || !windowOf(start))
+                return;
+            selected = start;
+            if (!V2.startFromActive(previous, screens))
+                return;
         }
+        const owner = windowOf(selected);
+        if (!owner)
+            return;
         const next = owner.neighborOf(selected, dir);
         if (next !== "") {
             selected = next;
@@ -420,13 +445,23 @@ Scope {
     function activateSelection(): void {
         if (spaceFocus >= 0) {
             const owner = windows.instances.find(w => w.screenName === spaceScreen);
-            if (owner)
+            if (owner) {
                 owner.activateTile(spaceFocus);
-        } else if (selected !== "") {
-            const owner = windowOf(selected);
-            if (owner)
-                owner.activateWindow(selected);
+                return;
+            }
+        } else {
+            // Nothing chosen yet: Return takes the window the ring shows, the one active at open.
+            const key = selected !== "" ? selected : previousAddress;
+            const owner = key !== "" ? windowOf(key) : null;
+            if (owner) {
+                owner.activateWindow(key);
+                return;
+            }
         }
+        // Nothing the ring could show (no window was active at open, or it is gone, or the Desktops bar owner is gone):
+        // Return closes, as Esc does (macOS: Return with nothing chosen leaves Mission Control). Before this it did
+        // nothing, and the next Return was the one that closed.
+        closeAnd(null);
     }
 
     Timer {
@@ -448,6 +483,17 @@ Scope {
     Timer {
         id: releaseBound
         interval: Tokens.overviewReleaseBoundMs
+        onTriggered: root.tryFinishRelease(true)
+    }
+
+    // Dev-only test hook (holdNextRelease): the next close, when its release would end (the chromes let go of the keyboard,
+    // or the bound), stays "releasing" this much longer, then finishes as the bound would. 0: no hold (always, outside a
+    // nested dev session).
+    property int testReleaseHoldNext: 0
+    property int testReleaseHoldMs: 0
+
+    Timer {
+        id: testReleaseHold
         onTriggered: root.tryFinishRelease(true)
     }
 
@@ -489,7 +535,17 @@ Scope {
             root.requestClose();
         }
 
-        // Test hook: JSON {open, thumbnailMode, profile, screens: [{name, windows: [{address,
+        // Dev-only test hook (GRASSFIELD_DEV=1 in a nested dev session; tests/compositor/click_focus.sh): the next close stays
+        // in its "releasing" stage at least `ms` (1 to 10000), so that a click during the release can be tested. Refused
+        // otherwise.
+        function holdNextRelease(ms: int): string {
+            if (Quickshell.env("GRASSFIELD_DEV") !== "1" || Quickshell.env("GRASSFIELD_SESSION") === "1" || ms < 1 || ms > 10000)
+                return "refused";
+            root.testReleaseHoldNext = ms;
+            return "held";
+        }
+
+        // Test hook: JSON {open, stage, thumbnailMode, profile, screens: [{name, windows: [{address,
         // appId, title, real, rect}], spaces, selected}]}. Rects are window-local pixels.
         function status(): string {
             const screens = [];
@@ -498,6 +554,7 @@ Scope {
                 screens.push(all[i].statusData());
             return JSON.stringify({
                 open: root.open,
+                stage: root.stage,
                 thumbnailMode: root.thumbnailMode,
                 phase: root.phase,
                 live: root.live,

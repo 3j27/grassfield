@@ -67,6 +67,21 @@ systemctl --user cat omarchy-sleep-lock.service | tail -4                     # 
 The build leaves `packaging/arch/src`, `packaging/arch/pkg` and `*.pkg.tar.zst` (git-ignored) and writes
 `compositor/build/` in the checkout.
 
+**Icon theme (ADR-0017, amended 2026-10-21).** The session icon theme `grassfield-icons` resolves Grassfield's own icons,
+then Breeze (the `breeze-icons` dependency of `grassfield-desktop`), Adwaita and hicolor. The earlier optional
+`grassfield-whitesur-icons` package no longer exists: if you installed it, remove it with
+`sudo pacman -Rns grassfield-whitesur-icons`. Then **log out and log in again**: the icon variables are read at login.
+Nothing is written to `~/.config` or to your dconf database. Check afterwards (read-only):
+
+```bash
+pacman -Q breeze-icons
+cat /usr/share/uwsm/env-grassfield                                  # QT_QPA_SYSTEM_ICON_THEME + DCONF_PROFILE
+systemctl --user show-environment | grep -E 'QT_QPA_SYSTEM_ICON_THEME|DCONF_PROFILE'   # in Grassfield only
+gsettings get org.gnome.desktop.interface icon-theme                # Grassfield: 'grassfield-icons'; Omarchy: unchanged
+```
+Back in the Omarchy session the last command must print your usual theme and `dconf dump /org/gnome/desktop/interface/`
+must be unchanged. In the Grassfield session, changing the icon theme with `gsettings set` fails on purpose (locked key).
+
 ## 4. Log out, enter Grassfield, come back
 
 **Option A (TTY).**
@@ -115,11 +130,31 @@ Gate names are the owner L2 items of `docs/STATE.md` (L3, L5, P1, P3, P5, R2, R3
 - [ ] Files, Settings, Preview: open each, browse, change a harmless setting, Space on a file in Files opens Glance.
 - [ ] Log Out from the Grassfield menu returns to the greeter or TTY.
 
+**New in 0.4.0-7** (installed with `sudo pacman -U grassfield-desktop-0.4.0-7-x86_64.pkg.tar.zst
+grassfield-compositor-0.4.0-7-x86_64.pkg.tar.zst` from `packaging/arch`, then log out and in):
+
+- [ ] Click to focus: lock (SUPER+CTRL+Q) with the pointer away from every window, unlock, type at once: the keys reach
+      the window that was in front, with no click. Click another window: it gets the keyboard.
+- [ ] Font: menus, Settings, Files, a GTK app (Nautilus), Chromium's UI and a web page using the system font show Inter.
+      The terminal keeps its own font. Override if needed: `~/.config/grassfield/fonts.conf` (fontconfig syntax).
+- [ ] Icons: app icons come from Breeze or Adwaita (WhiteSur is gone). Note any app showing a generic placeholder.
+- [ ] Windows: a browser's dialogs and Picture-in-Picture keep their own size; a browser's first window still opens large.
+- [ ] Dock: a click bounces the icon until the first window appears; a click on a running app brings its windows
+      forward; minimized windows come back.
+- [ ] Apps: plain F4 is left to applications; Apps opens with the Launchpad key (if the keyboard has one), the 4-finger
+      pinch and the Dock tile.
+- [ ] Overview: open it with nothing chosen, press Return: it closes; the first arrow key moves the ring.
+- [ ] Notification Center: Tab, Delete and Return keep the focus where you expect after new notifications arrive.
+
 ## 6. Known issues on main right now
 
 - Search/Apps keyboard focus on two outputs: under a fix pass.
-- Dock drag-out removal: under a fix pass (do not drag a pinned tile above the Dock while Search/Overview opens: it can unpin).
-- Icon modes (Dark, Clear, Tinted) are not on main yet.
+- Dock: holding a tile does not open its menu yet (use right click); dragging a pinned tile above the Dock while the
+  Overview opens is still under review (it may unpin).
+- Icon modes (Dark, Clear, Tinted, the plate behind every icon) are not on main yet.
+- Wallpaper choice (Settings > Wallpaper) is not on main yet.
+- Fonts: a GTK/Qt app that asks by name for a font that is not installed (Roboto, Ubuntu, Verdana, ...) gets Liberation
+  Sans, not Inter (documented limit; browsers are not affected).
 - Stages are off by default.
 - The notification banner first-show delay is unmeasured on real hardware (you are the measurement).
 - Omarchy's own shell (bar, notifications, launcher, lock) does not run inside Grassfield, by design; Omarchy keybinds

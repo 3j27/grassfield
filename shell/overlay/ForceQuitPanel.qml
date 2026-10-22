@@ -79,6 +79,7 @@ Dialog {
 
                         TintedIcon {
                             size: Tokens.menuItemHeight - 6
+                            overAccent: row.current
                             anchors.verticalCenter: parent.verticalCenter
                             source: {
                                 const e = Apps.lookup(row.modelData.appId);

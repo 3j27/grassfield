@@ -19,18 +19,35 @@ Singleton {
     property var queued: null
 
     // Glance is showing (or starting).
-    readonly property bool open: launcher.running
+    property bool starting: false
+    readonly property bool open: launcher.running || starting
 
     // Closes Glance (Esc on the desktop: the desktop keeps the keyboard when Glance maps, so Glance cannot close itself).
     function close(): void {
         root.queued = null;
+        if (starting)
+            cancelStart();
         if (launcher.running)
             launcher.signal(15);
+    }
+
+    // Drops a start that still waits for the scope detection (Esc or a second Space in that short window): its callback
+    // finds a newer token and does nothing.
+    property int startToken: 0
+    function cancelStart(): void {
+        root.startToken++;
+        root.starting = false;
+        root.shownKey = "";
     }
 
     function toggle(paths: var): void {
         if (!paths || paths.length === 0)
             return;
+        // A second Space while the start is pending cancels it (like a second Space on a running Glance closes it).
+        if (starting) {
+            cancelStart();
+            return;
+        }
         const files = paths.slice(0, 50);
         const key = files.join("\n");
         if (launcher.running) {
@@ -45,10 +62,20 @@ Singleton {
     function start(files: var): void {
         const cmd = (Quickshell.env("GRASSFIELD_PREVIEW_CMD") || "grassfield-preview").split(" ").filter(w => w !== "" && w !== "--glance");
         root.shownKey = files.join("\n");
-        launcher.command = ["sh", "-c", "command -v -- \"$1\" >/dev/null 2>&1 || { echo missing; exit 0; }; exec \"$@\"", "sh"].concat(cmd, ["--glance", "--"], files);
-        // The pointer size and colour theme the user chose (Pointer.launchEnvironment), like every app the shell starts.
-        launcher.environment = Pointer.launchEnvironment();
-        launcher.running = true;
+        // "open" is true from here on (a second toggle while the scope detection is pending closes nothing twice).
+        root.starting = true;
+        const token = ++root.startToken;
+        Apps.whenScopeKnown(() => {
+            if (token !== root.startToken)
+                return;
+            // In a real session Glance gets a scope of its own (Apps.scoped). uwsm-app execs systemd-run --scope, so the
+            // process the shell holds is the application: close() still signals it.
+            launcher.command = ["sh", "-c", "command -v -- \"$1\" >/dev/null 2>&1 || { echo missing; exit 0; }; shift; exec \"$@\"", "sh", cmd[0]].concat(Apps.scoped(cmd.concat(["--glance", "--"], files)));
+            // The pointer size and colour theme the user chose (Pointer.launchEnvironment), like every app the shell starts.
+            launcher.environment = Pointer.launchEnvironment();
+            root.starting = false;
+            launcher.running = true;
+        });
     }
 
     Process {

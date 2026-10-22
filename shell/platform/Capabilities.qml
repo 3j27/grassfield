@@ -10,17 +10,27 @@ import "CapabilityEvent.js" as CapabilityEvent
 // Sends the hello every helloRetryMs (the first ones can predate Quickshell's event socket, so
 // the reply would be missed) and waits for a Hyprland raw event named `grassfield` whose
 // data is JSON {"v":"gfc/1","type":"capabilities","features":[...]}. No reply within
-// helloTimeoutMs means degraded mode (pluginPresent = false).
+// helloTimeoutMs means degraded mode (pluginPresent = false) for now: the hello keeps going every
+// helloSlowRetryMs for helloGiveUpMs, so a reply that comes late (a loaded host at login, Quickshell's
+// event socket connecting after the first hellos) still brings the shell out of degraded mode.
 Singleton {
     id: root
 
     readonly property string protocol: "gfc/1"
     readonly property int helloTimeoutMs: 1500
     readonly property int helloRetryMs: 250
+    readonly property int helloSlowRetryMs: 2000
+    readonly property int helloGiveUpMs: 300000
+    // A loaded plugin can answer seconds after the timeout at login (the late replies above): only this long without a
+    // reply, or an unload, makes the extension known to be absent.
+    readonly property int helloAbsentMs: 15000
 
     property bool pluginPresent: false
     // False until the hello reply arrived or the timeout elapsed.
     property bool settled: false
+    // The extension is known to be absent: no reply within helloAbsentMs, or its unload. The degraded notice waits for
+    // this, so that a late reply at login never shows it for a moment (degraded mode itself starts at the timeout).
+    property bool absent: false
     property var features: []
     // A capabilities event of another protocol version was logged (once per shell run).
     property bool protocolWarned: false
@@ -52,10 +62,12 @@ Singleton {
         features = msg.features;
         // An empty list is the plugin's unload: nothing is available any more, same as no plugin.
         pluginPresent = msg.present;
+        absent = !msg.present;
         settled = true;
         timeout.stop();
         // No polling after an unload: a plugin loaded later announces itself.
         retry.stop();
+        giveUp.stop();
         console.info("grassfield: compositor plugin", msg.present ? "present, features:" : "gone (empty capabilities)", features.join(","));
     }
 
@@ -84,15 +96,33 @@ Singleton {
         id: timeout
         interval: root.helloTimeoutMs
         onTriggered: {
-            retry.stop();
-            if (!root.pluginPresent)
-                console.info("grassfield: no compositor plugin reply, running in degraded mode");
+            if (!root.pluginPresent) {
+                console.info("grassfield: no compositor plugin reply yet, running in degraded mode (still asking)");
+                retry.interval = root.helloSlowRetryMs;
+                giveUp.start();
+            } else {
+                retry.stop();
+            }
             root.settled = true;
         }
     }
 
-    // Resends the hello until a reply arrives or the timeout elapses. A plugin loaded later
-    // is still accepted: the capabilities event is handled at any time.
+    Timer {
+        id: absentDelay
+        interval: root.helloAbsentMs
+        onTriggered: root.absent = !root.pluginPresent
+    }
+
+    // Stops the slow hellos: by then the plugin is not loaded, and one loaded later announces itself.
+    Timer {
+        id: giveUp
+        interval: root.helloGiveUpMs
+        onTriggered: retry.stop()
+    }
+
+    // Resends the hello until a reply arrives: every helloRetryMs until the timeout, then every
+    // helloSlowRetryMs until giveUp. A plugin loaded later is still accepted: the capabilities event is
+    // handled at any time.
     Timer {
         id: retry
         interval: root.helloRetryMs
@@ -102,6 +132,7 @@ Singleton {
 
     Component.onCompleted: {
         timeout.start();
+        absentDelay.start();
         retry.start();
         Hyprland.dispatch(root.helloRequest);
     }

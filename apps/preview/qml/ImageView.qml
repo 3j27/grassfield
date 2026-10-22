@@ -81,6 +81,7 @@ Item {
                 visible: !(root.info.animated ?? false)
                 source: root.info.url && !root.info.animated ? "image://preview/" + root.currentPage + "/" + root.fileIndex : ""
                 asynchronous: true
+                retainWhileLoading: true
                 cache: false
                 mipmap: true
                 smooth: true
@@ -108,6 +109,17 @@ Item {
                     root.zoomIn();
                 else if (event.angleDelta.y < 0)
                     root.zoomOut();
+            }
+        }
+
+        // Double click toggles between Zoom to Fit and Actual Size (macOS Preview).
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            onDoubleTapped: {
+                if (root.fitMode && root.fitScale < 1)
+                    root.actualSize();
+                else
+                    root.fit();
             }
         }
 

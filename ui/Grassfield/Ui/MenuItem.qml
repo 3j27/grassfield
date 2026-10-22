@@ -67,6 +67,7 @@ Item {
             color: root.foreground
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyMenuSize
+            font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
             font.weight: Tokens.typographySmallWeight
         }
 
@@ -84,6 +85,7 @@ Item {
             color: root.highlighted && root.enabled ? root.foreground : Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyMenuSize
+            font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
             font.weight: Tokens.typographySmallWeight
         }
 

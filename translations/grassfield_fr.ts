@@ -346,6 +346,18 @@
         <translation>Fenêtres, menus et panneaux clairs ou sombres.</translation>
     </message>
     <message>
+        <source>Accent colour</source>
+        <translation>Couleur d’accentuation</translation>
+    </message>
+    <message>
+        <source>Colour of buttons, selections, toggles and focus rings in the shell and in the apps. Multicolour is the Grassfield green. The highlight colour follows the accent.</source>
+        <translation>Couleur des boutons, des sélections, des interrupteurs et des anneaux de focus dans le shell et dans les apps. Multicolore est le vert Grassfield. La couleur de surbrillance suit l’accent.</translation>
+    </message>
+    <message>
+        <source>Multicolour</source>
+        <translation>Multicolore</translation>
+    </message>
+    <message>
         <source>Light</source>
         <translation>Clair</translation>
     </message>
@@ -2316,8 +2328,20 @@
         <translation>Survol</translation>
     </message>
     <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Previous</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
         <source>%1 of %2</source>
         <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Next</source>
+        <translation>Suivant</translation>
     </message>
     <message>
         <source>Open with Preview</source>
@@ -2527,14 +2551,6 @@
         <translation>Présentation</translation>
     </message>
     <message>
-        <source>Hide Sidebar</source>
-        <translation>Masquer la barre latérale</translation>
-    </message>
-    <message>
-        <source>Show Sidebar</source>
-        <translation>Afficher la barre latérale</translation>
-    </message>
-    <message>
         <source>Actual Size</source>
         <translation>Taille réelle</translation>
     </message>
@@ -2553,6 +2569,30 @@
     <message>
         <source>Go</source>
         <translation>Aller</translation>
+    </message>
+    <message>
+        <source>Hide Thumbnails</source>
+        <translation>Masquer les vignettes</translation>
+    </message>
+    <message>
+        <source>Show Thumbnails</source>
+        <translation>Afficher les vignettes</translation>
+    </message>
+    <message>
+        <source>Hide Info</source>
+        <translation>Masquer les informations</translation>
+    </message>
+    <message>
+        <source>Show Info</source>
+        <translation>Afficher les informations</translation>
+    </message>
+    <message>
+        <source>Stop Slideshow</source>
+        <translation>Arrêter le diaporama</translation>
+    </message>
+    <message>
+        <source>Slideshow</source>
+        <translation>Diaporama</translation>
     </message>
     <message>
         <source>Previous Page</source>
@@ -2914,6 +2954,14 @@
     <message>
         <source>dark light theme transparency material motion icons tint</source>
         <translation>sombre clair thème transparence matière animation apparence icônes teinte</translation>
+    </message>
+    <message>
+        <source>Wallpaper</source>
+        <translation>Fond d’écran</translation>
+    </message>
+    <message>
+        <source>background picture photo image folder slideshow shuffle colour color desktop picture</source>
+        <translation>arrière-plan image photo dossier diaporama aléatoire couleur bureau fond</translation>
     </message>
     <message>
         <source>Accessibility</source>
@@ -3286,14 +3334,6 @@
         <source>Desktop %1</source>
         <translation>Bureau %1</translation>
     </message>
-    <message>
-        <source>1 window</source>
-        <translation>1 fenêtre</translation>
-    </message>
-    <message>
-        <source>%1 windows</source>
-        <translation>%1 fenêtres</translation>
-    </message>
 </context>
 <context>
     <name>PasswordField</name>
@@ -3497,6 +3537,10 @@
     <message>
         <source>Show a quick, floating look at the files (Space or Esc closes it).</source>
         <translation>Affiche un Survol flottant des fichiers (Espace ou Échap le ferme).</translation>
+    </message>
+    <message>
+        <source>Show file number &lt;n&gt; of the given files first (0 is the first).</source>
+        <translation>Afficher d’abord le fichier numéro &lt;n&gt; des fichiers donnés (0 est le premier).</translation>
     </message>
     <message>
         <source>Local files or file: URLs.</source>
@@ -3987,52 +4031,52 @@
         <translation>Visionneuse</translation>
     </message>
     <message>
-        <source>Sidebar</source>
-        <translation>Barre latérale</translation>
-    </message>
-    <message>
         <source>Zoom Out</source>
         <translation>Zoom arrière</translation>
-    </message>
-    <message>
-        <source>Zoom %1</source>
-        <translation>Zoom %1</translation>
     </message>
     <message>
         <source>Zoom In</source>
         <translation>Zoom avant</translation>
     </message>
     <message>
-        <source>Fit</source>
-        <translation>Ajuster</translation>
-    </message>
-    <message>
-        <source>Fit to Window</source>
-        <translation>Ajuster à la fenêtre</translation>
-    </message>
-    <message>
-        <source>Rotate</source>
-        <translation>Pivoter</translation>
-    </message>
-    <message>
         <source>Rotate Right</source>
         <translation>Pivoter à droite</translation>
-    </message>
-    <message>
-        <source>Previous Page</source>
-        <translation>Page précédente</translation>
-    </message>
-    <message>
-        <source>%1 / %2</source>
-        <translation>%1 / %2</translation>
     </message>
     <message>
         <source>Page %1 of %2</source>
         <translation>Page %1 sur %2</translation>
     </message>
     <message>
-        <source>Next Page</source>
-        <translation>Page suivante</translation>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Thumbnails</source>
+        <translation>Vignettes</translation>
+    </message>
+    <message>
+        <source>Previous</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Next</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Slideshow</source>
+        <translation>Diaporama</translation>
+    </message>
+    <message>
+        <source>Zoom to Fit</source>
+        <translation>Ajuster à la fenêtre</translation>
+    </message>
+    <message>
+        <source>Rotate Left</source>
+        <translation>Pivoter à gauche</translation>
+    </message>
+    <message>
+        <source>Info</source>
+        <translation>Informations</translation>
     </message>
     <message>
         <source>Search in document</source>
@@ -4045,6 +4089,38 @@
     <message>
         <source>%1 found</source>
         <translation>%1 trouvés</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Dimensions</source>
+        <translation>Dimensions</translation>
+    </message>
+    <message>
+        <source>%1 × %2 pixels</source>
+        <translation>%1 × %2 pixels</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation>Modifié le</translation>
+    </message>
+    <message>
+        <source>Where</source>
+        <translation>Emplacement</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation>%1 : %2</translation>
     </message>
     <message>
         <source>Files</source>
@@ -4079,6 +4155,257 @@
     <message>
         <source>%1%</source>
         <translation>%1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>WallpaperPage</name>
+    <message>
+        <source>Wallpaper</source>
+        <translation>Fond d’écran</translation>
+    </message>
+    <message>
+        <source>When logging in</source>
+        <translation>À l’ouverture de session</translation>
+    </message>
+    <message>
+        <source>Every 5 seconds</source>
+        <translation>Toutes les 5 secondes</translation>
+    </message>
+    <message>
+        <source>Every minute</source>
+        <translation>Toutes les minutes</translation>
+    </message>
+    <message>
+        <source>Every 5 minutes</source>
+        <translation>Toutes les 5 minutes</translation>
+    </message>
+    <message>
+        <source>Every 15 minutes</source>
+        <translation>Toutes les 15 minutes</translation>
+    </message>
+    <message>
+        <source>Every 30 minutes</source>
+        <translation>Toutes les 30 minutes</translation>
+    </message>
+    <message>
+        <source>Every hour</source>
+        <translation>Toutes les heures</translation>
+    </message>
+    <message>
+        <source>Every day</source>
+        <translation>Tous les jours</translation>
+    </message>
+    <message>
+        <source>Fill Screen</source>
+        <translation>Remplir l’écran</translation>
+    </message>
+    <message>
+        <source>Fit to Screen</source>
+        <translation>Ajuster à l’écran</translation>
+    </message>
+    <message>
+        <source>Stretch to Fill Screen</source>
+        <translation>Étirer pour remplir l’écran</translation>
+    </message>
+    <message>
+        <source>Center</source>
+        <translation>Centrer</translation>
+    </message>
+    <message>
+        <source>Tile</source>
+        <translation>Mosaïque</translation>
+    </message>
+    <message>
+        <source>Blue</source>
+        <translation>Bleu</translation>
+    </message>
+    <message>
+        <source>Purple</source>
+        <translation>Violet</translation>
+    </message>
+    <message>
+        <source>Pink</source>
+        <translation>Rose</translation>
+    </message>
+    <message>
+        <source>Red</source>
+        <translation>Rouge</translation>
+    </message>
+    <message>
+        <source>Orange</source>
+        <translation>Orange</translation>
+    </message>
+    <message>
+        <source>Yellow</source>
+        <translation>Jaune</translation>
+    </message>
+    <message>
+        <source>Green</source>
+        <translation>Vert</translation>
+    </message>
+    <message>
+        <source>Graphite</source>
+        <translation>Graphite</translation>
+    </message>
+    <message>
+        <source>The picture &quot;%1&quot; can&apos;t be found.</source>
+        <translation>L’image «&#xa0;%1&#xa0;» est introuvable.</translation>
+    </message>
+    <message>
+        <source>The picture &quot;%1&quot; can&apos;t be read.</source>
+        <translation>L’image «&#xa0;%1&#xa0;» ne peut pas être lue.</translation>
+    </message>
+    <message>
+        <source>This picture format isn&apos;t supported.</source>
+        <translation>Ce format d’image n’est pas pris en charge.</translation>
+    </message>
+    <message>
+        <source>This picture is too large.</source>
+        <translation>Cette image est trop grande.</translation>
+    </message>
+    <message>
+        <source>This item can&apos;t be used as a wallpaper.</source>
+        <translation>Cet élément ne peut pas servir de fond d’écran.</translation>
+    </message>
+    <message>
+        <source>The folder &quot;%1&quot; isn&apos;t available.</source>
+        <translation>Le dossier «&#xa0;%1&#xa0;» n’est pas disponible.</translation>
+    </message>
+    <message>
+        <source>No pictures in this folder.</source>
+        <translation>Aucune image dans ce dossier.</translation>
+    </message>
+    <message>
+        <source>None of the pictures in this folder can be shown.</source>
+        <translation>Aucune image de ce dossier ne peut être affichée.</translation>
+    </message>
+    <message>
+        <source>Wallpapers can&apos;t be prepared: the helper is missing.</source>
+        <translation>Les fonds d’écran ne peuvent pas être préparés&#xa0;: l’outil est absent.</translation>
+    </message>
+    <message>
+        <source>Preparing the picture took too long.</source>
+        <translation>La préparation de l’image a pris trop de temps.</translation>
+    </message>
+    <message>
+        <source>In a development session only pictures inside the project&apos;s .dev folder can be used.</source>
+        <translation>Dans une session de développement, seules les images du dossier .dev du projet peuvent être utilisées.</translation>
+    </message>
+    <message>
+        <source>This path can&apos;t be used.</source>
+        <translation>Ce chemin ne peut pas être utilisé.</translation>
+    </message>
+    <message>
+        <source>Video wallpapers aren&apos;t available yet.</source>
+        <translation>Les fonds d’écran vidéo ne sont pas encore disponibles.</translation>
+    </message>
+    <message>
+        <source>The wallpaper can&apos;t be shown.</source>
+        <translation>Le fond d’écran ne peut pas être affiché.</translation>
+    </message>
+    <message>
+        <source>Grassfield</source>
+        <translation>Grassfield</translation>
+    </message>
+    <message>
+        <source>Preparing…</source>
+        <translation>Préparation…</translation>
+    </message>
+    <message>
+        <source>%1, shuffled</source>
+        <translation>%1, ordre aléatoire</translation>
+    </message>
+    <message>
+        <source>%1 · Pictures in the folder: %2</source>
+        <translation>%1 · Images dans le dossier&#xa0;: %2</translation>
+    </message>
+    <message>
+        <source>Current wallpaper: %1</source>
+        <translation>Fond d’écran actuel&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Use the Grassfield Wallpaper</source>
+        <translation>Utiliser le fond d’écran Grassfield</translation>
+    </message>
+    <message>
+        <source>Fit</source>
+        <translation>Ajustement</translation>
+    </message>
+    <message>
+        <source>Colour</source>
+        <translation>Couleur</translation>
+    </message>
+    <message>
+        <source>Shown around a picture that does not fill the screen.</source>
+        <translation>Affichée autour d’une image qui ne remplit pas l’écran.</translation>
+    </message>
+    <message>
+        <source>Wallpaper colour</source>
+        <translation>Couleur du fond d’écran</translation>
+    </message>
+    <message>
+        <source>Change picture</source>
+        <translation>Changer d’image</translation>
+    </message>
+    <message>
+        <source>Shuffle</source>
+        <translation>Ordre aléatoire</translation>
+    </message>
+    <message>
+        <source>Random order, every picture once before any is repeated.</source>
+        <translation>Chaque image apparaît une fois avant toute répétition.</translation>
+    </message>
+    <message>
+        <source>Pictures</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <source>No pictures were found in the Pictures folder.</source>
+        <translation>Aucune image n’a été trouvée dans le dossier Images.</translation>
+    </message>
+    <message>
+        <source>Show Fewer</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show All (%1)</source>
+        <translation>Tout afficher (%1)</translation>
+    </message>
+    <message>
+        <source>Colours</source>
+        <translation>Couleurs</translation>
+    </message>
+    <message>
+        <source>Folders and Pictures</source>
+        <translation>Dossiers et images</translation>
+    </message>
+    <message>
+        <source>Add a folder to change the picture at an interval, or a single picture.</source>
+        <translation>Ajoutez un dossier pour changer d’image à intervalle régulier, ou une seule image.</translation>
+    </message>
+    <message>
+        <source>Shuffle %1</source>
+        <translation>Mélanger %1</translation>
+    </message>
+    <message>
+        <source>Add Folder…</source>
+        <translation>Ajouter un dossier…</translation>
+    </message>
+    <message>
+        <source>Add Picture…</source>
+        <translation>Ajouter une image…</translation>
+    </message>
+    <message>
+        <source>Choose a folder of pictures</source>
+        <translation>Choisir un dossier d’images</translation>
+    </message>
+    <message>
+        <source>Choose a picture</source>
+        <translation>Choisir une image</translation>
+    </message>
+    <message>
+        <source>Pictures (%1)</source>
+        <translation>Images (%1)</translation>
     </message>
 </context>
 <context>

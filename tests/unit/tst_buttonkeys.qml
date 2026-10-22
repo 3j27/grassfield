@@ -63,11 +63,8 @@ TestCase {
         compare(tc.parentKeys.length, 0);
     }
 
-    function test_disabledButtonDoesNotActivate() {
-        button.enabled = false;
-        keyClick(Qt.Key_Return);
-        compare(tc.clicks, 0);
-    }
+    // (No case for a disabled Button: Qt takes the focus off a disabled item, so a key never reaches its handler and a test of the
+    // `enabled` half of the guard would prove nothing. The hidden case below does reach it: Qt keeps the focus on a hidden item.)
 
     // Escape (and any other key) from a hidden Button reaches the parent.
     function test_hiddenButtonLetsEscapeAndOtherKeysPropagate() {

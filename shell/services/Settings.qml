@@ -34,6 +34,7 @@ Singleton {
     readonly property bool dockMinimizeIntoApp: store.data.dock.minimizeIntoApp
     readonly property string dockMinimizeEffect: store.dockMinimizeEffect
 
+    readonly property string accentColor: store.accentColor
     readonly property string iconMode: store.iconMode
     readonly property string iconTint: store.iconTint
     readonly property string folderColor: store.folderColor
@@ -46,6 +47,9 @@ Singleton {
     readonly property int pointerSize: store.pointerSize
     readonly property string pointerOutlineColor: store.pointerOutlineColor
     readonly property string pointerFillColor: store.pointerFillColor
+
+    // Wallpaper settings (ADR-0016), complete and valid; see ui/Grassfield/Ui/WallpaperConfig.js.
+    readonly property var wallpaper: store.wallpaper
 
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews

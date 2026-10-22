@@ -26,6 +26,32 @@ function meanLuminance(bytes) {
     return sum / n;
 }
 
+// WCAG contrast ratio of two relative luminances.
+function contrastRatio(a, b) {
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+// Tone from the luminance distribution of the strip (ADR-0016 section 7): white text is limited by the lightest pixels
+// of the strip (p95), black text by the darkest (p5). The tone with the better worst case wins; the previous tone stays
+// unless the other is better by less than `margin` and the previous one reaches `needed` (no flip-flopping between two
+// similar wallpapers). When the CHOSEN tone is below `needed` (4.5:1), `assist` is true: the bar shows the frosted band (macOS's "show menu bar background",
+// switched on for that output) until the wallpaper changes.
+// Returns {tone: "light" | "dark", white, black, best, assist}.
+function stripTone(p5, p95, previous, needed, margin) {
+    const hi = Math.max(0, Math.min(1, p95));
+    const lo = Math.max(0, Math.min(1, p5));
+    const white = contrastRatio(1, hi);
+    const black = contrastRatio(0, lo);
+    let tone = white >= black ? "light" : "dark";
+    // Hysteresis: the previous tone stays only while it still reaches `needed` itself (never keep a tone that fails when the
+    // other one passes).
+    const previousContrast = previous === "light" ? white : black;
+    if ((previous === "light" || previous === "dark") && previous !== tone && Math.abs(white - black) < margin && previousContrast >= needed)
+        tone = previous;
+    const best = tone === "light" ? white : black;
+    return {tone: tone, white: white, black: black, best: best, assist: best < needed};
+}
+
 // Luminance of a vertical two-stop gradient strip: from colour a (top) towards colour b, the strip covering the fraction
 // `reach` (0..1) of the way; a and b are {r, g, b} in 0..1. The mean over the strip is taken at its middle.
 function stripOfGradient(a, b, reach) {

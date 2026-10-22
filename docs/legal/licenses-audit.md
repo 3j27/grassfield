@@ -58,6 +58,7 @@ Observations for counsel (no conclusion):
 | `grassfield-desktop` | QML shell (`/usr/share/grassfield/shell`), `Grassfield.Ui` QML module + 40 SVG icons, `Grassfield.I18n` QML plugin `.so` + `.qm` catalogues, Hyprland Lua session config, JSON defaults and schema, session `.desktop`, systemd user units, `grassfield-menu-bridge`, `grassfield-settings`, `grassfield-files`, `grassfield-preview` binaries and their QML, `.desktop` files, README, `BRANDING.md` | this repository only |
 | `grassfield-compositor` | `/usr/lib/grassfield/grassfield-compositor.so` (Hyprland plugin) | this repository, compiled against Hyprland headers, with code generated from `compositor/protocols/appmenu.xml` |
 
+
 Everything else (Hyprland, Quickshell, Qt, KF6, fonts) is a declared dependency installed from the Arch/Omarchy
 repositories; Grassfield does not redistribute it today. The ISO (M6) changes that (section 6).
 
@@ -90,6 +91,7 @@ repositories; Grassfield does not redistribute it today. The ISO (M6) changes th
 | 21 | googletest 1.18.0 | `makedepends`; unit tests of plugin, bridge, Files, Preview; test binaries built in `check()` | BSD-3-Clause, "Copyright 2008, Google Inc." | notice only if test binaries were distributed | not packaged (VERIFIED: the package functions and the CMake `install()` rules install no test binary) |
 | 22 | wlr-virtual-pointer protocol (test tool) | `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml`, "reconstructed from the request signatures" of Hyprland's generated header | upstream notice in `/usr/include/hyprland/protocols/wlr-virtual-pointer-unstable-v1.hpp`: MIT, "Copyright © 2019 Josef Gajdusek" | MIT notice if distributed | test-only, not packaged; no notice in the reconstructed file |
 | 23 | uwsm 0.26.7 | session launcher in `grassfield.desktop` `Exec=` | MIT | none (separate program) | dependency |
+| 24 | Breeze and Adwaita icon themes (`breeze-icons` 6.29.0, `adwaita-icon-theme` 50.0; runtime dependencies, ADR-0017 amended 2026-10-21) | icon theme data read by Qt and GTK as data; installed by pacman, never vendored or modified; WhiteSur was dropped on 2026-10-21 | LGPL-3.0-or-later and LGPL-2.1-only (Breeze); CC-BY-SA-3.0 OR LGPL-3.0-only (Adwaita), per pacman | licence files are installed by their packages; needs legal review |
 
 ### 4.2 Hyprland and its libraries (rows 1, 2, 5)
 
@@ -257,6 +259,7 @@ needs legal review: confirmation that executing separately distributed programs 
 | G9 | FFmpeg GPL-3.0 at run time in Preview | ask counsel; engineering options: other backend, LGPL build of ffmpeg on the ISO |
 | G10 | No in-app notices | optional "Acknowledgements"/licences page in Settings › About |
 | G11 | Test-only protocol XML without notice | add the MIT notice to `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml` before publishing the repository |
+| G12 | Closed 2026-10-21: no GPL-3.0 icon data is packaged any more (WhiteSur dropped, ADR-0017 amendment) | Breeze and Adwaita are runtime dependencies installed by pacman (row 24). needs legal review |
 
 ## 6. Grassfield OS ISO (M6): items to plan
 
@@ -286,13 +289,19 @@ These are obligations to examine with counsel before any ISO is distributed. Non
    example NVIDIA drivers or apps from Omarchy's default set; ASSUMPTION), check each redistribution licence;
    patent-encumbered codecs in ffmpeg may matter in some jurisdictions.
 9. **Default themes.** Icon and cursor themes on the image must not imitate Apple assets (see visual-review E27,
-   E28).
+   E28). The session icon chain is Grassfield's own icons, then Breeze, Adwaita and hicolor (ADR-0017 amended
+   2026-10-21; WhiteSur was dropped after four counter-reviews each found more Apple app-icon artwork in a filtered copy).
+   Breeze and Adwaita are original KDE and GNOME art installed by pacman; the macOS 26 shape will come from the shell's
+   system plate (ADR-0014). needs legal review before any public release or ISO.
 10. **Trademarks.** Arch Linux and Omarchy names on the image and website ("based on Arch Linux", "built for
     Omarchy" per §14); Hyprland, KDE, Qt names in credits. needs legal review.
 11. **Repository signing and distribution** (M6 signed `[grassfield]` repository): export-control or notification
     rules for cryptographic software, if any apply to the owner's jurisdiction (ASSUMPTION). needs legal review.
 
 ## 7. Open questions (all: needs legal review)
+
+0. (closed 2026-10-21) The GPL-3.0 WhiteSur question (G12) no longer applies: no WhiteSur data is packaged. Remaining:
+   Breeze and Adwaita as runtime dependencies of an image (row 24).
 
 1. BSD-3 notice for the binary plugin built from Hyprland headers (4.2).
 2. LGPL-2.1-or-later protocol XML compiled into the MIT plugin (4.4) and scanner output (4.3).

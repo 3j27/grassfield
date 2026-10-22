@@ -2,9 +2,11 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 
-// The icon appearance picker (macOS 26 layout): four tiles, each showing one sample icon drawn the way that mode
-// draws every app and file icon. model: [{id, text}]; value is the selected id; picked(id) on user change.
-// One focus stop like Segmented: Left/Right (and Up/Down) move the choice, the focus ring surrounds the tile.
+// The icon appearance picker (macOS 26 layout): four tiles, each showing a sample icon through the same TintedIcon that
+// draws every app and file icon (same shader: the system plate and the fixed recolour), so a tile is what icons get. model: [{id, text}];
+// value is the selected id; picked(id) on user change.
+// One focus stop like Segmented: Left/Right (and Up/Down) move the choice. The selection is an accent border on the
+// tile; the keyboard focus is a separate ring in the text colour, set off from the tile by a gap.
 FocusScope {
     id: root
 
@@ -72,16 +74,17 @@ FocusScope {
                 Accessible.checked: tile.selected
                 Accessible.onPressAction: root.picked(tile.modelData.id)
 
-                // Keyboard focus ring (the selection ring is inside it).
+                // Keyboard focus ring: outside the tile, set off by a gap, in the text colour (the selection ring is the
+                // accent border of the tile itself, so the two never read as one ring).
                 Rectangle {
-                    x: -Tokens.controlFocusRing
-                    y: -Tokens.controlFocusRing
-                    width: plate.width + 2 * Tokens.controlFocusRing
-                    height: plate.height + 2 * Tokens.controlFocusRing
-                    radius: Tokens.iconModePreviewRadius + Tokens.controlFocusRing
+                    x: -(Tokens.controlFocusRing + Tokens.iconModePreviewFocusGap)
+                    y: x
+                    width: plate.width - 2 * x
+                    height: plate.height - 2 * x
+                    radius: Tokens.iconModePreviewRadius - x
                     color: "transparent"
                     border.width: Tokens.controlFocusRing
-                    border.color: Appearance.colors.accent
+                    border.color: Appearance.colors.text
                     visible: tile.selected && root.activeFocus
                 }
 
@@ -95,43 +98,13 @@ FocusScope {
                     border.width: tile.selected ? Tokens.controlFocusRing : Tokens.appsBorderWidth
                     border.color: tile.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
-                    // The sample icon: drawn once into a texture, then through the mode's effect (the same
-                    // IconEffect the shell and the apps use on theme icons).
-                    Item {
-                        id: sample
+                    // A real icon through the real pipeline: the per-tile mode overrides the global one.
+                    TintedIcon {
                         anchors.centerIn: parent
-                        width: Tokens.iconModePreviewSize
-                        height: Tokens.iconModePreviewSize
-                        layer.enabled: true
-                        // Hidden when an effect draws it; the default tile shows it as is.
-                        visible: tile.modelData.id === "default"
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: width * Tokens.iconModeSampleRadius
-                            gradient: Gradient {
-                                GradientStop { position: 0; color: Tokens.iconModeSampleTop }
-                                GradientStop { position: 1; color: Tokens.iconModeSampleBottom }
-                            }
-                        }
-
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: parent.width * 0.46
-                            height: width
-                            radius: width / 2
-                            color: Tokens.iconModeSampleGlyph
-                        }
-                    }
-
-                    Loader {
-                        anchors.fill: sample
-                        active: tile.modelData.id !== "default"
-                        sourceComponent: IconEffect {
-                            source: sample
-                            mode: tile.modelData.id
-                            tint: root.tint
-                        }
+                        size: Tokens.iconModePreviewSize
+                        source: Appearance.iconSampleSource
+                        mode: tile.modelData.id
+                        tint: root.tint
                     }
                 }
 

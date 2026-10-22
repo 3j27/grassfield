@@ -18,6 +18,14 @@ class Backend : public QObject
     Q_PROPERTY(QString bindingsFile READ bindingsFile CONSTANT)
     // GRASSFIELD_DEV=1: the system sections show state but never act on the owner's machine (systemguard.h).
     Q_PROPERTY(bool devSession READ devSession CONSTANT)
+    // Wallpaper (ADR-0016): the helper, its cache, the folder of the Pictures section and the files the shell and this app
+    // share. In a dev session everything is under the worktree's .dev (devRoot is the worktree, "" otherwise).
+    Q_PROPERTY(QString wallpaperTool READ wallpaperTool CONSTANT)
+    Q_PROPERTY(QString wallpaperCache READ wallpaperCache CONSTANT)
+    Q_PROPERTY(QString picturesDir READ picturesDir CONSTANT)
+    Q_PROPERTY(QString devRoot READ devRoot CONSTANT)
+    Q_PROPERTY(QString wallpaperStatusFile READ wallpaperStatusFile CONSTANT)
+    Q_PROPERTY(QString wallpaperRecentFile READ wallpaperRecentFile CONSTANT)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -28,6 +36,12 @@ public:
     QString appVersion() const;
     QString bindingsFile() const { return m_bindingsFile; }
     bool devSession() const { return m_dev; }
+    QString wallpaperTool() const { return m_wallpaperTool; }
+    QString wallpaperCache() const { return m_wallpaperCache; }
+    QString picturesDir() const { return m_picturesDir; }
+    QString devRoot() const { return m_devRoot; }
+    QString wallpaperStatusFile() const;
+    QString wallpaperRecentFile() const;
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.
     Q_INVOKABLE QVariantMap readText(const QString &path) const;
@@ -59,12 +73,17 @@ signals:
     void suppressed(const QString &what);
 
 private:
+    bool wallpaperAllowed(const QStringList &argv) const;
     void onPath(const QString &path);
     void start(const QStringList &argv, const QString &tag, int timeoutMs);
 
     QString m_configFile;
     QString m_bindingsFile;
     bool m_dev;
+    QString m_wallpaperTool;
+    QString m_wallpaperCache;
+    QString m_picturesDir;
+    QString m_devRoot;
     QFileSystemWatcher m_watcher;
     QStringList m_watched;
 };

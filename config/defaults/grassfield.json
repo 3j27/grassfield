@@ -11,9 +11,9 @@
   },
   "dock": {
     "pinned": [
-      "foot",
       "chromium",
-      "org.gnome.Nautilus"
+      "foot",
+      "org.grassfield.Settings"
     ],
     "magnification": 1.6,
     "magnificationEnabled": false,
@@ -45,6 +45,9 @@
   "menubar": {
     "showBackground": false
   },
+  "accent": {
+    "color": "multicolor"
+  },
   "icons": {
     "mode": "default",
     "tint": "accent",
@@ -54,5 +57,15 @@
     "size": 24,
     "outlineColor": "#ffffff",
     "fillColor": "#000000"
+  },
+  "wallpaper": {
+    "source": "builtin",
+    "path": "",
+    "color": "#000000",
+    "fit": "fill",
+    "interval": "1h",
+    "shuffle": true,
+    "videoOnBattery": false,
+    "outputs": []
   }
 }

@@ -29,6 +29,8 @@ ShellRoot {
     readonly property real base: Date.now()
     property var steps: []
     property int stepAt: 0
+    property int escapes: 0
+    property var fired: []
     readonly property alias list: list
 
     // Stands in for the column (CenterContent): the surface host the list talks to.
@@ -58,6 +60,7 @@ ShellRoot {
 
             anchors.fill: parent
             focus: true
+            Keys.onEscapePressed: root.escapes++
 
             NotificationList {
                 id: list
@@ -239,12 +242,14 @@ ShellRoot {
     }
 
     // A scene: reset, build, act (the focus is set and the change made in ONE event-loop turn), check.
-    function scene(build, act, verify): void {
+    function scene(build, act, verify, final): void {
         const s = {};
         step(() => root.resetAll(), 350);
         step(() => build(s), 350);
         step(() => act(s), 200);
-        step(() => verify(s), 50);
+        step(() => verify(s), final ? 250 : 50);
+        if (final)
+            step(() => final(s), 50);
     }
 
     // Every non-leaving delegate sits right under the one above it and carries no visual offset left.
@@ -787,6 +792,101 @@ ShellRoot {
             root.check("30: Delete on the x clears its card", root.focusCtl(s.k, "close"));
             keys.keyClick(Qt.Key_Delete);
             root.check("30: that card is gone", Notifications.entryFor(s.k) === null && Notifications.count === 4);
+        });
+
+        // 31. The identity's rank follows the layout when the focused card itself stays: focus the 2nd card of a group of three, one
+        // arrival of the same app (the card is now the 3rd), settled; Delete clears it and the focus goes to the card that slid into
+        // ITS slot (the 3rd, revealed), not to the card above.
+        root.scene(s => {
+            s.m = mailBy(3);
+            s.c = root.add("cal");
+        }, s => {
+            root.check("31: focus the second card", root.focusCtl(s.m[1], "card"));
+            s.m.push(root.add("mail"));
+        }, s => {
+            root.check("31: the card is the third now", root.shownOf("mail").indexOf(s.m[1]) === 2 && root.held() === s.m[1]);
+            root.check("31: its identity says rank 2", list.focusId !== null && list.focusId.rank === 2);
+            keys.keyClick(Qt.Key_Delete);
+            root.check("31: the card that slid into the slot has the focus", root.held() === s.m[0] && root.onUsable());
+        });
+
+        // 32. The settled rows follow the layout too: groups a, b, c (a newest); the focus on b's card; an arrival of c moves c to the top;
+        // b's card is closed by the app. The group is gone: the focus goes to the card before it (a), not to c, which the stale
+        // order [a, b, c] would name next.
+        root.scene(s => {
+            s.c = root.add("gc");
+            s.b = root.add("gb");
+            s.a = root.add("ga");
+        }, s => {
+            root.check("32: order a, b, c", root.shownKeys().join() === [s.a, s.b, s.c].join());
+            root.check("32: focus b", root.focusCtl(s.b, "card"));
+            s.c2 = root.add("gc");
+        }, s => {
+            root.check("32: c moved to the top", root.shownKeys().join() === [s.c2, s.c, s.a, s.b].join());
+            Notifications.closed(s.b, CLOSED);
+        }, s => {
+            root.check("32: b is gone", Notifications.entryFor(s.b) === null);
+            root.check("32: focus on the card before the gone group (a)", root.held() === s.a && root.onUsable());
+        });
+
+        // 33. A hidden Clear All holding the focus swallows only its activation keys: Escape reaches the panel.
+        root.scene(s => {
+            s.m = mailBy(2);
+        }, s => {
+            s.e0 = root.escapes;
+            root.check("33: focus Clear All", root.focusCtl(s.m[1], "clearGroup"));
+            root.ctl(s.m[1], "clearGroup").visible = false;
+            keys.keyClick(Qt.Key_Escape);
+            s.e1 = root.escapes;
+        }, s => {
+            root.check("33: Escape propagated to the panel", s.e1 === s.e0 + 1);
+        });
+
+        // 34. Keys in the SAME turn as the change that took the card out of the rows (before the resolver ran) do nothing: Delete on
+        // a card an arrival has just pushed out of the collapsed group.
+        root.scene(s => {
+            s.m = mailBy(3);
+        }, s => {
+            root.check("34: focus the third card", root.focusCtl(s.m[0], "card"));
+            s.m.push(root.add("mail"));
+            keys.keyClick(Qt.Key_Delete);
+            s.alive = Notifications.entryFor(s.m[0]) !== null;
+        }, s => {
+            root.check("34: Delete did not clear the card that left the rows", s.alive && Notifications.count === 4);
+            root.check("34: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+        });
+
+        // 35. Space on a sender action of a card that left the rows in the same turn does not invoke it.
+        root.scene(s => {
+            root.fired = [];
+            s.k = root.add("mail", {nid: 21, actions: [{id: "a", text: "A"}]});
+            Notifications.liveByKey[s.k] = {actions: [{identifier: "a", invoke: () => root.fired.push("a")}], dismiss: () => {}};
+            s.m = mailBy(2);
+        }, s => {
+            root.check("35: focus the action (third card)", root.focusCtl(s.k, "action:a"));
+            s.m.push(root.add("mail"));
+            keys.keyClick(Qt.Key_Space);
+            s.n = root.fired.length;
+        }, s => {
+            root.check("35: the action was not invoked", s.n === 0 && root.fired.length === 0);
+            root.check("35: focus is on a usable element", root.onUsable() && root.noHiddenFocus());
+        });
+
+        // 36. Return on the stray actions Loader (the focus a same-id update leaves there) does not open the card.
+        root.scene(s => {
+            s.k = root.add("act", {nid: 22, actions: [{id: "a", text: "A"}, {id: "b", text: "B"}]});
+        }, s => {
+            root.check("36: focus action b", root.focusCtl(s.k, "action:b"));
+            const e = Notifications.entryFor(s.k);
+            Notifications.updateEntry(s.k, Object.assign({}, e, {actions: [{id: "b", text: "B"}]}));
+            s.stray = root.ident() !== null && root.ident().role === "";
+            keys.keyClick(Qt.Key_Return);
+            s.open = Notifications.centerOpen;
+            s.count = Notifications.count;
+        }, s => {
+            root.check("36: the update left the focus on the stray actions Loader (the state this scene is about)", s.stray);
+            root.check("36: Return did not open the card nor close the column", s.open && s.count === 1 && Notifications.count === 1);
+            root.check("36: focus is back on the button", root.onUsable() && root.ident().role === "action:b");
         });
 
         // 27. Property: seeded random turns (arrivals, closes, expiries, toggles, clears; 1 to 3 per turn) with the focus anywhere.

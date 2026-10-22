@@ -21,8 +21,8 @@ ShellRoot {
     readonly property string dirBad: base + "/bad"
     readonly property string dirRange: base + "/range"
     readonly property string badText: '{ "appearance": "light", oops'
-    readonly property string keepText: '{"version":1,"appearance":"light","material":{"transparency":0.5,"profile":"full"},"accessibility":{"reduceTransparency":false,"reduceMotion":false},"dock":{"pinned":["a","b"],"magnification":1.2,"magnificationEnabled":true,"autohide":false},"windows":{"titlebarDoubleClick":"minimize"},"notifications":{"dnd":false,"previews":"always"},"lock":{"idleMinutes":17}}'
-    readonly property string rangeText: '{"version":1,"icons":{"mode":"neon","tint":"#12345","folderColor":"red"},"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999},"pointer":{"size":7}}'
+    readonly property string keepText: '{"version":1,"appearance":"light","material":{"transparency":0.5,"profile":"full"},"accessibility":{"reduceTransparency":false,"reduceMotion":false},"dock":{"pinned":["a","b"],"magnification":1.2,"magnificationEnabled":true,"autohide":false},"windows":{"titlebarDoubleClick":"minimize"},"notifications":{"dnd":false,"previews":"always"},"lock":{"idleMinutes":17},"wallpaper":{"source":"folder","path":"/pics","outputs":[{"display":{"name":"X-1","model":"","serial":""},"fit":"tile"}]}}'
+    readonly property string rangeText: '{"version":1,"icons":{"mode":"neon","tint":"#12345","folderColor":"red"},"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999},"pointer":{"size":7},"wallpaper":{"source":"file","path":"relative","color":"#ABCDEF","fit":7,"interval":"2s","shuffle":"yes","outputs":[{"bad":1}]}}'
     readonly property string dirMerge: base + "/merge"
     readonly property string mergeText: '{"version":1,"appearance":"dark","lock":{"idleMinutes":3},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
     readonly property string mergeEdited: '{"version":1,"appearance":"light","lock":{"idleMinutes":42},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
@@ -103,6 +103,8 @@ ShellRoot {
                 return;
             done = true;
             root.check("keep loaded profile", keep.data.material.profile === "full");
+            // The adapter's QVariantList is not an Array: the outputs must survive it (review finding).
+            root.check("keep wallpaper outputs through the adapter", keep.wallpaper.outputs.length === 1 && keep.wallpaper.outputs[0].fit === "tile" && keep.wallpaper.source === "folder");
             keep.setNotificationsDnd(true);
             keep.flush();
         }
@@ -188,6 +190,7 @@ ShellRoot {
             root.check("range icon tint", range.iconTint === "accent");
             root.check("range folder colour", range.folderColor === "theme");
             root.check("range pointer size", range.pointerSize === 24);
+            root.check("range wallpaper", range.wallpaper.source === "builtin" && range.wallpaper.path === "" && range.wallpaper.color === "#abcdef" && range.wallpaper.fit === "fill" && range.wallpaper.interval === "1h" && range.wallpaper.shuffle === true && range.wallpaper.outputs.length === 0);
             mergeSetup.running = true;
         }
     }
@@ -364,6 +367,8 @@ ShellRoot {
         writer.setPointerSize(48);
         // Pointer colours: the packaged theme's own by default; the Settings app writes them (the shell only reads).
         check("default pointer colours", writer.pointerOutlineColor === "#ffffff" && writer.pointerFillColor === "#000000" && writer.data.pointer.outlineColor === "#ffffff" && writer.data.pointer.fillColor === "#000000");
+        // Wallpaper (ADR-0016): the defaults, complete, with the whole group in a fresh file; the shell never writes it.
+        check("default wallpaper", writer.wallpaper.source === "builtin" && writer.wallpaper.path === "" && writer.wallpaper.color === "#000000" && writer.wallpaper.fit === "fill" && writer.wallpaper.interval === "1h" && writer.wallpaper.shuffle === true && writer.wallpaper.videoOnBattery === false && writer.wallpaper.outputs.length === 0 && writer.data.wallpaper.interval === "1h");
         writer.flush();
     }
 }

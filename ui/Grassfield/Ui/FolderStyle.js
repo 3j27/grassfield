@@ -305,8 +305,8 @@ function isEmoji(glyph) {
 // (`prefersLighter`) and the plate allows, until it reaches the minimum contrast against the plate. The plate is MEASURED,
 // once per icon file and size bucket and independent of the colour, the icon mode and the appearance: FolderPlate reads
 // the RAW icon's pixels under the symbol (`sampleBox`), and the plate of any combination is then computed from those
-// samples by the same shader arithmetic as Qt's MultiEffect (`effectSamples`: the icon mode, then the folder colour,
-// `plateThrough`), so a new colour, mode or appearance never needs another measure. The estimate (`plateOf`) only serves
+// samples by the arithmetic of the icon shader (`modeSamples`, over its system plate: `underlay`) and of Qt's MultiEffect for the folder
+// colour (`effectSamples`; `plateThrough`), so a new colour, mode or appearance never needs another measure. The estimate (`plateOf`) only serves
 // until the samples are known, and when they cannot be read (no icon).
 
 function rgbOf(color) {
@@ -375,42 +375,23 @@ function fromHsl(hsl) {
     return [channel(h + 1 / 3), channel(h), channel(h - 1 / 3)];
 }
 
-// The estimated plate colour (rgb 0..1) under a symbol: the folder colour when the folder is recoloured, else the icon
-// theme's own folder plate; scaled by the icon mode (default: the recolour alone; Dark and Tinted lower it, Tinted by
-// the luminance of the icon tint `modeTint`; in Tinted mode the theme's own folder takes the tint's hue).
-function plateOf(recolored, tint, mode, modeTint, tokens) {
-    const tintRgb = rgbOf(modeTint);
-    if (mode === "tinted") {
-        if (!recolored) {
-            const g = tokens.folderIconThemeTintedGain;
-            return [Math.min(1, tintRgb[0] * g), Math.min(1, tintRgb[1] * g), Math.min(1, tintRgb[2] * g)];
-        }
-        const f = Math.max(0.3, Math.min(1, tokens.folderIconPlateTintedBase + tokens.folderIconPlateTintedSlope * relativeLuminance(tintRgb)));
-        const b = rgbOf(tint);
-        return [b[0] * f, b[1] * f, b[2] * f];
-    }
+// The estimated plate colour (rgb 0..1) under a symbol: the folder colour (times `plateDefault`) when the folder is
+// recoloured, else the icon theme's own folder plate, through the icon mode's step (`modeSamples`: Dark keeps a coloured
+// folder, Clear makes it a light or dark ink, Tinted the tint). Only used until the icon's samples are read.
+function plateOf(recolored, tint, mode, modeTint, tokens, dark, wall) {
     const base = rgbOf(recolored ? tint : tokens.folderIconThemePlate);
-    let k = recolored ? tokens.folderIconPlateDefault : 1;
-    if (mode === "dark")
-        k = recolored ? tokens.folderIconPlateDark : tokens.folderIconPlateDark / tokens.folderIconPlateDefault;
-    return [base[0] * k, base[1] * k, base[2] * k];
+    const k = recolored ? tokens.folderIconPlateDefault : 1;
+    const isDark = dark !== false;
+    const out = modeSamples([base[0] * k, base[1] * k, base[2] * k, 1], mode, modeTint, isDark, tokens, wall === true);
+    const under = underlay(mode, modeTint, isDark, wall === true, rgbOf(isDark ? tokens.folderIconPlateBackdropDark : tokens.folderIconPlateBackdropLight), tokens);
+    return [0, 1, 2].map(q => out[q] * out[3] + under[q] * (1 - out[3]));
 }
 
-// The lightest the plate can be: in Clear mode the plate is translucent and a dark one shows the backdrop through.
-function lightestPlateOf(plate, mode, tokens) {
-    if (mode !== "clear")
-        return plate;
-    const lift = tokens.folderIconClearLift;
-    return [plate[0] + (1 - plate[0]) * lift, plate[1] + (1 - plate[1]) * lift, plate[2] + (1 - plate[2]) * lift];
-}
-
-// Which way a plain symbol is engraved in an icon mode, one rule per mode so that the folders of a view agree: Dark engraves
-// the lighter shade (the mode darkens its folders); Tinted does when the mode's own folder plate (`reference`, the relative
-// luminance of the theme's folder plate through the mode) is dark; Default and Clear engrave the darker shade (macOS 26). A
-// plate that cannot reach the contrast that way (a black folder in Default, a pale one in Dark) takes the other shade.
+// Which way a plain symbol is engraved in an icon mode, one rule per mode so that the folders of a view agree: Tinted does
+// when the mode's own folder plate (`reference`, the relative luminance of the theme's folder plate through the mode) is
+// dark; Default, Dark and Clear engrave the darker shade (macOS 26; a Dark folder keeps its colour on the dark system plate).
+// A plate that cannot reach the contrast that way (a black folder, a very dark tint) takes the other shade.
 function prefersLighter(mode, reference, tokens) {
-    if (mode === "dark")
-        return true;
     if (mode === "tinted")
         return reference < tokens.folderIconGlyphLighterBelow;
     return false;
@@ -419,11 +400,11 @@ function prefersLighter(mode, reference, tokens) {
 // The colour (#rrggbb) of a plain symbol on a folder of colour `tint` (or the theme's own colour when !recolored) in
 // icon mode `mode` with icon tint `modeTint`. `measured`: the plate computed from the icon's samples ({dark, light, hue, ref},
 // see plateThrough), else the estimate.
-function glyphShade(recolored, tint, mode, modeTint, tokens, measured) {
+function glyphShade(recolored, tint, mode, modeTint, tokens, measured, dark, wall) {
     const hasMeasure = measured !== undefined && measured !== null && measured.dark !== undefined;
-    const plate = hasMeasure ? measured.dark : plateOf(recolored, tint, mode, modeTint, tokens);
-    const lightest = hasMeasure ? measured.light : lightestPlateOf(plate, mode, tokens);
-    const reference = hasMeasure && measured.ref !== undefined ? measured.ref : relativeLuminance(plateOf(false, "", mode, modeTint, tokens));
+    const plate = hasMeasure ? measured.dark : plateOf(recolored, tint, mode, modeTint, tokens, dark, wall);
+    const lightest = hasMeasure ? measured.light : plate;
+    const reference = hasMeasure && measured.ref !== undefined ? measured.ref : relativeLuminance(plateOf(false, "", mode, modeTint, tokens, dark, wall));
     const target = tokens.folderIconGlyphMinContrast + tokens.folderIconGlyphContrastMargin;
     const hueRgb = recolored ? rgbOf(tint) : (hasMeasure ? measured.hue : rgbOf(mode === "tinted" ? modeTint : tokens.folderIconThemePlate));
     const hsl = toHsl(hueRgb);
@@ -547,19 +528,105 @@ function plateSummary(samples, backdrop) {
     return {dark: dark, light: light, hue: [sum[0] / weight, sum[1] / weight, sum[2] / weight], mean: [total[0] / comp.length, total[1] / comp.length, total[2] / comp.length]};
 }
 
-// The plate of a combination from the raw icon's samples: through the icon mode (IconModes.effect) and then, when the folder
-// is recoloured, through the folder colour (effect). `modeTint`: the icon tint (only Tinted uses it); `tint`: the folder
-// colour; `backdrop`: rgb of the view behind a translucent plate. Adds `ref`: the relative luminance of the mode's own
-// folder plate (no folder colour), what `prefersLighter` reads. null when there is nothing to read.
-function plateThrough(samples, mode, modeTint, recolored, tint, backdrop, tokens) {
-    const m = Modes.effect(mode, modeTint, tokens);
-    const modeSamples = m.enabled ? effectSamples(samples, m) : samples;
-    const own = plateSummary(modeSamples, backdrop);
-    if (own === null)
-        return null;
-    const out = recolored ? plateSummary(effectSamples(modeSamples, effect(tint, tokens)), backdrop) : own;
-    if (out === null)
-        return null;
+// The icon mode step over samples of an icon's artwork, the arithmetic of shaders/icon.frag (the transform depends on the pixel
+// alone, so this is the shader's, not an estimate). The result is what is drawn over the system plate (`underlay`): rgb
+// straight, alpha = the sample's alpha times the mode's opacity (Clear's ink is more or less opaque with the luminance of the
+// artwork). `dark`: the icon is drawn for a dark material (the dark appearance or over the bare wallpaper), `modeTint`: the
+// Tinted colour (#rrggbb).
+function modeSamples(samples, mode, modeTint, dark, tokens, wall) {
+    const name = Modes.normalizeMode(mode);
+    if (name === "default")
+        return samples;
+    // The lightness of the relative luminance (linear light at gamma 2.2, encoded again): what the shader maps.
+    const luma = (r, g, b) => Math.pow(0.2126 * Math.pow(r, 2.2) + 0.7152 * Math.pow(g, 2.2) + 0.0722 * Math.pow(b, 2.2), 1 / 2.2);
+    const t = rgbOf(modeTint);
+    const out = new Array(samples.length);
+    for (let i = 0; i < samples.length; i += 4) {
+        const c = [samples[i], samples[i + 1], samples[i + 2]];
+        const lc = luma(c[0], c[1], c[2]);
+        let rgb;
+        let alpha = samples[i + 3];
+        if (name === "dark") {
+            const lin = c.map(v => Math.pow(v, 2.2));
+            const y = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+            const lo = Math.pow(tokens.iconModeDarkArtLift, 2.2), hi = Math.pow(tokens.iconModeDarkArtScale, 2.2);
+            rgb = lin.map(v => Math.pow(Math.max(0, lo + (hi - lo) * (y + (v - y) * tokens.iconModeDarkArtSaturation)), 1 / 2.2));
+        } else if (name === "clear") {
+            const ink = dark ? tokens.iconModeClearInkDark : tokens.iconModeClearInkLight;
+            rgb = [ink, ink, ink];
+            // The shader's solve: the composite is affine in linear light between the glass (black art) and the ink (white art).
+            const pa = wall === true ? tokens.iconModeClearPlateAlphaWallpaper : (dark ? tokens.iconModeClearPlateAlphaDark : tokens.iconModeClearPlateAlphaLight);
+            const pg = dark && wall !== true ? 1 : 0;
+            const bd = wall === true ? tokens.iconModeClearBackdropMid : (dark ? tokens.iconModeClearBackdropDark : tokens.iconModeClearBackdropLight);
+            const under = pg * pa + (1 - pa) * bd;
+            const yin = 0.2126 * Math.pow(c[0], 2.2) + 0.7152 * Math.pow(c[1], 2.2) + 0.0722 * Math.pow(c[2], 2.2);
+            const yEff = tokens.iconModeClearInkFloor + (1 - tokens.iconModeClearInkFloor) * (dark ? yin : 1 - yin);
+            const target = Math.pow(under, 2.2) + (Math.pow(ink, 2.2) - Math.pow(under, 2.2)) * yEff;
+            alpha *= Math.max(0, Math.min(1, (Math.pow(target, 1 / 2.2) - under) / (ink - under)));
+        } else {
+            const lo = t.map(v => v * (dark ? tokens.iconModeTintedRampLowDark : tokens.iconModeTintedRampLowLight));
+            const mixHigh = dark ? tokens.iconModeTintedRampHighDark : tokens.iconModeTintedRampHighLight;
+            const hi = t.map(v => v + (1 - v) * mixHigh);
+            const y = Math.pow(lc, 2.2);
+            rgb = [0, 1, 2].map(q => Math.pow(Math.pow(lo[q], 2.2) + (Math.pow(hi[q], 2.2) - Math.pow(lo[q], 2.2)) * y, 1 / 2.2));
+        }
+        out[i] = Math.max(0, Math.min(1, rgb[0]));
+        out[i + 1] = Math.max(0, Math.min(1, rgb[1]));
+        out[i + 2] = Math.max(0, Math.min(1, rgb[2]));
+        out[i + 3] = alpha;
+    }
+    return out;
+}
+
+// What the artwork of an icon is drawn over: the system plate of the mode composited over `backdrop` (rgb 0..1, the view behind
+// the icon), as the shader draws it (Dark graphite, Clear glass: light on a dark material, smoked on a light one and over the
+// bare wallpaper, Tinted the tinted plate; Default has none). `dark`: dark material (appearance or wallpaper), `wall`: over
+// the bare wallpaper.
+function underlay(mode, modeTint, dark, wall, backdrop, tokens) {
+    const name = Modes.normalizeMode(mode);
+    const bd = backdrop === undefined || backdrop === null ? [0, 0, 0] : backdrop;
+    if (name === "default")
+        return bd;
+    const t = rgbOf(modeTint);
+    if (name === "dark")
+        return [tokens.iconModeDarkPlateLuma, tokens.iconModeDarkPlateLuma, tokens.iconModeDarkPlateLuma];
+    if (name === "tinted")
+        return dark ? t.map(v => v * tokens.iconModeTintedPlateScale) : t.map(v => v + (1 - v) * tokens.iconModeTintedPlateMixLight);
+    const glass = dark && !wall ? 1 : 0;
+    const alpha = wall ? tokens.iconModeClearPlateAlphaWallpaper : (dark ? tokens.iconModeClearPlateAlphaDark : tokens.iconModeClearPlateAlphaLight);
+    return bd.map(v => glass * alpha + v * (1 - alpha));
+}
+
+// The plate of a combination from the raw icon's samples: through the icon mode (`modeSamples`) and then, when the folder
+// is recoloured, through the folder colour (effect), over the system plate of the mode (`underlay`). `modeTint`: the icon tint
+// (only Tinted uses it); `tint`: the folder colour; `backdrop`: rgb of the view behind a translucent plate (Clear glass);
+// `dark`: drawn for a dark material; `wall`: over the bare wallpaper. Adds `ref`: the relative luminance of the mode's own
+// folder (no folder colour), what `prefersLighter` reads. null when there is nothing to read.
+function plateThrough(samples, mode, modeTint, recolored, tint, backdrop, tokens, dark, wall) {
+    const isDark = dark !== false;
+    const modeOut = modeSamples(samples, mode, modeTint, isDark, tokens, wall === true);
+    const colourOut = recolored ? effectSamples(modeOut, effect(tint, tokens)) : modeOut;
+    // Over the bare wallpaper a translucent Clear folder shows the wallpaper through its ink, whatever its brightness: the plate under
+    // the symbol is the worst case of a dark and of a light wallpaper (the darkest and the lightest of the two).
+    const backs = wall === true && Modes.normalizeMode(mode) === "clear" ? [rgbOf(tokens.folderIconPlateBackdropDark), rgbOf(tokens.folderIconPlateBackdropLight)] : [backdrop];
+    let own = null, out = null;
+    for (const bd of backs) {
+        const under = underlay(mode, modeTint, isDark, wall === true, bd, tokens);
+        const o = plateSummary(modeOut, under);
+        const c = recolored ? plateSummary(colourOut, under) : o;
+        if (o === null || c === null)
+            return null;
+        if (own === null) {
+            own = o;
+            out = c;
+        } else {
+            // dark: the darker of the two, light: the lighter of the two
+            if (relativeLuminance(c.dark) < relativeLuminance(out.dark))
+                out.dark = c.dark;
+            if (relativeLuminance(c.light) > relativeLuminance(out.light))
+                out.light = c.light;
+        }
+    }
     return {dark: out.dark, light: out.light, hue: out.hue, ref: relativeLuminance(own.mean)};
 }
 

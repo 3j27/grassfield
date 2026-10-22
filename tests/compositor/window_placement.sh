@@ -9,8 +9,10 @@
 # (scripts/nestctl -j clients). The usable area is the output minus the area the shell reserves.
 #
 #   1 foot --app-id chromium, asks 500x350 (no stored geometry): grown to the default size, centred
-#   2 foot --app-id chromium, asks 1500x900 (a size of its own, larger than the default): kept
+#   2 foot --app-id chromium, asks 1500x900 (a size of its own, larger than the default), alone (case 1's window is closed first): kept
 #   3 foot --app-id gf-placement-probe, asks 500x350: kept (not a browser)
+#   4 a second chromium-class window (stands in for a dialog: Hyprland's Lua window has no parent field), asks 420x300: kept
+#   5 a firefox-class window titled "Picture-in-Picture" with no other firefox window, asks 480x270: kept
 # Sizes are compared with a tolerance of 24 px (foot rounds to its cell grid).
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Log: .dev/window-placement/run-<timestamp>.log.
 set -uo pipefail
@@ -36,7 +38,21 @@ say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" | tee -a "$log"; }
 pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log" 2>&1; }
 clients() { timeout 5 "$root/scripts/nestctl" -j clients; }
 
-# reserved is [left, top, right, bottom] in hyprctl's JSON: the area the shell's menu bar and Dock keep.
+# reserved is [left, top, right, bottom] in hyprctl's JSON: the area the shell's menu bar and Dock keep. The shell sets it
+# through the exclusive zones of its layer surfaces a little after the nested session is up: wait until the menu bar's
+# top is reserved and the four values have not changed for a second, then measure.
+reserved() { timeout 5 "$root/scripts/nestctl" -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | .reserved | map(tostring) | join(" ")'; }
+prev=""
+stable=0
+for _ in $(seq 1 100); do
+  cur=$(reserved)
+  read -r _ rt _ _ <<<"$cur"
+  if [[ -n $cur && ${rt:-0} -gt 0 && $cur == "$prev" ]]; then stable=$((stable + 1)); else stable=0; fi
+  prev=$cur
+  ((stable >= 4)) && break
+  sleep 0.3
+done
+((stable >= 4)) || { echo "window_placement: the shell's reserved area never settled (last: ${cur:-none}); is the shell running in the nested session?" >&2; exit 2; }
 read -r mon_x mon_y mon_w mon_h res_l res_t res_r res_b < <(timeout 5 "$root/scripts/nestctl" -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height) \(.reserved[0]) \(.reserved[1]) \(.reserved[2]) \(.reserved[3])"')
 [[ -n ${mon_w:-} ]] || { echo "window_placement: output $out not found" >&2; exit 2; }
 use_w=$((mon_w - res_l - res_r))
@@ -76,7 +92,12 @@ read -r x y w h < <(geom gf-place-small)
 check "grown to the default size" "$({ near "$w" "$want_w" && near "$h" "$want_h"; } && echo 0 || echo 1)" "got ${w}x${h} at ($x,$y), want ${want_w}x${want_h}"
 check "centred" "$(centred "$x" "$y" "$w" "$h" && echo 0 || echo 1)" "middle ($((x + w / 2)),$((y + h / 2))) of ${mon_w}x${mon_h}"
 
-say "2 browser class, asks 1500x900"
+# Case 2 must not lean on case 1: close its window first, so the large one is the only browser-class window open.
+kill "${pids[-1]}" 2>/dev/null
+for _ in $(seq 1 30); do [[ -z $(geom gf-place-small) ]] && break; sleep 0.2; done
+[[ -z $(geom gf-place-small) ]] || { say "setup error: the case 1 window did not close"; exit 2; }
+
+say "2 browser class, asks 1500x900, no other browser window"
 open_foot chromium gf-place-large 1500x900
 read -r x y w h < <(geom gf-place-large)
 [[ -n ${w:-} ]] || { say "setup error: window missing"; exit 2; }
@@ -87,6 +108,18 @@ open_foot gf-placement-probe gf-place-other 500x350
 read -r x y w h < <(geom gf-place-other)
 [[ -n ${w:-} ]] || { say "setup error: window missing"; exit 2; }
 check "own size kept" "$({ near "$w" 500 && near "$h" 350; } && echo 0 || echo 1)" "got ${w}x${h}, asked 500x350"
+
+say "4 browser class with a window already open (a dialog), asks 420x300"
+open_foot chromium gf-place-dialog 420x300
+read -r x y w h < <(geom gf-place-dialog)
+[[ -n ${w:-} ]] || { say "setup error: window missing"; exit 2; }
+check "dialog size kept" "$({ near "$w" 420 && near "$h" 300; } && echo 0 || echo 1)" "got ${w}x${h}, asked 420x300"
+
+say "5 Picture-in-Picture of a browser class with no other window, asks 480x270"
+open_foot firefox "Picture-in-Picture" 480x270
+read -r x y w h < <(geom "Picture-in-Picture")
+[[ -n ${w:-} ]] || { say "setup error: window missing"; exit 2; }
+check "Picture-in-Picture size kept" "$({ near "$w" 480 && near "$h" 270; } && echo 0 || echo 1)" "got ${w}x${h}, asked 480x270"
 
 "$root/scripts/dev/shot.sh" "window-placement-$stamp" "$out" >>"$log" 2>&1
 say "  capture: $dev/shots/window-placement-$stamp.png"

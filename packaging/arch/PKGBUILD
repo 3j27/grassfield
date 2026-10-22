@@ -1,5 +1,5 @@
 # Maintainer: Grassfield project
-# Local package build from this repository (private project, no source download):
+# Local package build from this repository. grassfield-desktop and grassfield-compositor need no download:
 #   cd packaging/arch && makepkg -si        (owner runs it; installs with sudo through pacman)
 # Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor
 # Never constrain the hyprland version here (ADR-0009, master-prompt §5.6).
@@ -7,14 +7,14 @@
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor)
 pkgver=0.4.0
-pkgrel=3
+pkgrel=7
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
 # Grassfield's own code is MIT (ADR-0005, accepted by the owner 2026-10-18; root LICENSE, installed by both packages).
 # Third-party notices: THIRD_PARTY.md, installed under /usr/share/licenses/<package>/.
 license=(MIT)
-makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python)
+makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf)
 options=(!debug)
 
 _root() { realpath "$startdir/../.."; }
@@ -30,6 +30,10 @@ build() {
   cmake -S "$(_root)/apps/settings" -B "$srcdir/settings-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/settings-build"
+  # grassfield-wallpaper (ADR-0016): the one-shot helper that parses wallpaper pictures for the shell and Settings.
+  cmake -S "$(_root)/apps/wallpaper-tool" -B "$srcdir/wallpaper-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/wallpaper-build"
   cmake -S "$(_root)/apps/files" -B "$srcdir/files-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/files-build"
@@ -55,7 +59,7 @@ package_grassfield-desktop() {
   # python, librsvg (rsvg-convert) and hyprcursor (hyprcursor-util) are RUNTIME dependencies (owner decision 2026-10-19):
   # the shell runs /usr/share/grassfield/cursors/build.sh to regenerate the cursor theme for the pointer colours
   # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine python librsvg hyprcursor)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine python librsvg hyprcursor breeze-icons)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
     'brightnessctl: display brightness OSD and Quick Settings slider'
@@ -100,6 +104,8 @@ package_grassfield-desktop() {
 
   # Grassfield Settings app (M4).
   DESTDIR="$pkgdir" cmake --install "$srcdir/settings-build"
+  # grassfield-wallpaper: /usr/lib/grassfield/grassfield-wallpaper (run by the shell and Settings, never by the user).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/wallpaper-build"
   # Grassfield Files (M4, KIO).
   DESTDIR="$pkgdir" cmake --install "$srcdir/files-build"
   # Grassfield Preview and Glance (M4; QtPdf comes from qt6-webengine).
@@ -114,6 +120,19 @@ package_grassfield-desktop() {
   install -d "$pkgdir/usr/share/grassfield/cursors/src"
   install -m644 "$root"/branding/cursors/src/*.svg.in "$pkgdir/usr/share/grassfield/cursors/src/"
   chmod 755 "$pkgdir/usr/share/grassfield/cursors/build.sh"
+
+  # Session icon theme (ADR-0017): Grassfield's own icons first (none yet), then Breeze, Adwaita and hicolor (breeze-icons is a dependency; Adwaita comes with GTK).
+  # The empty scalable/apps directory is required: GTK drops a theme without a Directories entry, with its Inherits.
+  install -Dm644 "$root/branding/icons/theme/index.theme" "$pkgdir/usr/share/icons/grassfield-icons/index.theme"
+  install -d "$pkgdir/usr/share/icons/grassfield-icons/scalable/apps"
+  # Own generic phone, tablet and media player glyphs under the names of the Apple device pictures of Breeze and Adwaita (E27).
+  install -Dm644 "$root"/branding/icons/theme/scalable/devices/*.svg -t "$pkgdir/usr/share/icons/grassfield-icons/scalable/devices"
+  # Session environment for uwsm (Grassfield desktop name only): Qt icon theme, the GTK dconf profile and the fontconfig file.
+  install -Dm644 "$root/packaging/uwsm/env-grassfield" "$pkgdir/usr/share/uwsm/env-grassfield"
+  install -Dm644 "$root/packaging/dconf/profile" "$pkgdir/usr/share/grassfield/dconf/profile"
+  install -Dm644 "$root/packaging/fontconfig/fonts.conf" "$pkgdir/usr/share/grassfield/fontconfig/fonts.conf"
+  dconf compile "$srcdir/grassfield.db" "$root/packaging/dconf/grassfield.d"
+  install -Dm644 "$srcdir/grassfield.db" "$pkgdir/usr/share/grassfield/dconf/grassfield.db"
 
   install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
   install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"

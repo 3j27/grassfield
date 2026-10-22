@@ -21,6 +21,9 @@ Item {
     property alias asynchronous: icon.asynchronous
     property alias mode: icon.mode
     property alias tint: icon.tint
+    property alias darkAppearance: icon.darkAppearance
+    property alias overWallpaper: icon.overWallpaper
+    property alias overAccent: icon.overAccent
 
     readonly property string setting: FolderStyle.effectiveColor(root.folderColor, root.globalColor)
     readonly property bool recolored: FolderStyle.recolors(root.setting)
@@ -28,7 +31,9 @@ Item {
     readonly property string glyph: FolderStyle.normalizeGlyph(root.folderGlyph)
     readonly property bool hasGlyph: root.glyph !== ""
     readonly property bool glyphIsEmoji: FolderStyle.isEmoji(root.glyph)
-    readonly property string modeName: IconModes.normalizeMode(root.mode)
+    // The appearance the icon is drawn for (over an accent fill: the polarity opposite to the fill).
+    readonly property bool inkDark: icon.inkDark
+    readonly property string modeName: icon.effectiveMode
     // The plate under the symbol (FolderPlate): the raw icon's pixels under it are read once per icon file and size bucket
     // (never per colour), the plate of this icon's mode, colour and appearance is computed from them. A plain symbol is
     // shaded against it. undefined until read, null when it could not be (the estimate of FolderStyle serves, and serves
@@ -36,9 +41,9 @@ Item {
     readonly property bool needsPlate: root.hasGlyph && !root.glyphIsEmoji
     readonly property string rawKey: FolderPlate.rawKeyOf(root.source, root.size)
     readonly property var plate: root.needsPlate ? FolderPlate.plateOf(root.rawKey, root.modeName, root.modeName === "tinted" ? String(root.tint) : "",
-                                                                       root.recolored ? String(root.folderTint) : "", Appearance.dark) : undefined
+                                                                       root.recolored ? String(root.folderTint) : "", root.inkDark || root.overWallpaper, root.overWallpaper) : undefined
     // The engraved shade of the plate's colour (opaque).
-    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.modeName, root.tint, Tokens, root.plate)
+    readonly property color glyphColor: FolderStyle.glyphShade(root.recolored, root.folderTint, root.modeName, root.tint, Tokens, root.plate, root.inkDark || root.overWallpaper, root.overWallpaper)
     // Its own hex colour, else the global colour (which is the accent for "accent").
     readonly property color folderTint: FolderStyle.colorOf(root.setting, Appearance.colors.accent)
 
@@ -54,7 +59,11 @@ Item {
         source: root.source
         size: root.size
         oversample: root.oversample
-        layer.enabled: root.recolored
+        // Default mode (no effect item) and a failed shader: the folder colour is a layer over the plain icon. In an icon mode the
+        // shader recolours the artwork itself (TintedIcon.recolor), so that the system plate and its rim are not recoloured.
+        recolor: root.recolored
+        recolorTint: root.folderTint
+        layer.enabled: root.recolored && (root.modeName === "default" || icon.effectFailed)
         layer.smooth: true
         layer.effect: FolderEffect {
             tint: root.folderTint
@@ -178,6 +187,10 @@ Item {
 
         objectName: "glyphBox"
         anchors.fill: parent
+        // In an icon mode the folder shrinks to sit on the system plate (the shader's sysGlyphScale):
+        // the symbol follows it. Not when the shader failed and the plain icon is drawn.
+        scale: root.modeName !== "default" && !icon.effectFailed ? Tokens.iconModeSysGlyphScale : 1
+        transformOrigin: Item.Center
         clip: true
         visible: root.hasGlyph
 

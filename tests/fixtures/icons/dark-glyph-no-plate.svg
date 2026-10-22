@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Test fixture (own drawing): a black glyph on transparency, no plate (the worst case on a dark material). -->
+  <path d="M24 100 L24 40 L64 20 L104 40 L104 100 Z" fill="#202022"/>
+  <rect x="52" y="64" width="24" height="36" fill="#A8A8B0"/>
+</svg>

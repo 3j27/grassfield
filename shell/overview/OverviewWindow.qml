@@ -61,13 +61,16 @@ Variants {
         // index (windows mode = -1). The state lives in the controller (one selection across outputs: the keyboard
         // reaches whichever chrome Hyprland picked, so the keys cannot depend on the output they arrive on).
         readonly property string selected: byKey[root.controller.selected] ? root.controller.selected : ""
+        // The window the ring and the name belong to: the selected one (hover, keys) or, until the user has chosen, the window
+        // that was active when the overview opened (macOS: the frontmost window is the one the eye lands on).
+        readonly property string marked: selected !== "" ? selected : (byKey[root.controller.previousAddress] ? root.controller.previousAddress : "")
         readonly property int spaceFocus: root.controller.spaceScreen === screenName ? root.controller.spaceFocus : -1
         // Drag state.
         property string dragKey: ""
         property point dragPoint: Qt.point(0, 0)
         property int dropIndex: -1
 
-        readonly property real barBottom: Tokens.overviewBarTopMargin + Tokens.overviewTileHeight
+        readonly property real barBottom: Tokens.overviewBarHeight
         // Free region in this window's coordinates (the overlay starts below the menu bar). Taken
         // from the screen, never from the window size, which is 0 until the compositor configures
         // the layer surface.
@@ -157,7 +160,11 @@ Variants {
         // opens, so opening does not pay for a new surface and its first frame.
         readonly property bool active: shown || progress > 0.001
         visible: true
-        mask: active ? null : emptyMask
+        // Input only while the stage is "open": from the moment a close starts (the "releasing" stage, which `shown` still
+        // counts as open, then the close animation, however long a busy GUI thread stretches them) a click belongs to the
+        // window under it, as when any other full-screen surface closed (R13 finding M1 on 0f3adf7).
+        readonly property bool takesInput: root.controller.stage === "open"
+        mask: takesInput ? null : emptyMask
         anchors {
             top: true
             bottom: true
@@ -176,7 +183,7 @@ Variants {
         // The full-screen blur is re-computed by the compositor every frame while the surface
         // animates (swap up to 1 s); it is applied only once the zoom-in has finished and dropped
         // when the zoom-out starts. The dim animates on its own meanwhile.
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && shown && progress >= 1 && !v2 ? blur : null
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && shown && progress >= 1 ? (v2 ? bandBlur : blur) : null
         // qmllint enable missing-type
 
         Region {
@@ -186,6 +193,12 @@ Variants {
         Region {
             id: blur
             item: backdrop
+        }
+
+        // v2: the backdrop is its own surface, so the chrome only blurs behind the Desktops band.
+        Region {
+            id: bandBlur
+            item: band
         }
 
         Behavior on progress {
@@ -335,6 +348,7 @@ Variants {
                 progress: progress,
                 scale: placement.scale,
                 selected: selected,
+                marked: marked,
                 spaceFocus: spaceFocus,
                 windows: wins.map(w => ({
                             address: w.address,
@@ -372,6 +386,16 @@ Variants {
             // The chrome holds the keyboard (wl_keyboard enter): the compositor accepts the layout from now on.
             readonly property bool chromeActive: Window.active
             onChromeActiveChanged: root.controller.onChromeChanged(win.screenName, chromeActive)
+
+            // Closing (releasing, then the animation): a press the compositor still delivered here, before the empty mask
+            // landed (late whenever the GUI thread was busy), is swallowed, never choosing the thumbnail under it. It never
+            // stands between a click and a window: once the empty mask landed no press reaches this surface.
+            MouseArea {
+                anchors.fill: parent
+                z: 1000
+                visible: !win.takesInput
+                acceptedButtons: Qt.AllButtons
+            }
 
             // Dimmed, blurred backdrop (v1; v2 draws it on its own Bottom-layer surface, this one is transparent but
             // still takes the click). A click on it closes Overview.
@@ -438,21 +462,44 @@ Variants {
                 }
             }
 
-            // Spaces bar.
-            Row {
+            // Desktops bar: a full-width band (macOS: tinted strip across the top, a hairline under it), the Desktop
+            // thumbnails centred with their names under them, the round add button 18 from the right edge.
+            Item {
                 id: bar
-                spacing: Tokens.overviewTileGap
-                x: (win.width - width) / 2
-                y: Tokens.overviewBarTopMargin - (Appearance.reduceMotion ? 0 : (1 - win.progress) * (Tokens.overviewTileHeight + Tokens.overviewBarTopMargin))
+                width: win.width
+                height: Tokens.overviewBarHeight
+                y: Appearance.reduceMotion ? 0 : -(1 - win.progress) * height
                 opacity: win.progress
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Desktops")
+
+                Material {
+                    id: band
+                    anchors.fill: parent
+                    radius: 0
+                    shadowEnabled: false
+                    highlightEnabled: false
+                    borderEnabled: false
+
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: 1
+                        color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialSeparatorOpacity)
+                    }
+
+                    // The band is not a click-through: a click on it is not "outside the windows".
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.AllButtons
+                    }
+                }
 
                 Repeater {
                     id: tileRepeater
                     model: win.tiles
 
-                    delegate: Rectangle {
+                    delegate: Item {
                         id: tile
 
                         required property var modelData
@@ -462,70 +509,70 @@ Variants {
                         readonly property bool dropTarget: win.dragKey !== "" && win.dropIndex === index && !isPlus && !modelData.active
                         readonly property bool focused: win.spaceFocus === index
                         readonly property int shownIcons: isPlus ? 0 : Math.min(modelData.appIds.length, Tokens.overviewTileMaxIcons)
+                        readonly property int count: win.tiles.length - 1
+                        readonly property real rowWidth: count * Tokens.overviewTileWidth + Math.max(0, count - 1) * Tokens.overviewTileGap
 
-                        // The add button is a round 32 button centred on the row, not a tile.
+                        // Thumbnails centred on the band; the add button is a round 32 button at the right edge.
                         width: isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
-                        height: isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight
-                        y: isPlus ? (Tokens.overviewTileHeight - Tokens.overviewAddSize) / 2 : 0
-                        radius: isPlus ? height / 2 : Tokens.radiusDialog
-                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
-                        border.width: modelData.active || focused || dropTarget ? Tokens.overviewSelectionWidth : 1
-                        border.color: modelData.active || focused || dropTarget ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+                        height: isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight + Tokens.overviewTileLabelGap + Tokens.overviewTileLabelHeight
+                        x: isPlus ? win.width - Tokens.overviewAddSize - Tokens.overviewAddEdgeInset : (win.width - rowWidth) / 2 + index * (Tokens.overviewTileWidth + Tokens.overviewTileGap)
+                        y: isPlus ? Tokens.overviewBarTopMargin + (Tokens.overviewTileHeight - Tokens.overviewAddSize) / 2 : Tokens.overviewBarTopMargin
                         Accessible.role: Accessible.Button
                         Accessible.name: isPlus ? qsTr("Add Desktop") : qsTr("Desktop %1").arg(modelData.id)
                         Accessible.onPressAction: win.activateTile(index)
 
-                        Text {
-                            visible: !tile.isPlus
-                            anchors.top: parent.top
-                            anchors.topMargin: Tokens.spacingSm
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: qsTr("Desktop %1").arg(tile.modelData.id)
-                            textFormat: Text.PlainText
-                            color: Appearance.colors.text
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyBodySize
-                            font.weight: Tokens.typographyMenuWeight
-                        }
+                        Rectangle {
+                            id: face
+                            height: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight
+                            width: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
+                            radius: tile.isPlus ? height / 2 : Tokens.overviewThumbRadius
+                            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
+                            border.width: tile.modelData.active || tile.focused || tile.dropTarget ? Tokens.overviewSelectionWidth : 1
+                            border.color: tile.modelData.active || tile.focused || tile.dropTarget ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
-                        Row {
-                            visible: !tile.isPlus
-                            anchors.centerIn: parent
-                            spacing: Tokens.spacingXs
+                            Row {
+                                visible: !tile.isPlus
+                                anchors.centerIn: parent
+                                spacing: Tokens.spacingXs
 
-                            Repeater {
-                                model: tile.shownIcons
+                                Repeater {
+                                    model: tile.shownIcons
 
-                                delegate: TintedIcon {
-                                    id: tileIcon
-                                    required property int index
-                                    size: Tokens.overviewTileIconSize
-                                    source: Quickshell.iconPath(Apps.lookup(tile.modelData.appIds[index]) ? Apps.lookup(tile.modelData.appIds[index]).icon : "", "application-x-executable")
+                                    delegate: TintedIcon {
+                                        id: tileIcon
+                                        required property int index
+                                        size: Tokens.overviewTileIconSize
+                                        source: Quickshell.iconPath(Apps.lookup(tile.modelData.appIds[index]) ? Apps.lookup(tile.modelData.appIds[index]).icon : "", "application-x-executable")
+                                    }
                                 }
+                            }
+
+                            Text {
+                                visible: tile.isPlus
+                                anchors.centerIn: parent
+                                text: "+"
+                                textFormat: Text.PlainText
+                                color: Appearance.colors.text
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyTitleSize * 2
+                                font.weight: Tokens.typographySmallWeight
                             }
                         }
 
                         Text {
                             visible: !tile.isPlus
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: Tokens.spacingSm
+                            anchors.top: face.bottom
+                            anchors.topMargin: Tokens.overviewTileLabelGap
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: tile.modelData.windowCount === 1 ? qsTr("1 window") : qsTr("%1 windows").arg(tile.isPlus ? 0 : tile.modelData.windowCount)
-                            textFormat: Text.PlainText
-                            color: Appearance.colors.textSecondary
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyCaptionSize
-                        }
-
-                        Text {
-                            visible: tile.isPlus
-                            anchors.centerIn: parent
-                            text: "+"
+                            width: parent.width
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
+                            text: qsTr("Desktop %1").arg(tile.modelData.id)
                             textFormat: Text.PlainText
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyTitleSize * 1.5
-                            font.weight: Tokens.typographySmallWeight
+                            font.pixelSize: Tokens.typographyBodySize
+                            font.weight: tile.modelData.active ? Tokens.typographyMenuWeight : Tokens.typographySmallWeight
                         }
 
                         MouseArea {
@@ -552,7 +599,7 @@ Variants {
                     readonly property var info: win.byKey[modelData]
                     readonly property var target: win.placedMap[modelData]
                     readonly property bool valid: info !== undefined && target !== undefined
-                    readonly property bool isSelected: win.selected === modelData && win.spaceFocus < 0
+                    readonly property bool isSelected: win.marked === modelData && win.spaceFocus < 0
                     readonly property bool dragging: win.dragKey === modelData
 
                     // Layout rectangle, animated when the layout changes while open.
@@ -760,8 +807,8 @@ Variants {
             Material {
                 id: label
 
-                readonly property var info: win.selected !== "" && win.spaceFocus < 0 ? win.byKey[win.selected] : undefined
-                readonly property var rect: win.selected !== "" ? win.placedMap[win.selected] : undefined
+                readonly property var info: win.marked !== "" && win.spaceFocus < 0 ? win.byKey[win.marked] : undefined
+                readonly property var rect: win.marked !== "" ? win.placedMap[win.marked] : undefined
                 readonly property var entry: info ? Apps.lookup(info.appId) : null
                 readonly property string appName: info ? Apps.nameFor(info.appId) : ""
 

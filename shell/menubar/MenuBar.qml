@@ -147,10 +147,9 @@ Scope {
             readonly property var bridgeMenus: MenuBridge.menus.length > 0 && hasApp && MenuBridge.windowAppId.toLowerCase() === shownAppId.toLowerCase() ? MenuBridge.menus : []
             // T0 File (desktop entry actions) gives way to the app's own menus; the actions stay in the Dock menu.
             readonly property bool hasFileMenu: hasApp && bridgeMenus.length === 0 && AppMenus.model.hasFileMenu(AppMenus.context(shownAppId))
-            // A menu of this bar is open: only then may the bar take the keyboard (never on hover or at start).
-            readonly property bool menuOpen: Popups.active && Popups.screenName === win.screen.name
-            // Transparent by default (like macOS 26/27); `menubar.showBackground` restores the frosted band.
-            readonly property bool showBackground: Settings.menubarShowBackground
+            // Transparent by default (like macOS 26/27); `menubar.showBackground` restores the frosted band, and so does a wallpaper
+            // strip over which neither tone reaches 4.5:1 (BarTone.assistOf, ADR-0016: shown on that output until the wallpaper changes).
+            readonly property bool showBackground: Settings.menubarShowBackground || BarTone.assistOf(win.screen.name)
             // Without a background the bar sits on the wallpaper and its foreground adapts to the wallpaper strip under this
             // output's bar (BarTone, the macOS model): white text over a dark wallpaper, black over a light one, with a faint
             // shadow of the opposite colour (gate A2). On the material it is the appearance's text colour.
@@ -276,12 +275,14 @@ Scope {
             implicitHeight: Tokens.menubarHeight
             exclusiveZone: Tokens.menubarHeight
             color: "transparent"
-            // No keyboard focus by default (hovering or starting must never take the keyboard from the focused
-            // window); OnDemand only while one of this bar's menus is open (the popup itself takes exclusive focus,
-            // CTRL+F2 opens the system menu that way) and released when it closes.
-            focusable: win.menuOpen
+            // Never the keyboard: hovering or starting must never take it from the focused window, and while one of this
+            // bar's menus is open its popup holds it (Exclusive, shell/overlay; CTRL+F2 opens the system menu that way).
+            // An OnDemand bar took the keyboard as a menu closed with the pointer resting on the bar (Hyprland gives an
+            // on-demand layer under the pointer the keyboard when it refocuses), so the window it still counted active lost
+            // its keys (tests/compositor/click_focus.sh).
+            focusable: false
             WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.keyboardFocus: win.menuOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-menubar"
             // Quickshell qmltypes name this property's type PendingRegion/FileViewAdapter without exporting it (metadata quirk).
             // qmllint disable missing-type
