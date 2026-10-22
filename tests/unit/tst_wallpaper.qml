@@ -39,13 +39,14 @@ TestCase {
         compare(n.interval, "1h");
         compare(n.shuffle, true);
         compare(n.videoOnBattery, false);
+        compare(n.online, {provider: "commons"});
         compare(n.outputs, []);
         for (const raw of [null, 5, "x", [], true])
             compare(WallpaperConfig.normalize(raw), n, String(raw));
     }
 
     function test_invalidFieldsReadAsDefaults() {
-        const n = WallpaperConfig.normalize({source: "online", path: "rel/x.jpg", color: "red", fit: 3, interval: "2s", shuffle: "yes", videoOnBattery: 1, outputs: "x"});
+        const n = WallpaperConfig.normalize({source: "apod", path: "rel/x.jpg", color: "red", fit: 3, interval: "2s", shuffle: "yes", videoOnBattery: 1, online: {provider: "apod"}, outputs: "x"});
         compare(n.source, "builtin");
         compare(n.path, "");
         compare(n.color, "#000000");
@@ -53,6 +54,7 @@ TestCase {
         compare(n.interval, "1h");
         compare(n.shuffle, true);
         compare(n.videoOnBattery, false);
+        compare(n.online, {provider: "commons"});
         compare(n.outputs, []);
     }
 
@@ -460,5 +462,139 @@ TestCase {
         // The crossover of the two tones is around 0.179.
         const mid = WallpaperConfig.stripContrast(0.179, 0.179);
         verify(Math.abs(mid.white - mid.black) < 0.05);
+    }
+
+    // ---- online daily pictures (ADR-0016 step 2) ----
+
+    function test_onlineSource() {
+        compare(WallpaperConfig.normalize({source: "online"}).source, "online", "needs no path");
+        compare(WallpaperConfig.normalize({source: "online", online: {provider: "commons"}}).online, {provider: "commons"});
+        compare(WallpaperConfig.normalize({source: "online", online: "x"}).online, {provider: "commons"});
+        compare(WallpaperConfig.normalize({source: "online", online: {provider: "apod"}}).online, {provider: "commons"}, "an unknown provider reads as the default");
+        compare(WallpaperConfig.resolve({source: "online"}, panel).source, "online");
+        compare(WallpaperConfig.resolve({source: "online"}, panel).provider, "commons");
+        // Off by default, and a display can opt out or in on its own.
+        compare(WallpaperConfig.normalize(undefined).source, "builtin");
+        verify(!WallpaperConfig.onlineWanted(undefined));
+        verify(!WallpaperConfig.onlineWanted({source: "folder", path: "/p"}));
+        verify(WallpaperConfig.onlineWanted({source: "online"}));
+        verify(WallpaperConfig.onlineWanted({source: "builtin", outputs: [{display: panel, source: "online"}]}));
+        verify(WallpaperConfig.onlineWanted({source: "online", outputs: [{display: panel, source: "builtin"}]}), "other displays may still use it");
+        compare(WallpaperConfig.resolve({source: "online", outputs: [{display: panel, source: "file", path: "/a.jpg"}]}, panel).source, "file");
+        compare(WallpaperConfig.outputsProblem([{display: panel, source: "online"}]), "");
+    }
+
+    function test_onlineHelperArguments() {
+        const out = "/home/u/.cache/grassfield/wallpapers/online/commons";
+        compare(WallpaperConfig.fetchArgs("/usr/lib/grassfield/grassfield-wallpaper", "commons", "2026-10-22", out, "fr", ""), ["/usr/lib/grassfield/grassfield-wallpaper", "fetch", "commons", "--date", "2026-10-22", "--out", out, "--lang", "fr"]);
+        compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22", out, "en", "http://127.0.0.1:8123").slice(-2), ["--base-url", "http://127.0.0.1:8123"]);
+        compare(WallpaperConfig.fetchArgs("/h", "apod", "2026-10-22", out, "en", ""), null);
+        compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22x", out, "en", ""), null);
+        compare(WallpaperConfig.fetchArgs("/h", "commons", "--out", out, "en", ""), null);
+        compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22", "relative", "en", ""), null);
+        compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22", out, "de; rm", ""), null);
+        compare(WallpaperConfig.latestArgs("/h", "commons", out), ["/h", "latest", "commons", "--out", out]);
+        compare(WallpaperConfig.latestArgs("/h", "commons", "x"), null);
+        compare(WallpaperConfig.reasonOf(11), "network");
+        compare(WallpaperConfig.reasonOf(12), "skipped");
+        compare(WallpaperConfig.reasonOf(13), "bad-response");
+        verify(WallpaperConfig.onlineSkips(12));
+        verify(WallpaperConfig.onlineSkips(5));
+        verify(!WallpaperConfig.onlineSkips(11));
+        verify(!WallpaperConfig.onlineSkips(9));
+    }
+
+    function test_onlineDates() {
+        const t = Date.UTC(2026, 9, 22, 0, 9, 59);
+        compare(WallpaperConfig.onlineDate(t), "2026-10-21", "before 00:10 UTC the day before");
+        compare(WallpaperConfig.onlineDate(t + 1000), "2026-10-22", "from 00:10 UTC");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 23, 59, 59)), "2026-10-22");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2027, 0, 1, 0, 5)), "2026-12-31", "across a year");
+        verify(isNaN(WallpaperConfig.utcDayStart("2026-02-30")));
+        verify(isNaN(WallpaperConfig.utcDayStart("x")));
+    }
+
+    function test_onlineScheduleFirstFetchIsImmediate() {
+        const now = Date.UTC(2026, 9, 22, 3, 0);
+        // Nothing cached and the day's slot (00:10 + rand * 6 h) is later: still due at once.
+        const s = WallpaperConfig.onlineSchedule({}, now, false, 0.99);
+        verify(s.due);
+        compare(s.date, "2026-10-22");
+        // A picture is cached: wait for the slot.
+        const w = WallpaperConfig.onlineSchedule({}, now, true, 0.99);
+        verify(!w.due);
+        compare(w.at, Date.UTC(2026, 9, 22, 0, 10) + Math.floor(0.99 * 6 * 3600000));
+        verify(w.at > now);
+        const d = WallpaperConfig.onlineSchedule({}, now, true, 0.0);
+        verify(d.due, "slot at 00:10 has passed at 03:00");
+        compare(d.at, Date.UTC(2026, 9, 22, 0, 10));
+    }
+
+    function test_onlineSlotIsStableForTheDay() {
+        const now = Date.UTC(2026, 9, 22, 9, 0);
+        const a = WallpaperConfig.onlineSchedule({}, now, true, 0.5);
+        // Persisted, then evaluated again with another random number: the slot does not move.
+        const b = WallpaperConfig.onlineSchedule(a.state, now + 60000, true, 0.01);
+        compare(b.at, a.at);
+        // The next day picks a new one.
+        const c = WallpaperConfig.onlineSchedule(a.state, Date.UTC(2026, 9, 23, 1, 0), true, 0.25);
+        compare(c.date, "2026-10-23");
+        compare(c.at, Date.UTC(2026, 9, 23, 0, 10) + Math.floor(0.25 * 6 * 3600000));
+        // The window is 00:10 to 06:10 UTC.
+        for (const r of [0, 0.3, 0.7, 0.999999, 1, 5, -1])
+            verify(WallpaperConfig.onlineSchedule({}, Date.UTC(2026, 9, 22, 12), true, r).at <= Date.UTC(2026, 9, 22, 6, 10));
+    }
+
+    function test_onlineOneSuccessfulFetchPerDay() {
+        const now = Date.UTC(2026, 9, 22, 9, 0);
+        const st = WallpaperConfig.onlineAfter({}, now, "2026-10-22", "ok");
+        const s = WallpaperConfig.onlineSchedule(st, now + 3600000, true, 0.0);
+        verify(!s.due);
+        compare(s.at, Date.UTC(2026, 9, 23, 0, 10), "looks again when the next day starts");
+        // A skip (licence) ends the day too.
+        verify(!WallpaperConfig.onlineSchedule(WallpaperConfig.onlineAfter({}, now, "2026-10-22", "skipped"), now, true, 0).due);
+        // The next day it is due again once its slot has come.
+        verify(WallpaperConfig.onlineSchedule(st, Date.UTC(2026, 9, 23, 7, 0), true, 0.0).due);
+    }
+
+    function test_onlineBackoff() {
+        const t0 = Date.UTC(2026, 9, 22, 9, 0);
+        let st = WallpaperConfig.onlineAfter({}, t0, "2026-10-22", "network");
+        compare(st.failures, 1);
+        compare(st.retryAt, t0 + 3600000, "1 h after the first failure");
+        verify(!WallpaperConfig.onlineSchedule(st, t0 + 3599000, true, 0).due);
+        verify(WallpaperConfig.onlineSchedule(st, t0 + 3600000, true, 0).due);
+        const t1 = t0 + 3600000;
+        st = WallpaperConfig.onlineAfter(st, t1, "2026-10-22", "network");
+        compare(st.failures, 2);
+        compare(st.retryAt, t1 + 3 * 3600000, "3 h after the second");
+        verify(!WallpaperConfig.onlineSchedule(st, t1 + 3 * 3600000 - 1000, true, 0).due);
+        const t2 = t1 + 3 * 3600000;
+        st = WallpaperConfig.onlineAfter(st, t2, "2026-10-22", "network");
+        compare(st.failures, 3);
+        // Then the next day: not due for the rest of today, whatever the clock says.
+        const s = WallpaperConfig.onlineSchedule(st, t2 + 5 * 3600000, true, 0);
+        verify(!s.due);
+        compare(s.at, Date.UTC(2026, 9, 23, 0, 10));
+        // The next day starts with a clean slate.
+        verify(WallpaperConfig.onlineSchedule(st, Date.UTC(2026, 9, 23, 7, 0), true, 0).due);
+        // Success resets everything.
+        const ok = WallpaperConfig.onlineAfter(st, t2, "2026-10-22", "ok");
+        compare(ok.failures, 0);
+        compare(ok.retryAt, 0);
+        // Nothing cached does not bypass the backoff.
+        verify(!WallpaperConfig.onlineSchedule(WallpaperConfig.onlineAfter({}, t0, "2026-10-22", "network"), t0 + 60000, false, 0.5).due);
+    }
+
+    function test_onlineStateFromAnything() {
+        for (const raw of [null, 5, "x", [], {failures: "many", done: 7, retryAt: -1, slotAt: "x", failDate: "2026-99-99"}]) {
+            const st = WallpaperConfig.onlineStateOf(raw);
+            compare(st.done, "");
+            compare(st.failures, 0);
+            compare(st.retryAt, 0);
+            compare(st.failDate, "");
+        }
+        compare(WallpaperConfig.onlineStateOf({failures: 99}).failures, 3);
+        compare(WallpaperConfig.onlineStateOf({done: "2026-10-22"}).done, "2026-10-22");
     }
 }

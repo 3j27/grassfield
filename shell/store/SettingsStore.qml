@@ -64,6 +64,7 @@ Scope {
         interval: config.wallpaper.interval,
         shuffle: config.wallpaper.shuffle,
         videoOnBattery: config.wallpaper.videoOnBattery,
+        online: config.wallpaper.online,
         outputs: config.wallpaper.outputs
     })
     readonly property int lockIdleMinutes: Math.round(clampNumber(config.lock.idleMinutes, 0, 240, 5))
@@ -176,6 +177,8 @@ Scope {
         property var interval: "1h"
         property var shuffle: true
         property var videoOnBattery: false
+        // {provider}: a var too, a hand-edited file may hold anything (WallpaperConfig.normalize decides).
+        property var online: ({provider: "commons"})
         property var outputs: []
     }
 
@@ -413,6 +416,8 @@ Scope {
             config.wallpaper.shuffle = d.shuffle;
         if (!("videoOnBattery" in wp))
             config.wallpaper.videoOnBattery = d.videoOnBattery;
+        if (!("online" in wp))
+            config.wallpaper.online = {provider: d.online.provider};
         if (!("outputs" in wp))
             config.wallpaper.outputs = [];
     }
