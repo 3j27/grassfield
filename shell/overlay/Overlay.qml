@@ -39,13 +39,13 @@ Variants {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: open && !Popups.pointerHeld ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-overlay"
         // The whole output receives input while a popup is open (the bar strip is handed to the bar, below); nothing once
         // it closed: the surface stays mapped a moment for the keyboard release, and a click in that moment belongs to the
         // window under it.
         // qmllint disable missing-type
-        mask: win.open ? openMask : passThrough
+        mask: win.open && !Popups.pointerHeld ? openMask : passThrough
         // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
         // qmllint enable missing-type

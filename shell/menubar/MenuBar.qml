@@ -194,7 +194,8 @@ Scope {
             readonly property bool hasFileMenu: hasApp && bridgeMenus.length === 0 && AppMenus.model.hasFileMenu(AppMenus.context(shownAppId))
             // Transparent by default (like macOS 26/27); `menubar.showBackground` restores the frosted band, and so does a wallpaper
             // strip over which neither tone reaches 4.5:1 (BarTone.assistOf, ADR-0016: shown on that output until the wallpaper changes).
-            readonly property bool showBackground: Settings.menubarShowBackground || BarTone.assistOf(win.screen.name)
+            // Over a full-screen window the bar is drawn on that window's content, not on the wallpaper the tone was measured on: the frosted band then (macOS does the same).
+            readonly property bool showBackground: Settings.menubarShowBackground || BarTone.assistOf(win.screen.name) || win.fullscreen
             // Without a background the bar sits on the wallpaper and its foreground adapts to the wallpaper strip under this
             // output's bar (BarTone, the macOS model): white text over a dark wallpaper, black over a light one, with a faint
             // shadow of the opposite colour (gate A2). On the material it is the appearance's text colour.
@@ -575,8 +576,12 @@ Scope {
                         Popups.trackPointer(win.screen.name, lastX, lastY);
                 }
                 onActiveChanged: {
-                    if (!active)
+                    if (active) {
+                        Popups.pointerHeld = true;
+                    } else {
                         Popups.releasePointer(win.screen.name, lastX, lastY);
+                        Popups.pointerHeld = false;
+                    }
                 }
             }
 
