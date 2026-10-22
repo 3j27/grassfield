@@ -177,7 +177,15 @@ SettingsPage {
         if (root.source === "online")
             return;
         root.disclosing = true;
-        Qt.callLater(() => useOnlineButton.forceActiveFocus());
+        Qt.callLater(root.revealDisclosure);
+    }
+
+    // The disclosure opens below the fold: scroll it into view (its bottom at the bottom of the pane) and give the keyboard to the
+    // default button.
+    function revealDisclosure(): void {
+        const bottom = disclosure.mapToItem(root.contentItem, 0, disclosure.height).y;
+        root.contentY = Math.max(0, Math.min(root.contentHeight - root.height, Math.max(root.contentY, bottom - root.height + Tokens.spacingLg)));
+        useOnlineButton.forceActiveFocus();
     }
 
     function useOnline(): void {
@@ -584,13 +592,13 @@ SettingsPage {
         caption: qsTr("About This Wallpaper")
 
         SettingsRow {
-            visible: root.onlineEntry && root.onlineEntry.title
+            visible: !!(root.onlineEntry && root.onlineEntry.title)
             title: qsTr("Title")
             valueText: root.onlineEntry ? root.onlineEntry.title : ""
         }
 
         SettingsRow {
-            visible: root.onlineEntry && (root.onlineEntry.author || root.onlineEntry.credit)
+            visible: !!(root.onlineEntry && (root.onlineEntry.author || root.onlineEntry.credit))
             title: qsTr("Author")
             valueText: root.onlineEntry ? (root.onlineEntry.author || root.onlineEntry.credit) : ""
         }
@@ -602,13 +610,13 @@ SettingsPage {
         }
 
         SettingsRow {
-            visible: root.onlineEntry && root.onlineEntry.licenseShort
+            visible: !!(root.onlineEntry && root.onlineEntry.licenseShort)
             title: qsTr("Licence")
             valueText: root.onlineEntry ? root.onlineEntry.licenseShort : ""
         }
 
         SettingsRow {
-            visible: root.onlineEntry && root.formatUpdated(root.onlineEntry.fetchedAt) !== ""
+            visible: !!root.onlineEntry && root.formatUpdated(root.onlineEntry.fetchedAt) !== ""
             title: qsTr("Last updated")
             valueText: root.onlineEntry ? root.formatUpdated(root.onlineEntry.fetchedAt) : ""
         }

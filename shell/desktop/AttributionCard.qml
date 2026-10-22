@@ -28,11 +28,17 @@ FocusScope {
     // The source page without its scheme ("commons.wikimedia.org/wiki/File:..."): shown as text, never opened from here.
     readonly property string sourceText: (root.entry.sourceUrl || "").replace(/^https?:\/\//, "")
 
+    readonly property string authorLabel: qsTr("Author")
+    readonly property string sourceLabel: qsTr("Source")
+    readonly property string licenceLabel: qsTr("Licence")
+    readonly property string updatedLabel: qsTr("Last updated")
+    readonly property string commonsName: qsTr("Wikimedia Commons")
+
     readonly property var rows: [
-        {label: qsTr("Author"), value: root.entry.author || root.entry.credit || ""},
-        {label: qsTr("Source"), value: root.sourceText !== "" ? qsTr("Wikimedia Commons") + "\n" + root.sourceText : qsTr("Wikimedia Commons")},
-        {label: qsTr("Licence"), value: root.entry.licenseShort || ""},
-        {label: qsTr("Last updated"), value: root.updated}
+        {label: root.authorLabel, value: root.entry.author || root.entry.credit || ""},
+        {label: root.sourceLabel, value: root.sourceText !== "" ? root.commonsName + "\n" + root.sourceText : root.commonsName},
+        {label: root.licenceLabel, value: root.entry.licenseShort || ""},
+        {label: root.updatedLabel, value: root.updated}
     ].filter(r => r.value !== "")
 
     Keys.onPressed: event => {

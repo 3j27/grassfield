@@ -629,7 +629,8 @@ ExitCode fetchCommons(const Options &opts, QJsonObject *result, QString *reason)
     // A day's picture is fetched once: both files there means nothing to do (no request at all).
     const QString image = opts.out + QLatin1Char('/') + opts.date + QStringLiteral(".jpg");
     const QString sidecar = opts.out + QLatin1Char('/') + opts.date + QStringLiteral(".json");
-    if (!ensureCacheDir(opts.out)) {
+    // The folder above (online/) is created 0700 as well, so that the whole online cache is private.
+    if (!ensureCacheDir(QFileInfo(opts.out).absolutePath()) || !ensureCacheDir(opts.out)) {
         *reason = QStringLiteral("cannot create the output folder");
         return WriteFailed;
     }

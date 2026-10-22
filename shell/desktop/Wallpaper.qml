@@ -95,6 +95,16 @@ Scope {
             return "unknown output";
         }
 
+        // Dev only, with the loopback test server (GRASSFIELD_ONLINE_BASE_URL): the online scheduler's clock runs this many hours ahead.
+        function onlineClock(hours: int): string {
+            return root.dev ? WallpaperOnline.devClock(hours) : "refused";
+        }
+
+        // Dev only: the online scheduler's state as JSON.
+        function onlineStatus(): string {
+            return root.dev ? WallpaperOnline.devStatus() : "refused";
+        }
+
         function set(path: string): string {
             if (!root.dev)
                 return "refused";

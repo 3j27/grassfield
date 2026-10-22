@@ -112,7 +112,9 @@ Singleton {
     function adopt(o: var): void {
         // Only a complete, plausible answer replaces the picture: a path inside our own cache folder and the text fields.
         if (o && o.ok === true && o.found === true && typeof o.file === "string" && WallpaperConfig.isUnder(o.file, root.outDir) && typeof o.date === "string") {
-            if (!root.entry || root.entry.file !== o.file || root.entry.fetchedAt !== o.fetchedAt)
+            // Never an older day's picture over a newer one; the same day's picture again only when it was fetched again.
+            const newer = !root.entry || o.date > root.entry.date || (o.date === root.entry.date && root.entry.fetchedAt !== o.fetchedAt);
+            if (newer)
                 root.entry = o;
         }
     }
@@ -187,8 +189,8 @@ Singleton {
     function evaluate(): void {
         if (!ready || fetchProc.running || meteredProc.running)
             return;
-        const now = Date.now();
-        const r = WallpaperConfig.onlineSchedule(sched, now, entry !== null, Math.random());
+        const now = clock();
+        const r = WallpaperConfig.onlineSchedule(sched, now, entry !== null, devOffsetMs !== 0 ? 0 : Math.random());
         if (r.state.slotDate !== sched.slotDate || r.state.slotAt !== sched.slotAt)
             saveState(r.state);
         if (r.due) {
@@ -203,6 +205,28 @@ Singleton {
 
     // The date of the fetch under way.
     property string fetchDate: ""
+
+    // Dev only, and only with the loopback test server: the scheduler's clock runs this many hours ahead (the visual test cannot
+    // wait for a new UTC day). The date, the day's slot (at 00:10 while shifted), the backoff and the fetch all follow it, so the
+    // test drives the real accounting. A restart of the shell resets it.
+    property real devOffsetMs: 0
+
+    function clock(): real {
+        return Date.now() + devOffsetMs;
+    }
+
+    function devClock(hours: real): string {
+        if (!WallpaperState.dev || devBaseUrl === "")
+            return "refused";
+        devOffsetMs = Math.max(0, Math.min(24 * 400, hours)) * 3600000;
+        evaluate();
+        return "ok";
+    }
+
+    // Dev only: what the scheduler knows, one line of JSON.
+    function devStatus(): string {
+        return WallpaperState.dev ? JSON.stringify({phase: phase, failure: lastFailure, fetchCount: fetchCount, sched: sched, entry: entry ? entry.date : ""}) : "refused";
+    }
 
     function networkOk(): bool {
         // A dev session: only the loopback test server.
@@ -282,7 +306,7 @@ Singleton {
         } catch (e) {
             o = null;
         }
-        const now = Date.now();
+        const now = clock();
         let outcome = "failed";
         if (o && o.ok === true && fetchExit === 0) {
             outcome = "ok";
@@ -296,6 +320,8 @@ Singleton {
         }
         if (outcome !== "ok")
             console.warn("wallpaper online: fetch " + fetchDate + " " + outcome + (o && o.reason ? " (" + o.reason + ")" : "") + (fetchTimedOut ? " (timed out)" : ""));
+        else
+            console.info("wallpaper online: fetched " + fetchDate + (o.cached ? " (already cached)" : ""));
         fetchTimedOut = false;
         saveState(WallpaperConfig.onlineAfter(sched, now, fetchDate, outcome));
         phase = "scheduled";
