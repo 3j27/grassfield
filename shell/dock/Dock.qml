@@ -11,6 +11,7 @@ import qs.services
 import "DockModel.js" as DockModel
 import "Launch.js" as Launch
 import "../desktop/IconsLogic.js" as Icons
+import "AutoHide.js" as AutoHide
 import "Magnify.js" as Magnify
 
 // Bottom dock, one per screen: pinned apps (Settings) and running apps (foreign-toplevel app ids
@@ -445,6 +446,18 @@ Scope {
             root.testPointerX = -1;
         }
 
+        // Auto-hide machine state and visible fraction "state visible" (fixtures only).
+        function hidestate(screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    return all[i].hideMachine.state + " " + all[i].hideMachine.visible.toFixed(3);
+            }
+            return "";
+        }
+
         function reveal(on: bool): void {
             root.testReveal = on;
         }
@@ -700,18 +713,35 @@ Scope {
 
             readonly property bool pointerActive: areaHover.hovered || root.testPointerX >= 0
             readonly property real pointerX: root.testPointerX >= 0 ? root.testPointerX : areaHover.point.position.x
-            // 0..1, eases magnification in and out.
-            property real influence: pointerActive ? 1 : 0
-
-            readonly property var scaleList: {
-                const raw = Magnify.scales(baseCenters, pointerX, pitch, maxScale, Tokens.dockMagnificationRadius);
-                return raw.map((s, i) => root.items[i].kind === "separator" ? 1 : 1 + (s - 1) * influence);
-            }
+            // Magnification: the target scales of the pointer (all 1 without it) and the displayed ones, which follow them
+            // with a frame-rate independent exponential smoothing (Magnify.step; Reduce Motion snaps).
+            readonly property var separatorFlags: root.items.map(it => it.kind === "separator")
+            readonly property var targetScales: pointerActive ? Magnify.slotScales(baseCenters, widths, Tokens.dockSpacing, separatorFlags, pointerX, pitch, maxScale, Tokens.dockMagnificationRadius) : widths.map(() => 1)
+            property var smoothScales: []
+            readonly property var scaleList: widths.map((w, i) => smoothScales[i] !== undefined ? smoothScales[i] : 1)
             readonly property real shelfWidth: Magnify.totalWidth(widths.map((w, i) => w * scaleList[i]), Tokens.dockSpacing) + 2 * Tokens.dockPadding - dragCollapse * pitch
 
-            // Autohide: revealed while the pointer is on the dock (or the bottom edge strip).
-            property bool revealedState: false
-            readonly property bool revealed: !autohide || revealedState || root.testReveal || root.keyboardMode || Popups.kind === "dock"
+            // Autohide state machine (AutoHide.js, table in docs/specs/dock.md): inhibitors keep the shelf shown.
+            property int pressedTile: -1
+            property var hideMachine: AutoHide.create()
+            readonly property var hideInhibitors: ({
+                    pointer: pointerActive,
+                    drag: dragFrom >= 0,
+                    popup: Popups.kind === "dock",
+                    hold: pressedTile >= 0,
+                    keyboard: root.keyboardMode,
+                    forced: root.testReveal
+                })
+            readonly property var hideTiming: ({
+                    hideGrace: Tokens.dockHideGrace,
+                    hideDuration: Appearance.duration(Tokens.dockHideDuration),
+                    revealDwell: Tokens.dockRevealDwell,
+                    revealDuration: Appearance.duration(Tokens.dockRevealDuration)
+                })
+            // The input area is the shelf unless the machine is fully hidden (then only the edge strip takes input).
+            readonly property bool revealed: !autohide || hideMachine.state !== "hidden" || AutoHide.forcing(hideInhibitors)
+            // Tooltips: after one was shown, the next icon labels at once for a while.
+            property bool tipsWarm: false
 
             function focusFirstTile(): void {
                 for (let i = 0; i < tileRepeater.count; i++) {
@@ -828,27 +858,32 @@ Scope {
             }
             Component.onDestruction: Compositor.unregisterDock(screenName, win)
 
-            Behavior on influence {
-                NumberAnimation {
-                    duration: Appearance.duration(Tokens.motionFast)
-                    easing.type: Easing.OutQuad
+            onPointerActiveChanged: {
+                if (pointerActive)
+                    Trash.refresh();
+            }
+
+            // Frame clock of the magnification: runs only until the displayed scales reach their targets.
+            FrameAnimation {
+                running: !Magnify.settled(win.smoothScales, win.targetScales, 0.0005)
+                onTriggered: {
+                    let next = Magnify.step(win.smoothScales, win.targetScales, frameTime * 1000, Appearance.reduceMotion ? 0 : Tokens.dockMagnificationTau, Tokens.dockMagnificationMaxDt);
+                    if (Magnify.settled(next, win.targetScales, 0.0005))
+                        next = win.targetScales.slice();
+                    win.smoothScales = next;
                 }
             }
 
-            onPointerActiveChanged: {
-                if (pointerActive) {
-                    hideTimer.stop();
-                    revealedState = true;
-                    Trash.refresh();
-                } else {
-                    hideTimer.restart();
-                }
+            // Frame clock of the auto-hide machine: stops while nothing can change (hidden and idle, or shown and held).
+            FrameAnimation {
+                running: AutoHide.active(win.hideMachine, win.hideInhibitors, win.autohide)
+                onTriggered: win.hideMachine = AutoHide.step(win.hideMachine, win.hideInhibitors, win.autohide, win.hideTiming, Math.min(frameTime * 1000, 100))
             }
 
             Timer {
-                id: hideTimer
-                interval: Tokens.dockHideDelay
-                onTriggered: win.revealedState = false
+                id: tipsWarmTimer
+                interval: Tokens.dockTooltipWarm
+                onTriggered: win.tipsWarm = false
             }
 
             Item {
@@ -906,20 +941,12 @@ Scope {
                     width: win.shelfWidth
                     height: win.shelfHeight
                     x: (win.width - width) / 2
-                    y: win.height - Tokens.dockBottomMargin - height + (win.revealed ? 0 : height + Tokens.dockBottomMargin + shadowMargin)
+                    y: win.height - Tokens.dockBottomMargin - height + (1 - AutoHide.ease(win.hideMachine.visible)) * (height + Tokens.dockBottomMargin + shadowMargin)
                     radius: Tokens.radiusDock
                     tintAlphaOverride: Appearance.dark ? Tokens.dockTintAlphaDark : Tokens.dockTintAlphaLight
                     highlightOpacity: Tokens.dockHighlightOpacity
                     borderOpacity: Tokens.dockRimOpacity
                     borderColor: Appearance.colors.materialHighlight
-
-                    Behavior on y {
-                        NumberAnimation {
-                            duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.curve
-                        }
-                    }
 
                     Row {
                         id: tiles
@@ -952,6 +979,11 @@ Scope {
                                 // The button is held on an app tile: the icon darkens slightly (macOS).
                                 readonly property bool pressedDown: isApp && leftTap.pressed && !dragging
                                 property bool tipSuppressed: false
+                                // The hovered state outlives the pointer by Tokens.dockHoverHold, so the label does not flicker
+                                // when the pointer crosses the gap between two icons.
+                                property bool hoverHeld: false
+                                // A magnified icon rises by a small part of its growth (the running dot stays on the shelf).
+                                readonly property real hoverLift: win.iconSize * (tileScale - 1) * Tokens.dockMagnificationLift
                                 // The Dock menu was opened by holding the button: the release is not a click.
                                 property bool menuByHold: false
                                 // root.clickCancels when the button went down, and whether Qt cancelled the press (the tap is refused then).
@@ -1039,7 +1071,7 @@ Scope {
                                 // The shelf closes a gap around its centre: the dragged tile compensates to stay under the pointer.
                                 transform: Translate {
                                     x: tile.dragging ? win.dragDx - win.dragCollapse * win.pitch / 2 : tile.shiftAnim + tile.glide
-                                    y: tile.dragging ? win.dragDy : tile.glideY
+                                    y: tile.dragging ? win.dragDy : tile.glideY - tile.hoverLift
                                 }
                                 activeFocusOnTab: !isSeparator
                                 Accessible.role: isSeparator ? Accessible.Separator : Accessible.Button
@@ -1279,7 +1311,7 @@ Scope {
                                     radius: width / 2
                                     color: Appearance.colors.indicator
                                     x: (tile.width - width) / 2
-                                    y: win.iconSize + Tokens.dockSpacing
+                                    y: win.iconSize + Tokens.dockSpacing + tile.hoverLift
                                 }
 
                                 Tooltip {
@@ -1287,8 +1319,16 @@ Scope {
                                     z: 10
                                     tail: true
                                     text: tile.dragging ? qsTr("Remove") : tile.label
-                                    delay: 0
-                                    shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tileHover.hovered || (tile.activeFocus && root.keyboardMode)) && !tile.tipSuppressed && !Popups.active && win.dragFrom < 0)
+                                    delay: (tile.dragging || (tile.activeFocus && root.keyboardMode) || win.tipsWarm) ? 0 : Tokens.dockTooltipDelay
+                                    onVisibleNowChanged: {
+                                        if (visibleNow) {
+                                            win.tipsWarm = true;
+                                            tipsWarmTimer.stop();
+                                        } else {
+                                            tipsWarmTimer.restart();
+                                        }
+                                    }
+                                    shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tile.hoverHeld || (tile.activeFocus && root.keyboardMode)) && !tile.tipSuppressed && !Popups.active && win.dragFrom < 0)
                                     x: (tile.width - width) / 2
                                     y: tile.height - win.indicatorArea - tile.iconPx - Tokens.dockTooltipGap - height
                                 }
@@ -1298,11 +1338,22 @@ Scope {
                                     onHoveredChanged: {
                                         if (VisualFixtures.active && leftTap.pressed)
                                             console.info("dock-launch: hover-while-pressed", hovered, Date.now());
-                                        if (!hovered)
+                                        if (hovered) {
+                                            hoverHoldTimer.stop();
+                                            tile.hoverHeld = true;
+                                        } else {
+                                            hoverHoldTimer.restart();
                                             tile.tipSuppressed = false;
+                                        }
                                     }
                                     enabled: !tile.isSeparator
                                     cursorShape: Qt.ArrowCursor
+                                }
+
+                                Timer {
+                                    id: hoverHoldTimer
+                                    interval: Tokens.dockHoverHold
+                                    onTriggered: tile.hoverHeld = false
                                 }
 
                                 // Files dropped on the Trash tile (from the desktop icons or any
@@ -1458,6 +1509,8 @@ Scope {
                                     onPressedChanged: {
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: pressed", pressed, Date.now());
+                                        // Auto-hide inhibitor: a press (and hold) in progress on this tile.
+                                        win.pressedTile = pressed ? tile.index : (win.pressedTile === tile.index ? -1 : win.pressedTile);
                                         if (pressed) {
                                             tile.tipSuppressed = true;
                                             tile.menuByHold = false;
