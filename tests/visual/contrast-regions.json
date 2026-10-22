@@ -42,19 +42,19 @@
    {"name": "Neovim subtitle", "box": [680, 431, 62, 10], "kind": "text"}
   ],
   "banners": [
-   {"name": "banner 1 title", "box": [1610, 46, 100, 12], "kind": "text"},
-   {"name": "banner 1 body", "box": [1610, 66, 170, 12], "kind": "text"},
-   {"name": "banner 2 title", "box": [1610, 114, 100, 12], "kind": "text"},
-   {"name": "banner 2 body", "box": [1610, 134, 220, 12], "kind": "text"},
-   {"name": "banner time", "box": [1868, 44, 26, 10], "kind": "text"}
+   {"name": "banner 1 title", "box": [1617, 44, 92, 13], "kind": "text"},
+   {"name": "banner 1 body", "box": [1617, 60, 190, 14], "kind": "text"},
+   {"name": "banner 2 title", "box": [1617, 106, 92, 13], "kind": "text"},
+   {"name": "banner 2 body", "box": [1617, 122, 216, 14], "kind": "text"},
+   {"name": "banner time", "box": [1869, 44, 26, 11], "kind": "text"}
   ],
   "notificationcenter": [
    {"name": "card 1 group name", "box": [1572, 59, 58, 13], "kind": "text"},
    {"name": "card 1 title", "box": [1616, 90, 100, 13], "kind": "text"},
-   {"name": "card 1 body", "box": [1616, 110, 188, 12], "kind": "text"},
+   {"name": "card 1 body", "box": [1616, 108, 190, 13], "kind": "text"},
    {"name": "card 1 time", "box": [1868, 90, 26, 10], "kind": "text"},
-   {"name": "card 3 group name (Mail)", "box": [1572, 239, 30, 13], "kind": "text"},
-   {"name": "footer Edit Widgets", "box": [1682, 344, 70, 11], "kind": "text"}
+   {"name": "card 3 group name (Mail)", "box": [1572, 232, 30, 13], "kind": "text"},
+   {"name": "footer Edit Widgets", "box": [1682, 688, 70, 12], "kind": "text"}
   ],
   "notificationcenterhover": [
    {"name": "card x glyph (pointer on the card)", "box": [1558, 39, 10, 10], "kind": "icon"},

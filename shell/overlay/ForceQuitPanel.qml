@@ -16,6 +16,7 @@ Dialog {
 
     title: qsTr("Force Quit Applications")
     message: qsTr("If an app is not responding, select it and choose Force Quit.")
+    sheet: true
     panelWidth: Tokens.panelForceQuitWidth
 
     function ask(): void {

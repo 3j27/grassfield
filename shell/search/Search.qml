@@ -7,6 +7,7 @@ import qs.platform
 import qs.services
 import "Calc.js" as Calc
 import "Files.js" as Files
+import "Filters.js" as Filters
 import "Ranking.js" as Ranking
 import "Units.js" as Units
 
@@ -38,6 +39,21 @@ Scope {
     property var items: []
     property int selected: -1
     property var fileHits: []
+    // Filter chips under the field: the chip ids the unfiltered results offer, and the selected one ("" = all).
+    // File search still running or about to start: the "No Results" notice waits for it.
+    readonly property bool filesPending: fileTimer.running || liveSearches.length > 0
+    property var chips: []
+    property string filter: ""
+    // Chips need something to choose between; a lone category is the list itself.
+    readonly property bool chipsShown: query.trim() !== "" && chips.length > 1
+    // Keyboard reach of the chips: the field keeps the text focus; in the "chips" zone the ring is on chip `chipIndex`.
+    property string zone: "field"
+    property int chipIndex: -1
+    readonly property var chipLabels: ({
+            "apps": qsTr("Applications"),
+            "commands": qsTr("Commands"),
+            "documents": qsTr("Documents")
+        })
 
     // Lock Screen is offered only when the shell exposes a lock IPC target. The lock module
     // (shell/security) does not ship one yet, so the command stays hidden.
@@ -94,6 +110,7 @@ Scope {
 
     function hide(): void {
         open = false;
+        leaveChips();
         fileTimer.stop();
         cancelFiles();
         fileHits = [];
@@ -110,6 +127,8 @@ Scope {
         if (text === query && groups.length > 0)
             return;
         query = text;
+        filter = "";
+        leaveChips();
         fileHits = [];
         cancelFiles();
         compute();
@@ -220,7 +239,7 @@ Scope {
             }
         }
 
-        const g = [];
+        let g = [];
         if (calc)
             g.push({id: "calc", title: qsTr("Calculator"), items: [{kind: "calc", key: "calc", title: calc.text, subtitle: q + " " + qsTr("(Return copies the result)"), badge: "=", text: calc.text}]});
         if (unit)
@@ -235,6 +254,14 @@ Scope {
             g.push({id: "files", title: qsTr("Documents"), items: docs});
         if (recents.length > 0)
             g.push({id: "recent", title: qsTr("Recent"), items: recents});
+
+        // Chips come from the unfiltered results; a chip that no longer has results is dropped with its filter.
+        chips = Filters.chipsOf(g);
+        if (zone === "chips" && (chips.length < 2 || query.trim() === ""))
+            leaveChips();
+        if (filter !== "" && chips.indexOf(filter) < 0)
+            filter = "";
+        g = Filters.apply(g, filter, filter !== "" ? chipLabels[filter] : "");
 
         const flat = [];
         const rowList = [];
@@ -291,7 +318,8 @@ Scope {
             ? ["timeout", "2", "localsearch", "search", "-f", "-l", String(Tokens.searchMaxFiles), "--", term]
             : ["timeout", "2", "plocate", "-i", "-b", "-l", "1500"].concat(plocateDb !== "" ? ["-d", plocateDb] : [], ["--", term]);
         const p = searchProc.createObject(root, {seq: seq, term: term, stage: stage, command: argv});
-        liveSearches.push(p);
+        // Reassigned, not pushed: a mutated array does not notify, and filesPending must see the search start.
+        liveSearches = liveSearches.concat([p]);
         p.running = true;
     }
 
@@ -383,6 +411,27 @@ Scope {
         }
     }
 
+    // Click on a chip: select it, or clear the filter when it is the selected one.
+    function leaveChips(): void {
+        zone = "field";
+        chipIndex = -1;
+    }
+
+    // A key of the field's handler while the chips hold the keyboard reach. Returns whether the key was consumed.
+    function chipKey(action: string): bool {
+        const r = Filters.chipKey(zone, chipIndex, chips.length, action);
+        zone = r.zone;
+        chipIndex = r.index;
+        if (r.toggle && chipIndex >= 0 && chipIndex < chips.length)
+            toggleFilter(chips[chipIndex]);
+        return r.handled;
+    }
+
+    function toggleFilter(id: string): void {
+        filter = filter === id ? "" : id;
+        compute();
+    }
+
     function move(delta: int): void {
         if (items.length === 0)
             return;
@@ -395,6 +444,11 @@ Scope {
             return;
         const current = selected >= 0 ? items[selected].groupId : groups[0].id;
         let gi = groups.findIndex(g => g.id === current);
+        if (chipsShown && Filters.leavesForChips(gi, groups.length, delta)) {
+            zone = "chips";
+            chipIndex = delta > 0 ? 0 : chips.length - 1;
+            return;
+        }
         gi = (gi + delta + groups.length) % groups.length;
         const target = groups[gi].id;
         selected = items.findIndex(it => it.groupId === target);
@@ -469,6 +523,13 @@ Scope {
             root.keyStartMs = 0;
         }
 
+        // Selects (or clears, with the selected chip's id or "") a filter chip (tests).
+        function filter(id: string): void {
+            if (!VisualFixtures.active)
+                return;
+            root.toggleFilter(id);
+        }
+
         // JSON of the visible groups.
         function status(): string {
             return JSON.stringify({
@@ -476,6 +537,9 @@ Scope {
                 query: root.query,
                 screen: root.screenName,
                 selected: root.selected,
+                chips: root.chips,
+                filter: root.filter,
+                zone: root.zone,
                 groups: root.groups.map(g => ({id: g.id, title: g.title, items: g.items.map(i => ({kind: i.kind, title: i.title, subtitle: i.subtitle}))}))
             });
         }

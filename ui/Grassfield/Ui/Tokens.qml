@@ -373,6 +373,10 @@ QtObject {
     readonly property int controlToggleHeight: 16
     // estimate, pending F1 measurement from design/reference
     readonly property int controlFocusRing: 2
+    // F1 gap 13: macOS keyboard focus ring ~3.5, drawn outside the control, following its shape
+    readonly property int controlFocusOutline: 3
+    // estimate: the macOS focus ring is the accent, translucent
+    readonly property real controlFocusOutlineOpacity: 0.6
     // estimate
     readonly property int controlTooltipDelay: 500
     // F1 gap 13: push button minimum width ~64
@@ -387,6 +391,8 @@ QtObject {
     readonly property int controlSliderKnobWidth: 21
     // F1 gap 18: Quick Settings slider track stays 4
     readonly property int controlSliderTrackCompact: 4
+    // F1 gap 13: push button 24 tall (sheets, Force Quit footer)
+    readonly property int controlButtonHeight: 24
     // F1 gap 13: alert capsule buttons 110x28
     readonly property int controlAlertButtonHeight: 28
     // F1 gap 13: gap between alert buttons
@@ -438,6 +444,14 @@ QtObject {
     readonly property int panelPercentWidth: 36
     // estimate: centred dialogs sit this fraction of the screen height above centre
     readonly property real panelDialogRaise: 0.08
+    // F1 gap 13: alert app icon in a ~64 frame at the top left (low confidence)
+    readonly property int panelAlertIconFrame: 64
+    // estimate: glyph inside the 64 alert icon frame
+    readonly property int panelAlertIconGlyph: 48
+    // F1 gap 13: sheet padding 20
+    readonly property int panelSheetPadding: 20
+    // F1 gap 13: sheet footer 64 tall under a full-width hairline
+    readonly property int panelSheetFooterHeight: 64
     // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages)
     readonly property int panelAlertWidth: 260
 
@@ -474,6 +488,12 @@ QtObject {
     readonly property int notificationBannerGap: 6
     // design/reference/macos (f1-reference-gaps.md gap 7): app icon 32 pt in banners and cards
     readonly property int notificationBannerIconSize: 32
+    // F1 gap 7 (meas-A): icon 13-15 from the card edge; added to the 12-pt card padding
+    readonly property int notificationIconInset: 2
+    // F1 gap 7 (meas-A): text column 57-58 from the card edge = 14 + 32 icon + 11
+    readonly property int notificationTextGap: 11
+    // F1 gap 7 (meas-A): title and body lines on one 16-pt pitch, no extra gap
+    readonly property int notificationLineGap: 0
     // spec N2: default 5 s
     readonly property int notificationBannerTimeout: 5000
     // spec: body up to 4 lines
@@ -540,6 +560,12 @@ QtObject {
     readonly property int searchRowIconSize: 32
     // estimate
     readonly property int searchHeaderHeight: 28
+    // F1 gap 8 (gs-086-210): hairline under the field to the chip row, about 10
+    readonly property int searchChipTop: 10
+    // F1 gap 8 (gs-086-210): chip row to the first result, about 12 with the list padding
+    readonly property int searchChipBottom: 4
+    // estimate: no usable reference (f1-reference-gaps.md, no capture of the empty state at a verified scale): notice area under the field
+    readonly property int searchEmptyHeight: 88
     // estimate: glyph size relative to the row icon tile
     readonly property real searchGlyphScale: 0.7
     // estimate: decoded icon size relative to the row icon tile
@@ -783,6 +809,14 @@ QtObject {
     readonly property real widgetDimBrightness: -0.12
     // estimate: widgets v1, dim transition
     readonly property int widgetDimMs: 300
+    // F1 gap 16 (gs-017-032): gallery panel left 41 from the screen edge, anchored bottom-left
+    readonly property int widgetGalleryInsetLeft: 41
+    // estimate: the single-column gallery (sidebar 241 + previews of the reference do not fit a one-column list); 344 column + room for the size picker
+    readonly property int widgetGalleryWidth: 360
+    // F1 gap 16 (gs-017-032): the gallery covers about 60 percent of the screen height
+    readonly property real widgetGalleryHeightFraction: 0.62
+    // estimate: upper bound of the gallery height
+    readonly property int widgetGalleryMaxHeight: 720
     // estimate: widgets v1, gallery preview row
     readonly property int widgetGalleryRowHeight: 120
     // estimate: widgets v1, size picker segment

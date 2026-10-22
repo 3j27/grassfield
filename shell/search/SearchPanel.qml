@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.launchpad
 import qs.platform
 import qs.services
 
@@ -118,11 +119,17 @@ Variants {
             id: panel
 
             readonly property bool hasResults: root.controller.rows.length > 0
+            // Chips need something to choose between; a lone category is the list itself.
+            readonly property bool chipsShown: root.controller.chipsShown
+            readonly property real chipBlock: chipsShown ? Tokens.searchChipTop + Tokens.launcherChipHeight + Tokens.searchChipBottom : 0
+            // A query nothing answers (file search settled): a centred notice instead of a bare field.
+            readonly property bool noResults: !hasResults && root.controller.query.trim() !== "" && !root.controller.filesPending
+            readonly property real listTop: Tokens.searchFieldHeight + chipBlock + Tokens.spacingSm
 
             x: (win.width - width) / 2
             y: win.height * Tokens.searchTopFraction
             width: Math.min(Tokens.searchWidth, win.width - 2 * Tokens.searchEdgeMargin)
-            height: Tokens.searchFieldHeight + (hasResults ? Math.min(list.contentHeight + 2 * Tokens.spacingSm, win.maxResults) : 0)
+            height: Tokens.searchFieldHeight + chipBlock + (hasResults ? Math.min(list.contentHeight + 2 * Tokens.spacingSm, win.maxResults - chipBlock) : 0) + (noResults ? Tokens.searchEmptyHeight : 0)
             opacity: win.shown ? 1 : 0
             Accessible.role: Accessible.Pane
             Accessible.name: qsTr("Search")
@@ -193,6 +200,24 @@ Variants {
                     const c = root.controller;
                     const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
                     event.accepted = true;
+                    // The chips hold the keyboard reach (the field keeps the text focus): they take their keys first, and
+                    // a key they do not know leaves them and acts on the field as usual.
+                    if (c.zone === "chips") {
+                        const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
+                        const actions = {};
+                        actions[Qt.Key_Tab] = shift ? "prev" : "next";
+                        actions[Qt.Key_Backtab] = "prev";
+                        actions[Qt.Key_Left] = "left";
+                        actions[Qt.Key_Right] = "right";
+                        actions[Qt.Key_Home] = "home";
+                        actions[Qt.Key_End] = "end";
+                        actions[Qt.Key_Escape] = "escape";
+                        actions[Qt.Key_Space] = "activate";
+                        actions[Qt.Key_Return] = "activate";
+                        actions[Qt.Key_Enter] = "activate";
+                        if (c.chipKey(actions[event.key] ?? "other"))
+                            return;
+                    }
                     switch (event.key) {
                     case Qt.Key_Down:
                         c.move(1);
@@ -234,7 +259,7 @@ Variants {
             }
 
             Rectangle {
-                visible: panel.hasResults
+                visible: panel.hasResults || panel.noResults
                 x: Tokens.spacingLg
                 y: Tokens.searchFieldHeight - 1
                 width: panel.width - 2 * Tokens.spacingLg
@@ -242,10 +267,79 @@ Variants {
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 
+            // Filter chips. The field keeps the text focus; Tab past the last result group (Shift+Tab before the first) moves
+            // the focus ring to the chips, Left/Right move along them, Space or Return selects, Esc or Tab leaves.
+            Flickable {
+                id: chipFlick
+                visible: panel.chipsShown
+                x: Tokens.spacingLg - Tokens.controlFocusOutline
+                y: Tokens.searchFieldHeight + Tokens.searchChipTop - Tokens.controlFocusOutline
+                width: panel.width - 2 * Tokens.spacingLg + 2 * Tokens.controlFocusOutline
+                // Room around the chips for the focus ring outside them (the row clips).
+                height: Tokens.launcherChipHeight + 2 * Tokens.controlFocusOutline
+                contentWidth: chipRow.width + 2 * Tokens.controlFocusOutline
+                contentHeight: height
+                clip: true
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentWidth > width
+                Accessible.role: Accessible.Pane
+                Accessible.name: qsTr("Filters")
+
+                Row {
+                    id: chipRow
+                    x: Tokens.controlFocusOutline
+                    y: Tokens.controlFocusOutline
+                    spacing: Tokens.launcherChipGap
+
+                    Repeater {
+                        model: root.controller.chips
+
+                        AppsChip {
+                            required property string modelData
+                            required property int index
+
+                            label: root.controller.chipLabels[modelData]
+                            focused: root.controller.zone === "chips" && root.controller.chipIndex === index
+                            active: root.controller.filter === modelData
+                            onClicked: {
+                                root.controller.leaveChips();
+                                root.controller.toggleFilter(modelData);
+                            }
+                            onFocusedChanged: {
+                                if (focused)
+                                    chipFlick.contentX = Math.max(0, Math.min(chipFlick.contentWidth - chipFlick.width, x + width / 2 - chipFlick.width / 2));
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text {
+                id: emptyNotice
+                visible: panel.noResults
+                x: Tokens.spacingLg
+                y: Tokens.searchFieldHeight
+                width: panel.width - 2 * Tokens.spacingLg
+                height: Tokens.searchEmptyHeight
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideMiddle
+                maximumLineCount: 1
+                textFormat: Text.PlainText
+                text: qsTr("No Results for “%1”").arg(root.controller.query.trim())
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyTitleSize
+                font.weight: Tokens.typographySmallWeight
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
+
             ListView {
                 id: list
                 x: Tokens.spacingSm
-                y: Tokens.searchFieldHeight + Tokens.spacingSm
+                y: panel.listTop
                 width: panel.width - 2 * Tokens.spacingSm
                 height: panel.height - y - Tokens.spacingSm
                 clip: true

@@ -9,13 +9,15 @@ Item {
     property bool destructive: false
     // Alert style: a capsule, alertButtonHeight tall (a Dialog sets it on its buttons).
     property bool capsule: false
+    // macOS push button: buttonHeight (24) tall instead of the roomier default (a sheet sets it on its buttons).
+    property bool push: false
 
     signal clicked
 
     readonly property bool hovered: mouse.containsMouse
 
     implicitWidth: Math.max(Tokens.controlButtonMinWidth, label.implicitWidth + 2 * Tokens.spacingLg)
-    implicitHeight: root.capsule ? Tokens.controlAlertButtonHeight : Tokens.menuItemHeight + Tokens.spacingSm
+    implicitHeight: root.capsule ? Tokens.controlAlertButtonHeight : (root.push ? Tokens.controlButtonHeight : Tokens.menuItemHeight + Tokens.spacingSm)
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: root.text
@@ -45,8 +47,6 @@ Item {
         anchors.fill: parent
         radius: root.capsule ? height / 2 : Tokens.radiusControl
         color: root.primary ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: root.primary ? Appearance.colors.text : Appearance.colors.accent
 
         Rectangle {
             anchors.fill: parent
@@ -54,6 +54,17 @@ Item {
             color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity)
             visible: root.hovered
         }
+    }
+
+    // Keyboard focus ring: outside the control, following its shape, accent and translucent (as macOS).
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -Tokens.controlFocusOutline
+        radius: (root.capsule ? root.height / 2 : Tokens.radiusControl) + Tokens.controlFocusOutline
+        visible: root.activeFocus
+        color: "transparent"
+        border.width: Tokens.controlFocusOutline
+        border.color: Appearance.withAlpha(Appearance.colors.accent, Tokens.controlFocusOutlineOpacity)
     }
 
     Text {

@@ -9,6 +9,9 @@ Dialog {
 
     readonly property var info: Popups.data
 
+    // The glyph follows the action: power for restart and shut down, the person for log out, the cross for Force Quit.
+    readonly property var glyphs: ({"restart": "power", "shutdown": "power", "logout": "person", "forcequit": "close-glyph"})
+    icon: info.destructive === true ? (glyphs[info.action] ?? "power") : "grassfield-logo"
     title: info.title ? info.title : ""
     message: info.message ? info.message : ""
 
