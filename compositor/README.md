@@ -4,8 +4,8 @@ Hyprland plugin for the Grassfield session (master-prompt §5.6):
 
 - titlebars on floating windows: close / minimize / zoom buttons on the left, centered title,
   drag to move (a maximized window un-zooms under the pointer), double-click per Settings (zoom by default);
-- minimize / restore with a "Scale" animation into / out of the Dock tile the shell sends (M2), hidden state
-  `special:minimized` (shared with the shell's fallback);
+- minimize / restore with a funnel (default) or shrink animation into / out of the Dock tile the shell sends (M2,
+  FR44-FR46), hidden state `special:minimized` (shared with the shell's fallback);
 - appmenu protocol (feature 3, D4): the `org_kde_kwin_appmenu_manager` global (version 2); each window's
   DBusMenu address (service, object path) is validated and posted to the shell as a gfc/1 `appmenu` event;
 - overview v2 (feature 4, Mission Control): the real windows of the current workspace drawn live, scaled and moved
@@ -143,10 +143,11 @@ mid-animation, screenshots of the animation; PASS (exit 0) = window hidden on `s
 `minimized` event and a Dock tile, restored at its geometry and focused with a `restored` event, every round
 completed, Hyprland alive without core dump.
 
-Minimize effects (nested only, plugin + shell): `tests/compositor/genie.sh [timing N | c2 [X Y]]` — Genie, Scale and
+Minimize effects (nested only, plugin + shell): `tests/compositor/genie.sh [timing N | c2 [X Y]]` — funnel, shrink and
 Reduce Motion (fade) through the dev settings file, slow-motion (Shift) captures classified by
-`tests/compositor/genie_shape.py`, the plugin's frame timing lines, plugin unload / load mid-animation; `c2` in a
-session started with `nested-up.sh --no-plugin` checks the shell's fallback. Run it bare, with the relative path.
+`tests/compositor/genie_shape.py`, a frame timing verdict that prints every stall with the host load, plugin
+unload / load mid-animation, the funnel shader failure (dev fault injection); `c2` in a session started with
+`nested-up.sh --no-plugin` checks the shell's fallback. Run it bare, with the relative path.
 
 Double-click setting (nested only, plugin + shell): `tests/compositor/double_click_setting.sh` — rewrites the dev
 settings file (`.dev/config/grassfield.json`, restored at exit) to `minimize`, `none`, `zoom` and double-clicks a

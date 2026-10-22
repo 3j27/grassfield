@@ -10,7 +10,7 @@ and focus reasons after the R13 counter-review of 17208af; no focus under an Exc
 refresh for the pointer size (feature `cursor-refresh`, FR39-FR40, ADR-0014); the focus after the Overview closes (feature
 `overview-focus`, FR41-FR43, owner decision 2026-10-19 batch 5; its deferred-focus core shared with Stages); click focus
 for Hyprland's focused window without the keyboard (FR30 (d)) and the keyboard back after an unlock (FR30 (e)), plugin
-0.8.2-clickfocus; the Genie minimize effect, the Scale effect and the Reduce Motion fade (feature `minimize-effect`,
+0.8.2-clickfocus; the funnel minimize effect (internal name Genie), the shrink effect and the Reduce Motion fade (feature `minimize-effect`,
 FR44-FR46, Track B3, owner defect #6). Plugin 0.9.0-genie.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
@@ -29,7 +29,7 @@ Code: `compositor/`. Build and run: `compositor/README.md`.
   curved funnel, its sides pinch toward the tile's width, then the whole window slides down into it, about half a
   second) or "Scale Effect" (the window shrinks uniformly while it moves, accelerating, about a third of a second).
   Clicking the tile plays the effect backwards and makes the window key again. Shift held plays it in slow motion.
-  With Reduce Motion the window fades instead of moving.
+  With Reduce Motion the window fades instead of moving. (Grassfield names its own options "Funnel" and "Shrink", FR45.)
 
 ## Purpose and non-goals
 
@@ -112,9 +112,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   plays the configured effect backwards (Scale: grows from the tile to its box in 300 ms, ease-out, the time-reverse
   of FR14's curve, fading in over the first 20 %); then it is shown and `{"type":"restored"}` is posted. A restore
   during a minimize animation (or a minimize during a restore) completes the running one first; a Scale minimize
-  interrupting a restore starts from the restore's current box, a Genie one (either way) from the shape on screen.
+  interrupting a restore starts from the restore's current box, a funnel one (either way) from the shape on screen.
 - **FR16** `hl.plugin.grassfield.config(key, value)`: allowlist `titlebarDoubleClick` = `zoom` | `minimize` |
-  `none`, `stagesEnabled` (FR33) and `minimizeEffect` = `genie` | `scale` | `fade` (FR45) (exact strings); anything
+  `none`, `stagesEnabled` (FR33) and `minimizeEffect` = `funnel` | `shrink` | `fade` (FR45) (exact strings); anything
   else is rejected (logged, no change); returns `hl.dsp.no_op()`. The shell pushes the settings after each
   capabilities event and whenever Settings change.
 - **FR17** Minimize robustness: a window closed during its animation drops the animation (no event); a
@@ -375,7 +375,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   records, the refusal gate) and `DeferredFocus.*` (Hyprland's refusal checks, keyboard holder, cursor on an Exclusive layer,
   press context, reason mapping, coalesced event-loop attempt); Stages uses them unchanged (same conditions, order and doLater
   semantics; `gf::stages` keeps aliases).
-- **FR44** Genie effect (the default; `core/Genie.*`, drawn by `GenieDraw.*`): the window's visible box goes into its
+- **FR44** Funnel effect (setting value `funnel`, the default; internal name Genie: `core/Genie.*`, drawn by
+  `GenieDraw.*`; comparable to the macOS genie, with its own mesh, curves and name): the window's visible box goes into its
   visible box fitted into the Dock tile (`fitInside`) in 500 ms. Model in the Dock frame (axis along = toward the Dock
   edge, across = parallel to it): each window row (fraction v) lies between the far edge (window top) and the near edge
   (window bottom); the near edge travels to the tile's far side over the first 50 % (ease-in-out cubic), the far edge
@@ -387,26 +388,36 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   of the tile's monitor closest to the tile (bottom today; top, left and right use the same math). The snapshot is drawn
   on a 32 x 96 quad mesh (96 along the curved sides) covering the window's full box (shadow included, clipped to the
   snapshot) with a GLES 3 textured shader, opacity 1 until the last 15 % (minimize) / from the first 15 % (restore).
-  A restore is the minimize played backwards (progress 1 -> 0, same curves). Genie is used only when it can be drawn:
-  GL renderer, the custom element drawn (FR46), the snapshot's monitor untransformed, the tile's far side beyond the
-  window's far edge (`isGenieGeometry`); otherwise that animation runs the Scale effect.
-- **FR45** Effect setting (`dock.minimizeEffect`, Settings > Desktop & Dock > "Minimize windows using"):
-  `hl.plugin.grassfield.config("minimizeEffect", "genie" | "scale" | "fade")`, accepted only while `minimize` is available;
-  the feature `minimize-effect` tells the shell the key exists (older plugins reject it, so the shell sends it only
-  then). The shell sends `fade` while `accessibility.reduceMotion` is on (macOS Reduce Motion: no genie, no movement):
-  the snapshot fades out (minimize) or in (restore) at the window's own place in 100 ms (`Tokens.motionReducedMax`),
-  linearly. Default before any push: `genie`. A change applies to the next animation (a running one keeps its effect).
-  Shift held on any keyboard (`getModsFromAllKBs() & HL_MODIFIER_SHIFT`) when an animation starts plays it 10 times
-  slower (macOS Shift-click slow motion), for every effect.
-- **FR46** Genie drawing safety: the element (type `EK_CUSTOM`, `draw()` called by Hyprland while it renders the pass,
-  after the windows and before the top layers) scissors every draw to the frame's damage (nothing is drawn outside it),
-  saves and restores the GL program, vertex array, array buffer, active texture and 2D texture bindings around its draw,
-  and goes through Hyprland's cache-aware blend and scissor calls. Its GL objects (program, vertex array, vertex and index
-  buffers) are created at the first draw and deleted at unload with Hyprland's EGL context current. A shader compile or
-  link failure, or 10 Genie elements added without a single `draw()` call, disables Genie for the plugin's life (one
-  error line) and the running Genie animations continue as Scale ones. Each finished animation logs one timing line
-  (own log budget, FR24): effect, duration, frames on the snapshot's monitor, frame interval avg / max, CPU time per
-  frame (render.preChecks -> RENDER_POST) avg / max, longest Genie draw (CPU).
+  A restore is the minimize played backwards (progress 1 -> 0, same curves). The funnel is used only when it can be
+  drawn: GL renderer, the custom element drawn (FR46), the snapshot's monitor untransformed, the tile's far side beyond
+  the window's far edge (`isGenieGeometry`); otherwise that animation runs the shrink (Scale) effect.
+- **FR45** Effect setting (`dock.minimizeEffect`, Settings > Desktop & Dock > "Minimize animation": "Funnel" | "Shrink";
+  fr "Animation de réduction": "Entonnoir" | "Rétrécissement"; Grassfield's own wording, not the macOS strings):
+  `hl.plugin.grassfield.config("minimizeEffect", "funnel" | "shrink" | "fade")`, accepted only while `minimize` is
+  available; the feature `minimize-effect` tells the shell the key exists (older plugins reject it, so the shell sends it
+  only then). The shell sends `fade` while `accessibility.reduceMotion` is on (no funnel, no movement, as macOS does with
+  Reduce Motion): the snapshot fades out (minimize) or in (restore) at the window's own place in 100 ms
+  (`Tokens.motionReducedMax`), linearly. Default before any push: `funnel`. A change applies to the next animation (a
+  running one keeps its effect). Shift held on any keyboard (`getModsFromAllKBs() & HL_MODIFIER_SHIFT`) when an
+  animation starts plays it 10 times slower (as macOS Shift-click slow motion), for every effect. Dev fault injection:
+  `hl.plugin.grassfield.config("testFault", "funnel-shader")` is honoured only when Hyprland's environment has
+  `GRASSFIELD_DEV=1` (the nested dev session; the installed session never sets it), never advertised; the next funnel
+  draw compiles a broken shader so that FR46's failure path runs (`tests/compositor/genie.sh` step 6).
+- **FR46** Funnel drawing safety: the element (type `EK_CUSTOM`, pass name `CGrassfieldGenieElement`, `draw()` called by
+  Hyprland while it renders the pass, after the windows and before the top layers) scissors every draw to the frame's
+  damage (nothing is drawn outside it), saves and restores the GL program, vertex array, array buffer, active texture and
+  2D texture bindings around its draw, and goes through Hyprland's cache-aware blend and scissor calls. Its GL objects
+  (program, vertex array, vertex and index buffers) are created at the first draw and deleted at unload with Hyprland's EGL
+  context current. The funnel is disabled for the plugin's life (one error line) by a shader compile or link failure, a
+  GL error raised by a funnel draw (bounded `glGetError`: at most 8 calls drain the flags left by earlier GL work before
+  the draw, at most 8 check after it), or 10 funnel elements added without a single `draw()` call; at the next tick
+  every running funnel animation continues as a shrink one from the same share of its duration (never as nothing). A
+  plugin load forgets an earlier failure. `PLUGIN_EXIT` removes queued funnel elements from Hyprland's render pass
+  (`CRenderPass::removeAllOfType` by pass name, `m_renderPass` and the current pass) before anything else: unload never
+  runs inside a frame, so the pass is normally empty, and this covers a frame that queued elements without rendering
+  them. Each finished animation logs one timing line (own log budget, FR24): effect, duration, frames on the snapshot's
+  monitor, frame interval avg / max, CPU time per frame (render.preChecks -> RENDER_POST) avg / max, longest funnel draw
+  (CPU), and `speed normal` or `speed slow` (tests separate slow-motion animations by it, never by duration).
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -470,7 +481,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | Lua function `hl.plugin.grassfield.hello()` via `Hyprland.dispatch("hl.plugin.grassfield.hello()")` | re-posts capabilities |
 | shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` (Dock tile, layout px, integers) | FR14 / FR15 |
 | shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | FR16 |
-| shell → plugin | `hl.plugin.grassfield.config("minimizeEffect", "genie"\|"scale"\|"fade")` (only with feature `minimize-effect`) | FR45 |
+| shell → plugin | `hl.plugin.grassfield.config("minimizeEffect", "funnel"\|"shrink"\|"fade")` (only with feature `minimize-effect`) | FR45 |
 | plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>"}`; `"service":"","path":""` = no menu (FR20–FR22) |
 | shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's appmenu event (FR22) |
 | client → plugin | Wayland global `org_kde_kwin_appmenu_manager` v2 (`create(new_id, wl_surface)`, `release` since 2); `org_kde_kwin_appmenu.set_address(s, s)`, `release` | FR18–FR21 |
@@ -836,9 +847,9 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
 - Minimize without the `minimize` feature (plugin absent, mismatched, or its hooks failed): the shell parks
   the window on `special:minimized` itself (no animation) and restores it from there; same hidden state, so
   windows minimized either way stay restorable after the plugin comes or goes.
-- Genie unavailable (Vulkan renderer, shader failure, custom elements not drawn, transformed monitor, tile behind the
-  window): that animation uses the Scale effect (FR44, FR46). A plugin without `minimize-effect` (older build): the shell
-  sends no `minimizeEffect` and the plugin keeps its own animation.
+- Funnel unavailable (Vulkan renderer, shader failure, a GL error, custom elements not drawn, transformed monitor, tile
+  behind the window): that animation uses the shrink effect, a running one included (FR44, FR46). A plugin without
+  `minimize-effect` (older build): the shell sends no `minimizeEffect` and the plugin keeps its own animation.
 - Minimize without a Dock (no shell, or no target rectangle): the shell sends an empty rectangle and the
   plugin minimizes/restores without animation; with no shell at all, the minimize button only posts
   `minimize-request` and nothing happens (there would be no way to restore the window).
@@ -891,8 +902,9 @@ pass 31458f5 (recents, dividers) had made the computed tile drift), `tests/compo
 `tests/compositor/desktop_focus.sh [check | baseline | race | stale]` (FR30-FR32; fixture `tests/compositor/desktop-focus-fixture`),
 `tests/compositor/stages.sh [check | perf [seconds]]` (FR33-FR37; fixture `tests/compositor/stages-fixture`),
 `tests/compositor/genie.sh [timing N | c2 [X Y]]` (FR44-FR46: effects, shape of slow-motion captures classified by
-`tests/compositor/genie_shape.py`, frame timing, unload / load mid-animation; `c2`: the fallback without the plugin).
-Unit tests `Genie*` and `MinimizeEffect.*` cover the genie geometry, mesh, timing and the effect allowlist.
+`tests/compositor/genie_shape.py`, frame timing verdict with every stall and the host load shown, unload / load mid-animation,
+the funnel shader failure through the dev fault injection; `c2`: the fallback without the plugin).
+Unit tests `Genie*` and `MinimizeEffect.*` cover the funnel geometry, mesh, timing, the effect allowlist and the dev-only fault key.
 Unit tests also cover the desktop focus policy (`DesktopFocus*`: decision table, layer classification, pending grant,
 press target source), Stages (`Stages*`: model, request validation, thumbnail geometry, events, flag) and the cursor
 refresh (`CursorRefresh.*`: verb and feature names as the shell sends them, advertised list, decision table, log names,
@@ -1042,12 +1054,15 @@ Manual (L1, nested only):
   request (`timeout`) and Hyprland's own refocus decides when it closes. The activation order behind the front window starts
   at the plugin load (before it, and after a reload, the stack order is used). A touch or tablet press during the close counts
   as a press into the Exclusive layer (it never retargets). Stages on during a close focus was not exercised in nested.
-- Genie (FR44): the window bends under the menu bar and the Dock (drawn before the top layers, like the Scale effect),
-  so its neck disappears behind the Dock's material instead of pouring over the tile; the snapshot is sampled without
-  colour management (correct on SDR outputs; an HDR output would show the window's colours unconverted during the
-  0.5 s) and without mipmaps (the shrunk end of the funnel can shimmer slightly); each mesh quad is two affine
+- Funnel (FR44): the window bends under the menu bar and the Dock (drawn before the top layers, like the shrink
+  effect), so its neck disappears behind the Dock's material instead of pouring over the tile, a known difference from
+  macOS, deferred (R13 of the funnel, integrator decision): drawing above the Dock means drawing at
+  `RENDER_LAST_MOMENT`, after the top and overlay layers, which also runs while the session is locked, so it needs a
+  lock guard (nothing of a window may be drawn over the lock screen) and its own damage handling first. The snapshot is
+  sampled without colour management (correct on SDR outputs; an HDR output would show the window's colours unconverted
+  during the 0.5 s) and without mipmaps (the shrunk end of the funnel can shimmer slightly); each mesh quad is two affine
   triangles (no visible seam at 32 x 96). A rotated or flipped snapshot monitor, a Dock tile behind the window's top
-  edge, or the Vulkan renderer use the Scale effect instead.
+  edge, or the Vulkan renderer use the shrink effect instead.
 - The animation shows a snapshot taken at the start: a window that changes while it animates (video) is
   frozen for 300 ms; translucent windows are drawn without their blur during the animation (Hyprland renders
   snapshots without blur).
