@@ -9,8 +9,8 @@ import qs.services
 
 // Host of every popup (menus, status menus, Control Center, dialogs): one transparent
 // layer-shell window per screen, mapped only while a popup is open on that screen. It takes
-// exclusive keyboard focus, closes on a click outside and lets the menu bar stay clickable so
-// the user can switch menus. Content is declared in Popups (kind, anchor, payload).
+// exclusive keyboard focus, closes on a click outside and hands the menu bar strip to that output's
+// bar so the user can switch menus (hover or click, macOS). Content is declared in Popups (kind, anchor, payload).
 Variants {
     id: root
 
@@ -41,24 +41,22 @@ Variants {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-overlay"
-        // Everything except the menu bar strip receives input while a popup is open; nothing once it closed: the surface
-        // stays mapped a moment for the keyboard release, and a click in that moment belongs to the window under it.
+        // The whole output receives input while a popup is open (the bar strip is handed to the bar, below); nothing once
+        // it closed: the surface stays mapped a moment for the keyboard release, and a click in that moment belongs to the
+        // window under it.
         // qmllint disable missing-type
         mask: win.open ? openMask : passThrough
         // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
         // qmllint enable missing-type
 
+        // The whole output, the menu bar strip included: the strip is handed to the bar below (Popups.bars). Leaving it out
+        // left a press there with no surface at all when the pointer had not moved since the popup opened (Hyprland takes
+        // the pointer from the bar when this Exclusive layer maps and enters it only where it takes input).
         Region {
             id: openMask
             width: win.width
             height: win.height
-
-            Region {
-                width: win.width
-                height: Tokens.menubarHeight
-                intersection: Intersection.Subtract
-            }
         }
 
         Region {
@@ -131,6 +129,35 @@ Variants {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
             onPressed: Popups.close()
+        }
+
+        // The menu bar strip while a popup is open: Hyprland sends the pointer to this Exclusive layer, not to the bar under
+        // it (a press at the Window title landed here), so the strip goes to that output's bar (Popups.bars): moving onto
+        // another title or status item switches menus, a click on the open title closes it, a click on another opens it.
+        Item {
+            width: win.width
+            height: Tokens.menubarHeight
+            visible: win.open
+
+            HoverHandler {
+                onPointChanged: {
+                    const bar = Popups.bars[win.modelData.name];
+                    if (hovered && bar)
+                        bar.trackAt(point.position.x);
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+                onPressed: mouse => {
+                    const bar = Popups.bars[win.modelData.name];
+                    if (bar)
+                        bar.pressAt(mouse.x);
+                    else
+                        Popups.close();
+                }
+            }
         }
 
         // Swallows clicks on the popup itself so they do not reach the click-outside area.

@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# The menu bar's pointer and keyboard behaviour against the macOS model (docs/specs/menubar.md), on GF-REF with one foot
+# window focused (app name, File/Window titles). Each check prints PASS/FAIL; the captures are in $VS_SHOTS/mbm-*.png.
+#   press-opens       a press on a title opens its menu before the release (macOS opens on mouse down)
+#   press-drag-release  press on Window, drag onto its first row (Minimize), release: the item runs (foot minimized)
+#   hover-switch      with the app menu open, moving onto Window (no click) opens the Window menu
+#   status-switch     with the volume menu open, moving onto the network item opens the network menu
+#   click-closes      a click on the open title closes its menu
+#   keyboard-right    with the app menu open, Right moves to the next title's menu (no submenu on the current row)
+#   no-hover-idle     hovering a title with no menu open draws nothing (macOS has no hover highlight in the bar)
+#   fullscreen-reveal with foot full screen the bar is hidden, and the pointer at the top edge reveals it over the window
+# Usage (bare command): tests/visual/menubar-macos.sh
+source "$(dirname "$0")/lib.sh"
+
+fail=0
+check() {
+  local name=$1
+  shift
+  if "$@"; then echo "PASS: $name"; else echo "FAIL: $name"; fail=1; fi
+}
+kind() { vs_ipc menubar openKind | tr -d '"'; }
+is_kind() { [[ $(kind) == "$1@$VS_OUTPUT" ]]; }
+closed() { [[ -z $(kind) ]]; }
+title_x() { # kind -> centre x of that left title on GF-REF
+  vs_ipc menubar bridgeState "$VS_OUTPUT" | jq -r --arg k "$1" '.bar[] | select(.kind == $k) | (.x + .w / 2 | floor)' | head -n 1
+}
+foot_state() { "$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | select(.title == "mbm-foot") | .workspace.name'; }
+px_diff() { # a b crop -> differing pixels (fuzz 6 %)
+  { magick compare -fuzz 6% -metric AE <(magick "$1" -crop "$3" +repage png:-) <(magick "$2" -crop "$3" +repage png:-) null: 2>&1 || true; } | awk '{print int($1)}'
+}
+reset_menus() { vs_ipc menubar close >/dev/null; vs_sleep 0.4; }
+
+vs_session >/dev/null
+vs_reset >/dev/null
+vs_foot mbm-foot 80x20 >/dev/null
+vs_wait_clients 1 >/dev/null || true
+vs_sleep 1.5
+app_x=$(title_x app)
+win_x=$(title_x window)
+echo "titles: app at x=$app_x, window at x=$win_x"
+
+# press-opens (one pointer process for the press and its release: a release from another virtual pointer is not the
+# same button)
+reset_menus
+vs_pointer abs "$app_x" 12 down sleep 1200 up >/dev/null &
+press=$!
+vs_sleep 0.6
+k=$(kind)
+wait "$press"
+check "press-opens: the app menu is open while the button is still down (got '${k:-none}')" test "$k" = "app@$VS_OUTPUT"
+
+# click-closes. The second click comes 1 px away: Hyprland gives a layer that maps under a resting pointer no pointer
+# focus until the pointer moves, so a click with no motion at all since the menu opened reaches no surface (known
+# limit, docs/specs/menubar.md; a real mouse moves, a trackpad tap may not).
+reset_menus
+vs_pointer abs "$app_x" 12 click >/dev/null
+vs_sleep 0.5
+opened=$(kind)
+vs_pointer abs "$((app_x + 1))" 12 click >/dev/null
+vs_sleep 0.5
+check "click-closes: a click on the open title closes it (opened '${opened:-none}', now '$(kind)')" closed
+
+# hover-switch
+reset_menus
+vs_pointer abs "$app_x" 12 click >/dev/null
+vs_sleep 0.5
+vs_pointer abs "$win_x" 12 >/dev/null
+vs_sleep 0.6
+k=$(kind)
+VS_NOPARK=1 vs_capture mbm-hover-switch >/dev/null
+check "hover-switch: moving onto Window with the app menu open opens Window (got '${k:-none}')" test "$k" = "appwindow@$VS_OUTPUT"
+
+# keyboard-right
+reset_menus
+vs_pointer abs "$app_x" 12 click >/dev/null
+vs_sleep 0.5
+"$VS_ROOT/scripts/dev/keys.sh" -k Right >/dev/null
+vs_sleep 0.5
+k=$(kind)
+check "keyboard-right: Right in the app menu moves to the next title (got '${k:-none}')" test "$k" != "app@$VS_OUTPUT" -a -n "$k"
+
+# status-switch: the network and volume items sit left of Quick Settings and the clock; open volume through IPC, then move
+# onto the network item, found from the bar's right side in the capture-free way: IPC opens give the anchor, so use
+# the popup's own x (volume opens aligned to its item's right edge) and step one item left.
+reset_menus
+vs_ipc menubar open volume "$VS_OUTPUT" >/dev/null
+vs_sleep 0.5
+read -r W _ < <(magick identify -format '%w %h\n' "$(VS_NOPARK=1 vs_capture mbm-volume-open)")
+# Right side: clock (~140 px), Quick Settings, volume, network from the right edge; probe leftwards until the kind changes.
+k=""
+for x in $(seq $((W - 200)) -12 $((W - 330))); do
+  vs_pointer abs "$x" 12 >/dev/null
+  vs_sleep 0.3
+  k=$(kind)
+  [[ $k == "network@$VS_OUTPUT" ]] && break
+done
+check "status-switch: moving onto the network item with the volume menu open opens it (got '${k:-none}')" test "$k" = "network@$VS_OUTPUT"
+
+# press-drag-release on Window > Minimize (first row)
+reset_menus
+vs_pointer abs "$win_x" 12 down sleep 400 drag "$((win_x + 30))" 30 sleep 150 drag "$((win_x + 40))" 44 sleep 300 up >/dev/null
+vs_sleep 1.2
+ws=$(foot_state)
+check "press-drag-release: Window > Minimize chosen by press, drag and release (foot on '${ws:-?}')" test "$ws" = "special:minimized"
+# Bring foot back for the next checks (Dock click equivalent: the platform restores it on focus).
+if [[ $ws == special:minimized ]]; then
+  "$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.focus({ window = 'title:mbm-foot' })" >/dev/null 2>&1 || true
+  vs_sleep 1
+fi
+
+# no-hover-idle: crop around the app title with the pointer parked vs hovering it
+reset_menus
+idle=$(vs_capture mbm-idle)
+vs_pointer abs "$app_x" 12 >/dev/null
+vs_sleep 0.6
+hover=$(VS_NOPARK=1 vs_capture mbm-hover)
+d=$(px_diff "$idle" "$hover" "160x24+$((app_x - 80))+0")
+check "no-hover-idle: hovering a title with no menu open draws nothing ($d px changed)" test "$d" -lt 40
+
+# fullscreen-reveal
+reset_menus
+addr=$("$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | select(.title == "mbm-foot") | .address' | head -n 1)
+"$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.window.fullscreen({ mode = 'fullscreen', window = 'address:$addr' })" >/dev/null 2>&1
+vs_sleep 1.5
+vs_pointer abs 960 540 >/dev/null
+vs_sleep 0.8
+fs_away=$(VS_NOPARK=1 vs_capture mbm-fullscreen-away)
+vs_pointer abs 960 0 >/dev/null
+vs_sleep 1.2
+fs_edge=$(VS_NOPARK=1 vs_capture mbm-fullscreen-edge)
+d=$(px_diff "$fs_away" "$fs_edge" "1600x22+0+1")
+check "fullscreen-reveal: the bar appears when the pointer reaches the top edge over a full-screen window ($d px changed)" test "$d" -gt 400
+"$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.window.fullscreen({ mode = 'fullscreen', window = 'address:$addr' })" >/dev/null 2>&1 || true
+
+reset_menus
+check "no QML error in the shell log" test "$(grep -cE 'TypeError|ReferenceError|Binding loop' "$VS_DEV/shell.log")" = 0
+exit $fail

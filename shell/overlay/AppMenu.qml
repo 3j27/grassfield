@@ -26,5 +26,6 @@ PopupMenu {
     }
 
     onCloseRequested: Popups.close()
+    onMenuStepRequested: direction => Popups.stepMenu(direction)
     onActivated: item => AppMenus.run(item, appId, ctx)
 }

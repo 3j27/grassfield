@@ -36,6 +36,9 @@ FocusScope {
     signal activated(var item)
     // Esc on the top-level menu.
     signal closeRequested
+    // Right on a row without a submenu (also inside a submenu) or Left in the top-level menu: the menu bar opens the
+    // next (+1) or previous (-1) title's menu (macOS). Other hosts ignore it.
+    signal menuStepRequested(int direction)
 
     readonly property Item surface: material
 
@@ -149,6 +152,12 @@ FocusScope {
         case "closeSubmenu":
             // Handled by the parent menu through submenuLoader.
             root.closeRequested();
+            break;
+        case "nextMenu":
+            root.menuStepRequested(1);
+            break;
+        case "previousMenu":
+            root.menuStepRequested(-1);
             break;
         }
     }
@@ -274,6 +283,10 @@ FocusScope {
 
         function onActivated(item: var): void {
             root.activated(item);
+        }
+
+        function onMenuStepRequested(direction: int): void {
+            root.menuStepRequested(direction);
         }
 
         function onCloseRequested(): void {

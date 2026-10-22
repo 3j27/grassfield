@@ -40,9 +40,12 @@ TestCase {
     function test_submenuKeys() {
         compare(MenuNav.handleKey(items, 4, "right", false).action, "openSubmenu");
         compare(MenuNav.handleKey(items, 4, "return", false).action, "openSubmenu");
-        compare(MenuNav.handleKey(items, 3, "right", false).action, "");
+        // macOS: Right on a row without a submenu (in a submenu too) and Left in a top-level menu move to the neighbouring
+        // menu bar title; Left in a submenu closes it.
+        compare(MenuNav.handleKey(items, 3, "right", false).action, "nextMenu");
+        compare(MenuNav.handleKey(items, 3, "right", true).action, "nextMenu");
         compare(MenuNav.handleKey(items, 0, "left", true).action, "closeSubmenu");
-        compare(MenuNav.handleKey(items, 0, "left", false).action, "");
+        compare(MenuNav.handleKey(items, 0, "left", false).action, "previousMenu");
     }
 
     function test_escape() {
@@ -78,7 +81,7 @@ TestCase {
         compare(MenuNav.handleKey(menu, 1, "left", false).action, "swatchPrevious");
         compare(MenuNav.handleKey(menu, 1, "left", true).action, "swatchPrevious", "Left on a swatch row of a submenu moves, it does not close");
         compare(MenuNav.handleKey(menu, 1, "return", false).action, "activate");
-        compare(MenuNav.handleKey(menu, 2, "right", false).action, "");
+        compare(MenuNav.handleKey(menu, 2, "right", false).action, "nextMenu", "a disabled swatch row is no swatch row: Right moves on");
         compare(MenuNav.stepSwatch(menu[1], 0, 1), 1);
         compare(MenuNav.stepSwatch(menu[1], 2, 1), 0);
         compare(MenuNav.stepSwatch(menu[1], 0, -1), 2);

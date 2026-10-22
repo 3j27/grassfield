@@ -3,12 +3,16 @@ import QtQuick
 import QtQuick.Effects
 import Grassfield.Ui
 
-// Menu bar item: hover/pressed highlight (also while its popup is open), keyboard focusable.
+// Menu bar item, macOS model: it acts on the press (a menu opens on mouse down), the capsule shows only while it is
+// pressed or its popup is open (no hover highlight in the bar), `entered` lets the bar switch menus on hover while one
+// is open. Keyboard focusable.
 Item {
     id: root
 
     property string accessibleName: ""
     property bool active: false
+    // Opens one of the bar's menus: the bar switches to it on hover while another menu is open (macOS tracking).
+    property bool opensMenu: false
     // Padding on each side of the content (titles: menubar.itemPadding, status glyphs: menubar.statusItemPadding).
     property real padding: Tokens.menubarItemPadding
     // Highlight colour (the bar passes the dark palette's while it has no background of its own).
@@ -20,6 +24,7 @@ Item {
     readonly property bool hovered: hover.hovered
 
     signal activated
+    signal entered
     signal scrolled(real delta)
 
     implicitWidth: row.implicitWidth + 2 * root.padding
@@ -45,7 +50,7 @@ Item {
         }
         radius: height / 2
         color: Appearance.withAlpha(root.tint, root.active ? Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor : Tokens.materialHoverOpacity)
-        opacity: root.hovered || root.active ? 1 : 0
+        opacity: tap.pressed || root.active ? 1 : 0
         border.width: root.activeFocus ? Tokens.controlFocusRing : 0
         border.color: Appearance.colors.accent
 
@@ -95,13 +100,16 @@ Item {
     HoverHandler {
         id: hover
         cursorShape: Qt.ArrowCursor
+        onHoveredChanged: if (hovered)
+            root.entered()
     }
 
     TapHandler {
-        onTapped: {
-            root.forceActiveFocus();
-            root.activated();
-        }
+        id: tap
+        // No forceActiveFocus: the bar never has the keyboard (keyboard focus None), and a pointer press left the focus ring
+        // drawn on the title until another item took the focus (macOS shows the ring only in keyboard navigation).
+        onPressedChanged: if (pressed)
+            root.activated()
     }
 
     WheelHandler {

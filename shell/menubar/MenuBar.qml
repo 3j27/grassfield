@@ -42,6 +42,11 @@ Scope {
             Popups.close();
         }
 
+        // Test hook (tests/visual/menubar-macos.sh): the open popup's kind and output, "" when none. Read-only.
+        function openKind(): string {
+            return Popups.active ? Popups.kind + "@" + Popups.screenName : "";
+        }
+
         // Test hook (tests/integration/global_menus.sh): JSON with the shown window, the bridge state, the bar's
         // left titles and, when a bridge menu is open, its rows (submenus included), in output coordinates.
         function bridgeState(screen: string): string {
@@ -201,6 +206,106 @@ Scope {
                 return Popups.kind === kind && Popups.screenName === win.screen.name;
             }
 
+            // macOS menu tracking: while one of this bar's menus is open, moving onto another title or status item opens
+            // its menu without a click. The clock (Notification Center) and the Do Not Disturb indicator are not menus.
+            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter"]
+            readonly property bool tracking: Popups.active && Popups.screenName === win.screen.name && trackedKinds.indexOf(Popups.kind) >= 0
+
+            function hoverSwitch(kind: string): void {
+                if (win.tracking && Popups.kind !== kind)
+                    win.popup(kind);
+            }
+
+            function hoverSwitchBridge(button: Item, menu: var): void {
+                if (win.tracking && !(Popups.kind === "appbridge" && Popups.data.dbusId === menu.dbusId))
+                    win.openBridge(button, menu);
+            }
+
+            // Left titles that open a menu, in bar order: [{kind, button, menu}] (menu: the bridge entry, else null).
+            function menuTitles(): var {
+                const out = [];
+                const kids = leftRow.children;
+                let bridge = 0;
+                for (let i = 0; i < kids.length; i++) {
+                    const k = kids[i];
+                    const name = k.objectName;
+                    if (name.indexOf("menubar-") !== 0)
+                        continue;
+                    const sep = name.indexOf(":");
+                    const kind = sep < 0 ? name.slice(8) : name.slice(8, sep);
+                    const menu = kind === "bridge" ? win.bridgeMenus[bridge++] : null;
+                    if (!k.visible || (menu && !menu.enabled))
+                        continue;
+                    out.push({kind: kind, button: k, menu: menu});
+                }
+                return out;
+            }
+
+            // Left/Right in an open menu (macOS): the previous or next title's menu, wrapping around.
+            function stepMenu(direction: int): void {
+                const titles = win.menuTitles();
+                const kindOf = {system: "system", app: "app", bridge: "appbridge", file: "appfile", window: "appwindow"};
+                let at = -1;
+                for (let i = 0; i < titles.length; i++) {
+                    const t = titles[i];
+                    if (kindOf[t.kind] === Popups.kind && (!t.menu || Popups.data.dbusId === t.menu.dbusId))
+                        at = i;
+                }
+                if (at < 0 || titles.length < 2)
+                    return;
+                const next = titles[(at + direction + titles.length) % titles.length];
+                if (next.menu)
+                    win.openBridge(next.button, next.menu);
+                else
+                    win.popup(kindOf[next.kind]);
+            }
+
+            Connections {
+                target: Popups
+
+                function onMenuStepRequested(screen: string, direction: int): void {
+                    if (screen === win.screen.name)
+                        win.stepMenu(direction);
+                }
+            }
+
+            // The bar button under x (output coordinates), null for none.
+            function buttonAt(x: real): BarButton {
+                const rows = [leftRow, rightRow];
+                for (let r = 0; r < rows.length; r++) {
+                    const kids = rows[r].children;
+                    for (let i = 0; i < kids.length; i++) {
+                        const k = kids[i] as BarButton;
+                        if (!k || !k.visible)
+                            continue;
+                        const left = k.mapToItem(null, 0, 0).x;
+                        if (x >= left && x < left + k.width)
+                            return k;
+                    }
+                }
+                return null;
+            }
+
+            // The overlay's share of the bar strip while a popup is open (Popups.bars): moving onto a menu item switches to
+            // its menu; a press acts like a click on that item (the open one closes, another opens), and a press on the
+            // clock, the Do Not Disturb item or empty bar closes the open menu first.
+            function trackAt(x: real): void {
+                const b = win.buttonAt(x);
+                if (b && b.opensMenu)
+                    b.entered();
+            }
+
+            function pressAt(x: real): void {
+                const b = win.buttonAt(x);
+                if (!b || !b.opensMenu)
+                    Popups.close();
+                if (b)
+                    b.activated();
+            }
+
+            Component.onCompleted: Popups.registerBar(win.screen.name, win)
+            Component.onDestruction: Popups.unregisterBar(win.screen.name, win)
+
             // Opens a popup under (left) or aligned to the right edge of (right) a bar button.
             function openFor(kind: string, button: Item, alignment: string, payload: var): void {
                 const x = button.mapToItem(null, alignment === "right" ? button.width : 0, 0).x;
@@ -342,12 +447,15 @@ Scope {
 
                         BarButton {
                             id: systemButton
+                            objectName: "menubar-system"
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
                             accessibleName: qsTr("Grassfield menu")
                             active: win.isOpen("system")
                             onActivated: win.popup("system")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("system")
 
                             Icon {
                                 size: Tokens.menubarIconSize
@@ -365,6 +473,8 @@ Scope {
                             accessibleName: qsTr("Application menu: %1").arg(win.appName)
                             active: win.isOpen("app")
                             onActivated: win.popup("app")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("app")
 
                             Text {
                                 textFormat: Text.PlainText
@@ -393,6 +503,8 @@ Scope {
                                 accessibleName: qsTr("%1 menu").arg(modelData.title)
                                 active: win.isOpen("appbridge") && Popups.data.dbusId === modelData.dbusId
                                 onActivated: win.openBridge(bridgeButton, bridgeButton.modelData)
+                                opensMenu: true
+                                onEntered: win.hoverSwitchBridge(bridgeButton, bridgeButton.modelData)
 
                                 Text {
                                     textFormat: Text.PlainText
@@ -415,6 +527,8 @@ Scope {
                             accessibleName: qsTr("File menu")
                             active: win.isOpen("appfile")
                             onActivated: win.popup("appfile")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("appfile")
 
                             Text {
                                 textFormat: Text.PlainText
@@ -436,6 +550,8 @@ Scope {
                             accessibleName: qsTr("Window menu")
                             active: win.isOpen("appwindow")
                             onActivated: win.popup("appwindow")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("appwindow")
 
                             Text {
                                 textFormat: Text.PlainText
@@ -449,6 +565,7 @@ Scope {
                     }
 
                     Row {
+                        id: rightRow
                         anchors {
                             right: parent.right
                             rightMargin: Tokens.menubarInsetRight - Tokens.menubarItemPadding
@@ -483,6 +600,8 @@ Scope {
                             accessibleName: qsTr("Network: %1").arg(Connectivity.description)
                             active: win.isOpen("network")
                             onActivated: win.popup("network")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("network")
 
                             Icon {
                                 size: Tokens.menubarIconSize
@@ -500,6 +619,8 @@ Scope {
                             accessibleName: qsTr("Volume: %1%").arg(Math.round(Audio.volume * 100))
                             active: win.isOpen("volume")
                             onActivated: win.popup("volume")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("volume")
                             onScrolled: delta => Audio.adjust(delta > 0 ? 0.05 : -0.05)
 
                             Icon {
@@ -519,6 +640,8 @@ Scope {
                             accessibleName: qsTr("Battery %1%").arg(win.battery ? Math.round(win.battery.percentage * 100) : 0)
                             active: win.isOpen("battery")
                             onActivated: win.popup("battery")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("battery")
 
                             Icon {
                                 size: Tokens.menubarIconSize
@@ -545,6 +668,8 @@ Scope {
                             accessibleName: qsTr("Quick Settings")
                             active: win.isOpen("controlcenter")
                             onActivated: win.popup("controlcenter")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("controlcenter")
 
                             Icon {
                                 size: Tokens.menubarIconSize

@@ -36,6 +36,7 @@ PopupMenu {
     }
 
     onCloseRequested: Popups.close()
+    onMenuStepRequested: direction => Popups.stepMenu(direction)
     onActivated: item => {
         MenuBridge.activate(item.dbusId);
         Popups.close();

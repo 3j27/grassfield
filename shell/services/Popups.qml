@@ -21,6 +21,32 @@ Singleton {
 
     readonly property bool active: kind !== ""
 
+    // The menu bar of each output, by output name. While a popup holds the keyboard (Exclusive) Hyprland sends the pointer
+    // to the overlay even over the bar strip (its input mask leaves the strip out), so the overlay hands the strip to the
+    // bar: trackAt(x) and pressAt(x) in output coordinates.
+    property var bars: ({})
+
+    function registerBar(screen: string, bar: var): void {
+        const all = Object.assign({}, root.bars);
+        all[screen] = bar;
+        root.bars = all;
+    }
+
+    function unregisterBar(screen: string, bar: var): void {
+        if (root.bars[screen] !== bar)
+            return;
+        const all = Object.assign({}, root.bars);
+        delete all[screen];
+        root.bars = all;
+    }
+
+    // A menu asked for the next (+1) or previous (-1) menu bar title (Left/Right, macOS); the bar of `screen` answers.
+    signal menuStepRequested(string screen, int direction)
+
+    function stepMenu(direction: int): void {
+        root.menuStepRequested(root.screenName, direction);
+    }
+
     function open(popupKind: string, screen: string, x: real, y: real, alignment: string, payload: var): void {
         data = payload ? payload : {};
         screenName = screen;

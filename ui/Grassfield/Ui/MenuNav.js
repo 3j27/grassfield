@@ -50,7 +50,9 @@ function stepSwatch(item, swatchIndex, dir) {
 }
 
 // Result of a key press: {index, action} with action one of
-// "", "activate", "close", "openSubmenu", "closeSubmenu", "swatchPrevious", "swatchNext".
+// "", "activate", "close", "openSubmenu", "closeSubmenu", "swatchPrevious", "swatchNext", "nextMenu", "previousMenu".
+// nextMenu / previousMenu (macOS): Right on a row without a submenu, or Left in a top-level menu, moves to the
+// neighbouring title of a menu bar; a host without one ignores them.
 // On a swatch row "activate" means: choose the swatch under the row's cursor.
 function handleKey(items, index, key, isSubmenu) {
     const onSwatches = selectable(items[index]) && hasSwatches(items[index]);
@@ -71,9 +73,9 @@ function handleKey(items, index, key, isSubmenu) {
             return {index: index, action: ""};
         return {index: index, action: hasSubmenu(items[index]) ? "openSubmenu" : "activate"};
     case "right":
-        return {index: index, action: selectable(items[index]) && hasSubmenu(items[index]) ? "openSubmenu" : ""};
+        return {index: index, action: selectable(items[index]) && hasSubmenu(items[index]) ? "openSubmenu" : "nextMenu"};
     case "left":
-        return {index: index, action: isSubmenu ? "closeSubmenu" : ""};
+        return {index: index, action: isSubmenu ? "closeSubmenu" : "previousMenu"};
     case "escape":
         return {index: index, action: isSubmenu ? "closeSubmenu" : "close"};
     }

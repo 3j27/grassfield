@@ -27,6 +27,7 @@ PopupMenu {
     ]
 
     onCloseRequested: Popups.close()
+    onMenuStepRequested: direction => Popups.stepMenu(direction)
 
     onActivated: item => {
         switch (item.id) {
