@@ -221,8 +221,8 @@ Scope {
     // Drag-out removal follows "cancel on interruption": anything that can take the pointer or the focus during a tile drag marks the
     // drag interrupted (win.dragInterrupted), and an interrupted drag never removes its tile (it glides back). Events only. The
     // Dock's own drag feedback (Remove label, puff, tooltip) is inside its window and reports none of these.
-    // Counts every interruption event, drag or not: a press records it when the button goes down, and a drag that starts later in the same
-    // press keeps any interruption seen since (starting a drag never clears one).
+    // Counts every interruption event, drag or not: a press records it when the button goes down, and a drag that would start later in the
+    // same press is refused (drag-refused) when the count changed since.
     property int dragInterruptions: 0
 
     function interruptDrag(): void {
@@ -958,7 +958,7 @@ Scope {
                                 property int pressMark: 0
                                 property bool pressCancelled: false
                                 property real pressTime: 0
-                                // root.dragInterruptions when the button went down (a drag of this press starts interrupted when it changed).
+                                // root.dragInterruptions when the button went down (a drag of this press is refused when it changed).
                                 property int dragMark: 0
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0

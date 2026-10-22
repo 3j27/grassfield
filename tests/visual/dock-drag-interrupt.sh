@@ -315,8 +315,9 @@ hd_then_deliberate() {
 
 # ir LABEL WHEN: the reorder case under a plain interruption (no hold menu). WHEN = during: the running unpinned app
 # gfdockA is dragged along the shelf to just left of the pinned foot tile, Search is opened by IPC 1.5 s into the press, the release is there (the
-# drag started, then was interrupted: it must change no pin, the tile glides back); before: a notification banner appears while the button is down (Search would end the press) but
-# before the drag moves (the press is already interrupted: the drag is refused, drag-refused interrupted). Pins must stay either way.
+# drag started, then was interrupted: it must change no pin, the tile glides back); before: the fixtures IPC `dock forceinterrupt true` marks the press
+# interrupted when the button goes down (a real surface would race the drag, Search would end the press), before the drag moves (the drag is
+# refused, drag-refused interrupted). Pins must stay either way.
 # Valid only with drag-start (during) / drag-refused (before) in the shell log; else repeated (four times), then FAIL (not tested).
 ir() {
   local label=$1 when=$2 attempt mark ok=0 lines cx cy fx before want_line tp
@@ -345,7 +346,6 @@ ir() {
     [[ -n $tp ]] && wait "$tp"
     sleep 1
     end_search >/dev/null 2>&1
-    end_banner >/dev/null 2>&1
     lines=$(tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|drag-start\|drag-refused\|click-cancel\)")
     if grep -q "$want_line" <<<"$lines" && grep -q "pressed true" <<<"$lines"; then
       ok=1
