@@ -132,6 +132,7 @@ PopupMenu {
     // The same tail on the side of the menu that faces a Dock on the left ("rightOf": the menu is right of the shelf, the tail
     // points left) or right edge ("leftOf"). The Overlay centres the menu on the icon along the edge.
     Shape {
+        id: sideTail
         readonly property bool facingLeft: Popups.align === "rightOf"
         visible: facingLeft || Popups.align === "leftOf"
         readonly property real menuY: Math.max(0, Math.min(root.Window.height - root.height - Tokens.panelPopupMargin, Popups.anchorY - root.height / 2))
@@ -146,18 +147,18 @@ PopupMenu {
         ShapePath {
             strokeWidth: 0
             fillColor: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.tintAlpha(Appearance.effectiveTransparency))
-            startX: parent.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
+            startX: sideTail.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
             startY: 0
             PathLine {
-                x: parent.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
+                x: sideTail.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
                 y: Tokens.dockMenuTailWidth
             }
             PathLine {
-                x: parent.facingLeft ? 0 : Tokens.dockMenuTailHeight + 1
+                x: sideTail.facingLeft ? 0 : Tokens.dockMenuTailHeight + 1
                 y: Tokens.dockMenuTailWidth / 2
             }
             PathLine {
-                x: parent.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
+                x: sideTail.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
                 y: 0
             }
         }
