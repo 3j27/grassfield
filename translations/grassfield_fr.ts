@@ -3697,6 +3697,14 @@
         <source>Type to search applications, files, calculations and commands</source>
         <translation>Saisissez pour rechercher des applications, des fichiers, des calculs et des commandes</translation>
     </message>
+    <message>
+        <source>Filters</source>
+        <translation>Filtres</translation>
+    </message>
+    <message>
+        <source>No Results for “%1”</source>
+        <translation>Aucun résultat pour « %1 »</translation>
+    </message>
 </context>
 <context>
     <name>Sheet</name>
