@@ -2,15 +2,19 @@
 """Measures the plugin titlebar of one window on a GF-REF capture (tests/compositor/chrome.sh). No third-party modules.
 
 Usage: chrome_measure.py <capture.ppm> <surface x> <surface y> <surface w> <bar height> <close x> <minimize x> <zoom x>
-       <bar middle> [<corner fill: rrggbb>]
+       <bar middle> [fill=<rrggbb>] [radius=<px>]
 Positions in output pixels (scale 1): the surface box from `hyprctl clients`, the titlebar geometry from
 tests/compositor/titlebar_geometry.sh (button centres right of the surface's left edge, bar middle above its top edge).
 The corners are found where the fill colour starts: the titlebar's colour by default; without the plugin (bar height 0)
-the window's own content colour, given as the last argument.
+the window's own content colour (fill=). radius= is the window's rounding, for the junction check.
 Prints key=value lines:
   <light>_cx <light>_cy   centre of the light (close, minimize, zoom), coverage-weighted, output px (pixel edges)
   <light>_d               diameter from the light's covered area
   <light>_glyph           dark pixels inside the light (its glyph)
+  <light>_grey            pixels of the inactive grey (titlebarPalette(Dark).inactiveLight) around the light's centre
+  junction_left/_right    (with radius=) pixels of the content's top corner squares that the rounding cuts away (outside
+                          the corner curve) and that differ from the content next to them: the curve between bar and
+                          content; 0 when the bar and the content join square
   bar_rows                rows of bar colour right above the surface, 40 px left of its right edge
   bar_bottom_gap          pixels of the bar's last row (30 px from either end) that are not bar colour
   bar_left_gap            pixels of the bar's first column (below the corner) that are not bar colour
@@ -27,6 +31,7 @@ LIGHTS = {
     "minimize": (0xD9, 0xA9, 0x3B),
     "zoom": (0x4F, 0xA6, 0x4F),
 }
+INACTIVE = (0x5A, 0x5A, 0x5E)  # compositor/src/core/Theme.hpp titlebarPalette(Dark).inactiveLight
 ROUNDING_POWER = 2.6  # config/hypr/grassfield/looknfeel.lua decoration.rounding_power
 
 
@@ -92,8 +97,10 @@ def measure_light(img, name, cx, cy):
             area += a
             sx += a * (x + 0.5)
             sy += a * (y + 0.5)
+    grey = sum(1 for y in range(int(cy) - 7, int(cy) + 7) for x in range(int(cx) - 7, int(cx) + 7)
+               if close_to(img.at(x, y), INACTIVE, 12))
     if area <= 0:
-        return {f"{name}_cx": -1, f"{name}_cy": -1, f"{name}_d": 0, f"{name}_glyph": 0}
+        return {f"{name}_cx": -1, f"{name}_cy": -1, f"{name}_d": 0, f"{name}_glyph": 0, f"{name}_grey": grey}
     mx, my = sx / area, sy / area
     d = 2 * (area / 3.141592653589793) ** 0.5
     glyph = 0
@@ -103,9 +110,27 @@ def measure_light(img, name, cx, cy):
             c = img.at(x, y)
             if c is None or (x + 0.5 - mx) ** 2 + (y + 0.5 - my) ** 2 > r * r:
                 continue
-            if luminance(c) < 0.75 * luminance(light) and coverage(c, light) > 0.2:
+            # Darker than the light but not the inactive grey (a grey light is darker than the yellow and green ones).
+            if luminance(c) < 0.75 * luminance(light) and coverage(c, light) > 0.2 and not close_to(c, INACTIVE, 12):
                 glyph += 1
-    return {f"{name}_cx": round(mx, 2), f"{name}_cy": round(my, 2), f"{name}_d": round(d, 2), f"{name}_glyph": glyph}
+    return {f"{name}_cx": round(mx, 2), f"{name}_cy": round(my, 2), f"{name}_d": round(d, 2), f"{name}_glyph": glyph,
+            f"{name}_grey": grey}
+
+
+def junction(img, x0, y0, step_x, radius, reference):
+    """Pixels of the radius x radius square at a top corner of the content (corner pixel at x0, y0; step_x +1 for the
+    left corner, -1 for the right one) that lie outside the window's corner curve and differ from `reference`."""
+    count = 0
+    limit = radius ** ROUNDING_POWER
+    for j in range(radius):
+        for i in range(radius):
+            dx, dy = radius - (i + 0.5), radius - (j + 0.5)
+            if dx ** ROUNDING_POWER + dy ** ROUNDING_POWER <= limit:
+                continue  # inside the curve: the surface itself is drawn there
+            c = img.at(x0 + step_x * i, y0 + j)
+            if c is not None and not close_to(c, reference, 6):
+                count += 1
+    return count
 
 
 def first_fill_on_diagonal(img, x0, y0, step_x, fill, limit=40):
@@ -119,14 +144,19 @@ def first_fill_on_diagonal(img, x0, y0, step_x, fill, limit=40):
 
 
 def main():
-    if len(sys.argv) not in (10, 11):
+    if len(sys.argv) < 10:
         raise SystemExit(__doc__)
     img = Image(sys.argv[1])
     sx, sy, sw, bar_h, close_x, min_x, zoom_x, mid = (int(v) for v in sys.argv[2:10])
-    fill = BAR
-    if len(sys.argv) == 11:
-        hexa = sys.argv[10]
-        fill = (int(hexa[0:2], 16), int(hexa[2:4], 16), int(hexa[4:6], 16))
+    fill, radius = BAR, 0
+    for option in sys.argv[10:]:
+        key, _, value = option.partition("=")
+        if key == "fill":
+            fill = (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
+        elif key == "radius":
+            radius = int(value)
+        else:
+            raise SystemExit(__doc__)
     out = {}
     for name, ox in (("close", close_x), ("minimize", min_x), ("zoom", zoom_x)):
         out.update(measure_light(img, name, sx + ox, sy - mid))
@@ -152,6 +182,13 @@ def main():
     out["radius_estimate"] = round((k - 1.5) / inset, 1) if k >= 0 else -1
     bg = img.at(sx - 8, top - 8)
     out["background_ok"] = int(bg is not None and not close_to(bg, fill, 30))
+
+    if radius > 0 and bar_h > 0:
+        # The content next to each corner square, on the content's first row just past the square.
+        left_ref = img.at(sx + radius + 4, sy + 1)
+        right_ref = img.at(sx + sw - 1 - radius - 4, sy + 1)
+        out["junction_left"] = junction(img, sx, sy, 1, radius, left_ref) if left_ref else -1
+        out["junction_right"] = junction(img, sx + sw - 1, sy, -1, radius, right_ref) if right_ref else -1
 
     for key, value in out.items():
         print(f"{key}={value}")

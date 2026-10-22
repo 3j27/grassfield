@@ -10,12 +10,15 @@
 #   1 foot A (a third-party window), active, pointer away: the three lights at their centres (+-0.75 px), 14 px across
 #     (+-1), no glyph; the bar GF_TB_HEIGHT rows tall, flush with the window's left edge and the surface (no gap); its
 #     top corners rounded like the window, radius 12 (inset of the first fill pixels on the corner's diagonal 3-5 px; a
-#     square corner gives 0-1; measured on Hyprland 0.56.2: 4 at radius 12, 8 at radius 26)
+#     square corner gives 0-1; measured on Hyprland 0.56.2: 4 at radius 12, 8 at radius 26); the lights coloured; bar and
+#     content join square (no pixel of the content's cut top corners differs from the content next to them)
 #   2 pointer in the gap between A's close and minimize lights (no light under the cursor image): glyphs on all three
 #     lights (the whole group, macOS); pointer away again: no glyph
-#   3 foot B opened and moved aside (A inactive): pointer on A's close light: glyphs on A's three lights
+#   3 foot B opened and moved aside (A inactive): pointer on A's close light: lights coloured, glyphs on all three;
+#     pointer away: grey lights (titlebarPalette inactiveLight), no glyph
 #   4 Grassfield Settings (org.grassfield.Settings, when .dev/build/grassfield-settings exists): the same lights and bar,
-#     radius 20 (rule gf-grassfield-rounding; corner inset 5-7 px), glyphs with the pointer between its minimize and zoom lights
+#     radius 26 (the global default; corner inset 7-10 px), square join, glyphs with the pointer between its minimize
+#     and zoom lights
 # Without grassfield-compositor (C2: nested-up.sh --no-plugin, or scripts/nestctl plugin unload): no titlebar; only the
 # radii are measured, at the surface's own corners (the Lua config alone sets them).
 # Captures, 2x crops of the lights and the corners, measurements: .dev/chrome/run-<timestamp>/.
@@ -86,13 +89,14 @@ crops() { # <name> <x> <y> <w>: 2x crops (nearest neighbour) of the lights and o
   magick "$run/$name.ppm" -crop "48x$((GF_TB_HEIGHT + 24))+$((x + w - 40))+$((top - 8))" +repage -filter point -resize 400% "$run/$name-corner-right-4x.png"
 }
 
-measure() { # <name> <x> <y> <w> -> key=value lines in $run/<name>.txt, loaded into m[...]
-  local name=$1 x=$2 y=$3 w=$4 bar=$GF_TB_HEIGHT mid=$GF_TB_MID fill=()
+measure() { # <name> <x> <y> <w> [radius] -> key=value lines in $run/<name>.txt, loaded into m[...]
+  local name=$1 x=$2 y=$3 w=$4 bar=$GF_TB_HEIGHT mid=$GF_TB_MID opts=()
+  [[ -n ${5:-} ]] && opts+=("radius=$5")
   # Without the plugin there is no titlebar: the corners are where the window's own content colour starts, sampled 16 px in
   # and 2 px down (inside the corner curve for radius 12 to 26, above the inset sidebar of Grassfield's apps).
-  ((plugin)) || { bar=0 mid=0 fill=("$(magick "$run/$name.ppm" -format "%[hex:p{$((x + 16)),$((y + 2))}]" info: | cut -c1-6)"); }
+  ((plugin)) || { bar=0 mid=0 opts+=("fill=$(magick "$run/$name.ppm" -format "%[hex:p{$((x + 16)),$((y + 2))}]" info: | cut -c1-6)"); }
   python3 -I "$root/tests/compositor/chrome_measure.py" "$run/$name.ppm" "$x" "$y" "$w" "$bar" "$GF_TB_CLOSE_X" "$GF_TB_MIN_X" "$GF_TB_ZOOM_X" "$mid" \
-    "${fill[@]}" >"$run/$name.txt" 2>>"$log"
+    "${opts[@]}" >"$run/$name.txt" 2>>"$log"
   unset m
   declare -gA m=()
   local k v
@@ -133,6 +137,25 @@ check_bar() { # <label>
   check "$1: titlebar" "$ok" "${m[bar_rows]} rows of bar colour (expected $GF_TB_HEIGHT), gaps: bottom row ${m[bar_bottom_gap]} px, left column ${m[bar_left_gap]} px"
 }
 
+check_junction() { # <label>: no curve where the content meets the bar (the content's own pixels fill the cut corners)
+  local ok=0
+  ((${m[junction_left]:--1} == 0 && ${m[junction_right]:--1} == 0)) || ok=1
+  check "$1: bar and content join square" "$ok" "pixels of the cut top corners that differ from the content: left ${m[junction_left]:-?}, right ${m[junction_right]:-?} (before the fix: 21 at radius 12, 98 at radius 26)"
+}
+
+check_grey() { # <label> <0 = expect grey lights | 1 = expect coloured lights>
+  local label=$1 want=$2 ok=0 name details=""
+  for name in close minimize zoom; do
+    if ((want == 0)); then
+      ((${m[${name}_grey]:-0} >= 100)) || ok=1 # a 14-px light is about 150 px
+    else
+      ((${m[${name}_grey]:-0} <= 4)) && within "${m[${name}_d]:-0}" 14 1.2 || ok=1
+    fi
+    details+="$name grey ${m[${name}_grey]} px, colour diameter ${m[${name}_d]}; "
+  done
+  check "$label" "$ok" "$details"
+}
+
 check_corner() { # <label> <lo> <hi> <radius>
   if [[ ${m[background_ok]} != 1 ]]; then
     say "  $1: corner SKIP (background next to the corner too close to the bar colour: not measurable)"
@@ -163,11 +186,13 @@ say "1 foot A ${aw}x${ah} at ($ax,$ay) (output px), class $(clients | jq -r --ar
 park
 capture a-active
 crops a-active "$ax" "$ay" "$aw"
-measure a-active "$ax" "$ay" "$aw"
+measure a-active "$ax" "$ay" "$aw" "$(rounding_of "$a_addr")"
 if ((plugin)); then
   check_lights "A active" "$ax" "$ay"
   check_glyphs "A active, pointer away: no glyph" 1
+  check_grey "A active: coloured lights" 1
   check_bar "A"
+  check_junction "A"
 fi
 check_corner "A (third-party)" 3 5 12
 
@@ -199,9 +224,13 @@ if ((plugin)); then
     [[ $active == gf-chrome-b ]]
     check "A inactive" $? "active: $active"
     check_glyphs "A inactive, pointer on its close light: glyphs on all three" 0
+    check_grey "A inactive, pointer on its lights: coloured" 1
     park
     capture a-inactive
     crops a-inactive "$ax" "$ay" "$aw"
+    measure a-inactive "$ax" "$ay" "$aw"
+    check_grey "A inactive, pointer away: grey lights" 0
+    check_glyphs "A inactive, pointer away: no glyph" 1
   else
     check "foot B opened" 1 "window B not found"
   fi
@@ -230,12 +259,14 @@ if [[ -x $settings ]]; then
     park
     capture settings
     crops settings "$sx" "$sy" "$sw"
-    measure settings "$sx" "$sy" "$sw"
+    measure settings "$sx" "$sy" "$sw" "$(rounding_of "$s_addr")"
     if ((plugin)); then
       check_lights "Settings" "$sx" "$sy"
+      check_grey "Settings (active): coloured lights" 1
       check_bar "Settings"
+      check_junction "Settings"
     fi
-    check_corner "Settings (org.grassfield.*)" 5 7 20
+    check_corner "Settings (org.grassfield.*)" 7 10 26
     if ((plugin)); then
       pointer abs $((sx + (GF_TB_MIN_X + GF_TB_ZOOM_X) / 2)) $((sy - GF_TB_MID)) sleep 400
       capture settings-hover
