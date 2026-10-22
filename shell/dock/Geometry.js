@@ -205,3 +205,46 @@ function footprint(edge, m, autohide) {
     const zone = DockModel.reservedHeight(m, autohide);
     return {left: edge === "left" ? zone : 0, right: edge === "right" ? zone : 0, bottom: edge === "bottom" ? zone : 0};
 }
+
+// ---- Resize by dragging the separator (macOS) ----
+
+// The tile size while the separator is dragged by (tx, ty) from where it was pressed (a Dock of `start` px tiles). Dragging
+// away from the screen edge makes the Dock larger and toward it smaller; movement along the Dock does nothing. The
+// separator sits in the middle of the shelf, which grows by the change of the tile on its outward side only, so the size
+// changes by twice the pointer's distance to keep the separator under the pointer. Clamped to [min, max], whole px.
+function resizeSize(start, edge, tx, ty, min, max) {
+    return clampSize(start + 2 * dragOutward(edge, tx, ty), min, max, start);
+}
+
+// ---- One Dock across displays (macOS: the Dock is on the display where the pointer last reached its edge) ----
+
+// The output the Dock starts on: the focused one. `preferred` is the dev override (the primary output named by
+// GRASSFIELD_DESKTOP_SCREEN, which only a development session sets: a nested session has two outputs and which one is focused
+// when the shell starts is a race); "" without a start output (nothing is focused yet).
+function startScreen(names, focused, preferred) {
+    if (preferred && names.indexOf(preferred) >= 0)
+        return preferred;
+    return names.indexOf(focused) >= 0 ? focused : "";
+}
+
+// The output that has the Dock: the chosen one while it still exists, else the start output, else the first.
+function dockScreen(chosen, names, focused, preferred) {
+    if (names.indexOf(chosen) >= 0)
+        return chosen;
+    const start = startScreen(names, focused, preferred);
+    if (start !== "")
+        return start;
+    return names.length > 0 ? names[0] : "";
+}
+
+// The chosen output once the Dock has no choice yet: it starts on the start output (and stays there when focus moves on).
+function latchScreen(chosen, names, focused, preferred) {
+    return chosen === "" ? startScreen(names, focused, preferred) : chosen;
+}
+
+// Whether the output of a Dock window takes the Dock from the one that has it: an output without the Dock acts as an
+// auto-hidden Dock that stays away, and its machine starting to reveal (AutoHide.js: the pointer rested on the edge
+// strip for the reveal dwell) is the pointer having reached the Dock's edge there.
+function movesDock(isDockScreen, previousState, nextState) {
+    return !isDockScreen && previousState !== "revealing" && nextState === "revealing";
+}

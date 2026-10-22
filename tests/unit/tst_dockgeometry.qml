@@ -3,6 +3,7 @@ import QtTest
 import "../../shell/dock/Geometry.js" as Geometry
 import "../../shell/dock/DockModel.js" as DockModel
 import "../../shell/dock/Magnify.js" as Magnify
+import "../../shell/dock/AutoHide.js" as AutoHide
 
 TestCase {
     name: "DockGeometry"
@@ -278,6 +279,83 @@ TestCase {
         compare(JSON.stringify(again), JSON.stringify(along));
         verify(along[3] > along[4] && along[4] > along[5], JSON.stringify(along));
         compare(Magnify.slotScales(centers, widths, 4, flags, 6000, 52, 1.6, 3)[0], 1);
+    }
+
+    // ---- resize by dragging the separator ----
+
+    function test_resizeFollowsTheDragAwayFromTheEdge() {
+        // Bottom: up (negative y) grows, down shrinks, twice the distance; along the Dock nothing happens.
+        compare(Geometry.resizeSize(48, "bottom", 0, -10, 32, 96), 68);
+        compare(Geometry.resizeSize(48, "bottom", 0, 6, 32, 96), 36);
+        compare(Geometry.resizeSize(48, "bottom", 300, 0, 32, 96), 48);
+        // Left: right grows. Right: left grows.
+        compare(Geometry.resizeSize(48, "left", 10, 90, 32, 96), 68);
+        compare(Geometry.resizeSize(48, "left", -4, 0, 32, 96), 40);
+        compare(Geometry.resizeSize(48, "right", -10, 0, 32, 96), 68);
+        compare(Geometry.resizeSize(48, "right", 10, 0, 32, 96), 32);
+    }
+
+    function test_resizeIsClampedAndWhole() {
+        compare(Geometry.resizeSize(48, "bottom", 0, -500, 32, 96), 96);
+        compare(Geometry.resizeSize(48, "bottom", 0, 500, 32, 96), 32);
+        compare(Geometry.resizeSize(48, "bottom", 0, -3.3, 32, 96), 55);
+        compare(Geometry.resizeSize(48, "bottom", 0, 0, 32, 96), 48);
+        // An undefined drag keeps the size it started with.
+        compare(Geometry.resizeSize(48, "bottom", NaN, NaN, 32, 96), 48);
+    }
+
+    // ---- one Dock across displays ----
+
+    function test_dockScreenIsTheChosenOneWhileItExists() {
+        compare(Geometry.dockScreen("DP-2", ["DP-1", "DP-2"], "DP-1"), "DP-2");
+        // Chosen output unplugged: the focused one, else the first.
+        compare(Geometry.dockScreen("DP-3", ["DP-1", "DP-2"], "DP-2"), "DP-2");
+        compare(Geometry.dockScreen("DP-3", ["DP-1", "DP-2"], "HDMI-9"), "DP-1");
+        compare(Geometry.dockScreen("", ["DP-1", "DP-2"], ""), "DP-1");
+        compare(Geometry.dockScreen("", [], "DP-1"), "");
+        // The development override names the start output; it never beats a choice and is ignored when unknown.
+        compare(Geometry.dockScreen("", ["DP-1", "DP-2"], "DP-1", "DP-2"), "DP-2");
+        compare(Geometry.dockScreen("DP-1", ["DP-1", "DP-2"], "DP-2", "DP-2"), "DP-1");
+        compare(Geometry.dockScreen("", ["DP-1", "DP-2"], "DP-1", "HDMI-9"), "DP-1");
+    }
+
+    function test_theDockStartsOnTheFocusedOutputAndStaysThere() {
+        compare(Geometry.latchScreen("", ["DP-1", "DP-2"], "DP-2"), "DP-2");
+        // Focus moving on does not move it; an unknown focus latches nothing.
+        compare(Geometry.latchScreen("DP-2", ["DP-1", "DP-2"], "DP-1"), "DP-2");
+        compare(Geometry.latchScreen("", ["DP-1", "DP-2"], ""), "");
+        compare(Geometry.latchScreen("", ["DP-1", "DP-2"], "DP-7"), "");
+        compare(Geometry.latchScreen("", ["DP-1", "DP-2"], "DP-1", "DP-2"), "DP-2");
+    }
+
+    function test_theEdgeDwellOfAnotherOutputTakesTheDock() {
+        // A machine that starts to reveal on an output without the Dock is the pointer resting on its edge strip.
+        verify(Geometry.movesDock(false, "hidden", "revealing"));
+        verify(Geometry.movesDock(false, "hiding", "revealing"));
+        // Once, not on every frame of the reveal.
+        verify(!Geometry.movesDock(false, "revealing", "revealing"));
+        // The Dock's own output, and a machine that is not revealing, never move it.
+        verify(!Geometry.movesDock(true, "hidden", "revealing"));
+        verify(!Geometry.movesDock(false, "hidden", "hidden"));
+        verify(!Geometry.movesDock(false, "shown", "hiding"));
+        // With the real machine: the pointer on the strip for the dwell, and only then.
+        const timing = {hideGrace: 250, hideDuration: 300, revealDwell: 120, revealDuration: 240};
+        let m = {state: "hidden", visible: 0, timer: 0};
+        let moved = -1;
+        for (let t = 0; t < 400 && moved < 0; t += 16) {
+            const next = AutoHide.step(m, {pointer: true}, true, timing, 16);
+            if (Geometry.movesDock(false, m.state, next.state))
+                moved = t;
+            m = next;
+        }
+        verify(moved >= 100 && moved <= 140, "moved at " + moved + " ms");
+        // No pointer, no move, however long.
+        m = {state: "hidden", visible: 0, timer: 0};
+        for (let t = 0; t < 2000; t += 16) {
+            const next = AutoHide.step(m, {}, true, timing, 16);
+            verify(!Geometry.movesDock(false, m.state, next.state));
+            m = next;
+        }
     }
 
     function test_smallSizeKeepsTheBadgeReadable() {

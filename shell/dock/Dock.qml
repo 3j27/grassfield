@@ -64,18 +64,48 @@ Scope {
         items = next;
         applyOps(ops.filter(o => o.op !== "remove"));
     }
+    // Resize by dragging the separator (macOS): the size while the drag runs (-1 when none). The Dock follows it live; the setting is
+    // written once, when the button is released.
+    property real liveSize: -1
+    readonly property int sizeNow: liveSize >= 0 ? Math.round(liveSize) : Settings.dockSize
+
+    // One Dock across displays (macOS: the Dock is on the display where the pointer last reached its edge, and moves there). Every
+    // output keeps its Dock window, but only the one of `dockScreen` is shown and takes the exclusive zone; the others are, in
+    // effect, an auto-hidden Dock that never shows on its own: the 2 px strip at the Dock's edge is their only input, and the
+    // pointer resting on it for Tokens.dockRevealDwell makes that output the Dock's (`moveDockTo`). It starts on the focused output.
+    property string chosenScreen: ""
+    // Development sessions name their primary output (GRASSFIELD_DESKTOP_SCREEN, as the desktop icons do); the Dock starts there.
+    readonly property string startHint: Quickshell.env("GRASSFIELD_DESKTOP_SCREEN") || ""
+    readonly property var screenNames: Quickshell.screens.map(s => s.name)
+    readonly property string dockScreen: Geometry.dockScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint)
+
+    function moveDockTo(name: string): void {
+        if (name === "" || name === dockScreen)
+            return;
+        if (VisualFixtures.active)
+            console.info("dock-screen: move", dockScreen, "->", name, Date.now());
+        chosenScreen = name;
+    }
+
+    // The output the Dock is on is also the one the minimize animation, Overview and the others look at.
+    Binding {
+        target: Compositor
+        property: "dockScreenName"
+        value: root.dockScreen
+    }
+
     // Test hooks (IPC): a pointer position along the Dock (x at the bottom, y on a side edge, in the Dock window) forcing magnification, and a forced reveal.
     property real testPointerX: -1
     property bool testReveal: false
     // Keyboard navigation mode: the dock takes exclusive keyboard focus until Esc, an
     // activation, or pointer use; then the layer releases focus and the compositor restores the app.
     property bool keyboardMode: false
-    // Output whose Dock has the keyboard (the focused one when the mode was entered).
+    // Output whose Dock has the keyboard (the Dock's output when the mode was entered).
     property string keyboardScreen: ""
 
     // Enter keyboard mode and focus the first tile.
     function enterKeyboardMode(): void {
-        keyboardScreen = Compositor.focusedScreenName !== "" ? Compositor.focusedScreenName : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+        keyboardScreen = dockScreen;
         keyboardMode = true;
         Qt.callLater(() => {
             const all = windows.instances;
@@ -275,7 +305,15 @@ Scope {
             Compositor.activate(top);
     }
 
-    Component.onCompleted: rebuild()
+    Component.onCompleted: {
+        rebuild();
+        latchStartScreen();
+    }
+
+    // The Dock starts on the focused output and stays where it is until the pointer moves it (focus changes do not).
+    function latchStartScreen(): void {
+        chosenScreen = Geometry.latchScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint);
+    }
 
     // Drag-out removal follows "cancel on interruption": anything that can take the pointer or the focus during a tile drag marks the
     // drag interrupted (win.dragInterrupted), and an interrupted drag never removes its tile (it glides back). Events only. The
@@ -377,6 +415,7 @@ Scope {
 
         function onFocusedScreenNameChanged(): void {
             root.interruptDrag();
+            root.latchStartScreen();
         }
     }
 
@@ -525,6 +564,17 @@ Scope {
             root.testReveal = on;
         }
 
+        // Output that has the Dock (fixtures only).
+        function screen(): string {
+            return VisualFixtures.active ? root.dockScreen : "";
+        }
+
+        // Where the next minimized window of `screen` would go: the rectangle Compositor.dockRect hands the plugin (global layout
+        // coordinates, JSON; fixtures only).
+        function targetrect(screen: string): string {
+            return VisualFixtures.active ? JSON.stringify(Compositor.dockRect(screen, Compositor.minimized.length, true, null)) : "";
+        }
+
         // Option-Command-D (macOS): turns Dock hiding on or off. The integrator binds a key to it (config/hypr); not fixtures-gated.
         function toggleAutohide(): void {
             Settings.setDockAutohide(!Settings.dockAutohide);
@@ -534,6 +584,22 @@ Scope {
             if (!VisualFixtures.active)
                 return;
             Settings.setDockAutohide(on);
+        }
+
+        // Tile size and screen edge through the settings (fixtures only), like autohide and magnify.
+        function size(px: int): void {
+            if (VisualFixtures.active)
+                Settings.setDockSize(px);
+        }
+
+        function position(edge: string): void {
+            if (VisualFixtures.active)
+                Settings.setDockPosition(edge);
+        }
+
+        // Tile size now, "liveSize" included (fixtures only).
+        function sizenow(): string {
+            return VisualFixtures.active ? String(root.sizeNow) : "";
         }
 
         function magnify(factor: real, enabled: bool): void {
@@ -591,7 +657,21 @@ Scope {
             required property ShellScreen modelData
 
             // Tile size (Settings > Size): everything below follows it (Geometry.metrics).
-            readonly property int iconSize: Settings.dockSize
+            readonly property int iconSize: root.sizeNow
+            // The window is as deep as the largest Dock needs, whatever the size now: resizing never reconfigures the layer surface
+            // (the pointer's coordinates in it stay put while the separator is dragged). It is transparent and takes input only where the mask says.
+            readonly property var largest: Geometry.metrics(Tokens.dockSizeMax, {
+                iconSize: Tokens.dockIconSize,
+                padding: Tokens.dockPadding,
+                indicatorSize: Tokens.dockIndicatorSize,
+                spacing: Tokens.dockSpacing,
+                bottomMargin: Tokens.dockBottomMargin,
+                separatorHeight: Tokens.dockSeparatorHeight,
+                badgeSize: Tokens.dockBadgeSize,
+                radiusIcon: Tokens.radiusDockIcon
+            })
+            // The separator is being dragged (resize).
+            property bool resizing: false
             readonly property int separatorWidth: Tokens.dockSpacing * 2 + Tokens.dockSeparatorWidth
             readonly property real maxScale: Settings.dockMagnificationEnabled ? Settings.dockMagnification : 1
             readonly property real pitch: iconSize + Tokens.dockSpacing
@@ -794,13 +874,18 @@ Scope {
                 duration: Appearance.duration(Tokens.dockPoofDuration)
                 easing.type: Easing.OutQuad
             }
-            readonly property bool autohide: Settings.dockAutohide
+            // This output has the Dock (modelData is null while the window is destroyed: the name is kept in screenName).
+            readonly property bool isDockScreen: screenName !== "" && screenName === root.dockScreen
+            // A Dock that moved here comes out of its edge strip: until it has slid in, the machine runs even with auto-hide off.
+            property bool revealPending: false
+            // Auto-hide as the machine sees it: the setting, or any output that does not have the Dock (it stays away).
+            readonly property bool autohide: Settings.dockAutohide || !isDockScreen || revealPending
             // Layout from the unmagnified geometry (stable under the pointer), then scaled.
             readonly property var widths: root.items.map(it => it.kind === "separator" ? separatorWidth : iconSize)
             readonly property real baseTotal: Magnify.totalWidth(widths, Tokens.dockSpacing)
             readonly property var baseCenters: Magnify.centersFor(widths, Tokens.dockSpacing, (mainTotal - baseTotal) / 2)
 
-            readonly property bool pointerActive: areaHover.hovered || root.testPointerX >= 0
+            readonly property bool pointerActive: areaHover.hovered || (isDockScreen && root.testPointerX >= 0)
             // The pointer along the Dock (x for a bottom Dock, y for a side one; the test hook gives it directly).
             readonly property real pointerX: root.testPointerX >= 0 ? root.testPointerX : Geometry.mainOf(edge, areaHover.point.position.x, areaHover.point.position.y)
             // Magnification: the target scales of the pointer (all 1 without it) and the displayed ones, which follow them
@@ -814,14 +899,19 @@ Scope {
             // Autohide state machine (AutoHide.js, table in docs/specs/dock.md): inhibitors keep the shelf shown.
             property int pressedTile: -1
             property var hideMachine: AutoHide.create()
+            onHideMachineChanged: {
+                if (revealPending && hideMachine.state === "shown")
+                    revealPending = false;
+            }
+            // Only the pointer on the edge strip can bring the Dock to another output: the other inhibitors belong to the Dock's output.
             readonly property var hideInhibitors: ({
                     pointer: pointerActive,
-                    drag: dragFrom >= 0,
-                    popup: Popups.kind === "dock",
-                    hold: pressedTile >= 0,
-                    keyboard: root.keyboardMode,
-                    forced: root.testReveal,
-                    attention: root.attentionReveal
+                    drag: isDockScreen && dragFrom >= 0,
+                    popup: isDockScreen && Popups.kind === "dock",
+                    hold: isDockScreen && (pressedTile >= 0 || resizing),
+                    keyboard: isDockScreen && root.keyboardMode,
+                    forced: isDockScreen && root.testReveal,
+                    attention: isDockScreen && root.attentionReveal
                 })
             readonly property var hideTiming: ({
                     hideGrace: Tokens.dockHideGrace,
@@ -859,7 +949,9 @@ Scope {
                 const t = tileRepeater.itemAt(index);
                 if (!t)
                     return "";
-                const p = t.mapToItem(null, t.iconPos.x + t.iconPx / 2, t.iconPos.y + t.iconPx / 2);
+                // The separator is narrower than an icon: its middle along the Dock, the icons' middle across it.
+                const along = t.isSeparator;
+                const p = t.mapToItem(null, along && !win.vertical ? t.width / 2 : t.iconPos.x + t.iconPx / 2, along && win.vertical ? t.height / 2 : t.iconPos.y + t.iconPx / 2);
                 return Math.round(origin.x + p.x) + " " + Math.round(origin.y + p.y);
             }
 
@@ -897,10 +989,11 @@ Scope {
                 top: win.vertical
             }
             // Across the Dock: shelf, margin, the growth of magnified icons and the room for a label or a dragged icon.
-            readonly property real depth: Geometry.depth(shelfHeight, Tokens.dockBottomMargin, overhang, roomPx)
+            readonly property real depth: Geometry.depth(DockModel.shelfHeight(largest), Tokens.dockBottomMargin, Math.ceil((maxScale - 1) * Tokens.dockSizeMax), roomPx)
             implicitWidth: vertical ? depth : 0
             implicitHeight: vertical ? 0 : depth
-            exclusiveZone: DockModel.reservedHeight(dockMetrics, autohide)
+            // Only the Dock's output reserves room, and not while auto-hide is on.
+            exclusiveZone: isDockScreen ? DockModel.reservedHeight(dockMetrics, Settings.dockAutohide) : 0
             color: "transparent"
             focusable: true
             WlrLayershell.layer: WlrLayer.Top
@@ -959,6 +1052,9 @@ Scope {
             Component.onCompleted: {
                 screenName = win.modelData.name;
                 Compositor.registerDock(screenName, win);
+                // An output that does not have the Dock starts with it slid out of sight.
+                if (!isDockScreen)
+                    hideMachine = {state: "hidden", visible: 0, timer: 0};
             }
             Component.onDestruction: Compositor.unregisterDock(screenName, win)
 
@@ -981,7 +1077,15 @@ Scope {
             // Frame clock of the auto-hide machine: stops while nothing can change (hidden and idle, or shown and held).
             FrameAnimation {
                 running: AutoHide.active(win.hideMachine, win.hideInhibitors, win.autohide)
-                onTriggered: win.hideMachine = AutoHide.step(win.hideMachine, win.hideInhibitors, win.autohide, win.hideTiming, Math.min(frameTime * 1000, 100))
+                onTriggered: {
+                    const next = AutoHide.step(win.hideMachine, win.hideInhibitors, win.autohide, win.hideTiming, Math.min(frameTime * 1000, 100));
+                    // The pointer stayed on the edge strip of an output without the Dock for the dwell: the Dock comes here.
+                    if (Geometry.movesDock(win.isDockScreen, win.hideMachine.state, next.state)) {
+                        win.revealPending = true;
+                        root.moveDockTo(win.screenName);
+                    }
+                    win.hideMachine = next;
+                }
             }
 
             Timer {
@@ -1011,7 +1115,7 @@ Scope {
                     id: hitItem
                     readonly property var r: Geometry.hitRect(win.edge, win.width, win.height, {
                         revealed: win.revealed,
-                        dragging: win.dragFrom >= 0,
+                        dragging: win.dragFrom >= 0 || win.resizing,
                         pointerActive: win.pointerActive,
                         shelfMain0: Geometry.mainOf(win.edge, shelf.x, shelf.y),
                         shelfLength: win.shelfWidth,
@@ -1226,6 +1330,41 @@ Scope {
                                     x: win.vertical ? (win.edge === "left" ? win.indicatorArea : 0) + (win.iconSize - width) / 2 : (tile.width - width) / 2
                                     y: win.vertical ? (tile.height - height) / 2 : (win.iconSize - height) / 2
                                     color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+                                }
+
+                                // Resize (macOS): the separator is a handle. The pointer shows the resize cursor over it (across the Dock, along
+                                // the direction it moves) and dragging away from the screen edge makes the Dock larger, live; the setting is
+                                // written on release. The shelf grows by the change of the tile, so its middle (the separator) follows the
+                                // pointer when the size changes by twice the pointer's distance.
+                                HoverHandler {
+                                    enabled: tile.isSeparator
+                                    cursorShape: win.vertical ? Qt.SizeHorCursor : Qt.SizeVerCursor
+                                }
+
+                                DragHandler {
+                                    id: resizeDrag
+                                    enabled: tile.isSeparator
+                                    target: null
+                                    cursorShape: win.vertical ? Qt.SizeHorCursor : Qt.SizeVerCursor
+                                    property real startSize: 0
+                                    onActiveChanged: {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-resize: active", active, win.iconSize, Date.now());
+                                        if (active) {
+                                            startSize = win.iconSize;
+                                            win.resizing = true;
+                                            root.liveSize = win.iconSize;
+                                        } else if (win.resizing) {
+                                            win.resizing = false;
+                                            if (root.liveSize >= 0)
+                                                Settings.setDockSize(root.liveSize);
+                                            root.liveSize = -1;
+                                        }
+                                    }
+                                    onTranslationChanged: {
+                                        if (active)
+                                            root.liveSize = Geometry.resizeSize(startSize, win.edge, translation.x, translation.y, Tokens.dockSizeMin, Tokens.dockSizeMax);
+                                    }
                                 }
 
                                 // Attention with Reduce Motion: a static accent plate behind the icon (no hop).
@@ -1499,14 +1638,16 @@ Scope {
                                     tailSide: Geometry.tooltipTailSide(win.edge)
                                     text: tile.dragging ? qsTr("Remove") : tile.label
                                     delay: (tile.dragging || (tile.activeFocus && root.keyboardMode) || win.tipsWarm) ? 0 : Tokens.dockTooltipDelay
-                                    onVisibleNowChanged: {
-                                        if (visibleNow) {
+                                    // One turn of the event loop later: `delay` reads tipsWarm and visibleNow reads delay, so setting it from this
+                                    // handler is a binding loop (Qt warned each time a label showed).
+                                    onVisibleNowChanged: Qt.callLater(() => {
+                                        if (tooltip.visibleNow) {
                                             win.tipsWarm = true;
                                             tipsWarmTimer.stop();
                                         } else {
                                             tipsWarmTimer.restart();
                                         }
-                                    }
+                                    })
                                     shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tile.hoverHeld || (tile.activeFocus && root.keyboardMode)) && !tile.tipSuppressed && !Popups.active && win.dragFrom < 0)
                                     readonly property var at: Geometry.tooltipOrigin(win.edge, tile.width, tile.height, win.iconSize, tile.iconPx, win.indicatorArea, Tokens.dockTooltipGap, width, height)
                                     x: at.x
