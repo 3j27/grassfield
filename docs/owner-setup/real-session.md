@@ -176,13 +176,33 @@ and the Hyprland config changed):
 - [ ] Search: Tab reaches the filter chips; "No Results" no longer flashes while the search still runs.
 - [ ] Settings > Wallpaper: the optional "Picture of the Day" (off by default) shows its author, source and licence links.
 
+**New in 0.4.0-10** (`sudo pacman -U grassfield-desktop-0.4.0-10-x86_64.pkg.tar.zst
+grassfield-compositor-0.4.0-10-x86_64.pkg.tar.zst` from `packaging/arch`, then log out and back in: the plugin
+(0.12.0-pointer) and the Hyprland config changed):
+
+- [ ] Window tiling: drag a window by its title bar to the left or right screen edge (half), to the top or bottom of that
+      edge (quarter), onto the menu bar (fill); a translucent frame shows the place first; dragging it away gives its size
+      back. Window menu > Fill, Center, Move & Resize; Super+Ctrl+arrows, Super+Ctrl+R. Settings > Desktop & Dock >
+      Windows has the three switches.
+- [ ] Menu bar: the icons of your apps (Spotify, Discord, Steam...) with their menus; Now Playing while music plays
+      (artwork and controls); the Search magnifier; it reveals over a full-screen window at the top edge; Settings >
+      Desktop & Dock > Menu Bar > "Automatically hide and show the menu bar".
+- [ ] Menu bar: a second click on an open menu title closes it even without moving the mouse.
+- [ ] Grassfield menu > Recent Items: the apps you launched and your recent documents; Clear Menu.
+- [ ] Dock: its menu lists the app's windows; Option (Alt) shows Force Quit and Hide Others; Trash > Empty Trash…;
+      an app asking for attention bounces; Settings > Desktop & Dock > Size, Position (left, bottom, right); with two
+      screens one Dock that follows the screen whose bottom edge you touch; Super+Alt+D turns hiding on or off.
+- [ ] Dock: badges and progress set by the apps themselves (Telegram, Discord, Firefox downloads).
+- [ ] Two screens: the menu bar of the screen that is not active is dimmed.
+
 ## 6. Known issues on main right now
 
 - Search/Apps keyboard focus on two outputs: under a fix pass.
-- Menu bar (0.4.0-9): no icons of third-party apps yet, no Now Playing item (both merged on main after 0.4.0-9: next
-  package), and it stays hidden over a full-screen window (in progress). A second click on an open menu title without
-  moving the pointer at all is ignored (move it a little).
-- Dock: the Dock menu does not list the app's windows yet, and no attention bounce (in progress).
+- Attention bounce: most apps that ask for attention get the focus at once (Hyprland focuses activation requests;
+  telling a user-triggered activation from another one is not possible in Hyprland 0.56.2), so the bounce shows mainly
+  for apps that only set an urgency hint.
+- Tray icons and Now Playing were checked with test items and a test player, not yet with your real apps: tell me if one
+  is missing or its menu misbehaves.
 - Fonts: a GTK/Qt app that asks by name for a font that is not installed (Roboto, Ubuntu, Verdana, ...) gets Liberation
   Sans, not Inter (documented limit; browsers are not affected).
 - Stages are off by default.
