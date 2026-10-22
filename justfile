@@ -9,7 +9,7 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-secrets
+check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-secrets
 
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland.
 check-config:
@@ -37,6 +37,10 @@ check-i18n:
 # Regenerate translations/grassfield_fr.ts after adding or changing qsTr() strings.
 i18n-update:
     scripts/dev/i18n-update.sh
+
+# Every test is registered in tests/inventory.json with exactly one layer (static, cheap; docs/testing/README.md).
+check-inventory:
+    python3 -I tests/ci/inventory.py
 
 # Secret scan of the whole history (gate S1).
 check-secrets:
