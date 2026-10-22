@@ -283,6 +283,23 @@ Variants {
                 shown = true;
                 panel.forceActiveFocus();
                 glideStart.restart();
+                host.takeGalleryRequest();
+            }
+
+            // Edit Widgets… on the desktop (Notifications.openWidgetGallery): the gallery opens with the column.
+            function takeGalleryRequest(): void {
+                if (!Notifications.galleryWanted)
+                    return;
+                Notifications.galleryWanted = false;
+                panel.galleryOpen = true;
+            }
+
+            Connections {
+                target: Notifications
+
+                function onGalleryWantedChanged(): void {
+                    host.takeGalleryRequest();
+                }
             }
 
             // The footer glides with the cards only once the column has slid in: its first layout (the list growing from

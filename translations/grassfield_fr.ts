@@ -2662,16 +2662,100 @@
         <translation>Ouvrir</translation>
     </message>
     <message>
+        <source>Open With</source>
+        <translation>Ouvrir avec</translation>
+    </message>
+    <message>
+        <source>%1 (default)</source>
+        <translation>%1 (par défaut)</translation>
+    </message>
+    <message>
+        <source>Get Info</source>
+        <translation>Obtenir des informations</translation>
+    </message>
+    <message>
         <source>Rename</source>
         <translation>Renommer</translation>
+    </message>
+    <message>
+        <source>Compress “%1”</source>
+        <translation>Compresser «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Compress %1 Items</source>
+        <translation>Compresser %1 éléments</translation>
+    </message>
+    <message>
+        <source>Duplicate</source>
+        <translation>Dupliquer</translation>
+    </message>
+    <message>
+        <source>Make Alias</source>
+        <translation>Créer un alias</translation>
     </message>
     <message>
         <source>Copy</source>
         <translation>Copier</translation>
     </message>
     <message>
+        <source>Copy %1 Items</source>
+        <translation>Copier %1 éléments</translation>
+    </message>
+    <message>
+        <source>Paste Item</source>
+        <translation>Coller l’élément</translation>
+    </message>
+    <message>
+        <source>Paste %1 Items</source>
+        <translation>Coller %1 éléments</translation>
+    </message>
+    <message>
+        <source>Change Wallpaper…</source>
+        <translation>Changer le fond d’écran…</translation>
+    </message>
+    <message>
+        <source>Edit Widgets…</source>
+        <translation>Modifier les widgets…</translation>
+    </message>
+    <message>
+        <source>Clean Up</source>
+        <translation>Ranger</translation>
+    </message>
+    <message>
+        <source>Clean Up By</source>
+        <translation>Ranger par</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Date Modified</source>
+        <translation>Date de modification</translation>
+    </message>
+    <message>
+        <source>Date Created</source>
+        <translation>Date de création</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
         <source>Move to Trash</source>
         <translation>Placer dans la corbeille</translation>
+    </message>
+    <message>
+        <source>Glance at %1 Items</source>
+        <translation>Survoler %1 éléments</translation>
+    </message>
+    <message>
+        <source>Glance at “%1”</source>
+        <translation>Survoler «&#xa0;%1&#xa0;»</translation>
     </message>
     <message>
         <source>New Folder</source>
@@ -3529,6 +3613,10 @@
     <message>
         <source>Folders or URLs to open, one window each.</source>
         <translation>Dossiers ou URL à ouvrir, une fenêtre chacun.</translation>
+    </message>
+    <message>
+        <source>Show the Get Info window of each location.</source>
+        <translation>Afficher la fenêtre Obtenir des informations de chaque emplacement.</translation>
     </message>
     <message>
         <source>View images, PDF documents, text, audio and video (read only)</source>

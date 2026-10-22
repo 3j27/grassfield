@@ -210,4 +210,55 @@ TestCase {
         compare(Logic.desktopDir("", "", "/home/u"), "/home/u/Desktop");
         compare(Logic.desktopDir("", "relative", "/home/u"), "/home/u/Desktop");
     }
+
+    // Desktop menu (macOS names): Duplicate, Make Alias, Compress.
+    function test_copyAliasAndArchiveNames() {
+        compare(Logic.copyName("Report.pdf", ["Report.pdf"], false), "Report copy.pdf");
+        compare(Logic.copyName("Report.pdf", ["Report.pdf", "Report copy.pdf"], false), "Report copy 2.pdf");
+        compare(Logic.copyName("Projects.v2", ["Projects.v2"], true), "Projects.v2 copy");
+        compare(Logic.aliasName("Report.pdf", []), "Report.pdf alias");
+        compare(Logic.aliasName("Report.pdf", ["Report.pdf alias"]), "Report.pdf alias 2");
+        compare(Logic.archiveName(["Report.pdf"], []), "Report.pdf.zip");
+        compare(Logic.archiveName(["a", "b"], []), "Archive.zip");
+        compare(Logic.archiveName(["a", "b"], ["Archive.zip"]), "Archive 2.zip");
+    }
+
+    function test_cleanUpByOrders() {
+        const meta = {
+            "b.txt": {isDir: false, size: 10, modified: 300, created: 100},
+            "A.pdf": {isDir: false, size: 99, modified: 100, created: 300},
+            "Docs": {isDir: true, size: 0, modified: 200, created: 200}
+        };
+        const names = ["b.txt", "A.pdf", "Docs"];
+        compare(Logic.orderBy(names, "name", meta), ["A.pdf", "b.txt", "Docs"]);
+        compare(Logic.orderBy(names, "kind", meta), ["Docs", "A.pdf", "b.txt"]);
+        compare(Logic.orderBy(names, "size", meta), ["A.pdf", "b.txt", "Docs"]);
+        compare(Logic.orderBy(names, "modified", meta), ["b.txt", "Docs", "A.pdf"]);
+        compare(Logic.orderBy(names, "created", meta), ["A.pdf", "Docs", "b.txt"]);
+        // An unknown key falls back to the name order; missing metadata sorts as zero.
+        compare(Logic.orderBy(names, "colour", meta), ["A.pdf", "b.txt", "Docs"]);
+        compare(Logic.orderBy(["x", "y"], "size", {}), ["x", "y"]);
+    }
+
+    function test_cleanUpPacksInVisualOrder() {
+        // Two icons in column 2 and one in column 0 row 1: Clean Up keeps that order and packs them from the corner.
+        const lay = {c: {col: 2, row: 0}, a: {col: 0, row: 1}, b: {col: 2, row: 1}};
+        compare(Logic.visualOrder(lay), ["a", "c", "b"]);
+        const packed = Logic.arrange(Logic.visualOrder(lay), 3, 2, {});
+        compare(packed.a, {col: 0, row: 0});
+        compare(packed.c, {col: 0, row: 1});
+        compare(packed.b, {col: 1, row: 0});
+        // A blocked slot (under a widget) is skipped.
+        const around = Logic.arrange(["a", "b"], 3, 2, {[Logic.key(0, 0)]: true});
+        compare(around.a, {col: 0, row: 1});
+        compare(around.b, {col: 1, row: 0});
+    }
+
+    function test_parseStat() {
+        const m = Logic.parseStat("directory|4096|200|150|/d/Docs\nregular file|12|300|0|/d/a|b.txt\n\ngarbage");
+        compare(m["Docs"], {isDir: true, size: 4096, modified: 200, created: 150});
+        // A "|" in the name is kept; no birth time: created falls back to modified.
+        compare(m["a|b.txt"], {isDir: false, size: 12, modified: 300, created: 300});
+        compare(Object.keys(m).length, 2);
+    }
 }

@@ -13,11 +13,16 @@ Singleton {
     signal missing
 
     function open(): void {
-        Apps.whenScopeKnown(() => root.openNow());
+        Apps.whenScopeKnown(() => root.openNow(""));
     }
 
-    function openNow(): void {
-        const cmd = (Quickshell.env("GRASSFIELD_SETTINGS_CMD") || "grassfield-settings").split(" ");
+    // Settings showing one section first (`--section=<id>`: "wallpaper" for the desktop's Change Wallpaper…).
+    function openSection(section: string): void {
+        Apps.whenScopeKnown(() => root.openNow(section));
+    }
+
+    function openNow(section: string): void {
+        const cmd = (Quickshell.env("GRASSFIELD_SETTINGS_CMD") || "grassfield-settings").split(" ").concat(section !== "" ? ["--section=" + section] : []);
         // In a real session Settings gets a scope of its own (Apps.scoped): a shell restart never closes it.
         launcher.command = ["sh", "-c", "command -v -- \"$1\" >/dev/null 2>&1 || { echo missing; exit 0; }; shift; setsid -f \"$@\" >/dev/null 2>&1", "sh", cmd[0]].concat(Apps.scoped(cmd));
         // The pointer size and colour theme the user chose (Pointer.launchEnvironment), like every app the shell starts.

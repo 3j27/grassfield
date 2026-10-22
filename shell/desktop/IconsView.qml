@@ -6,6 +6,7 @@ import Grassfield.Ui
 import qs.widgets
 import "../widgets/Placements.js" as Placements
 import qs.services
+import qs.notifications
 import "IconsLogic.js" as Logic
 
 // Desktop icons (docs/specs/desktop.md): the files of the desktop folder as a grid of icons on the
@@ -203,6 +204,12 @@ FocusScope {
 
     function openMenu(kind: string, x: real, y: real): void {
         menuAt = Qt.point(x, y);
+        // What the menu offers beyond the fixed items is read now: the clipboard's files (Paste) or the apps that open
+        // the selection (Open With ▸); the rows appear as soon as the answer is in.
+        if (kind === "desktop")
+            files.refreshClipboard();
+        else
+            files.resolveOpenWith(selectedPaths);
         menuKind = kind;
         menuPopup.visible = true;
         focusEvent({
@@ -230,16 +237,45 @@ FocusScope {
         if (kind === "desktop") {
             if (action === "newFolder")
                 files.newFolder();
+            else if (action === "paste")
+                files.paste();
+            else if (action === "getInfo")
+                files.showInfo([files.dir]);
+            else if (action === "wallpaper")
+                SettingsApp.openSection("wallpaper");
+            else if (action === "editWidgets")
+                Notifications.openWidgetGallery(root.screen ? root.screen.name : "");
+            else if (action === "cleanUp")
+                files.setPositions(Logic.arrange(Logic.visualOrder(lay), grid.cols, grid.rows, blocked));
+            else if (action.startsWith("cleanUpBy:"))
+                cleanUpBy(action.substring(10));
             return;
         }
         if (action === "rename" && names.length === 1)
             beginRename(names[0]);
         else if (action === "open")
             openNames(names);
+        else if (action.startsWith("openWith:"))
+            files.openWith(action.substring(9));
+        else if (action === "getInfo")
+            files.showInfo(paths);
+        else if (action === "compress")
+            files.compress(names);
+        else if (action === "duplicate")
+            files.duplicate(names);
+        else if (action === "alias")
+            files.makeAlias(names);
+        else if (action === "quickLook")
+            GlanceApp.toggle(paths);
         else if (action === "copy")
             files.copy(paths);
         else if (action === "trash")
             files.trash(paths);
+    }
+
+    // Clean Up By: every icon in the chosen order (name, kind, size, dates), packed from the top-right corner.
+    function cleanUpBy(key: string): void {
+        files.readMeta(meta => files.setPositions(Logic.arrange(Logic.orderBy(files.names, key, meta), grid.cols, grid.rows, blocked)));
     }
 
     // A press elsewhere ends the rename: it commits (macOS). The press goes on with its own action.
@@ -551,8 +587,9 @@ FocusScope {
         anchor.gravity: Edges.Bottom | Edges.Right
         anchor.adjustment: PopupAdjustment.All
         // qmllint enable missing-type
-        implicitWidth: (menuLoader.item as Item)?.width ?? 1
-        implicitHeight: (menuLoader.item as Item)?.height ?? 1
+        // The menu and its open submenu (Open With ▸, Clean Up By ▸), which opens to the right of the menu.
+        implicitWidth: Math.max(1, (menuLoader.item as Item)?.childrenRect.width ?? 1)
+        implicitHeight: Math.max(1, (menuLoader.item as Item)?.childrenRect.height ?? 1)
         color: "transparent"
         grabFocus: true
         // qmllint disable missing-type
@@ -578,6 +615,11 @@ FocusScope {
             id: menuBlur
             item: menuLoader
             radius: Tokens.radiusMenu
+
+            Region {
+                item: (menuLoader.item as PopupMenu)?.submenuItem ?? null
+                radius: Tokens.radiusMenu
+            }
         }
 
         Loader {
@@ -587,6 +629,9 @@ FocusScope {
                 kind: root.menuKind
                 showKeyHints: root.fileKeyActions
                 count: root.selectedNames.length
+                singleName: root.selectedNames.length === 1 ? root.selectedNames[0] : ""
+                pasteCount: files.clipboardPaths.length
+                openWithApps: files.openWithApps
                 onChoose: action => root.applyMenu(action)
                 onCloseRequested: root.closeMenu("esc")
             }
