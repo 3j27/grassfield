@@ -1110,7 +1110,62 @@ Manual (L1, nested only):
   equivalents exist (SUPER+W close, SUPER+ALT+F zoom).
 - i18n: no plugin strings are shown except the degradation notifications (English, compositor-side).
 
+## Activation model spike (2026-10-22): no-go on Hyprland 0.56.2
+
+Goal (macOS model, `docs/specs/dock.md` requirement 21): an app may take the focus when its activation follows user input
+(a link clicked in one app brings the browser forward); otherwise its Dock icon bounces and the focus stays. Grassfield keeps
+`misc.focus_on_activate = true` (every request focuses); `false` would only mark every request urgent. Question: can the
+plugin see each request with its origin and token validity and decide per request (focus when the token is valid and recent,
+else urgent without focus)? Sources: the installed headers and the 0.56.2 binary (`objdump` of the handlers named below; no
+Hyprland source is installed).
+
+What Hyprland 0.56.2 does:
+
+- xdg-activation (`src/protocols/XDGActivation.hpp`): a token's `set_serial`, `set_app_id` and the issued string are stored in
+  `CXDGActivationToken` (`m_serial`, `m_appID`, `m_token`: private), the issued tokens in `CXDGActivationProtocol::m_sentTokens`
+  (private). The commit handler issues a token for every commit (`CTokenManager::registerNewToken`, `sendDone`) without
+  consulting the seat; the `activate` handler only looks the string up in `m_sentTokens` (unknown: "activate event for
+  non-existent token"), erases it, resolves the surface to a window (else "non-window or gone surface") and calls
+  `CWindow::activate(false)`. The serial is never compared with an input serial and the creating client is never compared
+  with the focused one: every issued token is "valid", whoever asked and whenever.
+- X11 `_NET_ACTIVE_WINDOW`: the XWM turns it into `CXWaylandSurface::events.activate`, a `CSignalT<>` with no payload (the
+  source indication and the timestamp are not passed on), handled by `CWindow::activateX11` (private listener), which
+  compares the window's PID with the focused window's (`CWindow::getPID`), asks `CXWaylandSurface::wantsFocus` and ends in
+  `CWindow::activate(false)` (calls read from the binary; the branches between them not traced).
+- `CWindow::activate(bool force)` (public): in call order in the binary, it checks Hyprland's focused window, posts
+  `urgent>>ADDRESS`, emits the event bus `window.urgent` (`Event<PHLWINDOW>`, not cancellable), then reads
+  `misc:focus_on_activate` and focuses. The per-window inputs of that decision are public in the headers
+  (`CWindowRuleApplicator::focusOnActivate`, `m_suppressedEvents` with `SUPPRESS_ACTIVATE` / `SUPPRESS_ACTIVATE_FOCUSONLY`,
+  `m_isUrgent`); how `activate` combines them follows Hyprland's documented rules and was not traced instruction by
+  instruction.
+
+What a plugin can see: only `window.urgent` with the window, after the decision inputs are gone (no origin, no token, no
+serial, no timestamp), and before the focus. Every request kind looks the same there.
+
+Ways to get the macOS behaviour, and why none is taken:
+
+1. A function hook (`HyprlandAPI::createFunctionHook`) on `CWindow::activate` or on the activate handler (an unnamed lambda):
+   patches Hyprland's code at run time, and even then the token's serial and creator are private and unchecked. Excluded
+   (no patching of Hyprland).
+2. From the `window.urgent` listener, set `SUPPRESS_ACTIVATE_FOCUSONLY` in the window's public `m_suppressedEvents` when the
+   request does not "follow user input", and clear it afterwards: the bit is owned by window rules (`suppress_event`), so a
+   rule update in between would be lost or clobbered; and "follows user input" could only be guessed from the timing of the
+   last key or button press (no token data): a slow browser start would bounce instead of coming forward, a background app
+   asking right after a click elsewhere would steal the focus. Not the token rule asked for; not a documented hook.
+3. Replace Hyprland's `xdg_activation_v1` global with the plugin's own (as for the appmenu global, FR18) to check serials
+   itself: Hyprland's global, token list and the seat's serial history are private, clients bind whichever global they see
+   first, and live tokens would break at unload. Invasive, no graceful degradation.
+
+Decision: **no-go**, nothing implemented; `focus_on_activate = true` stays (activation always focuses; urgency without
+activation still bounces). Needed upstream for a later attempt: Hyprland validating the token (serial from the focused
+client's recent input, as other compositors do) and exposing the result, e.g. a cancellable event bus `window.activate` with
+the window, the source (xdg-activation, X11, foreign toplevel) and the validity; the plugin decision would then be a small pure
+rule (valid and recent: focus; else `urgent` only) with graceful degradation (no event: Hyprland's behaviour).
+
 ## Known limitations (honest, user-visible gaps vs macOS)
+
+- Activation (spike above): every activation request focuses its window (`focus_on_activate = true`); macOS lets only an
+  activation that follows user input take the focus. Not doable with Hyprland 0.56.2's plugin surface.
 
 - Titlebar join (FR3): a thin 1-px arc remains on XWayland windows and translucent windows show lighter corner squares.
 - Layer pointer focus (FR47): only the shell's own `grassfield-*` layers are corrected; another client's layer surface that
