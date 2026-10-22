@@ -948,6 +948,9 @@ Scope {
                                     id: appIcon
                                     visible: tile.isApp
                                     size: win.iconSize
+                                    // Default mode is decoded as before; an effect mode decodes at the largest magnification so the
+                                    // fixed-size texture is never upscaled.
+                                    oversample: appIcon.modeActive ? Tokens.dockIconOversample : appIcon.defaultOversample
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
@@ -1063,7 +1066,12 @@ Scope {
                                     }
 
                                     TintedIcon {
-                                        size: win.iconSize
+                                        id: minimizedIcon
+                                        // The drawn nominal size (the badge is a fraction of the tile when the thumbnail shows), so that
+                                        // the minimum size of the icon modes applies to what is on screen.
+                                        size: minimizedTile.live ? Math.round(win.iconSize * Tokens.dockMinimizedBadgeScale) : win.iconSize
+                                        // The same decode as the tile's icon: an effect mode decodes at the largest magnification.
+                                        oversample: minimizedIcon.modeActive ? Tokens.dockIconOversample : minimizedIcon.defaultOversample
                                         width: minimizedTile.live ? Math.round(parent.width * Tokens.dockMinimizedBadgeScale) : parent.width
                                         height: width
                                         anchors.right: parent.right
@@ -1079,6 +1087,7 @@ Scope {
                                     readonly property string themed: Quickshell.iconPath(Trash.empty ? "user-trash" : "user-trash-full", true)
                                     visible: tile.isTrash && themed !== ""
                                     size: win.iconSize
+                                    oversample: trashThemed.modeActive ? Tokens.dockIconOversample : trashThemed.defaultOversample
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom

@@ -104,6 +104,10 @@ Item {
             TintedIcon {
                 size: root.iconSize
                 source: Quickshell.iconPath(root.iconTheme, "text-x-generic")
+                // The desktop is drawn over the wallpaper, not over a window material: its icons and labels follow the
+                // dark palette whatever the window appearance (like the labels).
+                darkAppearance: true
+                overWallpaper: true
             }
         }
 
@@ -115,6 +119,8 @@ Item {
                 source: Quickshell.iconPath(root.iconTheme, "text-x-generic")
                 folderColor: root.folderColor
                 folderGlyph: root.folderGlyph
+                darkAppearance: true
+                overWallpaper: true
             }
         }
 

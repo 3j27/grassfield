@@ -42,7 +42,7 @@ fixtures() {
 
 set_global() { # set_global theme|accent|#rrggbb
   mkdir -p "$VS_DEV/config"
-  printf '{"version":1,"icons":{"folderColor":"%s"}}\n' "$1" > "$VS_DEV/config/grassfield.json.tmp"
+  printf '{"version":1,"lock":{"idleMinutes":0},"icons":{"folderColor":"%s"}}\n' "$1" > "$VS_DEV/config/grassfield.json.tmp"
   mv "$VS_DEV/config/grassfield.json.tmp" "$VS_DEV/config/grassfield.json"
   vs_sleep 1.5
 }

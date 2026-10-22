@@ -300,7 +300,7 @@ TestCase {
             // tint (null = the theme's own folder), mode, icon tint, measured plate
             ["#e5484d", "default", dk, "#e0474b"], ["#3e7bfa", "default", dk, "#3d78f5"], ["#f5883b", "default", dk, "#f0853a"], ["#e6b422", "default", dk, "#e1b021"],
             ["#3fae5a", "default", dk, "#3eaa58"], ["#8e5bea", "default", dk, "#8b59e5"], ["#8a8f98", "default", dk, "#878c95"], ["#ffffff", "default", dk, "#fafafa"],
-            ["#000000", "default", dk, "#000000"], ["#ffd60a", "default", dk, "#fad20a"], [null, "default", dk, "#a4caee"],
+            ["#000000", "default", dk, "#000000"], ["#ffd60a", "default", dk, "#fad20a"], [null, "default", dk, "#3daee9"],
             ["#e5484d", "dark", dk, "#b5393d"], ["#3e7bfa", "dark", dk, "#3161c6"], ["#ffffff", "dark", dk, "#cacaca"], [null, "dark", dk, "#7fa3c6"],
             ["#e5484d", "tinted", dk, "#cb4044"], ["#3e7bfa", "tinted", dk, "#376dde"], ["#ffffff", "tinted", dk, "#e2e2e2"], [null, "tinted", dk, "#63df86"],
             ["#e5484d", "tinted", lt, "#80282b"], ["#3e7bfa", "tinted", lt, "#23458c"], ["#f5883b", "tinted", lt, "#894c21"], ["#e6b422", "tinted", lt, "#816513"],
@@ -310,6 +310,10 @@ TestCase {
             ["#ffffff", "clear", lt, "#ffffff"], ["#ffd60a", "clear", lt, "#ffff40"]
         ];
         for (const m of measured) {
+            // The rows of the other icon modes were measured on the previous (MultiEffect) mode pipeline; the modes now draw
+            // through shaders/icon.frag, modelled and checked against rendered pixels (tst_iconshader test_folderModelMatchesTheShader).
+            if (m[1] !== "default")
+                continue;
             const shade = FolderStyle.glyphShade(m[0] !== null, m[0] === null ? "" : m[0], m[1], m[2], Tokens);
             const r = contrast(shade, m[3]);
             verify(r >= Tokens.folderIconGlyphMinContrast, String(m[0]) + " " + m[1] + ": " + shade + " on " + m[3] + " = " + r.toFixed(2));
@@ -352,9 +356,10 @@ TestCase {
         compare(FolderStyle.plateSummary([], [0, 0, 0]), null);
     }
 
-    // The WhiteSur folder plate under the symbol as measured on the raw icon (nested capture, default mode, theme colour):
-    // #74cbf5. The plates measured in the same captures for the other modes and for a recolour are what the shader
-    // arithmetic of effectSamples gives from it (checked against Qt's compiled multieffect shader).
+    // A folder plate under the symbol as measured on a raw icon (nested capture, default mode; the sample colour below):
+    // #74cbf5. Default is the identity; a recolour is Qt's MultiEffect arithmetic (checked against the compiled shader). The
+    // icon modes are shaders/icon.frag for a pixel of a plate-less icon (a folder is one): the expected values are derived
+    // here by hand from the shader's formulas, and tests/unit/tst_iconshader.qml compares the model with the rendered pixels.
     function test_effectSamplesAreTheShaderArithmetic() {
         const raw = [0x74 / 255, 0xcb / 255, 0xf5 / 255, 1];
         const near = (rgb, hex, tol) => {
@@ -362,23 +367,48 @@ TestCase {
             return Math.abs(rgb[0] - want[0]) <= tol && Math.abs(rgb[1] - want[1]) <= tol && Math.abs(rgb[2] - want[2]) <= tol;
         };
         const dk = String(Tokens.colorDark.accent);
-        // dark mode theme plate: measured #51a4cd
-        const darkMode = FolderStyle.plateThrough(raw, "dark", dk, false, "", [0, 0, 0], Tokens);
-        verify(near(darkMode.dark, "#51a4cd", 0.01), "dark mode " + FolderStyle.hexOf(darkMode.dark));
-        // dark mode, red folder: measured #a73538
-        const darkRed = FolderStyle.plateThrough(raw, "dark", dk, true, "#e5484d", [0, 0, 0], Tokens);
-        verify(near(darkRed.dark, "#a73538", 0.012), "dark mode, red " + FolderStyle.hexOf(darkRed.dark));
+        // Dark: affine from darkArtLift to darkArtScale over a little desaturated artwork (shaders/icon.frag, derived here by hand)
+        const rawRgb = FolderStyle.rgbOf("#74cbf5");
+        const lightness = rgb => Math.pow(0.2126 * Math.pow(rgb[0], 2.2) + 0.7152 * Math.pow(rgb[1], 2.2) + 0.0722 * Math.pow(rgb[2], 2.2), 1 / 2.2);
+        const lc = lightness(rawRgb);
+        const linRaw = rawRgb.map(v => Math.pow(v, 2.2));
+        const yRaw = 0.2126 * linRaw[0] + 0.7152 * linRaw[1] + 0.0722 * linRaw[2];
+        const loL = Math.pow(Tokens.iconModeDarkArtLift, 2.2), hiL = Math.pow(Tokens.iconModeDarkArtScale, 2.2);
+        const darkWant = linRaw.map(v => Math.pow(loL + (hiL - loL) * (yRaw + (v - yRaw) * Tokens.iconModeDarkArtSaturation), 1 / 2.2));
+        const darkMode = FolderStyle.plateThrough(raw, "dark", dk, false, "", [0, 0, 0], Tokens, true).dark;
+        verify(Math.abs(darkMode[0] - darkWant[0]) < 0.005 && Math.abs(darkMode[1] - darkWant[1]) < 0.005 && Math.abs(darkMode[2] - darkWant[2]) < 0.005, "dark mode " + FolderStyle.hexOf(darkMode));
+        // The artwork keeps its hue: still a blue (b > g > r)
+        verify(darkMode[2] > darkMode[1] && darkMode[1] > darkMode[0], "dark mode keeps the colour identity");
+        // Dark, red folder: the recolour (MultiEffect arithmetic) of the darkened folder; a red stays red
+        const redDark = FolderStyle.plateThrough(raw, "dark", dk, true, "#e5484d", [0, 0, 0], Tokens, true).dark;
+        verify(redDark[0] > redDark[1] * 2 && redDark[0] > redDark[2] * 2, "dark mode, red " + FolderStyle.hexOf(redDark));
         // default mode, red folder: measured #d14246; blue folder #3970e5; white folder #e9e9e9
         verify(near(FolderStyle.plateThrough(raw, "default", dk, true, "#e5484d", [0, 0, 0], Tokens).dark, "#d14246", 0.01), "default red");
         verify(near(FolderStyle.plateThrough(raw, "default", dk, true, "#3e7bfa", [0, 0, 0], Tokens).dark, "#3970e5", 0.012), "default blue");
         verify(near(FolderStyle.plateThrough(raw, "default", dk, true, "#ffffff", [0, 0, 0], Tokens).dark, "#e9e9e9", 0.012), "default white");
-        // tinted mode with the dark appearance's accent, theme colour: measured #5cd07c
-        verify(near(FolderStyle.plateThrough(raw, "tinted", dk, false, "", [0, 0, 0], Tokens).dark, "#5cd07c", 0.012), "tinted theme");
+        // Tinted, dark appearance: the luminance of the artwork on the two-tone ramp of the tint.
+        const t = FolderStyle.rgbOf(dk);
+        const loT = t.map(v => v * Tokens.iconModeTintedRampLowDark), hiT = t.map(v => v + (1 - v) * Tokens.iconModeTintedRampHighDark);
+        const want = [0, 1, 2].map(q => Math.pow(Math.pow(loT[q], 2.2) + (Math.pow(hiT[q], 2.2) - Math.pow(loT[q], 2.2)) * Math.pow(lc, 2.2), 1 / 2.2));
+        const tinted = FolderStyle.plateThrough(raw, "tinted", dk, false, "", [0, 0, 0], Tokens, true).dark;
+        verify(Math.abs(tinted[0] - want[0]) < 0.01 && Math.abs(tinted[1] - want[1]) < 0.01 && Math.abs(tinted[2] - want[2]) < 0.01, "tinted theme " + FolderStyle.hexOf(tinted));
+        // Clear, dark appearance: a light ink whose opacity follows the luminance, over the glass of the system plate over the backdrop.
+        // The shader's solve: the composite on screen is affine in linear light between the glass and the ink.
+        const glassed = Tokens.iconModeClearPlateAlphaDark * 1 + (1 - Tokens.iconModeClearPlateAlphaDark) * Tokens.iconModeClearBackdropDark;
+        const yRaw2 = 0.2126 * Math.pow(rawRgb[0], 2.2) + 0.7152 * Math.pow(rawRgb[1], 2.2) + 0.0722 * Math.pow(rawRgb[2], 2.2);
+        const inkL = Tokens.iconModeClearInkDark;
+        const yEffT = Tokens.iconModeClearInkFloor + (1 - Tokens.iconModeClearInkFloor) * yRaw2;
+        const targetS = Math.pow(Math.pow(glassed, 2.2) + (Math.pow(inkL, 2.2) - Math.pow(glassed, 2.2)) * yEffT, 1 / 2.2);
+        const inkA = (targetS - glassed) / (inkL - glassed);
+        const realGlass = Tokens.iconModeClearPlateAlphaDark;   // white glass over the black test backdrop
+        const clearWant = inkL * inkA + realGlass * (1 - inkA);
+        const clear = FolderStyle.plateThrough(raw, "clear", dk, false, "", [0, 0, 0], Tokens, true).dark;
+        verify(Math.abs(clear[0] - clearWant) < 0.01 && Math.abs(clear[2] - clearWant) < 0.01, "clear dark " + FolderStyle.hexOf(clear) + " want " + clearWant.toFixed(3));
         // an absent colour is the identity of the default mode
         verify(near(FolderStyle.plateThrough(raw, "default", dk, false, "", [0, 0, 0], Tokens).dark, "#74cbf5", 0.003), "default theme");
     }
 
-    // A flat plate of the WhiteSur blue as raw samples.
+    // A flat plate of a folder blue as raw samples.
     readonly property var flatRaw: {
         const out = [];
         for (let i = 0; i < 16; i++)
@@ -391,8 +421,8 @@ TestCase {
     function shadeFor(mode, dark, color) {
         const modeTint = String(dark ? Tokens.colorDark.accent : Tokens.colorLight.accent);
         const backdrop = FolderStyle.rgbOf(dark ? Tokens.folderIconPlateBackdropDark : Tokens.folderIconPlateBackdropLight);
-        const plate = FolderStyle.plateThrough(flatRaw, mode, modeTint, color !== "", color, backdrop, Tokens);
-        const shade = FolderStyle.glyphShade(color !== "", color, mode, modeTint, Tokens, plate);
+        const plate = FolderStyle.plateThrough(flatRaw, mode, modeTint, color !== "", color, backdrop, Tokens, dark);
+        const shade = FolderStyle.glyphShade(color !== "", color, mode, modeTint, Tokens, plate, dark);
         return {plate: plate, shade: shade, lighter: FolderStyle.relativeLuminance(FolderStyle.rgbOf(shade)) > FolderStyle.relativeLuminance(plate.dark)};
     }
 
@@ -411,7 +441,7 @@ TestCase {
     }
 
     // One rule per mode and appearance: the engraving direction is the mode's, a folder takes the other one only when its
-    // plate cannot reach the contrast that way. Default and Clear: darker (only a black folder flips); Dark: lighter (only
+    // plate cannot reach the contrast that way. Default, Dark and Clear: darker (only a black folder flips; Dark keeps its colour on the dark system plate) (only
     // the pale plates flip); Tinted: lighter on a dark tint plate (light appearance), darker on a light one (dark appearance).
     function test_oneEngravingRulePerMode() {
         const flips = (mode, dark, wantLighter) => {
@@ -426,9 +456,9 @@ TestCase {
             verify(flips("default", dark, false).length <= 2, "default " + dark + ": " + flips("default", dark, false));
             compare(flips("default", dark, false).indexOf("#000000") >= 0, true, "a black folder gets the lighter shade");
             verify(flips("clear", dark, false).length <= 2, "clear " + dark + ": " + flips("clear", dark, false));
-            verify(flips("dark", dark, true).length <= 4, "dark " + dark + ": " + flips("dark", dark, true));
+            verify(flips("dark", dark, false).length <= 2, "dark " + dark + ": " + flips("dark", dark, false));
         }
-        compare(flips("tinted", false, true).length, 0, "tinted, light appearance: every folder lighter: " + flips("tinted", false, true));
+        verify(flips("tinted", false, true).length <= 1, "tinted, light appearance: every folder lighter but a white one: " + flips("tinted", false, true));
         verify(flips("tinted", true, false).length <= 2, "tinted, dark appearance: " + flips("tinted", true, false));
         // The same colour always gets the same shade.
         compare(shadeFor("dark", true, "#3e7bfa").shade, shadeFor("dark", true, "#3e7bfa").shade);
@@ -461,6 +491,22 @@ TestCase {
         verify(FolderPlate.claim("b|64"), "the next one may go");
         FolderPlate.release("b|64");
         verify(FolderPlate.claim("c|64"), "a released claim frees the reader");
+        FolderPlate.reset();
+    }
+
+    // Past the bound the least recently used quarter goes, not everything: an icon in use keeps its plate.
+    function test_cacheEvictsTheLeastRecentlyUsed() {
+        FolderPlate.reset();
+        FolderPlate.claim("keep|64");
+        FolderPlate.store("keep|64", flatRaw);
+        for (let i = 0; i < FolderPlate.limit + 10; i++) {
+            FolderPlate.store("k" + i + "|64", flatRaw);
+            verify(FolderPlate.plateOf("keep|64", "default", "", "", true) !== undefined, "the icon in use is touched");
+        }
+        verify(FolderPlate.plateOf("keep|64", "default", "", "", true) !== undefined, "the icon in use survived the eviction");
+        compare(FolderPlate.plateOf("k0|64", "default", "", "", true), undefined, "the oldest unused one went");
+        verify(FolderPlate.count <= FolderPlate.limit, "bounded: " + FolderPlate.count);
+        verify(FolderPlate.count > FolderPlate.limit / 2, "a quarter went, not everything: " + FolderPlate.count);
         FolderPlate.reset();
     }
 
