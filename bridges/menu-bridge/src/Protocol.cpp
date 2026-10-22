@@ -205,4 +205,14 @@ namespace gf::menubridge {
         });
     }
 
+    QByteArray launcherMessage(const QString& app, std::optional<qint64> count, std::optional<double> progress, std::optional<bool> urgent) {
+        return line(QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("launcher")},
+            {QStringLiteral("app"), app},
+            {QStringLiteral("count"), count ? QJsonValue(*count) : QJsonValue(QJsonValue::Null)},
+            {QStringLiteral("progress"), progress ? QJsonValue(*progress) : QJsonValue(QJsonValue::Null)},
+            {QStringLiteral("urgent"), urgent ? QJsonValue(*urgent) : QJsonValue(QJsonValue::Null)},
+        });
+    }
+
 } // namespace gf::menubridge

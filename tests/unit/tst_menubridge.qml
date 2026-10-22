@@ -112,6 +112,42 @@ TestCase {
         compare(msg.items[0].children[5].toggleState, 1);
     }
 
+    // ADR-0018: launcher lines (an application's own badge, progress and attention hint).
+    function test_launcherLines() {
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"firefox\",\"count\":5,\"progress\":0.5,\"urgent\":true}"),
+                {type: "launcher", app: "firefox", count: 5, progress: 0.5, urgent: true});
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"org.a-b_c.D\",\"count\":null,\"progress\":-1,\"urgent\":false}"),
+                {type: "launcher", app: "org.a-b_c.D", count: null, progress: -1, urgent: false});
+        // Missing keys read as null; all null is "forget this app".
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"x\"}"), {type: "launcher", app: "x", count: null, progress: null, urgent: null});
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"x\",\"count\":0}").count, 0);
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"x\",\"count\":99999}").count, 99999);
+    }
+
+    function test_launcherLinesAreValidated() {
+        const bad = [
+            "{\"type\":\"launcher\"}",
+            "{\"type\":\"launcher\",\"app\":\"\"}",
+            "{\"type\":\"launcher\",\"app\":5}",
+            "{\"type\":\"launcher\",\"app\":\"a b\"}",
+            "{\"type\":\"launcher\",\"app\":\"a/b\"}",
+            "{\"type\":\"launcher\",\"app\":\"<b>\"}",
+            "{\"type\":\"launcher\",\"app\":\"" + "a".repeat(256) + "\"}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"count\":-1}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"count\":100000}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"count\":1.5}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"count\":\"5\"}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"progress\":1.5}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"progress\":-2}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"progress\":\"0.5\"}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"urgent\":1}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"urgent\":\"true\"}"
+        ];
+        for (const line of bad)
+            compare(Bridge.parseBridgeLine(line), null, line);
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"" + "a".repeat(255) + "\"}").app.length, 255);
+    }
+
     function test_untrustedItemsAreSanitized() {
         const items = Bridge.sanitizeItems([
             {id: -1, label: "negative"},

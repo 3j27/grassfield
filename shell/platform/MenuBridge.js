@@ -16,7 +16,8 @@ var limits = {
     key: 32,               // characters of one shortcut key name
     keys: 6,               // keys of one shortcut
     code: 64,              // characters of an error code
-    message: 256           // characters of an error message
+    message: 256,          // characters of an error message
+    launcherCount: 99999   // largest badge count of a launcher message
 };
 
 // Validated lowercase hex of a Hyprland window address ("0x" prefix optional), "" if invalid.
@@ -147,7 +148,7 @@ function sanitizeItems(items, depth, budget) {
 }
 
 // One bridge line -> {type: "status", state, registrar} | {type: "menu", window, revision, items}
-// | {type: "error", window, code, message}, or null.
+// | {type: "launcher", app, count, progress, urgent} | {type: "error", window, code, message}, or null.
 function parseBridgeLine(line) {
     if (typeof line !== "string" || line.length === 0 || line.length > limits.line)
         return null;
@@ -169,6 +170,21 @@ function parseBridgeLine(line) {
         if (window === "" || !Number.isInteger(msg.revision) || msg.revision < 0 || !Array.isArray(msg.items))
             return null;
         return {type: "menu", window: window, revision: msg.revision, items: sanitizeItems(msg.items, 0, {items: limits.items})};
+    }
+    case "launcher": {
+        // ADR-0018: an application's own badge, progress and attention hint. null = this update did not touch it.
+        if (typeof msg.app !== "string" || !/^[A-Za-z0-9._-]{1,255}$/.test(msg.app))
+            return null;
+        const count = msg.count === null || msg.count === undefined ? null : msg.count;
+        const progress = msg.progress === null || msg.progress === undefined ? null : msg.progress;
+        const urgent = msg.urgent === null || msg.urgent === undefined ? null : msg.urgent;
+        if (count !== null && (!Number.isInteger(count) || count < 0 || count > limits.launcherCount))
+            return null;
+        if (progress !== null && (typeof progress !== "number" || !isFinite(progress) || progress < -1 || progress > 1))
+            return null;
+        if (urgent !== null && typeof urgent !== "boolean")
+            return null;
+        return {type: "launcher", app: msg.app, count: count, progress: progress, urgent: urgent};
     }
     case "error":
         return {
