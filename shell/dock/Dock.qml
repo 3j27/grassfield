@@ -221,12 +221,49 @@ Scope {
     // Drag-out removal follows "cancel on interruption": anything that can take the pointer or the focus during a tile drag marks the
     // drag interrupted (win.dragInterrupted), and an interrupted drag never removes its tile (it glides back). Events only. The
     // Dock's own drag feedback (Remove label, puff, tooltip) is inside its window and reports none of these.
+    // Counts every interruption event, drag or not: a press records it when the button goes down, and a drag that starts later in the same
+    // press keeps any interruption seen since (starting a drag never clears one).
+    property int dragInterruptions: 0
+
     function interruptDrag(): void {
+        dragInterruptions++;
         const all = windows.instances;
         for (let i = 0; i < all.length; i++) {
             if (all[i].dragFrom >= 0)
                 all[i].dragInterrupted = true;
         }
+    }
+
+    // CLICK CANCELLATION, its own short list (not the drag-out list above: that one over-cancels on purpose, owner batch 7, and a window
+    // retitling every few milliseconds must not eat Dock clicks). A press on a tile is taken away from the Dock, and its release never
+    // clicks, only when:
+    //   1. a shell surface opens over the Dock (Search, Overview, Apps, the switcher, a Dock or menu-bar menu, Notification Center,
+    //      Control Center): FocusReturn.surfaceOpened, and Popups.kind switching to a popup;
+    //   2. the session locks (FocusReturn.lockedChanged);
+    //   3. Qt cancels the grab or the pointer leaves the tile's handler (TapHandler.canceled / a cancelled grab, in the delegate).
+    // Window titles, focus changes and windows closing are NOT in the list (a window OPENING ends a held press in Qt, see lastWindowEvent).
+    // A tile records clickCancels when its button goes down and refuses its tap when the value changed.
+    property int clickCancels: 0
+
+    // Time (ms) of the last window OPENING (an insertion into the window list; a closing never ends a press). Qt ends a held press with a synthesized release, and a
+    // tap, when a window opens (nested probe: pressed, toplevels-changed, 35 ms later tap + release with grab state 8, no hover or cancel
+    // event, nothing that tells it from a real release). A press that began before such an event and whose tap comes within
+    // Tokens.dockClickWindowGuard of it is refused: it was not finished by the user. A real click that coincides with a window opening
+    // within that time is lost and costs one repeated click.
+    property real lastWindowEvent: 0
+
+    // Fixtures only (IPC dock forcehold): every press on an app tile counts as having opened the hold menu at once (no popup), so a test
+    // gets "menu first, then the drag of the same press" deterministically instead of racing a hook against the 550 ms timer.
+    property bool forceHoldMenu: false
+
+    // Fixtures only (IPC dock forceinterrupt): every press on an app tile is interrupted (one interruption event, no popup, no menu) the
+    // moment it goes down, so a test reaches "interrupted before the drag starts" without racing a real surface against the drag.
+    property bool forceInterrupt: false
+
+    function cancelClicks(): void {
+        clickCancels++;
+        if (VisualFixtures.active)
+            console.info("dock-launch: click-cancel", Date.now());
     }
 
     onKeyboardModeChanged: interruptDrag()
@@ -237,6 +274,7 @@ Scope {
 
         function onSurfaceOpened(name: string): void {
             root.interruptDrag();
+            root.cancelClicks();
         }
 
         function onSurfaceClosed(name: string): void {
@@ -246,6 +284,7 @@ Scope {
         // The session lock.
         function onLockedChanged(): void {
             root.interruptDrag();
+            root.cancelClicks();
         }
     }
 
@@ -255,6 +294,8 @@ Scope {
 
         function onKindChanged(): void {
             root.interruptDrag();
+            if (Popups.kind !== "")
+                root.cancelClicks();
         }
     }
 
@@ -289,6 +330,13 @@ Scope {
         function onValuesChanged(): void {
             root.interruptDrag();
             root.rebuild();
+        }
+
+        // Only a window OPENING makes Qt end a held press (nested probe); a window closing never did (3 of 3 clicks tapped).
+        function onObjectInsertedPost(object: var, index: int): void {
+            root.lastWindowEvent = Date.now();
+            if (VisualFixtures.active)
+                console.info("dock-launch: toplevel-inserted", Date.now());
         }
     }
 
@@ -337,7 +385,7 @@ Scope {
         }
     }
 
-    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned>. autohide, magnify, click
+    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup|holdmenu|forcehold|forceinterrupt>. autohide, magnify, click
     // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert.
     IpcHandler {
         target: "dock"
@@ -347,6 +395,39 @@ Scope {
             if (!VisualFixtures.active)
                 return "[]";
             return JSON.stringify(Settings.dockPinned);
+        }
+
+        function forceinterrupt(on: bool): void {
+            if (VisualFixtures.active)
+                root.forceInterrupt = on;
+        }
+
+        // Fixtures only: while on, every press on an app tile is marked as having opened the hold menu at the moment it goes down.
+        function forcehold(on: bool): void {
+            if (VisualFixtures.active)
+                root.forceHoldMenu = on;
+        }
+
+        // The press held on tile `index` becomes a hold menu without a popup (fixtures only): the press is marked as having opened the menu
+        // and the interruption a popup opening causes is recorded, in this order, before any drag of the press starts. A real hold menu
+        // takes the pointer and usually ends the press; only a stalled GUI thread lets the drag of the same press follow (reviewer: menu
+        // +6569 ms, drag +27 ms later), and that order cannot be forced from outside, so the hook forces the state it leaves behind.
+        function holdmenu(index: int, screen: string): void {
+            if (!VisualFixtures.active)
+                return;
+            const all = windows.instances;
+            let win = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    win = all[i];
+            }
+            if (win)
+                win.markHoldMenu(index);
+        }
+
+        // Kind of the open shell popup ("" when none; fixtures only): tests close menus before a part.
+        function popup(): string {
+            return VisualFixtures.active ? Popups.kind : "";
         }
 
         // Keys of the tiles in order (JSON list), the index `click` takes (fixtures only).
@@ -384,6 +465,19 @@ Scope {
         function click(index: int): void {
             if (VisualFixtures.active && root.items[index])
                 root.activateItem(root.items[index]);
+        }
+
+        // Centre "x y" of tile `index` on `screen` in output coordinates (fixtures only; the magnification must be off).
+        function centre(index: int, screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            let win = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    win = all[i];
+            }
+            return win ? win.tileCentre(index) : "";
         }
 
         function keyboard(): void {
@@ -448,10 +542,10 @@ Scope {
             // Set ONLY by the drag handler when the pointer button is really released (exclusive grab ended by a release event)
             // away from the drop zone. Every other end of a drag (cancelled or stolen grab) leaves it false.
             property bool releasedOutside: false
-            // Set by root.interruptDrag() and by a cancelled or stolen grab, cleared when a drag starts: something took the pointer or
-            // the focus during the drag (a shell surface, a popup, the lock, a window, workspace or monitor event, Esc in keyboard
-            // mode). Qt then ends the drag with a synthesized release that looks real, so an interrupted drag never removes: the
-            // tile glides back.
+            // Set by root.interruptDrag() and by a cancelled or stolen grab, cleared when a drag ends: something took the pointer or the
+            // focus during the drag (a shell surface, a popup, the lock, a window, workspace or monitor event, Esc in keyboard mode). Qt
+            // then ends the drag with a synthesized release that looks real, so an interrupted drag changes no pins (no removal, no
+            // reorder): the tile glides back. A press that was already interrupted when the drag would start does not start it at all.
             property bool dragInterrupted: false
             readonly property bool dragRemovable: dragFrom >= 0 && !!root.items[dragFrom] && (root.items[dragFrom].pinned || root.items[dragFrom].recent === true) && root.items[dragFrom].windows.length === 0
             property real poofX: 0
@@ -467,6 +561,7 @@ Scope {
                 const item = all[from];
                 const out = releasedOutside && !dragInterrupted && dragOut && dragRemovable;
                 const dragOutNotReleased = !out && dragOut && dragRemovable;
+                const interrupted = dragInterrupted;
                 const slot = dragSlot;
                 const fromApp = dragFromApp;
                 releasedOutside = false;
@@ -496,8 +591,9 @@ Scope {
                     }
                     return;
                 }
-                if (dragOutNotReleased) {
-                    // Dragged out but not released out there (interrupted): nothing changes, the tile glides back.
+                if (dragOutNotReleased || interrupted) {
+                    // Dragged out but not released out there, or interrupted by anything: no pin changes (no removal, no reorder), the
+                    // tile glides back to its slot.
                     tileItem.glideFrom(dx, dy);
                     return;
                 }
@@ -625,6 +721,25 @@ Scope {
                         return;
                     }
                 }
+            }
+
+            // Test hook (IPC dock holdmenu): the pressed tile `index` counts as having opened the hold menu.
+            function markHoldMenu(index: int): void {
+                const t = tileRepeater.itemAt(index);
+                if (!t)
+                    return;
+                t.menuByHold = true;
+                root.interruptDrag();
+                console.info("dock-launch: menu-by-hold (forced)", Date.now());
+            }
+
+            // "x y" of the icon centre of tile `index`, in output coordinates (test hook).
+            function tileCentre(index: int): string {
+                const t = tileRepeater.itemAt(index);
+                if (!t)
+                    return "";
+                const p = t.mapToItem(null, t.width / 2, t.height - indicatorArea - t.iconPx / 2);
+                return Math.round(p.x) + " " + Math.round(screen.height - height + p.y);
             }
 
             function openMenu(index: int): void {
@@ -837,6 +952,14 @@ Scope {
                                 // The button is held on an app tile: the icon darkens slightly (macOS).
                                 readonly property bool pressedDown: isApp && leftTap.pressed && !dragging
                                 property bool tipSuppressed: false
+                                // The Dock menu was opened by holding the button: the release is not a click.
+                                property bool menuByHold: false
+                                // root.clickCancels when the button went down, and whether Qt cancelled the press (the tap is refused then).
+                                property int pressMark: 0
+                                property bool pressCancelled: false
+                                property real pressTime: 0
+                                // root.dragInterruptions when the button went down (a drag of this press starts interrupted when it changed).
+                                property int dragMark: 0
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
@@ -1006,29 +1129,33 @@ Scope {
                                         duration: Appearance.duration(Tokens.motionNormal)
                                         easing.type: Easing.OutBounce
                                     }
+                                }
 
-                                    // Notification badge (counts from the notification history).
-                                    Rectangle {
-                                        visible: tile.badge > 0
-                                        height: Tokens.dockBadgeSize
-                                        width: Math.max(height, badgeLabel.implicitWidth + Tokens.spacingSm)
-                                        radius: height / 2
-                                        color: Appearance.colors.destructive
-                                        anchors.right: parent.right
-                                        anchors.top: parent.top
-                                        anchors.rightMargin: -Tokens.dockBadgeOverhang
-                                        anchors.topMargin: -Tokens.dockBadgeOverhang
+                                // Notification badge (counts from the notification history). Not a child of the icon: the press-dim layer
+                                // would clip the part that overhangs the icon. It hops with the icon.
+                                Rectangle {
+                                    visible: tile.badge > 0
+                                    transform: Translate {
+                                        y: -appIcon.lift
+                                    }
+                                    height: Tokens.dockBadgeSize
+                                    width: Math.max(height, badgeLabel.implicitWidth + Tokens.spacingSm)
+                                    radius: height / 2
+                                    color: Appearance.colors.destructive
+                                    anchors.right: appIcon.right
+                                    anchors.top: appIcon.top
+                                    anchors.rightMargin: -Tokens.dockBadgeOverhang
+                                    anchors.topMargin: -Tokens.dockBadgeOverhang
 
-                                        Text {
-                                            id: badgeLabel
-                                            textFormat: Text.PlainText
-                                            anchors.centerIn: parent
-                                            text: DockModel.badgeText(tile.badge)
-                                            color: Appearance.colors.destructiveText
-                                            font.family: Appearance.fontFamily
-                                            font.pixelSize: Tokens.typographyCaptionSize
-                                            font.weight: Tokens.typographyMenuBoldWeight
-                                        }
+                                    Text {
+                                        id: badgeLabel
+                                        textFormat: Text.PlainText
+                                        anchors.centerIn: parent
+                                        text: DockModel.badgeText(tile.badge)
+                                        color: Appearance.colors.destructiveText
+                                        font.family: Appearance.fontFamily
+                                        font.pixelSize: Tokens.typographyCaptionSize
+                                        font.weight: Tokens.typographyMenuBoldWeight
                                     }
                                 }
 
@@ -1168,8 +1295,12 @@ Scope {
 
                                 HoverHandler {
                                     id: tileHover
-                                    onHoveredChanged: if (!hovered)
-                                        tile.tipSuppressed = false
+                                    onHoveredChanged: {
+                                        if (VisualFixtures.active && leftTap.pressed)
+                                            console.info("dock-launch: hover-while-pressed", hovered, Date.now());
+                                        if (!hovered)
+                                            tile.tipSuppressed = false;
+                                    }
                                     enabled: !tile.isSeparator
                                     cursorShape: Qt.ArrowCursor
                                 }
@@ -1276,8 +1407,21 @@ Scope {
                                     }
                                     onActiveChanged: {
                                         if (active) {
+                                            // A press that is already interrupted (it opened the hold menu, or a surface, popup, window or focus
+                                            // event came since the button went down) does not become a drag: nothing moves, no gap opens, the
+                                            // tooltip stays, the release changes no pin. The decision is taken here, from per-press state
+                                            // (tile.menuByHold, root.dragInterruptions against the mark taken at the press), not from an enabled
+                                            // flag or from leftTap.pressed: the tap handler cancels at the drag threshold, which would
+                                            // re-enable a handler guarded by it within the same event. win.dragFrom stays -1.
+                                            if (tile.menuByHold || root.dragInterruptions !== tile.dragMark) {
+                                                if (VisualFixtures.active)
+                                                    console.info("dock-launch: drag-refused", tile.menuByHold ? "hold-menu" : "interrupted", Date.now());
+                                                return;
+                                            }
                                             win.releasedOutside = false;
                                             win.dragInterrupted = false;
+                                            if (VisualFixtures.active)
+                                                console.info("dock-launch: drag-start", Date.now());
                                             win.dragSnap = false;
                                             win.dragFrom = tile.index;
                                             win.dragDx = 0;
@@ -1292,7 +1436,7 @@ Scope {
                                         }
                                     }
                                     onTranslationChanged: {
-                                        if (active) {
+                                        if (active && win.dragFrom === tile.index) {
                                             win.dragDx = translation.x;
                                             // Never above the point where the "Remove" label would leave the window.
                                             const iconTop = win.height - Tokens.dockBottomMargin - Tokens.dockPadding - win.indicatorArea - tile.iconPx;
@@ -1305,19 +1449,75 @@ Scope {
                                     id: leftTap
                                     enabled: !tile.isSeparator
                                     acceptedButtons: Qt.LeftButton
-                                    // macOS launches on release however long the button was held (the default threshold turns a hold
-                                    // of about half a second into no click at all); moving away still cancels it.
-                                    longPressThreshold: Tokens.dockClickHoldLimit
-                                    // macOS: the label goes away on the click and stays away until the pointer leaves the tile.
-                                    onPressedChanged: if (pressed)
-                                        tile.tipSuppressed = true
-                                    onTapped: root.activateItem(tile.modelData)
+                                    // macOS: a press held past Tokens.dockMenuHold opens the Dock menu and its release launches nothing; a
+                                    // shorter press is a click; a press that turns into a drag is a drag (the drag cancels this handler).
+                                    // Only a tile with a Dock menu (apps and Files, the same as a right click) takes the hold; the others
+                                    // (Apps, Trash, minimized windows) keep the click on release however long the button is held, as before.
+                                    longPressThreshold: tile.isApp ? Tokens.dockMenuHold / 1000 : Tokens.dockClickHoldLimit
+                                    // The label goes away on the press and stays away until the pointer leaves the tile.
+                                    onPressedChanged: {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: pressed", pressed, Date.now());
+                                        if (pressed) {
+                                            tile.tipSuppressed = true;
+                                            tile.menuByHold = false;
+                                            tile.pressMark = root.clickCancels;
+                                            tile.pressCancelled = false;
+                                            tile.pressTime = Date.now();
+                                            tile.dragMark = root.dragInterruptions;
+                                            if (root.forceHoldMenu && tile.isApp)
+                                                win.markHoldMenu(tile.index);
+                                            if (root.forceInterrupt && tile.isApp)
+                                                root.interruptDrag();
+                                        }
+                                    }
+                                    onCanceled: {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: canceled", Date.now());
+                                        tile.pressCancelled = true;
+                                    }
+                                    onGrabChanged: (transition, point) => {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: grab", transition, point.state, Date.now());
+                                        if (transition === PointerDevice.CancelGrabExclusive || transition === PointerDevice.CancelGrabPassive)
+                                            tile.pressCancelled = true;
+                                    }
+                                    onLongPressed: if (tile.isApp) {
+                                        tile.menuByHold = true;
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: menu-by-hold", Date.now());
+                                        win.openMenu(tile.index);
+                                    }
+                                    onTapped: {
+                                        if (tile.menuByHold)
+                                            return;
+                                        // Press taken away from the Dock (a shell surface or popup opened, the lock, or Qt cancelled it; see root.clickCancels): nothing happens.
+                                        if (root.clickCancels !== tile.pressMark || tile.pressCancelled) {
+                                            if (VisualFixtures.active)
+                                                console.info("dock-launch: tap-refused-interrupted", Date.now());
+                                            return;
+                                        }
+                                        // A window OPENED during the press and the release follows it at once: Qt ended the press.
+                                        if (root.lastWindowEvent >= tile.pressTime && Date.now() - root.lastWindowEvent < Tokens.dockClickWindowGuard) {
+                                            if (VisualFixtures.active)
+                                                console.info("dock-launch: tap-refused-window-event", Date.now());
+                                            return;
+                                        }
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: tap", Date.now());
+                                        root.activateItem(tile.modelData);
+                                    }
                                 }
 
                                 TapHandler {
                                     enabled: tile.isApp
                                     acceptedButtons: Qt.RightButton
-                                    onTapped: win.openMenu(tile.index)
+                                    // macOS: a secondary click opens the Dock menu on the press, however long the button is held.
+                                    onPressedChanged: if (pressed) {
+                                        if (VisualFixtures.active)
+                                            console.info("dock-launch: menu-by-right-press", Date.now());
+                                        win.openMenu(tile.index);
+                                    }
                                 }
                             }
                         }
