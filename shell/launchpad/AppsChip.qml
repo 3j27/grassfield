@@ -34,13 +34,14 @@ Item {
     }
 
     Rectangle {
-        // Keyboard focus ring.
+        // Keyboard focus ring: outside the capsule, accent and translucent (as macOS).
         anchors.fill: parent
+        anchors.margins: -Tokens.controlFocusOutline
         radius: height / 2
         visible: root.focused
         color: "transparent"
-        border.width: Tokens.controlFocusRing
-        border.color: root.active ? Appearance.colors.accentText : Appearance.colors.accent
+        border.width: Tokens.controlFocusOutline
+        border.color: Appearance.withAlpha(Appearance.colors.accent, Tokens.controlFocusOutlineOpacity)
     }
 
     Text {

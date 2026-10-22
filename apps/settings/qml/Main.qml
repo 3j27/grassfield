@@ -243,6 +243,9 @@ Window {
             }
             model: root.filtered
             spacing: Tokens.spacingXs / 2
+            // Room for the focus ring outside the first and last rows (the list clips).
+            topMargin: Tokens.controlFocusOutline
+            bottomMargin: Tokens.controlFocusOutline
             clip: true
             interactive: false
             keyNavigationEnabled: false
@@ -284,8 +287,17 @@ Window {
                     anchors.fill: parent
                     radius: Tokens.radiusControl
                     color: entry.selected ? Appearance.colors.accent : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
-                    border.width: entry.selected && list.activeFocus ? Tokens.controlFocusRing : 0
-                    border.color: Appearance.colors.text
+                }
+
+                // Keyboard focus ring: outside the selected row, accent and translucent (as macOS).
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -Tokens.controlFocusOutline
+                    radius: Tokens.radiusControl + Tokens.controlFocusOutline
+                    visible: entry.selected && list.activeFocus
+                    color: "transparent"
+                    border.width: Tokens.controlFocusOutline
+                    border.color: Appearance.withAlpha(Appearance.colors.accent, Tokens.controlFocusOutlineOpacity)
                 }
 
                 Icon {

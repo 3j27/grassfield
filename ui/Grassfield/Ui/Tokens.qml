@@ -353,8 +353,12 @@ QtObject {
     readonly property int controlToggleWidth: 36
     // F1 gap 12: toggle track 36x16
     readonly property int controlToggleHeight: 16
-    // F1 gap 13: focus ring ~3.5, accent (gs sheets, 2x crops)
-    readonly property int controlFocusRing: 3
+    // estimate, pending F1 measurement from design/reference
+    readonly property int controlFocusRing: 2
+    // F1 gap 13: macOS keyboard focus ring ~3.5, drawn outside the control, following its shape
+    readonly property int controlFocusOutline: 3
+    // estimate: the macOS focus ring is the accent, translucent
+    readonly property real controlFocusOutlineOpacity: 0.6
     // estimate
     readonly property int controlTooltipDelay: 500
     // F1 gap 13: push button minimum width ~64

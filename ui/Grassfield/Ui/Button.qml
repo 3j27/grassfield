@@ -47,8 +47,6 @@ Item {
         anchors.fill: parent
         radius: root.capsule ? height / 2 : Tokens.radiusControl
         color: root.primary ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: root.primary ? Appearance.colors.text : Appearance.colors.accent
 
         Rectangle {
             anchors.fill: parent
@@ -56,6 +54,17 @@ Item {
             color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity)
             visible: root.hovered
         }
+    }
+
+    // Keyboard focus ring: outside the control, following its shape, accent and translucent (as macOS).
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -Tokens.controlFocusOutline
+        radius: (root.capsule ? root.height / 2 : Tokens.radiusControl) + Tokens.controlFocusOutline
+        visible: root.activeFocus
+        color: "transparent"
+        border.width: Tokens.controlFocusOutline
+        border.color: Appearance.withAlpha(Appearance.colors.accent, Tokens.controlFocusOutlineOpacity)
     }
 
     Text {
