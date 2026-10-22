@@ -8,6 +8,7 @@
 #include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
 #include "Ipc.hpp"
+#include "LayerPointer.hpp"
 #include "Minimize.hpp"
 #include "Overview.hpp"
 #include "OverviewFocus.hpp"
@@ -96,6 +97,10 @@ namespace {
         // left on a strip window (input blocked, no motion since) moves to the surface under the cursor before
         // anything else sees the press (R13 review of 46b3e9b).
         l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) {
+            // A shell layer mapped or took the keyboard under the resting pointer and its pointer focus is not refreshed yet
+            // (a button was held, no pointer device, or the press came in the same event loop pass): a press is delivered
+            // at the right place, a release schedules the refresh after Hyprland handled it (FR51).
+            gf::guarded("layer pointer press", [&] { gf::layerPointer::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             gf::guarded("stages pointer guard", [&] { gf::stager::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             // A press after an overview focus request wins over the target the shell named (recorded only).
             gf::guarded("overview focus press", [&] { gf::overviewFocus::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
@@ -186,6 +191,7 @@ namespace {
         step("stages", [] { gf::stager::stop(); });          // strip windows shown normally, input unblocked, transformers detached
         step("overview focus", [] { gf::overviewFocus::stop(); }); // a waiting request ends "unavailable"; watches and timer removed
         step("cursor refresh", [] { gf::cursorRefresh::stop(); }); // trailing-refresh timer removed (its callback is in this library)
+        step("layer pointer", [] { gf::layerPointer::stop(); });   // layer listener and event-loop callback removed
         step("appmenu", [] { gf::appmenuServer::stop(); }); // no wl_resource may point into this library after dlclose
         step("events", [] { gf::ipc::stopEvents(); });      // after the appmenu clears: waiting events posted, timer removed
         step("ipc", [] { gf::ipc::unregisterAll(); });
@@ -208,7 +214,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     auto& s  = state();
     s.handle = handle;
 
-    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu, overview, overview focus, desktop focus, Stages, cursor refresh and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
+    PLUGIN_DESCRIPTION_INFO info{.name = gf::kPluginName, .description = "Grassfield titlebars, minimize, appmenu, overview, overview focus, desktop focus, Stages, cursor refresh, layer pointer focus and shell IPC (gfc/1)", .author = "Grassfield", .version = gf::kPluginVersion};
 
     const std::string serverHash = __hyprland_api_get_hash();
     const std::string clientHash = __hyprland_api_get_client_hash();
@@ -266,6 +272,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         if (!cursorRefreshOk) {
             gf::guarded("cursor refresh rollback", [] { gf::cursorRefresh::stop(); });
             gf::log(Log::WARN, "no renderer for the cursor refresh; cursor-refresh not advertised");
+        }
+        // Optional feature: without it a click without motion after a shell layer mapped may miss it (Hyprland 0.56.2, FR51).
+        bool layerPointerOk = false;
+        gf::guarded("layer pointer start", [&] { layerPointerOk = gf::layerPointer::start(); });
+        if (!layerPointerOk) {
+            gf::guarded("layer pointer rollback", [] { gf::layerPointer::stop(); });
+            gf::log(Log::WARN, "layer pointer listener failed to register; layer-pointer not advertised");
         }
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");

@@ -4,6 +4,7 @@
 #include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
 #include "GenieDraw.hpp"
+#include "LayerPointer.hpp"
 #include "Minimize.hpp"
 #include "Overview.hpp"
 #include "OverviewFocus.hpp"
@@ -180,7 +181,7 @@ namespace gf::ipc {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
-                                                state().luaTileRegistered && state().luaConfigRegistered);
+                                                state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
