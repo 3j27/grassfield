@@ -4,27 +4,46 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <utility>
 
 using namespace gf::titlebar;
 
 TEST(TitlebarLayout, DefaultMetricsMatchTheSpec) {
+    // macOS 26 titlebar-only window (docs/testing/f1-reference-gaps.md, "Window chrome").
     const Metrics m;
-    EXPECT_DOUBLE_EQ(m.height, 28.0);
-    EXPECT_DOUBLE_EQ(m.diameter, 12.0);
-    EXPECT_DOUBLE_EQ(m.spacing, 8.0);
-    EXPECT_DOUBLE_EQ(m.insetLeft, 12.0);
+    EXPECT_DOUBLE_EQ(m.height, 32.0);
+    EXPECT_DOUBLE_EQ(m.diameter, 14.0);
+    EXPECT_DOUBLE_EQ(m.spacing, 9.0);
+    EXPECT_DOUBLE_EQ(m.insetLeft, 9.0);
+    EXPECT_DOUBLE_EQ(m.hitSlop, 14.0 / 6.0);
+}
+
+TEST(TitlebarLayout, HitSlopScalesWithTheDiameter) {
+    // 2 px around the former 12-px lights: the same share of the new diameter.
+    EXPECT_DOUBLE_EQ(gf::theme::kButtonHitSlop / gf::theme::kButtonDiameter, 2.0 / 12.0);
 }
 
 TEST(TitlebarLayout, ButtonsAreLeftAlignedCloseMinimizeZoom) {
-    EXPECT_EQ(buttonRect(Button::Close), (Rect{12, 8, 12, 12}));
-    EXPECT_EQ(buttonRect(Button::Minimize), (Rect{32, 8, 12, 12}));
-    EXPECT_EQ(buttonRect(Button::Zoom), (Rect{52, 8, 12, 12}));
-    EXPECT_DOUBLE_EQ(buttonsRightEdge(), 64.0);
+    EXPECT_EQ(buttonRect(Button::Close), (Rect{9, 9, 14, 14}));
+    EXPECT_EQ(buttonRect(Button::Minimize), (Rect{32, 9, 14, 14}));
+    EXPECT_EQ(buttonRect(Button::Zoom), (Rect{55, 9, 14, 14}));
+    EXPECT_DOUBLE_EQ(buttonsRightEdge(), 69.0);
 }
 
 TEST(TitlebarLayout, ButtonsAreVerticallyCentered) {
     const Rect r = buttonRect(Button::Close);
-    EXPECT_DOUBLE_EQ(r.y + (r.h / 2.0), 14.0);
+    EXPECT_DOUBLE_EQ(r.y + (r.h / 2.0), 16.0);
+}
+
+TEST(TitlebarLayout, FirstLightAndPitchMatchTheReference) {
+    // Reference: first centre (15.6, 15.6) +-1 from the window's top-left corner, centres 23 apart.
+    const Rect close = buttonRect(Button::Close);
+    const Rect min   = buttonRect(Button::Minimize);
+    const Rect zoom  = buttonRect(Button::Zoom);
+    EXPECT_NEAR(close.x + (close.w / 2.0), 15.6, 1.0);
+    EXPECT_NEAR(close.y + (close.h / 2.0), 15.6, 1.0);
+    EXPECT_DOUBLE_EQ(min.x - close.x, 23.0);
+    EXPECT_DOUBLE_EQ(zoom.x - min.x, 23.0);
 }
 
 TEST(TitlebarLayout, CustomMetricsScaleTheLayout) {
@@ -37,36 +56,52 @@ TEST(TitlebarLayout, CustomMetricsScaleTheLayout) {
 }
 
 TEST(TitlebarLayout, HitTestButtonCenters) {
-    EXPECT_EQ(hitTest(18, 14, 400), HitTarget::Close);
-    EXPECT_EQ(hitTest(38, 14, 400), HitTarget::Minimize);
-    EXPECT_EQ(hitTest(58, 14, 400), HitTarget::Zoom);
+    EXPECT_EQ(hitTest(16, 16, 400), HitTarget::Close);
+    EXPECT_EQ(hitTest(39, 16, 400), HitTarget::Minimize);
+    EXPECT_EQ(hitTest(62, 16, 400), HitTarget::Zoom);
 }
 
 TEST(TitlebarLayout, HitTestUsesCircleWithSlop) {
-    // radius 6 + slop 2 = 8 from the close center (18, 14)
-    EXPECT_EQ(hitTest(18 + 7.9, 14, 400), HitTarget::Close);
-    EXPECT_EQ(hitTest(18, 14 - 7.9, 400), HitTarget::Close);
-    // corner of the bounding square grown by the slop is outside the circle
-    EXPECT_EQ(hitTest(18 + 7, 14 + 7, 400), HitTarget::DragArea);
+    // radius 7 + slop 2.33 = 9.33 around each centre: close (16, 16), minimize (39, 16), zoom (62, 16)
+    for (const auto& [cx, target] : {std::pair{16.0, HitTarget::Close}, std::pair{39.0, HitTarget::Minimize}, std::pair{62.0, HitTarget::Zoom}}) {
+        EXPECT_EQ(hitTest(cx + 9.3, 16, 400), target) << cx;
+        EXPECT_EQ(hitTest(cx - 9.3, 16, 400), target) << cx;
+        EXPECT_EQ(hitTest(cx, 16 - 9.3, 400), target) << cx;
+        EXPECT_EQ(hitTest(cx, 16 + 9.3, 400), target) << cx;
+        EXPECT_EQ(hitTest(cx + 6.5, 16 + 6.5, 400), target) << cx; // 9.19 from the centre: outside the drawn circle, inside the slop
+        // just past the slop
+        EXPECT_EQ(hitTest(cx, 16 - 9.4, 400), HitTarget::DragArea) << cx;
+        EXPECT_EQ(hitTest(cx, 16 + 9.4, 400), HitTarget::DragArea) << cx;
+        // corner of the bounding square grown by the slop is outside the circle
+        EXPECT_EQ(hitTest(cx + 7, 16 + 7, 400), HitTarget::DragArea) << cx;
+    }
+    EXPECT_EQ(hitTest(16 - 9.4, 16, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(62 + 9.4, 16, 400), HitTarget::DragArea);
 }
 
 TEST(TitlebarLayout, HitTestGapBetweenButtonsIsDragArea) {
-    // Exactly between close (18) and minimize (38): 10 px from each center > 8.
-    EXPECT_EQ(hitTest(28, 14, 400), HitTarget::DragArea);
+    // Exactly between two centres: 11.5 px from each > 9.33.
+    EXPECT_EQ(hitTest(27.5, 16, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(50.5, 16, 400), HitTarget::DragArea);
+    // The slops of neighbours never meet: about 2.17 px of drag area on each side of the middle.
+    EXPECT_EQ(hitTest(16 + 9.4, 16, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(39 - 9.4, 16, 400), HitTarget::DragArea);
 }
 
 TEST(TitlebarLayout, HitTestRestOfBarIsDragArea) {
-    EXPECT_EQ(hitTest(200, 14, 400), HitTarget::DragArea);
-    EXPECT_EQ(hitTest(399.5, 27.5, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(200, 16, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(399.5, 31.5, 400), HitTarget::DragArea);
     EXPECT_EQ(hitTest(0, 0, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(16, 0.5, 400), HitTarget::DragArea);  // above the close button's slop
+    EXPECT_EQ(hitTest(16, 31.5, 400), HitTarget::DragArea); // below it
 }
 
 TEST(TitlebarLayout, HitTestOutsideIsNone) {
-    EXPECT_EQ(hitTest(-1, 14, 400), HitTarget::None);
-    EXPECT_EQ(hitTest(400, 14, 400), HitTarget::None);
-    EXPECT_EQ(hitTest(200, 28, 400), HitTarget::None);
+    EXPECT_EQ(hitTest(-1, 16, 400), HitTarget::None);
+    EXPECT_EQ(hitTest(400, 16, 400), HitTarget::None);
+    EXPECT_EQ(hitTest(200, 32, 400), HitTarget::None);
     EXPECT_EQ(hitTest(200, -0.1, 400), HitTarget::None);
-    EXPECT_EQ(hitTest(18, 14, 0), HitTarget::None);
+    EXPECT_EQ(hitTest(16, 16, 0), HitTarget::None);
 }
 
 TEST(TitlebarLayout, ButtonForHit) {
@@ -81,19 +116,19 @@ TEST(TitlebarLayout, TitleIsCenteredOnTheWholeBar) {
     const auto p = placeTitle(800, 100);
     ASSERT_TRUE(p.visible);
     EXPECT_DOUBLE_EQ(p.x, 350.0);
-    EXPECT_DOUBLE_EQ(p.maxWidth, 800 - (2 * (64 + 8)));
+    EXPECT_DOUBLE_EQ(p.maxWidth, 800 - (2 * (69 + 8)));
 }
 
 TEST(TitlebarLayout, LongTitleIsClampedClearOfTheButtons) {
     const auto p = placeTitle(300, 1000);
     ASSERT_TRUE(p.visible);
-    EXPECT_DOUBLE_EQ(p.maxWidth, 300 - 144);
-    EXPECT_DOUBLE_EQ(p.x, 72.0); // buttons end at 64, plus 8 px padding
+    EXPECT_DOUBLE_EQ(p.maxWidth, 300 - 154);
+    EXPECT_DOUBLE_EQ(p.x, 77.0); // buttons end at 69, plus 8 px padding
     EXPECT_GE(p.x, buttonsRightEdge() + Metrics{}.titlePadding);
 }
 
 TEST(TitlebarLayout, TitleHiddenWhenNoRoom) {
-    EXPECT_FALSE(placeTitle(144, 10).visible);
+    EXPECT_FALSE(placeTitle(154, 10).visible);
     EXPECT_FALSE(placeTitle(100, 10).visible);
     EXPECT_FALSE(placeTitle(800, 0).visible);
     EXPECT_DOUBLE_EQ(maxTitleWidth(100), 0.0);

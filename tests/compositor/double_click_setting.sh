@@ -25,6 +25,8 @@ hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
 # may name another worktree's session.
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
@@ -83,7 +85,7 @@ sleep 1.5
 read -r x0 y0 w0 h0 fs0 ws0 < <(geom)
 [[ -n ${w0:-} ]] || { say "double_click_setting: setup error: window not found"; exit 2; }
 bar_x=$((x0 + w0 / 2))
-bar_y=$((y0 - 14))
+bar_y=$((y0 - GF_TB_MID))
 double_click() { pointer abs "$1" "$2" sleep 50 click sleep 60 click sleep 800; }
 
 say "minimize"
@@ -102,7 +104,7 @@ if [[ $ws == special:minimized ]]; then
   sleep 1.5
   read -r x0 y0 w0 h0 fs0 ws0 < <(geom)
   bar_x=$((x0 + w0 / 2))
-  bar_y=$((y0 - 14))
+  bar_y=$((y0 - GF_TB_MID))
 fi
 
 say "none"
@@ -118,7 +120,7 @@ double_click "$bar_x" "$bar_y"
 read -r mx my mw mh fs ws < <(geom)
 [[ $fs == 1 ]]
 check "double-click maximizes" $? "${mw}x${mh} fullscreen $fs"
-double_click $((mx + mw / 2)) $((my - 14))
+double_click $((mx + mw / 2)) $((my - GF_TB_MID))
 read -r x y w h fs ws < <(geom)
 [[ $fs == 0 && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
 check "double-click restores" $? "${w}x${h} at ($x,$y) fullscreen $fs"

@@ -40,6 +40,8 @@ hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
 # may name another worktree's session.
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 if [[ -z $sock || -z $sig || -z $hypr_pid ]] || ! kill -0 "$hypr_pid" 2>/dev/null; then
@@ -148,7 +150,7 @@ for ((r = 1; r <= rounds; r++)); do
   check_click_on_b "drag" "$c_cap"
 
   # cancel: press C's close button (now moved by dx, dy), move away across C's content, release there.
-  cx=$((left + 18 + dx))
+  cx=$((left + GF_TB_CLOSE_X + dx))
   cy=$((bar_y + dy))
   pointer abs "$cx" "$cy" sleep 60 down drag $((cx + 200)) $((cy + 160)) up
   sleep 0.4

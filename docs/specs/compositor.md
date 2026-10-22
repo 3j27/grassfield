@@ -14,10 +14,13 @@ Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
 
-- Every standard window has a titlebar strip about 28 pt tall that is part of the window: same corner
+- Every standard window has a titlebar strip about 32 pt tall that is part of the window: same corner
   radius as the window at the top, square joint with the content, one continuous outline and shadow.
-- Three circular buttons on the left, 12 pt diameter, evenly spaced (8 pt gaps), vertically centered:
-  close, minimize, zoom. Glyphs appear on hover; inactive windows show grey buttons.
+  Titlebar-only windows have a corner radius of about 13 pt; toolbar windows about 26 pt
+  (docs/testing/f1-reference-gaps.md, "Window chrome").
+- Three circular buttons on the left, 14 pt diameter, evenly spaced (9 pt gaps, 23 pt pitch), the first centre
+  about 15.6 pt from the window's left and top edges, vertically centered: close, minimize, zoom. Glyphs appear on
+  hover; inactive windows show grey buttons.
 - The window title is centered on the full titlebar width in semibold system text, never overlapping the
   buttons, truncated with an ellipsis when too long.
 - Dragging the titlebar moves the window; double-clicking it performs the user's chosen action (default: zoom).
@@ -45,13 +48,14 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 - **FR1** The plugin refuses to hook anything when `__hyprland_api_get_hash()` differs from
   `__hyprland_api_get_client_hash()`, logs the mismatch and shows one notification.
 - **FR2** Every mapped floating window (not full screen, `decorate` rule not false, not X11
-  override-redirect) gets a titlebar decoration 28 px (logical) tall above its content; tiled and
+  override-redirect) gets a titlebar decoration 32 px (logical) tall above its content; tiled and
   full-screen windows get none (zero extents).
 - **FR3** The titlebar background uses the window's corner radius and rounding power on its top corners,
   is square at the bottom, and fills the content's rounded top corners; the window border and shadow
   wrap titlebar + content.
-- **FR4** Close, minimize, zoom buttons: 12 px circles, 8 px gaps, first one 12 px from the left edge,
-  vertically centered; colors from `compositor/src/core/Theme.hpp` (close `#E5534B`, minimize `#D9A93B`,
+- **FR4** Close, minimize, zoom buttons: 14 px circles, 9 px gaps (23 px pitch), first one 9 px from the left
+  edge (centres at x 16, 39, 62), vertically centered (y 16); each is hit inside its circle grown by 1/6 of the
+  diameter (2.33 px), and the gaps between the buttons stay drag area; colors from `compositor/src/core/Theme.hpp` (close `#E5534B`, minimize `#D9A93B`,
   zoom `#4FA64F`; background dark `rgba(40,40,44,1)` / light `rgba(236,236,238,1)`, dark in S2).
 - **FR5** The title is centered on the bar and kept at least 8 px clear of the buttons (symmetric margins);
   it is limited to the remaining width.
@@ -601,7 +605,7 @@ Chosen in Hyprland 0.56.2 after reading its headers and the v0.56.2 sources of `
   schedules the next frames; a 450 ms event-loop timer completes animations if no monitor renders.
 - **Rejected: animating the window's own `m_realPosition`/`m_realSize` (`PHLANIMVAR`).** Their begin callback
   calls `sendWindowSize` (v0.56.2 `CWindow` map code), so the client would be configured to every
-  intermediate size, the titlebar (fixed 28 px) would not scale, and the layout would fight the animation.
+  intermediate size, the titlebar (fixed height) would not scale, and the layout would fight the animation.
 - **Rejected: a custom `Desktop::IFadeout` added to `fadingOutState()`.** It would render in Hyprland's own
   planes, but Hyprland would then hold objects whose vtable lives in the plugin: unloading safely needs
   `clear()` (drops Hyprland's own fadeouts) or relying on `cleanupForMonitor`; the plugin-owned pass element
@@ -998,7 +1002,7 @@ Manual (L1, nested only):
 - Long titles are clamped to the available width by Hyprland's text renderer; ellipsis behaviour depends on it.
 - The content's rounded top corners are filled with the titlebar color; with `rounding_power` 2.6 a small
   corner curve of the content stays visible instead of a perfectly square joint.
-- The titlebar sits above the client's requested position, so a centered window's titlebar extends 28 px
+- The titlebar sits above the client's requested position, so a centered window's titlebar extends 32 px
   above the centered area.
 - Fractional scaling: geometry is scaled by the monitor scale but only scale 1 was tested.
 - Runtime unload through `scripts/nestctl` is exercised by `tests/compositor/overview.sh` (unload during an open

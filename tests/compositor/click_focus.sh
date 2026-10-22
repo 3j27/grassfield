@@ -65,6 +65,8 @@ done
 wanted() { [[ " ${sections[*]} " == *" $1 "* ]]; }
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 
@@ -259,8 +261,8 @@ read -r bx by bw bh < <(geom "$win_b")
 say "A $win_a ${aw}x${ah}+$ax+$ay   B $win_b ${bw}x${bh}+$bx+$by"
 a_in="$((ax + aw / 2)) $((ay + ah / 2))"
 b_in="$((bx + bw / 2)) $((by + bh / 2))"
-a_bar="$((ax + aw / 2)) $((ay - 14))"
-b_bar="$((bx + bw / 2)) $((by - 14))"
+a_bar="$((ax + aw / 2)) $((ay - GF_TB_MID))"
+b_bar="$((bx + bw / 2)) $((by - GF_TB_MID))"
 desk="$((mon_w / 2)) $((mon_h - 260))" # bare desktop between the windows and the Dock
 click_a() { local x y; read -r x y <<<"$a_in"; click "$x" "$y"; ms "${1:-400}"; }
 click_b() { local x y; read -r x y <<<"$b_in"; click "$x" "$y"; ms "${1:-400}"; }
@@ -373,7 +375,7 @@ client_case() { # <name>
   for path in "${paths[@]}"; do
     focus_a
     # Content: near the left edge, half-way down (clear of the centre buttons of a welcome screen such as Obsidian's).
-    if [[ $path == content ]]; then x=$((cx + 30)) y=$((cy + ch / 2)); else x=$((cx + cw / 2)) y=$((cy - 14)); fi
+    if [[ $path == content ]]; then x=$((cx + 30)) y=$((cy + ch / 2)); else x=$((cx + cw / 2)) y=$((cy - GF_TB_MID)); fi
     click "$x" "$y"
     ms 700
     act=$(active)

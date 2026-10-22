@@ -60,6 +60,8 @@ hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
 # may name another worktree's session.
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
@@ -152,22 +154,22 @@ clients_of() { # <addresses (space separated)> -> compact at/size per window, so
 }
 
 # Grid layout of n windows of size ww x wh on the output (layout coordinates): Spaces bar 96 px at the top, Dock
-# 110 px at the bottom, 48 px gaps, scale <= 0.8, the titlebar (28 px x scale) kept clear above each rect.
+# 110 px at the bottom, 48 px gaps, scale <= 0.8, the titlebar (GF_TB_HEIGHT x scale) kept clear above each rect.
 grid_json() { # <on> <durationMs> <addresses...>
   local on=$1 dur=$2
   shift 2
   jq -nc --argjson on "$on" --argjson d "$dur" --argjson mx "$mon_x" --argjson my "$mon_y" --argjson W "$mon_w" --argjson H "$mon_h" \
-    --argjson ww 700 --argjson wh 500 '$ARGS.positional as $a | ($a | length) as $n |
+    --argjson ww 700 --argjson wh 500 --argjson tb "$GF_TB_HEIGHT" '$ARGS.positional as $a | ($a | length) as $n |
     (if $n == 0 then 1 else ([range(1; $n + 1)] | map(select(. * . >= $n)) | first) end) as $cols |
     (if $n == 0 then 1 else (($n + $cols - 1) / $cols | floor) end) as $rows |
     48 as $gap | 96 as $top | 110 as $bottom |
     (($W - 2 * $gap - ($cols - 1) * $gap) / $cols) as $cw |
     (($H - $top - $bottom - $gap - ($rows - 1) * $gap) / $rows) as $ch |
-    ([0.8, $cw / $ww, $ch / ($wh + 28)] | min) as $s |
+    ([0.8, $cw / $ww, $ch / ($wh + $tb)] | min) as $s |
     {on: $on, durationMs: $d, windows: [$a | to_entries[] | .key as $i |
       {address: .value,
        x: ($mx + $gap + ($i % $cols) * ($cw + $gap) + ($cw - $ww * $s) / 2 | floor),
-       y: ($my + $top + $gap + (($i / $cols) | floor) * ($ch + $gap) + ($ch - ($wh + 28) * $s) / 2 + 28 * $s | floor),
+       y: ($my + $top + $gap + (($i / $cols) | floor) * ($ch + $gap) + ($ch - ($wh + $tb) * $s) / 2 + $tb * $s | floor),
        w: ($ww * $s | floor), h: ($wh * $s | floor)}]}' --args "$@"
 }
 

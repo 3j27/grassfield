@@ -270,10 +270,11 @@ TEST(StagesGeometry, SingleWindowFitsWithItsTitlebarAndIsCentred) {
     const Box  tile{16, 120, 180, 130};
     const auto r = thumbRects(tile, std::vector<Box>{{500, 300, 700, 500}});
     ASSERT_EQ(r.size(), 1U);
-    const double s = std::min(180.0 / 700, 130.0 / 528);
+    const double withBar = 500 + kTitlebarHeight; // the surface and the plugin's titlebar above it
+    const double s       = std::min(180.0 / 700, 130.0 / withBar);
     EXPECT_NEAR(r[0].w, 700 * s, 1e-9);
     EXPECT_NEAR(r[0].h, 500 * s, 1e-9);
-    EXPECT_NEAR(r[0].y - (kTitlebarHeight * s), tile.y + ((130 - (528 * s)) / 2), 1e-9);
+    EXPECT_NEAR(r[0].y - (kTitlebarHeight * s), tile.y + ((130 - (withBar * s)) / 2), 1e-9);
     EXPECT_NEAR(r[0].x + (r[0].w / 2), tile.x + 90, 1e-9) << "centred";
     EXPECT_NEAR(r[0].w / r[0].h, 700.0 / 500.0, 1e-9) << "never distorted";
 }

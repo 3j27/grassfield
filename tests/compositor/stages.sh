@@ -77,6 +77,8 @@ hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
 # may name another worktree's session.
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
@@ -1181,7 +1183,7 @@ check "full screen: the strip comes back after leaving full screen" $? "tile0 gr
 stages "{\"op\":\"activate\",\"stage\":$(stage_of "$addr_b3")}"
 sleep 0.6
 read -r bx by bw bh < <(jq -r '.[] | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' <<<"$(clients_of "$addr_b3")")
-gx=$((bx + bw / 2 - mon_x)) gy=$((by - 14 - mon_y)) # on b3's titlebar (28 px above its surface), clear of the 700x500 windows
+gx=$((bx + bw / 2 - mon_x)) gy=$((by - GF_TB_MID - mon_y)) # on b3's titlebar (GF_TB_HEIGHT above its surface), clear of the 700x500 windows
 pointer abs "$gx" "$gy" sleep 150 down drag $((gx - 420)) "$gy" sleep 100 up
 sleep 1
 ov1=$(last_st | jq -r '.monitors[0].overlap')

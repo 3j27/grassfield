@@ -25,6 +25,8 @@ dev=$root/.dev
 out=${WS_OUTPUT:-GF-REF}
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK
 
@@ -83,10 +85,10 @@ read -r bx by bw bh bfloat _ < <(geom gf-stack-b)
 [[ -n ${aw:-} && -n ${bw:-} && $afloat == true && $bfloat == true ]] || { say "setup error: windows missing or not floating (A: ${aw:-none}, B: ${bw:-none})"; exit 2; }
 say "  setup: A ${aw}x${ah} at ($ax,$ay), B ${bw}x${bh} at ($bx,$by)"
 
-# 1 Move B over the lower right part of A: drag from the middle of B's titlebar (14 px above its surface).
+# 1 Move B over the lower right part of A: drag from the middle of B's titlebar (GF_TB_MID above its surface).
 dx=$((aw * 6 / 10))
 dy=$((ah * 4 / 10))
-pointer abs $((bx + bw / 2)) $((by - 14)) sleep 50 down drag $((bx + bw / 2 + dx)) $((by - 14 + dy)) sleep 50 up sleep 500
+pointer abs $((bx + bw / 2)) $((by - GF_TB_MID)) sleep 50 down drag $((bx + bw / 2 + dx)) $((by - GF_TB_MID + dy)) sleep 50 up sleep 500
 dispatch() { timeout 5 "$root/scripts/nestctl" dispatch "$1" >>"$log" 2>&1; }
 read -r nbx nby bw bh _ b_addr < <(geom gf-stack-b)
 if [[ $nbx == "$bx" && $nby == "$by" ]]; then

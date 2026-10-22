@@ -27,12 +27,19 @@ namespace gf::theme {
     }
 
     // ---- Metrics (logical pixels at scale 1) ----
-    inline constexpr double kTitlebarHeight  = 28.0;
-    inline constexpr double kButtonDiameter  = 12.0;
-    inline constexpr double kButtonSpacing   = 8.0;  // gap between adjacent button edges
-    inline constexpr double kButtonInsetLeft = 12.0; // titlebar left edge -> first button edge
-    inline constexpr double kButtonHitSlop   = 2.0;  // extra hit radius around each button
-    inline constexpr double kTitlePadding    = 8.0;  // min gap between the buttons and the title
+    // macOS 26 titlebar-only window (docs/testing/f1-reference-gaps.md, "Window chrome"): 14-pt lights on a 23-pt
+    // pitch, the first centre (15.6, 15.6) +-1 from the window's top-left corner, a titlebar of about 32 pt.
+    // Plain literals: tests/compositor/titlebar_geometry.sh reads the first four from this file.
+    // Overview and Stages draw the same band: ui/tokens/tokens.json overview.windowTitlebarHeight follows
+    // kTitlebarHeight, and core/Stages.hpp uses it directly.
+    inline constexpr double kTitlebarHeight  = 32.0;
+    inline constexpr double kButtonDiameter  = 14.0;
+    inline constexpr double kButtonSpacing   = 9.0; // gap between adjacent button edges (pitch 23)
+    inline constexpr double kButtonInsetLeft = 9.0; // titlebar left edge -> first button edge: first centre at (16, 16)
+    // Extra hit radius around each button; it scales with the diameter (2 at the former 12) and leaves the gaps
+    // between the buttons to the drag area (centres 23 apart, hit radius 7 + 2.33).
+    inline constexpr double kButtonHitSlop = kButtonDiameter / 6.0;
+    inline constexpr double kTitlePadding  = 8.0; // min gap between the buttons and the title
 
     // ---- Title text ----
     inline constexpr int         kTitleFontSizePt = 13;
