@@ -45,3 +45,36 @@ function activationPlan(windows) {
         return here.slice().sort(byRecency).map(w => w.ref);
     return [visible.slice().sort(byRecency).pop().ref];
 }
+
+// Processes to kill for "Force Quit" on an app's tile (Option variant of Quit): the distinct client PIDs of its windows. PIDs that
+// are not plain client processes (unknown 0, init 1, negatives, non-integers) are dropped, as Power.forceQuit refuses them.
+function forceQuitPids(pids) {
+    const out = [];
+    for (const p of pids || []) {
+        if (Number.isInteger(p) && p > 1 && out.indexOf(p) < 0)
+            out.push(p);
+    }
+    return out;
+}
+
+// Window list at the top of an app's Dock menu (macOS): one row per window of the app, the most recent first. Each window is
+// {ref, title, minimized, stamp}; a row is {ref, title (whitespace collapsed, elided to `max` characters, the app name when
+// empty), minimized, checked}. The check goes to the most recently focused window that is not minimized (macOS: the key window);
+// a minimized window never has it. Choosing a row activates that one window (Compositor.activate restores a minimized window
+// and switches to its Desktop, the same call as a Dock click).
+function menuWindows(windows, max, appName) {
+    if (!windows || windows.length === 0)
+        return [];
+    const sorted = windows.slice().sort((a, b) => b.stamp - a.stamp);
+    const front = sorted.find(w => !w.minimized);
+    return sorted.map(w => {
+        const t = String(w.title === undefined || w.title === null ? "" : w.title).replace(/\s+/g, " ").trim();
+        const title = t === "" ? appName : t;
+        return {
+            ref: w.ref,
+            title: title.length > max ? title.slice(0, max - 1) + "…" : title,
+            minimized: w.minimized === true,
+            checked: w === front
+        };
+    });
+}

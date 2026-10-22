@@ -93,6 +93,26 @@ SettingsPage {
                 onToggled: c => root.store.set("dock.minimizeIntoApp", c)
             }
         }
+
+        SettingsRow {
+            title: qsTr("Animate opening applications")
+            subtitle: qsTr("The icon bounces while an application opens.")
+            Toggle {
+                accessibleName: qsTr("Animate opening applications")
+                checked: root.store.value("dock.animateOpening")
+                onToggled: c => root.store.set("dock.animateOpening", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Show indicators for open applications")
+            subtitle: qsTr("A small dot under the icon of each open application.")
+            Toggle {
+                accessibleName: qsTr("Show indicators for open applications")
+                checked: root.store.value("dock.showIndicators")
+                onToggled: c => root.store.set("dock.showIndicators", c)
+            }
+        }
     }
 
     SettingsGroup {

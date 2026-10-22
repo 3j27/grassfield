@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
+import Grassfield.Ui
 import qs.services
 import "Minimized.js" as Minimized
 import "StagesFront.js" as StagesFront
@@ -44,6 +45,16 @@ Singleton {
     // drag): a window opened or closed, another window, workspace or monitor became active, a monitor came or went, a layer
     // opened or closed (a surface unmapping hands the pointer back, whatever its client, shell banners included). Over-reporting is intended; `event` is the Hyprland event name.
     signal interrupted(string event)
+
+    // A window asked for attention (Hyprland's `urgent` event, relayed here: only the platform layer reads compositor events).
+    // `address` is lower-case hex without 0x. The Dock bounces the app's icon until the app is activated.
+    signal attention(string address)
+
+    // Address of a toplevel as Hyprland names it (lower-case hex without 0x), "" when Hyprland does not know it (yet).
+    function addressOf(toplevel: var): string {
+        const top = hyprlandToplevel(toplevel);
+        return top ? Minimized.normalizeAddress(top.address) : "";
+    }
     readonly property var interruptingEvents: ["openwindow", "closewindow", "movewindowv2", "activewindowv2", "workspacev2", "createworkspacev2", "destroyworkspacev2", "moveworkspacev2", "activespecialv2", "focusedmonv2", "monitoraddedv2", "monitorremovedv2", "openlayer", "closelayer", "fullscreen"]
 
     // Windows currently in the hidden-app workspace, as toplevel handles (see hiddenWindows).
@@ -88,6 +99,38 @@ Singleton {
         if (top && top.workspace && (top.workspace.name === hiddenWorkspace || top.workspace.name === minimizedWorkspace) && root.focusedWorkspace)
             dispatchRequest(moveRequest(top.address, String(root.focusedWorkspace.id)));
         toplevel.activate();
+    }
+
+    // Activate once a shell layer surface is gone. Hyprland refuses to focus a window while an Exclusive layer surface exists
+    // (the switcher waits for `closelayer` for the same reason), and a popup menu that is closing still has its surface for a
+    // moment: a window chosen from a menu is activated when the compositor reports `namespace` unmapped, or after
+    // Tokens.dockMenuLayerWait if that event never comes. One pending request at a time (the latest wins).
+    property var pendingActivation: null
+
+    function activateAfterLayer(toplevel: var, namespace: string): void {
+        if (!toplevel)
+            return;
+        pendingActivation = {toplevel: toplevel, namespace: namespace};
+        layerWaitTimer.restart();
+    }
+
+    function runPendingActivation(): void {
+        const p = pendingActivation;
+        pendingActivation = null;
+        layerWaitTimer.stop();
+        if (p)
+            activate(p.toplevel);
+    }
+
+    Timer {
+        id: layerWaitTimer
+        interval: Tokens.dockMenuLayerWait
+        onTriggered: root.runPendingActivation()
+    }
+
+    onLayerClosed: namespace => {
+        if (pendingActivation && pendingActivation.namespace === namespace)
+            runPendingActivation();
     }
 
     // Name of the special workspace used by hide().
@@ -478,6 +521,12 @@ Singleton {
                 const address = Minimized.minimizeRequestAddress(event.data);
                 if (address !== "")
                     root.minimizeByAddress(address);
+                return;
+            }
+            if (event.name === "urgent") {
+                const urgent = Minimized.normalizeAddress(event.data);
+                if (urgent !== "")
+                    root.attention(urgent);
                 return;
             }
             if (root.interruptingEvents.indexOf(event.name) >= 0)

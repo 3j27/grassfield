@@ -12,6 +12,7 @@ import "DockModel.js" as DockModel
 import "Launch.js" as Launch
 import "../desktop/IconsLogic.js" as Icons
 import "AutoHide.js" as AutoHide
+import "Attention.js" as Attention
 import "Magnify.js" as Magnify
 
 // Bottom dock, one per screen: pinned apps (Settings) and running apps (foreign-toplevel app ids
@@ -93,6 +94,61 @@ Scope {
     // Time of the last launch click (ms); with the visual fixtures the bounce curve is logged against it (tests/visual/dock-launch.sh).
     property real launchClickedAt: 0
 
+    // Attention (macOS: an app that needs attention bounces its icon until it is activated; Attention.js, pure): window addresses
+    // that sent Hyprland's `urgent` event and have not been satisfied, the tiles they belong to, and the moment an auto-hidden
+    // Dock comes out (a token duration after a new request).
+    property var attention: ({})
+    property real attentionAt: 0
+    property bool attentionReveal: false
+    readonly property var attentionKeys: Attention.tileKeys(attention, attentionGroups())
+
+    // One entry per app tile: its key and the addresses of its windows.
+    function attentionGroups(): var {
+        return items.filter(it => it.kind === "app" || it.kind === "files").map(it => ({key: it.key, addresses: it.windows.map(t => Compositor.addressOf(t))}));
+    }
+
+    function liveAddresses(): var {
+        const tops = Compositor.toplevels ? Compositor.toplevels.values : [];
+        return tops.map(t => Compositor.addressOf(t));
+    }
+
+    // An app is activated or a window went away: the bounce stops.
+    function settleAttention(): void {
+        if (Object.keys(attention).length === 0)
+            return;
+        const focusedAddress = Compositor.focusedToplevel ? Compositor.addressOf(Compositor.focusedToplevel) : "";
+        const live = liveAddresses();
+        const next = Attention.settle(attention, attentionGroups(), focusedAddress, live);
+        if (next !== attention) {
+            attention = next;
+            // Nothing asks for attention any more: an auto-hidden Dock that was out for it goes back at once.
+            if (Object.keys(next).length === 0) {
+                attentionReveal = false;
+                attentionRevealTimer.stop();
+            }
+            if (VisualFixtures.active)
+                console.info("dock-attention: settled", Object.keys(next).length, Date.now());
+        }
+    }
+
+    function requestAttention(address: string): void {
+        const next = Attention.request(attention, address, Compositor.focusedToplevel ? Compositor.addressOf(Compositor.focusedToplevel) : "");
+        if (VisualFixtures.active)
+            console.info("dock-attention: urgent", address, next !== attention ? "bounce" : "ignored", Date.now());
+        if (next === attention)
+            return;
+        attention = next;
+        attentionAt = Date.now();
+        attentionReveal = true;
+        attentionRevealTimer.restart();
+    }
+
+    Timer {
+        id: attentionRevealTimer
+        interval: Tokens.dockAttentionReveal
+        onTriggered: root.attentionReveal = false
+    }
+
     // Keys of the listed apps that had a window at the previous rebuild (null: no rebuild yet).
     property var previousRunning: null
 
@@ -141,6 +197,7 @@ Scope {
         setItems(DockModel.withFixed(split.files, DockModel.withTail(shown, tail)));
         all.forEach(w => w.playLayout());
         pruneLaunching();
+        settleAttention();
     }
 
     function pruneLaunching(): void {
@@ -310,6 +367,11 @@ Scope {
 
         function onFocusedToplevelChanged(): void {
             root.interruptDrag();
+            root.settleAttention();
+        }
+
+        function onAttention(address: string): void {
+            root.requestAttention(address);
         }
 
         function onFocusedScreenNameChanged(): void {
@@ -460,6 +522,11 @@ Scope {
 
         function reveal(on: bool): void {
             root.testReveal = on;
+        }
+
+        // Option-Command-D (macOS): turns Dock hiding on or off. The integrator binds a key to it (config/hypr); not fixtures-gated.
+        function toggleAutohide(): void {
+            Settings.setDockAutohide(!Settings.dockAutohide);
         }
 
         function autohide(on: bool): void {
@@ -730,7 +797,8 @@ Scope {
                     popup: Popups.kind === "dock",
                     hold: pressedTile >= 0,
                     keyboard: root.keyboardMode,
-                    forced: root.testReveal
+                    forced: root.testReveal,
+                    attention: root.attentionReveal
                 })
             readonly property var hideTiming: ({
                     hideGrace: Tokens.dockHideGrace,
@@ -775,11 +843,18 @@ Scope {
             function openMenu(index: int): void {
                 root.keyboardMode = false;
                 const item = root.items[index];
-                if (!item || (item.kind !== "app" && item.kind !== "files"))
+                if (!item || (item.kind !== "app" && item.kind !== "files" && item.kind !== "trash"))
                     return;
                 const t = tileRepeater.itemAt(index);
                 const cx = t.mapToItem(null, t.width / 2, 0).x;
-                Popups.open("dock", win.screen.name, cx, win.screen.height - Tokens.dockBottomMargin - shelfHeight - Tokens.dockMenuTailGap - Tokens.dockMenuTailHeight, "above", {
+                const above = win.screen.height - Tokens.dockBottomMargin - shelfHeight - Tokens.dockMenuTailGap - Tokens.dockMenuTailHeight;
+                if (item.kind === "trash") {
+                    // macOS Trash menu: Open, Empty Trash…
+                    Trash.refresh();
+                    Popups.open("dock", win.screen.name, cx, above, "above", {kind: "trash", key: "trash", windows: [], running: false});
+                    return;
+                }
+                Popups.open("dock", win.screen.name, cx, above, "above", {
                     key: item.key,
                     entry: item.entry,
                     pinned: item.pinned,
@@ -992,7 +1067,11 @@ Scope {
                                 property real pressTime: 0
                                 // root.dragInterruptions when the button went down (a drag of this press is refused when it changed).
                                 property int dragMark: 0
-                                readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
+                                readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion && Settings.dockAnimateOpening
+                                // An app asking for attention: its icon hops again and again until the app is activated. With Reduce Motion
+                                // it does not move: a static accent plate shows it instead.
+                                readonly property bool attentive: isApp && running && root.attentionKeys.indexOf(modelData.key) >= 0
+                                readonly property bool attentionHops: attentive && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
                                 readonly property real shiftX: {
@@ -1075,7 +1154,7 @@ Scope {
                                 }
                                 activeFocusOnTab: !isSeparator
                                 Accessible.role: isSeparator ? Accessible.Separator : Accessible.Button
-                                Accessible.name: isAppsTile ? qsTr("Apps") : isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? (badge === 1 ? qsTr(", 1 notification") : qsTr(", %1 notifications").arg(badge)) : "")))
+                                Accessible.name: isAppsTile ? qsTr("Apps") : isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? (badge === 1 ? qsTr(", 1 notification") : qsTr(", %1 notifications").arg(badge)) : "") + (attentive ? qsTr(", needs attention") : "")))
                                 Accessible.focusable: !isSeparator
                                 Accessible.ignored: isSeparator
                                 Accessible.onPressAction: root.activateItem(modelData)
@@ -1096,6 +1175,17 @@ Scope {
                                     width: Tokens.dockSeparatorWidth
                                     height: Tokens.dockSeparatorHeight
                                     color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+                                }
+
+                                // Attention with Reduce Motion: a static accent plate behind the icon (no hop).
+                                Rectangle {
+                                    visible: tile.attentive && Appearance.reduceMotion
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: win.indicatorArea
+                                    radius: Tokens.radiusDockIcon * tile.tileScale
+                                    color: Appearance.withAlpha(Appearance.colors.accent, Tokens.dockAttentionHighlightOpacity)
                                 }
 
                                 // Application icon, growing upward from the shelf.
@@ -1120,10 +1210,44 @@ Scope {
 
                                     // Launch bounce: hops until the app has a window (or the launch timeout).
                                     property real lift: 0
-                                    onLiftChanged: if (VisualFixtures.active && root.launchClickedAt > 0 && tile.bouncing)
-                                        console.info("dock-launch: lift", Date.now() - root.launchClickedAt, Math.round(lift * 10) / 10)
+                                    onLiftChanged: {
+                                        if (VisualFixtures.active && root.launchClickedAt > 0 && tile.bouncing)
+                                            console.info("dock-launch: lift", Date.now() - root.launchClickedAt, Math.round(lift * 10) / 10);
+                                        if (VisualFixtures.active && root.attentionAt > 0 && tile.attentionHops)
+                                            console.info("dock-attention: lift", Date.now() - root.attentionAt, Math.round(lift * 10) / 10);
+                                    }
                                     transform: Translate {
                                         y: -appIcon.lift
+                                    }
+
+                                    // Attention: the launch hop repeated, one every Tokens.dockAttentionPeriod, until the app is activated.
+                                    SequentialAnimation {
+                                        running: tile.attentionHops
+                                        loops: Animation.Infinite
+                                        onRunningChanged: {
+                                            if (running)
+                                                landAnim.stop();
+                                            else if (appIcon.lift > 0)
+                                                landAnim.restart();
+                                        }
+
+                                        NumberAnimation {
+                                            target: appIcon
+                                            property: "lift"
+                                            to: tile.iconPx * Tokens.dockAttentionHeightScale
+                                            duration: Tokens.dockBounceDuration / 2
+                                            easing.type: Easing.OutQuad
+                                        }
+                                        NumberAnimation {
+                                            target: appIcon
+                                            property: "lift"
+                                            to: 0
+                                            duration: Tokens.dockBounceDuration / 2
+                                            easing.type: Easing.InQuad
+                                        }
+                                        PauseAnimation {
+                                            duration: Math.max(0, Tokens.dockAttentionPeriod - Tokens.dockBounceDuration)
+                                        }
                                     }
 
                                     SequentialAnimation {
@@ -1305,7 +1429,7 @@ Scope {
 
                                 // Running indicator.
                                 Rectangle {
-                                    visible: tile.running
+                                    visible: tile.running && Settings.dockShowIndicators
                                     width: Tokens.dockIndicatorSize
                                     height: Tokens.dockIndicatorSize
                                     radius: width / 2
@@ -1563,7 +1687,7 @@ Scope {
                                 }
 
                                 TapHandler {
-                                    enabled: tile.isApp
+                                    enabled: tile.isApp || tile.isTrash
                                     acceptedButtons: Qt.RightButton
                                     // macOS: a secondary click opens the Dock menu on the press, however long the button is held.
                                     onPressedChanged: if (pressed) {

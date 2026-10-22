@@ -1764,6 +1764,22 @@
         <translation>Désactivé : chaque fenêtre réduite a sa propre icône près de la Corbeille.</translation>
     </message>
     <message>
+        <source>Animate opening applications</source>
+        <translation>Animer l’ouverture des applications</translation>
+    </message>
+    <message>
+        <source>The icon bounces while an application opens.</source>
+        <translation>L’icône rebondit pendant l’ouverture d’une application.</translation>
+    </message>
+    <message>
+        <source>Show indicators for open applications</source>
+        <translation>Afficher les indicateurs des applications ouvertes</translation>
+    </message>
+    <message>
+        <source>A small dot under the icon of each open application.</source>
+        <translation>Un petit point sous l’icône de chaque application ouverte.</translation>
+    </message>
+    <message>
         <source>Menu Bar</source>
         <translation>Barre des menus</translation>
     </message>
@@ -1953,6 +1969,10 @@
         <translation>, 1 notification</translation>
     </message>
     <message>
+        <source>, needs attention</source>
+        <translation>, demande votre attention</translation>
+    </message>
+    <message>
         <source>Remove</source>
         <translation>Retirer</translation>
     </message>
@@ -1964,6 +1984,10 @@
         <translation>Menu de l’élément du Dock</translation>
     </message>
     <message>
+        <source>%1 (minimized)</source>
+        <translation>%1 (réduite)</translation>
+    </message>
+    <message>
         <source>New Window</source>
         <translation>Nouvelle fenêtre</translation>
     </message>
@@ -1972,12 +1996,44 @@
         <translation>Ouvrir</translation>
     </message>
     <message>
+        <source>Empty Trash…</source>
+        <translation>Vider la corbeille…</translation>
+    </message>
+    <message>
         <source>Options</source>
         <translation>Options</translation>
     </message>
     <message>
+        <source>Hide Others</source>
+        <translation>Masquer les autres</translation>
+    </message>
+    <message>
+        <source>Force Quit</source>
+        <translation>Forcer à quitter</translation>
+    </message>
+    <message>
         <source>Remove from Dock</source>
         <translation>Retirer du Dock</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to permanently erase the items in the Trash?</source>
+        <translation>Voulez-vous vraiment effacer définitivement les éléments de la corbeille&#xa0;?</translation>
+    </message>
+    <message>
+        <source>You can’t undo this action.</source>
+        <translation>Vous ne pouvez pas annuler cette action.</translation>
+    </message>
+    <message>
+        <source>Empty Trash</source>
+        <translation>Vider la corbeille</translation>
+    </message>
+    <message>
+        <source>Force quit “%1”?</source>
+        <translation>Forcer «&#xa0;%1&#xa0;» à quitter&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Unsaved changes in this application will be lost.</source>
+        <translation>Les modifications non enregistrées de cette application seront perdues.</translation>
     </message>
     <message>
         <source>Keep in Dock</source>

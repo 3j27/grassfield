@@ -9,7 +9,8 @@
 //   hidden    --pointer at the edge for revealDwell-->    revealing
 //   revealing --visible reaches 1-->                      shown
 //
-// Inhibitors keep the Dock shown: pointer over it, a drag, a Dock popup or menu, a press and hold, keyboard mode.
+// Inhibitors keep the Dock shown: pointer over it, a drag, a Dock popup or menu, a press and hold, keyboard mode, and
+// `attention` (an app asked for attention: the Dock comes out for a moment, a token duration set by the Dock).
 // While hidden the pointer can only be at the edge strip (the input mask is the strip), so `pointer` means "at the edge".
 
 function create() {
@@ -22,12 +23,12 @@ function create() {
 
 // True when the Dock must not leave (or must come back to) the shown state.
 function inhibited(inh) {
-    return !!(inh.pointer || inh.drag || inh.popup || inh.hold || inh.keyboard || inh.forced);
+    return !!(inh.pointer || inh.drag || inh.popup || inh.hold || inh.keyboard || inh.forced || inh.attention);
 }
 
 // Inhibitors other than the pointer (they reveal a hidden Dock at once, the pointer waits for its dwell).
 function forcing(inh) {
-    return !!(inh.drag || inh.popup || inh.hold || inh.keyboard || inh.forced);
+    return !!(inh.drag || inh.popup || inh.hold || inh.keyboard || inh.forced || inh.attention);
 }
 
 // Next machine after `dt` ms. `timing` is {hideGrace, hideDuration, revealDwell, revealDuration}; with `enabled` false

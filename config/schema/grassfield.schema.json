@@ -89,6 +89,12 @@
         "minimizeIntoApp": {
           "type": "boolean"
         },
+        "animateOpening": {
+          "type": "boolean"
+        },
+        "showIndicators": {
+          "type": "boolean"
+        },
         "minimizeEffect": {
           "type": "string",
           "enum": [

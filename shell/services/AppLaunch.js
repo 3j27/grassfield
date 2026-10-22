@@ -91,6 +91,22 @@ function folderAwareArgv(argv, script, enabled) {
     return a;
 }
 
+// argv that empties the Trash (Dock Trash menu, after its confirmation). A real session asks gio (every trash of the user). A dev session
+// never does: gio's trash:/// is served by the owner's session, so it empties ONLY the isolated trash under the dev apps-home
+// (`<appsHome>/data/Trash`, where the shell's own trash actions put files, ADR-0011) with find; null (nothing runs) when `appsHome`
+// is not a plain absolute `.../apps-home` path (control characters, `.`/`..`/empty segments, too shallow).
+function emptyTrashArgv(devSession, appsHome) {
+    if (!devSession)
+        return ["gio", "trash", "--empty"];
+    const home = String(appsHome || "");
+    // eslint-disable-next-line no-control-regex
+    if (!/^\/[^\u0000-\u001f\u007f]+\/apps-home$/.test(home))
+        return null;
+    if (home.split("/").slice(1).some(seg => seg === "" || seg === "." || seg === ".."))
+        return null;
+    return ["find", home + "/data/Trash/files", home + "/data/Trash/info", "-mindepth", "1", "-delete"];
+}
+
 // Directory of the user's autostart entries (XDG): `<appsHome>/config/autostart` in a dev session (never the owner's
 // own), else `$XDG_CONFIG_HOME/autostart` or `~/.config/autostart`.
 function autostartDir(devSession, appsHome, xdgConfigHome, home) {

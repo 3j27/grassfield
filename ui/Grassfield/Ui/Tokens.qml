@@ -294,6 +294,16 @@ QtObject {
     readonly property real dockPressDim: 0.25
     // macOS 26: one up-and-down hop of the launch bounce, about 0.5 s (ease out up, ease in down)
     readonly property int dockBounceDuration: 500
+    // estimate (same as switcher.layerWaitMs): a window chosen from the Dock menu is activated when the compositor reports the overlay surface unmapped (Hyprland refuses to focus a window while an Exclusive layer exists); if no such event arrives within this time it is activated anyway, ms
+    readonly property int dockMenuLayerWait: 250
+    // macOS: an app asking for attention hops again and again with a short rest between hops; one hop (dock.bounceDuration) every this many ms, estimate
+    readonly property int dockAttentionPeriod: 1500
+    // macOS: the attention hop is the launch hop; same rise as dock.bounceHeightScale (fraction of the icon height)
+    readonly property real dockAttentionHeightScale: 0.34
+    // NextKDE and others: an auto-hidden Dock comes out for a moment when an app asks for attention, ms, estimate
+    readonly property int dockAttentionReveal: 3000
+    // estimate: static accent plate behind the icon of an app asking for attention while Reduce Motion is on (no hop)
+    readonly property real dockAttentionHighlightOpacity: 0.35
     // estimate: the launch bounce stops after this long without a window, ms
     readonly property int dockLaunchTimeout: 12000
     // macOS: pressing and holding a Dock icon about half a second opens its menu (ms); a shorter press is a click
@@ -358,6 +368,8 @@ QtObject {
     readonly property int menuSwatchGap: 8
     // estimate: ring around the hovered or keyboard-current swatch
     readonly property int menuSwatchRing: 2
+    // same limit as the menu bar's Window menu (AppMenuModel.titleMax): longest window title in a Dock menu's window list, characters
+    readonly property int menuWindowTitleMax: 40
     // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1)
     readonly property string menuSwatchMark: "#1B1B1F"
 

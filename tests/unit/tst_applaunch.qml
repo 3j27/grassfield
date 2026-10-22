@@ -35,6 +35,25 @@ TestCase {
         compare(AppLaunch.appsHomeFor("", "/run"), "/run/grassfield-dev/apps-home");
     }
 
+    // Empty Trash (Dock Trash menu): a dev session empties ONLY the isolated trash under its apps-home (ADR-0011), never gio's
+    // trash:/// (served by the owner's session) and never the owner's ~/.local/share/Trash.
+    function test_emptyTrashDevIsOnlyTheIsolatedTrash() {
+        const argv = AppLaunch.emptyTrashArgv(true, "/w/.dev/apps-home");
+        compare(argv.join(" "), "find /w/.dev/apps-home/data/Trash/files /w/.dev/apps-home/data/Trash/info -mindepth 1 -delete");
+        verify(argv.indexOf("gio") < 0);
+        for (const a of argv)
+            verify(a.indexOf("/.local/share/Trash") < 0 && a.indexOf("trash:") < 0, a);
+    }
+
+    function test_emptyTrashDevRefusesAnythingButAnAppsHome() {
+        for (const bad of ["", "relative/apps-home", "/w/.dev/apps-home/../../home/u/apps-home", "/", "/home/u", "/w/.dev/state", "/w/ .dev/apps-home\n", "/w/.dev/apps-home/"])
+            compare(AppLaunch.emptyTrashArgv(true, bad), null, "accepted: " + bad);
+    }
+
+    function test_emptyTrashRealSessionUsesGio() {
+        compare(AppLaunch.emptyTrashArgv(false, "/w/.dev/apps-home").join(" "), "gio trash --empty");
+    }
+
     function test_folderAwareArgv() {
         const s = "/usr/share/grassfield/shell/services/open-real.sh";
         // A real session: gio open and xdg-open go through the folder policy, scoped afterwards by the caller.

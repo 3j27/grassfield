@@ -195,4 +195,30 @@ TestCase {
         compare(m.openIndex, -1);
         compare(closeSpy.count, 0);
     }
+
+    // Option (Alt) variants (macOS Dock menu): the menu reports whether Alt is down, live, and nothing else changes.
+    function test_altHeldFollowsTheKey() {
+        const m = makeMenu();
+        verify(!m.altHeld);
+        keyClick(Qt.Key_Down);
+        keyPress(Qt.Key_Alt, Qt.AltModifier);
+        verify(m.altHeld);
+        compare(m.currentIndex, 0);
+        compare(activatedSpy.count, 0);
+        compare(closeSpy.count, 0);
+        keyRelease(Qt.Key_Alt, Qt.NoModifier);
+        verify(!m.altHeld);
+    }
+
+    function test_altHeldReachesTheTopMenuFromASubmenu() {
+        const m = makeMenu();
+        keyClick(Qt.Key_Up);
+        keyClick(Qt.Key_Right);
+        wait(100);
+        verify(m.openIndex >= 0);
+        keyPress(Qt.Key_Alt, Qt.AltModifier);
+        verify(m.altHeld);
+        keyRelease(Qt.Key_Alt, Qt.NoModifier);
+        verify(!m.altHeld);
+    }
 }

@@ -210,7 +210,7 @@ TestCase {
             revealDuration: Tokens.dockRevealDuration
         })
     readonly property var none: ({})
-    readonly property var kinds: ["pointer", "drag", "popup", "hold", "keyboard", "forced"]
+    readonly property var kinds: ["pointer", "drag", "popup", "hold", "keyboard", "forced", "attention"]
 
     function only(kind) {
         const o = {};

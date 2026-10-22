@@ -32,6 +32,8 @@ Singleton {
     readonly property var dockRecent: store.dockRecent
     readonly property bool dockShowRecents: store.data.dock.showRecents
     readonly property bool dockMinimizeIntoApp: store.data.dock.minimizeIntoApp
+    readonly property bool dockAnimateOpening: store.data.dock.animateOpening
+    readonly property bool dockShowIndicators: store.data.dock.showIndicators
     readonly property string dockMinimizeEffect: store.dockMinimizeEffect
 
     readonly property string accentColor: store.accentColor
