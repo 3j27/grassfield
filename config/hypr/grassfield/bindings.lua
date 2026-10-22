@@ -112,6 +112,8 @@ bind("SUPER + ALT + ESCAPE", "Force Quit Applications", shell("menubar", "panel 
 -- Keyboard access to the menu bar and the Dock (gate A1), like Ctrl+F2 / Ctrl+F3.
 bind("CTRL + F2", "Focus the menu bar", shell("menubar", "open system ''"))
 bind("CTRL + F3", "Focus the Dock", shell("dock", "keyboard"))
+-- Turn Dock hiding on or off (macOS Option-Command-D).
+bind("SUPER + ALT + D", "Turn Dock hiding on or off", shell("dock", "toggleAutohide"))
 
 -- Hardware keys: real volume/brightness changes plus the OSD (shell/osd).
 bind("XF86AudioRaiseVolume", "Volume up", shell("volume", "up"), { repeating = true, locked = true })
