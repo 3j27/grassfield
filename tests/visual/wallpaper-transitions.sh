@@ -43,11 +43,26 @@ apply() {
   mv "$cfg.new" "$cfg"
 }
 
+near() { # "r g b" "r g b": within 12 per channel (a prepared JPEG is not exact)
+  awk -v a="$1" -v b="$2" 'BEGIN {split(a, x, " "); split(b, y, " "); for (i = 1; i <= 3; i++) {d = x[i] - y[i]; if (d < 0) d = -d; if (d > 12) exit 1} exit 0}'
+}
+color_now() { # "r g b" of the middle of the desktop right now
+  "$VS_ROOT/scripts/dev/shot.sh" cur "$VS_OUTPUT" >/dev/null
+  magick "$VS_DEV/shots/cur.png" -crop 300x300+300+300 +repage -resize 1x1! -format '%[fx:int(255*r)] %[fx:int(255*g)] %[fx:int(255*b)]' info:
+}
+
 rgb_of() { # name -> "r,g,b" of the content on screen when it is stable
   apply "$1"
-  sleep 5
-  "$VS_ROOT/scripts/dev/shot.sh" ref "$VS_OUTPUT" >/dev/null
-  magick "$VS_DEV/shots/ref.png" -crop 300x300+300+300 +repage -resize 1x1! -format '%[fx:int(255*r)],%[fx:int(255*g)],%[fx:int(255*b)]' info:
+  # Stable: two captures 1.5 s apart agree (a slow machine takes seconds to prepare and fade in a picture).
+  local prev="" cur="" i
+  sleep 4
+  for i in $(seq 1 30); do
+    cur=$(color_now)
+    near "$cur" "${prev:-999 999 999}" && break
+    prev=$cur
+    sleep 1.5
+  done
+  echo "${cur// /,}"
 }
 
 ref_art=$(rgb_of art)
@@ -61,7 +76,10 @@ declare -A ref=([art]=$ref_art [red]=$ref_red [green]=$ref_green [blue]=$ref_blu
 transition() { # from to final(to|from)
   local from=$1 to=$2 final=${3:-to} file=$out/$1-$2.txt
   apply "$from"
-  sleep 5
+  # The outgoing content must be on screen and settled before the change (a slow machine takes seconds to prepare a picture).
+  SECONDS=0
+  until near "$(color_now)" "${ref[$from]//,/ }" || ((SECONDS > 40)); do sleep 0.5; done
+  sleep 1
   : > "$file"
   ( sleep 0.7; apply "$to" ) &
   local changer=$!
