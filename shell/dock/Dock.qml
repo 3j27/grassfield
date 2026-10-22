@@ -256,6 +256,10 @@ Scope {
     // gets "menu first, then the drag of the same press" deterministically instead of racing a hook against the 550 ms timer.
     property bool forceHoldMenu: false
 
+    // Fixtures only (IPC dock forceinterrupt): every press on an app tile is interrupted (one interruption event, no popup, no menu) the
+    // moment it goes down, so a test reaches "interrupted before the drag starts" without racing a real surface against the drag.
+    property bool forceInterrupt: false
+
     function cancelClicks(): void {
         clickCancels++;
         if (VisualFixtures.active)
@@ -381,7 +385,7 @@ Scope {
         }
     }
 
-    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup|holdmenu|forcehold>. autohide, magnify, click
+    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup|holdmenu|forcehold|forceinterrupt>. autohide, magnify, click
     // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert.
     IpcHandler {
         target: "dock"
@@ -391,6 +395,11 @@ Scope {
             if (!VisualFixtures.active)
                 return "[]";
             return JSON.stringify(Settings.dockPinned);
+        }
+
+        function forceinterrupt(on: bool): void {
+            if (VisualFixtures.active)
+                root.forceInterrupt = on;
         }
 
         // Fixtures only: while on, every press on an app tile is marked as having opened the hold menu at the moment it goes down.
@@ -1458,6 +1467,8 @@ Scope {
                                             tile.dragMark = root.dragInterruptions;
                                             if (root.forceHoldMenu && tile.isApp)
                                                 win.markHoldMenu(tile.index);
+                                            if (root.forceInterrupt && tile.isApp)
+                                                root.interruptDrag();
                                         }
                                     }
                                     onCanceled: {

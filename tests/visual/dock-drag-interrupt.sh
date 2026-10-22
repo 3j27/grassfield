@@ -313,6 +313,55 @@ hd_then_deliberate() {
   res "$label" removed "$(pinned)"
 }
 
+# ir LABEL WHEN: the reorder case under a plain interruption (no hold menu). WHEN = during: the running unpinned app
+# gfdockA is dragged along the shelf to just left of the pinned foot tile, Search is opened by IPC 1.5 s into the press, the release is there (the
+# drag started, then was interrupted: it must change no pin, the tile glides back); before: a notification banner appears while the button is down (Search would end the press) but
+# before the drag moves (the press is already interrupted: the drag is refused, drag-refused interrupted). Pins must stay either way.
+# Valid only with drag-start (during) / drag-refused (before) in the shell log; else repeated (four times), then FAIL (not tested).
+ir() {
+  local label=$1 when=$2 attempt mark ok=0 lines cx cy fx before want_line tp
+  for attempt in 1 2 3 4; do
+    restore || { restore_failed "$label"; return; }
+    before=$(pinned)
+    read -r cx cy <<<"$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("gfdockA")')" "$VS_OUTPUT")"
+    fx=$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("foot")')" "$VS_OUTPUT" | cut -d' ' -f1)
+    if ! [[ $cx =~ ^[0-9]+$ && $fx =~ ^[0-9]+$ ]]; then
+      echo "  ($label: attempt $attempt: no gfdockA tile, not tested: again)"
+      continue
+    fi
+    mark=$(wc -l < "$VS_DEV/shell.log")
+    if [[ $when == during ]]; then
+      want_line="drag-start"
+      ( sleep 1.5; trig_search >/dev/null 2>&1 ) &
+      tp=$!
+      vs_pointer abs "$cx" "$cy" sleep 200 down sleep 200 drag $((fx - 30)) $cy sleep 150 drag $((fx - 34)) $cy sleep 2500 up sleep 300 $park >/dev/null
+    else
+      want_line="drag-refused interrupted"
+      vs_ipc dock forceinterrupt true >/dev/null
+      tp=
+      vs_pointer abs "$cx" "$cy" sleep 200 down sleep 200 drag $((fx - 30)) $cy sleep 150 drag $((fx - 34)) $cy sleep 400 up sleep 300 $park >/dev/null
+      vs_ipc dock forceinterrupt false >/dev/null
+    fi
+    [[ -n $tp ]] && wait "$tp"
+    sleep 1
+    end_search >/dev/null 2>&1
+    end_banner >/dev/null 2>&1
+    lines=$(tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|drag-start\|drag-refused\|click-cancel\)")
+    if grep -q "$want_line" <<<"$lines" && grep -q "pressed true" <<<"$lines"; then
+      ok=1
+      break
+    fi
+    echo "  ($label: attempt $attempt: no $want_line in the log ($(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|')), not tested: again)"
+  done
+  if (( ! ok )); then
+    failn=$((failn + 1))
+    echo "$(date +%T) $label never gave $want_line, not tested: FAIL"
+    return
+  fi
+  echo "  ($label: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|'); pins before $before)"
+  res "$label" kept "$(pinned)"
+}
+
 # fn NAME DRAG-STEPS...: a deliberate drag that must remove the pin.
 fn() {
   local name=$1
@@ -327,6 +376,8 @@ hd_trials() { # REP
   hd "holdmenu_then_drag_out_r$1" foot above
   hd "holdmenu_then_drag_sideways_reorder_r$1" gfdockA side
   hd_then_deliberate "holdmenu_then_next_press_removes_r$1"
+  ir "interrupted_during_drag_sideways_no_reorder_r$1" during
+  ir "interrupted_before_drag_sideways_refused_r$1" before
 }
 
 reps=${2:-1}
