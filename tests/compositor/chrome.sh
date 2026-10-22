@@ -143,10 +143,10 @@ check_corner() { # <label> <lo> <hi> <radius>
   check "$1: corner radius $4" "$ok" "diagonal inset left ${m[corner_diag]} px, right ${m[corner_diag_right]} px (expected $2-$3), radius about ${m[radius_estimate]}"
 }
 
-start_foot() { # <title>: pid in $started
+start_foot() { # <title>: pid in $started; the text cursor is hidden (DECTCEM): it sits in the corner the C2 check measures
   WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" --name chrome foot --title "$1" -w 700x420 \
-    -o colors-dark.background=d8d8d8 -o colors-light.background=d8d8d8 -o colors-dark.alpha=1 -o colors-light.alpha=1 sleep 600 \
-    >/dev/null 2>&1 </dev/null &
+    -o colors-dark.background=d8d8d8 -o colors-light.background=d8d8d8 -o colors-dark.alpha=1 -o colors-light.alpha=1 \
+    sh -c 'printf "\033[?25l"; exec sleep 600' >/dev/null 2>&1 </dev/null &
   started=$!
   pids+=("$started")
   sleep 1.5
