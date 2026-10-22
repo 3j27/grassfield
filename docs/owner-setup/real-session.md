@@ -179,9 +179,9 @@ and the Hyprland config changed):
 ## 6. Known issues on main right now
 
 - Search/Apps keyboard focus on two outputs: under a fix pass.
-- Menu bar: no icons of third-party apps yet (Spotify, Discord, Steam tray icons), no Now Playing item, and it stays
-  hidden over a full-screen window (both in progress). A second click on an open menu title without moving the pointer
-  at all is ignored (move it a little).
+- Menu bar (0.4.0-9): no icons of third-party apps yet, no Now Playing item (both merged on main after 0.4.0-9: next
+  package), and it stays hidden over a full-screen window (in progress). A second click on an open menu title without
+  moving the pointer at all is ignored (move it a little).
 - Dock: the Dock menu does not list the app's windows yet, and no attention bounce (in progress).
 - Fonts: a GTK/Qt app that asks by name for a font that is not installed (Roboto, Ubuntu, Verdana, ...) gets Liberation
   Sans, not Inter (documented limit; browsers are not affected).
