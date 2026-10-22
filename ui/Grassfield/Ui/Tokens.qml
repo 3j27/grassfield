@@ -358,6 +358,8 @@ QtObject {
     readonly property int menuSwatchGap: 8
     // estimate: ring around the hovered or keyboard-current swatch
     readonly property int menuSwatchRing: 2
+    // same limit as the menu bar's Window menu (AppMenuModel.titleMax): longest window title in a Dock menu's window list, characters
+    readonly property int menuWindowTitleMax: 40
     // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1)
     readonly property string menuSwatchMark: "#1B1B1F"
 

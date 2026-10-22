@@ -6,6 +6,7 @@ import Grassfield.Ui
 import qs.platform
 import qs.services
 import "../dock/DockModel.js" as DockModel
+import "../dock/Launch.js" as Launch
 import "../services/AppLaunch.js" as AppLaunch
 
 // Dock item context menu. Payload (Popups.data): key, entry (DesktopEntry or null),
@@ -23,8 +24,20 @@ PopupMenu {
     accessibleName: qsTr("Dock item menu")
     currentIndex: -1
 
+    // The app's windows (only the windows of this tile: the same identity rules as the running dot), most recent first.
+    readonly property var windowRows: Launch.menuWindows((info.windows ? info.windows : []).map(t => {
+        const w = Compositor.windowInfo(t);
+        return {ref: t, title: t.title, minimized: w.minimized, stamp: w.stamp};
+    }), Tokens.menuWindowTitleMax, Apps.nameFor(appId()))
+
     model: {
         const items = [];
+        // macOS: the app's windows come first (a check on the front window, a mark on minimized ones), then a separator.
+        if (windowRows.length > 0) {
+            for (const w of windowRows)
+                items.push({id: "window", ref: w.ref, text: w.minimized ? qsTr("%1 (minimized)").arg(w.title) : w.title, checked: w.checked});
+            items.push({separator: true});
+        }
         items.push(info.running ? {id: "new", text: qsTr("New Window"), enabled: entry !== null} : {id: "open", text: qsTr("Open"), enabled: entry !== null});
         if (desktopActions.length > 0) {
             items.push({separator: true});
@@ -125,8 +138,15 @@ PopupMenu {
     onActivated: item => {
         const data = root.info;
         const appId = root.appId();
+        // A window chosen from the list is the focus the user wants: nothing hands it back to the previous window.
+        if (item.id === "window")
+            FocusReturn.skip();
         Popups.close();
         switch (item.id) {
+        case "window":
+            // Restores a minimized window and switches to its Desktop (the same call as a Dock click).
+            Compositor.activate(item.ref);
+            break;
         case "open":
         case "new":
             if (data.entry)

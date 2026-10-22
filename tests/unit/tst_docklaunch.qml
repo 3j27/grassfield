@@ -82,4 +82,42 @@ TestCase {
         compare(Launch.activationPlan([]).length, 0);
         compare(Launch.activationPlan(null).length, 0);
     }
+
+    function wi(ref, title, stamp, minimized) {
+        return {ref: ref, title: title, stamp: stamp, minimized: minimized};
+    }
+
+    // Window list at the top of an app's Dock menu (macOS): most recent first, a check on the most recent visible window.
+    function test_menuWindowsRecentFirstWithCheck() {
+        const rows = Launch.menuWindows([wi("a", "Old", 1, false), wi("b", "New", 9, false), wi("c", "Mid", 5, false)], 40, "App");
+        compare(rows.map(r => r.ref).join(","), "b,c,a");
+        compare(rows.map(r => r.checked).join(","), "true,false,false");
+    }
+
+    function test_menuWindowsMinimizedIsMarkedAndNeverChecked() {
+        const rows = Launch.menuWindows([wi("a", "Visible", 1, false), wi("b", "Hidden away", 9, true)], 40, "App");
+        compare(rows[0].ref, "b");
+        verify(rows[0].minimized);
+        verify(!rows[0].checked);
+        verify(rows[1].checked);
+    }
+
+    function test_menuWindowsAllMinimizedNoCheck() {
+        const rows = Launch.menuWindows([wi("a", "A", 1, true), wi("b", "B", 2, true)], 40, "App");
+        compare(rows.filter(r => r.checked).length, 0);
+    }
+
+    function test_menuWindowsTitleElidedAndNormalised() {
+        const rows = Launch.menuWindows([wi("a", "x".repeat(60), 1, false), wi("b", "  two\n  lines  ", 0, false), wi("c", "", 0, false)], 40, "App");
+        compare(rows[0].title.length, 40);
+        verify(rows[0].title.endsWith("…"));
+        compare(rows[1].title, "two lines");
+        // An empty title falls back to the app name, as the Window menu does.
+        compare(rows[2].title, "App");
+    }
+
+    function test_menuWindowsEmpty() {
+        compare(Launch.menuWindows([], 40, "App").length, 0);
+        compare(Launch.menuWindows(null, 40, "App").length, 0);
+    }
 }

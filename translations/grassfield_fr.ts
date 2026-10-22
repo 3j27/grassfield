@@ -1913,6 +1913,10 @@
         <translation>Menu de l’élément du Dock</translation>
     </message>
     <message>
+        <source>%1 (minimized)</source>
+        <translation>%1 (réduite)</translation>
+    </message>
+    <message>
         <source>New Window</source>
         <translation>Nouvelle fenêtre</translation>
     </message>
