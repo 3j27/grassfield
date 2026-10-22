@@ -119,6 +119,7 @@
  {"path": "tests/shell/a2_limits_doc.sh", "layer": "data"},
  {"path": "tests/shell/apps_nested.sh", "layer": "nested"},
  {"path": "tests/shell/apps_start_fail.sh", "layer": "headless"},
+ {"path": "tests/shell/wallpaper_online_start_fail.sh", "layer": "headless"},
  {"path": "tests/shell/audio_dev_guard.sh", "layer": "headless"},
  {"path": "tests/shell/autostart_write.sh", "layer": "logic"},
  {"path": "tests/shell/check_schema_pattern.sh", "layer": "logic"},

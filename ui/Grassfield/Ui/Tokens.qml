@@ -1309,6 +1309,8 @@ QtObject {
     readonly property int wallpaperOnlineMaxWaitMs: 21600000
     // ADR-0016 step 2: a metered connection is asked about again after this long
     readonly property int wallpaperOnlineMeteredRecheckMs: 3600000
+    // ADR-0016 step 2: the nmcli metered query that runs longer than this is killed and counted as not metered (a hung NetworkManager never blocks the fetch)
+    readonly property int wallpaperMeteredTimeoutMs: 10000
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width)
     readonly property int wallpaperAboutWidth: 360
 

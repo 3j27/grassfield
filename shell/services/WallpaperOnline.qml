@@ -92,6 +92,7 @@ Singleton {
             root.entryLoaded = true;
             return;
         }
+        latestProc.didStart = false;
         latestProc.command = args;
         latestProc.running = true;
     }
@@ -128,6 +129,16 @@ Singleton {
                 } catch (e) {
                     console.warn("wallpaper online: unreadable answer of latest");
                 }
+                root.entryLoaded = true;
+                root.evaluate();
+            }
+        }
+        property bool didStart: false
+        onStarted: didStart = true
+        // A helper that cannot start sends no `exited`: the scheduler would wait for the cache for ever.
+        onRunningChanged: {
+            if (!running && !didStart && !root.entryLoaded) {
+                console.warn("wallpaper online: could not start the helper to read the cache");
                 root.entryLoaded = true;
                 root.evaluate();
             }
@@ -248,32 +259,71 @@ Singleton {
         }
         // Metered connections are left alone (the flag is not exposed by Quickshell: one nmcli query per fetch, no polling).
         phase = "scheduled";
+        meteredHandled = false;
+        meteredProc.didStart = false;
+        meteredProc.command = root.meteredCommand;
+        meteredTimeout.interval = root.meteredTimeoutMs;
+        meteredTimeout.restart();
         meteredProc.running = true;
+    }
+
+    // Test seams (a test names a command that does not exist, or one that hangs, and a short timeout); the defaults are the
+    // production values.
+    property var meteredCommand: ["nmcli", "-t", "-g", "GENERAL.METERED", "device", "show"]
+    property int meteredTimeoutMs: Tokens.wallpaperMeteredTimeoutMs
+    property var fetchCommandOverride: []
+    property int fetchTimeoutMs: Tokens.wallpaperFetchTimeoutMs
+
+    // Every way the nmcli query can end (an answer, a start failure, a timeout) lands here once.
+    property bool meteredHandled: true
+
+    function meteredResolved(metered: bool): void {
+        if (meteredHandled)
+            return;
+        meteredHandled = true;
+        meteredTimeout.stop();
+        if (metered) {
+            phase = "waiting";
+            nextTimer.interval = Tokens.wallpaperOnlineMeteredRecheckMs;
+            nextTimer.restart();
+            return;
+        }
+        runFetch();
     }
 
     Process {
         id: meteredProc
-        command: ["nmcli", "-t", "-g", "GENERAL.METERED", "device", "show"]
+        // Set by started: a run that ends without it never started (see onRunningChanged).
+        property bool didStart: false
         stdout: StdioCollector {
             id: meteredOut
         }
-        // qmllint disable signal-handler-parameters
-        onExited: exitCode => {
-            // An unreadable answer (no nmcli, no NetworkManager) is not metered: the connectivity gate already passed.
-            const metered = exitCode === 0 && /^yes/m.test(meteredOut.text);
-            if (metered) {
-                root.phase = "waiting";
-                nextTimer.interval = Tokens.wallpaperOnlineMeteredRecheckMs;
-                nextTimer.restart();
-                return;
+        onStarted: didStart = true
+        // Quickshell sends no `exited` when a start fails, only running going back to false without a `started`. An
+        // unreadable answer (no nmcli, no NetworkManager, a hang) is not metered: the connectivity gate already passed.
+        onRunningChanged: {
+            if (!running && !didStart) {
+                console.warn("wallpaper online: could not start nmcli; the connection counts as not metered");
+                root.meteredResolved(false);
             }
-            root.runFetch();
         }
+        // qmllint disable signal-handler-parameters
+        onExited: exitCode => root.meteredResolved(exitCode === 0 && /^yes/m.test(meteredOut.text))
         // qmllint enable signal-handler-parameters
     }
 
+    Timer {
+        id: meteredTimeout
+        onTriggered: {
+            console.warn("wallpaper online: nmcli did not answer; the connection counts as not metered");
+            if (meteredProc.running)
+                meteredProc.signal(9);
+            root.meteredResolved(false);
+        }
+    }
+
     function runFetch(): void {
-        const args = WallpaperConfig.fetchArgs(WallpaperState.tool, root.provider, fetchDate, root.outDir, root.lang, root.devBaseUrl);
+        const args = root.fetchCommandOverride.length > 0 ? root.fetchCommandOverride : WallpaperConfig.fetchArgs(WallpaperState.tool, root.provider, fetchDate, root.outDir, root.lang, root.devBaseUrl);
         if (args === null) {
             console.warn("wallpaper online: no valid fetch command");
             return;
@@ -284,6 +334,8 @@ Singleton {
         fetchExit = -2;
         gotOut = false;
         gotExit = false;
+        fetchProc.didStart = false;
+        fetchTimeout.interval = root.fetchTimeoutMs;
         fetchTimeout.restart();
         fetchProc.command = args;
         fetchProc.running = true;
@@ -298,6 +350,9 @@ Singleton {
     function fetchDone(): void {
         if (!(gotOut && gotExit))
             return;
+        // One accounting per run: a late stream end after a start failure must not count again.
+        gotOut = false;
+        gotExit = false;
         joinTimer.stop();
         fetchTimeout.stop();
         let o = null;
@@ -331,10 +386,24 @@ Singleton {
 
     Process {
         id: fetchProc
+        // Set by started: a run that ends without it never started (see onRunningChanged).
+        property bool didStart: false
         stdout: StdioCollector {
             onStreamFinished: {
                 root.fetchOut = text;
                 root.gotOut = true;
+                root.fetchDone();
+            }
+        }
+        onStarted: didStart = true
+        // Quickshell sends no `exited` when a start fails, only running going back to false without a `started`: the fetch
+        // fails (backoff) instead of staying "fetching" for ever.
+        onRunningChanged: {
+            if (!running && !didStart) {
+                console.warn("wallpaper online: could not start the helper");
+                root.fetchExit = 127;
+                root.gotOut = true;
+                root.gotExit = true;
                 root.fetchDone();
             }
         }
@@ -360,7 +429,6 @@ Singleton {
 
     Timer {
         id: fetchTimeout
-        interval: Tokens.wallpaperFetchTimeoutMs
         onTriggered: {
             root.fetchTimedOut = true;
             if (fetchProc.running)
