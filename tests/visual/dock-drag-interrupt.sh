@@ -167,15 +167,34 @@ trial() {
   else
     tail="drag $FX $DY sleep 150 up sleep 150 $park"
   fi
-  restore || { restore_failed "$label"; return; }
-  if declare -F "pre_$trig" >/dev/null; then "pre_$trig" >/dev/null 2>&1; fi
-  vs_pointer $P drag $FX $hy $path $tail >/dev/null &
-  ptr_pid=$!
-  sleep 1.5
-  "trig_$trig" >/dev/null 2>&1
-  wait "$ptr_pid"
-  ptr_pid=""
-  sleep 1.2
+  # A trial counts only when the shell logged the drag start (dock-launch: drag-start): a pointer that never dragged (released 1-3 ms
+  # after the press) proves nothing and is repeated, up to three times, then reported as not tested (FAIL), never as a pass.
+  local attempt mark started=0
+  for attempt in 1 2 3; do
+    restore || { restore_failed "$label"; return; }
+    if declare -F "pre_$trig" >/dev/null; then "pre_$trig" >/dev/null 2>&1; fi
+    mark=$(wc -l < "$VS_DEV/shell.log")
+    vs_pointer $P drag $FX $hy $path $tail >/dev/null &
+    ptr_pid=$!
+    sleep 1.5
+    "trig_$trig" >/dev/null 2>&1
+    wait "$ptr_pid"
+    ptr_pid=""
+    sleep 1.2
+    if tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep -q "dock-launch: drag-start"; then
+      started=1
+      break
+    fi
+    echo "  ($label: no drag started on attempt $attempt, not tested: again)"
+    "end_$trig" >/dev/null 2>&1
+    # the pin may have been touched by nothing; bring the state back
+  done
+  if (( ! started )); then
+    failn=$((failn + 1))
+    echo "$(date +%T) $label no drag ever started, not tested: FAIL"
+    "end_$trig" >/dev/null 2>&1
+    return
+  fi
   res "$label" kept "$(pinned)"
   "end_$trig" >/dev/null 2>&1
 }
@@ -186,6 +205,34 @@ pos_run() { # TRIGGER REP: the four positions (+ released-at-held-point above th
   trial "$t" $INSIDE still slot "${t}_inside_still_r$r"
   trial "$t" $INSIDE wiggle slot "${t}_inside_moving_r$r"
   trial "$t" $ABOVE still held "${t}_above_still_releaseheld_r$r"
+}
+
+# hd NAME STYLE: press, hold 0.9 s (the hold menu opens at 550 ms and has the press from then on), then drag out above the Dock and
+# release there. The press became a menu: it must never become a drag, and the pin must stay. The shell must have logged
+# menu-by-hold (else the menu never opened: not tested, repeated, then FAIL). On 0ba3bc6 a drag started after the menu cleared the
+# interruption and removed the pin when the GUI thread was slow enough.
+hd() {
+  local label=$1 steps=$2 attempt mark opened=0
+  for attempt in 1 2 3; do
+    restore || { restore_failed "$label"; return; }
+    mark=$(wc -l < "$VS_DEV/shell.log")
+    vs_pointer abs $FX $DY sleep 200 down sleep 900 $steps sleep 300 up sleep 300 $park >/dev/null
+    sleep 1
+    if tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep -q "dock-launch: menu-by-hold"; then
+      opened=1
+      break
+    fi
+    echo "  ($label: the hold menu did not open on attempt $attempt, not tested: again)"
+    vs_ipc menubar close >/dev/null 2>&1
+  done
+  if (( ! opened )); then
+    failn=$((failn + 1))
+    echo "$(date +%T) $label the hold menu never opened, not tested: FAIL"
+    return
+  fi
+  res "$label" kept "$(pinned)"
+  vs_ipc menubar close >/dev/null 2>&1
+  sleep 1
 }
 
 # fn NAME DRAG-STEPS...: a deliberate drag that must remove the pin.
@@ -206,6 +253,15 @@ case $mode in
       for t in ${3:-overview apps search switcher dockmenu ncenter ccenter menubarmenu windowopen windowclose appquit workspace banner}; do
         pos_run "$t" "$r"
       done
+      hd "holdmenu_then_drag_above_r$r" "drag $FX $ABOVE"
+      hd "holdmenu_then_drag_above_moving_r$r" "drag $FX $ABOVE sleep 100 drag $((FX + 25)) $ABOVE sleep 100 drag $((FX - 25)) $ABOVE"
+    done
+    ;;
+  holddrag)
+    # Only the hold-menu-then-drag trials (also part of `interrupt`).
+    for r in $(seq 1 "$reps"); do
+      hd "holdmenu_then_drag_above_r$r" "drag $FX $ABOVE"
+      hd "holdmenu_then_drag_above_moving_r$r" "drag $FX $ABOVE sleep 100 drag $((FX + 25)) $ABOVE sleep 100 drag $((FX - 25)) $ABOVE"
     done
     ;;
   deliberate)

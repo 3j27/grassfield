@@ -13,6 +13,7 @@
 #   holdtiles a 900 ms hold on the Apps tile, the Trash tile and a minimized-window tile (no Dock menu) still clicks on release
 #   retitle   eight clicks while the focused window retitles every 20 ms all tap (title and focus events never cancel a click)
 #   mapdrop   a window opening during a held press ends it early in Qt: neither a tap nor an activation (Trash, app tile)
+#   closeclick a click while a window closes still taps (only a window opening is guarded)
 #   interrupt a press that another surface interrupts clicks nothing (Trash held while Apps opens, app tile pressed while Apps opens)
 #   rightclick a right press opens the Dock menu at once, however long it is held
 #   reduced   Reduce Motion on: no bounce, the dot still appears
@@ -43,7 +44,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 parts=("$@")
-(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles retitle mapdrop interrupt rightclick reduced)
+(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles retitle mapdrop closeclick interrupt rightclick reduced)
 want() { local p; for p in "${parts[@]}"; do [[ $p == "$1" ]] && return 0; done; return 1; }
 
 mkdir -p "$out" "$VS_DEV/share/applications" "$VS_DEV/share/gflaunch"
@@ -521,6 +522,29 @@ if want mapdrop; then
   check "mapdrop: app tile held 1 s, a window opened 0.1 s in: the app is not activated (gfLA windows: $(count_class gfLA))" $RC
   vs_ipc menubar close >/dev/null
   quiet gfLM gfLA
+fi
+
+if want closeclick; then
+  clean_state closeclick
+  # A window CLOSING never made Qt end a press (3 of 3 clicks tapped), so it must not refuse one: a 250 ms click on the Trash tile while
+  # a window closes 100 ms in must tap. (Only a window opening is guarded, see mapdrop.)
+  quiet gfLA gfLB gfLM
+  vs_spawn foot --app-id gfLM
+  wait_count gfLM 1 10
+  sleep 2
+  read -r cx cy <<<"$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("trash")')" "$VS_OUTPUT")"
+  vs_pointer abs "$cx" "$cy" >/dev/null
+  sleep 0.7
+  m=$(wc -l < "$VS_DEV/shell.log")
+  ( sleep 0.1; kill_class gfLM ) &
+  vs_pointer down sleep 250 up >/dev/null
+  wait
+  sleep 1
+  tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch:" > "$out/closeclick.txt"
+  echo "closeclick: $(sed 's/.*dock-launch: //' "$out/closeclick.txt" | tr '\n' '|')"
+  grep -q "dock-launch: tap [0-9]" "$out/closeclick.txt" && ! grep -q "tap-refused" "$out/closeclick.txt"; RC=$?
+  check "closeclick: a 250 ms click while a window closes 0.1 s in taps (no refusal)" $RC
+  quiet gfLM
 fi
 
 if want interrupt; then

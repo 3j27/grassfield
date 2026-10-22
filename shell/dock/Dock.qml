@@ -221,7 +221,12 @@ Scope {
     // Drag-out removal follows "cancel on interruption": anything that can take the pointer or the focus during a tile drag marks the
     // drag interrupted (win.dragInterrupted), and an interrupted drag never removes its tile (it glides back). Events only. The
     // Dock's own drag feedback (Remove label, puff, tooltip) is inside its window and reports none of these.
+    // Counts every interruption event, drag or not: a press records it when the button goes down, and a drag that starts later in the same
+    // press keeps any interruption seen since (starting a drag never clears one).
+    property int dragInterruptions: 0
+
     function interruptDrag(): void {
+        dragInterruptions++;
         const all = windows.instances;
         for (let i = 0; i < all.length; i++) {
             if (all[i].dragFrom >= 0)
@@ -313,11 +318,15 @@ Scope {
         target: Compositor.toplevels
 
         function onValuesChanged(): void {
-            root.lastWindowEvent = Date.now();
-            if (VisualFixtures.active)
-                console.info("dock-launch: toplevels-changed", Date.now());
             root.interruptDrag();
             root.rebuild();
+        }
+
+        // Only a window OPENING makes Qt end a held press (nested probe); a window closing never did (3 of 3 clicks tapped).
+        function onObjectInsertedPost(object: var, index: int): void {
+            root.lastWindowEvent = Date.now();
+            if (VisualFixtures.active)
+                console.info("dock-launch: toplevel-inserted", Date.now());
         }
     }
 
@@ -899,6 +908,8 @@ Scope {
                                 property int pressMark: 0
                                 property bool pressCancelled: false
                                 property real pressTime: 0
+                                // root.dragInterruptions when the button went down (a drag of this press starts interrupted when it changed).
+                                property int dragMark: 0
                                 readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
                                 // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
@@ -1320,7 +1331,8 @@ Scope {
                                 // Drag to reorder; dragged far above the shelf it leaves the Dock (poof).
                                 DragHandler {
                                     id: dragHandler
-                                    enabled: tile.isApp && !tile.isFiles
+                                    // A press that opened the hold menu can never become a drag (and never removes a pin).
+                                    enabled: tile.isApp && !tile.isFiles && !(tile.menuByHold && leftTap.pressed)
                                     target: null
                                     cursorShape: Qt.ClosedHandCursor
                                     // The one positive release signal: the exclusive grab ends with a Released event point (state 8,
@@ -1338,7 +1350,11 @@ Scope {
                                     onActiveChanged: {
                                         if (active) {
                                             win.releasedOutside = false;
-                                            win.dragInterrupted = false;
+                                            // Interruption state is per press: an event since the button went down (the hold menu, a surface, a
+                                            // window) keeps this drag from removing the tile.
+                                            win.dragInterrupted = tile.menuByHold || root.dragInterruptions !== tile.dragMark;
+                                            if (VisualFixtures.active)
+                                                console.info("dock-launch: drag-start", win.dragInterrupted ? "interrupted" : "clean", Date.now());
                                             win.dragSnap = false;
                                             win.dragFrom = tile.index;
                                             win.dragDx = 0;
@@ -1381,6 +1397,7 @@ Scope {
                                             tile.pressMark = root.clickCancels;
                                             tile.pressCancelled = false;
                                             tile.pressTime = Date.now();
+                                            tile.dragMark = root.dragInterruptions;
                                         }
                                     }
                                     onCanceled: {
