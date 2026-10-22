@@ -22,7 +22,7 @@ pkg_check_modules(LUA REQUIRED lua) # headers only: symbols resolve from Hyprlan
 # Pure logic, no Hyprland includes (unit-testable).
 add_library(gfcore STATIC src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp
   src/core/EventThrottle.cpp src/core/Overview.cpp src/core/DesktopFocus.cpp src/core/Json.cpp src/core/Stages.cpp src/core/CursorRefresh.cpp
-  src/core/DeferredFocus.cpp src/core/OverviewFocus.cpp src/core/Genie.cpp src/core/LayerPointer.cpp)
+  src/core/DeferredFocus.cpp src/core/OverviewFocus.cpp src/core/Genie.cpp src/core/Tiling.cpp src/core/LayerPointer.cpp)
 target_include_directories(gfcore PUBLIC src)
 set_target_properties(gfcore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_options(gfcore PRIVATE -Wall -Wextra)
@@ -39,7 +39,7 @@ add_library(gfprotocols OBJECT ${GF_PROTO_DIR}/appmenu.cpp)
 target_link_libraries(gfprotocols PRIVATE PkgConfig::HYPRLAND)
 set_target_properties(gfprotocols PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden)
 
-add_library(grassfield-compositor SHARED src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp src/WindowTransform.cpp src/Stages.cpp src/CursorRefresh.cpp src/DeferredFocus.cpp src/OverviewFocus.cpp src/GenieDraw.cpp src/LayerPointer.cpp $<TARGET_OBJECTS:gfprotocols>)
+add_library(grassfield-compositor SHARED src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp src/WindowTransform.cpp src/Stages.cpp src/CursorRefresh.cpp src/DeferredFocus.cpp src/OverviewFocus.cpp src/GenieDraw.cpp src/Tiling.cpp src/LayerPointer.cpp $<TARGET_OBJECTS:gfprotocols>)
 target_link_libraries(grassfield-compositor PRIVATE gfcore PkgConfig::HYPRLAND)
 target_include_directories(grassfield-compositor PRIVATE ${LUA_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_options(grassfield-compositor PRIVATE -Wall -Wextra)
@@ -53,7 +53,7 @@ if(GRASSFIELD_BUILD_TESTS)
   enable_testing()
   add_executable(grassfield-compositor-tests tests/ProtocolTest.cpp tests/TitlebarLayoutTest.cpp tests/PointerGestureTest.cpp tests/MinimizeTest.cpp tests/AppmenuTest.cpp
     tests/EventThrottleTest.cpp tests/OverviewTest.cpp tests/DesktopFocusTest.cpp tests/StagesTest.cpp tests/CursorRefreshTest.cpp
-    tests/DeferredFocusTest.cpp tests/OverviewFocusTest.cpp tests/GenieTest.cpp tests/LayerPointerTest.cpp)
+    tests/DeferredFocusTest.cpp tests/OverviewFocusTest.cpp tests/GenieTest.cpp tests/TilingTest.cpp tests/LayerPointerTest.cpp)
   target_link_libraries(grassfield-compositor-tests PRIVATE gfcore GTest::gtest_main)
   target_compile_options(grassfield-compositor-tests PRIVATE -Wall -Wextra)
   set_target_properties(grassfield-compositor-tests PROPERTIES

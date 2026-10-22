@@ -14,6 +14,7 @@
 #include "OverviewFocus.hpp"
 #include "Plugin.hpp"
 #include "Stages.hpp"
+#include "Tiling.hpp"
 #include "Titlebar.hpp"
 
 #include <hyprland/src/desktop/state/WindowState.hpp>
@@ -98,7 +99,7 @@ namespace {
         l.push_back(ev.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& /*info*/) {
             // A shell layer mapped or took the keyboard under the resting pointer and its pointer focus is not refreshed yet
             // (a button was held, no pointer device, or the press came in the same event loop pass): a press is delivered
-            // at the right place, a release schedules the refresh after Hyprland handled it (FR47).
+            // at the right place, a release schedules the refresh after Hyprland handled it (FR51).
             gf::guarded("layer pointer press", [&] { gf::layerPointer::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             gf::guarded("stages pointer guard", [&] { gf::stager::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             // A press after an overview focus request wins over the target the shell named (recorded only).
@@ -147,6 +148,7 @@ namespace {
 
     void removeAllTitlebars() {
         CGrassfieldTitlebar::cancelPointerGrab();
+        gf::tiler::forgetAll();
 
         // Visible windows: Hyprland's own removal path, which also lays the window out again without the
         // titlebar. It destroys the decoration synchronously for a mapped, visible window.
@@ -271,7 +273,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
             gf::guarded("cursor refresh rollback", [] { gf::cursorRefresh::stop(); });
             gf::log(Log::WARN, "no renderer for the cursor refresh; cursor-refresh not advertised");
         }
-        // Optional feature: without it a click without motion after a shell layer mapped may miss it (Hyprland 0.56.2, FR47).
+        // Optional feature: without it a click without motion after a shell layer mapped may miss it (Hyprland 0.56.2, FR51).
         bool layerPointerOk = false;
         gf::guarded("layer pointer start", [&] { layerPointerOk = gf::layerPointer::start(); });
         if (!layerPointerOk) {

@@ -12,8 +12,9 @@ refresh for the pointer size (feature `cursor-refresh`, FR39-FR40, ADR-0014); th
 for Hyprland's focused window without the keyboard (FR30 (d)) and the keyboard back after an unlock (FR30 (e)), plugin
 0.8.2-clickfocus; the funnel minimize effect (internal name Genie), the shrink effect and the Reduce Motion fade (feature `minimize-effect`,
 FR44-FR46, Track B3, owner defect #6), plugin 0.9.0-genie; the macOS 26 titlebar (F2a: 32-px bar, 14-px lights,
-hover glyphs, grey lights on inactive windows, square bar/content join, FR3-FR4c); the pointer focus on a shell layer that maps
-or takes the keyboard under a resting pointer (feature `layer-pointer`, FR47-FR48). Plugin 0.11.0-pointer.
+hover glyphs, grey lights on inactive windows, square bar/content join, FR3-FR4c), plugin 0.10.0-chrome; window tiling
+(feature `window-tiling`, FR47-FR50), plugin 0.11.0-tiling; the pointer focus on a shell layer that maps or takes the
+keyboard under a resting pointer (feature `layer-pointer`, FR51-FR52). Plugin 0.12.0-pointer.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -102,9 +103,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `grassfield>>{"v":"gfc/1","type":"capabilities","features":[...]}`: `decorations` always; `minimize` only
   when the `minimize`/`restore` Lua functions and the minimize render hooks registered; `config` only when the
   `config` Lua function registered; `appmenu` (FR18), `overview` (FR29), `desktop-focus` + `desktop-focus-v2` (FR31),
-  `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR48) likewise;
-  `minimize-effect` (FR45) with `minimize` and `config`; `stages` only while its flag is on
-  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","layer-pointer"]`
+  `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR52) likewise;
+  `minimize-effect` (FR45) with `minimize` and `config`; `window-tiling` (FR50) when the `tile` Lua function and `config`
+  registered; `stages` only while its flag is on
+  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer"]`
   when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
@@ -440,7 +442,31 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   them. Each finished animation logs one timing line (own log budget, FR24): effect, duration, frames on the snapshot's
   monitor, frame interval avg / max, CPU time per frame (render.preChecks -> RENDER_POST) avg / max, longest funnel draw
   (CPU), and `speed normal` or `speed slow` (tests separate slow-motion animations by it, never by duration).
-- **FR47** Pointer focus on the shell's layers (feature `layer-pointer`, plugin 0.11.0-pointer; integrator finding 2026-10-22,
+- **FR47** Window tiling by dragging (macOS 15+, owner request 2026-10-22): during a titlebar drag (the plugin's own
+  move, FR6/FR8) the pointer within `kEdge` (4 px) of a FREE left or right edge of an output tiles the window into that
+  half of the output's free area (`logicalBoxMinusReserved`: the menu bar and the Dock left out); also within
+  `kCorner` (96 px) of the output's top or bottom, into that quarter; the pointer on the menu bar strip (the output's
+  top reserved area) fills the free area. An edge shared with another output never tiles (the drag moves the window
+  over). Not for full-screen, maximized, pinned or tiled-by-layout windows. Pure logic `core/Tiling.*`
+  (`placeForPointer`, `surfaceFor`), unit tests `TilingDrag.*`, `TilingPlace.*`.
+- **FR48** Preview: while the release would tile, the place's frame (titlebar included) is drawn under the dragged window
+  and over the windows behind it (the titlebar decoration's DECORATION_LAYER_UNDER pass), a translucent white rim
+  (`kTilePreviewFill`) and lighter inside (`kTilePreviewInner`), corners at the window's rounding; old and new frames
+  are damaged when the place changes and when the gesture ends or is cancelled.
+- **FR49** Placement: the release sets the surface box (`setTargetGeom`) to `surfaceFor(place)`: margins `kMargin` (8)
+  around and between the tiles when "Tiled windows have margins" is on, the titlebar (`kTitlebarHeight`) inside the
+  frame below the menu bar. The box from before the FIRST tiling is remembered (per window, forgotten when the window
+  goes, on unload); a later drag of a tiled window gives that size back under the pointer at the same relative place
+  (like the un-zoom, `unzoomedDragBox`). `hl.plugin.grassfield.tile(address, place)` places a window the same way for
+  the Window menu (Fill, Center, Move & Resize: halves, quarters) and the keys Super+Ctrl+arrows; place `previous`
+  returns to the remembered box (Return to Previous Size, Super+Ctrl+R). Untrusted: fixed-size strings, the address
+  compared with live windows, the place from a fixed list.
+- **FR50** Settings (macOS Desktop & Dock > Windows, all on by default): `windows.tilingEdges` ("Drag windows to screen
+  edges to tile"), `windows.tilingMenuBar` ("Drag windows to menu bar to fill screen"), `windows.tilingMargins` ("Tiled
+  windows have margins"), pushed with `hl.plugin.grassfield.config("tilingEdges" | "tilingMenuBar" | "tilingMargins",
+  "true" | "false")` once the plugin advertises `window-tiling`. Without the plugin (C2) the shell shows no tiling items
+  and the keys do nothing; drags move windows as Hyprland does.
+- **FR51** Pointer focus on the shell's layers (feature `layer-pointer`, plugin 0.12.0-pointer; integrator finding 2026-10-22,
   `docs/specs/menubar.md` "Known limitations": a click with no pointer motion since a bar menu opened reached no surface).
   Cause (Hyprland 0.56.2, measured, and read from the binary): when a layer surface takes the keyboard (`CLayerSurface::onMap`
   for a layer mapped Exclusive, or OnDemand while the pointer is not constrained; `CLayerSurface::onCommit` when a mapped
@@ -465,10 +491,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   already calls `simulateMouseMovement` (read from the binary; measured: a click without motion after the menu closed
   reaches the window under the pointer, with and without the plugin). Decision logic pure (`core/LayerPointer.*`:
   `isGrassfieldNamespace`, `CRefreshState`).
-- **FR48** `layer-pointer` (no verb; the shell needs no change) is advertised when its two listeners registered.
-  `PLUGIN_EXIT` removes the listeners and the scheduled event-loop callback (`deferredFocus::CLater`) before `dlclose`;
-  `start()` resets the state (the library may stay mapped, FR23). One DEBUG log line at the 1st, 10th, 100th, ... refresh
-  (request log budget, FR24).
+- **FR52** `layer-pointer` (no verb; the shell needs no change) is advertised when its two listeners registered, after
+  `window-tiling` in the list. `PLUGIN_EXIT` removes the listeners and the scheduled event-loop callback
+  (`deferredFocus::CLater`) before `dlclose`; `start()` resets the state (the library may stay mapped, FR23). One DEBUG log
+  line at the 1st, 10th, 100th, ... refresh (request log budget, FR24).
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 
@@ -521,7 +547,8 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | FR41-FR43 | unit `OverviewFocus*` (request validation, gate, target plan, fallback Desktop, front window order, presses, user focus, events, capability: 11), `DeferredFocus*` (3; the Stages cases run through the aliases); nested `tests/compositor/overview_focus.sh check` / `baseline` / `stress`; `stages.sh`, `overview.sh`, `desktop_focus.sh`, `minimize.sh`, `soak.sh` (C1) | L0 / L1 | 2026-10-19, plugin 0.8.0-ovfocus, Hyprland v0.56.2 (efb50993): `check` **66/66 PASS** on the headless pair GF-REF + GF-REF2, WAYLAND-1 disabled (`.dev/overview-focus/run-20261019-194052-check`, final build; `run-20261019-192909-check`): letters reach exactly the target for the window active at open (three release orders), a window on the other output (chromes mapped or unmapping), the current Desktop, a Desktop on the other output, another Desktop, a closed and a minimized target (fallback), a press beside the remaining chrome, a polkit-like dialog during the close (its field gets the letters, `timeout`; a short one: the target after it), the lock (`refused`, nothing typed, no window focused); invalid payloads, a 300-request flood (one outcome), unload while waiting (`unavailable`, reload advertises the feature). `baseline` (the verb a no-op): old build 0.7.1-stages and `--no-plugin` both **32/44**, safety PASS (`run-20261019-201004-baseline`, `run-20261019-200901-baseline`): the targets on the other output, another Desktop and the press get nothing, keys lost after a closed or minimized target. Regressions on the same builds: `stages.sh` **66/66** (pair, `.dev/stages/run-20261019-193039-check`; final build with GF-REF + WAYLAND-1, `run-20261019-200634-check`), `overview.sh` 32/32, `desktop_focus.sh` 26/26, `minimize.sh` PASS |
 | FR17 | nested `minimize.sh` step 4; code review; unload path | L1 | 2026-10-17: a window killed 100 ms into its minimize animation and another killed 100 ms into its restore animation: both gone, the other window unaffected, nested Hyprland alive, no core dump of its PID. Monitor removal and runtime plugin unload mid-animation: NOT VERIFIED (no hotplug in nested; no `scripts/nestctl` for `plugin unload`); shutdown with the plugin loaded: see FR12. Lock screen: code inspection only (RENDER_POST_WINDOWS is not emitted while locked, Hyprland 0.56.2 `renderAllClientsForWorkspace`). Runtime unload mid-animation: verified 2026-10-20 by `tests/compositor/genie.sh` step 5 (FR44-FR46 row) |
 | FR44-FR46 | unit `GenieEdge.*`, `GenieGeometry.*` (exact window at 0, exact target at 1, inside the bounds, monotonic, rows never cross, genie not scale midway, only toward the Dock), `GenieMesh.*`, `GenieTiming.*`, `MinimizeEffect.*`; QML `tst_minimized` `configCallMinimizeEffect`; nested `tests/compositor/genie.sh` (shape of captures, timing, unload / load mid-animation), `genie.sh c2` (C2) | L0 / L1 | 2026-10-20, plugin 0.9.0-genie, Hyprland v0.56.2 (efb50993), headless GF-REF 1920x1080@60 on i915, host load 9-18 (other agents' sessions): unit 248/248; `genie.sh` **PASS** (`.dev/genie/run-20261020-163707`): genie minimize 4 of 5 slow-motion captures classified genie (funnel, top 4-7x wider than the neck), restore 4 of 5; scale 0 genie (3 + 5 rectangles); Reduce Motion: every footprint at the window's own box, move -> event 101 / 102 ms; unload 1 s into a slow genie minimize: Hyprland alive, window on `special:minimized`; reload advertises `minimize-effect`; unload 1 s into a slow genie restore: window fully shown at its place; no core dump, 0 exceptions. Timing at normal speed, no capture: genie 10 animations / 310 frames, frame interval mean 16.9 ms, worst 20.2 ms (0 frames over 25 ms), Genie draw CPU 0.35-5.0 ms; scale 6 / 114 frames worst 18.9 ms; fade 6 / 42 worst 19.8 ms. Captures (grim screencopy) stalled the nested compositor for 0.4-3.8 s per capture burst with every effect, hence slow motion for the captures. Two multi-second frames without captures were seen in genie rounds (3.0 s in `run-20261020-162322`, 1 of 10; 2.2 s in `.dev/minimize/run-20261020-171057`, 1 of 20) under that load; cause not isolated. `genie.sh c2 993 1032` **PASS** (`.dev/genie/run-20261020-172150`, `nested-up.sh --no-plugin`): `hyprctl grassfield` "unknown request", shell degraded, SUPER+M parks the window, the Dock tile restores it. `minimize.sh 20`: FAIL twice under load (`run-20261020-171057`: 3 events late beyond 3 s, the shell answering minimize-requests 1.4-1.5 s late; `run-20261020-172302`: the nested shell vanished without a core dump or a log line between 17:24:09 and 17:24:12, next to an i915 GPU hang of another nested Hyprland reported at 17:24:16 ("Resetting rcs0 for preemption time out"), with 6 fence timeouts on this instance); a third and fourth run on 2026-10-20 (Genie and Scale) also failed on late events, and the nested shell vanished once more with Genie. 2026-10-22, after merging main 072824f (minimize.sh rounds wait on the event socket, `MZ_ROUND_MS` 10 s, c7969ff; the shell's hello retries, ff5f888), host load ~7, 0 fence timeouts in the previous 20 min: `tests/compositor/minimize.sh` (20 rounds, Genie default) **PASS** (`.dev/minimize/run-20261022-081719`: 0 missing events, 22 minimized / 21 restored / 23 minimize-request, the shell alive to the end); `genie.sh` **PASS** (`.dev/genie/run-20261022-081918`: genie 4 of 5 captures, restore 4 of 5, scale 0 genie, fade in place, unload / load mid-animation; normal speed: genie 10 animations / 310 frames, interval mean 16.7 ms, worst 17.8 ms, 0 over 25 ms, frame CPU mean 2.23 ms, worst 5.73 ms, Genie draw worst 0.46 ms; scale 6 / 114 frames worst 17.3 ms; fade 6 / 42 worst 16.8 ms); `genie.sh c2 1019 1032` **PASS** (`.dev/genie/run-20261022-082227`). The 500 ms Genie needs no timing change in minimize.sh: its mid-animation click comes 0.12 s after the move, inside both effects. `soak.sh 300`: not run |
-| FR47-FR48 | unit `LayerPointer.*` (9; also under `-fsanitize=address,undefined`); nested `tests/compositor/layer_pointer.sh` (`check`, `--output WAYLAND-1`, `--expect plugin` against an older build and with the plugin unloaded, C2) | L0 / L1 | 2026-10-22, plugin 0.11.0-pointer, Hyprland v0.56.2 (efb50993), GF-REF at x = 1440 next to WAYLAND-1 at 0,0, host load ~3: unit 283/283 (ASan/UBSan build 283/283, 0 sanitizer reports); `layer_pointer.sh check` **PASS** on GF-REF (`.dev/layer-pointer/run-20261022-223323-check`): a second click without motion closes the menu opened by a press (same pointer, and a new pointer device sending no motion), and the menu opened by IPC under the still pointer; 1-px control and the click after a menu closed over foot PASS; `--output WAYLAND-1` PASS. Defect shown: the 0.10.0-chrome build (loaded from another path with `scripts/nestctl plugin load`) with `--expect plugin` **FAIL** 3/3 map cases (`run-20261022-223421-check`), the plugin unloaded likewise (`run-20261022-223339-check`); without the plugin the map cases pass on WAYLAND-1 (at the origin) and fail on GF-REF (baseline probes `run-20261022-221741-probe`, `run-20261022-221846-probe`). First fix (map only) left the menu opened by a press failing: diagnostic lines showed the overlay maps while the button is still down with keyboard None and takes the keyboard after the release (`CLayerSurface::onCommit`, same miscomputed position): hence the keyboard trigger and the wait for the release. Runtime unload / load: rc 0 both, Hyprland alive, `layer-pointer` withdrawn and advertised again, check PASS after the reload (`run-20261022-223449-check`) |
+| FR47-FR50 | unit `TilingDrag.*`, `TilingPlace.*`, `TilingNames.*` (7); QML `tst_appmenumodel` `test_windowMenuTilingItems`, `settings_apply` (tiling keys); nested `tests/compositor/tiling.sh` | L0 / L1 | 2026-10-22, plugin 0.11.0-tiling (integrator): unit 280/280; `tiling.sh` **10/10 PASS** on GF-REF (left edge shared with WAYLAND-1, right edge free): right edge -> 948x926 at 2404,64, drag-out -> 800x500 back, top of the right edge -> 948x443 quarter, shared left edge -> no tiling, menu bar -> 1904x926 at 1448,64, IPC `left` then `previous`, `tilingEdges false` -> no tiling; preview captures viewed (right half, fill); Window > Move & Resize capture viewed. Not run: C2 without the plugin, soak, R13 |
+| FR51-FR52 | unit `LayerPointer.*` (9; also under `-fsanitize=address,undefined`); nested `tests/compositor/layer_pointer.sh` (`check`, `--output WAYLAND-1`, `--expect plugin` against an older build and with the plugin unloaded, C2) | L0 / L1 | 2026-10-22, plugin 0.11.0-pointer, Hyprland v0.56.2 (efb50993), GF-REF at x = 1440 next to WAYLAND-1 at 0,0, host load ~3: unit 283/283 (ASan/UBSan build 283/283, 0 sanitizer reports); `layer_pointer.sh check` **PASS** on GF-REF (`.dev/layer-pointer/run-20261022-223323-check`): a second click without motion closes the menu opened by a press (same pointer, and a new pointer device sending no motion), and the menu opened by IPC under the still pointer; 1-px control and the click after a menu closed over foot PASS; `--output WAYLAND-1` PASS. Defect shown: the 0.10.0-chrome build (loaded from another path with `scripts/nestctl plugin load`) with `--expect plugin` **FAIL** 3/3 map cases (`run-20261022-223421-check`), the plugin unloaded likewise (`run-20261022-223339-check`); without the plugin the map cases pass on WAYLAND-1 (at the origin) and fail on GF-REF (baseline probes `run-20261022-221741-probe`, `run-20261022-221846-probe`). First fix (map only) left the menu opened by a press failing: diagnostic lines showed the overlay maps while the button is still down with keyboard None and takes the keyboard after the release (`CLayerSurface::onCommit`, same miscomputed position): hence the keyboard trigger and the wait for the release. Runtime unload / load: rc 0 both, Hyprland alive, `layer-pointer` withdrawn and advertised again, check PASS after the reload (`run-20261022-223449-check`) |
 
 ## Interfaces / contracts (versions)
 
@@ -549,7 +576,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | shell → plugin | `hl.plugin.grassfield.cursor_refresh()` (feature `cursor-refresh`), after the shell's `setcursor <theme> <size>` was answered `ok` | the pointer is drawn again at that size, same shape, same place (FR39-FR40); no event |
 | shell → plugin | `hl.plugin.grassfield.overview_focus("<json>")` (feature `overview-focus`) when the Overview starts closing | `{"target":"window"\|"workspace"\|"remembered"\|"none",…}` (FR41; contract `docs/specs/overview.md` "Close focus") |
 | plugin → shell | socket2 event `grassfield` (overview focus outcome) | `{"v":"gfc/1","type":"overview-focus","outcome":"…","target":"…","id":N}` (+ `"address"`, `"workspace"`, `"reason"`; FR42) |
-| plugin (no verb) | feature `layer-pointer`: the pointer focus is re-run at the cursor after a `grassfield-*` layer surface maps or takes the keyboard | FR47-FR48 |
+| plugin (no verb) | feature `layer-pointer`: the pointer focus is re-run at the cursor after a `grassfield-*` layer surface maps or takes the keyboard | FR51-FR52 |
 | query | `hyprctl grassfield` | capabilities JSON |
 
 The shell sends every verb guarded (`local p = hl.plugin and hl.plugin.grassfield; if p and p.<verb> then
@@ -975,7 +1002,7 @@ rate gate). Nested: `tests/compositor/cursor_refresh.sh [check | baseline | stre
 also cover the overview focus (`OverviewFocus*`: request validation, gate, target plan, fallback Desktop, front window order,
 presses, user focus, events, capability) and the shared deferred focus (`DeferredFocus*`), and the layer pointer focus
 (`LayerPointer.*`: namespaces, one refresh per burst, waiting for the release or a pointer device, the press fallback, the
-feature). Nested: `tests/compositor/layer_pointer.sh [check | probe] [--output NAME] [--expect plugin | degraded]` (FR47-FR48:
+feature). Nested: `tests/compositor/layer_pointer.sh [check | probe] [--output NAME] [--expect plugin | degraded]` (FR51-FR52:
 clicks without motion on a bar menu opened by a press, from a new pointer device and by IPC; the 1-px control; a click after
 a menu closed over a window; C2 and an older build through `--expect`).
 
@@ -1168,7 +1195,7 @@ rule (valid and recent: focus; else `urgent` only) with graceful degradation (no
   activation that follows user input take the focus. Not doable with Hyprland 0.56.2's plugin surface.
 
 - Titlebar join (FR3): a thin 1-px arc remains on XWayland windows and translucent windows show lighter corner squares.
-- Layer pointer focus (FR47): only the shell's own `grassfield-*` layers are corrected; another client's layer surface that
+- Layer pointer focus (FR51): only the shell's own `grassfield-*` layers are corrected; another client's layer surface that
   takes the keyboard on an output away from the layout origin (a third-party launcher) keeps Hyprland's wrong position until
   the pointer moves. The cause is in Hyprland 0.56.2 (`CLayerSurface::onMap` / `onCommit` add the monitor position to a
   geometry already in layout coordinates); worth reporting upstream. The refresh is one pixel's worth of Hyprland motion

@@ -130,6 +130,10 @@ Scope {
 
     component WindowsConfig: JsonObject {
         property string titlebarDoubleClick: "zoom"
+        // Window tiling (macOS 15+, all on by default): drag to the screen edges, drag to the menu bar, margins.
+        property bool tilingEdges: true
+        property bool tilingMenuBar: true
+        property bool tilingMargins: true
     }
 
     component LockConfig: JsonObject {

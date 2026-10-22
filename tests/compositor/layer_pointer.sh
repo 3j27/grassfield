@@ -3,9 +3,9 @@
 # model: what appears or disappears under a still pointer gets the next click; a trackpad tap does not move the pointer).
 # Integrator finding 2026-10-22 (docs/specs/menubar.md "Known limitations"): with a bar menu open, a click with no pointer
 # motion since the menu opened reached no surface; 1 px of motion first and it reached the menu's overlay and closed it.
-# Cause (docs/specs/compositor.md FR47): Hyprland 0.56.2 gives a layer that takes the keyboard the pointer focus with the
+# Cause (docs/specs/compositor.md FR51): Hyprland 0.56.2 gives a layer that takes the keyboard the pointer focus with the
 # monitor offset counted twice, so on GF-REF (x = 1440) the overlay was told the pointer at x - 1440 until it moved; on an
-# output at the layout origin (WAYLAND-1) the same clicks worked. grassfield-compositor 0.11.0-pointer re-runs Hyprland's
+# output at the layout origin (WAYLAND-1) the same clicks worked. grassfield-compositor 0.12.0-pointer re-runs Hyprland's
 # pointer focus at the cursor afterwards (feature layer-pointer).
 #
 # Usage: tests/compositor/layer_pointer.sh [check | probe] [--output NAME] [--expect plugin | degraded]

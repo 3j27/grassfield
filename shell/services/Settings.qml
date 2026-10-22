@@ -56,6 +56,9 @@ Singleton {
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
+    readonly property bool windowsTilingEdges: store.data.windows.tilingEdges
+    readonly property bool windowsTilingMenuBar: store.data.windows.tilingMenuBar
+    readonly property bool windowsTilingMargins: store.data.windows.tilingMargins
     readonly property int lockIdleMinutes: store.lockIdleMinutes
 
     readonly property bool desktopShowIcons: store.data.desktop.showIcons

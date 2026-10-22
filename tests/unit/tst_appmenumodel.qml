@@ -97,6 +97,23 @@ TestCase {
         compare(list[1].ref, "w2");
     }
 
+    // macOS 15+ window tiling, only with the plugin's "window-tiling": Fill, Center, Move & Resize (halves, quarters,
+    // Return to Previous Size); disabled in full screen.
+    function test_windowMenuTilingItems() {
+        compare(ids(model.windowMenu(ctx({}))).indexOf("tile"), -1, "no tiling items without the capability");
+        const items = model.windowMenu(ctx({canTile: true}));
+        compare(ids(items).join(","), "minimize,zoom,tile,tile,moveResize,fullscreen,moveMenu,bringAll,window,window");
+        compare(items.filter(i => i.id === "tile").map(i => i.place).join(","), "fill,center");
+        const sub = items.find(i => i.id === "moveResize").submenu.filter(i => !i.separator);
+        compare(sub.map(i => i.place).join(","), "left,right,top,bottom,top-left,top-right,bottom-left,bottom-right,previous");
+        compare(sub[0].shortcut, "Super+Ctrl+Left");
+        compare(sub[8].text, "Return to Previous Size");
+        verify(sub.every(i => i.enabled));
+        const full = model.windowMenu(ctx({canTile: true, fullscreen: true}));
+        verify(full.find(i => i.id === "moveResize").submenu.filter(i => !i.separator).every(i => !i.enabled), "no tiling in full screen");
+        verify(!full.find(i => i.place === "fill").enabled);
+    }
+
     function test_windowCommandsAreGreyWhenTheAppIsNamedFromStagesOnly() {
         const items = model.windowMenu(ctx({displayOnly: true}));
         for (const id of ["minimize", "zoom", "fullscreen", "moveMenu"])

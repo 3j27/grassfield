@@ -33,6 +33,7 @@ namespace gf::gfc {
     inline constexpr std::string_view kLuaStages      = "stages";     // hl.plugin.grassfield.stages(json): Stages (behind config stagesEnabled)
     inline constexpr std::string_view kLuaCursorRefresh = "cursor_refresh"; // hl.plugin.grassfield.cursor_refresh(): redraw the pointer at its size
     inline constexpr std::string_view kLuaOverviewFocus = "overview_focus"; // hl.plugin.grassfield.overview_focus(json): focus after the Overview closes
+    inline constexpr std::string_view kLuaTile = "tile"; // hl.plugin.grassfield.tile(address, place): Window > Move & Resize (core/Tiling.hpp)
 
     // What a shell sends through Hyprland.dispatch() to call a plugin verb.
     std::string luaDispatchRequest(std::string_view verb);
@@ -63,17 +64,21 @@ namespace gf::gfc {
     // Settings dock.minimizeEffect ("Minimize animation"), "fade" while Reduce Motion is on. Advertised with
     // minimize and config; a shell pushes the key only when it sees this feature (older plugins reject the key).
     inline constexpr std::string_view kFeatureMinimizeEffect = "minimize-effect";
-    // No verb: when a layer surface of the shell ("grassfield-*") maps, the plugin re-runs Hyprland's pointer focus at the
-    // cursor, so a click without motion reaches what is under the pointer (spec FR47-FR48, core/LayerPointer.hpp).
+    // Window tiling (core/Tiling.hpp, FR47-FR50): titlebar drags tile at the free side edges, their corners and the menu
+    // bar; hl.plugin.grassfield.tile(address, place) and the config keys tilingEdges / tilingMenuBar / tilingMargins.
+    inline constexpr std::string_view kFeatureWindowTiling = "window-tiling";
+    // No verb: when a layer surface of the shell ("grassfield-*") maps or takes the keyboard, the plugin re-runs Hyprland's
+    // pointer focus at the cursor, so a click without motion reaches what is under the pointer (spec FR51-FR52,
+    // core/LayerPointer.hpp).
     inline constexpr std::string_view kFeatureLayerPointer = "layer-pointer";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
-    // overview-focus, minimize-effect, layer-pointer.
+    // overview-focus, minimize-effect, window-tiling, layer-pointer.
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
                                            bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
-                                           bool layerPointer = false);
+                                           bool windowTiling = false, bool layerPointer = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, stagesEnabled
     // (core/Stages.hpp) and minimizeEffect (core/Minimize.hpp).

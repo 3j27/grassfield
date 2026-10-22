@@ -10,6 +10,7 @@
 #include "OverviewFocus.hpp"
 #include "Plugin.hpp"
 #include "Stages.hpp"
+#include "Tiling.hpp"
 #include "core/Minimize.hpp"
 #include "core/Overview.hpp"
 #include "core/OverviewFocus.hpp"
@@ -180,7 +181,7 @@ namespace gf::ipc {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
-                                                layerPointer::ready());
+                                                state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -299,9 +300,25 @@ namespace gf::ipc {
                     logRequest(Log::INFO, "config: {} = {}", minimize::kConfigMinimizeEffect, value.view());
                     return;
                 }
+                // Window tiling (core/Tiling.hpp): Settings windows.tilingEdges / tilingMenuBar / tilingMargins.
+                if (key.ok && value.ok && (key.view() == tiling::kConfigEdges || key.view() == tiling::kConfigMenuBar || key.view() == tiling::kConfigMargins)) {
+                    const auto on = tiling::parseBool(value.view());
+                    if (!on) {
+                        logRequest(Log::WARN, "config: rejected ({} = true|false)", key.view());
+                        return;
+                    }
+                    if (key.view() == tiling::kConfigEdges)
+                        state().tilingDrag.edges = *on;
+                    else if (key.view() == tiling::kConfigMenuBar)
+                        state().tilingDrag.menuBar = *on;
+                    else
+                        state().tilingMargins = *on;
+                    logRequest(Log::INFO, "config: {} = {}", key.view(), value.view());
+                    return;
+                }
                 const auto action = key.ok && value.ok ? gfc::parseDoubleClickAction(key.view(), value.view()) : std::nullopt;
                 if (!action) {
-                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none, {} = true|false and {} = funnel|shrink|fade are accepted)",
+                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none, {} = true|false, {} = funnel|shrink|fade and the tiling keys are accepted)",
                                gfc::kConfigTitlebarDoubleClick, gf::stages::kConfigStagesEnabled, minimize::kConfigMinimizeEffect);
                     return;
                 }
@@ -450,6 +467,21 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
+        // hl.plugin.grassfield.tile(address, place): Window > Move & Resize (core/Tiling.hpp names, or "previous").
+        // Untrusted: both strings are copied out of Lua with fixed limits; the address is compared with the live windows.
+        int luaTile(lua_State* L) {
+            const auto address = readString<24>(L, 1);
+            const auto place   = readString<16>(L, 2);
+            guarded("hl.plugin.grassfield.tile", [&] {
+                if (!address.ok || !place.ok) {
+                    logRequest(Log::WARN, "tile: rejected: invalid arguments");
+                    return;
+                }
+                tiler::tileRequest(address.view(), place.view());
+            });
+            return pushNoOpDispatcher(L);
+        }
+
         // hl.plugin.grassfield.appmenu(address): re-posts the appmenu event of a mapped window (the shell calls it
         // after a restart). Untrusted: the address is parsed and compared with the live windows.
         int luaAppmenu(lua_State* L) {
@@ -532,6 +564,7 @@ namespace gf::ipc {
         s.luaStagesRegistered   = stager::ready() && addLua(gfc::kLuaStages, luaStages);          // only with its listeners
         s.luaCursorRefreshRegistered = cursorRefresh::ready() && addLua(gfc::kLuaCursorRefresh, luaCursorRefresh); // only with a renderer
         s.luaOverviewFocusRegistered = overviewFocus::ready() && addLua(gfc::kLuaOverviewFocus, luaOverviewFocus);   // only with its listeners
+        s.luaTileRegistered          = addLua(gfc::kLuaTile, luaTile);
         bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
@@ -554,6 +587,7 @@ namespace gf::ipc {
         removeLua(s.luaStagesRegistered, gfc::kLuaStages);
         removeLua(s.luaCursorRefreshRegistered, gfc::kLuaCursorRefresh);
         removeLua(s.luaOverviewFocusRegistered, gfc::kLuaOverviewFocus);
+        removeLua(s.luaTileRegistered, gfc::kLuaTile);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();

@@ -1,4 +1,4 @@
-// Pointer focus after a Grassfield layer maps or takes the keyboard (gfc/1 "layer-pointer", spec FR47-FR48): which
+// Pointer focus after a Grassfield layer maps or takes the keyboard (gfc/1 "layer-pointer", spec FR51-FR52): which
 // namespaces count, one refresh per burst of events from the event loop, waiting for the release of a held button or for
 // a pointer device, the press fallback, and the feature name.
 
@@ -145,9 +145,9 @@ TEST(LayerPointer, ResetForgetsEverything) {
 TEST(LayerPointer, FeatureIsAdvertisedOnlyWhenRegisteredAndLast) {
     using namespace gf::gfc;
     EXPECT_EQ(kFeatureLayerPointer, "layer-pointer");
-    EXPECT_EQ(capabilitiesJson(features(false, false, false, false, false, false, false, false, false, false, true)),
+    EXPECT_EQ(capabilitiesJson(features(false, false, false, false, false, false, false, false, false, false, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","layer-pointer"]})");
-    EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true, true, false, true, true, true, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","layer-pointer"]})");
-    EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true, true, true, true, true, true, false)).find("layer-pointer"), std::string::npos);
+    EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true, true, false, true, true, true, true, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true, true, true, true, true, true, true, false)).find("layer-pointer"), std::string::npos);
 }

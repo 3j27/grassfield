@@ -1,7 +1,7 @@
 #pragma once
 
 // Pointer focus on a Grassfield layer surface that maps or takes the keyboard under a resting pointer (gfc/1 feature
-// "layer-pointer", spec FR47-FR48). Plain C++ with no Hyprland includes, so it is unit-testable
+// "layer-pointer", spec FR51-FR52). Plain C++ with no Hyprland includes, so it is unit-testable
 // (compositor/tests/LayerPointerTest.cpp); the glue is src/LayerPointer.cpp.
 //
 // Why (Hyprland 0.56.2, measured in the nested session and read from the binary): when a layer surface takes the keyboard

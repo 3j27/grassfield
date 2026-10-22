@@ -4,6 +4,7 @@
 
 #include "core/EventThrottle.hpp"
 #include "core/Protocol.hpp"
+#include "core/Tiling.hpp"
 
 #include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
@@ -23,7 +24,7 @@ class IHyprWindowDecoration;
 namespace gf {
 
     inline constexpr const char* kPluginName    = "grassfield-compositor";
-    inline constexpr const char* kPluginVersion = "0.11.0-pointer";
+    inline constexpr const char* kPluginVersion = "0.12.0-pointer";
 
     struct SPluginState {
         HANDLE                             handle = nullptr;
@@ -40,9 +41,13 @@ namespace gf {
         bool                               luaStagesRegistered   = false;
         bool                               luaCursorRefreshRegistered = false;
         bool                               luaOverviewFocusRegistered = false;
+        bool                               luaTileRegistered          = false;
 
         // Settings pushed by the shell (hl.plugin.grassfield.config).
         gfc::DoubleClickAction doubleClickAction = gfc::DoubleClickAction::Zoom;
+        // Window tiling (core/Tiling.hpp, Settings windows.tilingEdges / tilingMenuBar / tilingMargins): macOS defaults, all on.
+        tiling::DragOptions tilingDrag;
+        bool                tilingMargins = true;
 
         // Live titlebars. Owned by their windows; each removes itself in its destructor.
         std::vector<CGrassfieldTitlebar*> titlebars;

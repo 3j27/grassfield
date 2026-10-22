@@ -1,7 +1,7 @@
 #pragma once
 
 // Pointer focus on a Grassfield layer surface that maps or takes the keyboard under a resting pointer (gfc/1 feature
-// "layer-pointer", spec FR47-FR48). Hyprland 0.56.2 glue; the reason and the decisions are in core/LayerPointer.*.
+// "layer-pointer", spec FR51-FR52). Hyprland 0.56.2 glue; the reason and the decisions are in core/LayerPointer.*.
 //
 // Hooks (installed headers): the event bus `layer.opened` (emitted from CLayerSurface::onMap) and `input.keyboard.focus`
 // (the seat's keyboard going to a layer surface, also from CLayerSurface::onCommit), one coalesced callback from

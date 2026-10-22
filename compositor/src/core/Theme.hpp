@@ -93,4 +93,11 @@ namespace gf::theme {
     // S2: fixed appearance. Switching follows the shell's appearance setting later (tokens + IPC).
     inline constexpr Appearance kDefaultAppearance = Appearance::Dark;
 
+    // ---- Window tiling preview (core/Tiling.hpp, FR48) ----
+    // A translucent frame of the place a drag would tile into, under the dragged window: a light rim and a lighter
+    // inside, readable over light and dark windows (macOS shows a translucent pane). Corners follow the window's rounding.
+    inline constexpr Rgba   kTilePreviewFill  = fromHex(0xFFFFFF, 0.42F);
+    inline constexpr Rgba   kTilePreviewInner = fromHex(0xFFFFFF, 0.16F);
+    inline constexpr double kTilePreviewRim   = 2.0;
+
 } // namespace gf::theme
