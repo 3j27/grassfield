@@ -147,7 +147,8 @@ grassfield-compositor-0.4.0-7-x86_64.pkg.tar.zst` from `packaging/arch`, then lo
 - [ ] Notification Center: Tab, Delete and Return keep the focus where you expect after new notifications arrive.
 
 **New in 0.4.0-8** (`sudo pacman -U grassfield-desktop-0.4.0-8-x86_64.pkg.tar.zst
-grassfield-compositor-0.4.0-8-x86_64.pkg.tar.zst` from `packaging/arch`, then log out and in):
+grassfield-compositor-0.4.0-8-x86_64.pkg.tar.zst` from `packaging/arch`, then `systemctl --user restart
+grassfield-shell`; the plugin and the Hyprland config did not change since 0.4.0-7, so no re-login is needed):
 
 - [ ] Login: no "Compositor extension not loaded" banner, titlebars and minimize work at once. If the extension answers
       late, the shell keeps asking for 5 minutes and recovers by itself (no shell restart needed any more).
