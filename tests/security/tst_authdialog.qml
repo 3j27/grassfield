@@ -63,6 +63,28 @@ TestCase {
         model: dialogModel
     }
 
+    // test_7: hands every key it gets to `target`'s own key handler first (Keys.forwardTo sends the event to the target
+    // item whether or not that item is enabled) and records the keys the target did not accept. Qt never gives a disabled
+    // item the active focus, so focusing a disabled Allow cannot bring a key to its handler; this does.
+    Item {
+        id: forwarder
+
+        property Item target: null
+        property var reached: []
+
+        Keys.forwardTo: forwarder.target ? [forwarder.target] : []
+        Keys.onPressed: event => {
+            forwarder.reached = forwarder.reached.concat([event.key]);
+            event.accepted = true;
+        }
+    }
+
+    // test_7: Allow's own activations, whatever the field and the model then do with them.
+    SignalSpy {
+        id: allowClicks
+        signalName: "clicked"
+    }
+
     function findText(item, needle) {
         if (item.text !== undefined && String(item.text).indexOf(needle) !== -1)
             return item;
@@ -123,25 +145,76 @@ TestCase {
 
     // R12: with a typed password, Allow answers polkit once from the keyboard; while the answer is checked it is disabled,
     // and neither Return, Enter nor Space can send a second one.
+    // The disabled Allow's own key check is tested, not only its effect (2026-10-22 review: focusing a disabled Allow
+    // never brings a key to it, so a Button without its `enabled` check passed): the keys are also handed to Allow's
+    // handler by `forwarder`, and Allow's activations are counted directly, because the field (busy) and the model
+    // (canSubmit) would hide a second activation. Those two must still block a second send when Allow is activated
+    // anyway (an activation that bypasses the key handler, e.g. an accessibility press action).
     function test_7_allowSubmitsOnceFromTheKeyboard() {
         dialogModel.cancel();
         const before = flow.submitted.length;
+        const allow = findExact(dialog, "Allow");
+        verify(allow !== null);
+        allowClicks.target = allow;
+        allowClicks.clear();
         dialog.focusField();
         keyClick(Qt.Key_A);
         keyClick(Qt.Key_B);
-        const allow = findExact(dialog, "Allow");
-        verify(allow !== null && allow.visible && allow.enabled, "Allow is shown and enabled");
+        verify(allow.visible && allow.enabled, "Allow is shown and enabled");
         allow.forceActiveFocus();
         verify(allow.activeFocus);
         keyClick(Qt.Key_Return);
+        compare(allowClicks.count, 1);
         compare(flow.submitted.length, before + 1);
         compare(flow.submitted[flow.submitted.length - 1], "ab");
         verify(!allow.enabled, "Allow is disabled while the answer is checked");
-        for (const key of [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space]) {
+        verify(allow.visible, "Allow stays shown: only its `enabled` check can stop it");
+
+        const keys = [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space];
+        // Through the focus, as before (Qt keeps a disabled item from taking it, so these keys go elsewhere).
+        for (const key of keys) {
             allow.forceActiveFocus();
             keyClick(key);
         }
+        compare(allowClicks.count, 1, "no activation through the focus");
+        // Straight to the disabled Allow's key handler. It must swallow the keys without acting: none reaches the
+        // forwarder's own handler (proof that Allow's handler got them), and Allow is not activated.
+        forwarder.target = allow;
+        forwarder.reached = [];
+        forwarder.forceActiveFocus();
+        verify(forwarder.activeFocus);
+        for (const key of keys)
+            keyClick(key);
+        compare(forwarder.reached, [], "the disabled Allow's handler received and swallowed Return, Enter and Space");
+        compare(allowClicks.count, 1, "a disabled Allow never acts on Return, Enter or Space");
         compare(flow.submitted.length, before + 1);
+
+        // Defence in depth: an activation of the disabled Allow that bypasses its key check still sends nothing. The field
+        // is read-only while busy, so text is put into it directly; the field (busy) and the model (canSubmit) must refuse.
+        const input = findInput(dialog);
+        verify(input !== null);
+        input.text = "cd";
+        allow.clicked();
+        compare(allowClicks.count, 2);
+        compare(flow.submitted.length, before + 1, "busy/canSubmit block a second send");
+        verify(!dialogModel.submit("cd"), "the model refuses a second answer while the first is checked");
+        compare(flow.submitted.length, before + 1);
+
+        forwarder.target = null;
+        allowClicks.target = null;
+        dialogModel.cancel();
+    }
+
+    // The password TextInput of the sheet (the only item with an echoMode).
+    function findInput(item) {
+        if (item.echoMode !== undefined)
+            return item;
+        for (let i = 0; i < item.children.length; i++) {
+            const found = findInput(item.children[i]);
+            if (found)
+                return found;
+        }
+        return null;
     }
 
     // R12: a hidden Allow that still holds the focus never answers polkit (shared Button key guard: Return, Enter and
