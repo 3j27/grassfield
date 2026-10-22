@@ -3,7 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
-import "../dock/Geometry.js" as Geometry
 
 // grassfield.json (contract version 1): schema, defaults, persistence. Not a singleton so that
 // tests can create independent instances; the shell uses it through the Settings singleton.
@@ -38,9 +37,9 @@ Scope {
     readonly property real transparency: clampNumber(config.material.transparency, 0, 1, 0.25)
     readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
     // Tile size of the Dock in px (Settings > Size); a hand-edited value is clamped to the slider range.
-    readonly property int dockSize: Geometry.clampSize(config.dock.size, Tokens.dockSizeMin, Tokens.dockSizeMax, Tokens.dockIconSize)
+    readonly property int dockSize: tileSize(config.dock.size)
     // Screen edge of the Dock (Settings > Position on screen); anything but left/right is the bottom.
-    readonly property string dockPosition: Geometry.normalizeEdge(config.dock.position)
+    readonly property string dockPosition: dockEdge(config.dock.position)
     readonly property real dockMagnification: clampNumber(config.dock.magnification, 1, 2.5, 1.6)
     // The default list of the first releases (a file written by them holds it) reads as the current default: Files is the
     // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
@@ -81,6 +80,17 @@ Scope {
     readonly property string hotCornerTopRight: cornerAction(config.hotCorners.topRight)
     readonly property string hotCornerBottomLeft: cornerAction(config.hotCorners.bottomLeft)
     readonly property string hotCornerBottomRight: cornerAction(config.hotCorners.bottomRight)
+
+    // A stored tile size: a whole number inside the slider's range (dock.sizeMin..dock.sizeMax); anything that is not a number reads
+    // as the default size (same rule as Geometry.clampSize, which the Dock uses for the live resize).
+    function tileSize(value: var): int {
+        return typeof value === "number" && isFinite(value) ? Math.round(Math.max(Tokens.dockSizeMin, Math.min(Tokens.dockSizeMax, value))) : Tokens.dockIconSize;
+    }
+
+    // A stored Dock edge: left or right, anything else is the bottom (Geometry.normalizeEdge).
+    function dockEdge(value: var): string {
+        return value === "left" || value === "right" ? value : "bottom";
+    }
 
     // Hot corner action clamped to the schema enum.
     function cornerAction(value: var): string {
@@ -230,11 +240,11 @@ Scope {
     }
 
     function setDockSize(value: real): void {
-        change("dock.size", Geometry.clampSize(value, Tokens.dockSizeMin, Tokens.dockSizeMax, Tokens.dockIconSize));
+        change("dock.size", tileSize(value));
     }
 
     function setDockPosition(value: string): void {
-        change("dock.position", Geometry.normalizeEdge(value));
+        change("dock.position", dockEdge(value));
     }
 
     function setDockMagnification(value: real, enabled: bool): void {
