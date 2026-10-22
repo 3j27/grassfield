@@ -170,6 +170,9 @@ Plugin unload (R13 review): an empty capabilities event now means the plugin is 
 `CapabilityEvent.js`, `tests/unit/tst_capabilities.qml`): the degraded notice is posted once (`shell.qml` `syncDegradedNotice`,
 screenshot after `just plugin-unload` and with `--no-plugin`: banner "Compositor extension not loaded" top right of the focused
 output), and desktop-focus / overview behaviour switch off live. No hello polling resumes after an unload.
+The notice waits for a known absence (`Capabilities.absent`): an unload, or no reply for `helloAbsentMs` (15 s). Degraded
+mode itself starts at the 1.5 s timeout, but a loaded plugin can answer seconds later at a start (the slow hellos of
+ff5f888), and the notice must not show for a moment then (`tests/visual/degraded-notice.sh`).
 
 
 ## Folder colours

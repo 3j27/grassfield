@@ -21,10 +21,16 @@ Singleton {
     readonly property int helloRetryMs: 250
     readonly property int helloSlowRetryMs: 2000
     readonly property int helloGiveUpMs: 300000
+    // A loaded plugin can answer seconds after the timeout at login (the late replies above): only this long without a
+    // reply, or an unload, makes the extension known to be absent.
+    readonly property int helloAbsentMs: 15000
 
     property bool pluginPresent: false
     // False until the hello reply arrived or the timeout elapsed.
     property bool settled: false
+    // The extension is known to be absent: no reply within helloAbsentMs, or its unload. The degraded notice waits for
+    // this, so that a late reply at login never shows it for a moment (degraded mode itself starts at the timeout).
+    property bool absent: false
     property var features: []
     // A capabilities event of another protocol version was logged (once per shell run).
     property bool protocolWarned: false
@@ -56,6 +62,7 @@ Singleton {
         features = msg.features;
         // An empty list is the plugin's unload: nothing is available any more, same as no plugin.
         pluginPresent = msg.present;
+        absent = !msg.present;
         settled = true;
         timeout.stop();
         // No polling after an unload: a plugin loaded later announces itself.
@@ -100,6 +107,12 @@ Singleton {
         }
     }
 
+    Timer {
+        id: absentDelay
+        interval: root.helloAbsentMs
+        onTriggered: root.absent = !root.pluginPresent
+    }
+
     // Stops the slow hellos: by then the plugin is not loaded, and one loaded later announces itself.
     Timer {
         id: giveUp
@@ -119,6 +132,7 @@ Singleton {
 
     Component.onCompleted: {
         timeout.start();
+        absentDelay.start();
         retry.start();
         Hyprland.dispatch(root.helloRequest);
     }
