@@ -148,6 +148,42 @@ TestCase {
         compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"" + "a".repeat(255) + "\"}").app.length, 255);
     }
 
+    function launcherLine(fields) {
+        return Bridge.parseBridgeLine(JSON.stringify(Object.assign({type: "launcher", app: "app", count: null, progress: null, urgent: null}, fields)));
+    }
+
+    function test_launcherState() {
+        let s = {};
+        s = Bridge.applyLauncher(s, launcherLine({app: "Firefox", count: 3}));
+        compare(s, {firefox: {count: 3, urgent: false}}, "keys are lower-case");
+        s = Bridge.applyLauncher(s, launcherLine({app: "firefox", progress: 0.5}));
+        compare(s.firefox, {count: 3, progress: 0.5, urgent: false}, "an update keeps what it did not touch");
+        s = Bridge.applyLauncher(s, launcherLine({app: "firefox", count: 0, urgent: true}));
+        compare(s.firefox, {count: 0, progress: 0.5, urgent: true}, "count 0 is a known count");
+        s = Bridge.applyLauncher(s, launcherLine({app: "firefox", progress: -1, urgent: false}));
+        compare(s.firefox, {count: 0, urgent: false}, "progress -1 removes the bar");
+        const before = JSON.stringify(s);
+        const t = Bridge.applyLauncher(s, launcherLine({app: "other", count: 1}));
+        compare(JSON.stringify(s), before, "the argument is not changed");
+        compare(Object.keys(t).sort().join(","), "firefox,other");
+        // Nothing in the line: the app's sender left the bus, the app is forgotten.
+        compare(Bridge.applyLauncher(t, launcherLine({app: "FIREFOX"})), {other: {count: 1, urgent: false}});
+    }
+
+    function test_launcherStateIsBounded() {
+        let s = {};
+        for (let i = 0; i < 100; i++)
+            s = Bridge.applyLauncher(s, launcherLine({app: "app" + i, count: 1}));
+        compare(Object.keys(s).length, 64);
+        // A tracked app still updates, and an app can leave to make room.
+        s = Bridge.applyLauncher(s, launcherLine({app: "app0", count: 9}));
+        compare(s.app0.count, 9);
+        s = Bridge.applyLauncher(s, launcherLine({app: "app1"}));
+        s = Bridge.applyLauncher(s, launcherLine({app: "new", count: 2}));
+        compare(s.new.count, 2);
+        compare(Object.keys(s).length, 64);
+    }
+
     function test_untrustedItemsAreSanitized() {
         const items = Bridge.sanitizeItems([
             {id: -1, label: "negative"},

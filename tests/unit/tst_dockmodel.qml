@@ -62,6 +62,35 @@ TestCase {
         compare(DockModel.unpinKey(["FOOT", "chromium"], "foot", lookup).join(","), "chromium");
     }
 
+    // ADR-0018: the app's own count (LauncherEntry) is authoritative for its tile while it is known.
+    function test_launcherBadgeOverridesNotifications() {
+        const item = {kind: "app", key: "chromium", name: "Chromium", entry: {id: "chromium"}};
+        const history = [{appName: "Chromium"}, {appName: "chromium"}, {appName: "Chromium"}];
+        compare(DockModel.tileBadge(history, item, {}), 3, "no state: the notification count");
+        compare(DockModel.tileBadge(history, item, undefined), 3);
+        compare(DockModel.tileBadge(history, item, {chromium: {count: 7, urgent: false}}), 7);
+        compare(DockModel.tileBadge(history, item, {chromium: {count: 0, urgent: false}}), 0, "count 0 hides the badge");
+        compare(DockModel.tileBadge(history, item, {chromium: {progress: 0.5, urgent: false}}), 3, "no count of its own: notifications");
+        compare(DockModel.tileBadge(history, item, {other: {count: 9, urgent: false}}), 3, "another app's count is not used");
+        compare(DockModel.tileBadge(history, {kind: "trash"}, {trash: {count: 4}}), 0);
+        // Matched on the tile key or the desktop entry id, whatever the case.
+        compare(DockModel.tileBadge([], {kind: "app", key: "Chromium", entry: {id: "Chromium"}}, {chromium: {count: 2, urgent: false}}), 2);
+        compare(DockModel.tileBadge([], {kind: "app", key: "ChromiumWin", entry: {id: "chromium"}}, {chromium: {count: 2, urgent: false}}), 2);
+        compare(DockModel.tileBadge([], {kind: "files", key: "files"}, {files: {count: 2}}), 0, "only app tiles");
+    }
+
+    function test_launcherProgress() {
+        const item = {kind: "app", key: "firefox", entry: {id: "firefox"}};
+        compare(DockModel.tileProgress({}, item), -1);
+        compare(DockModel.tileProgress(undefined, item), -1);
+        compare(DockModel.tileProgress({firefox: {urgent: false}}, item), -1);
+        compare(DockModel.tileProgress({firefox: {progress: 0, urgent: false}}, item), 0);
+        compare(DockModel.tileProgress({firefox: {progress: 0.25, urgent: false}}, item), 0.25);
+        compare(DockModel.tileProgress({firefox: {progress: 1, urgent: false}}, item), 1);
+        compare(DockModel.tileProgress({firefox: {progress: 2, urgent: false}}, item), -1, "out of range: no bar");
+        compare(DockModel.tileProgress({firefox: {progress: 0.5}}, {kind: "trash"}), -1);
+    }
+
     function test_badgeCounts() {
         const item = {kind: "app", key: "org.gnome.Nautilus", name: "Files"};
         const history = [{appName: "files"}, {appName: "Files"}, {appName: "org.gnome.nautilus"}, {appName: "Other"}];
