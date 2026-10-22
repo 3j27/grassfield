@@ -1776,6 +1776,22 @@
         <translation>Désactivé : le fond d’écran apparaît à travers la barre des menus. Activé : la barre est dessinée sur la matière dépolie.</translation>
     </message>
     <message>
+        <source>Show Now Playing in the menu bar</source>
+        <translation>Afficher « En cours de lecture » dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>While a media player has a track, a button in the menu bar opens its controls.</source>
+        <translation>Tant qu’un lecteur multimédia a un morceau, un bouton de la barre des menus ouvre ses commandes.</translation>
+    </message>
+    <message>
+        <source>Show Search in the menu bar</source>
+        <translation>Afficher la recherche dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>A magnifier button in the menu bar opens Search.</source>
+        <translation>Un bouton en forme de loupe dans la barre des menus ouvre la recherche.</translation>
+    </message>
+    <message>
         <source>Desktop</source>
         <translation>Bureau</translation>
     </message>
@@ -3221,6 +3237,14 @@
         <translation>Fenêtre</translation>
     </message>
     <message>
+        <source>Now Playing: %1</source>
+        <translation>En cours de lecture : %1</translation>
+    </message>
+    <message>
+        <source>Now Playing</source>
+        <translation>En cours de lecture</translation>
+    </message>
+    <message>
         <source>Do Not Disturb is on</source>
         <translation>Ne pas déranger est activé</translation>
     </message>
@@ -3239,6 +3263,10 @@
     <message>
         <source>%1%</source>
         <translation>%1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
     </message>
     <message>
         <source>Quick Settings</source>
@@ -3426,6 +3454,13 @@
     <message>
         <source>Not Playing</source>
         <translation>Pas de lecture</translation>
+    </message>
+</context>
+<context>
+    <name>NowPlayingPopover</name>
+    <message>
+        <source>Now Playing</source>
+        <translation>En cours de lecture</translation>
     </message>
 </context>
 <context>
@@ -4157,6 +4192,13 @@
     <message>
         <source>Page %1</source>
         <translation>Page %1</translation>
+    </message>
+</context>
+<context>
+    <name>TrayMenu</name>
+    <message>
+        <source>%1 menu</source>
+        <translation>Menu %1</translation>
     </message>
 </context>
 <context>

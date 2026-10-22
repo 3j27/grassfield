@@ -58,6 +58,8 @@ Singleton {
 
     readonly property bool desktopShowIcons: store.data.desktop.showIcons
     readonly property bool menubarShowBackground: store.data.menubar.showBackground
+    readonly property bool menubarShowNowPlaying: store.data.menubar.showNowPlaying
+    readonly property bool menubarShowSearch: store.data.menubar.showSearch
     readonly property string hotCornerTopLeft: store.hotCornerTopLeft
     readonly property string hotCornerTopRight: store.hotCornerTopRight
     readonly property string hotCornerBottomLeft: store.hotCornerBottomLeft
