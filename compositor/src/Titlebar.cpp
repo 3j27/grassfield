@@ -3,6 +3,7 @@
 #include "DeferredFocus.hpp"
 #include "Ipc.hpp"
 #include "Plugin.hpp"
+#include "Tiling.hpp"
 #include "core/PointerGesture.hpp"
 #include "core/Protocol.hpp"
 #include "core/Theme.hpp"
@@ -54,6 +55,8 @@ namespace {
         bool                      moved    = false; // the pointer passed kDragThreshold: the window follows it
         bool                      unzoom   = false; // pressed on a maximized window: un-zoom it when the move starts
         CBox                      zoomedSurface;    // surface box of that maximized window at the press
+        bool                      untile   = false; // pressed on a tiled window: its size from before comes back when the move starts
+        std::optional<gf::tiler::Snap> snap;        // where a release would tile the window (its preview is drawn)
         PHLWINDOWREF              window;   // window being moved
         Vector2D                  pressPos; // pointer at press (global logical)
         CBox                      startBox; // window layout box at press
@@ -149,6 +152,36 @@ namespace {
         grab.unzoom   = false;
     }
 
+    // A move that starts on a tiled window gives it back its size from before tiling, under the pointer at the same
+    // relative place on the titlebar (macOS), like the un-zoom above.
+    void untileUnderPointer(SPointerGrab& grab, const PHLWINDOW& w, const SP<Layout::ITarget>& target, const Vector2D& pointer) {
+        grab.untile        = false;
+        const auto before = gf::tiler::takePrevious(w);
+        if (!before)
+            return;
+        const CBox tiled = target->position();
+        const auto box   = tb::unzoomedDragBox(tb::Rect{tiled.x, tiled.y, tiled.w, tiled.h}, before->w, before->h, grab.pressPos.x, grab.pressPos.y, pointer.x, pointer.y);
+        gf::logRequest(Log::DEBUG, "titlebar drag leaves the tile: {:.0f}x{:.0f} at {:.0f},{:.0f}", box.w, box.h, box.x, box.y);
+        grab.startBox = CBox{box.x, box.y, box.w, box.h};
+        grab.pressPos = pointer;
+    }
+
+    // The tiling preview of a drag changes: the old and the new frames are redrawn.
+    void damageSnap(const std::optional<gf::tiler::Snap>& snap) {
+        if (snap && g_pHyprRenderer)
+            g_pHyprRenderer->damageBox(snap->frame);
+    }
+
+    void updateSnap(SPointerGrab& grab, const PHLWINDOW& w, const Vector2D& pointer) {
+        auto next = gf::tiler::snapFor(w, pointer);
+        const bool same = next.has_value() == grab.snap.has_value() && (!next || (next->place == grab.snap->place && next->frame == grab.snap->frame));
+        if (same)
+            return;
+        damageSnap(grab.snap);
+        damageSnap(next);
+        grab.snap = std::move(next);
+    }
+
     // Interactive move driven by the plugin: the window follows the pointer from the press point.
     // S2 history: with CLayoutManager::beginDragTarget and CKeybindManager::changeMouseBindMode the window
     // jumped by (window middle - press point). The cause was most likely Config::Actions::focus() warping
@@ -169,9 +202,12 @@ namespace {
         grab.moved = true;
         if (grab.unzoom)
             unzoomUnderPointer(grab, w, target, pointer);
+        else if (grab.untile)
+            untileUnderPointer(grab, w, target, pointer);
         CBox box = grab.startBox;
         box.translate(pointer - grab.pressPos);
         g_layoutManager->setTargetGeom(box, target);
+        updateSnap(grab, w, pointer);
     }
 
     std::vector<WP<IPointer>> pointerDevices() {
@@ -405,6 +441,18 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     const auto   bgColor  = toColor(palette.background, alpha);
     const int    roundPx  = static_cast<int>(std::round(rounding * scale));
 
+    // 0. A drag of this window over a tiling place: the place's frame, translucent, under the window and over the
+    //    windows behind it (this decoration is drawn under the window's surface, after the windows below it).
+    if (const auto& grab = pointerInput().grab; grab.deco == this && grab.snap && grab.snap->monitor.lock() == monitor) {
+        CBox preview = grab.snap->frame;
+        preview.translate(-monitor->m_position);
+        addRect(preview.scale(scale).round(), toColor(theme::kTilePreviewFill, alpha), roundPx, power);
+        CBox inner = grab.snap->frame;
+        inner.translate(-monitor->m_position);
+        inner.expand(-theme::kTilePreviewRim);
+        addRect(inner.scale(scale).round(), toColor(theme::kTilePreviewInner, alpha), std::max(0, roundPx - static_cast<int>(std::round(theme::kTilePreviewRim * scale))), power);
+    }
+
     // 1. Background with rounded top corners: a rounded rect taller than the bar, clipped to the bar.
     CBox bgBox   = bar;
     bgBox.h     += 2.0 * rounding;
@@ -629,6 +677,7 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         input.grab.unzoom   = mode == Fullscreen::FSMODE_MAXIMIZED;
         if (input.grab.unzoom)
             input.grab.zoomedSurface = w->geometricBox(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+        input.grab.untile   = !input.grab.unzoom && gf::tiler::isTiled(w);
         input.grab.window   = w;
         input.grab.pressPos = coords;
         input.grab.startBox = target->position();
@@ -662,6 +711,7 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
             // Hyprland sends it, and its release with it.
             if (input.presses.onPress(e.button)) {
                 gf::logRequest(Log::DEBUG, "titlebar gesture cancelled by a new press (button {:#x})", e.button);
+                damageSnap(input.grab.snap);
                 input.grab = {};
             }
             return;
@@ -682,6 +732,12 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
         SPointerGrab grab = std::exchange(input.grab, {});
         if (grab.dragging)
             updateMove(grab); // final position at the release point (none for a click)
+        // Released over a tiling place: the window takes it (FR47); the preview goes.
+        if (grab.dragging && grab.moved && grab.snap) {
+            damageSnap(grab.snap);
+            if (const auto w = grab.window.lock())
+                gf::tiler::tile(w, grab.snap->place, grab.snap->monitor.lock());
+        }
 
         if (grab.button && isLive(grab.deco) && g_pInputManager) {
             const auto pos = g_pInputManager->getMouseCoordsInternal();
@@ -703,6 +759,7 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
         const bool held = g_pInputManager && g_pInputManager->hasHeldButtons();
         if (input.presses.onMotion(held, devicesIntact(input.grab.devices))) {
             gf::logRequest(Log::DEBUG, "titlebar gesture cancelled: no button held or a pointer device went away");
+            damageSnap(input.grab.snap);
             input.grab = {};
             return;
         }
@@ -714,6 +771,7 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
 void CGrassfieldTitlebar::cancelPointerGrab() {
     gf::guarded("titlebar cancelPointerGrab", [] {
         auto& input        = pointerInput();
+        damageSnap(input.grab.snap);
         input.grab         = {};
         input.hovered      = nullptr;
         input.activeWindow = {};

@@ -13,6 +13,7 @@
 #include "OverviewFocus.hpp"
 #include "Plugin.hpp"
 #include "Stages.hpp"
+#include "Tiling.hpp"
 #include "Titlebar.hpp"
 
 #include <hyprland/src/desktop/state/WindowState.hpp>
@@ -142,6 +143,7 @@ namespace {
 
     void removeAllTitlebars() {
         CGrassfieldTitlebar::cancelPointerGrab();
+        gf::tiler::forgetAll();
 
         // Visible windows: Hyprland's own removal path, which also lays the window out again without the
         // titlebar. It destroys the decoration synchronously for a mapped, visible window.
