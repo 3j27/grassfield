@@ -165,8 +165,10 @@ Singleton {
     property var minimized: []
     // Per-screen Docks by screen name: each Dock instance registers itself (an object with
     // tileRect(index, adding) -> {x, y, w, h} in global layout coordinates, or null) and unregisters
-    // on destruction, so a window animates toward the Dock of its own monitor.
+    // on destruction. There is one visible Dock at a time (macOS: on the output where the pointer last reached its
+    // edge): the Dock publishes that output in `dockScreenName`, and a window animates toward that Dock.
     property var dockOwners: ({})
+    property string dockScreenName: ""
 
     function registerDock(screenName: string, owner: var): void {
         root.dockOwners[screenName] = owner;
@@ -177,12 +179,12 @@ Singleton {
             delete root.dockOwners[screenName];
     }
 
-    // Dock tile rectangle of the minimized slot `index` on a screen (`adding`: a tile that does not
+    // Dock tile rectangle of the minimized slot `index` (on the Dock's screen, else on `screenName`) (`adding`: a tile that does not
     // exist yet, appended before the Trash). Empty ({0,0,0,0}) without a Dock there: the plugin then
     // hides/shows the window without animation.
     // With "minimize into application icon" (dock.minimizeIntoApp) the rectangle is the tile of the window's app.
     function dockRect(screenName: string, index: int, adding: bool, toplevel: var): var {
-        const owner = root.dockOwners[screenName];
+        const owner = root.dockOwners[root.dockScreenName] || root.dockOwners[screenName];
         return Minimized.finiteRect(owner ? owner.tileRect(index, adding, toplevel) : null) || {x: 0, y: 0, w: 0, h: 0};
     }
 

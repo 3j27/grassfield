@@ -2,6 +2,7 @@ import QtQuick
 import QtTest
 import "../../shell/dock/Geometry.js" as Geometry
 import "../../shell/dock/DockModel.js" as DockModel
+import "../../shell/dock/Magnify.js" as Magnify
 
 TestCase {
     name: "DockGeometry"
@@ -50,6 +51,233 @@ TestCase {
         compare(DockModel.shelfHeight(big) - DockModel.shelfHeight(Geometry.metrics(48, base)), 48);
         compare(DockModel.reservedHeight(big, false) - DockModel.reservedHeight(Geometry.metrics(48, base), false), 48);
         compare(DockModel.reservedHeight(big, true), 0);
+    }
+
+    // ---- position on screen ----
+
+    readonly property var m48: Geometry.metrics(48, base)
+
+    function test_normalizeEdge() {
+        compare(Geometry.normalizeEdge("left"), "left");
+        compare(Geometry.normalizeEdge("right"), "right");
+        compare(Geometry.normalizeEdge("bottom"), "bottom");
+        compare(Geometry.normalizeEdge("top"), "bottom");
+        compare(Geometry.normalizeEdge(undefined), "bottom");
+        compare(Geometry.normalizeEdge(3), "bottom");
+        verify(Geometry.isVertical("left") && Geometry.isVertical("right") && !Geometry.isVertical("bottom"));
+    }
+
+    function test_rectMapsMainAndCrossForEachEdge() {
+        // A 300 x 100 window anchored at the bottom, 100 x 300 on a side edge: 10 px off the edge, 40 deep, from 50 for 60.
+        const b = Geometry.rect("bottom", 300, 100, 50, 60, 10, 40);
+        compare(b.x, 50);
+        compare(b.w, 60);
+        compare(b.y, 100 - 10 - 40);
+        compare(b.h, 40);
+        const l = Geometry.rect("left", 100, 300, 50, 60, 10, 40);
+        compare(l.y, 50);
+        compare(l.h, 60);
+        compare(l.x, 10);
+        compare(l.w, 40);
+        const r = Geometry.rect("right", 100, 300, 50, 60, 10, 40);
+        compare(r.y, 50);
+        compare(r.h, 60);
+        compare(r.x, 100 - 10 - 40);
+        compare(r.w, 40);
+    }
+
+    function test_crossAndMainOfAPoint() {
+        compare(Geometry.crossOf("bottom", 20, 90, 300, 100), 10);
+        compare(Geometry.crossOf("left", 12, 90, 100, 300), 12);
+        compare(Geometry.crossOf("right", 88, 90, 100, 300), 12);
+        compare(Geometry.mainOf("bottom", 20, 90), 20);
+        compare(Geometry.mainOf("left", 20, 90), 90);
+        compare(Geometry.mainOf("right", 20, 90), 90);
+        compare(Geometry.mainSize("bottom", 300, 100), 300);
+        compare(Geometry.mainSize("right", 100, 300), 300);
+        compare(Geometry.crossSize("bottom", 300, 100), 100);
+        compare(Geometry.crossSize("left", 100, 300), 100);
+    }
+
+    function test_shelfIsCentredAndSlidesTowardItsEdge() {
+        const thick = DockModel.shelfHeight(m48);
+        for (const edge of Geometry.EDGES) {
+            const w = Geometry.isVertical(edge) ? 200 : 1000;
+            const h = Geometry.isVertical(edge) ? 1000 : 200;
+            const shown = Geometry.shelfRect(edge, w, h, 400, thick, 6, 0);
+            const main0 = Geometry.mainOf(edge, shown.x, shown.y);
+            compare(main0, 300, edge);
+            compare(Geometry.crossOf(edge, shown.x + (edge === "right" ? shown.w : 0), shown.y + (edge === "bottom" ? shown.h : 0), w, h), 6, edge);
+            // Fully hidden (slide = thickness + margin + shadow room): entirely beyond the screen edge.
+            const hidden = Geometry.shelfRect(edge, w, h, 400, thick, 6, thick + 6 + 20);
+            if (edge === "bottom")
+                verify(hidden.y >= h, edge);
+            else if (edge === "left")
+                verify(hidden.x + hidden.w <= 0, edge);
+            else
+                verify(hidden.x >= w, edge);
+        }
+    }
+
+    function test_hitRectIsTheStripWhileAwayAndTheShelfOtherwise() {
+        const base = {revealed: false, dragging: false, pointerActive: false, shelfMain0: 300, shelfLength: 400, thickness: 76, margin: 6, overhang: 29, room: 36, zone: 2};
+        const strip = Geometry.hitRect("bottom", 1000, 200, base);
+        compare(strip.w, 1000);
+        compare(strip.h, 2);
+        compare(strip.y, 198);
+        const side = Geometry.hitRect("left", 200, 1000, base);
+        compare(side.h, 1000);
+        compare(side.w, 2);
+        compare(side.x, 0);
+        const rside = Geometry.hitRect("right", 200, 1000, base);
+        compare(rside.x, 198);
+        const idle = Object.assign({}, base, {revealed: true});
+        const shelf = Geometry.hitRect("right", 200, 1000, idle);
+        compare(shelf.y, 300);
+        compare(shelf.h, 400);
+        compare(shelf.w, 76 + 6);
+        const hover = Geometry.hitRect("left", 200, 1000, Object.assign({}, idle, {pointerActive: true}));
+        compare(hover.w, 76 + 6 + 29 + 36);
+        const drag = Geometry.hitRect("left", 200, 1000, Object.assign({}, idle, {dragging: true}));
+        compare(drag.w, 200);
+    }
+
+    function test_iconAndDotSitOnOppositeSidesOfTheTile() {
+        const area = base.indicatorSize + base.spacing;
+        // Unmagnified: the icon is at the tile's origin on the outward side of the dot.
+        compare(Geometry.iconOrigin("bottom", 48, 48, area).y, 0);
+        compare(Geometry.iconOrigin("left", 48, 48, area).x, area);
+        compare(Geometry.iconOrigin("right", 48, 48, area).x, 0);
+        // Magnified 1.5x: it grows away from the screen edge, its edge-side stays put.
+        const bottom = Geometry.iconOrigin("bottom", 48, 72, area);
+        compare(bottom.y + 72, 48);
+        const right = Geometry.iconOrigin("right", 48, 72, area);
+        compare(right.x + 72, 48);
+        const left = Geometry.iconOrigin("left", 48, 72, area);
+        compare(left.x, area);
+        // The dot is on the screen-edge side, spacing away from the icon, and the hover lift is cancelled.
+        const dotB = Geometry.dotOrigin("bottom", 48, 56, 48, 4, 4, 0);
+        compare(dotB.y, 52);
+        compare(dotB.x, 22);
+        compare(Geometry.dotOrigin("right", 56, 48, 48, 4, 4, 0).x, 52);
+        compare(Geometry.dotOrigin("left", 56, 48, 48, 4, 4, 0).x, 0);
+        compare(Geometry.dotOrigin("left", 56, 48, 48, 4, 4, 5).x, -5);
+        compare(Geometry.dotOrigin("right", 56, 48, 48, 4, 4, 5).x, 57);
+        compare(Geometry.dotOrigin("bottom", 48, 56, 48, 4, 4, 5).y, 57);
+    }
+
+    function test_tooltipIsOnTheOutwardSideOfTheIcon() {
+        const area = base.indicatorSize + base.spacing;
+        // Bottom: above the icon, centred (the formula the Dock always used).
+        const b = Geometry.tooltipOrigin("bottom", 48, 56, 48, 48, area, 8, 100, 30);
+        compare(b.x, -26);
+        compare(b.y, 56 - area - 48 - 8 - 30);
+        // Left: right of the icon, vertically centred on the tile; right: left of it.
+        const l = Geometry.tooltipOrigin("left", 56, 48, 48, 48, area, 8, 100, 30);
+        compare(l.x, area + 48 + 8);
+        compare(l.y, 9);
+        verify(l.x > area + 48);
+        const r = Geometry.tooltipOrigin("right", 56, 48, 48, 48, area, 8, 100, 30);
+        compare(r.x, 48 - 48 - 8 - 100);
+        compare(r.y, 9);
+        compare(Geometry.tooltipTailSide("left"), "left");
+        compare(Geometry.tooltipTailSide("right"), "right");
+        compare(Geometry.tooltipTailSide("bottom"), "bottom");
+        // A magnified icon pushes the label out with it.
+        verify(Geometry.tooltipOrigin("left", 56, 72, 48, 72, area, 8, 100, 30).x > l.x);
+        verify(Geometry.tooltipOrigin("right", 56, 72, 48, 72, area, 8, 100, 30).x < r.x);
+    }
+
+    function test_iconInsideTheShelfIsTheMinimizeTarget() {
+        // The icon of tile n, placed the way the Dock places it (shelf, padding, tile box, icon origin), is the rectangle the
+        // compositor animates to.
+        const thick = DockModel.shelfHeight(m48);
+        const area = base.indicatorSize + base.spacing;
+        for (const edge of Geometry.EDGES) {
+            const w = Geometry.isVertical(edge) ? 300 : 1000;
+            const h = Geometry.isVertical(edge) ? 1000 : 300;
+            const shelf = Geometry.shelfRect(edge, w, h, 400, thick, 6, 0);
+            const icon = Geometry.iconOrigin(edge, 48, 48, area);
+            // The tile row starts `padding` into the shelf and the tile is 150 px along the main axis from there.
+            const main = 150;
+            const x = shelf.x + base.padding + (Geometry.isVertical(edge) ? 0 : main) + icon.x;
+            const y = shelf.y + base.padding + (Geometry.isVertical(edge) ? main : 0) + icon.y;
+            const mainCenter = Geometry.mainOf(edge, shelf.x, shelf.y) + base.padding + main + 24;
+            const target = Geometry.tileRect(edge, w, h, mainCenter, 48, 6, base.padding, area);
+            compare(target.x, x, edge);
+            compare(target.y, y, edge);
+            compare(target.w, 48);
+            compare(target.h, 48);
+        }
+    }
+
+    function test_menuAnchorIsBesideTheShelfWithRoomForTheTail() {
+        const thick = 76;
+        const b = Geometry.menuAnchor("bottom", 1920, 1080, 500, thick, 6, 16, 13);
+        compare(b.align, "above");
+        compare(b.x, 500);
+        compare(b.y, 1080 - (6 + 76 + 16 + 13));
+        const l = Geometry.menuAnchor("left", 1920, 1080, 400, thick, 6, 16, 13);
+        compare(l.align, "rightOf");
+        compare(l.x, 6 + 76 + 16 + 13);
+        compare(l.y, 400);
+        const r = Geometry.menuAnchor("right", 1920, 1080, 400, thick, 6, 16, 13);
+        compare(r.align, "leftOf");
+        compare(r.x, 1920 - (6 + 76 + 16 + 13));
+        compare(r.y, 400);
+    }
+
+    function test_dragComponents() {
+        compare(Geometry.dragMain("bottom", 7, -30), 7);
+        compare(Geometry.dragMain("left", 7, -30), -30);
+        compare(Geometry.dragOutward("bottom", 7, -30), 30);
+        compare(Geometry.dragOutward("left", 40, 3), 40);
+        compare(Geometry.dragOutward("right", -40, 3), 40);
+        compare(Geometry.dragOutward("right", 40, 3), -40);
+        for (const edge of Geometry.EDGES) {
+            const v = Geometry.dragVector(edge, 12, 34);
+            compare(Geometry.dragMain(edge, v.x, v.y), 12, edge);
+            compare(Geometry.dragOutward(edge, v.x, v.y), 34, edge);
+        }
+    }
+
+    function test_windowOriginAndDepth() {
+        compare(Geometry.windowOrigin("bottom", 1920, 1080, 1920, 300).y, 780);
+        compare(Geometry.windowOrigin("left", 1920, 1080, 300, 1044).x, 0);
+        compare(Geometry.windowOrigin("left", 1920, 1080, 300, 1044).y, 36);
+        compare(Geometry.windowOrigin("right", 1920, 1080, 300, 1044).x, 1620);
+        compare(Geometry.depth(76, 6, 29, 168), 279);
+        // The label beside a side Dock needs its width, above a bottom Dock its height; the drag room is the floor.
+        compare(Geometry.room("bottom", 36, 240, 168), 168);
+        compare(Geometry.room("left", 36, 240, 168), 240);
+        compare(Geometry.room("right", 36, 100, 168), 168);
+    }
+
+    function test_footprintIsOnTheDocksEdgeOnly() {
+        const zone = DockModel.reservedHeight(m48, false);
+        const left = Geometry.footprint("left", m48, false);
+        compare(left.left, zone);
+        compare(left.right, 0);
+        compare(left.bottom, 0);
+        compare(Geometry.footprint("right", m48, false).right, zone);
+        compare(Geometry.footprint("bottom", m48, false).bottom, zone);
+        const hidden = Geometry.footprint("left", m48, true);
+        compare(hidden.left + hidden.right + hidden.bottom, 0);
+    }
+
+    // Magnify.js is axis free: a column of tiles with the pointer at the same distance along it scales like a row.
+    function test_magnificationAlongAColumnIsTheSameCurve() {
+        const widths = [48, 48, 5, 48, 48, 48];
+        const flags = [false, false, true, false, false, false];
+        const centers = Magnify.centersFor(widths, 4, 100);
+        const along = Magnify.slotScales(centers, widths, 4, flags, centers[3] + 5, 52, 1.6, 3);
+        const row = Geometry.mainOf("bottom", centers[3] + 5, 777);
+        const col = Geometry.mainOf("left", 777, centers[3] + 5);
+        compare(row, col);
+        const again = Magnify.slotScales(centers, widths, 4, flags, col, 52, 1.6, 3);
+        compare(JSON.stringify(again), JSON.stringify(along));
+        verify(along[3] > along[4] && along[4] > along[5], JSON.stringify(along));
+        compare(Magnify.slotScales(centers, widths, 4, flags, 6000, 52, 1.6, 3)[0], 1);
     }
 
     function test_smallSizeKeepsTheBadgeReadable() {

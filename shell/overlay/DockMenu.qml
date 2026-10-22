@@ -99,6 +99,7 @@ PopupMenu {
     // Tail pointing at the icon (reference: rounded panel with a tail on the shelf side). The Overlay centres the menu on
     // the icon and keeps it Tokens.panelPopupMargin inside the window: the tail follows the icon when that clamps it.
     Shape {
+        visible: Popups.align === "above"
         readonly property real menuX: Math.max(Tokens.panelPopupMargin, Math.min(root.Window.width - root.width - Tokens.panelPopupMargin, Popups.anchorX - root.width / 2))
         readonly property real tipX: Math.max(Tokens.radiusMenu + Tokens.dockMenuTailWidth / 2, Math.min(root.width - Tokens.radiusMenu - Tokens.dockMenuTailWidth / 2, Popups.anchorX - menuX))
         x: tipX - Tokens.dockMenuTailWidth / 2
@@ -123,6 +124,40 @@ PopupMenu {
             }
             PathLine {
                 x: 0
+                y: 0
+            }
+        }
+    }
+
+    // The same tail on the side of the menu that faces a Dock on the left ("rightOf": the menu is right of the shelf, the tail
+    // points left) or right edge ("leftOf"). The Overlay centres the menu on the icon along the edge.
+    Shape {
+        readonly property bool facingLeft: Popups.align === "rightOf"
+        visible: facingLeft || Popups.align === "leftOf"
+        readonly property real menuY: Math.max(0, Math.min(root.Window.height - root.height - Tokens.panelPopupMargin, Popups.anchorY - root.height / 2))
+        readonly property real tipY: Math.max(Tokens.radiusMenu + Tokens.dockMenuTailWidth / 2, Math.min(root.height - Tokens.radiusMenu - Tokens.dockMenuTailWidth / 2, Popups.anchorY - menuY))
+        x: facingLeft ? -Tokens.dockMenuTailHeight : root.width - 1
+        y: tipY - Tokens.dockMenuTailWidth / 2
+        width: Tokens.dockMenuTailHeight + 1
+        height: Tokens.dockMenuTailWidth
+        preferredRendererType: Shape.CurveRenderer
+        Accessible.ignored: true
+
+        ShapePath {
+            strokeWidth: 0
+            fillColor: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.tintAlpha(Appearance.effectiveTransparency))
+            startX: parent.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
+            startY: 0
+            PathLine {
+                x: parent.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
+                y: Tokens.dockMenuTailWidth
+            }
+            PathLine {
+                x: parent.facingLeft ? 0 : Tokens.dockMenuTailHeight + 1
+                y: Tokens.dockMenuTailWidth / 2
+            }
+            PathLine {
+                x: parent.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
                 y: 0
             }
         }

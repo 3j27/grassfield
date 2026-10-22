@@ -188,6 +188,19 @@ TestCase {
         verify(withDock.y + withDock.h + 34 + 76 <= 1080 - 32);
     }
 
+    function test_freeAreaReservesTheDockOnASideEdge() {
+        const free = Layout.freeArea({w: 1920, h: 1080}, reserve);
+        const left = Layout.freeArea({w: 1920, h: 1080}, Object.assign({}, reserve, {dockLeft: 82}));
+        compare(left.x, free.x + 82);
+        compare(left.w, free.w - 82);
+        compare(left.h, free.h);
+        compare(left.y, free.y);
+        const right = Layout.freeArea({w: 1920, h: 1080}, Object.assign({}, reserve, {dockRight: 82}));
+        compare(right.x, free.x);
+        compare(right.w, free.w - 82);
+        compare(right.h, free.h);
+    }
+
     function test_layoutInsideTheDockReservedAreaKeepsWindowsAboveTheDock() {
         const a = Layout.freeArea({w: 1920, h: 1080}, Object.assign({}, reserve, {dock: 76}));
         const input = grid(9, 700, 500, false);

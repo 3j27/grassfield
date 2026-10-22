@@ -16,6 +16,7 @@
       "org.grassfield.Settings"
     ],
     "size": 48,
+    "position": "bottom",
     "magnification": 1.6,
     "magnificationEnabled": false,
     "autohide": false,

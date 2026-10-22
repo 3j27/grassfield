@@ -70,6 +70,14 @@
           "minimum": 32,
           "maximum": 96
         },
+        "position": {
+          "type": "string",
+          "enum": [
+            "left",
+            "bottom",
+            "right"
+          ]
+        },
         "magnification": {
           "type": "number",
           "minimum": 1,

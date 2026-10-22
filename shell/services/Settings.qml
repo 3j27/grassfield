@@ -30,6 +30,7 @@ Singleton {
     readonly property var dockPinned: store.dockPinned
     readonly property int dockSize: store.dockSize
     // Metrics of the Dock at the stored tile size (what the others reserve around it; the Dock itself follows a live resize).
+    readonly property string dockPosition: store.dockPosition
     readonly property var dockMetrics: DockGeometry.metrics(dockSize, {
         iconSize: Tokens.dockIconSize,
         padding: Tokens.dockPadding,
@@ -40,6 +41,8 @@ Singleton {
         badgeSize: Tokens.dockBadgeSize,
         radiusIcon: Tokens.radiusDockIcon
     })
+    // What the Dock keeps clear on its edge, whether or not it hides (the desktop icons, the widgets and the Apps panel stay put).
+    readonly property var dockFootprint: DockGeometry.footprint(dockPosition, dockMetrics, false)
     readonly property real dockMagnification: store.dockMagnification
     readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
     readonly property bool dockAutohide: store.data.dock.autohide
@@ -120,6 +123,10 @@ Singleton {
 
     function setDockSize(value: real): void {
         store.setDockSize(value);
+    }
+
+    function setDockPosition(value: string): void {
+        store.setDockPosition(value);
     }
 
     function setDockMagnification(value: real, enabled: bool): void {

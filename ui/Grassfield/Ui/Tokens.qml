@@ -288,6 +288,8 @@ QtObject {
     readonly property int dockTooltipGap: 8
     // estimate: height reserved above the shelf for the label
     readonly property int dockTooltipArea: 36
+    // estimate: width reserved beside the shelf of a Dock on the left or right edge for the label of a tile (the label sits beside the tile, so it needs its width)
+    readonly property int dockTooltipSideArea: 240
     // estimate: app badge on a minimized-window tile
     readonly property real dockMinimizedBadgeScale: 0.4
     // estimate, pending F1 measurement from design/reference

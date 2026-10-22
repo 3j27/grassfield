@@ -182,9 +182,10 @@ function gridSize(width, height, cell, gap, margin) {
 // Grid of a screen: the usable area is the screen minus the menu bar on top and the Dock's
 // reserved height at the bottom, then `margin` on every side. Returns {cols, rows, x0, y0}
 // (origin in screen px).
-function gridFor(width, height, cell, gap, margin, top, bottom) {
-    const g = gridSize(width, height - top - bottom, cell, gap, margin);
-    return {cols: g.cols, rows: g.rows, x0: margin, y0: top + margin};
+function gridFor(width, height, cell, gap, margin, top, bottom, left, right) {
+    const l = left || 0;
+    const g = gridSize(width - l - (right || 0), height - top - bottom, cell, gap, margin);
+    return {cols: g.cols, rows: g.rows, x0: margin + l, y0: top + margin};
 }
 
 // Nearest grid cell for a top-left position in px relative to the grid origin; clamped so that

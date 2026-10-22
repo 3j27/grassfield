@@ -64,7 +64,7 @@ Scope {
         items = next;
         applyOps(ops.filter(o => o.op !== "remove"));
     }
-    // Test hooks (IPC): a pointer x forcing magnification, and a forced reveal.
+    // Test hooks (IPC): a pointer position along the Dock (x at the bottom, y on a side edge, in the Dock window) forcing magnification, and a forced reveal.
     property real testPointerX: -1
     property bool testReveal: false
     // Keyboard navigation mode: the dock takes exclusive keyboard focus until Esc, an
@@ -609,6 +609,19 @@ Scope {
             readonly property int shelfHeight: DockModel.shelfHeight(dockMetrics)
             readonly property real overhang: Math.ceil((maxScale - 1) * iconSize)
             readonly property int tooltipArea: Tokens.dockTooltipArea
+            // Position on screen (Settings > Position on screen): the window is anchored to this edge. "main" is the direction along
+            // the Dock, "cross" the one away from the screen edge (Geometry.js: one formula for the three edges).
+            readonly property string edge: Settings.dockPosition
+            readonly property bool vertical: Geometry.isVertical(edge)
+            readonly property var outDir: Geometry.outward(edge)
+            // Extent of the window along the Dock (the screen's width or height) and of a tile across it.
+            readonly property real mainTotal: Geometry.mainSize(edge, width, height)
+            readonly property real tileCross: iconSize + indicatorArea
+            // Room kept beside the shelf for a label (above a bottom Dock, beside a side one) and for a dragged icon.
+            readonly property real tipRoom: vertical ? Tokens.dockTooltipSideArea : tooltipArea
+            readonly property real roomPx: Geometry.room(edge, tooltipArea, Tokens.dockTooltipSideArea, Tokens.dockDragArea)
+            // Top-left of this window in screen coordinates (the input of the pointer tracker and of the test hooks).
+            readonly property var origin: Geometry.windowOrigin(edge, screen.width, screen.height, width, height)
             // Drag to reorder or remove: the dragged tile (index in items, -1 none), its offset from the press, the slot
             // it would take, and whether releasing it now removes it from the Dock.
             property int dragFrom: -1
@@ -620,10 +633,11 @@ Scope {
             // applications divider sits between app tiles).
             readonly property var appItems: DockModel.appIndices(root.items)
             readonly property int dragFromApp: dragFrom < 0 ? -1 : appItems.indexOf(dragFrom)
-            readonly property int dragSlot: dragFrom < 0 ? -1 : DockModel.dropSlot(baseCenters, appItems, baseCenters[dragFrom] + dragDx)
-            // How far above its press point a tile must be to leave the Dock (outside the drop zone: the shelf and the room around it).
+            readonly property int dragSlot: dragFrom < 0 ? -1 : DockModel.dropSlot(baseCenters, appItems, baseCenters[dragFrom] + Geometry.dragMain(edge, dragDx, dragDy))
+            // How far away from the screen edge (above a bottom Dock) its press point a tile must be to leave the Dock (outside the
+            // drop zone: the shelf and the room around it).
             readonly property real dragOutReach: Tokens.dockPadding + iconSize / 2 + Tokens.dockDragOutDistance
-            readonly property bool dragOut: dragFrom >= 0 && dragDy < -dragOutReach
+            readonly property bool dragOut: dragFrom >= 0 && Geometry.dragOutward(edge, dragDx, dragDy) > dragOutReach
             // Set ONLY by the drag handler when the pointer button is really released (exclusive grab ended by a release event)
             // away from the drop zone. Every other end of a drag (cancelled or stolen grab) leaves it false.
             property bool releasedOutside: false
@@ -652,8 +666,9 @@ Scope {
                 releasedOutside = false;
                 dragInterrupted = false;
                 // mapToItem already includes the tile's drag translation (its Translate transform): adding dragDx/dragDy put the puff off the window.
-                const cx = tileItem.mapToItem(area, tileItem.width / 2, win.iconSize / 2).x;
-                const cy = tileItem.mapToItem(area, 0, win.iconSize / 2).y;
+                const centre = tileItem.mapToItem(area, tileItem.iconPos.x + tileItem.iconPx / 2, tileItem.iconPos.y + tileItem.iconPx / 2);
+                const cx = centre.x;
+                const cy = centre.y;
                 const dx = dragDx;
                 const dy = dragDy;
                 // The tiles keep their dragged / displaced places until the rebuild: it animates from there.
@@ -718,15 +733,17 @@ Scope {
                 easing.type: Easing.OutQuad
             }
 
-            // Layout transition (DockModel.layoutTransition): x of every tile (window coordinates) before a rebuild.
+            // Layout transition (DockModel.layoutTransition): position along the Dock of every tile (window coordinates) before a rebuild.
             property var layoutBefore: ({})
 
             function tileXs(): var {
                 const out = {};
                 for (let i = 0; i < tileRepeater.count; i++) {
                     const t = tileRepeater.itemAt(i) as Item;
-                    if (t)
-                        out[t.tileId] = t.mapToItem(area, 0, 0).x;
+                    if (t) {
+                        const at = t.mapToItem(area, 0, 0);
+                        out[t.tileId] = win.vertical ? at.y : at.x;
+                    }
                 }
                 return out;
             }
@@ -755,7 +772,7 @@ Scope {
                         continue;
                     const key = t.tileId;
                     if (plan.slide[key] !== undefined)
-                        t.glideFrom(plan.slide[key], 0);
+                        t.glideFrom(win.vertical ? 0 : plan.slide[key], win.vertical ? plan.slide[key] : 0);
                     else if (plan.enter.indexOf(key) >= 0)
                         t.fadeIn();
                 }
@@ -781,10 +798,11 @@ Scope {
             // Layout from the unmagnified geometry (stable under the pointer), then scaled.
             readonly property var widths: root.items.map(it => it.kind === "separator" ? separatorWidth : iconSize)
             readonly property real baseTotal: Magnify.totalWidth(widths, Tokens.dockSpacing)
-            readonly property var baseCenters: Magnify.centersFor(widths, Tokens.dockSpacing, (width - baseTotal) / 2)
+            readonly property var baseCenters: Magnify.centersFor(widths, Tokens.dockSpacing, (mainTotal - baseTotal) / 2)
 
             readonly property bool pointerActive: areaHover.hovered || root.testPointerX >= 0
-            readonly property real pointerX: root.testPointerX >= 0 ? root.testPointerX : areaHover.point.position.x
+            // The pointer along the Dock (x for a bottom Dock, y for a side one; the test hook gives it directly).
+            readonly property real pointerX: root.testPointerX >= 0 ? root.testPointerX : Geometry.mainOf(edge, areaHover.point.position.x, areaHover.point.position.y)
             // Magnification: the target scales of the pointer (all 1 without it) and the displayed ones, which follow them
             // with a frame-rate independent exponential smoothing (Magnify.step; Reduce Motion snaps).
             readonly property var separatorFlags: root.items.map(it => it.kind === "separator")
@@ -841,8 +859,8 @@ Scope {
                 const t = tileRepeater.itemAt(index);
                 if (!t)
                     return "";
-                const p = t.mapToItem(null, t.width / 2, t.height - indicatorArea - t.iconPx / 2);
-                return Math.round(p.x) + " " + Math.round(screen.height - height + p.y);
+                const p = t.mapToItem(null, t.iconPos.x + t.iconPx / 2, t.iconPos.y + t.iconPx / 2);
+                return Math.round(origin.x + p.x) + " " + Math.round(origin.y + p.y);
             }
 
             function openMenu(index: int): void {
@@ -851,15 +869,17 @@ Scope {
                 if (!item || (item.kind !== "app" && item.kind !== "files" && item.kind !== "trash"))
                     return;
                 const t = tileRepeater.itemAt(index);
-                const cx = t.mapToItem(null, t.width / 2, 0).x;
-                const above = win.screen.height - Tokens.dockBottomMargin - shelfHeight - Tokens.dockMenuTailGap - Tokens.dockMenuTailHeight;
+                // Centre of the tile along the Dock in screen coordinates; the menu opens above a bottom Dock and beside a side one.
+                const c = t.mapToItem(null, t.width / 2, t.height / 2);
+                const centre = win.vertical ? win.origin.y + c.y : win.origin.x + c.x;
+                const at = Geometry.menuAnchor(win.edge, win.screen.width, win.screen.height, centre, shelfHeight, Tokens.dockBottomMargin, Tokens.dockMenuTailGap, Tokens.dockMenuTailHeight);
                 if (item.kind === "trash") {
                     // macOS Trash menu: Open, Empty Trash…
                     Trash.refresh();
-                    Popups.open("dock", win.screen.name, cx, above, "above", {kind: "trash", key: "trash", windows: [], running: false});
+                    Popups.open("dock", win.screen.name, at.x, at.y, at.align, {kind: "trash", key: "trash", windows: [], running: false});
                     return;
                 }
-                Popups.open("dock", win.screen.name, cx, above, "above", {
+                Popups.open("dock", win.screen.name, at.x, at.y, at.align, {
                     key: item.key,
                     entry: item.entry,
                     pinned: item.pinned,
@@ -872,10 +892,14 @@ Scope {
             screen: modelData
             anchors {
                 bottom: true
-                left: true
-                right: true
+                left: win.edge !== "right"
+                right: win.edge !== "left"
+                top: win.vertical
             }
-            implicitHeight: shelfHeight + Tokens.dockBottomMargin + overhang + Math.max(tooltipArea, Tokens.dockDragArea)
+            // Across the Dock: shelf, margin, the growth of magnified icons and the room for a label or a dragged icon.
+            readonly property real depth: Geometry.depth(shelfHeight, Tokens.dockBottomMargin, overhang, roomPx)
+            implicitWidth: vertical ? depth : 0
+            implicitHeight: vertical ? 0 : depth
             exclusiveZone: DockModel.reservedHeight(dockMetrics, autohide)
             color: "transparent"
             focusable: true
@@ -905,28 +929,28 @@ Scope {
                 if (Settings.dockMinimizeIntoApp && toplevel && mon) {
                     // Minimize into the application icon: the window goes to (and comes from) its app's tile.
                     const at = root.items.findIndex(it => (it.kind === "app" || it.kind === "files") && it.windows.indexOf(toplevel) >= 0);
-                    if (at >= 0) {
-                        return {
-                            x: mon.x + baseCenters[at] - iconSize / 2,
-                            y: mon.y + win.screen.height - Tokens.dockBottomMargin - shelfHeight + Tokens.dockPadding,
-                            w: iconSize,
-                            h: iconSize
-                        };
-                    }
+                    if (at >= 0)
+                        return globalTileRect(mon, baseCenters[at]);
                 }
                 if (sep < 0 || !mon || index < 0)
                     return null;
                 const w = widths.slice();
                 if (adding)
                     w.splice(sep + 1 + index, 0, iconSize);
-                const slot = Magnify.centersFor(w, Tokens.dockSpacing, (width - Magnify.totalWidth(w, Tokens.dockSpacing)) / 2)[sep + 1 + index];
+                const slot = Magnify.centersFor(w, Tokens.dockSpacing, (mainTotal - Magnify.totalWidth(w, Tokens.dockSpacing)) / 2)[sep + 1 + index];
                 if (slot === undefined)
                     return null;
+                return globalTileRect(mon, slot);
+            }
+
+            // The unmagnified icon of the tile whose centre is `mainCenter` along the Dock, in global layout coordinates (the monitor `mon`).
+            function globalTileRect(mon: var, mainCenter: real): var {
+                const r = Geometry.tileRect(edge, width, height, mainCenter, iconSize, Tokens.dockBottomMargin, Tokens.dockPadding, indicatorArea);
                 return {
-                    x: mon.x + slot - iconSize / 2,
-                    y: mon.y + win.screen.height - Tokens.dockBottomMargin - shelfHeight + Tokens.dockPadding,
-                    w: iconSize,
-                    h: iconSize
+                    x: mon.x + origin.x + r.x,
+                    y: mon.y + origin.y + r.y,
+                    w: r.w,
+                    h: r.h
                 };
             }
 
@@ -975,7 +999,7 @@ Scope {
                     // Using the pointer leaves keyboard mode (focus returns to the app).
                     onPointChanged: {
                         if (hovered)
-                            PointerTracker.report(win.screen.name, point.position.x, win.screen.height - win.height + point.position.y);
+                            PointerTracker.report(win.screen.name, win.origin.x + point.position.x, win.origin.y + point.position.y);
                         if (hovered && root.keyboardMode)
                             root.keyboardMode = false;
                     }
@@ -985,10 +1009,22 @@ Scope {
                 // bottom strip while the dock is hidden.
                 Item {
                     id: hitItem
-                    x: win.revealed ? shelf.x : 0
-                    width: win.revealed ? shelf.width : win.width
-                    height: win.revealed ? (win.dragFrom >= 0 ? win.height : (win.pointerActive ? win.shelfHeight + Tokens.dockBottomMargin + win.overhang + win.tooltipArea : win.shelfHeight + Tokens.dockBottomMargin)) : Tokens.dockRevealZone
-                    y: win.height - height
+                    readonly property var r: Geometry.hitRect(win.edge, win.width, win.height, {
+                        revealed: win.revealed,
+                        dragging: win.dragFrom >= 0,
+                        pointerActive: win.pointerActive,
+                        shelfMain0: Geometry.mainOf(win.edge, shelf.x, shelf.y),
+                        shelfLength: win.shelfWidth,
+                        thickness: win.shelfHeight,
+                        margin: Tokens.dockBottomMargin,
+                        overhang: win.overhang,
+                        room: win.tipRoom,
+                        zone: Tokens.dockRevealZone
+                    })
+                    x: r.x
+                    y: r.y
+                    width: r.w
+                    height: r.h
                 }
 
                 // Removal puff.
@@ -1018,21 +1054,25 @@ Scope {
 
                 Material {
                     id: shelf
-                    width: win.shelfWidth
-                    height: win.shelfHeight
-                    x: (win.width - width) / 2
-                    y: win.height - Tokens.dockBottomMargin - height + (1 - AutoHide.ease(win.hideMachine.visible)) * (height + Tokens.dockBottomMargin + shadowMargin)
+                    // Centred along the Dock, a margin off the screen edge, slid toward the edge while the Dock hides (any edge).
+                    readonly property var r: Geometry.shelfRect(win.edge, win.width, win.height, win.shelfWidth, win.shelfHeight, Tokens.dockBottomMargin, (1 - AutoHide.ease(win.hideMachine.visible)) * (win.shelfHeight + Tokens.dockBottomMargin + shadowMargin))
+                    x: r.x
+                    y: r.y
+                    width: r.w
+                    height: r.h
                     radius: Tokens.radiusDock
                     tintAlphaOverride: Appearance.dark ? Tokens.dockTintAlphaDark : Tokens.dockTintAlphaLight
                     highlightOpacity: Tokens.dockHighlightOpacity
                     borderOpacity: Tokens.dockRimOpacity
                     borderColor: Appearance.colors.materialHighlight
 
-                    Row {
+                    // A row of tiles, or a column (first tile on top) on a side edge.
+                    Grid {
                         id: tiles
                         x: Tokens.dockPadding
                         y: Tokens.dockPadding
                         spacing: Tokens.dockSpacing
+                        columns: win.vertical ? 1 : Math.max(1, tileRepeater.count)
 
                         Repeater {
                             id: tileRepeater
@@ -1055,6 +1095,8 @@ Scope {
                                 readonly property bool running: isApp && modelData.windows.length > 0
                                 readonly property string label: isTrash ? qsTr("Trash") : isAppsTile ? qsTr("Apps") : (isApp || isMinimized ? modelData.name : "")
                                 readonly property real iconPx: win.iconSize * tileScale
+                                // The icon's place in the tile (it grows away from the screen edge) and the way out (bounce, hover rise).
+                                readonly property var iconPos: Geometry.iconOrigin(win.edge, win.iconSize, iconPx, win.indicatorArea)
                                 readonly property bool dragging: win.dragFrom === index
                                 // The button is held on an app tile: the icon darkens slightly (macOS).
                                 readonly property bool pressedDown: isApp && leftTap.pressed && !dragging
@@ -1078,8 +1120,8 @@ Scope {
                                 readonly property bool attentive: isApp && running && root.attentionKeys.indexOf(modelData.key) >= 0
                                 readonly property bool attentionHops: attentive && !Appearance.reduceMotion
                                 readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
-                                // Neighbours of a dragged tile make room (or close the gap while it is dragged out).
-                                readonly property real shiftX: {
+                                // Neighbours of a dragged tile make room along the Dock (or close the gap while it is dragged out).
+                                readonly property real shiftMain: {
                                     if (win.dragFrom < 0 || index === win.dragFrom)
                                         return 0;
                                     if (win.dragCollapsing)
@@ -1096,12 +1138,12 @@ Scope {
                                     return 0;
                                 }
 
-                                // Layout transition: horizontal offset gliding to 0, and the fade-in of a new tile.
+                                // Layout transition: offset (screen x, y) gliding to 0, and the fade-in of a new tile.
                                 property real glide: 0
                                 property real glideY: 0
                                 // The make-room offset animates while a tile is dragged; it snaps at the release, together
                                 // with the layout change.
-                                property real shiftAnim: shiftX
+                                property real shiftAnim: shiftMain
                                 Behavior on shiftAnim {
                                     enabled: !tile.dragging && !win.dragSnap
                                     NumberAnimation {
@@ -1149,13 +1191,15 @@ Scope {
                                     easing.type: Easing.OutQuad
                                 }
 
-                                width: isSeparator ? win.separatorWidth : iconPx
-                                height: win.iconSize + win.indicatorArea
+                                width: win.vertical ? win.tileCross : (isSeparator ? win.separatorWidth : iconPx)
+                                height: win.vertical ? (isSeparator ? win.separatorWidth : iconPx) : win.tileCross
                                 z: dragging ? 100 : 0
-                                // The shelf closes a gap around its centre: the dragged tile compensates to stay under the pointer.
+                                // The shelf closes a gap around its centre: the dragged tile compensates to stay under the pointer. A hovered
+                                // icon rises away from the screen edge by hoverLift.
+                                readonly property real collapseShift: -win.dragCollapse * win.pitch / 2
                                 transform: Translate {
-                                    x: tile.dragging ? win.dragDx - win.dragCollapse * win.pitch / 2 : tile.shiftAnim + tile.glide
-                                    y: tile.dragging ? win.dragDy : tile.glideY - tile.hoverLift
+                                    x: tile.dragging ? win.dragDx + (win.vertical ? 0 : tile.collapseShift) : tile.glide + (win.vertical ? 0 : tile.shiftAnim) + win.outDir.x * tile.hoverLift
+                                    y: tile.dragging ? win.dragDy + (win.vertical ? tile.collapseShift : 0) : tile.glideY + (win.vertical ? tile.shiftAnim : 0) + win.outDir.y * tile.hoverLift
                                 }
                                 activeFocusOnTab: !isSeparator
                                 Accessible.role: isSeparator ? Accessible.Separator : Accessible.Button
@@ -1169,16 +1213,18 @@ Scope {
                                 Keys.onEscapePressed: root.keyboardMode = false
                                 Keys.onLeftPressed: (tile.nextItemInFocusChain(false) as Item).forceActiveFocus()
                                 Keys.onRightPressed: (tile.nextItemInFocusChain(true) as Item).forceActiveFocus()
+                                Keys.onUpPressed: (tile.nextItemInFocusChain(false) as Item).forceActiveFocus()
+                                Keys.onDownPressed: (tile.nextItemInFocusChain(true) as Item).forceActiveFocus()
                                 Keys.onMenuPressed: win.openMenu(index)
 
                                 // Separator hairline.
                                 Rectangle {
                                     visible: tile.isSeparator
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea - (height - win.iconSize) / 2
-                                    width: Tokens.dockSeparatorWidth
-                                    height: win.dockMetrics.separatorHeight
+                                    // Across a bottom Dock the hairline is vertical, along a side Dock horizontal; centred on the icons.
+                                    width: win.vertical ? win.dockMetrics.separatorHeight : Tokens.dockSeparatorWidth
+                                    height: win.vertical ? Tokens.dockSeparatorWidth : win.dockMetrics.separatorHeight
+                                    x: win.vertical ? (win.edge === "left" ? win.indicatorArea : 0) + (win.iconSize - width) / 2 : (tile.width - width) / 2
+                                    y: win.vertical ? (tile.height - height) / 2 : (win.iconSize - height) / 2
                                     color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                                 }
 
@@ -1187,8 +1233,8 @@ Scope {
                                     visible: tile.attentive && Appearance.reduceMotion
                                     width: tile.iconPx
                                     height: tile.iconPx
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
                                     radius: win.dockMetrics.iconRadius * tile.tileScale
                                     color: Appearance.withAlpha(Appearance.colors.accent, Tokens.dockAttentionHighlightOpacity)
                                 }
@@ -1203,8 +1249,8 @@ Scope {
                                     oversample: appIcon.modeActive ? Tokens.dockIconOversample : appIcon.defaultOversample
                                     width: tile.iconPx
                                     height: tile.iconPx
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
                                     source: tile.isApp ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
 
                                     // Held button: darker by Tokens.dockPressDim (an offscreen layer only while pressed).
@@ -1222,7 +1268,8 @@ Scope {
                                             console.info("dock-attention: lift", Date.now() - root.attentionAt, Math.round(lift * 10) / 10);
                                     }
                                     transform: Translate {
-                                        y: -appIcon.lift
+                                        x: win.outDir.x * appIcon.lift
+                                        y: win.outDir.y * appIcon.lift
                                     }
 
                                     // Attention: the launch hop repeated, one every Tokens.dockAttentionPeriod, until the app is activated.
@@ -1297,7 +1344,8 @@ Scope {
                                 Rectangle {
                                     visible: tile.badge > 0
                                     transform: Translate {
-                                        y: -appIcon.lift
+                                        x: win.outDir.x * appIcon.lift
+                                        y: win.outDir.y * appIcon.lift
                                     }
                                     height: win.dockMetrics.badgeSize
                                     width: Math.max(height, badgeLabel.implicitWidth + Tokens.spacingSm)
@@ -1327,8 +1375,8 @@ Scope {
                                     visible: tile.isMinimized
                                     width: tile.iconPx
                                     height: tile.iconPx
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
 
                                     readonly property bool live: Settings.materialProfile === "full"
                                     readonly property string iconSource: tile.isMinimized ? Quickshell.iconPath(tile.modelData.icon, "application-x-executable") : ""
@@ -1378,8 +1426,8 @@ Scope {
                                     oversample: trashThemed.modeActive ? Tokens.dockIconOversample : trashThemed.defaultOversample
                                     width: tile.iconPx
                                     height: tile.iconPx
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
                                     source: tile.isTrash ? themed : ""
                                 }
 
@@ -1389,8 +1437,8 @@ Scope {
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     radius: win.dockMetrics.iconRadius * tile.tileScale
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
                                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
 
                                     Icon {
@@ -1407,8 +1455,8 @@ Scope {
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     radius: win.dockMetrics.iconRadius * tile.tileScale
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
                                     color: Appearance.colors.accent
 
                                     Icon {
@@ -1424,8 +1472,8 @@ Scope {
                                     visible: tile.activeFocus && root.keyboardMode && !tile.isSeparator
                                     width: tile.iconPx
                                     height: tile.iconPx
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
                                     radius: win.dockMetrics.iconRadius * tile.tileScale
                                     color: "transparent"
                                     border.width: Tokens.controlFocusRing
@@ -1439,14 +1487,16 @@ Scope {
                                     height: Tokens.dockIndicatorSize
                                     radius: width / 2
                                     color: Appearance.colors.indicator
-                                    x: (tile.width - width) / 2
-                                    y: win.iconSize + Tokens.dockSpacing + tile.hoverLift
+                                    readonly property var dot: Geometry.dotOrigin(win.edge, tile.width, tile.height, win.iconSize, Tokens.dockSpacing, Tokens.dockIndicatorSize, tile.hoverLift)
+                                    x: dot.x
+                                    y: dot.y
                                 }
 
                                 Tooltip {
                                     id: tooltip
                                     z: 10
                                     tail: true
+                                    tailSide: Geometry.tooltipTailSide(win.edge)
                                     text: tile.dragging ? qsTr("Remove") : tile.label
                                     delay: (tile.dragging || (tile.activeFocus && root.keyboardMode) || win.tipsWarm) ? 0 : Tokens.dockTooltipDelay
                                     onVisibleNowChanged: {
@@ -1458,8 +1508,9 @@ Scope {
                                         }
                                     }
                                     shown: tile.dragging ? (win.dragOut && win.dragRemovable) : (tile.label !== "" && (tile.hoverHeld || (tile.activeFocus && root.keyboardMode)) && !tile.tipSuppressed && !Popups.active && win.dragFrom < 0)
-                                    x: (tile.width - width) / 2
-                                    y: tile.height - win.indicatorArea - tile.iconPx - Tokens.dockTooltipGap - height
+                                    readonly property var at: Geometry.tooltipOrigin(win.edge, tile.width, tile.height, win.iconSize, tile.iconPx, win.indicatorArea, Tokens.dockTooltipGap, width, height)
+                                    x: at.x
+                                    y: at.y
                                 }
 
                                 HoverHandler {
@@ -1505,8 +1556,8 @@ Scope {
                                     visible: tile.isTrash && trashDrop.containsDrag
                                     width: tile.iconPx
                                     height: tile.iconPx
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
                                     radius: win.dockMetrics.iconRadius * tile.tileScale
                                     color: Appearance.withAlpha(Appearance.colors.accent, Tokens.desktopIconSelectionOpacity)
                                 }
@@ -1561,8 +1612,8 @@ Scope {
                                     visible: tile.isApp && appDrop.containsDrag && appDrop.acceptable && appDrop.verdict !== "pending"
                                     width: tile.iconPx
                                     height: tile.iconPx
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: win.indicatorArea
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
                                     radius: win.dockMetrics.iconRadius * tile.tileScale
                                     color: Appearance.withAlpha(Appearance.colors.accent, Tokens.dockDropHighlightOpacity)
                                 }
@@ -1581,7 +1632,7 @@ Scope {
                                         if (win.dragFrom !== tile.index)
                                             return;
                                         if (transition === PointerDevice.UngrabExclusive && point.state === 8)
-                                            win.releasedOutside = point.scenePosition.y - point.scenePressPosition.y < -win.dragOutReach;
+                                            win.releasedOutside = Geometry.dragOutward(win.edge, point.scenePosition.x - point.scenePressPosition.x, point.scenePosition.y - point.scenePressPosition.y) > win.dragOutReach;
                                         else if (transition === PointerDevice.CancelGrabExclusive || transition === PointerDevice.UngrabExclusive)
                                             win.dragInterrupted = true;
                                     }
@@ -1617,10 +1668,11 @@ Scope {
                                     }
                                     onTranslationChanged: {
                                         if (active && win.dragFrom === tile.index) {
-                                            win.dragDx = translation.x;
-                                            // Never above the point where the "Remove" label would leave the window.
-                                            const iconTop = win.height - Tokens.dockBottomMargin - Tokens.dockPadding - win.indicatorArea - tile.iconPx;
-                                            win.dragDy = Math.max(translation.y, -(iconTop - Tokens.dockTooltipGap - tooltip.height));
+                                            // Never beyond the point where the "Remove" label would leave the window (away from the screen edge).
+                                            const room = Geometry.crossSize(win.edge, win.width, win.height) - Tokens.dockBottomMargin - Tokens.dockPadding - win.indicatorArea - tile.iconPx - Tokens.dockTooltipGap - (win.vertical ? tooltip.width : tooltip.height);
+                                            const drag = Geometry.dragVector(win.edge, Geometry.dragMain(win.edge, translation.x, translation.y), Math.min(Geometry.dragOutward(win.edge, translation.x, translation.y), room));
+                                            win.dragDx = drag.x;
+                                            win.dragDy = drag.y;
                                         }
                                     }
                                 }

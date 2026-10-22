@@ -39,6 +39,8 @@ Scope {
     readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
     // Tile size of the Dock in px (Settings > Size); a hand-edited value is clamped to the slider range.
     readonly property int dockSize: Geometry.clampSize(config.dock.size, Tokens.dockSizeMin, Tokens.dockSizeMax, Tokens.dockIconSize)
+    // Screen edge of the Dock (Settings > Position on screen); anything but left/right is the bottom.
+    readonly property string dockPosition: Geometry.normalizeEdge(config.dock.position)
     readonly property real dockMagnification: clampNumber(config.dock.magnification, 1, 2.5, 1.6)
     // The default list of the first releases (a file written by them holds it) reads as the current default: Files is the
     // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
@@ -116,6 +118,7 @@ Scope {
     component DockConfig: JsonObject {
         property var pinned: ["chromium", "foot", "org.grassfield.Settings"]
         property var size: 48
+        property string position: "bottom"
         property real magnification: 1.6
         property bool magnificationEnabled: false
         property bool autohide: false
@@ -228,6 +231,10 @@ Scope {
 
     function setDockSize(value: real): void {
         change("dock.size", Geometry.clampSize(value, Tokens.dockSizeMin, Tokens.dockSizeMax, Tokens.dockIconSize));
+    }
+
+    function setDockPosition(value: string): void {
+        change("dock.position", Geometry.normalizeEdge(value));
     }
 
     function setDockMagnification(value: real, enabled: bool): void {
