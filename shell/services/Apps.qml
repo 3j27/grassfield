@@ -136,6 +136,9 @@ Singleton {
     }
 
     Process {
+        id: uwsmProbe
+        // Set by started: a run that ends without it never started (see onRunningChanged).
+        property bool didStart: false
         running: root.realSession
         command: ["sh", "-c", "command -v uwsm-app"]
         stdout: StdioCollector {
@@ -144,7 +147,15 @@ Singleton {
                 root.settleScope();
             }
         }
-        // sh could not even start: launches must not wait for ever (they start unscoped).
+        onStarted: didStart = true
+        // sh could not even start: launches must not wait for ever (they start unscoped). Quickshell sends no
+        // `exited` when a start fails, only running going back to false without a `started`.
+        onRunningChanged: {
+            if (!running && !didStart) {
+                console.warn("Apps: could not start sh to detect uwsm-app; applications start without a scope");
+                root.settleScope();
+            }
+        }
         // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
         // qmllint disable signal-handler-parameters
         onExited: root.settleScope()

@@ -121,6 +121,50 @@ TestCase {
         compare(flow.cancels, before + 1);
     }
 
+    // R12: with a typed password, Allow answers polkit once from the keyboard; while the answer is checked it is disabled,
+    // and neither Return, Enter nor Space can send a second one.
+    function test_7_allowSubmitsOnceFromTheKeyboard() {
+        dialogModel.cancel();
+        const before = flow.submitted.length;
+        dialog.focusField();
+        keyClick(Qt.Key_A);
+        keyClick(Qt.Key_B);
+        const allow = findExact(dialog, "Allow");
+        verify(allow !== null && allow.visible && allow.enabled, "Allow is shown and enabled");
+        allow.forceActiveFocus();
+        verify(allow.activeFocus);
+        keyClick(Qt.Key_Return);
+        compare(flow.submitted.length, before + 1);
+        compare(flow.submitted[flow.submitted.length - 1], "ab");
+        verify(!allow.enabled, "Allow is disabled while the answer is checked");
+        for (const key of [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space]) {
+            allow.forceActiveFocus();
+            keyClick(key);
+        }
+        compare(flow.submitted.length, before + 1);
+    }
+
+    // R12: a hidden Allow that still holds the focus never answers polkit (shared Button key guard: Return, Enter and
+    // Space are swallowed), and Escape still reaches the sheet and cancels.
+    function test_8_hiddenAllowNeverActsAndEscapeStillCancels() {
+        dialogModel.cancel();
+        const before = flow.submitted.length;
+        dialog.focusField();
+        keyClick(Qt.Key_C);
+        const allow = findExact(dialog, "Allow");
+        verify(allow.enabled, "a password is typed: Allow would act if it were shown");
+        allow.forceActiveFocus();
+        verify(allow.activeFocus);
+        allow.visible = false;
+        for (const key of [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space])
+            keyClick(key);
+        compare(flow.submitted.length, before);
+        const cancels = flow.cancels;
+        keyClick(Qt.Key_Escape);
+        compare(flow.cancels, cancels + 1);
+        allow.visible = true;
+    }
+
     function findExact(item, value) {
         if (item.text !== undefined && String(item.text) === value)
             return item;

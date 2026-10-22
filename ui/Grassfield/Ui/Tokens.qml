@@ -141,8 +141,8 @@ QtObject {
     readonly property int radiusPanel: 18
     // estimate, pending F1 measurement from design/reference
     readonly property int radiusDialog: 14
-    // spec notifications.md: about 16 pt
-    readonly property int radiusBanner: 16
+    // design/reference/macos (f1-reference-gaps.md gap 7): notification banner radius 18 pt
+    readonly property int radiusBanner: 18
     // spec search.md: rounded about 26 pt
     readonly property int radiusSearch: 26
     // F1 gap 13: alert radius ~24 +-3 (Dialog frame: confirm, notice, About, Force Quit)
@@ -448,8 +448,8 @@ QtObject {
     readonly property int notificationBannerWidth: 344
     // F1 gap 7: gap between stacked cards 6 +-1 (value only)
     readonly property int notificationBannerGap: 6
-    // estimate, pending F1 measurement from design/reference
-    readonly property int notificationBannerIconSize: 36
+    // design/reference/macos (f1-reference-gaps.md gap 7): app icon 32 pt in banners and cards
+    readonly property int notificationBannerIconSize: 32
     // spec N2: default 5 s
     readonly property int notificationBannerTimeout: 5000
     // spec: body up to 4 lines
