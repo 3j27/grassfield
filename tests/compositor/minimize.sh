@@ -385,9 +385,20 @@ bad=0
 for ((i = 1; i <= repeats; i++)); do
   nm=$(event_count minimized "$hex")
   nr=$(event_count restored "$hex")
+  since=$(follow_lines)
   pointer abs "$min_x" "$bar_y" sleep 30 click
+  # The Dock tile exists once the shell has answered the plugin's minimize-request with its rectangle; on a loaded
+  # host that answer can take seconds (1.85 s measured), and a click before it lands where no tile is yet. Click only
+  # once this round's rectangle is logged, at the centre the shell sent.
+  read -r round_out round_x round_y <<<"$(dock_tile "$hex" "$since")"
+  if [[ -n ${round_y:-} ]]; then
+    dock_out=$round_out tx=$round_x tile_y=$round_y
+  else
+    say "  round $i: no Dock rectangle from the shell within 3 s"
+    bad=$((bad + 1))
+  fi
   if ((i % 4 == 0)); then
-    sleep 0.12 # mid-animation: the restore interrupts the minimize animation
+    sleep 0.12 # mid-animation (the animation starts with the rectangle): the restore interrupts the minimize
   else
     wait_event minimized "$hex" "$nm" 3000 || { say "  round $i: no minimized event"; bad=$((bad + 1)); }
   fi
