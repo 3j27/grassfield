@@ -229,6 +229,16 @@ sheet() { # <prefix>
 }
 # Centre of the Dock tile the shell sent with A's latest minimize (plugin log line, see minimize.sh) -> "x y tileTop".
 follow_lines() { grep -ac "" "$follow" 2>/dev/null || echo 0; }
+# Waits up to <ms> for <text> in the followed log after line <since> (Hyprland's log reaches it through a pipe: a line can
+# arrive a little after the request that wrote it).
+follow_wait() { # <since> <text> <ms>
+  local deadline=$(($(date +%s%3N) + $3))
+  while :; do
+    tail -n +"$(($1 + 1))" "$follow" 2>/dev/null | grep -aqF -- "$2" && return 0
+    (($(date +%s%3N) > deadline)) && return 1
+    sleep 0.05
+  done
+}
 dock_tile() { # <since line>
   local line deadline=$(($(date +%s%3N) + 3000)) rx ry rw rh
   while :; do
@@ -446,7 +456,7 @@ read -r _ _ _ _ _ ws < <(client "$a_pid")
 kill -0 "$hypr_pid" 2>/dev/null && [[ $ws == special:minimized ]]
 check "unload mid-minimize" $? "Hyprland alive, A on $ws"
 # FR23: with appmenu client objects alive (the shell's) the library stays mapped; only an unload without them unmaps it.
-if tail -n +"$((f0 + 1))" "$follow" | grep -aq "this library stays in memory"; then
+if follow_wait "$f0" "this library stays in memory" 3000; then
   say "  unload kind: pinned (appmenu client objects alive); an unmapped-library unload is NOT VERIFIED here"
 else
   say "  unload kind: library unmapped (no appmenu client object)"
@@ -485,7 +495,7 @@ pointer abs $((x0 + w0 / 2)) $((y0 + h0 / 2)) sleep 50
 f0=$(follow_lines)
 timeout 10 "$root/scripts/nestctl" dispatch 'hl.plugin.grassfield.config("testFault", "funnel-shader")' >>"$log" 2>&1
 sleep 0.3
-tail -n +"$((f0 + 1))" "$follow" | grep -aq "genie: dev fault injection"
+follow_wait "$f0" "genie: dev fault injection" 3000
 check "fault injected (dev session only)" $? "plugin log line after the testFault request"
 minimize_round fault-min 1 || exit 1
 read -r g r n o < <(classify fault-min "$run/fault-min-after.ppm" "$limit")
