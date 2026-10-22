@@ -596,11 +596,23 @@ Scope {
                 precision: SystemClock.Minutes
             }
 
+            // macOS: with several displays the menu bar of the one that is not active is dimmed (band and content). A single
+            // output, or no focused output known, is never dimmed.
+            readonly property bool dimmed: Quickshell.screens.length > 1 && Compositor.focusedScreenName !== "" && Compositor.focusedScreenName !== win.screen.name
+            readonly property real dimOpacity: win.dimmed ? Tokens.menubarInactiveOpacity : 1
+
+            Behavior on dimOpacity {
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.motionFast)
+                }
+            }
+
             Material {
                 id: material
                 y: win.slideY
                 width: parent.width
                 height: parent.height
+                opacity: win.dimOpacity
                 visible: win.showBackground
                 radius: Tokens.radiusMenuBar
                 shadowEnabled: false
@@ -625,6 +637,7 @@ Scope {
                 y: win.slideY
                 width: parent.width
                 height: parent.height
+                opacity: win.dimOpacity
 
                     Row {
                         id: leftRow

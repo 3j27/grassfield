@@ -235,6 +235,8 @@ QtObject {
     readonly property int menubarHideDuration: 250
     // estimate: the pointer must stay on the top edge this long before a hidden bar slides in (ms)
     readonly property int menubarRevealDwell: 120
+    // macOS: the menu bar of a display that is not the active one is dimmed (its titles and status items at this opacity, the band too); a single output is always active
+    readonly property real menubarInactiveOpacity: 0.5
     // estimate: slide in, ms (Reduce Motion: shown at once)
     readonly property int menubarRevealDuration: 200
 
