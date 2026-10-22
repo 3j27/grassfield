@@ -201,6 +201,7 @@
  {"path": "tests/visual/dock-drops.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-feel.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-launch.sh", "layer": "visual", "runner": "bare"},
+ {"path": "tests/visual/dock-macos.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-motion.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-perf.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/f2c.sh", "layer": "visual", "runner": "bare"},
