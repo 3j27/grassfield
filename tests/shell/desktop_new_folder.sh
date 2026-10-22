@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Desktop New Folder never fails because the listing lags behind the folder (real session 2026-10-22: "mkdir failed
+# ... untitled folder: File exists"). Runs tests/shell/desktop_new_folder.d/newfolder.qml offscreen with the real
+# DesktopFiles on a temporary desktop folder. Plain shell test: prints PASS/FAIL, exits non-zero on failure.
+set -euo pipefail
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+cd "$root"
+unset QT_QPA_PLATFORMTHEME
+mkdir -p "$root/.dev"
+tmp=$(mktemp -d "$root/.dev/desktop-new-folder.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/runtime" "$tmp/home" "$tmp/state" "$tmp/desktop"
+chmod 700 "$tmp/runtime"
+mkdir -p "$tmp/cfg"
+for entry in shell/*; do
+  [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
+done
+cp tests/shell/desktop_new_folder.d/newfolder.qml "$tmp/cfg/shell.qml"
+out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u GRASSFIELD_DEV -u DISPLAY \
+  QS_NO_RELOAD_POPUP=1 HOME="$tmp/home" XDG_RUNTIME_DIR="$tmp/runtime" GRASSFIELD_STATE_HOME="$tmp/state" \
+  GRASSFIELD_DESKTOP_DIR="$tmp/desktop" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" \
+  GRASSFIELD_LANG=en timeout 60 qs -p "$tmp/cfg" --no-color 2>&1) || true
+if grep -q "desktop-new-folder: PASS" <<<"$out"; then
+  grep "desktop-new-folder:" <<<"$out"
+  exit 0
+fi
+grep -E "desktop-new-folder:|ERROR|WARN qml" <<<"$out" || echo "$out"
+echo "FAIL: tests/shell/desktop_new_folder.sh"
+exit 1
