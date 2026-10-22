@@ -8,7 +8,7 @@ X Y W H is the window's box on that output (titlebar included), LIMIT_Y the firs
 Dock: the minimized tile appears there). The pixels that differ from REFERENCE inside the window's box widened by 40 px
 form the animation's footprint. Its width near the top and near the bottom of the footprint classifies the frame:
 
-  genie  the top is at least 1.6 times wider than the bottom (the window narrows toward the Dock)
+  funnel the top is at least 1.6 times wider than the bottom (the window narrows toward the Dock)
   rect   top and bottom widths within 25 % of each other (a uniform scale, or a fade in place)
   none   no footprint (fewer than 12 rows differ)
   other  anything else
@@ -115,7 +115,7 @@ def main(argv):
     w_top, w_bottom = median(band(0.10, 0.20)), median(band(0.80, 0.90))
     ratio = w_top / w_bottom if w_bottom > 0 else 0.0
     if ratio >= 1.6:
-        kind = "genie"
+        kind = "funnel"
     elif 0.8 <= ratio <= 1.25:
         kind = "rect"
     else:

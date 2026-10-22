@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Minimize effects scenario (Track B3, defect #6): Settings dock.minimizeEffect = genie | scale, Reduce Motion, and a
-# plugin unload / reload in the middle of an animation.
+# Minimize effects scenario (Track B3, defect #6): Settings dock.minimizeEffect = funnel | shrink, Reduce Motion (fade),
+# a funnel shader failure, and a plugin unload / reload in the middle of an animation.
 #
-# Usage: tests/compositor/genie.sh            the whole scenario (steps 1-6)
-#        tests/compositor/genie.sh timing N   only N minimize + restore pairs per effect (genie, scale, fade) at normal
+# Usage: tests/compositor/genie.sh            the whole scenario (steps 1-7)
+#        tests/compositor/genie.sh timing N   only N minimize + restore pairs per effect (funnel, shrink, fade) at normal
 #                                             speed, no capture: the plugin's frame timing lines, then health
 #        tests/compositor/genie.sh c2 [X Y]   gate C2, in a session started with nested-up.sh --no-plugin: SUPER+M parks
 #                                             the window (shell fallback); with X Y (the Dock tile on the output) a click
@@ -11,21 +11,32 @@
 # NESTED only: needs scripts/dev/nested-up.sh with grassfield-compositor loaded (features "minimize" and
 # "minimize-effect") and grassfield-shell running. Settings change through the dev settings file
 # (.dev/config/grassfield.json, the nested shell's GRASSFIELD_CONFIG_HOME; restored at exit), which the shell pushes to
-# the plugin (hl.plugin.grassfield.config("minimizeEffect", genie|scale|fade)). Pointer input through
-# scripts/dev/pointer.sh; hyprctl read-only through scripts/nestctl's instance, except the plugin unload / load of step 5,
-# which goes through `just plugin-unload` / `just plugin-load` (scripts/nestctl, nested only).
-#   1 genie: minimize foot window A with its minimize button, Shift held (slow motion, see SLOW_DELAYS); captures of the
+# the plugin (hl.plugin.grassfield.config("minimizeEffect", funnel|shrink|fade)). Pointer input through
+# scripts/dev/pointer.sh; queries read-only through scripts/nestctl's instance, except the plugin unload / load (steps 5
+# and 6: `just plugin-unload` / `just plugin-load`) and the dev fault injection of step 6
+# (hl.plugin.grassfield.config("testFault", "funnel-shader"), honoured only in a dev session), all through
+# scripts/nestctl, nested only.
+#   1 funnel: minimize foot window A with its minimize button, Shift held (slow motion, see SLOW_DELAYS); captures of the
 #     output during the animation, each classified by tests/compositor/genie_shape.py against the output after the
-#     minimize: at least one capture must show the genie (top of the footprint >= 1.6 x wider than its bottom);
-#   2 genie restore: Shift-click on A's Dock tile; captures; at least one genie-shaped; A back at its geometry; then
+#     minimize: at least one capture must show the funnel (top of the footprint >= 1.6 x wider than its bottom);
+#   2 funnel restore: Shift-click on A's Dock tile; captures; at least one funnel-shaped; A back at its geometry; then
 #     5 minimize + restore pairs at normal speed without captures (the plugin logs their frame timing);
-#   3 scale: the same with dock.minimizeEffect = scale: no genie-shaped capture, at least one rectangle;
+#   3 shrink: the same with dock.minimizeEffect = shrink: no funnel-shaped capture, at least one rectangle;
 #   4 Reduce Motion (accessibility.reduceMotion = true): minimize and restore fade in place (every footprint is a
-#     rectangle at A's own box, no genie), move -> event <= 250 ms at normal speed;
+#     rectangle at A's own box, no funnel), move -> event <= 250 ms at normal speed;
 #   5 unload mid-minimize, load, restore through the Dock, unload mid-restore, load: Hyprland alive, A minimized after
-#     the first unload, A fully shown at its place after the second one, the plugin advertises its features again;
-#   6 health: Hyprland alive, no core dump, no grassfield exception; the plugin's timing lines (frame interval and CPU
-#     time per frame during each animation) are copied into the log.
+#     the first unload, A fully shown at its place after the second one, the plugin advertises its features again; the
+#     log says whether the library stayed pinned (FR23: the shell's appmenu objects pin it);
+#   6 funnel shader failure (FR46): the fault is injected, then a slow funnel minimize: the plugin logs the failure and
+#     the running animation goes on as a shrink one (its timing line says shrink; a capture shows a rectangle, never
+#     nothing); the restore is a shrink too; a plugin reload brings the funnel back (a normal minimize logs funnel);
+#   7 health: Hyprland alive, no core dump, no grassfield exception; every timing line (frame interval and CPU time per
+#     frame during each animation) is copied into the log.
+# Frame timing verdict (normal speed: steps 2-4 and the timing mode): an animation with a frame interval over 25 ms is a
+# stall. Every stall is printed with its worst interval and the host during the animation (1-min load and number of dev
+# nested Hyprland instances, sampled every second). A stall while the host was outside the agreed limits (1-min load
+# above 8, or more than 3 dev nested instances) is labelled "stalled (host)"; any other stall FAILS the run. None is
+# dropped.
 # Captures: .dev/genie/run-<timestamp>/frames/*.png (and contact sheets). Exit: 0 PASS, 1 FAIL, 2 usage or environment.
 set -uo pipefail
 
@@ -115,11 +126,23 @@ trap cleanup EXIT
 # Anchor devices (see minimize.sh): clients keep their wl_pointer while pointer.sh adds and removes its own.
 "$root/scripts/dev/pointer.sh" output "$out" sleep 3600000 >>"$log" 2>&1 &
 pids+=($!)
-timeout 3600 stdbuf -oL "$root/scripts/nestctl" rollinglog -f >"$follow" 2>&1 &
-pids+=($!)
+# Every line of Hyprland's log and of the event socket gets the time it was read (microseconds since the epoch) as its
+# first field: the frame timing verdict joins the plugin's timing lines with the host samples by time.
 stamp_events() { local l; while IFS= read -r l; do printf '%s %s\n' "${EPOCHREALTIME/./}" "$l"; done; }
+timeout 3600 stdbuf -oL "$root/scripts/nestctl" rollinglog -f > >(stamp_events >"$follow") 2>&1 &
+pids+=($!)
 socat -u UNIX-CONNECT:"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$sig/.socket2.sock" STDOUT 2>>"$log" </dev/null > >(stamp_events >"$events") &
 socat_pid=$!
+# The host every second: time, 1-min load, dev nested Hyprland instances (all trees, this one included).
+host_log=$run/host.log
+sample_host() {
+  while :; do
+    printf '%s %s %s\n' "${EPOCHREALTIME/./}" "$(cut -d' ' -f1 /proc/loadavg)" "$(ps -C Hyprland -o args= | grep -c -- '--config .*/dev\.lua')"
+    sleep 1
+  done
+}
+sample_host >"$host_log" 2>/dev/null &
+pids+=($!)
 sleep 0.3
 
 read -r mon_x mon_y mon_w mon_h < <(query monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
@@ -167,7 +190,7 @@ frames_after_move() { # <regex> <count before> <prefix> <delays...>
   done
   wait "${shots[@]}"
 }
-# Classifies every capture of <prefix> against <reference.ppm>; prints "<genie> <rect> <none> <other>" and logs each.
+# Classifies every capture of <prefix> against <reference.ppm>; prints "<funnel> <rect> <none> <other>" and logs each.
 classify() { # <prefix> <reference.ppm> <limit y>
   local f j g=0 r=0 n=0 o=0
   for f in "$run/frames/$1"-*.ppm; do
@@ -176,7 +199,7 @@ classify() { # <prefix> <reference.ppm> <limit y>
     echo "    $(basename "$f"): $j" >>"$log"
     printf '%s\n' "$j" >"${f%.ppm}.json"
     case $(jq -r '.class' <<<"$j") in
-      genie) g=$((g + 1)) ;;
+      funnel) g=$((g + 1)) ;;
       rect) r=$((r + 1)) ;;
       none) n=$((n + 1)) ;;
       *) o=$((o + 1)) ;;
@@ -185,14 +208,14 @@ classify() { # <prefix> <reference.ppm> <limit y>
   echo "$g $r $n $o"
 }
 # Every footprint of <prefix> lies at A's own box and spans its width (a fade in place: no movement, no shrink, no
-# genie). The top row is not compared: a translucent titlebar over the dark sky differs too little from it.
+# funnel). The top row is not compared: a translucent titlebar over the dark sky differs too little from it.
 in_place() { # <prefix>
   local f c top bottom left right
   for f in "$run/frames/$1"-*.json; do
     [[ -f $f ]] || continue
     c=$(jq -r '.class' "$f")
     [[ $c == none ]] && continue
-    [[ $c == genie ]] && return 1
+    [[ $c == funnel ]] && return 1
     read -r top bottom left right < <(jq -r '"\(.top) \(.bottom) \(.left) \(.right)"' "$f")
     ((top < y0 - 28 - 45 || bottom > y0 + h0 + 45 || bottom < y0 + h0 - 20 || left < x0 - 45 || right > x0 + w0 + 45 || right - left < w0 * 9 / 10)) && return 1
   done
@@ -222,7 +245,7 @@ dock_tile() { # <since line>
 
 # Captures need frames: on a loaded GPU a capture (grim's screencopy) can hold the nested compositor's frames for
 # hundreds of ms, longer than a whole animation. Captured animations therefore run in slow motion (Shift held when the
-# animation starts: kSlowMotionFactor 10, a 5 s genie, a 3 s scale, a 1 s fade); the timing rounds run at normal speed
+# animation starts: kSlowMotionFactor 10, a 5 s funnel, a 3 s shrink, a 1 s fade); the timing rounds run at normal speed
 # without any capture.
 SLOW_DELAYS=(400 1300 2200 3100 4000) # ms after the plugin's move of A
 hold_shift() { # <ms>: Shift down for that long (virtual keyboard of the nested session), in the background
@@ -290,7 +313,7 @@ timing_rounds() { # <label> <n>
 }
 
 say "genie: nested pid $hypr_pid, output $out ${mon_w}x${mon_h}, features $(features)"
-((c2)) || set_settings genie false
+((c2)) || set_settings funnel false
 pointer abs $((mon_w / 2)) $((mon_h / 3)) sleep 50
 WAYLAND_DISPLAY=$sock setsid "$root/scripts/dev/isolated.sh" foot >/dev/null 2>&1 </dev/null &
 a_pid=$!
@@ -340,64 +363,64 @@ fi
 
 if ((timing_only)); then
   say "timing: $pairs minimize + restore pairs per effect at normal speed, no capture"
-  set_settings genie false
-  timing_rounds genie "$pairs"
-  set_settings scale false
-  timing_rounds scale "$pairs"
-  set_settings genie true
+  set_settings funnel false
+  timing_rounds funnel "$pairs"
+  set_settings shrink false
+  timing_rounds shrink "$pairs"
+  set_settings funnel true
   timing_rounds fade "$pairs"
-  set_settings genie false
+  set_settings funnel false
 else
 
-# 1-2 genie
-say "1 genie minimize (slow motion, captures)"
-minimize_round genie-min 1 || exit 1
-read -r g r n o < <(classify genie-min "$run/genie-min-after.ppm" "$limit")
+# 1-2 funnel
+say "1 funnel minimize (slow motion, captures)"
+minimize_round funnel-min 1 || exit 1
+read -r g r n o < <(classify funnel-min "$run/funnel-min-after.ppm" "$limit")
 ((g >= 1))
-check "genie: captures show the genie" $? "genie $g, rect $r, none $n, other $o of ${#SLOW_DELAYS[@]}"
-sheet genie-min
-say "2 genie restore (slow motion, captures)"
-restore_round genie-restore 1
-read -r g r n o < <(classify genie-restore "$run/genie-min-after.ppm" "$limit")
+check "funnel: captures show the funnel" $? "funnel $g, rect $r, none $n, other $o of ${#SLOW_DELAYS[@]}"
+sheet funnel-min
+say "2 funnel restore (slow motion, captures)"
+restore_round funnel-restore 1
+read -r g r n o < <(classify funnel-restore "$run/funnel-min-after.ppm" "$limit")
 ((g >= 1))
-check "genie restore: captures show the genie" $? "genie $g, rect $r, none $n, other $o"
-sheet genie-restore
-timing_rounds genie 5
+check "funnel restore: captures show the funnel" $? "funnel $g, rect $r, none $n, other $o"
+sheet funnel-restore
+timing_rounds funnel 5
 
-# 3 scale
-say "3 scale"
-set_settings scale false
-minimize_round scale-min 1 || exit 1
-read -r g r n o < <(classify scale-min "$run/scale-min-after.ppm" "$limit")
+# 3 shrink
+say "3 shrink"
+set_settings shrink false
+minimize_round shrink-min 1 || exit 1
+read -r g r n o < <(classify shrink-min "$run/shrink-min-after.ppm" "$limit")
 ((g == 0 && r >= 1))
-check "scale: uniform shrink, no genie" $? "genie $g, rect $r, none $n, other $o"
-sheet scale-min
-restore_round scale-restore 1
-read -r g r n o < <(classify scale-restore "$run/scale-min-after.ppm" "$limit")
+check "shrink: uniform shrink, no funnel" $? "funnel $g, rect $r, none $n, other $o"
+sheet shrink-min
+restore_round shrink-restore 1
+read -r g r n o < <(classify shrink-restore "$run/shrink-min-after.ppm" "$limit")
 ((g == 0 && r >= 1))
-check "scale restore: uniform growth, no genie" $? "genie $g, rect $r, none $n, other $o"
-sheet scale-restore
-timing_rounds scale 3
+check "shrink restore: uniform growth, no funnel" $? "funnel $g, rect $r, none $n, other $o"
+sheet shrink-restore
+timing_rounds shrink 3
 
 # 4 Reduce Motion
 say "4 Reduce Motion"
-set_settings genie true
+set_settings funnel true
 minimize_round fade-min 1 || exit 1
 read -r g r n o < <(classify fade-min "$run/fade-min-after.ppm" "$limit")
 in_place fade-min && ((g == 0 && r + o >= 1))
-check "Reduce Motion: the window fades in place" $? "genie $g, rect $r, none $n, other $o"
+check "Reduce Motion: the window fades in place" $? "funnel $g, rect $r, none $n, other $o"
 sheet fade-min
 restore_round fade-restore 1
 read -r g r n o < <(classify fade-restore "$run/fade-min-after.ppm" "$limit")
 in_place fade-restore && ((g == 0 && r + o >= 1))
-check "Reduce Motion restore: the window fades in place" $? "genie $g, rect $r, none $n, other $o"
+check "Reduce Motion restore: the window fades in place" $? "funnel $g, rect $r, none $n, other $o"
 sheet fade-restore
 timing_rounds fade 3
 ms_min=$(event_ms "$to_minimized" minimized)
 ms_res=$(event_ms "$to_workspace" restored)
 ((ms_min >= 0 && ms_min <= 250 && ms_res >= 0 && ms_res <= 250))
 check "Reduce Motion: quick" $? "move -> minimized $ms_min ms, move -> restored $ms_res ms (fade 100 ms)"
-set_settings genie false
+set_settings funnel false
 
 # 5 unload / load mid-animation (slow motion: the unload lands inside the animation)
 say "5 plugin unload and load mid-animation"
@@ -416,11 +439,18 @@ pointer abs "$min_x" "$bar_y" sleep 300
 hold_shift 1500
 pointer abs "$min_x" "$bar_y" sleep 40 click
 sleep 1
+f0=$(follow_lines)
 plugin_unload
 sleep 0.5
 read -r _ _ _ _ _ ws < <(client "$a_pid")
 kill -0 "$hypr_pid" 2>/dev/null && [[ $ws == special:minimized ]]
 check "unload mid-minimize" $? "Hyprland alive, A on $ws"
+# FR23: with appmenu client objects alive (the shell's) the library stays mapped; only an unload without them unmaps it.
+if tail -n +"$((f0 + 1))" "$follow" | grep -aq "this library stays in memory"; then
+  say "  unload kind: pinned (appmenu client objects alive); an unmapped-library unload is NOT VERIFIED here"
+else
+  say "  unload kind: library unmapped (no appmenu client object)"
+fi
 plugin_load
 wait_features
 check "load again: minimize-effect advertised" $? "features $(features)"
@@ -438,7 +468,7 @@ check "unload mid-restore" $? "Hyprland alive, A on $ws at ($x,$y)"
 pointer abs $((x0 + w0 / 2)) $((y0 + h0 / 2)) sleep 300
 WAYLAND_DISPLAY=$sock grim -t ppm -o "$out" "$run/after-unload-restore.ppm" 2>>"$log"
 magick "$run/after-unload-restore.ppm" "$run/after-unload-restore.png" 2>>"$log"
-j=$(python3 -I "$root/tests/compositor/genie_shape.py" "$run/after-unload-restore.ppm" "$run/genie-min-after.ppm" "$x0" "$((y0 - 28))" "$w0" "$((h0 + 28))" "$limit")
+j=$(python3 -I "$root/tests/compositor/genie_shape.py" "$run/after-unload-restore.ppm" "$run/funnel-min-after.ppm" "$x0" "$((y0 - 28))" "$w0" "$((h0 + 28))" "$limit")
 read -r rows left right bottom < <(jq -r '"\(.rows) \(.left // -1) \(.right // -1) \(.bottom // -1)"' <<<"$j")
 # A, fully opaque at its place, differs from the output without it over its whole box.
 ((rows >= h0 && left <= x0 + 5 && right >= x0 + w0 - 5 && bottom >= y0 + h0 - 5))
@@ -446,11 +476,79 @@ check "A fully shown at its place after the unload mid-restore" $? "footprint vs
 plugin_load
 wait_features
 check "load again" $? "features $(features)"
+for _ in $(seq 1 50); do (($(grep -c "compositor setting minimizeEffect = funnel" "$dev/shell.log") > 0)) && break; sleep 0.1; done
+sleep 0.5
+
+# 6 funnel shader failure (FR46): a running funnel animation goes on as a shrink one, never as nothing
+say "6 funnel shader failure (dev fault injection)"
+pointer abs $((x0 + w0 / 2)) $((y0 + h0 / 2)) sleep 50
+f0=$(follow_lines)
+timeout 10 "$root/scripts/nestctl" dispatch 'hl.plugin.grassfield.config("testFault", "funnel-shader")' >>"$log" 2>&1
+sleep 0.3
+tail -n +"$((f0 + 1))" "$follow" | grep -aq "genie: dev fault injection"
+check "fault injected (dev session only)" $? "plugin log line after the testFault request"
+minimize_round fault-min 1 || exit 1
+read -r g r n o < <(classify fault-min "$run/fault-min-after.ppm" "$limit")
+since=$(tail -n +"$((f0 + 1))" "$follow")
+grep -aq "funnel drawing disabled (shader compile failed)" <<<"$since" \
+  && grep -aqE "minimize $hex: shrink minimize in [0-9]+ ms, .* speed slow" <<<"$since" && ((g == 0 && r >= 1))
+check "shader failure: the running funnel goes on as a shrink" $? "funnel $g, rect $r, none $n, other $o; failure logged: $(grep -ac 'funnel drawing disabled' <<<"$since"), timing line: $(grep -aoE 'minimize [0-9a-f]+: [a-z]+ minimize in [0-9]+ ms' <<<"$since" | tail -n 1)"
+sheet fault-min
+restore_round fault-restore 0
+grep -aqE "minimize $hex: shrink restore in [0-9]+ ms" <<<"$(tail -n +"$((f0 + 1))" "$follow")"
+check "shader failure: the restore is a shrink" $? "timing line of the restore"
+f1=$(follow_lines)
+plugin_unload
+plugin_load
+wait_features
+check "reload after the failure" $? "features $(features)"
+sleep 1
+minimize_round fault-after-min 0 || exit 1
+restore_round fault-after-restore 0
+grep -aqE "minimize $hex: funnel minimize in [0-9]+ ms" <<<"$(tail -n +"$((f1 + 1))" "$follow")"
+check "a reload brings the funnel back" $? "timing line of the next minimize"
 
 fi
 
-# 6 health
-say "6 health"
+# Frame timing verdict at normal speed (see the header): every stall is printed with the host during the animation.
+timing_verdict() {
+  local out bad
+  say "  frame timing at normal speed (stall: a frame interval over 25 ms; host limits: 1-min load above 8 or more than 3 dev nested instances):"
+  out=$(grep -a "\[grassfield\] minimize $hex: .* speed normal" "$follow" | gawk -v hostlog="$host_log" '
+    BEGIN { while ((getline line < hostlog) > 0) { split(line, a, " "); ht[nh] = a[1] + 0; hl[nh] = a[2] + 0; hn[nh] = a[3] + 0; nh++ } }
+    {
+      t = $1 + 0 # microseconds when the line was read: the end of the animation
+      sub(/^.*\[grassfield\] /, "")
+      effect = $3; kind = $4; ms = $6 + 0
+      match($0, /([0-9]+) frames/, f); match($0, /interval avg ([0-9.]+) max ([0-9.]+)/, iv)
+      match($0, /cpu avg ([0-9.]+) max ([0-9.]+)/, cpu); match($0, /draw max ([0-9]+) us/, dr)
+      n[effect]++; frames[effect] += f[1]; sumavg[effect] += iv[1]
+      if (iv[2] + 0 > maxiv[effect] + 0) maxiv[effect] = iv[2]
+      sumcpu[effect] += cpu[1]; if (cpu[2] + 0 > maxcpu[effect] + 0) maxcpu[effect] = cpu[2]
+      if (dr[1] + 0 > maxdraw[effect] + 0) maxdraw[effect] = dr[1]
+      if (iv[2] + 0 > 25) {
+        # The host from 1 s before the animation started to 1 s after it ended.
+        from = t - (ms + 1000) * 1000; to = t + 1000000; load = -1; nested = -1
+        for (i = 0; i < nh; i++) if (ht[i] >= from && ht[i] <= to) { if (hl[i] > load) load = hl[i]; if (hn[i] > nested) nested = hn[i] }
+        host = (load > 8 || nested > 3)
+        if (host) hoststalls[effect]++; else stalls[effect]++
+        printf "    %s %s %s in %d ms: worst frame interval %.1f ms; 1-min load %s, dev nested instances %s\n", (host ? "stalled (host):" : "STALL:"), effect, kind, ms, iv[2], (load < 0 ? "unknown" : load), (nested < 0 ? "unknown" : nested)
+      }
+    }
+    END {
+      for (e in n)
+        printf "    %s: %d animations, %d frames, frame interval mean %.1f ms, worst %.1f ms; %d stall(s), %d stalled (host); frame cpu mean %.2f ms, worst %.2f ms; funnel draw worst %d us\n", e, n[e], frames[e], sumavg[e] / n[e], maxiv[e], stalls[e] + 0, hoststalls[e] + 0, sumcpu[e] / n[e], maxcpu[e], maxdraw[e]
+      total = 0; for (e in stalls) total += stalls[e]
+      printf "VERDICT %d %d\n", total, NR
+    }')
+  printf '%s\n' "$out" | grep -v '^VERDICT ' | tee -a "$log"
+  read -r bad lines < <(printf '%s\n' "$out" | sed -n 's/^VERDICT //p')
+  [[ ${bad:-1} == 0 && ${lines:-0} -gt 0 ]]
+  check "frame timing: no stall outside the host limits" $? "${bad:-?} stall(s) outside the limits over ${lines:-0} normal-speed animation(s)"
+}
+
+# 7 health
+say "7 health"
 kill -0 "$hypr_pid" 2>/dev/null
 check "nested Hyprland alive" $? "pid $hypr_pid"
 dumps=$(coredumpctl --no-pager --json=short list Hyprland --since "$start_human" 2>/dev/null | jq -r '.[].pid' 2>/dev/null | grep -cx "$hypr_pid")
@@ -462,26 +560,7 @@ check "no grassfield exception" $? "$exceptions in the followed log"
 say "  plugin timing lines (frame interval and CPU time per frame on $out during each animation):"
 grep -a "\[grassfield\] minimize $hex: .* in [0-9]* ms," "$follow" | sed 's/^.*\[grassfield\] /    /' | tee -a "$log"
 grep -a "\[grassfield\] genie:" "$follow" | sed 's/^.*\[grassfield\] /    /' | tee -a "$log"
-# Per effect, animations at normal speed only (slow motion lasts >= 1 s): a frame interval over 25 ms (1.5 x the 60 Hz
-# period of the headless output) is a dropped frame.
-say "  summary at normal speed (frame interval > 25 ms = dropped frame):"
-grep -a "\[grassfield\] minimize $hex: .* in [0-9]* ms," "$follow" | sed 's/^.*\[grassfield\] //' | gawk '
-  {
-    effect = $3; ms = $6 + 0
-    if (ms >= 1000) next
-    match($0, /([0-9]+) frames/, f); match($0, /interval avg ([0-9.]+) max ([0-9.]+)/, iv)
-    match($0, /cpu avg ([0-9.]+) max ([0-9.]+)/, cpu); match($0, /draw max ([0-9]+) us/, dr)
-    n[effect]++; frames[effect] += f[1]; sumavg[effect] += iv[1]
-    if (iv[2] > maxiv[effect]) maxiv[effect] = iv[2]
-    if (iv[2] > 25) dropped[effect]++
-    sumcpu[effect] += cpu[1]; if (cpu[2] > maxcpu[effect]) maxcpu[effect] = cpu[2]
-    if (dr[1] > maxdraw[effect]) maxdraw[effect] = dr[1]
-  }
-  END {
-    for (e in n)
-      printf "    %s: %d animations, %d frames, frame interval mean %.1f ms, worst %.1f ms, %d animation(s) with a frame over 25 ms; frame cpu mean %.2f ms, worst %.2f ms; genie draw worst %d us\n",
-        e, n[e], frames[e], sumavg[e] / n[e], maxiv[e], dropped[e], sumcpu[e] / n[e], maxcpu[e], maxdraw[e]
-  }' | tee -a "$log"
+timing_verdict
 
 if ((fail == 0)); then say "genie: PASS"; else say "genie: FAIL"; fi
 say "genie: run $run"
