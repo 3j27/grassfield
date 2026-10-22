@@ -140,11 +140,11 @@ function overviewFocusCall(target, id) {
 }
 
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
-// minimizeEffect: Settings dock.minimizeEffect (genie | scale), or "fade" while Reduce Motion is on (feature
+// minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
 var pluginConfig = {
     titlebarDoubleClick: ["zoom", "minimize", "none"],
-    minimizeEffect: ["genie", "scale", "fade"]
+    minimizeEffect: ["funnel", "shrink", "fade"]
 };
 
 function configCall(key, value) {

@@ -46,7 +46,7 @@ Scope {
     }
     readonly property var dockRecent: stringList(config.dock.recent)
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
-    readonly property string dockMinimizeEffect: ["genie", "scale"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "genie"
+    readonly property string dockMinimizeEffect: ["funnel", "shrink"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "funnel"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
     readonly property string accentColor: Accent.normalize(config.accent.color)
     readonly property string iconMode: IconModes.normalizeMode(config.icons.mode)
@@ -118,8 +118,8 @@ Scope {
         property bool showRecents: true
         // Minimized windows go into their app's tile instead of getting a tile of their own.
         property bool minimizeIntoApp: false
-        // "Minimize windows using": genie (macOS default) | scale. The compositor plugin draws it.
-        property string minimizeEffect: "genie"
+        // "Minimize animation": funnel (the default) | shrink. The compositor plugin draws it.
+        property string minimizeEffect: "funnel"
     }
 
     component WindowsConfig: JsonObject {

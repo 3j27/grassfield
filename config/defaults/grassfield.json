@@ -21,7 +21,7 @@
     "recent": [],
     "showRecents": true,
     "minimizeIntoApp": false,
-    "minimizeEffect": "genie"
+    "minimizeEffect": "funnel"
   },
   "windows": {
     "titlebarDoubleClick": "zoom"

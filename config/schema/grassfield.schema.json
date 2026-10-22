@@ -92,8 +92,8 @@
         "minimizeEffect": {
           "type": "string",
           "enum": [
-            "genie",
-            "scale"
+            "funnel",
+            "shrink"
           ]
         }
       }

@@ -55,11 +55,11 @@ SettingsPage {
         }
 
         SettingsRow {
-            title: qsTr("Minimize windows using")
+            title: qsTr("Minimize animation")
             subtitle: qsTr("With Reduce Motion on, windows fade instead.")
             Picker {
-                accessibleName: qsTr("Minimize windows using")
-                model: [{id: "genie", text: qsTr("Genie Effect")}, {id: "scale", text: qsTr("Scale Effect")}]
+                accessibleName: qsTr("Minimize animation")
+                model: [{id: "funnel", text: qsTr("Funnel")}, {id: "shrink", text: qsTr("Shrink")}]
                 value: root.store.value("dock.minimizeEffect")
                 onPicked: id => root.store.set("dock.minimizeEffect", id)
             }
