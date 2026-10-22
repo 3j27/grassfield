@@ -62,6 +62,32 @@ namespace gf::minimize {
         Restore,  // tile -> window box, ease-out, fades in at the start
     };
 
+    // The minimize effect (Settings dock.minimizeEffect, pushed by the shell with hl.plugin.grassfield.config):
+    // Genie = "funnel" (the default, core/Genie.*), Scale = "shrink" (uniform shrink into the tile, frameAt) or
+    // Fade = "fade" (Reduce Motion: the window fades out where it is, fadeFrameAt; the shell sends it while
+    // accessibility.reduceMotion is on).
+    enum class Effect : uint8_t {
+        Genie,
+        Scale,
+        Fade,
+    };
+
+    inline constexpr std::string_view kConfigMinimizeEffect = "minimizeEffect";
+
+    // nullopt unless key is kConfigMinimizeEffect and value is exactly "funnel", "shrink" or "fade" (the values of Settings
+    // dock.minimizeEffect, Grassfield's own names; the code keeps Genie / Scale as internal identifiers).
+    std::optional<Effect> parseEffect(std::string_view key, std::string_view value);
+
+    // Dev fault injection (tests/compositor/genie.sh fault): hl.plugin.grassfield.config("testFault", "funnel-shader") makes
+    // the next funnel draw compile a broken shader. Honoured only in a dev session (GRASSFIELD_DEV=1 in Hyprland's
+    // environment, set by scripts/dev/nested-up.sh); never advertised, rejected like any unknown key otherwise.
+    inline constexpr std::string_view kConfigTestFault       = "testFault";
+    inline constexpr std::string_view kTestFaultFunnelShader = "funnel-shader";
+    bool                              isFunnelShaderFault(std::string_view key, std::string_view value, bool devSession);
+
+    // Shift held when a minimize or restore starts plays it in slow motion, as on macOS (any effect).
+    inline constexpr double kSlowMotionFactor = 10.0;
+
     struct Frame {
         Box   box;           // where the window's visible box is drawn (layout coordinates)
         float alpha = 1.F;   // snapshot opacity
@@ -77,6 +103,13 @@ namespace gf::minimize {
 
     // State of an animation from `from` to `to` after elapsedMs (negative elapsed = start).
     Frame frameAt(Kind kind, const Box& from, const Box& to, double elapsedMs);
+
+    // Reduce Motion: a quick fade in place, no movement (Tokens.motionReducedMax, docs/specs/ui.md).
+    inline constexpr double kFadeDurationMs = 100.0;
+
+    // State of a Fade animation of the window box `box` after elapsedMs: the box never moves; alpha goes 1 -> 0
+    // (Minimize) or 0 -> 1 (Restore), linearly.
+    Frame fadeFrameAt(Kind kind, const Box& box, double elapsedMs);
 
     // The affine map that sends `src` onto `dst` (per-axis scale + translation), applied to `inner`
     // (e.g. the window's full box with its shadow, for damage).

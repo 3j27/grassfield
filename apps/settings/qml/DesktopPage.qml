@@ -55,6 +55,17 @@ SettingsPage {
         }
 
         SettingsRow {
+            title: qsTr("Minimize animation")
+            subtitle: qsTr("With Reduce Motion on, windows fade instead.")
+            Picker {
+                accessibleName: qsTr("Minimize animation")
+                model: [{id: "funnel", text: qsTr("Funnel")}, {id: "shrink", text: qsTr("Shrink")}]
+                value: root.store.value("dock.minimizeEffect")
+                onPicked: id => root.store.set("dock.minimizeEffect", id)
+            }
+        }
+
+        SettingsRow {
             title: qsTr("Automatically hide the Dock")
             Toggle {
                 accessibleName: qsTr("Automatically hide the Dock")

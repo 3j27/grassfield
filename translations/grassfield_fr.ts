@@ -1693,6 +1693,22 @@
         <translation>%1x</translation>
     </message>
     <message>
+        <source>With Reduce Motion on, windows fade instead.</source>
+        <translation>Avec «&#xa0;Réduire les animations&#xa0;», les fenêtres s’estompent à la place.</translation>
+    </message>
+    <message>
+        <source>Minimize animation</source>
+        <translation>Animation de réduction</translation>
+    </message>
+    <message>
+        <source>Funnel</source>
+        <translation>Entonnoir</translation>
+    </message>
+    <message>
+        <source>Shrink</source>
+        <translation>Rétrécissement</translation>
+    </message>
+    <message>
         <source>Automatically hide the Dock</source>
         <translation>Masquer automatiquement le Dock</translation>
     </message>

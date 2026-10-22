@@ -20,7 +20,8 @@
     "autohide": false,
     "recent": [],
     "showRecents": true,
-    "minimizeIntoApp": false
+    "minimizeIntoApp": false,
+    "minimizeEffect": "funnel"
   },
   "windows": {
     "titlebarDoubleClick": "zoom"

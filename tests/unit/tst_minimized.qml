@@ -38,6 +38,20 @@ TestCase {
         compare(Minimized.configCall("constructor", "zoom"), "");
     }
 
+    // Settings dock.minimizeEffect, or "fade" under Reduce Motion (plugin feature "minimize-effect").
+    function test_configCallMinimizeEffect() {
+        compare(Minimized.configCall("minimizeEffect", "funnel"),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.config then p.config(\"minimizeEffect\", \"funnel\") end end");
+        verify(Minimized.configCall("minimizeEffect", "shrink") !== "");
+        verify(Minimized.configCall("minimizeEffect", "fade") !== "");
+        compare(Minimized.configCall("minimizeEffect", "genie"), "");
+        compare(Minimized.configCall("minimizeEffect", "scale"), "");
+        compare(Minimized.configCall("minimizeEffect", "Funnel"), "");
+        compare(Minimized.configCall("minimizeEffect", "zoom"), "");
+        compare(Minimized.configCall("minimizeEffect", "funnel\") os.exit() --"), "");
+        compare(Minimized.configCall("minimizeEffect", null), "");
+    }
+
     // ---- overview verb (docs/specs/overview.md "Shell contract" 3) ----
 
     readonly property string ovHead: "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.overview then p.overview("

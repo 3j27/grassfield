@@ -32,6 +32,7 @@ ShellRoot {
         ["dock.recent", ["x", "y"], () => Settings.dockRecent.join(",") === "x,y"],
         ["dock.showRecents", false, () => Settings.dockShowRecents === false],
         ["dock.minimizeIntoApp", true, () => Settings.dockMinimizeIntoApp === true],
+        ["dock.minimizeEffect", "shrink", () => Settings.dockMinimizeEffect === "shrink"],
         ["desktop.showIcons", false, () => Settings.desktopShowIcons === false],
         ["menubar.showBackground", true, () => Settings.menubarShowBackground === true],
         ["windows.titlebarDoubleClick", "minimize", () => Settings.titlebarDoubleClick === "minimize"],

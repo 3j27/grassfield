@@ -3,6 +3,7 @@
 #include "AppmenuServer.hpp"
 #include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
+#include "GenieDraw.hpp"
 #include "Minimize.hpp"
 #include "Overview.hpp"
 #include "OverviewFocus.hpp"
@@ -25,6 +26,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <optional>
 #include <string>
@@ -137,6 +139,22 @@ namespace gf::ipc {
         return s.luaMinimizeRegistered && s.luaRestoreRegistered && minimizer::ready();
     }
 
+    namespace {
+        // A dev session (scripts/dev/nested-up.sh exports GRASSFIELD_DEV=1 to the nested Hyprland); the installed
+        // session never sets it. Read once: the environment does not change under a running compositor.
+        bool devSession() {
+            static const bool dev = [] {
+                const char* v = std::getenv("GRASSFIELD_DEV"); // NOLINT(concurrency-mt-unsafe): compositor thread only
+                return v != nullptr && std::string_view{v} == "1";
+            }();
+            return dev;
+        }
+    } // namespace
+
+    bool minimizeEffectAvailable() {
+        return minimizeAvailable() && state().luaConfigRegistered;
+    }
+
     bool appmenuAvailable() {
         return state().luaAppmenuRegistered && appmenuServer::ready();
     }
@@ -160,7 +178,7 @@ namespace gf::ipc {
     namespace {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
-                                                stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable());
+                                                stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -263,10 +281,26 @@ namespace gf::ipc {
                         postCapabilities(); // "stages" appears or goes away
                     return;
                 }
+                // Dev fault injection: only in a dev session, never advertised (core/Minimize.hpp kConfigTestFault).
+                if (key.ok && value.ok && minimize::isFunnelShaderFault(key.view(), value.view(), devSession())) {
+                    genie::injectShaderFault();
+                    logRequest(Log::WARN, "config: {} = {} (dev fault injection)", minimize::kConfigTestFault, value.view());
+                    return;
+                }
+                if (key.ok && value.ok && key.view() == minimize::kConfigMinimizeEffect) {
+                    const auto effect = minimize::parseEffect(key.view(), value.view());
+                    if (!effect || !minimizeEffectAvailable()) {
+                        logRequest(Log::WARN, "config: rejected ({} = funnel|shrink|fade, and only while minimize is available)", minimize::kConfigMinimizeEffect);
+                        return;
+                    }
+                    minimizer::setEffect(*effect);
+                    logRequest(Log::INFO, "config: {} = {}", minimize::kConfigMinimizeEffect, value.view());
+                    return;
+                }
                 const auto action = key.ok && value.ok ? gfc::parseDoubleClickAction(key.view(), value.view()) : std::nullopt;
                 if (!action) {
-                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none and {} = true|false are accepted)", gfc::kConfigTitlebarDoubleClick,
-                               gf::stages::kConfigStagesEnabled);
+                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none, {} = true|false and {} = funnel|shrink|fade are accepted)",
+                               gfc::kConfigTitlebarDoubleClick, gf::stages::kConfigStagesEnabled, minimize::kConfigMinimizeEffect);
                     return;
                 }
                 state().doubleClickAction = *action;

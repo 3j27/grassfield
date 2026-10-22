@@ -105,6 +105,31 @@ namespace gf::minimize {
         return frame;
     }
 
+    std::optional<Effect> parseEffect(std::string_view key, std::string_view value) {
+        if (key != kConfigMinimizeEffect)
+            return std::nullopt;
+        if (value == "funnel")
+            return Effect::Genie;
+        if (value == "shrink")
+            return Effect::Scale;
+        if (value == "fade")
+            return Effect::Fade;
+        return std::nullopt;
+    }
+
+    bool isFunnelShaderFault(std::string_view key, std::string_view value, bool devSession) {
+        return devSession && key == kConfigTestFault && value == kTestFaultFunnelShader;
+    }
+
+    Frame fadeFrameAt(Kind kind, const Box& box, double elapsedMs) {
+        const double t = std::isfinite(elapsedMs) ? std::clamp(elapsedMs / kFadeDurationMs, 0.0, 1.0) : 1.0;
+        Frame        frame;
+        frame.box   = box;
+        frame.done  = t >= 1.0;
+        frame.alpha = std::clamp(static_cast<float>(kind == Kind::Minimize ? 1.0 - t : t), 0.F, 1.F);
+        return frame;
+    }
+
     Box mapBox(const Box& inner, const Box& src, const Box& dst) {
         const double sx = src.w > 0 ? dst.w / src.w : 1.0;
         const double sy = src.h > 0 ? dst.h / src.h : 1.0;

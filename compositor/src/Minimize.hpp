@@ -15,6 +15,9 @@
 //   minimized window), animate window box -> tile. Restore: move back to the focused monitor's workspace,
 //   focus, snapshot, keep the window transparent (WINDOW_ALPHA_MOVE_FROM_WORKSPACE, the alpha Hyprland uses
 //   to fade windows in on arrival) while the snapshot grows tile -> window box, then show it.
+// - Effects (Settings dock.minimizeEffect, hl.plugin.grassfield.config("minimizeEffect", ...)): Genie (default) draws
+//   the snapshot on a mesh that bends into the tile (core/Genie.*, drawn by GenieDraw.*); Scale shrinks it uniformly
+//   (CTexPassElement); Fade (Reduce Motion) fades it in place. Genie falls back to Scale when it cannot be drawn.
 
 #include "core/Minimize.hpp"
 
@@ -32,6 +35,10 @@ namespace gf::minimizer {
 
     // start() succeeded and stop() has not run.
     bool ready();
+
+    // The effect of the next animations (a running one keeps its own). Genie until the shell says otherwise.
+    void                   setEffect(gf::minimize::Effect effect);
+    gf::minimize::Effect   effect();
 
     // A target rectangle the shell sent, validated against the current monitor layout (core isValidTarget).
     std::optional<gf::minimize::Box> validTarget(const gf::minimize::Box& rect);
