@@ -2,11 +2,13 @@
 """Validate JSON documents against config/schema/grassfield.schema.json (stdlib only).
 
 Supports the JSON Schema subset used by Grassfield: type, enum, required, properties,
-additionalProperties (bool), items, minimum, maximum, minLength.
+additionalProperties (bool), items, minimum, maximum, minLength, pattern (re.search, ECMA-262 patterns written
+without lookbehind or unicode classes behave the same in Python).
 Usage: check-schema.py [FILE...]   (default: config/defaults/grassfield.json)
 """
 import json
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -35,6 +37,10 @@ def check(value, schema, path, errors):
         errors.append(f"{path}: {value} > maximum {schema['maximum']}")
     if "minLength" in schema and len(value) < schema["minLength"]:
         errors.append(f"{path}: shorter than {schema['minLength']}")
+    # JSON Schema patterns are ECMA-262 and unanchored: `$` matches only at the very end (Python's also before a
+    # trailing newline, which would accept "accent\\n"), so `$` is translated to `\\Z`.
+    if "pattern" in schema and isinstance(value, str) and not re.search(re.sub(r"(?<!\\)\$", r"\\Z", schema["pattern"]), value):
+        errors.append(f"{path}: {value!r} does not match {schema['pattern']}")
     if isinstance(value, dict):
         props = schema.get("properties", {})
         for key in schema.get("required", []):

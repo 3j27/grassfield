@@ -9,7 +9,7 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-shell check-i18n check-scripts check-secrets
+check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-secrets
 
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland.
 check-config:
@@ -25,6 +25,10 @@ check-schema *files:
 # Lint QML (0 warnings required in changed files, gate Q1).
 check-shell:
     scripts/dev/qmllint.sh
+
+# The committed .qsb shaders are current with their .frag sources (rebuild: scripts/dev/build-shaders.sh).
+check-shaders:
+    scripts/dev/build-shaders.sh --check
 
 # Gate I1: every visible string is in qsTr(); the fr catalog is current and complete.
 check-i18n:
@@ -45,6 +49,10 @@ check-scripts:
 # Offscreen unit tests (QML TestCase) and compositor unit tests when built.
 test:
     scripts/dev/test.sh
+
+# Gate A2 for the icon modes on a GPU scene graph, as a client of the nested session (ask).
+test-icons:
+    tests/visual/icon-a2.sh
 
 # Nested dev session (ask).
 nested-up:

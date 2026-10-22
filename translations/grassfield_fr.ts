@@ -2940,6 +2940,14 @@
         <translation>sombre clair thème transparence matière animation apparence icônes teinte</translation>
     </message>
     <message>
+        <source>Wallpaper</source>
+        <translation>Fond d’écran</translation>
+    </message>
+    <message>
+        <source>background picture photo image folder slideshow shuffle colour color desktop picture</source>
+        <translation>arrière-plan image photo dossier diaporama aléatoire couleur bureau fond</translation>
+    </message>
+    <message>
         <source>Accessibility</source>
         <translation>Accessibilité</translation>
     </message>
@@ -4131,6 +4139,257 @@
     <message>
         <source>%1%</source>
         <translation>%1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>WallpaperPage</name>
+    <message>
+        <source>Wallpaper</source>
+        <translation>Fond d’écran</translation>
+    </message>
+    <message>
+        <source>When logging in</source>
+        <translation>À l’ouverture de session</translation>
+    </message>
+    <message>
+        <source>Every 5 seconds</source>
+        <translation>Toutes les 5 secondes</translation>
+    </message>
+    <message>
+        <source>Every minute</source>
+        <translation>Toutes les minutes</translation>
+    </message>
+    <message>
+        <source>Every 5 minutes</source>
+        <translation>Toutes les 5 minutes</translation>
+    </message>
+    <message>
+        <source>Every 15 minutes</source>
+        <translation>Toutes les 15 minutes</translation>
+    </message>
+    <message>
+        <source>Every 30 minutes</source>
+        <translation>Toutes les 30 minutes</translation>
+    </message>
+    <message>
+        <source>Every hour</source>
+        <translation>Toutes les heures</translation>
+    </message>
+    <message>
+        <source>Every day</source>
+        <translation>Tous les jours</translation>
+    </message>
+    <message>
+        <source>Fill Screen</source>
+        <translation>Remplir l’écran</translation>
+    </message>
+    <message>
+        <source>Fit to Screen</source>
+        <translation>Ajuster à l’écran</translation>
+    </message>
+    <message>
+        <source>Stretch to Fill Screen</source>
+        <translation>Étirer pour remplir l’écran</translation>
+    </message>
+    <message>
+        <source>Center</source>
+        <translation>Centrer</translation>
+    </message>
+    <message>
+        <source>Tile</source>
+        <translation>Mosaïque</translation>
+    </message>
+    <message>
+        <source>Blue</source>
+        <translation>Bleu</translation>
+    </message>
+    <message>
+        <source>Purple</source>
+        <translation>Violet</translation>
+    </message>
+    <message>
+        <source>Pink</source>
+        <translation>Rose</translation>
+    </message>
+    <message>
+        <source>Red</source>
+        <translation>Rouge</translation>
+    </message>
+    <message>
+        <source>Orange</source>
+        <translation>Orange</translation>
+    </message>
+    <message>
+        <source>Yellow</source>
+        <translation>Jaune</translation>
+    </message>
+    <message>
+        <source>Green</source>
+        <translation>Vert</translation>
+    </message>
+    <message>
+        <source>Graphite</source>
+        <translation>Graphite</translation>
+    </message>
+    <message>
+        <source>The picture &quot;%1&quot; can&apos;t be found.</source>
+        <translation>L’image «&#xa0;%1&#xa0;» est introuvable.</translation>
+    </message>
+    <message>
+        <source>The picture &quot;%1&quot; can&apos;t be read.</source>
+        <translation>L’image «&#xa0;%1&#xa0;» ne peut pas être lue.</translation>
+    </message>
+    <message>
+        <source>This picture format isn&apos;t supported.</source>
+        <translation>Ce format d’image n’est pas pris en charge.</translation>
+    </message>
+    <message>
+        <source>This picture is too large.</source>
+        <translation>Cette image est trop grande.</translation>
+    </message>
+    <message>
+        <source>This item can&apos;t be used as a wallpaper.</source>
+        <translation>Cet élément ne peut pas servir de fond d’écran.</translation>
+    </message>
+    <message>
+        <source>The folder &quot;%1&quot; isn&apos;t available.</source>
+        <translation>Le dossier «&#xa0;%1&#xa0;» n’est pas disponible.</translation>
+    </message>
+    <message>
+        <source>No pictures in this folder.</source>
+        <translation>Aucune image dans ce dossier.</translation>
+    </message>
+    <message>
+        <source>None of the pictures in this folder can be shown.</source>
+        <translation>Aucune image de ce dossier ne peut être affichée.</translation>
+    </message>
+    <message>
+        <source>Wallpapers can&apos;t be prepared: the helper is missing.</source>
+        <translation>Les fonds d’écran ne peuvent pas être préparés&#xa0;: l’outil est absent.</translation>
+    </message>
+    <message>
+        <source>Preparing the picture took too long.</source>
+        <translation>La préparation de l’image a pris trop de temps.</translation>
+    </message>
+    <message>
+        <source>In a development session only pictures inside the project&apos;s .dev folder can be used.</source>
+        <translation>Dans une session de développement, seules les images du dossier .dev du projet peuvent être utilisées.</translation>
+    </message>
+    <message>
+        <source>This path can&apos;t be used.</source>
+        <translation>Ce chemin ne peut pas être utilisé.</translation>
+    </message>
+    <message>
+        <source>Video wallpapers aren&apos;t available yet.</source>
+        <translation>Les fonds d’écran vidéo ne sont pas encore disponibles.</translation>
+    </message>
+    <message>
+        <source>The wallpaper can&apos;t be shown.</source>
+        <translation>Le fond d’écran ne peut pas être affiché.</translation>
+    </message>
+    <message>
+        <source>Grassfield</source>
+        <translation>Grassfield</translation>
+    </message>
+    <message>
+        <source>Preparing…</source>
+        <translation>Préparation…</translation>
+    </message>
+    <message>
+        <source>%1, shuffled</source>
+        <translation>%1, ordre aléatoire</translation>
+    </message>
+    <message>
+        <source>%1 · Pictures in the folder: %2</source>
+        <translation>%1 · Images dans le dossier&#xa0;: %2</translation>
+    </message>
+    <message>
+        <source>Current wallpaper: %1</source>
+        <translation>Fond d’écran actuel&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Use the Grassfield Wallpaper</source>
+        <translation>Utiliser le fond d’écran Grassfield</translation>
+    </message>
+    <message>
+        <source>Fit</source>
+        <translation>Ajustement</translation>
+    </message>
+    <message>
+        <source>Colour</source>
+        <translation>Couleur</translation>
+    </message>
+    <message>
+        <source>Shown around a picture that does not fill the screen.</source>
+        <translation>Affichée autour d’une image qui ne remplit pas l’écran.</translation>
+    </message>
+    <message>
+        <source>Wallpaper colour</source>
+        <translation>Couleur du fond d’écran</translation>
+    </message>
+    <message>
+        <source>Change picture</source>
+        <translation>Changer d’image</translation>
+    </message>
+    <message>
+        <source>Shuffle</source>
+        <translation>Ordre aléatoire</translation>
+    </message>
+    <message>
+        <source>Random order, every picture once before any is repeated.</source>
+        <translation>Chaque image apparaît une fois avant toute répétition.</translation>
+    </message>
+    <message>
+        <source>Pictures</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <source>No pictures were found in the Pictures folder.</source>
+        <translation>Aucune image n’a été trouvée dans le dossier Images.</translation>
+    </message>
+    <message>
+        <source>Show Fewer</source>
+        <translation>Afficher moins</translation>
+    </message>
+    <message>
+        <source>Show All (%1)</source>
+        <translation>Tout afficher (%1)</translation>
+    </message>
+    <message>
+        <source>Colours</source>
+        <translation>Couleurs</translation>
+    </message>
+    <message>
+        <source>Folders and Pictures</source>
+        <translation>Dossiers et images</translation>
+    </message>
+    <message>
+        <source>Add a folder to change the picture at an interval, or a single picture.</source>
+        <translation>Ajoutez un dossier pour changer d’image à intervalle régulier, ou une seule image.</translation>
+    </message>
+    <message>
+        <source>Shuffle %1</source>
+        <translation>Mélanger %1</translation>
+    </message>
+    <message>
+        <source>Add Folder…</source>
+        <translation>Ajouter un dossier…</translation>
+    </message>
+    <message>
+        <source>Add Picture…</source>
+        <translation>Ajouter une image…</translation>
+    </message>
+    <message>
+        <source>Choose a folder of pictures</source>
+        <translation>Choisir un dossier d’images</translation>
+    </message>
+    <message>
+        <source>Choose a picture</source>
+        <translation>Choisir une image</translation>
+    </message>
+    <message>
+        <source>Pictures (%1)</source>
+        <translation>Images (%1)</translation>
     </message>
 </context>
 <context>

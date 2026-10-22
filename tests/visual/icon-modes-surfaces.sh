@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Captures of the shell surfaces that draw app icons (Dock and desktop together, Apps, Search with its selected row, the
+# Settings icon-mode picker) in the four icon appearance modes and both appearances, for the look of the system plate
+# (ADR-0014, docs/specs/ui.md "Icon shader"). NOT a regression scenario: writes
+# .dev/visual/icon-modes-surfaces/ims-<surface>-<appearance>-<mode>.<lang>.png. Run it as a BARE command.
+#
+#   tests/visual/icon-modes-surfaces.sh [en|fr] ["dark light"] ["default dark clear tinted"]
+source "$(dirname "$0")/lib.sh"
+VS_LANG=${1:-$VS_LANG}
+export VISUAL_LANG=$VS_LANG
+APPEARANCES=${2:-"dark light"}
+MODES=${3:-"default dark clear tinted"}
+OUT=$VS_STATE/icon-modes-surfaces
+mkdir -p "$OUT"
+
+config() { # config APPEARANCE MODE
+  mkdir -p "$VS_DEV/config"
+  printf '{"version":1,"appearance":"%s","lock":{"idleMinutes":0},"icons":{"folderColor":"theme","mode":"%s"}}\n' "$1" "$2" > "$VS_DEV/config/grassfield.json.tmp"
+  mv "$VS_DEV/config/grassfield.json.tmp" "$VS_DEV/config/grassfield.json"
+  vs_sleep 1.5
+}
+
+shot() { vs_capture "$1" >/dev/null; cp "$VS_SHOTS/$1.$VS_LANG.png" "$OUT/$1.$VS_LANG.png"; echo "$OUT/$1.$VS_LANG.png"; }
+
+vs_session
+vs_reset
+for appearance in $APPEARANCES; do
+  for mode in $MODES; do
+    config "$appearance" "$mode"
+    vs_ipc controlcenter appearance "$appearance" >/dev/null
+    shot "ims-desktop-$appearance-$mode"
+    vs_ipc apps open >/dev/null
+    vs_sleep 1
+    shot "ims-apps-$appearance-$mode"
+    vs_ipc apps close >/dev/null
+    vs_sleep 0.5
+    vs_ipc search open files >/dev/null
+    vs_sleep 1.5
+    shot "ims-search-$appearance-$mode"
+    vs_ipc search close >/dev/null
+    vs_sleep 0.5
+  done
+done
+
+vs_spawn "$VS_DEV/build/grassfield-settings"
+vs_wait_clients 1
+vs_sleep 2
+for appearance in $APPEARANCES; do
+  for mode in $MODES; do
+    config "$appearance" "$mode"
+    vs_ipc controlcenter appearance "$appearance" >/dev/null
+    shot "ims-settings-$appearance-$mode"
+  done
+done
+vs_kill_clients
+echo "captures in $OUT"

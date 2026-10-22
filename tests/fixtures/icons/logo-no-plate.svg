@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Test fixture (own drawing): a colourful logo on transparency, no plate. -->
+  <circle cx="64" cy="64" r="44" fill="#F0642A"/>
+  <circle cx="64" cy="64" r="26" fill="#2B5BD8"/>
+  <circle cx="64" cy="64" r="10" fill="#FFFFFF"/>
+</svg>

@@ -122,14 +122,16 @@ ShellRoot {
         value: Settings.configDir + "/pointer-theme.json"
     }
 
-    // One degraded-mode notice when the compositor extension never answered; withdrawn if it loads later.
+    // One degraded-mode notice when the compositor extension is absent; withdrawn if it loads later.
     property string degradedNoticeKey: ""
 
-    // The degraded notice is shown once while the compositor extension is absent and withdrawn when it is present.
+    // The degraded notice is shown once the compositor extension is known to be absent (Capabilities.absent: not at the
+    // first timeout, a loaded plugin can answer late at login) and withdrawn when it is present.
     function syncDegradedNotice(): void {
-        if (Capabilities.settled && !Capabilities.pluginPresent && degradedNoticeKey === "") {
+        if (Capabilities.absent && degradedNoticeKey === "") {
+            console.info("grassfield: degraded notice posted (compositor extension absent)");
             degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
-        } else if (Capabilities.pluginPresent && degradedNoticeKey !== "") {
+        } else if (!Capabilities.absent && degradedNoticeKey !== "") {
             Notifications.clear(degradedNoticeKey);
             degradedNoticeKey = "";
         }
@@ -154,12 +156,8 @@ ShellRoot {
     Connections {
         target: Capabilities
 
-        function onSettledChanged(): void {
-            root.syncDegradedNotice();
-        }
-
-        // Also when the plugin goes away later (unload: empty capabilities event).
-        function onPluginPresentChanged(): void {
+        // No reply for helloAbsentMs, an unload (empty capabilities event), or a plugin that loads after the notice.
+        function onAbsentChanged(): void {
             root.syncDegradedNotice();
         }
     }

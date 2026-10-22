@@ -320,6 +320,7 @@ Variants {
                             anchors.fill: parent
                             size: Tokens.searchRowIconSize
                             oversample: Tokens.searchIconOversample
+                            overAccent: row.selected
                             visible: !row.isHeader && row.info.iconSource !== undefined
                             source: !row.isHeader && row.info.iconSource !== undefined ? row.info.iconSource : ""
                             asynchronous: true

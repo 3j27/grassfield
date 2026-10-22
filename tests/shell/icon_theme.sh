@@ -19,7 +19,7 @@ envfile=$root/packaging/uwsm/env-grassfield
 desc="wrapper index.theme inherits breeze,Adwaita,hicolor"
 check grep -qx 'Inherits=breeze,Adwaita,hicolor' "$theme"
 desc="wrapper index.theme lists a Directories key (GTK drops a theme without one)"
-check grep -q '^Directories=scalable/apps$' "$theme"
+check grep -q '^Directories=scalable/apps,scalable/devices$' "$theme"
 
 desc="env-grassfield exports QT_QPA_SYSTEM_ICON_THEME=grassfield-icons"
 check bash -c 'out=$(env -i sh -c ". \"$1\"; echo \"\$QT_QPA_SYSTEM_ICON_THEME\"") && [ "$out" = grassfield-icons ]' _ "$envfile"
@@ -29,6 +29,8 @@ fake=$tmp/repo
 mkdir -p "$fake/scripts/dev" "$fake/branding/icons/theme" "$fake/.dev/share/icons"
 cp "$root/scripts/dev/devenv.sh" "$fake/scripts/dev/"
 cp "$theme" "$fake/branding/icons/theme/"
+mkdir -p "$fake/branding/icons/theme/scalable"
+cp -r "$root/branding/icons/theme/scalable/devices" "$fake/branding/icons/theme/scalable/"
 git -C "$fake" init -q
 env_of() { env -i PATH="$PATH" HOME=/nonexistent bash -c '. "$1"; . "$1"; env' _ "$fake/scripts/dev/devenv.sh"; }
 out=$(env_of)
@@ -36,6 +38,8 @@ desc="devenv.sh selects grassfield-icons"
 check grep -qx 'QT_QPA_SYSTEM_ICON_THEME=grassfield-icons' <<<"$out"
 desc="devenv.sh installs the wrapper with its real scalable/apps directory"
 check bash -c 'cmp -s "$1/branding/icons/theme/index.theme" "$1/.dev/share/icons/grassfield-icons/index.theme" && [ -d "$1/.dev/share/icons/grassfield-icons/scalable/apps" ]' _ "$fake"
+desc="devenv.sh installs the device glyphs that shadow the Apple device pictures"
+check bash -c 'for n in phone-apple-iphone phone-apple-iphone-symbolic multimedia-player-ipod-mini-blue multimedia-player-ipod-mini-blue-symbolic multimedia-player-apple-ipod-touch-symbolic computer-apple-ipad-symbolic; do cmp -s "$1/branding/icons/theme/scalable/devices/$n.svg" "$1/.dev/share/icons/grassfield-icons/scalable/devices/$n.svg" || exit 1; done' _ "$fake"
 
 # Fixture themes: breeze, Adwaita, hicolor (solid colours, named as the wrapper's Inherits).
 fix() { # dir
@@ -111,5 +115,28 @@ if python3 -c 'import gi; gi.require_version("Gtk","3.0")' 2>/dev/null && python
   done
 else
   echo "SKIP: installed Breeze and Adwaita through the wrapper (PyGObject with Gtk 3 and 4, or the themes, missing)"
+fi
+# ---- The Apple device pictures of Breeze and Adwaita (E27): the wrapper's own glyphs answer to those names, in Qt and in GTK 3 and 4.
+# The wrapper is installed as the PKGBUILD does (index.theme and scalable/devices); the real Breeze and Adwaita (when installed) are
+# its parents. A name that neither parent has still resolves to our glyph.
+shadowed="phone-apple-iphone phone-apple-iphone-symbolic multimedia-player-ipod-mini-blue multimedia-player-ipod-mini-blue-symbolic multimedia-player-apple-ipod-touch-symbolic computer-apple-ipad-symbolic"
+shd=$tmp/shadow
+mkdir -p "$shd/icons/grassfield-icons/scalable/apps" "$shd/icons/grassfield-icons/scalable/devices"
+cp "$theme" "$shd/icons/grassfield-icons/index.theme"
+cp "$root"/branding/icons/theme/scalable/devices/*.svg "$shd/icons/grassfield-icons/scalable/devices/"
+for t in Adwaita breeze hicolor; do [[ -d /usr/share/icons/$t ]] && ln -s "/usr/share/icons/$t" "$shd/icons/$t"; done
+if [[ -x ${probe:-} ]]; then
+  args=()
+  for n in $shadowed; do args+=("cmp:$n=$root/branding/icons/theme/scalable/devices/$n.svg"); done
+  out=$(env -i PATH="$PATH" HOME="$tmp" XDG_RUNTIME_DIR="$tmp" QT_QPA_PLATFORM=offscreen XDG_DATA_DIRS="$shd" QT_QPA_SYSTEM_ICON_THEME=grassfield-icons "$probe" "${args[@]}")
+  desc="Qt: the six Apple device names resolve to Grassfield's own glyphs ($(tr '\n' ' ' <<<"$out" | cut -c1-260))"
+  check bash -c 'n=$(grep -c "=same$" <<<"$1"); [ "$n" = 6 ]' _ "$out"
+fi
+if python3 -c 'import gi; gi.require_version("Gtk","3.0")' 2>/dev/null && python3 -c 'import gi; gi.require_version("Gtk","4.0")' 2>/dev/null; then
+  for v in 3 4; do
+    out=$(env -i PATH="$PATH" HOME="$tmp" XDG_RUNTIME_DIR="$tmp" GSETTINGS_BACKEND=memory python3 -I "$root/tests/shell/icon_probe_gtk.py" "$v" "$shd/icons" grassfield-icons $shadowed 2>/dev/null)
+    desc="GTK$v: the six Apple device names resolve to grassfield-icons/scalable/devices ($(tr '\n' ' ' <<<"$out" | cut -c1-300))"
+    check bash -c 'n=$(grep -c "=grassfield-icons/scalable/devices/" <<<"$1"); [ "$n" = 6 ]' _ "$out"
+  done
 fi
 exit "$fail"

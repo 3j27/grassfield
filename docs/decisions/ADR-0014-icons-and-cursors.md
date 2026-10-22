@@ -6,7 +6,7 @@ Status: Proposed (owner request 2026-10-19; applied provisionally) · Date: 2026
 The owner wants icons and cursors as Grassfield capabilities: icons with a live tint like the macOS 26 icon appearance
 modes (Default, Dark, Clear, Tinted) and Material You themed icons, and Grassfield's own cursor set with an adjustable
 accent and size. Owner decisions (2026-10-19, docs/STATE.md):
-- Base icon theme for the internal phase: WhiteSur (third-party, GPL-3.0, a macOS-style theme), shipped as a package
+- Base icon theme for the internal phase (superseded: WhiteSur was dropped on 2026-10-21, the base is now Grassfield's own icons, Breeze, Adwaita, hicolor, ADR-0017; the text that follows is the history): WhiteSur (third-party, GPL-3.0, a macOS-style theme), shipped as a package
   dependency and never vendored into this MIT repository; a designer replaces it with Grassfield's own set in 6–8 months.
   Apple's own icons are never used (hard rule). docs/legal/visual-review.md E27 must be reviewed again before any
   public release.
@@ -38,20 +38,39 @@ A. **Grassfield SVG sources → hyprcursor theme (SVG) + XCursor fallback built 
 B. A fixed palette of prebuilt accent variants only.
 
 ## Decision (proposed)
-- **Icons: option 3, phased.** Phase 1 = option 1: `TintedIcon` with modes `default` (unchanged), `dark` (darker plate,
-  luminance compressed, contrast kept), `clear` (desaturated, lighter, translucent over the material), `tinted`
-  (luminance → two-tone ramp of the tint colour, alpha kept). First implementation with `MultiEffect`
-  (colorization/saturation/brightness); a custom `qsb` shader only if MultiEffect cannot reach the look or the cost
-  target. Effects are enabled only when the mode is not `default` (no offscreen pass by default); a per-surface layer is
-  used instead of one pass per icon where many icons are shown (Apps panel, Files grid). Phase 2 (later, own review):
+- **Icons: option 3, phased.** Phase 1 = option 1: `TintedIcon` with modes `default` (unchanged), `dark`, `clear` and `tinted`,
+  implemented with a custom `qsb` fragment shader (`ui/Grassfield/Ui/shaders/icon.frag`): MultiEffect (colorization,
+  saturation, brightness, contrast) could not reach the macOS 26 look (a white plate only went from 248 to 210 in Dark; Tinted
+  gave a bright tint-coloured plate), so the shader draws a plate and recolours the artwork per mode (algorithm and limits:
+  docs/specs/ui.md, "Icon shader").
+  **System plate for every icon (owner decision 2026-10-20, replaces the plate-detecting design of 2026-10-19; macOS model:
+  an icon that is not made for a mode gets the system plate, none is analysed):** in `dark`, `clear` and `tinted` every
+  app or file icon is drawn scaled down (`iconMode.sysGlyphScale` 0.72) on a squircle plate (`sysPlateInset` 0.04,
+  `sysPlateRadius` 0.225) that is graphite in Dark, glass in Clear (light glass on a dark material, smoked glass on a light one,
+  over the bare wallpaper and at material transparency 0.8 and above) and tinted in Tinted, with a thin edge highlight that scales
+  with the icon size (at least 1.5 px, fading below 48 px). The artwork is recoloured by a fixed transform per mode that
+  depends on the pixel alone: Dark darkens and slightly desaturates it and lifts very dark parts so they separate from the
+  graphite (colour identity kept), Clear turns it into monochrome ink (light in the dark appearance, smoked in the light one)
+  whose opacity follows its luminance, Tinted maps its luminance onto a two-tone ramp of the tint. There is NO per-icon
+  analysis: no probes, no clustering, no plate or stroke detection, no analysis pass. This is one cheap fragment shader (a
+  few texture reads), so it compiles in milliseconds, costs the same on every icon and cannot misread an icon (the previous
+  design's halos, wedges and slow cold compile came from guessing). Accepted cost: an icon's own plate is no longer kept,
+  so a macOS-style icon shows its plate inside the system plate, as macOS shows non-conforming icons. The folder colour
+  (below) recolours the artwork only, not the system plate.
+  **Small icons (integrator decision 2026-10-22, the macOS model):** the modes apply only from `iconMode.minSize` (24 px) up; below it
+  (Files rows and sidebar, Force Quit rows, the Overview pill, the Dock's minimized badge) every mode draws the Default artwork, because a plate and a recolour made small file-type icons the
+  same tile (docs/specs/ui.md, "Small icons keep the Default artwork"). Known issue: the first draw of about 100 effects in the Apps panel
+  makes one slow frame per opening in the opt-in effect modes (docs/specs/ui.md).
+  Effects exist only when the mode is not `default` and only for icons that are shown: one effect item per visible icon
+  (not one shared pass per surface: a container layer would redraw labels, highlights and indicators through the effect). Phase 2 (later, own review):
   a generated tinted theme for third-party apps, regenerated in the background.
 - Settings keys (settings contract, versioned): `icons.mode` (`default|dark|clear|tinted`, default `default`),
   `icons.tint` (`accent` or `#rrggbb`, default `accent`). (Implemented 2026-10-19 under `icons.*` because `appearance` is
   already a string key in contract version 1.) Settings › Appearance gets the mode and tint controls (macOS 26
   layout). Folder colours (owner request 2026-10-19) are a separate step, `icons.folderColor` (`theme|accent|#rrggbb`, default `theme`) and a per-folder colour and symbol (docs/specs/ui.md, docs/specs/files.md), so the mode effects stay untouched. The shell and Grassfield apps react live.
 - Base theme: Grassfield sets the icon theme name for its session and for the shell (Quickshell's IconTheme pragma or
-  `QT_ICON_THEME`/environment, whichever the installed version supports — verify), with WhiteSur first and the
-  freedesktop fallback chain (`hicolor`, then the system theme) for missing icons. Packaging: WhiteSur is a dependency of
+  `QT_ICON_THEME`/environment, whichever the installed version supports — verify), with (then) WhiteSur first and the
+  freedesktop fallback chain (`hicolor`, then the system theme) for missing icons. Packaging (then): WhiteSur was a dependency of
   the session package with its licence noted in THIRD_PARTY.md; never copied into the repository. Dev sessions use it
   only if the owner installed it.
 - **Cursors: option A.** `branding/cursors/` holds the original SVG sources (CC-BY-SA-4.0 like the other Grassfield
@@ -88,8 +107,8 @@ B. A fixed palette of prebuilt accent variants only.
   is ever addressed.
 
 ## Consequences
-- New shared component and settings keys; every icon call site moves to `TintedIcon` (one pass per surface).
+- New shared component, a committed compiled shader (`scripts/dev/build-shaders.sh`, checked by `just check`) and settings keys; every icon call site moves to `TintedIcon` (one effect item per visible icon).
 - New asset folder `branding/cursors/` and build steps (hyprcursor-util and XCursor generation as build dependencies).
-- GPL-3.0 WhiteSur is a separate package; the ISO (M6) must ship its source offer and licence; public release needs the
+- (Historical, WhiteSur dropped 2026-10-21) GPL-3.0 WhiteSur was a separate package; the ISO (M6) must ship its source offer and licence; public release needs the
   E27 legal review again.
 - Limits: tinted third-party icons are approximations; running GTK/Qt apps keep their cursor until restarted.

@@ -1,5 +1,5 @@
 # ADR-0016: Wallpapers: local photo, video and carousel (step 1), online daily pictures (step 2)
-Status: Proposed (owner decisions 2026-10-20, batch 10; design only, nothing implemented) · Date: 2026-10-20 · Decider: owner
+Status: Accepted (owner decisions 2026-10-20, batch 10/11); step 1 implemented through W6 and merged to main (bc1d19f, 2026-10-22; see "Implementation notes"), W7 to W9 and step 2 not started; step 2 endpoints verified 2026-10-22 (APOD unusable, Commons only) · Date: 2026-10-20 · Decider: owner
 
 ## Context
 
@@ -179,7 +179,7 @@ Option A2 (helper process), V1b for video, C1 for the lock and D1 for the menu b
 - **Display identity.** Serial and model when the serial is not empty, else the connector name. The shell (`ShellScreen`)
   and the Settings app (`QScreen`) see the same three strings. An override for a display that is not connected stays
   stored and applies again when it is.
-- **Validation.** One pure module, `ui/Grassfield/Ui/Wallpaper.js` (like `PointerColors.js`): defaults, validation,
+- **Validation.** One pure module, `ui/Grassfield/Ui/WallpaperConfig.js` (like `PointerColors.js`): defaults, validation,
   per-display resolution, the carousel order, the pause policy, the helper's argument vectors and the failure reasons.
   `Store.js` gets one rule type per key (`wallpaperOutputs` for the array). The shell's `SettingsStore` reads through the
   same module. `tst_settingsstore` checks parity with the schema. An invalid hand edit reads as the default and is never
@@ -540,6 +540,30 @@ Commons)". Choosing one asks for the opt-in, shows the disclosure, then the curr
 O1 helper `fetch` with fixtures and a loopback test server (1.5 days), O2 scheduler and cache (1 day), O3 Settings
 section and attribution (1-1.5 days), O4 reviewer (network and untrusted input) plus an owner L2 run: ≈ 4-5 days.
 
+### Step 2 verification (integrator, 2026-10-22; requests from the dev machine, results kept in no repo file)
+- **NASA APOD is not usable today.** `https://apod.nasa.gov/apod/astropix.html` answers `301` to
+  `https://science.nasa.gov/apod/` (a WordPress page that loads the day's entry dynamically; no APOD feed, the only
+  RSS is the whole NASA Science site). `api.nasa.gov/planetary/apod` still answers `200`, but for every date tried
+  (2026-03-01, 2026-09-15, 2026-10-20, 2026-10-21) it returns `title: "NASA Science"` and the NASA logo
+  (`science.nasa.gov/.../nasa-logo@2x.png`) as `url` and `hdurl`, with `media_type: image`. Showing that would put the
+  NASA insignia on the desktop, which this ADR forbids. `DEMO_KEY` now reports `X-RateLimit-Limit: 10`.
+  **Integrator decision (owner asked for autonomy, 2026-10-21):** step 2 ships Wikimedia Commons only; APOD waits until
+  the API returns real entries again. The helper must still refuse an entry whose image host is not on the allow-list,
+  so a broken source can never show a logo.
+- **Wikimedia Commons POTD works as designed, with two changes.**
+  - `expandtemplates` gives the file name (`{{Potd/2026-10-20}}`) and the caption (`{{Potd/2026-10-20 (fr)}}`). The
+    caption is wikitext with `[[link|text]]` and `''italics''`: reduce it to plain text.
+  - `imageinfo` with `iiurlwidth=3840` gives `thumburl` on **`thumb.wikimedia.org`** (not `upload.wikimedia.org`; the
+    original `url` stays on `upload.wikimedia.org`). Both URLs carry `utm_source/utm_campaign/utm_content` query
+    parameters: drop the query string before fetching. Fetching the bare thumb URL returned `200`, `image/jpeg`,
+    `Content-Length` 1866060, a 3840 x 3072 JPEG.
+  - `extmetadata` has `LicenseShortName` (`CC BY-SA 4.0`), `LicenseUrl`, `License` (`cc-by-sa-4.0`, the machine key to
+    match the allow-list against), `Artist` and `Credit` as HTML, `AttributionRequired`, `UsageTerms`, `ObjectName`.
+  - Allow-list of hosts for step 2: `commons.wikimedia.org`, `thumb.wikimedia.org`, `upload.wikimedia.org`.
+- **curl 8.22.0 (installed).** `--max-filesize` aborts a transfer that reaches the limit even without a
+  `Content-Length` (since 8.4.0, man curl), so it bounds the download by itself; the helper's streamed count stays as
+  a second check.
+
 ## Owner questions (recommended proposal first)
 1. **Where pictures and videos are parsed.**
    (a) The one-shot helper `grassfield-wallpaper`; the shell decodes only the helper's output.
@@ -592,6 +616,50 @@ section and attribution (1-1.5 days), O4 reviewer (network and untrusted input) 
 | W8 lock still | the proposed diff, by the security-engineer | L1-L5, A2 lock run, opus reviewer PASS |
 | W9 (optional) | material tint | token calculation; owner screenshots |
 | O1-O4 (step 2) | fetch, scheduler, cache, Settings, attribution | reviewer (network); legal entries; one owner L2 fetch |
+
+## Slice W0 measurements (2026-10-20, nested, Intel UHD 630, 1920x1080, machine load average 5-10 from other agents)
+Method: a throw-away QML spike (not committed) loaded into the nested shell through a temporary IPC hook; frame times from
+`FrameAnimation.frameTime`; CPU and DRM engine time of the shell and of the nested Hyprland from `/proc/<pid>/stat` and
+`/proc/<pid>/fdinfo` (`drm-engine-render`, `drm-engine-video`), every 2 s. Test media generated under `.dev/wallpapers`
+(ffmpeg testsrc2 and mandelbrot, ImageMagick plasma). The nested stack renders through the owner's compositor, so absolute
+numbers are pessimistic and noisy; gates P3, W-V and P1 stay L2 (owner run).
+
+| Question | Result |
+|---|---|
+| Async decode of a 3840x2160 JPEG into a 1920x1080 `sourceSize` (Image `asynchronous`, off the GUI thread) | 89-342 ms to `Ready` (median ~200 ms), 18 samples |
+| Frames during a 1 s crossfade, texture upload on the first fade frame | 60 frames, 70-80 % under 17.7 ms, 12-18 frames over 33 ms, max 140-450 ms |
+| Same, texture upload forced one frame early (opacity 0.004 for 50 ms) | 60 frames, 63-73 % under 17.7 ms, 16-22 frames over 33 ms, max 100-135 ms: no measurable gain |
+| Same stack, static wallpaper, no animation (baseline) | 180 frames in 3 s, 98.9 % under 17.7 ms, max 23 ms |
+| Cost of a crossfade | shell 50-90 % of one core, nested Hyprland 17-30 % CPU and 28-45 % of the render engine while it runs; zero when idle |
+| H.264 1080p30 in the shell (QtMultimedia FFmpeg backend) | hardware decode through VA-API confirmed: video engine 38-40 % busy, QFFmpeg decode thread ~1 % CPU. The shell still used 70-100 % of one core: render thread 38 %, Wayland event thread 26-32 %, main 9 % (presentation through the nested stack, not decode). Not representative of a real session: W-V stays L2 |
+| HEVC 1080p, VP9 1080p | hardware decode too (video engine 31-40 % and 24 %), same CPU profile |
+| AV1 1080p | software decode: 130-155 % of one core, video engine 0 %, and the decoder kept 90-150 % busy for 10+ s after `pause()` |
+| H.264 4K30 | saturates the video engine (86-116 %), the player drops frames, RSS +120 MB (600 MB): a 4K source must be transcoded down to the output size |
+| Paused video | shell 1-2 %, Hyprland 0 % within ~4 s (H.264/VP9/HEVC); frame stays on screen |
+| Playback rate 0.25 | decode drops to 9 % of the video engine; the shell CPU stayed high while frames were presented |
+| Video behind the Dock and menu bar | Hyprland render 27-53 % with the video on the Background layer, 30-43 % with the same video on the Overlay layer: the Dock re-blur is not separable from per-frame compositing cost in this stack |
+| Menu-bar frosted band over a playing video | Hyprland render 25-39 % with the band, 28-53 % without: no measurable cost (24 px strip); screenshot `.dev/shots/w0-band.png` shows the band over the video |
+| Video on the Background layer above the shell wallpaper | a later-mapped Background layer surface draws above the earlier one; ordering after a restart not verified |
+| `grabToImage` of a `VideoOutput` | not measured (poster frames come from the helper's ffmpeg step, option not needed) |
+
+Conclusions: (1) V1b is confirmed: 4K and AV1 sources are unplayable on this GPU, H.264 at output size is hardware decoded.
+(2) The early texture upload does not pay off here; the crossfade cost is the compositor and the full-screen blend, so keep
+the fade short and make it skippable (Reduce Motion, reduced profile). The preload of the next picture still hides the decode.
+(3) Pause is effective for H.264; for software codecs it is not (another reason to transcode).
+(4) One shell crash happened during a later HEVC run (shell gone, no log kept: the restart overwrote it); not reproduced,
+cause unknown, and the video work (W7) must test the crash marker. No i915 fence timeout was visible to this agent (dmesg
+is not readable from the sandbox).
+
+## Implementation notes (slices W1 to W6, 2026-10-21)
+Deviations from the text above, each with its reason:
+- **Names.** The shared rules module is `ui/Grassfield/Ui/WallpaperConfig.js`, registered as `WallpaperConfig` (the shell has its own `Wallpaper` type, and a JS library registered under another name than its file is not found by a JS `.import`). The artwork moved to `ui/Grassfield/Ui/GrassfieldArtwork.qml` (registered `GrassfieldArtwork`); `shell/desktop/WallpaperArt.qml` stays as a thin wrapper, because the lock screen (security module, read only here) imports both `Grassfield.Ui` and `qs.desktop` and two types called `WallpaperArt` would be ambiguous.
+- **One copy of the rules.** `apps/settings/qml/Store.js` takes the wallpaper lists, defaults, path and outputs rules from `WallpaperConfig.js` through an unversioned `.import Grassfield.Ui as Tree`: a versioned `.import Grassfield.Ui 1.0` resolves the installed (older) `/usr/lib/qt6/qml/Grassfield/Ui`, which does not know a module added since, while the unversioned one resolves the tree's own (`QML_IMPORT_PATH`, `-import`). `tests/unit/fixtures/wallpaper-rules.json` holds cases both test files run (`tst_wallpaper` against the module, `tst_settingsstore` through the store); `tst_wallpaper` also checks lists and defaults against the schema and the default file.
+- **Review fixes (2026-10-21).** `assist` tests the contrast of the chosen tone, and hysteresis keeps the previous tone only while it reaches 4.5:1 itself. Lists from the JSON adapter (a QVariantList is not an `Array`) are accepted as array-likes, with a bounded read. The helper door of the Settings backend accepts only the exact tool path and the argument vectors of the pane (`systemguard.cpp`, `tests/unit/settings`). The helper refuses a truncated JPEG, tiles with one textured fill, never prunes the pictures on screen (`--keep`). `login` advances only for a new compositor instance. The crossfade is one fixed length (a plain switch with Reduce Motion): an adaptive version was removed because its frame metric counted animation ticks, not frames. A picture is shown only once it is `Image.Ready`; a change that arrives during a decode replaces the pending one. The helper accepts `--out` only as `<...>/grassfield/wallpapers/{prepared,thumbs}` or `<...>/cache/wallpapers/{prepared,thumbs}` (it owns those folders and prunes names of its own form there), creates the folder with `mkdir` mode 0700 in one step and never chmods an existing one. `--out` is trusted as a folder name of the cache layout and nothing more: Settings pins the exact path and the shell computes it, both under the same user, so a caller that can choose `--out` can already write what it likes as that user (documented, accepted). The shell draws every wallpaper kind through one two-slot model (`WallpaperSlot.qml`): the incoming slot on top, ready before it shows, crossfaded, a failure keeps what is on screen; the separate colour and artwork layers are gone. The Settings door resolves real paths (dangling symlinks and a missing first component are refused).
+- **Atomic multi-key writes.** `Store.setValues` and `ConfigStore.setMany` write source and path in one file write, so the shell never sees half a change.
+- **Helper exit codes** (`WallpaperConfig.EXIT`): 2 usage, 3 not found, 4 not a regular file, 5 file too large, 6 picture too large, 7 unreadable, 8 unsupported, 10 write failed; the shell adds 9 (timeout) and 127 (helper missing, checked once with `test -x`). It prints one JSON object on stdout. `prepare` names the picture by a SHA-256 key of the real path, size, mtime, output size, fit, colour and strip rows, and answers from the cache when both files exist. The cache directory is 0700, files 0600, pruned by modification time (oldest first, never the file just written, never anything younger than a minute). SVG is refused on purpose.
+- **Statistics.** The sidecar holds the menu bar strip statistics for the whole width and each half (mean, p5, p95 of the relative luminance, 1024 bins), and the mean colour. `BarTone` uses the whole-width percentiles.
+- **Not done in this pass:** video (W7), the lock still (W8, needs the security engineer), material tint (W9), the 30-second preload of the next picture (the change itself is fast through the helper's cache), the display picker and per-display UI, "Play on battery power", the desktop menu's "Change Wallpaper…", `contrast.sh` through the helper (the A2 wallpapers run in `tests/visual/wallpaper-legibility.sh` instead; `contrast.sh` still uses the dev override), the licence entries (`THIRD_PARTY.md`, G9, E32) that the video work needs.
+- **Measured (nested, loaded machine):** idle CPU of the shell 0.15 % of one core with a picture and with the artwork (`tests/visual/wallpaper.sh`); a thumbnail or a 4K JPEG prepare takes well under a second; the 5-second carousel and the crossfade ran without a blank frame in the captures reviewed (a pixel-level blank check is not automated).
 
 ## Evidence
 Design only. This session read the files cited above with `grep`, `sed -n`, `ls` and a Python one-liner over the schema.

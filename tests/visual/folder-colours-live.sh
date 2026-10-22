@@ -20,7 +20,7 @@ mkdir -p "$SB"/{Alpha,Beta,Gamma}
 
 vs_session
 vs_reset
-printf '{"version":1,"appearance":"dark","icons":{"folderColor":"theme","mode":"default"}}\n' > "$VS_DEV/config/grassfield.json"
+printf '{"version":1,"lock":{"idleMinutes":0},"appearance":"dark","icons":{"folderColor":"theme","mode":"default"}}\n' > "$VS_DEV/config/grassfield.json"
 vs_sleep 1.5
 vs_spawn "$VS_DEV/build/grassfield-files" "$SB"
 vs_wait_clients 1

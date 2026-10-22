@@ -8,6 +8,7 @@ import "../../apps/settings/qml/Store.js" as Store
 TestCase {
     id: testCase
     name: "IconModes"
+    visible: true
     when: windowShown
     width: 200
     height: 200
@@ -15,47 +16,52 @@ TestCase {
     readonly property color red: "#e5484d"
 
     function cleanup() {
+        Appearance.iconShaderBroken = false;
         Appearance.iconMode = "default";
         Appearance.iconTintSetting = "accent";
     }
 
     function test_defaultHasNoEffect() {
-        const p = IconModes.effect("default", testCase.red, Tokens);
+        const p = IconModes.effect("default", testCase.red);
         compare(p.enabled, false);
-        compare(p.colorization, 0);
-        compare(p.opacity, 1);
+        compare(p.index, 0);
         // Unknown modes are default.
-        compare(IconModes.effect("neon", testCase.red, Tokens).enabled, false);
+        compare(IconModes.effect("neon", testCase.red).enabled, false);
         compare(IconModes.normalizeMode(undefined), "default");
         compare(IconModes.normalizeMode("Dark"), "default");
     }
 
-    function test_darkIsDarkerWithContrastKept() {
-        const p = IconModes.effect("dark", testCase.red, Tokens);
-        compare(p.enabled, true);
-        verify(p.colorization > 0.3 && p.colorization < 1, "darkened by colorizing towards black (hue kept)");
-        compare(p.colorizationColor.toString(), Qt.color("#000000").toString(), "never the tint");
-        verify(p.contrast > 0, "contrast kept so the glyph stays readable");
-        compare(p.opacity, 1);
-        verify(p.saturation > -1, "colour is kept");
+    function test_modesMapToShaderIndex() {
+        compare(IconModes.effect("dark", testCase.red).index, 1);
+        compare(IconModes.effect("clear", testCase.red).index, 2);
+        compare(IconModes.effect("tinted", testCase.red).index, 3);
+        for (const m of ["dark", "clear", "tinted"])
+            compare(IconModes.effect(m, testCase.red).enabled, true);
+        compare(IconModes.effect("tinted", testCase.red).tint, testCase.red);
     }
 
-    function test_clearIsDesaturatedLighterTranslucent() {
-        const p = IconModes.effect("clear", testCase.red, Tokens);
-        compare(p.enabled, true);
-        compare(p.saturation, -1);
-        verify(p.brightness > 0);
-        verify(p.opacity < 1 && p.opacity >= 0.5, "translucent but meaningful (A2)");
-        compare(p.colorization, 0);
+    // The mode numbers are tokens that the shader reads; wrong ranges would break the look silently.
+    function test_shaderTokensInRange() {
+        verify(Tokens.iconModeDarkPlateLuma > 0 && Tokens.iconModeDarkPlateLuma < 0.3, "Dark plates are near black");
+        verify(Tokens.iconModeDarkArtLift > Tokens.iconModeDarkPlateLuma, "a black part of the artwork is lifted above the plate");
+        verify(Tokens.iconModeDarkArtScale > Tokens.iconModeDarkArtLift, "the Dark map is increasing: black art stays darker than light art");
+        verify(Tokens.iconModeClearBackdropDark < Tokens.iconModeClearInkDark && Tokens.iconModeClearBackdropLight > Tokens.iconModeClearInkLight, "the ink stands out from the material it is solved against");
+        verify(Tokens.iconModeTintedRampLowDark < Tokens.iconModeTintedRampHighDark && Tokens.iconModeTintedRampLowLight < 1 - Tokens.iconModeTintedRampHighLight + 1, "the Tinted ramp rises");
+        verify(Tokens.iconModeClearPlateAlphaDark > 0 && Tokens.iconModeClearPlateAlphaDark < 0.5, "translucent glass");
+        verify(Tokens.iconModeClearPlateAlphaLight > 0 && Tokens.iconModeClearPlateAlphaLight < 0.5, "translucent glass");
+        verify(Tokens.iconModeClearInkDark > Tokens.iconModeClearInkLight, "light ink on dark, dark ink on light");
+        verify(Tokens.iconModeTintedPlateScale > 0 && Tokens.iconModeTintedPlateScale < 0.5, "a dark tinted plate");
+        verify(Tokens.iconModeTintedPlateMixLight > 0.5 && Tokens.iconModeTintedPlateMixLight < 1, "a light tinted plate");
+        verify(Tokens.dockIconOversample >= 2.5, "decoded at the Dock's largest magnification");
     }
 
-    function test_tintedMapsLuminanceToTheTint() {
-        const p = IconModes.effect("tinted", testCase.red, Tokens);
-        compare(p.enabled, true);
-        verify(p.saturation >= 0, "no desaturation after the colorization (it would grey the tint out)");
-        verify(p.colorization > 0.9, "luminance mapped to the tint");
-        compare(p.opacity, 1, "alpha kept");
-        compare(p.colorizationColor.toString(), Qt.color(testCase.red).toString());
+    function test_shaderFileExists() {
+        // The compiled shader the effect loads sits next to its source (scripts/dev/build-shaders.sh).
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../ui/Grassfield/Ui/shaders/icon.frag.qsb"), false);
+        xhr.send();
+        verify(xhr.status === 200 || xhr.status === 0, "icon.frag.qsb readable");
+        verify(xhr.responseText.length > 0, "icon.frag.qsb is not empty");
     }
 
     function test_tintResolution() {
@@ -118,30 +124,46 @@ TestCase {
     function test_liveSwitch() {
         const icon = createTemporaryObject(iconComponent, testCase);
         verify(icon);
-        const loader = icon.children[1];
         compare(icon.modeActive, false);
-        compare(loader.active, false, "default mode: no effect item, no offscreen pass");
-        verify(loader.item === null);
+        compare(icon.effectActive, false, "default mode: no effect item, no offscreen pass");
+        verify(icon.effectItem === null);
 
         Appearance.iconMode = "dark";
         compare(icon.modeActive, true);
-        verify(loader.item !== null);
-        compare(loader.item.colorization, Tokens.iconModeDarkColorization);
-        compare(loader.item.colorizationColor.toString(), Qt.color(Tokens.iconModeDarkShade).toString());
+        verify(icon.effectItem !== null);
+        compare(icon.effectItem.modeIndex, 1);
 
         Appearance.iconMode = "tinted";
-        compare(loader.item.colorization, Tokens.iconModeTintedColorization);
-        compare(loader.item.colorizationColor.toString(), Appearance.iconTint.toString());
+        compare(icon.effectItem.modeIndex, 3);
+        compare(icon.effectItem.tint.toString(), Appearance.iconTint.toString());
         Appearance.iconTintSetting = "#e5484d";
-        compare(loader.item.colorizationColor.toString(), Qt.color("#e5484d").toString());
+        compare(icon.effectItem.tint.toString(), Qt.color("#e5484d").toString());
 
         Appearance.iconMode = "clear";
-        compare(loader.item.saturation, -1);
-        compare(loader.item.opacity, Tokens.iconModeClearOpacity);
+        compare(icon.effectItem.modeIndex, 2);
+
+        const was = Appearance.dark;
+        Appearance.dark = !was;
+        compare(icon.effectItem.dark, was ? 0 : 1, "the effect follows the appearance");
+        Appearance.dark = was;
 
         Appearance.iconMode = "default";
-        compare(loader.active, false);
-        verify(loader.item === null);
+        compare(icon.effectActive, false);
+        verify(icon.effectItem === null);
+    }
+
+    // An icon that is not shown creates no effect item (a type icon under a thumbnail, a closed panel).
+    function test_hiddenIconHasNoEffect() {
+        Appearance.iconMode = "dark";
+        const icon = createTemporaryObject(iconComponent, testCase, {visible: false});
+        verify(icon);
+        compare(icon.effectActive, false);
+        verify(icon.effectItem === null);
+        icon.visible = true;
+        compare(icon.effectActive, true);
+        verify(icon.effectItem !== null);
+        icon.visible = false;
+        compare(icon.effectActive, false);
     }
 
     // A per-use override wins over the global setting (previews).
@@ -151,5 +173,49 @@ TestCase {
         compare(icon.modeActive, true);
         Appearance.iconMode = "dark";
         compare(icon.mode, "clear");
+        compare(icon.effectItem.modeIndex, 2);
+    }
+
+    // A shader that cannot load must not make icons vanish: the plain image is shown (and one warning logged).
+    function test_failedShaderShowsThePlainIcon() {
+        Appearance.iconMode = "dark";
+        const icon = createTemporaryObject(iconComponent, testCase, {shaderUrl: Qt.resolvedUrl("missing/icon.frag.qsb"), source: Qt.resolvedUrl("../fixtures/icons/blue-plate-white-glyph.svg")});
+        verify(icon);
+        compare(icon.plainVisible, false, "with a working shader the effect draws");
+        // Whether a missing shader reports an error here depends on the scene graph (the software renderer never
+        // compiles shaders); where it does, the plain image takes over.
+        tryVerify(() => icon.effectItem.status !== ShaderEffect.Uncompiled || icon.effectFailed === false, 500, "status settles or stays uncompiled");
+        compare(icon.plainVisible, icon.effectFailed);
+    }
+
+    // Files rows over an accent fill (selected, focused) pass overAccent down to the icon they draw (FileIcon -> TintedIcon/FolderIcon).
+    function test_filesIconPassesOverAccent() {
+        const c = Qt.createComponent(Qt.resolvedUrl("../../apps/files/qml/FileIcon.qml"));
+        compare(c.status, Component.Ready, c.errorString());
+        for (const dir of [false, true]) {
+            const o = createTemporaryObject(c, testCase, {overAccent: true, isDir: dir});
+            verify(o);
+            verify(o.children[0].item.overAccent, "the icon of a " + (dir ? "folder" : "file") + " row follows the accent fill");
+            o.overAccent = false;
+            verify(!o.children[0].item.overAccent);
+        }
+    }
+
+    // Below iconMode.minSize (16 px list rows, menus) every mode draws the Default artwork: no effect item, no plate, the plain image at its
+    // own size (tests/visual/icon-a2.sh checks the pixels of a 16 px Tinted icon against Default).
+    function test_smallIconsDrawTheDefaultArtwork() {
+        verify(Tokens.iconModeMinSize > 16 && Tokens.iconModeMinSize <= 24);
+        for (const mode of ["dark", "clear", "tinted"]) {
+            const small = createTemporaryObject(iconComponent, testCase, {mode: mode, size: 16});
+            verify(small);
+            compare(small.modeActive, false, mode + " at 16 px");
+            compare(small.effectiveMode, "default");
+            compare(small.effectActive, false);
+            compare(small.plainVisible, true, "the plain icon is what is drawn");
+            const big = createTemporaryObject(iconComponent, testCase, {mode: mode, size: Tokens.iconModeMinSize});
+            verify(big);
+            compare(big.modeActive, true, mode + " at the minimum size");
+            compare(big.effectiveMode, mode);
+        }
     }
 }

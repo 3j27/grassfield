@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Test fixture (own drawing): a one-colour mascot-like logo filling the canvas (ears on top, a wide round body, two
+       holes), the structure of logo-only icons such as a chat client's: no plate, and its colour dominates every probe. -->
+  <path fill-rule="evenodd" fill="#5865F2" d="M6 36 Q4 14 24 12 Q44 14 52 22 H76 Q84 14 104 12 Q124 14 122 36 L126 92 Q126 112 104 114 Q92 116 84 108 H44 Q36 116 24 114 Q2 112 2 92 Z M42 54 a12 15 0 1 0 0.1 0 Z M86 54 a12 15 0 1 0 0.1 0 Z"/>
+</svg>

@@ -15,6 +15,8 @@ Item {
     property bool isDir: false
     property string folderColor: ""
     property string folderGlyph: ""
+    // Drawn over the accent fill of a selected, focused row (the plate and ink are then the opposite of the fill).
+    property bool overAccent: false
 
     implicitWidth: size
     implicitHeight: size
@@ -35,6 +37,7 @@ Item {
         TintedIcon {
             size: root.size
             oversample: Tokens.filesThumbnailOversample
+            overAccent: root.overAccent
             source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
         }
     }
@@ -48,6 +51,7 @@ Item {
             source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
             folderColor: root.folderColor
             folderGlyph: root.folderGlyph
+            overAccent: root.overAccent
         }
     }
 
