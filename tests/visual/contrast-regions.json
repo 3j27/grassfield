@@ -14,11 +14,13 @@
   ],
   "systemmenu": [
    {"name": "About This Computer", "box": [44, 34, 130, 14], "kind": "text"},
-   {"name": "Settings", "box": [44, 64, 100, 14], "kind": "text"},
-   {"name": "Force Quit", "box": [44, 95, 70, 14], "kind": "text"},
-   {"name": "Sleep", "box": [44, 125, 40, 14], "kind": "text"},
-   {"name": "Lock Screen", "box": [44, 201, 70, 14], "kind": "text"},
-   {"name": "Log Out", "box": [44, 223, 130, 14], "kind": "text"}
+   {"name": "Settings", "box": [44, 69, 66, 17], "kind": "text"},
+   {"name": "Force Quit", "box": [44, 104, 80, 15], "kind": "text"},
+   {"name": "Sleep", "box": [44, 139, 40, 17], "kind": "text"},
+   {"name": "Restart", "box": [44, 163, 59, 14], "kind": "text"},
+   {"name": "Shut Down", "box": [44, 187, 83, 14], "kind": "text"},
+   {"name": "Lock Screen", "box": [44, 222, 81, 14], "kind": "text"},
+   {"name": "Log Out", "box": [44, 245, 128, 18], "kind": "text"}
   ],
   "controlcenter": [
    {"name": "Wi-Fi label", "box": [1672, 55, 36, 14], "kind": "text"},
@@ -33,13 +35,15 @@
    {"name": "Sound title", "box": [1629, 351, 40, 13], "kind": "text"}
   ],
   "search": [
-   {"name": "query", "box": [668, 256, 48, 22], "kind": "text"},
-   {"name": "Top Hit header", "box": [640, 315, 44, 12], "kind": "text"},
-   {"name": "Files row title (selected)", "box": [680, 341, 34, 14], "kind": "text"},
-   {"name": "Files row subtitle (selected)", "box": [680, 358, 56, 10], "kind": "text"},
-   {"name": "Applications header", "box": [640, 388, 72, 12], "kind": "text"},
-   {"name": "Neovim title", "box": [680, 414, 44, 13], "kind": "text"},
-   {"name": "Neovim subtitle", "box": [680, 431, 62, 10], "kind": "text"}
+   {"name": "query", "box": [686, 252, 58, 26], "kind": "text"},
+   {"name": "Top Hit header", "box": [657, 311, 46, 16], "kind": "text"},
+   {"name": "Files row title (selected)", "box": [702, 342, 34, 17], "kind": "text"},
+   {"name": "Files row subtitle (selected)", "box": [702, 358, 74, 16], "kind": "text"},
+   {"name": "Applications header", "box": [657, 396, 72, 15], "kind": "text"},
+   {"name": "Files app title", "box": [702, 427, 34, 14], "kind": "text"},
+   {"name": "Files app subtitle", "box": [702, 443, 62, 14], "kind": "text"},
+   {"name": "Neovim title", "box": [702, 483, 52, 14], "kind": "text"},
+   {"name": "Neovim subtitle", "box": [702, 499, 62, 12], "kind": "text"}
   ],
   "banners": [
    {"name": "banner 1 title", "box": [1610, 46, 100, 12], "kind": "text"},
@@ -54,7 +58,7 @@
    {"name": "card 1 body", "box": [1616, 110, 188, 12], "kind": "text"},
    {"name": "card 1 time", "box": [1868, 90, 26, 10], "kind": "text"},
    {"name": "card 3 group name (Mail)", "box": [1572, 239, 30, 13], "kind": "text"},
-   {"name": "footer Edit Widgets", "box": [1682, 344, 70, 11], "kind": "text"}
+   {"name": "footer Edit Widgets", "box": [1678, 697, 82, 18], "kind": "text"}
   ],
   "notificationcenterhover": [
    {"name": "card x glyph (pointer on the card)", "box": [1558, 39, 10, 10], "kind": "icon"},
@@ -68,16 +72,16 @@
    {"name": "search placeholder", "box": [591, 226, 46, 13], "kind": "text"},
    {"name": "chip All (accent text on accent)", "box": [569, 267, 18, 14], "kind": "text"},
    {"name": "chip Productivity", "box": [617, 267, 76, 14], "kind": "text"},
-   {"name": "label Aether", "box": [595, 370, 42, 13], "kind": "text"},
-   {"name": "label Chromium", "box": [1274, 370, 62, 13], "kind": "text"},
-   {"name": "label Disks", "box": [1059, 472, 32, 13], "kind": "text"}
+   {"name": "label Aether", "box": [594, 360, 43, 16], "kind": "text"},
+   {"name": "label Chromium", "box": [1273, 360, 63, 16], "kind": "text"},
+   {"name": "label Disks", "box": [1057, 462, 36, 16], "kind": "text"}
   ],
   "lock": [
    {"name": "date", "box": [850, 66, 222, 27], "kind": "text"},
    {"name": "clock", "box": [856, 110, 206, 88], "kind": "large"},
-   {"name": "avatar initials", "box": [946, 832, 28, 30], "kind": "large"},
-   {"name": "user name", "box": [920, 887, 81, 21], "kind": "text"},
-   {"name": "password placeholder (right of the caret, inside the focus ring)", "box": [868, 924, 90, 12], "kind": "text"}
+   {"name": "avatar initials", "box": [947, 812, 26, 26], "kind": "large"},
+   {"name": "user name", "box": [920, 865, 80, 20], "kind": "text"},
+   {"name": "password placeholder (right of the caret, inside the focus ring)", "box": [866, 898, 92, 18], "kind": "text"}
   ],
   "dock": [
    {"name": "running dot, first test app", "box": [975, 1058, 9, 8], "kind": "icon"},

@@ -1087,6 +1087,8 @@ QtObject {
     readonly property int launcherLabelGap: 6
     // estimate: pill search field (Search uses a 48-pt field; F1 low confidence)
     readonly property int launcherSearchHeight: 36
+    // A2: dark appearance only. The search field keeps the light translucent fill (macOS model, docs/specs/apps.md) but at 0.10 instead of material.fillOpacity 0.14: the lighter backdrop under the light placeholder (textSecondary) gave 4.30:1 on a white wallpaper at transparency 0.6; the light appearance keeps material.fillOpacity
+    readonly property real launcherSearchFillOpacityDark: 0.1
     // F1 reference: category chips about 23-24 tall
     readonly property int launcherChipHeight: 24
     // F1 reference: chip gap about 7.6
