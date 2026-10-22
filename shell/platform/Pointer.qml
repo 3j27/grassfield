@@ -313,23 +313,26 @@ Singleton {
 
     // The theme build ended, or its stamp was read, or the colours it follows changed: the custom theme may be needed or
     // may be removable now (read from the primary state, never from a binding that has not been re-evaluated yet).
+    // Deferred to the end of the turn: update() can start a removal or a build, which changes `idle` and `building`
+    // while their own change is still being notified ("PointerTheme: Binding loop detected for property idle" in the
+    // wallpaper tests' shell logs). Qt.callLater also folds several changes of one turn into one update.
     Connections {
         target: themeBuilder
 
         function onBuildingChanged(): void {
-            root.update();
+            Qt.callLater(root.update);
         }
 
         function onIdleChanged(): void {
-            root.update();
+            Qt.callLater(root.update);
         }
 
         function onReadyChanged(): void {
-            root.update();
+            Qt.callLater(root.update);
         }
 
         function onWantedKeyChanged(): void {
-            root.update();
+            Qt.callLater(root.update);
         }
     }
 
