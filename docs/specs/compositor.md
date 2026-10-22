@@ -37,8 +37,8 @@ IPC under Hyprland's Lua config (input for ADR-0007). M2: real minimize with an 
 tile rectangle the shell sends (ADR-0002), and the user's double-click setting.
 
 Non-goals: the "Genie" warp (the animation is the "Scale" effect: uniform shrink + move; a genie would need a
-mesh-deformed texture draw, which Hyprland's pass elements do not offer), hover glyphs and inactive-state
-buttons, appearance switching, tiled windows, CSD negotiation; for the overview: the layout, labels, Desktops bar and
+mesh-deformed texture draw, which Hyprland's pass elements do not offer), inactive-state (grey) buttons, the
+pressed-button state, appearance switching, tiled windows, CSD negotiation; for the overview: the layout, labels, Desktops bar and
 input (the shell), transforming popups; for appmenu: reading or
 rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B, ADR-0008), the
 `com.canonical.AppMenu.Registrar` service, X11 (XWayland) menus.
@@ -57,6 +57,12 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   edge (centres at x 16, 39, 62), vertically centered (y 16); each is hit inside its circle grown by 1/6 of the
   diameter (2.33 px), and the gaps between the buttons stay drag area; colors from `compositor/src/core/Theme.hpp` (close `#E5534B`, minimize `#D9A93B`,
   zoom `#4FA64F`; background dark `rgba(40,40,44,1)` / light `rgba(236,236,238,1)`, dark in S2).
+- **FR4b** Hover glyphs (macOS): while the pointer is over the group of lights (the box of the three hit circles,
+  gaps included) of the topmost window under it, all three lights show their glyph: × close, − minimize, + zoom (the
+  zoom action; macOS shows + for zoom and arrows for full screen). Glyph box 0.55 of the diameter (8 px at scale 1,
+  centred on whole pixels at every scale), strokes 0.12 of the diameter with round caps, black at 50 % over the
+  light; active and inactive windows alike. A window drawn by the overview or Stages, or whose input is blocked,
+  shows none. Only the titlebars whose hover state changes are damaged.
 - **FR5** The title is centered on the bar and kept at least 8 px clear of the buttons (symmetric margins);
   it is limited to the remaining width.
 - **FR6** A left press on a button arms it; releasing over the same button activates it: close → close the
@@ -380,7 +386,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 | FR1 | Code review of `PLUGIN_INIT`; scripted mismatch test (C2) | L0 / L1 | match path verified (log); mismatch path NOT VERIFIED |
 | FR2 | nested: open foot → screenshot | L1 | verified (floating); tiled/full-screen hiding NOT VERIFIED |
 | FR3 | nested screenshot, corner crops | L1 | verified at scale 1 (see limitations) |
-| FR4 | unit `TitlebarLayout.*`, `Theme.*`; screenshot | L0 / L1 | verified |
+| FR4 | unit `TitlebarLayout.*`, `Theme.*`; nested `tests/compositor/chrome.sh` (lights, bar, corners measured on GF-REF captures) | L0 / L1 | verified; F2a geometry (32-px bar, 14-px lights, 23-px pitch, first centre (16, 16); radius 26 for org.grassfield.*, 12 otherwise) 2026-10-22, Hyprland 0.56.2: `chrome.sh` PASS (lights within 0.05 px of their centres, 13.9 px across; 32 rows; corner insets 4 px (radius 12) and 8 px (radius 26)) |
+| FR4b | unit `ButtonGroup.*`, `GlyphSize.*`, `GlyphMask.*`; nested `tests/compositor/chrome.sh` | L0 / L1 | 2026-10-22: glyphs on all three lights with the pointer between two lights (active window, inactive window, Settings), none with the pointer away |
 | FR5 | unit `TitlebarLayout.Title*`; screenshot with long and short titles | L0 / L1 | verified |
 | FR6 | nested: virtual pointer clicks on close / zoom / minimize; press on close + release elsewhere; `tests/compositor/minimize.sh` | L1 | verified (close closed the window; zoom toggled `fullscreen` 0↔1; cancel kept the window). Minimize (2026-10-17): the button posted `minimize-request`, the shell answered with `hl.plugin.grassfield.minimize`, the window went to `special:minimized` (see FR14) |
 | FR7 | nested: virtual pointer drag, window position before/after; abandoned drag (pointer tool exits after `down drag`, its device is destroyed) then move and click elsewhere with a new pointer | L1 | verified: press (500,186) → release (600,286) moved the window (370,200) → (470,300), cursor not warped. Abandoned drag (2026-10-17): before the fix the window followed the unpressed pointer and jumped to the next click; after it the window stays where the drag left it, the next click lands on the desktop, log `titlebar gesture cancelled: no button held or a pointer device went away` |
@@ -1001,7 +1008,10 @@ Manual (L1, nested only):
 - Client-side-decorated apps that ignore the server-side decoration request get a second titlebar.
 - Long titles are clamped to the available width by Hyprland's text renderer; ellipsis behaviour depends on it.
 - The content's rounded top corners are filled with the titlebar color; with `rounding_power` 2.6 a small
-  corner curve of the content stays visible instead of a perfectly square joint.
+  corner curve of the content stays visible instead of a perfectly square joint. Hyprland 0.56.2 rounds all four
+  corners of the surface with one radius (`CSurfacePassElement` has no per-corner rounding), so at radius 26
+  (org.grassfield.* windows) that curve is 26 px: a concave titlebar-coloured corner at the top of the content
+  (`.dev/chrome/run-*/settings-corner-*-4x.png`). macOS joins titlebar and content square.
 - The titlebar sits above the client's requested position, so a centered window's titlebar extends 32 px
   above the centered area.
 - Fractional scaling: geometry is scaled by the monitor scale but only scale 1 was tested.
