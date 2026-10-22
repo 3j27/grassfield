@@ -1,0 +1,27 @@
+# Apple-logo (and look-alike) removal list for the composed icon theme grassfield-icons (owner decision 2026-10-23).
+# Input of packaging/arch/icons-compose.py. One entry per line:
+#   <layer>:<path in the upstream checkout> [kind]
+#   mactahoe:src/<category>/<size>/<file>      pebble:Pebble/<dir>/<dir>/<file>
+#   kind: apple-logo (default) | finder-face | appstore
+# apple-logo and finder-face: the file's whole icon NAME is dropped from that layer (every size, every directory) with
+# every link that resolves to one of them; the name falls through to the next layers (Pebble, our glyphs, Breeze,
+# Adwaita, hicolor). appstore: a MacTahoe file whose names are served by Pebble's shopping bag instead.
+# Every listed file must exist at the pinned commit (the composer fails on pin drift). Re-derive on a pin change.
+#
+# Seed: the start-here logos and the folder-apple drawing (the by-eye sweep list replaces this file).
+mactahoe:src/places/16/start-here.svg
+mactahoe:src/places/22/start-here.svg
+mactahoe:src/places/24/start-here.svg
+mactahoe:src/places/scalable/start-here.svg
+mactahoe:src/places/scalable/start-here-symbolic.svg
+mactahoe:src/mimes/24/start-here.svg
+mactahoe:src/status/32/start-here.svg
+mactahoe:src/status/16/start-here-symbolic.svg
+mactahoe:src/status/22/start-here-symbolic.svg
+mactahoe:src/status/24/start-here-symbolic.svg
+mactahoe:src/status/symbolic/start-here-symbolic.svg
+mactahoe:src/status/symbolic-budgie/start-here-symbolic.svg
+mactahoe:src/places/16/folder-apple.svg
+mactahoe:src/places/symbolic/folder-apple-symbolic.svg
+# The App Store drawing (also built into the composer, listed for the record).
+mactahoe:src/apps/scalable/softwarecenter.svg appstore
