@@ -6,11 +6,11 @@ hl.window_rule({ name = "gf-float-all", match = { class = ".*" }, float = true }
 -- Don't let apps maximize themselves into a tiled state; Zoom is a Grassfield action.
 hl.window_rule({ name = "gf-no-maximize-event", match = { class = ".*" }, suppress_event = "maximize" })
 
--- Corner radius (docs/testing/f1-reference-gaps.md, "Window chrome"): Grassfield's own windows get 20, the maximum a
--- window rule accepts in Hyprland 0.56.2 (`rounding` is capped at 20), with the default rounding_power; the macOS
--- toolbar-window radius is 26 (integrator decision, ADR-0015 spike step 1). Every other window keeps the default 12
--- (looknfeel.lua). Rule regexes match the whole class, hence the trailing `.*`.
-hl.window_rule({ name = "gf-grassfield-rounding", match = { class = "^org\\.grassfield\\..*$" }, rounding = 20 })
+-- Corner radius (docs/testing/f1-reference-gaps.md, "Window chrome"): Grassfield's own windows keep the default 26
+-- (looknfeel.lua, the macOS toolbar-window radius); every other window, matched by a negated class regex (also a window
+-- without a class), gets 12, the titlebar-only radius (under the rule's cap of 20). Rule regexes match the whole class:
+-- the pattern must cover all of it (a bare prefix never matches, so its negation would match every window).
+hl.window_rule({ name = "gf-third-party-rounding", match = { class = "negative:^org\\.grassfield\\..*$" }, rounding = 12 })
 
 -- Glance (quick look of Preview): a floating panel centered on the screen, without the plugin titlebar.
 hl.window_rule({ name = "gf-glance", match = { class = "^org\\.grassfield\\.Preview\\.Glance$" }, float = true, center = true, decorate = false })
