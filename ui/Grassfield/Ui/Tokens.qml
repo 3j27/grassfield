@@ -452,6 +452,12 @@ QtObject {
     readonly property int notificationBannerGap: 6
     // design/reference/macos (f1-reference-gaps.md gap 7): app icon 32 pt in banners and cards
     readonly property int notificationBannerIconSize: 32
+    // F1 gap 7 (meas-A): icon 13-15 from the card edge; added to the 12-pt card padding
+    readonly property int notificationIconInset: 2
+    // F1 gap 7 (meas-A): text column 57-58 from the card edge = 14 + 32 icon + 11
+    readonly property int notificationTextGap: 11
+    // F1 gap 7 (meas-A): title and body lines on one 16-pt pitch, no extra gap
+    readonly property int notificationLineGap: 0
     // spec N2: default 5 s
     readonly property int notificationBannerTimeout: 5000
     // spec: body up to 4 lines
