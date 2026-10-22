@@ -246,8 +246,26 @@ QtObject {
     readonly property int dockMagnificationRadius: 3
     // estimate: pointer hot strip in px when autohidden
     readonly property int dockRevealZone: 2
-    // estimate
-    readonly property int dockHideDelay: 450
+    // estimate (no macOS capture under design/reference to measure): a magnified icon rises by this fraction of its growth, iconSize * (scale - 1); kept small
+    readonly property real dockMagnificationLift: 0.1
+    // clean-room study of a GPL dock: exponential smoothing of the displayed scales toward the pointer target, time constant in ms (frame rate independent)
+    readonly property int dockMagnificationTau: 26
+    // same study: a frame step is capped at 1/30 s, so a stalled frame never makes a jump (ms)
+    readonly property int dockMagnificationMaxDt: 33
+    // estimate: an icon keeps its hovered state this long after the pointer leaves it, no flicker between icons (ms)
+    readonly property int dockHoverHold: 80
+    // estimate (macOS shows the label after a short dwell): the Dock label appears after this long on an icon (ms)
+    readonly property int dockTooltipDelay: 250
+    // estimate: after a label was shown, moving to the next icon shows its label at once within this time (ms)
+    readonly property int dockTooltipWarm: 400
+    // estimate: auto-hide waits this long with no inhibitor before the Dock starts to slide away (ms); replaces the single 450 ms dock.hideDelay
+    readonly property int dockHideGrace: 250
+    // estimate: auto-hide slide away, ms (Reduce Motion caps it)
+    readonly property int dockHideDuration: 300
+    // estimate: the pointer must stay on the edge strip this long before a hidden Dock slides in (ms)
+    readonly property int dockRevealDwell: 120
+    // estimate: auto-hide slide in, ms (Reduce Motion caps it)
+    readonly property int dockRevealDuration: 240
     // estimate, pending F1 measurement from design/reference
     readonly property int dockSeparatorWidth: 1
     // F1 gap 4: shelf height minus 18 for a 48 tile with 9.5 padding
