@@ -50,11 +50,6 @@ left_neighbour() {
   nestctl monitors -j | jq -r --arg o "$out" --argjson x "$mx" --argjson y "$my" --argjson h "$mh" \
     '[.[] | select(.name != $o and (.x + .width) == $x and .y < ($y + $h) and (.y + .height) > $y) | .name][0] // ""'
 }
-# Free area and the expected boxes (core/Tiling.cpp: margin 8 around and between, titlebar above each surface).
-read -r ax ay aw ah < <(area_of "$out")
-m=8 tb=$GF_TB_HEIGHT
-halfw=$(((aw - 3 * m) / 2)) halfh=$(((ah - 3 * m) / 2))
-say "GF-REF ${mw}x${mh} at $mx,$my, free area ${aw}x${ah} at $ax,$ay, titlebar $tb"
 
 pids=()
 cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done; }
@@ -73,6 +68,13 @@ nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), win
 sleep 0.8
 read -r x0 y0 w0 h0 addr < <(geometry)
 say "foot ${w0}x${h0} at $x0,$y0 ($addr)"
+
+# Free area and the expected boxes (core/Tiling.cpp: margin 8 around and between, titlebar above each surface), read
+# once the session settled: right after nested-up the menu bar may not reserve its strip yet.
+read -r ax ay aw ah < <(area_of "$out")
+m=8 tb=$GF_TB_HEIGHT
+halfw=$(((aw - 3 * m) / 2)) halfh=$(((ah - 3 * m) / 2))
+say "GF-REF ${mw}x${mh} at $mx,$my, free area ${aw}x${ah} at $ax,$ay, titlebar $tb"
 
 # drag WHERE_X WHERE_Y [hold-capture-name] (layout coordinates): press on the titlebar's middle, glide to the point,
 # release there. pointer.sh takes coordinates relative to GF-REF.
@@ -131,13 +133,24 @@ check "ipc: tile(address, \"previous\") gives ${w0}x${h0} back" size_is "$w0" "$
 
 # other-output: press near the titlebar's right end and drag to GF-REF's left edge, so that the window's middle is on
 # the neighbouring output; the IPC tile must use that output (R13 finding 1).
+# The nested WAYLAND-1 output is a window in the owner's session and can be resized at any time: the neighbour is checked
+# again right before, and the step is skipped when the window's middle does not land on it.
+neighbour=$(left_neighbour)
+nbox=$([[ -n $neighbour ]] && nestctl monitors -j | jq -r --arg o "$neighbour" '.[] | select(.name == $o) | "\(.x) \(.width)"')
 if [[ -n $neighbour ]]; then
   read -r x y w h _a < <(geometry)
   pointer abs $((x + w - 40 - mx)) $((y - GF_TB_MID - my)) down sleep 150 drag 400 $((y - GF_TB_MID - my)) sleep 150 drag 2 $((y - GF_TB_MID - my)) sleep 400 up
   sleep 0.8
   read -r x y w h _a < <(geometry)
-  say "  dragged over to $neighbour: ${w}x${h} at $x,$y (middle x $((x + w / 2)))"
+  read -r nbx nbw <<<"$nbox"
+  say "  dragged over to $neighbour (${nbw} wide at x $nbx): ${w}x${h} at $x,$y (middle x $((x + w / 2)))"
   read -r nx ny nw nh < <(area_of "$neighbour")
+fi
+if [[ -n $neighbour ]] && (( x + w / 2 < nbx || x + w / 2 >= nbx + nbw )); then
+  say "SKIP: other-output (the window's middle is not on $neighbour: the nested output changed size)"
+  nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
+  sleep 0.8
+elif [[ -n $neighbour ]]; then
   nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$addr\", \"left\") end)()" >>"$log" 2>&1
   sleep 0.8
   check "other-output: tile(address, \"left\") after a drag onto $neighbour places its left half there" is_box $((nx + m)) $((ny + m + tb)) $(((nw - 3 * m) / 2)) $((nh - 2 * m - tb))
