@@ -3,11 +3,12 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "AppLaunch.js" as AppLaunch
 
-// Trash state for the Dock, read-only: empty or not, from ~/.local/share/Trash/files (in a dev session the isolated
+// Trash state for the Dock: empty or not, from ~/.local/share/Trash/files (in a dev session the isolated
 // trash under .dev/apps-home, where the shell's own trash actions put files; ADR-0011).
 // Event-driven: `gio monitor` reports changes; a check also runs at start and on demand.
-// Nothing here ever modifies the trash.
+// The only modification is emptyNow(), called after the Dock menu's confirmation.
 Singleton {
     id: root
 
@@ -32,6 +33,25 @@ Singleton {
     // (Apps.openDetached; never the default handler, ADR-0011).
     function open(): void {
         Apps.openDetached(["gio", "open", Apps.devSession ? root.filesPath : "trash:///"]);
+    }
+
+    // Empty Trash (Dock Trash menu; only after its confirmation). The one place that deletes from the trash: a real session asks gio,
+    // a dev session removes the contents of the isolated trash only (AppLaunch.emptyTrashArgv, ADR-0011), never the owner's.
+    function emptyNow(): void {
+        const argv = AppLaunch.emptyTrashArgv(Apps.devSession, Apps.appsHome);
+        if (argv === null) {
+            console.warn("grassfield-shell: empty trash refused, no isolated trash directory");
+            return;
+        }
+        Quickshell.execDetached(argv);
+        refreshTimer.restart();
+    }
+
+    // The monitor reports the deletions; this covers a trash directory that did not exist when the monitor started.
+    Timer {
+        id: refreshTimer
+        interval: 800
+        onTriggered: root.refresh()
     }
 
     Component.onCompleted: refresh()

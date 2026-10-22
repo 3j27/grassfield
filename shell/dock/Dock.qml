@@ -831,11 +831,18 @@ Scope {
             function openMenu(index: int): void {
                 root.keyboardMode = false;
                 const item = root.items[index];
-                if (!item || (item.kind !== "app" && item.kind !== "files"))
+                if (!item || (item.kind !== "app" && item.kind !== "files" && item.kind !== "trash"))
                     return;
                 const t = tileRepeater.itemAt(index);
                 const cx = t.mapToItem(null, t.width / 2, 0).x;
-                Popups.open("dock", win.screen.name, cx, win.screen.height - Tokens.dockBottomMargin - shelfHeight - Tokens.dockMenuTailGap - Tokens.dockMenuTailHeight, "above", {
+                const above = win.screen.height - Tokens.dockBottomMargin - shelfHeight - Tokens.dockMenuTailGap - Tokens.dockMenuTailHeight;
+                if (item.kind === "trash") {
+                    // macOS Trash menu: Open, Empty Trash…
+                    Trash.refresh();
+                    Popups.open("dock", win.screen.name, cx, above, "above", {kind: "trash", key: "trash", windows: [], running: false});
+                    return;
+                }
+                Popups.open("dock", win.screen.name, cx, above, "above", {
                     key: item.key,
                     entry: item.entry,
                     pinned: item.pinned,
@@ -1668,7 +1675,7 @@ Scope {
                                 }
 
                                 TapHandler {
-                                    enabled: tile.isApp
+                                    enabled: tile.isApp || tile.isTrash
                                     acceptedButtons: Qt.RightButton
                                     // macOS: a secondary click opens the Dock menu on the press, however long the button is held.
                                     onPressedChanged: if (pressed) {

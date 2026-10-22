@@ -1929,6 +1929,10 @@
         <translation>Ouvrir</translation>
     </message>
     <message>
+        <source>Empty Trash…</source>
+        <translation>Vider la corbeille…</translation>
+    </message>
+    <message>
         <source>Options</source>
         <translation>Options</translation>
     </message>
@@ -1943,6 +1947,18 @@
     <message>
         <source>Remove from Dock</source>
         <translation>Retirer du Dock</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to permanently erase the items in the Trash?</source>
+        <translation>Voulez-vous vraiment effacer définitivement les éléments de la corbeille&#xa0;?</translation>
+    </message>
+    <message>
+        <source>You can’t undo this action.</source>
+        <translation>Vous ne pouvez pas annuler cette action.</translation>
+    </message>
+    <message>
+        <source>Empty Trash</source>
+        <translation>Vider la corbeille</translation>
     </message>
     <message>
         <source>Force quit “%1”?</source>

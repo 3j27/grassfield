@@ -30,7 +30,12 @@ PopupMenu {
         return {ref: t, title: t.title, minimized: w.minimized, stamp: w.stamp};
     }), Tokens.menuWindowTitleMax, Apps.nameFor(appId()))
 
+    readonly property bool isTrash: info.kind === "trash"
+
     model: {
+        // macOS Trash menu: Open, Empty Trash… (disabled while the Trash is empty).
+        if (isTrash)
+            return [{id: "trashOpen", text: qsTr("Open")}, {id: "trashEmpty", text: qsTr("Empty Trash…"), enabled: !Trash.empty}];
         const items = [];
         // macOS: the app's windows come first (a check on the front window, a mark on minimized ones), then a separator.
         if (windowRows.length > 0) {
@@ -154,6 +159,11 @@ PopupMenu {
             FocusReturn.skip();
         // Force Quit asks first (the same confirmation and kill path as the Grassfield menu's Force Quit…): the confirmation
         // replaces this menu, nothing is killed before its button.
+        // Empty Trash asks first, macOS wording, destructive (Cancel has the focus). The Trash it empties is the isolated one in dev.
+        if (item.id === "trashEmpty") {
+            Popups.confirm(qsTr("Are you sure you want to permanently erase the items in the Trash?"), qsTr("You can’t undo this action."), qsTr("Empty Trash"), "emptytrash", {}, true);
+            return;
+        }
         if (item.id === "forcequit") {
             const pids = Launch.forceQuitPids(data.windows.map(t => Compositor.pidOf(t)));
             if (pids.length === 0) {
@@ -166,6 +176,10 @@ PopupMenu {
         }
         Popups.close();
         switch (item.id) {
+        case "trashOpen":
+            Trash.open();
+            Trash.refresh();
+            break;
         case "window":
             // Restores a minimized window and switches to its Desktop (the same call as a Dock click).
             Compositor.activate(item.ref);
