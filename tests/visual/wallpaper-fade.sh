@@ -67,6 +67,11 @@ for i in $(seq 1 60); do
   near_nominal "$now" "${order[0]}" && [[ $(progress) == -1 ]] && break
   sleep 1
 done
+# The capture above can predate the end of the fade that the progress read after it no longer shows (it measured 230,10,11
+# for 254,0,0, within the tolerance): the settled colour is measured as the loop below measures its ends, once idle.
+idle || true
+sleep 1
+now=$(rgb_now)
 near_nominal "$now" "${order[0]}" || { echo "FAIL: the first picture did not settle (shows $now)"; exit 1; }
 settled[${order[0]}]=$now
 echo "start: picture ${order[0]} shows ${settled[${order[0]}]}"

@@ -293,6 +293,7 @@ Scope {
                 loadTimer.stop();
                 fadePending = false;
                 pendingDesc = null;
+                toneDone = false;
                 if (incoming !== null) {
                     incoming.url = "";
                     incoming.opacity = 0;
@@ -351,6 +352,8 @@ Scope {
                 shownDesc = pendingDesc;
                 incoming = null;
                 pendingDesc = null;
+                // The next pending picture has not dominated anything yet (toneDesc must not report it while it loads).
+                toneDone = false;
                 if (old !== shown) {
                     old.opacity = 0;
                     old.url = "";

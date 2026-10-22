@@ -81,5 +81,25 @@ vs_wallpaper ""
 vs_sleep 2
 check "the override cleared: the bar follows the artwork again (light)" test "$(field tone)" = light
 
+# The override cleared while the next picture still decodes (dev hook loadDelay, at most 5 s): the bar keeps the tone of what
+# is on screen (the black picture, light), not the one of the white picture that is not shown yet (review finding: a flag
+# left over from the previous fade made it report the pending picture). Needs a real fade first (vs_reset turns Reduce
+# Motion on, which switches without one).
+vs_ipc controlcenter reduceMotion false >/dev/null
+use dark.png
+check "after a real fade the black picture gives the light tone" test "$(field tone)" = light
+vs_ipc wallpaper loadDelay 5000 >/dev/null
+vs_wallpaper "$pics/light.png"
+vs_sleep 1
+jq --arg p "$pics/light.png" '.wallpaper = {source: "file", path: $p, fit: "fill"}' "$cfg" > "$cfg.new" && mv "$cfg.new" "$cfg"
+vs_sleep 2
+vs_wallpaper ""
+vs_sleep 1
+check "the override cleared during a decode: the bar keeps the shown picture's tone (light)" test "$(field tone)" = light
+vs_ipc wallpaper loadDelay 0 >/dev/null
+vs_sleep 7
+check "the decoded white picture then gives the dark tone" test "$(field tone)" = dark
+vs_ipc controlcenter reduceMotion true >/dev/null
+
 check "no QML error in the shell log" test "$(grep -cE 'TypeError|ReferenceError|Binding loop' "$VS_DEV/shell.log")" = 0
 exit $fail
