@@ -207,29 +207,40 @@ pos_run() { # TRIGGER REP: the four positions (+ released-at-held-point above th
   trial "$t" $ABOVE still held "${t}_above_still_releaseheld_r$r"
 }
 
-# hd NAME STYLE: press, hold 0.9 s (the hold menu opens at 550 ms and has the press from then on), then drag out above the Dock and
-# release there. The press became a menu: it must never become a drag, and the pin must stay. The shell must have logged
-# menu-by-hold (else the menu never opened: not tested, repeated, then FAIL). On 0ba3bc6 a drag started after the menu cleared the
-# interruption and removed the pin when the GUI thread was slow enough.
+# hd NAME STEPS: a press that opened the hold menu, then a drag out above the Dock and a release there. The menu is forced through the
+# fixtures hook `dock holdmenu` about 0.15 s into the press, before the drag starts (the drag starts 0.45 s in, before the natural 550 ms hold timer) (a real hold menu takes the pointer and mostly ends the
+# press; the GUI-stall order menu-then-drag cannot be forced from outside). The press became a menu: it must never become a drag,
+# and the pin must stay. Valid only when the shell logged the forced menu (else not tested: repeated, then FAIL). On 0ba3bc6 the drag
+# cleared the interruption and the release removed the pin.
 hd() {
-  local label=$1 steps=$2 attempt mark opened=0
-  for attempt in 1 2 3; do
+  local label=$1 steps=$2 attempt mark ok=0 lines hook_pid idx fm dl pf
+  for attempt in 1 2 3 4 5 6; do
     restore || { restore_failed "$label"; return; }
     mark=$(wc -l < "$VS_DEV/shell.log")
-    vs_pointer abs $FX $DY sleep 200 down sleep 900 $steps sleep 300 up sleep 300 $park >/dev/null
+    idx=$(vs_ipc dock tiles | jq 'index("foot")')
+    ( sleep 0.3; vs_ipc dock holdmenu "$idx" "$VS_OUTPUT" >/dev/null 2>&1 ) &
+    hook_pid=$!
+    vs_pointer abs $FX $DY sleep 200 down sleep 450 $steps sleep 400 up sleep 300 $park >/dev/null
+    wait "$hook_pid"
     sleep 1
-    if tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep -q "dock-launch: menu-by-hold"; then
-      opened=1
+    lines=$(tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(menu-by-hold\|drag-start\|pressed\)")
+    fm=$(grep -n "menu-by-hold (forced)" <<<"$lines" | head -1 | cut -d: -f1)
+    dl=$(grep -n "drag-start" <<<"$lines" | head -1 | cut -d: -f1)
+    pf=$(grep -n "pressed false" <<<"$lines" | head -1 | cut -d: -f1)
+    # Valid: the forced menu came while the button was down (before pressed false) and before any drag-start.
+    if [[ -n $fm && ( -z $pf || $fm -lt $pf ) && ( -z $dl || $fm -lt $dl ) ]]; then
+      ok=1
       break
     fi
-    echo "  ($label: the hold menu did not open on attempt $attempt, not tested: again)"
+    echo "  ($label: attempt $attempt: the forced menu did not come between the press and the drag ($(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|')), not tested: again; pin now $(pinned))"
     vs_ipc menubar close >/dev/null 2>&1
   done
-  if (( ! opened )); then
+  if (( ! ok )); then
     failn=$((failn + 1))
-    echo "$(date +%T) $label the hold menu never opened, not tested: FAIL"
+    echo "$(date +%T) $label the forced hold menu never logged, not tested: FAIL"
     return
   fi
+  echo "  ($label: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|'))"
   res "$label" kept "$(pinned)"
   vs_ipc menubar close >/dev/null 2>&1
   sleep 1

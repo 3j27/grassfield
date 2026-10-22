@@ -375,7 +375,7 @@ Scope {
         }
     }
 
-    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup>. autohide, magnify, click
+    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup|holdmenu>. autohide, magnify, click
     // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert.
     IpcHandler {
         target: "dock"
@@ -385,6 +385,23 @@ Scope {
             if (!VisualFixtures.active)
                 return "[]";
             return JSON.stringify(Settings.dockPinned);
+        }
+
+        // The press held on tile `index` becomes a hold menu without a popup (fixtures only): the press is marked as having opened the menu
+        // and the interruption a popup opening causes is recorded, in this order, before any drag of the press starts. A real hold menu
+        // takes the pointer and usually ends the press; only a stalled GUI thread lets the drag of the same press follow (reviewer: menu
+        // +6569 ms, drag +27 ms later), and that order cannot be forced from outside, so the hook forces the state it leaves behind.
+        function holdmenu(index: int, screen: string): void {
+            if (!VisualFixtures.active)
+                return;
+            const all = windows.instances;
+            let win = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    win = all[i];
+            }
+            if (win)
+                win.markHoldMenu(index);
         }
 
         // Kind of the open shell popup ("" when none; fixtures only): tests close menus before a part.
@@ -681,6 +698,16 @@ Scope {
                         return;
                     }
                 }
+            }
+
+            // Test hook (IPC dock holdmenu): the pressed tile `index` counts as having opened the hold menu.
+            function markHoldMenu(index: int): void {
+                const t = tileRepeater.itemAt(index);
+                if (!t)
+                    return;
+                t.menuByHold = true;
+                root.interruptDrag();
+                console.info("dock-launch: menu-by-hold (forced)", Date.now());
             }
 
             // "x y" of the icon centre of tile `index`, in output coordinates (test hook).
@@ -1332,6 +1359,8 @@ Scope {
                                 DragHandler {
                                     id: dragHandler
                                     // A press that opened the hold menu can never become a drag (and never removes a pin).
+                                    // A press that opened the hold menu can never become a drag (and never removes a pin).
+                                    // A press that opened the hold menu can never become a drag (and never removes a pin).
                                     enabled: tile.isApp && !tile.isFiles && !(tile.menuByHold && leftTap.pressed)
                                     target: null
                                     cursorShape: Qt.ClosedHandCursor
@@ -1350,6 +1379,8 @@ Scope {
                                     onActiveChanged: {
                                         if (active) {
                                             win.releasedOutside = false;
+                                            // Interruption state is per press: an event since the button went down (the hold menu, a surface, a
+                                            // window) keeps this drag from removing the tile.
                                             // Interruption state is per press: an event since the button went down (the hold menu, a surface, a
                                             // window) keeps this drag from removing the tile.
                                             win.dragInterrupted = tile.menuByHold || root.dragInterruptions !== tile.dragMark;
