@@ -1497,7 +1497,7 @@ Scope {
                                                 console.info("dock-launch: tap-refused-interrupted", Date.now());
                                             return;
                                         }
-                                        // A window opened or closed during the press and the release follows it at once: Qt ended the press.
+                                        // A window OPENED during the press and the release follows it at once: Qt ended the press.
                                         if (root.lastWindowEvent >= tile.pressTime && Date.now() - root.lastWindowEvent < Tokens.dockClickWindowGuard) {
                                             if (VisualFixtures.active)
                                                 console.info("dock-launch: tap-refused-window-event", Date.now());
