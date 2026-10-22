@@ -543,7 +543,8 @@ grep -aq "funnel drawing disabled (shader compile failed)" <<<"$since" \
 check "shader failure: the running funnel goes on as a shrink" $? "funnel $g, rect $r, none $n, other $o; failure logged: $(grep -ac 'funnel drawing disabled' <<<"$since"), timing line: $(grep -aoE 'minimize [0-9a-f]+: [a-z]+ minimize in [0-9]+ ms' <<<"$since" | tail -n 1)"
 sheet fault-min
 restore_round fault-restore 0
-grep -aqE "minimize $hex: shrink restore in [0-9]+ ms" <<<"$(tail -n +"$((f0 + 1))" "$follow")"
+# The plugin writes the timing line when the animation ends, after the restored event: wait for it.
+follow_wait "$f0" "minimize $hex: shrink restore in " 3000
 check "shader failure: the restore is a shrink" $? "timing line of the restore"
 f1=$(follow_lines)
 plugin_unload
