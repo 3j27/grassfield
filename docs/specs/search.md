@@ -42,6 +42,9 @@ Providers: apps (DesktopEntries), Grassfield settings pages, calculator, unit co
 - Commands: Sleep, Restart, Shut Down, Log Out reuse `Power` and the confirmation dialogs; Lock Screen stays hidden until a lock IPC target exists (`Search.lockAvailable`).
 - Latency is logged by the shell: `search open->visible N ms` (IPC call to first frame) and `search keystroke->results N ms`.
 
+- Filter chips (F2c): with a query that has results in two or more of Applications, Commands and Documents (files and recents), a chip row sits under the field (`Filters.js`; the capsule is the Apps category chip). A click narrows the results to that kind (the Top Hit joins its kind; inline answers are hidden) and a second click clears it; a new query clears it. IPC `search filter <apps|commands|documents|"">` is the test hook. Chips take no keyboard focus: the field keeps it and Tab keeps moving between groups.
+- No-results notice: a non-empty query that nothing answers, once the file search settled (`filesPending`), shows "No Results for ...", centred under the field.
+
 ## Limitations (v1)
 - Ctrl+Return reveals with `gio open <parent folder>` (default file manager) until Grassfield Files exists (M4).
 - localsearch output parsing (`file://` URIs per line) could not be verified against real results: nothing is indexed on the dev machine.

@@ -524,6 +524,12 @@ QtObject {
     readonly property int searchRowIconSize: 32
     // estimate
     readonly property int searchHeaderHeight: 28
+    // F1 gap 8 (gs-086-210): hairline under the field to the chip row, about 10
+    readonly property int searchChipTop: 10
+    // F1 gap 8 (gs-086-210): chip row to the first result, about 12 with the list padding
+    readonly property int searchChipBottom: 4
+    // estimate: no usable reference (f1-reference-gaps.md, no capture of the empty state at a verified scale): notice area under the field
+    readonly property int searchEmptyHeight: 88
     // estimate: glyph size relative to the row icon tile
     readonly property real searchGlyphScale: 0.7
     // estimate: decoded icon size relative to the row icon tile
