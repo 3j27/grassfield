@@ -189,3 +189,21 @@ TEST(ActionGuard, OnlyTheNamedProgramsRun)
     for (const char *no : {"", "sh", "bash", "/usr/bin/xdg-open", "xdg-open ", "gio", "rm", "env"})
         EXPECT_FALSE(isActionProgram(QString::fromLatin1(no))) << no;
 }
+
+TEST(ActionGuard, XdgOpenOnlyOpensOneCleanHttpsLink)
+{
+    const QString open = QStringLiteral("xdg-open");
+    EXPECT_TRUE(isAllowedAction({open, QStringLiteral("https://commons.wikimedia.org/wiki/File:Example.jpg")}));
+    EXPECT_TRUE(isAllowedAction({open, QStringLiteral("https://creativecommons.org/licenses/by-sa/4.0/")}));
+    // Local files and entries run whatever handler claims them; other schemes, credentials, options, extra words: no.
+    for (const char *no : {"file:///etc/passwd", "/home/u/app.desktop", "app.desktop", "http://example.org/", "ftp://example.org/",
+                           "javascript:alert(1)", "https://", "https://user:pw@example.org/", "--help", "-",
+                           "https://example.org/a b", "https://example.org/\na", "https://exa\u202emple.org/", ""})
+        EXPECT_FALSE(isAllowedAction({open, QString::fromUtf8(no)})) << no;
+    EXPECT_FALSE(isAllowedAction({open}));
+    EXPECT_FALSE(isAllowedAction({open, QStringLiteral("https://example.org/"), QStringLiteral("https://example.org/")}));
+    // The other programs keep their whole argument vectors (their pages build them).
+    EXPECT_TRUE(isAllowedAction({QStringLiteral("nmcli"), QStringLiteral("radio"), QStringLiteral("wifi"), QStringLiteral("on")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("sh"), QStringLiteral("-c"), QStringLiteral("xdg-open https://x.org")}));
+    EXPECT_FALSE(isAllowedAction({}));
+}
