@@ -97,19 +97,27 @@ Fidelity pass 2026-10-19 (docs/specs/dock.md): shelf glass material (`dock.tintA
 
 | Metric | Reference | Grassfield | Δ | Severity |
 |---|---|---|---|---|
-| Corner radius, toolbar windows | 26 ± 1.5 | `rounding` 12 (looknfeel.lua, all windows) | −14 | large |
-| Corner radius, titlebar-only windows | ~13 ± 3 | 12 | −1 | match |
-| Traffic-light diameter | 14 ± 0.5 | `kButtonDiameter` 12 | −2 | small |
-| Gap between lights (pitch) | 9 ± 0.5 (23) | `kButtonSpacing` 8 (20) | −1 | match |
-| Titlebar height, titlebar-only window | ~32 ± 2 | `kTitlebarHeight` 28 | −4 | small |
-| First light centre, titlebar-only window (x, y) | ~15.6, 15.6 ± 1 | 18, 14 | +2.4 / −1.6 | small |
+| Corner radius, toolbar windows | 26 ± 1.5 | `rounding` 26 (looknfeel.lua default; Grassfield's own windows, org.grassfield.*) | 0 | match |
+| Corner radius, titlebar-only windows | ~13 ± 3 | 12 (window rule `gf-third-party-rounding`, every other class) | −1 | match |
+| Traffic-light diameter | 14 ± 0.5 | `kButtonDiameter` 14 | 0 | match |
+| Gap between lights (pitch) | 9 ± 0.5 (23) | `kButtonSpacing` 9 (23) | 0 | match |
+| Titlebar height, titlebar-only window | ~32 ± 2 | `kTitlebarHeight` 32 | 0 | match |
+| First light centre, titlebar-only window (x, y) | ~15.6, 15.6 ± 1 | 16, 16 (`kButtonInsetLeft` 9) | +0.4 / +0.4 | match |
+| Hover glyphs | ×, −, full-screen arrows on all three lights while the pointer is over the group; ~0.5-0.57 of the diameter, about half the light's brightness | ×, −, + (Grassfield's green button zooms), 0.55 of the diameter, black 50 % | zoom glyph | match (zoom glyph deliberate) |
 | First light centre, toolbar window (x, y) | 25.75, 25.75 ± 0.5 (inside the floating sidebar) | n/a: Grassfield apps sit under a separate titlebar | — | missing |
-| Unified toolbar height | 52 ± 1; traffic lights and items share one row | Files: 28-px titlebar + 52 toolbar (two rows); `files.toolbarHeight` 52 | +28 overall | missing |
+| Unified toolbar height | 52 ± 1; traffic lights and items share one row | Files: 32-px titlebar + 52 toolbar (two rows); `files.toolbarHeight` 52 | +32 overall | missing |
 | Toolbar items | separate 36-pt glass capsules (back/forward pair 72.5 x 36, view group, actions group, search circle opening to a ~200-pt field); group gaps 16-20; insets 8 | `files.toolbarButtonSize` 28, `preview.toolbarButtonSize` 28, flat buttons | −8 | large |
 | Window title in toolbar windows | ~15 bold, left-aligned after back/forward | centred 13-pt semibold title in the plugin titlebar, plus a folder title in the toolbar | — | missing |
 | Traffic-light colours (sampled, JPEG/ICC caveat) | close ≈ #FF5C60, minimise ≈ #FAC800, zoom ≈ #35C759; inactive ≈ #D4D4D4 | own values #E5534B / #D9A93B / #4FA64F | deliberate | n/a (own palette) |
 | Tiling margins | 8 ± 1 outer and between windows (off by default in Settings) | `gaps_out` 8, `gaps_in` 4 (8 between) | 0 | match |
 | Tiling popover on green-button hover | Move & Resize (4 halves), Fill & Arrange (fill, 2-up, 3-up, quarters), Full Screen submenu, move to display; 230 x 251, radius 12 | none (Window menu only) | — | missing |
+
+Fidelity pass F2a (2026-10-22): titlebar 32, lights 14 on a 23 pitch with the first centre at (16, 16), hit slop 1/6 of the
+diameter, hover glyphs, radius 26 for org.grassfield.* and 12 for other windows. Measured on GF-REF captures by
+`tests/compositor/chrome.sh` (light centres within 0.05 px of the expected ones, 13.9 px across, 32 bar rows, corner insets
+4 px for radius 12 and 8 px for radius 26). Still open: the toolbar-window light row (unified toolbar, ADR-0015, F2b),
+inactive grey lights, and the content's top corners, which Hyprland 0.56.2 rounds with the window radius (a concave
+titlebar-coloured curve under the bar at radius 26; macOS joins them square).
 
 ### Quick Settings (macOS Control Center)
 
@@ -319,10 +327,11 @@ Grassfield's own green on purpose and are not compared.
 Ordered by how often the surface is seen, then by how cheap the change is. "Token" means `ui/tokens/tokens.json`
 (regenerate Tokens.qml with `ui/tools/gen-tokens.py`).
 
-1. **Window corner radius.** Use 26 for Grassfield's own toolbar windows (Settings, Files, Preview); keep ~12-13 for
+1. **Window corner radius.** (Done in F2a, 2026-10-22: default 26, rule `gf-third-party-rounding` 12; the window rule
+   `rounding` is capped at 20 in Hyprland 0.56.2, hence the default.) Use 26 for Grassfield's own toolbar windows (Settings, Files, Preview); keep ~12-13 for
    titlebar-only third-party windows. Change: `config/hypr/grassfield/looknfeel.lua` `rounding` plus a window rule for
    the `org.grassfield.*` classes; titlebar drawing in `compositor/src/Titlebar.cpp` follows `w->rounding()`.
-2. **Traffic lights and titlebar.** Diameter 12 → 14, gap 8 → 9, titlebar 28 → ~32 (low confidence), first centre at
+2. **Traffic lights and titlebar.** (Done in F2a, 2026-10-22, with hover glyphs.) Diameter 12 → 14, gap 8 → 9, titlebar 28 → ~32 (low confidence), first centre at
    ~15.6 from the left. Change: `compositor/src/core/Theme.hpp` `kButtonDiameter`, `kButtonSpacing`, `kTitlebarHeight`,
    `kButtonInsetLeft`. Keep `overview.windowTitlebarHeight` and `Stages.hpp` `kTitlebarHeight` in sync.
 3. **Menu bar.**
