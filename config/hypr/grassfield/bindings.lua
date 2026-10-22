@@ -67,6 +67,13 @@ bind("SUPER + Q", "Close window", in_switcher_else("quit", hl.dsp.window.close()
 bind("SUPER + W", "Close window", hl.dsp.window.close())
 bind("SUPER + CTRL + F", "Full screen", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 bind("SUPER + ALT + F", "Zoom (fill the screen)", hl.dsp.window.fullscreen({ mode = "maximized" }))
+-- Window tiling (macOS 15+ Globe+Ctrl+arrows; Super plays Command here): halves, and back to the size from before. The
+-- compositor plugin places the window (window-tiling); the Window menu's Move & Resize shows the same keys.
+bind("SUPER + CTRL + LEFT", "Tile the window to the left half", shell("windows", "tile left"))
+bind("SUPER + CTRL + RIGHT", "Tile the window to the right half", shell("windows", "tile right"))
+bind("SUPER + CTRL + UP", "Tile the window to the top half", shell("windows", "tile top"))
+bind("SUPER + CTRL + DOWN", "Tile the window to the bottom half", shell("windows", "tile bottom"))
+bind("SUPER + CTRL + R", "Return the window to its previous size", shell("windows", "tile previous"))
 bind("SUPER + T", "Toggle floating/tiling", hl.dsp.window.float({ action = "toggle" }))
 bind("SUPER + M", "Minimize window", shell("windows", "minimize"))
 bind("SUPER + H", "Hide app", in_switcher_else("hide", shell("windows", "hide")))

@@ -259,6 +259,26 @@
         <translation>Super+Ctrl+F</translation>
     </message>
     <message>
+        <source>Super+Ctrl+Left</source>
+        <translation>Super+Ctrl+Gauche</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Right</source>
+        <translation>Super+Ctrl+Droite</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Up</source>
+        <translation>Super+Ctrl+Haut</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+Down</source>
+        <translation>Super+Ctrl+Bas</translation>
+    </message>
+    <message>
+        <source>Super+Ctrl+R</source>
+        <translation>Super+Ctrl+R</translation>
+    </message>
+    <message>
         <source>About %1</source>
         <translation>À propos de %1</translation>
     </message>
@@ -301,6 +321,54 @@
     <message>
         <source>New Desktop</source>
         <translation>Nouveau bureau</translation>
+    </message>
+    <message>
+        <source>Fill</source>
+        <translation>Remplir</translation>
+    </message>
+    <message>
+        <source>Center</source>
+        <translation>Centrer</translation>
+    </message>
+    <message>
+        <source>Move &amp; Resize</source>
+        <translation>Déplacer et redimensionner</translation>
+    </message>
+    <message>
+        <source>Left</source>
+        <translation>Gauche</translation>
+    </message>
+    <message>
+        <source>Right</source>
+        <translation>Droite</translation>
+    </message>
+    <message>
+        <source>Top</source>
+        <translation>Haut</translation>
+    </message>
+    <message>
+        <source>Bottom</source>
+        <translation>Bas</translation>
+    </message>
+    <message>
+        <source>Top Left</source>
+        <translation>En haut à gauche</translation>
+    </message>
+    <message>
+        <source>Top Right</source>
+        <translation>En haut à droite</translation>
+    </message>
+    <message>
+        <source>Bottom Left</source>
+        <translation>En bas à gauche</translation>
+    </message>
+    <message>
+        <source>Bottom Right</source>
+        <translation>En bas à droite</translation>
+    </message>
+    <message>
+        <source>Return to Previous Size</source>
+        <translation>Revenir à la taille précédente</translation>
     </message>
     <message>
         <source>Minimize</source>
@@ -831,6 +899,26 @@
         <translation>Zoom (remplir l’écran)</translation>
     </message>
     <message>
+        <source>Tile the window to the left half</source>
+        <translation>Placer la fenêtre sur la moitié gauche</translation>
+    </message>
+    <message>
+        <source>Tile the window to the right half</source>
+        <translation>Placer la fenêtre sur la moitié droite</translation>
+    </message>
+    <message>
+        <source>Tile the window to the top half</source>
+        <translation>Placer la fenêtre sur la moitié haute</translation>
+    </message>
+    <message>
+        <source>Tile the window to the bottom half</source>
+        <translation>Placer la fenêtre sur la moitié basse</translation>
+    </message>
+    <message>
+        <source>Return the window to its previous size</source>
+        <translation>Rendre à la fenêtre sa taille précédente</translation>
+    </message>
+    <message>
         <source>Minimize window</source>
         <translation>Réduire la fenêtre</translation>
     </message>
@@ -869,6 +957,10 @@
     <message>
         <source>Resize window</source>
         <translation>Redimensionner la fenêtre</translation>
+    </message>
+    <message>
+        <source>Turn Dock hiding on or off</source>
+        <translation>Activer ou désactiver le masquage du Dock</translation>
     </message>
     <message>
         <source>Next Desktop</source>
@@ -1862,6 +1954,22 @@
     <message>
         <source>Do Nothing</source>
         <translation>Ne rien faire</translation>
+    </message>
+    <message>
+        <source>Drag windows to screen edges to tile</source>
+        <translation>Faire glisser les fenêtres vers les bords de l’écran pour les disposer en mosaïque</translation>
+    </message>
+    <message>
+        <source>A window dragged to the left or right edge fills that half, to a corner that quarter.</source>
+        <translation>Une fenêtre glissée vers le bord gauche ou droit occupe cette moitié de l’écran, vers un coin ce quart.</translation>
+    </message>
+    <message>
+        <source>Drag windows to menu bar to fill screen</source>
+        <translation>Faire glisser les fenêtres vers la barre des menus pour remplir l’écran</translation>
+    </message>
+    <message>
+        <source>Tiled windows have margins</source>
+        <translation>Ajouter des marges aux fenêtres en mosaïque</translation>
     </message>
     <message>
         <source>Screen Corners</source>
