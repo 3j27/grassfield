@@ -884,6 +884,7 @@ ShellRoot {
             s.open = Notifications.centerOpen;
             s.count = Notifications.count;
         }, s => {
+            root.check("36: the update left the focus on the stray actions Loader (the state this scene is about)", s.stray);
             root.check("36: Return did not open the card nor close the column", s.open && s.count === 1 && Notifications.count === 1);
             root.check("36: focus is back on the button", root.onUsable() && root.ident().role === "action:b");
         });

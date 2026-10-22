@@ -381,18 +381,29 @@ say "  restore animation on screen: $(intermediate_frames restore "$run/before-r
 
 # 3 rapid repetition
 say "3 minimize + restore x$repeats"
+# How long one round waits for each event. The shell answers the plugin's minimize-request before anything moves, and on
+# a loaded host that answer alone has taken seconds; the rounds test that every minimize and restore completes, not its
+# latency (frame timing is measured in step 1). MZ_ROUND_MS overrides it.
+round_ms=${MZ_ROUND_MS:-10000}
 bad=0
 for ((i = 1; i <= repeats; i++)); do
   nm=$(event_count minimized "$hex")
   nr=$(event_count restored "$hex")
+  moves=$(grep -cE "$to_minimized" "$events")
   pointer abs "$min_x" "$bar_y" sleep 30 click
   if ((i % 4 == 0)); then
-    sleep 0.12 # mid-animation: the restore interrupts the minimize animation
+    # Mid-animation: the restore interrupts the minimize. The tile exists, and the animation starts, only once the
+    # shell has answered the plugin's minimize-request (1.85 s measured on a loaded host): wait for A's move to
+    # special:minimized on the event socket (unbuffered, unlike Hyprland's log), then click 0.12 s into the animation.
+    deadline=$(($(date +%s%3N) + round_ms))
+    while (($(grep -cE "$to_minimized" "$events") <= moves)) && (($(date +%s%3N) < deadline)); do sleep 0.02; done
+    (($(grep -cE "$to_minimized" "$events") > moves)) || { say "  round $i: A never moved to special:minimized"; bad=$((bad + 1)); }
+    sleep 0.12
   else
-    wait_event minimized "$hex" "$nm" 3000 || { say "  round $i: no minimized event"; bad=$((bad + 1)); }
+    wait_event minimized "$hex" "$nm" "$round_ms" || { say "  round $i: no minimized event"; bad=$((bad + 1)); }
   fi
   dock_pointer abs "$tx" "$tile_y" sleep 30 click
-  if ! wait_event restored "$hex" "$nr" 3000; then
+  if ! wait_event restored "$hex" "$nr" "$round_ms"; then
     say "  round $i: no restored event"
     bad=$((bad + 1))
   fi

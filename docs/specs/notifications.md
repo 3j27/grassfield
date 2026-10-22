@@ -4,7 +4,7 @@ UI naming (renamed 2026-10-18, owner decision): the internal "Notification Cente
 Status: implemented in M2 (see "Implementation notes"); N10 (lock screen) belongs to the lock module.
 
 ## macOS reference behavior (described in words)
-- Banners slide in at the top-right under the menu bar, ~344 pt wide, rounded ~16 pt, material background,
+- Banners slide in at the top-right under the menu bar, ~344 pt wide, rounded ~18 pt, material background,
   app icon left, bold title, body up to 4 lines, relative time ("now", "2m ago") top-right. They stay ~5 s
   (alerts stay until acted on), hovering pauses dismissal, a swipe/drag to the right dismisses, a close (×)
   button appears on hover at the top-left corner.
