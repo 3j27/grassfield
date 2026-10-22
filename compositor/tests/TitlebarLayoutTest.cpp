@@ -253,6 +253,69 @@ TEST(GlyphMask, PremultipliedPixels) {
     EXPECT_EQ(red[3], 128);
 }
 
+// ---- inactive lights ----
+
+namespace {
+    bool sameColor(const gf::theme::Rgba& a, const gf::theme::Rgba& b) {
+        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+    }
+} // namespace
+
+TEST(LightColor, ActiveWindowShowsTheColours) {
+    using gf::theme::Appearance;
+    EXPECT_TRUE(sameColor(lightColor(Button::Close, true, false, Appearance::Dark), gf::theme::kCloseColor));
+    EXPECT_TRUE(sameColor(lightColor(Button::Minimize, true, false, Appearance::Dark), gf::theme::kMinimizeColor));
+    EXPECT_TRUE(sameColor(lightColor(Button::Zoom, true, true, Appearance::Light), gf::theme::kZoomColor));
+}
+
+TEST(LightColor, InactiveWindowIsGreyUntilHovered) {
+    using gf::theme::Appearance;
+    for (const auto button : kButtonOrder) {
+        EXPECT_TRUE(sameColor(lightColor(button, false, false, Appearance::Dark), gf::theme::titlebarPalette(Appearance::Dark).inactiveLight));
+        EXPECT_TRUE(sameColor(lightColor(button, false, false, Appearance::Light), gf::theme::titlebarPalette(Appearance::Light).inactiveLight));
+    }
+    EXPECT_TRUE(sameColor(lightColor(Button::Close, false, true, Appearance::Dark), gf::theme::kCloseColor)); // hover: colours back
+}
+
+TEST(LightColor, InactiveGreyIsOneStepAboveItsBar) {
+    using gf::theme::Appearance;
+    const auto dark  = gf::theme::titlebarPalette(Appearance::Dark);
+    const auto light = gf::theme::titlebarPalette(Appearance::Light);
+    EXPECT_GT(dark.inactiveLight.r, dark.background.r);   // lighter than the dark bar
+    EXPECT_LT(light.inactiveLight.r, light.background.r); // darker than the light bar
+    EXPECT_NEAR(light.inactiveLight.r, 0xD4 / 255.F, 4 / 255.F); // reference sample about #D4D4D4
+}
+
+// ---- content corners under the bar ----
+
+TEST(ContentCornerPatch, SquaresUnderBothEndsOfTheBar) {
+    const Rect bar{100, 50, 700, 32};
+    const Rect texture{100, 82, 700, 500}; // the surface right below the bar
+    const auto p = contentCornerPatch(bar, 26, texture);
+    ASSERT_TRUE(p.valid);
+    EXPECT_EQ(p.left, (Rect{100, 82, 26, 26}));
+    EXPECT_EQ(p.right, (Rect{774, 82, 26, 26}));
+}
+
+TEST(ContentCornerPatch, TextureWithClientShadowMargins) {
+    // A client-side-decorated surface: its texture extends 20 px beyond the window geometry on every side.
+    const auto p = contentCornerPatch(Rect{100, 50, 700, 32}, 12, Rect{80, 62, 740, 540});
+    ASSERT_TRUE(p.valid);
+    EXPECT_EQ(p.left, (Rect{100, 82, 12, 12}));
+}
+
+TEST(ContentCornerPatch, InvalidWhenTheMappingWouldBeAGuess) {
+    const Rect bar{100, 50, 700, 32};
+    EXPECT_FALSE(contentCornerPatch(bar, 0, Rect{100, 82, 700, 500}).valid);   // no rounding
+    EXPECT_FALSE(contentCornerPatch(bar, -3, Rect{100, 82, 700, 500}).valid);
+    EXPECT_FALSE(contentCornerPatch(Rect{100, 50, 40, 32}, 26, Rect{100, 82, 40, 500}).valid); // narrower than two squares
+    EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 82, 600, 500}).valid);  // surface narrower than the bar (resizing)
+    EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 90, 700, 500}).valid);  // surface below the bar's bottom edge
+    EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 82, 700, 10}).valid);   // shorter than the square
+    EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 82, 0, 0}).valid);
+    EXPECT_TRUE(contentCornerPatch(bar, 26, Rect{100.4, 82.4, 699.6, 500}).valid); // sub-pixel rounding tolerated
+}
+
 TEST(ClickTracker, TwoQuickPressesAreADoubleClick) {
     CClickTracker t;
     EXPECT_FALSE(t.press(1000, 100, 10));

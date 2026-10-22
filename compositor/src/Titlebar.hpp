@@ -67,6 +67,10 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // Drops any gesture and press ownership (plugin unload).
     static void cancelPointerGrab();
 
+    // Window focus listener (Event::bus()->m_events.window.active): the lights of the window that lost the focus turn grey,
+    // those of the newly active one take their colours (macOS).
+    static void onActiveWindowChanged(const PHLWINDOW& window);
+
   private:
     CBox layoutBox() const; // titlebar box in global logical (layout) coordinates
     bool onButtonPress(const Vector2D& coords, const IPointer::SButtonEvent& e);
@@ -74,6 +78,8 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     void drawTitlebar(const PHLMONITOR& monitor, float alpha);
     // The glyphs over the lights; `bar` in monitor-local logical coordinates.
     void drawGlyphs(const CBox& bar, float scale, float alpha);
+    // The content's own pixels in the surface's rounded top corners (under the surface), when its texture maps 1:1.
+    void drawContentCorners(const PHLWINDOW& w, const CBox& bar, double rounding, float scale, float alpha);
 
     PHLWINDOWREF                m_owner;
     bool                        m_lastShown = false;

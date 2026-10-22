@@ -161,6 +161,31 @@ namespace gf::titlebar {
         return out;
     }
 
+    theme::Rgba lightColor(Button button, bool windowActive, bool groupHovered, theme::Appearance appearance) {
+        if (!windowActive && !groupHovered)
+            return theme::titlebarPalette(appearance).inactiveLight;
+        switch (button) {
+            case Button::Close: return theme::kCloseColor;
+            case Button::Minimize: return theme::kMinimizeColor;
+            case Button::Zoom: return theme::kZoomColor;
+        }
+        return theme::kCloseColor;
+    }
+
+    CornerPatch contentCornerPatch(const Rect& bar, double rounding, const Rect& texture) {
+        constexpr double TOL = 0.5; // half a logical pixel: surface sizes and positions are whole in practice
+        if (!(rounding > 0) || !(bar.w >= 2 * rounding) || !(texture.w > 0) || !(texture.h > 0))
+            return {};
+        const Rect left{.x = bar.x, .y = bar.y + bar.h, .w = rounding, .h = rounding};
+        const Rect right{.x = bar.x + bar.w - rounding, .y = bar.y + bar.h, .w = rounding, .h = rounding};
+        const auto inside = [&texture](const Rect& r) {
+            return r.x >= texture.x - TOL && r.y >= texture.y - TOL && r.x + r.w <= texture.x + texture.w + TOL && r.y + r.h <= texture.y + texture.h + TOL;
+        };
+        if (!inside(left) || !inside(right))
+            return {};
+        return CornerPatch{.valid = true, .left = left, .right = right};
+    }
+
     double maxTitleWidth(double barWidth, const Metrics& m) {
         // Symmetric margins keep the title centered on the whole bar, like the reference layout.
         const double margin = buttonsRightEdge(m) + m.titlePadding;

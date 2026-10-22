@@ -82,6 +82,7 @@ namespace {
         l.push_back(ev.window.floating.listen([](const PHLWINDOW& w) { gf::guarded("window.floating", [&] { refreshFor(w); }); }));
         l.push_back(ev.window.fullscreen.listen([](const PHLWINDOW& w) { gf::guarded("window.fullscreen", [&] { refreshFor(w); }); }));
         l.push_back(ev.window.updateRules.listen([](const PHLWINDOW& w) { gf::guarded("window.updateRules", [&] { refreshFor(w); }); }));
+        l.push_back(ev.window.active.listen([](const PHLWINDOW& w, Desktop::eFocusReason /*reason*/) { CGrassfieldTitlebar::onActiveWindowChanged(w); }));
         l.push_back(ev.window.title.listen([](const PHLWINDOW& w) {
             gf::guarded("window.title", [&] {
                 if (auto* deco = titlebarFor(w))

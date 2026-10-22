@@ -83,6 +83,25 @@ namespace gf::titlebar {
     // The mask as premultiplied 32-bit pixels, bytes B, G, R, A (DRM_FORMAT_ARGB8888 on little-endian).
     std::vector<uint8_t> premultipliedBgra(const std::vector<uint8_t>& mask, const theme::Rgba& color);
 
+    // Colour of a light (macOS): its own colour on the active window, and on any window while the pointer is over the group
+    // of lights; the palette's inactive grey otherwise.
+    theme::Rgba lightColor(Button button, bool windowActive, bool groupHovered, theme::Appearance appearance = theme::kDefaultAppearance);
+
+    // ---- Content corners under the bar ----
+    // Hyprland 0.56.2 rounds all four corners of a window's surface with one radius, so a rounded window shows a curve
+    // where its content meets the bar; macOS joins them square. The two squares below the bar's ends, `rounding` wide,
+    // are redrawn from the surface's own texture, unrounded. All rectangles share one coordinate space.
+    struct CornerPatch {
+        bool valid = false;
+        Rect left;  // square under the bar's left end
+        Rect right; // square under the bar's right end
+    };
+
+    // `bar`: the titlebar; `texture`: where the surface's whole texture is drawn (its top-left corner at the surface's
+    // origin). Invalid when there is no rounding, the bar is narrower than two squares, or a square is not fully inside
+    // the texture (the mapping would be a guess).
+    CornerPatch contentCornerPatch(const Rect& bar, double rounding, const Rect& texture);
+
     struct TitlePlacement {
         bool   visible  = false;
         double x        = 0; // left edge of the text

@@ -75,13 +75,18 @@ namespace gf::theme {
     struct TitlebarPalette {
         Rgba background;
         Rgba title;
+        // The three lights of an inactive window (macOS: grey; coloured again while the pointer is over them). Own values:
+        // the light-appearance reference samples about #D4D4D4 on a white bar; the dark value keeps the same small step
+        // above its bar.
+        Rgba inactiveLight;
     };
 
     constexpr TitlebarPalette titlebarPalette(Appearance appearance) {
         switch (appearance) {
-            case Appearance::Light: return TitlebarPalette{.background = fromRgb8(236, 236, 238), .title = fromRgb8(40, 40, 44, 0.85F)};
+            case Appearance::Light:
+                return TitlebarPalette{.background = fromRgb8(236, 236, 238), .title = fromRgb8(40, 40, 44, 0.85F), .inactiveLight = fromHex(0xD1D1D3)};
             case Appearance::Dark:
-            default: return TitlebarPalette{.background = fromRgb8(40, 40, 44), .title = fromRgb8(236, 236, 238, 0.85F)};
+            default: return TitlebarPalette{.background = fromRgb8(40, 40, 44), .title = fromRgb8(236, 236, 238, 0.85F), .inactiveLight = fromHex(0x5A5A5E)};
         }
     }
 
