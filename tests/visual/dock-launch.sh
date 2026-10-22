@@ -541,7 +541,16 @@ if want closeclick; then
     sleep 0.7
     m=$(wc -l < "$VS_DEV/shell.log")
     rm -f "$out/closeclick.kill"
-    ( sleep 0.1; date +%s%3N > "$out/closeclick.kill"; kill_class gfLM ) &
+    # The window is closed 100 ms after the Dock reports the press (not at a guessed delay: the pointer tool starts late under load).
+    (
+      for _ in $(seq 1 300); do
+        if tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep -q "dock-launch: pressed true"; then break; fi
+        sleep 0.01
+      done
+      sleep 0.1
+      date +%s%3N > "$out/closeclick.kill"
+      kill_class gfLM
+    ) &
     kill_pid=$!
     vs_pointer down sleep 250 up >/dev/null
     wait "$kill_pid"
@@ -550,7 +559,7 @@ if want closeclick; then
     echo "closeclick: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/closeclick.txt" | tr '\n' '|')"
     cdown=$(awk '/pressed true/ {print $NF; exit}' "$out/closeclick.txt")
     cup=$(awk '/pressed false/ {print $NF; exit}' "$out/closeclick.txt")
-    ckill=$(<"$out/closeclick.kill")
+    ckill=$(cat "$out/closeclick.kill" 2>/dev/null || echo 0)
     if [[ -n $cdown && -n $cup && $(( cup - cdown )) -ge 200 && $(( cup - cdown )) -lt 500 && $ckill -gt $cdown && $ckill -lt $cup ]]; then
       grep -q "dock-launch: tap [0-9]" "$out/closeclick.txt" && ! grep -q "tap-refused" "$out/closeclick.txt"; RC=$?
       break
