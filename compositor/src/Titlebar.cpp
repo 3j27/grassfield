@@ -10,8 +10,7 @@
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
-#include <hyprland/src/desktop/state/ViewHitTester.hpp>
-#include <hyprland/src/desktop/state/ViewState.hpp>
+#include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
@@ -219,18 +218,27 @@ namespace {
         return w && w->m_transformers.empty() && !w->isInputBlocked();
     }
 
-    // The titlebar whose lights are under the pointer: on the topmost window there, by Hyprland's own hit test (the
-    // one pointer focus and clicks use; it skips windows whose input is blocked).
+    // The titlebar whose lights are under the pointer, on the topmost window there. Plain geometry over Hyprland's window
+    // list, walked from the top (the stacking order `hyprctl clients` reports): the first mapped window on a visible
+    // workspace whose surface or titlebar contains the pointer decides. Hyprland's hit tester is not used here: calling
+    // CViewHitTester::windowAt from this motion listener cost Qt and GTK4 windows their keyboard enter on a titlebar click
+    // (tests/compositor/click_focus.sh clients, 2026-10-22: 13/15 with it, 15/15 without).
     CGrassfieldTitlebar* titlebarHoveredAt(const Vector2D& pos) {
         const auto& all = gf::state().titlebars;
-        if (all.empty() || !Desktop::viewState())
+        if (all.empty() || !Desktop::windowState())
             return nullptr;
-        constexpr auto props = static_cast<uint16_t>(Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
-        const auto     w     = Desktop::viewState()->hitTest().windowAt(pos, props);
-        if (!drawnInPlace(w))
-            return nullptr;
-        const auto it = std::ranges::find_if(all, [&](const CGrassfieldTitlebar* deco) { return deco->window() == w && deco->buttonGroupContains(pos); });
-        return it != all.end() ? *it : nullptr;
+        const auto& windows = Desktop::windowState()->windows();
+        for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
+            const auto& w = *it;
+            if (!w || !w->m_isMapped || w->isHidden() || !w->m_workspace || !w->m_workspace->isVisible())
+                continue;
+            const auto deco  = std::ranges::find_if(all, [&w](const CGrassfieldTitlebar* d) { return d->window() == w; });
+            const bool onBar = deco != all.end() && (*deco)->barContains(pos);
+            if (!onBar && !w->getWindowMainSurfaceBox().containsPoint(pos))
+                continue; // not under the pointer: a window further down may be
+            return onBar && drawnInPlace(w) && (*deco)->buttonGroupContains(pos) ? *deco : nullptr;
+        }
+        return nullptr;
     }
 
     // Pointer motion: the glyphs follow the pointer onto and off the lights. Only the titlebars that change are damaged.
