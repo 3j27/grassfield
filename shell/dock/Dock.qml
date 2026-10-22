@@ -1529,7 +1529,7 @@ Scope {
                                     anchors.leftMargin: Tokens.dockProgressInset
                                     anchors.rightMargin: Tokens.dockProgressInset
                                     anchors.bottomMargin: Tokens.dockProgressBottomOffset
-                                    color: Appearance.withAlpha(Appearance.colors.text, Tokens.dockProgressTrackOpacity)
+                                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.dockProgressTrackOpacity)
 
                                     Rectangle {
                                         width: Math.max(0, tile.progress) * parent.width

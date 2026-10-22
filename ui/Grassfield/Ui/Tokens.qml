@@ -348,7 +348,7 @@ QtObject {
     readonly property int dockProgressInset: 6
     // estimate: distance of the progress bar from the bottom of the icon, px
     readonly property int dockProgressBottomOffset: 4
-    // estimate: opacity of the progress track (the text colour of the appearance over the tile)
+    // estimate: opacity of the progress track (the appearance fill colour: white in dark, black in light)
     readonly property real dockProgressTrackOpacity: 0.4
     // estimate: starting opacity of the removal puff
     readonly property real dockPoofOpacity: 0.5
