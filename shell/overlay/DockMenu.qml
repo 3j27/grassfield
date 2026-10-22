@@ -181,8 +181,9 @@ PopupMenu {
             Trash.refresh();
             break;
         case "window":
-            // Restores a minimized window and switches to its Desktop (the same call as a Dock click).
-            Compositor.activate(item.ref);
+            // Restores a minimized window and switches to its Desktop (the same call as a Dock click), once this menu's
+            // Exclusive overlay surface is gone: Hyprland refuses to focus a window while it exists.
+            Compositor.activateAfterLayer(item.ref, "grassfield-overlay");
             break;
         case "open":
         case "new":

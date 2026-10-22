@@ -294,6 +294,8 @@ QtObject {
     readonly property real dockPressDim: 0.25
     // macOS 26: one up-and-down hop of the launch bounce, about 0.5 s (ease out up, ease in down)
     readonly property int dockBounceDuration: 500
+    // estimate (same as switcher.layerWaitMs): a window chosen from the Dock menu is activated when the compositor reports the overlay surface unmapped (Hyprland refuses to focus a window while an Exclusive layer exists); if no such event arrives within this time it is activated anyway, ms
+    readonly property int dockMenuLayerWait: 250
     // macOS: an app asking for attention hops again and again with a short rest between hops; one hop (dock.bounceDuration) every this many ms, estimate
     readonly property int dockAttentionPeriod: 1500
     // macOS: the attention hop is the launch hop; same rise as dock.bounceHeightScale (fraction of the icon height)

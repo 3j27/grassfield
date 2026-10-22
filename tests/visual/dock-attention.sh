@@ -65,6 +65,7 @@ vs_session en
 vs_reset dark 0.25
 vs_ipc dock magnify 1 false >/dev/null
 vs_ipc dock autohide false >/dev/null
+vs_ipc controlcenter reduceMotion false >/dev/null
 
 # The window that asks must not have the focus when it does: the plain client is mapped last and keeps it.
 start_pair() { # CLASS DELAY: a bell client, then a plain client that has the focus

@@ -63,14 +63,15 @@ vs_sleep 1
 vs_ipc dock menu "$foot" "$VS_OUTPUT" >/dev/null
 vs_sleep 0.8
 VS_NOPARK=1 vs_capture "dmo-menu-minimized"
-"$VS_ROOT/scripts/dev/keys.sh" -k Down -k Return >/dev/null
+minimized_title=$after
+"$VS_ROOT/scripts/dev/keys.sh" -k Down -k Down -k Return >/dev/null
 vs_sleep 1.2
-check "window list: choosing a window restores it ('$(active)' active, $(vs_ipc dock tiles | jq -r 'map(select(startswith("min"))) | length') minimized tiles)" test -n "$(active)"
+check "window list: choosing the minimized window ('$minimized_title') restores and focuses it (active now '$(active)')" test "$(active)" = "$minimized_title"
 
 # Option (Alt) variants follow the key while the menu is open: Hide -> Hide Others, Quit -> Force Quit (check by eye)
 vs_ipc dock menu "$foot" "$VS_OUTPUT" >/dev/null
 vs_sleep 0.8
-"$VS_ROOT/scripts/dev/keys.sh" -M alt -s 2500 -m alt >/dev/null &
+"$VS_ROOT/scripts/dev/keys.sh" -P Alt_L -s 2500 -p Alt_L >/dev/null &
 alt_pid=$!
 vs_sleep 1
 VS_NOPARK=1 vs_capture "dmo-menu-alt"

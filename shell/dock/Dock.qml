@@ -116,9 +116,18 @@ Scope {
     function settleAttention(): void {
         if (Object.keys(attention).length === 0)
             return;
-        const next = Attention.settle(attention, attentionGroups(), Compositor.focusedToplevel ? Compositor.addressOf(Compositor.focusedToplevel) : "", liveAddresses());
+        const focusedAddress = Compositor.focusedToplevel ? Compositor.addressOf(Compositor.focusedToplevel) : "";
+        const live = liveAddresses();
+        if (VisualFixtures.active)
+            console.info("dock-attention: settle? focused", focusedAddress, "live", JSON.stringify(live), "urgent", JSON.stringify(Object.keys(attention)), "groups", JSON.stringify(attentionGroups()));
+        const next = Attention.settle(attention, attentionGroups(), focusedAddress, live);
         if (next !== attention) {
             attention = next;
+            // Nothing asks for attention any more: an auto-hidden Dock that was out for it goes back at once.
+            if (Object.keys(next).length === 0) {
+                attentionReveal = false;
+                attentionRevealTimer.stop();
+            }
             if (VisualFixtures.active)
                 console.info("dock-attention: settled", Object.keys(next).length, Date.now());
         }

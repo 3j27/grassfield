@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
+import Grassfield.Ui
 import qs.services
 import "Minimized.js" as Minimized
 import "StagesFront.js" as StagesFront
@@ -98,6 +99,38 @@ Singleton {
         if (top && top.workspace && (top.workspace.name === hiddenWorkspace || top.workspace.name === minimizedWorkspace) && root.focusedWorkspace)
             dispatchRequest(moveRequest(top.address, String(root.focusedWorkspace.id)));
         toplevel.activate();
+    }
+
+    // Activate once a shell layer surface is gone. Hyprland refuses to focus a window while an Exclusive layer surface exists
+    // (the switcher waits for `closelayer` for the same reason), and a popup menu that is closing still has its surface for a
+    // moment: a window chosen from a menu is activated when the compositor reports `namespace` unmapped, or after
+    // Tokens.dockMenuLayerWait if that event never comes. One pending request at a time (the latest wins).
+    property var pendingActivation: null
+
+    function activateAfterLayer(toplevel: var, namespace: string): void {
+        if (!toplevel)
+            return;
+        pendingActivation = {toplevel: toplevel, namespace: namespace};
+        layerWaitTimer.restart();
+    }
+
+    function runPendingActivation(): void {
+        const p = pendingActivation;
+        pendingActivation = null;
+        layerWaitTimer.stop();
+        if (p)
+            activate(p.toplevel);
+    }
+
+    Timer {
+        id: layerWaitTimer
+        interval: Tokens.dockMenuLayerWait
+        onTriggered: root.runPendingActivation()
+    }
+
+    onLayerClosed: namespace => {
+        if (pendingActivation && pendingActivation.namespace === namespace)
+            runPendingActivation();
     }
 
     // Name of the special workspace used by hide().
