@@ -63,13 +63,17 @@ namespace gf::gfc {
     // Settings dock.minimizeEffect ("Minimize animation"), "fade" while Reduce Motion is on. Advertised with
     // minimize and config; a shell pushes the key only when it sees this feature (older plugins reject the key).
     inline constexpr std::string_view kFeatureMinimizeEffect = "minimize-effect";
+    // No verb: when a layer surface of the shell ("grassfield-*") maps, the plugin re-runs Hyprland's pointer focus at the
+    // cursor, so a click without motion reaches what is under the pointer (spec FR47-FR48, core/LayerPointer.hpp).
+    inline constexpr std::string_view kFeatureLayerPointer = "layer-pointer";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
-    // overview-focus, minimize-effect.
+    // overview-focus, minimize-effect, layer-pointer.
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
-                                           bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false);
+                                           bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
+                                           bool layerPointer = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, stagesEnabled
     // (core/Stages.hpp) and minimizeEffect (core/Minimize.hpp).

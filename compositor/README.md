@@ -27,6 +27,10 @@ Hyprland plugin for the Grassfield session (master-prompt §5.6):
   focuses it once no Exclusive layer surface is left, checked again then, through Hyprland's own focus path; a press after
   the request wins; outcome events (FR41-FR43, `docs/specs/overview.md` "Close focus"); the deferred-focus decisions are
   shared with Stages (`DeferredFocus.*`);
+- layer pointer focus (feature `layer-pointer`, FR47-FR48): when a shell layer (`grassfield-*`) maps or takes the keyboard
+  under a resting pointer, Hyprland's pointer focus is re-run at the cursor (what one pixel of motion does), so a click
+  without motion reaches it at the right place (Hyprland 0.56.2 places the pointer wrongly on an output away from the
+  layout origin);
 - shell IPC `gfc/1`: capabilities event on Hyprland's socket2, `hl.plugin.grassfield.{hello, minimize,
   restore, config, appmenu, overview, stages, cursor_refresh, overview_focus}()`, `hyprctl grassfield`.
 
