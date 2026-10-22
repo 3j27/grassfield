@@ -48,6 +48,7 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Force Quit Applications"),
     QT_TRANSLATE_NOOP("Bindings", "Focus the menu bar"),
     QT_TRANSLATE_NOOP("Bindings", "Focus the Dock"),
+    QT_TRANSLATE_NOOP("Bindings", "Turn Dock hiding on or off"),
     QT_TRANSLATE_NOOP("Bindings", "Mute"),
     QT_TRANSLATE_NOOP("Bindings", "Volume up"),
     QT_TRANSLATE_NOOP("Bindings", "Volume down"),
