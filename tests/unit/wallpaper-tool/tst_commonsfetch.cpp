@@ -86,6 +86,22 @@ TEST(CommonsText, ControlAndBidiCharactersAreRemoved)
     EXPECT_EQ(plainText(QStringLiteral("a&#x202E;b&#8238;c&#7;d&#0;e&#xD800;f&#1114112;g"), 300), QStringLiteral("abc defg"));
 }
 
+TEST(CommonsText, InvisibleFillersAreRemoved)
+{
+    // Hangul fillers (U+3164, U+115F, U+1160, U+FFA0), the Mongolian vowel separator (U+180E) and free variation selectors, the combining
+    // grapheme joiner (U+034F), the Khmer inherent vowels, a Braille blank, the variation selectors supplement: they draw nothing and
+    // must not survive (a title made of them would look empty, or hide text between letters).
+    for (const char32_t c : {0x3164u, 0x115fu, 0x1160u, 0xffa0u, 0x180eu, 0x180bu, 0x180fu, 0x034fu, 0x17b4u, 0x17b5u, 0x2800u, 0xe0100u, 0x1d173u}) {
+        const QString s = QStringLiteral("a") + QString::fromUcs4(&c, 1) + QStringLiteral("b");
+        EXPECT_EQ(plainText(s, 300), c == 0x2800u ? QStringLiteral("a b") : QStringLiteral("ab")) << QString::number(c, 16).toStdString();
+        EXPECT_EQ(plainText(QString::fromUcs4(&c, 1), 300), QString()) << QString::number(c, 16).toStdString();
+    }
+    // As entities too.
+    EXPECT_EQ(plainText(QStringLiteral("a&#x3164;b&#4447;c&#x180E;d"), 300), QStringLiteral("abcd"));
+    // Ordinary text with accents, CJK and emoji is untouched.
+    EXPECT_EQ(plainText(QStringLiteral("Ch\u00e2teau \u5bcc\u58eb \U0001F600"), 300), QStringLiteral("Ch\u00e2teau \u5bcc\u58eb \U0001F600"));
+}
+
 TEST(CommonsText, LengthIsBoundedInCodePoints)
 {
     const QString long300(300, QLatin1Char('a'));
@@ -109,9 +125,9 @@ TEST(CommonsText, LengthIsBoundedInCodePoints)
 
 TEST(CommonsLicense, AllowListByMachineKey)
 {
-    for (const char *ok : {"pd", "pd-old", "pd-usgov-nasa", "pd-self", "cc0", "cc0-1.0", "cc-zero", "cc-by-2.0", "cc-by-4.0", "cc-by-3.0-de", "cc-by-sa-4.0", "cc-by-sa-2.5", "CC-BY-SA-4.0"})
+    for (const char *ok : {"pd", "pd-old", "pd-usgov-nasa", "pd-self", "cc0", "cc0-1.0", "cc-zero", "cc-by-2.0", "cc-by-4.0", "cc-by-3.0-de", "cc-by-sa-4.0", "cc-by-sa-2.5", "CC-BY-SA-4.0", "cc-by-sa-3.0-migrated", "cc-by-3.0-migrated", "cc-by-sa-3.0-de", "cc-by-3.0-us-migrated", "cc-by-sa-2.0-fr"})
         EXPECT_TRUE(licenseAllowed(QString::fromLatin1(ok))) << ok;
-    for (const char *no : {"", "gfdl", "cc-by-nc-4.0", "cc-by-nd-4.0", "cc-by-nc-sa-4.0", "cc-by-sa", "cc-by-", "copyrighted", "fair-use", "attribution", "pd/../x", "pdx", "cc-by-4.0 ", "cc-by-4.0\nx", "fal"})
+    for (const char *no : {"", "gfdl", "cc-by-nc-4.0", "cc-by-nd-4.0", "cc-by-nc-sa-4.0", "cc-by-sa", "cc-by-", "copyrighted", "fair-use", "attribution", "pd/../x", "pdx", "cc-by-4.0 ", "cc-by-4.0\nx", "fal", "cc-by-4.0-nc", "cc-by-4.0-nd", "cc-by-sa-4.0-nc", "cc-by-sa-3.0-nd-migrated", "cc-by-4.0-ncx", "cc-by-4.0-nc-migrated", "cc-by-sa-3.0-migrated-nc", "cc-by-4.0-de-nc", "cc-by-4.0-migrated-migrated", "cc-by-9.0", "cc-by-sa-10.0", "cc-by-4.0-abc"})
         EXPECT_FALSE(licenseAllowed(QString::fromLatin1(no))) << no;
 }
 

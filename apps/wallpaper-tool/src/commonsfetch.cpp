@@ -41,13 +41,16 @@ QString site(const QString &baseUrl)
 
 bool isWhitespace(char32_t c)
 {
-    return c <= 0x20 || (c >= 0x7f && c <= 0xa0) || c == 0x1680 || (c >= 0x2000 && c <= 0x200a) || c == 0x2028 || c == 0x2029 || c == 0x202f || c == 0x205f || c == 0x3000;
+    return c <= 0x20 || (c >= 0x7f && c <= 0xa0) || c == 0x1680 || (c >= 0x2000 && c <= 0x200a) || c == 0x2028 || c == 0x2029 || c == 0x202f || c == 0x205f || c == 0x2800 || c == 0x3000;
 }
 
-// Invisible and direction-changing characters, noncharacters and the replacement character.
+// Invisible and direction-changing characters, noncharacters and the replacement character. Also the characters that draw
+// nothing but are not white space: the combining grapheme joiner, the Hangul fillers, the Khmer inherent vowels, the Mongolian
+// free variation selectors and vowel separator, the variation selectors supplement and the musical formatting characters.
 bool isRemoved(char32_t c)
 {
-    return c == 0x00ad || c == 0x061c || (c >= 0x200b && c <= 0x200f) || (c >= 0x202a && c <= 0x202e) || (c >= 0x2060 && c <= 0x206f) || c == 0xfeff || (c >= 0xfff9 && c <= 0xfffd)
+    return c == 0x00ad || c == 0x034f || c == 0x061c || c == 0x115f || c == 0x1160 || c == 0x17b4 || c == 0x17b5 || (c >= 0x180b && c <= 0x180f) || c == 0x3164 || c == 0xffa0
+        || (c >= 0x1d173 && c <= 0x1d17a) || (c >= 0xe0100 && c <= 0xe01ef) || (c >= 0x200b && c <= 0x200f) || (c >= 0x202a && c <= 0x202e) || (c >= 0x2060 && c <= 0x206f) || c == 0xfeff || (c >= 0xfff9 && c <= 0xfffd)
         || (c >= 0xfdd0 && c <= 0xfdef) || (c & 0xfffe) == 0xfffe || (c >= 0xe0000 && c <= 0xe007f) || (c >= 0xd800 && c <= 0xdfff);
 }
 
@@ -207,7 +210,9 @@ QUrl withoutQuery(const QUrl &url)
 bool licenseAllowed(const QString &key)
 {
     // Public-domain marks (pd, pd-old, pd-usgov, ...), CC0, CC BY and CC BY-SA with a version; nothing with NC or ND, no GFDL.
-    static const QRegularExpression re(QStringLiteral("\\A(pd|pd-[a-z0-9-]{1,40}|cc0|cc0-[0-9.]{1,6}|cc-zero|cc-by-[0-9][0-9a-z.-]{0,10}|cc-by-sa-[0-9][0-9a-z.-]{0,10})\\z"));
+    // The real Commons keys of the ported and migrated versions are accepted: "cc-by-sa-3.0-de", "cc-by-sa-3.0-migrated",
+    // "cc-by-3.0-us-migrated" (an optional two-letter country, which is never "nc" or "nd", then an optional "migrated").
+    static const QRegularExpression re(QStringLiteral("\\A(pd|pd-[a-z0-9-]{1,40}|cc0|cc0-[0-9.]{1,6}|cc-zero|cc-by(-sa)?-[1-4]\\.[0-9](-(?!nc|nd)[a-z]{2})?(-migrated)?)\\z"));
     return re.match(key.toLower()).hasMatch();
 }
 
