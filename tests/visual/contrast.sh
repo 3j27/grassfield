@@ -55,10 +55,24 @@ snap() {
   fail "$name: the nested output kept returning an empty frame"
 }
 
+# snap_stable NAME SETTLE: like snap, then taken again (0.4 s apart, up to 6 times) until two consecutive frames are the same
+# within 150 px: a surface that is still fading in or moving (slow nested frames) is not measured half way. The caller of the
+# four glyph modes only needs the normal capture to be settled; the others are taken after it.
+snap_stable() {
+  local name=$1 settle=$2 try
+  snap "$name" "$settle"
+  for try in 1 2 3 4 5 6; do
+    mv "$dir/$name.en.png" "$dir/$name.prev.png"
+    snap "$name" 0.4
+    if ! differs_q "$dir/$name.prev.png" "$dir/$name.en.png" 150; then rm -f "$dir/$name.prev.png"; return 0; fi
+  done
+  rm -f "$dir/$name.prev.png"
+}
+
 # cap SURFACE [SETTLE]: the surface in the four glyph modes -> $dir/SURFACE{,.hidden,.white,.black}.png
 cap() {
   local name=$1 settle=${2:-1} m
-  snap "$name" "$settle"
+  snap_stable "$name" "$settle"
   mv "$dir/$name.en.png" "$dir/$name.png"
   for m in hidden white black; do
     vs_ipc visual glyphs "$m" >/dev/null
@@ -181,9 +195,11 @@ dock_surface() {
   DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a gfdockB -t 20000 "Test" "Badge"
   vs_sleep 1
   # Hover: the tooltip of the first test tile.
-  vs_pointer abs $DOCK_X_A $DOCK_Y >/dev/null
+  # (nudged: a hover that arrives while the new windows re-lay the Dock is only seen at the next motion; the tooltip is shown
+  # with the pointer at rest, which snap_stable waits for)
+  vs_pointer abs $DOCK_X_A $DOCK_Y sleep 300 abs $((DOCK_X_A + 2)) $DOCK_Y sleep 300 abs $DOCK_X_A $DOCK_Y >/dev/null
   vs_sleep 1.5
-  VS_SHOTS=$dir VS_NOPARK=1 VS_SETTLE=0.8 vs_capture dock >/dev/null
+  VS_NOPARK=1 snap_stable dock 0.8
   mv "$dir/dock.en.png" "$dir/dock.png"
   for m in hidden white black; do
     vs_ipc visual glyphs "$m" >/dev/null
@@ -191,13 +207,23 @@ dock_surface() {
     mv "$dir/dock.en.png" "$dir/dock.$m.png"
   done
   vs_ipc visual glyphs normal >/dev/null
-  # Drag: held for the four captures, then back on its slot and released (an unchanged order).
-  "$VS_ROOT/scripts/dev/pointer.sh" output "$VS_OUTPUT" abs $DOCK_X_FOOT $DOCK_Y sleep 300 down sleep 300 drag $DOCK_X_FOOT 900 \
-    sleep 14000 drag $DOCK_X_FOOT $DOCK_Y sleep 400 up sleep 300 abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null &
-  local pointer_pid=$!
-  vs_sleep 2
-  VS_SHOTS=$dir VS_NOPARK=1 VS_SETTLE=0.3 vs_capture dockdrag >/dev/null
-  mv "$dir/dockdrag.en.png" "$dir/dockdrag.png"
+  # Drag: held for the four captures, then back on its slot and released (an unchanged order). A press that the busy shell
+  # never turned into a drag shows no "Remove" label (checked by pixels in the label's place, which is empty in "dock"): the
+  # drag is then waited out and tried again, up to three times.
+  local pointer_pid try
+  for try in 1 2 3; do
+    "$VS_ROOT/scripts/dev/pointer.sh" output "$VS_OUTPUT" abs $DOCK_X_FOOT $DOCK_Y sleep 400 abs $((DOCK_X_FOOT + 2)) $DOCK_Y sleep 400 abs $DOCK_X_FOOT $DOCK_Y sleep 600 down sleep 300 drag $DOCK_X_FOOT 900 \
+      sleep 25000 drag $DOCK_X_FOOT $DOCK_Y sleep 400 up sleep 300 abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null &
+    pointer_pid=$!
+    vs_sleep 4
+    VS_NOPARK=1 snap_stable dockdrag 0.3
+    mv "$dir/dockdrag.en.png" "$dir/dockdrag.png"
+    magick "$dir/dock.png" -crop 120x50+870+830 +repage "$dir/label-ref.png"
+    magick "$dir/dockdrag.png" -crop 120x50+870+830 +repage "$dir/label-now.png"
+    if differs_q "$dir/label-ref.png" "$dir/label-now.png" 150; then rm -f "$dir/label-ref.png" "$dir/label-now.png"; break; fi
+    rm -f "$dir/label-ref.png" "$dir/label-now.png"
+    wait "$pointer_pid" || true
+  done
   for m in hidden white black; do
     vs_ipc visual glyphs "$m" >/dev/null
     VS_SHOTS=$dir VS_NOPARK=1 VS_SETTLE=0.3 vs_capture dockdrag >/dev/null

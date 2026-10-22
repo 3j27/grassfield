@@ -1069,6 +1069,8 @@ QtObject {
     readonly property int launcherLabelGap: 6
     // estimate: pill search field (Search uses a 48-pt field; F1 low confidence)
     readonly property int launcherSearchHeight: 36
+    // A2: dark appearance only. The search field is a darker inset (shadow colour) instead of a light fill, so the placeholder (textSecondary) keeps 4.5:1 on the lightened material (4.30:1 with the white fill over a white wallpaper at transparency 0.6); the light appearance keeps its dark fill
+    readonly property real launcherSearchInsetOpacity: 0.25
     // F1 reference: category chips about 23-24 tall
     readonly property int launcherChipHeight: 24
     // F1 reference: chip gap about 7.6
