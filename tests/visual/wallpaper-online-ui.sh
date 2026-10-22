@@ -71,8 +71,8 @@ vs_sleep 1
 vs_pointer abs 600 400 sleep 200 rclick >/dev/null
 vs_sleep 2
 vs_capture wallpaper-online-ui-3-menu
-about_x=${WPO_ABOUT_X:-640}
-about_y=${WPO_ABOUT_Y:-445}
+about_x=${WPO_ABOUT_X:-680}
+about_y=${WPO_ABOUT_Y:-500}
 vs_pointer abs "$((about_x + 10))" "$((about_y - 5))" sleep 300 abs "$((about_x + 12))" "$about_y" sleep 400 click >/dev/null
 vs_sleep 2
 vs_capture wallpaper-online-ui-4-about
