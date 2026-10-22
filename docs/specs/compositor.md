@@ -457,7 +457,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   goes, on unload); a later drag of a tiled window gives that size back under the pointer at the same relative place
   (like the un-zoom, `unzoomedDragBox`). `hl.plugin.grassfield.tile(address, place)` places a window the same way for
   the Window menu (Fill, Center, Move & Resize: halves, quarters) and the keys Super+Ctrl+arrows; place `previous`
-  returns to the remembered box (Return to Previous Size, Super+Ctrl+R). Untrusted: fixed-size strings, the address
+  returns to the remembered box (Return to Previous Size, Super+Ctrl+R; centred on the window's output now when the old box lies off every output). The output is the one under the window's middle (Hyprland's window monitor is not updated by the plugin's own drags, R13). A window moved or resized since its tiling is no longer tiled (its box is compared with the one the tiling gave it), so its next drag keeps its size. Untrusted: fixed-size strings, the address
   compared with live windows, the place from a fixed list.
 - **FR50** Settings (macOS Desktop & Dock > Windows, all on by default): `windows.tilingEdges` ("Drag windows to screen
   edges to tile"), `windows.tilingMenuBar` ("Drag windows to menu bar to fill screen"), `windows.tilingMargins` ("Tiled

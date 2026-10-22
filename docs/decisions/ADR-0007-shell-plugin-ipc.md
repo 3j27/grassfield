@@ -73,6 +73,12 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   burst, then 50/s; `overview` and `stages` have one key each (the latest state wins). Events are coalesced, never required one by one: the shell rebuilds minimize state from
   `movewindowv2` and can ask for a window's registration again with `appmenu(address)`. Client-triggerable log lines
   share one budget, titlebar pointer actions included.
+- Feature `window-tiling` and verb `tile(address, place)` (2026-10-22, additive, docs/specs/compositor.md FR47-FR50):
+  `place` ∈ left|right|top|bottom|top-left|top-right|bottom-left|bottom-right|fill|center|previous (fixed list, the
+  address compared with the live windows); the window is placed in the free area of the output under its middle.
+  `config` allowlist gains `tilingEdges`, `tilingMenuBar`, `tilingMargins` ∈ true|false (all true at load). The feature
+  is advertised only when the `tile` and `config` verbs registered. (Other verbs added since 2026-10-18 and not listed
+  above: `cursor_refresh()`, `overview_focus(json)`, `config("minimizeEffect", …)`; see their specs.)
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.

@@ -89,8 +89,9 @@ QtObject {
         spaces.push({separator: true});
         spaces.push({id: "moveToNew", space: ctx.newSpaceId, text: qsTr("New Desktop")});
 
-        // Window tiling (macOS 15+): Fill, Center and Move & Resize, placed by the compositor plugin (window-tiling).
-        const canTile = canAct && ctx.canTile === true && !ctx.fullscreen;
+        // Window tiling (macOS 15+): Fill, Center and Move & Resize, placed by the compositor plugin (window-tiling). The plugin
+        // places floating windows only: not in full screen, not zoomed (unzoom first, as macOS greys them for a zoomed window).
+        const canTile = canAct && ctx.canTile === true && !ctx.fullscreen && !ctx.maximized;
         const tile = (place, text, shortcut) => ({id: "tile", place: place, text: text, shortcut: shortcut, enabled: canTile});
         const tiling = ctx.canTile === true ? [
             tile("fill", qsTr("Fill"), ""),
