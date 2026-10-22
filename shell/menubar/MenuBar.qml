@@ -8,6 +8,7 @@ import Grassfield.Ui
 import qs.notifications
 import qs.platform
 import qs.services
+import "StatusLogic.js" as Logic
 
 // Top bar, one per screen. Left: Grassfield menu (leaf mark), the focused app name with its
 // application menu, then the app's own menus when it exports them (T1/T2 through MenuBridge) or the
@@ -15,6 +16,10 @@ import qs.services
 // Control Center, clock. Popups are rendered by qs.overlay through Popups.
 Scope {
     id: root
+
+    // The Search status item asks the shell to toggle Search (shell.qml owns it); `searchActive` lights the item while open.
+    property bool searchActive: false
+    signal searchRequested
 
     // Test and keyboard hook: qs ipc call menubar open <system|app|volume|network|battery|controlcenter> <output|"">.
     IpcHandler {
@@ -45,6 +50,17 @@ Scope {
         // Test hook (tests/visual/menubar-macos.sh): the open popup's kind and output, "" when none. Read-only.
         function openKind(): string {
             return Popups.active ? Popups.kind + "@" + Popups.screenName : "";
+        }
+
+        // Test hook (tests/visual/menubar-status.sh): JSON {menusRight, status: [{name, x, w}]} of the bar of `screen`.
+        function statusState(screen: string): string {
+            const all = bars.instances;
+            let bar = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    bar = all[i];
+            }
+            return bar ? JSON.stringify({menusRight: bar.menusRight(), status: bar.statusRects()}) : "{}";
         }
 
         // Test hook (tests/integration/global_menus.sh): JSON with the shown window, the bridge state, the bar's
@@ -165,6 +181,41 @@ Scope {
             readonly property color barTint: showBackground ? Appearance.colors.hover : barPalette.hover
             readonly property color barShadow: darkTone ? barPalette.materialHighlight : barPalette.shadow
             readonly property var battery: UPower.displayDevice
+            // Now Playing (macOS: "Show When Active"): while a player has a session (playing, or paused with a track).
+            readonly property bool showNowPlaying: Logic.nowPlayingShown(Settings.menubarShowNowPlaying, Media.available, Media.playing, Media.title)
+            // Crowding (macOS: status items that would collide with the menus are hidden): the status area gets the width
+            // between the application menus and the right inset; optional items (third-party, Now Playing, Search) give way
+            // leftmost first, never the system items, Quick Settings or the clock (StatusLogic.hiddenItems). Implicit widths
+            // only: a hidden item never changes the decision.
+            readonly property real statusIconWidth: Tokens.menubarIconSize + 2 * Tokens.menubarStatusItemPadding
+            readonly property var statusItems: {
+                const list = [];
+                const trays = TrayHost.items;
+                for (let i = 0; i < trays.length; i++)
+                    list.push({key: "tray" + i, width: statusIconWidth, optional: true});
+                if (showNowPlaying)
+                    list.push({key: "nowplaying", width: statusIconWidth, optional: true});
+                list.push({key: "system", width: (Notifications.dnd ? dndButton.implicitWidth : 0) + networkButton.implicitWidth + volumeButton.implicitWidth + (hasBattery ? batteryButton.implicitWidth : 0), optional: false});
+                if (Settings.menubarShowSearch)
+                    list.push({key: "search", width: statusIconWidth, optional: true});
+                list.push({key: "core", width: ccButton.implicitWidth + clockButton.implicitWidth, optional: false});
+                return list;
+            }
+            // Width of the status items that never give way (system items, Quick Settings, clock).
+            readonly property real statusMandatoryWidth: {
+                let sum = 0;
+                for (let i = 0; i < statusItems.length; i++) {
+                    if (!statusItems[i].optional)
+                        sum += statusItems[i].width;
+                }
+                return sum;
+            }
+            // Room for the application name: the bar minus the insets, the fixed titles and the mandatory status items.
+            readonly property real appTitleMax: Math.max(0, win.width - (Tokens.menubarInsetLeft - Tokens.menubarItemPadding) - (Tokens.menubarInsetRight - Tokens.menubarItemPadding)
+                - systemButton.implicitWidth - (hasFileMenu ? fileButton.implicitWidth : 0) - (hasApp ? windowButton.implicitWidth : 0)
+                - 2 * Tokens.menubarItemPadding - statusMandatoryWidth - 2 * Tokens.menubarItemPadding)
+            readonly property real statusAvailable: win.width - (Tokens.menubarInsetRight - Tokens.menubarItemPadding) - (leftRow.x + leftRow.width) - Tokens.menubarItemPadding
+            readonly property var hiddenStatus: Logic.hiddenItems(statusAvailable, statusItems, 0)
             readonly property bool hasBattery: !VisualFixtures.active && battery !== null && battery.isPresent && battery.isLaptopBattery
 
             // SingleMainWindow of the app's desktop entry decides whether File has New Window.
@@ -202,13 +253,19 @@ Scope {
                     Qt.callLater(Popups.close);
             }
 
+            // The Now Playing item went away (player closed, switched off in Settings): its open popover would act on nothing.
+            onShowNowPlayingChanged: {
+                if (!showNowPlaying && isOpen("nowplaying"))
+                    Qt.callLater(Popups.close);
+            }
+
             function isOpen(kind: string): bool {
                 return Popups.kind === kind && Popups.screenName === win.screen.name;
             }
 
             // macOS menu tracking: while one of this bar's menus is open, moving onto another title or status item opens
             // its menu without a click. The clock (Notification Center) and the Do Not Disturb indicator are not menus.
-            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter"]
+            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying"]
             readonly property bool tracking: Popups.active && Popups.screenName === win.screen.name && trackedKinds.indexOf(Popups.kind) >= 0
 
             function hoverSwitch(kind: string): void {
@@ -219,6 +276,21 @@ Scope {
             function hoverSwitchBridge(button: Item, menu: var): void {
                 if (win.tracking && !(Popups.kind === "appbridge" && Popups.data.dbusId === menu.dbusId))
                     win.openBridge(button, menu);
+            }
+
+            function hoverSwitchTray(button: Item, item: var): void {
+                if (item && win.tracking && !(Popups.kind === "tray" && Popups.data.item === item))
+                    win.openTray(button, item);
+            }
+
+            // Opens (or closes, if it is open) a status item's own menu, aligned to the right edge of its button.
+            function openTray(button: Item, item: var): void {
+                if (isOpen("tray") && Popups.data.item === item) {
+                    Popups.close();
+                    return;
+                }
+                const x = button.mapToItem(null, button.width, 0).x;
+                Popups.open("tray", win.screen.name, x, Tokens.menubarHeight, "right", {item: item});
             }
 
             // Left titles that open a menu, in bar order: [{kind, button, menu}] (menu: the bridge entry, else null).
@@ -295,11 +367,15 @@ Scope {
                     b.entered();
             }
 
-            function pressAt(x: real): void {
+            function pressAt(x: real, button: string): void {
                 const b = win.buttonAt(x);
                 if (!b || !b.opensMenu)
                     Popups.close();
-                if (b)
+                if (!b)
+                    return;
+                if (button === "right" || button === "middle")
+                    b.auxPressed(button);
+                else
                     b.activated();
             }
 
@@ -341,6 +417,24 @@ Scope {
                 return out;
             }
 
+            // Visible status buttons in output coordinates (test hook): [{name, x, w}] left to right, and the right edge of the
+            // application menus (`menusRight`), to check that the two never overlap.
+            function statusRects(): var {
+                const out = [];
+                const kids = rightRow.children;
+                for (let i = 0; i < kids.length; i++) {
+                    const k = kids[i] as BarButton;
+                    if (!k || !k.visible)
+                        continue;
+                    out.push({name: k.accessibleName, x: Math.round(k.mapToItem(null, 0, 0).x), w: Math.round(k.width)});
+                }
+                return out;
+            }
+
+            function menusRight(): real {
+                return Math.round(leftRow.mapToItem(null, leftRow.width, 0).x);
+            }
+
             function popup(kind: string): void {
                 switch (kind) {
                 case "system":
@@ -367,6 +461,10 @@ Scope {
                     break;
                 case "controlcenter":
                     openFor("controlcenter", ccButton, "right", {});
+                    break;
+                case "nowplaying":
+                    if (win.showNowPlaying)
+                        openFor("nowplaying", nowPlayingButton, "right", {});
                     break;
                 }
             }
@@ -484,6 +582,8 @@ Scope {
                                 font.pixelSize: Tokens.typographyMenuSize
                                 font.weight: Tokens.typographyMenuBoldWeight
                                 elide: Text.ElideRight
+                                // A name too long for the room the always-present status items leave is elided.
+                                width: Math.min(implicitWidth, win.appTitleMax)
                             }
                         }
 
@@ -573,6 +673,45 @@ Scope {
                         }
                         spacing: 0
 
+                        // Third-party status items (StatusNotifierItem), leftmost: macOS keeps them left of the system's.
+                        Repeater {
+                            model: TrayHost.items
+
+                            delegate: TrayButton {
+                                required property var modelData
+                                required property int index
+
+                                item: modelData
+                                visible: !win.hiddenStatus["tray" + index]
+                                bar: win
+                                tint: win.barTint
+                                shadowed: !win.showBackground
+                                shadowColor: win.barShadow
+                            }
+                        }
+
+                        // Now Playing: the active player's controls, while it has a session.
+                        BarButton {
+                            id: nowPlayingButton
+                            objectName: "menubar-nowplaying"
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            shadowColor: win.barShadow
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: win.showNowPlaying && !win.hiddenStatus.nowplaying
+                            accessibleName: Media.title !== "" ? qsTr("Now Playing: %1").arg(Media.title) : qsTr("Now Playing")
+                            active: win.isOpen("nowplaying")
+                            onActivated: win.popup("nowplaying")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("nowplaying")
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: "now-playing"
+                            }
+                        }
+
                         // Do Not Disturb indicator; click turns it off.
                         BarButton {
                             id: dndButton
@@ -656,6 +795,26 @@ Scope {
                                 font.family: Appearance.fontFamily
                                 font.pixelSize: Tokens.typographyMenuSize
                                 font.weight: Tokens.typographyMenuWeight
+                            }
+                        }
+
+                        // Search (macOS shows the Spotlight magnifier by default): toggles Search, not a menu.
+                        BarButton {
+                            id: searchButton
+                            objectName: "menubar-search"
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            shadowColor: win.barShadow
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: Settings.menubarShowSearch && !win.hiddenStatus.search
+                            accessibleName: qsTr("Search")
+                            active: root.searchActive
+                            onActivated: root.searchRequested()
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: "search"
                             }
                         }
 

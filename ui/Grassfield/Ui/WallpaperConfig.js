@@ -5,7 +5,9 @@
 // Registered as WallpaperConfig in qmldir (the shell has its own Wallpaper type). Untrusted input: every value read from
 // grassfield.json goes through normalize(); an invalid field reads as its default, never as an error.
 
-const SOURCES = ["builtin", "color", "file", "folder", "video"];
+const SOURCES = ["builtin", "color", "file", "folder", "video", "online"];
+// Online daily pictures (ADR-0016 step 2). One provider today; a second one is a new name here and a new `fetch` subcommand.
+const ONLINE_PROVIDERS = ["commons"];
 const FITS = ["fill", "fit", "stretch", "center", "tile"];
 // Interval name to milliseconds ("login" changes the picture once, at shell start: 0 means no timer).
 const INTERVALS = {"login": 0, "5s": 5000, "1m": 60000, "5m": 300000, "15m": 900000, "30m": 1800000, "1h": 3600000, "1d": 86400000};
@@ -25,11 +27,12 @@ const WALLPAPER_DEFAULTS = {
     interval: "1h",
     shuffle: true,
     videoOnBattery: false,
+    online: {provider: "commons"},
     outputs: []
 };
 
 // Helper exit codes (apps/wallpaper-tool) and the failure each one means (ids; the UI translates them).
-const EXIT = {OK: 0, USAGE: 2, NOT_FOUND: 3, NOT_REGULAR: 4, TOO_LARGE_FILE: 5, TOO_LARGE_PICTURE: 6, UNREADABLE: 7, UNSUPPORTED: 8, TIMEOUT: 9, WRITE: 10, MISSING: 127};
+const EXIT = {OK: 0, USAGE: 2, NOT_FOUND: 3, NOT_REGULAR: 4, TOO_LARGE_FILE: 5, TOO_LARGE_PICTURE: 6, UNREADABLE: 7, UNSUPPORTED: 8, TIMEOUT: 9, WRITE: 10, NETWORK: 11, SKIPPED: 12, BAD_RESPONSE: 13, MISSING: 127};
 const REASONS = {
     3: "not-found",
     4: "not-regular",
@@ -39,6 +42,9 @@ const REASONS = {
     8: "unsupported",
     9: "timeout",
     10: "write",
+    11: "network",
+    12: "skipped",
+    13: "bad-response",
     127: "helper-missing"
 };
 
@@ -240,6 +246,7 @@ function normalize(raw) {
         interval: oneOf(INTERVAL_NAMES, r.interval) ? r.interval : WALLPAPER_DEFAULTS.interval,
         shuffle: typeof r.shuffle === "boolean" ? r.shuffle : WALLPAPER_DEFAULTS.shuffle,
         videoOnBattery: typeof r.videoOnBattery === "boolean" ? r.videoOnBattery : WALLPAPER_DEFAULTS.videoOnBattery,
+        online: {provider: isPlainObject(r.online) && oneOf(ONLINE_PROVIDERS, r.online.provider) ? r.online.provider : WALLPAPER_DEFAULTS.online.provider},
         outputs: normalizeOutputs(r.outputs)
     };
     return settle(out);
@@ -266,7 +273,8 @@ function resolve(cfg, display) {
         fit: base.fit,
         interval: base.interval,
         shuffle: base.shuffle,
-        videoOnBattery: base.videoOnBattery
+        videoOnBattery: base.videoOnBattery,
+        provider: base.online.provider
     };
     for (const entry of base.outputs) {
         if (!sameDisplay(entry.display, display))
@@ -386,6 +394,128 @@ function keepPicture(state, intervalMs, now, loginKey, files, bad) {
     if (intervalMs > 0)
         return now - (typeof state.changedAt === "number" ? state.changedAt : 0) < intervalMs ? state.last : "";
     return loginKey !== "" && state.loginKey === loginKey ? state.last : "";
+}
+
+// ---- online daily pictures: when to fetch (ADR-0016 step 2, pure; the shell service only runs what this decides) ----
+
+const MINUTE_MS = 60000;
+const HOUR_MS = 3600000;
+const DAY_MS = 86400000;
+// The POTD of a UTC date is final shortly after midnight UTC: nothing is asked before 00:10 UTC.
+const ONLINE_AFTER_MIDNIGHT_MS = 10 * MINUTE_MS;
+// The fetch of a day happens at a random time in this window after 00:10 UTC (spreads the load; no fixed instant).
+const ONLINE_WINDOW_MS = 6 * HOUR_MS;
+// Wait after the first and the second failure of a day; a third failure waits for the next day.
+const ONLINE_BACKOFF_MS = [HOUR_MS, 3 * HOUR_MS];
+const ONLINE_MAX_FAILURES = 3;
+
+function pad2(n) {
+    return (n < 10 ? "0" : "") + n;
+}
+
+// "YYYY-MM-DD" (UTC) of a timestamp.
+function utcDate(ms) {
+    const d = new Date(ms);
+    return d.getUTCFullYear() + "-" + pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate());
+}
+
+// Milliseconds at 00:00 UTC of a "YYYY-MM-DD" date, NaN when it is not one.
+function utcDayStart(date) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof date === "string" ? date : "");
+    if (!m)
+        return NaN;
+    const t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+    return utcDate(t) === date ? t : NaN;
+}
+
+// The POTD date that applies at `ms`: the UTC date of ten minutes ago (the day flips at 00:10 UTC).
+function onlineDate(ms) {
+    return utcDate(ms - ONLINE_AFTER_MIDNIGHT_MS);
+}
+
+// The persisted scheduler state ({done, failures, failDate, retryAt, slotDate, slotAt}) from anything: a bad field reads as unset.
+function onlineStateOf(raw) {
+    const r = isPlainObject(raw) ? raw : {};
+    const num = v => typeof v === "number" && isFinite(v) && v >= 0 ? v : 0;
+    return {
+        done: !isNaN(utcDayStart(r.done)) ? r.done : "",
+        failures: Math.min(ONLINE_MAX_FAILURES, Math.floor(num(r.failures))),
+        failDate: !isNaN(utcDayStart(r.failDate)) ? r.failDate : "",
+        retryAt: num(r.retryAt),
+        slotDate: !isNaN(utcDayStart(r.slotDate)) ? r.slotDate : "",
+        slotAt: num(r.slotAt)
+    };
+}
+
+// What to do at `now` (ms): {date, due, at, state}. `date` is the picture to fetch, `due` says "fetch now", `at` is when to look
+// again (ms; only a bound: any event re-evaluates), `state` is the state with today's random slot filled in (persist it).
+// `cached` is true when a picture is already on disk (nothing cached: no waiting for the day's slot, the first fetch is at once).
+// `rand` is a number in [0, 1) for the slot, passed in so that the tests are exact.
+function onlineSchedule(rawState, now, cached, rand) {
+    const st = onlineStateOf(rawState);
+    const date = onlineDate(now);
+    const dayStart = utcDayStart(date);
+    const tomorrow = dayStart + DAY_MS + ONLINE_AFTER_MIDNIGHT_MS;
+    if (st.done === date)
+        return {date: date, due: false, at: tomorrow, state: st};
+    if (st.slotDate !== date) {
+        st.slotDate = date;
+        st.slotAt = dayStart + ONLINE_AFTER_MIDNIGHT_MS + Math.floor(Math.max(0, Math.min(0.999999, rand)) * ONLINE_WINDOW_MS);
+    }
+    const failures = st.failDate === date ? st.failures : 0;
+    if (failures >= ONLINE_MAX_FAILURES)
+        return {date: date, due: false, at: tomorrow, state: st};
+    let at = cached ? st.slotAt : Math.min(st.slotAt, now);
+    if (failures > 0)
+        at = Math.max(at, st.retryAt);
+    return {date: date, due: now >= at, at: at, state: st};
+}
+
+// The state after a fetch: "ok" and "skipped" (today's entry cannot be used: not retried today) finish the day; any other
+// outcome is a failure with the next wait (1 h, then 3 h, then the next day).
+function onlineAfter(rawState, now, date, outcome) {
+    const st = onlineStateOf(rawState);
+    if (outcome === "ok" || outcome === "skipped") {
+        st.done = date;
+        st.failures = 0;
+        st.failDate = "";
+        st.retryAt = 0;
+        return st;
+    }
+    const before = st.failDate === date ? st.failures : 0;
+    st.failDate = date;
+    st.failures = Math.min(ONLINE_MAX_FAILURES, before + 1);
+    st.retryAt = before < ONLINE_BACKOFF_MS.length ? now + ONLINE_BACKOFF_MS[before] : 0;
+    return st;
+}
+
+// True when an online source applies to some display (the top level or an override), so the shell has to keep the picture.
+function onlineWanted(cfg) {
+    const base = normalize(cfg);
+    if (base.source === "online")
+        return true;
+    return base.outputs.some(e => e.source === "online");
+}
+
+// Failure ids of `fetch` that end the day without a retry (the entry itself cannot be used).
+function onlineSkips(exitCode) {
+    return exitCode === EXIT.TOO_LARGE_FILE || exitCode === EXIT.TOO_LARGE_PICTURE || exitCode === EXIT.UNSUPPORTED || exitCode === EXIT.SKIPPED;
+}
+
+// Argument vectors (no shell) for the helper. `baseUrl` is only passed in a dev session, for the loopback test server.
+function fetchArgs(helper, provider, date, outDir, lang, baseUrl) {
+    if (!oneOf(ONLINE_PROVIDERS, provider) || !validPath(outDir) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || (lang !== "en" && lang !== "fr"))
+        return null;
+    const args = [helper, "fetch", provider, "--date", date, "--out", outDir, "--lang", lang];
+    if (baseUrl)
+        args.push("--base-url", baseUrl);
+    return args;
+}
+
+function latestArgs(helper, provider, outDir) {
+    if (!oneOf(ONLINE_PROVIDERS, provider) || !validPath(outDir))
+        return null;
+    return [helper, "latest", provider, "--out", outDir];
 }
 
 // ---- video pause policy (ADR-0016 section 5; pure, evaluated on every event, never polled) ----
@@ -530,4 +660,32 @@ function picturesRoot(env) {
     if (env.dev)
         return env.picturesDir ? env.picturesDir : env.repoRoot + "/.dev/wallpapers";
     return env.picturesDir ? env.picturesDir : env.home + "/Pictures";
+}
+
+// ---- the attribution's links (CC BY 4.0 section 3(a)(1)(C) wants the licence name with its URI or a link) ----
+
+// Characters that draw nothing or reorder text: controls, soft hyphen, fillers, bidi, zero-width, variation selectors, specials.
+const HIDDEN = /[\u0000-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u2028-\u202e\u2060-\u206f\u2800\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffd]/;
+
+// The address a link may open: https, no white space and no hidden character, at most 2048 characters; "" otherwise. The helper
+// already refuses anything else; this is the second check at the point where the address becomes a command argument.
+function linkOf(url) {
+    if (typeof url !== "string" || url.length === 0 || url.length > 2048)
+        return "";
+    if (!/^https:\/\/[^\s\/]+/.test(url) || /\s/.test(url) || HIDDEN.test(url))
+        return "";
+    return url;
+}
+
+// An address for reading: no scheme, percent-escapes decoded ("File%3AX%20y.jpg" reads "File:X y.jpg"). When decoding fails or
+// would produce a hidden or reordering character (%0A, %E2%80%AE), the address stays as it was written.
+function displayUrl(url) {
+    const bare = (typeof url === "string" ? url : "").replace(/^https?:\/\//, "");
+    let decoded = bare;
+    try {
+        decoded = decodeURIComponent(bare);
+    } catch (e) {
+        return bare;
+    }
+    return HIDDEN.test(decoded) ? bare : decoded;
 }

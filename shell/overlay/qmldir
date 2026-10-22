@@ -8,6 +8,8 @@ AppAboutPanel 1.0 AppAboutPanel.qml
 ForceQuitPanel 1.0 ForceQuitPanel.qml
 SystemMenu 1.0 SystemMenu.qml
 AppMenu 1.0 AppMenu.qml
+TrayMenu 1.0 TrayMenu.qml
+NowPlayingPopover 1.0 NowPlayingPopover.qml
 VolumeMenu 1.0 VolumeMenu.qml
 NetworkMenu 1.0 NetworkMenu.qml
 BatteryMenu 1.0 BatteryMenu.qml

@@ -11,7 +11,8 @@ import Grassfield.Ui
 //   - The carousel position per display ($XDG_STATE_HOME/grassfield/wallpaper.json, runtime state, safe to delete):
 //     {"displays": {<key>: {seed, index, last, avoid, changedAt}}}, written atomically a short while after a change.
 //   - The status per output ($XDG_CONFIG_HOME/grassfield/wallpaper-state.json, read by the Settings app):
-//     {"outputs": {<name>: {state, reason, source, path, name, files}}}; state is builtin | color | preparing | ready | error.
+//     {"outputs": {<name>: {state, reason, source, path, name, files}}, "online": {...}}; state is builtin | color | preparing |
+//     ready | error | waiting (the online source with nothing cached yet).
 Singleton {
     id: root
 
@@ -41,6 +42,9 @@ Singleton {
 
     // {output name: {state, reason, source, path, name, files, file}} as reported by the feeds.
     property var outputs: ({})
+    // The online daily picture (WallpaperOnline): {phase, provider, failure, entry: {date, title, author, credit, caption,
+    // licenseShort, licenseUrl, sourceUrl, fetchedAt, file} | null}; {} before it reports. Written with the outputs for Settings.
+    property var online: ({})
     // The loaded carousel state: {displays: {...}}.
     property var saved: ({displays: {}})
     // The carousel state has been read (or does not exist yet): feeds wait for it before choosing a picture.
@@ -51,6 +55,17 @@ Singleton {
         next[output] = info;
         outputs = next;
         statusTimer.restart();
+    }
+
+    function reportOnline(info: var): void {
+        online = info;
+        statusTimer.restart();
+    }
+
+    // True while the picture of an output is the online daily one (the desktop menu's "About This Wallpaper").
+    function onlineShown(output: string): bool {
+        const o = outputs[output];
+        return !!o && o.source === "online" && o.state === "ready" && !!online.entry;
     }
 
     // The prepared picture of an output (for the lock screen's still), "" when the artwork or a colour is shown.
@@ -89,7 +104,7 @@ Singleton {
     Timer {
         id: statusTimer
         interval: Tokens.wallpaperStateWriteMs
-        onTriggered: statusWriter.setText(JSON.stringify({outputs: root.outputs}, null, 2) + "\n")
+        onTriggered: statusWriter.setText(JSON.stringify({outputs: root.outputs, online: root.online}, null, 2) + "\n")
     }
 
     Timer {

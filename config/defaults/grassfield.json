@@ -45,7 +45,9 @@
     "showIcons": true
   },
   "menubar": {
-    "showBackground": false
+    "showBackground": false,
+    "showNowPlaying": true,
+    "showSearch": true
   },
   "accent": {
     "color": "multicolor"
@@ -68,6 +70,9 @@
     "interval": "1h",
     "shuffle": true,
     "videoOnBattery": false,
+    "online": {
+      "provider": "commons"
+    },
     "outputs": []
   }
 }

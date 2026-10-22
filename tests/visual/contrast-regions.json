@@ -4,7 +4,7 @@
   "desktop": [
    {"name": "menubar app name", "box": [40, 5, 60, 14], "kind": "text"},
    {"name": "menubar clock", "box": [1795, 5, 115, 14], "kind": "text"},
-   {"name": "menubar status icons", "box": [1700, 4, 82, 16], "kind": "icon"},
+   {"name": "menubar status icons", "box": [1650, 4, 120, 16], "kind": "icon"},
    {"name": "icon label Archive.zip", "box": [1820, 122, 80, 13], "kind": "text"},
    {"name": "icon label Notes.txt", "box": [1820, 236, 80, 13], "kind": "text"},
    {"name": "icon label Projects", "box": [1820, 348, 80, 13], "kind": "text"},

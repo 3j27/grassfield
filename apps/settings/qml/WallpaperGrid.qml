@@ -5,7 +5,7 @@ import Grassfield.Ui
 // Grid of 16:10 wallpaper tiles (Settings > Wallpaper, ADR-0016). One focus stop: arrows, Home and End move, Return or
 // Space applies (the IconModePicker pattern). model: [{label, kind, color, thumb, selected}] with kind "art" (the
 // Grassfield artwork), "color", "image" (thumb is a file path, "" while it is prepared), "folder" or "add" (a button-like
-// tile). The tiles are radio buttons for assistive technology, named after the picture. Names are untrusted: plain text.
+// tile). `wrap: true` lets a long label take three lines (the online tile) instead of eliding in the middle. The tiles are radio buttons for assistive technology, named after the picture. Names are untrusted: plain text.
 Item {
     id: root
 
@@ -19,7 +19,9 @@ Item {
     readonly property int gap: Tokens.settingsWallpaperTileGap
     readonly property real tileWidth: Math.max(1, (width - (columns - 1) * gap) / columns)
     readonly property real tileHeight: tileWidth * 10 / 16
-    readonly property real labelHeight: Tokens.typographyCaptionSize * 2 + Tokens.spacingXs
+    // Two lines of label, three when a tile asks to wrap (the online tile's name is long and the tiles are narrow).
+    readonly property int labelLines: root.model.some(m => m.wrap === true) ? 3 : 2
+    readonly property real labelHeight: Tokens.typographyCaptionSize * labelLines + Tokens.spacingXs
     readonly property int rows: Math.ceil(root.model.length / columns)
 
     implicitHeight: rows * (tileHeight + labelHeight) + Math.max(0, rows - 1) * gap
@@ -147,8 +149,9 @@ Item {
                 width: parent.width
                 textFormat: Text.PlainText
                 text: tile.modelData.label
-                elide: Text.ElideMiddle
-                maximumLineCount: 1
+                elide: tile.modelData.wrap === true ? Text.ElideRight : Text.ElideMiddle
+                wrapMode: tile.modelData.wrap === true ? Text.Wrap : Text.NoWrap
+                maximumLineCount: tile.modelData.wrap === true ? 3 : 1
                 horizontalAlignment: Text.AlignHCenter
                 color: tile.modelData.selected === true ? Appearance.colors.text : Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily

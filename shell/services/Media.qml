@@ -16,15 +16,19 @@ Singleton {
         }
         return players.length > 0 ? players[0] : null;
     }
-    // No player in the visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES).
-    readonly property bool available: !VisualFixtures.active && player !== null
+    // The nested dev session runs on its own bus (GRASSFIELD_PRIVATE_BUS=1): the owner's players are not on it, only a
+    // test player the test starts there.
+    readonly property bool privateBus: Quickshell.env("GRASSFIELD_PRIVATE_BUS") === "1"
+    // No player in the visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES), unless the bus is private.
+    readonly property bool available: (!VisualFixtures.active || privateBus) && player !== null
     readonly property string title: available ? player.trackTitle : ""
     readonly property string artist: available ? player.trackArtist : ""
     readonly property string artUrl: available ? player.trackArtUrl : ""
     readonly property bool playing: available && player.isPlaying
 
-    // A GRASSFIELD_DEV session runs on the owner's machine: the transport never drives the real player there.
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    // A GRASSFIELD_DEV session runs on the owner's machine: the transport never drives the real player there. On the
+    // private bus only a test player can answer, so the transport is live there.
+    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1" && !privateBus
 
     function devGuarded(what: string): bool {
         if (devSession)

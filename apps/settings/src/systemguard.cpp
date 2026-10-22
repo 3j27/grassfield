@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QList>
 #include <QRegularExpression>
+#include <QUrl>
 
 namespace grassfield::settings {
 
@@ -147,7 +148,26 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 
 bool isActionProgram(const QString &program)
 {
-    return program == QLatin1String("nmcli") || program == QLatin1String("bluetoothctl") || program == QLatin1String("wpctl");
+    return program == QLatin1String("nmcli") || program == QLatin1String("bluetoothctl") || program == QLatin1String("wpctl") || program == QLatin1String("xdg-open");
+}
+
+bool isAllowedAction(const QStringList &argv)
+{
+    if (argv.isEmpty() || !isActionProgram(argv.first()))
+        return false;
+    if (argv.first() != QLatin1String("xdg-open"))
+        return true;
+    if (argv.size() != 2)
+        return false;
+    const QString &link = argv.at(1);
+    if (link.startsWith(QLatin1Char('-')))
+        return false;
+    for (const QChar c : link) {
+        if (c.isSpace() || c.category() == QChar::Other_Control || c.category() == QChar::Other_Format)
+            return false;
+    }
+    const QUrl url(link, QUrl::StrictMode);
+    return url.isValid() && url.scheme() == QLatin1String("https") && !url.host().isEmpty() && url.userInfo().isEmpty();
 }
 
 } // namespace grassfield::settings

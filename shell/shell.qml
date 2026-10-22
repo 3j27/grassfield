@@ -166,7 +166,10 @@ ShellRoot {
     HotCorners {}
     DesktopIcons {}
     DesktopWidgets {}
-    MenuBar {}
+    MenuBar {
+        searchActive: searchSurface.open
+        onSearchRequested: searchSurface.toggle()
+    }
     Dock {
         onAppsRequested: appsSurface.toggle()
     }

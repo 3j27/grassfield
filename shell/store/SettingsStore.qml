@@ -65,6 +65,7 @@ Scope {
         interval: config.wallpaper.interval,
         shuffle: config.wallpaper.shuffle,
         videoOnBattery: config.wallpaper.videoOnBattery,
+        online: config.wallpaper.online,
         outputs: config.wallpaper.outputs
     })
     readonly property int lockIdleMinutes: Math.round(clampNumber(config.lock.idleMinutes, 0, 240, 5))
@@ -148,6 +149,10 @@ Scope {
     component MenubarConfig: JsonObject {
         // false: the bar is transparent like macOS 26/27; true restores the frosted material band.
         property bool showBackground: false
+        // Now Playing item of the bar (Settings > Desktop & Dock > Menu Bar): shown while a player has a session.
+        property bool showNowPlaying: true
+        // Search item (magnifier) of the bar.
+        property bool showSearch: true
     }
 
     component AccentConfig: JsonObject {
@@ -183,6 +188,8 @@ Scope {
         property var interval: "1h"
         property var shuffle: true
         property var videoOnBattery: false
+        // {provider}: a var too, a hand-edited file may hold anything (WallpaperConfig.normalize decides).
+        property var online: ({provider: "commons"})
         property var outputs: []
     }
 
@@ -420,6 +427,8 @@ Scope {
             config.wallpaper.shuffle = d.shuffle;
         if (!("videoOnBattery" in wp))
             config.wallpaper.videoOnBattery = d.videoOnBattery;
+        if (!("online" in wp))
+            config.wallpaper.online = {provider: d.online.provider};
         if (!("outputs" in wp))
             config.wallpaper.outputs = [];
     }
