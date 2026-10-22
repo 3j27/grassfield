@@ -539,6 +539,7 @@ Scope {
                 selected: root.selected,
                 chips: root.chips,
                 filter: root.filter,
+                zone: root.zone,
                 groups: root.groups.map(g => ({id: g.id, title: g.title, items: g.items.map(i => ({kind: i.kind, title: i.title, subtitle: i.subtitle}))}))
             });
         }

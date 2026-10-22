@@ -42,9 +42,18 @@ case $surface in
       vs_ipc search open "e" >/dev/null
       vs_sleep 2
       shot "search-$tag-$ap-chips"
-      vs_ipc search filter apps >/dev/null
+      # Keyboard: Tab through the groups until the ring reaches the chips, then Right to the second chip.
+      for try in 1 2 3 4 5 6; do
+        [[ $(vs_ipc search status) == *'"zone":"chips"'* ]] && break
+        "$VS_ROOT/scripts/dev/keys.sh" -k Tab >/dev/null
+        vs_sleep 0.5
+      done
+      "$VS_ROOT/scripts/dev/keys.sh" -k Right >/dev/null
       vs_sleep 1
-      shot "search-$tag-$ap-filtered"
+      shot "search-$tag-$ap-chipfocus"
+      "$VS_ROOT/scripts/dev/keys.sh" -k space >/dev/null
+      vs_sleep 1
+      shot "search-$tag-$ap-chipspace"
       vs_ipc search close >/dev/null
       vs_ipc search open zzqqxx >/dev/null
       vs_sleep 2.5
