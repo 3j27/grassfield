@@ -61,7 +61,9 @@ ListView {
         Accessible.role: Accessible.Button
         Accessible.name: ctl.text
         Accessible.focusable: true
-        Accessible.onPressAction: ctl.clicked()
+        // The same guard as its keys below (R12): never a hidden control, a disabled one, or one whose card is leaving.
+        Accessible.onPressAction: if (ctl.visible && ctl.enabled && (!ctl.gate || ctl.gate()))
+            ctl.clicked()
         Keys.onPressed: event => {
             // A hidden control, or one of a card that left the rows in this very turn, never acts, whatever still holds the focus;
             // its activation keys are swallowed (they would otherwise bubble up to the card and act there) and the resolver is

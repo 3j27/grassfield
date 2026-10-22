@@ -31,7 +31,9 @@ Item {
     Accessible.checkable: root.checkable
     Accessible.checked: root.checked
     Accessible.focusable: true
-    Accessible.onPressAction: root.clicked()
+    // An assistive technology's press (AT-SPI) acts only like the pointer and the keys would: never hidden or disabled (R12).
+    Accessible.onPressAction: if (root.visible && root.enabled)
+        root.clicked()
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {

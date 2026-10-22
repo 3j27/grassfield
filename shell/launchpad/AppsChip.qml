@@ -18,7 +18,9 @@ Item {
     Accessible.name: label
     Accessible.checked: active
     Accessible.focused: focused
-    Accessible.onPressAction: root.clicked()
+    // An assistive technology's press (AT-SPI) acts only like the pointer and the keys would: never hidden or disabled (R12).
+    Accessible.onPressAction: if (root.visible && root.enabled)
+        root.clicked()
 
     Rectangle {
         anchors.fill: parent

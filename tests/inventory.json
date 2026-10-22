@@ -27,6 +27,7 @@
  {"path": "tests/compositor/titlebar_geometry.sh", "reason": "helper sourced by the compositor scenarios (titlebar metrics from Theme.hpp)"}
 ],
 "tests": [
+ {"path": "tests/unit/tst_a11ypress.qml", "layer": "headless"},
  {"path": "tests/unit/tst_accent.qml", "layer": "headless"},
  {"path": "tests/unit/tst_applaunch.qml", "layer": "headless"},
  {"path": "tests/unit/tst_appmenumodel.qml", "layer": "headless"},

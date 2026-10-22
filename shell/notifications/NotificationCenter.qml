@@ -127,10 +127,13 @@ Variants {
             Accessible.role: Accessible.Button
             Accessible.name: pill.text
             Accessible.focusable: true
-            Accessible.onPressAction: pill.clicked()
+            // Accessibility press and keys act only while the pill is shown and enabled (R12).
+            Accessible.onPressAction: if (pill.visible && pill.enabled)
+                pill.clicked()
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    pill.clicked();
+                    if (pill.visible && pill.enabled)
+                        pill.clicked();
                     event.accepted = true;
                 }
             }
