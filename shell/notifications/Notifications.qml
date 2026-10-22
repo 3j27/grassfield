@@ -189,6 +189,16 @@ Singleton {
         return key;
     }
 
+    // The desktop's Edit Widgets… (macOS model): the Center opens straight on its widget gallery. The Center's column
+    // takes the request (galleryWanted) when it is created, or at once when it is already open.
+    property bool galleryWanted: false
+
+    function openWidgetGallery(screen: string): void {
+        galleryWanted = true;
+        if (!centerOpen)
+            toggleCenter(screen);
+    }
+
     function toggleCenter(screen: string): void {
         if (centerOpen) {
             closeCenter();

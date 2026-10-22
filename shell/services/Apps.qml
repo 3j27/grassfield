@@ -466,6 +466,24 @@ Singleton {
         return AppLaunch.mergeEnvironment(devSession ? AppLaunch.isolatedEnvironment(appsHome) : ({}), Pointer.launchEnvironment());
     }
 
+    // Open With (desktop menu): the shown apps that can open every one of `paths` (`resolved`: path -> real type, from
+    // dock/file-types.sh), by name, with `first` (the default handler's entry id) leading. One row per app name.
+    function appsFor(paths: var, resolved: var, first: string): var {
+        const out = [];
+        const seen = {};
+        for (const id of Object.keys(mimeData.entries)) {
+            const entry = lookup(id);
+            if (!entry || entry.noDisplay || seen[entry.name] || !DockModel.acceptsFiles(entry, paths, mimeData, resolved))
+                continue;
+            seen[entry.name] = true;
+            out.push({
+                id: id,
+                name: entry.name
+            });
+        }
+        return out.sort((a, b) => (b.id === first) - (a.id === first) || a.name.localeCompare(b.name));
+    }
+
     function nameFor(appId: string): string {
         const entry = lookup(appId);
         return entry ? entry.name : appId;

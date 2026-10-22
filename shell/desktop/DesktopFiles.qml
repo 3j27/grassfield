@@ -7,6 +7,7 @@ import Grassfield.Ui
 import qs.services
 import qs.store
 import "IconsLogic.js" as Logic
+import "../dock/DockModel.js" as DockModel
 
 // The desktop folder as a model (one instance, owned by DesktopIcons), the persisted icon slots, and every file operation of the desktop
 // icons (docs/specs/desktop.md). Nothing here touches a file unless a function below is called by an
@@ -196,6 +197,204 @@ Scope {
         if (paths.length === 0)
             return;
         run(["wl-copy", "--type", "text/uri-list", Logic.uriList(paths)], "copy to clipboard", null);
+    }
+
+    // Files on the clipboard (local paths of a text/uri-list), read when the desktop menu opens (refreshClipboard).
+    property var clipboardPaths: []
+    // Ctrl+V: paste as soon as the clipboard has been read.
+    property bool pasteAfterRead: false
+
+    function refreshClipboard(): void {
+        if (clipboardProbe.running)
+            return;
+        clipboardProbe.running = true;
+    }
+
+    function pasteFromClipboard(): void {
+        pasteAfterRead = true;
+        refreshClipboard();
+    }
+
+    // Paste Item(s): copies of the clipboard's files on the desktop, under unclaimed names (never overwrites); an item
+    // that already lives on the desktop gets a "copy" next to it, as on macOS.
+    function paste(): var {
+        const here = clipboardPaths.filter(p => Logic.dirName(p) === dir).map(p => Logic.baseName(p)).filter(n => names.indexOf(n) >= 0);
+        return importPaths(clipboardPaths, false).concat(duplicate(here));
+    }
+
+    // Get Info: Grassfield Files' Get Info window of each path (macOS model). A dev session runs the dev build
+    // (GRASSFIELD_FILES_CMD) with the isolated environment.
+    function showInfo(paths: var): void {
+        const list = paths.filter(p => typeof p === "string" && p.startsWith("/"));
+        if (list.length === 0)
+            return;
+        const cmd = (Quickshell.env("GRASSFIELD_FILES_CMD") || "grassfield-files").split(" ").filter(w => w !== "");
+        const argv = cmd.concat(["--info", "--"]).concat(list);
+        Apps.whenScopeKnown(() => Quickshell.execDetached({
+                "command": Apps.scoped(argv),
+                "environment": Apps.launchEnvironment()
+            }));
+    }
+
+    // The names a new item may not take: listed ones and those of operations still in flight.
+    function takenNames(): var {
+        return names.concat(busy);
+    }
+
+    function isDir(name: string): bool {
+        return entries.some(e => e.name === name && e.isDir);
+    }
+
+    // Duplicate: "Report copy.pdf" next to each item (cp -a, never overwrites).
+    function duplicate(itemNames: var): var {
+        const taken = takenNames();
+        const added = [];
+        for (const name of itemNames) {
+            const copy = Logic.copyName(name, taken, isDir(name));
+            taken.push(copy);
+            added.push(copy);
+            markBusy(copy);
+            run(["cp", "-a", "--no-clobber", "--no-target-directory", "--", path(name), path(copy)], "duplicate", () => unmarkBusy(copy));
+        }
+        return added;
+    }
+
+    // Make Alias: "Report.pdf alias", a symbolic link to the item (the Linux counterpart of a Finder alias).
+    function makeAlias(itemNames: var): var {
+        const taken = takenNames();
+        const added = [];
+        for (const name of itemNames) {
+            const alias = Logic.aliasName(name, taken);
+            taken.push(alias);
+            added.push(alias);
+            markBusy(alias);
+            run(["ln", "-s", "--", path(name), path(alias)], "make alias", () => unmarkBusy(alias));
+        }
+        return added;
+    }
+
+    // Compress: one zip archive of the items ("Report.pdf.zip", or "Archive.zip" for several), as macOS does. Names are
+    // given as ./name so that none is read as an option.
+    function compress(itemNames: var): string {
+        if (itemNames.length === 0)
+            return "";
+        const archive = Logic.archiveName(itemNames, takenNames());
+        markBusy(archive);
+        run(["bsdtar", "-a", "-cf", path(archive), "-C", dir].concat(itemNames.map(n => "./" + n)), "compress", () => unmarkBusy(archive));
+        return archive;
+    }
+
+    // Clean Up By: the metadata of every item ({name: {isDir, size, modified, created}}), then `done(meta)`.
+    property var statDone: null
+
+    function readMeta(done: var): void {
+        if (statProbe.running || dir === "")
+            return;
+        statDone = done;
+        statProbe.command = ["stat", "-c", "%F|%s|%Y|%W|%n", "--"].concat(names.map(n => path(n)));
+        statProbe.running = true;
+    }
+
+    // Open With ▸ of the selection: the apps that open every selected item, the default handler first (read when the
+    // icon menu opens). `openWithResolved` keeps the real types for the launch. One lookup at a time: a newer selection
+    // waits (only the latest) and an older answer is dropped, never shown for another selection.
+    property var openWithApps: []
+    property var openWithPaths: []
+    property var openWithResolved: ({})
+    property var openWithPending: null
+
+    function resolveOpenWith(paths: var): void {
+        openWithApps = [];
+        openWithPaths = [];
+        if (paths.length === 0 || paths.length > 32)
+            return;
+        if (typeProbe.running || defaultProbe.running) {
+            openWithPending = paths.slice();
+            return;
+        }
+        startOpenWith(paths);
+    }
+
+    function startOpenWith(paths: var): void {
+        openWithPaths = paths.slice();
+        openWithResolved = {};
+        typeProbe.command = ["timeout", "10", "sh", Quickshell.shellPath("dock/file-types.sh")].concat(openWithPaths);
+        typeProbe.running = true;
+    }
+
+    // The lookup of openWithPaths ended (defaultId: the default handler's entry id, "" when unknown); a newer request
+    // made meanwhile replaces it.
+    function finishOpenWith(defaultId: string): void {
+        if (openWithPending !== null) {
+            const next = openWithPending;
+            openWithPending = null;
+            startOpenWith(next);
+            return;
+        }
+        openWithApps = Apps.appsFor(openWithPaths, openWithResolved, defaultId);
+    }
+
+    // Opens `paths` with the app chosen in Open With ▸ (the Dock's launch path: field codes, isolated environment). Only
+    // the selection the list was made for: anything else would open files the user did not pick.
+    function openWith(appId: string, paths: var): void {
+        const entry = Apps.lookup(appId);
+        if (!entry || paths.join("\n") !== openWithPaths.join("\n"))
+            return;
+        Apps.openWith(entry, paths, openWithResolved);
+    }
+
+    Process {
+        id: typeProbe
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (root.openWithPending !== null) {
+                    root.finishOpenWith("");
+                    return;
+                }
+                root.openWithResolved = DockModel.parseResolved(root.openWithPaths, text);
+                const first = root.openWithResolved[root.openWithPaths[0]];
+                if (first && first !== "-") {
+                    defaultProbe.command = ["xdg-mime", "query", "default", first];
+                    defaultProbe.running = true;
+                } else {
+                    root.finishOpenWith("");
+                }
+            }
+        }
+    }
+
+    Process {
+        id: defaultProbe
+        stdout: StdioCollector {
+            onStreamFinished: root.finishOpenWith(text.trim().replace(/\.desktop$/, ""))
+        }
+    }
+
+    Process {
+        id: clipboardProbe
+        // Only a text/uri-list offer is read; anything else (text, images) leaves Paste out.
+        command: ["sh", "-c", "wl-paste --list-types 2>/dev/null | grep -qx text/uri-list && wl-paste --no-newline --type text/uri-list 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.clipboardPaths = Logic.parseUriList(text);
+                if (root.pasteAfterRead) {
+                    root.pasteAfterRead = false;
+                    root.paste();
+                }
+            }
+        }
+    }
+
+    Process {
+        id: statProbe
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const done = root.statDone;
+                root.statDone = null;
+                if (done)
+                    done(Logic.parseStat(text));
+            }
+        }
     }
 
     // ---- positions -------------------------------------------------------------------------------

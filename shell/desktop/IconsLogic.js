@@ -255,6 +255,88 @@ function uniqueName(name, existing) {
     return name;
 }
 
+// Name of a duplicate (macOS: "Report copy.pdf", then "Report copy 2.pdf"; a folder "Projects copy").
+function copyName(name, existing, isDir) {
+    const p = isDir ? {base: name, ext: ""} : splitExt(name);
+    let candidate = p.base + " copy" + p.ext;
+    for (let i = 2; existing.indexOf(candidate) >= 0 && i < 10000; i++)
+        candidate = p.base + " copy " + i + p.ext;
+    return candidate;
+}
+
+// Name of an alias (macOS: "Report.pdf alias", then "Report.pdf alias 2").
+function aliasName(name, existing) {
+    let candidate = name + " alias";
+    for (let i = 2; existing.indexOf(candidate) >= 0 && i < 10000; i++)
+        candidate = name + " alias " + i;
+    return candidate;
+}
+
+// Name of the archive Compress makes (macOS: "Report.pdf.zip" for one item, "Archive.zip" for several, numbered when taken).
+function archiveName(names, existing) {
+    return uniqueName(names.length === 1 ? names[0] + ".zip" : "Archive.zip", existing);
+}
+
+// Clean Up By order: `meta` maps a name to {isDir, size, modified, created} (seconds). Kind: folders first, then by
+// extension; size: largest first; dates: newest first (macOS); ties by name.
+function orderBy(names, key, meta) {
+    const byName = sortNames(names);
+    const rank = new Map(byName.map((n, i) => [n, i]));
+    const m = n => meta[n] || {};
+    const cmp = {
+        name: () => 0,
+        kind: (a, b) => (m(b).isDir === true) - (m(a).isDir === true) || extension(a).localeCompare(extension(b)),
+        size: (a, b) => (m(b).size || 0) - (m(a).size || 0),
+        modified: (a, b) => (m(b).modified || 0) - (m(a).modified || 0),
+        created: (a, b) => (m(b).created || 0) - (m(a).created || 0)
+    }[key];
+    if (!cmp)
+        return byName;
+    return byName.sort((a, b) => cmp(a, b) || rank.get(a) - rank.get(b));
+}
+
+// Clean Up: the icons in the order they are seen now (column-first from the top-right), packed into the first slots.
+function visualOrder(lay) {
+    return Object.keys(lay).sort((a, b) => lay[a].col - lay[b].col || lay[a].row - lay[b].row || (a < b ? -1 : a > b ? 1 : 0));
+}
+
+// Slots for `ordered` names, one after the other in column-first order, skipping blocked slots (under a widget).
+function arrange(ordered, cols, rows, blocked) {
+    const out = {};
+    const taken = Object.assign({}, blocked || {});
+    for (const n of ordered) {
+        const p = firstFree(taken, cols, rows);
+        if (!p)
+            break;
+        out[n] = p;
+        taken[key(p.col, p.row)] = true;
+    }
+    return out;
+}
+
+// stat -c '%F|%s|%Y|%W|%n' lines -> {name: {isDir, size, modified, created}}. The name comes last, so a "|" in it is
+// kept; created falls back to modified when the file system records no birth time (%W is 0).
+function parseStat(text) {
+    const out = {};
+    for (const line of String(text).split("\n")) {
+        const f = line.split("|");
+        if (f.length < 5)
+            continue;
+        const name = baseName(f.slice(4).join("|"));
+        if (name === "")
+            continue;
+        const modified = parseInt(f[2], 10) || 0;
+        const created = parseInt(f[3], 10);
+        out[name] = {
+            isDir: f[0] === "directory",
+            size: parseInt(f[1], 10) || 0,
+            modified: modified,
+            created: created > 0 ? created : modified
+        };
+    }
+    return out;
+}
+
 // ---- positions file -----------------------------------------------------------------------------
 
 // {ok, positions} from the file text; anything that is not a version 1 file with valid slots gives

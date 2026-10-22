@@ -22,6 +22,15 @@ FocusScope {
     // Optional area that submenus stay inside (an app window's menu layer): a submenu that would cross its right edge
     // opens to the left of the menu, and one that would cross its bottom edge moves up. null: no limit.
     property Item bounds: null
+    // The open submenu (null when none): a host sized to its own window (a PopupWindow) grows to include it and gives
+    // it a blur region of its own.
+    readonly property Item submenuItem: submenuLoader.item as Item
+    // Size of the menu together with its open submenus (no bounds: they open to the right and below), for that host.
+    // Not childrenRect: reading it inside the host's binding re-enters the binding (binding loop on implicitWidth).
+    readonly property size extent: {
+        const sub = submenuLoader.item as PopupMenu;
+        return Qt.size(Math.max(width, sub ? submenuLoader.x + sub.extent.width : 0), Math.max(height, sub ? submenuLoader.y + sub.extent.height : 0));
+    }
 
     // A leaf item was chosen.
     signal activated(var item)
