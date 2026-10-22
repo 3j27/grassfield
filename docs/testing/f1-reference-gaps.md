@@ -463,3 +463,16 @@ Token-level and shape changes only. Values are within the stated uncertainty; `t
 | 16 Widgets | radius 26, margin 16, cell 164, placement from the top-left | | gallery anchored bottom-left |
 | 17 Grids | files and desktop cells 112, list rows 20, column rows 22, column 245, Get Info 264 | | |
 | 18 Controls | slider track 6 (Quick Settings 4), pill knob 21 x 16, light separators 0.08 | | push button height 24 |
+
+## Fidelity pass F2c status (2026-10-22)
+
+Measured against the crops in `design/reference/macos`. Side-by-side captures go to `.dev/f2c/<surface>-compare.png`
+(ignored by version control); the driver is `tests/visual/f2c.sh`.
+
+| Gap | Closed | Value now | Left |
+|---|---|---|---|
+| 7 Banners | banner and Center card content: icon 32 centred on the card, inset 14 from the card edge (`notification.iconInset` 2 on the 12-pt padding), text column 57 from the edge (`textGap` 11), title and body on one line pitch (`lineGap` 0); title bold, body regular; radius 18 confirmed in a capture | `notification.*` | neutral bell tile for apps that send no icon; the 0.25 and 0.6 captures look alike on the flat fixture wallpaper (the contrast run covers the worst cases) |
+| 8 Search | filter chips under the field (the Apps category chip: 24 tall, gap 8, accent when selected; `search.chipTop` 10, `chipBottom` 4), sideways scroll, click toggles; a "No Results for ..." notice (`search.emptyHeight` 88) once the file search settled | `search.chip*`, `search.emptyHeight`; pure logic in `shell/search/Filters.js`, test `tst_searchfilters.qml` | chips are mouse and assistive-technology only (the keyboard stays in the field, Tab still moves between groups); the four round mode buttons of the empty-query state (no clipboard backend, low-confidence scale); the reference's grey selected row (ours stays accent, the contrast boxes are tuned to it) |
+| 15 Overview | already in place and verified in a capture: full-width band (164 with the menu bar), names under the thumbnails (13 regular, centred, ellipsis, gap 8), 32 round add button 18 from the right edge | `overview.*` | window thumbnails carry no title in the reference (macOS 26 Mission Control); the name pill on the hovered window stays |
+| 13 Alerts, sheets | alert: 64 icon frame (Grassfield glyph, accent) at the top left, 13 bold title and message left-aligned, capsule buttons of one width; sheet shape (`Dialog.sheet`) for Force Quit (380 kept) and the About panels: radius 26, padding 20, full-width hairline above a 64 footer, 24-pt push buttons right-aligned 20 from the edges; focus ring 3 (shared token: the Polkit dialog's buttons inherit it, no code under `shell/security/` changed) | `panel.alertIcon*`, `panel.sheetPadding`, `panel.sheetFooterHeight`, `control.buttonHeight` 24, `control.focusRing` 3 | no app icon (a glyph stands in); Files sheets (F2b); Polkit untouched |
+| 16 Widgets gallery | a glass panel with its own blur region, anchored bottom-left 41 from the left edge, instead of an opaque overlay inside the Notifications column | `widget.gallery*` | the reference's 241-pt category sidebar with search and a preview grid, and the Notifications column as a drop zone: not built (the one-column list stays) |

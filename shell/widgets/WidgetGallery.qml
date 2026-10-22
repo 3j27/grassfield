@@ -14,15 +14,22 @@ FocusScope {
     signal closed
 
     property string note: ""
+    // The Notification Center content that owns the blur regions (null: no glass registration, e.g. in a test).
+    property var surfaceHost: null
 
     Accessible.role: Accessible.Dialog
     Accessible.name: qsTr("Widget gallery")
     Keys.onEscapePressed: root.closed()
 
-    Rectangle {
+    Material {
+        id: glass
         anchors.fill: parent
         radius: Tokens.radiusPanel
-        color: Appearance.withAlpha(Appearance.colors.materialTint, 1)
+    }
+
+    Component.onCompleted: {
+        if (root.surfaceHost)
+            root.surfaceHost.addSurface(glass, false, Tokens.radiusPanel, null);
     }
 
     // Swallows clicks on the gallery.

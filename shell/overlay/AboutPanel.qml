@@ -7,6 +7,7 @@ Dialog {
     id: root
 
     title: qsTr("About This Computer")
+    sheet: true
     panelWidth: Tokens.panelAboutWidth
 
     component Row2: Row {

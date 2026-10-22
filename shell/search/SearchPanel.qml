@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.launchpad
 import qs.platform
 import qs.services
 
@@ -118,11 +119,17 @@ Variants {
             id: panel
 
             readonly property bool hasResults: root.controller.rows.length > 0
+            // Chips need something to choose between; a lone category is the list itself.
+            readonly property bool chipsShown: root.controller.query.trim() !== "" && root.controller.chips.length > 1
+            readonly property real chipBlock: chipsShown ? Tokens.searchChipTop + Tokens.launcherChipHeight + Tokens.searchChipBottom : 0
+            // A query nothing answers (file search settled): a centred notice instead of a bare field.
+            readonly property bool noResults: !hasResults && root.controller.query.trim() !== "" && !root.controller.filesPending
+            readonly property real listTop: Tokens.searchFieldHeight + chipBlock + Tokens.spacingSm
 
             x: (win.width - width) / 2
             y: win.height * Tokens.searchTopFraction
             width: Math.min(Tokens.searchWidth, win.width - 2 * Tokens.searchEdgeMargin)
-            height: Tokens.searchFieldHeight + (hasResults ? Math.min(list.contentHeight + 2 * Tokens.spacingSm, win.maxResults) : 0)
+            height: Tokens.searchFieldHeight + chipBlock + (hasResults ? Math.min(list.contentHeight + 2 * Tokens.spacingSm, win.maxResults - chipBlock) : 0) + (noResults ? Tokens.searchEmptyHeight : 0)
             opacity: win.shown ? 1 : 0
             Accessible.role: Accessible.Pane
             Accessible.name: qsTr("Search")
@@ -234,7 +241,7 @@ Variants {
             }
 
             Rectangle {
-                visible: panel.hasResults
+                visible: panel.hasResults || panel.noResults
                 x: Tokens.spacingLg
                 y: Tokens.searchFieldHeight - 1
                 width: panel.width - 2 * Tokens.spacingLg
@@ -242,10 +249,66 @@ Variants {
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 
+            // Filter chips (mouse and assistive technology; the keyboard stays in the field: Tab moves between groups).
+            Flickable {
+                id: chipFlick
+                visible: panel.chipsShown
+                x: Tokens.spacingLg
+                y: Tokens.searchFieldHeight + Tokens.searchChipTop
+                width: panel.width - 2 * Tokens.spacingLg
+                height: Tokens.launcherChipHeight
+                contentWidth: chipRow.width
+                contentHeight: height
+                clip: true
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentWidth > width
+                Accessible.role: Accessible.Pane
+                Accessible.name: qsTr("Filters")
+
+                Row {
+                    id: chipRow
+                    spacing: Tokens.launcherChipGap
+
+                    Repeater {
+                        model: root.controller.chips
+
+                        AppsChip {
+                            required property string modelData
+
+                            label: root.controller.chipLabels[modelData]
+                            active: root.controller.filter === modelData
+                            onClicked: root.controller.toggleFilter(modelData)
+                        }
+                    }
+                }
+            }
+
+            Text {
+                id: emptyNotice
+                visible: panel.noResults
+                x: Tokens.spacingLg
+                y: Tokens.searchFieldHeight
+                width: panel.width - 2 * Tokens.spacingLg
+                height: Tokens.searchEmptyHeight
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideMiddle
+                maximumLineCount: 1
+                textFormat: Text.PlainText
+                text: qsTr("No Results for “%1”").arg(root.controller.query.trim())
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyTitleSize
+                font.weight: Tokens.typographySmallWeight
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
+
             ListView {
                 id: list
                 x: Tokens.spacingSm
-                y: Tokens.searchFieldHeight + Tokens.spacingSm
+                y: panel.listTop
                 width: panel.width - 2 * Tokens.spacingSm
                 height: panel.height - y - Tokens.spacingSm
                 clip: true

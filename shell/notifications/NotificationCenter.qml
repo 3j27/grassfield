@@ -201,7 +201,7 @@ Variants {
             property int surfaceSeq: 0
             // Anything that moves or resizes a surface without changing its own geometry (list.motionTick counts the
             // frames of a card sliding or of the column reflowing).
-            readonly property real tick: list.contentY + list.contentHeight + list.count + list.height + panel.x + panel.y + list.motionTick
+            readonly property real tick: list.contentY + list.contentHeight + list.count + list.height + panel.x + panel.y + list.motionTick + gallery.x + gallery.y + (gallery.item ? 1 : 0)
             // The app the pointer is over (group controls), and how many hover handlers of each app are active.
             property string hoverApp: ""
             property var hoverCounts: ({})
@@ -573,19 +573,24 @@ Variants {
                         Component.onCompleted: forceActiveFocus()
                     }
                 }
+            }
 
-                Loader {
-                    id: gallery
-                    anchors.fill: parent
-                    active: panel.galleryOpen
-                    sourceComponent: WidgetGallery {
-                        screenName: win.modelData.name
-                        onClosed: {
-                            panel.galleryOpen = false;
-                            panel.forceActiveFocus();
-                        }
-                        Component.onCompleted: forceActiveFocus()
+            // Widget gallery: a glass panel at the bottom left (macOS), over the desktop; its own blur region.
+            Loader {
+                id: gallery
+                x: Tokens.widgetGalleryInsetLeft
+                y: host.height - height - Tokens.notificationCenterInset
+                width: Tokens.widgetGalleryWidth
+                height: Math.min(Tokens.widgetGalleryMaxHeight, (host.height - Tokens.menubarHeight) * Tokens.widgetGalleryHeightFraction)
+                active: panel.galleryOpen
+                sourceComponent: WidgetGallery {
+                    screenName: win.modelData.name
+                    surfaceHost: host
+                    onClosed: {
+                        panel.galleryOpen = false;
+                        panel.forceActiveFocus();
                     }
+                    Component.onCompleted: forceActiveFocus()
                 }
             }
         }

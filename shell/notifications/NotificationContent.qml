@@ -52,6 +52,9 @@ Item {
     // Icon tile: image/app icon, or a bell on a neutral tile.
     Item {
         id: iconTile
+        x: Tokens.notificationIconInset
+        // Centred on the whole card, as in the reference (also beside a five-line body).
+        y: Math.max(0, (root.implicitHeight - height) / 2)
         width: Tokens.notificationBannerIconSize
         height: Tokens.notificationBannerIconSize
 
@@ -84,9 +87,9 @@ Item {
 
     Column {
         id: column
-        x: iconTile.width + Tokens.spacingSm
+        x: iconTile.x + iconTile.width + Tokens.notificationTextGap
         width: root.width - x
-        spacing: Tokens.spacingXs
+        spacing: Tokens.notificationLineGap
 
         Item {
             width: parent.width
@@ -149,7 +152,7 @@ Item {
 
         Flow {
             id: actions
-            width: root.width - iconTile.width - Tokens.spacingSm
+            width: column.width
             spacing: Tokens.spacingSm
             topPadding: Tokens.spacingXs
             readonly property Repeater repeater: rep

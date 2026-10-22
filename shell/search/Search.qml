@@ -7,6 +7,7 @@ import qs.platform
 import qs.services
 import "Calc.js" as Calc
 import "Files.js" as Files
+import "Filters.js" as Filters
 import "Ranking.js" as Ranking
 import "Units.js" as Units
 
@@ -38,6 +39,16 @@ Scope {
     property var items: []
     property int selected: -1
     property var fileHits: []
+    // Filter chips under the field: the chip ids the unfiltered results offer, and the selected one ("" = all).
+    // File search still running or about to start: the "No Results" notice waits for it.
+    readonly property bool filesPending: fileTimer.running || liveSearches.length > 0
+    property var chips: []
+    property string filter: ""
+    readonly property var chipLabels: ({
+            "apps": qsTr("Applications"),
+            "commands": qsTr("Commands"),
+            "documents": qsTr("Documents")
+        })
 
     // Lock Screen is offered only when the shell exposes a lock IPC target. The lock module
     // (shell/security) does not ship one yet, so the command stays hidden.
@@ -110,6 +121,7 @@ Scope {
         if (text === query && groups.length > 0)
             return;
         query = text;
+        filter = "";
         fileHits = [];
         cancelFiles();
         compute();
@@ -220,7 +232,7 @@ Scope {
             }
         }
 
-        const g = [];
+        let g = [];
         if (calc)
             g.push({id: "calc", title: qsTr("Calculator"), items: [{kind: "calc", key: "calc", title: calc.text, subtitle: q + " " + qsTr("(Return copies the result)"), badge: "=", text: calc.text}]});
         if (unit)
@@ -235,6 +247,12 @@ Scope {
             g.push({id: "files", title: qsTr("Documents"), items: docs});
         if (recents.length > 0)
             g.push({id: "recent", title: qsTr("Recent"), items: recents});
+
+        // Chips come from the unfiltered results; a chip that no longer has results is dropped with its filter.
+        chips = Filters.chipsOf(g);
+        if (filter !== "" && chips.indexOf(filter) < 0)
+            filter = "";
+        g = Filters.apply(g, filter, filter !== "" ? chipLabels[filter] : "");
 
         const flat = [];
         const rowList = [];
@@ -383,6 +401,12 @@ Scope {
         }
     }
 
+    // Click on a chip: select it, or clear the filter when it is the selected one.
+    function toggleFilter(id: string): void {
+        filter = filter === id ? "" : id;
+        compute();
+    }
+
     function move(delta: int): void {
         if (items.length === 0)
             return;
@@ -469,6 +493,11 @@ Scope {
             root.keyStartMs = 0;
         }
 
+        // Selects (or clears, with the selected chip's id or "") a filter chip (tests).
+        function filter(id: string): void {
+            root.toggleFilter(id);
+        }
+
         // JSON of the visible groups.
         function status(): string {
             return JSON.stringify({
@@ -476,6 +505,8 @@ Scope {
                 query: root.query,
                 screen: root.screenName,
                 selected: root.selected,
+                chips: root.chips,
+                filter: root.filter,
                 groups: root.groups.map(g => ({id: g.id, title: g.title, items: g.items.map(i => ({kind: i.kind, title: i.title, subtitle: i.subtitle}))}))
             });
         }
