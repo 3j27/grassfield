@@ -5,7 +5,10 @@
 #   preview        a capture while the button is still down at the edge shows the translucent frame (checked by eye)
 #   drag-out       a drag of the tiled window away from the edge: it gets its size from before back
 #   top-right      released at the top of the right edge: the top-right quarter
-#   shared-edge    released at the left edge (shared with WAYLAND-1): no tiling, the window just moves
+#   left-edge      released at the left edge: no tiling when another output touches it (the window just moves over),
+#                  the left half when it is free (the nested layout varies: the edge is measured, never assumed)
+#   other-output   dragged by its titlebar until its middle is on the next output, then tile(address, "left"): the
+#                  left half of THAT output (the plugin's own drag does not update Hyprland's window monitor, R13)
 #   menu-bar       released on the menu bar: the free area is filled
 #   ipc            hl.plugin.grassfield.tile(address, "left"), then "previous": the left half, then the size from before
 #   options        with tilingEdges false a drag to the right edge does not tile
@@ -40,8 +43,16 @@ check() {
 nestctl -j grassfield 2>/dev/null | jq -e '.features | index("window-tiling")' >/dev/null 2>&1 || { say "SKIP: the plugin does not advertise window-tiling (load this tree's plugin)"; exit 2; }
 
 read -r mx my mw mh rtop rbottom < <(nestctl monitors -j | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height) \(.reserved[1]) \(.reserved[3])"')
+# Free area of any output: "x y w h" (reserved = [left, top, right, bottom]).
+area_of() { nestctl monitors -j | jq -r --arg o "$1" '.[] | select(.name == $o) | "\(.x + .reserved[0]) \(.y + .reserved[1]) \(.width - .reserved[0] - .reserved[2]) \(.height - .reserved[1] - .reserved[3])"'; }
+# Another output whose right edge touches GF-REF's left edge over an overlapping span: its name, or "".
+left_neighbour() {
+  nestctl monitors -j | jq -r --arg o "$out" --argjson x "$mx" --argjson y "$my" --argjson h "$mh" \
+    '[.[] | select(.name != $o and (.x + .width) == $x and .y < ($y + $h) and (.y + .height) > $y) | .name][0] // ""'
+}
 # Free area and the expected boxes (core/Tiling.cpp: margin 8 around and between, titlebar above each surface).
-ax=$mx ay=$((my + rtop)) aw=$mw ah=$((mh - rtop - rbottom)) m=8 tb=$GF_TB_HEIGHT
+read -r ax ay aw ah < <(area_of "$out")
+m=8 tb=$GF_TB_HEIGHT
 halfw=$(((aw - 3 * m) / 2)) halfh=$(((ah - 3 * m) / 2))
 say "GF-REF ${mw}x${mh} at $mx,$my, free area ${aw}x${ah} at $ax,$ay, titlebar $tb"
 
@@ -84,7 +95,7 @@ is_box() { # x y w h (surface), 1 px slack
   local x y w h _a
   read -r x y w h _a < <(geometry)
   say "  foot ${w}x${h} at $x,$y (want ${3}x${4} at $1,$2)"
-  (( ${x#-} - $1 <= 1 && $1 - x <= 1 && y - $2 <= 1 && $2 - y <= 1 && w - $3 <= 1 && $3 - w <= 1 && h - $4 <= 1 && $4 - h <= 1 ))
+  (( x - $1 <= 1 && $1 - x <= 1 && y - $2 <= 1 && $2 - y <= 1 && w - $3 <= 1 && $3 - w <= 1 && h - $4 <= 1 && $4 - h <= 1 ))
 }
 size_is() { local _x _y w h _a; read -r _x _y w h _a < <(geometry); say "  foot ${w}x${h} (want ${1}x${2})"; (( w == $1 && h == $2 )); }
 
@@ -96,11 +107,15 @@ check "drag-out: dragged away from the tile, the window gets ${w0}x${h0} back" s
 drag $((mx + mw - 1)) $((my + 40))
 check "top-right: released at the top of the right edge, the top-right quarter" is_box "$rx" "$ry" "$halfw" $((halfh - tb))
 drag $((mx + mw / 2)) $((my + mh / 2))
-read -r bx by _ _ _ < <(geometry)
+neighbour=$(left_neighbour)
 drag "$mx" $((my + mh / 2))
-read -r cx cy cw ch _ < <(geometry)
-say "  after the shared edge: ${cw}x${ch} at $cx,$cy"
-check "shared-edge: released at the left edge shared with WAYLAND-1, no tiling (size kept)" test "$cw" -eq "$w0" -a "$ch" -eq "$h0"
+if [[ -n $neighbour ]]; then
+  read -r cx cy cw ch _ < <(geometry)
+  say "  left edge shared with $neighbour: ${cw}x${ch} at $cx,$cy"
+  check "left-edge: shared with $neighbour, no tiling (size kept)" test "$cw" -eq "$w0" -a "$ch" -eq "$h0"
+else
+  check "left-edge: free, the window fills the left half" is_box $((ax + m)) "$ry" "$halfw" "$fullh"
+fi
 drag $((mx + mw / 2)) $((my + mh / 2))
 drag $((mx + mw / 2)) $((my + 2)) tiling-preview-fill
 check "menu-bar: released on the menu bar, the free area is filled" is_box $((ax + m)) "$ry" $((aw - 2 * m)) "$fullh"
@@ -113,6 +128,26 @@ check "ipc: tile(address, \"left\") places the left half" is_box $((ax + m)) "$r
 nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$addr\", \"previous\") end)()" >>"$log" 2>&1
 sleep 0.8
 check "ipc: tile(address, \"previous\") gives ${w0}x${h0} back" size_is "$w0" "$h0"
+
+# other-output: press near the titlebar's right end and drag to GF-REF's left edge, so that the window's middle is on
+# the neighbouring output; the IPC tile must use that output (R13 finding 1).
+if [[ -n $neighbour ]]; then
+  read -r x y w h _a < <(geometry)
+  pointer abs $((x + w - 40 - mx)) $((y - GF_TB_MID - my)) down sleep 150 drag 400 $((y - GF_TB_MID - my)) sleep 150 drag 2 $((y - GF_TB_MID - my)) sleep 400 up
+  sleep 0.8
+  read -r x y w h _a < <(geometry)
+  say "  dragged over to $neighbour: ${w}x${h} at $x,$y (middle x $((x + w / 2)))"
+  read -r nx ny nw nh < <(area_of "$neighbour")
+  nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$addr\", \"left\") end)()" >>"$log" 2>&1
+  sleep 0.8
+  check "other-output: tile(address, \"left\") after a drag onto $neighbour places its left half there" is_box $((nx + m)) $((ny + m + tb)) $(((nw - 3 * m) / 2)) $((nh - 2 * m - tb))
+  nestctl dispatch "(function() hl.plugin.grassfield.tile(\"$addr\", \"previous\") end)()" >>"$log" 2>&1
+  sleep 0.8
+  nestctl dispatch "hl.dsp.window.move({ x = $((mx + 300)), y = $((my + 200)), window = 'address:$addr' })" >>"$log" 2>&1
+  sleep 0.8
+else
+  say "SKIP: other-output (no neighbouring output)"
+fi
 
 nestctl dispatch "(function() hl.plugin.grassfield.config(\"tilingEdges\", \"false\") end)()" >>"$log" 2>&1
 drag $((mx + mw - 1)) $((my + mh / 2))

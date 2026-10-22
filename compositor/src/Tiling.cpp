@@ -22,6 +22,7 @@ namespace gf::tiler {
         struct STiled {
             PHLWINDOWREF window;
             CBox         before; // the floating surface box from before the first tiling
+            CBox         tiled;  // the box the last tiling gave it: a window moved or resized since is not tiled any more
         };
 
         std::vector<STiled>& tiled() {
@@ -86,6 +87,11 @@ namespace gf::tiler {
             return true;
         }
 
+        // The window still has the box its last tiling gave it (1 px slack: rounding in the layout).
+        bool sameBox(const CBox& a, const CBox& b) {
+            return std::abs(a.x - b.x) <= 1.0 && std::abs(a.y - b.y) <= 1.0 && std::abs(a.w - b.w) <= 1.0 && std::abs(a.h - b.h) <= 1.0;
+        }
+
         bool placeable(const PHLWINDOW& w) {
             if (!w || !w->m_isFloating || w->m_pinned || !w->layoutTarget())
                 return false;
@@ -114,21 +120,38 @@ namespace gf::tiler {
     bool tile(const PHLWINDOW& w, tiling::Place place, const PHLMONITOR& monitor) {
         if (!placeable(w) || !g_layoutManager)
             return false;
-        const auto m = monitor ? monitor : w->m_monitor.lock();
-        if (!m)
-            return false;
         const auto target  = w->layoutTarget();
         const CBox current = target->position();
-        const auto surface = tiling::surfaceFor(place, toRect(m->logicalBoxMinusReserved()), theme::kTitlebarHeight, state().tilingMargins, toRect(current));
-        if (!entryFor(w))
-            tiled().push_back(STiled{w, current});
-        g_layoutManager->setTargetGeom(toCBox(surface), target);
+        // The output the window is on now: the one under its middle. Hyprland's m_monitor is not updated by the plugin's
+        // own titlebar drags, so a window dragged to another output would tile back on the old one (R13).
+        auto m = monitor ? monitor : monitorAt(current.middle());
+        if (!m)
+            m = w->m_monitor.lock();
+        if (!m)
+            return false;
+        const CBox surface = toCBox(tiling::surfaceFor(place, toRect(m->logicalBoxMinusReserved()), theme::kTitlebarHeight, state().tilingMargins, toRect(current)));
+        if (auto* entry = entryFor(w); entry && sameBox(current, entry->tiled))
+            entry->tiled = surface; // re-tiled: the box from before the first tiling stays
+        else {
+            std::erase_if(tiled(), [&w](const STiled& t) { return t.window.lock() == w; });
+            tiled().push_back(STiled{w, current, surface});
+        }
+        g_layoutManager->setTargetGeom(surface, target);
         logRequest(Log::DEBUG, "tile {:x}: {} on {}", reinterpret_cast<uintptr_t>(w.get()), tiling::nameOf(place), m->m_name);
         return true;
     }
 
     bool isTiled(const PHLWINDOW& w) {
-        return entryFor(w) != nullptr;
+        auto* entry = entryFor(w);
+        if (!entry)
+            return false;
+        // Moved or resized since (by the user, the app, a rule): it left its tile; forget the box from before.
+        const auto target = w->layoutTarget();
+        if (!target || !sameBox(target->position(), entry->tiled)) {
+            std::erase_if(tiled(), [&w](const STiled& t) { return t.window.lock() == w; });
+            return false;
+        }
+        return true;
     }
 
     std::optional<CBox> takePrevious(const PHLWINDOW& w) {
@@ -159,7 +182,21 @@ namespace gf::tiler {
                 logRequest(Log::INFO, "tile {:x}: not tiled, nothing to return to", *address);
                 return;
             }
-            g_layoutManager->setTargetGeom(*before, window->layoutTarget());
+            CBox box = *before;
+            // The output it was on is gone (or the box lies off every output): the size comes back, centred in the free
+            // area of the output the window is on now.
+            if (!monitorAt(box.middle())) {
+                const CBox current = window->layoutTarget()->position();
+                auto       m       = monitorAt(current.middle());
+                if (!m)
+                    m = window->m_monitor.lock();
+                if (m) {
+                    const CBox area = m->logicalBoxMinusReserved();
+                    box.x           = std::round(area.x + (area.w - box.w) / 2);
+                    box.y           = std::round(area.y + (area.h - box.h) / 2);
+                }
+            }
+            g_layoutManager->setTargetGeom(box, window->layoutTarget());
             return;
         }
         const auto place = tiling::parsePlace(placeName);
