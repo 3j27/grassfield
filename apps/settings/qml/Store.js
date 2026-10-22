@@ -46,6 +46,7 @@ const DEFAULTS = {
     "wallpaper.interval": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.interval,
     "wallpaper.shuffle": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.shuffle,
     "wallpaper.videoOnBattery": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.videoOnBattery,
+    "wallpaper.online.provider": Tree.WallpaperConfig.WALLPAPER_DEFAULTS.online.provider,
     "wallpaper.outputs": []
 };
 
@@ -94,6 +95,7 @@ const RULES = {
     "wallpaper.interval": {type: "enum", values: Tree.WallpaperConfig.INTERVAL_NAMES},
     "wallpaper.shuffle": {type: "boolean"},
     "wallpaper.videoOnBattery": {type: "boolean"},
+    "wallpaper.online.provider": {type: "enum", values: Tree.WallpaperConfig.ONLINE_PROVIDERS},
     "wallpaper.outputs": {type: "wallpaperOutputs"}
 };
 

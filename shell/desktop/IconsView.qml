@@ -39,6 +39,8 @@ FocusScope {
     // Context menu: kind "icon" | "desktop", position in window coordinates.
     property string menuKind: ""
     property point menuAt: Qt.point(0, 0)
+    // "About This Wallpaper" (the online daily picture's attribution) is open: a card anchored where the menu was.
+    property bool aboutOpen: false
 
     readonly property real margin: Tokens.desktopIconMargin
     readonly property real topInset: Tokens.menubarHeight + margin
@@ -229,6 +231,26 @@ FocusScope {
         });
     }
 
+    // The attribution card: like the menu, a PopupWindow with a grab; the keyboard state machine sees it as a menu.
+    function openAbout(): void {
+        aboutOpen = true;
+        aboutPopup.visible = true;
+        focusEvent({
+            type: "menuOpened"
+        });
+    }
+
+    function closeAbout(how: string): void {
+        if (!aboutOpen)
+            return;
+        aboutOpen = false;
+        aboutPopup.visible = false;
+        focusEvent({
+            type: "menuClosed",
+            how: how
+        });
+    }
+
     function applyMenu(action: string): void {
         const names = selectedNames;
         const paths = selectedPaths;
@@ -249,6 +271,8 @@ FocusScope {
                 files.setPositions(Logic.arrange(Logic.visualOrder(lay), grid.cols, grid.rows, blocked));
             else if (action.startsWith("cleanUpBy:"))
                 cleanUpBy(action.substring(10));
+            else if (action === "aboutWallpaper")
+                openAbout();
             return;
         }
         if (action === "rename" && names.length === 1)
@@ -644,6 +668,7 @@ FocusScope {
             sourceComponent: IconMenu {
                 kind: root.menuKind
                 showKeyHints: root.fileKeyActions
+                aboutWallpaper: WallpaperState.onlineShown(root.screen.name)
                 count: root.selectedNames.length
                 singleName: root.selectedNames.length === 1 ? root.selectedNames[0] : ""
                 pasteCount: files.clipboardPaths.length
@@ -655,4 +680,54 @@ FocusScope {
         }
     }
 
+    // "About This Wallpaper": the attribution card. Esc, Return, Space and Close dismiss it; a click elsewhere too (swallowed).
+    // qmllint disable uncreatable-type
+    PopupWindow {
+        // qmllint enable uncreatable-type
+        id: aboutPopup
+
+        // qmllint disable missing-type
+        anchor.window: root.hostWindow
+        anchor.rect: Qt.rect(root.menuAt.x, root.menuAt.y, 1, 1)
+        anchor.edges: Edges.Top | Edges.Left
+        anchor.gravity: Edges.Bottom | Edges.Right
+        anchor.adjustment: PopupAdjustment.All
+        // qmllint enable missing-type
+        implicitWidth: (aboutLoader.item as Item)?.width ?? 1
+        implicitHeight: (aboutLoader.item as Item)?.height ?? 1
+        color: "transparent"
+        grabFocus: true
+        // qmllint disable missing-type
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && visible ? aboutBlur : null
+        // qmllint enable missing-type
+
+        onVisibleChanged: {
+            if (visible) {
+                (aboutLoader.item as Item)?.forceActiveFocus();
+                return;
+            }
+            if (root.aboutOpen) {
+                root.aboutOpen = false;
+                root.focusEvent({
+                    type: "menuClosed",
+                    how: "outside"
+                });
+            }
+        }
+
+        Region {
+            id: aboutBlur
+            item: aboutLoader
+            radius: Tokens.radiusMenu
+        }
+
+        Loader {
+            id: aboutLoader
+            active: root.aboutOpen
+            sourceComponent: AttributionCard {
+                onCloseRequested: root.closeAbout("esc")
+            }
+            onLoaded: (item as Item).forceActiveFocus()
+        }
+    }
 }

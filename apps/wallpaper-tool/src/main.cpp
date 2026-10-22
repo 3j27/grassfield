@@ -4,8 +4,10 @@
 //   grassfield-wallpaper thumb   --width W --out DIR -- SRC
 //   grassfield-wallpaper list    [--max N] -- FOLDER
 //   grassfield-wallpaper formats
+//   grassfield-wallpaper fetch commons --date YYYY-MM-DD --out DIR [--width N] [--lang en|fr] [--base-url URL]   (ADR-0016 step 2)
+//   grassfield-wallpaper latest commons --out DIR
 //
-// One JSON object on stdout, and the exit code (wallpaper::ExitCode). Never a daemon, never the network. The shell and
+// One JSON object on stdout, and the exit code (wallpaper::ExitCode). Never a daemon. Only `fetch` uses the network (curl). The shell and
 // the Settings app run it with an argument vector; the shell then decodes only this tool's own output.
 #include <QCoreApplication>
 #include <QDateTime>
@@ -20,6 +22,7 @@
 #include <QBuffer>
 #include <QTextStream>
 
+#include "commonsfetch.h"
 #include "wallpaperlogic.h"
 
 using namespace wallpaper;
@@ -251,6 +254,55 @@ int cmdList(const QStringList &args)
     return finish({{QStringLiteral("files"), QJsonArray::fromStringList(files)}, {QStringLiteral("truncated"), truncated}, {QStringLiteral("mtime"), double(mtime)}}, Ok);
 }
 
+// `fetch commons`: the day's Wikimedia Commons picture into the online cache (a fetch of a day already cached is a no-op).
+int cmdFetch(const QStringList &args)
+{
+    if (args.isEmpty() || args[0] != QLatin1String("commons"))
+        return fail(Usage, QStringLiteral("usage: fetch commons --date YYYY-MM-DD --out DIR"));
+    const Args a = parseArgs(args.mid(1), {QStringLiteral("date"), QStringLiteral("out"), QStringLiteral("width"), QStringLiteral("lang"), QStringLiteral("base-url")}, false);
+    if (!a.ok)
+        return fail(Usage, a.error);
+    commons::Options o;
+    o.date = a.options.value(QStringLiteral("date"));
+    if (!commons::validDate(o.date))
+        return fail(Usage, QStringLiteral("bad --date"));
+    o.out = a.options.value(QStringLiteral("out"));
+    if (!commons::outDirAllowed(o.out))
+        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/commons)"));
+    bool ok = true;
+    o.width = a.options.contains(QStringLiteral("width")) ? a.options.value(QStringLiteral("width")).toInt(&ok) : commons::kDefaultWidth;
+    if (!ok || o.width < 640 || o.width > commons::kDefaultWidth)
+        return fail(Usage, QStringLiteral("bad --width"));
+    o.lang = a.options.value(QStringLiteral("lang"), QStringLiteral("en"));
+    if (o.lang != QLatin1String("en") && o.lang != QLatin1String("fr"))
+        return fail(Usage, QStringLiteral("bad --lang"));
+    o.dev = qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1");
+    o.baseUrl = a.options.value(QStringLiteral("base-url"));
+    if (a.options.contains(QStringLiteral("base-url")) && !commons::baseUrlAllowed(o.baseUrl, o.dev))
+        return fail(Usage, QStringLiteral("--base-url is only for a dev session and only http://127.0.0.1:<port>"));
+    if (QFileInfo::exists(QStringLiteral("/usr/bin/curl")))
+        o.curl = QStringLiteral("/usr/bin/curl");
+    QJsonObject result;
+    QString reason;
+    const ExitCode c = commons::fetchCommons(o, &result, &reason);
+    if (c != Ok)
+        return fail(c, reason);
+    return finish(result, Ok);
+}
+
+int cmdLatest(const QStringList &args)
+{
+    if (args.isEmpty() || args[0] != QLatin1String("commons"))
+        return fail(Usage, QStringLiteral("usage: latest commons --out DIR"));
+    const Args a = parseArgs(args.mid(1), {QStringLiteral("out")}, false);
+    if (!a.ok)
+        return fail(Usage, a.error);
+    const QString out = a.options.value(QStringLiteral("out"));
+    if (!commons::outDirAllowed(out))
+        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/commons)"));
+    return finish(commons::latestCached(out), Ok);
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -260,7 +312,7 @@ int main(int argc, char *argv[])
     QCoreApplication app(argc, argv);
     const QStringList args = app.arguments().mid(1);
     if (args.isEmpty())
-        return fail(Usage, QStringLiteral("usage: grassfield-wallpaper prepare|thumb|list|formats"));
+        return fail(Usage, QStringLiteral("usage: grassfield-wallpaper prepare|thumb|list|formats|fetch|latest"));
     const QString sub = args[0];
     const QStringList rest = args.mid(1);
     if (sub == QLatin1String("prepare"))
@@ -269,6 +321,10 @@ int main(int argc, char *argv[])
         return cmdThumb(rest);
     if (sub == QLatin1String("list"))
         return cmdList(rest);
+    if (sub == QLatin1String("fetch"))
+        return cmdFetch(rest);
+    if (sub == QLatin1String("latest"))
+        return cmdLatest(rest);
     if (sub == QLatin1String("formats"))
         return finish({{QStringLiteral("suffixes"), QJsonArray::fromStringList(supportedSuffixes())}}, Ok);
     return fail(Usage, QStringLiteral("unknown subcommand"));

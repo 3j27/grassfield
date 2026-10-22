@@ -14,6 +14,16 @@ Singleton {
 
     readonly property bool available: fixture || Networking.backend === NetworkBackendType.NetworkManager
     readonly property var devices: Networking.devices ? Networking.devices.values : []
+
+    // NetworkManager says the network is fully usable (connectivity Full), or says nothing because its connectivity check is
+    // off (Unknown) while a link is up, or there is no NetworkManager backend to ask: then there is nothing to wait for and
+    // a user of the network just tries (online wallpaper, ADR-0016 step 2). Portal, Limited and None are not usable.
+    readonly property bool fullyConnected: {
+        if (fixture || !available)
+            return true;
+        const c = Networking.connectivity;
+        return c === NetworkConnectivity.Full || (c === NetworkConnectivity.Unknown && (wiredConnected || wifiConnected !== null));
+    }
     readonly property bool wifiEnabled: fixture || Networking.wifiEnabled
 
     function deviceOfType(type: int): var {

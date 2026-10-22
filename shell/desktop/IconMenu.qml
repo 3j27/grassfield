@@ -14,6 +14,8 @@ PopupMenu {
     property int count: 1
     // The single selected name ("" for several), for "Compress "name"" as on macOS.
     property string singleName: ""
+    // The wallpaper on this screen is the online daily picture: the menu offers its attribution.
+    property bool aboutWallpaper: false
     // Shortcut hints only when the matching desktop keyboard actions are enabled (IconsView.fileKeyActions).
     property bool showKeyHints: false
     // Files on the clipboard (text/uri-list), 0 when none: the desktop menu then offers Paste.
@@ -109,7 +111,14 @@ PopupMenu {
         }, {
             id: "wallpaper",
             text: qsTr("Change Wallpaper…")
-        }, {
+        });
+        if (aboutWallpaper) {
+            items.push({
+                id: "aboutWallpaper",
+                text: qsTr("About This Wallpaper")
+            });
+        }
+        items.push({
             id: "editWidgets",
             text: qsTr("Edit Widgets…")
         }, {
