@@ -81,7 +81,7 @@
    {"name": "clock", "box": [856, 110, 206, 88], "kind": "large"},
    {"name": "avatar initials", "box": [946, 832, 28, 30], "kind": "large"},
    {"name": "user name", "box": [920, 887, 81, 21], "kind": "text"},
-   {"name": "password placeholder (right of the caret, inside the focus ring)", "box": [858, 898, 96, 18], "kind": "text"}
+   {"name": "password placeholder (right of the caret, inside the focus ring)", "box": [866, 898, 92, 18], "kind": "text"}
   ],
   "dock": [
    {"name": "running dot, first test app", "box": [975, 1058, 9, 8], "kind": "icon"},
