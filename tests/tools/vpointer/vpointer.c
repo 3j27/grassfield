@@ -8,6 +8,7 @@
 //   drag X Y       absolute move to (X, Y) in 20 steps (use between down and up)
 //   down | up      left button press / release
 //   click          left press + release      rclick   right press + release
+//   rdown / rup    right button down / up (a held secondary click)
 //   scroll DY      vertical wheel scroll by DY (positive = down), in 15-unit notches
 //   sleep MS       wait
 //   outputs        print the logical layout of all outputs
@@ -176,6 +177,10 @@ int main(int argc, char** argv) {
             button(display, ptr, BTN_LEFT, 1);
         } else if (strcmp(cmd, "up") == 0) {
             button(display, ptr, BTN_LEFT, 0);
+        } else if (strcmp(cmd, "rdown") == 0) {
+            button(display, ptr, BTN_RIGHT, 1);
+        } else if (strcmp(cmd, "rup") == 0) {
+            button(display, ptr, BTN_RIGHT, 0);
         } else if (strcmp(cmd, "click") == 0 || strcmp(cmd, "rclick") == 0) {
             const uint32_t code = cmd[0] == 'r' ? BTN_RIGHT : BTN_LEFT;
             button(display, ptr, code, 1);
