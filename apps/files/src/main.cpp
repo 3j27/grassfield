@@ -33,7 +33,14 @@ int main(int argc, char *argv[])
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addPositionalArgument(QStringLiteral("locations"), QObject::tr("Folders or URLs to open, one window each."), QStringLiteral("[locations...]"));
+    // --info: the Get Info window of each location instead of a browser window (the desktop's Get Info, macOS model).
+    const QCommandLineOption infoOption(QStringLiteral("info"), QObject::tr("Show the Get Info window of each location."));
+    parser.addOption(infoOption);
     parser.process(app);
+    // --info shows its window only once the folder listing ended: KIO jobs hold quit locks, and the last one released with
+    // no window open yet would quit the app before the window appears. It quits when its last window closes instead.
+    if (parser.isSet(infoOption))
+        app.setQuitLockEnabled(false);
 
     QList<QUrl> urls;
     const QStringList args = parser.positionalArguments();
@@ -65,7 +72,8 @@ int main(int argc, char *argv[])
 
     // Global menu (T1): the windows export their menus only while the registrar is there (globalmenu.h).
     engine.setInitialProperties({{QStringLiteral("app"), QVariant::fromValue(&files)},
-                                 {QStringLiteral("globalMenu"), grassfield::apps::globalMenuAvailable()}});
+                                 {QStringLiteral("globalMenu"), grassfield::apps::globalMenuAvailable()},
+                                 {QStringLiteral("infoOnly"), parser.isSet(infoOption)}});
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl::fromLocalFile(QDir(qmlDir).absoluteFilePath(QStringLiteral("Main.qml"))));
