@@ -56,5 +56,15 @@
     "size": 24,
     "outlineColor": "#ffffff",
     "fillColor": "#000000"
+  },
+  "wallpaper": {
+    "source": "builtin",
+    "path": "",
+    "color": "#000000",
+    "fit": "fill",
+    "interval": "1h",
+    "shuffle": true,
+    "videoOnBattery": false,
+    "outputs": []
   }
 }

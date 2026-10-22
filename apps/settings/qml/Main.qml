@@ -21,6 +21,7 @@ Window {
         {id: "sound", title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
         {id: "displays", title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
         {id: "appearance", title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
+        {id: "wallpaper", title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
         {id: "accessibility", title: qsTr("Accessibility"), icon: "person", keywords: qsTr("pointer cursor size mouse large color colour outline fill")},
         {id: "desktop", title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window menu bar background transparent")},
         {id: "notifications", title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
@@ -383,6 +384,8 @@ Window {
                     return soundPage;
                 case "displays":
                     return displaysPage;
+                case "wallpaper":
+                    return wallpaperPage;
                 case "accessibility":
                     return accessibilityPage;
                 case "desktop":
@@ -436,6 +439,14 @@ Window {
         id: appearancePage
         AppearancePage {
             store: cfg
+        }
+    }
+
+    Component {
+        id: wallpaperPage
+        WallpaperPage {
+            store: cfg
+            backend: root.backend
         }
     }
 
