@@ -491,3 +491,46 @@ every WhiteSur decision above (distribution, the split package, the Apple-artwor
 - **Consequence.** Icons that Breeze and Adwaita lack fall to a generic icon until the system plate and Grassfield's own
   icons cover them. needs legal review before any public release (no claim that Breeze or Adwaita contain nothing that
   resembles an Apple icon).
+
+## Amendment 2026-10-23: grassfield-icons is a composed pack (MacTahoe, then Pebble, then Breeze, Adwaita, hicolor)
+Status of this amendment: Accepted (owner decision 2026-10-23, legal risk accepted by the owner). Decider: owner. It
+supersedes the 2026-10-21 chain for the art inside `grassfield-icons`; the selection of the theme (`QT_QPA_SYSTEM_ICON_THEME`,
+the locked dconf key, devenv.sh) is unchanged.
+
+- **Owner statements (French, verbatim).** "un melange des deux et pour les folders on utilise plutot pour pebble";
+  "je veux qu'on le fasse, on fait seulement retirer le logo de Apple pour le reste je prend le risque... pour le store on
+  prendra par exemple pour pebble"; "et ce pack d'icons a la fin deviens donc grassfield-icons"; "non on utiliser
+  mactaohe, puis pebble, puis les autres mais en suivant les reco que jai fait"; "en fait c'est tout ce pack d'cions que
+  mois j'appel grassfield-icons".
+- **What the integrator reported first (docs/STATE.md, 2026-10-23).** Both themes reproduce Apple app icons (Calendar,
+  Clock, Maps, Music, Notes, Photos, Weather, Settings, Safari, iCloud, iPhone renders). MacTahoe also contains the Apple
+  logo itself and the Finder face. Pebble has no licence file at the pinned commit (its README states GPL-3.0). The owner
+  decided with that information: only the Apple logo is removed; the trade-dress risk of the rest is his.
+- **Sources (pinned, fetched from github.com at build time, never committed).**
+  vinceliuice/MacTahoe-icon-theme `839848b9a8a38a92a6936e30c4abe35cc6f2546d` (GPL-3.0, COPYING and AUTHORS present);
+  a-shewale/Pebble-Icon-Theme `185da58c2f4caf3c2a038aa0869fd2772acc0933`, its main `Pebble/` variant only.
+- **Composition: one theme, first layer that provides an icon name wins.** A name provided by a layer removes every file
+  and link of that name from later layers, at every size, so GTK and Qt (which choose the closest size inside one theme)
+  never fall back to another layer's drawing.
+  0. Grassfield's own application icons (`branding/icons/theme/scalable/apps`).
+  1. MacTahoe, base variant, with three overrides: (a) every Apple-logo file in `packaging/arch/icons-apple-logos.txt`
+     and every link that resolves to it is dropped, so the name falls through; (b) folders: every non-symbolic name of
+     Pebble's places directories comes from Pebble; (c) store: every name that resolves to Pebble's store icon (the blue
+     bag) or to MacTahoe's App Store drawing is served by Pebble's bag.
+  2. Pebble, for every name not provided above, minus its own listed Apple-logo files.
+  3. Grassfield's six generic device glyphs (E27), for names not provided above.
+  Then `Inherits=breeze,Adwaita,hicolor`.
+- **The Apple-logo list** comes from a by-eye sweep of contact sheets of every source file of both pins (MacTahoe 11,631
+  files, Pebble 4,882 files). The composer fails when a listed file is missing from the source (pin drift) or when a
+  listed file or a link to it is still in the output. The Finder face is treated as an Apple logo (it is Apple's mark for
+  its file manager), so the file manager icon falls through to Pebble.
+- **No Apple trademark names in UI.** The composed index.theme is `Name=Grassfield`, `Hidden=true`, with no "Mac",
+  "macOS", "OSX", "Apple" or "Tahoe". No About page row and no UI text names the upstream themes; the credits and licences
+  are in THIRD_PARTY.md, branding/LICENSES.md and `/usr/share/licenses/grassfield-icons/`.
+- **Packaging.** A split package `grassfield-icons` owns `/usr/share/icons/grassfield-icons`; `grassfield-desktop` depends
+  on it. Dev sessions compose the same pack into `.dev/share/icons/grassfield-icons` and fall back to the plain wrapper
+  (own glyphs, Breeze, Adwaita, hicolor) when the pins cannot be fetched.
+- **Consequences.** Grassfield ships third-party art that imitates Apple's app icons, by owner decision; this stays on the
+  legal-review list before any public release, together with Pebble's missing licence file. A pin change needs a new
+  sweep of the changed files. The system plate (ADR-0014) must not draw a second plate around icons that already have
+  the rounded-square shape: checked visually when the pack lands.
