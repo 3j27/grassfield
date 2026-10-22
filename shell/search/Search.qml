@@ -44,6 +44,11 @@ Scope {
     readonly property bool filesPending: fileTimer.running || liveSearches.length > 0
     property var chips: []
     property string filter: ""
+    // Chips need something to choose between; a lone category is the list itself.
+    readonly property bool chipsShown: query.trim() !== "" && chips.length > 1
+    // Keyboard reach of the chips: the field keeps the text focus; in the "chips" zone the ring is on chip `chipIndex`.
+    property string zone: "field"
+    property int chipIndex: -1
     readonly property var chipLabels: ({
             "apps": qsTr("Applications"),
             "commands": qsTr("Commands"),
@@ -105,6 +110,7 @@ Scope {
 
     function hide(): void {
         open = false;
+        leaveChips();
         fileTimer.stop();
         cancelFiles();
         fileHits = [];
@@ -122,6 +128,7 @@ Scope {
             return;
         query = text;
         filter = "";
+        leaveChips();
         fileHits = [];
         cancelFiles();
         compute();
@@ -250,6 +257,8 @@ Scope {
 
         // Chips come from the unfiltered results; a chip that no longer has results is dropped with its filter.
         chips = Filters.chipsOf(g);
+        if (zone === "chips" && (chips.length < 2 || query.trim() === ""))
+            leaveChips();
         if (filter !== "" && chips.indexOf(filter) < 0)
             filter = "";
         g = Filters.apply(g, filter, filter !== "" ? chipLabels[filter] : "");
@@ -309,7 +318,8 @@ Scope {
             ? ["timeout", "2", "localsearch", "search", "-f", "-l", String(Tokens.searchMaxFiles), "--", term]
             : ["timeout", "2", "plocate", "-i", "-b", "-l", "1500"].concat(plocateDb !== "" ? ["-d", plocateDb] : [], ["--", term]);
         const p = searchProc.createObject(root, {seq: seq, term: term, stage: stage, command: argv});
-        liveSearches.push(p);
+        // Reassigned, not pushed: a mutated array does not notify, and filesPending must see the search start.
+        liveSearches = liveSearches.concat([p]);
         p.running = true;
     }
 
@@ -402,6 +412,21 @@ Scope {
     }
 
     // Click on a chip: select it, or clear the filter when it is the selected one.
+    function leaveChips(): void {
+        zone = "field";
+        chipIndex = -1;
+    }
+
+    // A key of the field's handler while the chips hold the keyboard reach. Returns whether the key was consumed.
+    function chipKey(action: string): bool {
+        const r = Filters.chipKey(zone, chipIndex, chips.length, action);
+        zone = r.zone;
+        chipIndex = r.index;
+        if (r.toggle && chipIndex >= 0 && chipIndex < chips.length)
+            toggleFilter(chips[chipIndex]);
+        return r.handled;
+    }
+
     function toggleFilter(id: string): void {
         filter = filter === id ? "" : id;
         compute();
@@ -419,6 +444,11 @@ Scope {
             return;
         const current = selected >= 0 ? items[selected].groupId : groups[0].id;
         let gi = groups.findIndex(g => g.id === current);
+        if (chipsShown && Filters.leavesForChips(gi, groups.length, delta)) {
+            zone = "chips";
+            chipIndex = delta > 0 ? 0 : chips.length - 1;
+            return;
+        }
         gi = (gi + delta + groups.length) % groups.length;
         const target = groups[gi].id;
         selected = items.findIndex(it => it.groupId === target);
@@ -495,6 +525,8 @@ Scope {
 
         // Selects (or clears, with the selected chip's id or "") a filter chip (tests).
         function filter(id: string): void {
+            if (!VisualFixtures.active)
+                return;
             root.toggleFilter(id);
         }
 

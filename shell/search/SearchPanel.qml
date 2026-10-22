@@ -120,7 +120,7 @@ Variants {
 
             readonly property bool hasResults: root.controller.rows.length > 0
             // Chips need something to choose between; a lone category is the list itself.
-            readonly property bool chipsShown: root.controller.query.trim() !== "" && root.controller.chips.length > 1
+            readonly property bool chipsShown: root.controller.chipsShown
             readonly property real chipBlock: chipsShown ? Tokens.searchChipTop + Tokens.launcherChipHeight + Tokens.searchChipBottom : 0
             // A query nothing answers (file search settled): a centred notice instead of a bare field.
             readonly property bool noResults: !hasResults && root.controller.query.trim() !== "" && !root.controller.filesPending
@@ -200,6 +200,24 @@ Variants {
                     const c = root.controller;
                     const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
                     event.accepted = true;
+                    // The chips hold the keyboard reach (the field keeps the text focus): they take their keys first, and
+                    // a key they do not know leaves them and acts on the field as usual.
+                    if (c.zone === "chips") {
+                        const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
+                        const actions = {};
+                        actions[Qt.Key_Tab] = shift ? "prev" : "next";
+                        actions[Qt.Key_Backtab] = "prev";
+                        actions[Qt.Key_Left] = "left";
+                        actions[Qt.Key_Right] = "right";
+                        actions[Qt.Key_Home] = "home";
+                        actions[Qt.Key_End] = "end";
+                        actions[Qt.Key_Escape] = "escape";
+                        actions[Qt.Key_Space] = "activate";
+                        actions[Qt.Key_Return] = "activate";
+                        actions[Qt.Key_Enter] = "activate";
+                        if (c.chipKey(actions[event.key] ?? "other"))
+                            return;
+                    }
                     switch (event.key) {
                     case Qt.Key_Down:
                         c.move(1);
@@ -249,15 +267,17 @@ Variants {
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 
-            // Filter chips (mouse and assistive technology; the keyboard stays in the field: Tab moves between groups).
+            // Filter chips. The field keeps the text focus; Tab past the last result group (Shift+Tab before the first) moves
+            // the focus ring to the chips, Left/Right move along them, Space or Return selects, Esc or Tab leaves.
             Flickable {
                 id: chipFlick
                 visible: panel.chipsShown
-                x: Tokens.spacingLg
-                y: Tokens.searchFieldHeight + Tokens.searchChipTop
-                width: panel.width - 2 * Tokens.spacingLg
-                height: Tokens.launcherChipHeight
-                contentWidth: chipRow.width
+                x: Tokens.spacingLg - Tokens.controlFocusOutline
+                y: Tokens.searchFieldHeight + Tokens.searchChipTop - Tokens.controlFocusOutline
+                width: panel.width - 2 * Tokens.spacingLg + 2 * Tokens.controlFocusOutline
+                // Room around the chips for the focus ring outside them (the row clips).
+                height: Tokens.launcherChipHeight + 2 * Tokens.controlFocusOutline
+                contentWidth: chipRow.width + 2 * Tokens.controlFocusOutline
                 contentHeight: height
                 clip: true
                 flickableDirection: Flickable.HorizontalFlick
@@ -268,6 +288,8 @@ Variants {
 
                 Row {
                     id: chipRow
+                    x: Tokens.controlFocusOutline
+                    y: Tokens.controlFocusOutline
                     spacing: Tokens.launcherChipGap
 
                     Repeater {
@@ -275,10 +297,19 @@ Variants {
 
                         AppsChip {
                             required property string modelData
+                            required property int index
 
                             label: root.controller.chipLabels[modelData]
+                            focused: root.controller.zone === "chips" && root.controller.chipIndex === index
                             active: root.controller.filter === modelData
-                            onClicked: root.controller.toggleFilter(modelData)
+                            onClicked: {
+                                root.controller.leaveChips();
+                                root.controller.toggleFilter(modelData);
+                            }
+                            onFocusedChanged: {
+                                if (focused)
+                                    chipFlick.contentX = Math.max(0, Math.min(chipFlick.contentWidth - chipFlick.width, x + width / 2 - chipFlick.width / 2));
+                            }
                         }
                     }
                 }

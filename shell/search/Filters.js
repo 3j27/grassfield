@@ -35,3 +35,40 @@ function apply(groups, filter, title) {
     }
     return items.length > 0 ? [{id: chip.id, title: title, items: items}] : [];
 }
+
+// Keyboard reach of the chips (the field keeps the text focus, as in the Apps panel: a "chips" zone draws the ring on
+// chip `index` and the field's key handler routes the keys here). `action` is next | prev | left | right | home | end |
+// escape | activate | other. Returns {zone, index, toggle, handled}: handled = false hands the key back to the field
+// (typing, Up, Down ... leave the chips and act as usual); toggle = true selects or clears chip `index`.
+function chipKey(zone, index, count, action) {
+    if (zone !== "chips")
+        return {zone: "field", index: -1, toggle: false, handled: false};
+    const to = i => ({zone: "chips", index: Math.max(0, Math.min(count - 1, i)), toggle: false, handled: true});
+    const leave = {zone: "field", index: -1, toggle: false, handled: true};
+    switch (action) {
+    case "right":
+        return to(index + 1);
+    case "left":
+        return to(index - 1);
+    case "home":
+        return to(0);
+    case "end":
+        return to(count - 1);
+    case "next":
+        return index + 1 < count ? to(index + 1) : leave;
+    case "prev":
+        return index > 0 ? to(index - 1) : leave;
+    case "escape":
+        return leave;
+    case "activate":
+        return {zone: "chips", index: index, toggle: true, handled: true};
+    default:
+        return {zone: "field", index: -1, toggle: false, handled: false};
+    }
+}
+
+// Whether Tab (delta 1) or Shift+Tab (delta -1) on group `current` of `groupCount` leaves the results for the chips
+// (the group cycle would wrap): the chips are the stop between the last and the first group.
+function leavesForChips(current, groupCount, delta) {
+    return delta > 0 ? current === groupCount - 1 : current === 0;
+}
