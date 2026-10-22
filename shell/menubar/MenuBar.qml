@@ -8,6 +8,7 @@ import Grassfield.Ui
 import qs.notifications
 import qs.platform
 import qs.services
+import "StatusLogic.js" as Logic
 
 // Top bar, one per screen. Left: Grassfield menu (leaf mark), the focused app name with its
 // application menu, then the app's own menus when it exports them (T1/T2 through MenuBridge) or the
@@ -15,6 +16,10 @@ import qs.services
 // Control Center, clock. Popups are rendered by qs.overlay through Popups.
 Scope {
     id: root
+
+    // The Search status item asks the shell to toggle Search (shell.qml owns it); `searchActive` lights the item while open.
+    property bool searchActive: false
+    signal searchRequested
 
     // Test and keyboard hook: qs ipc call menubar open <system|app|volume|network|battery|controlcenter> <output|"">.
     IpcHandler {
@@ -165,6 +170,8 @@ Scope {
             readonly property color barTint: showBackground ? Appearance.colors.hover : barPalette.hover
             readonly property color barShadow: darkTone ? barPalette.materialHighlight : barPalette.shadow
             readonly property var battery: UPower.displayDevice
+            // Now Playing (macOS: "Show When Active"): while a player has a session (playing, or paused with a track).
+            readonly property bool showNowPlaying: Logic.nowPlayingShown(Settings.menubarShowNowPlaying, Media.available, Media.playing, Media.title)
             readonly property bool hasBattery: !VisualFixtures.active && battery !== null && battery.isPresent && battery.isLaptopBattery
 
             // SingleMainWindow of the app's desktop entry decides whether File has New Window.
@@ -202,13 +209,19 @@ Scope {
                     Qt.callLater(Popups.close);
             }
 
+            // The Now Playing item went away (player closed, switched off in Settings): its open popover would act on nothing.
+            onShowNowPlayingChanged: {
+                if (!showNowPlaying && isOpen("nowplaying"))
+                    Qt.callLater(Popups.close);
+            }
+
             function isOpen(kind: string): bool {
                 return Popups.kind === kind && Popups.screenName === win.screen.name;
             }
 
             // macOS menu tracking: while one of this bar's menus is open, moving onto another title or status item opens
             // its menu without a click. The clock (Notification Center) and the Do Not Disturb indicator are not menus.
-            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray"]
+            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying"]
             readonly property bool tracking: Popups.active && Popups.screenName === win.screen.name && trackedKinds.indexOf(Popups.kind) >= 0
 
             function hoverSwitch(kind: string): void {
@@ -386,6 +399,10 @@ Scope {
                     break;
                 case "controlcenter":
                     openFor("controlcenter", ccButton, "right", {});
+                    break;
+                case "nowplaying":
+                    if (win.showNowPlaying)
+                        openFor("nowplaying", nowPlayingButton, "right", {});
                     break;
                 }
             }
@@ -604,6 +621,28 @@ Scope {
                                 tint: win.barTint
                                 shadowed: !win.showBackground
                                 shadowColor: win.barShadow
+                            }
+                        }
+
+                        // Now Playing: the active player's controls, while it has a session.
+                        BarButton {
+                            id: nowPlayingButton
+                            objectName: "menubar-nowplaying"
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            shadowColor: win.barShadow
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: win.showNowPlaying
+                            accessibleName: Media.title !== "" ? qsTr("Now Playing: %1").arg(Media.title) : qsTr("Now Playing")
+                            active: win.isOpen("nowplaying")
+                            onActivated: win.popup("nowplaying")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("nowplaying")
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: "now-playing"
                             }
                         }
 

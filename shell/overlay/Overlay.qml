@@ -119,6 +119,8 @@ Variants {
                 case "appabout":
                 case "notice":
                     return Tokens.radiusAlert;
+                case "nowplaying":
+                    return Tokens.quicksettingsRadiusTile;
                 }
                 return Tokens.radiusMenu;
             }
@@ -223,6 +225,8 @@ Variants {
                     return bridgeMenu;
                 case "tray":
                     return trayMenu;
+                case "nowplaying":
+                    return nowPlayingPopover;
                 case "volume":
                     return volumeMenu;
                 case "network":
@@ -270,6 +274,12 @@ Variants {
         Component {
             id: trayMenu
             TrayMenu {}
+        }
+
+        // The Now Playing status item's popover: the Quick Settings module on its own.
+        Component {
+            id: nowPlayingPopover
+            NowPlayingPopover {}
         }
 
         Component {

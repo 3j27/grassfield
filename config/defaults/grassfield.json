@@ -43,7 +43,8 @@
     "showIcons": true
   },
   "menubar": {
-    "showBackground": false
+    "showBackground": false,
+    "showNowPlaying": true
   },
   "accent": {
     "color": "multicolor"

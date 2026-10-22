@@ -144,6 +144,8 @@ Scope {
     component MenubarConfig: JsonObject {
         // false: the bar is transparent like macOS 26/27; true restores the frosted material band.
         property bool showBackground: false
+        // Now Playing item of the bar (Settings > Desktop & Dock > Menu Bar): shown while a player has a session.
+        property bool showNowPlaying: true
     }
 
     component AccentConfig: JsonObject {

@@ -35,6 +35,7 @@ ShellRoot {
         ["dock.minimizeEffect", "shrink", () => Settings.dockMinimizeEffect === "shrink"],
         ["desktop.showIcons", false, () => Settings.desktopShowIcons === false],
         ["menubar.showBackground", true, () => Settings.menubarShowBackground === true],
+        ["menubar.showNowPlaying", false, () => Settings.menubarShowNowPlaying === false],
         ["windows.titlebarDoubleClick", "minimize", () => Settings.titlebarDoubleClick === "minimize"],
         ["notifications.dnd", true, () => Settings.notificationsDnd === true],
         ["notifications.previews", "never", () => Settings.notificationsPreviews === "never"],

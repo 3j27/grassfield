@@ -201,6 +201,10 @@
       "properties": {
         "showBackground": {
           "type": "boolean"
+        },
+        "showNowPlaying": {
+          "type": "boolean",
+          "description": "Show the Now Playing item in the menu bar while a media player has a session (playing, or paused with a track loaded). Default true."
         }
       }
     },
