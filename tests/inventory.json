@@ -209,6 +209,7 @@
  {"path": "tests/visual/dock-drag-stress.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-drops.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-feel.sh", "layer": "visual", "runner": "bare"},
+ {"path": "tests/visual/dock-geometry.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-attention.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-launch.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-macos.sh", "layer": "visual", "runner": "bare"},
