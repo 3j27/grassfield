@@ -8,6 +8,8 @@ import Grassfield.Ui
 import qs.notifications
 import qs.platform
 import qs.services
+import "BarHide.js" as BarHide
+import "../dock/AutoHide.js" as AutoHide
 
 // Top bar, one per screen. Left: Grassfield menu (leaf mark), the focused app name with its
 // application menu, then the app's own menus when it exports them (T1/T2 through MenuBridge) or the
@@ -45,6 +47,28 @@ Scope {
         // Test hook (tests/visual/menubar-macos.sh): the open popup's kind and output, "" when none. Read-only.
         function openKind(): string {
             return Popups.active ? Popups.kind + "@" + Popups.screenName : "";
+        }
+
+        // Test hook (tests/visual/menubar-macos.sh): the auto-hide state of an output's bar as JSON. Read-only.
+        function autohide(screen: string): string {
+            const all = bars.instances;
+            let bar = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    bar = all[i];
+            }
+            if (!bar)
+                return "{}";
+            return JSON.stringify({
+                mode: bar.hideMode,
+                fullscreen: bar.fullscreen,
+                hides: bar.autoHides,
+                state: bar.hideMachine.state,
+                visible: bar.hideMachine.visible,
+                away: bar.away,
+                overlay: BarHide.overlayLayer(bar.fullscreen),
+                zone: bar.exclusiveZone
+            });
         }
 
         // Test hook (tests/integration/global_menus.sh): JSON with the shown window, the bridge state, the bar's
@@ -201,6 +225,27 @@ Scope {
                 if (bridgeMenus.length === 0 && isOpen("appbridge"))
                     Qt.callLater(Popups.close);
             }
+
+            // Auto-hide (macOS "Automatically hide and show the menu bar", BarHide.js): the Dock's state machine (AutoHide.js) per
+            // output. The bar window keeps its size; only the content slides, and only the edge strip takes input while it is
+            // away. Over a full-screen window it sits on the overlay layer (Hyprland draws full-screen windows above the top layer).
+            readonly property string hideMode: "fullscreen"
+            readonly property bool fullscreen: Compositor.fullscreenOn(win.screen.name, Compositor.topologyRevision)
+            readonly property bool autoHides: BarHide.hides(hideMode, fullscreen)
+            property var hideMachine: AutoHide.create()
+            // A menu of this bar open (or Notification Center from the clock) keeps it in view; the pointer on the bar or its edge strip too.
+            readonly property var hideInhibitors: ({
+                    pointer: winHover.hovered,
+                    popup: tracking || (Notifications.centerOpen && Notifications.centerScreen === win.screen.name)
+                })
+            readonly property var hideTiming: ({
+                    hideGrace: Tokens.menubarHideGrace,
+                    hideDuration: Appearance.reduceMotion ? 0 : Tokens.menubarHideDuration,
+                    revealDwell: Tokens.menubarRevealDwell,
+                    revealDuration: Appearance.reduceMotion ? 0 : Tokens.menubarRevealDuration
+                })
+            readonly property bool away: autoHides && hideMachine.state === "hidden" && !AutoHide.forcing(hideInhibitors)
+            readonly property real slideY: BarHide.slideOffset(Tokens.menubarHeight, AutoHide.ease(hideMachine.visible))
 
             function isOpen(kind: string): bool {
                 return Popups.kind === kind && Popups.screenName === win.screen.name;
@@ -378,7 +423,8 @@ Scope {
                 right: true
             }
             implicitHeight: Tokens.menubarHeight
-            exclusiveZone: Tokens.menubarHeight
+            // Only a bar that is on the desktop in its mode reserves space, constantly: reveal and hide never reflow windows.
+            exclusiveZone: BarHide.reservesSpace(hideMode) ? Tokens.menubarHeight : 0
             color: "transparent"
             // Never the keyboard: hovering or starting must never take it from the focused window, and while one of this
             // bar's menus is open its popup holds it (Exclusive, shell/overlay; CTRL+F2 opens the system menu that way).
@@ -386,12 +432,16 @@ Scope {
             // on-demand layer under the pointer the keyboard when it refocuses), so the window it still counted active lost
             // its keys (tests/compositor/click_focus.sh).
             focusable: false
-            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.layer: BarHide.overlayLayer(win.fullscreen) ? WlrLayer.Overlay : WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-menubar"
             // Quickshell qmltypes name this property's type PendingRegion/FileViewAdapter without exporting it (metadata quirk).
             // qmllint disable missing-type
-            BackgroundEffect.blurRegion: win.showBackground && material.blurActive ? blurRegion : null
+            BackgroundEffect.blurRegion: win.showBackground && material.blurActive && win.hideMachine.visible > 0 ? blurRegion : null
+            // The bar, or only the top edge strip while it is away.
+            mask: Region {
+                item: hitItem
+            }
             // qmllint enable missing-type
 
             Region {
@@ -400,9 +450,22 @@ Scope {
                 radius: material.radius
             }
 
+            Item {
+                id: hitItem
+                width: win.width
+                height: BarHide.inputHeight(Tokens.menubarHeight, Tokens.menubarRevealZone, win.away)
+            }
+
             HoverHandler {
+                id: winHover
                 onPointChanged: if (hovered)
                     PointerTracker.report(win.screen.name, point.position.x, point.position.y)
+            }
+
+            // Frame clock of the auto-hide machine: stops while nothing can change (away and idle, or in view and held).
+            FrameAnimation {
+                running: AutoHide.active(win.hideMachine, win.hideInhibitors, win.autoHides)
+                onTriggered: win.hideMachine = AutoHide.step(win.hideMachine, win.hideInhibitors, win.autoHides, win.hideTiming, Math.min(frameTime * 1000, 100))
             }
 
             SystemClock {
@@ -412,7 +475,9 @@ Scope {
 
             Material {
                 id: material
-                anchors.fill: parent
+                y: win.slideY
+                width: parent.width
+                height: parent.height
                 visible: win.showBackground
                 radius: Tokens.radiusMenuBar
                 shadowEnabled: false
@@ -434,7 +499,9 @@ Scope {
             // Content: drawn straight on the wallpaper unless the user turns the background on (Settings, Menu Bar).
             Item {
                 id: barContent
-                anchors.fill: parent
+                y: win.slideY
+                width: parent.width
+                height: parent.height
 
                     Row {
                         id: leftRow

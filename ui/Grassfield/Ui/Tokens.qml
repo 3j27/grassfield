@@ -227,6 +227,16 @@ QtObject {
     readonly property real menubarTextShadowBlur: 0.22
     // A2: vertical offset of the bar text shadow
     readonly property int menubarTextShadowOffsetY: 0
+    // estimate (macOS reveals the bar at the pointer's arrival on the top edge): input strip in px at the top edge while an auto-hidden bar is away
+    readonly property int menubarRevealZone: 2
+    // estimate: an auto-hidden bar waits this long, pointer off the bar and no menu open, before it slides away (ms)
+    readonly property int menubarHideGrace: 350
+    // estimate: slide away, ms (Reduce Motion: no slide)
+    readonly property int menubarHideDuration: 250
+    // estimate: the pointer must stay on the top edge this long before a hidden bar slides in (ms)
+    readonly property int menubarRevealDwell: 120
+    // estimate: slide in, ms (Reduce Motion: shown at once)
+    readonly property int menubarRevealDuration: 200
 
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIconSize: 48

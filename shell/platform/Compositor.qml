@@ -493,7 +493,7 @@ Singleton {
                     Hyprland.dispatch("hl.dsp.workspace.toggle_special(\"minimized\")");
                 return;
             }
-            if (event.name === "windowtitlev2" || event.name === "fullscreen" || event.name === "changefloatingmode") {
+            if (event.name === "windowtitlev2" || event.name === "fullscreen" || event.name === "changefloatingmode" || root.fullscreenRefreshEvents.indexOf(event.name) >= 0) {
                 root.requestWindowRefresh();
                 if (event.name === "windowtitlev2")
                     return;
@@ -598,6 +598,16 @@ Singleton {
             });
         }
         return out;
+    }
+
+    // Events after which which window is full screen where may have changed (a window opened, closed or moved, another
+    // workspace shown): the window data is re-read (coalesced, event-driven) so fullscreenOn stays right.
+    readonly property var fullscreenRefreshEvents: ["workspacev2", "openwindow", "closewindow", "movewindowv2"]
+
+    // True when a window of the output's shown workspace is full screen (Hyprland fullscreen mode 2, not Zoom). The menu
+    // bar sits above it on the overlay layer and auto-hides. Reactive on `revision` (topologyRevision).
+    function fullscreenOn(screenName: string, revision: int): bool {
+        return windowsOn(screenName, revision).some(w => w.fullscreen);
     }
 
     // Windows on the output's currently shown workspace.
