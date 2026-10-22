@@ -2,7 +2,9 @@ pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
+import Grassfield.Ui
 import qs.store
+import "../dock/Geometry.js" as DockGeometry
 
 // User configuration facade over SettingsStore (grassfield.json, contract version 1).
 // Keys are documented in docs/specs/ui.md.
@@ -26,6 +28,21 @@ Singleton {
     readonly property bool reduceTransparency: store.data.accessibility.reduceTransparency
     readonly property bool reduceMotion: store.data.accessibility.reduceMotion
     readonly property var dockPinned: store.dockPinned
+    readonly property int dockSize: store.dockSize
+    // Metrics of the Dock at the stored tile size (what the others reserve around it; the Dock itself follows a live resize).
+    readonly property string dockPosition: store.dockPosition
+    readonly property var dockMetrics: DockGeometry.metrics(dockSize, {
+        iconSize: Tokens.dockIconSize,
+        padding: Tokens.dockPadding,
+        indicatorSize: Tokens.dockIndicatorSize,
+        spacing: Tokens.dockSpacing,
+        bottomMargin: Tokens.dockBottomMargin,
+        separatorHeight: Tokens.dockSeparatorHeight,
+        badgeSize: Tokens.dockBadgeSize,
+        radiusIcon: Tokens.radiusDockIcon
+    })
+    // What the Dock keeps clear on its edge, whether or not it hides (the desktop icons, the widgets and the Apps panel stay put).
+    readonly property var dockFootprint: DockGeometry.footprint(dockPosition, dockMetrics, false)
     readonly property real dockMagnification: store.dockMagnification
     readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
     readonly property bool dockAutohide: store.data.dock.autohide
@@ -105,6 +122,14 @@ Singleton {
 
     function setDockAutohide(value: bool): void {
         store.setDockAutohide(value);
+    }
+
+    function setDockSize(value: real): void {
+        store.setDockSize(value);
+    }
+
+    function setDockPosition(value: string): void {
+        store.setDockPosition(value);
     }
 
     function setDockMagnification(value: real, enabled: bool): void {

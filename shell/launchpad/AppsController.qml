@@ -77,11 +77,12 @@ Scope {
     }
     readonly property var panel: Model.panelRect(screenSize.width, screenSize.height, ({
             width: Tokens.launcherPanelWidth,
-            edgeMargin: Tokens.launcherEdgeMargin,
+            edgeMargin: Math.max(Tokens.launcherEdgeMargin, Settings.dockFootprint.left, Settings.dockFootprint.right),
             heightFraction: Tokens.launcherHeightFraction,
             minHeight: Tokens.launcherMinHeight,
             topFraction: Tokens.launcherTopFraction,
-            bottomClearance: Tokens.launcherBottomClearance
+            // Never into the Dock (its size and edge are the user's): the tokens are the floor.
+            bottomClearance: Math.max(Tokens.launcherBottomClearance, Settings.dockFootprint.bottom)
         }))
     readonly property var grid: Model.grid(panel.w - 2 * Tokens.launcherPadding, ({
             columns: Tokens.launcherColumns,

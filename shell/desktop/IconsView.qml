@@ -44,9 +44,10 @@ FocusScope {
 
     readonly property real margin: Tokens.desktopIconMargin
     readonly property real topInset: Tokens.menubarHeight + margin
-    // The Dock sits at the bottom edge: keep the grid above it.
-    readonly property real bottomInset: margin + Tokens.dockIconSize + 2 * Tokens.dockPadding + Tokens.dockBottomMargin
-    readonly property real areaW: Math.max(0, width - 2 * margin)
+    // The Dock sits on one edge (bottom, left or right): keep the grid clear of it.
+    readonly property real bottomInset: margin + Settings.dockFootprint.bottom
+    readonly property real leftInset: margin + Settings.dockFootprint.left
+    readonly property real areaW: Math.max(0, width - leftInset - margin - Settings.dockFootprint.right)
     readonly property real areaH: Math.max(0, height - topInset - bottomInset)
     readonly property var grid: Logic.gridSize(areaW, areaH, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight)
     readonly property bool ready: width > 0 && height > 0 && files.positionsLoaded && files.dir !== ""
@@ -68,7 +69,7 @@ FocusScope {
         }
         return out;
     }
-    readonly property var blocked: Logic.blockedSlots(widgetRects, margin, topInset, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight, grid.cols, grid.rows)
+    readonly property var blocked: Logic.blockedSlots(widgetRects, leftInset, topInset, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight, grid.cols, grid.rows)
     readonly property var lay: Logic.layout(files.names, files.positions, grid.cols, grid.rows, blocked)
     readonly property var shown: files.entries.filter(e => lay[e.name] !== undefined)
     readonly property var selectedNames: Object.keys(selected).filter(n => selected[n] === true && lay[n] !== undefined)
@@ -128,7 +129,7 @@ FocusScope {
         if (lay[name] === undefined)
             return Qt.rect(0, 0, 0, 0);
         const s = Logic.slotPos(lay[name].col, lay[name].row, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight);
-        return Qt.rect(margin + s.x, topInset + s.y, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight);
+        return Qt.rect(leftInset + s.x, topInset + s.y, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight);
     }
 
     function iconAt(x: real, y: real): string {
@@ -379,7 +380,7 @@ FocusScope {
                 m = null;
             }
             if (m && Array.isArray(m.names) && typeof m.anchor === "string" && lay[m.anchor] !== undefined) {
-                const want = Logic.slotAt(drop.x - m.hx - margin, drop.y - m.hy - topInset, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight, grid.cols, grid.rows);
+                const want = Logic.slotAt(drop.x - m.hx - leftInset, drop.y - m.hy - topInset, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight, grid.cols, grid.rows);
                 const names = m.names.filter(n => typeof n === "string" && lay[n] !== undefined);
                 files.setPositions(Object.assign({}, files.positions, Logic.moveGroup(lay, names, m.anchor, want, grid.cols, grid.rows)));
                 drop.accept(Qt.MoveAction);
@@ -394,7 +395,7 @@ FocusScope {
         drop.accept(Qt.CopyAction);
         if (paths.length === 0 || dir === "")
             return;
-        const want = Logic.slotAt(drop.x - Tokens.desktopIconCellWidth / 2 - margin, drop.y - Tokens.desktopIconCellHeight / 2 - topInset, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight, grid.cols, grid.rows);
+        const want = Logic.slotAt(drop.x - Tokens.desktopIconCellWidth / 2 - leftInset, drop.y - Tokens.desktopIconCellHeight / 2 - topInset, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight, grid.cols, grid.rows);
         const added = files.importPaths(paths, false);
         // Reserve slots for the new names next to the drop point.
         const taken = {};

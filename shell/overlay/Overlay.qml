@@ -223,6 +223,10 @@ Variants {
                     return Popups.anchorX - width;
                 case "above":
                     return Popups.anchorX - width / 2;
+                case "rightOf":
+                    return Popups.anchorX;
+                case "leftOf":
+                    return Popups.anchorX - width;
                 case "center":
                     return (win.width - width) / 2;
                 }
@@ -234,6 +238,9 @@ Variants {
                 switch (Popups.align) {
                 case "above":
                     return Popups.anchorY - height;
+                case "rightOf":
+                case "leftOf":
+                    return Popups.anchorY - height / 2;
                 case "center":
                     return (win.height - height) / 2 - win.height * Tokens.panelDialogRaise;
                 }

@@ -300,9 +300,10 @@ CGrassfieldTitlebar::~CGrassfieldTitlebar() {
         if (input.hovered == this)
             input.hovered = nullptr;
         if (input.grab.deco == this) {
-            // The window is going away: drop the gesture. The press ownership stays, so the release that
-            // will still arrive is not mistaken for a client's (another titlebar under the pointer
-            // consumes it; elsewhere the seat drops it, as the client never saw the press).
+            // The window is going away: drop the gesture (and redraw where its tiling preview was). The press ownership
+            // stays, so the release that will still arrive is not mistaken for a client's (another titlebar under the
+            // pointer consumes it; elsewhere the seat drops it, as the client never saw the press).
+            damageSnap(input.grab.snap);
             input.grab = {};
             input.presses.dropGesture();
         }

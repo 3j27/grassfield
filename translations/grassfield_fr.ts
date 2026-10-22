@@ -1828,6 +1828,42 @@
         <translation>Animation de réduction</translation>
     </message>
     <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>The size of the icons in the Dock. You can also drag the divider in the Dock.</source>
+        <translation>La taille des icônes du Dock. Vous pouvez aussi faire glisser la séparation dans le Dock.</translation>
+    </message>
+    <message>
+        <source>Small</source>
+        <translation>Petit</translation>
+    </message>
+    <message>
+        <source>Large</source>
+        <translation>Grand</translation>
+    </message>
+    <message>
+        <source>Position on screen</source>
+        <translation>Position à l’écran</translation>
+    </message>
+    <message>
+        <source>The Dock goes to the edge you choose. With several displays it is on the one where the pointer last reached that edge.</source>
+        <translation>Le Dock se place au bord choisi. Avec plusieurs écrans, il est sur celui où le pointeur a touché ce bord en dernier.</translation>
+    </message>
+    <message>
+        <source>Left</source>
+        <translation>Gauche</translation>
+    </message>
+    <message>
+        <source>Bottom</source>
+        <translation>Bas</translation>
+    </message>
+    <message>
+        <source>Right</source>
+        <translation>Droite</translation>
+    </message>
+    <message>
         <source>Funnel</source>
         <translation>Entonnoir</translation>
     </message>

@@ -112,6 +112,9 @@ TestCase {
         const full = model.windowMenu(ctx({canTile: true, fullscreen: true}));
         verify(full.find(i => i.id === "moveResize").submenu.filter(i => !i.separator).every(i => !i.enabled), "no tiling in full screen");
         verify(!full.find(i => i.place === "fill").enabled);
+        const zoomed = model.windowMenu(ctx({canTile: true, maximized: true}));
+        verify(!zoomed.find(i => i.place === "fill").enabled, "no tiling for a zoomed window (the plugin refuses it, R13)");
+        verify(!zoomed.find(i => i.id === "moveResize").enabled);
     }
 
     function test_windowCommandsAreGreyWhenTheAppIsNamedFromStagesOnly() {

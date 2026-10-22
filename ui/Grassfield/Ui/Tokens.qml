@@ -242,6 +242,10 @@ QtObject {
 
     // estimate, pending F1 measurement from design/reference
     readonly property int dockIconSize: 48
+    // estimate: smallest tile size of the Size slider (macOS Settings > Desktop & Dock > Size, small end), px
+    readonly property int dockSizeMin: 32
+    // estimate: largest tile size of the Size slider (large end), px; the default is dock.iconSize (48)
+    readonly property int dockSizeMax: 96
     // F1 gap 4: vertical padding ~9.5 and end margin ~10 (integer for crisp tiles)
     readonly property int dockPadding: 10
     // estimate, pending F1 measurement from design/reference
@@ -286,6 +290,8 @@ QtObject {
     readonly property int dockTooltipGap: 8
     // estimate: height reserved above the shelf for the label
     readonly property int dockTooltipArea: 36
+    // estimate: width reserved beside the shelf of a Dock on the left or right edge for the label of a tile (the label sits beside the tile, so it needs its width)
+    readonly property int dockTooltipSideArea: 240
     // estimate: app badge on a minimized-window tile
     readonly property real dockMinimizedBadgeScale: 0.4
     // estimate, pending F1 measurement from design/reference
