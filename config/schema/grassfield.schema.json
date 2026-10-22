@@ -205,6 +205,10 @@
         "showNowPlaying": {
           "type": "boolean",
           "description": "Show the Now Playing item in the menu bar while a media player has a session (playing, or paused with a track loaded). Default true."
+        },
+        "showSearch": {
+          "type": "boolean",
+          "description": "Show the Search item (magnifier) in the menu bar. Default true."
         }
       }
     },

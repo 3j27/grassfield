@@ -44,7 +44,8 @@
   },
   "menubar": {
     "showBackground": false,
-    "showNowPlaying": true
+    "showNowPlaying": true,
+    "showSearch": true
   },
   "accent": {
     "color": "multicolor"

@@ -732,6 +732,26 @@ Scope {
                             }
                         }
 
+                        // Search (macOS shows the Spotlight magnifier by default): toggles Search, not a menu.
+                        BarButton {
+                            id: searchButton
+                            objectName: "menubar-search"
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            shadowColor: win.barShadow
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: Settings.menubarShowSearch
+                            accessibleName: qsTr("Search")
+                            active: root.searchActive
+                            onActivated: root.searchRequested()
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                color: win.barText
+                                name: "search"
+                            }
+                        }
+
                         BarButton {
                             id: ccButton
                             tint: win.barTint

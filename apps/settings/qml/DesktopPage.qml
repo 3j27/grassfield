@@ -117,6 +117,16 @@ SettingsPage {
                 onToggled: c => root.store.set("menubar.showNowPlaying", c)
             }
         }
+
+        SettingsRow {
+            title: qsTr("Show Search in the menu bar")
+            subtitle: qsTr("A magnifier button in the menu bar opens Search.")
+            Toggle {
+                accessibleName: qsTr("Show Search in the menu bar")
+                checked: root.store.value("menubar.showSearch")
+                onToggled: c => root.store.set("menubar.showSearch", c)
+            }
+        }
     }
 
     SettingsGroup {
