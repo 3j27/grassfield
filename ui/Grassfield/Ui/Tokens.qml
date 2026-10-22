@@ -1281,6 +1281,14 @@ QtObject {
     readonly property int wallpaperMaxListEntries: 10000
     // ADR-0016: quiet time before the carousel position is written to the state file
     readonly property int wallpaperStateWriteMs: 500
+    // ADR-0016 step 2: a grassfield-wallpaper fetch (three API requests and one picture, curl allows 60 s each) that runs longer than this is killed
+    readonly property int wallpaperFetchTimeoutMs: 300000
+    // ADR-0016 step 2: the online scheduler looks again at most this long after it went to sleep (the day's random slot lies within 6 h of 00:10 UTC)
+    readonly property int wallpaperOnlineMaxWaitMs: 21600000
+    // ADR-0016 step 2: a metered connection is asked about again after this long
+    readonly property int wallpaperOnlineMeteredRecheckMs: 3600000
+    // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width)
+    readonly property int wallpaperAboutWidth: 360
 
     // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it
     readonly property int focusReturnReleaseHoldMs: 120

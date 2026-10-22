@@ -8,6 +8,9 @@ import Grassfield.Ui
 // buttons that add a folder or a picture. Changes apply at once: the page writes the `wallpaper` keys of grassfield.json
 // in one write and the shell follows the file; the shell reports what happened in wallpaper-state.json (read here).
 // Pictures are parsed by grassfield-wallpaper only (thumbnails, listing): this page never decodes a file of the user's.
+// Online (ADR-0016 step 2): one tile, the Wikimedia Commons Picture of the Day. Choosing it shows what is contacted and asks
+// before anything is turned on; then the picture shows with its attribution (Title, Author, Source, Licence, Last updated).
+// This page never touches the network: the shell fetches, and reports the state in wallpaper-state.json.
 SettingsPage {
     id: root
 
@@ -24,6 +27,12 @@ SettingsPage {
     readonly property bool shuffle: root.store.value("wallpaper.shuffle")
     // The tool's answer for the output the user looks at: {state, reason, source, path, name, files, file}.
     property var status: ({})
+    // The online daily picture as the shell reports it: {phase, failure, entry: {title, author, credit, caption, licenseShort,
+    // licenseUrl, sourceUrl, fetchedAt, file} | null}; {} before it reports. Plain text only.
+    property var online: ({})
+    // The opt-in disclosure is open (the tile was chosen, the source is not on yet).
+    property bool disclosing: false
+    readonly property var onlineEntry: root.online.entry || null
     // The refusal of a choice (outside the dev folder, bad path): shown under the grids.
     property string refusal: ""
     property var pictures: []
@@ -98,11 +107,24 @@ SettingsPage {
         return qsTr("The wallpaper can't be shown.");
     }
 
+    // "26/10/22 09:41" in the user's locale, "" when the date does not parse.
+    function formatUpdated(iso: string): string {
+        const d = new Date(iso || "");
+        return isNaN(d.getTime()) ? "" : Qt.locale().toString(d, Locale.ShortFormat);
+    }
+
+    // The source page without its scheme: shown as text, never opened from here.
+    function sourceText(url: string): string {
+        return (url || "").replace(/^https?:\/\//, "");
+    }
+
     readonly property string headline: {
         if (root.source === "builtin")
             return qsTr("Grassfield");
         if (root.source === "color")
             return root.color;
+        if (root.source === "online")
+            return root.onlineEntry && root.onlineEntry.title ? root.onlineEntry.title : qsTr("Picture of the Day (Wikimedia Commons)");
         if (root.source === "folder")
             return root.baseName(root.path);
         return root.baseName(root.path);
@@ -113,6 +135,12 @@ SettingsPage {
             return root.reasonText(root.status.reason, root.source === "file" ? root.baseName(root.path) : root.baseName(root.path));
         if (root.status.state === "preparing")
             return qsTr("Preparing…");
+        if (root.source === "online") {
+            // Nothing cached yet: the artwork shows, and the page says why.
+            if (root.status.state === "waiting")
+                return root.online.phase === "fetching" ? qsTr("Downloading today's picture…") : qsTr("Waiting for a connection");
+            return root.onlineEntry && root.onlineEntry.caption ? root.onlineEntry.caption : "";
+        }
         if (root.source === "folder") {
             const every = root.shuffle ? qsTr("%1, shuffled").arg(root.intervalText(root.interval)) : root.intervalText(root.interval);
             return root.status.files > 0 ? qsTr("%1 · Pictures in the folder: %2").arg(every).arg(root.status.files) : every;
@@ -142,6 +170,19 @@ SettingsPage {
 
     function useArtwork(): void {
         root.choose({"wallpaper.source": "builtin"}, "", "");
+    }
+
+    // The online tile asks first: what is contacted is shown, and nothing is turned on until the user agrees.
+    function askOnline(): void {
+        if (root.source === "online")
+            return;
+        root.disclosing = true;
+        Qt.callLater(() => useOnlineButton.forceActiveFocus());
+    }
+
+    function useOnline(): void {
+        root.disclosing = false;
+        root.choose({"wallpaper.source": "online", "wallpaper.online.provider": "commons"}, "", "");
     }
 
     function useColor(c: string): void {
@@ -270,9 +311,12 @@ SettingsPage {
     function loadStatus(): void {
         const f = root.backend.readText(root.backend.wallpaperStatusFile);
         let pick = {};
+        let online = {};
         if (f.exists && f.ok) {
             try {
-                const outputs = JSON.parse(f.text).outputs || {};
+                const parsed = JSON.parse(f.text);
+                online = parsed.online && typeof parsed.online === "object" ? parsed.online : {};
+                const outputs = parsed.outputs || {};
                 const all = Object.keys(outputs).map(k => outputs[k]);
                 // An error on any output is the one worth showing.
                 pick = all.find(o => o.state === "error") || all[all.length - 1] || {};
@@ -281,6 +325,7 @@ SettingsPage {
             }
         }
         root.status = pick;
+        root.online = online;
     }
 
     Component.onCompleted: {
@@ -393,7 +438,7 @@ SettingsPage {
         visible: root.source !== "builtin"
 
         SettingsRow {
-            visible: root.source === "file" || root.source === "folder"
+            visible: root.source === "file" || root.source === "folder" || root.source === "online"
             title: qsTr("Fit")
             Picker {
                 anchors.verticalCenter: parent.verticalCenter
@@ -406,7 +451,7 @@ SettingsPage {
         }
 
         SettingsRow {
-            visible: root.source === "color" || ((root.source === "file" || root.source === "folder") && (root.fit === "fit" || root.fit === "center" || root.fit === "tile"))
+            visible: root.source === "color" || ((root.source === "file" || root.source === "folder" || root.source === "online") && (root.fit === "fit" || root.fit === "center" || root.fit === "tile"))
             title: qsTr("Colour")
             subtitle: root.source === "color" ? "" : qsTr("Shown around a picture that does not fill the screen.")
             ColorWell {
@@ -460,6 +505,112 @@ SettingsPage {
                 model: [{kind: "art", label: qsTr("Grassfield"), selected: root.source === "builtin"}]
                 onActivated: root.useArtwork()
             }
+        }
+    }
+
+    // ---- online (ADR-0016 step 2) ----
+    SettingsGroup {
+        id: onlineGroup
+        caption: qsTr("Online")
+        footnote: root.disclosing ? "" : qsTr("Once a day Grassfield contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org. These services see your IP address.")
+
+        Item {
+            width: parent.width
+            height: onlineGrid.height + 2 * Tokens.spacingMd
+
+            WallpaperGrid {
+                id: onlineGrid
+                x: Tokens.spacingMd
+                y: Tokens.spacingMd
+                width: parent.width - 2 * Tokens.spacingMd
+                accessibleName: qsTr("Online")
+                model: [{kind: "image", wrap: true, label: qsTr("Picture of the Day (Wikimedia Commons)"), thumb: root.onlineEntry && root.onlineEntry.file ? root.onlineEntry.file : "", selected: root.source === "online"}]
+                onActivated: root.askOnline()
+            }
+        }
+
+        // The opt-in: what is contacted, how often, who sees what. Esc or Cancel leaves everything as it was.
+        Item {
+            id: disclosure
+            visible: root.disclosing && root.source !== "online"
+            width: parent.width
+            height: visible ? disclosureColumn.height + 2 * Tokens.spacingMd : 0
+            Accessible.role: Accessible.Grouping
+            Accessible.name: qsTr("Picture of the Day (Wikimedia Commons)")
+            Keys.onEscapePressed: root.disclosing = false
+
+            Column {
+                id: disclosureColumn
+                x: Tokens.spacingMd
+                y: Tokens.spacingMd
+                width: parent.width - 2 * Tokens.spacingMd
+                spacing: Tokens.spacingSm
+
+                Text {
+                    width: parent.width
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    text: qsTr("Grassfield will download the Wikimedia Commons Picture of the Day once a day. It contacts commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, and only while you are online on a connection that is not metered. These services see your IP address and the picture you ask for. Nothing is contacted until you choose Use Picture of the Day.")
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyBodySize
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                }
+
+                Row {
+                    anchors.right: parent.right
+                    spacing: Tokens.spacingSm
+
+                    Button {
+                        text: qsTr("Cancel")
+                        onClicked: root.disclosing = false
+                    }
+
+                    Button {
+                        id: useOnlineButton
+                        primary: true
+                        text: qsTr("Use Picture of the Day")
+                        onClicked: root.useOnline()
+                    }
+                }
+            }
+        }
+    }
+
+    // The attribution of the picture on screen (the same fields as the desktop menu's "About This Wallpaper").
+    SettingsGroup {
+        visible: root.source === "online" && root.onlineEntry !== null
+        caption: qsTr("About This Wallpaper")
+
+        SettingsRow {
+            visible: root.onlineEntry && root.onlineEntry.title
+            title: qsTr("Title")
+            valueText: root.onlineEntry ? root.onlineEntry.title : ""
+        }
+
+        SettingsRow {
+            visible: root.onlineEntry && (root.onlineEntry.author || root.onlineEntry.credit)
+            title: qsTr("Author")
+            valueText: root.onlineEntry ? (root.onlineEntry.author || root.onlineEntry.credit) : ""
+        }
+
+        SettingsRow {
+            title: qsTr("Source")
+            subtitle: root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
+            valueText: qsTr("Wikimedia Commons")
+        }
+
+        SettingsRow {
+            visible: root.onlineEntry && root.onlineEntry.licenseShort
+            title: qsTr("Licence")
+            valueText: root.onlineEntry ? root.onlineEntry.licenseShort : ""
+        }
+
+        SettingsRow {
+            visible: root.onlineEntry && root.formatUpdated(root.onlineEntry.fetchedAt) !== ""
+            title: qsTr("Last updated")
+            valueText: root.onlineEntry ? root.formatUpdated(root.onlineEntry.fetchedAt) : ""
         }
     }
 
