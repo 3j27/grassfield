@@ -141,8 +141,9 @@ vs_session() {
 # The shell decides v1/v2 Overview, titlebars and the desktop focus policy from the plugin's capabilities, which arrive
 # after the shell is up (hello reply). A capture taken before they arrive differs from one taken after, so wait for
 # `capabilities status` = "ready present ..." when the plugin is loaded in the nested session; "ready degraded" is
-# the expected state without it. A shell that settled degraded although the plugin is there (its hello retries ended
-# before the plugin answered) is restarted once.
+# the expected state without it. A shell that settled degraded although the plugin is there keeps sending its hello
+# (Capabilities.qml, slow retries) and is waited for; one that still has not seen the plugin after 30 s is restarted
+# once.
 vs_plugin_expected() {
   [[ -f ${GRASSFIELD_PLUGIN:-$VS_ROOT/compositor/build/grassfield-compositor.so} && -z ${GRASSFIELD_NO_PLUGIN:-} ]]
 }
@@ -154,7 +155,7 @@ vs_wait_capabilities() {
       st=$(vs_ipc capabilities status 2>/dev/null || true)
       case $st in
         "ready present"*) return 0 ;;
-        "ready degraded") vs_plugin_expected || return 0; break ;;
+        "ready degraded") vs_plugin_expected || return 0 ;;
       esac
       sleep 0.5
     done

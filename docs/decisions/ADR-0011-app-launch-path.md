@@ -76,3 +76,16 @@ session, with the owner's real trash in its sidebar. Any D-Bus activatable handl
   `.dev/apps-home` and `GRASSFIELD_DEV=1`, so a service the bus activates is isolated too.
 - `isolated.sh` exports `GRASSFIELD_DEV=1`, so Grassfield Files started through it hides its Trash place, and in a dev
   session also the "Empty Trash" action (no confirmation that does nothing).
+
+### Addendum: native apps, helpers and the start queue
+- `apps/appscope.h` is the C++ counterpart of `Apps.scoped` for the Grassfield apps (Files and Glance start Preview,
+  Preview starts the full viewer): `startApplication` wraps the command as `uwsm-app -- <program> <args>` in a real
+  session (`GRASSFIELD_SESSION=1`, not `GRASSFIELD_DEV=1`, `uwsm-app` on the PATH, found synchronously), so a child does
+  not stay in the unit of the app that started it. One copy, shared by the apps.
+- `Apps.runHelper(argv)` is for short helpers that are not applications (`gio trash`): never in a scope of their own,
+  with the same isolated environment and, in a dev session, the same open policy as `openDetached`.
+- Start queue: the detection of `uwsm-app` is asynchronous, so every application start goes through
+  `Apps.whenScopeKnown`: it runs at once when the answer is known (always in a dev session), otherwise it is queued
+  and released when the probe answers. Quickshell sends no `exited` when a start fails, so the queue is also released
+  when the probe's `running` goes back to false without a `started` (logged); the launches then start unscoped rather
+  than wait for ever. Glance cancels a start that is still queued (Esc, a second Space).
