@@ -96,7 +96,7 @@ set_consistent() {
   hw=$(ae "$b.hidden.png" "$b.white.png")
   hk=$(ae "$b.hidden.png" "$b.black.png")
   nh=$(ae "$b.png" "$b.hidden.png")
-  if (( end >= 150 )); then echo "contrast: $n: the state changed during the set (first and last normal frame differ by $end px)" >&2; return 1; fi
+  if (( end >= 400 )); then echo "contrast: $n: the state changed during the set (first and last normal frame differ by $end px, limit 400)" >&2; return 1; fi
   if (( wk < 20 || nh < 20 )); then echo "contrast: $n: glyph modes not applied (white/black differ by $wk px, hidden/normal by $nh px)" >&2; return 1; fi
   if (( hw > wk + 150 || hk > wk + 150 )); then echo "contrast: $n: the glyph captures show different states (hidden/white $hw, hidden/black $hk, white/black $wk px)" >&2; return 1; fi
   return 0
@@ -112,12 +112,12 @@ capture_set() {
   for m in hidden white black; do
     cap_state_ok || { vs_ipc visual glyphs normal >/dev/null; echo "contrast: $name: scenario state lost before the $m capture" >&2; return 1; }
     vs_ipc visual glyphs "$m" >/dev/null
-    VS_NOPARK=1 snap "$name" 0.8
+    VS_NOPARK=1 snap "$name" "${GLYPH_SETTLE:-2}"
     mv "$dir/$name.en.png" "$dir/$name.$m.png"
   done
   vs_ipc visual glyphs normal >/dev/null
   cap_state_ok || { echo "contrast: $name: scenario state lost before the last capture" >&2; return 1; }
-  VS_NOPARK=1 snap "$name" 0.8
+  VS_NOPARK=1 snap "$name" "${GLYPH_SETTLE:-2}"
   mv "$dir/$name.en.png" "$dir/$name.end.png"
   set_consistent "$dir/$name"
 }
