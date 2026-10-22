@@ -180,3 +180,12 @@ TEST(WallpaperGuard, NamesTheHelperByItsFileName)
     EXPECT_FALSE(namesWallpaperTool(QStringLiteral("nmcli")));
     EXPECT_FALSE(namesWallpaperTool(QStringLiteral("/x/grassfield-wallpaper2")));
 }
+
+TEST(ActionGuard, OnlyTheNamedProgramsRun)
+{
+    // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell).
+    for (const char *ok : {"nmcli", "bluetoothctl", "wpctl", "xdg-open"})
+        EXPECT_TRUE(isActionProgram(QString::fromLatin1(ok))) << ok;
+    for (const char *no : {"", "sh", "bash", "/usr/bin/xdg-open", "xdg-open ", "gio", "rm", "env"})
+        EXPECT_FALSE(isActionProgram(QString::fromLatin1(no))) << no;
+}

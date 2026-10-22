@@ -137,7 +137,16 @@ TestCase {
 
     function test_wallpaperRules() {
         compare(Store.validate("wallpaper.source", "folder"), "");
-        verify(Store.validate("wallpaper.source", "online") !== "");
+        compare(Store.validate("wallpaper.source", "online"), "");
+        verify(Store.validate("wallpaper.source", "apod") !== "");
+        compare(Store.validate("wallpaper.online.provider", "commons"), "");
+        verify(Store.validate("wallpaper.online.provider", "apod") !== "");
+        verify(Store.validate("wallpaper.online.provider", 1) !== "");
+        compare(Store.read({wallpaper: {online: {provider: "commons"}}}, "wallpaper.online.provider"), "commons");
+        compare(Store.read({wallpaper: {online: "x"}}, "wallpaper.online.provider"), "commons");
+        const on = Store.setValues('{"version":1,"wallpaper":{"fit":"tile"}}', {"wallpaper.source": "online", "wallpaper.online.provider": "commons"});
+        verify(on.ok, on.error);
+        compare(JSON.parse(on.text).wallpaper, {fit: "tile", source: "online", online: {provider: "commons"}});
         compare(Store.validate("wallpaper.path", ""), "");
         compare(Store.validate("wallpaper.path", "/a/b"), "");
         verify(Store.validate("wallpaper.path", "a/b") !== "");

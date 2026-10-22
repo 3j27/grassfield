@@ -18,3 +18,4 @@ singleton VisualFixtures 1.0 VisualFixtures.qml
 singleton DesktopState 1.0 DesktopState.qml
 singleton BarTone 1.0 BarTone.qml
 singleton WallpaperState 1.0 WallpaperState.qml
+singleton WallpaperOnline 1.0 WallpaperOnline.qml

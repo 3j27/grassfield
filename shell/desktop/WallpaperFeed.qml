@@ -8,6 +8,9 @@ import qs.services
 //   - source builtin / color: no picture (`imageUrl` ""), the artwork or the colour is drawn.
 //   - source file: grassfield-wallpaper prepares the picture at this output's physical size and fit (the shell decodes only
 //     the helper's own output), `imageUrl` names the prepared file, `strip` holds the menu bar strip statistics.
+//   - source online (ADR-0016 step 2): the newest picture WallpaperOnline has on disk is prepared like a file (`label` is its
+//     title); with nothing cached the artwork shows and the state is "waiting" (Settings: "Waiting for a connection"). A newer
+//     picture (a day later) replaces it through the same crossfade.
 //   - source folder: the helper lists the folder, WallpaperConfig.advance picks the next picture (sorted or shuffled without
 //     repeat, position kept in WallpaperState), the interval timer asks for the next one. A file that fails is skipped for the
 //     session; with every file failing the current picture stays and `reason` says why.
@@ -31,9 +34,12 @@ Scope {
     readonly property string displayKey: WallpaperConfig.displayKey(outputIdentity)
     // Effective settings of this output.
     readonly property var cfg: WallpaperConfig.resolve(Settings.wallpaper, outputIdentity)
-    readonly property string cfgKey: JSON.stringify([cfg, pixelWidth, pixelHeight])
+    // The online source also follows the picture on disk (a new day's picture is a change).
+    readonly property string onlineFile: cfg.source === "online" && WallpaperOnline.entry ? WallpaperOnline.entry.file : ""
+    readonly property bool onlineLoaded: cfg.source === "online" && WallpaperOnline.entryLoaded
+    readonly property string cfgKey: JSON.stringify([cfg, pixelWidth, pixelHeight, onlineFile, onlineLoaded])
 
-    // builtin | color | preparing | ready | error
+    // builtin | color | preparing | ready | error | waiting
     property string status: "builtin"
     // Failure id (WallpaperConfig.reasonOf ids, plus folder-unavailable, folder-empty, all-failed, outside-dev, invalid-path,
     // helper-missing, timeout): translated by the Settings app.
@@ -175,6 +181,10 @@ Scope {
             showNone("color");
             return;
         }
+        if (c.source === "online") {
+            applyOnline();
+            return;
+        }
         const why = WallpaperConfig.sourceProblem(c.path, WallpaperState.dev, WallpaperState.repoRoot);
         if (why !== "") {
             fail(why === "outside-dev" ? "outside-dev" : "invalid-path");
@@ -191,6 +201,33 @@ Scope {
         } else {
             startList();
         }
+    }
+
+    // The online daily picture: the helper's own file in the cache, prepared for this output like any picture.
+    function applyOnline(): void {
+        if (WallpaperState.toolMissing) {
+            fail("helper-missing");
+            return;
+        }
+        // The cache has not been read yet: what is on screen stays (no flash of the artwork); the feed runs again when it has.
+        if (!WallpaperOnline.entryLoaded)
+            return;
+        const e = WallpaperOnline.entry;
+        if (!e) {
+            // Nothing cached (yet): the artwork, and Settings says why.
+            showNone("builtin");
+            status = "waiting";
+            publish();
+            return;
+        }
+        const why = WallpaperConfig.sourceProblem(e.file, WallpaperState.dev, WallpaperState.repoRoot);
+        if (why !== "") {
+            fail(why === "outside-dev" ? "outside-dev" : "invalid-path");
+            return;
+        }
+        files = [];
+        label = e.title;
+        startPrepare(e.file);
     }
 
     function fileName(path: string): string {
