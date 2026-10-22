@@ -15,6 +15,7 @@
       "foot",
       "org.grassfield.Settings"
     ],
+    "size": 48,
     "magnification": 1.6,
     "magnificationEnabled": false,
     "autohide": false,

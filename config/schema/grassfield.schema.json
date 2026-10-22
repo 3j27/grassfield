@@ -65,6 +65,11 @@
             "minLength": 1
           }
         },
+        "size": {
+          "type": "integer",
+          "minimum": 32,
+          "maximum": 96
+        },
         "magnification": {
           "type": "number",
           "minimum": 1,

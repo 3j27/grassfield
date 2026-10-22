@@ -44,6 +44,7 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.autohide` | bool | false | Dock |
 | `dock.recent` | string[] (desktop entry ids, newest first, at most `dock.recentMax` 3) | `[]` (owned by the Dock; written only when the list changes) | Dock |
 | `dock.showRecents` | bool | true | Dock, Settings |
+| `dock.size` | integer 32-96 (`dock.sizeMin`/`dock.sizeMax`) | 48 | Dock, Settings ("Size" slider; a stored value out of range is clamped) |
 | `dock.minimizeIntoApp` | bool | false | Dock, Settings |
 | `dock.animateOpening` | bool | true | Dock, Settings |
 | `dock.showIndicators` | bool | true | Dock, Settings |

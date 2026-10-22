@@ -14,6 +14,7 @@ import "../desktop/IconsLogic.js" as Icons
 import "AutoHide.js" as AutoHide
 import "Attention.js" as Attention
 import "Magnify.js" as Magnify
+import "Geometry.js" as Geometry
 
 // Bottom dock, one per screen: pinned apps (Settings) and running apps (foreign-toplevel app ids
 // mapped to desktop entries), a separator and the Trash. Click launches, focuses the most recent
@@ -589,17 +590,21 @@ Scope {
 
             required property ShellScreen modelData
 
-            readonly property int iconSize: Tokens.dockIconSize
+            // Tile size (Settings > Size): everything below follows it (Geometry.metrics).
+            readonly property int iconSize: Settings.dockSize
             readonly property int separatorWidth: Tokens.dockSpacing * 2 + Tokens.dockSeparatorWidth
             readonly property real maxScale: Settings.dockMagnificationEnabled ? Settings.dockMagnification : 1
             readonly property real pitch: iconSize + Tokens.dockSpacing
-            readonly property var dockMetrics: ({
-                    iconSize: Tokens.dockIconSize,
-                    padding: Tokens.dockPadding,
-                    indicatorSize: Tokens.dockIndicatorSize,
-                    spacing: Tokens.dockSpacing,
-                    bottomMargin: Tokens.dockBottomMargin
-                })
+            readonly property var dockMetrics: Geometry.metrics(iconSize, {
+                iconSize: Tokens.dockIconSize,
+                padding: Tokens.dockPadding,
+                indicatorSize: Tokens.dockIndicatorSize,
+                spacing: Tokens.dockSpacing,
+                bottomMargin: Tokens.dockBottomMargin,
+                separatorHeight: Tokens.dockSeparatorHeight,
+                badgeSize: Tokens.dockBadgeSize,
+                radiusIcon: Tokens.radiusDockIcon
+            })
             readonly property int indicatorArea: Tokens.dockIndicatorSize + Tokens.dockSpacing
             readonly property int shelfHeight: DockModel.shelfHeight(dockMetrics)
             readonly property real overhang: Math.ceil((maxScale - 1) * iconSize)
@@ -1173,7 +1178,7 @@ Scope {
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: win.indicatorArea - (height - win.iconSize) / 2
                                     width: Tokens.dockSeparatorWidth
-                                    height: Tokens.dockSeparatorHeight
+                                    height: win.dockMetrics.separatorHeight
                                     color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                                 }
 
@@ -1184,7 +1189,7 @@ Scope {
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: win.indicatorArea
-                                    radius: Tokens.radiusDockIcon * tile.tileScale
+                                    radius: win.dockMetrics.iconRadius * tile.tileScale
                                     color: Appearance.withAlpha(Appearance.colors.accent, Tokens.dockAttentionHighlightOpacity)
                                 }
 
@@ -1294,7 +1299,7 @@ Scope {
                                     transform: Translate {
                                         y: -appIcon.lift
                                     }
-                                    height: Tokens.dockBadgeSize
+                                    height: win.dockMetrics.badgeSize
                                     width: Math.max(height, badgeLabel.implicitWidth + Tokens.spacingSm)
                                     radius: height / 2
                                     color: Appearance.colors.destructive
@@ -1310,7 +1315,7 @@ Scope {
                                         text: DockModel.badgeText(tile.badge)
                                         color: Appearance.colors.destructiveText
                                         font.family: Appearance.fontFamily
-                                        font.pixelSize: Tokens.typographyCaptionSize
+                                        font.pixelSize: Tokens.typographyCaptionSize * win.dockMetrics.badgeScale
                                         font.weight: Tokens.typographyMenuBoldWeight
                                     }
                                 }
@@ -1331,7 +1336,7 @@ Scope {
                                     Rectangle {
                                         visible: minimizedTile.live
                                         anchors.fill: parent
-                                        radius: Tokens.radiusDockIcon * tile.tileScale
+                                        radius: win.dockMetrics.iconRadius * tile.tileScale
                                         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                                         clip: true
 
@@ -1383,7 +1388,7 @@ Scope {
                                     visible: tile.isTrash && trashThemed.themed === ""
                                     width: tile.iconPx
                                     height: tile.iconPx
-                                    radius: Tokens.radiusDockIcon * tile.tileScale
+                                    radius: win.dockMetrics.iconRadius * tile.tileScale
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: win.indicatorArea
                                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
@@ -1401,7 +1406,7 @@ Scope {
                                     visible: tile.isAppsTile
                                     width: tile.iconPx
                                     height: tile.iconPx
-                                    radius: Tokens.radiusDockIcon * tile.tileScale
+                                    radius: win.dockMetrics.iconRadius * tile.tileScale
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: win.indicatorArea
                                     color: Appearance.colors.accent
@@ -1421,7 +1426,7 @@ Scope {
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: win.indicatorArea
-                                    radius: Tokens.radiusDockIcon * tile.tileScale
+                                    radius: win.dockMetrics.iconRadius * tile.tileScale
                                     color: "transparent"
                                     border.width: Tokens.controlFocusRing
                                     border.color: Appearance.colors.accent
@@ -1502,7 +1507,7 @@ Scope {
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: win.indicatorArea
-                                    radius: Tokens.radiusDockIcon * tile.tileScale
+                                    radius: win.dockMetrics.iconRadius * tile.tileScale
                                     color: Appearance.withAlpha(Appearance.colors.accent, Tokens.desktopIconSelectionOpacity)
                                 }
 
@@ -1558,7 +1563,7 @@ Scope {
                                     height: tile.iconPx
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: win.indicatorArea
-                                    radius: Tokens.radiusDockIcon * tile.tileScale
+                                    radius: win.dockMetrics.iconRadius * tile.tileScale
                                     color: Appearance.withAlpha(Appearance.colors.accent, Tokens.dockDropHighlightOpacity)
                                 }
 

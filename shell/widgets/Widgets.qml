@@ -5,7 +5,9 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.UPower
 import Grassfield.Ui
+import qs.services
 import "Placements.js" as Placements
+import "../dock/DockModel.js" as DockModel
 
 // Widget placements (widgets/1, docs/specs/widgets.md): where each widget sits, in the Notification
 // Center and on the desktop, persisted in $GRASSFIELD_STATE_HOME (dev) or $XDG_STATE_HOME/grassfield
@@ -42,7 +44,7 @@ Singleton {
 
     // Height the Dock reserves at the bottom of a screen (shelf, indicator row, bottom margin);
     // reserved even when the Dock autohides, so widgets never sit where it appears.
-    readonly property int dockReserve: Tokens.dockIconSize + 2 * Tokens.dockPadding + Tokens.dockIndicatorSize + Tokens.dockSpacing + Tokens.dockBottomMargin
+    readonly property int dockReserve: DockModel.reservedHeight(Settings.dockMetrics, false)
 
     // Grid of a screen: {cols, rows, x0, y0, cell, gap} in screen px, below the menu bar and above the Dock.
     function gridFor(screen: var): var {

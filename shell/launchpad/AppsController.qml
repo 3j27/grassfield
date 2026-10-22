@@ -7,6 +7,7 @@ import qs.platform
 import qs.services
 import "../search/Ranking.js" as Ranking
 import "Model.js" as Model
+import "../dock/DockModel.js" as DockModel
 
 // Apps controller (spec docs/specs/apps.md): owns the open state, the search query, the category
 // chip, the keyboard zone and selection, and the IPC target `apps`. AppsWindow renders it, one
@@ -81,7 +82,8 @@ Scope {
             heightFraction: Tokens.launcherHeightFraction,
             minHeight: Tokens.launcherMinHeight,
             topFraction: Tokens.launcherTopFraction,
-            bottomClearance: Tokens.launcherBottomClearance
+            // Never into the Dock (its size is the user's): the token is the floor.
+            bottomClearance: Math.max(Tokens.launcherBottomClearance, DockModel.reservedHeight(Settings.dockMetrics, false))
         }))
     readonly property var grid: Model.grid(panel.w - 2 * Tokens.launcherPadding, ({
             columns: Tokens.launcherColumns,

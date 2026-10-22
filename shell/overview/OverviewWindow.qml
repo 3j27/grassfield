@@ -75,13 +75,7 @@ Variants {
         // from the screen, never from the window size, which is 0 until the compositor configures
         // the layer surface.
         // The Dock's area (when it takes space) is reserved, as is the menu bar's (the surface starts below it).
-        readonly property int dockReserve: DockModel.reservedHeight({
-            iconSize: Tokens.dockIconSize,
-            padding: Tokens.dockPadding,
-            indicatorSize: Tokens.dockIndicatorSize,
-            spacing: Tokens.dockSpacing,
-            bottomMargin: Tokens.dockBottomMargin
-        }, Settings.dockAutohide)
+        readonly property int dockReserve: DockModel.reservedHeight(Settings.dockMetrics, Settings.dockAutohide)
         readonly property var area: Layout.freeArea({
             w: modelData.width,
             h: modelData.height

@@ -8,6 +8,7 @@ import "../widgets/Placements.js" as Placements
 import qs.services
 import qs.notifications
 import "IconsLogic.js" as Logic
+import "../dock/DockModel.js" as DockModel
 
 // Desktop icons (docs/specs/desktop.md): the files of the desktop folder as a grid of icons on the
 // wallpaper surface, so a click between icons simply lands on the wallpaper and the widgets (a
@@ -45,7 +46,7 @@ FocusScope {
     readonly property real margin: Tokens.desktopIconMargin
     readonly property real topInset: Tokens.menubarHeight + margin
     // The Dock sits at the bottom edge: keep the grid above it.
-    readonly property real bottomInset: margin + Tokens.dockIconSize + 2 * Tokens.dockPadding + Tokens.dockBottomMargin
+    readonly property real bottomInset: margin + DockModel.reservedHeight(Settings.dockMetrics, false)
     readonly property real areaW: Math.max(0, width - 2 * margin)
     readonly property real areaH: Math.max(0, height - topInset - bottomInset)
     readonly property var grid: Logic.gridSize(areaW, areaH, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight)

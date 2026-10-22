@@ -44,6 +44,7 @@
  {"path": "tests/unit/tst_desktopicons.qml", "layer": "headless"},
  {"path": "tests/unit/tst_dockattention.qml", "layer": "headless"},
  {"path": "tests/unit/tst_dockfeel.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_dockgeometry.qml", "layer": "headless"},
  {"path": "tests/unit/tst_docklaunch.qml", "layer": "headless"},
  {"path": "tests/unit/tst_dockmodel.qml", "layer": "headless"},
  {"path": "tests/unit/tst_exclusivesurfaces.qml", "layer": "headless"},
