@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace gf::titlebar {
 
@@ -61,6 +62,26 @@ namespace gf::titlebar {
     HitTarget hitTest(double x, double y, double barWidth, const Metrics& m = {});
 
     std::optional<Button> buttonForHit(HitTarget hit);
+
+    // ---- Hover glyphs (macOS: the three glyphs show together while the pointer is over the group of lights) ----
+
+    // The group of lights: the box of the three hit circles (gaps between the lights included).
+    Rect buttonGroupRect(const Metrics& m = {});
+
+    // The pointer at (x, y) is over the group of lights of a bar barWidth wide (and on the bar).
+    bool overButtonGroup(double x, double y, double barWidth, const Metrics& m = {});
+
+    // Side in device px of the square a glyph is drawn in, for a light buttonPx device px across: about
+    // ratio x buttonPx, with the parity of buttonPx so that the glyph is centred on whole pixels. 0 if invalid.
+    int glyphSizePx(int buttonPx, double ratio = theme::kGlyphRatio);
+
+    // Coverage mask of a button's glyph (x close, - minimize, + zoom): sizePx x sizePx bytes, row-major, 0..255. Strokes
+    // strokePx wide with round caps, inside the square, anti-aliased over one pixel. Empty if sizePx is outside
+    // [1, kMaxGlyphPx] or strokePx is not positive.
+    std::vector<uint8_t> glyphMask(Button button, int sizePx, double strokePx);
+
+    // The mask as premultiplied 32-bit pixels, bytes B, G, R, A (DRM_FORMAT_ARGB8888 on little-endian).
+    std::vector<uint8_t> premultipliedBgra(const std::vector<uint8_t>& mask, const theme::Rgba& color);
 
     struct TitlePlacement {
         bool   visible  = false;

@@ -134,6 +134,125 @@ TEST(TitlebarLayout, TitleHiddenWhenNoRoom) {
     EXPECT_DOUBLE_EQ(maxTitleWidth(100), 0.0);
 }
 
+// ---- hover glyphs ----
+
+TEST(ButtonGroup, CoversTheThreeHitCirclesAndTheirGaps) {
+    const Rect g = buttonGroupRect();
+    const double slop = gf::theme::kButtonHitSlop;
+    EXPECT_DOUBLE_EQ(g.x, 9 - slop);
+    EXPECT_DOUBLE_EQ(g.y, 9 - slop);
+    EXPECT_DOUBLE_EQ(g.x + g.w, 69 + slop);
+    EXPECT_DOUBLE_EQ(g.y + g.h, 23 + slop);
+    for (const double x : {16.0, 27.5, 39.0, 50.5, 62.0}) // centres and the gaps between the lights
+        EXPECT_TRUE(overButtonGroup(x, 16, 400)) << x;
+    // Every point that hits a button is over the group (half-pixel grid).
+    for (int ix = 0; ix < 160; ++ix) {
+        for (int iy = 0; iy < 64; ++iy) {
+            const double x = ix / 2.0;
+            const double y = iy / 2.0;
+            if (buttonForHit(hitTest(x, y, 400))) {
+                EXPECT_TRUE(overButtonGroup(x, y, 400)) << x << "," << y;
+            }
+        }
+    }
+}
+
+TEST(ButtonGroup, ElsewhereOnTheBarIsNotOverTheGroup) {
+    EXPECT_FALSE(overButtonGroup(69 + 2.5, 16, 400)); // right of the zoom button's slop
+    EXPECT_FALSE(overButtonGroup(16, 3, 400));        // above the close button
+    EXPECT_FALSE(overButtonGroup(16, 29, 400));       // below it
+    EXPECT_FALSE(overButtonGroup(200, 16, 400));
+    EXPECT_FALSE(overButtonGroup(16, 16, 0)); // no bar
+    EXPECT_FALSE(overButtonGroup(16, 16, 12)); // bar narrower than the pointer's x
+    EXPECT_FALSE(overButtonGroup(-1, 16, 400));
+}
+
+TEST(GlyphSize, AboutTheRatioWithTheLightsParity) {
+    EXPECT_EQ(glyphSizePx(14), 8);  // 7.7 -> 8: (14 - 8) / 2 = 3 px each side
+    EXPECT_EQ(glyphSizePx(28), 16); // scale 2: 15.4 -> 16
+    EXPECT_EQ(glyphSizePx(21), 11); // scale 1.5: 11.55 -> 11, odd like 21
+    EXPECT_EQ(glyphSizePx(1), 1);
+    EXPECT_EQ(glyphSizePx(0), 0);
+    EXPECT_EQ(glyphSizePx(-4), 0);
+    EXPECT_EQ(glyphSizePx(14, 0), 0);
+    EXPECT_EQ(glyphSizePx(14, 1.5), 0);
+    EXPECT_LE(glyphSizePx(10000), gf::theme::kMaxGlyphPx);
+}
+
+namespace {
+    uint8_t at(const std::vector<uint8_t>& mask, int n, int x, int y) {
+        return mask[(static_cast<size_t>(y) * static_cast<size_t>(n)) + static_cast<size_t>(x)];
+    }
+} // namespace
+
+TEST(GlyphMask, CloseIsASymmetricCross) {
+    const int  n    = 16;
+    const auto mask = glyphMask(Button::Close, n, 0.12 * 28);
+    ASSERT_EQ(mask.size(), static_cast<size_t>(n * n));
+    for (int y = 0; y < n; ++y) {
+        for (int x = 0; x < n; ++x) {
+            EXPECT_EQ(at(mask, n, x, y), at(mask, n, y, x)) << "transpose " << x << "," << y;
+            EXPECT_EQ(at(mask, n, x, y), at(mask, n, n - 1 - x, y)) << "mirror " << x << "," << y;
+        }
+    }
+    EXPECT_EQ(at(mask, n, 7, 7), 255);  // the crossing
+    EXPECT_GT(at(mask, n, 0, 0), 100);  // the arms reach the corners (round caps)
+    EXPECT_EQ(at(mask, n, 7, 0), 0);    // nothing in the middle of an edge
+    EXPECT_EQ(at(mask, n, 0, 7), 0);
+}
+
+TEST(GlyphMask, MinimizeIsOneHorizontalBar) {
+    const int  n    = 8;
+    const auto mask = glyphMask(Button::Minimize, n, 0.12 * 14);
+    ASSERT_EQ(mask.size(), static_cast<size_t>(n * n));
+    for (int x = 1; x < n - 1; ++x) {
+        EXPECT_GT(at(mask, n, x, 3), 200) << x; // the two middle rows
+        EXPECT_GT(at(mask, n, x, 4), 200) << x;
+        EXPECT_EQ(at(mask, n, x, 0), 0) << x;
+        EXPECT_EQ(at(mask, n, x, n - 1), 0) << x;
+    }
+    for (int y = 0; y < n; ++y)
+        EXPECT_EQ(at(mask, n, 0, y), at(mask, n, n - 1, y)) << y;
+}
+
+TEST(GlyphMask, ZoomIsAPlus) {
+    const int  n    = 8;
+    const auto mask = glyphMask(Button::Zoom, n, 0.12 * 14);
+    ASSERT_EQ(mask.size(), static_cast<size_t>(n * n));
+    EXPECT_GT(at(mask, n, 3, 3), 200);
+    EXPECT_GT(at(mask, n, 3, 0), 100); // vertical arm reaches the top
+    EXPECT_GT(at(mask, n, 0, 4), 100); // horizontal arm reaches the left edge
+    EXPECT_EQ(at(mask, n, 0, 0), 0);   // corners empty
+    EXPECT_EQ(at(mask, n, n - 1, n - 1), 0);
+    for (int y = 0; y < n; ++y) {
+        for (int x = 0; x < n; ++x)
+            EXPECT_EQ(at(mask, n, x, y), at(mask, n, y, x)) << x << "," << y;
+    }
+}
+
+TEST(GlyphMask, RefusesInvalidSizes) {
+    EXPECT_TRUE(glyphMask(Button::Close, 0, 2).empty());
+    EXPECT_TRUE(glyphMask(Button::Close, -3, 2).empty());
+    EXPECT_TRUE(glyphMask(Button::Close, gf::theme::kMaxGlyphPx + 1, 2).empty());
+    EXPECT_TRUE(glyphMask(Button::Close, 8, 0).empty());
+    EXPECT_TRUE(glyphMask(Button::Close, 8, -1).empty());
+    EXPECT_EQ(glyphMask(Button::Zoom, 1, 50).size(), 1U); // stroke wider than the square: clamped
+}
+
+TEST(GlyphMask, PremultipliedPixels) {
+    const std::vector<uint8_t> mask{0, 255, 128};
+    const auto px = premultipliedBgra(mask, gf::theme::kGlyphColor);
+    ASSERT_EQ(px.size(), 12U);
+    EXPECT_EQ(px[3], 0);   // transparent where the mask is empty
+    EXPECT_EQ(px[7], 128); // half-opaque black under full coverage (kGlyphColor alpha 0.5)
+    EXPECT_EQ(px[4], 0);
+    EXPECT_EQ(px[11], 64);
+    const auto red = premultipliedBgra({255}, gf::theme::Rgba{.r = 1.F, .g = 0.F, .b = 0.F, .a = 0.5F});
+    EXPECT_EQ(red[0], 0);   // B
+    EXPECT_EQ(red[2], 128); // R premultiplied by alpha
+    EXPECT_EQ(red[3], 128);
+}
+
 TEST(ClickTracker, TwoQuickPressesAreADoubleClick) {
     CClickTracker t;
     EXPECT_FALSE(t.press(1000, 100, 10));

@@ -41,6 +41,13 @@ namespace gf::theme {
     inline constexpr double kButtonHitSlop = kButtonDiameter / 6.0;
     inline constexpr double kTitlePadding  = 8.0; // min gap between the buttons and the title
 
+    // ---- Hover glyphs: x (close), - (minimize), + (zoom) on all three lights while the pointer is over them ----
+    // Measured on the 2x reference (14-pt lights): glyph extents 0.50-0.57 of the diameter, strokes about 1.6 pt, the
+    // glyph about half as bright as its light.
+    inline constexpr double kGlyphRatio  = 0.55; // glyph box side / button diameter
+    inline constexpr double kGlyphStroke = 0.12; // stroke width / button diameter
+    inline constexpr int    kMaxGlyphPx  = 256;  // larger glyph textures are refused (device px)
+
     // ---- Title text ----
     inline constexpr int         kTitleFontSizePt = 13;
     inline constexpr int         kTitleFontWeight = 600; // semibold
@@ -58,6 +65,7 @@ namespace gf::theme {
     inline constexpr Rgba kCloseColor    = fromHex(0xE5534B);
     inline constexpr Rgba kMinimizeColor = fromHex(0xD9A93B);
     inline constexpr Rgba kZoomColor     = fromHex(0x4FA64F);
+    inline constexpr Rgba kGlyphColor    = Rgba{.r = 0.F, .g = 0.F, .b = 0.F, .a = 0.5F}; // darkens the light under it
 
     enum class Appearance : uint8_t {
         Dark,

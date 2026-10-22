@@ -10,6 +10,7 @@
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/render/decorations/IHyprWindowDecoration.hpp>
 
+#include <array>
 #include <string>
 
 namespace Render {
@@ -49,6 +50,9 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // The titlebar is shown and its bar contains `pos` (global layout coordinates, the pointer's space).
     bool barContains(const Vector2D& pos) const;
 
+    // The titlebar is shown and `pos` (global layout coordinates) is over its group of lights (hover glyphs).
+    bool buttonGroupContains(const Vector2D& pos) const;
+
     // Global pointer button listener (Event::bus()->m_events.input.mouse.button), called before any
     // titlebar or client sees the event; it never cancels it. Tracks press ownership (so a titlebar
     // consumes only the releases of presses a titlebar consumed) and ends gestures (drag, armed button)
@@ -56,7 +60,8 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     static void onGlobalMouseButton(const IPointer::SButtonEvent& e);
 
     // Global pointer motion listener (Event::bus()->m_events.input.mouse.move): moves a dragged window,
-    // or cancels the gesture when no button is held any more or the pressing device may be gone.
+    // or cancels the gesture when no button is held any more or the pressing device may be gone; tracks which
+    // titlebar's lights the pointer is over (their glyphs show, macOS).
     static void onGlobalMouseMove();
 
     // Drops any gesture and press ownership (plugin unload).
@@ -67,6 +72,8 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     bool onButtonPress(const Vector2D& coords, const IPointer::SButtonEvent& e);
     void activate(gf::titlebar::Button button);
     void drawTitlebar(const PHLMONITOR& monitor, float alpha);
+    // The glyphs over the lights; `bar` in monitor-local logical coordinates.
+    void drawGlyphs(const CBox& bar, float scale, float alpha);
 
     PHLWINDOWREF                m_owner;
     bool                        m_lastShown = false;
@@ -78,4 +85,12 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
         float                scale      = 0.F;
         int                  maxWidthPx = 0;
     } m_title;
+
+    // One glyph texture per light (kButtonOrder), built on the first hover at a given size and scale.
+    struct SGlyph {
+        SP<Render::ITexture> texture;
+        int                  sizePx = 0;
+        float                scale  = 0.F;
+    };
+    std::array<SGlyph, gf::titlebar::kButtonOrder.size()> m_glyphs;
 };

@@ -10,6 +10,8 @@
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/state/ViewHitTester.hpp>
+#include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
@@ -20,6 +22,7 @@
 #include <hyprland/src/render/pass/RectPassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
 
+#include <drm_fourcc.h>
 #include <linux/input-event-codes.h>
 
 #include <algorithm>
@@ -58,6 +61,7 @@ namespace {
     struct SPointerInput {
         SPointerGrab                      grab;
         gf::input::CPointerGestureTracker presses;
+        CGrassfieldTitlebar*              hovered = nullptr; // lights under the pointer (glyphs); checked with isLive
     };
 
     // Constructed on first use, inside a guarded call, so a throwing constructor cannot escape (R13).
@@ -208,6 +212,40 @@ namespace {
             gf::deferredFocus::focusWindow(w, Desktop::FOCUS_REASON_CLICK);
         logIfFailed("raise", Config::Actions::alterZOrder("top", w));
     }
+
+    // A window drawn where it is, taking input: no overview or Stages transform, no input block. Only such a window
+    // shows hover glyphs (a transformed window is drawn away from where the pointer hovers its real lights).
+    bool drawnInPlace(const PHLWINDOW& w) {
+        return w && w->m_transformers.empty() && !w->isInputBlocked();
+    }
+
+    // The titlebar whose lights are under the pointer: on the topmost window there, by Hyprland's own hit test (the
+    // one pointer focus and clicks use; it skips windows whose input is blocked).
+    CGrassfieldTitlebar* titlebarHoveredAt(const Vector2D& pos) {
+        const auto& all = gf::state().titlebars;
+        if (all.empty() || !Desktop::viewState())
+            return nullptr;
+        constexpr auto props = static_cast<uint16_t>(Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+        const auto     w     = Desktop::viewState()->hitTest().windowAt(pos, props);
+        if (!drawnInPlace(w))
+            return nullptr;
+        const auto it = std::ranges::find_if(all, [&](const CGrassfieldTitlebar* deco) { return deco->window() == w && deco->buttonGroupContains(pos); });
+        return it != all.end() ? *it : nullptr;
+    }
+
+    // Pointer motion: the glyphs follow the pointer onto and off the lights. Only the titlebars that change are damaged.
+    void updateHover() {
+        auto& input = pointerInput();
+        auto* now   = g_pInputManager ? titlebarHoveredAt(g_pInputManager->getMouseCoordsInternal()) : nullptr;
+        auto* was   = input.hovered;
+        if (now == was)
+            return;
+        input.hovered = now;
+        if (isLive(was))
+            was->damageEntire();
+        if (now)
+            now->damageEntire();
+    }
 } // namespace
 
 CGrassfieldTitlebar::CGrassfieldTitlebar(const PHLWINDOW& window) : IHyprWindowDecoration(window), m_owner(window) {
@@ -220,6 +258,8 @@ CGrassfieldTitlebar::~CGrassfieldTitlebar() {
     gf::forgetRegisteredDecoration(this);
     gf::guarded("titlebar destructor", [this] {
         auto& input = pointerInput();
+        if (input.hovered == this)
+            input.hovered = nullptr;
         if (input.grab.deco == this) {
             // The window is going away: drop the gesture. The press ownership stays, so the release that
             // will still arrive is not mistaken for a client's (another titlebar under the pointer
@@ -318,6 +358,13 @@ bool CGrassfieldTitlebar::barContains(const Vector2D& pos) const {
     return shouldShow() && layoutBox().containsPoint(pos);
 }
 
+bool CGrassfieldTitlebar::buttonGroupContains(const Vector2D& pos) const {
+    if (!shouldShow())
+        return false;
+    const CBox bar = layoutBox();
+    return tb::overButtonGroup(pos.x - bar.x, pos.y - bar.y, bar.w);
+}
+
 void CGrassfieldTitlebar::damageEntire() {
     gf::guarded("titlebar damageEntire", [this] {
         const auto w = window();
@@ -369,13 +416,16 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
         addRect(right.scale(scale).round(), bgColor, 0, power);
     }
 
-    // 3. Buttons (owner-drawn circles; glyphs on hover are a later M1 slice).
+    // 3. Buttons (owner-drawn circles), with their glyphs while the pointer is over them (macOS: all three at once).
     for (const auto button : tb::kButtonOrder) {
         const auto r = tb::buttonRect(button);
         CBox       box{bar.x + r.x, bar.y + r.y, r.w, r.h};
         box.scale(scale).round();
         addRect(box, toColor(buttonColor(button), alpha), static_cast<int>(std::round(box.w / 2.0)), 2.F);
     }
+    // The pointer is checked again here: the window may have moved or gone under a pointer that has not moved since.
+    if (pointerInput().hovered == this && g_pInputManager && drawnInPlace(w) && buttonGroupContains(g_pInputManager->getMouseCoordsInternal()))
+        drawGlyphs(bar, scale, alpha);
 
     // 4. Title, centered on the bar, never over the buttons.
     const int maxWidthPx = static_cast<int>(std::floor(tb::maxTitleWidth(bar.w) * scale));
@@ -405,6 +455,38 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     data.box = CBox{bar.x + placement.x, bar.y + ((bar.h - texH) / 2.0), std::min(texW, placement.maxWidth), texH}.scale(scale).round();
     data.a   = alpha;
     g_pHyprRenderer->addPassElement(makeUnique<CTexPassElement>(data));
+}
+
+void CGrassfieldTitlebar::drawGlyphs(const CBox& bar, float scale, float alpha) {
+    for (size_t i = 0; i < tb::kButtonOrder.size(); ++i) {
+        const auto button = tb::kButtonOrder[i];
+        const auto r      = tb::buttonRect(button);
+        CBox       box{bar.x + r.x, bar.y + r.y, r.w, r.h};
+        box.scale(scale).round(); // the light exactly as drawn above
+        const int sizePx = tb::glyphSizePx(static_cast<int>(std::lround(box.w)));
+        if (sizePx <= 0)
+            continue;
+
+        auto& glyph = m_glyphs[i];
+        if (!glyph.texture || glyph.sizePx != sizePx || glyph.scale != scale) {
+            glyph = {};
+            auto pixels = tb::premultipliedBgra(tb::glyphMask(button, sizePx, theme::kGlyphStroke * theme::kButtonDiameter * scale), theme::kGlyphColor);
+            if (pixels.empty())
+                continue;
+            glyph.texture = g_pHyprRenderer->createTexture(DRM_FORMAT_ARGB8888, pixels.data(), static_cast<uint32_t>(sizePx) * 4U, Vector2D{static_cast<double>(sizePx), static_cast<double>(sizePx)});
+            glyph.sizePx  = sizePx;
+            glyph.scale   = scale;
+        }
+        if (!glyph.texture || !glyph.texture->ok())
+            continue;
+
+        // glyphSizePx keeps the light's parity: the glyph sits centred on whole pixels.
+        CTexPassElement::SRenderData data;
+        data.tex = glyph.texture;
+        data.box = CBox{box.x + std::floor((box.w - sizePx) / 2.0), box.y + std::floor((box.h - sizePx) / 2.0), static_cast<double>(sizePx), static_cast<double>(sizePx)};
+        data.a   = alpha;
+        g_pHyprRenderer->addPassElement(makeUnique<CTexPassElement>(data));
+    }
 }
 
 bool CGrassfieldTitlebar::onInputOnDeco(const eInputType type, const Vector2D& coords, std::any data) {
@@ -549,6 +631,7 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
 }
 
 void CGrassfieldTitlebar::onGlobalMouseMove() {
+    gf::guarded("titlebar hover", [] { updateHover(); });
     gf::guarded("titlebar onGlobalMouseMove", [] {
         auto& input = pointerInput();
         if (!input.presses.gestureButton())
@@ -568,8 +651,9 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
 
 void CGrassfieldTitlebar::cancelPointerGrab() {
     gf::guarded("titlebar cancelPointerGrab", [] {
-        auto& input = pointerInput();
-        input.grab  = {};
+        auto& input   = pointerInput();
+        input.grab    = {};
+        input.hovered = nullptr;
         input.presses.reset();
     });
 }
