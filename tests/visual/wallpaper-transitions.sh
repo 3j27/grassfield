@@ -96,6 +96,12 @@ transition() { # from to final(to|from)
     magick "$VS_DEV/shots/tr.png" -crop 300x300+300+300 +repage -resize 1x1! -format '%[fx:int(255*r)] %[fx:int(255*g)] %[fx:int(255*b)]\n' info: >> "$file"
   done
   wait "$changer"
+  # The fade may still be running (a 4 s fade, slow captures): wait for it to end (progress -1), then one final capture.
+  SECONDS=0
+  until [[ $(vs_ipc wallpaper progress "$VS_OUTPUT" | tr -d '[:space:]') == -1 ]] || ((SECONDS > 40)); do sleep 0.3; done
+  sleep 0.5
+  "$VS_ROOT/scripts/dev/shot.sh" tr "$VS_OUTPUT" >/dev/null
+  magick "$VS_DEV/shots/tr.png" -crop 300x300+300+300 +repage -resize 1x1! -format '%[fx:int(255*r)] %[fx:int(255*g)] %[fx:int(255*b)]\n' info: >> "$file"
   local target=$to
   [[ $to == garbage ]] && target=$from
   if [[ $to == garbage ]]; then
