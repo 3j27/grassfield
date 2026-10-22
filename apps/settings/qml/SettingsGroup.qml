@@ -11,7 +11,8 @@ Item {
     default property alias rows: column.data
 
     width: parent ? parent.width : implicitWidth
-    implicitHeight: captionText.height + column.height + footnoteText.height
+    // A hidden Text keeps its implicit height, so only visible captions and footnotes count.
+    implicitHeight: column.y + column.height + (footnoteText.visible ? footnoteText.height : 0)
     implicitWidth: Tokens.settingsContentMaxWidth
     Accessible.role: Accessible.Grouping
     Accessible.name: root.caption
@@ -20,9 +21,11 @@ Item {
         id: captionText
         textFormat: Text.PlainText
         visible: root.caption !== ""
-        height: visible ? implicitHeight + Tokens.spacingSm : 0
         width: parent.width
         leftPadding: Tokens.spacingMd
+        // The gap below is padding, not a height bound to implicitHeight: that self-reference looped on rewraps
+        // (real session 2026-10-22, "Binding loop detected for property height").
+        bottomPadding: Tokens.spacingSm
         text: root.caption
         color: Appearance.colors.textSecondary
         font.family: Appearance.fontFamily
@@ -41,7 +44,7 @@ Item {
 
     Column {
         id: column
-        y: captionText.height
+        y: captionText.visible ? captionText.height : 0
         width: parent.width
     }
 
@@ -49,9 +52,9 @@ Item {
         id: footnoteText
         textFormat: Text.PlainText
         visible: root.footnote !== ""
-        y: captionText.height + column.height
-        height: visible ? implicitHeight + Tokens.spacingSm : 0
+        y: column.y + column.height
         topPadding: Tokens.spacingXs
+        bottomPadding: Tokens.spacingSm
         width: parent.width
         leftPadding: Tokens.spacingMd
         rightPadding: Tokens.spacingMd

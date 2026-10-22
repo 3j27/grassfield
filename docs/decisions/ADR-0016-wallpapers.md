@@ -1,5 +1,5 @@
 # ADR-0016: Wallpapers: local photo, video and carousel (step 1), online daily pictures (step 2)
-Status: Accepted (owner decisions 2026-10-20, batch 10/11); step 1 implemented through W6 on its branch (see "Implementation notes"), W7 to W9 and step 2 not started · Date: 2026-10-20 · Decider: owner
+Status: Accepted (owner decisions 2026-10-20, batch 10/11); step 1 implemented through W6 and merged to main (bc1d19f, 2026-10-22; see "Implementation notes"), W7 to W9 and step 2 not started; step 2 endpoints verified 2026-10-22 (APOD unusable, Commons only) · Date: 2026-10-20 · Decider: owner
 
 ## Context
 
@@ -539,6 +539,30 @@ Commons)". Choosing one asks for the opt-in, shows the disclosure, then the curr
 ### Size
 O1 helper `fetch` with fixtures and a loopback test server (1.5 days), O2 scheduler and cache (1 day), O3 Settings
 section and attribution (1-1.5 days), O4 reviewer (network and untrusted input) plus an owner L2 run: ≈ 4-5 days.
+
+### Step 2 verification (integrator, 2026-10-22; requests from the dev machine, results kept in no repo file)
+- **NASA APOD is not usable today.** `https://apod.nasa.gov/apod/astropix.html` answers `301` to
+  `https://science.nasa.gov/apod/` (a WordPress page that loads the day's entry dynamically; no APOD feed, the only
+  RSS is the whole NASA Science site). `api.nasa.gov/planetary/apod` still answers `200`, but for every date tried
+  (2026-03-01, 2026-09-15, 2026-10-20, 2026-10-21) it returns `title: "NASA Science"` and the NASA logo
+  (`science.nasa.gov/.../nasa-logo@2x.png`) as `url` and `hdurl`, with `media_type: image`. Showing that would put the
+  NASA insignia on the desktop, which this ADR forbids. `DEMO_KEY` now reports `X-RateLimit-Limit: 10`.
+  **Integrator decision (owner asked for autonomy, 2026-10-21):** step 2 ships Wikimedia Commons only; APOD waits until
+  the API returns real entries again. The helper must still refuse an entry whose image host is not on the allow-list,
+  so a broken source can never show a logo.
+- **Wikimedia Commons POTD works as designed, with two changes.**
+  - `expandtemplates` gives the file name (`{{Potd/2026-10-20}}`) and the caption (`{{Potd/2026-10-20 (fr)}}`). The
+    caption is wikitext with `[[link|text]]` and `''italics''`: reduce it to plain text.
+  - `imageinfo` with `iiurlwidth=3840` gives `thumburl` on **`thumb.wikimedia.org`** (not `upload.wikimedia.org`; the
+    original `url` stays on `upload.wikimedia.org`). Both URLs carry `utm_source/utm_campaign/utm_content` query
+    parameters: drop the query string before fetching. Fetching the bare thumb URL returned `200`, `image/jpeg`,
+    `Content-Length` 1866060, a 3840 x 3072 JPEG.
+  - `extmetadata` has `LicenseShortName` (`CC BY-SA 4.0`), `LicenseUrl`, `License` (`cc-by-sa-4.0`, the machine key to
+    match the allow-list against), `Artist` and `Credit` as HTML, `AttributionRequired`, `UsageTerms`, `ObjectName`.
+  - Allow-list of hosts for step 2: `commons.wikimedia.org`, `thumb.wikimedia.org`, `upload.wikimedia.org`.
+- **curl 8.22.0 (installed).** `--max-filesize` aborts a transfer that reaches the limit even without a
+  `Content-Length` (since 8.4.0, man curl), so it bounds the download by itself; the helper's streamed count stays as
+  a second check.
 
 ## Owner questions (recommended proposal first)
 1. **Where pictures and videos are parsed.**
