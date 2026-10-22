@@ -23,6 +23,8 @@ Scope {
     property string outcome: "idle"
     // Dev hook `qs ipc call wallpaper loadDelay <ms>`: the decode of every new picture starts that late (0 = off).
     property int loadDelayMs: 0
+    // Dev hook `qs ipc call wallpaper fadeLength <ms>`: the crossfade lasts that long (0 = the token), so that a capture lands in it.
+    property int fadeLengthMs: 0
 
     // "" when the path is acceptable for a stat check, else the reason it is refused.
     function pathProblem(path: string): string {
@@ -73,6 +75,26 @@ Scope {
             return "ok";
         }
 
+        // Dev only: the crossfade lasts this many ms (0 = the token).
+        function fadeLength(ms: int): string {
+            if (!root.dev)
+                return "refused";
+            root.fadeLengthMs = Math.max(0, Math.min(60000, ms));
+            return "ok";
+        }
+
+        // Dev only: where the crossfade of an output is, as the incoming slot's opacity (0 to 1; 0 also while a picture
+        // still loads), or -1 when nothing is incoming. Lets a capture test know where its capture sits in the fade.
+        function progress(output: string): string {
+            if (!root.dev)
+                return "refused";
+            for (const w of variants.instances) {
+                if (w.modelData && w.modelData.name === output)
+                    return String(w.incoming !== null ? w.incoming.opacity : -1);
+            }
+            return "unknown output";
+        }
+
         function set(path: string): string {
             if (!root.dev)
                 return "refused";
@@ -101,6 +123,7 @@ Scope {
     }
 
     Variants {
+        id: variants
         model: Quickshell.screens
 
         // Quickshell qmltypes mark PanelWindow uncreatable (metadata quirk); suppress just this warning.
@@ -144,7 +167,7 @@ Scope {
                     return;
                 }
                 // The override is gone (or never was): the bar follows what is on screen.
-                reportTone(shownDesc);
+                reportTone(toneDesc());
             }
             onImageFileChanged: Qt.callLater(measure)
             onHeightChanged: Qt.callLater(measure)
@@ -278,7 +301,11 @@ Scope {
             }
 
             function slotLoaded(slot: WallpaperSlot): void {
-                if (slot === incoming && fadePending && pendingDesc !== null && pendingDesc.kind === "picture")
+                // Only the picture that is wanted NOW may start a fade: a decode that a newer request superseded (its slot
+                // still holds the old url, or the dev hook has not started the new decode yet) never does.
+                // (The signal itself says the Image is Ready for a non-empty url; the slot's own `pictureReady` binding may not
+                // have been re-evaluated yet when the handler runs, so it is not read here.)
+                if (slot === incoming && fadePending && pendingDesc !== null && pendingDesc.kind === "picture" && slot.url === pendingDesc.url)
                     beginFade();
             }
 
@@ -294,15 +321,16 @@ Scope {
             // switch. P3 for the fade is measured on real hardware with real frame timing (owner L2, docs/specs/desktop.md).
             function beginFade(): void {
                 fadePending = false;
-                const ms = Settings.reduceMotion ? 0 : Tokens.wallpaperCrossfadeMs;
+                // (The dev hook `wallpaper fadeLength <ms>` lengthens the fade so that a capture lands inside it.)
+                const ms = Settings.reduceMotion ? 0 : (root.fadeLengthMs > 0 ? root.fadeLengthMs : Tokens.wallpaperCrossfadeMs);
                 if (ms === 0) {
                     incoming.opacity = 1;
                     completeFade();
                     return;
                 }
-                // The bar's tone follows the new wallpaper once it dominates (60 % of the fade), whatever its kind.
-                toneMid.interval = ms * 0.6;
-                toneMid.restart();
+                // The bar's tone follows the new wallpaper once it dominates: from the fade's own progress (the incoming
+                // slot's opacity reaching 60 %), not from a timer (a fade is frame-driven, a timer is not).
+                toneDone = false;
                 fadeIn.duration = ms;
                 fadeIn.target = incoming;
                 fadeIn.restart();
@@ -318,7 +346,6 @@ Scope {
             }
 
             function completeFade(): void {
-                toneMid.stop();
                 const old = shown;
                 shown = incoming;
                 shownDesc = pendingDesc;
@@ -351,11 +378,23 @@ Scope {
                 onFinished: win.completeFade()
             }
 
-            // The bar's tone switches when the incoming wallpaper dominates (60 % of the crossfade).
-            Timer {
-                id: toneMid
-                onTriggered: if (win.pendingDesc !== null)
-                    win.reportTone(win.pendingDesc)
+            // The bar's tone switches when the incoming wallpaper dominates: 60 % of the crossfade's own progress.
+            property bool toneDone: false
+            Connections {
+                target: win.incoming
+                ignoreUnknownSignals: true
+
+                function onOpacityChanged(): void {
+                    if (!win.toneDone && win.incoming !== null && fadeIn.running && win.incoming.opacity >= 0.6 && win.pendingDesc !== null) {
+                        win.toneDone = true;
+                        win.reportTone(win.pendingDesc);
+                    }
+                }
+            }
+
+            // The wallpaper whose tone the bar should show: the incoming one once it dominates its fade, else the shown one.
+            function toneDesc(): var {
+                return incoming !== null && toneDone && pendingDesc !== null ? pendingDesc : shownDesc;
             }
 
             Image {

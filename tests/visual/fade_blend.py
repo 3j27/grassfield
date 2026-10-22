@@ -14,6 +14,9 @@ Usage: fade_blend.py FRAMES.txt R,G,B R,G,B ...      fade_blend.py --selftest
 import math
 import sys
 
+BETWEEN_PURE = 12  # --between is strict: a capture is a content within this distance of it (a prepared JPEG is not exact),
+BETWEEN_LINE = 15  # or within this distance of the line between the two: a 15 % bleed of a third colour is caught
+MIN_BLENDS = 2     # a change that is not a failure must show at least this many captures inside the fade
 PURE = 40      # distance to a picture colour under which a capture is that picture
 LINE = 45      # distance to the segment between two colours under which a blend is a crossfade of them
 MIN_TRANSITIONS = 4
@@ -81,19 +84,22 @@ def foreign(frames, pures):
     return bad
 
 
-def between(frames, a, b, final):
+def between(frames, a, b, final, min_blends=0):
     """A transition from content a to content b: every capture is a, b, or a point on the line between them (a crossfade of
     the two); never a third colour (the artwork or the bare window showing through). The last capture is `final` (b, or a
     when the change must fail and keep what is on screen). Returns the list of problems."""
     problems = []
     for i, f in enumerate(frames):
-        if dist(f, a) >= PURE and dist(f, b) >= PURE and to_segment(f, a, b)[0] >= LINE:
+        if dist(f, a) >= BETWEEN_PURE and dist(f, b) >= BETWEEN_PURE and to_segment(f, a, b)[0] >= BETWEEN_LINE:
             problems.append("capture %d is a third thing: %s" % (i, f))
+    mids = [f for f in frames if dist(f, a) >= BETWEEN_PURE and dist(f, b) >= BETWEEN_PURE]
+    if len(mids) < min_blends:
+        problems.append("only %d capture(s) inside the fade (need %d)" % (len(mids), min_blends))
     if not frames:
         problems.append("no capture")
     else:
         end = b if final == "to" else a
-        if dist(frames[-1], end) >= PURE:
+        if dist(frames[-1], end) >= BETWEEN_PURE:
             problems.append("the last capture %s is not %s" % (frames[-1], final))
     return problems
 
@@ -125,6 +131,10 @@ def selftest():
     assert between([red, red, red], red, green, "from") == [], "a failure keeps what was on screen"
     assert between([red, art, green], red, green, "to") != [], "the artwork showed between the two"
     assert between([red, mix(red, art, 0.5), art, green], red, green, "to") != []
+    assert between([red, mix(red, art, 0.15), green], red, green, "to") != [], "a 15 % bleed of the artwork"
+    assert between([red, mix(red, green, 0.4), mix(red, green, 0.6), green], red, green, "to", 2) == []
+    assert between([red, mix(red, green, 0.4), green, green], red, green, "to", 2) != [], "one blend is not enough"
+    assert between([red, red, green], red, green, "to", 2) != [], "a hard cut shows no blend"
     print("fade_blend selftest: ok")
 
 
@@ -135,7 +145,7 @@ def main(argv):
     if argv[:1] == ["--between"]:
         frames = [tuple(int(v) for v in line.split()) for line in open(argv[1]) if line.strip()]
         a, b = (tuple(int(v) for v in x.split(",")) for x in argv[2:4])
-        problems = between(frames, a, b, argv[4])
+        problems = between(frames, a, b, argv[4], MIN_BLENDS if argv[4] == "to" else 0)
         for p in problems:
             print(p)
         print("%d captures, %d problem(s)" % (len(frames), len(problems)))

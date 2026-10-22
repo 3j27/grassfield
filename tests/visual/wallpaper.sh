@@ -75,7 +75,7 @@ sleep 15
 cpu_art=$(cpu_of 30)
 echo "idle CPU of the shell with the artwork: $cpu_art % of one core over 30 s"
 # A margin of one point and an absolute ceiling: under load from other processes a 30 s window varies by a few tenths.
-check "a still picture costs no more than the artwork plus 1 point and stays under 2 % (picture $cpu_pic %, artwork $cpu_art %)" awk -v p="$cpu_pic" -v a="$cpu_art" 'BEGIN {exit !(p <= a + 1.0 && p < 2.0)}'
+check "a still picture costs at most max(0.5 %, 3x the artwork) and stays under 2 % (picture $cpu_pic %, artwork $cpu_art %)" awk -v p="$cpu_pic" -v a="$cpu_art" 'BEGIN {m = 3 * a; if (m < 0.5) m = 0.5; exit !(p <= m && p < 2.0)}'
 
 vs_kill_clients
 exit $fail

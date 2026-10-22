@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Changes that arrive faster than the picture decodes (ADR-0016, review finding): the picture on screen must stay until the
 # next one is Ready, and a newer change replaces a pending one without touching what is shown. The dev hook `wallpaper
-# loadDelay 2500` starts every decode 2.5 s late; four solid-colour pictures are switched 0.3 s apart while the desktop is
+# loadDelay 2500` starts every decode 2.5 s late; four solid-colour pictures are switched about 0.4 s apart while the desktop is
 # captured; every capture must be a picture or a blend of two pictures, never the artwork or the bare window colour.
 # Usage (bare command): tests/visual/wallpaper-pending.sh
 source "$(dirname "$0")/lib.sh"
@@ -107,6 +107,8 @@ check "a capture was taken while the first change was still delayed, so the test
 early_not_red=$(while read -r c; do near "$c" "255 0 0" || echo "$c"; done < "$VS_DEV/pending-early.txt" | wc -l)
 check "the delayed new colour did not show early: those captures are still red ($early_not_red are not)" test "$early_not_red" = 0
 check "no capture shows the artwork or the bare window between the pictures" python3 -I "$VS_HERE/fade_blend.py" --only-pictures "$VS_DEV/pending-frames.txt" 255,0,0 0,255,0 0,0,255 255,255,0
+superseded=$(awk '{ if (($1 < 40 && $2 > 215 && $3 < 40) || ($1 < 40 && $2 < 40 && $3 > 215)) n++ } END {print n + 0}' "$VS_DEV/pending-frames.txt")
+check "a superseded decode never starts a fade: no capture shows picture 2 (green) or 3 (blue) ($superseded do)" test "$superseded" = 0
 check "the last picture ends on screen (yellow)" near "$(tail -1 "$VS_DEV/pending-frames.txt")" "255 255 0"
 vs_ipc wallpaper loadDelay 0 >/dev/null
 check "no QML error in the shell log" test "$(grep -cE 'TypeError|ReferenceError|Binding loop' "$VS_DEV/shell.log")" = 0

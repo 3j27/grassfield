@@ -27,6 +27,8 @@ check() {
 vs_session
 vs_reset
 vs_ipc controlcenter reduceMotion false >/dev/null
+# A 4 s fade (dev hook), so that several captures land inside it whatever the speed of the nested compositor.
+vs_ipc wallpaper fadeLength 4000 >/dev/null
 cfg=$VS_DEV/config/grassfield.json
 
 # A wallpaper by name: art, red (a colour), green (a picture), blue (a colour), yellow (a picture), garbage (a failing file).
@@ -81,12 +83,14 @@ transition() { # from to final(to|from)
   until near "$(color_now)" "${ref[$from]//,/ }" || ((SECONDS > 40)); do sleep 0.5; done
   sleep 1
   : > "$file"
+  local warns_before
+  warns_before=$(grep -c 'wallpaper: .*garbage.jpg' "$VS_DEV/shell.log" || true)
   ( sleep 0.7; apply "$to" ) &
   local changer=$!
   SECONDS=0
   local n=0
-  # At least 7 s and 6 captures (a capture can take a second while a picture is prepared), at most 25 s.
-  while { ((SECONDS < 7)) || ((n < 6)); } && ((SECONDS < 25)); do
+  # At least 9 s and 8 captures (a capture can take a second while a picture is prepared), at most 30 s.
+  while { ((SECONDS < 9)) || ((n < 8)); } && ((SECONDS < 30)); do
     n=$((n + 1))
     "$VS_ROOT/scripts/dev/shot.sh" tr "$VS_OUTPUT" >/dev/null
     magick "$VS_DEV/shots/tr.png" -crop 300x300+300+300 +repage -resize 1x1! -format '%[fx:int(255*r)] %[fx:int(255*g)] %[fx:int(255*b)]\n' info: >> "$file"
@@ -94,7 +98,12 @@ transition() { # from to final(to|from)
   wait "$changer"
   local target=$to
   [[ $to == garbage ]] && target=$from
-  check "$from -> $to: only the two and their blends show, the last capture is the $final content" \
+  if [[ $to == garbage ]]; then
+    local warns_after
+    warns_after=$(grep -c 'wallpaper: .*garbage.jpg' "$VS_DEV/shell.log" || true)
+    check "$from -> $to: the shell reported the failure (a 'wallpaper: <output>: <reason> (...garbage.jpg)' log line)" test "$warns_after" -gt "$warns_before"
+  fi
+  check "$from -> $to: only the two and their blends show (at least 2 captures inside the fade), the last capture is the $final content" \
     python3 -I "$VS_HERE/fade_blend.py" --between "$file" "${ref[$from]}" "${ref[$target]}" "$final"
 }
 
@@ -112,5 +121,6 @@ transition art garbage from
 transition red garbage from
 transition green garbage from
 
+vs_ipc wallpaper fadeLength 0 >/dev/null || true
 check "no QML error in the shell log" test "$(grep -cE 'TypeError|ReferenceError|Binding loop' "$VS_DEV/shell.log")" = 0
 exit $fail
