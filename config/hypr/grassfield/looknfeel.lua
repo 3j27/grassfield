@@ -27,7 +27,10 @@ hl.config({
 
   decoration = {
     -- Fixed-radius window corners (macOS 27). Continuous-corner approximation.
-    rounding = 12,
+    -- 26: the macOS toolbar-window radius, for Grassfield's own windows (org.grassfield.*). Every other window gets the
+    -- titlebar-only radius 12 from the rule gf-third-party-rounding (windows.lua): Hyprland 0.56.2 caps the window rule
+    -- `rounding` at 20, so the larger radius can only be the default.
+    rounding = 26,
     rounding_power = 2.6,
     active_opacity = 1.0,
     inactive_opacity = 1.0,

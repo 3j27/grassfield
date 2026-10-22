@@ -6,6 +6,11 @@ hl.window_rule({ name = "gf-float-all", match = { class = ".*" }, float = true }
 -- Don't let apps maximize themselves into a tiled state; Zoom is a Grassfield action.
 hl.window_rule({ name = "gf-no-maximize-event", match = { class = ".*" }, suppress_event = "maximize" })
 
+-- Corner radius (docs/testing/f1-reference-gaps.md, "Window chrome"): Grassfield's own windows keep the default 26
+-- (looknfeel.lua, the macOS toolbar-window radius); every other window, matched by a negated class regex (also a window
+-- without a class), gets 12, the titlebar-only radius.
+hl.window_rule({ name = "gf-third-party-rounding", match = { class = "negative:^org\\.grassfield\\." }, rounding = 12 })
+
 -- Glance (quick look of Preview): a floating panel centered on the screen, without the plugin titlebar.
 hl.window_rule({ name = "gf-glance", match = { class = "^org\\.grassfield\\.Preview\\.Glance$" }, float = true, center = true, decorate = false })
 
