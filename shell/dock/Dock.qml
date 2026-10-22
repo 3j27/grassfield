@@ -254,6 +254,8 @@ Scope {
 
     function cancelClicks(): void {
         clickCancels++;
+        if (VisualFixtures.active)
+            console.info("dock-launch: click-cancel", Date.now());
     }
 
     onKeyboardModeChanged: interruptDrag()

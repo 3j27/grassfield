@@ -86,7 +86,7 @@ wait_count() { # CLASS N SECONDS
 }
 fail=0
 # Duration (ms) of the press in a file of Dock log lines ("pressed true|false EPOCH-MS").
-press_ms() { awk '/pressed true/ {d = $NF} /pressed false/ {u = $NF} END {print u - d}' "$1"; }
+press_ms() { awk '/pressed true/ {d = $NF} /pressed false/ {u = $NF} /menu-by-hold/ {m = $NF} END {if (!u) u = m; print u - d}' "$1"; }
 # Hold of the launch click (ms): well under the Dock's menu hold (dock.menuHold, 550 ms: a host stall of 100 ms made the 450 ms hold
 # a menu hold), long enough for a couple of frames of the dimmed icon. The shell logs the real duration, which is checked.
 HOLD=250
@@ -582,12 +582,23 @@ if want interrupt; then
     vs_pointer down sleep 450 up >/dev/null
     wait
     sleep 3
-    tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\)" > "$out/interrupt-app.txt"
+    tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|tap\|menu-by-hold\|click-cancel\)" > "$out/interrupt-app.txt"
     vs_ipc apps close >/dev/null
     sleep 1.5
     if grep -q "menu-by-hold" "$out/interrupt-app.txt" && [[ $(press_ms "$out/interrupt-app.txt") -ge 500 ]]; then
       echo "interrupt: attempt $attempt: the shell measured a hold of $(press_ms "$out/interrupt-app.txt") ms (menu hold): host stall, again"
       RC=2
+      clean_state interrupt
+      continue
+    fi
+    # The Apps panel must have opened (click-cancel logged) while the button was down; if the IPC call came after the release nothing was
+    # tested (no tap-refused is expected then): again, and after three such attempts the check fails as not tested.
+    cl=$(grep -n "click-cancel" "$out/interrupt-app.txt" | head -1 | cut -d: -f1)
+    rl=$(grep -n "pressed false" "$out/interrupt-app.txt" | head -1 | cut -d: -f1)
+    if [[ -z $cl || ( -n $rl && $cl -gt $rl ) ]]; then
+      echo "interrupt: attempt $attempt: the Apps panel did not open while the button was down (log: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/interrupt-app.txt" | tr '\n' '|')), not tested: again"
+      RC=2
+      quiet gfLA gfLB
       clean_state interrupt
       continue
     fi
