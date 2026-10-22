@@ -3,6 +3,7 @@
 // exercised over an in-process peer-to-peer D-Bus connection (no bus daemon, nothing on any session bus).
 
 #include "DBusObjects.h"
+#include "Launcher.h"
 #include "Layout.h"
 #include "MenuClient.h"
 #include "Penalties.h"
@@ -1119,6 +1120,273 @@ TEST(Safety, SocketDirectoryIsPrivate) {
     const QString linked = dir.path() + QStringLiteral("/link");
     ASSERT_TRUE(QFile::link(dir.path() + QStringLiteral("/grassfield"), linked));
     EXPECT_NE(prepareSocketDirectory(linked + QStringLiteral("/menu-bridge.sock")), QString());
+}
+
+// ---- LauncherEntry (ADR-0018): validation, limits, coalescing, sender cleanup ------------------------------------
+
+namespace {
+    using namespace gf::menubridge::launcher;
+
+    QVariantMap props(std::initializer_list<std::pair<QString, QVariant>> list) {
+        QVariantMap m;
+        for (const auto& [k, v] : list)
+            m.insert(k, v);
+        return m;
+    }
+
+    QString uri(const QString& id) {
+        return QStringLiteral("application://") + id + QStringLiteral(".desktop");
+    }
+
+    QString K(const char* name) {
+        return QString::fromLatin1(name);
+    }
+
+    const QString kA = QStringLiteral(":1.10");
+    const QString kB = QStringLiteral(":1.11");
+} // namespace
+
+TEST(LauncherUri, AcceptsADesktopId) {
+    EXPECT_EQ(appFromUri(QStringLiteral("application://firefox.desktop")), QStringLiteral("firefox"));
+    EXPECT_EQ(appFromUri(QStringLiteral("application://org.mozilla.Firefox-esr_2.desktop")), QStringLiteral("org.mozilla.Firefox-esr_2"));
+    EXPECT_EQ(appFromUri(uri(QString(255, u'a'))), QString(255, u'a'));
+}
+
+TEST(LauncherUri, RefusesEverythingElse) {
+    for (const char* bad : {"", "firefox.desktop", "application://.desktop", "application://firefox", "application:/firefox.desktop", "Application://firefox.desktop",
+                            "application://fire fox.desktop", "application://a/b.desktop", "application://a:b.desktop", "application://fire\nfox.desktop",
+                            "application://f\xc3\xa9.desktop", "application://firefox.desktop ", "application://%66irefox.desktop", "file://firefox.desktop",
+                            "application://x.desktop.bak", "application://"})
+        EXPECT_FALSE(appFromUri(QString::fromUtf8(bad)).has_value()) << bad;
+    EXPECT_FALSE(appFromUri(uri(QString(256, u'a'))).has_value());
+    QString withNul = uri(QStringLiteral("a"));
+    withNul.insert(14, QChar(0));
+    EXPECT_FALSE(appFromUri(withNul).has_value());
+}
+
+TEST(LauncherParse, CountIsClampedAndTypedStrictly) {
+    EXPECT_EQ(parse(uri(K("a")), props({{K("count"), qlonglong(7)}})).properties.count, 7);
+    EXPECT_EQ(parse(uri(K("a")), props({{K("count"), qlonglong(-5)}})).properties.count, 0);
+    EXPECT_EQ(parse(uri(K("a")), props({{K("count"), qlonglong(1) << 40}})).properties.count, kMaxCount);
+    for (const QVariant& wrong : {QVariant(5), QVariant(5.0), QVariant(QStringLiteral("5")), QVariant(true), QVariant(quint64(5))}) {
+        const Parsed p = parse(uri(K("a")), props({{K("count"), wrong}}));
+        EXPECT_TRUE(p.valid);
+        EXPECT_FALSE(p.properties.count.has_value());
+        EXPECT_TRUE(p.dropped);
+    }
+}
+
+TEST(LauncherParse, ProgressMustBeFiniteAndIsClamped) {
+    auto progress = [](QVariant v) { return parse(uri(K("a")), props({{K("progress"), std::move(v)}})); };
+    EXPECT_DOUBLE_EQ(*progress(0.25).properties.progress, 0.25);
+    EXPECT_DOUBLE_EQ(*progress(7.0).properties.progress, 1.0);
+    EXPECT_DOUBLE_EQ(*progress(-3.0).properties.progress, 0.0);
+    for (const QVariant& bad : {QVariant(std::numeric_limits<double>::quiet_NaN()), QVariant(std::numeric_limits<double>::infinity()), QVariant(-std::numeric_limits<double>::infinity()),
+                                QVariant(1), QVariant(qlonglong(1)), QVariant(QStringLiteral("0.5"))}) {
+        const Parsed p = progress(bad);
+        EXPECT_FALSE(p.properties.progress.has_value());
+        EXPECT_TRUE(p.dropped);
+    }
+}
+
+TEST(LauncherParse, BooleansAndUnknownProperties) {
+    const Parsed p = parse(uri(K("a")), props({{K("urgent"), true},
+                                               {K("count-visible"), false},
+                                               {K("progress-visible"), true},
+                                               {K("quicklist"), QStringLiteral("/com/x/Menu")},
+                                               {K("whatever"), 1}}));
+    EXPECT_TRUE(p.valid);
+    EXPECT_FALSE(p.dropped);
+    EXPECT_EQ(p.properties.urgent, true);
+    EXPECT_EQ(p.properties.countVisible, false);
+    EXPECT_EQ(p.properties.progressVisible, true);
+    const Parsed wrong = parse(uri(K("a")), props({{K("urgent"), 1}, {K("count-visible"), QStringLiteral("no")}}));
+    EXPECT_TRUE(wrong.dropped);
+    EXPECT_TRUE(wrong.properties.empty());
+}
+
+TEST(LauncherParse, AnAbsurdMapIsNotRead) {
+    QVariantMap big;
+    for (int i = 0; i <= kMaxProperties; ++i)
+        big.insert(QStringLiteral("k%1").arg(i), i);
+    big.insert(K("count"), qlonglong(3));
+    const Parsed p = parse(uri(K("a")), big);
+    EXPECT_TRUE(p.valid);
+    EXPECT_TRUE(p.dropped);
+    EXPECT_TRUE(p.properties.empty());
+}
+
+TEST(LauncherBook, ForwardsCountProgressUrgent) {
+    Book b;
+    auto r = b.submit(kA, uri(K("app")), props({{K("count"), qlonglong(5)}, {K("count-visible"), true}}), 0);
+    ASSERT_EQ(r.forward.size(), 1u);
+    EXPECT_EQ(r.forward[0], (Update{.app = K("app"), .count = 5, .progress = std::nullopt, .urgent = std::nullopt}));
+    EXPECT_FALSE(r.malformed);
+    r = b.submit(kA, uri(K("app")), props({{K("progress"), 0.5}, {K("progress-visible"), true}, {K("urgent"), true}}), 10);
+    ASSERT_EQ(r.forward.size(), 1u);
+    EXPECT_EQ(r.forward[0], (Update{.app = K("app"), .count = std::nullopt, .progress = 0.5, .urgent = true}));
+}
+
+TEST(LauncherBook, HiddenValuesAreForwardedAsZeroAndMinusOne) {
+    Book b;
+    b.submit(kA, uri(K("app")), props({{K("count"), qlonglong(5)}, {K("progress"), 0.2}}), 0);
+    auto r = b.submit(kA, uri(K("app")), props({{K("count-visible"), false}}), 10);
+    ASSERT_EQ(r.forward.size(), 1u);
+    EXPECT_EQ(r.forward[0].count, 0);
+    EXPECT_FALSE(r.forward[0].progress.has_value());
+    r = b.submit(kA, uri(K("app")), props({{K("progress-visible"), false}}), 20);
+    ASSERT_EQ(r.forward.size(), 1u);
+    EXPECT_EQ(r.forward[0].progress, -1.0);
+    // Visible again: the value the app sent before comes back.
+    r = b.submit(kA, uri(K("app")), props({{K("count-visible"), true}, {K("progress-visible"), true}}), 30);
+    ASSERT_EQ(r.forward.size(), 1u);
+    EXPECT_EQ(r.forward[0].count, 5);
+    EXPECT_EQ(r.forward[0].progress, 0.2);
+    // count-visible:false in the same update as a count wins.
+    r = b.submit(kA, uri(K("other")), props({{K("count"), qlonglong(9)}, {K("count-visible"), false}}), 40);
+    EXPECT_EQ(r.forward.at(0).count, 0);
+}
+
+TEST(LauncherBook, NothingToSayIsNotForwardedNorTracked) {
+    Book b;
+    EXPECT_TRUE(b.submit(kA, uri(K("app")), props({{K("quicklist"), QStringLiteral("x")}}), 0).forward.empty());
+    EXPECT_TRUE(b.submit(kA, uri(K("app")), props({{K("count-visible"), true}}), 1).forward.empty());
+    EXPECT_EQ(b.apps(), 0);
+}
+
+TEST(LauncherBook, MalformedInputIsReportedAndNotForwarded) {
+    Book b;
+    auto r = b.submit(kA, QStringLiteral("application://bad/app.desktop"), props({{K("count"), qlonglong(5)}}), 0);
+    EXPECT_TRUE(r.malformed);
+    EXPECT_TRUE(r.forward.empty());
+    r = b.submit(kA, QString(), {}, 1); // a signal with the wrong signature reaches the Book with no uri
+    EXPECT_TRUE(r.malformed);
+    // A wrong type is dropped and punished, the rest of the update goes through.
+    r = b.submit(kA, uri(K("app")), props({{K("count"), QStringLiteral("5")}, {K("urgent"), true}}), 2);
+    EXPECT_TRUE(r.malformed);
+    ASSERT_EQ(r.forward.size(), 1u);
+    EXPECT_EQ(r.forward[0].urgent, true);
+    EXPECT_FALSE(r.forward[0].count.has_value());
+    EXPECT_EQ(b.apps(), 1);
+}
+
+TEST(LauncherBook, AtMost64Apps) {
+    Book b;
+    for (int i = 0; i < kMaxApps; ++i)
+        EXPECT_EQ(b.submit(QStringLiteral(":1.%1").arg(100 + i / 5), uri(QStringLiteral("app%1").arg(i)), props({{K("count"), qlonglong(1)}}), i * 1000LL).forward.size(), 1u);
+    EXPECT_EQ(b.apps(), kMaxApps);
+    const auto r = b.submit(kA, uri(K("one-too-many")), props({{K("count"), qlonglong(1)}}), 70000);
+    EXPECT_TRUE(r.dropped);
+    EXPECT_TRUE(r.forward.empty());
+    EXPECT_EQ(b.apps(), kMaxApps);
+    // A tracked app still updates.
+    EXPECT_EQ(b.submit(kA, uri(K("app0")), props({{K("count"), qlonglong(2)}}), 80000).forward.size(), 1u);
+}
+
+TEST(LauncherBook, AtMost64Senders) {
+    Book b;
+    for (int i = 0; i < kMaxSenders; ++i)
+        EXPECT_FALSE(b.submit(QStringLiteral(":1.%1").arg(i), uri(QStringLiteral("a%1").arg(i % 8)), props({{K("count"), qlonglong(1)}}), 0).dropped);
+    EXPECT_EQ(b.senders(), kMaxSenders);
+    EXPECT_TRUE(b.submit(QStringLiteral(":1.999"), uri(K("x")), props({{K("count"), qlonglong(1)}}), 0).dropped);
+}
+
+TEST(LauncherBook, TwentyUpdatesPerSecondPerSenderThenCoalescing) {
+    Book b;
+    int  forwarded = 0;
+    for (int i = 0; i < 100; ++i)
+        forwarded += static_cast<int>(b.submit(kA, uri(K("app")), props({{K("count"), qlonglong(i)}}), i /* ms */).forward.size());
+    EXPECT_EQ(forwarded, kMaxPerSecond);
+    EXPECT_TRUE(b.hasPending());
+    // Nothing goes out while the budget is used up, the last state per app goes out once it is back.
+    EXPECT_TRUE(b.flush(500).empty());
+    const auto out = b.flush(1000 + 19);
+    ASSERT_EQ(out.size(), 1u);
+    EXPECT_EQ(out[0].app, K("app"));
+    EXPECT_EQ(out[0].count, 99);
+    EXPECT_FALSE(b.hasPending());
+    // Another sender is not slowed down by the flood.
+    EXPECT_EQ(b.submit(kB, uri(K("calm")), props({{K("count"), qlonglong(1)}}), 50).forward.size(), 1u);
+}
+
+TEST(LauncherBook, CoalescingMergesPropertiesLastWins) {
+    Book b;
+    for (int i = 0; i < kMaxPerSecond; ++i)
+        b.submit(kA, uri(K("app")), props({{K("count"), qlonglong(i)}}), 0);
+    b.submit(kA, uri(K("app")), props({{K("count"), qlonglong(50)}, {K("urgent"), true}}), 10);
+    b.submit(kA, uri(K("app")), props({{K("progress"), 0.5}}), 20);
+    b.submit(kA, uri(K("app")), props({{K("count"), qlonglong(60)}}), 30);
+    const auto out = b.flush(1000);
+    ASSERT_EQ(out.size(), 1u);
+    EXPECT_EQ(out[0], (Update{.app = K("app"), .count = 60, .progress = 0.5, .urgent = true}));
+}
+
+TEST(LauncherBook, ExcessMalformedInputIsNotKept) {
+    Book b;
+    for (int i = 0; i < kMaxPerSecond; ++i)
+        b.submit(kA, uri(K("app")), props({{K("count"), qlonglong(1)}}), 0);
+    const auto r = b.submit(kA, QStringLiteral("junk"), {}, 5);
+    EXPECT_TRUE(r.throttled);
+    EXPECT_FALSE(r.malformed);
+    EXPECT_FALSE(b.hasPending());
+}
+
+TEST(LauncherBook, ASenderThatLeavesClearsItsApps) {
+    Book b;
+    b.submit(kA, uri(K("one")), props({{K("count"), qlonglong(1)}}), 0);
+    b.submit(kA, uri(K("two")), props({{K("progress"), 0.5}}), 0);
+    b.submit(kB, uri(K("three")), props({{K("count"), qlonglong(3)}}), 0);
+    const auto gone = b.senderGone(kA);
+    ASSERT_EQ(gone.size(), 2u);
+    EXPECT_EQ(gone[0].app, K("one"));
+    EXPECT_EQ(gone[1].app, K("two"));
+    for (const Update& u : gone)
+        EXPECT_TRUE(u.forget());
+    EXPECT_EQ(b.apps(), 1);
+    EXPECT_EQ(b.senders(), 1);
+    EXPECT_TRUE(b.senderGone(kA).empty());
+    // The state of the survivor is still there, and a late flush sends nothing for the departed sender's apps.
+    ASSERT_EQ(b.snapshot().size(), 1u);
+    EXPECT_EQ(b.snapshot()[0].app, K("three"));
+    EXPECT_TRUE(b.flush(5000).empty());
+}
+
+TEST(LauncherBook, PendingStateOfADepartedSenderIsDropped) {
+    Book b;
+    for (int i = 0; i < kMaxPerSecond; ++i)
+        b.submit(kA, uri(K("app")), props({{K("count"), qlonglong(i)}}), 0);
+    b.submit(kA, uri(K("app")), props({{K("count"), qlonglong(77)}}), 1);
+    ASSERT_TRUE(b.hasPending());
+    b.senderGone(kA);
+    EXPECT_FALSE(b.hasPending());
+    EXPECT_TRUE(b.flush(5000).empty());
+}
+
+TEST(LauncherBook, SnapshotReplaysTheCurrentState) {
+    Book b;
+    b.submit(kA, uri(K("b")), props({{K("count"), qlonglong(4)}, {K("progress"), 0.3}, {K("urgent"), true}}), 0);
+    b.submit(kA, uri(K("a")), props({{K("count"), qlonglong(4)}, {K("count-visible"), false}}), 1);
+    const auto snap = b.snapshot();
+    ASSERT_EQ(snap.size(), 2u);
+    EXPECT_EQ(snap[0], (Update{.app = K("a"), .count = 0, .progress = std::nullopt, .urgent = std::nullopt}));
+    EXPECT_EQ(snap[1], (Update{.app = K("b"), .count = 4, .progress = 0.3, .urgent = true}));
+}
+
+TEST(LauncherProtocol, MessageShape) {
+    const QJsonObject full = QJsonDocument::fromJson(launcherMessage(K("app"), 5, 0.5, true)).object();
+    EXPECT_EQ(full.value(K("type")).toString(), K("launcher"));
+    EXPECT_EQ(full.value(K("app")).toString(), K("app"));
+    EXPECT_EQ(full.value(K("count")).toInt(), 5);
+    EXPECT_DOUBLE_EQ(full.value(K("progress")).toDouble(), 0.5);
+    EXPECT_TRUE(full.value(K("urgent")).toBool());
+    const QByteArray raw = launcherMessage(K("app"), std::nullopt, -1.0, false);
+    EXPECT_TRUE(raw.endsWith('\n'));
+    EXPECT_EQ(raw.count('\n'), 1);
+    const QJsonObject partial = QJsonDocument::fromJson(raw).object();
+    EXPECT_TRUE(partial.value(K("count")).isNull());
+    EXPECT_TRUE(partial.contains(K("count")));
+    EXPECT_DOUBLE_EQ(partial.value(K("progress")).toDouble(), -1.0);
+    EXPECT_FALSE(partial.value(K("urgent")).toBool(true));
 }
 
 // ---- diagnostics interface -------------------------------------------------------------------------------------

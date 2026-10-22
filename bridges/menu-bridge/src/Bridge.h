@@ -12,8 +12,12 @@
 //   org.freedesktop.DBus.GetConnectionUnixProcessID(owner) equals that pid (a client naming another app's bus name
 //   is refused). It then talks to the unique name only.
 // - The bridge executes nothing: it only sends DBusMenu GetLayout / AboutToShow / Event calls.
+// - LauncherEntry (ADR-0018): while it runs, applications' com.canonical.Unity.LauncherEntry.Update signals are
+//   validated and forwarded to the shell as "launcher" lines (LauncherWatcher.h); the current state is replayed when
+//   a shell connects.
 
 #include "DBusObjects.h"
+#include "LauncherWatcher.h"
 #include "MenuClient.h"
 #include "Penalties.h"
 #include "Protocol.h"
@@ -102,6 +106,7 @@ namespace gf::menubridge {
         bool                        m_stateOwned = false; // loadState ran: this instance is the one bridge that may write the state file
 
         PenaltyBook                 m_penalties;
+        LauncherWatcher             m_launcher; // ADR-0018: applications' own Dock badges (needs m_penalties and m_bus)
         struct Calls {
             int     count     = 0;
             qint64  startedMs = 0; // monotonic clock, start of the oldest call in flight

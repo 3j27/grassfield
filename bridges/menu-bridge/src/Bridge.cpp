@@ -37,7 +37,24 @@ namespace gf::menubridge {
         }
     } // namespace
 
-    Bridge::Bridge(const QDBusConnection& bus, QString socketPath, QObject* parent) : QObject(parent), m_bus(bus), m_socketPath(std::move(socketPath)) {
+    Bridge::Bridge(const QDBusConnection& bus, QString socketPath, QObject* parent)
+        : QObject(parent), m_bus(bus), m_socketPath(std::move(socketPath)),
+          m_launcher(bus,
+                     LauncherWatcher::Hooks{
+                         .refused = [this](const QString& identity) {
+                             QString why;
+                             return m_penalties.refused(identity, &why);
+                         },
+                         .strike =
+                             [this](const QString& identity) {
+                                 // Malformed LauncherEntry input: the same short back-off as an unreadable layout.
+                                 m_penalties.record(identity, Offence::LayoutFailed);
+                                 saveState();
+                                 log(QStringLiteral("malformed LauncherEntry update from \"%1\"").arg(displayIdentity(identity)));
+                             },
+                     },
+                     this) {
+        connect(&m_launcher, &LauncherWatcher::line, this, [this](const QByteArray& line) { send(line); });
         m_server.setSocketOptions(QLocalServer::UserAccessOption);
         m_server.setMaxPendingConnections(2);
         connect(&m_server, &QLocalServer::newConnection, this, [this] { onNewConnection(); });
@@ -80,11 +97,13 @@ namespace gf::menubridge {
             return false;
         }
         ::chmod(local.constData(), 0600);
+        m_launcher.start();
         log(QStringLiteral("listening on %1 (standby until the shell says hello with appmenu)").arg(m_socketPath));
         return true;
     }
 
     void Bridge::stop() {
+        m_launcher.stop();
         setRegistrar(false);
         dropAll();
         m_calls.clear(); // a clean stop leaves nothing in flight
@@ -140,6 +159,8 @@ namespace gf::menubridge {
             });
             log(QStringLiteral("shell connected"));
             sendStatus();
+            for (const QByteArray& launcherLine : m_launcher.snapshot())
+                send(launcherLine); // applications' badges set before this shell connected
         }
     }
 

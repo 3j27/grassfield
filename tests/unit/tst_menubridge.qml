@@ -112,6 +112,78 @@ TestCase {
         compare(msg.items[0].children[5].toggleState, 1);
     }
 
+    // ADR-0018: launcher lines (an application's own badge, progress and attention hint).
+    function test_launcherLines() {
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"firefox\",\"count\":5,\"progress\":0.5,\"urgent\":true}"),
+                {type: "launcher", app: "firefox", count: 5, progress: 0.5, urgent: true});
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"org.a-b_c.D\",\"count\":null,\"progress\":-1,\"urgent\":false}"),
+                {type: "launcher", app: "org.a-b_c.D", count: null, progress: -1, urgent: false});
+        // Missing keys read as null; all null is "forget this app".
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"x\"}"), {type: "launcher", app: "x", count: null, progress: null, urgent: null});
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"x\",\"count\":0}").count, 0);
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"x\",\"count\":99999}").count, 99999);
+    }
+
+    function test_launcherLinesAreValidated() {
+        const bad = [
+            "{\"type\":\"launcher\"}",
+            "{\"type\":\"launcher\",\"app\":\"\"}",
+            "{\"type\":\"launcher\",\"app\":5}",
+            "{\"type\":\"launcher\",\"app\":\"a b\"}",
+            "{\"type\":\"launcher\",\"app\":\"a/b\"}",
+            "{\"type\":\"launcher\",\"app\":\"<b>\"}",
+            "{\"type\":\"launcher\",\"app\":\"" + "a".repeat(256) + "\"}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"count\":-1}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"count\":100000}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"count\":1.5}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"count\":\"5\"}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"progress\":1.5}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"progress\":-2}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"progress\":\"0.5\"}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"urgent\":1}",
+            "{\"type\":\"launcher\",\"app\":\"x\",\"urgent\":\"true\"}"
+        ];
+        for (const line of bad)
+            compare(Bridge.parseBridgeLine(line), null, line);
+        compare(Bridge.parseBridgeLine("{\"type\":\"launcher\",\"app\":\"" + "a".repeat(255) + "\"}").app.length, 255);
+    }
+
+    function launcherLine(fields) {
+        return Bridge.parseBridgeLine(JSON.stringify(Object.assign({type: "launcher", app: "app", count: null, progress: null, urgent: null}, fields)));
+    }
+
+    function test_launcherState() {
+        let s = {};
+        s = Bridge.applyLauncher(s, launcherLine({app: "Firefox", count: 3}));
+        compare(s, {firefox: {count: 3, urgent: false}}, "keys are lower-case");
+        s = Bridge.applyLauncher(s, launcherLine({app: "firefox", progress: 0.5}));
+        compare(s.firefox, {count: 3, progress: 0.5, urgent: false}, "an update keeps what it did not touch");
+        s = Bridge.applyLauncher(s, launcherLine({app: "firefox", count: 0, urgent: true}));
+        compare(s.firefox, {count: 0, progress: 0.5, urgent: true}, "count 0 is a known count");
+        s = Bridge.applyLauncher(s, launcherLine({app: "firefox", progress: -1, urgent: false}));
+        compare(s.firefox, {count: 0, urgent: false}, "progress -1 removes the bar");
+        const before = JSON.stringify(s);
+        const t = Bridge.applyLauncher(s, launcherLine({app: "other", count: 1}));
+        compare(JSON.stringify(s), before, "the argument is not changed");
+        compare(Object.keys(t).sort().join(","), "firefox,other");
+        // Nothing in the line: the app's sender left the bus, the app is forgotten.
+        compare(Bridge.applyLauncher(t, launcherLine({app: "FIREFOX"})), {other: {count: 1, urgent: false}});
+    }
+
+    function test_launcherStateIsBounded() {
+        let s = {};
+        for (let i = 0; i < 100; i++)
+            s = Bridge.applyLauncher(s, launcherLine({app: "app" + i, count: 1}));
+        compare(Object.keys(s).length, 64);
+        // A tracked app still updates, and an app can leave to make room.
+        s = Bridge.applyLauncher(s, launcherLine({app: "app0", count: 9}));
+        compare(s.app0.count, 9);
+        s = Bridge.applyLauncher(s, launcherLine({app: "app1"}));
+        s = Bridge.applyLauncher(s, launcherLine({app: "new", count: 2}));
+        compare(s.new.count, 2);
+        compare(Object.keys(s).length, 64);
+    }
+
     function test_untrustedItemsAreSanitized() {
         const items = Bridge.sanitizeItems([
             {id: -1, label: "negative"},

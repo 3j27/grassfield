@@ -150,6 +150,35 @@ top-level menus (Left/Right).
   (session configuration, socket in /tmp) per nested session, reused across shell restarts, and (re)starts the
   bridge on it before the shell and any test app (`.dev/run/menu-bridge.sock`, `.dev/menu-bridge.log`,
   `--menu-bridge PATH`). Without `--private-bus` no bridge runs. `nested-down.sh` stops the bridge, then the bus.
+- **MB15 LauncherEntry** (ADR-0018; badges, progress and urgent set by applications, macOS `NSDockTile`). While it runs,
+  the bridge subscribes to `type='signal',interface='com.canonical.Unity.LauncherEntry',member='Update'` on its bus
+  (`Update(s app_uri, a{sv} properties)`; the private bus in development, so no owner application is ever read) and
+  forwards each accepted update to the shell as the additive `launcher` line of menu/1. Logic: `src/Launcher.{h,cpp}`
+  (pure, gtest), D-Bus side: `src/LauncherWatcher.{h,cpp}`. Every client may emit the signal: nothing is trusted.
+    - `app_uri` is `application://` + an id of 1 to 255 bytes of `[A-Za-z0-9._-]` + `.desktop`; the id (without the
+      suffix) is the `app` of the line. Anything else is malformed. A signal whose signature is not `sa{sv}` is malformed.
+    - `count` (type `x`) is clamped to 0..99999, `progress` (type `d`) must be finite and is clamped to 0..1,
+      `count-visible`, `progress-visible` and `urgent` are booleans (`b`). A property of another type is dropped (the rest of
+      the update goes on) and counts as malformed; unknown properties (`quicklist`) are ignored; a map of more than 32
+      entries is not read. `count-visible:false` is forwarded as `count:0`, `progress-visible:false` as `progress:-1`;
+      `count-visible:true` alone brings back the count the application sent before.
+    - At most 64 apps and 64 senders are tracked. At most 20 updates per second per sender go out at once: the excess is
+      coalesced (the last properties per app win) and sent as soon as the sender's budget allows (a 50 ms timer runs only
+      while something is pending). A sender that leaves the bus (`NameOwnerChanged`, or no process for its name) clears its
+      apps: a `launcher` line with `count`, `progress` and `urgent` all `null` ("forget"), and its pending state is dropped.
+      The sender that updated an app last owns it (spoofing between applications on one bus is possible as in KDE and
+      cosmetic: a number or a bar on a tile; accepted risk, no pid matching).
+    - Malformed input is a penalty for the sender, through `Penalties`: its application identity (pid of its unique
+      name, `appIdentity`) gets a `LayoutFailed` strike (refused 2 s, doubling to 64 s), logged as `malformed
+      LauncherEntry update from "<identity>"`. A refused identity's signals are dropped. The strike is shared with that
+      application's menu (same identity), so a sender that spams garbage also waits before its menu is served again.
+    - The current state of every app is replayed to a shell that connects later (a restarted shell keeps the badges).
+    - The line: `{"type":"launcher","app":"<id>","count":N|null,"progress":P|null,"urgent":true|false|null}` (`null`: the
+      update did not touch the value). Old shells ignore unknown types; the protocol stays `menu/1`.
+    - Shell side (`MenuBridge.js` `parseBridgeLine` / `applyLauncher`, `MenuBridge.qml` `launcher`, `launcherUpdate`): the
+      line is validated again (app charset and length, count 0..99999, progress -1..1, urgent boolean), the latest state
+      per lower-case app id is kept (at most 64), and cleared when the bridge disconnects. The Dock uses it
+      (docs/specs/dock.md requirements 14 and 21).
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 | Req | Test | Level | Status |
@@ -159,6 +188,8 @@ top-level menus (Left/Right).
 | gfc/1 `pid` | `compositor/tests` `Protocol.AppmenuJson*`, `AppmenuRegistry.PidTravels…` | L0 | 2026-10-17: 92/92 PASS |
 | M3 exit (MB1, MB5, MB6, MB11, MB12, MB13) | `tests/integration/global_menus.sh` (nested, private bus, virtual pointer) | L1 | 2026-10-17: PASS twice in a row (runs `.dev/global-menus/run-20261017-133714`, `run-20261017-133805`); bridge RSS 19.4–19.5 MiB (shared Qt libraries included), CPU time 0 s |
 | MB14 | `tests/integration/menu_bridge_memory.sh` (private bus, hostile fixture; cases B A C D E F G H I J: memory incl. RssAnon, oversized, kill on first fetch, kill on a re-read with new pids, forged state files, second instance, unsolicited 100 MB message until the bridge gives up, huge LayoutUpdated, slow victim plus attacker, 7 rotating copies ending degraded; the memory limit is emulated by a watcher) | L1 | see STATE.md |
+| MB15 (logic) | `tests/unit/menu-bridge/tst_menubridge.cpp` `LauncherUri`, `LauncherParse`, `LauncherBook`, `LauncherProtocol` (17 cases: uri and id charset, count clamp, finite progress, wrong types, 64 apps and senders, 20 per second and coalescing, sender gone, replay, message shape), plain and ASan/UBSan builds (`scripts/dev/test.sh`); shell parser and state: `tests/unit/tst_menubridge.qml` `test_launcher*` | L0 | 2026-10-22: 64 passed, 4 skipped (no Unix sockets in the sandbox), plain and ASan |
+| MB15 (D-Bus) | `tests/integration/launcher_entry.sh` (bare; private bus, bridge, socket tap as the shell, `tests/fixtures/launcher-entry.py` as applications): count and clamp, count-visible, progress and clamp, progress-visible, urgent, flood (21 lines for 300 updates, last state arrives), sender disconnect, replay to a new shell, invalid uri and wrong signature (penalty logged, sender refused then served again). Fails on the bridge before ADR-0018 | L1 | 2026-10-22: PASS (and every behaviour check FAILs against the previous bridge) |
 | MB5 refusal, MB4 errors, MB3 cleanup | throwaway private bus, `open` naming the bridge's own name with a wrong pid → `pid-mismatch`; right pid → accepted; invalid lines → `bad-request`; SIGTERM removes the socket | L1 | 2026-10-17 verified manually (session log) |
 | MB10 | bridge started with `GRASSFIELD_DEV=1` and the owner's bus address, no address, no session variables, no socket → exit 3 before connecting | L0 | 2026-10-17 verified |
 | Unit hardening | `systemd-analyze --user verify packaging/systemd/grassfield-menu-bridge.service` | L0 | only finding: `/usr/bin/grassfield-menu-bridge` not installed; runtime under systemd NOT VERIFIED (owner L2) |
@@ -175,6 +206,9 @@ top-level menus (Left/Right).
   and `backoff` the window has no bridge menu: the shell clears its T1/T2 menus and shows T0 (log line only). Item: `{"id","type":"standard"|"separator","label","enabled","visible",
   "toggle-type":""|"checkmark"|"radio","toggle-state":-1|0|1,"shortcut":[[keys…]…],"icon-name","submenu",
   "children":[…]}`.
+- **menu/1 `launcher`** (bridge → shell, additive, MB15): `{"type":"launcher","app":"<desktop id>","count":N|null,
+  "progress":P|null,"urgent":bool|null}`; `count` 0 hides the badge, `progress` -1 hides the bar, all three `null`
+  forgets the app. Input: the `com.canonical.Unity.LauncherEntry` `Update(s, a{sv})` signal on the bridge's bus.
 - **gfc/1 `appmenu`** gains the additive field `"pid":N` (0 for clears; consumers that ignore it are unaffected).
 - **D-Bus**: `org.grassfield.MenuBridge1` (MB9), `com.canonical.AppMenu.Registrar` (MB1, MB2).
 - **Test hook**: `qs ipc call menubar bridgeState <output>` → JSON (shown window, bridge state, left titles and the
@@ -194,6 +228,9 @@ grassfield-compositor (feature `appmenu`). Verified clients: Qt 6.11.2 (`tests/f
 - Bridge absent, crashed or restarting: the shell retries every 2 s, the bar shows T0; the registrar disappears with
   the bridge, so apps started meanwhile keep in-window menus. Apps that hid their menu bar earlier export it again as
   soon as the bridge is back (the shell re-sends `open`).
+- Without the bridge (not built, crashed, standby): no application badge, progress or urgent hint; the Dock keeps its
+  notification-derived badges. The shell clears the launcher state when the bridge disconnects and gets it back when it
+  connects.
 - Shell restart: the bridge releases the registrar on disconnect and takes it again on the new `hello`; the shell
   re-queries the plugin and the focused app's menus come back (verified in the exit test).
 - A refused (`pid-mismatch`, `no-owner`, `backoff`), oversized (`oversized`) or unreadable (`layout-failed`) menu, or
@@ -235,3 +272,8 @@ application localized them; Grassfield strings use `qsTr()`.
   An innocent whose single fresh call coincides with someone else's huge message is refused for 15 min (T0 menus); the
   wrongful blame can repeat, doubling each time. See the residual risks in MB14.
 - Peers whose executable cannot be read share one `unknown` identity (refused 2 min at most).
+- LauncherEntry (MB15): an application can set another application's badge (spoofing on a shared bus, cosmetic);
+  `count` must be an int64 (`x`) and `progress` a double (`d`) as in the Unity specification, an application sending
+  `int32` counts is dropped as malformed; the `quicklist` property is not supported; the urgent hint bounces only an
+  app that already has a window; an application sending a huge a{sv} is read in full by QtDBus before the 32-entry cap
+  (the MB14 message-size limit applies).

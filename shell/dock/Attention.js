@@ -47,6 +47,37 @@ function settle(state, groups, focusedAddress, liveAddresses) {
     return Object.keys(next).length === Object.keys(state).length ? state : next;
 }
 
+// An app set the urgent hint itself (LauncherEntry, ADR-0018): every window of its tile asks for attention (the focused
+// window never does). `appKey` is compared with the groups' keys without regard to case.
+function requestApp(state, groups, appKey, focusedAddress) {
+    let next = state;
+    for (const g of groups || []) {
+        if (String(g.key).toLowerCase() !== String(appKey).toLowerCase())
+            continue;
+        for (const a of g.addresses)
+            next = request(next, a, focusedAddress);
+    }
+    return next;
+}
+
+// The app cleared its urgent hint (or left the bus): its windows leave the state.
+function clearApp(state, groups, appKey) {
+    let next = state;
+    for (const g of groups || []) {
+        if (String(g.key).toLowerCase() !== String(appKey).toLowerCase())
+            continue;
+        for (const a of g.addresses) {
+            const n = normalize(a);
+            if (next[n] !== true)
+                continue;
+            if (next === state)
+                next = Object.assign({}, state);
+            delete next[n];
+        }
+    }
+    return next;
+}
+
 // Keys of the tiles that bounce, in the order of `groups`.
 function tileKeys(state, groups) {
     return (groups || []).filter(g => g.addresses.some(a => state[normalize(a)] === true)).map(g => g.key);

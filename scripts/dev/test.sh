@@ -195,7 +195,9 @@ gtest_suite tests/unit/settings "apps/settings/build-direct.sh --tests >/dev/nul
   ".dev/build/settings-unit-tests --gtest_brief=1" ".dev/build/settings-unit-tests-asan --gtest_brief=1"
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards). The peer-to-peer D-Bus
 # case skips itself inside the sandbox (no Unix sockets).
-gtest_suite tests/unit/menu-bridge "bridges/menu-bridge/build-direct.sh --tests" ".dev/build/menu-bridge-unit-tests --gtest_brief=1"
+# Built twice: plain, then with ASan and UBSan.
+gtest_suite tests/unit/menu-bridge "bridges/menu-bridge/build-direct.sh --tests >/dev/null && bridges/menu-bridge/build-direct.sh --tests --asan" \
+  ".dev/build/menu-bridge-unit-tests --gtest_brief=1" ".dev/build/menu-bridge-unit-tests-asan --gtest_brief=1"
 # Isolation: no test or dev script may start an app (grassfield-settings/files/preview, foot, ...) without
 # scripts/dev/isolated.sh (nothing may be written to the owner's home), and the checker itself is tested.
 if want logic; then

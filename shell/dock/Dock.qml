@@ -174,6 +174,37 @@ Scope {
         attentionRevealTimer.restart();
     }
 
+    // An application set (or cleared) the urgent hint itself (LauncherEntry, ADR-0018): the same attention state, for the windows of its tile.
+    function setAppAttention(app: string, urgent: bool): void {
+        const focusedAddress = Compositor.focusedToplevel ? Compositor.addressOf(Compositor.focusedToplevel) : "";
+        const next = urgent ? Attention.requestApp(attention, attentionGroups(), app, focusedAddress) : Attention.clearApp(attention, attentionGroups(), app);
+        if (VisualFixtures.active)
+            console.info("dock-attention: launcher", app, urgent ? (next !== attention ? "bounce" : "ignored") : "clear", Date.now());
+        if (next === attention)
+            return;
+        attention = next;
+        if (urgent) {
+            attentionAt = Date.now();
+            attentionReveal = true;
+            attentionRevealTimer.restart();
+        } else if (Object.keys(next).length === 0) {
+            attentionReveal = false;
+            attentionRevealTimer.stop();
+        }
+    }
+
+    Connections {
+        target: MenuBridge
+
+        function onLauncherUpdate(msg: var): void {
+            // urgent true/false sets/clears it; a line with nothing in it (the app's process left the bus) clears it.
+            if (msg.urgent === true)
+                root.setAppAttention(msg.app, true);
+            else if (msg.urgent === false || (msg.count === null && msg.progress === null))
+                root.setAppAttention(msg.app, false);
+        }
+    }
+
     Timer {
         id: attentionRevealTimer
         interval: Tokens.dockAttentionReveal
@@ -1223,7 +1254,10 @@ Scope {
                                 // it does not move: a static accent plate shows it instead.
                                 readonly property bool attentive: isApp && running && root.attentionKeys.indexOf(modelData.key) >= 0
                                 readonly property bool attentionHops: attentive && !Appearance.reduceMotion
-                                readonly property int badge: isApp ? DockModel.badgeCount(Notifications.history, modelData) : 0
+                                // The count the app set itself (LauncherEntry) wins over the notifications' while it is known; 0 hides it.
+                                readonly property int badge: isApp ? DockModel.tileBadge(Notifications.history, modelData, MenuBridge.launcher) : 0
+                                // Progress the app set on its tile: 0..1, -1 for no bar.
+                                readonly property real progress: isApp ? DockModel.tileProgress(MenuBridge.launcher, modelData) : -1
                                 // Neighbours of a dragged tile make room along the Dock (or close the gap while it is dragged out).
                                 readonly property real shiftMain: {
                                     if (win.dragFrom < 0 || index === win.dragFrom)
@@ -1475,6 +1509,33 @@ Scope {
                                         to: 0
                                         duration: Appearance.duration(Tokens.motionNormal)
                                         easing.type: Easing.OutBounce
+                                    }
+                                }
+
+                                // Progress an application set on its tile (LauncherEntry): a thin bar near the bottom of the icon, like
+                                // macOS' progress on a Dock tile. It hops with the icon.
+                                Rectangle {
+                                    id: progressTrack
+                                    objectName: "dockProgress"
+                                    visible: tile.progress >= 0
+                                    transform: Translate {
+                                        y: -appIcon.lift
+                                    }
+                                    height: Tokens.dockProgressHeight
+                                    radius: height / 2
+                                    anchors.left: appIcon.left
+                                    anchors.right: appIcon.right
+                                    anchors.bottom: appIcon.bottom
+                                    anchors.leftMargin: Tokens.dockProgressInset
+                                    anchors.rightMargin: Tokens.dockProgressInset
+                                    anchors.bottomMargin: Tokens.dockProgressBottomOffset
+                                    color: Appearance.withAlpha(Appearance.colors.fill, Tokens.dockProgressTrackOpacity)
+
+                                    Rectangle {
+                                        width: Math.max(0, tile.progress) * parent.width
+                                        height: parent.height
+                                        radius: parent.radius
+                                        color: Appearance.colors.accent
                                     }
                                 }
 

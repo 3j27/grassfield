@@ -342,6 +342,14 @@ QtObject {
     readonly property int dockBadgeSize: 20
     // estimate: how far the badge sticks out of the icon corner, px
     readonly property int dockBadgeOverhang: 5
+    // estimate (macOS Dock tile progress): height of the progress bar an application sets on its tile (ADR-0018), px
+    readonly property int dockProgressHeight: 5
+    // estimate: horizontal inset of the progress bar from the icon edges, px
+    readonly property int dockProgressInset: 6
+    // estimate: distance of the progress bar from the bottom of the icon, px
+    readonly property int dockProgressBottomOffset: 4
+    // estimate: opacity of the progress track (the appearance fill colour: white in dark, black in light)
+    readonly property real dockProgressTrackOpacity: 0.4
     // estimate: starting opacity of the removal puff
     readonly property real dockPoofOpacity: 0.5
     // estimate: centre circle of the puff, fraction of poofSize

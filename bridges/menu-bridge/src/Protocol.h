@@ -13,6 +13,10 @@
 //   {"type":"status","v":"menu/1","state":"standby"|"active","registrar":true|false}
 //   {"type":"menu","window":"<hex>","revision":N,"items":[...]}      (items: see Layout.h)
 //   {"type":"error","window":"<hex>"|"","code":"<code>","message":"<text>"}
+//   {"type":"launcher","app":"<desktop id>","count":N|null,"progress":P|null,"urgent":true|false|null}
+//       (additive, ADR-0018, Launcher.h: an application's own Dock badge, progress and attention hint, from
+//        com.canonical.Unity.LauncherEntry. null: the update did not touch the value. count 0 hides the badge,
+//        progress -1 hides the bar; all three null: forget the app, the sender left the bus.)
 //
 // Everything the shell sends is untrusted: every field is type- and range-checked, unknown types are refused.
 
@@ -74,5 +78,6 @@ namespace gf::menubridge {
     QByteArray menuMessage(const QString& window, quint32 revision, const QJsonArray& items);
     QByteArray errorMessage(const QString& window, const QString& code, const QString& message);
     QByteArray statusMessage(const QString& state, bool registrar);
+    QByteArray launcherMessage(const QString& app, std::optional<qint64> count, std::optional<double> progress, std::optional<bool> urgent);
 
 } // namespace gf::menubridge

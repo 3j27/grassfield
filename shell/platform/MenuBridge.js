@@ -16,7 +16,9 @@ var limits = {
     key: 32,               // characters of one shortcut key name
     keys: 6,               // keys of one shortcut
     code: 64,              // characters of an error code
-    message: 256           // characters of an error message
+    message: 256,          // characters of an error message
+    launcherCount: 99999,  // largest badge count of a launcher message
+    launcherApps: 64       // apps whose launcher state is kept
 };
 
 // Validated lowercase hex of a Hyprland window address ("0x" prefix optional), "" if invalid.
@@ -147,7 +149,7 @@ function sanitizeItems(items, depth, budget) {
 }
 
 // One bridge line -> {type: "status", state, registrar} | {type: "menu", window, revision, items}
-// | {type: "error", window, code, message}, or null.
+// | {type: "launcher", app, count, progress, urgent} | {type: "error", window, code, message}, or null.
 function parseBridgeLine(line) {
     if (typeof line !== "string" || line.length === 0 || line.length > limits.line)
         return null;
@@ -170,6 +172,21 @@ function parseBridgeLine(line) {
             return null;
         return {type: "menu", window: window, revision: msg.revision, items: sanitizeItems(msg.items, 0, {items: limits.items})};
     }
+    case "launcher": {
+        // ADR-0018: an application's own badge, progress and attention hint. null = this update did not touch it.
+        if (typeof msg.app !== "string" || !/^[A-Za-z0-9._-]{1,255}$/.test(msg.app))
+            return null;
+        const count = msg.count === null || msg.count === undefined ? null : msg.count;
+        const progress = msg.progress === null || msg.progress === undefined ? null : msg.progress;
+        const urgent = msg.urgent === null || msg.urgent === undefined ? null : msg.urgent;
+        if (count !== null && (!Number.isInteger(count) || count < 0 || count > limits.launcherCount))
+            return null;
+        if (progress !== null && (typeof progress !== "number" || !isFinite(progress) || progress < -1 || progress > 1))
+            return null;
+        if (urgent !== null && typeof urgent !== "boolean")
+            return null;
+        return {type: "launcher", app: msg.app, count: count, progress: progress, urgent: urgent};
+    }
     case "error":
         return {
             type: "error",
@@ -179,6 +196,35 @@ function parseBridgeLine(line) {
         };
     }
     return null;
+}
+
+// ---- launcher state (ADR-0018) ----
+
+// Latest state per app (lower-case desktop id): {count?: int, progress?: 0..1, urgent: bool}. `state` is not changed;
+// `msg` is a parsed launcher line. A count (0 included) means the app owns its badge; progress -1 removes the bar;
+// a line with nothing in it forgets the app (its sender left the bus). At most limits.launcherApps apps are kept.
+function applyLauncher(state, msg) {
+    const id = String(msg.app).toLowerCase();
+    const next = Object.assign({}, state);
+    if (msg.count === null && msg.progress === null && msg.urgent === null) {
+        delete next[id];
+        return next;
+    }
+    if (next[id] === undefined && Object.keys(next).length >= limits.launcherApps)
+        return state;
+    const entry = Object.assign({urgent: false}, next[id]);
+    if (msg.count !== null)
+        entry.count = msg.count;
+    if (msg.progress !== null) {
+        if (msg.progress < 0)
+            delete entry.progress;
+        else
+            entry.progress = msg.progress;
+    }
+    if (msg.urgent !== null)
+        entry.urgent = msg.urgent;
+    next[id] = entry;
+    return next;
 }
 
 // Error codes after which the window's current bridge menu must not stay on screen (its items would be dead):

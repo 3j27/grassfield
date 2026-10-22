@@ -60,6 +60,12 @@ Singleton {
         }
         return "";
     }
+    // Applications' own Dock badge, progress and urgent hint (ADR-0018): lower-case desktop id -> {count?, progress?,
+    // urgent}, from the bridge's launcher lines (MenuBridge.js applyLauncher). Empty without a bridge: the Dock then
+    // keeps its notification-derived badges.
+    property var launcher: ({})
+    // A launcher line was applied (msg: the parsed line); the Dock turns urgent into its attention bounce.
+    signal launcherUpdate(var msg)
     // The open bridge menu popup (BridgeMenu registers itself; read by the menubar test hook), null if none.
     property Item popup: null
 
@@ -187,6 +193,10 @@ Singleton {
                 root.revision = msg.revision;
             }
             break;
+        case "launcher":
+            root.launcher = Logic.applyLauncher(root.launcher, msg);
+            root.launcherUpdate(msg);
+            break;
         case "error":
             console.info("grassfield: menu bridge:", msg.code, msg.window, msg.message);
             // The window's menu is unusable (spoofed name, app gone, unreadable, oversized or refused layout, also
@@ -238,6 +248,8 @@ Singleton {
             }
             root.helloSent = false;
             root.registrar = false;
+            // The bridge is gone: what the applications set is unknown (it is replayed when a bridge connects).
+            root.launcher = {};
             root.openedWindow = "";
             root.openedRegistration = null;
             root.items = [];

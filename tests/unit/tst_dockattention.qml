@@ -60,6 +60,37 @@ TestCase {
         compare(Attention.tileKeys(s, groups).join(","), "foot");
     }
 
+    // ADR-0018: an app sets or clears urgent itself (LauncherEntry): the same state, for every window of its tile.
+    function test_appUrgentBouncesItsTile() {
+        const s = Attention.requestApp({}, groups, "FOOT", "b1");
+        compare(Attention.tileKeys(s, groups).join(","), "foot");
+        verify(s.a1 === true && s.a2 === true);
+        compare(Attention.tileKeys(Attention.requestApp({}, groups, "nobody", ""), groups).length, 0);
+    }
+
+    function test_appUrgentSkipsTheFocusedWindow() {
+        const s = Attention.requestApp({}, groups, "foot", "a1");
+        verify(s.a1 === undefined);
+        verify(s.a2 === true);
+        compare(Object.keys(Attention.requestApp({}, groups, "chromium", "b1")).length, 0);
+    }
+
+    function test_appUrgentFalseClearsOnlyThatApp() {
+        let s = Attention.requestApp({}, groups, "foot", "");
+        s = Attention.requestApp(s, groups, "chromium", "");
+        const cleared = Attention.clearApp(s, groups, "foot");
+        compare(Attention.tileKeys(cleared, groups).join(","), "chromium");
+        verify(cleared !== s);
+        verify(s.a1 === true, "the argument is not changed");
+        verify(Attention.clearApp(cleared, groups, "foot") === cleared, "nothing to clear: the same state");
+    }
+
+    function test_appUrgentIsSatisfiedByActivation() {
+        let s = Attention.requestApp({}, groups, "foot", "b1");
+        s = Attention.settle(s, groups, "a2", ["a1", "a2", "b1"]);
+        compare(Attention.tileKeys(s, groups).length, 0);
+    }
+
     function test_addressesAreComparedNormalised() {
         compare(Attention.normalize("0xABC123"), "abc123");
         compare(Attention.normalize("abc123"), "abc123");

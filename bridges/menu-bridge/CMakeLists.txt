@@ -13,11 +13,13 @@ set(MENU_BRIDGE_LOGIC
     src/Layout.cpp src/Layout.h
     src/Safety.cpp src/Safety.h
     src/Penalties.cpp src/Penalties.h
+    src/Launcher.cpp src/Launcher.h
     src/DBusObjects.cpp src/DBusObjects.h)
 
 add_executable(grassfield-menu-bridge
     src/main.cpp
     src/Bridge.cpp src/Bridge.h
+    src/LauncherWatcher.cpp src/LauncherWatcher.h
     src/MenuClient.cpp src/MenuClient.h
     src/Log.h
     ${MENU_BRIDGE_LOGIC})

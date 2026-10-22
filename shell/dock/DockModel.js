@@ -160,6 +160,34 @@ function badgeCount(history, item) {
     return n;
 }
 
+// The launcher state (MenuBridge.applyLauncher: lower-case desktop id -> {count?, progress?, urgent}) of an app tile,
+// matched on the tile's key or desktop entry id; undefined when the app never set anything.
+function launcherOf(launcher, item) {
+    if (!launcher || !item || item.kind !== "app")
+        return undefined;
+    const ids = [String(item.key || "").toLowerCase(), String(item.entry && item.entry.id || "").toLowerCase()];
+    for (const id of ids) {
+        if (id !== "" && launcher[id] !== undefined)
+            return launcher[id];
+    }
+    return undefined;
+}
+
+// Badge of an app tile: the count the app set itself when it did (macOS: the app is authoritative, 0 hides the badge),
+// else the number of its notifications.
+function tileBadge(history, item, launcher) {
+    const own = launcherOf(launcher, item);
+    if (own && Number.isInteger(own.count))
+        return own.count;
+    return badgeCount(history, item);
+}
+
+// Progress an app set on its tile: 0..1, or -1 for no bar.
+function tileProgress(launcher, item) {
+    const own = launcherOf(launcher, item);
+    return own && typeof own.progress === "number" && own.progress >= 0 && own.progress <= 1 ? own.progress : -1;
+}
+
 // Badge text: "" for none, the number up to 99, then "99+".
 function badgeText(count) {
     return count <= 0 ? "" : (count > 99 ? "99+" : String(count));
