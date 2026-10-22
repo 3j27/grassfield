@@ -6,7 +6,7 @@ import QtQml
 // ctx: {displayOnly?: bool (app named from the Stages event, no key window: window commands disabled), hasApp, appName, entry: {id, actions: [{id, name}]} | null, singleMain: bool,
 //       windows: [{ref, title, focused, minimized}], focusedWindow: ref | null,
 //       fullscreen: bool, maximized: bool, windowSpaceId: int,
-//       othersCount: int, hiddenCount: int, spaces: [{id}], newSpaceId: int}
+//       othersCount: int, hiddenCount: int, spaces: [{id}], newSpaceId: int, canTile?: bool (plugin "window-tiling")}
 // Items: {id, text, shortcut?, enabled?, checked?, separator?, submenu?, ...payload}; AppMenus.run()
 // performs them.
 QtObject {
@@ -18,7 +18,12 @@ QtObject {
         hide: qsTr("Super+H"),
         minimize: qsTr("Super+M"),
         zoom: qsTr("Super+Alt+F"),
-        fullscreen: qsTr("Super+Ctrl+F")
+        fullscreen: qsTr("Super+Ctrl+F"),
+        tileLeft: qsTr("Super+Ctrl+Left"),
+        tileRight: qsTr("Super+Ctrl+Right"),
+        tileTop: qsTr("Super+Ctrl+Up"),
+        tileBottom: qsTr("Super+Ctrl+Down"),
+        tilePrevious: qsTr("Super+Ctrl+R")
     })
 
     // Longest window title shown in the Window menu.
@@ -84,15 +89,38 @@ QtObject {
         spaces.push({separator: true});
         spaces.push({id: "moveToNew", space: ctx.newSpaceId, text: qsTr("New Desktop")});
 
+        // Window tiling (macOS 15+): Fill, Center and Move & Resize, placed by the compositor plugin (window-tiling).
+        const canTile = canAct && ctx.canTile === true && !ctx.fullscreen;
+        const tile = (place, text, shortcut) => ({id: "tile", place: place, text: text, shortcut: shortcut, enabled: canTile});
+        const tiling = ctx.canTile === true ? [
+            tile("fill", qsTr("Fill"), ""),
+            tile("center", qsTr("Center"), ""),
+            {id: "moveResize", text: qsTr("Move & Resize"), enabled: canTile, submenu: [
+                    tile("left", qsTr("Left"), root.shortcuts.tileLeft),
+                    tile("right", qsTr("Right"), root.shortcuts.tileRight),
+                    tile("top", qsTr("Top"), root.shortcuts.tileTop),
+                    tile("bottom", qsTr("Bottom"), root.shortcuts.tileBottom),
+                    {separator: true},
+                    tile("top-left", qsTr("Top Left"), ""),
+                    tile("top-right", qsTr("Top Right"), ""),
+                    tile("bottom-left", qsTr("Bottom Left"), ""),
+                    tile("bottom-right", qsTr("Bottom Right"), ""),
+                    {separator: true},
+                    tile("previous", qsTr("Return to Previous Size"), root.shortcuts.tilePrevious)
+                ]},
+            {separator: true}
+        ] : [];
+
         const items = [
             {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct},
-            {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct},
+            {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct}
+        ].concat(tiling.length > 0 ? [{separator: true}].concat(tiling) : [], [
             {id: "fullscreen", text: ctx.fullscreen ? qsTr("Exit Full Screen") : qsTr("Enter Full Screen"), shortcut: root.shortcuts.fullscreen, enabled: canAct},
             {separator: true},
             {id: "moveMenu", text: qsTr("Move to Desktop"), enabled: canAct, submenu: spaces},
             {separator: true},
             {id: "bringAll", text: qsTr("Bring All to Front"), enabled: ctx.windows.length > 0}
-        ];
+        ]);
         if (ctx.windows.length > 0) {
             items.push({separator: true});
             for (let i = 0; i < ctx.windows.length; i++) {

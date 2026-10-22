@@ -142,6 +142,17 @@ Variants {
                 }
                 return Tokens.radiusMenu;
             }
+
+            // A menu's open submenu (Move & Resize, an app's own submenus) is blurred too, and its own open submenu.
+            Region {
+                item: (holder.item as PopupMenu)?.submenuItem ?? null
+                radius: Tokens.radiusMenu
+
+                Region {
+                    item: ((holder.item as PopupMenu)?.submenuItem as PopupMenu)?.submenuItem ?? null
+                    radius: Tokens.radiusMenu
+                }
+            }
         }
 
         // Click outside closes. Right and middle buttons too.

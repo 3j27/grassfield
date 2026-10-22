@@ -246,15 +246,37 @@ Singleton {
     // The minimize animation (Settings dock.minimizeEffect); Reduce Motion replaces it with a quick fade in place, as
     // macOS does. Without the plugin the fallback minimize has no animation at all.
     readonly property string minimizeEffect: Settings.reduceMotion ? "fade" : Settings.dockMinimizeEffect
+    // Window tiling (macOS "Drag windows to screen edges to tile", "... to menu bar to fill screen", "Tiled windows have
+    // margins"; Settings windows.tiling*): the plugin tiles titlebar drags at the edges, corners and menu bar.
+    readonly property var tilingConfig: ({
+            tilingEdges: Settings.windowsTilingEdges ? "true" : "false",
+            tilingMenuBar: Settings.windowsTilingMenuBar ? "true" : "false",
+            tilingMargins: Settings.windowsTilingMargins ? "true" : "false"
+        })
 
     onTitlebarDoubleClickChanged: pushPluginConfig()
     onMinimizeEffectChanged: pushPluginConfig()
+    onTilingConfigChanged: pushPluginConfig()
 
     function pushPluginConfig(): void {
         if (Capabilities.has("config") && dispatchRequest(Minimized.configCall("titlebarDoubleClick", root.titlebarDoubleClick)))
             console.info("grassfield: compositor setting titlebarDoubleClick =", root.titlebarDoubleClick);
         if (Capabilities.has("minimize-effect") && dispatchRequest(Minimized.configCall("minimizeEffect", root.minimizeEffect)))
             console.info("grassfield: compositor setting minimizeEffect =", root.minimizeEffect);
+        if (Capabilities.has("window-tiling")) {
+            for (const key of Object.keys(root.tilingConfig))
+                dispatchRequest(Minimized.configCall(key, root.tilingConfig[key]));
+        }
+    }
+
+    // Window > Move & Resize and the tiling keys (macOS 15+): the plugin places the window (FR49). False without the
+    // capability or for a window Hyprland does not know.
+    readonly property bool canTile: Capabilities.has("window-tiling")
+
+    function tile(toplevel: var, place: string): bool {
+        if (!root.canTile)
+            return false;
+        return dispatchRequest(Minimized.tileCall(addressOf(toplevel), place));
     }
 
     Connections {
@@ -469,6 +491,11 @@ Singleton {
 
         function minimize(): void {
             root.minimize(root.focusedToplevel);
+        }
+
+        // Super+Ctrl+arrows / Super+Ctrl+R (macOS Globe+Ctrl): the focused window to a half, or back to its size.
+        function tile(place: string): void {
+            root.tile(root.focusedToplevel, place);
         }
 
         function hide(): void {
