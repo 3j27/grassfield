@@ -22,7 +22,7 @@ ShellRoot {
     readonly property string dirRange: base + "/range"
     readonly property string badText: '{ "appearance": "light", oops'
     readonly property string keepText: '{"version":1,"appearance":"light","material":{"transparency":0.5,"profile":"full"},"accessibility":{"reduceTransparency":false,"reduceMotion":false},"dock":{"pinned":["a","b"],"magnification":1.2,"magnificationEnabled":true,"autohide":false},"windows":{"titlebarDoubleClick":"minimize"},"notifications":{"dnd":false,"previews":"always"},"lock":{"idleMinutes":17},"wallpaper":{"source":"folder","path":"/pics","outputs":[{"display":{"name":"X-1","model":"","serial":""},"fit":"tile"}]}}'
-    readonly property string rangeText: '{"version":1,"icons":{"mode":"neon","tint":"#12345","folderColor":"red"},"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999},"pointer":{"size":7},"wallpaper":{"source":"file","path":"relative","color":"#ABCDEF","fit":7,"interval":"2s","shuffle":"yes","outputs":[{"bad":1}]}}'
+    readonly property string rangeText: '{"version":1,"icons":{"mode":"neon","tint":"#12345","folderColor":"red"},"appearance":"zzz","material":{"transparency":9,"profile":"nope"},"dock":{"pinned":[1,"","a"],"magnification":99,"size":7,"position":"top"},"windows":{"titlebarDoubleClick":"x"},"notifications":{"previews":"x"},"lock":{"idleMinutes":999},"pointer":{"size":7},"wallpaper":{"source":"file","path":"relative","color":"#ABCDEF","fit":7,"interval":"2s","shuffle":"yes","outputs":[{"bad":1}]}}'
     readonly property string dirMerge: base + "/merge"
     readonly property string mergeText: '{"version":1,"appearance":"dark","lock":{"idleMinutes":3},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
     readonly property string mergeEdited: '{"version":1,"appearance":"light","lock":{"idleMinutes":42},"futureKey":{"a":[1,2]},"notifications":{"dnd":false,"extra":"keep"}}'
@@ -68,6 +68,8 @@ ShellRoot {
             root.check("autohide", reader.data.dock.autohide === true);
             root.check("magnification", Math.abs(reader.data.dock.magnification - 2.0) < 1e-9);
             root.check("magnificationEnabled", reader.data.dock.magnificationEnabled === false);
+            root.check("dock size", reader.data.dock.size === 72 && reader.dockSize === 72);
+            root.check("dock position", reader.data.dock.position === "right" && reader.dockPosition === "right");
             root.check("pinned", reader.data.dock.pinned.join(",") === "foot,kitty");
             root.check("dnd", reader.data.notifications.dnd === true);
             root.check("previews", reader.data.notifications.previews === "never");
@@ -182,6 +184,8 @@ ShellRoot {
             root.check("range transparency", range.transparency === 1);
             root.check("range profile", range.materialProfile === "balanced");
             root.check("range magnification", range.dockMagnification === 2.5);
+            root.check("range dock size", range.dockSize === 32);
+            root.check("range dock position", range.dockPosition === "bottom");
             root.check("range pinned", range.dockPinned.join(",") === "a");
             root.check("range titlebar", range.titlebarDoubleClick === "zoom");
             root.check("range previews", range.notificationsPreviews === "unlocked");
@@ -318,6 +322,8 @@ ShellRoot {
         check("default transparency", Math.abs(writer.data.material.transparency - 0.25) < 1e-9);
         check("default pinned", writer.data.dock.pinned.length === 3);
         check("default magnification", Math.abs(writer.data.dock.magnification - 1.6) < 1e-9);
+        check("default dock size", writer.data.dock.size === 48 && writer.dockSize === 48);
+        check("default dock position", writer.data.dock.position === "bottom" && writer.dockPosition === "bottom");
 
         // Clamping and normalization.
         writer.setTransparency(7);
@@ -330,6 +336,12 @@ ShellRoot {
         check("magnification max", writer.data.dock.magnification === 2.5);
         writer.setDockMagnification(0.2, true);
         check("magnification min", writer.data.dock.magnification === 1);
+        writer.setDockSize(500);
+        check("dock size max", writer.data.dock.size === 96);
+        writer.setDockSize(3);
+        check("dock size min", writer.data.dock.size === 32);
+        writer.setDockPosition("top");
+        check("dock position normalized", writer.data.dock.position === "bottom");
 
         check("default dnd", writer.data.notifications.dnd === false);
         writer.setNotificationsPreviews("bogus");
@@ -342,6 +354,8 @@ ShellRoot {
         writer.setReduceMotion(true);
         writer.setDockAutohide(true);
         writer.setDockMagnification(2.0, false);
+        writer.setDockSize(72);
+        writer.setDockPosition("right");
         writer.setDockPinned(["foot", "kitty"]);
         writer.setNotificationsDnd(true);
         writer.setNotificationsPreviews("never");
