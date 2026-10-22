@@ -18,6 +18,9 @@ keys() { "$VS_ROOT/scripts/dev/keys.sh" "$@" >/dev/null; }
 
 vs_session >/dev/null
 vs_reset >/dev/null
+# A foot the Dock launched in an earlier run is not one of the clients vs_reset closes: a click would only activate it.
+for _ in 1 2 3; do "$VS_ROOT/scripts/nestctl" dispatch 'hl.dsp.window.close({ window = "class:foot" })' >/dev/null 2>&1; done
+vs_sleep 1
 foot=$(vs_ipc dock tiles | jq -r 'index("foot")')
 vs_ipc dock click "$foot" >/dev/null
 vs_wait_clients 1 >/dev/null || true

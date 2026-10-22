@@ -597,9 +597,11 @@ Scope {
             }
 
             // macOS: with several displays the menu bar of the one that is not active is dimmed (band and content). A single
-            // output, or no focused output known, is never dimmed.
+            // output, no focused output known, or a bar with one of its menus open (the user is using it, whatever output
+            // Hyprland counts as focused) is never dimmed.
             readonly property bool dimmed: Quickshell.screens.length > 1 && Compositor.focusedScreenName !== "" && Compositor.focusedScreenName !== win.screen.name
-            readonly property real dimOpacity: win.dimmed ? Tokens.menubarInactiveOpacity : 1
+                && !(Popups.active && Popups.screenName === win.screen.name)
+            property real dimOpacity: win.dimmed ? Tokens.menubarInactiveOpacity : 1
 
             Behavior on dimOpacity {
                 NumberAnimation {
