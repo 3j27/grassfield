@@ -241,16 +241,20 @@ Scope {
     //      Control Center): FocusReturn.surfaceOpened, and Popups.kind switching to a popup;
     //   2. the session locks (FocusReturn.lockedChanged);
     //   3. Qt cancels the grab or the pointer leaves the tile's handler (TapHandler.canceled / a cancelled grab, in the delegate).
-    // Window titles, focus changes and windows opening or closing are NOT in the list. A tile records clickCancels when its button goes down
-    // and refuses its tap when the value changed.
+    // Window titles, focus changes and windows closing are NOT in the list (a window OPENING ends a held press in Qt, see lastWindowEvent).
+    // A tile records clickCancels when its button goes down and refuses its tap when the value changed.
     property int clickCancels: 0
 
-    // Time (ms) of the last change of the window list (a window opened or closed). Qt ends a held press with a synthesized release, and a
+    // Time (ms) of the last window OPENING (an insertion into the window list; a closing never ends a press). Qt ends a held press with a synthesized release, and a
     // tap, when a window opens (nested probe: pressed, toplevels-changed, 35 ms later tap + release with grab state 8, no hover or cancel
     // event, nothing that tells it from a real release). A press that began before such an event and whose tap comes within
     // Tokens.dockClickWindowGuard of it is refused: it was not finished by the user. A real click that coincides with a window opening
     // within that time is lost and costs one repeated click.
     property real lastWindowEvent: 0
+
+    // Fixtures only (IPC dock forcehold): every press on an app tile counts as having opened the hold menu at once (no popup), so a test
+    // gets "menu first, then the drag of the same press" deterministically instead of racing a hook against the 550 ms timer.
+    property bool forceHoldMenu: false
 
     function cancelClicks(): void {
         clickCancels++;
@@ -377,7 +381,7 @@ Scope {
         }
     }
 
-    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup|holdmenu>. autohide, magnify, click
+    // Test hooks: qs ipc call dock <hover|unhover|reveal|autohide|magnify|click|keyboard|menu|pinned|tiles|centre|popup|holdmenu|forcehold>. autohide, magnify, click
     // and pinned (read-only) act only with the visual fixtures (dev, --visual-fixtures); elsewhere they are inert.
     IpcHandler {
         target: "dock"
@@ -387,6 +391,12 @@ Scope {
             if (!VisualFixtures.active)
                 return "[]";
             return JSON.stringify(Settings.dockPinned);
+        }
+
+        // Fixtures only: while on, every press on an app tile is marked as having opened the hold menu at the moment it goes down.
+        function forcehold(on: bool): void {
+            if (VisualFixtures.active)
+                root.forceHoldMenu = on;
         }
 
         // The press held on tile `index` becomes a hold menu without a popup (fixtures only): the press is marked as having opened the menu
@@ -523,10 +533,10 @@ Scope {
             // Set ONLY by the drag handler when the pointer button is really released (exclusive grab ended by a release event)
             // away from the drop zone. Every other end of a drag (cancelled or stolen grab) leaves it false.
             property bool releasedOutside: false
-            // Set by root.interruptDrag() and by a cancelled or stolen grab, cleared when a drag starts: something took the pointer or
-            // the focus during the drag (a shell surface, a popup, the lock, a window, workspace or monitor event, Esc in keyboard
-            // mode). Qt then ends the drag with a synthesized release that looks real, so an interrupted drag never removes: the
-            // tile glides back.
+            // Set by root.interruptDrag() and by a cancelled or stolen grab, cleared when a drag ends: something took the pointer or the
+            // focus during the drag (a shell surface, a popup, the lock, a window, workspace or monitor event, Esc in keyboard mode). Qt
+            // then ends the drag with a synthesized release that looks real, so an interrupted drag changes no pins (no removal, no
+            // reorder): the tile glides back. A press that was already interrupted when the drag would start does not start it at all.
             property bool dragInterrupted: false
             readonly property bool dragRemovable: dragFrom >= 0 && !!root.items[dragFrom] && (root.items[dragFrom].pinned || root.items[dragFrom].recent === true) && root.items[dragFrom].windows.length === 0
             property real poofX: 0
@@ -542,6 +552,7 @@ Scope {
                 const item = all[from];
                 const out = releasedOutside && !dragInterrupted && dragOut && dragRemovable;
                 const dragOutNotReleased = !out && dragOut && dragRemovable;
+                const interrupted = dragInterrupted;
                 const slot = dragSlot;
                 const fromApp = dragFromApp;
                 releasedOutside = false;
@@ -571,8 +582,9 @@ Scope {
                     }
                     return;
                 }
-                if (dragOutNotReleased) {
-                    // Dragged out but not released out there (interrupted): nothing changes, the tile glides back.
+                if (dragOutNotReleased || interrupted) {
+                    // Dragged out but not released out there, or interrupted by anything: no pin changes (no removal, no reorder), the
+                    // tile glides back to its slot.
                     tileItem.glideFrom(dx, dy);
                     return;
                 }
@@ -1369,10 +1381,7 @@ Scope {
                                 // Drag to reorder; dragged far above the shelf it leaves the Dock (poof).
                                 DragHandler {
                                     id: dragHandler
-                                    // A press that opened the hold menu can never become a drag (and never removes a pin).
-                                    // A press that opened the hold menu can never become a drag (and never removes a pin).
-                                    // A press that opened the hold menu can never become a drag (and never removes a pin).
-                                    enabled: tile.isApp && !tile.isFiles && !(tile.menuByHold && leftTap.pressed)
+                                    enabled: tile.isApp && !tile.isFiles
                                     target: null
                                     cursorShape: Qt.ClosedHandCursor
                                     // The one positive release signal: the exclusive grab ends with a Released event point (state 8,
@@ -1389,14 +1398,21 @@ Scope {
                                     }
                                     onActiveChanged: {
                                         if (active) {
+                                            // A press that is already interrupted (it opened the hold menu, or a surface, popup, window or focus
+                                            // event came since the button went down) does not become a drag: nothing moves, no gap opens, the
+                                            // tooltip stays, the release changes no pin. The decision is taken here, from per-press state
+                                            // (tile.menuByHold, root.dragInterruptions against the mark taken at the press), not from an enabled
+                                            // flag or from leftTap.pressed: the tap handler cancels at the drag threshold, which would
+                                            // re-enable a handler guarded by it within the same event. win.dragFrom stays -1.
+                                            if (tile.menuByHold || root.dragInterruptions !== tile.dragMark) {
+                                                if (VisualFixtures.active)
+                                                    console.info("dock-launch: drag-refused", tile.menuByHold ? "hold-menu" : "interrupted", Date.now());
+                                                return;
+                                            }
                                             win.releasedOutside = false;
-                                            // Interruption state is per press: an event since the button went down (the hold menu, a surface, a
-                                            // window) keeps this drag from removing the tile.
-                                            // Interruption state is per press: an event since the button went down (the hold menu, a surface, a
-                                            // window) keeps this drag from removing the tile.
-                                            win.dragInterrupted = tile.menuByHold || root.dragInterruptions !== tile.dragMark;
+                                            win.dragInterrupted = false;
                                             if (VisualFixtures.active)
-                                                console.info("dock-launch: drag-start", win.dragInterrupted ? "interrupted" : "clean", Date.now());
+                                                console.info("dock-launch: drag-start", Date.now());
                                             win.dragSnap = false;
                                             win.dragFrom = tile.index;
                                             win.dragDx = 0;
@@ -1411,7 +1427,7 @@ Scope {
                                         }
                                     }
                                     onTranslationChanged: {
-                                        if (active) {
+                                        if (active && win.dragFrom === tile.index) {
                                             win.dragDx = translation.x;
                                             // Never above the point where the "Remove" label would leave the window.
                                             const iconTop = win.height - Tokens.dockBottomMargin - Tokens.dockPadding - win.indicatorArea - tile.iconPx;
@@ -1440,6 +1456,8 @@ Scope {
                                             tile.pressCancelled = false;
                                             tile.pressTime = Date.now();
                                             tile.dragMark = root.dragInterruptions;
+                                            if (root.forceHoldMenu && tile.isApp)
+                                                win.markHoldMenu(tile.index);
                                         }
                                     }
                                     onCanceled: {

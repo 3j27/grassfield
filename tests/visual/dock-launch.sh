@@ -486,7 +486,7 @@ fi
 
 if want mapdrop; then
   clean_state mapdrop
-  # A window opening during a press makes Qt end the press with a release (and a tap) while the button is still down. A press the Dock
+  # A window OPENING during a press makes Qt end the press with a release (and a tap) while the button is still down. A press the Dock
   # did not finish does nothing: neither a tap nor an activation nor a menu. The sequence the handler sees is kept in the logs.
   quiet gfLA gfLB gfLM
   ensure_recent gfLA
@@ -526,24 +526,39 @@ fi
 
 if want closeclick; then
   clean_state closeclick
-  # A window CLOSING never made Qt end a press (3 of 3 clicks tapped), so it must not refuse one: a 250 ms click on the Trash tile while
-  # a window closes 100 ms in must tap. (Only a window opening is guarded, see mapdrop.)
-  quiet gfLA gfLB gfLM
-  vs_spawn foot --app-id gfLM
-  wait_count gfLM 1 10
-  sleep 2
-  read -r cx cy <<<"$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("trash")')" "$VS_OUTPUT")"
-  vs_pointer abs "$cx" "$cy" >/dev/null
-  sleep 0.7
-  m=$(wc -l < "$VS_DEV/shell.log")
-  ( sleep 0.1; kill_class gfLM ) &
-  vs_pointer down sleep 250 up >/dev/null
-  wait
-  sleep 1
-  tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch:" > "$out/closeclick.txt"
-  echo "closeclick: $(sed 's/.*dock-launch: //' "$out/closeclick.txt" | tr '\n' '|')"
-  grep -q "dock-launch: tap [0-9]" "$out/closeclick.txt" && ! grep -q "tap-refused" "$out/closeclick.txt"; RC=$?
-  check "closeclick: a 250 ms click while a window closes 0.1 s in taps (no refusal)" $RC
+  # A window CLOSING never made Qt end a press (a 1.2 s press with a window closing 0.4 s in lasted 1020 ms and tapped at the release), so it
+  # must not refuse a click: a 250 ms click on the Trash tile while a window closes 0.1 s in must tap. The attempt counts only when the
+  # shell's press and release times show a press of at least 200 ms (under dock.menuHold) and the window was killed while the button was
+  # down; a press that is too short (51 ms was seen under load) or the wrong order proves nothing and is repeated, up to five times.
+  RC=2
+  for attempt in 1 2 3 4 5; do
+    quiet gfLA gfLB gfLM
+    vs_spawn foot --app-id gfLM
+    wait_count gfLM 1 10
+    sleep 2
+    read -r cx cy <<<"$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("trash")')" "$VS_OUTPUT")"
+    vs_pointer abs "$cx" "$cy" >/dev/null
+    sleep 0.7
+    m=$(wc -l < "$VS_DEV/shell.log")
+    rm -f "$out/closeclick.kill"
+    ( sleep 0.1; date +%s%3N > "$out/closeclick.kill"; kill_class gfLM ) &
+    kill_pid=$!
+    vs_pointer down sleep 250 up >/dev/null
+    wait "$kill_pid"
+    sleep 1
+    tail -n +"$(( m + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch:" > "$out/closeclick.txt"
+    echo "closeclick: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' "$out/closeclick.txt" | tr '\n' '|')"
+    cdown=$(awk '/pressed true/ {print $NF; exit}' "$out/closeclick.txt")
+    cup=$(awk '/pressed false/ {print $NF; exit}' "$out/closeclick.txt")
+    ckill=$(<"$out/closeclick.kill")
+    if [[ -n $cdown && -n $cup && $(( cup - cdown )) -ge 200 && $(( cup - cdown )) -lt 500 && $ckill -gt $cdown && $ckill -lt $cup ]]; then
+      grep -q "dock-launch: tap [0-9]" "$out/closeclick.txt" && ! grep -q "tap-refused" "$out/closeclick.txt"; RC=$?
+      break
+    fi
+    echo "closeclick: attempt $attempt: press ${cdown:+$(( cup - cdown ))} ms, window killed $(( ckill - ${cdown:-0} )) ms after the press: not a valid close-during-click, again"
+    RC=2
+  done
+  check "closeclick: a click of $(( cup - cdown )) ms while a window closed $(( ckill - cdown )) ms in taps, no refusal (attempt $attempt)" $RC
   quiet gfLM
 fi
 

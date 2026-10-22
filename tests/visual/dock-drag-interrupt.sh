@@ -4,6 +4,9 @@
 #   tests/visual/dock-drag-interrupt.sh interrupt [REPS=1] ["trigger ..."]   every trigger x 4 tile positions (held above the Dock
 #                                                                           window / inside it, still / moving) must KEEP the pin;
 #                                                                           above-still also with the release at the held point
+#   tests/visual/dock-drag-interrupt.sh holddrag [REPS=1]  (alias hd)       a press that opened the hold menu (forced: dock forcehold)
+#                                                                           refuses its drag and changes no pin (drag out, and sideways
+#                                                                           = reorder); the next press is a normal one
 #   tests/visual/dock-drag-interrupt.sh deliberate [REPS=1]                 deliberate drag-outs must REMOVE the pin, 100 %
 #   tests/visual/dock-drag-interrupt.sh lock POS                            LAST, alone: POS = above-still | above-moving |
 #                                                                           inside-still | inside-moving. Locks the session while
@@ -225,43 +228,89 @@ pos_run() { # TRIGGER REP: the four positions (+ released-at-held-point above th
   trial "$t" $ABOVE still held "${t}_above_still_releaseheld_r$r"
 }
 
-# hd NAME STEPS: a press that opened the hold menu, then a drag out above the Dock and a release there. The menu is forced through the
-# fixtures hook `dock holdmenu` about 0.15 s into the press, before the drag starts (the drag starts 0.45 s in, before the natural 550 ms hold timer) (a real hold menu takes the pointer and mostly ends the
-# press; the GUI-stall order menu-then-drag cannot be forced from outside). The press became a menu: it must never become a drag,
-# and the pin must stay. Valid only when the shell logged the forced menu (else not tested: repeated, then FAIL). On 0ba3bc6 the drag
-# cleared the interruption and the release removed the pin.
+# hd LABEL KEY KIND: the press on the tile of KEY opened the hold menu, then the pointer drags it. KIND above: out above the Dock and release
+# there (the removal case); side: along the shelf to just left of the pinned foot tile (the reorder case, KEY = a running unpinned app,
+# which a drop before a pinned tile would pin). The press becomes the menu's: the drag must be REFUSED (the shell logs drag-refused, never
+# drag-start), nothing moves, and the pins must not change (neither unpin nor reorder).
+# The menu is forced deterministically: `dock forcehold true` marks every press on an app tile as having opened the hold menu the moment
+# it goes down (no popup, no timing against the 550 ms timer). A trial counts only when the shell logged pressed true, the forced menu
+# and then drag-refused; a press that never reached the Dock is repeated (four times), then reported as not tested (FAIL). A drag-start
+# after the menu is a FAIL at once.
 hd() {
-  local label=$1 steps=$2 attempt mark ok=0 lines hook_pid idx fm dl pf
-  for attempt in 1 2 3 4 5 6; do
+  local label=$1 key=$2 kind=$3 attempt mark ok=0 lines idx cx cy fx steps before
+  for attempt in 1 2 3 4; do
     restore || { restore_failed "$label"; return; }
+    before=$(pinned)
+    idx=$(vs_ipc dock tiles | jq --arg k "$key" 'index($k)')
+    fx=$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("foot")')" "$VS_OUTPUT" | cut -d' ' -f1)
+    read -r cx cy <<<"$(vs_ipc dock centre "$idx" "$VS_OUTPUT")"
+    if ! [[ $cx =~ ^[0-9]+$ && $fx =~ ^[0-9]+$ ]]; then
+      echo "  ($label: attempt $attempt: no tile '$key' in the Dock, not tested: again)"
+      continue
+    fi
+    if [[ $kind == side ]]; then steps="drag $((fx - 30)) $cy sleep 150 drag $((fx - 34)) $cy"; else steps="drag $cx $ABOVE sleep 150 drag $((cx + 25)) $ABOVE"; fi
+    vs_ipc dock forcehold true >/dev/null
     mark=$(wc -l < "$VS_DEV/shell.log")
-    idx=$(vs_ipc dock tiles | jq 'index("foot")')
-    ( sleep 0.3; vs_ipc dock holdmenu "$idx" "$VS_OUTPUT" >/dev/null 2>&1 ) &
-    hook_pid=$!
-    vs_pointer abs $FX $DY sleep 200 down sleep 450 $steps sleep 400 up sleep 300 $park >/dev/null
-    wait "$hook_pid"
+    vs_pointer abs "$cx" "$cy" sleep 200 down sleep 200 $steps sleep 400 up sleep 300 $park >/dev/null
     sleep 1
-    lines=$(tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(menu-by-hold\|drag-start\|pressed\)")
-    fm=$(grep -n "menu-by-hold (forced)" <<<"$lines" | head -1 | cut -d: -f1)
-    dl=$(grep -n "drag-start" <<<"$lines" | head -1 | cut -d: -f1)
-    pf=$(grep -n "pressed false" <<<"$lines" | head -1 | cut -d: -f1)
-    # Valid: the forced menu came while the button was down (before pressed false) and before any drag-start.
-    if [[ -n $fm && ( -z $pf || $fm -lt $pf ) && ( -z $dl || $fm -lt $dl ) ]]; then
+    vs_ipc dock forcehold false >/dev/null
+    lines=$(tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(pressed\|menu-by-hold\|drag-start\|drag-refused\)")
+    if grep -q "drag-start" <<<"$lines"; then
+      failn=$((failn + 1))
+      echo "$(date +%T) $label a drag STARTED after the hold menu ($(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|')): FAIL"
+      vs_ipc menubar close >/dev/null 2>&1
+      return
+    fi
+    if grep -q "pressed true" <<<"$lines" && grep -q "menu-by-hold (forced)" <<<"$lines" && grep -q "drag-refused" <<<"$lines"; then
       ok=1
       break
     fi
-    echo "  ($label: attempt $attempt: the forced menu did not come between the press and the drag ($(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|')), not tested: again; pin now $(pinned))"
+    echo "  ($label: attempt $attempt: no press / forced menu / drag-refused in the log ($(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|')), not tested: again)"
     vs_ipc menubar close >/dev/null 2>&1
   done
   if (( ! ok )); then
     failn=$((failn + 1))
-    echo "$(date +%T) $label the forced hold menu never logged, not tested: FAIL"
+    echo "$(date +%T) $label never gave press + forced menu + drag-refused, not tested: FAIL"
     return
   fi
-  echo "  ($label: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|'))"
+  echo "  ($label: $(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|'); pins before $before)"
   res "$label" kept "$(pinned)"
   vs_ipc menubar close >/dev/null 2>&1
   sleep 1
+}
+
+# hd_then_deliberate LABEL: a press right after a hold-menu press is a normal press: the drag of the first press is refused, a deliberate
+# drag-out of the next press (no menu, no interruption) still removes the pin.
+hd_then_deliberate() {
+  local label=$1 attempt mark lines cx cy ok=0
+  for attempt in 1 2 3 4; do
+    restore || { restore_failed "$label"; return; }
+    read -r cx cy <<<"$(vs_ipc dock centre "$(vs_ipc dock tiles | jq 'index("foot")')" "$VS_OUTPUT")"
+    vs_ipc dock forcehold true >/dev/null
+    mark=$(wc -l < "$VS_DEV/shell.log")
+    vs_pointer abs "$cx" "$cy" sleep 200 down sleep 200 drag "$cx" $ABOVE sleep 300 up sleep 300 $park >/dev/null
+    sleep 1
+    vs_ipc dock forcehold false >/dev/null
+    vs_ipc menubar close >/dev/null 2>&1
+    lines=$(tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep "dock-launch: \(drag-start\|drag-refused\)")
+    grep -q "drag-refused" <<<"$lines" && ! grep -q "drag-start" <<<"$lines" && [[ $(pinned) == "$want" ]] && { ok=1; break; }
+    echo "  ($label: attempt $attempt: the first press was not refused cleanly ($(sed 's/.*dock-launch: //; s/ [0-9]\{13\}//' <<<"$lines" | tr '\n' '|')) pins $(pinned), not tested: again)"
+  done
+  if (( ! ok )); then
+    failn=$((failn + 1))
+    echo "$(date +%T) $label the hold-menu press was never refused cleanly, not tested: FAIL"
+    return
+  fi
+  refresh_fx
+  mark=$(wc -l < "$VS_DEV/shell.log")
+  vs_pointer abs "$cx" "$cy" sleep 200 down sleep 200 drag "$cx" $ABOVE sleep 600 up sleep 300 $park >/dev/null
+  sleep 1.3
+  if ! tail -n +"$(( mark + 1 ))" "$VS_DEV/shell.log" | grep -q "dock-launch: drag-start"; then
+    failn=$((failn + 1))
+    echo "$(date +%T) $label the deliberate drag after the menu press never started, not tested: FAIL"
+    return
+  fi
+  res "$label" removed "$(pinned)"
 }
 
 # fn NAME DRAG-STEPS...: a deliberate drag that must remove the pin.
@@ -274,6 +323,12 @@ fn() {
   res "$name" removed "$(pinned)"
 }
 
+hd_trials() { # REP
+  hd "holdmenu_then_drag_out_r$1" foot above
+  hd "holdmenu_then_drag_sideways_reorder_r$1" gfdockA side
+  hd_then_deliberate "holdmenu_then_next_press_removes_r$1"
+}
+
 reps=${2:-1}
 rc=0
 case $mode in
@@ -282,15 +337,13 @@ case $mode in
       for t in ${3:-overview apps search switcher dockmenu ncenter ccenter menubarmenu windowopen windowclose appquit workspace banner}; do
         pos_run "$t" "$r"
       done
-      hd "holdmenu_then_drag_above_r$r" "drag $FX $ABOVE"
-      hd "holdmenu_then_drag_above_moving_r$r" "drag $FX $ABOVE sleep 100 drag $((FX + 25)) $ABOVE sleep 100 drag $((FX - 25)) $ABOVE"
+      hd_trials "$r"
     done
     ;;
-  holddrag)
-    # Only the hold-menu-then-drag trials (also part of `interrupt`).
+  holddrag|hd)
+    # Only the hold-menu-press trials (also part of `interrupt`): drag out above, drag sideways (reorder), and the next press is normal.
     for r in $(seq 1 "$reps"); do
-      hd "holdmenu_then_drag_above_r$r" "drag $FX $ABOVE"
-      hd "holdmenu_then_drag_above_moving_r$r" "drag $FX $ABOVE sleep 100 drag $((FX + 25)) $ABOVE sleep 100 drag $((FX - 25)) $ABOVE"
+      hd_trials "$r"
     done
     ;;
   deliberate)
@@ -355,7 +408,7 @@ case $mode in
     was_running=1
     ;;
   *)
-    echo "usage: dock-drag-interrupt.sh interrupt|deliberate|lock ..." >&2
+    echo "usage: dock-drag-interrupt.sh interrupt|holddrag|deliberate|race|lock ... (holddrag, alias hd: [REPS])" >&2
     exit 2
     ;;
 esac
