@@ -4,7 +4,7 @@
 #  * the wrapper theme never inherits WhiteSur;
 #  * no tracked file installs, fetches, selects or references a WhiteSur theme at runtime. Docs and licence notices keep
 #    the history (docs/, THIRD_PARTY.md, branding/LICENSES.md), and the design tokens and one unit test name the theme
-#    the tuned values were measured on (comments and "source" strings only); those files are the only exceptions.
+#    the tuned values were measured on (comments and "source" strings only); those files, and tests/inventory.json (it lists this test by name), are the only exceptions.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 fail=0
@@ -17,7 +17,7 @@ check bash -c '[ "$(grep -c "^Inherits=" "$1")" = 1 ] && grep -qx "Inherits=bree
 
 hits=$(git -C "$root" grep -l -i -e whitesur -e 'white-sur' -- . \
   ':!docs' ':!THIRD_PARTY.md' ':!branding/LICENSES.md' ':!ui/tokens/tokens.json' ':!ui/Grassfield/Ui/Tokens.qml' \
-  ':!tests/unit/tst_foldercolors.qml' ':!tests/shell/no_whitesur.sh' || true)
+  ':!tests/unit/tst_foldercolors.qml' ':!tests/shell/no_whitesur.sh' ':!tests/inventory.json' || true)
 desc="no tracked file outside the documented exceptions mentions WhiteSur${hits:+ (found: $(tr '\n' ' ' <<<"$hits"))}"
 check test -z "$hits"
 

@@ -65,7 +65,9 @@ scripts/dev/test.sh                     data, logic, headless, and the tests/she
 scripts/dev/test.sh --layer headless    one layer, or several: --layer data,logic
 ```
 
-The end of every run prints one line per selected layer: `pass fail skip manual`.
+The end of every run prints one line per selected layer: `pass fail skip manual`. An explicitly requested layer that
+reports nothing but skips fails the run (`--layer nested` without a session). In the default run the nested layer is not
+gated (its scripts SKIP without a session by design); a layer with only bare commands (`visual`) is reported, not gated.
 
 ## Moving a test down a layer
 

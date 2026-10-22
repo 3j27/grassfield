@@ -245,7 +245,9 @@ for l in "${layers_all[@]}"; do
   # A layer is gated only when this script can run something of it.
   runnable=0
   for k in "${!inv_runner[@]}"; do [[ ${inv_layer[$k]} == "$l" && ${inv_runner[$k]} == test.sh ]] && runnable=1; done
-  if ((runnable)); then gate_layers+=("$l"); else echo "note: layer $l has nothing test.sh can run (${manual[$l]:-0} manual entries: docs/testing/README.md)"; fi
+  # The default run only opportunistically runs the nested layer's tests/shell scripts (they SKIP without a session): not gated.
+  if ((!explicit)) && [[ $l == nested ]]; then runnable=0; fi
+  if ((runnable)); then gate_layers+=("$l"); else echo "note: layer $l is not gated in this run (${manual[$l]:-0} manual entries: docs/testing/README.md)"; fi
 done
 if ((${#gate_layers[@]})); then
   gate_csv=$(IFS=,; echo "${gate_layers[*]}")
