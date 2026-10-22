@@ -147,7 +147,7 @@ def main():
     # The 45-degree point of a superellipse corner of radius r lies r * (1 - 2^(-1/p)) from both edges (2.8 px for r 12,
     # 6.1 px for r 26). The first two pixels of pure fill colour start about 1.5 px further in: the anti-aliased inner
     # edge of the window border (1 px, drawn along the same curve) tints the pixels on the curve. Measured on GF-REF
-    # (Hyprland 0.56.2, rounding_power 2.6): inset 4 for radius 12, 8 for radius 26.
+    # (Hyprland 0.56.2, rounding_power 2.6): inset 4 for radius 12, 6 for radius 20, 8 for radius 26.
     inset = 1 - 2 ** (-1 / ROUNDING_POWER)
     out["radius_estimate"] = round((k - 1.5) / inset, 1) if k >= 0 else -1
     bg = img.at(sx - 8, top - 8)

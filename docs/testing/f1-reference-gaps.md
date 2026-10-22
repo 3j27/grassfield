@@ -114,8 +114,8 @@ Fidelity pass 2026-10-19 (docs/specs/dock.md): shelf glass material (`dock.tintA
 
 Fidelity pass F2a (2026-10-22): titlebar 32, lights 14 on a 23 pitch with the first centre at (16, 16), hit slop 1/6 of the
 diameter, hover glyphs, radius 20 for org.grassfield.* and 12 for other windows. Measured on GF-REF captures by
-`tests/compositor/chrome.sh` (light centres within 0.05 px of the expected ones, 13.9 px across, 32 bar rows, corner insets
-4 px for radius 12). Still open: the toolbar-window light row (unified toolbar, ADR-0015, F2b), inactive grey lights, and
+`tests/compositor/chrome.sh` (light centres within 0.05 px of the expected ones, 13.9 px across, 32 bar rows, getprop
+rounding 12 / 20, corner insets 4 px for radius 12 and 6 px for radius 20). Still open: the toolbar-window light row (unified toolbar, ADR-0015, F2b), inactive grey lights, and
 the content's top corners, which Hyprland 0.56.2 rounds with the window radius (a concave titlebar-coloured curve under
 the bar; macOS joins them square).
 
