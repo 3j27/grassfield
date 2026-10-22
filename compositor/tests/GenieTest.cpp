@@ -278,6 +278,31 @@ TEST(GenieMesh, TheShadowAroundTheWindowIsExtrapolated) {
     EXPECT_TRUE(mesh.empty());
 }
 
+TEST(GenieMesh, DamageBandsCoverTheMeshTighterThanItsBox) {
+    const CGenie             g{WINDOW, fitInside(WINDOW, TILE), Edge::Bottom};
+    std::vector<SMeshVertex> mesh;
+    genieMesh(g, WINDOW, WINDOW, 0.6, kGenieAcross, kGenieAlong, mesh);
+    const auto bands = meshBands(mesh, kGenieAcross, kGenieAlong, kGenieLinesPerDamageBand);
+    ASSERT_EQ(bands.size(), static_cast<size_t>((kGenieAlong + kGenieLinesPerDamageBand - 1) / kGenieLinesPerDamageBand));
+    // Every vertex lies in a band: nothing of the funnel is left out of the damage.
+    for (const auto& m : mesh) {
+        const bool inside = std::ranges::any_of(bands, [&m](const Box& b) { return m.x >= b.x - EPS && m.x <= b.x + b.w + EPS && m.y >= b.y - EPS && m.y <= b.y + b.h + EPS; });
+        ASSERT_TRUE(inside) << m.x << "," << m.y;
+    }
+    // Consecutive bands touch (each includes the line it shares with the next): no gap along the Dock axis.
+    for (size_t i = 1; i < bands.size(); ++i)
+        EXPECT_LE(bands[i].y, bands[i - 1].y + bands[i - 1].h + EPS);
+    // Midway through a minimize the narrowing funnel needs far less than its bounding box.
+    const Box bounds = meshBounds(mesh);
+    double    area   = 0;
+    for (const auto& b : bands)
+        area += b.w * b.h;
+    EXPECT_LT(area, 0.75 * bounds.w * bounds.h);
+    // A mesh of another shape: its bounding box alone.
+    EXPECT_EQ(meshBands(mesh, kGenieAcross + 1, kGenieAlong, 8).size(), 1U);
+    EXPECT_TRUE(meshBands({}, kGenieAcross, kGenieAlong, 8).empty());
+}
+
 TEST(GenieMesh, IndicesAreTwoTrianglesPerQuadWithinRange) {
     const auto indices = meshIndices(kGenieAcross, kGenieAlong);
     ASSERT_EQ(indices.size(), static_cast<size_t>(kGenieAcross * kGenieAlong * 6));

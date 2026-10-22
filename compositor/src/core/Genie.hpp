@@ -106,6 +106,13 @@ namespace gf::minimize {
     // Bounding box of the mesh positions (empty box for an empty mesh).
     Box meshBounds(std::span<const SMeshVertex> mesh);
 
+    // The mesh covered band by band along the Dock axis: one bounding box per `linesPerBand` mesh lines (each band
+    // includes the line it shares with the next, so the bands leave no gap). The damage of a funnel frame: much smaller
+    // than meshBounds once the funnel narrows (the empty sides of the neck, the Dock beside the tile, are not repainted).
+    // A mesh that is not (along + 1) x (across + 1) vertices, or linesPerBand < 1, gives meshBounds alone.
+    inline constexpr int kGenieLinesPerDamageBand = 8;
+    std::vector<Box>     meshBands(std::span<const SMeshVertex> mesh, int across, int along, int linesPerBand);
+
     // Timing: about half a second, as macOS. The window fades out over the last 15 % of a minimize (it is a sliver in
     // the tile by then) and in over the first 15 % of a restore. A restore is the minimize played backwards.
     inline constexpr double kGenieDurationMs   = 500.0;

@@ -205,6 +205,22 @@ namespace gf::minimize {
         return Box{x0, y0, x1 - x0, y1 - y0};
     }
 
+    std::vector<Box> meshBands(std::span<const SMeshVertex> mesh, int across, int along, int linesPerBand) {
+        std::vector<Box> out;
+        if (mesh.empty())
+            return out;
+        const auto stride = static_cast<size_t>(across) + 1;
+        if (across < 1 || along < 1 || linesPerBand < 1 || mesh.size() != stride * (static_cast<size_t>(along) + 1)) {
+            out.push_back(meshBounds(mesh));
+            return out;
+        }
+        for (int first = 0; first < along; first += linesPerBand) {
+            const int last = std::min(first + linesPerBand, along); // shared with the next band
+            out.push_back(meshBounds(mesh.subspan(static_cast<size_t>(first) * stride, static_cast<size_t>(last - first + 1) * stride)));
+        }
+        return out;
+    }
+
     SGenieFrame genieFrameAt(Kind kind, double elapsedMs) {
         const double t = std::isfinite(elapsedMs) ? std::clamp(elapsedMs / kGenieDurationMs, 0.0, 1.0) : 1.0;
         SGenieFrame  frame;

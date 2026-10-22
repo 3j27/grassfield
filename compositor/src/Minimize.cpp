@@ -81,6 +81,7 @@ namespace {
         double                       progress = 0; // Genie: 0 window .. 1 tile
         std::vector<mz::SMeshVertex> mesh;         // Genie: this frame's mesh (layout)
         mz::Box                      damaged;      // last damaged visual box (layout)
+        std::vector<mz::Box>         damagedBands; // funnel: the bands damaged last frame (layout), repainted next frame
         uintptr_t                    monitorKey = 0; // the snapshot's monitor (timing only: compared, never dereferenced)
         STiming                      timing;
     };
@@ -205,11 +206,25 @@ namespace {
     void damage(SAnimation& a) {
         if (!g_pHyprRenderer)
             return;
-        const mz::Box visual = visualBox(a);
-        if (a.damaged.w > 0 && a.damaged.h > 0)
+        // The previous frame: the funnel's bands when it drew them, else the box it drew in.
+        if (!a.damagedBands.empty()) {
+            for (const auto& b : a.damagedBands)
+                g_pHyprRenderer->damageBox(toCBox(b));
+            a.damagedBands.clear();
+        } else if (a.damaged.w > 0 && a.damaged.h > 0)
             g_pHyprRenderer->damageBox(toCBox(a.damaged));
+        const mz::Box visual = visualBox(a);
+        a.damaged            = visual; // what complete() and cancelFor() repaint
+        if (a.effect == mz::Effect::Genie && !a.mesh.empty()) {
+            // Band by band (core meshBands): the empty sides of the funnel's neck, and the Dock beside the tile with its
+            // blurred material, are not repainted every frame.
+            for (const auto& b : mz::meshBands(a.mesh, mz::kGenieAcross, mz::kGenieAlong, mz::kGenieLinesPerDamageBand)) {
+                a.damagedBands.push_back(mz::Box{b.x - 2.0, b.y - 2.0, b.w + 4.0, b.h + 4.0});
+                g_pHyprRenderer->damageBox(toCBox(a.damagedBands.back()));
+            }
+            return;
+        }
         g_pHyprRenderer->damageBox(toCBox(visual));
-        a.damaged = visual;
     }
 
     // The window, transparent while its restore animation runs, becomes visible again.
