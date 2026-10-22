@@ -22,6 +22,8 @@ BarButton {
     active: root.bar.isOpen("tray") && Popups.data.item === root.item
 
     function perform(button: string): void {
+        if (!root.item)
+            return;
         switch (Logic.clickAction(root.item, button)) {
         case "menu":
             root.bar.openTray(root, root.item);
@@ -40,8 +42,14 @@ BarButton {
     onActivated: root.perform("left")
     onAuxPressed: button => root.perform(button)
     onEntered: root.bar.hoverSwitchTray(root, root.item)
-    onScrolled: delta => root.item.scroll(delta, false)
-    onScrolledHorizontally: delta => root.item.scroll(delta, true)
+    onScrolled: delta => {
+        if (root.item)
+            root.item.scroll(delta, false);
+    }
+    onScrolledHorizontally: delta => {
+        if (root.item)
+            root.item.scroll(delta, true);
+    }
 
     Item {
         width: Tokens.menubarIconSize
@@ -49,7 +57,8 @@ BarButton {
 
         Image {
             anchors.fill: parent
-            source: root.item.icon
+            // The item can already be gone while its delegate is being removed.
+            source: root.item ? root.item.icon : ""
             sourceSize: Qt.size(Tokens.menubarIconSize * 2, Tokens.menubarIconSize * 2)
             fillMode: Image.PreserveAspectFit
             asynchronous: true

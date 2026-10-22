@@ -52,6 +52,17 @@ Scope {
             return Popups.active ? Popups.kind + "@" + Popups.screenName : "";
         }
 
+        // Test hook (tests/visual/menubar-status.sh): JSON {menusRight, status: [{name, x, w}]} of the bar of `screen`.
+        function statusState(screen: string): string {
+            const all = bars.instances;
+            let bar = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    bar = all[i];
+            }
+            return bar ? JSON.stringify({menusRight: bar.menusRight(), status: bar.statusRects()}) : "{}";
+        }
+
         // Test hook (tests/integration/global_menus.sh): JSON with the shown window, the bridge state, the bar's
         // left titles and, when a bridge menu is open, its rows (submenus included), in output coordinates.
         function bridgeState(screen: string): string {
@@ -172,6 +183,39 @@ Scope {
             readonly property var battery: UPower.displayDevice
             // Now Playing (macOS: "Show When Active"): while a player has a session (playing, or paused with a track).
             readonly property bool showNowPlaying: Logic.nowPlayingShown(Settings.menubarShowNowPlaying, Media.available, Media.playing, Media.title)
+            // Crowding (macOS: status items that would collide with the menus are hidden): the status area gets the width
+            // between the application menus and the right inset; optional items (third-party, Now Playing, Search) give way
+            // leftmost first, never the system items, Quick Settings or the clock (StatusLogic.hiddenItems). Implicit widths
+            // only: a hidden item never changes the decision.
+            readonly property real statusIconWidth: Tokens.menubarIconSize + 2 * Tokens.menubarStatusItemPadding
+            readonly property var statusItems: {
+                const list = [];
+                const trays = TrayHost.items;
+                for (let i = 0; i < trays.length; i++)
+                    list.push({key: "tray" + i, width: statusIconWidth, optional: true});
+                if (showNowPlaying)
+                    list.push({key: "nowplaying", width: statusIconWidth, optional: true});
+                list.push({key: "system", width: (Notifications.dnd ? dndButton.implicitWidth : 0) + networkButton.implicitWidth + volumeButton.implicitWidth + (hasBattery ? batteryButton.implicitWidth : 0), optional: false});
+                if (Settings.menubarShowSearch)
+                    list.push({key: "search", width: statusIconWidth, optional: true});
+                list.push({key: "core", width: ccButton.implicitWidth + clockButton.implicitWidth, optional: false});
+                return list;
+            }
+            // Width of the status items that never give way (system items, Quick Settings, clock).
+            readonly property real statusMandatoryWidth: {
+                let sum = 0;
+                for (let i = 0; i < statusItems.length; i++) {
+                    if (!statusItems[i].optional)
+                        sum += statusItems[i].width;
+                }
+                return sum;
+            }
+            // Room for the application name: the bar minus the insets, the fixed titles and the mandatory status items.
+            readonly property real appTitleMax: Math.max(0, win.width - (Tokens.menubarInsetLeft - Tokens.menubarItemPadding) - (Tokens.menubarInsetRight - Tokens.menubarItemPadding)
+                - systemButton.implicitWidth - (hasFileMenu ? fileButton.implicitWidth : 0) - (hasApp ? windowButton.implicitWidth : 0)
+                - 2 * Tokens.menubarItemPadding - statusMandatoryWidth - 2 * Tokens.menubarItemPadding)
+            readonly property real statusAvailable: win.width - (Tokens.menubarInsetRight - Tokens.menubarItemPadding) - (leftRow.x + leftRow.width) - Tokens.menubarItemPadding
+            readonly property var hiddenStatus: Logic.hiddenItems(statusAvailable, statusItems, 0)
             readonly property bool hasBattery: !VisualFixtures.active && battery !== null && battery.isPresent && battery.isLaptopBattery
 
             // SingleMainWindow of the app's desktop entry decides whether File has New Window.
@@ -235,7 +279,7 @@ Scope {
             }
 
             function hoverSwitchTray(button: Item, item: var): void {
-                if (win.tracking && !(Popups.kind === "tray" && Popups.data.item === item))
+                if (item && win.tracking && !(Popups.kind === "tray" && Popups.data.item === item))
                     win.openTray(button, item);
             }
 
@@ -371,6 +415,24 @@ Scope {
                     out.push({kind: sep < 0 ? name.slice(8) : name.slice(8, sep), title: sep < 0 ? "" : name.slice(sep + 1), x: Math.round(p.x), y: Math.round(p.y), w: Math.round(k.width), h: Math.round(k.height)});
                 }
                 return out;
+            }
+
+            // Visible status buttons in output coordinates (test hook): [{name, x, w}] left to right, and the right edge of the
+            // application menus (`menusRight`), to check that the two never overlap.
+            function statusRects(): var {
+                const out = [];
+                const kids = rightRow.children;
+                for (let i = 0; i < kids.length; i++) {
+                    const k = kids[i] as BarButton;
+                    if (!k || !k.visible)
+                        continue;
+                    out.push({name: k.accessibleName, x: Math.round(k.mapToItem(null, 0, 0).x), w: Math.round(k.width)});
+                }
+                return out;
+            }
+
+            function menusRight(): real {
+                return Math.round(leftRow.mapToItem(null, leftRow.width, 0).x);
             }
 
             function popup(kind: string): void {
@@ -520,6 +582,8 @@ Scope {
                                 font.pixelSize: Tokens.typographyMenuSize
                                 font.weight: Tokens.typographyMenuBoldWeight
                                 elide: Text.ElideRight
+                                // A name too long for the room the always-present status items leave is elided.
+                                width: Math.min(implicitWidth, win.appTitleMax)
                             }
                         }
 
@@ -615,8 +679,10 @@ Scope {
 
                             delegate: TrayButton {
                                 required property var modelData
+                                required property int index
 
                                 item: modelData
+                                visible: !win.hiddenStatus["tray" + index]
                                 bar: win
                                 tint: win.barTint
                                 shadowed: !win.showBackground
@@ -632,7 +698,7 @@ Scope {
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
                             padding: Tokens.menubarStatusItemPadding
-                            visible: win.showNowPlaying
+                            visible: win.showNowPlaying && !win.hiddenStatus.nowplaying
                             accessibleName: Media.title !== "" ? qsTr("Now Playing: %1").arg(Media.title) : qsTr("Now Playing")
                             active: win.isOpen("nowplaying")
                             onActivated: win.popup("nowplaying")
@@ -740,7 +806,7 @@ Scope {
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
                             padding: Tokens.menubarStatusItemPadding
-                            visible: Settings.menubarShowSearch
+                            visible: Settings.menubarShowSearch && !win.hiddenStatus.search
                             accessibleName: qsTr("Search")
                             active: root.searchActive
                             onActivated: root.searchRequested()
