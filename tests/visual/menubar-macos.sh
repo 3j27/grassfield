@@ -9,6 +9,7 @@
 #   keyboard-right    with the app menu open, Right moves to the next title's menu (no submenu on the current row)
 #   no-hover-idle     hovering a title with no menu open draws nothing (macOS has no hover highlight in the bar)
 #   fullscreen-reveal with foot full screen the bar is hidden, and the pointer at the top edge reveals it over the window
+#   fullscreen-hidden  the IPC state of that bar: hidden (away) on the overlay layer with the exclusive zone kept, shown at the edge, away again
 # Usage (bare command): tests/visual/menubar-macos.sh
 source "$(dirname "$0")/lib.sh"
 
@@ -98,13 +99,18 @@ check "status-switch: moving onto the network item with the volume menu open ope
 
 # press-drag-release on Window > Minimize (first row)
 reset_menus
+restore_ws=$(foot_state)
 vs_pointer abs "$win_x" 12 down sleep 400 drag "$((win_x + 30))" 30 sleep 150 drag "$((win_x + 40))" 44 sleep 300 up >/dev/null
 vs_sleep 1.2
 ws=$(foot_state)
 check "press-drag-release: Window > Minimize chosen by press, drag and release (foot on '${ws:-?}')" test "$ws" = "special:minimized"
 # Bring foot back for the next checks (Dock click equivalent: the platform restores it on focus).
 if [[ $ws == special:minimized ]]; then
-  "$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.focus({ window = 'title:mbm-foot' })" >/dev/null 2>&1 || true
+  # (A plain focus does not bring it back: move it to the workspace it came from, the one shown on GF-REF.)
+  back=$("$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | select(.title == "mbm-foot") | .address' | head -n 1)
+  "$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.window.move({ workspace = \"$restore_ws\", follow = false, window = \"address:$back\" })" >/dev/null 2>&1 || true
+  vs_sleep 0.8
+  "$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.focus({ window = 'address:$back' })" >/dev/null 2>&1 || true
   vs_sleep 1
 fi
 
@@ -125,11 +131,19 @@ vs_sleep 1.5
 vs_pointer abs 960 540 >/dev/null
 vs_sleep 0.8
 fs_away=$(VS_NOPARK=1 vs_capture mbm-fullscreen-away)
+st_away=$(vs_ipc menubar autohide "$VS_OUTPUT")
 vs_pointer abs 960 0 >/dev/null
 vs_sleep 1.2
 fs_edge=$(VS_NOPARK=1 vs_capture mbm-fullscreen-edge)
-d=$(px_diff "$fs_away" "$fs_edge" "1600x22+0+1")
+st_edge=$(vs_ipc menubar autohide "$VS_OUTPUT")
+vs_pointer abs 960 540 >/dev/null
+vs_sleep 1.5
+st_gone=$(vs_ipc menubar autohide "$VS_OUTPUT")
+read -r FW _ < <(magick identify -format '%w %h\n' "$fs_edge")
+d=$(px_diff "$fs_away" "$fs_edge" "${FW}x22+0+1")
 check "fullscreen-reveal: the bar appears when the pointer reaches the top edge over a full-screen window ($d px changed)" test "$d" -gt 400
+check "fullscreen-hidden: full screen hides the bar on the overlay layer with the exclusive zone kept, the edge shows it, leaving the bar hides it again ($st_away / $st_edge / $st_gone)" \
+  bash -c '[[ $(jq -r "[.fullscreen, .away, .overlay, .zone] | @csv" <<<"$1") == "true,true,true,24" && $(jq -r ".state" <<<"$2") == shown && $(jq -r ".away" <<<"$3") == true ]]' _ "$st_away" "$st_edge" "$st_gone"
 "$VS_ROOT/scripts/nestctl" dispatch "hl.dsp.window.fullscreen({ mode = 'fullscreen', window = 'address:$addr' })" >/dev/null 2>&1 || true
 
 reset_menus

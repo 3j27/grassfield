@@ -129,6 +129,17 @@ SettingsPage {
         }
 
         SettingsRow {
+            title: qsTr("Automatically hide and show the menu bar")
+            subtitle: qsTr("A hidden menu bar slides in over the window when the pointer reaches the top edge of the screen.")
+            Picker {
+                accessibleName: qsTr("Automatically hide and show the menu bar")
+                model: [{id: "always", text: qsTr("Always")}, {id: "desktop", text: qsTr("On Desktop Only")}, {id: "fullscreen", text: qsTr("In Full Screen Only")}, {id: "never", text: qsTr("Never")}]
+                value: root.store.value("menubar.autoHide")
+                onPicked: id => root.store.set("menubar.autoHide", id)
+            }
+        }
+
+        SettingsRow {
             title: qsTr("Show Now Playing in the menu bar")
             subtitle: qsTr("While a media player has a track, a button in the menu bar opens its controls.")
             Toggle {

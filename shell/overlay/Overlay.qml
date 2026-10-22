@@ -39,13 +39,13 @@ Variants {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: open && !Popups.pointerHeld ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-overlay"
         // The whole output receives input while a popup is open (the bar strip is handed to the bar, below); nothing once
         // it closed: the surface stays mapped a moment for the keyboard release, and a click in that moment belongs to the
         // window under it.
         // qmllint disable missing-type
-        mask: win.open ? openMask : passThrough
+        mask: win.open && !Popups.pointerHeld ? openMask : passThrough
         // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
         // qmllint enable missing-type
@@ -86,6 +86,24 @@ Variants {
                     FocusReturn.opened("popup");
                 else
                     FocusReturn.closed("popup", true);
+            }
+        }
+
+        // Press, drag, release: the bar (or the strip below) holds the pointer while the button is down and reports it
+        // (Popups.trackPointer / releasePointer); the open menu highlights the row under it and runs it on release.
+        Connections {
+            target: Popups
+
+            function onPointerTracked(screen: string, x: real, y: real): void {
+                const menu = holder.item as PopupMenu;
+                if (win.open && menu && screen === win.modelData.name)
+                    menu.trackPointer(x, y);
+            }
+
+            function onPointerReleased(screen: string, x: real, y: real): void {
+                const menu = holder.item as PopupMenu;
+                if (win.open && menu && screen === win.modelData.name)
+                    menu.releasePointer(x, y);
             }
         }
 
@@ -158,6 +176,15 @@ Variants {
                         bar.pressAt(mouse.x, mouse.button === Qt.RightButton ? "right" : mouse.button === Qt.MiddleButton ? "middle" : "left");
                     else
                         Popups.close();
+                }
+                // Held, the pointer stays with this strip when it moves down onto the menu: relay it (press, drag, release).
+                onPositionChanged: mouse => {
+                    if (pressed && mouse.buttons === Qt.LeftButton)
+                        Popups.trackPointer(win.modelData.name, mouse.x, mouse.y);
+                }
+                onReleased: mouse => {
+                    if (mouse.button === Qt.LeftButton)
+                        Popups.releasePointer(win.modelData.name, mouse.x, mouse.y);
                 }
             }
         }

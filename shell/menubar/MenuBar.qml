@@ -8,6 +8,8 @@ import Grassfield.Ui
 import qs.notifications
 import qs.platform
 import qs.services
+import "BarHide.js" as BarHide
+import "../dock/AutoHide.js" as AutoHide
 import "StatusLogic.js" as Logic
 
 // Top bar, one per screen. Left: Grassfield menu (leaf mark), the focused app name with its
@@ -61,6 +63,28 @@ Scope {
                     bar = all[i];
             }
             return bar ? JSON.stringify({menusRight: bar.menusRight(), status: bar.statusRects()}) : "{}";
+        }
+
+        // Test hook (tests/visual/menubar-macos.sh): the auto-hide state of an output's bar as JSON. Read-only.
+        function autohide(screen: string): string {
+            const all = bars.instances;
+            let bar = all.length > 0 ? all[0] : null;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    bar = all[i];
+            }
+            if (!bar)
+                return "{}";
+            return JSON.stringify({
+                mode: bar.hideMode,
+                fullscreen: bar.fullscreen,
+                hides: bar.autoHides,
+                state: bar.hideMachine.state,
+                visible: bar.hideMachine.visible,
+                away: bar.away,
+                overlay: BarHide.overlayLayer(bar.fullscreen),
+                zone: bar.exclusiveZone
+            });
         }
 
         // Test hook (tests/integration/global_menus.sh): JSON with the shown window, the bridge state, the bar's
@@ -170,7 +194,8 @@ Scope {
             readonly property bool hasFileMenu: hasApp && bridgeMenus.length === 0 && AppMenus.model.hasFileMenu(AppMenus.context(shownAppId))
             // Transparent by default (like macOS 26/27); `menubar.showBackground` restores the frosted band, and so does a wallpaper
             // strip over which neither tone reaches 4.5:1 (BarTone.assistOf, ADR-0016: shown on that output until the wallpaper changes).
-            readonly property bool showBackground: Settings.menubarShowBackground || BarTone.assistOf(win.screen.name)
+            // Over a full-screen window the bar is drawn on that window's content, not on the wallpaper the tone was measured on: the frosted band then (macOS does the same).
+            readonly property bool showBackground: Settings.menubarShowBackground || BarTone.assistOf(win.screen.name) || win.fullscreen
             // Without a background the bar sits on the wallpaper and its foreground adapts to the wallpaper strip under this
             // output's bar (BarTone, the macOS model): white text over a dark wallpaper, black over a light one, with a faint
             // shadow of the opposite colour (gate A2). On the material it is the appearance's text colour.
@@ -252,6 +277,27 @@ Scope {
                 if (bridgeMenus.length === 0 && isOpen("appbridge"))
                     Qt.callLater(Popups.close);
             }
+
+            // Auto-hide (macOS "Automatically hide and show the menu bar", BarHide.js): the Dock's state machine (AutoHide.js) per
+            // output. The bar window keeps its size; only the content slides, and only the edge strip takes input while it is
+            // away. Over a full-screen window it sits on the overlay layer (Hyprland draws full-screen windows above the top layer).
+            readonly property string hideMode: BarHide.normalize(Settings.menubarAutoHide)
+            readonly property bool fullscreen: Compositor.fullscreenOn(win.screen.name, Compositor.topologyRevision)
+            readonly property bool autoHides: BarHide.hides(hideMode, fullscreen)
+            property var hideMachine: AutoHide.create()
+            // A menu of this bar open (or Notification Center from the clock) keeps it in view; the pointer on the bar or its edge strip too.
+            readonly property var hideInhibitors: ({
+                    pointer: winHover.hovered,
+                    popup: tracking || (Notifications.centerOpen && Notifications.centerScreen === win.screen.name)
+                })
+            readonly property var hideTiming: ({
+                    hideGrace: Tokens.menubarHideGrace,
+                    hideDuration: Appearance.reduceMotion ? 0 : Tokens.menubarHideDuration,
+                    revealDwell: Tokens.menubarRevealDwell,
+                    revealDuration: Appearance.reduceMotion ? 0 : Tokens.menubarRevealDuration
+                })
+            readonly property bool away: autoHides && hideMachine.state === "hidden" && !AutoHide.forcing(hideInhibitors)
+            readonly property real slideY: BarHide.slideOffset(Tokens.menubarHeight, AutoHide.ease(hideMachine.visible))
 
             // The Now Playing item went away (player closed, switched off in Settings): its open popover would act on nothing.
             onShowNowPlayingChanged: {
@@ -476,7 +522,8 @@ Scope {
                 right: true
             }
             implicitHeight: Tokens.menubarHeight
-            exclusiveZone: Tokens.menubarHeight
+            // Only a bar that is on the desktop in its mode reserves space, constantly: reveal and hide never reflow windows.
+            exclusiveZone: BarHide.reservesSpace(hideMode) ? Tokens.menubarHeight : 0
             color: "transparent"
             // Never the keyboard: hovering or starting must never take it from the focused window, and while one of this
             // bar's menus is open its popup holds it (Exclusive, shell/overlay; CTRL+F2 opens the system menu that way).
@@ -484,12 +531,16 @@ Scope {
             // on-demand layer under the pointer the keyboard when it refocuses), so the window it still counted active lost
             // its keys (tests/compositor/click_focus.sh).
             focusable: false
-            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.layer: BarHide.overlayLayer(win.fullscreen) ? WlrLayer.Overlay : WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-menubar"
             // Quickshell qmltypes name this property's type PendingRegion/FileViewAdapter without exporting it (metadata quirk).
             // qmllint disable missing-type
-            BackgroundEffect.blurRegion: win.showBackground && material.blurActive ? blurRegion : null
+            BackgroundEffect.blurRegion: win.showBackground && material.blurActive && win.hideMachine.visible > 0 ? blurRegion : null
+            // The bar, or only the top edge strip while it is away.
+            mask: Region {
+                item: hitItem
+            }
             // qmllint enable missing-type
 
             Region {
@@ -498,9 +549,46 @@ Scope {
                 radius: material.radius
             }
 
+            Item {
+                id: hitItem
+                width: win.width
+                height: BarHide.inputHeight(Tokens.menubarHeight, Tokens.menubarRevealZone, win.away)
+            }
+
             HoverHandler {
+                id: winHover
                 onPointChanged: if (hovered)
                     PointerTracker.report(win.screen.name, point.position.x, point.position.y)
+            }
+
+            // Press, drag, release (macOS): a title opens its menu on the press and the button is still down, so the pointer
+            // stays with this window (implicit grab) as it moves down onto the menu. Relay it to the open menu (it highlights
+            // the row under the pointer) and, on the release, let it run that row; a release on no row leaves the menu open.
+            PointHandler {
+                id: menuDrag
+                property real lastX: 0
+                property real lastY: 0
+                acceptedButtons: Qt.LeftButton
+                onPointChanged: {
+                    lastX = point.scenePosition.x;
+                    lastY = point.scenePosition.y;
+                    if (active)
+                        Popups.trackPointer(win.screen.name, lastX, lastY);
+                }
+                onActiveChanged: {
+                    if (active) {
+                        Popups.pointerHeld = true;
+                    } else {
+                        Popups.releasePointer(win.screen.name, lastX, lastY);
+                        Popups.pointerHeld = false;
+                    }
+                }
+            }
+
+            // Frame clock of the auto-hide machine: stops while nothing can change (away and idle, or in view and held).
+            FrameAnimation {
+                running: AutoHide.active(win.hideMachine, win.hideInhibitors, win.autoHides)
+                onTriggered: win.hideMachine = AutoHide.step(win.hideMachine, win.hideInhibitors, win.autoHides, win.hideTiming, Math.min(frameTime * 1000, 100))
             }
 
             SystemClock {
@@ -510,7 +598,9 @@ Scope {
 
             Material {
                 id: material
-                anchors.fill: parent
+                y: win.slideY
+                width: parent.width
+                height: parent.height
                 visible: win.showBackground
                 radius: Tokens.radiusMenuBar
                 shadowEnabled: false
@@ -532,7 +622,9 @@ Scope {
             // Content: drawn straight on the wallpaper unless the user turns the background on (Settings, Menu Bar).
             Item {
                 id: barContent
-                anchors.fill: parent
+                y: win.slideY
+                width: parent.width
+                height: parent.height
 
                     Row {
                         id: leftRow

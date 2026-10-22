@@ -60,6 +60,7 @@ Singleton {
 
     readonly property bool desktopShowIcons: store.data.desktop.showIcons
     readonly property bool menubarShowBackground: store.data.menubar.showBackground
+    readonly property string menubarAutoHide: store.menubarAutoHide
     readonly property bool menubarShowNowPlaying: store.data.menubar.showNowPlaying
     readonly property bool menubarShowSearch: store.data.menubar.showSearch
     readonly property string hotCornerTopLeft: store.hotCornerTopLeft
@@ -77,6 +78,10 @@ Singleton {
 
     function setMenubarShowBackground(value: bool): void {
         store.setMenubarShowBackground(value);
+    }
+
+    function setMenubarAutoHide(value: string): void {
+        store.setMenubarAutoHide(value);
     }
 
     function setAppearance(value: string): void {

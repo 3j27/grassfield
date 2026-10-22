@@ -46,6 +46,7 @@
   },
   "menubar": {
     "showBackground": false,
+    "autoHide": "fullscreen",
     "showNowPlaying": true,
     "showSearch": true
   },

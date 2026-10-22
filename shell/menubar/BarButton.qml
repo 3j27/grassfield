@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Grassfield.Ui
+import qs.services
 
 // Menu bar item, macOS model: it acts on the press (a menu opens on mouse down), the capsule shows only while it is
 // pressed or its popup is open (no hover highlight in the bar), `entered` lets the bar switch menus on hover while one
@@ -111,8 +112,11 @@ Item {
         id: tap
         // No forceActiveFocus: the bar never has the keyboard (keyboard focus None), and a pointer press left the focus ring
         // drawn on the title until another item took the focus (macOS shows the ring only in keyboard navigation).
-        onPressedChanged: if (pressed)
-            root.activated()
+        // The menu this press opens must map while the button is known to be down (Popups.pointerHeld, cleared by the bar on the release).
+        onPressedChanged: if (pressed) {
+            Popups.pointerHeld = true;
+            root.activated();
+        }
     }
 
     // Right and middle presses (the left button is the TapHandler above).

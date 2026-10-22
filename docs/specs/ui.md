@@ -29,6 +29,7 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.magnification` | number 1–2.5 | 1.6 | Dock |
 | `dock.magnificationEnabled` | bool | false | Dock |
 | `menubar.showBackground` | bool | false | Menu bar (transparent unless true) |
+| `menubar.autoHide` | enum `always` \| `desktop` \| `fullscreen` \| `never` | fullscreen | Automatically hide and show the menu bar (macOS: Always, On Desktop Only, In Full Screen Only, Never) |
 | `menubar.showNowPlaying` | bool | true | Now Playing item in the menu bar while a player has a session |
 | `menubar.showSearch` | bool | true | Search item in the menu bar |
 | `wallpaper.source` | `"builtin"` \| `"color"` \| `"file"` \| `"folder"` \| `"video"` \| `"online"` | `"builtin"` | Desktop wallpaper (ADR-0016; `video` is accepted and shows the artwork until W7; `online` needs no path and is off by default: it contacts the network once a day, step 2) |

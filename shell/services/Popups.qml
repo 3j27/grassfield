@@ -47,6 +47,29 @@ Singleton {
         root.menuStepRequested(root.screenName, direction);
     }
 
+    // Press, drag, release (macOS): the button that opened a menu is still down, so the pointer stays with the surface it
+    // was pressed on (the bar, or the overlay's strip over it, by the implicit grab) and the open menu gets no pointer
+    // events. That surface reports the pointer and the release in output coordinates; the overlay of `screen` relays them to
+    // the open PopupMenu (trackPointer, releasePointer).
+    // True while the button of a press on the bar is down. The overlay then maps without the keyboard: an Exclusive layer
+    // mapping makes Hyprland release the held buttons and take the pointer from the pressed surface (measured: the bar got
+    // a release 15 ms after the press and the real release reached no surface), which ends the drag. The overlay takes the
+    // keyboard when the button is up.
+    property bool pointerHeld: false
+
+    signal pointerTracked(string screen, real x, real y)
+    signal pointerReleased(string screen, real x, real y)
+
+    function trackPointer(screen: string, x: real, y: real): void {
+        if (root.active && root.screenName === screen)
+            root.pointerTracked(screen, x, y);
+    }
+
+    function releasePointer(screen: string, x: real, y: real): void {
+        if (root.active && root.screenName === screen)
+            root.pointerReleased(screen, x, y);
+    }
+
     function open(popupKind: string, screen: string, x: real, y: real, alignment: string, payload: var): void {
         data = payload ? payload : {};
         screenName = screen;
