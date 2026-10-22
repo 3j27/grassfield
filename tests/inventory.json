@@ -196,6 +196,7 @@
  {"path": "tests/compositor/window_stacking.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/zoom_restore.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/integration/global_menus.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/integration/launcher_entry.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/integration/menu_bridge_memory.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/integration/tray_host.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/apps/files_info.sh", "layer": "headless", "runner": "bare"},
