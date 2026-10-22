@@ -44,11 +44,12 @@ say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" | tee -a "$log"; }
 pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log" 2>&1; }
 clients() { timeout 5 "$root/scripts/nestctl" -j clients; }
 dispatch() { timeout 5 "$root/scripts/nestctl" dispatch "$1" >>"$log" 2>&1; }
+rounding_of() { timeout 5 "$root/scripts/nestctl" getprop "address:$1" rounding 2>>"$log" | head -n 1; } # effective window rule value
 
 read -r mon_x mon_y mon_w mon_h < <(timeout 5 "$root/scripts/nestctl" -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
 [[ -n ${mon_w:-} ]] || { echo "chrome: output $out not found" >&2; exit 2; }
 plugin=0
-HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield >/dev/null 2>&1 && plugin=1
+HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null | jq -e '.features | index("decorations")' >/dev/null 2>&1 && plugin=1
 
 pids=()
 cleanup() {
@@ -87,8 +88,9 @@ crops() { # <name> <x> <y> <w>: 2x crops (nearest neighbour) of the lights and o
 
 measure() { # <name> <x> <y> <w> -> key=value lines in $run/<name>.txt, loaded into m[...]
   local name=$1 x=$2 y=$3 w=$4 bar=$GF_TB_HEIGHT mid=$GF_TB_MID fill=()
-  # Without the plugin there is no titlebar: the corners are where the window's own content colour starts (sampled inside).
-  ((plugin)) || { bar=0 mid=0 fill=("$(magick "$run/$name.ppm" -format "%[hex:p{$((x + 30)),$((y + 30))}]" info: | cut -c1-6)"); }
+  # Without the plugin there is no titlebar: the corners are where the window's own content colour starts, sampled 16 px in
+  # and 2 px down (inside the corner curve for radius 12 and 26, above the inset sidebar of Grassfield's apps).
+  ((plugin)) || { bar=0 mid=0 fill=("$(magick "$run/$name.ppm" -format "%[hex:p{$((x + 16)),$((y + 2))}]" info: | cut -c1-6)"); }
   python3 -I "$root/tests/compositor/chrome_measure.py" "$run/$name.ppm" "$x" "$y" "$w" "$bar" "$GF_TB_CLOSE_X" "$GF_TB_MIN_X" "$GF_TB_ZOOM_X" "$mid" \
     "${fill[@]}" >"$run/$name.txt" 2>>"$log"
   unset m
@@ -157,7 +159,7 @@ park
 start_foot gf-chrome-a
 read -r ax ay aw ah a_addr < <(geom gf-chrome-a)
 [[ -n ${aw:-} ]] || { say "chrome: setup error: window A not found"; exit 2; }
-say "1 foot A ${aw}x${ah} at ($ax,$ay) (output px), class $(clients | jq -r --arg a "$a_addr" '.[] | select(.address == $a) | .class')"
+say "1 foot A ${aw}x${ah} at ($ax,$ay) (output px), class $(clients | jq -r --arg a "$a_addr" '.[] | select(.address == $a) | .class'), rounding (getprop) $(rounding_of "$a_addr")"
 park
 capture a-active
 crops a-active "$ax" "$ay" "$aw"
@@ -224,7 +226,7 @@ if [[ -x $settings ]]; then
   if [[ -n $sw ]]; then
     sleep 1.5
     read -r sx sy sw sh s_addr < <(geom_class org.grassfield.Settings)
-    say "4 Settings ${sw}x${sh} at ($sx,$sy)"
+    say "4 Settings ${sw}x${sh} at ($sx,$sy), rounding (getprop) $(rounding_of "$s_addr")"
     park
     capture settings
     crops settings "$sx" "$sy" "$sw"
