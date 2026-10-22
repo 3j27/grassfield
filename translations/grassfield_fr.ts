@@ -999,10 +999,6 @@
         <translation>Activer le Dock</translation>
     </message>
     <message>
-        <source>Turn Dock hiding on or off</source>
-        <translation>Activer ou désactiver le masquage du Dock</translation>
-    </message>
-    <message>
         <source>Mute</source>
         <translation>Couper le son</translation>
     </message>
