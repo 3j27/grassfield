@@ -10,6 +10,7 @@
 
 #include "DeferredFocus.hpp"
 #include "Overview.hpp"
+#include "Theme.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -46,7 +47,7 @@ namespace gf::stages {
     inline constexpr size_t kStackDepth = 3;
     inline constexpr double kStackStep  = 8;
     // The plugin's titlebar above each window's surface box (logical px, scaled with the thumbnail).
-    inline constexpr double kTitlebarHeight = 28;
+    inline constexpr double kTitlebarHeight = gf::theme::kTitlebarHeight;
     // How far left of its monitor a hidden strip's thumbnails are drawn (they are then not visible).
     inline constexpr double kHiddenMargin = 48;
 

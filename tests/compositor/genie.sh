@@ -60,6 +60,8 @@ esac
 
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 main=$(cat "$dev/main.instance" 2>/dev/null || true)
@@ -209,7 +211,7 @@ classify() { # <prefix> <reference.ppm> <limit y>
       say "  $(basename "$f"): garbled capture (screencopy), not classified"
       continue
     fi
-    j=$(python3 -I "$root/tests/compositor/genie_shape.py" "$f" "$2" "$x0" "$((y0 - 28))" "$w0" "$((h0 + 28))" "$3")
+    j=$(python3 -I "$root/tests/compositor/genie_shape.py" "$f" "$2" "$x0" "$((y0 - GF_TB_HEIGHT))" "$w0" "$((h0 + GF_TB_HEIGHT))" "$3")
     echo "    $(basename "$f"): $j" >>"$log"
     printf '%s\n' "$j" >"${f%.ppm}.json"
     case $(jq -r '.class' <<<"$j") in
@@ -231,7 +233,7 @@ in_place() { # <prefix>
     [[ $c == none || $c == garbled ]] && continue
     [[ $c == funnel ]] && return 1
     read -r top bottom left right < <(jq -r '"\(.top) \(.bottom) \(.left) \(.right)"' "$f")
-    ((top < y0 - 28 - 45 || bottom > y0 + h0 + 45 || bottom < y0 + h0 - 20 || left < x0 - 45 || right > x0 + w0 + 45 || right - left < w0 * 9 / 10)) && return 1
+    ((top < y0 - GF_TB_HEIGHT - 45 || bottom > y0 + h0 + 45 || bottom < y0 + h0 - 20 || left < x0 - 45 || right > x0 + w0 + 45 || right - left < w0 * 9 / 10)) && return 1
   done
   return 0
 }
@@ -370,8 +372,8 @@ sleep 1.5
 read -r addr x0 y0 w0 h0 ws0 < <(client "$a_pid")
 [[ -n ${addr:-} ]] || { say "genie: setup error: window A not found"; exit 2; }
 hex=${addr#0x}
-min_x=$((x0 + 38))
-bar_y=$((y0 - 14))
+min_x=$((x0 + GF_TB_MIN_X))
+bar_y=$((y0 - GF_TB_MID))
 to_minimized="^[0-9]+ movewindowv2>>$hex,-?[0-9]+,special:minimized\$"
 to_workspace="^[0-9]+ movewindowv2>>$hex,[0-9]+,$ws0\$"
 say "  setup: A $addr ${w0}x${h0} at ($x0,$y0) on workspace $ws0"
@@ -516,7 +518,7 @@ check "unload mid-restore" $? "Hyprland alive, A on $ws at ($x,$y)"
 pointer abs $((x0 + w0 / 2)) $((y0 + h0 / 2)) sleep 300
 stable_capture "$run/after-unload-restore.ppm"
 magick "$run/after-unload-restore.ppm" "$run/after-unload-restore.png" 2>>"$log"
-j=$(python3 -I "$root/tests/compositor/genie_shape.py" "$run/after-unload-restore.ppm" "$run/funnel-min-after.ppm" "$x0" "$((y0 - 28))" "$w0" "$((h0 + 28))" "$limit")
+j=$(python3 -I "$root/tests/compositor/genie_shape.py" "$run/after-unload-restore.ppm" "$run/funnel-min-after.ppm" "$x0" "$((y0 - GF_TB_HEIGHT))" "$w0" "$((h0 + GF_TB_HEIGHT))" "$limit")
 read -r rows left right bottom < <(jq -r '"\(.rows) \(.left // -1) \(.right // -1) \(.bottom // -1)"' <<<"$j")
 # A, fully opaque at its place, differs from the output without it over its whole box.
 ((rows >= h0 && left <= x0 + 5 && right >= x0 + w0 - 5 && bottom >= y0 + h0 - 5))

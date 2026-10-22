@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace gf::titlebar {
 
@@ -61,6 +62,45 @@ namespace gf::titlebar {
     HitTarget hitTest(double x, double y, double barWidth, const Metrics& m = {});
 
     std::optional<Button> buttonForHit(HitTarget hit);
+
+    // ---- Hover glyphs (macOS: the three glyphs show together while the pointer is over the group of lights) ----
+
+    // The group of lights: the box of the three hit circles (gaps between the lights included).
+    Rect buttonGroupRect(const Metrics& m = {});
+
+    // The pointer at (x, y) is over the group of lights of a bar barWidth wide (and on the bar).
+    bool overButtonGroup(double x, double y, double barWidth, const Metrics& m = {});
+
+    // Side in device px of the square a glyph is drawn in, for a light buttonPx device px across: about
+    // ratio x buttonPx, with the parity of buttonPx so that the glyph is centred on whole pixels. 0 if invalid.
+    int glyphSizePx(int buttonPx, double ratio = theme::kGlyphRatio);
+
+    // Coverage mask of a button's glyph (x close, - minimize, + zoom): sizePx x sizePx bytes, row-major, 0..255. Strokes
+    // strokePx wide with round caps, inside the square, anti-aliased over one pixel. Empty if sizePx is outside
+    // [1, kMaxGlyphPx] or strokePx is not positive.
+    std::vector<uint8_t> glyphMask(Button button, int sizePx, double strokePx);
+
+    // The mask as premultiplied 32-bit pixels, bytes B, G, R, A (DRM_FORMAT_ARGB8888 on little-endian).
+    std::vector<uint8_t> premultipliedBgra(const std::vector<uint8_t>& mask, const theme::Rgba& color);
+
+    // Colour of a light (macOS): its own colour on the active window, and on any window while the pointer is over the group
+    // of lights; the palette's inactive grey otherwise.
+    theme::Rgba lightColor(Button button, bool windowActive, bool groupHovered, theme::Appearance appearance = theme::kDefaultAppearance);
+
+    // ---- Content corners under the bar ----
+    // Hyprland 0.56.2 rounds all four corners of a window's surface with one radius, so a rounded window shows a curve
+    // where its content meets the bar; macOS joins them square. The two squares below the bar's ends, `rounding` wide,
+    // are redrawn from the surface's own texture, unrounded. All rectangles share one coordinate space.
+    struct CornerPatch {
+        bool valid = false;
+        Rect left;  // square under the bar's left end
+        Rect right; // square under the bar's right end
+    };
+
+    // `bar`: the titlebar; `texture`: where the surface's whole texture is drawn (its top-left corner at the surface's
+    // origin). Invalid when there is no rounding, the bar is narrower than two squares, or a square is not fully inside
+    // the texture (the mapping would be a guess).
+    CornerPatch contentCornerPatch(const Rect& bar, double rounding, const Rect& texture);
 
     struct TitlePlacement {
         bool   visible  = false;

@@ -4,27 +4,46 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <utility>
 
 using namespace gf::titlebar;
 
 TEST(TitlebarLayout, DefaultMetricsMatchTheSpec) {
+    // macOS 26 titlebar-only window (docs/testing/f1-reference-gaps.md, "Window chrome").
     const Metrics m;
-    EXPECT_DOUBLE_EQ(m.height, 28.0);
-    EXPECT_DOUBLE_EQ(m.diameter, 12.0);
-    EXPECT_DOUBLE_EQ(m.spacing, 8.0);
-    EXPECT_DOUBLE_EQ(m.insetLeft, 12.0);
+    EXPECT_DOUBLE_EQ(m.height, 32.0);
+    EXPECT_DOUBLE_EQ(m.diameter, 14.0);
+    EXPECT_DOUBLE_EQ(m.spacing, 9.0);
+    EXPECT_DOUBLE_EQ(m.insetLeft, 9.0);
+    EXPECT_DOUBLE_EQ(m.hitSlop, 14.0 / 6.0);
+}
+
+TEST(TitlebarLayout, HitSlopScalesWithTheDiameter) {
+    // 2 px around the former 12-px lights: the same share of the new diameter.
+    EXPECT_DOUBLE_EQ(gf::theme::kButtonHitSlop / gf::theme::kButtonDiameter, 2.0 / 12.0);
 }
 
 TEST(TitlebarLayout, ButtonsAreLeftAlignedCloseMinimizeZoom) {
-    EXPECT_EQ(buttonRect(Button::Close), (Rect{12, 8, 12, 12}));
-    EXPECT_EQ(buttonRect(Button::Minimize), (Rect{32, 8, 12, 12}));
-    EXPECT_EQ(buttonRect(Button::Zoom), (Rect{52, 8, 12, 12}));
-    EXPECT_DOUBLE_EQ(buttonsRightEdge(), 64.0);
+    EXPECT_EQ(buttonRect(Button::Close), (Rect{9, 9, 14, 14}));
+    EXPECT_EQ(buttonRect(Button::Minimize), (Rect{32, 9, 14, 14}));
+    EXPECT_EQ(buttonRect(Button::Zoom), (Rect{55, 9, 14, 14}));
+    EXPECT_DOUBLE_EQ(buttonsRightEdge(), 69.0);
 }
 
 TEST(TitlebarLayout, ButtonsAreVerticallyCentered) {
     const Rect r = buttonRect(Button::Close);
-    EXPECT_DOUBLE_EQ(r.y + (r.h / 2.0), 14.0);
+    EXPECT_DOUBLE_EQ(r.y + (r.h / 2.0), 16.0);
+}
+
+TEST(TitlebarLayout, FirstLightAndPitchMatchTheReference) {
+    // Reference: first centre (15.6, 15.6) +-1 from the window's top-left corner, centres 23 apart.
+    const Rect close = buttonRect(Button::Close);
+    const Rect min   = buttonRect(Button::Minimize);
+    const Rect zoom  = buttonRect(Button::Zoom);
+    EXPECT_NEAR(close.x + (close.w / 2.0), 15.6, 1.0);
+    EXPECT_NEAR(close.y + (close.h / 2.0), 15.6, 1.0);
+    EXPECT_DOUBLE_EQ(min.x - close.x, 23.0);
+    EXPECT_DOUBLE_EQ(zoom.x - min.x, 23.0);
 }
 
 TEST(TitlebarLayout, CustomMetricsScaleTheLayout) {
@@ -37,36 +56,52 @@ TEST(TitlebarLayout, CustomMetricsScaleTheLayout) {
 }
 
 TEST(TitlebarLayout, HitTestButtonCenters) {
-    EXPECT_EQ(hitTest(18, 14, 400), HitTarget::Close);
-    EXPECT_EQ(hitTest(38, 14, 400), HitTarget::Minimize);
-    EXPECT_EQ(hitTest(58, 14, 400), HitTarget::Zoom);
+    EXPECT_EQ(hitTest(16, 16, 400), HitTarget::Close);
+    EXPECT_EQ(hitTest(39, 16, 400), HitTarget::Minimize);
+    EXPECT_EQ(hitTest(62, 16, 400), HitTarget::Zoom);
 }
 
 TEST(TitlebarLayout, HitTestUsesCircleWithSlop) {
-    // radius 6 + slop 2 = 8 from the close center (18, 14)
-    EXPECT_EQ(hitTest(18 + 7.9, 14, 400), HitTarget::Close);
-    EXPECT_EQ(hitTest(18, 14 - 7.9, 400), HitTarget::Close);
-    // corner of the bounding square grown by the slop is outside the circle
-    EXPECT_EQ(hitTest(18 + 7, 14 + 7, 400), HitTarget::DragArea);
+    // radius 7 + slop 2.33 = 9.33 around each centre: close (16, 16), minimize (39, 16), zoom (62, 16)
+    for (const auto& [cx, target] : {std::pair{16.0, HitTarget::Close}, std::pair{39.0, HitTarget::Minimize}, std::pair{62.0, HitTarget::Zoom}}) {
+        EXPECT_EQ(hitTest(cx + 9.3, 16, 400), target) << cx;
+        EXPECT_EQ(hitTest(cx - 9.3, 16, 400), target) << cx;
+        EXPECT_EQ(hitTest(cx, 16 - 9.3, 400), target) << cx;
+        EXPECT_EQ(hitTest(cx, 16 + 9.3, 400), target) << cx;
+        EXPECT_EQ(hitTest(cx + 6.5, 16 + 6.5, 400), target) << cx; // 9.19 from the centre: outside the drawn circle, inside the slop
+        // just past the slop
+        EXPECT_EQ(hitTest(cx, 16 - 9.4, 400), HitTarget::DragArea) << cx;
+        EXPECT_EQ(hitTest(cx, 16 + 9.4, 400), HitTarget::DragArea) << cx;
+        // corner of the bounding square grown by the slop is outside the circle
+        EXPECT_EQ(hitTest(cx + 7, 16 + 7, 400), HitTarget::DragArea) << cx;
+    }
+    EXPECT_EQ(hitTest(16 - 9.4, 16, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(62 + 9.4, 16, 400), HitTarget::DragArea);
 }
 
 TEST(TitlebarLayout, HitTestGapBetweenButtonsIsDragArea) {
-    // Exactly between close (18) and minimize (38): 10 px from each center > 8.
-    EXPECT_EQ(hitTest(28, 14, 400), HitTarget::DragArea);
+    // Exactly between two centres: 11.5 px from each > 9.33.
+    EXPECT_EQ(hitTest(27.5, 16, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(50.5, 16, 400), HitTarget::DragArea);
+    // The slops of neighbours never meet: about 2.17 px of drag area on each side of the middle.
+    EXPECT_EQ(hitTest(16 + 9.4, 16, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(39 - 9.4, 16, 400), HitTarget::DragArea);
 }
 
 TEST(TitlebarLayout, HitTestRestOfBarIsDragArea) {
-    EXPECT_EQ(hitTest(200, 14, 400), HitTarget::DragArea);
-    EXPECT_EQ(hitTest(399.5, 27.5, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(200, 16, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(399.5, 31.5, 400), HitTarget::DragArea);
     EXPECT_EQ(hitTest(0, 0, 400), HitTarget::DragArea);
+    EXPECT_EQ(hitTest(16, 0.5, 400), HitTarget::DragArea);  // above the close button's slop
+    EXPECT_EQ(hitTest(16, 31.5, 400), HitTarget::DragArea); // below it
 }
 
 TEST(TitlebarLayout, HitTestOutsideIsNone) {
-    EXPECT_EQ(hitTest(-1, 14, 400), HitTarget::None);
-    EXPECT_EQ(hitTest(400, 14, 400), HitTarget::None);
-    EXPECT_EQ(hitTest(200, 28, 400), HitTarget::None);
+    EXPECT_EQ(hitTest(-1, 16, 400), HitTarget::None);
+    EXPECT_EQ(hitTest(400, 16, 400), HitTarget::None);
+    EXPECT_EQ(hitTest(200, 32, 400), HitTarget::None);
     EXPECT_EQ(hitTest(200, -0.1, 400), HitTarget::None);
-    EXPECT_EQ(hitTest(18, 14, 0), HitTarget::None);
+    EXPECT_EQ(hitTest(16, 16, 0), HitTarget::None);
 }
 
 TEST(TitlebarLayout, ButtonForHit) {
@@ -81,22 +116,204 @@ TEST(TitlebarLayout, TitleIsCenteredOnTheWholeBar) {
     const auto p = placeTitle(800, 100);
     ASSERT_TRUE(p.visible);
     EXPECT_DOUBLE_EQ(p.x, 350.0);
-    EXPECT_DOUBLE_EQ(p.maxWidth, 800 - (2 * (64 + 8)));
+    EXPECT_DOUBLE_EQ(p.maxWidth, 800 - (2 * (69 + 8)));
 }
 
 TEST(TitlebarLayout, LongTitleIsClampedClearOfTheButtons) {
     const auto p = placeTitle(300, 1000);
     ASSERT_TRUE(p.visible);
-    EXPECT_DOUBLE_EQ(p.maxWidth, 300 - 144);
-    EXPECT_DOUBLE_EQ(p.x, 72.0); // buttons end at 64, plus 8 px padding
+    EXPECT_DOUBLE_EQ(p.maxWidth, 300 - 154);
+    EXPECT_DOUBLE_EQ(p.x, 77.0); // buttons end at 69, plus 8 px padding
     EXPECT_GE(p.x, buttonsRightEdge() + Metrics{}.titlePadding);
 }
 
 TEST(TitlebarLayout, TitleHiddenWhenNoRoom) {
-    EXPECT_FALSE(placeTitle(144, 10).visible);
+    EXPECT_FALSE(placeTitle(154, 10).visible);
     EXPECT_FALSE(placeTitle(100, 10).visible);
     EXPECT_FALSE(placeTitle(800, 0).visible);
     EXPECT_DOUBLE_EQ(maxTitleWidth(100), 0.0);
+}
+
+// ---- hover glyphs ----
+
+TEST(ButtonGroup, CoversTheThreeHitCirclesAndTheirGaps) {
+    const Rect g = buttonGroupRect();
+    const double slop = gf::theme::kButtonHitSlop;
+    EXPECT_DOUBLE_EQ(g.x, 9 - slop);
+    EXPECT_DOUBLE_EQ(g.y, 9 - slop);
+    EXPECT_DOUBLE_EQ(g.x + g.w, 69 + slop);
+    EXPECT_DOUBLE_EQ(g.y + g.h, 23 + slop);
+    for (const double x : {16.0, 27.5, 39.0, 50.5, 62.0}) // centres and the gaps between the lights
+        EXPECT_TRUE(overButtonGroup(x, 16, 400)) << x;
+    // Every point that hits a button is over the group (half-pixel grid).
+    for (int ix = 0; ix < 160; ++ix) {
+        for (int iy = 0; iy < 64; ++iy) {
+            const double x = ix / 2.0;
+            const double y = iy / 2.0;
+            if (buttonForHit(hitTest(x, y, 400))) {
+                EXPECT_TRUE(overButtonGroup(x, y, 400)) << x << "," << y;
+            }
+        }
+    }
+}
+
+TEST(ButtonGroup, ElsewhereOnTheBarIsNotOverTheGroup) {
+    EXPECT_FALSE(overButtonGroup(69 + 2.5, 16, 400)); // right of the zoom button's slop
+    EXPECT_FALSE(overButtonGroup(16, 3, 400));        // above the close button
+    EXPECT_FALSE(overButtonGroup(16, 29, 400));       // below it
+    EXPECT_FALSE(overButtonGroup(200, 16, 400));
+    EXPECT_FALSE(overButtonGroup(16, 16, 0)); // no bar
+    EXPECT_FALSE(overButtonGroup(16, 16, 12)); // bar narrower than the pointer's x
+    EXPECT_FALSE(overButtonGroup(-1, 16, 400));
+}
+
+TEST(GlyphSize, AboutTheRatioWithTheLightsParity) {
+    EXPECT_EQ(glyphSizePx(14), 8);  // 7.7 -> 8: (14 - 8) / 2 = 3 px each side
+    EXPECT_EQ(glyphSizePx(28), 16); // scale 2: 15.4 -> 16
+    EXPECT_EQ(glyphSizePx(21), 11); // scale 1.5: 11.55 -> 11, odd like 21
+    EXPECT_EQ(glyphSizePx(1), 1);
+    EXPECT_EQ(glyphSizePx(0), 0);
+    EXPECT_EQ(glyphSizePx(-4), 0);
+    EXPECT_EQ(glyphSizePx(14, 0), 0);
+    EXPECT_EQ(glyphSizePx(14, 1.5), 0);
+    EXPECT_LE(glyphSizePx(10000), gf::theme::kMaxGlyphPx);
+}
+
+namespace {
+    uint8_t at(const std::vector<uint8_t>& mask, int n, int x, int y) {
+        return mask[(static_cast<size_t>(y) * static_cast<size_t>(n)) + static_cast<size_t>(x)];
+    }
+} // namespace
+
+TEST(GlyphMask, CloseIsASymmetricCross) {
+    const int  n    = 16;
+    const auto mask = glyphMask(Button::Close, n, 0.12 * 28);
+    ASSERT_EQ(mask.size(), static_cast<size_t>(n * n));
+    for (int y = 0; y < n; ++y) {
+        for (int x = 0; x < n; ++x) {
+            EXPECT_EQ(at(mask, n, x, y), at(mask, n, y, x)) << "transpose " << x << "," << y;
+            EXPECT_EQ(at(mask, n, x, y), at(mask, n, n - 1 - x, y)) << "mirror " << x << "," << y;
+        }
+    }
+    EXPECT_EQ(at(mask, n, 7, 7), 255);  // the crossing
+    EXPECT_GT(at(mask, n, 0, 0), 100);  // the arms reach the corners (round caps)
+    EXPECT_EQ(at(mask, n, 7, 0), 0);    // nothing in the middle of an edge
+    EXPECT_EQ(at(mask, n, 0, 7), 0);
+}
+
+TEST(GlyphMask, MinimizeIsOneHorizontalBar) {
+    const int  n    = 8;
+    const auto mask = glyphMask(Button::Minimize, n, 0.12 * 14);
+    ASSERT_EQ(mask.size(), static_cast<size_t>(n * n));
+    for (int x = 1; x < n - 1; ++x) {
+        EXPECT_GT(at(mask, n, x, 3), 200) << x; // the two middle rows
+        EXPECT_GT(at(mask, n, x, 4), 200) << x;
+        EXPECT_EQ(at(mask, n, x, 0), 0) << x;
+        EXPECT_EQ(at(mask, n, x, n - 1), 0) << x;
+    }
+    for (int y = 0; y < n; ++y)
+        EXPECT_EQ(at(mask, n, 0, y), at(mask, n, n - 1, y)) << y;
+}
+
+TEST(GlyphMask, ZoomIsAPlus) {
+    const int  n    = 8;
+    const auto mask = glyphMask(Button::Zoom, n, 0.12 * 14);
+    ASSERT_EQ(mask.size(), static_cast<size_t>(n * n));
+    EXPECT_GT(at(mask, n, 3, 3), 200);
+    EXPECT_GT(at(mask, n, 3, 0), 100); // vertical arm reaches the top
+    EXPECT_GT(at(mask, n, 0, 4), 100); // horizontal arm reaches the left edge
+    EXPECT_EQ(at(mask, n, 0, 0), 0);   // corners empty
+    EXPECT_EQ(at(mask, n, n - 1, n - 1), 0);
+    for (int y = 0; y < n; ++y) {
+        for (int x = 0; x < n; ++x)
+            EXPECT_EQ(at(mask, n, x, y), at(mask, n, y, x)) << x << "," << y;
+    }
+}
+
+TEST(GlyphMask, RefusesInvalidSizes) {
+    EXPECT_TRUE(glyphMask(Button::Close, 0, 2).empty());
+    EXPECT_TRUE(glyphMask(Button::Close, -3, 2).empty());
+    EXPECT_TRUE(glyphMask(Button::Close, gf::theme::kMaxGlyphPx + 1, 2).empty());
+    EXPECT_TRUE(glyphMask(Button::Close, 8, 0).empty());
+    EXPECT_TRUE(glyphMask(Button::Close, 8, -1).empty());
+    EXPECT_EQ(glyphMask(Button::Zoom, 1, 50).size(), 1U); // stroke wider than the square: clamped
+}
+
+TEST(GlyphMask, PremultipliedPixels) {
+    const std::vector<uint8_t> mask{0, 255, 128};
+    const auto px = premultipliedBgra(mask, gf::theme::kGlyphColor);
+    ASSERT_EQ(px.size(), 12U);
+    EXPECT_EQ(px[3], 0);   // transparent where the mask is empty
+    EXPECT_EQ(px[7], 128); // half-opaque black under full coverage (kGlyphColor alpha 0.5)
+    EXPECT_EQ(px[4], 0);
+    EXPECT_EQ(px[11], 64);
+    const auto red = premultipliedBgra({255}, gf::theme::Rgba{.r = 1.F, .g = 0.F, .b = 0.F, .a = 0.5F});
+    EXPECT_EQ(red[0], 0);   // B
+    EXPECT_EQ(red[2], 128); // R premultiplied by alpha
+    EXPECT_EQ(red[3], 128);
+}
+
+// ---- inactive lights ----
+
+namespace {
+    bool sameColor(const gf::theme::Rgba& a, const gf::theme::Rgba& b) {
+        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+    }
+} // namespace
+
+TEST(LightColor, ActiveWindowShowsTheColours) {
+    using gf::theme::Appearance;
+    EXPECT_TRUE(sameColor(lightColor(Button::Close, true, false, Appearance::Dark), gf::theme::kCloseColor));
+    EXPECT_TRUE(sameColor(lightColor(Button::Minimize, true, false, Appearance::Dark), gf::theme::kMinimizeColor));
+    EXPECT_TRUE(sameColor(lightColor(Button::Zoom, true, true, Appearance::Light), gf::theme::kZoomColor));
+}
+
+TEST(LightColor, InactiveWindowIsGreyUntilHovered) {
+    using gf::theme::Appearance;
+    for (const auto button : kButtonOrder) {
+        EXPECT_TRUE(sameColor(lightColor(button, false, false, Appearance::Dark), gf::theme::titlebarPalette(Appearance::Dark).inactiveLight));
+        EXPECT_TRUE(sameColor(lightColor(button, false, false, Appearance::Light), gf::theme::titlebarPalette(Appearance::Light).inactiveLight));
+    }
+    EXPECT_TRUE(sameColor(lightColor(Button::Close, false, true, Appearance::Dark), gf::theme::kCloseColor)); // hover: colours back
+}
+
+TEST(LightColor, InactiveGreyIsOneStepAboveItsBar) {
+    using gf::theme::Appearance;
+    const auto dark  = gf::theme::titlebarPalette(Appearance::Dark);
+    const auto light = gf::theme::titlebarPalette(Appearance::Light);
+    EXPECT_GT(dark.inactiveLight.r, dark.background.r);   // lighter than the dark bar
+    EXPECT_LT(light.inactiveLight.r, light.background.r); // darker than the light bar
+    EXPECT_NEAR(light.inactiveLight.r, 0xD4 / 255.F, 4 / 255.F); // reference sample about #D4D4D4
+}
+
+// ---- content corners under the bar ----
+
+TEST(ContentCornerPatch, SquaresUnderBothEndsOfTheBar) {
+    const Rect bar{100, 50, 700, 32};
+    const Rect texture{100, 82, 700, 500}; // the surface right below the bar
+    const auto p = contentCornerPatch(bar, 26, texture);
+    ASSERT_TRUE(p.valid);
+    EXPECT_EQ(p.left, (Rect{100, 82, 26, 26}));
+    EXPECT_EQ(p.right, (Rect{774, 82, 26, 26}));
+}
+
+TEST(ContentCornerPatch, TextureWithClientShadowMargins) {
+    // A client-side-decorated surface: its texture extends 20 px beyond the window geometry on every side.
+    const auto p = contentCornerPatch(Rect{100, 50, 700, 32}, 12, Rect{80, 62, 740, 540});
+    ASSERT_TRUE(p.valid);
+    EXPECT_EQ(p.left, (Rect{100, 82, 12, 12}));
+}
+
+TEST(ContentCornerPatch, InvalidWhenTheMappingWouldBeAGuess) {
+    const Rect bar{100, 50, 700, 32};
+    EXPECT_FALSE(contentCornerPatch(bar, 0, Rect{100, 82, 700, 500}).valid);   // no rounding
+    EXPECT_FALSE(contentCornerPatch(bar, -3, Rect{100, 82, 700, 500}).valid);
+    EXPECT_FALSE(contentCornerPatch(Rect{100, 50, 40, 32}, 26, Rect{100, 82, 40, 500}).valid); // narrower than two squares
+    EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 82, 600, 500}).valid);  // surface narrower than the bar (resizing)
+    EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 90, 700, 500}).valid);  // surface below the bar's bottom edge
+    EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 82, 700, 10}).valid);   // shorter than the square
+    EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 82, 0, 0}).valid);
+    EXPECT_TRUE(contentCornerPatch(bar, 26, Rect{100.4, 82.4, 699.6, 500}).valid); // sub-pixel rounding tolerated
 }
 
 TEST(ClickTracker, TwoQuickPressesAreADoubleClick) {

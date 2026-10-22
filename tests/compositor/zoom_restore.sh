@@ -7,8 +7,8 @@
 # scripts/dev/pointer.sh, the client gets the nested socket only, hyprctl is used read-only (`clients`,
 # `monitors`) against the nested instance.
 #
-# One foot window, all titlebar targets computed from its geometry (button centers 58 px right of the
-# surface's left edge for zoom, bar middle 14 px above the surface):
+# One foot window, all titlebar targets computed from its geometry and tests/compositor/titlebar_geometry.sh (the zoom
+# button centre right of the surface's left edge, the bar middle above the surface):
 #   1 zoom button -> maximized; double-click on the maximized bar -> floating geometry back (bug before the
 #     fix: the first click's release wrote the maximized box into the floating geometry);
 #   2 zoom button; single click on the maximized bar; zoom button -> floating geometry back;
@@ -30,6 +30,8 @@ hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
 # may name another worktree's session.
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 if [[ -z $sock || -z $sig || -z $hypr_pid ]] || ! kill -0 "$hypr_pid" 2>/dev/null; then
@@ -76,8 +78,8 @@ sleep 1.5
 read -r x0 y0 w0 h0 fs0 < <(geom)
 [[ -n ${w0:-} && $fs0 == 0 ]] || { say "zoom_restore: setup error: window not found or not floating"; exit 2; }
 say "  setup: floating ${w0}x${h0} at ($x0,$y0)"
-zoom_x=$((x0 + 58))
-bar_y=$((y0 - 14))
+zoom_x=$((x0 + GF_TB_ZOOM_X))
+bar_y=$((y0 - GF_TB_MID))
 
 zoom_in() {
   pointer abs "$zoom_x" "$bar_y" sleep 50 click sleep 600
@@ -93,36 +95,36 @@ same_as_start() { # <label>
 
 say "1 double-click on the maximized titlebar"
 if zoom_in; then
-  pointer abs $((mx + mw / 2)) $((my - 14)) sleep 50 click sleep 60 click sleep 600
+  pointer abs $((mx + mw / 2)) $((my - GF_TB_MID)) sleep 50 click sleep 60 click sleep 600
   same_as_start "double-click restores"
 fi
 
 say "2 single click on the maximized titlebar, then the zoom button"
 if zoom_in; then
-  pointer abs $((mx + mw / 2)) $((my - 14)) sleep 50 click sleep 500
-  pointer abs $((mx + 58)) $((my - 14)) sleep 50 click sleep 600
+  pointer abs $((mx + mw / 2)) $((my - GF_TB_MID)) sleep 50 click sleep 500
+  pointer abs $((mx + GF_TB_ZOOM_X)) $((my - GF_TB_MID)) sleep 50 click sleep 600
   same_as_start "click + zoom button restores"
 fi
 
 say "3 drag on the maximized titlebar un-zooms under the pointer"
 if zoom_in; then
   px=$((mx + mw / 4))
-  py=$((my - 14))
+  py=$((my - GF_TB_MID))
   tx=$((mon_w / 2))
   ty=$((mon_h / 2 - 100))
   pointer abs "$px" "$py" sleep 50 down drag "$tx" "$ty" sleep 50 up sleep 600
   read -r x y w h fs < <(geom)
-  # Pointer at 25 % of the restored width (±2 px) and 14 px above the surface, i.e. on the titlebar (±2 px).
+  # Pointer at 25 % of the restored width (±2 px) and on the bar middle above the surface (±2 px).
   fx=$((tx - x - w0 / 4))
-  fy=$((y - ty - 14))
+  fy=$((y - ty - GF_TB_MID))
   [[ $fs == 0 && $w == "$w0" && $h == "$h0" && ${fx#-} -le 2 && ${fy#-} -le 2 ]]
   check "drag un-zooms" $? "now ${w}x${h} at ($x,$y) fullscreen $fs, pointer ($tx,$ty): x error $fx, y error $fy"
   read -r x0 y0 w0 h0 fs0 < <(geom) # new floating reference
-  zoom_x=$((x0 + 58))
-  bar_y=$((y0 - 14))
+  zoom_x=$((x0 + GF_TB_ZOOM_X))
+  bar_y=$((y0 - GF_TB_MID))
   say "4 zoom button restores the un-zoomed window's floating geometry"
   if zoom_in; then
-    pointer abs $((mx + 58)) $((my - 14)) sleep 50 click sleep 600
+    pointer abs $((mx + GF_TB_ZOOM_X)) $((my - GF_TB_MID)) sleep 50 click sleep 600
     same_as_start "zoom toggle after the un-zoom drag"
   fi
 fi

@@ -55,6 +55,8 @@ hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
 # may name another worktree's session.
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
@@ -285,8 +287,8 @@ sleep 1.5
 read -r addr x0 y0 w0 h0 ws0 < <(client "$a_pid")
 [[ -n ${addr:-} ]] || { say "minimize: setup error: window A not found"; exit 2; }
 hex=${addr#0x}
-min_x=$((x0 + 38)) # minimize button center: 38 px right of the surface's left edge, bar middle 14 px above it
-bar_y=$((y0 - 14))
+min_x=$((x0 + GF_TB_MIN_X)) # minimize button center, right of the surface's left edge; bar middle above the surface
+bar_y=$((y0 - GF_TB_MID))
 say "  setup: A $addr ${w0}x${h0} at ($x0,$y0) on workspace $ws0"
 if ((stages_mode)); then
   # A joined O's stage (same app): O moves into a strip stage of its own, A stays alone in the active stage.
@@ -422,7 +424,7 @@ b_pid=$(open_foot)
 sleep 1.5
 read -r b_addr bx by _ _ _ < <(client "$b_pid")
 if [[ -n ${b_addr:-} ]]; then
-  pointer abs $((bx + 38)) $((by - 14)) sleep 30 click
+  pointer abs $((bx + GF_TB_MIN_X)) $((by - GF_TB_MID)) sleep 30 click
   sleep 0.1
   kill "$b_pid" 2>/dev/null
   shot closed-during-minimize
@@ -439,7 +441,7 @@ read -r c_addr cx cy _ _ _ < <(client "$c_pid")
 if [[ -n ${c_addr:-} ]]; then
   n=$(event_count minimized "${c_addr#0x}")
   f0=$(follow_lines)
-  pointer abs $((cx + 38)) $((cy - 14)) sleep 30 click
+  pointer abs $((cx + GF_TB_MIN_X)) $((cy - GF_TB_MID)) sleep 30 click
   wait_event minimized "${c_addr#0x}" "$n" 3000
   sleep 0.3
   # C's own rectangle; after the rapid repetition the plugin's request log budget (FR24: 20 lines, then one per second)

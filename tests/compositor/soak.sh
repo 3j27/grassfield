@@ -51,6 +51,8 @@ hypr_pid=$(cat "$dev/nested.pid" 2>/dev/null || true)
 # may name another worktree's session.
 # shellcheck source=../../scripts/dev/pidfile.sh
 . "$root/scripts/dev/pidfile.sh"
+# shellcheck source=titlebar_geometry.sh
+. "$root/tests/compositor/titlebar_geometry.sh" || exit 2
 dev_nested_target "$dev" || exit 2
 sock=$DEV_NESTED_SOCK sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 if [[ -z $sock || -z $sig || -z $hypr_pid ]] || ! kill -0 "$hypr_pid" 2>/dev/null; then
@@ -81,9 +83,9 @@ read -r out_w out_h < <(timeout 20 "$root/scripts/dev/pointer.sh" outputs 2>/dev
 
 left=$(((out_w - win_w) / 2))
 mid_x=$((out_w / 2))
-close_x=$((left + 18))
-min_x=$((left + 38))
-zoom_x=$((left + 58))
+close_x=$((left + GF_TB_CLOSE_X))
+min_x=$((left + GF_TB_MIN_X))
+zoom_x=$((left + GF_TB_ZOOM_X))
 
 # Minimize rounds: plugin feature (read-only `hyprctl grassfield`) and a running shell (Dock, minimize-request).
 minimize_rounds=0

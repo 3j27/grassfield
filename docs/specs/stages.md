@@ -48,7 +48,7 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
   normally).
 - **ST4** The active stage's windows are shown and usable at their real places, unchanged.
 - **ST5** Every window of a strip stage stays mapped on its workspace at its real place and is drawn, live, into its tile
-  (`Render::IWindowTransformer`, as the overview): its surface box fitted with its 28 px titlebar band (uniform scale,
+  (`Render::IWindowTransformer`, as the overview): its surface box fitted with its 32 px titlebar band (uniform scale,
   never enlarged, centred) into its stack position; stacked windows of one stage step 8 px up-left (at most 3 distinct
   positions, the front window bottom-right). Stages beyond the tiles are drawn off the monitor (not visible). No client is
   ever moved, resized or configured. A frame without a free pooled work buffer draws the window as nothing (never at its
@@ -302,7 +302,7 @@ window, so it is not counted as evidence either way).
    plus `"reason":"invalid|disabled|no-strip|unknown|unavailable|interrupted"`. Coalesced (latest wins): treat as a
    state. Per monitor with a strip: the workspace shown there, the active stage id, the stages in recency order (active
    first, `slot` = tile index, −1 for the active stage and for stages beyond the tiles), each stage's windows back to
-   front, and for windows in a tile the rect where their **surface box** is drawn (their 28 px titlebar band is drawn
+   front, and for windows in a tile the rect where their **surface box** is drawn (their 32 px titlebar band is drawn
    above it, scaled), always at the shown position (also while `hidden`). `front` (added in 0.6.4-stages, additive;
    absent when the shown Desktop has no stage): the front window of the active stage and its app (the window's class, the
    Wayland app id; client text sanitized to valid UTF-8, at most 256 bytes), re-posted when it changes. It is the window

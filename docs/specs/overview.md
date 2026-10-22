@@ -250,7 +250,7 @@ Code: `compositor/src/core/Overview.*` (payload parser and validation, interpola
    `{"on":true,"durationMs":350,"curve":[0.2,0,0,1],"windows":[{"address":"0x…","x":…,"y":…,"w":…,"h":…},…]}`.
    - Rects are layout coordinates (global logical, like `hyprctl clients` at/size) of where the window's **surface box**
      (at/size, without the titlebar) is drawn. The scale is uniform: a rect of another aspect ratio gets the window
-     centred in it. The plugin's titlebar (28 px) and shadow are drawn around it, scaled: keep `28 × scale` free above
+     centred in it. The plugin's titlebar (32 px) and shadow are drawn around it, scaled: keep `32 × scale` free above
      each rect and include that band in hit-testing and label placement.
    - Limits (else the request is refused): a JSON object of at most 16 KiB; `on` (bool) and `durationMs` (integer
      0..2000) required; `windows` required when `on` is true, at most 64 entries, unique addresses, finite numbers,
@@ -484,7 +484,7 @@ it fails on the reverted build (`open box height 351, box damaged at the start o
 Code: `shell/overview/Overview.qml` (controller, conversation with the plugin), `OverviewWindow.qml` (chrome, one per output),
 `OverviewBackdrop.qml` (Bottom-layer dim, namespace `grassfield-overview-backdrop`), `V2.js` (event parsing, decisions,
 layout coordinates; `tests/unit/tst_overviewv2.qml`), `Minimized.overviewCall` (the one validator/Lua quoter,
-`tst_minimized.qml`), `Compositor.overview()`. Tokens: `overview.windowTitlebarHeight` 28, `chromeWaitMs`, `chromeRetryMs`.
+`tst_minimized.qml`), `Compositor.overview()`. Tokens: `overview.windowTitlebarHeight` 32 (the plugin's `kTitlebarHeight`), `chromeWaitMs`, `chromeRetryMs`.
 - Selection: `thumbnailMode = thumbsThisOpen || !Capabilities.has("overview")`; `thumbsThisOpen` is decided at each open
   (no capability, or a full-screen window on a shown Desktop) and set by a fallback (refusal `invalid`/`no-windows`, `no-chrome`
   after one retry, `unavailable`, `fullscreen`, chrome not holding the keyboard within `chromeWaitMs`). A fallback while

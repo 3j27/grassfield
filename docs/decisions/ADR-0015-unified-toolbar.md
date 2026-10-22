@@ -647,6 +647,12 @@ The owner asked for decisions without questions (2026-10-21, docs/STATE.md); the
 - **Q5, radius 26 (step 1).** Hyprland 0.56.2 rejects `rounding` above 20 in a rule. Tagged windows get 20 with the
   session's `rounding_power`, the closest native shape, as F2a does for `org.grassfield.*`. A plugin-drawn corner mask
   is considered only if the owner's F1 review finds the difference visible.
+  - **Correction (F2a, 2026-10-22):** 26 is native through the global `decoration.rounding`; only per-window rules are
+    capped at 20 (`--verify-config`: `decoration = { rounding = 26 }` config ok; the rule: "value 26 is more than the
+    maximum of 20"). F2a sets the global 26 and gives every class that is not `org.grassfield.*` the radius 12 with a
+    negated whole-class rule (`negative:^org\.grassfield\..*$`; 12 is under the cap), measured getprop 26 / 12.
+    Tagged unified-toolbar windows get 26 the same way: the 12 rule must exclude them too (by tag or class), no
+    rule may raise a window above 20.
 - **Status:** accepted with these decisions. Next slices, in order:
   1. plugin parity: the tag rule, `requestMove` un-zoom, the minimize bridge for tagged windows, C2 behaviour;
   2. the grassfield-ui `WindowControls` / `UnifiedToolbar` components;

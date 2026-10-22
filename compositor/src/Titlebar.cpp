@@ -10,16 +10,21 @@
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/state/WindowState.hpp>
+#include <hyprland/src/desktop/view/WLSurface.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
+#include <hyprland/src/protocols/XDGShell.hpp>
+#include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/decorations/DecorationPositioner.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
 
+#include <drm_fourcc.h>
 #include <linux/input-event-codes.h>
 
 #include <algorithm>
@@ -58,6 +63,8 @@ namespace {
     struct SPointerInput {
         SPointerGrab                      grab;
         gf::input::CPointerGestureTracker presses;
+        CGrassfieldTitlebar*              hovered = nullptr; // lights under the pointer (glyphs); checked with isLive
+        PHLWINDOWREF                      activeWindow;      // last window reported active (its lights are coloured)
     };
 
     // Constructed on first use, inside a guarded call, so a throwing constructor cannot escape (R13).
@@ -83,15 +90,6 @@ namespace {
         data.roundingPower = roundingPower;
         data.clipBox       = clip;
         g_pHyprRenderer->addPassElement(makeUnique<CRectPassElement>(data));
-    }
-
-    theme::Rgba buttonColor(tb::Button b) {
-        switch (b) {
-            case tb::Button::Close: return theme::kCloseColor;
-            case tb::Button::Minimize: return theme::kMinimizeColor;
-            case tb::Button::Zoom: return theme::kZoomColor;
-        }
-        return theme::kCloseColor;
     }
 
     const char* hitName(tb::HitTarget hit) {
@@ -208,6 +206,49 @@ namespace {
             gf::deferredFocus::focusWindow(w, Desktop::FOCUS_REASON_CLICK);
         logIfFailed("raise", Config::Actions::alterZOrder("top", w));
     }
+
+    // A window drawn where it is, taking input: no overview or Stages transform, no input block. Only such a window
+    // shows hover glyphs (a transformed window is drawn away from where the pointer hovers its real lights).
+    bool drawnInPlace(const PHLWINDOW& w) {
+        return w && w->m_transformers.empty() && !w->isInputBlocked();
+    }
+
+    // The titlebar whose lights are under the pointer, on the topmost window there. Plain geometry over Hyprland's window
+    // list, walked from the top (the stacking order `hyprctl clients` reports): the first mapped window on a visible
+    // workspace whose surface or titlebar contains the pointer decides. Hyprland's hit tester is not used here: calling
+    // CViewHitTester::windowAt from this motion listener cost Qt and GTK4 windows their keyboard enter on a titlebar click
+    // (tests/compositor/click_focus.sh clients, 2026-10-22: 13/15 with it, 15/15 without).
+    CGrassfieldTitlebar* titlebarHoveredAt(const Vector2D& pos) {
+        const auto& all = gf::state().titlebars;
+        if (all.empty() || !Desktop::windowState())
+            return nullptr;
+        const auto& windows = Desktop::windowState()->windows();
+        for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
+            const auto& w = *it;
+            if (!w || !w->m_isMapped || w->isHidden() || !w->m_workspace || !w->m_workspace->isVisible())
+                continue;
+            const auto deco  = std::ranges::find_if(all, [&w](const CGrassfieldTitlebar* d) { return d->window() == w; });
+            const bool onBar = deco != all.end() && (*deco)->barContains(pos);
+            if (!onBar && !w->getWindowMainSurfaceBox().containsPoint(pos))
+                continue; // not under the pointer: a window further down may be
+            return onBar && drawnInPlace(w) && (*deco)->buttonGroupContains(pos) ? *deco : nullptr;
+        }
+        return nullptr;
+    }
+
+    // Pointer motion: the glyphs follow the pointer onto and off the lights. Only the titlebars that change are damaged.
+    void updateHover() {
+        auto& input = pointerInput();
+        auto* now   = g_pInputManager ? titlebarHoveredAt(g_pInputManager->getMouseCoordsInternal()) : nullptr;
+        auto* was   = input.hovered;
+        if (now == was)
+            return;
+        input.hovered = now;
+        if (isLive(was))
+            was->damageEntire();
+        if (now)
+            now->damageEntire();
+    }
 } // namespace
 
 CGrassfieldTitlebar::CGrassfieldTitlebar(const PHLWINDOW& window) : IHyprWindowDecoration(window), m_owner(window) {
@@ -220,6 +261,8 @@ CGrassfieldTitlebar::~CGrassfieldTitlebar() {
     gf::forgetRegisteredDecoration(this);
     gf::guarded("titlebar destructor", [this] {
         auto& input = pointerInput();
+        if (input.hovered == this)
+            input.hovered = nullptr;
         if (input.grab.deco == this) {
             // The window is going away: drop the gesture. The press ownership stays, so the release that
             // will still arrive is not mistaken for a client's (another titlebar under the pointer
@@ -318,6 +361,13 @@ bool CGrassfieldTitlebar::barContains(const Vector2D& pos) const {
     return shouldShow() && layoutBox().containsPoint(pos);
 }
 
+bool CGrassfieldTitlebar::buttonGroupContains(const Vector2D& pos) const {
+    if (!shouldShow())
+        return false;
+    const CBox bar = layoutBox();
+    return tb::overButtonGroup(pos.x - bar.x, pos.y - bar.y, bar.w);
+}
+
 void CGrassfieldTitlebar::damageEntire() {
     gf::guarded("titlebar damageEntire", [this] {
         const auto w = window();
@@ -361,21 +411,30 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     CBox clipBox = bar;
     addRect(bgBox.scale(scale).round(), bgColor, roundPx, power, clipBox.scale(scale).round());
 
-    // 2. Fill the window surface's rounded top corners so bar and content join without notches.
+    // 2. The surface's rounded top corners, under the surface: Hyprland cuts them away with the window's rounding, so the
+    //    bar colour fills them, then the content's own pixels are drawn there unrounded (macOS: bar and content are one
+    //    shape, square where they meet). Where the content is transparent the bar colour stays.
     if (rounding > 0) {
         CBox left{bar.x, bar.y + bar.h, rounding, rounding};
         CBox right{bar.x + bar.w - rounding, bar.y + bar.h, rounding, rounding};
         addRect(left.scale(scale).round(), bgColor, 0, power);
         addRect(right.scale(scale).round(), bgColor, 0, power);
+        drawContentCorners(w, bar, rounding, scale, alpha);
     }
 
-    // 3. Buttons (owner-drawn circles; glyphs on hover are a later M1 slice).
+    // 3. Buttons (owner-drawn circles): coloured on the active window, grey on the others; coloured again with their
+    //    glyphs while the pointer is over the group (macOS). The pointer is checked again here: the window may have moved
+    //    or gone under a pointer that has not moved since.
+    const bool hovered = pointerInput().hovered == this && g_pInputManager && drawnInPlace(w) && buttonGroupContains(g_pInputManager->getMouseCoordsInternal());
+    const bool active  = Desktop::focusState() && Desktop::focusState()->window() == w;
     for (const auto button : tb::kButtonOrder) {
         const auto r = tb::buttonRect(button);
         CBox       box{bar.x + r.x, bar.y + r.y, r.w, r.h};
         box.scale(scale).round();
-        addRect(box, toColor(buttonColor(button), alpha), static_cast<int>(std::round(box.w / 2.0)), 2.F);
+        addRect(box, toColor(tb::lightColor(button, active, hovered), alpha), static_cast<int>(std::round(box.w / 2.0)), 2.F);
     }
+    if (hovered)
+        drawGlyphs(bar, scale, alpha);
 
     // 4. Title, centered on the bar, never over the buttons.
     const int maxWidthPx = static_cast<int>(std::floor(tb::maxTitleWidth(bar.w) * scale));
@@ -405,6 +464,91 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     data.box = CBox{bar.x + placement.x, bar.y + ((bar.h - texH) / 2.0), std::min(texW, placement.maxWidth), texH}.scale(scale).round();
     data.a   = alpha;
     g_pHyprRenderer->addPassElement(makeUnique<CTexPassElement>(data));
+}
+
+void CGrassfieldTitlebar::drawGlyphs(const CBox& bar, float scale, float alpha) {
+    for (size_t i = 0; i < tb::kButtonOrder.size(); ++i) {
+        const auto button = tb::kButtonOrder[i];
+        const auto r      = tb::buttonRect(button);
+        CBox       box{bar.x + r.x, bar.y + r.y, r.w, r.h};
+        box.scale(scale).round(); // the light exactly as drawn above
+        const int sizePx = tb::glyphSizePx(static_cast<int>(std::lround(box.w)));
+        if (sizePx <= 0)
+            continue;
+
+        auto& glyph = m_glyphs[i];
+        if (!glyph.texture || glyph.sizePx != sizePx || glyph.scale != scale) {
+            glyph = {};
+            auto pixels = tb::premultipliedBgra(tb::glyphMask(button, sizePx, theme::kGlyphStroke * theme::kButtonDiameter * scale), theme::kGlyphColor);
+            if (pixels.empty())
+                continue;
+            glyph.texture = g_pHyprRenderer->createTexture(DRM_FORMAT_ARGB8888, pixels.data(), static_cast<uint32_t>(sizePx) * 4U, Vector2D{static_cast<double>(sizePx), static_cast<double>(sizePx)});
+            glyph.sizePx  = sizePx;
+            glyph.scale   = scale;
+        }
+        if (!glyph.texture || !glyph.texture->ok())
+            continue;
+
+        // glyphSizePx keeps the light's parity: the glyph sits centred on whole pixels.
+        CTexPassElement::SRenderData data;
+        data.tex = glyph.texture;
+        data.box = CBox{box.x + std::floor((box.w - sizePx) / 2.0), box.y + std::floor((box.h - sizePx) / 2.0), static_cast<double>(sizePx), static_cast<double>(sizePx)};
+        data.a   = alpha;
+        g_pHyprRenderer->addPassElement(makeUnique<CTexPassElement>(data));
+    }
+}
+
+void CGrassfieldTitlebar::drawContentCorners(const PHLWINDOW& w, const CBox& bar, double rounding, float scale, float alpha) {
+    // Only where the surface's texture maps 1:1 onto its box: no overview or Stages transform, no buffer transform, no
+    // viewport crop. Elsewhere the bar colour drawn before stays (the former look).
+    if (!drawnInPlace(w))
+        return;
+    const auto view    = w->wlSurface();
+    const auto surface = view ? view->resource() : nullptr;
+    if (!surface)
+        return;
+    const auto& state = surface->m_current;
+    if (!state.texture || !state.texture->ok() || state.transform != WL_OUTPUT_TRANSFORM_NORMAL || state.viewport.hasSource)
+        return;
+    // The window's box (right below the bar) is its xdg geometry; the texture starts at the surface's origin, the
+    // geometry's offset up-left of it (client-side shadows). XWayland surfaces have no offset.
+    Vector2D origin{0.0, 0.0};
+    if (!w->m_isX11) {
+        const auto xdg = w->m_xdgSurface.lock();
+        if (!xdg)
+            return;
+        origin = xdg->m_current.geometry.pos();
+    }
+    const tb::Rect texture{.x = bar.x - origin.x, .y = bar.y + bar.h - origin.y, .w = state.size.x, .h = state.size.y};
+    const auto     patch = tb::contentCornerPatch(tb::Rect{.x = bar.x, .y = bar.y, .w = bar.w, .h = bar.h}, rounding, texture);
+    if (!patch.valid)
+        return;
+
+    CBox texBox{texture.x, texture.y, texture.w, texture.h};
+    texBox.scale(scale).round();
+    for (const auto& square : {patch.left, patch.right}) {
+        CBox clip{square.x, square.y, square.w, square.h};
+        CTexPassElement::SRenderData data;
+        data.tex     = state.texture;
+        data.box     = texBox;
+        data.clipBox = clip.scale(scale).round();
+        data.a       = alpha;
+        g_pHyprRenderer->addPassElement(makeUnique<CTexPassElement>(data));
+    }
+}
+
+void CGrassfieldTitlebar::onActiveWindowChanged(const PHLWINDOW& window) {
+    gf::guarded("titlebar onActiveWindowChanged", [&] {
+        // Grey or coloured lights: the titlebars of the window that lost the focus and of the one that got it.
+        auto&      input    = pointerInput();
+        const auto previous = input.activeWindow.lock();
+        input.activeWindow  = window;
+        for (auto* deco : gf::state().titlebars) {
+            const auto w = deco->window();
+            if (w && (w == window || w == previous))
+                deco->damageEntire();
+        }
+    });
 }
 
 bool CGrassfieldTitlebar::onInputOnDeco(const eInputType type, const Vector2D& coords, std::any data) {
@@ -549,6 +693,7 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
 }
 
 void CGrassfieldTitlebar::onGlobalMouseMove() {
+    gf::guarded("titlebar hover", [] { updateHover(); });
     gf::guarded("titlebar onGlobalMouseMove", [] {
         auto& input = pointerInput();
         if (!input.presses.gestureButton())
@@ -568,8 +713,10 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
 
 void CGrassfieldTitlebar::cancelPointerGrab() {
     gf::guarded("titlebar cancelPointerGrab", [] {
-        auto& input = pointerInput();
-        input.grab  = {};
+        auto& input        = pointerInput();
+        input.grab         = {};
+        input.hovered      = nullptr;
+        input.activeWindow = {};
         input.presses.reset();
     });
 }

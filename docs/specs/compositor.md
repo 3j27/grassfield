@@ -11,15 +11,19 @@ refresh for the pointer size (feature `cursor-refresh`, FR39-FR40, ADR-0014); th
 `overview-focus`, FR41-FR43, owner decision 2026-10-19 batch 5; its deferred-focus core shared with Stages); click focus
 for Hyprland's focused window without the keyboard (FR30 (d)) and the keyboard back after an unlock (FR30 (e)), plugin
 0.8.2-clickfocus; the funnel minimize effect (internal name Genie), the shrink effect and the Reduce Motion fade (feature `minimize-effect`,
-FR44-FR46, Track B3, owner defect #6). Plugin 0.9.0-genie.
+FR44-FR46, Track B3, owner defect #6), plugin 0.9.0-genie; the macOS 26 titlebar (F2a: 32-px bar, 14-px lights,
+hover glyphs, grey lights on inactive windows, square bar/content join, FR3-FR4c). Plugin 0.10.0-chrome.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
 
-- Every standard window has a titlebar strip about 28 pt tall that is part of the window: same corner
+- Every standard window has a titlebar strip about 32 pt tall that is part of the window: same corner
   radius as the window at the top, square joint with the content, one continuous outline and shadow.
-- Three circular buttons on the left, 12 pt diameter, evenly spaced (8 pt gaps), vertically centered:
-  close, minimize, zoom. Glyphs appear on hover; inactive windows show grey buttons.
+  Titlebar-only windows have a corner radius of about 13 pt; toolbar windows about 26 pt
+  (docs/testing/f1-reference-gaps.md, "Window chrome").
+- Three circular buttons on the left, 14 pt diameter, evenly spaced (9 pt gaps, 23 pt pitch), the first centre
+  about 15.6 pt from the window's left and top edges, vertically centered: close, minimize, zoom. Glyphs appear on
+  hover; inactive windows show grey buttons.
 - The window title is centered on the full titlebar width in semibold system text, never overlapping the
   buttons, truncated with an ellipsis when too long.
 - Dragging the titlebar moves the window; double-clicking it performs the user's chosen action (default: zoom).
@@ -38,9 +42,8 @@ macOS-like titlebars on floating windows, and that the shell can discover the pl
 IPC under Hyprland's Lua config (input for ADR-0007). M2: real minimize with an animation toward the Dock
 tile rectangle the shell sends (ADR-0002), and the user's double-click setting.
 
-Non-goals: hover glyphs and inactive-state
-buttons, appearance switching, tiled windows, CSD negotiation; for the overview: the layout, labels, Desktops bar and
-input (the shell), transforming popups; for appmenu: reading or
+Non-goals: the pressed-button state, appearance switching, tiled windows, CSD negotiation; for the overview: the
+layout, labels, Desktops bar and input (the shell), transforming popups; for appmenu: reading or
 rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B, ADR-0008), the
 `com.canonical.AppMenu.Registrar` service, X11 (XWayland) menus.
 
@@ -49,14 +52,32 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 - **FR1** The plugin refuses to hook anything when `__hyprland_api_get_hash()` differs from
   `__hyprland_api_get_client_hash()`, logs the mismatch and shows one notification.
 - **FR2** Every mapped floating window (not full screen, `decorate` rule not false, not X11
-  override-redirect) gets a titlebar decoration 28 px (logical) tall above its content; tiled and
+  override-redirect) gets a titlebar decoration 32 px (logical) tall above its content; tiled and
   full-screen windows get none (zero extents).
 - **FR3** The titlebar background uses the window's corner radius and rounding power on its top corners,
-  is square at the bottom, and fills the content's rounded top corners; the window border and shadow
-  wrap titlebar + content.
-- **FR4** Close, minimize, zoom buttons: 12 px circles, 8 px gaps, first one 12 px from the left edge,
-  vertically centered; colors from `compositor/src/core/Theme.hpp` (close `#E5534B`, minimize `#D9A93B`,
+  is square at the bottom, and the bar and the content join square (macOS: one shape, no curve where they meet);
+  the window border and shadow wrap titlebar + content. Hyprland 0.56.2 rounds the surface's four corners with one
+  radius, so under the surface the plugin fills the two cut top corners with the bar colour, then draws the content's
+  own texture there, unrounded, clipped to the two corner squares. That texture is drawn only where it maps 1:1 onto
+  the surface box (no overview or Stages transform, no buffer transform, no viewport crop, the squares inside the
+  texture); otherwise the bar colour stays. Known limits (R13 of F2a, 2026-10-22): XWayland windows keep a thin 1-px
+  arc at the join (radius 12 and 26, scale 1 and 2; the patch is drawn, the anti-aliased edge of the rounded surface
+  still blends with what is behind it, cause not proven); a translucent window (foot at alpha 0.5) shows lighter
+  corner squares and the curve (before F2a: dark squares).
+- **FR4** Close, minimize, zoom buttons: 14 px circles, 9 px gaps (23 px pitch), first one 9 px from the left
+  edge (centres at x 16, 39, 62), vertically centered (y 16); each is hit inside its circle grown by 1/6 of the
+  diameter (2.33 px), and the gaps between the buttons stay drag area; colors from `compositor/src/core/Theme.hpp` (close `#E5534B`, minimize `#D9A93B`,
   zoom `#4FA64F`; background dark `rgba(40,40,44,1)` / light `rgba(236,236,238,1)`, dark in S2).
+- **FR4b** Hover glyphs (macOS): while the pointer is over the group of lights (the box of the three hit circles,
+  gaps included) of the topmost window under it, all three lights show their glyph: × close, − minimize, + zoom (the
+  zoom action; macOS shows + for zoom and arrows for full screen). Glyph box 0.55 of the diameter (8 px at scale 1,
+  centred on whole pixels at every scale), strokes 0.12 of the diameter with round caps, black at 50 % over the
+  light; active and inactive windows alike. A window drawn by the overview or Stages, or whose input is blocked,
+  shows none. Only the titlebars whose hover state changes are damaged.
+- **FR4c** Inactive windows (macOS): the lights of every window but Hyprland's focused one are grey
+  (`titlebarPalette().inactiveLight`, own values: dark `#5A5A5E`, light `#D1D1D3`; the light reference samples about
+  `#D4D4D4`); with the pointer over the group (FR4b) they take their colours and glyphs. A focus change damages the
+  titlebars of the window that lost the focus and of the one that got it.
 - **FR5** The title is centered on the bar and kept at least 8 px clear of the buttons (symmetric margins);
   it is limited to the remaining width.
 - **FR6** A left press on a button arms it; releasing over the same button activates it: close → close the
@@ -425,8 +446,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 |---|---|---|---|
 | FR1 | Code review of `PLUGIN_INIT`; scripted mismatch test (C2) | L0 / L1 | match path verified (log); mismatch path NOT VERIFIED |
 | FR2 | nested: open foot → screenshot | L1 | verified (floating); tiled/full-screen hiding NOT VERIFIED |
-| FR3 | nested screenshot, corner crops | L1 | verified at scale 1 (see limitations) |
-| FR4 | unit `TitlebarLayout.*`, `Theme.*`; screenshot | L0 / L1 | verified |
+| FR3 | unit `ContentCornerPatch.*`; nested `tests/compositor/chrome.sh` (junction count, 4x corner crops) | L0 / L1 | 2026-10-22, Hyprland 0.56.2: pixels of the cut top corners that differ from the content 0 / 0 for foot (radius 12) and Settings (radius 26); before the content-texture corners 21 and 98 per corner (`.dev/chrome/run-20261022-101750` vs `run-20261022-133902`) |
+| FR4 | unit `TitlebarLayout.*`, `Theme.*`; nested `tests/compositor/chrome.sh` (lights, bar, corners measured on GF-REF captures) | L0 / L1 | verified; F2a geometry (32-px bar, 14-px lights, 23-px pitch, first centre (16, 16); radius 26 for org.grassfield.* (global decoration.rounding), 12 otherwise (rule gf-third-party-rounding)) 2026-10-22, Hyprland 0.56.2: `chrome.sh` PASS (lights within 0.05 px of their centres, 13.9 px across; 32 rows; getprop rounding 12 / 26; corner insets 4 px (radius 12) and 8 px (radius 26), the titlebar's top corners with them; C2 without the plugin: the same radii) |
+| FR4b | unit `ButtonGroup.*`, `GlyphSize.*`, `GlyphMask.*`; nested `tests/compositor/chrome.sh` | L0 / L1 | 2026-10-22: glyphs on all three lights with the pointer between two lights (active window, inactive window, Settings), none with the pointer away |
+| FR4c | unit `LightColor.*`; nested `tests/compositor/chrome.sh` | L0 / L1 | 2026-10-22: inactive foot 148 grey px per light and no glyph; coloured with glyphs while the pointer is on its lights; the active windows coloured |
 | FR5 | unit `TitlebarLayout.Title*`; screenshot with long and short titles | L0 / L1 | verified |
 | FR6 | nested: virtual pointer clicks on close / zoom / minimize; press on close + release elsewhere; `tests/compositor/minimize.sh` | L1 | verified (close closed the window; zoom toggled `fullscreen` 0↔1; cancel kept the window). Minimize (2026-10-17): the button posted `minimize-request`, the shell answered with `hl.plugin.grassfield.minimize`, the window went to `special:minimized` (see FR14) |
 | FR7 | nested: virtual pointer drag, window position before/after; abandoned drag (pointer tool exits after `down drag`, its device is destroyed) then move and click elsewhere with a new pointer | L1 | verified: press (500,186) → release (600,286) moved the window (370,200) → (470,300), cursor not warped. Abandoned drag (2026-10-17): before the fix the window followed the unpressed pointer and jumped to the next click; after it the window stays where the drag left it, the next click lands on the desktop, log `titlebar gesture cancelled: no button held or a pointer device went away` |
@@ -653,7 +676,7 @@ Chosen in Hyprland 0.56.2 after reading its headers and the v0.56.2 sources of `
   schedules the next frames; a 450 ms event-loop timer completes animations if no monitor renders.
 - **Rejected: animating the window's own `m_realPosition`/`m_realSize` (`PHLANIMVAR`).** Their begin callback
   calls `sendWindowSize` (v0.56.2 `CWindow` map code), so the client would be configured to every
-  intermediate size, the titlebar (fixed 28 px) would not scale, and the layout would fight the animation.
+  intermediate size, the titlebar (fixed height) would not scale, and the layout would fight the animation.
 - **Rejected: a custom `Desktop::IFadeout` added to `fadingOutState()`.** It would render in Hyprland's own
   planes, but Hyprland would then hold objects whose vtable lives in the plugin: unloading safely needs
   `clear()` (drops Hyprland's own fadeouts) or relying on `cleanupForMonitor`; the plugin-owned pass element
@@ -1047,6 +1070,7 @@ Manual (L1, nested only):
 
 ## Known limitations (honest, user-visible gaps vs macOS)
 
+- Titlebar join (FR3): a thin 1-px arc remains on XWayland windows and translucent windows show lighter corner squares.
 - Stages (prototype behind a flag): limits and risks in `docs/specs/stages.md` "Known limitations and risks".
 - Overview close focus (`overview-focus`): the shell sends it on every close (`Overview.closeAnd`) and keeps its own
   checked focus path without the capability. Keys typed before the last chrome released still reach that chrome (lost,
@@ -1078,9 +1102,11 @@ Manual (L1, nested only):
 - Titlebar drags don't snap to screen edges or other windows (SUPER+drag still does).
 - Client-side-decorated apps that ignore the server-side decoration request get a second titlebar.
 - Long titles are clamped to the available width by Hyprland's text renderer; ellipsis behaviour depends on it.
-- The content's rounded top corners are filled with the titlebar color; with `rounding_power` 2.6 a small
-  corner curve of the content stays visible instead of a perfectly square joint.
-- The titlebar sits above the client's requested position, so a centered window's titlebar extends 28 px
+- The square join (FR3) redraws the content's texture under the surface in the two corner squares. Translucent
+  content is drawn twice in the part of each square inside the corner curve (slightly more opaque there); windows
+  whose texture does not map 1:1 (viewport crop, buffer transform) or whose corners are subsurfaces keep the
+  bar-coloured curve.
+- The titlebar sits above the client's requested position, so a centered window's titlebar extends 32 px
   above the centered area.
 - Fractional scaling: geometry is scaled by the monitor scale but only scale 1 was tested.
 - Runtime unload through `scripts/nestctl` is exercised by `tests/compositor/overview.sh` (unload during an open

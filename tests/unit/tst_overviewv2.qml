@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import Grassfield.Ui
 import "../../shell/overview/V2.js" as V2
 import "../../shell/platform/FocusReturn.js" as FocusReturn
 import "../../shell/overview/Layout.js" as Layout
@@ -93,28 +94,34 @@ TestCase {
 
     // ---- layout coordinates ----
 
+    function test_theBandIsThePluginTitlebar() {
+        compare(Tokens.overviewWindowTitlebarHeight, 32, "grassfield-compositor kTitlebarHeight (compositor/src/core/Theme.hpp)");
+    }
+
     function test_surfaceRectRemovesTheTitlebarBandAndMapsToLayoutCoordinates() {
-        // Window 800x600 at (100, 200) on an output at (1440, 0), chrome below a 24 px menu bar, band 28.
-        const input = V2.layoutInput("a", 100, 200, 800, 600, 28);
-        compare(input.y, 172);
-        compare(input.h, 628);
-        const rect = {id: "a", x: 300, y: 100, w: 400, h: 314};   // scale 0.5: 628 * 0.5 = 314
-        const s = V2.surfaceRect(rect, 800, 28, 1440, 0, 24);
+        // Window 800x600 at (100, 200) on an output at (1440, 0), chrome below a 24 px menu bar, the plugin's band.
+        const band = Tokens.overviewWindowTitlebarHeight;
+        const input = V2.layoutInput("a", 100, 200, 800, 600, band);
+        compare(input.y, 200 - band);
+        compare(input.h, 600 + band);
+        const rect = {id: "a", x: 300, y: 100, w: 400, h: (600 + band) / 2};   // scale 0.5
+        const s = V2.surfaceRect(rect, 800, band, 1440, 0, 24);
         compare(s.x, 1740);
-        compare(s.y, 24 + 100 + 14);
+        compare(s.y, 24 + 100 + band / 2);
         compare(s.w, 400);
         compare(s.h, 300);
     }
 
     function test_theBandKeepsEveryLaidOutSurfaceInsideTheArea() {
+        const band = Tokens.overviewWindowTitlebarHeight;
         const area = {x: 32, y: 160, w: 1856, h: 800};
         const input = [];
         for (let i = 0; i < 6; i++)
-            input.push(V2.layoutInput("w" + i, 200 + i * 40, 150 + i * 30, 700, 500, 28));
+            input.push(V2.layoutInput("w" + i, 200 + i * 40, 150 + i * 30, 700, 500, band));
         const res = Layout.layout(input, area, {maxScale: 0.8, gap: 24});
         for (const r of res.rects) {
-            const s = V2.surfaceRect(r, 700, 28, 0, 0, 0);
-            verify(s.y - 28 * (r.w / 700) >= area.y - 1e-6, "titlebar band stays inside the area");
+            const s = V2.surfaceRect(r, 700, band, 0, 0, 0);
+            verify(s.y - band * (r.w / 700) >= area.y - 1e-6, "titlebar band stays inside the area");
             verify(s.y + s.h <= area.y + area.h + 1e-6);
             verify(Math.abs(s.w / s.h - 700 / 500) < 1e-6, "aspect ratio of the window is kept");
         }
