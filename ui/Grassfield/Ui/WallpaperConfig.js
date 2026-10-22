@@ -661,3 +661,31 @@ function picturesRoot(env) {
         return env.picturesDir ? env.picturesDir : env.repoRoot + "/.dev/wallpapers";
     return env.picturesDir ? env.picturesDir : env.home + "/Pictures";
 }
+
+// ---- the attribution's links (CC BY 4.0 section 3(a)(1)(C) wants the licence name with its URI or a link) ----
+
+// Characters that draw nothing or reorder text: controls, soft hyphen, fillers, bidi, zero-width, variation selectors, specials.
+const HIDDEN = /[\u0000-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u2028-\u202e\u2060-\u206f\u2800\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffd]/;
+
+// The address a link may open: https, no white space and no hidden character, at most 2048 characters; "" otherwise. The helper
+// already refuses anything else; this is the second check at the point where the address becomes a command argument.
+function linkOf(url) {
+    if (typeof url !== "string" || url.length === 0 || url.length > 2048)
+        return "";
+    if (!/^https:\/\/[^\s\/]+/.test(url) || /\s/.test(url) || HIDDEN.test(url))
+        return "";
+    return url;
+}
+
+// An address for reading: no scheme, percent-escapes decoded ("File%3AX%20y.jpg" reads "File:X y.jpg"). When decoding fails or
+// would produce a hidden or reordering character (%0A, %E2%80%AE), the address stays as it was written.
+function displayUrl(url) {
+    const bare = (typeof url === "string" ? url : "").replace(/^https?:\/\//, "");
+    let decoded = bare;
+    try {
+        decoded = decodeURIComponent(bare);
+    } catch (e) {
+        return bare;
+    }
+    return HIDDEN.test(decoded) ? bare : decoded;
+}

@@ -113,9 +113,18 @@ SettingsPage {
         return isNaN(d.getTime()) ? "" : Qt.locale().toString(d, Locale.ShortFormat);
     }
 
-    // The source page without its scheme: shown as text, never opened from here.
+    // The source page as it reads: no scheme, percent-escapes decoded (WallpaperConfig.displayUrl).
     function sourceText(url: string): string {
-        return (url || "").replace(/^https?:\/\//, "");
+        return WallpaperConfig.displayUrl(url);
+    }
+
+    // The licence name and the source page are links (CC BY 4.0 section 3(a)(1)(C)): a click or Return opens a clean https
+    // address with xdg-open through the backend's guarded action path (an argument vector, never a shell string; a dev
+    // session suppresses it). The page itself never touches the network.
+    function openLink(url: string): void {
+        const u = WallpaperConfig.linkOf(url);
+        if (u !== "")
+            root.backend.act(qsTr("Open a link"), ["xdg-open", u], "wallpaper.link");
     }
 
     readonly property string headline: {
@@ -604,15 +613,36 @@ SettingsPage {
         }
 
         SettingsRow {
+            id: sourceRow
+            readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.sourceUrl) : ""
             title: qsTr("Source")
-            subtitle: root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
-            valueText: qsTr("Wikimedia Commons")
+            subtitle: sourceRow.link === "" && root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
+            valueText: sourceRow.link === "" ? qsTr("Wikimedia Commons") : ""
+
+            LinkText {
+                visible: sourceRow.link !== ""
+                width: Math.min(implicitWidth, sourceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
+                text: root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
+                target: sourceRow.link
+                maximumLineCount: 3
+                onActivated: root.openLink(sourceRow.link)
+            }
         }
 
         SettingsRow {
+            id: licenceRow
+            readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.licenseUrl) : ""
             visible: !!(root.onlineEntry && root.onlineEntry.licenseShort)
             title: qsTr("Licence")
-            valueText: root.onlineEntry ? root.onlineEntry.licenseShort : ""
+            valueText: licenceRow.link === "" && root.onlineEntry ? root.onlineEntry.licenseShort : ""
+
+            LinkText {
+                visible: licenceRow.link !== ""
+                width: Math.min(implicitWidth, licenceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
+                text: root.onlineEntry ? root.onlineEntry.licenseShort : ""
+                target: licenceRow.link
+                onActivated: root.openLink(licenceRow.link)
+            }
         }
 
         SettingsRow {

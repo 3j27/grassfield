@@ -5,7 +5,9 @@ import qs.services
 
 // "About This Wallpaper": the attribution of the online daily picture (Title, Author, Source, Licence, Last updated), on the
 // frosted material, opened from the desktop menu. Everything shown comes from the helper's sanitized sidecar and is drawn as
-// plain text (never rich text, never a link that opens by itself). Return, Space, Esc and the button close it.
+// plain text (never rich text). The licence name links to the licence and the file page to its source (CC BY 4.0 section
+// 3(a)(1)(C)): a link opens only on a click or Return, only an https address (WallpaperConfig.linkOf), as an argument vector
+// through Apps.openDetached. Return, Space, Esc and the button close the card (a focused link opens instead).
 FocusScope {
     id: root
 
@@ -25,8 +27,11 @@ FocusScope {
         return isNaN(d.getTime()) ? "" : Qt.locale().toString(d, Locale.ShortFormat);
     }
 
-    // The source page without its scheme ("commons.wikimedia.org/wiki/File:..."): shown as text, never opened from here.
-    readonly property string sourceText: (root.entry.sourceUrl || "").replace(/^https?:\/\//, "")
+    // The file page as it reads ("commons.wikimedia.org/wiki/File:Name.jpg": no scheme, percent-escapes decoded) and the
+    // addresses the two links may open ("" when the address is not a clean https one: the text is then not a link).
+    readonly property string sourceText: WallpaperConfig.displayUrl(root.entry.sourceUrl)
+    readonly property string sourceLink: WallpaperConfig.linkOf(root.entry.sourceUrl)
+    readonly property string licenceLink: WallpaperConfig.linkOf(root.entry.licenseUrl)
 
     readonly property string authorLabel: qsTr("Author")
     readonly property string sourceLabel: qsTr("Source")
@@ -34,12 +39,20 @@ FocusScope {
     readonly property string updatedLabel: qsTr("Last updated")
     readonly property string commonsName: qsTr("Wikimedia Commons")
 
+    // {label, value (plain), linkText + url (a link)}.
     readonly property var rows: [
-        {label: root.authorLabel, value: root.entry.author || root.entry.credit || ""},
-        {label: root.sourceLabel, value: root.sourceText !== "" ? root.commonsName + "\n" + root.sourceText : root.commonsName},
-        {label: root.licenceLabel, value: root.entry.licenseShort || ""},
-        {label: root.updatedLabel, value: root.updated}
-    ].filter(r => r.value !== "")
+        {label: root.authorLabel, value: root.entry.author || root.entry.credit || "", linkText: "", url: ""},
+        root.sourceLink !== "" ? {label: root.sourceLabel, value: root.commonsName, linkText: root.sourceText, url: root.sourceLink} : {label: root.sourceLabel, value: root.sourceText !== "" ? root.commonsName + "\n" + root.sourceText : root.commonsName, linkText: "", url: ""},
+        root.licenceLink !== "" && (root.entry.licenseShort || "") !== "" ? {label: root.licenceLabel, value: "", linkText: root.entry.licenseShort, url: root.licenceLink} : {label: root.licenceLabel, value: root.entry.licenseShort || "", linkText: "", url: ""},
+        {label: root.updatedLabel, value: root.updated, linkText: "", url: ""}
+    ].filter(r => r.value !== "" || r.linkText !== "")
+
+    function openLink(url: string): void {
+        if (WallpaperConfig.linkOf(url) === "")
+            return;
+        Apps.openDetached(["xdg-open", url]);
+        root.closeRequested();
+    }
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
@@ -99,7 +112,7 @@ FocusScope {
                 width: content.width
                 spacing: 0
                 Accessible.role: Accessible.StaticText
-                Accessible.name: row.modelData.label + ": " + row.modelData.value
+                Accessible.name: row.modelData.label + ": " + (row.modelData.value !== "" ? row.modelData.value + " " : "") + row.modelData.linkText
 
                 Text {
                     width: parent.width
@@ -111,6 +124,7 @@ FocusScope {
                 }
 
                 Text {
+                    visible: row.modelData.value !== ""
                     width: parent.width
                     textFormat: Text.PlainText
                     wrapMode: Text.WrapAnywhere
@@ -120,6 +134,14 @@ FocusScope {
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
+                }
+
+                LinkText {
+                    visible: row.modelData.url !== ""
+                    width: parent.width
+                    text: row.modelData.linkText
+                    target: row.modelData.url
+                    onActivated: root.openLink(row.modelData.url)
                 }
             }
         }

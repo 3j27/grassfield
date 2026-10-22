@@ -147,7 +147,7 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx)
 
 bool isActionProgram(const QString &program)
 {
-    return program == QLatin1String("nmcli") || program == QLatin1String("bluetoothctl") || program == QLatin1String("wpctl");
+    return program == QLatin1String("nmcli") || program == QLatin1String("bluetoothctl") || program == QLatin1String("wpctl") || program == QLatin1String("xdg-open");
 }
 
 } // namespace grassfield::settings

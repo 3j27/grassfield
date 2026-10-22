@@ -4431,6 +4431,10 @@
         <translation>Le fond d’écran ne peut pas être affiché.</translation>
     </message>
     <message>
+        <source>Open a link</source>
+        <translation>Ouvrir un lien</translation>
+    </message>
+    <message>
         <source>Grassfield</source>
         <translation>Grassfield</translation>
     </message>

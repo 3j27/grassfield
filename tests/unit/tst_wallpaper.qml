@@ -597,4 +597,24 @@ TestCase {
         compare(WallpaperConfig.onlineStateOf({failures: 99}).failures, 3);
         compare(WallpaperConfig.onlineStateOf({done: "2026-10-22"}).done, "2026-10-22");
     }
+
+    function test_attributionLinks() {
+        // Only an https address opens, and only a clean one.
+        compare(WallpaperConfig.linkOf("https://creativecommons.org/licenses/by-sa/4.0"), "https://creativecommons.org/licenses/by-sa/4.0");
+        for (const bad of ["", null, 5, "http://creativecommons.org/x", "javascript:alert(1)", "file:///etc/passwd", "-x", "https://", "https:///x", "https://a b/c", "https://a/b\nc", "https://a/b" + String.fromCharCode(0x202e) + "c", "https://a/" + String.fromCharCode(0x3164), "ftp://a/b"])
+            compare(WallpaperConfig.linkOf(bad), "", String(bad));
+        compare(WallpaperConfig.linkOf("https://a.org/" + "x".repeat(2100)), "");
+    }
+
+    function test_displayAddress() {
+        compare(WallpaperConfig.displayUrl("https://commons.wikimedia.org/wiki/File%3AMount_Fuji%2C_%E5%AF%8C%E5%A3%AB.jpg"), "commons.wikimedia.org/wiki/File:Mount_Fuji,_" + String.fromCharCode(0x5bcc, 0x58eb) + ".jpg");
+        compare(WallpaperConfig.displayUrl("https://a.org/x%20y"), "a.org/x y");
+        compare(WallpaperConfig.displayUrl("https://commons.wikimedia.org/wiki/File:A.jpg"), "commons.wikimedia.org/wiki/File:A.jpg");
+        // A bad escape, or one that would hide or reorder text, stays as written.
+        compare(WallpaperConfig.displayUrl("https://a.org/%E0%A4%A"), "a.org/%E0%A4%A");
+        compare(WallpaperConfig.displayUrl("https://a.org/x%0Ay"), "a.org/x%0Ay");
+        compare(WallpaperConfig.displayUrl("https://a.org/x%E2%80%AEy"), "a.org/x%E2%80%AEy");
+        compare(WallpaperConfig.displayUrl("https://a.org/x%E3%85%A4y"), "a.org/x%E3%85%A4y");
+        compare(WallpaperConfig.displayUrl(undefined), "");
+    }
 }
