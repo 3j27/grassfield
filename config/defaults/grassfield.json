@@ -21,6 +21,8 @@
     "recent": [],
     "showRecents": true,
     "minimizeIntoApp": false,
+    "animateOpening": true,
+    "showIndicators": true,
     "minimizeEffect": "funnel"
   },
   "windows": {

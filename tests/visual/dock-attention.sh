@@ -7,6 +7,7 @@
 #            focused app's icon does not; focusing a window of the app stops it (settled line, lift back to 0)
 #   focused  BEL from the window that has the focus: no bounce (nothing is logged as a bounce)
 #   autohide an auto-hidden Dock comes out for a moment (dock.attentionReveal) and hides again afterwards
+#   toggle   IPC dock toggleAutohide flips auto-hide (Option-Command-D equivalent)
 #   reduced  Reduce Motion on: no hop (no lift line), the tile is still marked (screenshot crop attention-reduced.png)
 # Run as a BARE command (reference machine only). The nested session this script starts is torn down on exit.
 #   tests/visual/dock-attention.sh [part ...]     all parts by default
@@ -27,7 +28,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 parts=("$@")
-(( ${#parts[@]} )) || parts=(bounce focused autohide reduced)
+(( ${#parts[@]} )) || parts=(bounce focused autohide toggle reduced)
 want() { local p; for p in "${parts[@]}"; do [[ $p == "$1" ]] && return 0; done; return 1; }
 
 mkdir -p "$out"
@@ -129,6 +130,21 @@ if want autohide; then
   echo "later: $s" >> "$out/autohide.log"
   [[ $s == hid* ]]; check "autohide: the Dock went away again after attentionReveal ($s)" $?
   vs_ipc dock autohide false >/dev/null
+fi
+
+# IPC `dock toggleAutohide` (Option-Command-D): not fixtures-gated, flips dock.autohide each call.
+if want toggle; then
+  stop_all
+  vs_ipc dock autohide false >/dev/null
+  sleep 1
+  vs_ipc dock toggleAutohide >/dev/null
+  sleep 2.5
+  s=$(vs_ipc dock hidestate "$VS_OUTPUT")
+  [[ $s == hidden* ]]; check "toggle: toggleAutohide turned hiding on, the Dock hides ($s)" $?
+  vs_ipc dock toggleAutohide >/dev/null
+  sleep 1.5
+  s=$(vs_ipc dock hidestate "$VS_OUTPUT")
+  [[ $s == shown* ]]; check "toggle: a second toggleAutohide turned it off, the Dock is shown ($s)" $?
 fi
 
 if want reduced; then

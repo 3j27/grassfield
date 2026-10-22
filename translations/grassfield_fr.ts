@@ -1729,6 +1729,22 @@
         <translation>Désactivé : chaque fenêtre réduite a sa propre icône près de la Corbeille.</translation>
     </message>
     <message>
+        <source>Animate opening applications</source>
+        <translation>Animer l’ouverture des applications</translation>
+    </message>
+    <message>
+        <source>The icon bounces while an application opens.</source>
+        <translation>L’icône rebondit pendant l’ouverture d’une application.</translation>
+    </message>
+    <message>
+        <source>Show indicators for open applications</source>
+        <translation>Afficher les indicateurs des applications ouvertes</translation>
+    </message>
+    <message>
+        <source>A small dot under the icon of each open application.</source>
+        <translation>Un petit point sous l’icône de chaque application ouverte.</translation>
+    </message>
+    <message>
         <source>Menu Bar</source>
         <translation>Barre des menus</translation>
     </message>

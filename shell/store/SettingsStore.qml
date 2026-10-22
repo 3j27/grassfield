@@ -118,6 +118,10 @@ Scope {
         property bool showRecents: true
         // Minimized windows go into their app's tile instead of getting a tile of their own.
         property bool minimizeIntoApp: false
+        // "Animate opening applications": the launch bounce (macOS). Attention bounces are not part of it.
+        property bool animateOpening: true
+        // "Show indicators for open applications": the running dot under apps (macOS).
+        property bool showIndicators: true
         // "Minimize animation": funnel (the default) | shrink. The compositor plugin draws it.
         property string minimizeEffect: "funnel"
     }

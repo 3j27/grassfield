@@ -41,6 +41,8 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.recent` | string[] (desktop entry ids, newest first, at most `dock.recentMax` 3) | `[]` (owned by the Dock; written only when the list changes) | Dock |
 | `dock.showRecents` | bool | true | Dock, Settings |
 | `dock.minimizeIntoApp` | bool | false | Dock, Settings |
+| `dock.animateOpening` | bool | true | Dock, Settings |
+| `dock.showIndicators` | bool | true | Dock, Settings |
 | `dock.minimizeEffect` | `"funnel"` \| `"shrink"` | `"funnel"` | Settings ("Minimize animation": "Funnel" \| "Shrink"); the shell pushes it to the compositor plugin (`hl.plugin.grassfield.config("minimizeEffect", …)`, feature `minimize-effect`), `"fade"` instead while `accessibility.reduceMotion` is true; without the plugin minimize has no animation |
 | `notifications.dnd` | bool | false | Notifications (banners suppressed except critical), menu bar moon |
 | `notifications.previews` | `"always"` \| `"unlocked"` \| `"never"` | `"unlocked"` | Notifications (`never` hides bodies) |

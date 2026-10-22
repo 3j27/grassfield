@@ -517,6 +517,11 @@ Scope {
             root.testReveal = on;
         }
 
+        // Option-Command-D (macOS): turns Dock hiding on or off. The integrator binds a key to it (config/hypr); not fixtures-gated.
+        function toggleAutohide(): void {
+            Settings.setDockAutohide(!Settings.dockAutohide);
+        }
+
         function autohide(on: bool): void {
             if (!VisualFixtures.active)
                 return;
@@ -1055,7 +1060,7 @@ Scope {
                                 property real pressTime: 0
                                 // root.dragInterruptions when the button went down (a drag of this press is refused when it changed).
                                 property int dragMark: 0
-                                readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion
+                                readonly property bool bouncing: isApp && !running && root.launching[modelData.key] !== undefined && !Appearance.reduceMotion && Settings.dockAnimateOpening
                                 // An app asking for attention: its icon hops again and again until the app is activated. With Reduce Motion
                                 // it does not move: a static accent plate shows it instead.
                                 readonly property bool attentive: isApp && running && root.attentionKeys.indexOf(modelData.key) >= 0
@@ -1417,7 +1422,7 @@ Scope {
 
                                 // Running indicator.
                                 Rectangle {
-                                    visible: tile.running
+                                    visible: tile.running && Settings.dockShowIndicators
                                     width: Tokens.dockIndicatorSize
                                     height: Tokens.dockIndicatorSize
                                     radius: width / 2
