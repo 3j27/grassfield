@@ -201,11 +201,18 @@ Scope {
 
     // Files on the clipboard (local paths of a text/uri-list), read when the desktop menu opens (refreshClipboard).
     property var clipboardPaths: []
+    // Ctrl+V: paste as soon as the clipboard has been read.
+    property bool pasteAfterRead: false
 
     function refreshClipboard(): void {
         if (clipboardProbe.running)
             return;
         clipboardProbe.running = true;
+    }
+
+    function pasteFromClipboard(): void {
+        pasteAfterRead = true;
+        refreshClipboard();
     }
 
     // Paste Item(s): copies of the clipboard's files on the desktop, under unclaimed names (never overwrites); an item
@@ -289,38 +296,68 @@ Scope {
     }
 
     // Open With ▸ of the selection: the apps that open every selected item, the default handler first (read when the
-    // icon menu opens). `openWithResolved` keeps the real types for the launch.
+    // icon menu opens). `openWithResolved` keeps the real types for the launch. One lookup at a time: a newer selection
+    // waits (only the latest) and an older answer is dropped, never shown for another selection.
     property var openWithApps: []
     property var openWithPaths: []
     property var openWithResolved: ({})
+    property var openWithPending: null
 
     function resolveOpenWith(paths: var): void {
         openWithApps = [];
-        if (paths.length === 0 || paths.length > 32 || typeProbe.running)
+        openWithPaths = [];
+        if (paths.length === 0 || paths.length > 32)
             return;
+        if (typeProbe.running || defaultProbe.running) {
+            openWithPending = paths.slice();
+            return;
+        }
+        startOpenWith(paths);
+    }
+
+    function startOpenWith(paths: var): void {
         openWithPaths = paths.slice();
+        openWithResolved = {};
         typeProbe.command = ["timeout", "10", "sh", Quickshell.shellPath("dock/file-types.sh")].concat(openWithPaths);
         typeProbe.running = true;
     }
 
-    // Opens the selection with the app chosen in Open With ▸ (the Dock's launch path: field codes, isolated environment).
-    function openWith(appId: string): void {
+    // The lookup of openWithPaths ended (defaultId: the default handler's entry id, "" when unknown); a newer request
+    // made meanwhile replaces it.
+    function finishOpenWith(defaultId: string): void {
+        if (openWithPending !== null) {
+            const next = openWithPending;
+            openWithPending = null;
+            startOpenWith(next);
+            return;
+        }
+        openWithApps = Apps.appsFor(openWithPaths, openWithResolved, defaultId);
+    }
+
+    // Opens `paths` with the app chosen in Open With ▸ (the Dock's launch path: field codes, isolated environment). Only
+    // the selection the list was made for: anything else would open files the user did not pick.
+    function openWith(appId: string, paths: var): void {
         const entry = Apps.lookup(appId);
-        if (entry)
-            Apps.openWith(entry, openWithPaths, openWithResolved);
+        if (!entry || paths.join("\n") !== openWithPaths.join("\n"))
+            return;
+        Apps.openWith(entry, paths, openWithResolved);
     }
 
     Process {
         id: typeProbe
         stdout: StdioCollector {
             onStreamFinished: {
+                if (root.openWithPending !== null) {
+                    root.finishOpenWith("");
+                    return;
+                }
                 root.openWithResolved = DockModel.parseResolved(root.openWithPaths, text);
                 const first = root.openWithResolved[root.openWithPaths[0]];
                 if (first && first !== "-") {
                     defaultProbe.command = ["xdg-mime", "query", "default", first];
                     defaultProbe.running = true;
                 } else {
-                    root.openWithApps = Apps.appsFor(root.openWithPaths, root.openWithResolved, "");
+                    root.finishOpenWith("");
                 }
             }
         }
@@ -329,7 +366,7 @@ Scope {
     Process {
         id: defaultProbe
         stdout: StdioCollector {
-            onStreamFinished: root.openWithApps = Apps.appsFor(root.openWithPaths, root.openWithResolved, text.trim().replace(/\.desktop$/, ""))
+            onStreamFinished: root.finishOpenWith(text.trim().replace(/\.desktop$/, ""))
         }
     }
 
@@ -338,7 +375,13 @@ Scope {
         // Only a text/uri-list offer is read; anything else (text, images) leaves Paste out.
         command: ["sh", "-c", "wl-paste --list-types 2>/dev/null | grep -qx text/uri-list && wl-paste --no-newline --type text/uri-list 2>/dev/null"]
         stdout: StdioCollector {
-            onStreamFinished: root.clipboardPaths = Logic.parseUriList(text)
+            onStreamFinished: {
+                root.clipboardPaths = Logic.parseUriList(text);
+                if (root.pasteAfterRead) {
+                    root.pasteAfterRead = false;
+                    root.paste();
+                }
+            }
         }
     }
 

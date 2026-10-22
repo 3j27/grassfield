@@ -96,14 +96,16 @@ PopupMenu {
         if (pasteCount > 0) {
             items.push({
                 id: "paste",
-                text: pasteCount > 1 ? qsTr("Paste %1 Items").arg(pasteCount) : qsTr("Paste Item")
+                text: pasteCount > 1 ? qsTr("Paste %1 Items").arg(pasteCount) : qsTr("Paste Item"),
+                shortcut: showKeyHints ? "Ctrl+V" : ""
             });
         }
         items.push({
             separator: true
         }, {
             id: "getInfo",
-            text: qsTr("Get Info")
+            text: qsTr("Get Info"),
+            shortcut: showKeyHints ? "Ctrl+I" : ""
         }, {
             id: "wallpaper",
             text: qsTr("Change Wallpaper…")

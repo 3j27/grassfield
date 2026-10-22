@@ -38,6 +38,13 @@ TestCase {
         }
     }
 
+    Component {
+        id: itemComponent
+        MenuItem {
+            width: 300
+        }
+    }
+
     SignalSpy {
         id: activatedSpy
         signalName: "activated"
@@ -62,6 +69,28 @@ TestCase {
         const m = makeMenu();
         verify(m.width >= Tokens.menuMinWidth);
         verify(m.height > 0);
+    }
+
+    function textItem(root: Item, text: string): var {
+        for (const child of root.children) {
+            if (child.text === text)
+                return child;
+            const found = textItem(child, text);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    // Shortcuts form a right-aligned column whatever the label's length (docs/specs/ui.md), as on macOS.
+    function test_shortcutsAlignRight() {
+        const short = createTemporaryObject(itemComponent, testCase, {text: "Open", shortcut: "Ctrl+O"});
+        const long = createTemporaryObject(itemComponent, testCase, {text: "Glance at “Report.pdf”", shortcut: "Space"});
+        for (const row of [short, long]) {
+            const hint = textItem(row, row.shortcut);
+            verify(hint !== null);
+            fuzzyCompare(hint.mapToItem(row, hint.width, 0).x, row.width - Tokens.menuItemPadding, 0.5);
+        }
     }
 
     function test_downSkipsDisabledAndSeparator() {
@@ -97,9 +126,15 @@ TestCase {
         const m = makeMenu();
         keyClick(Qt.Key_Up);
         compare(m.currentIndex, 4);
+        compare(m.extent.width, m.width);
         keyClick(Qt.Key_Right);
         compare(m.openIndex, 4);
         wait(100);
+        // A host sized by extent (the desktop's PopupWindow) includes the submenu, which opens to the right.
+        const sub = m.submenuItem;
+        compare(m.extent.width, sub.mapToItem(m, sub.width, 0).x);
+        verify(m.extent.width > m.width);
+        verify(m.extent.height >= m.height);
         keyClick(Qt.Key_Down);
         keyClick(Qt.Key_Return);
         compare(activatedSpy.count, 1);

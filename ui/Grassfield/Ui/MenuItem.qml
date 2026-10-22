@@ -20,7 +20,9 @@ Item {
         : destructive ? Appearance.colors.danger
         : Appearance.colors.text
 
-    implicitWidth: row.implicitWidth + 2 * Tokens.menuItemPadding
+    // The shortcut and the chevron sit in their own right-aligned column (macOS model, docs/specs/ui.md); the
+    // minimum gap to the label is unchanged, so menus keep their widths.
+    implicitWidth: lead.implicitWidth + (trail.implicitWidth > 0 ? Tokens.menuShortcutGap + 2 * Tokens.spacingSm + trail.implicitWidth : 0) + 2 * Tokens.menuItemPadding
     implicitHeight: Tokens.menuItemHeight
     Accessible.role: Accessible.MenuItem
     Accessible.name: root.text
@@ -38,7 +40,7 @@ Item {
     }
 
     Row {
-        id: row
+        id: lead
         anchors {
             left: parent.left
             leftMargin: Tokens.menuItemPadding
@@ -70,12 +72,16 @@ Item {
             font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
             font.weight: Tokens.typographySmallWeight
         }
+    }
 
-        Item {
-            // Gap between label and shortcut / chevron.
-            width: root.shortcut !== "" || root.hasSubmenu ? Tokens.menuShortcutGap : 0
-            height: 1
+    Row {
+        id: trail
+        anchors {
+            right: parent.right
+            rightMargin: Tokens.menuItemPadding
+            verticalCenter: parent.verticalCenter
         }
+        spacing: Tokens.spacingSm
 
         Text {
             textFormat: Text.PlainText

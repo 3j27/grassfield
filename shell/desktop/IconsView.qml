@@ -256,7 +256,7 @@ FocusScope {
         else if (action === "open")
             openNames(names);
         else if (action.startsWith("openWith:"))
-            files.openWith(action.substring(9));
+            files.openWith(action.substring(9), paths);
         else if (action === "getInfo")
             files.showInfo(paths);
         else if (action === "compress")
@@ -390,7 +390,8 @@ FocusScope {
     // ---- keyboard --------------------------------------------------------------------------------
 
     // Active only while the desktop surface holds the keyboard (keysActive).
-    // Keyboard actions that change or open files (Return/F2 rename, Ctrl+O, Ctrl+Backspace) are on only while the
+    // Keyboard actions that change or open files (Return/F2 rename, Ctrl+O, Ctrl+Backspace, and as on macOS Ctrl+I Get
+    // Info, Ctrl+D Duplicate, Ctrl+C Copy, Ctrl+V Paste) are on only while the
     // compositor enforces the desktop focus policy (ADR-0012, "desktop-focus-v2" capability), set by the host: without
     // it the desktop can keep the keyboard after a click on Hyprland's active window, which the shell cannot observe.
     // Arrows, Ctrl+A, Space (Glance) and Esc only change the selection or a preview.
@@ -434,6 +435,21 @@ FocusScope {
         } else if (event.key === Qt.Key_F2 && root.fileKeyActions) {
             if (root.selectedNames.length === 1)
                 root.beginRename(root.selectedNames[0]);
+            event.accepted = true;
+        } else if (ctrl && event.key === Qt.Key_I && root.fileKeyActions) {
+            // Get Info of the selection, or of the desktop folder when nothing is selected (macOS).
+            files.showInfo(root.selectedPaths.length > 0 ? root.selectedPaths : [files.dir]);
+            event.accepted = true;
+        } else if (ctrl && event.key === Qt.Key_D && root.fileKeyActions) {
+            if (root.selectedNames.length > 0)
+                files.duplicate(root.selectedNames);
+            event.accepted = true;
+        } else if (ctrl && event.key === Qt.Key_C && root.fileKeyActions) {
+            if (root.selectedPaths.length > 0)
+                files.copy(root.selectedPaths);
+            event.accepted = true;
+        } else if (ctrl && event.key === Qt.Key_V && root.fileKeyActions) {
+            files.pasteFromClipboard();
             event.accepted = true;
         } else if (ctrl && event.key === Qt.Key_Backspace && root.fileKeyActions) {
             if (root.selectedPaths.length > 0)
@@ -588,8 +604,8 @@ FocusScope {
         anchor.adjustment: PopupAdjustment.All
         // qmllint enable missing-type
         // The menu and its open submenu (Open With ▸, Clean Up By ▸), which opens to the right of the menu.
-        implicitWidth: Math.max(1, (menuLoader.item as Item)?.childrenRect.width ?? 1)
-        implicitHeight: Math.max(1, (menuLoader.item as Item)?.childrenRect.height ?? 1)
+        implicitWidth: Math.max(1, (menuLoader.item as PopupMenu)?.extent.width ?? 1)
+        implicitHeight: Math.max(1, (menuLoader.item as PopupMenu)?.extent.height ?? 1)
         color: "transparent"
         grabFocus: true
         // qmllint disable missing-type
