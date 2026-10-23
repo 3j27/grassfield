@@ -87,8 +87,9 @@ client-hash formula, written by the build itself: `abi-stamp.cmake`, target `gra
 sources (`/usr/src/grassfield-compositor`) and `grassfield-compositor-rebuild` (on PATH). The session
 (`config/hypr/grassfield/compositor.lua`) loads the packaged build when its stamp is the ABI of the Hyprland that runs,
 else the user's own build (`$XDG_CACHE_HOME/grassfield/compositor/<abi>/`) when `grassfield-compositor-rebuild --vetted`
-vouches for it (every directory from the cache root down, the plugin and its stamp: no symlinks, the user's, not writable
-by group or others; the stamp is the ABI), else nothing: degraded mode (gate C2) and one translated notice from the shell
+vouches for it (the cache root canonical, its ancestors root's or the user's and not writable by others unless sticky;
+every directory from it down, the plugin and its stamp: no symlinks, the user's, not writable by group or others; the
+stamp is the ABI; the check is bounded to 5 s), else nothing: degraded mode (gate C2) and one translated notice from the shell
 naming the Hyprland version and the recovery (`--status`). A config reload keeps the build of the first parse (runtime
 note). `grassfield-compositor-rebuild` (run as the user; it refuses root) builds the shipped sources with CMake and the
 compiler in a private temporary directory (nice, at most 4 compilers, 15 min bound per step) and installs the result in
@@ -96,7 +97,8 @@ the user's cache (0700 directories, symlinks refused, the build's own stamp writ
 With the opt-in setting `windows.rebuildExtension` (Settings > Desktop & Dock, off by default) the shell runs that build
 itself in the background on a mismatch (`--session`) and loads the result into the running Hyprland when its ABI
 matches. Nothing is compiled as root or by a pacman hook. `--check` tells which build matches. Tests:
-`tests/shell/compositor_rebuild.sh`, `tests/unit/tst_extensionstatus.qml`.
+`tests/shell/compositor_rebuild.sh`, `tests/unit/tst_extensionstatus.qml`, and nested `tests/compositor/abi_mismatch.sh`
+(a build against another commit loaded by hand: it refuses itself, the session stays usable).
 
 ## Test
 

@@ -48,8 +48,9 @@ What ships (`grassfield-compositor`, `depends=(hyprland)` only, no version const
 - `/usr/lib/grassfield/grassfield-compositor.so` and its stamp `grassfield-compositor.abi`: the ABI string it was built
   for, computed with Hyprland's own formula (`PluginAPI.hpp` `__hyprland_api_get_client_hash`: commit, then the
   aquamarine, hyprutils, hyprgraphics, hyprcursor and hyprlang minors) by its own CMake build from the `version.h` it was
-  compiled against (`compositor/abi-stamp.cmake`), so a stamp always belongs to its build. `package()` stops when that
-  stamp is not the installed Hyprland's (a stale build). One build per package for now; more prebuilt variants (one per
+  compiled against (`compositor/abi-stamp.cmake`; the plugin target depends on it), so a stamp always belongs to its
+  build. `build()` writes both to `$srcdir/compositor-out` and `package()` installs them from there (never from the
+  tree's `compositor/build`); it stops when that stamp is not the installed Hyprland's (a stale build). One build per package for now; more prebuilt variants (one per
   ABI of the stable and rc channels) can be added later next to it, with their stamps.
 - The plugin sources in `/usr/src/grassfield-compositor` (CMakeLists.txt, abi-stamp.cmake, src/, protocols/, VERSION) and
   `grassfield-compositor-rebuild` (on PATH). cmake, gcc, make and pkgconf are optdepends (the rebuild's toolchain).
@@ -59,8 +60,11 @@ is the ABI of the Hyprland that runs (the installed `version.h`, its commit chec
 1. the packaged build (root's, a plain file);
 2. the user's build, `$XDG_CACHE_HOME/grassfield/compositor/<abi>/grassfield-compositor.so`, only when
    `grassfield-compositor-rebuild --vetted` vouches for it. Lua cannot look at owners, modes or symlinks; the script has
-   the one checker (`private_entry`), also used when it builds: every directory from the cache root down, the plugin and
-   its stamp are no symlinks (lstat), owned by the user and not writable by group or others, and the stamp is the ABI;
+   the one checker, also used when it builds: the cache root (`XDG_CACHE_HOME`, else `$HOME/.cache`) is an absolute,
+   canonical path (`realpath` gives it back unchanged) whose every ancestor is root's or the user's and not writable by
+   group or others unless sticky; every directory from it down, the plugin and its stamp are no symlinks (lstat), owned
+   by the user and not writable by group or others; and the stamp is the ABI. The check runs on Hyprland's main thread
+   during the parse, so it is bounded (`timeout` 5 s, then a kill), and only an answer with exit status 0 counts;
 3. none: nothing is loaded. The session runs in degraded mode (gate C2) and the shell shows one translated notice: it asks
    `grassfield-compositor-rebuild --status` and, on a mismatch, names the Hyprland version and the recovery.
 A config reload in the same Hyprland keeps the build its first parse loaded: `session.lua` writes the path to a runtime
@@ -69,7 +73,9 @@ a plugin loaded from a path the list still names and unloads the others), even w
 transaction replaced the files since. The note is a hint: only the packaged path, or a user build of the running commit
 that `--vetted <abi>` still vouches for. A Hyprland updated under the session is reconsidered at the next login. If the
 loader itself fails, the packaged build is loaded: it compares Hyprland's hash itself and refuses another build with its
-own notice.
+own notice. `Hyprland --verify-config` (`just check`) runs the same config with the caller's environment, a running
+instance's signature included: the loader recognises verify mode (`/proc/self/cmdline`) and writes no runtime note, and
+`check-config` runs it with a scratch runtime directory and fails if a note appears there.
 
 User rebuild (option 3): `grassfield-compositor-rebuild` refuses to run as root. It builds the shipped sources with CMake
 and the compiler, in a private temporary directory, with a clean environment, at low priority, with at most 4 compilers and
@@ -92,5 +98,6 @@ and made the toolchain a hard dependency. Nothing in the amended design runs as 
 Tests: `tests/shell/compositor_rebuild.sh` (logic): the formula in CMake, bash and Lua, the loader's choice including the
 mismatch, the runtime note and the update under a session, the vetting (mode and symlink cases of every entry; a foreign
 owner needs root to set up), root and symlink refusal, the cache install, the `--status` and `--session` answers.
-`tests/unit/tst_extensionstatus.qml`: the shell's reading of those answers. The nested part of the C2 mismatch test (a
-mismatched build loaded by hand) is still to be written (audit plan 1.8).
+`tests/unit/tst_extensionstatus.qml`: the shell's reading of those answers. `tests/compositor/abi_mismatch.sh` (nested,
+audit plan 1.8): the real plugin built against another commit and loaded by hand refuses itself, Hyprland stays up, the
+shell stays degraded with its one notice, menu bar and Dock stay mapped, minimize falls back, the unload is clean.
