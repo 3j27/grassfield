@@ -18,13 +18,20 @@ FocusScope {
     id: root
 
     readonly property var info: Popups.data
-    readonly property string folderPath: info.path ? info.path : ""
+    // Folders opened in place (Grid and List: macOS opens a sub-folder inside the stack with a back control): the path of each.
+    property var trail: []
+    readonly property bool nested: trail.length > 0
+    readonly property string folderPath: nested ? trail[trail.length - 1] : (info.path ? info.path : "")
     property var entries: []
     property bool loaded: false
     // Index of the item under the keyboard or pointer; entries.length is the "Open in Files" row. -1: none.
     property int currentIndex: -1
 
-    readonly property string view: Stacks.resolveView(info.view, entries.length, Tokens.dockStackFanMax)
+    // A sub-folder never opens as a Fan (the back control lives in the panel).
+    readonly property string view: {
+        const v = Stacks.resolveView(info.view, entries.length, Tokens.dockStackFanMax);
+        return nested && v === "fan" ? "grid" : v;
+    }
     readonly property bool fan: view === "fan"
     readonly property string align: Popups.align
     readonly property bool vertical: align === "rightOf" || align === "leftOf"
@@ -42,6 +49,8 @@ FocusScope {
     // Panel (grid, list) size.
     readonly property real panelPad: Tokens.menuPadding + Tokens.spacingXs
     readonly property real footerHeight: Tokens.menuItemHeight + Tokens.spacingXs
+    // The back row of a sub-folder, above the items.
+    readonly property real headerHeight: nested && !fan ? Tokens.menuItemHeight + Tokens.spacingXs : 0
 
     activeFocusOnTab: true
     focus: true
@@ -59,12 +68,38 @@ FocusScope {
         if (fan)
             return vertical ? 2 * (Tokens.dockStackFanBend + iconSize / 2) : Tokens.dockStackFanStep * fanCount + iconSize + Tokens.dockMenuTailGap;
         if (view === "list")
-            return rowCount * Tokens.menuItemHeight + footerHeight + 2 * Tokens.menuPadding + Tokens.menuItemHeight / 2;
-        return gridRows * Tokens.dockStackCellHeight + footerHeight + 2 * panelPad;
+            return rowCount * Tokens.menuItemHeight + footerHeight + headerHeight + 2 * Tokens.menuPadding + Tokens.menuItemHeight / 2;
+        return gridRows * Tokens.dockStackCellHeight + footerHeight + headerHeight + 2 * panelPad;
+    }
+
+    // Lists `path` (a folder opened in place, or back to the one above).
+    function reload(): void {
+        lister.running = false;
+        entries = [];
+        loaded = false;
+        currentIndex = -1;
+        lister.running = true;
+    }
+
+    function enter(path: string): void {
+        trail = trail.concat([path]);
+        reload();
+    }
+
+    function back(): void {
+        if (!nested)
+            return;
+        trail = trail.slice(0, -1);
+        reload();
     }
 
     function open(index: int): void {
         const e = index >= 0 && index < entries.length ? entries[index] : null;
+        // A folder in a Grid or a List opens in place; in a Fan (and "Open in Files") it opens in Files.
+        if (e && e.isDir && (view === "grid" || view === "list")) {
+            enter(e.path);
+            return;
+        }
         const target = e ? e.path : folderPath;
         Popups.close();
         if (target !== "")
@@ -81,10 +116,19 @@ FocusScope {
     Keys.onEscapePressed: Popups.close()
     Keys.onUpPressed: move(fan ? "down" : "up")
     Keys.onDownPressed: move(fan ? "up" : "down")
-    Keys.onLeftPressed: move("left")
+    // Left in a List and Backspace go back out of a sub-folder (macOS closes the submenu).
+    Keys.onLeftPressed: {
+        if (nested && view === "list")
+            back();
+        else
+            move("left");
+    }
     Keys.onRightPressed: move("right")
     Keys.onPressed: event => {
-        if (event.key === Qt.Key_Home) {
+        if (event.key === Qt.Key_Backspace) {
+            back();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Home) {
             move("home");
             event.accepted = true;
         } else if (event.key === Qt.Key_End) {
@@ -100,7 +144,8 @@ FocusScope {
     Process {
         id: lister
         command: ["sh", Quickshell.shellPath("dock/list-folder.sh"), root.folderPath]
-        running: root.folderPath !== ""
+        Component.onCompleted: if (root.folderPath !== "")
+            running = true
         stdout: StdioCollector {
             onStreamFinished: {
                 const all = Stacks.sortEntries(Stacks.parseListing(text, root.folderPath), root.info.sort);
@@ -131,6 +176,24 @@ FocusScope {
 
         function state(): string {
             return root.view + "|" + root.entries.map(e => e.name).join(",");
+        }
+
+        // How many folders deep the stack is opened in place (0: the stack itself).
+        function depth(): string {
+            return String(root.trail.length);
+        }
+
+        // Opens the folder `name` of the listing in place (the click of a Grid or List item); "refused" for a file or a Fan.
+        function enter(name: string): string {
+            const at = root.entries.findIndex(e => e.name === name && e.isDir);
+            if (at < 0 || root.fan)
+                return "refused";
+            root.open(at);
+            return "ok";
+        }
+
+        function back(): void {
+            root.back();
         }
     }
 
@@ -228,12 +291,61 @@ FocusScope {
             radius: Tokens.radiusMenu
         }
 
+        // Back row of a sub-folder opened in place: a chevron and the folder's name; a click goes back.
+        Item {
+            id: backRow
+            visible: root.nested && !root.fan
+            x: root.view === "list" ? Tokens.menuPadding : root.panelPad
+            y: root.view === "list" ? Tokens.menuPadding : root.panelPad
+            width: parent.width - 2 * x
+            height: Tokens.menuItemHeight
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Back to %1").arg(root.nested && root.trail.length > 1 ? Stacks.baseName(root.trail[root.trail.length - 2]) : (root.info.name ? root.info.name : ""))
+            Accessible.onPressAction: root.back()
+
+            Rectangle {
+                anchors.fill: parent
+                radius: Tokens.radiusControl
+                color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (backMouse.containsMouse ? 3 : 1))
+            }
+
+            Icon {
+                id: backGlyph
+                x: Tokens.menuItemPadding
+                anchors.verticalCenter: parent.verticalCenter
+                size: Tokens.menuIconSize
+                name: "chevron-right"
+                rotation: 180
+            }
+
+            Text {
+                textFormat: Text.PlainText
+                x: backGlyph.x + Tokens.menuIconSize + Tokens.spacingSm
+                width: parent.width - x - Tokens.menuItemPadding
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.nested ? Stacks.baseName(root.folderPath) : ""
+                elide: Text.ElideMiddle
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyMenuSize
+                font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
+                font.weight: Tokens.typographyMenuBoldWeight
+            }
+
+            MouseArea {
+                id: backMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: root.back()
+            }
+        }
+
         // Grid
         Flickable {
             id: gridView
             visible: root.view === "grid"
             x: root.panelPad
-            y: root.panelPad
+            y: root.panelPad + root.headerHeight
             width: root.columns * Tokens.dockStackCellWidth
             height: root.gridRows * Tokens.dockStackCellHeight
             contentWidth: gridContent.width
@@ -311,7 +423,7 @@ FocusScope {
             id: listView
             visible: root.view === "list"
             x: Tokens.menuPadding
-            y: Tokens.menuPadding
+            y: Tokens.menuPadding + root.headerHeight
             width: parent.width - 2 * Tokens.menuPadding
             height: root.rowCount * Tokens.menuItemHeight
             model: root.view === "list" ? root.entries : []

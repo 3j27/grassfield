@@ -3989,6 +3989,10 @@
         <source>Keyboard brightness %1%</source>
         <translation>Luminosité du clavier %1&#xa0;%</translation>
     </message>
+    <message>
+        <source>Input source %1</source>
+        <translation>Source de saisie&#xa0;: %1</translation>
+    </message>
 </context>
 <context>
     <name>OverviewWindow</name>
@@ -4809,6 +4813,10 @@
     <message>
         <source>%1 stack</source>
         <translation>Pile %1</translation>
+    </message>
+    <message>
+        <source>Back to %1</source>
+        <translation>Retour à %1</translation>
     </message>
 </context>
 <context>

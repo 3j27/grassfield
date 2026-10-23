@@ -52,6 +52,7 @@ if want stack; then
   rm -rf "$fix"
   mkdir -p "$fix/Sub"
   : >"$fix/.hidden"
+  printf 'x' >"$fix/Sub/inner.txt"
   printf 'a' >"$fix/beta.txt"; touch -d '2026-01-03' "$fix/beta.txt"
   printf 'a' >"$fix/alpha.png.txt"; touch -d '2026-01-05' "$fix/alpha.png.txt"
   printf 'a' >"$fix/gamma.md"; touch -d '2026-01-01' "$fix/gamma.md"
@@ -76,6 +77,24 @@ if want stack; then
     "$VS_ROOT/scripts/dev/keys.sh" -k Escape >/dev/null 2>&1
     sleep 0.8
     [[ -z $(popup) ]]; check "$v: Esc closes the stack" $?
+  done
+
+  # A folder of a Grid or a List opens in place, with a back control (macOS Grid view); a Fan opens it in Files (not tested here).
+  for v in grid list; do
+    setting ".dock.stackOptions = {\"$fix\": {\"view\": \"$v\", \"sort\": \"name\"}}"
+    vs_ipc dock stack "$idx" "$VS_OUTPUT" >/dev/null
+    sleep 1.2
+    [[ $(vs_ipc dockstack enter Sub) == ok ]]; check "$v: a folder item opens in place" $?
+    sleep 1
+    [[ $(vs_ipc dockstack depth) == 1 ]]; check "$v: the stack is one folder deep" $?
+    [[ $(state) == "$v|inner.txt" ]]; check "$v: the sub-folder's items are listed (state $(state))" $?
+    VS_SETTLE=1 vs_capture "dock-stack-$v-nested" >/dev/null
+    cp "$VS_SHOTS/dock-stack-$v-nested.en.png" "$out/$v-nested.png" 2>/dev/null
+    vs_ipc dockstack back >/dev/null
+    sleep 1
+    [[ $(vs_ipc dockstack depth) == 0 && $(state) == *Sub* ]]; check "$v: back returns to the stack's own items" $?
+    "$VS_ROOT/scripts/dev/keys.sh" -k Escape >/dev/null 2>&1
+    sleep 0.6
   done
 
   for sort in name dateAdded dateModified kind; do

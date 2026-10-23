@@ -4,9 +4,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
+import qs.platform
 import qs.services
 
-// On-screen display state (volume, brightness and keyboard backlight). Spec: docs/specs/osd.md.
+// On-screen display state (volume, brightness, keyboard backlight and input source). Spec: docs/specs/osd.md.
 //
 // Shown when the default sink volume/mute or the backlight change (by any program), and by the
 // IPC targets osd (tests), volume and brightness (real changes).
@@ -17,8 +18,10 @@ Singleton {
     property real level: 0
     property bool muted: false
     property bool shown: false
+    // kind "inputsource": the name of the keyboard layout now active (macOS input source HUD): the pill shows it instead of a bar.
+    property string label: ""
 
-    readonly property string iconName: kind === "keyboard" ? "keyboard" : kind === "brightness" ? "sun" : (muted || level <= 0 ? "volume-mute" : level < 0.34 ? "volume-1" : level < 0.67 ? "volume-2" : "volume-3")
+    readonly property string iconName: kind === "keyboard" || kind === "inputsource" ? "keyboard" : kind === "brightness" ? "sun" : (muted || level <= 0 ? "volume-mute" : level < 0.34 ? "volume-1" : level < 0.67 ? "volume-2" : "volume-3")
 
     // Changes before this are start-up noise (initial volume read), not user actions.
     property bool armed: false
@@ -31,6 +34,18 @@ Singleton {
         kind = osdKind === "brightness" || osdKind === "keyboard" ? osdKind : "volume";
         level = Math.max(0, Math.min(1, osdLevel));
         muted = osdMuted;
+        shown = true;
+        hideTimer.restart();
+    }
+
+    // The layout changed (InputSource: only a real change of a keyboard that had another layout, so nothing with a single layout).
+    function showInputSource(name: string): void {
+        if (name === "")
+            return;
+        kind = "inputsource";
+        label = name;
+        level = 0;
+        muted = false;
         shown = true;
         hideTimer.restart();
     }
@@ -154,6 +169,15 @@ Singleton {
         }
     }
 
+    Connections {
+        target: InputSource
+
+        function onLayoutChanged(name: string): void {
+            if (root.armed)
+                root.showInputSource(name);
+        }
+    }
+
     Component.onCompleted: arm.start()
 
     IpcHandler {
@@ -164,6 +188,13 @@ Singleton {
         function display(kind: string, level: real, muted: bool): void {
             if (VisualFixtures.dev)
                 root.showValue(kind, level, muted);
+        }
+
+        // Test hook: a compositor layout event, "keyboard,Layout name" (the first one for a keyboard shows nothing, a different
+        // layout after it shows the input source HUD).
+        function layout(data: string): void {
+            if (VisualFixtures.dev)
+                InputSource.feed(data);
         }
 
         function hide(): void {

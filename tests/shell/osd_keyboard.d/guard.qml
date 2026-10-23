@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import qs.platform
 import qs.services
 import qs.osd
 
@@ -74,6 +75,21 @@ ShellRoot {
         // The first backlight value read is not a user action.
         Brightness.kbdValue = 5;
         Brightness.kbdValue = 6;
+
+        // Start-up noise is ignored until the OSD is armed (O4): armed by hand here, the arming itself is timer driven.
+        Osd.armed = true;
+        // The input source HUD: a first layout shows nothing (one layout never does), a change shows its name.
+        Osd.hide();
+        InputSource.feed("kbd0,English (US)");
+        check("first layout: no HUD", !Osd.shown);
+        InputSource.feed("kbd0,English (US)");
+        check("same layout again: no HUD", !Osd.shown);
+        InputSource.feed("kbd0,French");
+        check("a change shows the HUD", Osd.shown && Osd.kind === "inputsource" && Osd.label === "French");
+        check("it uses the keyboard glyph", Osd.iconName === "keyboard");
+        Osd.hide();
+        InputSource.feed("garbage");
+        check("a malformed event shows nothing", !Osd.shown);
         finish();
     }
 
