@@ -16,7 +16,9 @@
  "tests/visual/*.sh",
  "tests/visual/test_*.py",
  "tests/visual/scenarios/*.sh",
- "tests/ci/*.py"
+ "tests/ci/*.py",
+ "scripts/gates/*.sh",
+ "scripts/gates/*.py"
 ],
 "ignore": [
  {"path": "tests/security/pam_audit.sh", "reason": "helper sourced by reload_locked.sh"},
@@ -26,6 +28,10 @@
  {"path": "tests/visual/run.sh", "reason": "runner of tests/visual/scenarios/*.sh, not a test itself"},
  {"path": "tests/compositor/titlebar_geometry.sh", "reason": "helper sourced by the compositor scenarios (titlebar metrics from Theme.hpp)"},
  {"path": "tests/compositor/window_geometry.sh", "reason": "helper sourced by soak.sh and input_consistency.sh (real window geometry from hyprctl clients)"},
+ {"path": "scripts/gates/lib.sh", "reason": "helper sourced by the gate scripts (tested by tests/shell/gates.sh)"},
+ {"path": "scripts/gates/frame_pacing.py", "reason": "judge of scripts/gates/frame-pacing.sh; --selftest and cases run by tests/shell/gates.sh"},
+ {"path": "scripts/gates/session_start.py", "reason": "journal parser of scripts/gates/session-start.sh; --selftest and cases run by tests/shell/gates.sh"},
+ {"path": "scripts/gates/coverage_report.py", "reason": "gcov summariser of scripts/gates/coverage.sh; tested on a toy program by tests/shell/gates.sh"},
  {"path": "tests/compositor/soak_lib.sh", "reason": "helper sourced by soak.sh (verdict and RSS-slope functions, tested by tests/shell/soak_lib.sh)"}
 ],
 "tests": [
@@ -229,6 +235,13 @@
  {"path": "tests/visual/dock-macos.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-motion.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-perf.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/shell/gates.sh", "layer": "logic"},
+ {"path": "scripts/gates/idle-cpu.sh", "layer": "nested", "runner": "bare"},
+ {"path": "scripts/gates/rss.sh", "layer": "nested", "runner": "bare"},
+ {"path": "scripts/gates/frame-pacing.sh", "layer": "nested", "runner": "bare"},
+ {"path": "scripts/gates/session-start.sh", "layer": "nested", "runner": "bare"},
+ {"path": "scripts/gates/coverage.sh", "layer": "logic", "runner": "bare"},
+ {"path": "scripts/gates/release-check.sh", "layer": "logic", "runner": "bare"},
  {"path": "tests/visual/f2c.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/folder-colours-desktop.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/folder-colours-live.sh", "layer": "visual", "runner": "bare"},

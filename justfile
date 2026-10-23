@@ -9,7 +9,19 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-secrets
+check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-version check-licenses check-tidy check-secrets
+
+# clang-tidy over the compositor with the project's config (gate Q1); a passing full run is stamped, an unchanged tree is "up to date" (--force: scripts/dev/tidy.sh --force).
+check-tidy:
+    scripts/dev/tidy.sh
+
+# One version source: every consumer agrees with the VERSION file (D-11).
+check-version:
+    scripts/dev/check-version.sh
+
+# Licence notices: Omarchy's LICENSE verbatim, license= arrays, shipped notices (GF-014).
+check-licenses:
+    scripts/dev/check-licenses.sh
 
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland.
 check-config:
@@ -50,7 +62,7 @@ check-secrets:
 
 # Syntax-check shell scripts.
 check-scripts:
-    for f in scripts/dev/*.sh tests/*/*.sh tests/visual/scenarios/*.sh; do bash -n "$f"; done
+    for f in scripts/dev/*.sh scripts/gates/*.sh tests/*/*.sh tests/visual/scenarios/*.sh; do bash -n "$f"; done
 
 # Offscreen unit tests (QML TestCase) and compositor unit tests when built.
 test:
@@ -103,6 +115,34 @@ cursors *args:
 plugin-build:
     cmake -S compositor -B compositor/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
     cmake --build compositor/build
+
+# The local CI equivalent (D-6): a clean build of a `git archive` of HEAD with `just check` (incl. tidy), `just test`, coverage, gitleaks and the plugin build. Bare command. Flags: --rc-headers ROOT --keep --only steps
+release-check *args:
+    scripts/gates/release-check.sh {{args}}
+
+# Gate Q3: gcov line coverage of the compositor core and the menu bridge logic (>= 70 %).
+coverage *args:
+    scripts/gates/coverage.sh {{args}}
+
+# Gate P1: idle CPU of grassfield-shell + menu bridge from /proc, e.g. `just gate-idle --nested` or `just gate-idle --real` (read only; bare command).
+gate-idle *args:
+    scripts/gates/idle-cpu.sh {{args}}
+
+# Gate P2: resident memory against the omarchy-shell baseline, e.g. `just gate-rss --real --baseline-mb 310` (bare command).
+gate-rss *args:
+    scripts/gates/rss.sh {{args}}
+
+# Gate P3: frame pacing while the Dock magnifies, the Overview and Apps open/close, in the nested session (reference machine; bare command).
+gate-frames *args:
+    scripts/gates/frame-pacing.sh {{args}}
+
+# Gate P5: session start to "grassfield-shell: usable", from the user journal (read only; bare command).
+gate-startup *args:
+    scripts/gates/session-start.sh {{args}}
+
+# Off-machine copy: a verified git bundle of the whole repository into DIR (an external disk; GF-034).
+backup dir:
+    scripts/dev/backup.sh {{dir}}
 
 # Load/unload the plugin in the NESTED instance via scripts/nestctl (ask).
 plugin-load:
