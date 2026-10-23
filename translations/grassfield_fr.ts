@@ -2064,6 +2064,18 @@
         <translation>Ajouter des marges aux fenêtres en mosaïque</translation>
     </message>
     <message>
+        <source>Stages</source>
+        <translation>Stages</translation>
+    </message>
+    <message>
+        <source>Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.</source>
+        <translation>Nécessite l’extension de compositeur Grassfield. L’interrupteur Stages est aussi dans les Réglages rapides.</translation>
+    </message>
+    <message>
+        <source>Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.</source>
+        <translation>Garde les fenêtres d’une app au centre et les autres apps récentes en miniatures sur le bord gauche.</translation>
+    </message>
+    <message>
         <source>Screen Corners</source>
         <translation>Coins de l’écran</translation>
     </message>
@@ -4303,6 +4315,36 @@
     <message>
         <source>Mute input</source>
         <translation>Couper l’entrée</translation>
+    </message>
+</context>
+<context>
+    <name>Stages</name>
+    <message>
+        <source>Stage</source>
+        <translation>Stage</translation>
+    </message>
+    <message>
+        <source>1 window</source>
+        <translation>1 fenêtre</translation>
+    </message>
+    <message>
+        <source>%1 windows</source>
+        <translation>%1 fenêtres</translation>
+    </message>
+</context>
+<context>
+    <name>StagesToggle</name>
+    <message>
+        <source>Stages</source>
+        <translation>Stages</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Activé</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
     </message>
 </context>
 <context>

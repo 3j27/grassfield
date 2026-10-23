@@ -85,6 +85,7 @@
  {"path": "tests/unit/tst_settingsstore.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingssystem.qml", "layer": "headless"},
  {"path": "tests/unit/tst_stagesfront.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_stages.qml", "layer": "headless"},
  {"path": "tests/unit/tst_statuslogic.qml", "layer": "headless"},
  {"path": "tests/unit/tst_switchermodel.qml", "layer": "headless"},
  {"path": "tests/unit/tst_textformat.qml", "layer": "headless"},
@@ -283,6 +284,7 @@
  {"path": "tests/visual/scenarios/overview.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/search.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/settings.sh", "layer": "visual", "runner": "bare"},
+ {"path": "tests/visual/scenarios/stages.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/systemmenu.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/scenarios/titlebar.sh", "layer": "visual", "runner": "bare"}
 ]
