@@ -14,6 +14,8 @@ Item {
     property bool active: false
     // Opens one of the bar's menus: the bar switches to it on hover while another menu is open (macOS tracking).
     property bool opensMenu: false
+    // The popup kind this item opens ("network", "volume", ...) for the keyboard cycle (Left/Right in an open menu, Ctrl+F8); empty: not in it.
+    property string menuKind: ""
     // Padding on each side of the content (titles: menubar.itemPadding, status glyphs: menubar.statusItemPadding).
     property real padding: Tokens.menubarItemPadding
     // Highlight colour (the bar passes the dark palette's while it has no background of its own).

@@ -334,4 +334,25 @@ TestCase {
         keyRelease(Qt.Key_Alt, Qt.NoModifier);
         verify(!m.altHeld);
     }
+
+    SignalSpy {
+        id: stepSpy
+        signalName: "menuStepRequested"
+    }
+
+    // GF-002 (audit): Right and Left in an open bar menu ask the bar for the next or previous title, also with the host's
+    // `bounds` set (the overlay sets it on every menu) and with no row selected (a menu opened with the pointer).
+    function test_rightAndLeftStepTheBarMenus() {
+        const m = makeMenu();
+        m.bounds = testCase;
+        m.currentIndex = -1;
+        stepSpy.target = m;
+        stepSpy.clear();
+        keyClick(Qt.Key_Right);
+        compare(stepSpy.count, 1);
+        compare(stepSpy.signalArguments[0][0], 1);
+        keyClick(Qt.Key_Left);
+        compare(stepSpy.count, 2);
+        compare(stepSpy.signalArguments[1][0], -1);
+    }
 }
