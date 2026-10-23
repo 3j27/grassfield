@@ -196,14 +196,21 @@ package_grassfield-compositor() {
     'gcc: grassfield-compositor-rebuild'
     'make: grassfield-compositor-rebuild'
     'pkgconf: grassfield-compositor-rebuild'
-    'libnotify: the notice when the extension does not match Hyprland'
   )
   local root
   root=$(_root)
   install -Dm755 "$root/compositor/build/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
-  # Its stamp: the ABI it was built for (config/hypr/grassfield/compositor.lua loads the build whose stamp is the ABI of the
-  # Hyprland that runs).
-  "$root/packaging/arch/grassfield-compositor-rebuild" --print-abi >"$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
+  # Its stamp: the ABI it was built for, written by its own CMake build from the headers it was compiled against
+  # (compositor/abi-stamp.cmake; config/hypr/grassfield/compositor.lua loads the build whose stamp is the ABI of the
+  # Hyprland that runs). Packaging stops when it is not the installed Hyprland's: the build is stale.
+  local built_abi installed_abi
+  built_abi=$(head -n 1 "$root/compositor/build/grassfield-compositor.abi")
+  installed_abi=$("$root/packaging/arch/grassfield-compositor-rebuild" --print-abi)
+  if [[ -z $built_abi || $built_abi != "$installed_abi" ]]; then
+    echo "grassfield-compositor: the plugin was built for '$built_abi', the installed Hyprland is '$installed_abi': rebuild it" >&2
+    return 1
+  fi
+  install -Dm644 "$root/compositor/build/grassfield-compositor.abi" "$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
   install -Dm755 "$root/packaging/arch/grassfield-compositor-rebuild" "$pkgdir/usr/lib/grassfield/grassfield-compositor-rebuild"
   # The commands a person types are on PATH (grassfield-compositor-rebuild, grassfield-compositor-rebuild --check).
   install -d "$pkgdir/usr/bin"
@@ -211,6 +218,7 @@ package_grassfield-compositor() {
   # The sources the user's rebuild is made from (the plugin only: no unit tests, no build directory).
   local src=$pkgdir/usr/src/grassfield-compositor
   install -Dm644 "$root/compositor/CMakeLists.txt" "$src/CMakeLists.txt"
+  install -Dm644 "$root/compositor/abi-stamp.cmake" "$src/abi-stamp.cmake"
   cp -a --no-preserve=ownership "$root/compositor/src" "$src/src"
   cp -a --no-preserve=ownership "$root/compositor/protocols" "$src/protocols"
   printf '%s-%s\n' "$pkgver" "$pkgrel" >"$src/VERSION"
