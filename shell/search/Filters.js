@@ -7,6 +7,7 @@
 const CHIPS = [
     {id: "apps", kinds: ["app"]},
     {id: "commands", kinds: ["command"]},
+    {id: "settings", kinds: ["setting"]},
     {id: "documents", kinds: ["file", "recent"]}
 ];
 

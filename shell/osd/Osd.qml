@@ -159,13 +159,16 @@ Singleton {
     IpcHandler {
         target: "osd"
 
+        // Test hooks (dev session only, VisualFixtures.dev, SEC-04: no OSD spoofing by another process).
         // qs ipc call osd display <volume|brightness|keyboard> <0..1> <muted>
         function display(kind: string, level: real, muted: bool): void {
-            root.showValue(kind, level, muted);
+            if (VisualFixtures.dev)
+                root.showValue(kind, level, muted);
         }
 
         function hide(): void {
-            root.hide();
+            if (VisualFixtures.dev)
+                root.hide();
         }
     }
 

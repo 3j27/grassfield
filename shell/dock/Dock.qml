@@ -592,12 +592,15 @@ Scope {
             return JSON.stringify(root.items.map(i => i.key !== undefined ? i.key : i.kind));
         }
 
+        // hover, unhover, reveal and menu: dev session only (VisualFixtures.dev, SEC-04).
         function hover(x: real): void {
-            root.testPointerX = x;
+            if (VisualFixtures.dev)
+                root.testPointerX = x;
         }
 
         function unhover(): void {
-            root.testPointerX = -1;
+            if (VisualFixtures.dev)
+                root.testPointerX = -1;
         }
 
         // Auto-hide machine state and visible fraction "state visible" (fixtures only).
@@ -613,7 +616,8 @@ Scope {
         }
 
         function reveal(on: bool): void {
-            root.testReveal = on;
+            if (VisualFixtures.dev)
+                root.testReveal = on;
         }
 
         // Output that has the Dock (fixtures only).
@@ -707,6 +711,8 @@ Scope {
         }
 
         function menu(index: int, screen: string): void {
+            if (!VisualFixtures.dev)
+                return;
             const all = windows.instances;
             let win = all.length > 0 ? all[0] : null;
             for (let i = 0; i < all.length; i++) {

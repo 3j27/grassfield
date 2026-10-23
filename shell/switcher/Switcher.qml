@@ -278,12 +278,16 @@ Scope {
             root.step(-1, false, id);
         }
 
+        // Test hooks (dev session only, VisualFixtures.dev, SEC-04): right, left, cancel and status. next, previous,
+        // release, quit and hide are the SUPER+TAB / SUPER+Q / SUPER+H bindings.
         function right(): void {
-            root.step(1, true, "");
+            if (VisualFixtures.dev)
+                root.step(1, true, "");
         }
 
         function left(): void {
-            root.step(-1, true, "");
+            if (VisualFixtures.dev)
+                root.step(-1, true, "");
         }
 
         function release(id: string): void {
@@ -291,7 +295,8 @@ Scope {
         }
 
         function cancel(): void {
-            root.cancel();
+            if (VisualFixtures.dev)
+                root.cancel();
         }
 
         function quit(): void {
@@ -303,6 +308,8 @@ Scope {
         }
 
         function status(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             return JSON.stringify({phase: root.phase, selected: root.selected, apps: root.apps.map(a => a.key), holdId: root.holdId, releasedId: root.releasedId, surfaceUp: root.surfaceUp});
         }
     }
