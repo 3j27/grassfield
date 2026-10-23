@@ -30,7 +30,9 @@ import "../../services/DevGate.js" as DevGate
 // - Crash: Hyprland keeps the session locked when this process dies (ext-session-lock; its
 //   "lockscreen app died" screen, no input reaches clients). The restarted shell re-takes the lock
 //   (misc.allow_session_lock_restore = true) when the marker in $XDG_RUNTIME_DIR (one per
-//   compositor instance) says anything but exactly "unlocked", when XDG_RUNTIME_DIR is unset
+//   compositor instance) says anything but "unlocked", when the machine slept since that "unlocked"
+//   was written (the marker records the kernel's count of completed suspends: no shell could lock for
+//   that sleep, Machine.sleptSince), when XDG_RUNTIME_DIR is unset
 //   (nothing can prove the session unlocked), or when Hyprland reports a lock this instance did
 //   not take (forged or missing marker): see strandedProbe.
 // - Soft reload (Quickshell.reload(false)): the new WlSessionLock inherits the old instance's lock
@@ -253,14 +255,17 @@ Singleton {
             console.warn("grassfield-lock: XDG_RUNTIME_DIR unset: no crash recovery marker (" + value + "); a restart will lock");
             return false;
         }
+        // The line also records the count of completed suspends, so that a restarted shell can tell that the
+        // machine slept while no shell could lock for it (Machine.sleptSince).
+        const line = Machine.markerLine(value, sleepCount());
         // FileView skips a write equal to its cached text, which is stale if the file was changed
         // or removed behind its back: re-read first.
         marker.reload();
         marker.waitForJob();
-        marker.setText(value + "\n");
+        marker.setText(line + "\n");
         marker.reload();
         marker.waitForJob();
-        const ok = String(marker.text()).trim() === value;
+        const ok = String(marker.text()).trim() === line;
         if (!ok)
             console.warn("grassfield-lock: crash recovery marker could not be written:", root.markerPath, "(wanted " + value + ")");
         markerFailed = !ok;
@@ -277,12 +282,25 @@ Singleton {
         return Machine.markerRead(marker.loadError === FileViewError.FileNotFound, marker.loadError !== FileViewError.Success, marker.text());
     }
 
-    // Restore the lock if the previous instance held or wanted it (see the header). Only ever
-    // locks; never unlocks.
+    // Count of completed suspends of the machine (/sys/power/suspend_stats/success), or -1 when unreadable.
+    function sleepCount(): int {
+        suspendStats.reload();
+        suspendStats.waitForJob();
+        return suspendStats.readable ? Machine.parseSleepCount(suspendStats.text()) : -1;
+    }
+
+    // Restore the lock if the previous instance held or wanted it (see the header), or if the machine slept
+    // since the marker said unlocked (a crash or restart right before or during a sleep: no shell could lock for
+    // it). Only ever locks; never unlocks.
     function restore(intent: bool, when: string): void {
-        if (currentlyLocked() || !Machine.restoreAtStart(intent, markerPath !== "", readMarker()))
+        if (currentlyLocked())
             return;
-        console.info("grassfield-lock: restoring the lock (" + when + (intent ? ", carried intent" : "") + (markerPath === "" ? ", no XDG_RUNTIME_DIR" : "") + ")");
+        const text = readMarker();
+        const sleeps = sleepCount();
+        if (!Machine.restoreAtStart(intent, markerPath !== "", text, sleeps))
+            return;
+        const slept = Machine.sleptSince(text, sleeps);
+        console.info("grassfield-lock: restoring the lock (" + when + (intent ? ", carried intent" : "") + (markerPath === "" ? ", no XDG_RUNTIME_DIR" : "") + (slept ? ", the machine slept while no shell could lock" : "") + ")");
         lock("restore");
     }
 
@@ -605,6 +623,19 @@ Singleton {
         onSaveFailed: error => console.warn("grassfield-lock: crash recovery marker write failed:", FileViewError.toString(error))
     }
 
+    // Completed suspends of the machine (kernel counter, world-readable): see sleepCount().
+    FileView {
+        id: suspendStats
+
+        property bool readable: false
+
+        path: "/sys/power/suspend_stats/success"
+        blockLoading: true
+        printErrors: false
+        onLoaded: readable = true
+        onLoadFailed: readable = false
+    }
+
     // Existence probes for the account picture (no QML image warnings for missing files).
     FileView {
         path: Quickshell.env("HOME") + "/.face"
@@ -715,7 +746,8 @@ Singleton {
             return root.lock("ipc");
         }
 
-        // Used by the Hyprland lid switch binding (bindings.lua). Only ever locks ("docked": clamshell, nothing done).
+        // Used by /usr/lib/grassfield/grassfield-lid, run by the lid switch binding of system.lua. Only ever locks
+        // ("docked": clamshell, nothing done).
         function lid(): string {
             return root.lockOnLid();
         }

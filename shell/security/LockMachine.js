@@ -57,7 +57,8 @@ function isHolding(state) {
     return state === LOCKED || state === AUTHENTICATING;
 }
 
-// Lid closed (Hyprland switch binding `switch:on:Lid Switch`, config/hypr/grassfield/bindings.lua): lock unless a
+// Lid closed (Hyprland switch binding `switch:on:Lid Switch` in config/hypr/grassfield/system.lua, which runs
+// /usr/lib/grassfield/grassfield-lid closed -> `lock lid`): lock unless a
 // physical external display is active, which is clamshell mode, still in use on that display (macOS does not lock or
 // sleep then; Omarchy's omarchy-system-lid-close makes the same choice). `names` are the shell's output names
 // (Quickshell.screens). External connectors are the DRM names Hyprland gives physical outputs (DP-1, HDMI-A-1,
@@ -75,13 +76,49 @@ function lidShouldLock(names) {
     return true;
 }
 
-// Crash-recovery marker ($XDG_RUNTIME_DIR, one per compositor instance), as returned by markerRead:
-// null when the file does not exist, else its content. Anything but an exact "unlocked" means the
-// session was (or may have been) locked: re-lock. That includes an empty or unreadable marker.
+// Crash-recovery marker ($XDG_RUNTIME_DIR, one per compositor instance): one line, "<state>" or
+// "<state> sleeps=<n>", state "locked" or "unlocked", n the system's count of completed suspends
+// (/sys/power/suspend_stats/success) when the line was written (absent when that count was unreadable).
+var MARKER_LINE = /^(locked|unlocked)(?: sleeps=([0-9]{1,12}))?$/;
+
+function markerLine(state, sleeps) {
+    var s = state === "unlocked" ? "unlocked" : "locked"; // anything unknown is written as locked
+    return isSleepCount(sleeps) ? s + " sleeps=" + sleeps : s;
+}
+
+function isSleepCount(n) {
+    return typeof n === "number" && isFinite(n) && n >= 0 && Math.floor(n) === n;
+}
+
+// /sys/power/suspend_stats/success as read (text, or undefined when unreadable) -> the count, or -1.
+function parseSleepCount(text) {
+    var m = String(text === undefined || text === null ? "" : text).match(/^\s*([0-9]{1,12})\s*$/);
+    return m ? Number(m[1]) : -1;
+}
+
+// The marker as returned by markerRead: null when the file does not exist, else its content. Anything
+// but an "unlocked" line means the session was (or may have been) locked: re-lock. That includes an
+// empty or unreadable marker and any malformed line.
 function markerSaysLocked(text) {
     if (text === null || text === undefined)
         return false; // missing: the first start of this compositor instance
-    return String(text).trim() !== "unlocked";
+    var m = String(text).trim().match(MARKER_LINE);
+    return !(m && m[1] === "unlocked");
+}
+
+// The machine slept since an "unlocked" marker was written (GF-AUDIT-001 follow-up N1): the count of
+// completed suspends differs from the one the line recorded. A shell that is alive locks before every
+// sleep and rewrites the marker when it is unlocked again, so a different count means a sleep happened
+// while no shell could lock for it (it had crashed or was restarting, right before or during that sleep):
+// the restarted shell locks. False when either count is unknown (an old marker without a count, an
+// unreadable sysfs file): no evidence either way.
+function sleptSince(markerText, sleepsNow) {
+    if (markerText === null || markerText === undefined || !isSleepCount(sleepsNow))
+        return false;
+    var m = String(markerText).trim().match(MARKER_LINE);
+    if (!m || m[2] === undefined)
+        return false;
+    return Number(m[2]) !== sleepsNow;
 }
 
 // Meaning of a marker read, from FileView's result: null when the file does not exist (FileNotFound);
@@ -102,9 +139,11 @@ function markerRead(missing, failed, text) {
 //   - markerAvailable false (XDG_RUNTIME_DIR unset): no marker can prove the session unlocked;
 //   - otherwise the marker decides (markerSaysLocked on a markerRead result). A missing marker (null)
 //     is the first start of this compositor instance; if it was removed while locked, the compositor
-//     still holds the dead client's lock (ext-session-lock) and compositorLockState() finds it.
-function restoreAtStart(intent, markerAvailable, markerText) {
-    return intent === true || markerAvailable !== true || markerSaysLocked(markerText);
+//     still holds the dead client's lock (ext-session-lock) and compositorLockState() finds it;
+//   - an "unlocked" marker no longer proves anything when the machine slept since it was written
+//     (sleptSince, sleepsNow = the current count of completed suspends, or -1 when unreadable).
+function restoreAtStart(intent, markerAvailable, markerText, sleepsNow) {
+    return intent === true || markerAvailable !== true || markerSaysLocked(markerText) || sleptSince(markerText, sleepsNow);
 }
 
 // Session lock state as reported by Hyprland, from `hyprctl -j monitors` objects
