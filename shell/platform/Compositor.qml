@@ -256,7 +256,8 @@ Singleton {
 
     // Reduce Motion also shortens what Hyprland animates itself: window pop-in and the Spaces slide become crossfades
     // (Minimized.motionCall). Applied whenever it changes, at every shell start (the compositor keeps what the previous shell
-    // set), and after a config reload (which restores the config's own animations).
+    // set), and after a config reload while it is on (the reload restores the config's own animations, which is already
+    // right when it is off).
     readonly property bool reduceMotion: Settings.reduceMotion
     onReduceMotionChanged: pushMotion()
 
@@ -268,7 +269,7 @@ Singleton {
         target: Hyprland
 
         function onRawEvent(event: HyprlandEvent): void {
-            if (event.name === "configreloaded")
+            if (event.name === "configreloaded" && root.reduceMotion)
                 root.pushMotion();
         }
     }
