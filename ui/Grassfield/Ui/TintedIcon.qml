@@ -83,7 +83,9 @@ Item {
         width: root.textureOnly ? root.size * root.oversample : root.width
         height: root.textureOnly ? root.size * root.oversample : root.height
         source: root.source
-        sourceSize: Qt.size(root.size * root.oversample, root.size * root.oversample)
+        // A tile icon is decoded at the size it is drawn at (decoded pixels per drawn pixel = oversample, as in Default): the shader then reads
+        // the mip level that holds one texel group per pixel and does not blur the artwork by resampling it at a fraction of a level (A2 rule I at 24 px).
+        sourceSize: Qt.size(root.size * root.oversample * (root.textureOnly && root.ownTile ? root.artScale : 1), root.size * root.oversample * (root.textureOnly && root.ownTile ? root.artScale : 1))
         fillMode: Image.PreserveAspectFit
         smooth: true
         mipmap: true

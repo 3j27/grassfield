@@ -1250,6 +1250,8 @@ QtObject {
     readonly property real iconModeClearPlateWallpaperLuma: 0.05
     // PERF-01 / UX-13: ms between two shape reads of the prewarm (IconShapePrewarm), one icon file at a time in the idle moments after the list of apps is known, so the Apps panel does not read about a hundred files while it opens
     readonly property int iconModePrewarmGapMs: 40
+    // ADR-0014 Clear in the light appearance: lightness of the smoked plate (dark grey rather than black, so that a black folder on a black background still shows its plate at the same faint level as over the bare wallpaper; white and bright materials see it as the smoke it is: A2 changes by under 0.1 on every cell, modelled)
+    readonly property real iconModeClearPlateLightLuma: 0.3
     // ADR-0014 Clear over the bare wallpaper (desktop icons): opacity of the smoked glass plate, strong so that white ink and the plate edge hold on a white and on a black wallpaper
     readonly property real iconModeClearPlateAlphaWallpaper: 0.7
     // ADR-0014 Dark: lightness (sRGB 0..1) of the graphite system plate; macOS 26 Dark plates are near black.

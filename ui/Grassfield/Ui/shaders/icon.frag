@@ -38,6 +38,7 @@ layout(std140, binding = 0) uniform buf {
     float tile;               // 1: the icon is its own rounded-square tile (own-tile rule): luminance-preserving maps, see below
     float tileDarkArtLift;
     float clearPlateWallpaperLuma;
+    float clearPlateLightLuma;
     float clearPlateAlphaDark;
     float clearPlateAlphaWallpaper;
     float overWallpaper;      // 1: drawn over the bare wallpaper (desktop), not over a window material
@@ -115,7 +116,7 @@ void main() {
         // The ink opacity is solved so that the colour on screen is affine in linear light between the glass (black art) and the ink
         // (white art), the glass being the plate over an assumed material: the contrast between two parts of the artwork survives.
         float pa = accent ? clearPlateAlphaAccent : (wall ? clearPlateAlphaWallpaper : (isDark ? clearPlateAlphaDark : clearPlateAlphaLight));
-        float pg = accent ? (accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? 1.0 : (wall ? clearPlateWallpaperLuma : 0.0));
+        float pg = accent ? (accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? 1.0 : (wall ? clearPlateWallpaperLuma : clearPlateLightLuma));
         float bd = (accent || wall) ? clearBackdropMid : (isDark ? clearBackdropDark : clearBackdropLight);
         float under = pg * pa + (1.0 - pa) * bd;
         float yEff = clearInkFloor + (1.0 - clearInkFloor) * (lightInk ? Y : 1.0 - Y);
@@ -157,7 +158,7 @@ void main() {
         plateA = 1.0;
     } else if (modeIndex < 2.5) {
         // Light glass on a dark material; smoked glass on a light one, and over the bare wallpaper (any brightness).
-        plateRgb = accent ? vec3(accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? vec3(1.0) : vec3(wall ? clearPlateWallpaperLuma : 0.0));
+        plateRgb = accent ? vec3(accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? vec3(1.0) : vec3(wall ? clearPlateWallpaperLuma : clearPlateLightLuma));
         plateA = accent ? clearPlateAlphaAccent : (wall ? clearPlateAlphaWallpaper : (isDark ? clearPlateAlphaDark : clearPlateAlphaLight));
     } else {
         vec3 t = tint.rgb;

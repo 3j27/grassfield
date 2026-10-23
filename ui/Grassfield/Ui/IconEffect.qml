@@ -50,6 +50,7 @@ ShaderEffect {
     readonly property real tile: root.ownTile ? 1 : 0
     readonly property real tileDarkArtLift: Tokens.iconModeTileDarkArtLift
     readonly property real clearPlateWallpaperLuma: Tokens.iconModeClearPlateWallpaperLuma
+    readonly property real clearPlateLightLuma: Tokens.iconModeClearPlateLightLuma
     readonly property real clearPlateAlphaDark: Tokens.iconModeClearPlateAlphaDark
     readonly property real clearPlateAlphaLight: Tokens.iconModeClearPlateAlphaLight
     readonly property real clearInkDark: Tokens.iconModeClearInkDark

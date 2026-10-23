@@ -1,15 +1,35 @@
 {
- "_doc": "A2 limits measured on Breeze, Adwaita and the own fixtures (tests/visual/icon-a2.sh). Key: the rule (E outside, S separation) and the label of the A2 line (icon, mode, size, appearance, scenario, tint, transparency); value: the measured metric of the rule, default: the Default rendering's. docs/specs/ui.md lists the same cells (tests/shell/a2_limits_doc.sh). Values of 2026-10-23 are modelled offline (the GPU run replaces them).",
+ "_doc": "A2 limits (tests/visual/icon-a2.sh). Key: the rule (E outside, S separation) and the label of the A2 line (icon, mode, size, appearance, scenario, tint, transparency); value: the measured metric of the rule, default: the Default rendering's. docs/specs/ui.md lists the same cells (tests/shell/a2_limits_doc.sh). Values marked PROVISIONAL in ui.md come from the offline model (.dev/a2m, calibrated on the GPU run of 2026-10-23) and are replaced by the next GPU run.",
  "limits": [
   {
-   "key": "E hicolor:kdenlive tinted 24px dark window wallpaper #ffffff",
+   "key": "E breeze48:kimagemapeditor clear 32px light window wallpaper #ffffff",
    "value": 2.87,
-   "default": 5
+   "default": 3.08
   },
   {
-   "key": "E hicolor:basecamp dark 48px dark window transparency 1.0 wallpaper #ffffff",
-   "value": 1.57,
-   "default": 1.94
+   "key": "E breeze48:kimagemapeditor tinted 32px light window tint #E25AA1 wallpaper #ffffff",
+   "value": 2.85,
+   "default": 3.08
+  },
+  {
+   "key": "E breeze48:kimagemapeditor tinted 32px light window tint #E6B422 wallpaper #ffffff",
+   "value": 2.75,
+   "default": 3.08
+  },
+  {
+   "key": "E breeze48:kimagemapeditor tinted 32px light window wallpaper #ffffff",
+   "value": 2.81,
+   "default": 3.08
+  },
+  {
+   "key": "E breeze48:utilities-terminal tinted 24px dark window wallpaper #ffffff",
+   "value": 2.82,
+   "default": 5.3
+  },
+  {
+   "key": "E hicolor:basecamp clear 24px dark window transparency 1.0 wallpaper #ffffff",
+   "value": 1.54,
+   "default": 1.92
   },
   {
    "key": "E hicolor:basecamp dark 24px dark window transparency 1.0 wallpaper #ffffff",
@@ -17,9 +37,14 @@
    "default": 1.92
   },
   {
-   "key": "E hicolor:basecamp clear 24px dark window transparency 1.0 wallpaper #ffffff",
-   "value": 1.56,
-   "default": 1.92
+   "key": "E hicolor:basecamp dark 48px dark window transparency 1.0 wallpaper #ffffff",
+   "value": 1.59,
+   "default": 1.93
+  },
+  {
+   "key": "E hicolor:basecamp dark 48px desktop wallpaper #808080",
+   "value": 2.35,
+   "default": 3.12
   },
   {
    "key": "E hicolor:basecamp tinted 24px dark window transparency 1.0 wallpaper #ffffff",
@@ -27,19 +52,49 @@
    "default": 1.92
   },
   {
-   "key": "E hicolor:basecamp dark 48px desktop wallpaper #808080",
-   "value": 2.39,
-   "default": 3.12
+   "key": "E hicolor:basecamp tinted 32px dark window tint #E25AA1 transparency 1.0 wallpaper #ffffff",
+   "value": 1.55,
+   "default": 1.94
   },
   {
    "key": "E hicolor:basecamp tinted 32px dark window tint #E6B422 transparency 1.0 wallpaper #ffffff",
-   "value": 1.57,
+   "value": 1.52,
    "default": 1.94
   },
   {
-   "key": "E hicolor:basecamp tinted 32px dark window tint #E25AA1 transparency 1.0 wallpaper #ffffff",
-   "value": 1.59,
-   "default": 1.94
+   "key": "E hicolor:basecamp tinted 48px light window wallpaper #000000",
+   "value": 1.9,
+   "default": 2.41
+  },
+  {
+   "key": "E hicolor:basecamp tinted 48px light window wallpaper #808080",
+   "value": 2.28,
+   "default": 2.9
+  },
+  {
+   "key": "E hicolor:basecamp tinted 48px light window wallpaper #ffffff",
+   "value": 2.71,
+   "default": 3.45
+  },
+  {
+   "key": "E hicolor:kdenlive tinted 24px dark window wallpaper #ffffff",
+   "value": 2.47,
+   "default": 4.53
+  },
+  {
+   "key": "E hicolor:kdenlive tinted 32px dark window tint #E25AA1 wallpaper #ffffff",
+   "value": 2.69,
+   "default": 3.54
+  },
+  {
+   "key": "E hicolor:kdenlive tinted 32px dark window wallpaper #ffffff",
+   "value": 2.64,
+   "default": 3.54
+  },
+  {
+   "key": "E hicolor:obs tinted 24px dark window wallpaper #ffffff",
+   "value": 2.6,
+   "default": 6.68
   }
  ]
 }
