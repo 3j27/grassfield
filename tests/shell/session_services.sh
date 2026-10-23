@@ -50,12 +50,14 @@ print("other-user", m.interesting(e(_UID=str(uid + 1)), uid, last, 1000.0))
 print("bad-pid", m.interesting(e(COREDUMP_PID="x; rm"), uid, last, 1000.0))
 last["firefox"] = 1000.0
 print("deduped", m.interesting(e(), uid, last, 1030.0))
-print("after-window", m.interesting(e(), uid, last, 1061.0))
+print("deduped-9min", m.interesting(e(), uid, last, 1000.0 + 540))
+print("after-window", m.interesting(e(), uid, last, 1000.0 + 601))
+print("cap", m.under_cap([0.0, 10.0, 20.0, 30.0, 40.0, 50.0], 100.0), m.under_cap([0.0, 10.0, 20.0, 30.0, 40.0, 50.0], 3700.0), m.under_cap([0.0] * 5, 100.0))
 print("own", m.interesting(e(COREDUMP_EXE="/usr/lib/grassfield/grassfield-crash-watch"), uid, last, 5000.0))
 PY
 out=$(python3 -I "$tmp/crash.py" "$root")
-desc="crash notifications: this user's crashes only, named by the executable, one per program per minute, never our own"
-check bash -c 'grep -qx "name firefox" <<<"$1" && grep -qx "comm-fallback thing" <<<"$1" && grep -qx "other-user None" <<<"$1" && grep -qx "bad-pid None" <<<"$1" && grep -qx "deduped None" <<<"$1" && grep -qx "after-window firefox" <<<"$1" && grep -qx "own None" <<<"$1"' _ "$out"
+desc="crash notifications: this user's crashes only, named by the executable, one per program per 10 minutes, at most 6 an hour, never our own"
+check bash -c 'grep -qx "name firefox" <<<"$1" && grep -qx "comm-fallback thing" <<<"$1" && grep -qx "other-user None" <<<"$1" && grep -qx "bad-pid None" <<<"$1" && grep -qx "deduped None" <<<"$1" && grep -qx "deduped-9min None" <<<"$1" && grep -qx "after-window firefox" <<<"$1" && grep -qx "cap False True True" <<<"$1" && grep -qx "own None" <<<"$1"' _ "$out"
 
 # --- migrations notice (clickable) -------------------------------------------------------------------------------------
 mkdir -p "$tmp/bin"
