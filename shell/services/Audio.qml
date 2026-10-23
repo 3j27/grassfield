@@ -4,15 +4,19 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
+import "VolumeScale.js" as Scale
 
-// Default output (PipeWire through Quickshell). volume is 0..1 (values above 1 are not offered).
+// Default output (PipeWire through Quickshell). volume is 0..1 on the cubic scale of wpctl (VolumeScale.js: PipeWire
+// stores the linear value; the sliders, the OSD, the IPC level and `wpctl get-volume` all speak the cubic one).
 Singleton {
     id: root
 
     readonly property var sink: sinkOverride !== null ? sinkOverride : Pipewire.defaultAudioSink
     // Visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES): an output at 50 percent, not muted.
     readonly property bool ready: VisualFixtures.active || (sink !== null && sink.audio !== null)
-    readonly property real volume: VisualFixtures.active ? 0.5 : (ready ? sink.audio.volume : 0)
+    // The real default sink on the shown scale (0 without one), whatever the fixtures say: what `wpctl get-volume` prints.
+    readonly property real deviceVolume: sink !== null && sink.audio !== null ? Scale.toPerceptual(sink.audio.volume) : 0
+    readonly property real volume: VisualFixtures.active ? 0.5 : deviceVolume
     readonly property bool muted: VisualFixtures.active ? false : (ready ? sink.audio.muted : false)
     readonly property string iconName: !ready || muted || volume <= 0 ? "volume-mute"
         : volume < 0.34 ? "volume-1"
@@ -69,7 +73,7 @@ Singleton {
     function setVolume(value: real): bool {
         return backendWrite("volume", () => {
             if (ready && !VisualFixtures.active)
-                sink.audio.volume = Math.max(0, Math.min(1, value));
+                sink.audio.volume = Scale.toLinear(value);
         });
     }
 
