@@ -11,9 +11,8 @@
 //       Clear  monochrome ink (light on dark, smoked on light) whose opacity follows the lightness of the artwork's luminance.
 //       Tinted the lightness of the artwork's luminance mapped onto a two-tone ramp of the tint.
 //     Every map is increasing and keeps a minimum slope, so the internal contrast of an icon survives (A2 "internal contrast").
-//  3. RIM. A thin edge highlight on the plate, so a dark plate stays visible on a dark material; its width scales with the
-//     icon size (never below a minimum) and it fades on small icons.
-// The folder colour (FolderIcon) recolours the artwork only, after the mode transform: the plate and its rim stay.
+//  There is no rim (owner decision 2026-10-23): a mode only changes the colour; the plate has no edge highlight.
+// The folder colour (FolderIcon) recolours the artwork only, after the mode transform: the plate stays.
 
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -24,8 +23,6 @@ layout(std140, binding = 0) uniform buf {
     vec4 tint;              // tint colour (Tinted)
     float modeIndex;        // 1 dark, 2 clear, 3 tinted
     float dark;             // 1 in the dark appearance
-    float rimUv;            // rim width in texture coordinates
-    float rimGain;          // 0..1: the rim fades out on small icons
     float sysPlateInset;    // system plate: inset from the icon box, in box fractions
     float sysPlateRadius;   // corner radius over the plate side
     float sysGlyphScale;    // scale of the artwork sitting on the plate
@@ -33,7 +30,6 @@ layout(std140, binding = 0) uniform buf {
     float darkArtSaturation;
     float darkArtScale;
     float darkArtLift;
-    float darkRim;
     float clearPlateAlphaDark;
     float clearPlateAlphaWallpaper;
     float overWallpaper;      // 1: drawn over the bare wallpaper (desktop), not over a window material
@@ -44,20 +40,14 @@ layout(std140, binding = 0) uniform buf {
     float clearBackdropLight;
     float clearBackdropMid;
     float clearInkFloor;
-    float rimInner;
-    float darkRimLight;
-    float tintedRimMixDark;
-    float tintedRimShadeLight;
     float clearPlateAlphaAccent;
     float accentFill;         // 0: none; 1: over a bright accent fill (selected row), 2: over a dark one
-    float clearRim;
     float tintedPlateScale;
     float tintedPlateMixLight;
     float tintedRampLowDark;
     float tintedRampHighDark;
     float tintedRampLowLight;
     float tintedRampHighLight;
-    float tintedRim;
     vec4 folderTint;          // folder colour step (FolderIcon): a = 1 when the artwork is recoloured, 0 otherwise
     float folderBrightness;   // MultiEffect arithmetic of the folder colour (FolderEffect, tokens folderIcon*)
     float folderContrast;
@@ -137,41 +127,28 @@ void main() {
     }
     vec4 artP = vec4(art * artA, artA);
 
-    // The system plate: a rounded square, with the rim on its edge.
+    // The system plate: a rounded square.
     float hs = 0.5 - sysPlateInset;
     float rad = sysPlateRadius * 2.0 * hs;
     vec2 q = abs(qt_TexCoord0 - vec2(0.5)) - vec2(hs - rad);
     float sdf = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - rad;
     float aa = max(fwidth(sdf), 0.0005);
     float mask = 1.0 - smoothstep(-aa, aa, sdf);
-    float inside = -sdf;
-    float band = smoothstep(0.0, aa, inside) * (1.0 - smoothstep(rimUv * rimInner, rimUv * 1.0, inside)) * rimGain;
     vec3 plateRgb;
     float plateA;
-    vec3 rimRgb;
-    float rimK;
     if (modeIndex < 1.5) {
         plateRgb = vec3(darkPlateLuma);
         plateA = 1.0;
-        rimRgb = vec3(1.0);
-        rimK = wall ? 1.0 : darkRim * (isDark ? 1.0 : darkRimLight);   // over the bare wallpaper the rim is fully opaque (it must read on any wallpaper)
     } else if (modeIndex < 2.5) {
         // Light glass on a dark material; smoked glass on a light one, and over the bare wallpaper (any brightness).
-        bool lightInk = accent ? accentBright : isDark;
         plateRgb = accent ? vec3(accentBright ? 0.0 : 1.0) : ((isDark && !wall) ? vec3(1.0) : vec3(0.0));
         plateA = accent ? clearPlateAlphaAccent : (wall ? clearPlateAlphaWallpaper : (isDark ? clearPlateAlphaDark : clearPlateAlphaLight));
-        rimRgb = vec3(lightInk ? clearInkDark : clearInkLight);
-        rimK = clearRim;
     } else {
         vec3 t = tint.rgb;
         plateRgb = isDark ? t * tintedPlateScale : mix(t, vec3(1.0), tintedPlateMixLight);
         plateA = 1.0;
-        rimRgb = isDark ? mix(t, vec3(1.0), tintedRimMixDark) : t * tintedRimShadeLight;
-        rimK = tintedRim;
     }
     vec4 plateP = vec4(plateRgb * plateA, plateA);
-    float rimA = band * rimK;
-    plateP = vec4(rimRgb * rimA, rimA) + plateP * (1.0 - rimA);
     plateP *= mask;
     fragColor = (artP + plateP * (1.0 - artP.a)) * qt_Opacity;
 }

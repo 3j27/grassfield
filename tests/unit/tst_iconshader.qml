@@ -184,11 +184,9 @@ TestCase {
         const at = (x, y) => x < 0 || y < 0 || x >= n || y >= n ? false : mask[y * n + x];
         const u = n / 48;
         const d2 = Math.max(1, Math.round(2 * u));
-        // The outline band holds the plate's edge highlight: the system plate is inset from the box by iconMode.sysPlateInset, the rim has
-        // its width in logical pixels (at least rimMinWidth) and one more pixel is antialiasing (3 to 4 px). The 2 px band that
-        // separates the ring from the edge (d2) saw only the antialiased edge pixel of the plate and never the rim, whatever its contrast.
-        const rimPx = Math.max(Tokens.iconModeRimMinWidth, Tokens.iconModeRimWidth * Math.min(1, n / Tokens.iconModeRimFullSize));
-        const dr = Math.max(2, Math.round(Tokens.iconModeSysPlateInset * n + 1 + rimPx));
+        // The outline band holds the plate's edge: the system plate is inset from the box by iconMode.sysPlateInset and one more pixel is antialiasing
+        // (no rim since the owner decision of 2026-10-23: the modes only change the colour).
+        const dr = Math.max(2, Math.round(Tokens.iconModeSysPlateInset * n + 1));
         const d4 = Math.max(2, Math.round(4 * u));
         const d8 = Math.max(3, Math.round(8 * u));
         const ring = [];

@@ -1206,10 +1206,6 @@ QtObject {
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
 
-    // ADR-0014 shader: width in logical pixels of the edge highlight that keeps a dark plate visible on a dark material (macOS 26 icons have a specular rim)
-    readonly property real iconModeRimWidth: 1.5
-    // ADR-0014 shader: icon size (logical px) from which the edge highlight has its full width and opacity; it shrinks and fades below
-    readonly property int iconModeRimFullSize: 48
     // ADR-0014 (integrator decision 2026-10-22, the macOS model: small icons stay legible): icon edge in logical pixels below which the icon appearance modes do not apply and the Default artwork is drawn in every mode (list rows, menus, the sidebar: a plate and a recolour made json, cpp, txt, sh and csv the same tile at 16 px)
     readonly property int iconModeMinSize: 24
     // ADR-0014 Dark/Clear/Tinted: the system plate every icon sits on is inset by this fraction of the icon box on each side (macOS 26 plates leave a small margin)
@@ -1248,14 +1244,6 @@ QtObject {
     readonly property int iconModeOwnTileTimeout: 3000
     // ADR-0014 Clear over the bare wallpaper (desktop icons): opacity of the smoked glass plate, strong so that white ink and the plate edge hold on a white and on a black wallpaper
     readonly property real iconModeClearPlateAlphaWallpaper: 0.7
-    // ADR-0014 shader: lowest opacity factor of the edge highlight on small icons (it keeps a 1 px width and fades to this, so a 16 px icon is neither haloed nor edgeless)
-    readonly property real iconModeRimMinOpacity: 0.5
-    // ADR-0014 shader: narrowest edge highlight in logical pixels (small icons keep a rim that is visible on a dark material)
-    readonly property real iconModeRimMinWidth: 1.5
-    // ADR-0014 shader: where the rim starts to fade, as a share of its width
-    readonly property real iconModeRimInner: 0.8
-    // ADR-0014 Dark: factor of the rim opacity in the light appearance (a white rim on a light material would glare)
-    readonly property real iconModeDarkRimLight: 0.25
     // ADR-0014 Dark: lightness (sRGB 0..1) of the graphite system plate; macOS 26 Dark plates are near black.
     readonly property real iconModeDarkPlateLuma: 0.13
     // ADR-0014 Dark: the artwork keeps this share of its colour (1 = unchanged, 0 = grey): a modest desaturation, colour identity kept
@@ -1264,8 +1252,6 @@ QtObject {
     readonly property real iconModeDarkArtScale: 0.97
     // ADR-0014 Dark: lightness the darkest part of the artwork is mapped to (a black part separates a little from the graphite plate; the affine map to darkArtScale keeps black art darker than light art: >= 3:1 where the default has it)
     readonly property real iconModeDarkArtLift: 0.32
-    // ADR-0014 Dark: opacity of the white edge highlight in the dark appearance; chosen with the A2 test (docs/specs/ui.md) so the plate outline stays visible on the dark material
-    readonly property real iconModeDarkRim: 0.8
     // ADR-0014 Clear: opacity of the white glass plate in the dark appearance (the material shows through)
     readonly property real iconModeClearPlateAlphaDark: 0.22
     // ADR-0014 Clear: opacity of the dark glass plate in the light appearance (the material shows through)
@@ -1284,8 +1270,6 @@ QtObject {
     readonly property real iconModeClearInkFloor: 0.15
     // ADR-0014 Clear over the accent fill of a selected row (Search, Force Quit): opacity of the plate, dark on a bright accent and light on a dark one, so that the plate and the ink keep 4.5:1 against the accent (A2 accent row)
     readonly property real iconModeClearPlateAlphaAccent: 0.9
-    // ADR-0014 Clear: opacity of the glyph-coloured edge highlight of the glass plate
-    readonly property real iconModeClearRim: 0.9
     // ADR-0014 Tinted, dark appearance: the plate is the tint colour at this fraction of its brightness (a dark tinted plate, macOS 26)
     readonly property real iconModeTintedPlateScale: 0.3
     // ADR-0014 Tinted, light appearance: the plate is the tint colour mixed this far to white (a light tinted plate)
@@ -1298,12 +1282,6 @@ QtObject {
     readonly property real iconModeTintedRampLowLight: 0.12
     // ADR-0014 Tinted, light appearance: the artwork's lightest tone is the tint mixed this far to white (a wide ramp keeps the internal contrast of the icon)
     readonly property real iconModeTintedRampHighLight: 0.4
-    // ADR-0014 Tinted: opacity of the glyph-coloured edge highlight of the plate
-    readonly property real iconModeTintedRim: 1.0
-    // ADR-0014 Tinted, dark appearance: the rim is the tint mixed this far to white
-    readonly property real iconModeTintedRimMixDark: 0.9
-    // ADR-0014 Tinted, light appearance: the rim is the tint at this fraction of its brightness
-    readonly property real iconModeTintedRimShadeLight: 0.6
     // ADR-0014 Clear: from this material transparency (Control Center slider, 0..1) the wallpaper shows through the window material so much that Clear icons are drawn as over the bare wallpaper (smoked plate, opaque rim); A2 at 1.0 holds a floor of 2.0 in every mode, tint and size (docs/specs/ui.md)
     readonly property real iconModeWallpaperLikeTransparency: 0.8
     // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)

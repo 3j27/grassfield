@@ -31,8 +31,6 @@ Window {
             property real sysPlateInset: 0.04
             property real sysPlateRadius: 0.225
             property real sysGlyphScale: 0.72
-            property real rimUv: 0.03
-            property real rimGain: 1
             fragmentShader: Qt.resolvedUrl("../../ui/Grassfield/Ui/shaders/icon.frag.qsb")
             onStatusChanged: console.log("status", status, log)
         }

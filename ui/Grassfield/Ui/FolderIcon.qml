@@ -60,7 +60,7 @@ Item {
         size: root.size
         oversample: root.oversample
         // Default mode (no effect item) and a failed shader: the folder colour is a layer over the plain icon. In an icon mode the
-        // shader recolours the artwork itself (TintedIcon.recolor), so that the system plate and its rim are not recoloured.
+        // shader recolours the artwork itself (TintedIcon.recolor), so that the system plate is not recoloured.
         recolor: root.recolored
         recolorTint: root.folderTint
         layer.enabled: root.recolored && (root.modeName === "default" || icon.effectFailed)
