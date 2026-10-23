@@ -211,6 +211,7 @@
  {"path": "tests/visual/test_frame_stats.py", "layer": "logic"},
  {"path": "tests/ci/inventory.py", "layer": "logic"},
  {"path": "tests/ci/qml_warnings.py", "layer": "logic"},
+ {"path": "tests/ci/qmldir_types.py", "layer": "logic"},
  {"path": "scripts/dev/i18n-cmake-check.sh", "layer": "headless"},
  {"path": "tests/compositor/appmenu.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/chrome.sh", "layer": "nested", "runner": "bare"},
