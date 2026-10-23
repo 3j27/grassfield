@@ -60,6 +60,17 @@ TestCase {
         verify(NotificationPrefs.bodyShown("unlocked", false));
     }
 
+    function test_hiddenPreviewShowsTheAppNameAndAGenericLine() {
+        const hidden = NotificationPrefs.display(false, "Re: salary", "<b>secret</b>", "Mail", "Notification");
+        compare(hidden.title, "Mail");
+        compare(hidden.body, "Notification");
+        const nameless = NotificationPrefs.display(false, "Re: salary", "x", "", "Notification");
+        compare(nameless.title, "Notification");
+        const shown = NotificationPrefs.display(true, "Re: salary", "text", "Mail", "Notification");
+        compare(shown.title, "Re: salary");
+        compare(shown.body, "text");
+    }
+
     function test_appsToList() {
         compare(NotificationPrefs.appsToList(["Zed", "mail", "Alpha"], list), ["Alpha", "Mail", "Signal", "Zed"]);
         compare(NotificationPrefs.appsToList(undefined, []), []);

@@ -136,11 +136,22 @@ Singleton {
 
     // ---- API used by the UI ----
 
-    // Sanitized body (computed once per entry); empty when previews are hidden for this app: its own setting, else the
-    // global one; "unlocked" hides the text while the session is locked. `appName` is the sender's name.
-    function bodyFor(bodyHtml: string, appName: string): string {
+    // Whether the title and text of this app's notifications are shown: its own setting, else the global one;
+    // "unlocked" hides them while the session is locked. `appName` is the sender's name.
+    function previewShown(appName: string): bool {
         const policy = NotificationPrefs.effective(Settings.notificationsAppPreviews, appName, Settings.notificationsPreviews);
-        return NotificationPrefs.bodyShown(policy, sessionLocked) ? bodyHtml : "";
+        return NotificationPrefs.bodyShown(policy, sessionLocked);
+    }
+
+    // macOS with previews off: the app name as the title and a generic "Notification" line, never the sender's title or
+    // body (a mail subject or a contact name is as private as the text). The history file keeps the real text (0600).
+    function summaryFor(summary: string, appName: string): string {
+        return NotificationPrefs.display(previewShown(appName), summary, "", appName, qsTr("Notification")).title;
+    }
+
+    // Sanitized body (computed once per entry); the generic line when previews are hidden for this app.
+    function bodyFor(bodyHtml: string, appName: string): string {
+        return NotificationPrefs.display(previewShown(appName), "", bodyHtml, appName, qsTr("Notification")).body;
     }
 
     // Image (hint) first, then the app icon (theme name or path); "" when none resolves, so the

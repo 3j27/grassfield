@@ -129,3 +129,11 @@ function appsToList(seen, list) {
         seen.forEach(add);
     return out.sort((a, b) => a.localeCompare(b));
 }
+
+// What a notification shows: with previews hidden the app name is the title (`generic` when the sender has no name) and
+// `generic` is the only line of text, never the sender's title or body (macOS); otherwise title and body as sent.
+function display(shown, summary, body, appName, generic) {
+    if (shown)
+        return {title: summary, body: body};
+    return {title: typeof appName === "string" && appName !== "" ? appName : generic, body: generic};
+}

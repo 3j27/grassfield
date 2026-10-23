@@ -773,7 +773,7 @@ ListView {
             height: rowLoader.height
             activeFocusOnTab: true
             Accessible.role: Accessible.ListItem
-            Accessible.name: item.summary !== "" ? item.summary : Notifications.groupLabel(item.appName)
+            Accessible.name: Notifications.summaryFor(item.summary, item.appName) !== "" ? Notifications.summaryFor(item.summary, item.appName) : Notifications.groupLabel(item.appName)
             Accessible.description: item.appName
             Accessible.focusable: true
             Accessible.onPressAction: row.open()
@@ -840,7 +840,7 @@ ListView {
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
                 Accessible.name: qsTr("Close")
-                Accessible.description: item.summary
+                Accessible.description: Notifications.summaryFor(item.summary, item.appName)
                 Accessible.focusable: true
                 Accessible.onPressAction: item.clearCard(false, true)
                 Keys.onPressed: event => {
@@ -1011,7 +1011,7 @@ ListView {
                             width: parent.width
                             Component.onCompleted: item.contentCtl = rowContent
                             onControlsChanged: list.queueResolve()
-                            summary: item.summary
+                            summary: Notifications.summaryFor(item.summary, item.appName)
                             appName: item.appName
                             urgency: item.urgency
                             actionsJson: item.actionsJson
