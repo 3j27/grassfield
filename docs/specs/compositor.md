@@ -131,8 +131,16 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   Then `grassfield>>{"v":"gfc/1","type":"minimized","address":"<hex>"}` is posted (at once without
   animation). A window already on `special:minimized` is left alone.
 - **FR15** `hl.plugin.grassfield.restore(address, x, y, w, h)`: same validation. A window on
-  `special:minimized` moves back to the focused monitor's active workspace at its floating geometry (Hyprland
-  keeps it on the special workspace), is focused and raised at once, and stays transparent while its snapshot
+  `special:minimized` moves back to **the display it was minimized from, on the Desktop that display shows now, at its
+  frame** (owner decision D-1 2026-10-23, the macOS model; audit GF-001): never to the display of the Dock that was
+  clicked. The plugin records the display (the one under the window's middle, else Hyprland's monitor of the window)
+  and the floating box when it minimizes the window (core `planRestore`); the record goes with the restore, the window's
+  close and a move of the window off `special:minimized` by any other way, and survives a plugin reload only when the
+  library stayed mapped (FR23). A display that moved keeps the frame at the same place relative to it; a display that is
+  gone hands the window to the focused one, its frame fitted into the area below the menu bar; without a record (a window
+  parked by the shell's fallback) the focused display's Desktop takes it and Hyprland's placement stays. A zoomed or
+  full-screen window keeps its state, only its display is chosen. The window is focused and raised at once, and stays
+  transparent while its snapshot
   plays the configured effect backwards (Scale: grows from the tile to its box in 300 ms, ease-out, the time-reverse
   of FR14's curve, fading in over the first 20 %); then it is shown and `{"type":"restored"}` is posted. A restore
   during a minimize animation (or a minimize during a restore) completes the running one first; a Scale minimize
@@ -718,7 +726,8 @@ Chosen in Hyprland 0.56.2 after reading its headers and the v0.56.2 sources of `
   focused monitor). Consequences: the shell rebuilds its Dock tiles from it after a restart; a plugin unload,
   crash or mismatch leaves windows minimized and restorable by the fallback; a window minimized by the
   fallback is restored by the plugin and the other way round. Hyprland keeps the floating geometry of a window
-  on a special workspace, so restore puts it back where it was (translated if restored on another monitor).
+  on a special workspace (translated when that workspace is on another monitor); the plugin gives the recorded frame
+  back exactly (FR15), and the shell's fallback moves the window to the Desktop its own display shows now (D-1).
 - **State first, animation second.** Minimize moves the window at once and animates a snapshot; restore moves
   it back at once (focused, transparent through `WINDOW_ALPHA_MOVE_FROM_WORKSPACE`, the alpha Hyprland itself
   animates 0 → 1 when a window arrives on a visible workspace) and shows it when the snapshot has grown back.

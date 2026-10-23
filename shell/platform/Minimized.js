@@ -2,7 +2,8 @@
 
 // Minimized-window bookkeeping (pure, unit-tested). The shell records every window it
 // minimized: Hyprland has no minimized state, so the record is the source of truth for the Dock.
-// Record: {toplevel, address, appId, title}.
+// Record: {toplevel, address, appId, title, screen} (`screen`: the display it was minimized from, "" when unknown, e.g. a
+// record rebuilt after a shell restart).
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
 var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile"];
@@ -183,6 +184,19 @@ function normalizeAddress(address) {
 // Arbitrary names (e.g. "undefined" from a missing value) are rejected.
 function validWorkspace(workspace) {
     return /^(?:[1-9][0-9]{0,8}|special:[A-Za-z0-9_-]{1,64})$/.test(String(workspace));
+}
+
+// The Desktop a window restored WITHOUT the plugin goes to (owner decision D-1, the macOS model; audit GF-001): the one the
+// display it was minimized from (`screen`, recorded at the minimize) shows now; else (no record, display gone) the focused
+// Desktop. `monitors`: [{name, workspace}] with the id of the Desktop each display shows. "" when neither is valid. The
+// plugin, when present, does this itself (and gives the frame back).
+function restoreWorkspace(screen, monitors, focusedWorkspace) {
+    if (typeof screen === "string" && screen !== "" && Array.isArray(monitors)) {
+        const m = monitors.find(x => x && x.name === screen);
+        if (m && /^[1-9][0-9]{0,8}$/.test(String(m.workspace)))
+            return String(m.workspace);
+    }
+    return /^[1-9][0-9]{0,8}$/.test(String(focusedWorkspace)) ? String(focusedWorkspace) : "";
 }
 
 function moveRequest(address, workspace) {

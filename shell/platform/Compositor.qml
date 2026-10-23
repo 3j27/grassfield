@@ -212,7 +212,7 @@ Singleton {
         // Rectangle of the tile this window gets (appended after the existing minimized tiles),
         // computed before the list changes.
         const tile = dockRect(windowScreenName(top) || focusedScreenName, root.minimized.length, true, toplevel);
-        root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title});
+        root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title, screen: windowScreenName(top)});
         if (Capabilities.has("minimize"))
             dispatchRequest(pluginWindowCall("minimize", address, tile));
         else
@@ -220,8 +220,9 @@ Singleton {
         return true;
     }
 
-    // Restore a minimized window to the current workspace and focus it. The plugin moves, focuses
-    // and animates it itself; activating it here too would race the plugin (a focus request for a
+    // Restore a minimized window and focus it: back on the display it was minimized from, on the Desktop that display shows
+    // now (owner decision D-1, macOS), never on the display of the Dock that was clicked. The plugin moves, focuses and
+    // animates it itself (and gives its frame back); activating it here too would race the plugin (a focus request for a
     // window still on special:minimized opens that workspace).
     function unminimize(toplevel: var): void {
         const rec = root.minimized.find(r => r.toplevel === toplevel);
@@ -233,8 +234,10 @@ Singleton {
             dispatchRequest(pluginWindowCall("restore", rec.address, tile));
             return;
         }
-        if (root.focusedWorkspace)
-            dispatchRequest(moveRequest(rec.address, String(root.focusedWorkspace.id)));
+        const monitors = (Hyprland.monitors ? Hyprland.monitors.values : []).map(m => ({name: m.name, workspace: m.activeWorkspace ? m.activeWorkspace.id : 0}));
+        const workspace = Minimized.restoreWorkspace(rec.screen || "", monitors, root.focusedWorkspace ? root.focusedWorkspace.id : 0);
+        if (workspace !== "")
+            dispatchRequest(moveRequest(rec.address, workspace));
         toplevel.activate();
     }
 

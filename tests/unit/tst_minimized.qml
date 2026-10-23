@@ -228,6 +228,22 @@ TestCase {
         compare(tiles[0].name, "Foot");
     }
 
+    // D-1 (macOS; audit GF-001), without the plugin: the Desktop that the display the window was minimized from shows now,
+    // never the display of the Dock that was clicked (the focused one).
+    function test_restoreWorkspaceIsTheOwnDisplaysCurrentDesktop() {
+        const monitors = [{name: "WAYLAND-1", workspace: 1}, {name: "GF-REF", workspace: 4}];
+        compare(Minimized.restoreWorkspace("GF-REF", monitors, 1), "4", "its own display, whichever display is focused");
+        compare(Minimized.restoreWorkspace("WAYLAND-1", monitors, 4), "1");
+        compare(Minimized.restoreWorkspace("DP-9", monitors, 1), "1", "its display is gone: the focused Desktop");
+        compare(Minimized.restoreWorkspace("", monitors, 1), "1", "no record (rebuilt after a restart): the focused Desktop");
+        compare(Minimized.restoreWorkspace(undefined, monitors, 1), "1");
+        compare(Minimized.restoreWorkspace("GF-REF", [{name: "GF-REF", workspace: -98}], 2), "2", "a special workspace is never a Desktop");
+        compare(Minimized.restoreWorkspace("GF-REF", [{name: "GF-REF", workspace: "3\", x = 1"}], 2), "2", "only plain ids");
+        compare(Minimized.restoreWorkspace("GF-REF", null, 2), "2");
+        compare(Minimized.restoreWorkspace("GF-REF", [], 0), "", "nothing valid: nothing to move to");
+        compare(Minimized.restoreWorkspace("GF-REF", [null, {name: "GF-REF", workspace: 7}], 0), "7");
+    }
+
     function test_moveRequestValidates() {
         compare(Minimized.moveRequest("0x55AB", "3"), "hl.dsp.window.move({ workspace = \"3\", follow = false, window = \"address:0x55ab\" })");
         compare(Minimized.moveRequest("55ab", "special:minimized").indexOf("special:minimized") > 0, true);

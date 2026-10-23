@@ -13,7 +13,11 @@
 #   1 minimize A with its minimize button: A ends on special:minimized, a `minimized` event is posted, the
 #     Dock gains a tile; back-to-back screenshots of the whole layout during the animation (frames/, contact
 #     sheets minimize-frames.png / restore-frames.png, count of frames showing the animation);
-#   2 restore A with a click on its Dock tile: `restored` event, A back on its workspace at its geometry, focused;
+#   2 restore A with a click on its Dock tile: `restored` event, A back on its display, on the Desktop that display shows,
+#     at its geometry, focused (owner decision D-1, the macOS model: never on the display of the Dock that was clicked);
+#   2b two displays (D-1, audit GF-001): the Dock moved to another output (the pointer rests on its bottom edge), A
+#     minimized, A's display switched to another Desktop, a click on A's tile on the other output: A comes back on its
+#     own display, on the Desktop it shows now, at its geometry, focused; then A, its Desktop and the Dock go back;
 #   3 repeat minimize + restore <repeats> times quickly; every 4th round the Dock tile is clicked while the
 #     minimize animation is still running; A must end at its geometry;
 #   4 a window closed during its minimize animation, another one closed during its restore animation;
@@ -147,7 +151,7 @@ contact_sheet() { # <prefix> <out.png>: frames in capture order
 pids=()
 socat_pid=""
 fixture_pid=""
-nestctl() { timeout 10 "$root/scripts/nestctl" "$@"; } # verbs of the plugin (Stages mode only)
+nestctl() { timeout 10 "$root/scripts/nestctl" "$@"; } # nested only: verbs of the plugin (Stages mode), dispatches of step 2b
 cleanup() {
   if ((stages_mode)); then
     nestctl dispatch 'hl.plugin.grassfield.stages([[{"op":"off","durationMs":0}]])' >/dev/null 2>&1
@@ -246,6 +250,12 @@ client() { # <pid> -> "<address> <x> <y> <w> <h> <workspace name>" (x/y relative
   query clients | jq -r --argjson p "$1" --argjson mx "$mon_x" --argjson my "$mon_y" \
     '.[] | select(.pid == $p) | "\(.address) \(.at[0] - $mx) \(.at[1] - $my) \(.size[0]) \(.size[1]) \(.workspace.name)"'
 }
+client_monitor() { # <pid> -> the name of the display the window is on
+  local id
+  id=$(query clients | jq -r --argjson p "$1" '[.[] | select(.pid == $p)][0].monitor // empty')
+  [[ -n $id ]] && query monitors | jq -r --argjson id "$id" '.[] | select(.id == $id) | .name'
+}
+shown_ws() { query monitors | jq -r --arg n "$1" '.[] | select(.name == $n) | .activeWorkspace.name'; } # <display> -> its Desktop
 event_count() { # <type> <address without 0x>
   local n
   n=$(grep -c "grassfield>>{\"v\":\"gfc/1\",\"type\":\"$1\",\"address\":\"$2\"}" "$events" 2>/dev/null)
@@ -289,7 +299,9 @@ read -r addr x0 y0 w0 h0 ws0 < <(client "$a_pid")
 hex=${addr#0x}
 min_x=$((x0 + GF_TB_MIN_X)) # minimize button center, right of the surface's left edge; bar middle above the surface
 bar_y=$((y0 - GF_TB_MID))
-say "  setup: A $addr ${w0}x${h0} at ($x0,$y0) on workspace $ws0"
+mon0=$(client_monitor "$a_pid")
+say "  setup: A $addr ${w0}x${h0} at ($x0,$y0) on workspace $ws0 of ${mon0:-?}"
+[[ $mon0 == "$out" ]] || { say "minimize: setup error: A opened on ${mon0:-?}, not on $out"; exit 2; }
 if ((stages_mode)); then
   # A joined O's stage (same app): O moves into a strip stage of its own, A stays alone in the active stage.
   nestctl dispatch "hl.plugin.grassfield.stages([[{\"op\":\"move\",\"address\":\"$o_addr\",\"stage\":\"new\"}]])" >/dev/null 2>&1
@@ -349,8 +361,10 @@ if command -v magick >/dev/null && [[ $dock_out == "$out" ]]; then
   tile_vs_trash=$(ae "$run/after-minimize.png[$(crop "$tx")]" "$run/after-minimize.png[$(crop $((tx + pitch)))]")
   [[ $trash_moved =~ ^[0-9]+$ && $tile_vs_trash =~ ^[0-9]+$ ]] && ((trash_moved < icon * icon / 20 && tile_vs_trash > icon * icon / 10))
   check "Dock tile appeared at ($tx,$tile_y)" $? "Trash half a pitch right: $trash_moved px differ; tile vs Trash: $tile_vs_trash of $((icon * icon)) px differ"
+elif ! command -v magick >/dev/null; then
+  say "  Dock tile appeared: NOT VERIFIED (ImageMagick 7, the magick command, is not installed)"
 else
-  say "  Dock tile appeared: NOT VERIFIED (ImageMagick missing, or the Dock is on $dock_out, not the captured $out)"
+  say "  Dock tile appeared: NOT VERIFIED (the Dock is on $dock_out; the captures before and after cover $out only)"
 fi
 say "  minimize animation: $(animation_ms "$to_minimized" minimized) (move to special:minimized -> minimized event)"
 contact_sheet min "$run/minimize-frames.png"
@@ -361,7 +375,9 @@ say "2 restore with a click on the Dock tile"
 n=$(event_count restored "$hex")
 dock_pointer abs "$tx" "$tile_y" sleep 300 # hover first (Dock magnification settles)
 WAYLAND_DISPLAY=$sock grim -t ppm "$run/before-restore-all.ppm" 2>>"$log"
-to_workspace="^[0-9]+ movewindowv2>>$hex,[0-9]+,$ws0\$"
+# D-1: A's own display and the Desktop it shows now (here the Desktop A was on), whichever display has the Dock.
+expect_ws=$(shown_ws "$mon0")
+to_workspace="^[0-9]+ movewindowv2>>$hex,[0-9]+,${expect_ws:-$ws0}\$"
 moves=$(grep -cE "$to_workspace" "$events")
 dock_pointer abs "$tx" "$tile_y" sleep 40 click
 frames_after_move "$to_workspace" "$moves" restore &
@@ -371,8 +387,10 @@ check "restored event" $? "count $(event_count restored "$hex")"
 wait "$bpid"
 sleep 0.3
 read -r _ x y w h ws < <(client "$a_pid")
-[[ $ws == "$ws0" && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
-check "A back at its geometry" $? "now ${w}x${h} at ($x,$y) on $ws; expected ${w0}x${h0} at ($x0,$y0) on $ws0"
+mon=$(client_monitor "$a_pid")
+[[ $mon == "$mon0" && $ws == "$expect_ws" && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
+check "A back on its display, its Desktop, at its geometry (D-1; Dock on $dock_out)" $? \
+  "now ${w}x${h} at ($x,$y) on $ws of ${mon:-?}; expected ${w0}x${h0} at ($x0,$y0) on $expect_ws of $mon0"
 active=$(query activewindow | jq -r '.address')
 [[ $active == "$addr" ]]
 check "A focused" $? "active window $active"
@@ -380,6 +398,70 @@ WAYLAND_DISPLAY=$sock grim -t ppm "$run/after-restore-all.ppm" 2>>"$log"
 say "  restore animation: $(animation_ms "$to_workspace" restored) (move back -> restored event)"
 contact_sheet restore "$run/restore-frames.png"
 say "  restore animation on screen: $(intermediate_frames restore "$run/before-restore-all.ppm" "$run/after-restore-all.ppm") frames (sheet: $run/restore-frames.png)"
+
+# 2b two displays (D-1): the Dock on another output than A's, A's display on another Desktop when the tile is clicked
+say "2b two displays: the Dock on the other display, A's display on another Desktop (D-1)"
+second=$(query monitors | jq -r --arg o "$out" '[.[] | select(.name != $o and (.disabled | not))][0].name // ""')
+# Brings the Dock to <display> (macOS: it moves to the display whose bottom edge the pointer rests on; the dwell is
+# Tokens.dockRevealDwell, as in tests/visual/dock-geometry.sh "onedock"), then lifts the pointer off the edge.
+dock_to() { # <display>
+  local dw dh
+  read -r dw dh < <(query monitors | jq -r --arg n "$1" '.[] | select(.name == $n) | "\(.width) \(.height)"')
+  [[ -n ${dh:-} ]] || return 1
+  timeout 20 "$root/scripts/dev/pointer.sh" output "$1" abs $((dw / 2)) $((dh / 2)) sleep 500 >>"$log" 2>&1
+  timeout 20 "$root/scripts/dev/pointer.sh" output "$1" abs $((dw / 2)) $((dh - 1)) sleep 1200 >>"$log" 2>&1
+  timeout 20 "$root/scripts/dev/pointer.sh" output "$1" abs $((dw / 2)) $((dh / 2)) sleep 600 >>"$log" 2>&1
+}
+if [[ -z $second ]]; then
+  check "2b: a second display" 1 "only $out is enabled: the D-1 two-display case needs one (the nested session has WAYLAND-1)"
+else
+  dock_to "$second"
+  n=$(event_count minimized "$hex")
+  f2=$(follow_lines)
+  pointer abs "$min_x" "$bar_y" sleep 300 # back on A's display: its titlebar press focuses that display
+  pointer abs "$min_x" "$bar_y" sleep 40 click
+  wait_event minimized "$hex" "$n" 5000
+  check "2b: minimized event" $? "count $(event_count minimized "$hex")"
+  read -r d2_out d2_x d2_y <<<"$(dock_tile "$hex" "$f2")"
+  [[ ${d2_out:-} == "$second" ]]
+  check "2b: the shell's Dock rectangle for A is on $second" $? "tile centre ${d2_x:-?},${d2_y:-?} on ${d2_out:-?}"
+  # Another Desktop on A's display (created there: A's display is the focused one after the press): the first free id.
+  used=$(query workspaces | jq -r '[.[].name] | join(" ")')
+  alt_ws=""
+  for cand in 7 8 9 10 11 12 13 14 15 16; do [[ " $used " == *" $cand "* ]] || { alt_ws=$cand; break; }; done
+  nestctl dispatch "hl.dsp.focus({ workspace = \"$alt_ws\" })" >>"$log" 2>&1
+  sleep 0.5
+  shown_now=$(shown_ws "$mon0")
+  [[ -n $alt_ws && $shown_now == "$alt_ws" ]]
+  check "2b: $mon0 shows another Desktop" $? "$mon0 shows ${shown_now:-?} (asked: ${alt_ws:-none free})"
+  if [[ -n ${d2_y:-} ]]; then
+    n=$(event_count restored "$hex")
+    timeout 20 "$root/scripts/dev/pointer.sh" output "$d2_out" abs "$d2_x" "$d2_y" sleep 300 >>"$log" 2>&1
+    timeout 20 "$root/scripts/dev/pointer.sh" output "$d2_out" abs "$d2_x" "$d2_y" sleep 40 click >>"$log" 2>&1
+    wait_event restored "$hex" "$n" 5000
+    check "2b: restored event" $? "count $(event_count restored "$hex")"
+    sleep 0.3
+    read -r _ x y w h ws < <(client "$a_pid")
+    mon=$(client_monitor "$a_pid")
+    [[ $mon == "$mon0" && $ws == "$shown_now" && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
+    check "2b: A back on its display, on the Desktop it shows, at its geometry (Dock on $d2_out)" $? \
+      "now ${w}x${h} at ($x,$y) on $ws of ${mon:-?}; expected ${w0}x${h0} at ($x0,$y0) on $shown_now of $mon0"
+    active=$(query activewindow | jq -r '.address')
+    [[ $active == "$addr" ]]
+    check "2b: A focused" $? "active window $active"
+  else
+    check "2b: restore from the other display" 1 "no Dock rectangle for A: no tile is clicked"
+  fi
+  # Back to the state of step 1 for the next steps: A on its Desktop, that Desktop shown, the Dock where it was.
+  nestctl dispatch "hl.dsp.window.move({ workspace = \"$ws0\", follow = false, window = \"address:$addr\" })" >>"$log" 2>&1
+  nestctl dispatch "hl.dsp.focus({ workspace = \"$ws0\" })" >>"$log" 2>&1
+  sleep 0.4
+  [[ $dock_out != "$second" ]] && dock_to "$dock_out"
+  nestctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >>"$log" 2>&1
+  sleep 0.4
+  read -r _ x y w h ws < <(client "$a_pid")
+  say "  2b: back for step 3: A ${w}x${h} at ($x,$y) on $ws of $(client_monitor "$a_pid"); the Dock on $dock_out"
+fi
 
 # 3 rapid repetition
 say "3 minimize + restore x$repeats"
