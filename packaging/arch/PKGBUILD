@@ -8,7 +8,7 @@
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor grassfield-icons)
 pkgver=0.4.0
-pkgrel=10
+pkgrel=11
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
@@ -193,5 +193,6 @@ package_grassfield-icons() {
     "Pebble icon theme (https://github.com/a-shewale/Pebble-Icon-Theme, commit ${_pebble_commit}), user a-shewale:" \
     "its folders (places), the store icon and the icons not provided by the other layers are used in this theme." \
     "Its README states GPL-3.0; the repository holds no licence file at this commit." \
+    "Its README credits MacTahoe, Hatter (https://github.com/Mibea/Hatter, base of its folders) and Adwaita as sources." \
     >"$lic/PEBBLE"
 }

@@ -143,7 +143,10 @@ package `grassfield-icons`, a dependency of `grassfield-desktop`) is ONE theme c
 `packaging/arch/icons-compose.py` (header of the script: layers, directory layout) from two pinned third-party themes and
 Grassfield's own glyphs (`branding/icons/theme`, MIT); it inherits `breeze,Adwaita,hicolor`. First layer that provides an
 icon name wins: Grassfield's own app icons, MacTahoe, Pebble, Grassfield's device glyphs. Pebble supplies the folders and the
-store icon; the files and names listed in `packaging/arch/icons-apple-logos.txt` (Apple logo and look-alikes) are removed. The
+store icon; the files and names listed in `packaging/arch/icons-apple-logos.txt` (the Apple logo, alone or inside a larger
+drawing, and the Finder face) are removed, and the composer refuses an output that draws or embeds a fingerprinted Apple
+mark (`packaging/arch/icons-apple-signatures.txt`) or holds a copy of a listed file. Look-alikes of Apple's app icons
+(Calendar, Clock, Maps, Music, Notes, Photos, Safari, ...) are NOT removed: owner decision 2026-10-23, risk accepted. The
 session selects the theme with `QT_QPA_SYSTEM_ICON_THEME` (uwsm `env-grassfield`) and, for GTK, a locked dconf database that
 holds only `icon-theme='grassfield-icons'`. Dev sessions compose the same theme with `scripts/dev/icons.sh` (`just icons`).
 - MacTahoe icon theme, `https://github.com/vinceliuice/MacTahoe-icon-theme` at commit
@@ -153,11 +156,14 @@ holds only `icon-theme='grassfield-icons'`. Dev sessions compose the same theme 
 - Pebble icon theme, `https://github.com/a-shewale/Pebble-Icon-Theme` at commit
   `185da58c2f4caf3c2a038aa0869fd2772acc0933`, only its main `Pebble/` variant. **Pebble: no licence file at the pin; its
   README states GPL-3.0 (and links a LICENSE file that does not exist); owner accepted the risk 2026-10-23.** It credits
-  MacTahoe, Hatter and Adwaita as its sources. The credit note ships as `/usr/share/licenses/grassfield-icons/PEBBLE`, the
+  MacTahoe, Hatter (`https://github.com/Mibea/Hatter`, the base of its folders and structure; its licence was not verified
+here) and Adwaita (pacman licence field CC-BY-SA-3.0 OR LGPL-3.0-only) as its sources. The credit note ships as `/usr/share/licenses/grassfield-icons/PEBBLE`, the
   two sources and commits as `SOURCE`.
 - The composed package declares `license=(MIT GPL-3.0-only)`: MIT for Grassfield's own glyphs, GPL-3.0 for the third-party art.
-  **needs legal review:** Apple trademark artwork that the by-eye sweep may have missed in either theme, the missing Pebble
-  licence, and the aggregation with the MIT packages. The theme's `index.theme` and the UI name neither theme.
+  **needs legal review:** Apple trademark artwork that the by-eye sweep and the fingerprints may have missed in either
+  theme (rasters are checked only against known fingerprints), the Apple look-alike app icons kept by owner decision, the
+  missing Pebble licence and the licences of the art Pebble took from Hatter and Adwaita, and the aggregation with the
+  MIT packages. The theme's `index.theme` and the UI name neither theme.
 
 Runtime theme dependencies (installed by pacman, read by Qt and GTK as data; nothing of them is vendored, copied or
 modified by Grassfield):

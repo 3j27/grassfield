@@ -14,7 +14,10 @@
 # screens and windows and the integrator's check of each hit and doubt; then a second, automatic pass: every path of the
 # listed logo files was drawn alone, the 23 that draw the apple were kept as position-free signatures (the path data
 # after its first moveto) and every regular file of both pins was searched for them (3 more files found and added:
-# accessories-system-cleaner twice, Pebble's preferences-system-windows). Only the Apple logo (and the Finder face, Apple's
+# accessories-system-cleaner twice, Pebble's preferences-system-windows); last, the independent review of the merge
+# found a byte-for-byte Pebble copy of a listed Finder face and an Apple-logo raster hidden in an SVG (both added; the
+# composer now refuses any copy of a listed file and checks embedded and PNG rasters). Only the Apple logo (and the
+# Finder face, Apple's
 # mark for its file manager) is removed; look-alikes of Apple app icons stay (owner: "pour le reste je prends le risque").
 
 # ---- MacTahoe: the Apple logo alone (start menu, Apple folder)
@@ -81,3 +84,7 @@ pebble:Pebble/scalable/apps/gnome-disks.svg
 pebble:Pebble/scalable/apps/input-mouse.svg
 pebble:Pebble/scalable/apps/preferences-desktop-icons.svg
 pebble:Pebble/scalable/apps/preferences-desktop-peripherals.svg
+# ---- Pebble: the Apple logo as a raster hidden in an SVG (display none: not drawn, but shipped; reviewer 2026-10-23)
+pebble:Pebble/scalable/apps/preferences-tweaks-slingshot.svg
+# ---- Pebble: the Finder face (a byte-for-byte copy of MacTahoe's; reviewer 2026-10-23)
+pebble:Pebble/scalable/apps/icon-preview-app.svg finder-face

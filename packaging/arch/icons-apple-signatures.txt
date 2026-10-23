@@ -1,12 +1,18 @@
-# Fingerprints of the Apple-logo glyph paths found in the pinned upstream themes (ADR-0017, owner decision 2026-10-23).
-# Input of packaging/arch/icons-compose.py (default next to it; --signatures FILE overrides). The composer fails when
-# any regular SVG of the composed theme draws a path whose signature has one of these SHA-256 values, so a logo that a
-# pin change or an alias brings back cannot ship.
-# Signature of a path: its `d` data with runs of white space collapsed to one space, trimmed, and the first moveto
-# (`M x y` / `m x y`) removed, so the same glyph placed elsewhere in an icon has the same signature. Only hashes are
-# stored here: the repository holds no Apple artwork.
+# Fingerprints of the Apple marks found in the pinned upstream themes (ADR-0017, owner decision 2026-10-23): the Apple
+# logo glyph and the Finder face. Input of packaging/arch/icons-compose.py (default next to it; --signatures FILE
+# overrides). The composer fails when the composed theme draws or embeds one of them, so a mark that a pin change, an
+# alias or a copy under another name brings back cannot ship. It also fails on a byte-for-byte copy of a file listed in
+# icons-apple-logos.txt.
+# Two kinds of lines:
+#   <sha256>         a path signature: the `d` data with runs of white space collapsed to one space, trimmed, and the
+#                    first moveto (`M x y` / `m x y`) removed, so the same glyph placed elsewhere matches;
+#   raster:<sha256>  the bytes of a raster: a PNG file of the theme, or an image embedded in an SVG as a base64 data
+#                    URI (hidden ones too, display none), decoded with white space and missing padding tolerated.
+# Only hashes are stored here: the repository holds no Apple artwork.
 # Source: every path of the files in icons-apple-logos.txt was drawn alone and looked at; the 23 that draw the apple
-# (alone, on an iMac chin, a mouse, an iPod, a drive, a menu bar, the rainbow logo pieces) are below.
+# (alone, on an iMac chin, a mouse, an iPod, a drive, a menu bar, the rainbow logo pieces) and the 3 that draw the
+# Finder face (its profile half, the nose line, the symbolic nose) are below, then the raster of the Apple logo hidden
+# in Pebble's preferences-tweaks-slingshot.svg (reviewer finding 2026-10-23).
 b4ab6eb070d1633bcee8653760c5feae4b76031dc7fbf887afb835fb380bb75b
 a644abc60014dff89b3c8c0852127303f1c4dfeea36ac80156a3ac9baa9b6740
 4f6b177f2a2429aac815933fccae5c52313ea6e9183ce4bdb254c09d91278df0
@@ -30,3 +36,9 @@ c00583d51c00c7d67e39ca6984d7c7a6e98388fd1d183205d10ab07b750ed4a1
 16d1204389991e1f0d9afa0ee688ec756b3629ee43c0060ac25f7ed459047ac0
 3b4ea0c265eccc9b6fb05af0c151e1a0a60304e25bef6fc1c572f68fc7ccb2cd
 4319b13a36c83d96380d3d27aa3378b09fafb1512f62b4d1771088738979df8b
+# Finder face
+66cdc85e41ef8a1fde41a3666af30574dfd77c99fbac8471b3ba6c2bcdaceb90
+638a5047a0fe945dc21426fe2910d57b9ee41ab498ed39be0354e4813c91d3c6
+dfa468def8b83058524e54812d2b0cee46087b8a5715e2745cbe8da85f883fbc
+# rasters
+raster:f372697b067e2584271f4d1f6dbde000663ed07e142b67328f6c499b1f2e4e14

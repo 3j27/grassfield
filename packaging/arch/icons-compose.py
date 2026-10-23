@@ -10,8 +10,9 @@ Used by BOTH the package build (packaging/arch/PKGBUILD) and the dev provisionin
   --branding  branding/icons/theme (Grassfield's own icons: scalable/apps first, scalable/devices last; index.theme)
   --list      packaging/arch/icons-apple-logos.txt
   --out       the theme directory to create (replaced when it exists)
-  --signatures  SHA-256 fingerprints of Apple-logo glyph paths (default: icons-apple-signatures.txt next to this file);
-              the composer fails when a regular SVG of the output draws one of them (a second guard after the list)
+  --signatures  SHA-256 fingerprints of Apple-mark glyph paths and rasters (default: icons-apple-signatures.txt next to
+              this file); the composer fails when the output draws or embeds one of them, or holds a byte-for-byte copy
+              of a listed file (a second guard after the list)
 
 Layers (first layer that provides an icon NAME wins; a name is a file name without extension):
   0. ours:      branding scalable/apps
@@ -52,6 +53,8 @@ Output layout (no ambiguity: Pebble's directories would collide with ours, and t
 Each directory gets the upstream section (Size, Scale, Context, Type, MinSize, MaxSize, Threshold) under its
 prefixed name. Links are relative and stay inside the theme; no icon-theme.cache is written.
 """
+import base64
+import binascii
 import hashlib
 import os
 import posixpath
@@ -446,7 +449,13 @@ def compose(a):
         fh.write(text)
 
     verify(out)
-    verify_signatures(out, a.signatures)
+    listed_hashes = {}
+    for layer, rel, kind in entries:
+        if kind != "appstore":
+            base = mt_root if layer == "mactahoe" else a.pebble
+            with open(os.path.join(base, rel), "rb") as fh:
+                listed_hashes[hashlib.sha256(fh.read()).hexdigest()] = "%s:%s" % (layer, rel)
+    verify_signatures(out, a.signatures, listed_hashes)
 
     # ---- report
     print("icons-compose: layer counts (files + links, names)")
@@ -501,21 +510,54 @@ def path_signature(d):
     return FIRST_MOVE.sub("", re.sub(r"\s+", " ", d.strip()), count=1).strip()
 
 
-def verify_signatures(out, sig_file):
-    """Fail when a regular SVG of the output draws a path whose signature is a listed Apple-logo fingerprint."""
+DATA_IMAGE = re.compile(r'href\s*=\s*"data:image/[a-z+.-]+;base64,([^"]+)"', re.S)
+
+
+def raster_bytes(b64):
+    """The bytes of an embedded raster (base64 with white space and missing padding tolerated), or None."""
+    data = re.sub(r"[^A-Za-z0-9+/]", "", b64)
+    data += "=" * (-len(data) % 4)
+    try:
+        return base64.b64decode(data)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def verify_signatures(out, sig_file, listed_hashes):
+    """Fail when the output carries a listed Apple mark:
+      * a regular SVG draws a path whose signature is a fingerprint of the file (plain SHA-256 lines);
+      * a PNG file, or a raster embedded in an SVG (also a hidden one: display none), has a `raster:` fingerprint;
+      * a regular file is byte for byte one of the listed source files (`listed_hashes`: a copy under another name or in
+        the other layer)."""
     with open(sig_file, encoding="utf-8") as fh:
-        wanted = {l.strip() for l in fh if l.strip() and not l.startswith("#")}
-    if not wanted or any(not re.fullmatch(r"[0-9a-f]{64}", h) for h in wanted):
-        die("%s: expected SHA-256 lines" % sig_file)
+        lines = [l.strip() for l in fh if l.strip() and not l.startswith("#")]
+    paths = {l for l in lines if re.fullmatch(r"[0-9a-f]{64}", l)}
+    rasters = {l[len("raster:"):] for l in lines if re.fullmatch(r"raster:[0-9a-f]{64}", l)}
+    if not paths or len(paths) + len(rasters) != len(lines):
+        die("%s: expected SHA-256 lines (path signatures) and raster:SHA-256 lines" % sig_file)
     for d, _, fs in os.walk(out):
         for f in fs:
             p = os.path.join(d, f)
-            if os.path.islink(p) or not f.endswith(".svg"):
+            if os.path.islink(p) or not f.endswith((".svg", ".png")):
                 continue
-            with open(p, encoding="utf-8", errors="replace") as fh:
-                for path in PATH_D.findall(fh.read()):
-                    if hashlib.sha256(path_signature(path).encode()).hexdigest() in wanted:
-                        die("an Apple-logo glyph (signature in %s) is drawn by %s" % (sig_file, os.path.relpath(p, out)))
+            rel = os.path.relpath(p, out)
+            with open(p, "rb") as fh:
+                raw = fh.read()
+            whole = hashlib.sha256(raw).hexdigest()
+            if whole in listed_hashes:
+                die("%s is a copy of the listed file %s" % (rel, listed_hashes[whole]))
+            if f.endswith(".png"):
+                if whole in rasters:
+                    die("an Apple-mark raster (raster: fingerprint in %s) is %s" % (sig_file, rel))
+                continue
+            text = raw.decode("utf-8", errors="replace")
+            for path in PATH_D.findall(text):
+                if hashlib.sha256(path_signature(path).encode()).hexdigest() in paths:
+                    die("an Apple-mark glyph (signature in %s) is drawn by %s" % (sig_file, rel))
+            for b64 in DATA_IMAGE.findall(text):
+                img = raster_bytes(b64)
+                if img is not None and hashlib.sha256(img).hexdigest() in rasters:
+                    die("an Apple-mark raster (raster: fingerprint in %s) is embedded in %s" % (sig_file, rel))
 
 
 def main(argv):

@@ -16,7 +16,7 @@ composer=$root/packaging/arch/icons-compose.py
 
 # ---- fixtures
 python3 -I - "$tmp" "$root" <<'PY'
-import os, struct, sys, zlib
+import base64, hashlib, os, struct, sys, zlib
 tmp, root = sys.argv[1], sys.argv[2]
 R, G, B, Y = (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)
 def svg(c):
@@ -33,6 +33,11 @@ def put(base, rel, c):
         open(p, "wb").write(png(c))
     else:
         open(p, "w").write(svg(c))
+def put_unique(base, rel, c):
+    # a listed file: content of its own (the composer refuses any output file that is a copy of a listed one)
+    p = os.path.join(base, rel)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    open(p, "w").write(svg(c).replace("</svg>", "<!-- %s --></svg>" % rel))
 def link(base, rel, target):
     p = os.path.join(base, rel)
     os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -92,10 +97,10 @@ for d in ("16", "24", "scalable"):
 put(S, "places/16/user-home.svg", R); put(S, "places/scalable/user-home.svg", R)
 put(S, "places/symbolic/folder-symbolic.svg", R)
 for d in ("16", "scalable"):
-    put(S, "places/%s/start-here.svg" % d, R)
+    put_unique(S, "places/%s/start-here.svg" % d, R)
 put(S, "places/symbolic/start-here-symbolic.svg", R)
-put(S, "mimes/24/start-here.svg", R)          # directory the upstream index.theme does not list
-put(S, "places/16/folder-apple.svg", R)
+put_unique(S, "mimes/24/start-here.svg", R)   # directory the upstream index.theme does not list
+put_unique(S, "places/16/folder-apple.svg", R)
 put(S, "places/scalable/user-trash-dark.svg", R)  # upstream install.sh deletes it
 put(S, "apps/16/softwarecenter.svg", R); put(S, "apps/scalable/softwarecenter.svg", R)
 put(S, "apps/16/calendar.svg", R); put(S, "apps/scalable/calendar.svg", R)
@@ -117,7 +122,7 @@ link(L, "places/scalable/logo-chain.svg", "distributor-logo.svg")
 put(S, "apps/16/media-mixed.svg", R)
 link(L, "apps/scalable/media-mixed.svg", "../../places/scalable/start-here.svg")
 link(L, "places/24/inode-directory.svg", "folder.svg")   # Pebble has no 24 px directory
-put(S, "apps/scalable/doubtful.svg", R)
+put_unique(S, "apps/scalable/doubtful.svg", R)
 
 # Pebble-like
 pb = tmp + "/pb"
@@ -178,7 +183,10 @@ write(P + "/scalable/apps/pb-mark.svg", MARK % "M30 40  l5 0 l0 5 z")
 put(P, "scalable/apps/shared.svg", G)
 put(P, "scalable/apps/calendar.svg", G)
 put(P, "scalable/apps/own-app.svg", G)
-put(P, "scalable/apps/start-here.svg", G)
+put_unique(P, "scalable/apps/start-here.svg", G)
+# A raster hidden in an SVG (display none): drawn by nobody, shipped all the same (the raster guard reads it).
+write(P + "/scalable/apps/pb-raster.svg", '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 64 64"><image display="none" width="16" height="16" xlink:href="data:image/png;base64,%s"/></svg>\n' % base64.b64encode(png((1, 2, 3))).decode())
+write(tmp + "/raster.sha256", hashlib.sha256(png((1, 2, 3))).hexdigest() + "\n")
 link(P, "scalable/apps/start-alias.svg", "start-here.svg")
 put(P, "scalable/apps/doubtful.svg", G)
 link(P, "scalable/apps/dangling.svg", "missing.svg")
@@ -207,6 +215,8 @@ mactahoe:src/apps/scalable/doubtful.svg doubt
 """)
 write(tmp + "/list-missing.txt", "mactahoe:src/places/16/start-here.svg\nmactahoe:src/places/16/no-such-icon.svg\n")
 write(tmp + "/list-pebble.txt", "pebble:Pebble/scalable/apps/start-here.svg\n")
+# shared.svg of MacTahoe is the same bytes as calendar.svg, which stays: listing it must fail the composition
+write(tmp + "/list-copy.txt", "mactahoe:src/places/16/start-here.svg\nmactahoe:src/apps/scalable/shared.svg\n")
 
 # the fixture themes the grassfield-icons theme inherits (Breeze stand-in: yellow)
 fx = tmp + "/fx/icons"
@@ -301,9 +311,14 @@ desc="a listed file missing from the source fails the composer (pin drift)"
 check bash -ec '! python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list-missing.txt" --out "$2/never" >/dev/null 2>&1 && [ ! -e "$2/never" ]' _ "$composer" "$tmp"
 desc="signature guard: a path whose signature is in the fingerprints file fails the composer and names the file, wherever the glyph sits"
 printf 'l5 0 l0 5 z' | sha256sum | cut -d' ' -f1 >"$tmp/sigs.txt"
-check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list.txt" --signatures "$2/sigs.txt" --out "$2/sigfail" 2>&1) && exit 1; grep -qE "Apple-logo glyph .* (base/apps/scalable/glyph-mark|extra/scalable/apps/pb-mark)\.svg" <<<"$out"' _ "$composer" "$tmp"
-desc="signature guard: the default fingerprints file (packaging/arch/icons-apple-signatures.txt) holds SHA-256 lines only and the fixtures pass it"
-check bash -ec '[ "$(grep -v "^#" "$1" | grep -cvE "^[0-9a-f]{64}$")" = 0 ] && [ "$(grep -cE "^[0-9a-f]{64}$" "$1")" -ge 1 ] && [ -f "$2/index.theme" ]' _ "$root/packaging/arch/icons-apple-signatures.txt" "$out"
+check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list.txt" --signatures "$2/sigs.txt" --out "$2/sigfail" 2>&1) && exit 1; grep -qE "Apple-mark glyph .* (base/apps/scalable/glyph-mark|extra/scalable/apps/pb-mark)\.svg" <<<"$out"' _ "$composer" "$tmp"
+desc="signature guard: the default fingerprints file (packaging/arch/icons-apple-signatures.txt) holds SHA-256 and raster:SHA-256 lines only and the fixtures pass it"
+check bash -ec '[ "$(grep -v "^#" "$1" | grep -cvE "^(raster:)?[0-9a-f]{64}$")" = 0 ] && [ "$(grep -cE "^[0-9a-f]{64}$" "$1")" -ge 1 ] && [ -f "$2/index.theme" ]' _ "$root/packaging/arch/icons-apple-signatures.txt" "$out"
+desc="raster guard: an image hidden in an SVG (display none) whose bytes have a raster: fingerprint fails the composer"
+{ printf 'no such path' | sha256sum | cut -d' ' -f1; sed 's/^/raster:/' "$tmp/raster.sha256"; } >"$tmp/sigs-raster.txt"
+check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list.txt" --signatures "$2/sigs-raster.txt" --out "$2/rasterfail" 2>&1) && exit 1; grep -q "Apple-mark raster .* embedded in extra/scalable/apps/pb-raster.svg" <<<"$out"' _ "$composer" "$tmp"
+desc="copy guard: an output file that is byte for byte a listed file (another name) fails the composer"
+check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list-copy.txt" --out "$2/copyfail" 2>&1) && exit 1; grep -q "is a copy of the listed file mactahoe:src/apps/scalable/shared.svg" <<<"$out"' _ "$composer" "$tmp"
 desc="a pebble: entry drops that name from Pebble with its aliases (start-here, start-alias go on to Breeze)"
 run "$tmp/list-pebble.txt" "$tmp/peb2" >/dev/null 2>&1
 check bash -ec '[ ! -e "$1/extra/scalable/apps/start-here.svg" ] && [ ! -e "$1/extra/scalable/apps/start-alias.svg" ] && [ -f "$1/base/places/16/start-here.svg" ]' _ "$tmp/peb2"
