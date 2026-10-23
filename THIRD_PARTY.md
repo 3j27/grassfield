@@ -4,8 +4,8 @@ Facts taken from local files (installed headers, `pacman -Qi`, `/usr/share/licen
 repository), as of 2026-10-18. No legal conclusion is stated. Items marked **needs legal review** are open
 questions for counsel; details and evidence are in `docs/legal/licenses-audit.md`.
 
-Grassfield's own licence is not settled (ADR-0005 is Proposed; no root `LICENSE` yet). The package metadata says
-`license=(MIT)` following ADR-0005 pending the owner's decision.
+Grassfield's own licence is decided: MIT for Grassfield's own code (ADR-0005, accepted by the owner 2026-10-18; root
+`LICENSE`). The package metadata says `license=(MIT)`. The asset and trade-dress questions below stay open for counsel.
 
 Licence texts shipped with the packages (`/usr/share/licenses/<package>/`):
 
