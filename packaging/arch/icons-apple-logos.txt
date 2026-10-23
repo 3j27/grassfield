@@ -1,14 +1,23 @@
-# Apple-logo (and look-alike) removal list for the composed icon theme grassfield-icons (owner decision 2026-10-23).
+# Apple-logo removal list for the composed icon theme grassfield-icons (owner decision 2026-10-23, ADR-0017).
 # Input of packaging/arch/icons-compose.py. One entry per line:
 #   <layer>:<path in the upstream checkout> [kind]
 #   mactahoe:src/<category>/<size>/<file>      pebble:Pebble/<dir>/<dir>/<file>
-#   kind: apple-logo (default) | finder-face | appstore
-# apple-logo and finder-face: the file's whole icon NAME is dropped from that layer (every size, every directory) with
-# every link that resolves to one of them; the name falls through to the next layers (Pebble, our glyphs, Breeze,
-# Adwaita, hicolor). appstore: a MacTahoe file whose names are served by Pebble's shopping bag instead.
+#   kind: apple-logo (default) | finder-face | doubt | appstore
+# apple-logo, finder-face and doubt: the file's whole icon NAME is dropped from that layer (every size, every directory)
+# with every link that resolves to one of them; the name falls through to the next layers (Pebble, our glyphs, Breeze,
+# Adwaita, hicolor). doubt: the owner's rule "in doubt, Pebble" (an unclear mark, or an App Store glyph: the store comes
+# from Pebble). appstore: a MacTahoe file whose names are served by Pebble's shopping bag instead.
 # Every listed file must exist at the pinned commit (the composer fails on pin drift). Re-derive on a pin change.
 #
-# Seed: the start-here logos and the folder-apple drawing (the by-eye sweep list replaces this file).
+# Source: by-eye sweep of contact sheets of EVERY regular file of both pins (MacTahoe 839848b: 11,631 files on 117
+# sheets; Pebble 185da58: 4,882 files on 49 sheets; five reviewers, 2026-10-23), with zoomed renders of devices,
+# screens and windows and the integrator's check of each hit and doubt; then a second, automatic pass: every path of the
+# listed logo files was drawn alone, the 23 that draw the apple were kept as position-free signatures (the path data
+# after its first moveto) and every regular file of both pins was searched for them (3 more files found and added:
+# accessories-system-cleaner twice, Pebble's preferences-system-windows). Only the Apple logo (and the Finder face, Apple's
+# mark for its file manager) is removed; look-alikes of Apple app icons stay (owner: "pour le reste je prends le risque").
+
+# ---- MacTahoe: the Apple logo alone (start menu, Apple folder)
 mactahoe:src/places/16/start-here.svg
 mactahoe:src/places/22/start-here.svg
 mactahoe:src/places/24/start-here.svg
@@ -19,9 +28,56 @@ mactahoe:src/status/32/start-here.svg
 mactahoe:src/status/16/start-here-symbolic.svg
 mactahoe:src/status/22/start-here-symbolic.svg
 mactahoe:src/status/24/start-here-symbolic.svg
-mactahoe:src/status/symbolic/start-here-symbolic.svg
 mactahoe:src/status/symbolic-budgie/start-here-symbolic.svg
 mactahoe:src/places/16/folder-apple.svg
 mactahoe:src/places/symbolic/folder-apple-symbolic.svg
-# The App Store drawing (also built into the composer, listed for the record).
+mactahoe:src/apps/scalable/preferences-desktop-icons.svg
+# ---- MacTahoe: the Apple logo inside a larger drawing (iMac chin, mouse, drive, iPod, menu bar of a window)
+mactahoe:src/apps/scalable/putty.svg
+mactahoe:src/apps/scalable/variety.svg
+mactahoe:src/apps/scalable/variety-slideshow.svg
+mactahoe:src/apps/scalable/xwaylandvideobridge.svg
+mactahoe:src/apps/scalable/accessories-system-cleaner.svg
+mactahoe:src/apps/scalable/remote-desktop.svg
+mactahoe:src/apps/scalable/preferences-system-windows.svg
+mactahoe:src/apps/scalable/gnome-disks.svg
+mactahoe:src/apps/scalable/input-mouse.svg
+mactahoe:src/apps/scalable/preferences-desktop-peripherals.svg
+mactahoe:src/apps/22/preferences-desktop-mouse.svg
+mactahoe:src/preferences/32/preferences-desktop-mouse.svg
+mactahoe:src/devices/scalable/computer.svg
+mactahoe:src/devices/scalable/input-mouse.svg
+mactahoe:src/devices/scalable/video-television.svg
+mactahoe:src/devices/16/multimedia-player-ipod-mini-blue.svg
+mactahoe:src/devices/22/multimedia-player-ipod-mini-blue.svg
+mactahoe:src/devices/24/multimedia-player-ipod-mini-blue.svg
+# ---- MacTahoe: the Finder face
+mactahoe:src/apps/scalable/file-manager.svg finder-face
+mactahoe:src/apps/scalable/icon-preview-app.svg finder-face
+mactahoe:src/apps/symbolic/system-file-manager-symbolic.svg finder-face
+# ---- MacTahoe: in doubt, Pebble (an apple-like mark on a tower; the App Store glyph on store icons)
+mactahoe:src/places/symbolic/network-server-symbolic.svg doubt
+mactahoe:src/apps/scalable/softwarecenter-debian.svg doubt
+mactahoe:src/apps/scalable/softwarecenter-ubuntu.svg doubt
+mactahoe:src/apps/scalable/software-properties.svg doubt
+mactahoe:src/apps/scalable/system-software-install.svg doubt
+mactahoe:src/apps/scalable/system-software-update.svg doubt
+mactahoe:src/apps/symbolic/gnome-software-symbolic.svg doubt
+mactahoe:src/apps/symbolic/software-store-symbolic.svg doubt
+mactahoe:src/preferences/32/system-software-update.svg doubt
+# ---- MacTahoe: the App Store drawing (also built into the composer, listed for the record)
 mactahoe:src/apps/scalable/softwarecenter.svg appstore
+
+# ---- Pebble: the Apple logo (iMac chin, menu bar of a window, mouse, drive, the rainbow logo, alone on a tile)
+pebble:Pebble/scalable/apps/putty.svg
+pebble:Pebble/scalable/apps/variety.svg
+pebble:Pebble/scalable/apps/variety-slideshow.svg
+pebble:Pebble/scalable/apps/xwaylandvideobridge.svg
+pebble:Pebble/scalable/apps/accessories-system-cleaner.svg
+pebble:Pebble/scalable/apps/remote-desktop.svg
+pebble:Pebble/scalable/apps/preferences-system-windows.svg
+pebble:Pebble/scalable/apps/basilisk2.svg
+pebble:Pebble/scalable/apps/gnome-disks.svg
+pebble:Pebble/scalable/apps/input-mouse.svg
+pebble:Pebble/scalable/apps/preferences-desktop-icons.svg
+pebble:Pebble/scalable/apps/preferences-desktop-peripherals.svg

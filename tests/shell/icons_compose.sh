@@ -99,6 +99,9 @@ put(S, "places/16/folder-apple.svg", R)
 put(S, "places/scalable/user-trash-dark.svg", R)  # upstream install.sh deletes it
 put(S, "apps/16/softwarecenter.svg", R); put(S, "apps/scalable/softwarecenter.svg", R)
 put(S, "apps/16/calendar.svg", R); put(S, "apps/scalable/calendar.svg", R)
+# A glyph drawn by a path (the signature guard): the same relative path data at two positions, in both layers.
+MARK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="%s"/></svg>\n'
+write(S + "/apps/scalable/glyph-mark.svg", MARK % "M10 10 l5 0 l0 5 z")
 put(S, "apps/scalable/shared.svg", R); put(S, "apps/scalable/own-app.svg", R)
 L = mt + "/links/"
 link(L, "apps/scalable/gnome-software.svg", "softwarecenter.svg")
@@ -110,6 +113,9 @@ for d in ("16", "scalable"):
     link(L, "places/%s/distributor-logo.svg" % d, "start-here.svg")
     link(L, "places/%s/inode-directory.svg" % d, "folder.svg")
 link(L, "places/scalable/logo-chain.svg", "distributor-logo.svg")
+# A name with two kinds of entries: its own drawing at 16 px, an alias of a logo drawing at scalable.
+put(S, "apps/16/media-mixed.svg", R)
+link(L, "apps/scalable/media-mixed.svg", "../../places/scalable/start-here.svg")
 link(L, "places/24/inode-directory.svg", "folder.svg")   # Pebble has no 24 px directory
 put(S, "apps/scalable/doubtful.svg", R)
 
@@ -168,6 +174,7 @@ link(P, "scalable/apps/appstore.svg", "softwarecenter.svg")
 link(P, "scalable/apps/software-center.svg", "appstore.svg")
 link(P, "scalable/apps/org.gnome.Software.svg", "softwarecenter.svg")
 put(P, "scalable/apps/pb-only.svg", G)
+write(P + "/scalable/apps/pb-mark.svg", MARK % "M30 40  l5 0 l0 5 z")
 put(P, "scalable/apps/shared.svg", G)
 put(P, "scalable/apps/calendar.svg", G)
 put(P, "scalable/apps/own-app.svg", G)
@@ -251,6 +258,8 @@ desc="MacTahoe-only names stay MacTahoe's, with their links merged from links/ (
 check bash -ec 'cd "$1/base/apps"; [ -f scalable/calendar.svg ] && [ -f 16/calendar.svg ] && [ "$(readlink -f scalable/calendar-alias.svg)" = "$(readlink -f scalable/calendar.svg)" ]' _ "$out"
 desc="logo names: every size and directory and every link to them (chains too) are gone from MacTahoe, symbolic is another name"
 check bash -ec 'cd "$1/base"; ls */*/start-here.* */*/distributor-logo.* */*/logo-chain.* */*/folder-apple.* 2>/dev/null && exit 1; [ -f places/symbolic/start-here-symbolic.svg ]' _ "$out"
+desc="an alias of a logo drawing loses only that entry: the name keeps its other drawing (media-mixed at 16 px stays, its scalable alias is gone)"
+check bash -ec '[ -f "$1/base/apps/16/media-mixed.svg" ] && [ ! -e "$1/base/apps/scalable/media-mixed.svg" ]' _ "$out"
 desc="a dropped logo name falls through to the next layer (Pebble start-here)"
 check test -f "$out/extra/scalable/apps/start-here.svg"
 desc="upstream behaviour kept: user-trash-dark is not installed; files in directories the index.theme does not list are ignored"
@@ -290,6 +299,11 @@ check bash -ec 'diff -r --no-dereference "$1" "$2" >/dev/null' _ "$out" "$tmp/ag
 
 desc="a listed file missing from the source fails the composer (pin drift)"
 check bash -ec '! python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list-missing.txt" --out "$2/never" >/dev/null 2>&1 && [ ! -e "$2/never" ]' _ "$composer" "$tmp"
+desc="signature guard: a path whose signature is in the fingerprints file fails the composer and names the file, wherever the glyph sits"
+printf 'l5 0 l0 5 z' | sha256sum | cut -d' ' -f1 >"$tmp/sigs.txt"
+check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list.txt" --signatures "$2/sigs.txt" --out "$2/sigfail" 2>&1) && exit 1; grep -qE "Apple-logo glyph .* (base/apps/scalable/glyph-mark|extra/scalable/apps/pb-mark)\.svg" <<<"$out"' _ "$composer" "$tmp"
+desc="signature guard: the default fingerprints file (packaging/arch/icons-apple-signatures.txt) holds SHA-256 lines only and the fixtures pass it"
+check bash -ec '[ "$(grep -v "^#" "$1" | grep -cvE "^[0-9a-f]{64}$")" = 0 ] && [ "$(grep -cE "^[0-9a-f]{64}$" "$1")" -ge 1 ] && [ -f "$2/index.theme" ]' _ "$root/packaging/arch/icons-apple-signatures.txt" "$out"
 desc="a pebble: entry drops that name from Pebble with its aliases (start-here, start-alias go on to Breeze)"
 run "$tmp/list-pebble.txt" "$tmp/peb2" >/dev/null 2>&1
 check bash -ec '[ ! -e "$1/extra/scalable/apps/start-here.svg" ] && [ ! -e "$1/extra/scalable/apps/start-alias.svg" ] && [ -f "$1/base/places/16/start-here.svg" ]' _ "$tmp/peb2"

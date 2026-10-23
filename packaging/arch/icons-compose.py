@@ -3,19 +3,23 @@
 
 Used by BOTH the package build (packaging/arch/PKGBUILD) and the dev provisioning (scripts/dev/icons.sh).
 
-  icons-compose.py --mactahoe DIR --pebble DIR --branding DIR --list FILE --out DIR
+  icons-compose.py --mactahoe DIR --pebble DIR --branding DIR --list FILE --out DIR [--signatures FILE]
 
   --mactahoe  checkout of the MacTahoe icon theme (vinceliuice/MacTahoe-icon-theme, pinned, GPL-3.0)
   --pebble    checkout of the Pebble icon theme (a-shewale/Pebble-Icon-Theme, pinned); only its Pebble/ variant is used
   --branding  branding/icons/theme (Grassfield's own icons: scalable/apps first, scalable/devices last; index.theme)
   --list      packaging/arch/icons-apple-logos.txt
   --out       the theme directory to create (replaced when it exists)
+  --signatures  SHA-256 fingerprints of Apple-logo glyph paths (default: icons-apple-signatures.txt next to this file);
+              the composer fails when a regular SVG of the output draws one of them (a second guard after the list)
 
 Layers (first layer that provides an icon NAME wins; a name is a file name without extension):
   0. ours:      branding scalable/apps
   1. MacTahoe:  base variant, default colour (see below), with three overrides
-       a. every name of a listed file is dropped from the layer (all sizes, all directories) together with every
-          link that resolves to one of them (to a fixpoint). A dropped name falls through to the next layers.
+       a. every name of a listed file is dropped from the layer (all sizes, all directories), and so is every link
+          that led to one of its drawings (to a fixpoint, chains too). Such an alias loses only that entry: a name
+          with other drawings keeps them. A name gone altogether falls through to the next layers. Last, every
+          regular SVG of the output is checked against icons-apple-signatures.txt (see --signatures).
        b. folders: every non-symbolic name in Pebble's places directories is served by Pebble at all its sizes and
           removed from MacTahoe at every size; MacTahoe links to a removed folder drawing are redirected to Pebble's.
        c. store: every name whose link chain resolves to Pebble's scalable/apps/softwarecenter.svg, and every name
@@ -48,6 +52,7 @@ Output layout (no ambiguity: Pebble's directories would collide with ours, and t
 Each directory gets the upstream section (Size, Scale, Context, Type, MinSize, MaxSize, Threshold) under its
 prefixed name. Links are relative and stay inside the theme; no icon-theme.cache is written.
 """
+import hashlib
 import os
 import posixpath
 import re
@@ -195,19 +200,21 @@ def parse_index(path):
 
 
 def fixpoint_drop(layer, names):
-    """Drop `names` from the layer and, to a fixpoint, every name with an entry resolving to a dropped one."""
+    """Drop the listed `names` from the layer (every size and directory), then, to a fixpoint, every link that
+    resolved before and now leads to a dropped drawing. Such an alias loses only that entry: a name with other entries
+    (media-removable: a drive drawing in devices/, an alias of a logo drawing in apps/) keeps them. Returns the names
+    that are gone from the layer altogether."""
     names = set(names)
-    while True:
-        more = set()
-        for r in layer.e:
-            t = layer.resolve(r)
-            if t is not None and name_of(t) in names and name_of(r) not in names:
-                more.add(name_of(r))
-        if not more:
-            break
-        names |= more
+    before = layer.names()
+    resolved = {r for r, ent in layer.e.items() if ent[0] == "l" and layer.resolve(r) is not None}
     layer.drop_names(names)
-    return names
+    while True:
+        bad = [r for r in layer.e if r in resolved and layer.resolve(r) is None]
+        if not bad:
+            break
+        for r in bad:
+            del layer.e[r]
+    return names | (before - layer.names())
 
 
 def compose(a):
@@ -439,6 +446,7 @@ def compose(a):
         fh.write(text)
 
     verify(out)
+    verify_signatures(out, a.signatures)
 
     # ---- report
     print("icons-compose: layer counts (files + links, names)")
@@ -484,14 +492,40 @@ def verify(out):
                     die("dangling link: %s -> %s" % (p, t))
 
 
+PATH_D = re.compile(r'\sd="([^"]+)"')
+FIRST_MOVE = re.compile(r"^\s*[Mm]\s*-?[\d.]+(?:e-?\d+)?[\s,]*-?[\d.]+(?:e-?\d+)?")
+
+
+def path_signature(d):
+    """A path's data without its first moveto (white space collapsed): the same glyph placed elsewhere matches."""
+    return FIRST_MOVE.sub("", re.sub(r"\s+", " ", d.strip()), count=1).strip()
+
+
+def verify_signatures(out, sig_file):
+    """Fail when a regular SVG of the output draws a path whose signature is a listed Apple-logo fingerprint."""
+    with open(sig_file, encoding="utf-8") as fh:
+        wanted = {l.strip() for l in fh if l.strip() and not l.startswith("#")}
+    if not wanted or any(not re.fullmatch(r"[0-9a-f]{64}", h) for h in wanted):
+        die("%s: expected SHA-256 lines" % sig_file)
+    for d, _, fs in os.walk(out):
+        for f in fs:
+            p = os.path.join(d, f)
+            if os.path.islink(p) or not f.endswith(".svg"):
+                continue
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                for path in PATH_D.findall(fh.read()):
+                    if hashlib.sha256(path_signature(path).encode()).hexdigest() in wanted:
+                        die("an Apple-logo glyph (signature in %s) is drawn by %s" % (sig_file, os.path.relpath(p, out)))
+
+
 def main(argv):
-    opts = {}
+    opts = {"signatures": os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons-apple-signatures.txt")}
     it = iter(argv)
     for k in it:
-        if k in ("--mactahoe", "--pebble", "--branding", "--list", "--out"):
+        if k in ("--mactahoe", "--pebble", "--branding", "--list", "--out", "--signatures"):
             opts[k[2:]] = os.path.abspath(next(it, None) or die("missing value for " + k))
         else:
-            die("usage: icons-compose.py --mactahoe DIR --pebble DIR --branding DIR --list FILE --out DIR")
+            die("usage: icons-compose.py --mactahoe DIR --pebble DIR --branding DIR --list FILE --out DIR [--signatures FILE]")
     for k in ("mactahoe", "pebble", "branding", "list", "out"):
         if k not in opts:
             die("missing --" + k)
