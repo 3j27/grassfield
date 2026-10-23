@@ -131,8 +131,35 @@ def generate_plugin(data):
     return "\n".join(out) + "\n"
 
 
+# Provenance (audit GF-095): every token says where its value comes from, with a pointer a reviewer can follow: the F1
+# reference analysis, a spec, an ADR, a test, the master prompt or an audit. A bare "estimate" is not a source.
+PROVENANCE = re.compile(r"f1-reference-gaps|docs/specs/|docs/decisions/|ADR-|tests/|master-prompt|docs/audits")
+
+
+def provenance_errors(data):
+    errors = []
+
+    def walk(node, path):
+        if is_leaf(node):
+            # The plugin group's sources are copied into compositor/src/core/ThemeTokens.hpp (compositor-owned): follow-up.
+            if path[0] not in PLUGIN_GROUPS and not PROVENANCE.search(str(node.get("source", ""))):
+                errors.append(".".join(path))
+            return
+        if isinstance(node, dict):
+            for key, child in node.items():
+                if not key.startswith("_") and isinstance(child, dict):
+                    walk(child, path + [key])
+
+    walk(data, [])
+    return errors
+
+
 def main():
     data = json.loads(SRC.read_text())
+    unsourced = provenance_errors(data)
+    if unsourced:
+        print("gen-tokens: tokens without a source pointer (f1-reference-gaps, a spec, an ADR or a test): " + ", ".join(unsourced), file=sys.stderr)
+        return 1
     outputs = ((DST, generate(data), "ui/Grassfield/Ui/Tokens.qml"), (PLUGIN_DST, generate_plugin(data), "compositor/src/core/ThemeTokens.hpp"))
     if "--check" in sys.argv[1:]:
         stale = [label for path, text, label in outputs if not path.exists() or path.read_text() != text]

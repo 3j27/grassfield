@@ -45,6 +45,37 @@ TestCase {
         fuzzyCompare(Appearance.tintAlpha(7), Tokens.materialTintAlphaMin, 1e-9);
     }
 
+    // GF-125: the compositor blur follows the transparency (docs/specs/ui.md "Material blur").
+    function test_blurDefaultIsWhatTheConfigShips() {
+        compare(Appearance.blurSize(Tokens.materialDefaultTransparency), 18, "looknfeel.lua ships size 18");
+        compare(Appearance.blurPasses(Tokens.materialDefaultTransparency), 3, "and 3 passes");
+        compare(Appearance.compositorBlurSize, 18);
+        compare(Appearance.compositorBlurPasses, 3);
+    }
+
+    function test_blurGrowsWithTransparency() {
+        let last = 0;
+        for (let t = 0; t <= 1.0001; t += 0.05) {
+            const size = Appearance.blurSize(t);
+            verify(size >= last, "size is monotonic at " + t);
+            last = size;
+        }
+        compare(Appearance.blurSize(0), Tokens.materialBlurSizeMin);
+        compare(Appearance.blurSize(1), Tokens.materialBlurSizeMax);
+        verify(Appearance.blurSize(0.05) < Appearance.blurSize(0.25), "a less transparent material blurs less");
+        verify(Appearance.blurSize(0.6) > Appearance.blurSize(0.25), "a more transparent one blurs more");
+        verify(Appearance.blurPasses(0.05) < Appearance.blurPasses(0.25), "a nearly opaque material uses fewer passes");
+        compare(Appearance.blurSize(-3), Tokens.materialBlurSizeMin);
+        compare(Appearance.blurSize(9), Tokens.materialBlurSizeMax);
+    }
+
+    function test_blurFollowsTheEffectiveTransparency() {
+        Appearance.transparency = 0.6;
+        compare(Appearance.compositorBlurSize, Appearance.blurSize(0.6));
+        Appearance.reduceTransparency = true;
+        compare(Appearance.compositorBlurSize, Tokens.materialBlurSizeMin, "Reduce Transparency: the minimum, and no surface asks for blur");
+    }
+
     function test_reduceTransparencyIsOpaque() {
         Appearance.transparency = 0.5;
         fuzzyCompare(Appearance.effectiveTransparency, 0.5, 1e-9);

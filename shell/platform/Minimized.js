@@ -178,6 +178,18 @@ function motionCall(reduced) {
     return "function() " + calls.join("; ") + " end";
 }
 
+// Compositor blur size and passes (GF-125, docs/specs/ui.md "Material blur"): one value for every surface, chosen by the
+// shell from the transparency. Core Hyprland config, no plugin needed; pcall keeps a Hyprland without hl.config quiet.
+// "" for anything but integers in range (callers must not dispatch it).
+var blurLimits = {sizeMin: 1, sizeMax: 64, passesMin: 1, passesMax: 6};
+
+function blurCall(size, passes) {
+    const ok = (v, lo, hi) => typeof v === "number" && isFinite(v) && Math.floor(v) === v && v >= lo && v <= hi;
+    if (!ok(size, blurLimits.sizeMin, blurLimits.sizeMax) || !ok(passes, blurLimits.passesMin, blurLimits.passesMax))
+        return "";
+    return "function() pcall(hl.config, { decoration = { blur = { size = " + size + ", passes = " + passes + " } } }) end";
+}
+
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).

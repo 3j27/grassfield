@@ -294,12 +294,34 @@ Singleton {
         dispatchRequest(Minimized.motionCall(root.reduceMotion));
     }
 
+    // Blur follows the transparency (GF-125): the compositor holds one blur size and pass count for all surfaces, so the
+    // shell sends the pair of the current transparency (Appearance.compositorBlur*). Sent at start, on every change
+    // (debounced: a slider drag is one request per settle) and after a config reload, which restores the config's own
+    // 18 / 3 (right at the default transparency).
+    readonly property int blurSize: Appearance.compositorBlurSize
+    readonly property int blurPasses: Appearance.compositorBlurPasses
+    onBlurSizeChanged: blurDebounce.restart()
+    onBlurPassesChanged: blurDebounce.restart()
+
+    function pushBlur(): void {
+        dispatchRequest(Minimized.blurCall(root.blurSize, root.blurPasses));
+    }
+
+    Timer {
+        id: blurDebounce
+        interval: Tokens.motionFast
+        onTriggered: root.pushBlur()
+    }
+
     Connections {
         target: Hyprland
 
         function onRawEvent(event: HyprlandEvent): void {
-            if (event.name === "configreloaded" && root.reduceMotion)
+            if (event.name !== "configreloaded")
+                return;
+            if (root.reduceMotion)
                 root.pushMotion();
+            root.pushBlur();
         }
     }
 
@@ -360,6 +382,8 @@ Singleton {
         // Always, whatever the value: Hyprland outlives the shell, so a restarted shell (or one that finds the setting off
         // after a config reset) must not leave the compositor on the reduced animations of the previous run.
         pushMotion();
+        // The same for the blur: the compositor keeps the values of the previous run.
+        pushBlur();
     }
 
     function isMinimized(toplevel: var): bool {

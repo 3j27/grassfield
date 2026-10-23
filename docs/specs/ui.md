@@ -1,7 +1,7 @@
 # grassfield-ui spec · shell-engineer · M1 (spike S1)
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
-No reference material exists yet (F1 pending). Every measurement is an estimate and carries a `source` note in `ui/tokens/tokens.json`.
+The reference analysis is `docs/testing/f1-reference-gaps.md` (our own measurements from private macOS 26 captures; owner sign-off F1 pending). Every token in `ui/tokens/tokens.json` carries a `source` note that points at that analysis, a spec section, an ADR or a test; `gen-tokens.py` fails when one does not (GF-095). Where the note says "estimate", no reference value exists yet.
 
 ## Purpose and non-goals
 Design system shared by the shell and (later) native apps: tokens, frosted material, appearance state and the M1 component set (Icon, PopupMenu/MenuItem/MenuSeparator, Slider, Toggle, Button, Tooltip). Non-goals: Qt Quick Controls style (M4), any Quickshell or Hyprland import, business logic.
@@ -125,6 +125,14 @@ Setting `accent.color` (schema enum, defaults, `Store.js`, shell store). The req
 ## Acceptance criteria
 - A1 `gen-tokens.py --check` exit 0 (L0). A2 `tests/unit/tst_tokens.qml`, `tst_popupmenu.qml`, `tst_menunav.qml` pass (L0). A5 `tests/shell/settings_roundtrip` (real FileView) passes (L1). A3 `qmllint.sh` 0 warnings (L0). A4 nested screenshot shows blur at transparency 1 and an opaque surface at 0 (L2, manual scenario).
 
+## Material blur follows transparency (GF-125)
+Hyprland holds one blur size and one pass count for every surface (the `ext-background-effect-v1` region and the layer rules carry no strength), so the shell asks the compositor for the pair of the current effective transparency; it never fakes a blur. Mapping (`Appearance.blurSize(t)`, `blurPasses(t)`, tokens `material.blurSize{Min,Max}`, `blurPasses{Light,Full}`, `blurPassesFrom`):
+- size = round(12 + 24 t) px (36 at t = 1); at the default 0.25 it is 18, and 3 passes below 0.15 the count is 2. The defaults are exactly what `config/hypr/grassfield/looknfeel.lua` ships (a test pins it), so a config reload at the default restores a right value.
+- Reduce Transparency = t 0: no surface requests blur; the minimum is kept.
+- Sent by `qs.platform` `Compositor` (`Minimized.blurCall`, Lua `pcall(hl.config, {decoration={blur={size,passes}}})` through the same dispatch as the Reduce Motion animations): at start, on every change (debounced by `motion.fast`), after `configreloaded`. A compositor without `hl.config` ignores it (pcall); the config's own 18 / 3 stays. No polling, no plugin needed.
+- Cost: more transparency = a wider blur = more GPU; the pass count drops by one for nearly opaque materials.
+- Verification: offline `tst_tokens` (mapping, monotonic, default = config) and `tst_minimized` (request builder); live, `scripts/nestctl getoption decoration:blur:size` after changing the slider in the nested Settings (visual / live NOT verified in this slice: no nested session).
+
 ## Interfaces / contracts (versions)
 Module `Grassfield.Ui` 1.0 (semver). Tokens JSON `version: 1`.
 
@@ -141,8 +149,8 @@ Compositor without ext-background-effect: surfaces stay tinted but unblurred (fa
 Each Material with a shadow adds two offscreen layers and a MultiEffect mask; not measured (gate P* not run). Shell RSS after the M1 scenarios: see the S2 report. Legibility gate A2 not measured. Strings live in surfaces via `qsTr()`.
 
 ## Known limitations
-- All values are estimates, not measured from the reference.
-- Blur strength cannot grow with the slider: it is compositor-defined; only the tint changes.
+- Values whose `source` says "estimate" are not measured from the reference (F1 sign-off pending); the measured ones name their gap number in `f1-reference-gaps.md`.
+- The blur pair is applied to the whole compositor (see "Material blur"): not per surface.
 - Light appearance is untested visually. Inter is not installed yet (Noto Sans is used).
 - The shadow cut-out mask shows a faint dark artifact at one corner in the light appearance (visible in `cc-light`); not fixed.
 - Submenus declare no blur region of their own.

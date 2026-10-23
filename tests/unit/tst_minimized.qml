@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import Grassfield.Ui
 import "../../shell/platform/Minimized.js" as Minimized
 import "../../shell/dock/DockModel.js" as DockModel
 
@@ -9,6 +10,15 @@ TestCase {
 
     function rec(top, appId, address) {
         return {toplevel: top, address: address ? address : "1a", appId: appId, title: "T " + top};
+    }
+
+    function test_blurCallIsBuiltFromIntegersInRange() {
+        compare(Minimized.blurCall(18, 3), "function() pcall(hl.config, { decoration = { blur = { size = 18, passes = 3 } } }) end");
+        compare(Minimized.blurCall(0, 3), "");
+        compare(Minimized.blurCall(18, 9), "");
+        compare(Minimized.blurCall(18.5, 3), "");
+        compare(Minimized.blurCall("18) end; os.exit() --", 3), "");
+        compare(Minimized.blurCall(NaN, 3), "");
     }
 
     function test_windowCallIsBuiltFromValidatedPieces() {
@@ -359,6 +369,18 @@ TestCase {
             verify(l.speed <= 1, l.leaf + " is at most 100 ms");
         compare(Minimized.motionCall(false).indexOf("slide") >= 0, true, "normal restores the Spaces slide");
         compare(Minimized.motionCall(false).indexOf("popin 94%") >= 0, true);
+    }
+
+    // GF-125: the blur the shell asks for at the default transparency is the one the config ships (a config reload then
+    // restores a value that is already right).
+    function test_blurAtTheDefaultTransparencyIsTheConfigsOwn() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../config/hypr/grassfield/looknfeel.lua"), false);
+        xhr.send();
+        const lua = xhr.responseText;
+        const t = Tokens.materialDefaultTransparency;
+        verify(new RegExp("blur = \\{[^}]*size = " + Appearance.blurSize(t) + ",").test(lua), "size " + Appearance.blurSize(t));
+        verify(new RegExp("blur = \\{[^}]*passes = " + Appearance.blurPasses(t) + ",").test(lua), "passes " + Appearance.blurPasses(t));
     }
 
     function test_isZoomed() {

@@ -7,1260 +7,1270 @@ QtObject {
 
     // color roles, dark appearance
     readonly property var colorDark: ({
-        text: "#F5F5F7",  // estimate, pending F1 measurement from design/reference
+        text: "#F5F5F7",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
         textSecondary: "#DCDCE4",  // A2: was #B8B8C0; 4.5:1 or more on every material backdrop up to transparency 0.6 over a white wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
-        accent: "#4FB36B",  // own Grassfield green, not copied
-        indicator: "#FFFFFF",  // Dock fidelity fix: running dot, pure white in dark mode like macOS; the per-appearance shelf tint (dock.tintAlphaDark) keeps it at 3:1 or more over any backdrop
-        hover: "#FFFFFF",  // estimate; drawn at hoverOpacity
-        materialTint: "#1D1F24",  // estimate, pending F1 measurement from design/reference
-        materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
-        materialBorder: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
-        shadow: "#000000",  // estimate, pending F1 measurement from design/reference
-        accentText: "#06240F",  // dark text on the bright green: contrast above 4.5:1 (gate A2, tested)
-        knob: "#FFFFFF",  // estimate; slider and toggle knobs
-        fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field
+        accent: "#4FB36B",  // own Grassfield green, not copied [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        indicator: "#FFFFFF",  // Dock fidelity fix: running dot, pure white in dark mode like macOS; the per-appearance shelf tint (dock.tintAlphaDark) keeps it at 3:1 or more over any backdrop [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        hover: "#FFFFFF",  // estimate; drawn at hoverOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        materialTint: "#1D1F24",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        materialHighlight: "#FFFFFF",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        materialBorder: "#FFFFFF",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        shadow: "#000000",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        accentText: "#06240F",  // dark text on the bright green: contrast above 4.5:1 (gate A2, tested) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        knob: "#FFFFFF",  // estimate; slider and toggle knobs [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
         barText: "#FFFFFF",  // menu bar text and glyphs on the bare wallpaper: pure white (dark palette, used over dark wallpapers) or pure black (light palette, over light ones); the adaptive tone picks the palette, not the appearance (docs/specs/menubar.md)
-        separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        danger: "#FFD3CF",  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
-        destructive: "#D13438",  // own value: solid fill of error and refusal banners in opaque app windows; 3.3:1 against materialTint, destructiveText on it 4.9:1 (WCAG AA, computed)
-        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (4.9:1, computed)
+        separator: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        fill: "#FFFFFF",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        danger: "#FFD3CF",  // A2: was #FF6B63 (2.9:1 as text on material over a white wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        destructive: "#D13438",  // own value: solid fill of error and refusal banners in opaque app windows; 3.3:1 against materialTint, destructiveText on it 4.9:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (4.9:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
     })
 
     // color roles, light appearance
     readonly property var colorLight: ({
-        text: "#1B1B1F",  // estimate, pending F1 measurement from design/reference
+        text: "#1B1B1F",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
         textSecondary: "#3A3A42",  // A2: was #55555D; 4.5:1 or more on every material backdrop up to transparency 0.6 over a black wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
-        accent: "#26763F",  // own Grassfield green, not copied
-        indicator: "#000000",  // Dock fidelity fix: running dot, pure black in light mode like macOS; the per-appearance shelf tint (dock.tintAlphaLight) keeps it at 3:1 or more over any backdrop
-        hover: "#000000",  // estimate; drawn at hoverOpacity
-        materialTint: "#F3F4F6",  // estimate, pending F1 measurement from design/reference
-        materialHighlight: "#FFFFFF",  // estimate, pending F1 measurement from design/reference
-        materialBorder: "#000000",  // estimate, pending F1 measurement from design/reference
-        shadow: "#000000",  // estimate, pending F1 measurement from design/reference
-        accentText: "#FFFFFF",  // white on the darker light-mode green: contrast above 4.5:1 (gate A2, tested)
-        knob: "#FFFFFF",  // estimate; slider and toggle knobs
-        fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field
+        accent: "#26763F",  // own Grassfield green, not copied [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        indicator: "#000000",  // Dock fidelity fix: running dot, pure black in light mode like macOS; the per-appearance shelf tint (dock.tintAlphaLight) keeps it at 3:1 or more over any backdrop [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        hover: "#000000",  // estimate; drawn at hoverOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        materialTint: "#F3F4F6",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        materialHighlight: "#FFFFFF",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        materialBorder: "#000000",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        shadow: "#000000",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
+        accentText: "#FFFFFF",  // white on the darker light-mode green: contrast above 4.5:1 (gate A2, tested) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        knob: "#FFFFFF",  // estimate; slider and toggle knobs [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        fieldFill: "#F5F5F7",  // A2 (finding M4): light fill of the inline rename field, same in both appearances (drawn at desktopIcon.renameFillOpacity), as a file manager rename field [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         fieldText: "#1B1B1F",  // A2 (finding M4): dark text on fieldFill, same in both appearances; 4.5:1 or more over any wallpaper, tested in tests/visual/test_contrast_tokens.py
         barText: "#000000",  // menu bar text and glyphs on the bare wallpaper: pure white (dark palette, used over dark wallpapers) or pure black (light palette, over light ones); the adaptive tone picks the palette, not the appearance (docs/specs/menubar.md)
-        separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity
-        danger: "#7A1812",  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested
-        destructive: "#C42B1C",  // own value: solid fill of error and refusal banners in opaque app windows; 5.1:1 against materialTint, destructiveText on it 5.7:1 (WCAG AA, computed)
-        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (5.7:1, computed)
+        separator: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        fill: "#000000",  // estimate; separator/fill are drawn at separatorOpacity/fillOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        danger: "#7A1812",  // A2: was #D93025 (2.6:1 as text on material over a black wallpaper); 4.5:1 or more on every material backdrop up to transparency 0.6, tested [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        destructive: "#C42B1C",  // own value: solid fill of error and refusal banners in opaque app windows; 5.1:1 against materialTint, destructiveText on it 5.7:1 (WCAG AA, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        destructiveText: "#FFFFFF"  // text and icons on the destructive fill (5.7:1, computed) [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
     })
 
     // color roles, accentDark appearance
     readonly property var colorAccentDark: ({
-        blue: "#5AA2FF",  // own dark-appearance value of the blue accent (appearance.accent), not copied; fills, selections and focus rings
+        blue: "#5AA2FF",  // own dark-appearance value of the blue accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         blueText: "#06182E",  // text and icons on the blue accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        purple: "#B48CF2",  // own dark-appearance value of the purple accent (appearance.accent), not copied; fills, selections and focus rings
+        purple: "#B48CF2",  // own dark-appearance value of the purple accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         purpleText: "#1E0A3A",  // text and icons on the purple accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        pink: "#F07AB0",  // own dark-appearance value of the pink accent (appearance.accent), not copied; fills, selections and focus rings
+        pink: "#F07AB0",  // own dark-appearance value of the pink accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         pinkText: "#3A0820",  // text and icons on the pink accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        red: "#F2766E",  // own dark-appearance value of the red accent (appearance.accent), not copied; fills, selections and focus rings
+        red: "#F2766E",  // own dark-appearance value of the red accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         redText: "#3A0804",  // text and icons on the red accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        orange: "#F5A04A",  // own dark-appearance value of the orange accent (appearance.accent), not copied; fills, selections and focus rings
+        orange: "#F5A04A",  // own dark-appearance value of the orange accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         orangeText: "#331800",  // text and icons on the orange accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        yellow: "#F2D14B",  // own dark-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings
+        yellow: "#F2D14B",  // own dark-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         yellowText: "#2B2300",  // text and icons on the yellow accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        green: "#8BD34E",  // own dark-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings
+        green: "#8BD34E",  // own dark-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         greenText: "#10240A",  // text and icons on the green accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        graphite: "#A0A4AE",  // own dark-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings
+        graphite: "#A0A4AE",  // own dark-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         graphiteText: "#121316"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
     })
 
     // color roles, accentLight appearance
     readonly property var colorAccentLight: ({
-        blue: "#1F5FCC",  // own light-appearance value of the blue accent (appearance.accent), not copied; fills, selections and focus rings
+        blue: "#1F5FCC",  // own light-appearance value of the blue accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         blueText: "#FFFFFF",  // text and icons on the blue accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        purple: "#7A3FC4",  // own light-appearance value of the purple accent (appearance.accent), not copied; fills, selections and focus rings
+        purple: "#7A3FC4",  // own light-appearance value of the purple accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         purpleText: "#FFFFFF",  // text and icons on the purple accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        pink: "#C2306F",  // own light-appearance value of the pink accent (appearance.accent), not copied; fills, selections and focus rings
+        pink: "#C2306F",  // own light-appearance value of the pink accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         pinkText: "#FFFFFF",  // text and icons on the pink accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        red: "#C0302A",  // own light-appearance value of the red accent (appearance.accent), not copied; fills, selections and focus rings
+        red: "#C0302A",  // own light-appearance value of the red accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         redText: "#FFFFFF",  // text and icons on the red accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        orange: "#964D08",  // own light-appearance value of the orange accent (appearance.accent), not copied; fills, selections and focus rings
+        orange: "#964D08",  // own light-appearance value of the orange accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         orangeText: "#FFFFFF",  // text and icons on the orange accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        yellow: "#E0B000",  // own light-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings
+        yellow: "#E0B000",  // own light-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         yellowText: "#241C00",  // text and icons on the yellow accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        green: "#3A7512",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings
+        green: "#3A7512",  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         greenText: "#FFFFFF",  // text and icons on the green accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
-        graphite: "#5C616B",  // own light-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings
+        graphite: "#5C616B",  // own light-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         graphiteText: "#FFFFFF"  // text and icons on the graphite accent: 4.5:1 or more (gate A2, tested for every accent in tests/visual/test_contrast_tokens.py)
     })
 
-    // generic family: code and plain text views (Preview)
+    // generic family: code and plain text views (Preview) [ref: docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers; docs/specs/ui.md]
     readonly property string typographyMonoFamily: "monospace"
     // ADR-0003 candidate (OFL); owner installs it
     readonly property string typographyFamily: "Inter"
-    // installed fallback
+    // installed fallback [ref: docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers; docs/specs/ui.md]
     readonly property string typographyFallbackFamily: "Noto Sans"
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)
     readonly property int typographyMenuSize: 13
-    // F1 gap 3: menu titles and clock are regular (reference); the app name keeps menuBoldWeight
+    // F1 gap 3: menu titles and clock are regular (reference); the app name keeps menuBoldWeight [ref: docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers; docs/specs/ui.md]
     readonly property int typographyMenuWeight: 400
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)
     readonly property int typographyMenuBoldWeight: 700
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)
     readonly property int typographyBodySize: Math.round(13 * Appearance.textScale)
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)
     readonly property int typographyCaptionSize: Math.round(11 * Appearance.textScale)
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)
     readonly property int typographyTitleSize: Math.round(15 * Appearance.textScale)
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)
     readonly property int typographySmallWeight: 400
-    // Inter dynamic metrics, text family (rsms.me/inter/lab, InterDynamicTracking): tracking in em = a + b * e^(c * size in px)
+    // Inter dynamic metrics, text family (rsms.me/inter/lab, InterDynamicTracking): tracking in em = a + b * e^(c * size in px) [ref: docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers; docs/specs/ui.md]
     readonly property real typographyTrackingA: -0.0223
-    // Inter dynamic metrics, text family: see trackingA
+    // Inter dynamic metrics, text family: see trackingA [ref: docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers; docs/specs/ui.md]
     readonly property real typographyTrackingB: 0.185
-    // Inter dynamic metrics, text family: see trackingA
+    // Inter dynamic metrics, text family: see trackingA [ref: docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers; docs/specs/ui.md]
     readonly property real typographyTrackingC: -0.1745
 
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Scale assumptions; docs/specs/ui.md]
     readonly property int spacingXs: 4
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Scale assumptions; docs/specs/ui.md]
     readonly property int spacingSm: 8
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Scale assumptions; docs/specs/ui.md]
     readonly property int spacingMd: 12
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Scale assumptions; docs/specs/ui.md]
     readonly property int spacingLg: 16
 
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
     readonly property int radiusControl: 6
-    // F1 gap 4: Dock radius ~24 +-3
+    // F1 gap 4: Dock radius ~24 +-3 [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusDock: 24
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
     readonly property int radiusDockIcon: 11
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
     readonly property int radiusMenuBar: 0
-    // F1 gap 5: menu radius 12 +-1.5 (reference 2x captures)
+    // F1 gap 5: menu radius 12 +-1.5 (reference 2x captures) [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusMenu: 12
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
     readonly property int radiusPanel: 18
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
     readonly property int radiusDialog: 14
     // design/reference/macos (f1-reference-gaps.md gap 7): notification banner radius 18 pt
     readonly property int radiusBanner: 18
-    // spec search.md: rounded about 26 pt
+    // docs/specs/search.md: rounded about 26 pt
     readonly property int radiusSearch: 26
-    // F1 gap 13: alert radius ~24 +-3 (Dialog frame: confirm, notice, About, Force Quit)
+    // F1 gap 13: alert radius ~24 +-3 (Dialog frame: confirm, notice, About, Force Quit) [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusAlert: 24
-    // F1 gap 13: sheet radius 26 +-1.5
+    // F1 gap 13: sheet radius 26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusSheet: 26
 
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome)
     readonly property int shadowBlur: 18
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome)
     readonly property int shadowOffsetY: 6
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome)
     readonly property real shadowOpacity: 0.3
 
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Limits (no motion capture))
     readonly property int motionFast: 120
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Limits (no motion capture))
     readonly property int motionNormal: 220
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Limits (no motion capture))
     readonly property int motionSlow: 350
     // master-prompt 5.5: Reduce Motion = crossfades of at most 100 ms
     readonly property int motionReducedMax: 100
-    // estimate; Easing.BezierSpline control points
+    // estimate; Easing.BezierSpline control points [ref: docs/testing/f1-reference-gaps.md § Limits (no motion capture); docs/specs/ui.md]
     readonly property var motionCurveStandard: [0.2, 0.0, 0.0, 1.0, 1.0, 1.0]
 
     // master-prompt 5.5 default, owner validates on screenshots
     readonly property real materialDefaultTransparency: 0.25
-    // tint alpha at transparency 1 (frosted material); the A2 clamp below keeps it readable up to 0.6
+    // tint alpha at transparency 1 (frosted material); the A2 clamp below keeps it readable up to 0.6 [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
     readonly property real materialTintAlphaMin: 0.4
     // A2 clamp: tint alpha never drops below this for transparency up to tintClampUntil (default 0.25 gives 0.85, unclamped); text and danger colours do the rest, tested in tests/visual/test_contrast_tokens.py
     readonly property real materialTintAlphaClamp: 0.82
     // A2: master-prompt 5.5, every slider value up to 0.6 must pass; beyond it the tint falls linearly from tintAlphaClamp to tintAlphaMin at 1
     readonly property real materialTintClampUntil: 0.6
-    // estimate, pending F1 measurement from design/reference
+    // GF-125: compositor blur size (per-pass radius, px) at transparency 0+: the blur grows with transparency (master-prompt 5.5); at the default 0.25 the size is 18, what config/hypr/grassfield/looknfeel.lua ships [ref: docs/specs/ui.md Material blur]
+    readonly property int materialBlurSizeMin: 12
+    // GF-125: compositor blur size at transparency 1 (linear from blurSizeMin; 12 + 24 x 0.25 = 18 at the default) [ref: docs/specs/ui.md Material blur]
+    readonly property int materialBlurSizeMax: 36
+    // GF-125: blur passes below blurPassesFrom (a nearly opaque material shows little blur: one pass fewer saves GPU time) [ref: docs/specs/ui.md Material blur]
+    readonly property int materialBlurPassesLight: 2
+    // GF-125: blur passes from blurPassesFrom up (3 is what looknfeel.lua ships) [ref: docs/specs/ui.md Material blur]
+    readonly property int materialBlurPassesFull: 3
+    // GF-125: transparency from which the full pass count is used (below the default 0.25, so the default look is unchanged) [ref: docs/specs/ui.md Material blur]
+    readonly property real materialBlurPassesFrom: 0.15
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialHighlightOpacity: 0.22
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialBorderOpacity: Appearance.increaseContrast ? 0.5 : 0.14
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialHoverOpacity: 0.12
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialSeparatorOpacity: Appearance.increaseContrast ? 0.45 : 0.16
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialFillOpacity: 0.14
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialDisabledOpacity: 0.38
-    // estimate: hover opacity multiplier for an active menu bar item
+    // estimate: hover opacity multiplier for an active menu bar item [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
     readonly property real materialHoverActiveFactor: 1.5
-    // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope
+    // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
     readonly property real materialSeparatorOpacityLight: Appearance.increaseContrast ? 0.45 : 0.08
 
-    // task spec / macOS convention, pending F1 measurement
+    // task spec / macOS convention, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar)
     readonly property int menubarHeight: 24
-    // F1 gap 3: 11 per side (titles 22 apart edge to edge, system mark to app name 22), now wired in BarButton
+    // F1 gap 3: 11 per side (titles 22 apart edge to edge, system mark to app name 22), now wired in BarButton [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarItemPadding: 11
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar)
     readonly property int menubarIconSize: 14
-    // F1 gap 3: open-title capsule about 23 of 24
+    // F1 gap 3: open-title capsule about 23 of 24 [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarHoverInsetTop: 0
-    // F1 gap 3: open-title capsule about 23 of 24
+    // F1 gap 3: open-title capsule about 23 of 24 [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarHoverInsetBottom: 1
-    // F1 gap 3: status glyphs 19 apart (18.5-20)
+    // F1 gap 3: status glyphs 19 apart (18.5-20) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarStatusItemPadding: 9.5
-    // F1 gap 3: screen edge to the system mark
+    // F1 gap 3: screen edge to the system mark [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarInsetLeft: 20.5
-    // F1 gap 3: clock end to the screen edge (18-19)
+    // F1 gap 3: clock end to the screen edge (18-19) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarInsetRight: 18.5
-    // adaptive bar: a bar showing the dark foreground switches to light when the wallpaper strip relative luminance falls below this; black text keeps 4.5:1 or more down to it (0.175), so the band is as wide as A2 allows (tested in test_contrast_tokens.py)
+    // adaptive bar: a bar showing the dark foreground switches to light when the wallpaper strip relative luminance falls below this; black text keeps 4.5:1 or more down to it (0.175), so the band is as wide as A2 allows (tested in test_contrast_tokens.py) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarToneLightBelow: 0.175
-    // adaptive bar: a bar showing the light foreground switches to dark when the wallpaper strip relative luminance rises above this; white text keeps 4.5:1 or more up to it (0.18). The gap to toneLightBelow is the hysteresis
+    // adaptive bar: a bar showing the light foreground switches to dark when the wallpaper strip relative luminance rises above this; white text keeps 4.5:1 or more up to it (0.18). The gap to toneLightBelow is the hysteresis [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarToneDarkAbove: 0.18
     // ADR-0016 W6 / gate A2: contrast the bar text needs over the wallpaper strip; below it on both tones the frosted band is shown on that output
     readonly property real menubarToneNeededContrast: 4.5
     // ADR-0016 W6: contrast ratio difference below which the bar keeps its previous tone (hysteresis of the percentile decision)
     readonly property real menubarToneMargin: 0.25
-    // adaptive bar: columns of the downscaled grab of the wallpaper strip under the bar
+    // adaptive bar: columns of the downscaled grab of the wallpaper strip under the bar [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarToneSampleColumns: 32
-    // adaptive bar: rows of the downscaled grab of the wallpaper strip under the bar
+    // adaptive bar: rows of the downscaled grab of the wallpaper strip under the bar [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarToneSampleRows: 4
-    // A2: alpha of the soft shadow (dark under light text, light under dark text) under the bar text and glyphs while the bar background is off; a single pass, the foreground adapts to the wallpaper
+    // A2: alpha of the soft shadow (dark under light text, light under dark text) under the bar text and glyphs while the bar background is off; a single pass, the foreground adapts to the wallpaper [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarTextShadowOpacity: 0.5
-    // A2: MultiEffect shadowBlur of the bar text shadow pass
+    // A2: MultiEffect shadowBlur of the bar text shadow pass [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarTextShadowBlur: 0.22
-    // A2: vertical offset of the bar text shadow
+    // A2: vertical offset of the bar text shadow [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarTextShadowOffsetY: 0
-    // estimate (macOS reveals the bar at the pointer's arrival on the top edge): input strip in px at the top edge while an auto-hidden bar is away
+    // estimate (macOS reveals the bar at the pointer's arrival on the top edge): input strip in px at the top edge while an auto-hidden bar is away [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarRevealZone: 2
-    // estimate: an auto-hidden bar waits this long, pointer off the bar and no menu open, before it slides away (ms)
+    // estimate: an auto-hidden bar waits this long, pointer off the bar and no menu open, before it slides away (ms) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarHideGrace: 350
-    // estimate: slide away, ms (Reduce Motion: no slide)
+    // estimate: slide away, ms (Reduce Motion: no slide) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarHideDuration: 250
-    // estimate: the pointer must stay on the top edge this long before a hidden bar slides in (ms)
+    // estimate: the pointer must stay on the top edge this long before a hidden bar slides in (ms) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarRevealDwell: 120
-    // macOS: the menu bar of a display that is not the active one is dimmed (its titles and status items at this opacity, the band too); a single output is always active. A2: 0.65 keeps the dimmed foreground at 3:1 or more (tested for both tones in test_contrast_tokens.py; 0.5 gave 1.2 to 2.6)
+    // macOS: the menu bar of a display that is not the active one is dimmed (its titles and status items at this opacity, the band too); a single output is always active. A2: 0.65 keeps the dimmed foreground at 3:1 or more (tested for both tones in test_contrast_tokens.py; 0.5 gave 1.2 to 2.6) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property real menubarInactiveOpacity: 0.65
-    // estimate: slide in, ms (Reduce Motion: shown at once)
+    // estimate: slide in, ms (Reduce Motion: shown at once) [ref: docs/testing/f1-reference-gaps.md § Menu bar; docs/specs/menubar.md]
     readonly property int menubarRevealDuration: 200
 
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockIconSize: 48
-    // estimate: smallest tile size of the Size slider (macOS Settings > Desktop & Dock > Size, small end), px
+    // estimate: smallest tile size of the Size slider (macOS Settings > Desktop & Dock > Size, small end), px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockSizeMin: 32
-    // estimate: largest tile size of the Size slider (large end), px; the default is dock.iconSize (48)
+    // estimate: largest tile size of the Size slider (large end), px; the default is dock.iconSize (48) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockSizeMax: 96
-    // F1 gap 4: vertical padding ~9.5 and end margin ~10 (integer for crisp tiles)
+    // F1 gap 4: vertical padding ~9.5 and end margin ~10 (integer for crisp tiles) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockPadding: 10
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockSpacing: 4
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockBottomMargin: 6
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockIndicatorSize: 4
-    // task spec default; user value in grassfield.json dock.magnification
+    // task spec default; user value in grassfield.json dock.magnification [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockMagnificationMax: 1.6
-    // dock.magnification is clamped to 2.5 (SettingsStore, Settings contract): a tile icon is decoded at the largest size it is ever drawn, so magnification never upscales it
+    // dock.magnification is clamped to 2.5 (SettingsStore, Settings contract): a tile icon is decoded at the largest size it is ever drawn, so magnification never upscales it [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockIconOversample: 2.5
-    // task spec: falloff (quintic smootherstep) over about 3 icons each side
+    // task spec: falloff (quintic smootherstep) over about 3 icons each side [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMagnificationRadius: 3
-    // estimate: pointer hot strip in px when autohidden
+    // estimate: pointer hot strip in px when autohidden [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockRevealZone: 2
-    // estimate (no macOS capture under design/reference to measure): a magnified icon rises by this fraction of its growth, iconSize * (scale - 1); kept small
+    // estimate (no macOS capture under design/reference to measure): a magnified icon rises by this fraction of its growth, iconSize * (scale - 1); kept small [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockMagnificationLift: 0.1
-    // clean-room study of a GPL dock: exponential smoothing of the displayed scales toward the pointer target, time constant in ms (frame rate independent)
+    // clean-room study of a GPL dock: exponential smoothing of the displayed scales toward the pointer target, time constant in ms (frame rate independent) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMagnificationTau: 26
-    // same study: a frame step is capped at 1/30 s, so a stalled frame never makes a jump (ms)
+    // same study: a frame step is capped at 1/30 s, so a stalled frame never makes a jump (ms) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMagnificationMaxDt: 33
-    // estimate: an icon keeps its hovered state this long after the pointer leaves it, no flicker between icons (ms)
+    // estimate: an icon keeps its hovered state this long after the pointer leaves it, no flicker between icons (ms) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockHoverHold: 80
-    // estimate (macOS shows the label after a short dwell): the Dock label appears after this long on an icon (ms)
+    // estimate (macOS shows the label after a short dwell): the Dock label appears after this long on an icon (ms) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockTooltipDelay: 250
-    // estimate: after a label was shown, moving to the next icon shows its label at once within this time (ms)
+    // estimate: after a label was shown, moving to the next icon shows its label at once within this time (ms) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockTooltipWarm: 400
-    // estimate: auto-hide waits this long with no inhibitor before the Dock starts to slide away (ms); replaces the single 450 ms dock.hideDelay
+    // estimate: auto-hide waits this long with no inhibitor before the Dock starts to slide away (ms); replaces the single 450 ms dock.hideDelay [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockHideGrace: 250
-    // estimate: auto-hide slide away, ms (Reduce Motion caps it)
+    // estimate: auto-hide slide away, ms (Reduce Motion caps it) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockHideDuration: 300
-    // estimate: the pointer must stay on the edge strip this long before a hidden Dock slides in (ms)
+    // estimate: the pointer must stay on the edge strip this long before a hidden Dock slides in (ms) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockRevealDwell: 120
-    // estimate: auto-hide slide in, ms (Reduce Motion caps it)
+    // estimate: auto-hide slide in, ms (Reduce Motion caps it) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockRevealDuration: 240
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockSeparatorWidth: 1
-    // F1 gap 4: shelf height minus 18 for a 48 tile with 9.5 padding
+    // F1 gap 4: shelf height minus 18 for a 48 tile with 9.5 padding [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockSeparatorHeight: 49
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property int dockTooltipGap: 8
-    // estimate: height reserved above the shelf for the label
+    // estimate: height reserved above the shelf for the label [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockTooltipArea: 36
-    // estimate: width reserved beside the shelf of a Dock on the left or right edge for the label of a tile (the label sits beside the tile, so it needs its width)
+    // estimate: width reserved beside the shelf of a Dock on the left or right edge for the label of a tile (the label sits beside the tile, so it needs its width) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockTooltipSideArea: 240
-    // estimate: app badge on a minimized-window tile
+    // estimate: app badge on a minimized-window tile [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockMinimizedBadgeScale: 0.4
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Dock)
     readonly property real dockTrashIconScale: 0.6
     // Dock fidelity pass: the shelf holds icons only (no text), so it is more translucent than the A2 text clamp; real blur behind it (reference gs-016-031: shelf a few percent lighter than its backdrop). Light appearance: black dot, needs relative luminance 0.10 or more over a black backdrop (0.42 gives 0.133, 3.7:1), tested in tests/unit/tst_bartone.qml
     readonly property real dockTintAlphaLight: 0.42
     // Dock fix pass 2: dark appearance, white dot, needs relative luminance 0.30 or less over a white backdrop (a white window under an autohidden or floating shelf); 0.52 gives 0.256 (3.4:1), tested in tests/unit/tst_bartone.qml
     readonly property real dockTintAlphaDark: 0.52
-    // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge)
+    // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockHighlightOpacity: 0.34
-    // Dock fidelity pass: 1 px rim, white in both appearances (glass edge)
+    // Dock fidelity pass: 1 px rim, white in both appearances (glass edge) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockRimOpacity: 0.34
-    // macOS convention: at most three recent applications
+    // macOS convention: at most three recent applications [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockRecentMax: 3
-    // estimate: recent documents listed in an app's Dock menu (macOS lists up to ten; five keep the menu short)
+    // estimate: recent documents listed in an app's Dock menu (macOS lists up to ten; five keep the menu short) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockRecentDocsMax: 5
-    // shrink to fit: free room kept at each end of the shelf along the Dock, px (same as the margin off the screen edge, dock.bottomMargin)
+    // shrink to fit: free room kept at each end of the shelf along the Dock, px (same as the margin off the screen edge, dock.bottomMargin) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockFitMargin: 6
-    // shrink to fit: smallest tile the Dock shrinks to, px (below this it would be unusable; the shelf then overflows the screen)
+    // shrink to fit: smallest tile the Dock shrinks to, px (below this it would be unusable; the shelf then overflows the screen) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockFitMin: 16
-    // macOS: a Fan shows about ten items; with Automatic a folder of more items opens as a Grid
+    // macOS: a Fan shows about ten items; with Automatic a folder of more items opens as a Grid [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackFanMax: 9
-    // estimate: folder stacks kept in the Dock (macOS has no hard limit)
+    // estimate: folder stacks kept in the Dock (macOS has no hard limit) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackMax: 12
-    // estimate from macOS Fan: distance between two fanned icons along the way out, px (icon 48 + gap)
+    // estimate from macOS Fan: distance between two fanned icons along the way out, px (icon 48 + gap) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackFanStep: 56
-    // estimate from macOS Fan: sideways drift of the last fanned icon, px
+    // estimate from macOS Fan: sideways drift of the last fanned icon, px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackFanBend: 80
-    // estimate: icon of a stack item in the Fan and the Grid, px
+    // estimate: icon of a stack item in the Fan and the Grid, px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackIconSize: 48
-    // estimate: width of a Grid cell, px
+    // estimate: width of a Grid cell, px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackCellWidth: 96
-    // estimate: height of a Grid cell (icon and two label lines), px
+    // estimate: height of a Grid cell (icon and two label lines), px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackCellHeight: 92
-    // estimate: widest Grid, columns
+    // estimate: widest Grid, columns [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackGridMaxColumns: 5
-    // estimate: tallest Grid before it scrolls, rows
+    // estimate: tallest Grid before it scrolls, rows [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackGridMaxRows: 4
-    // estimate: tallest List before it scrolls, rows
+    // estimate: tallest List before it scrolls, rows [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackListMaxRows: 12
-    // estimate: width of a List, px
+    // estimate: width of a List, px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackListWidth: 260
-    // estimate: items a Grid or List holds (the rest are in Files)
+    // estimate: items a Grid or List holds (the rest are in Files) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackItemMax: 300
-    // macOS stack icon: sheets behind the top one are turned by this angle, degrees
+    // macOS stack icon: sheets behind the top one are turned by this angle, degrees [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockStackPileTilt: 5
-    // estimate: size of a pile sheet relative to the tile
+    // estimate: size of a pile sheet relative to the tile [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockStackPileScale: 0.78
-    // macOS 26 launch bounce rises about a third of the icon height (per icon size)
+    // macOS 26 launch bounce rises about a third of the icon height (per icon size) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockBounceHeightScale: 0.34
-    // macOS: an icon darkens slightly while the mouse button is held (brightness, negative)
+    // macOS: an icon darkens slightly while the mouse button is held (brightness, negative) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockPressDim: 0.25
-    // macOS 26: one up-and-down hop of the launch bounce, about 0.5 s (ease out up, ease in down)
+    // macOS 26: one up-and-down hop of the launch bounce, about 0.5 s (ease out up, ease in down) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockBounceDuration: 500
-    // estimate (same as switcher.layerWaitMs): a window chosen from the Dock menu is activated when the compositor reports the overlay surface unmapped (Hyprland refuses to focus a window while an Exclusive layer exists); if no such event arrives within this time it is activated anyway, ms
+    // estimate (same as switcher.layerWaitMs): a window chosen from the Dock menu is activated when the compositor reports the overlay surface unmapped (Hyprland refuses to focus a window while an Exclusive layer exists); if no such event arrives within this time it is activated anyway, ms [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMenuLayerWait: 250
-    // macOS: an app asking for attention hops again and again with a short rest between hops; one hop (dock.bounceDuration) every this many ms, estimate
+    // macOS: an app asking for attention hops again and again with a short rest between hops; one hop (dock.bounceDuration) every this many ms, estimate [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockAttentionPeriod: 1500
-    // macOS: the attention hop is the launch hop; same rise as dock.bounceHeightScale (fraction of the icon height)
+    // macOS: the attention hop is the launch hop; same rise as dock.bounceHeightScale (fraction of the icon height) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockAttentionHeightScale: 0.34
-    // NextKDE and others: an auto-hidden Dock comes out for a moment when an app asks for attention, ms, estimate
+    // NextKDE and others: an auto-hidden Dock comes out for a moment when an app asks for attention, ms, estimate [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockAttentionReveal: 3000
-    // estimate: static accent plate behind the icon of an app asking for attention while Reduce Motion is on (no hop)
+    // estimate: static accent plate behind the icon of an app asking for attention while Reduce Motion is on (no hop) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockAttentionHighlightOpacity: 0.35
-    // estimate: the launch bounce stops after this long without a window, ms
+    // estimate: the launch bounce stops after this long without a window, ms [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockLaunchTimeout: 12000
-    // macOS: pressing and holding a Dock icon about half a second opens its menu (ms); a shorter press is a click
+    // macOS: pressing and holding a Dock icon about half a second opens its menu (ms); a shorter press is a click [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMenuHold: 550
-    // estimate: a window opening or closing makes Qt end a held press with a synthesized release (a tap with the button still down); a tap this many ms after such a window event, for a press that began before it, is refused (shell, Dock)
+    // estimate: a window opening or closing makes Qt end a held press with a synthesized release (a tap with the button still down); a tap this many ms after such a window event, for a press that began before it, is refused (shell, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockClickWindowGuard: 150
-    // tiles without a Dock menu (Apps, Trash, minimized windows): a click launches however long the button is held; TapHandler longPressThreshold in seconds, set so a long hold still counts as a tap
+    // tiles without a Dock menu (Apps, Trash, minimized windows): a click launches however long the button is held; TapHandler longPressThreshold in seconds, set so a long hold still counts as a tap [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockClickHoldLimit: 3600
-    // estimate: transparent room above the shelf for a dragged icon and the poof
+    // estimate: transparent room above the shelf for a dragged icon and the poof [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockDragArea: 168
-    // estimate: px above the shelf top (icon centre) from which a dropped tile leaves the Dock
+    // estimate: px above the shelf top (icon centre) from which a dropped tile leaves the Dock [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockDragOutDistance: 56
-    // estimate: removal puff, ms
+    // estimate: removal puff, ms [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockPoofDuration: 420
-    // estimate: final diameter of each puff circle, px
+    // estimate: final diameter of each puff circle, px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockPoofSize: 56
-    // estimate: notification badge height and minimum width
+    // estimate: notification badge height and minimum width [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockBadgeSize: 20
-    // estimate: how far the badge sticks out of the icon corner, px
+    // estimate: how far the badge sticks out of the icon corner, px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockBadgeOverhang: 5
-    // estimate (macOS Dock tile progress): height of the progress bar an application sets on its tile (ADR-0018), px
+    // estimate (macOS Dock tile progress): height of the progress bar an application sets on its tile (ADR-0018), px [ref: docs/testing/f1-reference-gaps.md § Dock]
     readonly property int dockProgressHeight: 5
-    // estimate: horizontal inset of the progress bar from the icon edges, px
+    // estimate: horizontal inset of the progress bar from the icon edges, px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockProgressInset: 6
-    // estimate: distance of the progress bar from the bottom of the icon, px
+    // estimate: distance of the progress bar from the bottom of the icon, px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockProgressBottomOffset: 4
-    // estimate: opacity of the progress track (the appearance fill colour: white in dark, black in light)
+    // estimate: opacity of the progress track (the appearance fill colour: white in dark, black in light) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockProgressTrackOpacity: 0.4
-    // estimate: starting opacity of the removal puff
+    // estimate: starting opacity of the removal puff [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockPoofOpacity: 0.5
-    // estimate: centre circle of the puff, fraction of poofSize
+    // estimate: centre circle of the puff, fraction of poofSize [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockPoofCoreScale: 0.7
-    // estimate: outer circles of the puff, fraction of poofSize
+    // estimate: outer circles of the puff, fraction of poofSize [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockPoofPuffScale: 0.4
-    // estimate: circles start at this fraction of their size and grow by one more
+    // estimate: circles start at this fraction of their size and grow by one more [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockPoofGrowFrom: 0.5
-    // estimate: accent fill of a tile under a file drag
+    // estimate: accent fill of a tile under a file drag [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockDropHighlightOpacity: 0.28
-    // reference gs-014-019: icon menu tail base ~19 px
+    // reference gs-014-019: icon menu tail base ~19 px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMenuTailWidth: 19
-    // reference gs-014-019: icon menu tail height ~12.6 px
+    // reference gs-014-019: icon menu tail height ~12.6 px [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMenuTailHeight: 13
-    // reference gs-014-019: tail tip 16 above the shelf top
+    // reference gs-014-019: tail tip 16 above the shelf top [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockMenuTailGap: 16
 
-    // task spec: pointer dwell before a hot corner fires
+    // task spec: pointer dwell before a hot corner fires [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int hotCornerDwellMs: 150
-    // estimate: px side of the corner trigger window
+    // estimate: px side of the corner trigger window [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int hotCornerSize: 2
 
-    // F1 gap 5: menu row height 24 +-0.5
+    // F1 gap 5: menu row height 24 +-0.5 [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property int menuItemHeight: 24
-    // F1 gap 5: no real minimum, menus as narrow as ~151
+    // F1 gap 5: no real minimum, menus as narrow as ~151 [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property int menuMinWidth: 150
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menus and popovers)
     readonly property int menuPadding: 5
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menus and popovers)
     readonly property int menuItemPadding: 10
-    // F1 gap 5: separator block 5+1+5
+    // F1 gap 5: separator block 5+1+5 [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property int menuSeparatorHeight: 11
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menus and popovers)
     readonly property int menuIconSize: 14
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menus and popovers)
     readonly property int menuShortcutGap: 24
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menus and popovers)
     readonly property int menuSubmenuOverlap: 4
-    // estimate: colour swatch of a swatch row (Files tags), pending F1 measurement
+    // estimate: colour swatch of a swatch row (Files tags), F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menus and popovers)
     readonly property int menuSwatchSize: 16
-    // estimate: space between swatches
+    // estimate: space between swatches [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property int menuSwatchGap: 8
-    // estimate: ring around the hovered or keyboard-current swatch
+    // estimate: ring around the hovered or keyboard-current swatch [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property int menuSwatchRing: 2
-    // same limit as the menu bar's Window menu (AppMenuModel.titleMax): longest window title in a Dock menu's window list, characters
+    // same limit as the menu bar's Window menu (AppMenuModel.titleMax): longest window title in a Dock menu's window list, characters [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property int menuWindowTitleMax: 40
-    // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1)
+    // own value: check/dash mark drawn on a swatch; 4.1:1 or more on every Files tag colour (computed, WCAG 1.4.11 asks 3:1) [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property string menuSwatchMark: "#1B1B1F"
 
-    // F1 gap 18: slider track 6 (Settings reference)
+    // F1 gap 18: slider track 6 (Settings reference) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlSliderTrack: 6
-    // F1 gap 18: pill knob height
+    // F1 gap 18: pill knob height [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlSliderKnob: 16
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets)
     readonly property int controlSliderHeight: 22
-    // F1 gap 12: toggle track 36x16
+    // F1 gap 12: toggle track 36x16 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleWidth: 36
-    // F1 gap 12: toggle track 36x16
+    // F1 gap 12: toggle track 36x16 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleHeight: 16
-    // inner border of the security surfaces only (lock password field, polkit dialog; their spec pins it, reviewed separately); every other surface draws the one ring, control.focusOutline
+    // inner border of the security surfaces only (lock password field, polkit dialog; their spec pins it, reviewed separately); every other surface draws the one ring, control.focusOutline [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlFocusRing: 2
-    // F1 gap 13: macOS keyboard focus ring ~3.5; the one keyboard focus ring of every surface (UX-09): this width, opaque, in Appearance.focusRingColor
+    // F1 gap 13: macOS keyboard focus ring ~3.5; the one keyboard focus ring of every surface (UX-09): this width, opaque, in Appearance.focusRingColor [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlFocusOutline: 3
-    // A11Y-08: the ring is opaque (it was 0.6, 2.5:1 in the light appearance); kept for hosts that blend it
+    // A11Y-08: the ring is opaque (it was 0.6, 2.5:1 in the light appearance); kept for hosts that blend it [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property real controlFocusOutlineOpacity: 1.0
     // A11Y-08 / WCAG 1.4.11: the ring is the accent where the accent holds this against the surface tint (3:1 needed over the material, 0.5 of margin for the wallpaper behind it), else the text colour (the light yellow accent); tested for every accent in tests/unit/tst_accent.qml
     readonly property real controlFocusRingMinContrast: 3.5
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlTooltipDelay: 500
-    // F1 gap 13: push button minimum width ~64
+    // F1 gap 13: push button minimum width ~64 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlButtonMinWidth: 64
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlSliderDefaultWidth: 200
-    // F1 gap 12: pill knob 21x12
+    // F1 gap 12: pill knob 21x12 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleKnobWidth: 21
-    // F1 gap 12: pill knob 21x12
+    // F1 gap 12: pill knob 21x12 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleKnobHeight: 12
-    // F1 gap 18: pill knob about 21x16 +-2
+    // F1 gap 18: pill knob about 21x16 +-2 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlSliderKnobWidth: 21
-    // F1 gap 18: Quick Settings slider track stays 4
+    // F1 gap 18: Quick Settings slider track stays 4 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlSliderTrackCompact: 4
-    // F1 gap 13: push button 24 tall (sheets, Force Quit footer)
+    // F1 gap 13: push button 24 tall (sheets, Force Quit footer) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlButtonHeight: 24
-    // F1 gap 13: alert capsule buttons 110x28
+    // F1 gap 13: alert capsule buttons 110x28 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlAlertButtonHeight: 28
-    // F1 gap 13: gap between alert buttons
+    // F1 gap 13: gap between alert buttons [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlAlertButtonGap: 8
-    // F1 gap 4: capsule side padding ~13.5
+    // F1 gap 4: capsule side padding ~13.5 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlTooltipPaddingX: 13
-    // F1 gap 4: capsule 24.4 tall with 13 pt text
+    // F1 gap 4: capsule 24.4 tall with 13 pt text [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlTooltipPaddingY: 4
-    // F1 gap 4: tail 12.6 wide
+    // F1 gap 4: tail 12.6 wide [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlTooltipTailWidth: 13
-    // F1 gap 4: tail 7.3 high
+    // F1 gap 4: tail 7.3 high [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlTooltipTailHeight: 7
 
-    // F1 gap 6: Quick Settings column 291 +-1 (4 x 63 cells + 3 x 13 gaps)
+    // F1 gap 6: Quick Settings column 291 +-1 (4 x 63 cells + 3 x 13 gaps) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelControlCenterWidth: 291
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
     readonly property int panelDialogWidth: 380
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
     readonly property int panelAboutWidth: 340
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
     readonly property int panelForceQuitWidth: 380
-    // F1 gap 6: 2x1 module height 63
+    // F1 gap 6: 2x1 module height 63 [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelTileHeight: 63
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
     readonly property int panelPopupMargin: 6
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets)
     readonly property int panelStatusPopupWidth: 260
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelAboutLabelWidth: 100
-    // F1 gap 6: 36-pt icon disk of a 2x1 module
+    // F1 gap 6: 36-pt icon disk of a 2x1 module [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelCcIconButton: 36
-    // estimate: Wi-Fi join button in a 34-pt list row (kept at its pre-36 size)
+    // estimate: Wi-Fi join button in a 34-pt list row (kept at its pre-36 size) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelCcJoinButton: 30
-    // estimate: Now Playing transport button in the Quick Settings 2x2 module (kept at its pre-36 size)
+    // estimate: Now Playing transport button in the Quick Settings 2x2 module (kept at its pre-36 size) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelCcTransportButton: 26
-    // estimate: transport button of the Now Playing desktop widget (kept at its pre-36 size)
+    // estimate: transport button of the Now Playing desktop widget (kept at its pre-36 size) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelWidgetTransportButton: 22
-    // estimate: list row in an expanded Control Center section
+    // estimate: list row in an expanded Control Center section [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelCcRowHeight: 34
-    // estimate: chevron glyph size
+    // estimate: chevron glyph size [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelCcChevron: 12
-    // estimate: Now Playing artwork in the 2x2 module
+    // estimate: Now Playing artwork in the 2x2 module [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelCcArtSize: 40
-    // estimate: visible rows before a list scrolls
+    // estimate: visible rows before a list scrolls [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelCcListMaxRows: 6
-    // estimate: dev-guard note lifetime in ms
+    // estimate: dev-guard note lifetime in ms [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelCcNoteTimeout: 3000
-    // estimate: width of a percentage readout
+    // estimate: width of a percentage readout [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelPercentWidth: 36
-    // estimate: centred dialogs sit this fraction of the screen height above centre
+    // estimate: centred dialogs sit this fraction of the screen height above centre [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property real panelDialogRaise: 0.08
-    // F1 gap 13: alert app icon in a ~64 frame at the top left (low confidence)
+    // F1 gap 13: alert app icon in a ~64 frame at the top left (low confidence) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelAlertIconFrame: 64
-    // estimate: glyph inside the 64 alert icon frame
+    // estimate: glyph inside the 64 alert icon frame [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelAlertIconGlyph: 48
-    // F1 gap 13: sheet padding 20
+    // F1 gap 13: sheet padding 20 [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelSheetPadding: 20
-    // F1 gap 13: sheet footer 64 tall under a full-width hairline
+    // F1 gap 13: sheet footer 64 tall under a full-width hairline [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelSheetFooterHeight: 64
-    // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages)
+    // F1 gap 13: alert width 260 +-2 (panel.dialogWidth 380 stays for the polkit dialog and Preview messages) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelAlertWidth: 260
 
-    // F1 gap 6: grid cell 63 (1x1 circle, 2x1 capsule 139 x 63)
+    // F1 gap 6: grid cell 63 (1x1 circle, 2x1 capsule 139 x 63) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsCell: 63
-    // F1 gap 6: gap between modules 12.5-13.3
+    // F1 gap 6: gap between modules 12.5-13.3 [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsGap: 13
-    // F1 gap 6: 14 +-1 from the right edge of the screen
+    // F1 gap 6: 14 +-1 from the right edge of the screen [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsEdgeMargin: 14
-    // F1 gap 6: about 13 below the menu bar
+    // F1 gap 6: about 13 below the menu bar [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsTopGap: 13
-    // F1 gap 6: 36-pt icon disk of a 2x1 module
+    // F1 gap 6: 36-pt icon disk of a 2x1 module [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsIconDisk: 36
-    // F1 gap 6: 2x2 module radius 30 +-3
+    // F1 gap 6: 2x2 module radius 30 +-3 [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRadiusTile: 30
-    // F1 gap 6: slider module radius 20 +-3
+    // F1 gap 6: slider module radius 20 +-3 [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRadiusSlider: 20
-    // estimate: opened detail module (same radius as a slider module)
+    // estimate: opened detail module (same radius as a slider module) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRadiusDetail: 20
-    // F1 gap 6: slider module 62.5, rounded to the cell so rows align
+    // F1 gap 6: slider module 62.5, rounded to the cell so rows align [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsSliderModuleHeight: 63
-    // F1 gap 6: inset of the content in a module (13.5)
+    // F1 gap 6: inset of the content in a module (13.5) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsPadding: 14
-    // estimate: bold title of a slider module
+    // estimate: bold title of a slider module [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsTitleSize: Math.round(13 * Appearance.textScale)
-    // estimate: back button of an opened detail module
+    // estimate: back button of an opened detail module [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsBackSize: 28
-    // estimate: dev-guard note capsule
+    // estimate: dev-guard note capsule [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsNoteHeight: 26
-    // ms: a burst of rfkill events re-reads the list once
+    // ms: a burst of rfkill events re-reads the list once [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsRfkillDebounce: 150
 
-    // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00
+    // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00 [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int autoAppearanceDarkFromHour: 19
-    // macOS Auto appearance turns light at sunrise; fixed local schedule: light from 07:00
+    // macOS Auto appearance turns light at sunrise; fixed local schedule: light from 07:00 [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int autoAppearanceDarkToHour: 7
-    // ms between two evaluations of the schedule while Auto is selected (minute resolution)
+    // ms between two evaluations of the schedule while Auto is selected (minute resolution) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int autoAppearanceRecheckInterval: 60000
 
-    // spec notifications.md: about 344 pt
+    // docs/specs/notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344
-    // ms to wait after the set of sender apps changes before notification-apps.json is rewritten
+    // ms to wait after the set of sender apps changes before notification-apps.json is rewritten [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationAppsWriteMs: 500
-    // F1 gap 7: gap between stacked cards 6 +-1 (value only)
+    // F1 gap 7: gap between stacked cards 6 +-1 (value only) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationBannerGap: 6
     // design/reference/macos (f1-reference-gaps.md gap 7): app icon 32 pt in banners and cards
     readonly property int notificationBannerIconSize: 32
-    // F1 gap 7 (meas-A): icon 13-15 from the card edge; added to the 12-pt card padding
+    // F1 gap 7 (meas-A): icon 13-15 from the card edge; added to the 12-pt card padding [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationIconInset: 2
-    // F1 gap 7 (meas-A): text column 57-58 from the card edge = 14 + 32 icon + 11
+    // F1 gap 7 (meas-A): text column 57-58 from the card edge = 14 + 32 icon + 11 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationTextGap: 11
-    // F1 gap 7 (meas-A): title and body lines on one 16-pt pitch, no extra gap
+    // F1 gap 7 (meas-A): title and body lines on one 16-pt pitch, no extra gap [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationLineGap: 0
-    // spec N2: default 5 s
+    // spec N2: default 5 s [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationBannerTimeout: 5000
-    // spec: body up to 4 lines
+    // spec: body up to 4 lines [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationBannerBodyLines: 4
-    // estimate: older banners wait in the queue
+    // estimate: older banners wait in the queue [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationBannerMaxVisible: 5
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Notifications and widgets)
     readonly property int notificationCloseSize: 18
-    // estimate: close glyph is this much smaller than its button
+    // estimate: close glyph is this much smaller than its button [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCloseGlyphInset: 8
-    // estimate: bell glyph is this much larger than a menu icon
+    // estimate: bell glyph is this much larger than a menu icon [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationIconGlyphExtra: 4
-    // estimate: banner close button backing
+    // estimate: banner close button backing [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property real notificationCloseTintOpacity: 0.95
-    // estimate: banner close button border vs material border
+    // estimate: banner close button border vs material border [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCloseBorderScale: 2
-    // spec N3: 30 percent of the width
+    // spec N3: 30 percent of the width [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property real notificationDismissFraction: 0.3
-    // spec N5
+    // spec N5 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationMaxActions: 3
-    // spec N9
+    // spec N9 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationImageMax: 256
-    // F1 gap 7: the Notifications column has the width of a banner, 344
+    // F1 gap 7: the Notifications column has the width of a banner, 344 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterWidth: 344
-    // F1 gap 7: right inset and offset below the bar 15 +-1 (same as the banners)
+    // F1 gap 7: right inset and offset below the bar 15 +-1 (same as the banners) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterInset: 16
-    // F1 gap 7: edit-widgets pill 87 x 23
+    // F1 gap 7: edit-widgets pill 87 x 23 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterPillWidth: 87
-    // F1 gap 7: edit-widgets pill 87 x 23
+    // F1 gap 7: edit-widgets pill 87 x 23 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterPillHeight: 23
-    // F1 gap 7: 24-pt close circle of the footer
+    // F1 gap 7: 24-pt close circle of the footer [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterCloseDisk: 24
-    // estimate: entries per group before Show all
+    // estimate: entries per group before Show all [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterGroupCollapsed: 3
-    // estimate: pixels of rows kept alive beyond the viewport (keyboard reach)
+    // estimate: pixels of rows kept alive beyond the viewport (keyboard reach) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationCenterCache: 2000
 
-    // estimate: compact pill
+    // estimate: compact pill [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdWidth: 220
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdHeight: 44
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdIconSize: 18
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdBarHeight: 6
-    // estimate: below the menu bar
+    // estimate: below the menu bar [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdGap: 8
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdHideDelay: 1600
 
-    // F1 gap 8: panel width with results 639 +-1
+    // F1 gap 8: panel width with results 639 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchWidth: 640
-    // spec search.md: about 1/4 from the top
+    // docs/specs/search.md: about 1/4 from the top
     readonly property real searchTopFraction: 0.22
-    // F1 gap 8: field row 56 +-1
+    // F1 gap 8: field row 56 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchFieldHeight: 56
-    // F1 gap 8: query text ~26 +-1.5
+    // F1 gap 8: query text ~26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchFieldSize: Math.round(26 * Appearance.textScale)
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchFieldIconSize: 22
-    // F1 gap 8: result row 56 +-1
+    // F1 gap 8: result row 56 +-1 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRowHeight: 56
-    // F1 gap 8: result icon ~32
+    // F1 gap 8: result icon ~32 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRowIconSize: 32
-    // estimate
+    // estimate [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchHeaderHeight: 28
-    // F1 gap 8 (gs-086-210): hairline under the field to the chip row, about 10
+    // F1 gap 8 (gs-086-210): hairline under the field to the chip row, about 10 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchChipTop: 10
-    // F1 gap 8 (gs-086-210): chip row to the first result, about 12 with the list padding
+    // F1 gap 8 (gs-086-210): chip row to the first result, about 12 with the list padding [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchChipBottom: 4
     // estimate: no usable reference (f1-reference-gaps.md, no capture of the empty state at a verified scale): notice area under the field
     readonly property int searchEmptyHeight: 88
-    // estimate: glyph size relative to the row icon tile
+    // estimate: glyph size relative to the row icon tile [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property real searchGlyphScale: 0.7
-    // estimate: decoded icon size relative to the row icon tile
+    // estimate: decoded icon size relative to the row icon tile [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchIconOversample: 2
-    // A2: subtitle on the selected row (was 0.8: 4.2-4.4:1 on the accent); 4.5:1 or more in both appearances, tested
+    // A2: subtitle on the selected row (was 0.8: 4.2-4.4:1 on the accent); 4.5:1 or more in both appearances, tested [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property real searchSelectedSubtitleOpacity: 0.9
-    // estimate: minimum gap between the panel and the screen edges
+    // estimate: minimum gap between the panel and the screen edges [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchEdgeMargin: 16
-    // task: results at most 60 percent of the screen
+    // task: results at most 60 percent of the screen [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property real searchMaxHeightFraction: 0.6
-    // spec S5
+    // spec S5 [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchMaxFiles: 20
-    // estimate: recent documents shown for an empty query
+    // estimate: recent documents shown for an empty query [ref: docs/testing/f1-reference-gaps.md § Search; docs/specs/search.md]
     readonly property int searchRecentCount: 5
 
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockTopMargin: 64
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockDateSize: 22
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockDateWeight: 600
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockClockSize: 104
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockClockWeight: 600
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockAvatarSize: 64
     // A2: was 0.3 (initials 2.7:1 over a white wallpaper); light disc (dark-palette fill) over the lock scrim, white initials 3.4:1 or more over any wallpaper (large text), tested in tests/visual/test_contrast_tokens.py
     readonly property real lockAvatarFillOpacity: 0.2
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockInitialsSize: 26
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockNameWeight: 600
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockFieldWidth: 220
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockFieldHeight: 32
-    // A2: was a white fill at 0.22 (placeholder 1.4:1 over a white wallpaper); the password field is a dark frosted inset (shadow colour) over the scrim: placeholder 8.6:1, typed dots and caret 10.7:1, return arrow 3.1:1 when hovered, over any wallpaper, tested
+    // A2: was a white fill at 0.22 (placeholder 1.4:1 over a white wallpaper); the password field is a dark frosted inset (shadow colour) over the scrim: placeholder 8.6:1, typed dots and caret 10.7:1, return arrow 3.1:1 when hovered, over any wallpaper, tested [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property real lockFieldFillOpacity: 0.45
-    // A2: alpha of the white focus ring of the password field; 3.5:1 or more against the scrim over any wallpaper, tested
+    // A2: alpha of the white focus ring of the password field; 3.5:1 or more against the scrim over any wallpaper, tested [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property real lockFocusRingOpacity: 0.7
-    // estimate: soft drop shadow under the white lock text (decoration; contrast comes from the scrim alone)
+    // estimate: soft drop shadow under the white lock text (decoration; contrast comes from the scrim alone) [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property real lockTextShadowOpacity: 0.4
-    // estimate: MultiEffect shadowBlur (0..1) of the lock text shadow
+    // estimate: MultiEffect shadowBlur (0..1) of the lock text shadow [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property real lockTextShadowBlur: 0.5
-    // estimate: px the lock text shadow is pushed down
+    // estimate: px the lock text shadow is pushed down [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property int lockTextShadowOffsetY: 1
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockSubmitSize: 22
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockBottomMargin: 112
     // A2: was 0.28 (clock 1.8:1 over a white wallpaper); shadow-colour scrim over the blurred wallpaper, white text 5.3:1 or more over any wallpaper (white is the worst case), tested in tests/visual/test_contrast_tokens.py
     readonly property real lockDimOpacity: 0.6
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockBlurMax: 64
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockShakeDistance: 12
-    // estimate: duration of one shake leg in ms
+    // estimate: duration of one shake leg in ms [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property int lockShakeDuration: 60
 
-    // estimate: idle dim before the lock
+    // estimate: idle dim before the lock [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property real idleDimOpacity: 0.55
-    // estimate: idle dim fade-in in ms
+    // estimate: idle dim fade-in in ms [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
     readonly property int idleDimFade: 1000
 
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int polkitIconSize: 40
-    // estimate, pending F1 measurement from design/reference
+    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int polkitFieldHeight: 28
 
-    // spec O2: max window scale 0.8
+    // spec O2: max window scale 0.8 [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property real overviewMaxScale: 0.8
-    // spec O2: min gap 24 px
+    // spec O2: min gap 24 px [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewMinGap: 24
-    // estimate: margin around the window area
+    // estimate: margin around the window area [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAreaMargin: 32
-    // estimate: dim over the blurred wallpaper
+    // estimate: dim over the blurred wallpaper [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property real overviewBackdropOpacity: 0.45
-    // estimate: dim when blur is off (Reduce Transparency)
+    // estimate: dim when blur is off (Reduce Transparency) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property real overviewBackdropOpacityOpaque: 0.92
-    // F1 gap 15: Space thumbnail 138x90 +-1
+    // F1 gap 15: Space thumbnail 138x90 +-1 [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewTileWidth: 138
-    // F1 gap 15: Space thumbnail 138x90 +-1
+    // F1 gap 15: Space thumbnail 138x90 +-1 [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewTileHeight: 90
-    // F1 gap 15: thumbnail gap 32
+    // F1 gap 15: thumbnail gap 32 [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewTileGap: 32
-    // F1 gap 15 (gs-066-145): thumbnail top 42 pt from the screen top, minus the 24 menu bar
+    // F1 gap 15 (gs-066-145): thumbnail top 42 pt from the screen top, minus the 24 menu bar [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewBarTopMargin: 18
-    // F1 gap 15 (gs-066-145): full-width band 164 pt tall from the screen top (+-1), minus the 24 menu bar the surface starts below
+    // F1 gap 15 (gs-066-145): full-width band 164 pt tall from the screen top (+-1), minus the 24 menu bar the surface starts below [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewBarHeight: 140
-    // F1 gap 15 (gs-066-145): 13 pt Desktop name under the thumbnail
+    // F1 gap 15 (gs-066-145): 13 pt Desktop name under the thumbnail [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewTileLabelHeight: 18
-    // F1 gap 15 (gs-066-145): thumbnail bottom to name top, about 8 pt
+    // F1 gap 15 (gs-066-145): thumbnail bottom to name top, about 8 pt [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewTileLabelGap: 8
-    // F1 gap 15 (meas-B): add-space button 18 pt from the right screen edge
+    // F1 gap 15 (meas-B): add-space button 18 pt from the right screen edge [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAddEdgeInset: 18
-    // estimate: app icons in a Space tile
+    // estimate: app icons in a Space tile [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewTileIconSize: 24
-    // estimate: icons shown per Space tile
+    // estimate: icons shown per Space tile [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewTileMaxIcons: 4
-    // estimate: window name pill
+    // estimate: window name pill [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewLabelHeight: 34
-    // macOS Mission Control shows minimized windows smaller than the open ones, in a row below a divider: width of one minimized tile, px (it shrinks when the row would not fit)
+    // macOS Mission Control shows minimized windows smaller than the open ones, in a row below a divider: width of one minimized tile, px (it shrinks when the row would not fit) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewMinimizedWidth: 144
-    // estimate (16:10 of minimizedWidth): height of one minimized tile, px
+    // estimate (16:10 of minimizedWidth): height of one minimized tile, px [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewMinimizedHeight: 90
-    // estimate: space between minimized tiles, px
+    // estimate: space between minimized tiles, px [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewMinimizedGap: 16
-    // estimate: space above and below the minimized row (the divider sits in the upper one), px
+    // estimate: space above and below the minimized row (the divider sits in the upper one), px [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewMinimizedPad: 12
-    // estimate: window title under a minimized tile, px
+    // estimate: window title under a minimized tile, px [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewMinimizedLabelHeight: 18
-    // estimate: window name pill icon
+    // estimate: window name pill icon [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewLabelIconSize: 20
-    // estimate: window name pill
+    // estimate: window name pill [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewLabelMaxWidth: 280
-    // estimate: selection outline
+    // estimate: selection outline [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewSelectionWidth: 3
-    // estimate: thumbnail corner radius
+    // estimate: thumbnail corner radius [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewThumbRadius: 10
-    // estimate: px before a press becomes a drag
+    // estimate: px before a press becomes a drag [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewDragThreshold: 8
-    // estimate: dragged thumbnail
+    // estimate: dragged thumbnail [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property real overviewDragOpacity: 0.8
-    // estimate: balanced profile refreshes thumbnails at 4 fps (the capture API has no rate control)
+    // estimate: balanced profile refreshes thumbnails at 4 fps (the capture API has no rate control) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewBalancedIntervalMs: 250
     // grassfield-compositor kTitlebarHeight (docs/specs/overview.md Shell contract 3): band the plugin draws above a transformed window, kept free above each layout rect and part of its hit area
     readonly property int overviewWindowTitlebarHeight: 32
-    // v2: how long the shell waits for the chrome surface to hold the keyboard before falling back to thumbnails (the plugin refuses on:true without it)
+    // v2: how long the shell waits for the chrome surface to hold the keyboard before falling back to thumbnails (the plugin refuses on:true without it) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewChromeWaitMs: 600
-    // v2: pause before the single retry of an on:true the plugin refused with no-chrome (the second output's Exclusive commit may lag)
+    // v2: pause before the single retry of an on:true the plugin refused with no-chrome (the second output's Exclusive commit may lag) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewChromeRetryMs: 120
-    // v2: pause (0: the next event-loop turn; measured 0 keys lost from 30 ms, none in the wrong window) after the last change of which chrome holds the keyboard before the close completes: every output's chrome commits keyboard None on its own, and Hyprland refuses to refocus while any of them is still Exclusive
+    // v2: pause (0: the next event-loop turn; measured 0 keys lost from 30 ms, none in the wrong window) after the last change of which chrome holds the keyboard before the close completes: every output's chrome commits keyboard None on its own, and Hyprland refuses to refocus while any of them is still Exclusive [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewReleaseSettleMs: 0
-    // estimate: without the plugin capability overview-focus, delay before the first check that the focus the shell asked for holds after the chromes are gone; it doubles with each retry (a focus dispatch settles within a few frames)
+    // estimate: without the plugin capability overview-focus, delay before the first check that the focus the shell asked for holds after the chromes are gone; it doubles with each retry (a focus dispatch settles within a few frames) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewFocusRetryMs: 60
-    // without overview-focus: the shell stops checking and retrying this long after the first attempt (Hyprland's own choice then stands); the plugin's own bound is 1 s
+    // without overview-focus: the shell stops checking and retrying this long after the first attempt (Hyprland's own choice then stands); the plugin's own bound is 1 s [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewFocusBoundMs: 1000
-    // v2: upper bound of the keyboard release; the close completes then even if a chrome still reports the keyboard (a lost chrome event must not leave the overview open)
+    // v2: upper bound of the keyboard release; the close completes then even if a chrome still reports the keyboard (a lost chrome event must not leave the overview open) [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewReleaseBoundMs: 500
-    // F1 gap 15: add-space button is a 32 circle
+    // F1 gap 15: add-space button is a 32 circle [ref: docs/testing/f1-reference-gaps.md § Overview; docs/specs/overview.md]
     readonly property int overviewAddSize: 32
 
-    // estimate: hairline border; shared by the Files, Settings and Ui components (the Apps launcher itself uses the launcher.* tokens)
+    // estimate: hairline border; shared by the Files, Settings and Ui components (the Apps launcher itself uses the launcher.* tokens) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/apps.md]
     readonly property int appsBorderWidth: 1
 
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsWindowWidth: 715
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsWindowHeight: 640
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsWindowMinWidth: 560
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsWindowMinHeight: 420
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsSidebarWidth: 215
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsSidebarItemHeight: 30
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsSidebarIconSize: 14
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsSearchHeight: 28
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsContentMaxWidth: 520
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsRowHeight: 40
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsGroupGap: 20
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsPageTitleSize: Math.round(20 * Appearance.textScale)
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsGroupLabelWidth: 150
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsPickerWidth: 150
-    // estimate: Settings app (docs/specs/settings.md)
+    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsShortcutKeyMinWidth: 28
-    // estimate: Settings system sections re-read the tools' state while a pane is open
+    // estimate: Settings system sections re-read the tools' state while a pane is open [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsSystemRefreshMs: 4000
-    // estimate: Displays pane, height of the arrangement preview
+    // estimate: Displays pane, height of the arrangement preview [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsDisplayPreviewHeight: 150
-    // estimate: Displays pane, smallest edge of an output rectangle in the preview
+    // estimate: Displays pane, smallest edge of an output rectangle in the preview [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsDisplayMinSide: 24
-    // estimate: Displays pane, corner radius of an output rectangle
+    // estimate: Displays pane, corner radius of an output rectangle [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsDisplayRadius: 4
-    // estimate: Settings device and network rows, leading glyph
+    // estimate: Settings device and network rows, leading glyph [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsListIconSize: 18
-    // estimate: Sound pane, minimum gap between two volume writes while a slider is dragged
+    // estimate: Sound pane, minimum gap between two volume writes while a slider is dragged [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsVolumeApplyMs: 120
-    // estimate: shell, minimum gap between two compositor cursor reloads while the pointer size slider is dragged
+    // estimate: shell, minimum gap between two compositor cursor reloads while the pointer size slider is dragged [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerApplyMs: 100
-    // estimate: shell, how long a compositor request socket may stay silent before the pointer request counts as lost
+    // estimate: shell, how long a compositor request socket may stay silent before the pointer request counts as lost [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerAnswerMs: 1000
-    // estimate: shell, first wait before a lost pointer request is sent again (doubles each attempt)
+    // estimate: shell, first wait before a lost pointer request is sent again (doubles each attempt) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerRetryMs: 250
-    // estimate: shell, attempts for one pointer size before waiting for the next change or compositor event
+    // estimate: shell, attempts for one pointer size before waiting for the next change or compositor event [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerRetryMax: 5
-    // estimate: shell, quiet time after the last pointer colour change before the cursor theme is regenerated (a colour well dragged for a second makes one build, for the colour it stops on)
+    // estimate: shell, quiet time after the last pointer colour change before the cursor theme is regenerated (a colour well dragged for a second makes one build, for the colour it stops on) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerColorDebounceMs: 350
-    // estimate: shell, a cursor theme build that runs longer than this is killed (a normal one takes about 2 s)
+    // estimate: shell, a cursor theme build that runs longer than this is killed (a normal one takes about 2 s) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerBuildTimeoutMs: 60000
-    // estimate: shell, wait for a cancelled build to stop on SIGTERM before it is killed
+    // estimate: shell, wait for a cancelled build to stop on SIGTERM before it is killed [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerBuildKillMs: 3000
-    // estimate: Settings > Wallpaper, width of the Fit and Change picture pickers (French 'Toutes les 15 minutes' did not fit the 150 px picker)
+    // estimate: Settings > Wallpaper, width of the Fit and Change picture pickers (French 'Toutes les 15 minutes' did not fit the 150 px picker) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsWallpaperPickerWidth: 210
     // ADR-0016: Settings > Wallpaper, thumbnails per row (macOS: 4)
     readonly property int settingsWallpaperTileColumns: 4
-    // estimate: Settings > Wallpaper, gap between thumbnails
+    // estimate: Settings > Wallpaper, gap between thumbnails [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsWallpaperTileGap: 12
-    // estimate: Settings > Wallpaper, thumbnail corner radius
+    // estimate: Settings > Wallpaper, thumbnail corner radius [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsWallpaperTileRadius: 6
-    // estimate: Settings > Wallpaper, height of the preview of the current wallpaper (width follows the display's aspect ratio)
+    // estimate: Settings > Wallpaper, height of the preview of the current wallpaper (width follows the display's aspect ratio) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsWallpaperPreviewHeight: 170
     // ADR-0016: width in pixels of the cached thumbnails the helper writes (about 2.6 times the tile width, sharp on a 2x display)
     readonly property int settingsWallpaperThumbWidth: 320
-    // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted
+    // estimate: shell, at startup the stored pointer colours are trusted after this long even when grassfield.json never loaded (no file yet); until then a custom cursor theme is not deleted [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerSettingsWaitMs: 3000
-    // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged
+    // estimate: Settings colour well, minimum gap between two writes of the colour while it is dragged [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsColorWriteMs: 120
-    // estimate: Settings colour well, side of the round well in a row
+    // estimate: Settings colour well, side of the round well in a row [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsColorWellSize: 22
-    // estimate: Settings colour well, width of the saturation and brightness square
+    // estimate: Settings colour well, width of the saturation and brightness square [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsColorSquareWidth: 200
-    // estimate: Settings colour well, height of the saturation and brightness square
+    // estimate: Settings colour well, height of the saturation and brightness square [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsColorSquareHeight: 140
-    // estimate: Settings colour well, width of the typed #rrggbb field
+    // estimate: Settings colour well, width of the typed #rrggbb field [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsColorHexWidth: 84
-    // estimate: Settings pointer preview, side of the arrow tile (the arrow is drawn on the 32 unit grid of the cursor sources)
+    // estimate: Settings pointer preview, side of the arrow tile (the arrow is drawn on the 32 unit grid of the cursor sources) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsPointerPreviewSize: 28
-    // the pure ends of the saturation/brightness square of the colour well are colour maths, not a theme colour
+    // the pure ends of the saturation/brightness square of the colour well are colour maths, not a theme colour [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property string settingsColorSquareWhite: "#ffffff"
-    // same: transparent white end of the square
+    // same: transparent white end of the square [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property string settingsColorSquareWhiteClear: "#00ffffff"
-    // same: black end of the square
+    // same: black end of the square [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property string settingsColorSquareBlack: "#000000"
-    // same: transparent black end of the square
+    // same: transparent black end of the square [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property string settingsColorSquareBlackClear: "#00000000"
-    // estimate: Sound pane, width of the percentage next to a slider
+    // estimate: Sound pane, width of the percentage next to a slider [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsVolumeValueWidth: 44
 
-    // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap)
+    // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164
-    // estimate: widgets v1, px between widgets
+    // estimate: widgets v1, px between widgets [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetGap: 16
-    // F1 gap 16: widget radius ~26 +-2
+    // F1 gap 16: widget radius ~26 +-2 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetRadius: 26
-    // F1 gap 16: 16 +-1 from the left, top aligned with the notification column
+    // F1 gap 16: 16 +-1 from the left, top aligned with the notification column [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetDesktopMargin: 16
-    // estimate: widgets v1, saturation shift while a window has focus
+    // estimate: widgets v1, saturation shift while a window has focus [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property real widgetDimSaturation: -0.75
-    // estimate: widgets v1, brightness shift while a window has focus
+    // estimate: widgets v1, brightness shift while a window has focus [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property real widgetDimBrightness: -0.12
-    // estimate: widgets v1, dim transition
+    // estimate: widgets v1, dim transition [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetDimMs: 300
-    // F1 gap 16 (gs-017-032): gallery panel left 41 from the screen edge, anchored bottom-left
+    // F1 gap 16 (gs-017-032): gallery panel left 41 from the screen edge, anchored bottom-left [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetGalleryInsetLeft: 41
-    // estimate: the single-column gallery (sidebar 241 + previews of the reference do not fit a one-column list); 344 column + room for the size picker
+    // estimate: the single-column gallery (sidebar 241 + previews of the reference do not fit a one-column list); 344 column + room for the size picker [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetGalleryWidth: 360
-    // F1 gap 16 (gs-017-032): the gallery covers about 60 percent of the screen height
+    // F1 gap 16 (gs-017-032): the gallery covers about 60 percent of the screen height [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property real widgetGalleryHeightFraction: 0.62
-    // estimate: upper bound of the gallery height
+    // estimate: upper bound of the gallery height [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetGalleryMaxHeight: 720
-    // estimate: widgets v1, gallery preview row
+    // estimate: widgets v1, gallery preview row [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetGalleryRowHeight: 120
-    // estimate: widgets v1, size picker segment
+    // estimate: widgets v1, size picker segment [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetSizeButtonWidth: 64
-    // estimate: widgets v1, analog clock hand width
+    // estimate: widgets v1, analog clock hand width [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetAnalogHandWidth: 3
-    // task spec: System widget sampling interval
+    // task spec: System widget sampling interval [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetSampleMs: 2000
-    // estimate: widgets v1, secondary figure size
+    // estimate: widgets v1, secondary figure size [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetGlyphSize: 34
-    // estimate: widgets v1, primary figure size
+    // estimate: widgets v1, primary figure size [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetBigSize: 44
-    // estimate: widgets v1, how long a click keeps the desktop active while a window has focus
+    // estimate: widgets v1, how long a click keeps the desktop active while a window has focus [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetActiveMs: 10000
-    // estimate: widgets v1, scale of a tile while it is dragged
+    // estimate: widgets v1, scale of a tile while it is dragged [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property real widgetLiftScale: 1.03
-    // estimate: widgets v1, analog face edge over tile height in the large Clock
+    // estimate: widgets v1, analog face edge over tile height in the large Clock [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property real widgetClockFaceRatio: 0.58
-    // estimate: widgets v1, date column over tile width in the Calendar
+    // estimate: widgets v1, date column over tile width in the Calendar [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property real widgetDateColumnRatio: 0.34
-    // estimate: widgets v1, px around a desktop tile in its layer surface so the shadow is not clipped
+    // estimate: widgets v1, px around a desktop tile in its layer surface so the shadow is not clipped [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetSurfacePad: 40
-    // estimate: widgets v1, cap of placements per list in widgets.json
+    // estimate: widgets v1, cap of placements per list in widgets.json [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetMaxEntries: 64
-    // estimate: widgets v1, widgets.json larger than this is rejected
+    // estimate: widgets v1, widgets.json larger than this is rejected [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetMaxFileBytes: 262144
 
-    // F1 gap 17: desktop grid 112x112 +-1
+    // F1 gap 17: desktop grid 112x112 +-1 [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconCellWidth: 112
-    // estimate: desktop icons v1, px height of a grid slot
+    // estimate: desktop icons v1, px height of a grid slot [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconCellHeight: 112
-    // estimate: desktop icons v1, px from the screen edges and the menu bar to the grid
+    // estimate: desktop icons v1, px from the screen edges and the menu bar to the grid [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconMargin: 16
-    // estimate: desktop icons v1, icon edge
+    // estimate: desktop icons v1, icon edge [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconSize: 64
-    // estimate: desktop icons v1, label font size
+    // estimate: desktop icons v1, label font size [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconLabelSize: 12
-    // task spec: labels wrap to at most 2 lines
+    // task spec: labels wrap to at most 2 lines [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconLabelMaxLines: 2
-    // estimate: desktop icons v1, label highlight and icon selection radius
+    // estimate: desktop icons v1, label highlight and icon selection radius [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconSelectionRadius: 6
-    // estimate: desktop icons v1, icon selection tint alpha
+    // estimate: desktop icons v1, icon selection tint alpha [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property real desktopIconSelectionOpacity: 0.35
-    // A2: alpha of the label drop shadow (three stacked passes); white label text over the shadow core is tested over white and black wallpapers, and measured on the nested screenshots (4.8:1 on white)
+    // A2: alpha of the label drop shadow (three stacked passes); white label text over the shadow core is tested over white and black wallpapers, and measured on the nested screenshots (4.8:1 on white) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property real desktopIconLabelShadowOpacity: 1.0
-    // A2: MultiEffect shadowBlur (0..1) of each label shadow pass; 0.06 to 0.35 measured on the white wallpaper, 0.22 is the best
+    // A2: MultiEffect shadowBlur (0..1) of each label shadow pass; 0.06 to 0.35 measured on the white wallpaper, 0.22 is the best [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property real desktopIconLabelShadowBlur: 0.22
-    // A2: px the label shadow is pushed down; 0 measured better than 1 on the white wallpaper
+    // A2: px the label shadow is pushed down; 0 measured better than 1 on the white wallpaper [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconLabelShadowOffsetY: 0
-    // estimate: backing of the inline rename field (was materialBodyOpacity)
+    // estimate: backing of the inline rename field (was materialBodyOpacity) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property real desktopIconRenameFillOpacity: 0.85
-    // estimate: desktop icons v1, rubber band fill alpha
+    // estimate: desktop icons v1, rubber band fill alpha [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property real desktopIconRubberBandOpacity: 0.18
-    // estimate: desktop icons v1, sourceSize cap of image thumbnails
+    // estimate: desktop icons v1, sourceSize cap of image thumbnails [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconThumbnailMax: 128
-    // estimate: desktop icons v1, px before a press becomes a drag
+    // estimate: desktop icons v1, px before a press becomes a drag [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconDragThreshold: 6
-    // estimate: desktop icons v1, debounce of the positions file
+    // estimate: desktop icons v1, debounce of the positions file [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int desktopIconSaveMs: 300
     // ADR-0012 spike: ms the 1x1 kicker surface is mapped (and unmapped) so Hyprland re-evaluates the keyboard focus without pointer motion; 60 measured, 30 untested
     readonly property int desktopIconFocusKickMs: 60
     // ADR-0012 spike: ms the desktop waits for the keyboard after a press before giving up and going back to None (grant measured at 60 to 120)
     readonly property int desktopIconFocusArmMs: 400
 
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesWindowWidth: 920
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesWindowHeight: 560
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesWindowMinWidth: 600
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesWindowMinHeight: 360
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesSidebarWidth: 184
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesSidebarItemHeight: 26
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesSidebarIconSize: 16
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesSidebarHeaderHeight: 28
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarHeight: 52
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarButtonSize: 28
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarIconSize: 16
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesSearchWidth: 180
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesTabHeight: 28
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesPathBarHeight: 26
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesStatusBarHeight: 22
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesIconSize: 64
-    // F1 gap 17: icon view cell 112x112 +-1
+    // F1 gap 17: icon view cell 112x112 +-1 [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesIconCellWidth: 112
-    // F1 gap 17: icon view cell 112x112 +-1
+    // F1 gap 17: icon view cell 112x112 +-1 [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesIconCellHeight: 112
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesIconLabelLines: 2
-    // estimate: grey backdrop around a selected icon
+    // estimate: grey backdrop around a selected icon [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesIconBackdropPadding: 4
-    // F1 gap 17: list row 20 +-0.5
+    // F1 gap 17: list row 20 +-0.5 [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesListRowHeight: 20
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesListIconSize: 16
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesListHeaderHeight: 26
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesListDateWidth: 180
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesListSizeWidth: 90
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesListKindWidth: 150
-    // estimate: alternating list row backgrounds
+    // estimate: alternating list row backgrounds [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real filesStripeOpacity: 0.04
-    // F1 gap 17: column view column 245 +-2
+    // F1 gap 17: column view column 245 +-2 [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesColumnWidth: 245
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesPreviewWidth: 260
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesPreviewIconSize: 128
-    // F1 gap 17: Get Info window 264 +-1.5
+    // F1 gap 17: Get Info window 264 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesInfoWindowWidth: 264
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesInfoWindowHeight: 500
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesInfoIconSize: 64
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesInfoLabelWidth: 100
-    // estimate: Customize Folder window (macOS 26 style panel: preview, colour row, symbol grid)
+    // estimate: Customize Folder window (macOS 26 style panel: preview, colour row, symbol grid) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesCustomizeWindowWidth: 440
-    // estimate: Customize Folder window height (preview, colour row, custom colour, symbol grid and field, buttons)
+    // estimate: Customize Folder window height (preview, colour row, custom colour, symbol grid and field, buttons) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesCustomizeWindowHeight: 500
-    // estimate: Customize Folder, custom colour and symbol fields
+    // estimate: Customize Folder, custom colour and symbol fields [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesCustomizeHexWidth: 140
-    // estimate: Customize Folder, time the per-user storage note stays before the window closes
+    // estimate: Customize Folder, time the per-user storage note stays before the window closes [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesCustomizeNoteMs: 1800
-    // estimate: Go to Folder and confirmation sheets
+    // estimate: Go to Folder and confirmation sheets [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesSheetWidth: 420
-    // estimate: pause that starts a new type-to-select search
+    // estimate: pause that starts a new type-to-select search [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesTypeaheadResetMs: 1000
-    // estimate: error banner lifetime in ms
+    // estimate: error banner lifetime in ms [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesBannerTimeout: 6000
-    // estimate: transient status notice in ms
+    // estimate: transient status notice in ms [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesNoticeTimeout: 3000
-    // estimate: px before a press becomes a drag
+    // estimate: px before a press becomes a drag [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesDragThreshold: 6
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesEmblemSize: 16
-    // estimate: Files app (docs/specs/files.md)
+    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesChevronSize: 10
-    // estimate: drop target outline
+    // estimate: drop target outline [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesDropBorder: 2
-    // estimate: selection rectangle fill
+    // estimate: selection rectangle fill [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real filesRubberBandOpacity: 0.2
-    // estimate: thumbnail pixels per icon point (sharp on HiDPI)
+    // estimate: thumbnail pixels per icon point (sharp on HiDPI) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesThumbnailOversample: 2
-    // estimate: hidden files are drawn dimmed when shown
+    // estimate: hidden files are drawn dimmed when shown [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real filesHiddenOpacity: 0.55
-    // estimate: overlay scroll bar thumb
+    // estimate: overlay scroll bar thumb [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesScrollbarWidth: 6
-    // estimate: shortest scroll bar thumb
+    // estimate: shortest scroll bar thumb [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesScrollbarMinLength: 24
-    // estimate: scroll bar while the view is still
+    // estimate: scroll bar while the view is still [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real filesScrollbarIdleOpacity: 0.5
-    // estimate: scroll bar thumb (text color alpha)
+    // estimate: scroll bar thumb (text color alpha) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real filesScrollbarThumbOpacity: 0.3
-    // estimate: dragged scroll bar thumb
+    // estimate: dragged scroll bar thumb [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real filesScrollbarPressedOpacity: 0.55
-    // estimate: gallery view thumbnail strip under the preview
+    // estimate: gallery view thumbnail strip under the preview [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryStripHeight: 84
-    // estimate: one thumbnail of the gallery strip
+    // estimate: one thumbnail of the gallery strip [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryStripCellWidth: 64
-    // estimate: thumbnail size in the gallery strip
+    // estimate: thumbnail size in the gallery strip [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryStripIconSize: 48
-    // estimate: space around the gallery preview
+    // estimate: space around the gallery preview [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryPreviewMargin: 24
-    // estimate: requested edge of the gallery preview thumbnail in points (x thumbnailOversample, at most the 1024 px xx-large cache)
+    // estimate: requested edge of the gallery preview thumbnail in points (x thumbnailOversample, at most the 1024 px xx-large cache) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryPreviewSize: 512
-    // estimate: type icon in the gallery preview when no thumbnail exists
+    // estimate: type icon in the gallery preview when no thumbnail exists [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryIconSize: 160
-    // estimate: gallery view info panel
+    // estimate: gallery view info panel [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryInfoWidth: 260
-    // estimate: colour tag dot next to a file name
+    // estimate: colour tag dot next to a file name [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesTagDotSize: 10
-    // estimate: overlap of stacked tag dots
+    // estimate: overlap of stacked tag dots [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesTagDotOverlap: 4
-    // estimate: tag dots shown per item (macOS shows a few, stacked)
+    // estimate: tag dots shown per item (macOS shows a few, stacked) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesTagDotsMax: 3
     // own value: a tag dot's edge is its colour darkened by this factor (Qt.darker); Orange, Yellow and Green are under 3:1 against the light window (2.3, 1.6, 2.9), the edge is 3:1 or more on every tag colour in the light appearance (computed, WCAG 1.4.11, tests/visual/test_contrast_tokens.py)
     readonly property real filesTagDotOutlineDarker: 1.6
-    // own value: colour tag Red (not copied)
+    // own value: colour tag Red (not copied) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string filesTagRed: "#E5484D"
-    // own value: colour tag Orange (not copied)
+    // own value: colour tag Orange (not copied) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string filesTagOrange: "#F08A24"
-    // own value: colour tag Yellow (not copied)
+    // own value: colour tag Yellow (not copied) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string filesTagYellow: "#E8C02A"
-    // own value: colour tag Green (not copied)
+    // own value: colour tag Green (not copied) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string filesTagGreen: "#3DA35D"
-    // own value: colour tag Blue (not copied)
+    // own value: colour tag Blue (not copied) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string filesTagBlue: "#3D7FE0"
-    // own value: colour tag Purple (not copied)
+    // own value: colour tag Purple (not copied) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string filesTagPurple: "#9B5DE5"
-    // own value: colour tag Gray (not copied)
+    // own value: colour tag Gray (not copied) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string filesTagGray: "#8B8D93"
-    // F1 gap 17: column view rows 22
+    // F1 gap 17: column view rows 22 [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesColumnRowHeight: 22
-    // minimum width of the list Name column (was filesColumnWidth)
+    // minimum width of the list Name column (was filesColumnWidth) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesListNameMinWidth: 230
 
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewWindowWidth: 860
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewWindowHeight: 640
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewWindowMinWidth: 480
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewWindowMinHeight: 320
-    // gs-092-232: floating thumbnail panel about 216 px wide at 1.0585 px/pt (about 204 pt) +-4
+    // gs-092-232: floating thumbnail panel about 216 px wide at 1.0585 px/pt (about 204 pt) +-4 [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewSidebarWidth: 204
-    // gs-092-232: glass capsule groups about 38 tall floating in a band of about 52 (capsule height plus 2 x spacing md)
+    // gs-092-232: glass capsule groups about 38 tall floating in a band of about 52 (capsule height plus 2 x spacing md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewToolbarHeight: 52
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewToolbarButtonSize: 28
-    // gs-092-232: thumbnail about 150 px wide at 1.0585 px/pt (about 140 pt) inside the 204-pt panel
+    // gs-092-232: thumbnail about 150 px wide at 1.0585 px/pt (about 140 pt) inside the 204-pt panel [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewThumbnailWidth: 140
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewSidebarItemHeight: 28
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewSearchWidth: 200
-    // page background of PDF thumbnails (documents are white in both themes)
+    // page background of PDF thumbnails (documents are white in both themes) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property string previewPaper: "#FFFFFF"
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlanceMinWidth: 360
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlanceMinHeight: 240
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property real previewGlanceScreenFraction: 0.7
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlanceTextWidth: 720
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlanceTextHeight: 520
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlancePdfWidth: 620
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlancePdfHeight: 780
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlanceMediaWidth: 480
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlanceVideoWidth: 800
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlanceVideoHeight: 480
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewGlanceMediaHeight: 220
-    // F1 reference (meas-B, gs-015-029): Quick Look header strip 38 +-1
+    // F1 reference (meas-B, gs-015-029): Quick Look header strip 38 +-1 [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewGlanceHeaderHeight: 38
-    // estimate: time after its creation during which a Glance follows the output it is mapped on (the compositor reports it within a frame or two); later output changes are user moves
+    // estimate: time after its creation during which a Glance follows the output it is mapped on (the compositor reports it within a frame or two); later output changes are user moves [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewGlancePlacementMs: 1000
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property real previewZoomStep: 1.25
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property real previewZoomMin: 0.05
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewZoomMax: 16
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewCodeFontSize: 12
-    // estimate: Preview app (docs/specs/preview.md)
+    // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewControlsHeight: 40
-    // gs-092-232: toolbar capsule groups about 38 tall (meas-B ~38 +-2); 36 = 28-pt buttons + 2 x spacing xs, same as the Files capsules
+    // gs-092-232: toolbar capsule groups about 38 tall (meas-B ~38 +-2); 36 = 28-pt buttons + 2 x spacing xs, same as the Files capsules [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewToolbarCapsuleHeight: 36
-    // estimate: glyph size inside a 28-pt toolbar button (same as files.toolbarIconSize)
+    // estimate: glyph size inside a 28-pt toolbar button (same as files.toolbarIconSize) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewToolbarIconSize: 16
-    // F1 reference (meas-B, gs-019-035): inspector panel about 248 +-3 wide
+    // F1 reference (meas-B, gs-019-035): inspector panel about 248 +-3 wide [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewInfoWidth: 248
-    // F1 reference (meas-B, gs-019-035): inspector info rows 23
+    // F1 reference (meas-B, gs-019-035): inspector info rows 23 [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewInfoRowHeight: 23
-    // F1 reference (meas-B, gs-015-029): Quick Look close glyph circle 13 +-1
+    // F1 reference (meas-B, gs-015-029): Quick Look close glyph circle 13 +-1 [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewGlanceGlyphSize: 13
-    // F1 reference (meas-B, gs-015-029): glyph circle pitch 20
+    // F1 reference (meas-B, gs-015-029): glyph circle pitch 20 [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewGlanceGlyphPitch: 20
-    // F1 reference (meas-B, gs-015-029): the open-with capsule about 135 x 24 +-2
+    // F1 reference (meas-B, gs-015-029): the open-with capsule about 135 x 24 +-2 [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewGlanceOpenButtonHeight: 24
-    // F1 reference (meas-B, gs-015-029): content inset about 5 +-1.5
+    // F1 reference (meas-B, gs-015-029): content inset about 5 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewGlanceContentInset: 5
-    // estimate: time one image stays in a slideshow
+    // estimate: time one image stays in a slideshow [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewSlideshowInterval: 3000
 
     // F1 reference (docs/testing/f1-reference-gaps.md, Apps launcher): panel 844 +-1 pt wide (2x capture)
     readonly property int launcherPanelWidth: 844
-    // F1 reference: radius about 28 +-2
+    // F1 reference: radius about 28 +-2 [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherPanelRadius: 28
-    // estimate: smallest gap between the panel and the screen sides on narrow outputs
+    // estimate: smallest gap between the panel and the screen sides on narrow outputs [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherEdgeMargin: 24
-    // F1 reference: top about 190 pt on a 956-pt screen (0.2); 0.18 keeps the panel clear of the menu bar on short outputs
+    // F1 reference: top about 190 pt on a 956-pt screen (0.2); 0.18 keeps the panel clear of the menu bar on short outputs [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property real launcherTopFraction: 0.18
-    // low confidence (not measured): panel height as a share of the output height; 670 px at 1080, about 5.5 rows so the scroll is visible
+    // low confidence (not measured): panel height as a share of the output height; 670 px at 1080, about 5.5 rows so the scroll is visible [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property real launcherHeightFraction: 0.62
-    // estimate: smallest panel height (search field, chips and two rows)
+    // estimate: smallest panel height (search field, chips and two rows) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherMinHeight: 320
-    // estimate: space kept free at the bottom of the output for the Dock
+    // estimate: space kept free at the bottom of the output for the Dock [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherBottomClearance: 96
-    // F1 reference: (844 - 7 x 114.7) / 2 is about 20 pt of side padding
+    // F1 reference: (844 - 7 x 114.7) / 2 is about 20 pt of side padding [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherPadding: 20
-    // F1 reference: 7 columns
+    // F1 reference: 7 columns [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherColumns: 7
-    // estimate: fewest columns on a narrow output
+    // estimate: fewest columns on a narrow output [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherMinColumns: 3
-    // estimate: narrowest cell before a column is dropped on a narrow output
+    // estimate: narrowest cell before a column is dropped on a narrow output [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherMinCellWidth: 80
-    // F1 reference: cell 114.7 x 101.6 +-1
+    // F1 reference: cell 114.7 x 101.6 +-1 [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherCellHeight: 102
-    // F1 reference: icon 62 visible
+    // F1 reference: icon 62 visible [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherIconSize: 62
-    // F1 reference: label about 12
+    // F1 reference: label about 12 [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherLabelSize: Math.round(12 * Appearance.textScale)
-    // F1 reference: name under the icon, one or two lines
+    // F1 reference: name under the icon, one or two lines [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherLabelLines: 2
-    // estimate: label line height relative to the label size
+    // estimate: label line height relative to the label size [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property real launcherLabelLineHeight: 1.2
-    // estimate: icon to label
+    // estimate: icon to label [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherLabelGap: 6
-    // estimate: pill search field (Search uses a 48-pt field; F1 low confidence)
+    // estimate: pill search field (Search uses a 48-pt field; F1 low confidence) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherSearchHeight: 36
     // A2: dark appearance only. The search field keeps the light translucent fill (macOS model, docs/specs/apps.md) but at 0.10 instead of material.fillOpacity 0.14: the lighter backdrop under the light placeholder (textSecondary) gave 4.30:1 on a white wallpaper at transparency 0.6; the light appearance keeps material.fillOpacity
     readonly property real launcherSearchFillOpacityDark: 0.1
-    // F1 reference: category chips about 23-24 tall
+    // F1 reference: category chips about 23-24 tall [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherChipHeight: 24
-    // F1 reference: chip gap about 7.6
+    // F1 reference: chip gap about 7.6 [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherChipGap: 8
-    // estimate: side padding inside a chip (F1: about 14 around the text)
+    // estimate: side padding inside a chip (F1: about 14 around the text) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherChipPadding: 12
-    // estimate: keyboard focus ring (same as control.focusRing + 1, F1 reference ring about 3.5)
+    // estimate: keyboard focus ring (same as control.focusRing + 1, F1 reference ring about 3.5) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherSelectionWidth: 3
-    // estimate: hover and focus ring corner radius relative to the icon
+    // estimate: hover and focus ring corner radius relative to the icon [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property real launcherHighlightRadiusScale: 0.22
-    // estimate: overlay scroll indicator
+    // estimate: overlay scroll indicator [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherScrollbarWidth: 4
-    // estimate: overlay scroll indicator, fill colour at this opacity
+    // estimate: overlay scroll indicator, fill colour at this opacity [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property real launcherScrollbarOpacity: 0.5
-    // estimate: time the scroll indicator stays after the last scroll
+    // estimate: time the scroll indicator stays after the last scroll [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherScrollbarIdleMs: 800
-    // estimate: shortest scroll indicator, in indicator widths
+    // estimate: shortest scroll indicator, in indicator widths [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherScrollbarMinLengthFactor: 4
-    // estimate: "No results" label, distance from the grid top as a fraction of the grid height
+    // estimate: "No results" label, distance from the grid top as a fraction of the grid height [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property real launcherEmptyOffsetFraction: 0.33
-    // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
+    // estimate: panel scale at the start of the open animation (Reduce Motion: fade only) [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property real launcherOpenScale: 0.96
 
     // ADR-0014 (integrator decision 2026-10-22, the macOS model: small icons stay legible): icon edge in logical pixels below which the icon appearance modes do not apply and the Default artwork is drawn in every mode (list rows, menus, the sidebar: a plate and a recolour made json, cpp, txt, sh and csv the same tile at 16 px)
@@ -1295,15 +1305,15 @@ QtObject {
     readonly property real iconModeOwnTileScaleMin: 0.85
     // ADR-0014 own-tile rule: highest artwork scale of a tile icon
     readonly property real iconModeOwnTileScaleMax: 1.35
-    // estimate: icon files read at once for the shape test
+    // estimate: icon files read at once for the shape test [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int iconModeOwnTileConcurrency: 8
-    // estimate: ms after which a shape read that did not finish is given up (the icon then sits on the system plate like a glyph)
+    // estimate: ms after which a shape read that did not finish is given up (the icon then sits on the system plate like a glyph) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int iconModeOwnTileTimeout: 3000
     // ADR-0014 own-tile rule, Dark: lightness the darkest part of the artwork of a tile icon is mapped to (no lift: the tile covers the plate, so nothing has to separate from it, and a lift flattens the glyph-vs-tile contrast of the icon; A2 rule I)
     readonly property real iconModeTileDarkArtLift: 0.0
     // ADR-0014 Clear over the bare wallpaper: lightness of the smoked plate (almost black, so a black folder on a black wallpaper still shows its plate while white ink and the plate hold on a white one; a lighter plate costs A2 rule E on mid-green wallpapers, modelled)
     readonly property real iconModeClearPlateWallpaperLuma: 0.05
-    // PERF-01 / UX-13: ms between two shape reads of the prewarm (IconShapePrewarm), one icon file at a time in the idle moments after the list of apps is known, so the Apps panel does not read about a hundred files while it opens
+    // PERF-01 / UX-13: ms between two shape reads of the prewarm (IconShapePrewarm), one icon file at a time in the idle moments after the list of apps is known, so the Apps panel does not read about a hundred files while it opens [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int iconModePrewarmGapMs: 40
     // ADR-0014 own-tile rule, Tinted in the light appearance: the plate under a tile icon (seen only in the antialiased fringe of the tile's edge) is the tint at this fraction of its brightness, dark, so that the edge keeps its contrast against a light material (A2 rule E, 32 px)
     readonly property real iconModeTileTintedPlateScaleLight: 0.3
@@ -1355,89 +1365,89 @@ QtObject {
     readonly property real iconModeTintedRampHighLight: 0.2
     // ADR-0014 Clear: from this material transparency (Control Center slider, 0..1) the wallpaper shows through the window material so much that Clear icons are drawn as over the bare wallpaper (smoked plate, opaque rim); A2 at 1.0 holds a floor of 2.0 in every mode, tint and size (docs/specs/ui.md)
     readonly property real iconModeWallpaperLikeTransparency: 0.8
-    // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)
+    // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int iconModePreviewSize: 56
-    // estimate: Settings icon mode picker, tile width
+    // estimate: Settings icon mode picker, tile width [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int iconModePreviewTileWidth: 96
-    // estimate: Settings icon mode picker, tile height
+    // estimate: Settings icon mode picker, tile height [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int iconModePreviewTileHeight: 96
-    // estimate: Settings icon mode picker, tile corner radius
+    // estimate: Settings icon mode picker, tile corner radius [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int iconModePreviewRadius: 10
-    // estimate: Settings icon mode picker, gap between tiles
+    // estimate: Settings icon mode picker, gap between tiles [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int iconModePreviewGap: 12
-    // estimate: Settings icon mode picker, gap between a tile and its keyboard focus ring (the selection ring is the tile border, so the two stay distinct)
+    // estimate: Settings icon mode picker, gap between a tile and its keyboard focus ring (the selection ring is the tile border, so the two stay distinct) [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int iconModePreviewFocusGap: 2
-    // own pick: the blue of the Theme folder colour swatch (Settings and Files Customize Folder); the same blue as the top of the sample icon plate
+    // own pick: the blue of the Theme folder colour swatch (Settings and Files Customize Folder); the same blue as the top of the sample icon plate [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property string iconModeSampleTop: "#4DA3FF"
-    // own picks, not copied: swatches of the Tinted icon colour (blue, purple, pink, red, orange, yellow, green, graphite); the accent is the first swatch
+    // own picks, not copied: swatches of the Tinted icon colour (blue, purple, pink, red, orange, yellow, green, graphite); the accent is the first swatch [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property var iconModeTintColors: ["#3E7BFA", "#8E5BEA", "#E25AA1", "#E5484D", "#F5883B", "#E6B422", "#3FAE5A", "#8A8F98"]
 
-    // folder colours: MultiEffect saturation (0: the colorization alone sets the hue; MultiEffect desaturates after colorizing)
+    // folder colours: MultiEffect saturation (0: the colorization alone sets the hue; MultiEffect desaturates after colorizing) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real folderIconSaturation: 0.0
     // folder colours: lifts the shading so the recoloured body keeps the lightness of the theme's folder (tuned on the former base theme's folders, re-checked on the Breeze folder in the nested session 2026-10-21: symbols 96/96 and 288/288 cells at 3:1, docs/specs/files.md)
     readonly property real folderIconBrightness: 0.15
-    // folder colours: keeps the flap and the body distinct after the colour mapping (tuned on the former base theme's folders, re-checked on the Breeze folder: flap and body stay distinct)
+    // folder colours: keeps the flap and the body distinct after the colour mapping (tuned on the former base theme's folders, re-checked on the Breeze folder: flap and body stay distinct) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real folderIconContrast: 0.25
-    // folder colours: strength of the colour (0..1): the luminance of the folder is mapped onto the colour, shape and shading kept
+    // folder colours: strength of the colour (0..1): the luminance of the folder is mapped onto the colour, shape and shading kept [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real folderIconColorization: 1.0
-    // estimate (macOS 26 Customize Folder): symbol or emoji edge over the folder icon edge
+    // estimate (macOS 26 Customize Folder): symbol or emoji edge over the folder icon edge [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real folderIconGlyphScale: 0.34
-    // estimate: vertical centre of the symbol over the icon height (the body of the folder, below the flap)
+    // estimate: vertical centre of the symbol over the icon height (the body of the folder, below the flap) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real folderIconGlyphCenterY: 0.62
-    // A2 (icons >= 3:1): a plain symbol is an engraved shade of the folder's own colour (macOS 26), darkened in the colour's hue until it reaches this contrast against the plate
+    // A2 (icons >= 3:1): a plain symbol is an engraved shade of the folder's own colour (macOS 26), darkened in the colour's hue until it reaches this contrast against the plate [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real folderIconGlyphMinContrast: 3.0
-    // measured safety over the minimum (the plate is estimated from the colour, the real one differs by a few percent)
+    // measured safety over the minimum (the plate is estimated from the colour, the real one differs by a few percent) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real folderIconGlyphContrastMargin: 0.3
-    // estimate, only used when the plate cannot be measured (FolderPlate): plate over the folder colour (measured on the fallback theme, tests/visual/folder_glyph_contrast.py), icon mode default and clear
+    // estimate, only used when the plate cannot be measured (FolderPlate): plate over the folder colour (measured on the fallback theme, tests/visual/folder_glyph_contrast.py), icon mode default and clear [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property real folderIconPlateDefault: 0.96
-    // estimate, only used when the plate cannot be measured (FolderPlate): plate of the base icon theme folder (Breeze, flat #3daee9 under the symbol) in default mode; the symbol shade otherwise follows the measured plate, any theme
+    // estimate, only used when the plate cannot be measured (FolderPlate): plate of the base icon theme folder (Breeze, flat #3daee9 under the symbol) in default mode; the symbol shade otherwise follows the measured plate, any theme [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string folderIconThemePlate: "#3daee9"
-    // A2 design rule: in the Tinted icon mode the symbol is engraved lighter when the mode's own folder plate (the theme's folder through the mode) has a relative luminance below this (a lighter shade reaches 3.3:1 on plates up to about 0.268), darker otherwise; Default, Dark and Clear darker (a Dark folder keeps its colour on the dark system plate)
+    // A2 design rule: in the Tinted icon mode the symbol is engraved lighter when the mode's own folder plate (the theme's folder through the mode) has a relative luminance below this (a lighter shade reaches 3.3:1 on plates up to about 0.268), darker otherwise; Default, Dark and Clear darker (a Dark folder keeps its colour on the dark system plate) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real folderIconGlyphLighterBelow: 0.25
-    // estimate: samples per axis of the grid read under the symbol from the raw icon (the plate of every colour, mode and appearance is computed from them)
+    // estimate: samples per axis of the grid read under the symbol from the raw icon (the plate of every colour, mode and appearance is computed from them) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int folderIconPlateSamples: 12
-    // estimate: icon size buckets of the plate measure (one measure per icon file and bucket); a larger icon uses the last
+    // estimate: icon size buckets of the plate measure (one measure per icon file and bucket); a larger icon uses the last [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property var folderIconPlateBuckets: [32, 64, 128, 256]
-    // estimate: the view behind a translucent (Clear mode) icon in dark appearance, composited under the plate when its shade is chosen
+    // estimate: the view behind a translucent (Clear mode) icon in dark appearance, composited under the plate when its shade is chosen [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string folderIconPlateBackdropDark: "#1e1f24"
-    // estimate: the view behind a translucent (Clear mode) icon in light appearance
+    // estimate: the view behind a translucent (Clear mode) icon in light appearance [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string folderIconPlateBackdropLight: "#f4f5f7"
-    // estimate: 1 px light edge under an engraved symbol (the engraved look)
+    // estimate: 1 px light edge under an engraved symbol (the engraved look) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string folderIconGlyphHighlight: "#40ffffff"
-    // estimate: offset of that edge over the icon edge (at least 1 px)
+    // estimate: offset of that edge over the icon edge (at least 1 px) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real folderIconGlyphHighlightOffset: 0.016
-    // estimate: Customize Folder, symbol suggestions per row
+    // estimate: Customize Folder, symbol suggestions per row [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int folderIconPickerGlyphColumns: 8
-    // estimate: Customize Folder, side of one symbol suggestion
+    // estimate: Customize Folder, side of one symbol suggestion [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int folderIconPickerCell: 30
-    // estimate: Customize Folder, preview icon edge
+    // estimate: Customize Folder, preview icon edge [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int folderIconPickerPreviewSize: 96
 
-    // F1 gap 19: icons about 104 pt
+    // F1 gap 19: icons about 104 pt [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherIconSize: 104
-    // F1 gap 19: icon pitch about 134 pt
+    // F1 gap 19: icon pitch about 134 pt [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherPitch: 134
-    // F1 gap 19: selection square about 123 pt
+    // F1 gap 19: selection square about 123 pt [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherSelectionSize: 123
-    // estimate: corner radius of the selection square (F1: rounded square, about a fifth of its side)
+    // estimate: corner radius of the selection square (F1: rounded square, about a fifth of its side) [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherSelectionRadius: 26
-    // F1 gap 19: panel radius about 30
+    // F1 gap 19: panel radius about 30 [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherPanelRadius: 30
-    // estimate: panel inner margin around the tile grid
+    // estimate: panel inner margin around the tile grid [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherPadding: 14
-    // estimate: app name under the selected icon
+    // estimate: app name under the selected icon [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherNameSize: Math.round(15 * Appearance.textScale)
-    // estimate: tile grid to app name
+    // estimate: tile grid to app name [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherNameGap: 8
-    // estimate: app name line
+    // estimate: app name line [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherNameHeight: 22
-    // estimate: smallest gap between the panel and the screen sides; more apps wrap to a new row
+    // estimate: smallest gap between the panel and the screen sides; more apps wrap to a new row [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherEdgeMargin: 32
-    // task (macOS model): the panel appears after this long with the modifier held, or at a second Tab; a quick press-release switches without it
+    // task (macOS model): the panel appears after this long with the modifier held, or at a second Tab; a quick press-release switches without it [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherShowDelayMs: 150
-    // estimate: the chosen app is activated when the compositor reports the switcher surface unmapped; if no such event arrives within this time it is activated anyway
+    // estimate: the chosen app is activated when the compositor reports the switcher surface unmapped; if no such event arrives within this time it is activated anyway [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherLayerWaitMs: 250
-    // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
+    // estimate: panel scale at the start of the open animation (Reduce Motion: fade only) [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property real switcherFadeScale: 0.96
 
     // ADR-0016: the fixed crossfade between two wallpapers of any kind (artwork, colour, picture; macOS: ASSUMPTION, check against design/reference); Reduce Motion makes it a plain switch
@@ -1462,10 +1472,10 @@ QtObject {
     readonly property int wallpaperOnlineMeteredRecheckMs: 3600000
     // ADR-0016 step 2: the nmcli metered query that runs longer than this is killed and counted as not metered (a hung NetworkManager never blocks the fetch)
     readonly property int wallpaperMeteredTimeoutMs: 10000
-    // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width)
+    // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int wallpaperAboutWidth: 360
 
-    // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it
+    // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it [ref: docs/testing/f1-reference-gaps.md § Limits; docs/specs/desktop.md]
     readonly property int focusReturnReleaseHoldMs: 120
 
     // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh)
