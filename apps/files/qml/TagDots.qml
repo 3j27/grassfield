@@ -15,7 +15,21 @@ Row {
     // The colour behind the dots (window or selection), drawn as their ring.
     property color ringColor: Appearance.colors.materialTint
 
-    readonly property var shown: (root.colors || []).slice(0, Tokens.filesTagDotsMax)
+    readonly property var shown: root.firstColors(root.colors)
+
+    // The first Tokens.filesTagDotsMax palette indices of a list. A JS array from the model, or a ListModel (a QML model
+    // hands a list role back as one) or nothing: never a TypeError (GF-073).
+    function firstColors(list: var): var {
+        const out = [];
+        if (list === undefined || list === null)
+            return out;
+        const n = Array.isArray(list) ? list.length : (typeof list.count === "number" ? list.count : (typeof list.length === "number" ? list.length : 0));
+        for (let i = 0; i < n && out.length < Tokens.filesTagDotsMax; i++) {
+            const v = Array.isArray(list) ? list[i] : (typeof list.get === "function" ? list.get(i) : list[i]);
+            out.push(typeof v === "object" && v !== null ? v.modelData ?? v.color ?? v.index ?? v : v);
+        }
+        return out;
+    }
 
     visible: root.shown.length > 0
     spacing: -Tokens.filesTagDotOverlap
