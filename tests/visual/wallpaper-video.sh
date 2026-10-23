@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Video wallpaper end to end in the nested session (ADR-0016 W7): the transcode, playback, every pause input of the policy
 # (battery, idle, Reduce Motion, lock), "paused = no decode" (the frame stops changing, the shell's CPU drops), play on battery,
-# the idle lock firing while a video plays (the wallpaper never inhibits idle) and the crash marker (kill -9 while the video
-# starts: the next shell shows the poster and does not play).
+# the crash marker (kill -9 while the video starts: the next shell shows the poster and does not play) and, last, the idle lock
+# firing while a video plays (the wallpaper never inhibits idle).
 # The clip is generated under .dev/wallpapers-e2e (ffmpeg testsrc2 with an audio track, so that the transcode must drop it).
 # Visual and timing checks need the nested compositor: NOT verified in the sandbox. Frame advance is read from two captures.
+# The nested session may have more than one output (a window output next to GF-REF): every question is about GF-REF. A failing check
+# prints a "diag:" block (the video status, the outputs' state, the shell's "wallpaper video:" log lines) to tell a product fault from
+# a test one. The player itself is tested headless by tests/shell/wallpaper_video_player.sh.
 # Usage (bare command): tests/visual/wallpaper-video.sh        Captures: $VS_SHOTS/wallpaper-video-*.en.png
 source "$(dirname "$0")/lib.sh"
 
@@ -17,12 +20,6 @@ clip=$pics/clip.mp4
 }
 
 fail=0
-check() { # name command...
-  local name=$1
-  shift
-  if "$@"; then echo "PASS: $name"; else echo "FAIL: $name"; fail=1; fi
-}
-
 vs_session
 vs_reset
 cfg=$VS_DEV/config/grassfield.json
@@ -35,6 +32,25 @@ setcfg() { # jq filter over grassfield.json (the shell follows the file)
 }
 vstatus() { vs_ipc wallpaper videoStatus "$VS_OUTPUT"; }
 field() { vstatus | jq -r ".$1"; }
+
+# What the shell says about the video of the display under test and of the other outputs.
+diag() {
+  echo "  diag: videoStatus $VS_OUTPUT: $(vstatus 2>&1 | head -c 400)"
+  echo "  diag: wallpaper-state outputs: $(jq -c '[.outputs | to_entries[] | {output: .key, state: .value.state, reason: .value.reason, video: ((.value.video // "") != ""), progress: .value.progress}]' "$status" 2>&1 | head -c 500)"
+  grep -E "wallpaper video:|wallpaper: " "$VS_DEV/shell.log" 2>/dev/null | tail -8 | cut -c1-220 | sed 's/^/  diag: log: /' || true
+}
+check() { # name command...
+  local name=$1
+  shift
+  if "$@"; then
+    echo "PASS: $name"
+  else
+    echo "FAIL: $name"
+    fail=1
+    diag
+  fi
+}
+
 # await SECONDS "shell expression" WANTED: polls the expression until its output is WANTED (evaluated again at every poll).
 await() {
   local t=$1 expr=$2 want=$3 i
@@ -50,9 +66,9 @@ fields() {
   for f in "$@"; do out+="${out:+|}$(field "$f")"; done
   echo "$out"
 }
-# The shell reports ready on every output and one of them has a video.
-ready_video() { echo "$(jq -r '[.outputs[] | .state] | unique | join(",")' "$status" 2>/dev/null)|$(jq -r '[.outputs[] | .video // ""] | map(select(. != "")) | length' "$status" 2>/dev/null)"; }
-reasons() { jq -r '[.outputs[] | .reason] | unique | join(",")' "$status" 2>/dev/null; }
+# state|has a video, of the display under test, from the file the shell writes for Settings.
+ready_video() { jq -r --arg o "$VS_OUTPUT" '.outputs[$o] | (.state // "none") + "|" + (if (.video // "") != "" then "1" else "0" end)' "$status" 2>/dev/null; }
+reasons() { jq -r --arg o "$VS_OUTPUT" '.outputs[$o].reason // ""' "$status" 2>/dev/null; }
 cpu_of() { # seconds: CPU percent of one core of the shell
   local pid t0 t1
   pid=$(dev_live_pid "$VS_DEV/shell.pid")
@@ -61,12 +77,15 @@ cpu_of() { # seconds: CPU percent of one core of the shell
   t1=$(awk '{print $14+$15}' "/proc/$pid/stat")
   awk -v a="$t0" -v b="$t1" -v s="$1" 'BEGIN {printf "%.2f", (b-a)/100/s*100}'
 }
-# Two captures a moment apart: 0 when they are identical (a frozen frame), else the number of differing pixels.
+# Two captures a moment apart, compared over the middle of the screen (the pointer and the menu bar are outside it) with a small
+# colour fuzz: 0 when they are identical (a frozen frame), else the number of differing pixels.
 frames_differ() {
   vs_capture wallpaper-video-a >/dev/null
   sleep 1
   vs_capture wallpaper-video-b >/dev/null
-  magick compare -metric AE "$VS_SHOTS/wallpaper-video-a.$VS_LANG.png" "$VS_SHOTS/wallpaper-video-b.$VS_LANG.png" null: 2>&1 || true
+  magick "$VS_SHOTS/wallpaper-video-a.$VS_LANG.png" -crop 1200x600+360+240 +repage "$VS_SHOTS/wallpaper-video-a-crop.png"
+  magick "$VS_SHOTS/wallpaper-video-b.$VS_LANG.png" -crop 1200x600+360+240 +repage "$VS_SHOTS/wallpaper-video-b-crop.png"
+  magick compare -metric AE -fuzz 3% "$VS_SHOTS/wallpaper-video-a-crop.png" "$VS_SHOTS/wallpaper-video-b-crop.png" null: 2>&1 | awk '{print $1}' || true
 }
 
 # Play: Reduce Motion off (the visual contract turns it on), AC, not idle.
@@ -114,6 +133,37 @@ check "Reduce Motion: policy pause (reason reduce-motion), paused" await 10 "fie
 setcfg '.accessibility.reduceMotion = false'
 check "Reduce Motion off: plays" await 20 "field playing" true
 
+# Crash marker: a shell killed (SIGKILL) while the video starts leaves the marker; the next shell shows the poster, no playback.
+# (This runs before the idle lock part below: a shell restart ends the nested lock.)
+vs_kill_clients
+setcfg '.wallpaper.source = "builtin"'
+"$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$VS_LANG" --desktop-dir "$VS_STATE/desktop" >/dev/null
+for i in $(seq 1 60); do vs_ipc lock status >/dev/null 2>&1 && break; sleep 0.5; done
+vs_ipc wallpaper videoBattery 0 >/dev/null
+vs_ipc wallpaper videoIdle 0 >/dev/null
+setcfg '.accessibility.reduceMotion = false | .wallpaper.source = "video" | .wallpaper.path = "'"$clip"'"'
+await 60 "field playing" true || true
+# The marker lives for the first 10 s of the playback (or until the video is paused): kill at once.
+shellpid=$(dev_live_pid "$VS_DEV/shell.pid" 2>/dev/null || true)
+check "the shell is alive before the kill (it did not crash starting the video)" test -n "$shellpid"
+kill -9 "$shellpid" 2>/dev/null || true
+sleep 1
+check "the crash marker is in wallpaper.json after the kill" test "$(jq -r --arg clip "$clip" '[(.videoStarting // [])[] | .path] | index($clip) != null' "$state")" = true
+"$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$VS_LANG" --desktop-dir "$VS_STATE/desktop" >/dev/null
+for i in $(seq 1 60); do vs_ipc lock status >/dev/null 2>&1 && break; sleep 0.5; done
+vs_ipc wallpaper videoBattery 0 >/dev/null
+vs_ipc wallpaper videoIdle 0 >/dev/null
+check "the next shell reports the poster with the reason video-crashed" await 60 reasons video-crashed
+sleep 3
+check "the blocked video is not played" test "$(field playing)" = false
+check "the markers are gone and the block is remembered" test "$(jq -r --arg clip "$clip" '(((.videoStarting // []) | length | tostring) + "|" + ((((.videoBlocked // []) | index($clip)) != null) | tostring))' "$state")" = "0|true"
+vs_capture wallpaper-video-poster >/dev/null
+# Choosing another wallpaper releases the block: the video, chosen again, plays.
+setcfg '.wallpaper.source = "builtin"'
+sleep 2
+setcfg '.wallpaper.source = "video" | .wallpaper.path = "'"$clip"'"'
+check "chosen again after another wallpaper, the video plays" await 60 "field playing" true
+
 # The wallpaper never inhibits idle: with a video playing and no input, the idle lock still fires (lock.idleMinutes 1: dim, then
 # lock; the real compositor idle of the nested session, nobody touches the pointer or the keyboard meanwhile).
 setcfg '.lock.idleMinutes = 1'
@@ -124,35 +174,8 @@ check "the idle monitor of the lock is enabled" test "$(jq -r .enabled <<<"$idle
 check "the idle lock fires while the video plays (within 3 minutes)" await 180 "vs_ipc lock status" locked
 setcfg '.lock.idleMinutes = 0'
 
-# Locked (by the idle lock above): the video pauses. Unlocking is the security tests' business; the crash-marker part below
-# restarts the shell, which ends the lock of the nested session.
+# Locked (by the idle lock above): the video pauses. The session stays locked to the end; unlocking is the security tests' business.
 check "locked: policy pause (reason locked), paused" await 10 "fields policy reason playing" "pause|locked|false"
-
-# Crash marker: a shell killed (SIGKILL) while the video starts leaves the marker; the next shell shows the poster, no playback.
-vs_kill_clients
-shellpid=$(dev_live_pid "$VS_DEV/shell.pid")
-kill -9 "$shellpid" 2>/dev/null || true
-sleep 1
-# The marker is only left when the kill came inside the first 10 s of a playback: start one, then kill at once.
-setcfg '.wallpaper.source = "builtin"'
-"$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$VS_LANG" --desktop-dir "$VS_STATE/desktop" >/dev/null
-for i in $(seq 1 60); do vs_ipc lock status >/dev/null 2>&1 && break; sleep 0.5; done
-vs_ipc wallpaper videoBattery 0 >/dev/null
-vs_ipc wallpaper videoIdle 0 >/dev/null
-setcfg '.accessibility.reduceMotion = false | .wallpaper.source = "video" | .wallpaper.path = "'"$clip"'"'
-await 60 "field playing" true || true
-kill -9 "$(dev_live_pid "$VS_DEV/shell.pid")" 2>/dev/null || true
-sleep 1
-check "the crash marker is in wallpaper.json after the kill" test "$(jq -r '.videoStarting[0].path // ""' "$state")" = "$clip"
-"$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$VS_LANG" --desktop-dir "$VS_STATE/desktop" >/dev/null
-for i in $(seq 1 60); do vs_ipc lock status >/dev/null 2>&1 && break; sleep 0.5; done
-vs_ipc wallpaper videoBattery 0 >/dev/null
-vs_ipc wallpaper videoIdle 0 >/dev/null
-check "the next shell reports the poster with the reason video-crashed" await 60 reasons video-crashed
-sleep 3
-check "the blocked video is not played" test "$(field playing)" = false
-check "the marker is gone and the block is remembered" test "$(jq -r '((.videoStarting | length | tostring) + "|" + ((.videoBlocked // []) | join(",")))' "$state")" = "0|$clip"
-vs_capture wallpaper-video-poster >/dev/null
 
 vs_kill_clients
 exit "$fail"

@@ -53,9 +53,16 @@ Item {
         videoOutput: output
         onMediaStatusChanged: {
             if (mediaStatus === MediaPlayer.LoadedMedia || mediaStatus === MediaPlayer.BufferedMedia) {
-                if (!root.seeked && root.posterMs > 0)
-                    player.position = root.posterMs;
-                root.seeked = true;
+                if (!root.seeked) {
+                    root.seeked = true;
+                    if (root.posterMs > 0) {
+                        // Playback starts at the poster's frame. A play() issued in the middle of the seek is dropped by some
+                        // backends: the start waits for the seek (a short timer), and the retry below catches the rest.
+                        player.position = root.posterMs;
+                        afterSeek.restart();
+                        return;
+                    }
+                }
                 root.sync();
             }
         }
@@ -75,17 +82,47 @@ Item {
         endOfStreamPolicy: VideoOutput.KeepLastFrame
     }
 
-    onPolicyChanged: sync()
+    onPolicyChanged: {
+        tries = 0;
+        sync();
+    }
     onSourceChanged: {
         seeked = false;
         markerWritten = false;
+        tries = 0;
         settle.stop();
+    }
+    onPlayingChanged: {
+        if (playing)
+            tries = 0;
+    }
+
+    Timer {
+        id: afterSeek
+        interval: 200
+        onTriggered: root.sync()
+    }
+
+    // Wanted but not playing: some backends drop a play() (a seek in flight, a sink that is not attached yet), and no event follows. The
+    // start is asked again once a second, at most 15 times, only while the policy says play and the player does not; nothing runs while it
+    // plays or is meant to be paused.
+    property int tries: 0
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.policy === "play" && root.source.toString() !== "" && !root.playing && root.tries < 15
+        onTriggered: {
+            root.tries++;
+            console.info("wallpaper video: " + root.markerOwner + " is not playing though the policy says play (status " + player.mediaStatus + ", state " + player.playbackState + "), asking again (" + root.tries + ")");
+            root.sync();
+        }
     }
 
     // The player follows the policy; every change of it, and the media becoming ready, comes here.
     function sync(): void {
         if (root.source.toString() === "")
             return;
+        console.info("wallpaper video: " + root.markerOwner + " policy " + root.policy + ", status " + player.mediaStatus + ", state " + player.playbackState);
         const ready = player.mediaStatus === MediaPlayer.LoadedMedia || player.mediaStatus === MediaPlayer.BufferedMedia || player.mediaStatus === MediaPlayer.StalledMedia || player.mediaStatus === MediaPlayer.EndOfMedia;
         if (root.policy === "play") {
             settle.stop();
