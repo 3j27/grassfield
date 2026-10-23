@@ -311,6 +311,9 @@ ShellRoot {
             theme.script = root.realScript;
             theme.iconsDir = root.tmp + "/real";
             theme.debounceMs = 100;
+            // The real builder gets the product's own limit (Tokens.settingsPointerBuildTimeoutMs, 60 s), not the 20 s
+            // meant for the fake one: on a loaded machine a real build takes longer than 20 s and was killed (exit 9).
+            theme.timeoutMs = 60000;
             root.t0 = Date.now();
             theme.outline = "#ffff00";
             theme.fill = "#ff0000";
