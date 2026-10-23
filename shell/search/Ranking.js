@@ -9,8 +9,15 @@
 const USAGE_VERSION = 1;
 const MAX_USAGE_ENTRIES = 500;
 
+// Folded form used for every comparison (GF-104, like Spotlight): NFD with the combining marks dropped, then
+// lower case, so "reglages" finds "Réglages" whether the stored name is NFC or NFD. Plain ASCII skips the work.
+const COMBINING = /[\u0300-\u036f]/g;
+const NON_ASCII = /[^\u0000-\u007f]/;
 function norm(s) {
-    return typeof s === "string" ? s.toLowerCase() : "";
+    if (typeof s !== "string")
+        return "";
+    const low = s.toLowerCase();
+    return NON_ASCII.test(low) ? low.normalize("NFD").replace(COMBINING, "").normalize("NFC") : low;
 }
 
 // Subsequence match: every query char appears in order. Returns 0 when not a subsequence,
@@ -164,8 +171,9 @@ function rank(apps, query, usage, limit) {
         if (s > 0)
             out.push({app: app, score: s, name: prep(app).name});
     }
-    // Ties by normalized name in code unit order (localeCompare costs several ms per sort).
-    out.sort((a, b) => b.score - a.score || (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)));
+    // Ties by folded name in code unit order, then by the locale collator for names that fold equal
+    // (localeCompare costs several ms per sort, so it only runs on exact ties).
+    out.sort((a, b) => b.score - a.score || (a.name < b.name ? -1 : (a.name > b.name ? 1 : (a.app.name || "").localeCompare(b.app.name || ""))));
     return limit > 0 ? out.slice(0, limit) : out;
 }
 

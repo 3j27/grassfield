@@ -186,9 +186,9 @@ Scope {
     }
 
     function commandScore(cmd: var, q: string): real {
-        let s = Ranking.textScore(cmd.title.toLowerCase(), q);
+        let s = Ranking.textScore(Ranking.norm(cmd.title), q);
         for (const w of cmd.words)
-            s = Math.max(s, Ranking.textScore(w.toLowerCase(), q) * 0.8);
+            s = Math.max(s, Ranking.textScore(Ranking.norm(w), q) * 0.8);
         return s >= 50 ? s : 0;
     }
 
@@ -214,7 +214,7 @@ Scope {
         const q = query.trim();
         const calc = q !== "" ? Calc.answer(q) : null;
         const unit = q !== "" ? Units.answer(q) : null;
-        const lq = q.toLowerCase();
+        const lq = Ranking.norm(q);
 
         let apps = q !== "" ? Ranking.rank(appRecords, q, usage, 8) : [];
         let cmds = [];
@@ -239,7 +239,7 @@ Scope {
                 break;
             if (seen[r.path])
                 continue;
-            if (lq === "" || Files.baseName(r.path).toLowerCase().indexOf(lq) >= 0)
+            if (lq === "" || Ranking.norm(Files.baseName(r.path)).indexOf(lq) >= 0)
                 recents.push(mkPath("recent", r.path));
         }
         if (lq !== "")

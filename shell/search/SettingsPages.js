@@ -28,14 +28,14 @@ const KEYWORD_FACTOR = 0.8;
 
 // `pages`: [{id, title, icon, keywords: [string]}]; `query` trimmed. Returns [{page, score}] best first, ties by title.
 function match(pages, query) {
-    const q = query.trim().toLowerCase();
+    const q = Ranking.norm(query).trim();
     if (q === "")
         return [];
     const out = [];
     for (const p of pages) {
-        let s = Ranking.textScore(p.title.toLowerCase(), q);
+        let s = Ranking.textScore(Ranking.norm(p.title), q);
         for (const w of p.keywords)
-            s = Math.max(s, Ranking.textScore(w.toLowerCase(), q) * KEYWORD_FACTOR);
+            s = Math.max(s, Ranking.textScore(Ranking.norm(w), q) * KEYWORD_FACTOR);
         if (s >= MIN_SCORE)
             out.push({page: p, score: s});
     }
