@@ -810,4 +810,39 @@ TestCase {
         // After the plan was used, another Cancel on A finds nothing: no artwork override is created for A.
         compare(WallpaperConfig.cancelPlan(plan.map, A, true, false, "video", "/v/x.mp4").action, "none");
     }
+
+    // Review 5, blocking: display A had its own picture, a video was chosen on A (an entry for A), A went back to following All
+    // Displays ("Use the All Displays Wallpaper"), a video X was chosen under All Displays, and Cancel is pressed with the picker on A.
+    // Cancel acts on the All Displays choice; no override is created for A, whether the stale entry of A was forgotten or not.
+    function test_cancelNeverCreatesAnOverrideForADisplayThatFollowsAll() {
+        const A = "n:eDP-1";
+        let m = WallpaperConfig.rememberPrevious({}, A, {source: "file", path: "/p/own.jpg", overridden: true}, "/v/y.mp4");
+        m = WallpaperConfig.rememberPrevious(m, "all", {source: "file", path: "/p/a.jpg", overridden: false}, "/v/x.mp4");
+        // The page forgets the entry of A when A goes back to following All; the plan does not depend on it.
+        for (const map of [WallpaperConfig.forgetPrevious(m, A), m]) {
+            const plan = WallpaperConfig.cancelPlan(map, A, true, false, "video", "/v/x.mp4");
+            compare(plan.action, "restore");
+            compare(plan.scope, "all");
+            compare(plan.fields, {source: "file", path: "/p/a.jpg"});
+            compare(plan.map, {}, "the stale entry of A and the All entry are both gone");
+        }
+        // The variant: A had no picture of its own before (the stale entry says "not overridden"): the same, not a silent no-op.
+        let v = WallpaperConfig.rememberPrevious({}, A, {source: "file", path: "/p/inherited.jpg", overridden: false}, "/v/y.mp4");
+        v = WallpaperConfig.rememberPrevious(v, "all", {source: "folder", path: "/p/dir", overridden: false}, "/v/x.mp4");
+        const plan2 = WallpaperConfig.cancelPlan(v, A, true, false, "video", "/v/x.mp4");
+        compare(plan2.action, "restore");
+        compare(plan2.scope, "all");
+        compare(plan2.fields, {source: "folder", path: "/p/dir"});
+        // A stale entry and no All Displays entry: nothing to undo for a display that follows All, and the stale entry is dropped.
+        const only = WallpaperConfig.cancelPlan(WallpaperConfig.rememberPrevious({}, A, {source: "file", path: "/p/own.jpg", overridden: true}, "/v/y.mp4"), A, true, false, "video", "/v/x.mp4");
+        compare(only.action, "none");
+        compare(only.map, {});
+        // Nothing to restore for All Displays (the video chosen again): the artwork, in the All Displays scope, never on the display.
+        const art = WallpaperConfig.cancelPlan({all: {source: "video", path: "/v/x.mp4", overridden: false}}, A, true, false, "video", "/v/x.mp4");
+        compare(art.action, "artwork");
+        compare(art.scope, "all");
+        // forgetPrevious touches one key only and tolerates a missing map.
+        compare(Object.keys(WallpaperConfig.forgetPrevious({all: {}, [A]: {}}, A)), ["all"]);
+        compare(WallpaperConfig.forgetPrevious(null, A), {});
+    }
 }

@@ -624,9 +624,10 @@ function rememberPrevious(map, key, was, chosenPath) {
 
 // What Cancel does on the page, which shows the display `key` ("all" or a display key; `isDisplay`, `overridden`: that display has
 // a wallpaper of its own). Cancel acts on the SCOPE the choice was made in, never on the display the picker happens to show:
-//   - the entry of `key` exists: the choice was made for that scope; it is undone there;
-//   - no entry, a display that follows All Displays, and an entry for "all": the choice was made for All Displays and this display
-//     inherits it; it is undone for all ("all" scope), the display itself is not touched (no override is ever created for it);
+//   - a display that follows All Displays (`overridden` false) inherits the All Displays choice: any entry of its own is stale (it
+//     was made before the display went back to following All) and is dropped; Cancel undoes the All Displays choice ("all" scope) and
+//     never creates an override for the display; without an All Displays entry there is nothing to undo ("none");
+//   - otherwise the entry of `key` exists: the choice was made for that scope; it is undone there;
 //   - otherwise (nothing recorded): "none" for a display (nothing to undo here), "artwork" for All Displays.
 // Returns {action, scope, fields, map}. `action`: "follow-all" (a display that had no wallpaper of its own: remove its override),
 // "restore" (write `fields`, source and path, in `scope`: "all" = the top level, "display" = the display's entry), "artwork" or
@@ -635,7 +636,10 @@ function cancelPlan(map, key, isDisplay, overridden, currentSource, currentPath)
     const all = Object.assign({}, isPlainObject(map) ? map : {});
     let scopeKey = key;
     let scope = isDisplay ? "display" : "all";
-    if (!all[key] && isDisplay && !overridden && all.all) {
+    if (isDisplay && !overridden) {
+        delete all[key];
+        if (!all.all)
+            return {action: "none", scope: "all", fields: null, map: all};
         scopeKey = "all";
         scope = "all";
     }
@@ -648,6 +652,14 @@ function cancelPlan(map, key, isDisplay, overridden, currentSource, currentPath)
     if (was.source === "video" && was.path === currentPath && currentSource === "video")
         return {action: "artwork", scope: scope, fields: null, map: all};
     return {action: "restore", scope: scope, fields: {source: was.source, path: was.path}, map: all};
+}
+
+// The map without the entry of `key` (the display went back to following All Displays: what it showed before a video was
+// chosen there is no longer what Cancel would restore).
+function forgetPrevious(map, key) {
+    const next = Object.assign({}, isPlainObject(map) ? map : {});
+    delete next[key];
+    return next;
 }
 
 // ---- the aspect rule of the online pictures (ADR-0016 step 2) ----

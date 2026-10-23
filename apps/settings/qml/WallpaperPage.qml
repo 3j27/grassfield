@@ -266,8 +266,11 @@ SettingsPage {
 
     // The chosen display follows All Displays again (its override is removed).
     function useAllDisplays(): void {
-        if (root.currentDisplay !== null)
-            root.store.set("wallpaper.outputs", WallpaperConfig.withOutput(root.stored.outputs, root.currentDisplay, null));
+        if (root.currentDisplay === null)
+            return;
+        // Back to following All Displays: what Cancel would have restored for this display is stale.
+        root.previousBy = WallpaperConfig.forgetPrevious(root.previousBy, root.displayId);
+        root.store.set("wallpaper.outputs", WallpaperConfig.withOutput(root.stored.outputs, root.currentDisplay, null));
     }
 
     function useArtwork(): void {
@@ -325,6 +328,9 @@ SettingsPage {
             root.store.setMany(entries);
         else if (plan.action === "restore")
             root.writeFields(entries);
+        else if (plan.action === "artwork" && plan.scope === "all")
+            // Nothing to restore, and the choice was for All Displays: the artwork there, no override for the display shown.
+            root.store.setMany({"wallpaper.source": "builtin"});
         else if (plan.action === "artwork")
             root.useArtwork();
     }
