@@ -519,7 +519,11 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   every other path are untouched; no event or button is ever cancelled. Unmaps need nothing: `CLayerSurface::onUnmap`
   already calls `simulateMouseMovement` (read from the binary; measured: a click without motion after the menu closed
   reaches the window under the pointer, with and without the plugin). Decision logic pure (`core/LayerPointer.*`:
-  `isGrassfieldNamespace`, `CRefreshState`).
+  `isGrassfieldNamespace`, `CRefreshState`). Only a keyboard that MOVES to a Grassfield layer counts, and what a refresh
+  itself causes is never a new reason: Hyprland sets the keyboard focus again on the on-demand layer under the cursor (the
+  desktop icons) on every refresh, and counting that looped for ever (stages.sh on 2026-10-23: 10 million refreshes after a
+  press on the desktop, the nested compositor stopped answering IPC, its log grew to 3.3 GB). A backstop drops refreshes
+  beyond 20 a second (logged at the 1st, 10th, ... dropped).
 - **FR52** `layer-pointer` (no verb; the shell needs no change) is advertised when its two listeners registered, after
   `window-tiling` in the list. `PLUGIN_EXIT` removes the listeners and the scheduled event-loop callback
   (`deferredFocus::CLater`) before `dlclose`; `start()` resets the state (the library may stay mapped, FR23). One DEBUG log

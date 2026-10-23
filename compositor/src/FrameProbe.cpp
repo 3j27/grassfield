@@ -16,10 +16,12 @@
 namespace gf::frameProbe {
 
     namespace {
+        // The ring before the listener that writes into it: members are destroyed in reverse order, so the listener goes
+        // first.
         struct SMonitor {
             PHLMONITORREF                  monitor;
-            CHyprSignalListener            presented;
             std::unique_ptr<frames::CRing> ring = std::make_unique<frames::CRing>();
+            CHyprSignalListener            presented;
         };
 
         struct SState {

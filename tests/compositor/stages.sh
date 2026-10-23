@@ -41,7 +41,9 @@
 # them when the remembered one closed under the layer, a real click beside the layer or just after it wins, and the Stages
 # event names the front window and app while Hyprland has no active window (8i); a focus-matched window rule is rechecked
 # when the plugin clears the active window (8c).
-# Screenshots (grim -o OUTPUT): .dev/stages/run-<timestamp>/. Exit: 0 PASS, 1 FAIL, 2 usage or environment error.
+# Screenshots (grim -o OUTPUT): .dev/stages/run-<timestamp>/. Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Never hangs:
+# every wait is bounded, a FAIL while the nested Hyprland does not answer stops the run, and the run is bounded (check 15
+# min, perf its seconds + 15 min).
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -117,7 +119,26 @@ pointer() { timeout 20 "$root/scripts/dev/pointer.sh" output "$out" "$@" >>"$log
 # Each keys.sh / pointer.sh run adds a virtual device; clients bind their new wl_keyboard / wl_pointer when the seat
 # capability comes back, so the first event can be lost on a loaded host: a short wait after the device appears.
 keys() { timeout 10 "$root/scripts/dev/keys.sh" -s 150 "$@" >>"$log" 2>&1; }
-shot() { WAYLAND_DISPLAY=$sock grim -l 0 -o "$out" "$run/$1.png" 2>>"$log"; }
+shot() { WAYLAND_DISPLAY=$sock timeout 10 grim -l 0 -o "$out" "$run/$1.png" 2>>"$log"; }
+# Fail fast, never hang (2026-10-23: a compositor that stopped answering left this script waiting for 30 minutes): every
+# wait is bounded, a process is stopped within 5 s, a number handed to jq is checked first, a FAIL while the nested
+# Hyprland does not answer ends the run at once, and the whole run is bounded (check: 15 min, perf: its seconds + 15 min).
+alive() { nestctl -j version >/dev/null 2>&1; }
+reap() { # <pid>: TERM, at most 5 s, then KILL; never waits longer
+  local p=$1 i
+  [[ -n $p ]] || return 0
+  kill "$p" 2>/dev/null
+  for i in $(seq 1 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
+  kill -9 "$p" 2>/dev/null
+  wait "$p" 2>/dev/null
+  return 0
+}
+num() { [[ ${1:-} =~ ^-?[0-9]+$ ]] && echo "$1" || echo -1; } # an integer for jq --argjson, -1 when there is none
+bound=$((15 * 60))
+[[ $mode == perf ]] && bound=$((perf_secs + 15 * 60))
+( sleep "$bound" && kill -TERM $$ 2>/dev/null ) &
+watchdog=$!
+trap 'echo "stages: FAIL: over the time bound ($bound s): stopped" >&2; exit 1' TERM
 
 pids=()
 socat_pid=""
@@ -133,6 +154,7 @@ cleanup() {
   nestctl dispatch 'hl.plugin.grassfield.config("stagesEnabled", "false")' >/dev/null 2>&1
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
   [[ -n $socat_pid ]] && kill "$socat_pid" 2>/dev/null
+  [[ -n ${watchdog:-} ]] && { pkill -P "$watchdog" 2>/dev/null; kill "$watchdog" 2>/dev/null; } # its sleep too
   if ((plugin_unloaded)); then
     nestctl plugin load "$plugin" >/dev/null 2>&1 # never leave the nested session without the plugin
   fi
@@ -186,8 +208,7 @@ start_fixture() {
 }
 stop_fixture() {
   [[ -n $fixture_pid ]] || return 0
-  kill "$fixture_pid" 2>/dev/null
-  wait "$fixture_pid" 2>/dev/null
+  reap "$fixture_pid"
   fixture_pid=""
 }
 # A second fixture instance: an Overlay surface with Exclusive keyboard interactivity (what the overview chrome or Search
@@ -208,8 +229,7 @@ start_exclusive() {
 }
 stop_exclusive() {
   [[ -n $exclusive_pid ]] || return 0
-  kill "$exclusive_pid" 2>/dev/null
-  wait "$exclusive_pid" 2>/dev/null
+  reap "$exclusive_pid"
   exclusive_pid=""
 }
 # A fourth fixture instance (role polkit): what the shell's authentication dialog is to Hyprland (a full-output Overlay
@@ -232,8 +252,7 @@ start_polkit() {
 }
 stop_polkit() {
   [[ -n $polkit_pid ]] || return 0
-  kill "$polkit_pid" 2>/dev/null
-  wait "$polkit_pid" 2>/dev/null
+  reap "$polkit_pid"
   polkit_pid=""
 }
 # A third fixture instance: an app window whose click opens a menu (an xdg_popup with a grab); it logs the menu opening and
@@ -249,8 +268,7 @@ start_popup_app() {
 }
 stop_popup_app() {
   [[ -n $popup_pid ]] || return 0
-  kill "$popup_pid" 2>/dev/null
-  wait "$popup_pid" 2>/dev/null
+  reap "$popup_pid"
   popup_pid=""
 }
 # Waits until a fixture log has a "[stages-fixture] <text>" line (Quickshell writes its log lines with a delay).
@@ -347,6 +365,10 @@ check() { # <label> <status> [detail]
   else
     say "  FAIL $1${3:+ ($3)}"
     fail=1
+    if ! alive; then
+      say "  FAIL the nested Hyprland does not answer (hung or gone): the run stops here ($passed/$total)"
+      exit 1
+    fi
   fi
 }
 
@@ -518,6 +540,7 @@ check "a press on a thumbnail reaches the strip surface (the shell)" $? "press a
 stages "$(on_json 900)" # slower swaps, so that a frame mid-animation can be captured
 sleep 0.3
 read -r px py <<<"$press"
+px=$(num "${px:-}") py=$(num "${py:-}") # no press logged: -1 -1, no tile
 hit=$(jq -r --argjson x "$px" --argjson y "$py" '[to_entries[] | select($x >= .value.x and $x < .value.x + .value.w and $y >= .value.y and $y < .value.y + .value.h) | .key][0] // -1' <<<"$tiles_json")
 target=$(slot_id "$hit")
 old_active=$(active_id)
@@ -1207,7 +1230,7 @@ sleep 0.8
 keys e0
 sleep 0.3
 next=$(slot_id 0)
-next_front=$(last_st | jq -r --argjson s "$next" '[.monitors[0].stages[] | select(.id == $s)][0].windows[-1].address // ""')
+next_front=$(last_st | jq -r --argjson s "$(num "$next")" '[.monitors[0].stages[] | select(.id == $s)][0].windows[-1].address // ""')
 e_alone=$(last_st | jq -r --arg a "$(hexof "$addr_e")" '.monitors[0] as $m | [$m.stages[] | select(.id == $m.active)][0].windows | map(.address) == [$a]')
 nestctl dispatch "hl.plugin.grassfield.minimize(\"$addr_e\", 0, 0, 0, 0)" >>"$log" 2>&1
 sleep 0.8
