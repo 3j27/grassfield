@@ -7,7 +7,8 @@
 #   Alt+Left / Alt+Right                      -> Ctrl+Left / Ctrl+Right        (word navigation in an ordinary application)
 #   Alt+Shift+Left                            -> Ctrl+Shift+Left               (select by word)
 #   Alt+Backspace                             -> Ctrl+Backspace                (delete the previous word)
-#   Super+1 .. Super+9, Super+Up              -> Ctrl+1 .. Ctrl+9, Ctrl+Up    (Command+number, Command+Up)
+#   Super+1 .. Super+9                        -> Ctrl+1 .. Ctrl+9            (Command+number)
+#   Super+Up/Down, Left/Right (+Shift), Backspace -> Ctrl+Home/End, Home/End (+Shift), Shift+Home then Backspace
 #   Super+[ / Super+]                         -> Alt+Left / Alt+Right          (Back / Forward)
 #   Ctrl+Left, Ctrl+1                         -> consumed (Spaces): the application receives nothing
 #   in a terminal (foot): Alt+Left stays Alt+Left (bytes ESC [ 1 ; 3 D)
@@ -64,7 +65,15 @@ n=$(lines); keys -M alt -M shift -k Left -m shift -m alt;    check "Alt+Shift+Le
 n=$(lines); keys -M alt -k BackSpace -m alt;                 check "Alt+Backspace -> Ctrl+Backspace" "key=16777219 mods=$CTRL " "$n"
 n=$(lines); keys -M logo -k bracketleft -m logo;             check "Super+[ -> Alt+Left" "key=16777234 mods=$ALT " "$n"
 n=$(lines); keys -M logo -k bracketright -m logo;            check "Super+] -> Alt+Right" "key=16777236 mods=$ALT " "$n"
-n=$(lines); keys -M logo -k Up -m logo;                      check "Super+Up -> Ctrl+Up" "key=16777235 mods=$CTRL " "$n"
+n=$(lines); keys -M logo -k Up -m logo;                      check "Super+Up -> Ctrl+Home (not Files)" "key=16777232 mods=$CTRL " "$n"
+n=$(lines); keys -M logo -k Down -m logo;                    check "Super+Down -> Ctrl+End" "key=16777233 mods=$CTRL " "$n"
+n=$(lines); keys -M logo -k Left -m logo;                    check "Super+Left -> Home" "key=16777232 mods=0 " "$n"
+n=$(lines); keys -M logo -k Right -m logo;                   check "Super+Right -> End" "key=16777233 mods=0 " "$n"
+n=$(lines); keys -M logo -M shift -k Right -m shift -m logo; check "Super+Shift+Right -> Shift+End" "key=16777233 mods=$SHIFT " "$n"
+n=$(lines); keys -M logo -M shift -k Up -m shift -m logo;    check "Super+Shift+Up -> Ctrl+Shift+Home" "key=16777232 mods=$((CTRL + SHIFT)) " "$n"
+# Command+Backspace is two chords: Shift+Home, then Backspace (16777219, no modifier).
+n=$(lines); keys -M logo -k BackSpace -m logo;               check "Super+Backspace ends with Backspace (after Shift+Home)" "key=16777219 mods=0 " "$n"
+if [[ $(tail -n +"$((n + 1))" "$fixlog" | grep -c "key=16777232 mods=$SHIFT ") -ge 1 ]]; then echo "PASS: Super+Backspace first selected to the line start (Shift+Home)"; else echo "FAIL: Super+Backspace did not send Shift+Home first (sequencing unreliable: drop that bind)"; fail=1; fi
 for d in 1 2 3 4 5 6 7 8 9; do
   n=$(lines); keys -M logo -k "$d" -m logo;                  check "Super+$d -> Ctrl+$d" "key=$((48 + d)) mods=$CTRL " "$n"
 done

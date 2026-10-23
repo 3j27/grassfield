@@ -65,4 +65,35 @@ bind("SUPER + bracketright", "Forward", forward("ALT", "Right"))
 for number = 1, 9 do
   bind("SUPER + code:" .. tostring(number + 9), "Command+" .. number .. " in the application", forward("CTRL", "code:" .. tostring(number + 9)))
 end
-bind("SUPER + UP", "Command+Up in the application", forward("CTRL", "Up"))
+
+-- Command+arrows, the macOS text model: Left/Right go to the line start/end, Up/Down to the document start/end, with Shift
+-- they select. Terminals receive the plain keys too. Grassfield Files keeps Finder's meaning: Command+Up is Enclosing Folder
+-- (Ctrl+Up there) and Command+Down is Open (Ctrl+Down). Nothing else binds these chords (the tiling binds all carry Ctrl).
+local function files_focused()
+  local window = hl.get_active_window()
+  return window ~= nil and (window.class or ""):lower() == "org.grassfield.files"
+end
+local function vertical(mods, key_in_files, key_elsewhere)
+  local in_files, elsewhere = forward("CTRL", key_in_files), forward(mods, key_elsewhere)
+  return function()
+    if files_focused() then
+      in_files()
+    else
+      elsewhere()
+    end
+  end
+end
+bind("SUPER + LEFT", "Beginning of the line", forward("", "Home"))
+bind("SUPER + RIGHT", "End of the line", forward("", "End"))
+bind("SUPER + SHIFT + LEFT", "Select to the beginning of the line", forward("SHIFT", "Home"))
+bind("SUPER + SHIFT + RIGHT", "Select to the end of the line", forward("SHIFT", "End"))
+bind("SUPER + UP", "Beginning of the document", vertical("CTRL", "Up", "Home"))
+bind("SUPER + DOWN", "End of the document", vertical("CTRL", "Down", "End"))
+bind("SUPER + SHIFT + UP", "Select to the beginning of the document", forward("CTRL SHIFT", "Home"))
+bind("SUPER + SHIFT + DOWN", "Select to the end of the document", forward("CTRL SHIFT", "End"))
+
+-- Command+Backspace deletes to the start of the line: select to it (Shift+Home), then Backspace, as two chords 100 ms apart.
+bind("SUPER + BACKSPACE", "Delete to the beginning of the line", function()
+  forward("SHIFT", "Home")()
+  hl.timer(forward("", "BackSpace"), { timeout = 100, type = "oneshot" })
+end)

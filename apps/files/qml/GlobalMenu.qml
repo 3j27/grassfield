@@ -88,7 +88,7 @@ Platform.MenuBar {
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Open")
-            shortcut: "Ctrl+Down"
+            shortcut: "Super+Down"
             enabled: bar.count > 0
             onTriggered: bar.tab.openSelection()
         }
@@ -242,25 +242,25 @@ Platform.MenuBar {
 
         MenuCheckItem {
             text: qsTr("as Icons")
-            shortcut: "Ctrl+1"
+            shortcut: "Super+1"
             on: bar.tab !== null && bar.tab.viewMode === "icons"
             onChosen: bar.tab.setViewMode("icons")
         }
         MenuCheckItem {
             text: qsTr("as List")
-            shortcut: "Ctrl+2"
+            shortcut: "Super+2"
             on: bar.tab !== null && bar.tab.viewMode === "list"
             onChosen: bar.tab.setViewMode("list")
         }
         MenuCheckItem {
             text: qsTr("as Columns")
-            shortcut: "Ctrl+3"
+            shortcut: "Super+3"
             on: bar.tab !== null && bar.tab.viewMode === "columns"
             onChosen: bar.tab.setViewMode("columns")
         }
         MenuCheckItem {
             text: qsTr("as Gallery")
-            shortcut: "Ctrl+4"
+            shortcut: "Super+4"
             on: bar.tab !== null && bar.tab.viewMode === "gallery"
             onChosen: bar.tab.setViewMode("gallery")
         }
@@ -354,7 +354,7 @@ Platform.MenuBar {
         }
         Platform.MenuItem {
             text: qsTr("Enclosing Folder")
-            shortcut: "Ctrl+Up"
+            shortcut: "Super+Up"
             enabled: bar.tab !== null && bar.tab.segments.length > 1
             onTriggered: bar.tab.up()
         }
