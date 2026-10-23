@@ -63,7 +63,10 @@ local f = plugin and io.open(plugin, "r")
 if f then
   f:close()
   local ok, err = pcall(hl.plugin.load, plugin)
-  if ok and chose and why ~= "kept" then
+  -- The runtime note is this instance's: never written by Hyprland --verify-config (`just check`), which inherits the
+  -- signature of the instance it was started from.
+  local verifying = chose and select(2, pcall(compositor.verifying)) == true
+  if ok and chose and why ~= "kept" and not verifying then
     pcall(compositor.remember, plugin)
   elseif not ok then
     print("grassfield: compositor extension not loaded: " .. tostring(err))

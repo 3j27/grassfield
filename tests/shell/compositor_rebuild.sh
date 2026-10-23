@@ -149,6 +149,65 @@ mkdir -p "$tmp/run"
 luamod "c.remember('$packaged', function(n) return ({XDG_RUNTIME_DIR = '$tmp/run', HYPRLAND_INSTANCE_SIGNATURE = '$sig'})[n] end)"
 expect "lua: remember writes the runtime note of this instance" "$(cat "$tmp/run/grassfield-compositor-$sig" 2>/dev/null)" "$packaged"
 expect "lua: --vetted is never asked with an ABI the shell would expand" "$(luamod "c.rebuild = '/bin/echo'; print(c.vetted('a;b'), c.vetted('\$(x)'))")" "nil	nil"
+# The check runs on Hyprland's main thread during the parse (review of b0d347e): bounded, and only an answer of a check
+# that succeeded counts.
+printf '#!/bin/sh\nsleep 30\necho /never\n' >"$tmp/slow-vetted"
+printf '#!/bin/sh\necho /some/path\nexit 1\n' >"$tmp/failing-vetted"
+printf '#!/bin/sh\necho "/ok/$*"\n' >"$tmp/ok-vetted"
+chmod +x "$tmp/slow-vetted" "$tmp/failing-vetted" "$tmp/ok-vetted"
+started=$SECONDS
+expect "lua: a --vetted check that hangs is cut off and vouches for nothing" \
+  "$(luamod "c.rebuild = '$tmp/slow-vetted'; c.vetted_seconds = 1; print(c.vetted())")" "nil"
+((SECONDS - started <= 4)) && pass "lua: the hanging check was cut off within its bound" || bad "lua: the hanging check took $((SECONDS - started)) s"
+expect "lua: a --vetted check that fails vouches for nothing" "$(luamod "c.rebuild = '$tmp/failing-vetted'; print(c.vetted())")" "nil"
+expect "lua: a --vetted check that succeeds is read" "$(luamod "c.rebuild = '$tmp/ok-vetted'; print(c.vetted(), c.vetted('A_1'))")" "/ok/--vetted	/ok/--vetted A_1"
+expect "lua: no timeout tool, no check" "$(luamod "c.rebuild = '$tmp/ok-vetted'; c.timeout = '$tmp/none'; print(c.vetted())")" "nil"
+# Verify mode (just check runs Hyprland --verify-config with the session config): the loader writes no runtime note.
+expect "lua: verify mode is read from the command line" \
+  "$(luamod "print(c.verifying(function() return 'Hyprland\\0--verify-config\\0--config\\0x.lua\\0' end), c.verifying(function() return 'Hyprland\\0--config\\0x.lua\\0' end), c.verifying(function() return nil end))")" \
+  "true	false	false"
+expect "lua: a plain lua process is not in verify mode" "$(luamod "print(c.verifying())")" "false"
+if command -v Hyprland >/dev/null; then
+  mkdir -p "$tmp/rt"
+  printf 'package.path = "%s/config/hypr/?.lua;" .. package.path\nprint("gf-probe verifying=" .. tostring(require("grassfield.compositor").verifying()))\n' "$root" >"$tmp/probe.lua"
+  out=$(env -u HYPRLAND_INSTANCE_SIGNATURE XDG_RUNTIME_DIR="$tmp/rt" Hyprland --verify-config --config "$tmp/probe.lua" 2>&1)
+  [[ $out == *"gf-probe verifying=true"* ]] && pass "Hyprland --verify-config: the loader knows it is verifying" \
+    || bad "Hyprland --verify-config: the loader knows it is verifying ($(grep -m1 gf-probe <<<"$out"))"
+fi
+
+# ---- session.lua's runtime note (review of dac8e71): a start writes it, verify mode writes nothing ----
+# session.lua itself under plain Lua: hl and the other session modules are stubs, the choice is fixed to a plugin file
+# that exists; remember() and verifying() are the real ones. Verify mode is the real detection: the interpreter runs
+# with --verify-config on its command line, as Hyprland --verify-config does (/proc/self/cmdline).
+cat >"$tmp/session-harness.lua" <<'EOF'
+local root = os.getenv("GF_ROOT")
+package.path = root .. "/config/hypr/?.lua;" .. package.path
+for _, name in ipairs({ "grassfield.core", "grassfield.autostart", "grassfield.system" }) do
+  package.preload[name] = function() return {} end
+end
+package.preload["grassfield.omarchy"] = function()
+  return { ok = true, monitors = true, problems = {}, guard_path = function() end }
+end
+local compositor = require("grassfield.compositor")
+compositor.choose = function() return os.getenv("GF_TEST_PLUGIN"), "packaged" end
+local loaded = {}
+hl = {
+  plugin = { load = function(p) loaded[#loaded + 1] = p end },
+  env = function() end, on = function() end, config = function() end, monitor = function() end, exec_cmd = function() end,
+}
+dofile(root .. "/config/hypr/session.lua")
+print("loaded=" .. tostring(loaded[1]))
+EOF
+printf 'plugin\n' >"$tmp/session-plugin.so"
+mkdir -p "$tmp/rt-start" "$tmp/rt-verify"
+out=$(GF_ROOT=$root GRASSFIELD_CONFIG_DIR=$root/config/hypr GF_TEST_PLUGIN=$tmp/session-plugin.so XDG_RUNTIME_DIR=$tmp/rt-start \
+  HYPRLAND_INSTANCE_SIGNATURE=$sig lua "$tmp/session-harness.lua" 2>&1)
+expect "session.lua: a start loads the chosen build" "$(grep '^loaded=' <<<"$out")" "loaded=$tmp/session-plugin.so"
+expect "session.lua: a start writes the runtime note of its instance" "$(cat "$tmp/rt-start/grassfield-compositor-$sig" 2>/dev/null)" "$tmp/session-plugin.so"
+out=$(GF_ROOT=$root GRASSFIELD_CONFIG_DIR=$root/config/hypr GF_TEST_PLUGIN=$tmp/session-plugin.so XDG_RUNTIME_DIR=$tmp/rt-verify \
+  HYPRLAND_INSTANCE_SIGNATURE=$sig lua "$tmp/session-harness.lua" --verify-config 2>&1)
+expect "session.lua: verify mode still parses the loader" "$(grep '^loaded=' <<<"$out")" "loaded=$tmp/session-plugin.so"
+expect "session.lua: verify mode writes no runtime note" "$(ls -A "$tmp/rt-verify")" ""
 
 # ---- the user rebuild and the vetting, on temporary directories ----
 lib=$tmp/lib src=$tmp/src tools=$tmp/tools cache=$tmp/cache
@@ -251,13 +310,47 @@ mv "$cache/grassfield" "$tmp/moved" && ln -s "$tmp/moved" "$cache/grassfield"
 vetted_refuses "a symlinked directory on the way" "is a symlink"
 rm -f "$cache/grassfield" && mv "$tmp/moved" "$cache/grassfield"
 mv "$cache" "$tmp/cache-real" && ln -s "$tmp/cache-real" "$cache"
-vetted_refuses "a symlinked cache root" "is a symlink"
+vetted_refuses "a symlinked cache root" "not a canonical path"
 rm -f "$cache" && mv "$tmp/cache-real" "$cache"
+# The cache root itself (review of b0d347e): only an absolute, canonical path; a trailing slash after a symlink used to
+# pass the symlink test (test -L follows "link/").
+vetted_refuses_as() { # <name> <what the reason says> <XDG_CACHE_HOME>
+  run XDG_CACHE_HOME="$3" "$script" --vetted; local rc=$?
+  expect "cache root: $1 -> refused" "$rc [$(cat "$tmp/out")] $(grep -c "$2" "$tmp/err")" "1 [] 1"
+}
+ln -s "$cache" "$tmp/cache-link"
+vetted_refuses_as "a symlink given with a trailing slash" "not a canonical path" "$tmp/cache-link/"
+vetted_refuses_as "a trailing slash" "not a canonical path" "$cache/"
+vetted_refuses_as "a path through .." "not a canonical path" "$tmp/lib/../cache"
+vetted_refuses_as "a relative path" "not an absolute path" "cache"
+rm -f "$tmp/cache-link"
 echo "$other" >"$tmp/stamp" && cp "$dest/grassfield-compositor.abi" "$tmp/good.abi" && cat "$tmp/stamp" >"$dest/grassfield-compositor.abi"
 vetted_refuses "a stamp for another ABI" "its stamp is not"
 cat "$tmp/good.abi" >"$dest/grassfield-compositor.abi"
 run "$script" --vetted; rc=$?
 expect "vetting: every case undone -> vouched for again" "$rc $(cat "$tmp/out")" "0 $so"
+
+# Above the cache root: every ancestor root's or the user's, not writable by group or others unless sticky (/tmp). A
+# foreign owner cannot be made without root; the mode cases go through the same check.
+mkdir -p "$tmp/anc"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script"; rc=$?
+expect "ancestors: a build under a private parent" "$rc" 0
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script" --vetted; rc=$?
+expect "ancestors: vouched for" "$rc $(cat "$tmp/out")" "0 $tmp/anc/cache/grassfield/compositor/$want/grassfield-compositor.so"
+chmod 0777 "$tmp/anc"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script" --vetted; rc=$?
+expect "ancestors: a parent others can write -> refused" "$rc [$(cat "$tmp/out")] $(grep -c 'above the cache directory, is writable' "$tmp/err")" "1 [] 1"
+chmod 0775 "$tmp/anc"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script" --vetted; rc=$?
+expect "ancestors: a parent the group can write -> refused" "$rc $(grep -c 'above the cache directory, is writable' "$tmp/err")" "1 1"
+chmod 1777 "$tmp/anc"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script" --vetted; rc=$?
+expect "ancestors: a sticky parent (like /tmp) is fine" "$rc $(cat "$tmp/out")" "0 $tmp/anc/cache/grassfield/compositor/$want/grassfield-compositor.so"
+chmod 0777 "$tmp/anc"
+rm -rf "$tmp/anc/cache"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script"; rc=$?
+expect "ancestors: no build under a parent others can write" "$rc $([[ -e $tmp/anc/cache ]] && echo created || echo untouched)" "1 untouched"
+chmod 0755 "$tmp/anc"
 
 # The build refuses a cache it could not vouch for afterwards, and its own odd results.
 rm -rf "$cache" && mkdir -p "$cache" && chmod 0777 "$cache"
