@@ -13,6 +13,7 @@ pk=$root/packaging
 # --- low battery -------------------------------------------------------------------------------------------------------
 cat >"$tmp/battery.py" <<'PY'
 import importlib.machinery, importlib.util, os, sys, tempfile
+sys.dont_write_bytecode = True  # no __pycache__ in packaging/bin (it would be packaged)
 loader = importlib.machinery.SourceFileLoader("battery", sys.argv[1] + "/packaging/bin/grassfield-battery-watch")
 spec = importlib.util.spec_from_loader("battery", loader); m = importlib.util.module_from_spec(spec); loader.exec_module(m)
 last, out = None, []
@@ -37,6 +38,7 @@ check bash -c 'grep -qx "no battery None" <<<"$1" && grep -qx "battery (17, .Dis
 # --- crash notifications -----------------------------------------------------------------------------------------------
 cat >"$tmp/crash.py" <<'PY'
 import importlib.machinery, importlib.util, os, sys
+sys.dont_write_bytecode = True  # no __pycache__ in packaging/bin (it would be packaged)
 loader = importlib.machinery.SourceFileLoader("crash", sys.argv[1] + "/packaging/bin/grassfield-crash-watch")
 spec = importlib.util.spec_from_loader("crash", loader); m = importlib.util.module_from_spec(spec); loader.exec_module(m)
 uid = os.getuid(); last = {}
@@ -107,8 +109,11 @@ for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notif
   d=$pk/systemd/$unit.service.d/10-grassfield.conf
   check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -q "$2" "$3"' _ "$d" "$unit" "$pk/arch/PKGBUILD"
 done
-desc="every helper in packaging/bin and packaging/shims is executable and installed by one PKGBUILD line (globs)"
-check bash -c 'for f in "$1"/bin/* "$1"/shims/*; do [[ -x $f ]] || exit 1; done; grep -q "install -m755 \"\$root\"/packaging/bin/\*" "$1/arch/PKGBUILD" && grep -q "install -m755 \"\$root\"/packaging/shims/\*" "$1/arch/PKGBUILD"' _ "$pk"
+desc="every helper in packaging/bin and packaging/shims is executable and installed by one PKGBUILD line (regular files only)"
+check bash -c 'for f in "$1"/bin/* "$1"/shims/*; do [[ -d $f || -x $f ]] || exit 1; done; grep -qF "find \"\$root/packaging/bin\" -maxdepth 1 -type f -exec install -m755 -t \"\$pkgdir/usr/lib/grassfield/\" {} +" "$1/arch/PKGBUILD" && grep -qF "find \"\$root/packaging/shims\" -maxdepth 1 -type f -exec install -m755 -t \"\$pkgdir/usr/lib/grassfield/omarchy-shims/\" {} +" "$1/arch/PKGBUILD"' _ "$pk"
+
+desc="the install lines skip a directory in packaging/bin (an ignored __pycache__ must neither break nor enter the package)"
+check bash -c 'w=$(mktemp -d) && mkdir -p "$w/packaging/bin/__pycache__" "$w/out" && printf "x\n" >"$w/packaging/bin/tool" && root=$w pkgdir=$w/pkg && mkdir -p "$pkgdir/usr/lib/grassfield" && eval "$(grep -F "find \"\$root/packaging/bin\" -maxdepth 1 -type f" "$1/arch/PKGBUILD")" && [[ -x $pkgdir/usr/lib/grassfield/tool && ! -e $pkgdir/usr/lib/grassfield/__pycache__ ]]; rc=$?; rm -rf "$w"; exit $rc' _ "$pk"
 desc="the .install scriptlet runs the login check and is declared by the PKGBUILD"
 check bash -c 'grep -q "grassfield-login-check" "$1/arch/grassfield-desktop.install" && grep -q "^  install=grassfield-desktop.install" "$1/arch/PKGBUILD" && grep -q "^  backup=(etc/sddm.conf.d/grassfield.conf)" "$1/arch/PKGBUILD"' _ "$pk"
 desc="autostart runs the Omarchy post-boot hooks, the power profile and the lid reconcile (what Omarchy's autostart did)"

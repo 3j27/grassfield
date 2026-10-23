@@ -1,13 +1,16 @@
 #!/bin/sh
 # ExecCondition of Omarchy's omarchy-sleep-lock.service, through the Grassfield drop-in 10-grassfield.conf (D-12,
 # GF-AUDIT-001 SEC-02 / GF-030). Installed to /usr/lib/grassfield/sleep-lock-gate.
-#   exit 0  run Omarchy's sleep-lock (the Omarchy session; or grassfield-shell stopped, failed or unknown)
-#   exit 1  skip it (systemd: condition not met, not a failure): the Grassfield session, and grassfield-shell is active,
-#           starting or reloading, so Grassfield locks before sleep itself.
-# Read-only: one `systemctl --user show` query. Any doubt lets Omarchy's unit run (it never weakens the lock).
+#   exit 0  run Omarchy's sleep-lock (the Omarchy session; or grassfield-shell not up and running: stopped, failed,
+#           starting, waiting to restart after a crash, unknown)
+#   exit 1  skip it (systemd: condition not met, not a failure): the Grassfield session, and grassfield-shell is up
+#           (ActiveState=active, SubState=running), so Grassfield holds its own inhibitor and locks before sleep itself.
+# "activating" is never enough: it includes the auto-restart wait after a crash and the shell's start-up, when no
+# Grassfield inhibitor exists yet (a sleep then would not wait for a lock).
+# Read-only: two `systemctl --user show` queries. Any doubt lets Omarchy's unit run (with Grassfield's omarchy-shell
+# stand-in it only ever asks grassfield-shell to lock).
 [ "${GRASSFIELD_SESSION:-}" = 1 ] || exit 0
 state=$(systemctl --user show --property=ActiveState --value grassfield-shell.service 2>/dev/null) || exit 0
-case $state in
-  active | activating | reloading | refreshing) exit 1 ;;
-esac
+sub=$(systemctl --user show --property=SubState --value grassfield-shell.service 2>/dev/null) || exit 0
+[ "$state" = active ] && [ "$sub" = running ] && exit 1
 exit 0

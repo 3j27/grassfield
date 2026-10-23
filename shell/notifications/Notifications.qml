@@ -57,8 +57,10 @@ Singleton {
     property string centerScreen: ""
 
     // Dev sessions share the owner's session bus; never register there (GRASSFIELD_PRIVATE_BUS=1
-    // runs the nested shell on its own bus, see docs/specs/notifications.md).
-    readonly property bool devSession: Quickshell.env("GRASSFIELD_DEV") === "1"
+    // runs the nested shell on its own bus, see docs/specs/notifications.md). The shell's one dev gate (SEC-03,
+    // follow-up N6): a GRASSFIELD_DEV=1 leaked into a real session (GRASSFIELD_SESSION=1) must not switch the
+    // notification server off there.
+    readonly property bool devSession: VisualFixtures.dev
     readonly property bool privateBus: Quickshell.env("GRASSFIELD_PRIVATE_BUS") === "1"
     readonly property bool serverEnabled: !devSession || privateBus
     // Test-only IPC hooks (invoke, clearAll, dismissAll): same gate as the visual fixtures (GRASSFIELD_DEV=1 and
