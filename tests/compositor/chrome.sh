@@ -19,7 +19,10 @@
 #   3b the light appearance (audit UX-06; plugin feature "appearance"): the dev settings file says "light", the shell pushes
 #     it; A's bar in the light palette (ui/tokens/tokens.json titlebar.backgroundLight), its lights in place, grey while
 #     inactive, coloured once focused; back to dark: the dark bar again. The settings file is restored at exit.
-#   4 Grassfield Settings (org.grassfield.Settings, when .dev/build/grassfield-settings exists): the same lights and bar,
+#   4 Grassfield Settings (org.grassfield.Settings, when .dev/build/grassfield-settings exists): a window that draws its own
+#     chrome (ADR-0015, tag grassfield-client-chrome): no plugin bar above it (0 rows of the bar colour), its own lights at
+#     their own geometry (centres 25.75 px from the surface's top-left, 23 px apart, 14 px across, coloured while active)
+#     and glyphs on all three while the pointer is between two of them (macOS); the window's corner radius as before;
 #     radius 26 (the global default; corner inset 7-10 px), square join, glyphs with the pointer between its minimize
 #     and zoom lights
 # Without grassfield-compositor (C2: nested-up.sh --no-plugin, or scripts/nestctl plugin unload): no titlebar; only the
@@ -154,6 +157,31 @@ check_lights() { # <label> <x> <y>: positions and size of the lights, no glyph
     within "${m[${name}_cx]}" $((x + ex)) 0.75 && within "${m[${name}_cy]}" $((y - GF_TB_MID)) 0.75 && within "${m[${name}_d]}" 14 1 \
       || ok=1
     details+="$name (${m[${name}_cx]},${m[${name}_cy]}) d ${m[${name}_d]}, expected ($((x + ex)),$((y - GF_TB_MID))) d 14; "
+  done
+  check "$label: lights" "$ok" "$details"
+}
+
+# The lights an app draws itself (grassfield-ui WindowControls, unified toolbar, ADR-0015): centres at 25.75 px from the
+# surface's top-left and 23 px apart (window tokens), on the app's own toolbar colour (sampled right of the lights).
+measure_app() { # <name> <x> <y> <w> -> m[...] as measure
+  local name=$1 x=$2 y=$3 w=$4 bg
+  bg=$(magick "$run/$name.ppm" -format "%[hex:p{$((x + 110)),$((y + 8))}]" info: | cut -c1-6)
+  python3 -I "$root/tests/compositor/chrome_measure.py" "$run/$name.ppm" "$x" "$y" "$w" 0 26 49 72 -26 "bar=$bg" "fill=$bg" \
+    "inactive=$(token_hex inactiveButtonDark)" >"$run/$name-app.txt" 2>>"$log"
+  unset m
+  declare -gA m=()
+  local k v
+  while IFS='=' read -r k v; do m[$k]=$v; done <"$run/$name-app.txt"
+  say "  measured $name (app lights on $bg): $(tr '\n' ' ' <"$run/$name-app.txt")"
+}
+
+check_app_lights() { # <label> <x> <y>: positions and size of the app's own lights
+  local label=$1 x=$2 y=$3 name i=0 ok=0 details="" ex
+  for name in close minimize zoom; do
+    ex=$(awk -v x="$x" -v i="$i" 'BEGIN { print x + 25.75 + 23 * i }')
+    within "${m[${name}_cx]}" "$ex" 0.75 && within "${m[${name}_cy]}" "$(awk -v y="$y" 'BEGIN { print y + 25.75 }')" 0.75 && within "${m[${name}_d]}" 14 1 || ok=1
+    details+="$name (${m[${name}_cx]},${m[${name}_cy]}) d ${m[${name}_d]}, expected ($ex,$(awk -v y="$y" 'BEGIN { print y + 25.75 }')) d 14; "
+    i=$((i + 1))
   done
   check "$label: lights" "$ok" "$details"
 }
@@ -327,20 +355,19 @@ if [[ -x $settings ]]; then
     crops settings "$sx" "$sy" "$sw"
     measure settings "$sx" "$sy" "$sw" "$(rounding_of "$s_addr")"
     if ((plugin)); then
-      check_lights "Settings" "$sx" "$sy"
-      check_grey "Settings (active): coloured lights" 1
-      check_bar "Settings"
-      check_junction "Settings"
+      ((${m[bar_rows]:-1} == 0))
+      check "Settings (client chrome): no plugin bar above it" $? "${m[bar_rows]} rows of the plugin bar colour above the surface (expected 0)"
     fi
     check_corner "Settings (org.grassfield.*)" 7 10 26
-    if ((plugin)); then
-      pointer abs $((sx + (GF_TB_MIN_X + GF_TB_ZOOM_X) / 2)) $((sy - GF_TB_MID)) sleep 400
-      capture settings-hover
-      crops settings-hover "$sx" "$sy" "$sw"
-      measure settings-hover "$sx" "$sy" "$sw"
-      check_glyphs "Settings, pointer between its minimize and zoom lights: glyphs on all three" 0
-      park
-    fi
+    measure_app settings "$sx" "$sy" "$sw"
+    check_app_lights "Settings (its own lights)" "$sx" "$sy"
+    check_grey "Settings (active): its own lights coloured" 1
+    pointer abs $((sx + 26 + 23 + 12)) $((sy + 26)) sleep 400 # between the minimize and zoom lights
+    capture settings-hover
+    crops settings-hover "$sx" "$((sy + (plugin ? GF_TB_HEIGHT : 0)))" "$sw" # the crop then starts at the surface top
+    measure_app settings-hover "$sx" "$sy" "$sw"
+    check_glyphs "Settings, pointer between its minimize and zoom lights: glyphs on all three" 0
+    park
   else
     check "Settings opened" 1 "no org.grassfield.Settings window (see $log)"
   fi
