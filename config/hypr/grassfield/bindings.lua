@@ -113,10 +113,7 @@ bind("SUPER + SPACE", "Search", shell("search", "toggle"))
 bind("XF86LaunchA", "Apps", shell("apps", "toggle"))
 bind("CTRL + UP", "Overview", shell("overview", "toggle"))
 bind("SUPER + CTRL + Q", "Lock screen", shell("lock", "lock"))
--- Closing the lid locks at once (D-4, macOS), whether or not logind then suspends; not in clamshell mode (an external
--- display is active). The shell decides (shell/security/lock/Lock.qml lockOnLid). Same switch name as Omarchy's binding.
--- Not a keyboard shortcut: bound with hl.bind directly, so Settings' Keyboard page (literal bind(...) lines) skips it.
-hl.bind("switch:on:Lid Switch", shell("lock", "lid"), { locked = true, description = "Lock the screen when the lid closes" })
+-- The lid switch is bound once, in system.lua (real session only): /usr/lib/grassfield/grassfield-lid calls `lock lid`.
 bind("SUPER + N", "Notification Center", shell("notifications", "toggleCenter"))
 bind("SUPER + ALT + ESCAPE", "Force Quit Applications", shell("menubar", "panel forcequit ''"))
 

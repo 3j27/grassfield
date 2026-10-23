@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # GF-AUDIT-001 SEC-03/SEC-04: the shell's IPC surface (Quickshell IpcHandler, callable by any process of the user) is
 # exactly the table in docs/specs/security.md "IPC surface", and each function is what its class says:
-#   action    has a real-session caller (config/hypr/grassfield/bindings.lua binding or gesture, or a screen corner in
-#             shell/desktop/HotCornerActions.js) and is not gated
+#   action    has a real-session caller (a binding or gesture in config/hypr/grassfield/*.lua, a session helper in
+#             packaging/bin or packaging/shims, or a screen corner in shell/desktop/HotCornerActions.js) and is not gated
 #   dev       refused outside a dev session: its body checks the one dev gate (shell/services/DevGate.js, directly,
 #             through VisualFixtures.dev, or a dev* function of the singleton)
 #   fixtures  dev session AND GRASSFIELD_VISUAL_FIXTURES=1 (VisualFixtures.active, Notifications.testHooks)
@@ -42,11 +42,16 @@ def block_end(text, start):
 
 # --- the code: every IpcHandler function and its body ---
 code = {}
+own_gates = []
 for path in sorted(glob.glob("shell/**/*.qml", recursive=True)):
     src = open(path, encoding="utf-8").read()
     for m in re.finditer(r"IpcHandler\s*\{", src):
         block = src[m.end():block_end(src, m.end())]
         target = re.search(r'target:\s*"([^"]+)"', block).group(1)
+        # SEC-03: one gate. An IPC handler never reads the dev variables itself (it checks DevGate or VisualFixtures).
+        stripped = block.replace('DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))', "")
+        if re.search(r'Quickshell\.env\("GRASSFIELD_(DEV|SESSION)"\)', stripped):
+            own_gates.append("%s (%s)" % (target, path))
         for f in re.finditer(r"function\s+(\w+)\s*\([^)]*\)[^{]*\{", block):
             body = block[f.end():block_end(block, f.end())]
             code[(target, f.group(1))] = (path, body)
@@ -74,11 +79,16 @@ if stale:
 if not missing and not stale:
     ok("%d functions of %d targets, all documented" % (len(code), len({t for t, _ in code})))
 
-# --- real-session callers ---
+# --- real-session callers: the Hyprland config, the session helpers and shims (packaging/bin, packaging/shims), the
+# screen corners. A `call <target> <fn>` counts only on a line that runs `qs ipc` (comments say "call" too).
 bindings = open("config/hypr/grassfield/bindings.lua", encoding="utf-8").read()
 callers = set(re.findall(r'shell\("(\w+)",\s*"(\w+)', bindings))
-callers |= set(re.findall(r"call (\w+) (\w+)", bindings))
 callers |= {("switcher", f) for f in re.findall(r'(?:switcher_request|in_switcher_else)\("(\w+)"', bindings)}
+scanned = sorted(glob.glob("config/hypr/grassfield/*.lua")) + sorted(glob.glob("packaging/bin/*")) + sorted(glob.glob("packaging/shims/*"))
+for path in scanned:
+    for line in open(path, encoding="utf-8", errors="replace"):
+        if "qs ipc" in line:
+            callers |= set(re.findall(r"call (\w+) (\w+)", line))
 corners = open("shell/desktop/HotCornerActions.js", encoding="utf-8").read()
 callers |= set(re.findall(r'\["(\w+)",\s*"(\w+)"\]', corners))
 
@@ -125,5 +135,9 @@ if leaks:
     bad("security modules read GRASSFIELD_DEV outside the dev gate: " + ", ".join(leaks))
 else:
     ok("security modules read GRASSFIELD_DEV only through DevGate.allowed")
+if own_gates:
+    bad("IPC handlers with their own dev gate (use DevGate.allowed or VisualFixtures.dev): " + ", ".join(own_gates))
+else:
+    ok("no IPC handler has a dev gate of its own")
 sys.exit(1 if fail else 0)
 PY

@@ -7,6 +7,7 @@ import Quickshell.Services.UPower
 import Grassfield.Ui
 import qs.services
 import "Placements.js" as Placements
+import "../services/DevGate.js" as DevGate
 
 // Widget placements (widgets/1, docs/specs/widgets.md): where each widget sits, in the Notification
 // Center and on the desktop, persisted in $GRASSFIELD_STATE_HOME (dev) or $XDG_STATE_HOME/grassfield
@@ -22,6 +23,8 @@ Singleton {
     readonly property var center: placements.center
     readonly property var desktop: placements.desktop
     property bool loaded: false
+    // The shell's one dev gate (shell/services/DevGate.js, SEC-03): the IPC test hooks below answer only in a dev session.
+    readonly property bool devHooks: DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
 
     readonly property string home: Quickshell.env("HOME")
     readonly property string stateDir: {
@@ -168,12 +171,11 @@ Singleton {
     IpcHandler {
         target: "widgets"
 
-        function devOnly(): bool {
-            return Quickshell.env("GRASSFIELD_DEV") === "1" && Quickshell.env("GRASSFIELD_SESSION") !== "1";
-        }
-
+        // Test hooks (tests/visual/widgets-blur.sh), refused outside a dev session (SEC-04).
         // JSON [{uid, id, size, x, y, w, h}]: the desktop widgets of `screen` in output pixels.
         function status(screen: string): string {
+            if (!root.devHooks)
+                return DevGate.REFUSED;
             const s = root.screenByName(screen);
             if (!s)
                 return "[]";
@@ -185,14 +187,14 @@ Singleton {
         }
 
         function addDesktop(id: string, size: string, screen: string): string {
-            if (!devOnly())
-                return "refused";
+            if (!root.devHooks)
+                return DevGate.REFUSED;
             return root.addDesktop(id, size, screen) ? "added" : "no room";
         }
 
         function clearDesktop(): string {
-            if (!devOnly())
-                return "refused";
+            if (!root.devHooks)
+                return DevGate.REFUSED;
             root.apply(Object.assign({}, root.placements, {desktop: []}));
             return "cleared";
         }

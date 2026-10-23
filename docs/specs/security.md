@@ -68,7 +68,7 @@ does not check its gate.
 | Target | Functions | Class | Caller, or why it is gated |
 |---|---|---|---|
 | lock | lock | action | SUPER+CTRL+Q, screen corner, Grassfield menu (in process). Only ever locks |
-| lock | lid | action | lid switch binding (D-4). Only ever locks; `docked` in clamshell mode |
+| lock | lid | action | lid switch: `config/hypr/grassfield/system.lua` → `/usr/lib/grassfield/grassfield-lid closed` (D-4). Only ever locks; `docked` in clamshell mode |
 | lock | status, devReload, devPauseOwnershipCheck, devForgeUnlockedAnswer, devLockView | dev | `reload_locked.sh`, `l2_wrong_password.sh`; the pause widens the foreign-release window |
 | idle | status, devSleep, devDisplayOff | dev | `reload_locked.sh`, `lock_privacy.sh` |
 | polkit | status | dev | registration state (the journal has it in a real session) |
@@ -86,7 +86,8 @@ does not check its gate.
 | notifications | dnd, status | dev | `dnd` would let another process silence notices (security notices too) |
 | notifications | invoke, clearAll, dismissAll | fixtures | runs another app's action / removes history |
 | menubar | open, panel | action | CTRL+F2, SUPER+ALT+ESCAPE |
-| menubar | close, openKind, statusState, autohide, bridgeState | dev | `bridgeState` returns the focused app's menu titles |
+| menubar | close, openKind, keyboardWait, statusState, autohide, bridgeState | dev | `bridgeState` returns the focused app's menu titles |
+| widgets | status, addDesktop, clearDesktop | dev | `tests/visual/widgets-blur.sh`; `addDesktop`/`clearDesktop` change the saved placements |
 | controlcenter | transparency, appearance, reduceTransparency, reduceMotion | dev | persisted settings changes |
 | dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
 | dock | hover, unhover, reveal, menu | dev | UI automation for tests |
@@ -190,7 +191,10 @@ nested `lock_privacy.sh screenshare` (DT-05: a window with app_id `Bitwarden` is
 VERIFIED until run).
 
 ## Lid, display power-off, screensaver inhibitors (D-4)
-- Lid: binding `switch:on:Lid Switch` → `lock lid` (`locked = true`, also while locked). `Lock.lockOnLid()` locks at
+- Lid: one binding, `switch:on:Lid Switch` in `config/hypr/grassfield/system.lua` (real session only, `locked = true`) →
+  `/usr/lib/grassfield/grassfield-lid closed`, which first sends `qs ipc -c grassfield call lock lid` on every close
+  (it decides nothing about locking; it only switches the laptop panel off and on for clamshell mode,
+  `tests/shell/lid.sh`). `Lock.lockOnLid()` locks at
   once, whether or not logind suspends (`HandleLidSwitchExternalPower=ignore`, a docked lid, a failed suspend), except
   in clamshell mode: a physical external output is active (`LockMachine.lidShouldLock`: `DP-n`, `HDMI-X-n`, `DVI-X-n`,
   `VGA-n`, `TV-n`, `USB-n`; the built-in panel, headless and nested outputs do not count), as macOS and Omarchy's

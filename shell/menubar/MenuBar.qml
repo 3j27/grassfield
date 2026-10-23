@@ -61,6 +61,8 @@ Scope {
         // Test hook (tests/visual/menubar-macos.sh): "held" while the overlay waits for the end of a press on the bar before it
         // takes the keyboard (a press whose release the bar never saw would leave it so: keys then reach the window below).
         function keyboardWait(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             return Popups.active && Popups.pointerHeld ? "held" : "";
         }
 
