@@ -1,9 +1,11 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Grassfield.Ui
+import QtQuick.Templates as T
 
-// Segmented choice of 2-4 options. model: [{id, text}]; value is the selected id; picked(id) on user change.
-Item {
+// Segmented choice of 2-4 options (QtQuick.Templates Control + one AbstractButton per segment). model: [{id, text}];
+// value is the selected id (the host owns it: the control only reports `picked(id)`); Left/Right/Up/Down step through the
+// segments. Each segment is a RadioButton for assistive technology.
+T.Control {
     id: root
 
     property var model: []
@@ -22,7 +24,8 @@ Item {
 
     implicitWidth: row.implicitWidth
     implicitHeight: Tokens.menuItemHeight + Tokens.spacingSm
-    activeFocusOnTab: true
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.Grouping
     Accessible.name: root.accessibleName
     Accessible.description: root.currentIndex >= 0 ? root.model[root.currentIndex].text : ""
@@ -46,22 +49,20 @@ Item {
         }
     }
 
-    Rectangle {
-        anchors.fill: parent
+    background: Rectangle {
         radius: Tokens.radiusControl
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
-        border.color: Appearance.focusRingColor
+        border.width: Appearance.increaseContrast ? 1 : 0
+        border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
     }
 
-    Row {
+    contentItem: Row {
         id: row
-        anchors.fill: parent
 
         Repeater {
             model: root.model
 
-            delegate: Item {
+            delegate: T.AbstractButton {
                 id: segment
 
                 required property var modelData
@@ -70,40 +71,47 @@ Item {
 
                 width: label.implicitWidth + 2 * Tokens.spacingLg
                 height: root.height
+                text: segment.modelData.text
+                hoverEnabled: true
+                // One tab stop for the whole control (the arrow keys move inside it).
+                focusPolicy: Qt.NoFocus
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: segment.modelData.text
                 Accessible.checkable: true
                 Accessible.checked: segment.selected
                 Accessible.onPressAction: root.picked(segment.modelData.id)
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: Tokens.controlFocusOutline / 2
-                    radius: Tokens.radiusControl
-                    color: Appearance.colors.accent
-                    visible: segment.selected
+                onClicked: {
+                    root.forceActiveFocus();
+                    root.picked(segment.modelData.id);
                 }
 
-                Text {
+                background: Item {
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: Tokens.controlFocusOutline / 2
+                        radius: Tokens.radiusControl
+                        color: segment.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.hover, segment.down ? Tokens.controlPressedOpacity : Tokens.materialHoverOpacity)
+                        visible: segment.selected || (root.enabled && (segment.hovered || segment.down))
+                    }
+                }
+
+                contentItem: Text {
                     id: label
                     textFormat: Text.PlainText
-                    anchors.centerIn: parent
-                    text: segment.modelData.text
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    text: segment.text
+                    opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
                     color: segment.selected ? Appearance.colors.accentText : Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyMenuSize
                     font.weight: Tokens.typographyMenuWeight
                 }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.ArrowCursor
-                    onClicked: {
-                        root.forceActiveFocus();
-                        root.picked(segment.modelData.id);
-                    }
-                }
             }
         }
+    }
+
+    FocusRing {
+        visible: root.activeFocus
     }
 }

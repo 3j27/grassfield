@@ -69,7 +69,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Show previews")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Show previews")
                 model: [{id: "always", text: qsTr("Always")}, {id: "unlocked", text: qsTr("When Unlocked")}, {id: "never", text: qsTr("Never")}]
                 value: root.store.value("notifications.previews")
@@ -92,7 +92,7 @@ SettingsPage {
                 required property string modelData
 
                 title: modelData
-                Picker {
+                ComboBox {
                     accessibleName: qsTr("Show previews for %1").arg(appRow.modelData)
                     model: root.choices
                     value: NotificationPrefs.valueFor(root.overrides, appRow.modelData)

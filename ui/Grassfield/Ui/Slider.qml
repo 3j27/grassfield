@@ -1,7 +1,9 @@
 import QtQuick
+import QtQuick.Templates as T
 
-// Horizontal slider with a pill track and a pill knob. value is within [from, to].
-Item {
+// Horizontal slider with a pill track and a pill knob, on a QtQuick.Templates Control: the host owns the value. value is
+// within [from, to]; moved(value) reports a user change.
+T.Control {
     id: root
 
     property real from: 0
@@ -30,7 +32,8 @@ Item {
 
     implicitWidth: Tokens.controlSliderDefaultWidth
     implicitHeight: Tokens.controlSliderHeight
-    activeFocusOnTab: true
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.Slider
     Accessible.name: root.accessibleName
     Accessible.focusable: true
@@ -98,8 +101,13 @@ Item {
         x: root.position * root.travel
         anchors.verticalCenter: parent.verticalCenter
         color: Appearance.colors.knob
-        border.width: root.activeFocus ? Tokens.controlFocusOutline : 1
-        border.color: root.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
+        border.width: 1
+        border.color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
+
+        FocusRing {
+            shapeRadius: parent.radius
+            visible: root.activeFocus
+        }
     }
 
     MouseArea {

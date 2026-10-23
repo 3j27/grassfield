@@ -242,9 +242,16 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             width: Tokens.filesSidebarItemHeight
             height: Tokens.filesSidebarItemHeight
-            themeIconName: "media-eject-symbolic"
             accessibleName: qsTr("Eject %1").arg(entry.name)
             onClicked: root.places.eject(entry.index)
+
+            ThemeIcon {
+                anchors.centerIn: parent
+                name: "media-eject-symbolic"
+                size: Tokens.filesToolbarIconSize
+                tint: true
+                color: Appearance.colors.text
+            }
         }
 
         DropArea {

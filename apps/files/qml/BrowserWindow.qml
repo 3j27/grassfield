@@ -434,12 +434,18 @@ Window {
                                 {mode: "gallery", name: qsTr("as Gallery")}
                             ]
                             delegate: ToolButton {
+                                id: viewButton
                                 required property var modelData
-                                glyph: modelData.mode
                                 checkable: true
+                                radio: true
                                 checked: win.tab !== null && win.tab.viewMode === modelData.mode
                                 accessibleName: modelData.name
                                 onClicked: win.tab.setViewMode(modelData.mode)
+
+                                ViewGlyph {
+                                    anchors.centerIn: parent
+                                    kind: viewButton.modelData.mode
+                                }
                             }
                         }
                     }
@@ -447,12 +453,16 @@ Window {
 
                 ToolButton {
                     id: actionButton
-                    glyph: "more"
                     accessibleName: qsTr("Action")
                     anchors.verticalCenter: parent.verticalCenter
                     onClicked: {
                         const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
                         win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+                    }
+
+                    ViewGlyph {
+                        anchors.centerIn: parent
+                        kind: "more"
                     }
                 }
 
@@ -603,9 +613,13 @@ Window {
                 id: newTabButton
                 width: Tokens.filesTabHeight
                 height: Tokens.filesTabHeight
-                glyph: "plus"
                 accessibleName: qsTr("New Tab")
                 onClicked: win.newTab(win.tab.url)
+
+                ViewGlyph {
+                    anchors.centerIn: parent
+                    kind: "plus"
+                }
             }
         }
 

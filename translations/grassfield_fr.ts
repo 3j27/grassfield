@@ -4688,6 +4688,17 @@
     </message>
 </context>
 <context>
+    <name>SearchField</name>
+    <message>
+        <source>Search</source>
+        <translation>Recherche</translation>
+    </message>
+    <message>
+        <source>Clear search</source>
+        <translation>Effacer la recherche</translation>
+    </message>
+</context>
+<context>
     <name>SearchPanel</name>
     <message>
         <source>Search</source>

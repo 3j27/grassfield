@@ -87,7 +87,7 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Text Size")
             subtitle: qsTr("The size of the text in the shell's panels and in Settings.")
-            Segmented {
+            SegmentedControl {
                 accessibleName: qsTr("Text Size")
                 model: [{id: "1", text: qsTr("100%")}, {id: "1.1", text: qsTr("110%")}, {id: "1.2", text: qsTr("120%")}, {id: "1.3", text: qsTr("130%")}]
                 value: String(root.store.value("accessibility.textSize"))

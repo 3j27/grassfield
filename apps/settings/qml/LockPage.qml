@@ -1,4 +1,5 @@
 import QtQuick
+import Grassfield.Ui
 
 SettingsPage {
     id: root
@@ -22,7 +23,7 @@ SettingsPage {
 
         SettingsRow {
             title: qsTr("Lock screen after inactivity")
-            Picker {
+            ComboBox {
                 accessibleName: qsTr("Lock screen after inactivity")
                 model: root.idleChoices
                 value: String(root.idleMinutes)

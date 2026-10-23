@@ -489,6 +489,34 @@ QtObject {
     readonly property int controlTooltipTailWidth: 13
     // F1 gap 4: tail 7.3 high [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlTooltipTailHeight: 7
+    // GF-085: toolbar button, a square 28 (the Files and Preview toolbars, which keep their own tokens for the bars) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlToolButtonSize: 28
+    // GF-085: glyph inside a tool button [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlToolIconSize: 16
+    // GF-085: check box and radio button box, 14 as the AppKit control [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlCheckSize: 14
+    // GF-085: check box corner radius [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlCheckRadius: 4
+    // GF-085: text field and search field height, 22 as the AppKit control [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlFieldHeight: 22
+    // GF-085: stepper arrows column width [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlStepperWidth: 14
+    // GF-085: progress bar thickness [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlProgressHeight: 6
+    // GF-085: overlay scroll bar thumb width (moved from files.scrollbarWidth) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlScrollbarWidth: 6
+    // GF-085: shortest scroll bar thumb [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlScrollbarMinLength: 24
+    // GF-085: scroll bar while the view is still [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property real controlScrollbarIdleOpacity: 0.5
+    // GF-085: scroll bar thumb (text colour alpha) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property real controlScrollbarThumbOpacity: 0.3
+    // GF-085: dragged scroll bar thumb [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property real controlScrollbarPressedOpacity: 0.55
+    // GF-085: sheet width (moved from files.sheetWidth) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlSheetWidth: 420
+    // GF-085: extra fill over a pressed control (the hover colour at this opacity) [ref: docs/specs/ui.md Controls (GF-085); docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property real controlPressedOpacity: 0.18
 
     // F1 gap 6: Quick Settings column 291 +-1 (4 x 63 cells + 3 x 13 gaps) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelControlCenterWidth: 291
@@ -1062,8 +1090,6 @@ QtObject {
     readonly property int filesCustomizeHexWidth: 140
     // estimate: Customize Folder, time the per-user storage note stays before the window closes [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesCustomizeNoteMs: 1800
-    // estimate: Go to Folder and confirmation sheets [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property int filesSheetWidth: 420
     // estimate: pause that starts a new type-to-select search [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesTypeaheadResetMs: 1000
     // estimate: error banner lifetime in ms [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
@@ -1084,16 +1110,6 @@ QtObject {
     readonly property int filesThumbnailOversample: 2
     // estimate: hidden files are drawn dimmed when shown [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property real filesHiddenOpacity: 0.55
-    // estimate: overlay scroll bar thumb [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property int filesScrollbarWidth: 6
-    // estimate: shortest scroll bar thumb [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property int filesScrollbarMinLength: 24
-    // estimate: scroll bar while the view is still [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property real filesScrollbarIdleOpacity: 0.5
-    // estimate: scroll bar thumb (text color alpha) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property real filesScrollbarThumbOpacity: 0.3
-    // estimate: dragged scroll bar thumb [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property real filesScrollbarPressedOpacity: 0.55
     // estimate: gallery view thumbnail strip under the preview [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesGalleryStripHeight: 84
     // estimate: one thumbnail of the gallery strip [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]

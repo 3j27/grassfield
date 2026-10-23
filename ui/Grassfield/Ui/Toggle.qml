@@ -1,7 +1,9 @@
 import QtQuick
+import QtQuick.Templates as T
 
-// On/off switch. checked is set from outside; toggled() reports a user request to flip it.
-Item {
+// On/off switch on a QtQuick.Templates Control: the host owns the value. checked is set from outside; toggled() reports a user
+// request to flip it (Space, Return, Enter, a click, an accessibility toggle). Switch is the self-toggling stock sibling.
+T.Control {
     id: root
 
     property bool checked: false
@@ -11,7 +13,8 @@ Item {
 
     implicitWidth: Tokens.controlToggleWidth
     implicitHeight: Tokens.controlToggleHeight
-    activeFocusOnTab: true
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.CheckBox
     Accessible.name: root.accessibleName
     Accessible.checkable: true
@@ -31,14 +34,17 @@ Item {
         anchors.fill: parent
         radius: height / 2
         color: root.checked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
-        border.color: Appearance.focusRingColor
 
         Behavior on color {
             ColorAnimation {
                 duration: Appearance.duration(Tokens.motionFast)
             }
         }
+    }
+
+    FocusRing {
+        shapeRadius: root.height / 2
+        visible: root.activeFocus
     }
 
     Rectangle {

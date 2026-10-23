@@ -4,7 +4,7 @@
 The reference analysis is `docs/testing/f1-reference-gaps.md` (our own measurements from private macOS 26 captures; owner sign-off F1 pending). Every token in `ui/tokens/tokens.json` carries a `source` note that points at that analysis, a spec section, an ADR or a test; `gen-tokens.py` fails when one does not (GF-095). Where the note says "estimate", no reference value exists yet.
 
 ## Purpose and non-goals
-Design system shared by the shell and (later) native apps: tokens, frosted material, appearance state and the M1 component set (Icon, PopupMenu/MenuItem/MenuSeparator, Slider, Toggle, Button, Tooltip). Non-goals: Qt Quick Controls style (M4), any Quickshell or Hyprland import, business logic.
+Design system shared by the shell and (later) native apps: tokens, frosted material, appearance state and the M1 component set (Icon, PopupMenu/MenuItem/MenuSeparator, Slider, Toggle, Button, Tooltip). Non-goals: any Quickshell or Hyprland import, business logic.
 
 ## Functional requirements
 1. `ui/tokens/tokens.json` is the single source of truth; `ui/tools/gen-tokens.py` generates `Tokens.qml`; `--check` exits 1 when stale.
@@ -125,9 +125,37 @@ Setting `accent.color` (schema enum, defaults, `Store.js`, shell store). The req
 ## Acceptance criteria
 - A1 `gen-tokens.py --check` exit 0 (L0). A2 `tests/unit/tst_tokens.qml`, `tst_popupmenu.qml`, `tst_menunav.qml` pass (L0). A5 `tests/shell/settings_roundtrip` (real FileView) passes (L1). A3 `qmllint.sh` 0 warnings (L0). A4 nested screenshot shows blur at transparency 1 and an opaque surface at 0 (L2, manual scenario).
 
+## Controls on QtQuick.Templates (GF-085, owner decision D-4 "Qt Quick style for the apps")
+Every Grassfield control is built on `QtQuick.Templates` (keyboard, focus, hover, input method and accessibility come from Qt), drawn with tokens only. All are in `Grassfield.Ui`:
+| Control | Template | Notes |
+|---|---|---|
+| `Button` | Button | primary / destructive / capsule / push; `activate()` guard (hidden or disabled never acts; Return, Enter, Space; AT press) |
+| `ToolButton` | ToolButton | `iconName`, any child glyph (centred), `text`; `radio` = one choice of a group (autoExclusive, role RadioButton) else a toggle (CheckBox); `capsule`; `accessibleName` |
+| `CheckBox`, `RadioButton`, `Switch` | same | 14 px box / disc; the control toggles itself; Return does not toggle |
+| `Toggle`, `Slider` | Control | host-driven values (`checked` / `value` are inputs, `toggled(bool)` / `moved(real)` report): the 29 / 12 existing call sites and Quick Settings rely on it, so they keep their API on a Control base |
+| `TextField`, `SearchField` | TextField | 22 px, I-beam, accent selection; SearchField: search glyph, clear button, Escape clears first |
+| `SpinBox` | SpinBox | field plus up/down stepper, Page keys step by ten |
+| `SegmentedControl` | Control + AbstractButton | model `[{id,text}]`, `value` owned by the host, `picked(id)`, arrows step |
+| `ComboBox` | ComboBox | pop-up button, list = `PopupMenu` in a Popup; `value`, `picked(id)` (the former settings Picker) |
+| `ProgressBar` | ProgressBar | determinate, indeterminate sweep (still with Reduce Motion) |
+| `ScrollBar` | ScrollBar | attached (`ScrollBar.vertical`) or standalone (`flickable: view`) |
+| `Sheet` | Pane (panel) | modal over its window, Return confirms, Esc cancels, field optional |
+
+Menus: `PopupMenu` / `MenuItem` stay the one menu implementation (submenus, swatch rows, pointer relay and layer-shell PopupWindow hosting, which a `Templates.Menu` popup cannot do); no `T.Menu` wrapper is added. Dialogs: `Sheet` (apps) and the shell's `Dialog` (alerts).
+
+Shared rules: one keyboard focus ring, `FocusRing` (`control.focusOutline` 3 px outside the shape, never inside), shown while the control has the active focus; disabled = `material.disabledOpacity`; hover and press = the hover colour at `material.hoverOpacity` / `control.pressedOpacity`; Increase Contrast adds the 1 px border (`material.borderOpacity` carries the stronger value); animations use `Appearance.duration()` (Reduce Motion caps them) and the indeterminate sweep stops; every visible string is `qsTr()`; roles and names are set explicitly (`Accessible.name` from `accessibleName`, else the text).
+
+Moved into `ui/` (the app copies are deleted; a module type shadows a same-named file of the app directory, so no stale copy can win): Files and Preview `ToolButton` (callers draw their glyph as a child: `ViewGlyph`, `Glyph`, `ThemeIcon`; the Preview `label` became `accessibleName`, plus `capsule: true`), Files `Sheet` and `ScrollBar`, Settings `Segmented` (now `SegmentedControl`) and `Picker` (now `ComboBox`; `Picker.qml` stays as a one-line alias because `WallpaperPage.qml` belongs to the wallpaper work). Tokens moved with them (`control.sheetWidth`, `control.scrollbar*`) and new ones were added (`control.toolButtonSize`, `checkSize`, `fieldHeight`, `stepperWidth`, `progressHeight`, `pressedOpacity`).
+
+Qt Quick Controls style: `ui/Grassfield` is a style module named `Grassfield` (`QT_QUICK_CONTROLS_STYLE=Grassfield`, an import path containing `ui/`): the stock Button, ToolButton, CheckBox, RadioButton, Switch, TextField, SpinBox, ComboBox, ProgressBar and ScrollBar resolve to the controls above (one-line files); every other stock control falls back (`QT_QUICK_CONTROLS_FALLBACK_STYLE=Basic`, which does not look like Grassfield: Slider, Dialog, Menu...). Test `tests/shell/controls_style.sh`. The apps still import `Grassfield.Ui` explicitly and do not import Qt Quick Controls.
+
+Tests: `tst_controlsbuttons.qml`, `tst_controlstext.qml`, `tst_controlsmisc.qml` (pointer, keys, state, role and name, ring, Increase Contrast, Reduce Motion), plus the existing `tst_buttonkeys.qml` / `tst_a11ypress.qml` for the Button guard.
+
+Left: `Slider` and `Toggle` are host-driven, not stock-shaped, so the style does not map them; a `Menu` / `Dialog` style needs the PopupMenu hosting question above; the polkit dialog (security) keeps using the shared `Button`, now on a Template (reviewer pass needed for `shell/security`, which was not edited).
+
 ## Material blur follows transparency (GF-125)
 Hyprland holds one blur size and one pass count for every surface (the `ext-background-effect-v1` region and the layer rules carry no strength), so the shell asks the compositor for the pair of the current effective transparency; it never fakes a blur. Mapping (`Appearance.blurSize(t)`, `blurPasses(t)`, tokens `material.blurSize{Min,Max}`, `blurPasses{Light,Full}`, `blurPassesFrom`):
-- size = round(12 + 24 t) px (36 at t = 1); at the default 0.25 it is 18, and 3 passes below 0.15 the count is 2. The defaults are exactly what `config/hypr/grassfield/looknfeel.lua` ships (a test pins it), so a config reload at the default restores a right value.
+- size = round(12 + 24 t) px (36 at t = 1); at the default 0.25 it is 18 with 3 passes (2 passes below transparency 0.15). The defaults are exactly what `config/hypr/grassfield/looknfeel.lua` ships (a test pins it), so a config reload at the default restores a right value.
 - Reduce Transparency = t 0: no surface requests blur; the minimum is kept.
 - Sent by `qs.platform` `Compositor` (`Minimized.blurCall`, Lua `pcall(hl.config, {decoration={blur={size,passes}}})` through the same dispatch as the Reduce Motion animations): at start, on every change (debounced by `motion.fast`), after `configreloaded`. A compositor without `hl.config` ignores it (pcall); the config's own 18 / 3 stays. No polling, no plugin needed.
 - Cost: more transparency = a wider blur = more GPU; the pass count drops by one for nearly opaque materials.

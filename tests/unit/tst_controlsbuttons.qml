@@ -1,0 +1,214 @@
+import QtQuick
+import QtTest
+import Grassfield.Ui
+
+// The button family of Grassfield.Ui on QtQuick.Templates (GF-085): Button, ToolButton, CheckBox, RadioButton, Switch and
+// the host-driven Toggle: pointer, keys, checked state, accessibility role and name, the one focus ring, Increase Contrast.
+TestCase {
+    id: tc
+
+    name: "ControlsButtons"
+    width: 400
+    height: 300
+    visible: true
+    when: windowShown
+
+    property int clicks: 0
+    property int toggles: 0
+
+    Column {
+        id: host
+
+        spacing: 8
+
+        Button {
+            id: button
+            text: "Save"
+            onClicked: tc.clicks++
+        }
+
+        ToolButton {
+            id: tool
+            accessibleName: "Info"
+            onClicked: tc.clicks++
+        }
+
+        Row {
+            id: group
+
+            ToolButton {
+                id: radioA
+                radio: true
+                checkable: true
+                checked: true
+                accessibleName: "A"
+            }
+
+            ToolButton {
+                id: radioB
+                radio: true
+                checkable: true
+                accessibleName: "B"
+            }
+        }
+
+        ToolButton {
+            id: toggleTool
+            checkable: true
+            accessibleName: "Sidebar"
+        }
+
+        CheckBox {
+            id: check
+            text: "Remember"
+            onToggled: tc.toggles++
+        }
+
+        Column {
+            RadioButton {
+                id: radio1
+                text: "One"
+                checked: true
+            }
+
+            RadioButton {
+                id: radio2
+                text: "Two"
+            }
+        }
+
+        Switch {
+            id: sw
+            accessibleName: "Wi-Fi"
+            onToggled: tc.toggles++
+        }
+
+        Toggle {
+            id: toggle
+            accessibleName: "Hosted"
+            checked: false
+            onToggled: checked => tc.toggles++
+        }
+    }
+
+    function init() {
+        tc.clicks = 0;
+        tc.toggles = 0;
+        Appearance.increaseContrast = false;
+        Appearance.reduceMotion = false;
+        button.enabled = true;
+        tool.enabled = true;
+    }
+
+    function test_buttonClickAndKeys() {
+        mouseClick(button);
+        compare(tc.clicks, 1);
+        verify(button.activeFocus, "a click focuses the button");
+        keyClick(Qt.Key_Space);
+        keyClick(Qt.Key_Return);
+        keyClick(Qt.Key_Enter);
+        compare(tc.clicks, 4);
+    }
+
+    function test_buttonRoleAndName() {
+        compare(button.Accessible.role, Accessible.Button);
+        compare(button.Accessible.name, "Save");
+        compare(tool.Accessible.role, Accessible.Button);
+        compare(tool.Accessible.name, "Info");
+    }
+
+    function test_disabledButtonNeverActs() {
+        button.enabled = false;
+        mouseClick(button);
+        verify(!button.activate());
+        compare(tc.clicks, 0);
+    }
+
+    function test_oneFocusRingOfTheTokenWidth() {
+        button.forceActiveFocus();
+        let ring = null;
+        for (let i = 0; i < button.children.length; i++) {
+            if (button.children[i].border !== undefined && button.children[i].border.width === Tokens.controlFocusOutline)
+                ring = button.children[i];
+        }
+        verify(ring !== null, "a ring child of the focus outline width");
+        verify(ring.visible);
+        compare(ring.border.width, 3);
+        compare(ring.anchors.margins, -Tokens.controlFocusOutline);
+        tool.forceActiveFocus();
+        verify(!ring.visible, "the ring leaves with the focus");
+    }
+
+    function test_increaseContrastDrawsABorder() {
+        compare((button.background as Rectangle).border.width, 0);
+        Appearance.increaseContrast = true;
+        compare((button.background as Rectangle).border.width, 1);
+    }
+
+    function test_toolButtonReturnClicks() {
+        tool.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        keyClick(Qt.Key_Space);
+        compare(tc.clicks, 2);
+        tool.enabled = false;
+        verify(!tool.activate());
+    }
+
+    function test_radioToolButtonsAreExclusiveAndRoleRadio() {
+        compare(radioA.Accessible.role, Accessible.RadioButton);
+        compare(toggleTool.Accessible.role, Accessible.CheckBox);
+        mouseClick(radioB);
+        verify(radioB.checked);
+        verify(!radioA.checked);
+        mouseClick(radioB);
+        verify(radioB.checked, "a checked choice is not unchecked by clicking it");
+        mouseClick(toggleTool);
+        verify(toggleTool.checked);
+        mouseClick(toggleTool);
+        verify(!toggleTool.checked, "a toggle flips back");
+    }
+
+    function test_checkBoxTogglesWithSpaceAndNotReturn() {
+        check.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        verify(check.checked);
+        compare(tc.toggles, 1);
+        keyClick(Qt.Key_Return);
+        verify(check.checked, "Return does not toggle");
+        mouseClick(check);
+        verify(!check.checked);
+        compare(check.Accessible.name, "Remember");
+        check.tristate = true;
+        check.checkState = Qt.PartiallyChecked;
+        compare(check.checkState, Qt.PartiallyChecked);
+        check.tristate = false;
+        check.checked = false;
+    }
+
+    function test_radioButtonsAreExclusive() {
+        mouseClick(radio2);
+        verify(radio2.checked);
+        verify(!radio1.checked);
+        mouseClick(radio2);
+        verify(radio2.checked);
+        compare(radio2.Accessible.role, Accessible.RadioButton);
+    }
+
+    function test_switchTogglesItselfAndToggleLeavesTheValueToTheHost() {
+        mouseClick(sw);
+        verify(sw.checked);
+        compare(tc.toggles, 1);
+        compare(sw.Accessible.name, "Wi-Fi");
+        toggle.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        verify(!toggle.checked, "the host owns Toggle.checked");
+        compare(tc.toggles, 2);
+        verify(toggle.activeFocus);
+        compare(toggle.Accessible.role, Accessible.CheckBox);
+    }
+
+    function test_reduceMotionCapsTheSwitchAnimation() {
+        Appearance.reduceMotion = true;
+        verify(Appearance.duration(Tokens.motionSlow) <= Tokens.motionReducedMax);
+    }
+}
