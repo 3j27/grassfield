@@ -63,6 +63,8 @@ add_custom_command(
   DEPENDS ${GF_HYPRLAND_VERSION_H} ${CMAKE_CURRENT_SOURCE_DIR}/abi-stamp.cmake
   VERBATIM)
 add_custom_target(grassfield-compositor-abi ALL DEPENDS ${GRASSFIELD_OUTPUT_DIR}/grassfield-compositor.abi)
+# Building the plugin alone (cmake --build --target grassfield-compositor, just plugin-build) refreshes its stamp too.
+add_dependencies(grassfield-compositor grassfield-compositor-abi)
 
 option(GRASSFIELD_BUILD_TESTS "Build unit tests" ON)
 if(GRASSFIELD_BUILD_TESTS)
