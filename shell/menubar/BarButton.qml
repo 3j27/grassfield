@@ -14,6 +14,8 @@ Item {
     property bool active: false
     // Opens one of the bar's menus: the bar switches to it on hover while another menu is open (macOS tracking).
     property bool opensMenu: false
+    // The popup kind this item opens ("network", "volume", ...) for the keyboard cycle (Left/Right in an open menu, Ctrl+F8); empty: not in it.
+    property string menuKind: ""
     // Padding on each side of the content (titles: menubar.itemPadding, status glyphs: menubar.statusItemPadding).
     property real padding: Tokens.menubarItemPadding
     // Highlight colour (the bar passes the dark palette's while it has no background of its own).
@@ -55,8 +57,8 @@ Item {
         radius: height / 2
         color: Appearance.withAlpha(root.tint, root.active ? Tokens.materialHoverOpacity * Tokens.materialHoverActiveFactor : Tokens.materialHoverOpacity)
         opacity: tap.pressed || root.active ? 1 : 0
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: Appearance.colors.accent
+        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
+        border.color: Appearance.focusRingColor
 
         Behavior on opacity {
             NumberAnimation {
@@ -75,8 +77,8 @@ Item {
         radius: height / 2
         color: "transparent"
         visible: root.activeFocus
-        border.width: Tokens.controlFocusRing
-        border.color: Appearance.colors.accent
+        border.width: Tokens.controlFocusOutline
+        border.color: Appearance.focusRingColor
     }
 
     // Content with a faint soft shadow (gate A2) while the bar is drawn straight on the wallpaper: dark under light text, light

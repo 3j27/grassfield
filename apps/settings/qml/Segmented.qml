@@ -50,8 +50,8 @@ Item {
         anchors.fill: parent
         radius: Tokens.radiusControl
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: Appearance.colors.accent
+        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
+        border.color: Appearance.focusRingColor
     }
 
     Row {
@@ -78,7 +78,7 @@ Item {
 
                 Rectangle {
                     anchors.fill: parent
-                    anchors.margins: Tokens.controlFocusRing / 2
+                    anchors.margins: Tokens.controlFocusOutline / 2
                     radius: Tokens.radiusControl
                     color: Appearance.colors.accent
                     visible: segment.selected

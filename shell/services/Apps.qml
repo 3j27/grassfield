@@ -35,6 +35,22 @@ Singleton {
         return !entry.noDisplay && !Model.isHidden(root.hiddenIds, entry.id);
     }
 
+    // Icon sources of the listed apps in alphabetical order, as the Apps panel and Search ask the icon theme for them: the shape
+    // of those files is read ahead of time (Grassfield.Ui IconShapePrewarm, hosted by the menu bar) so that opening the panel does not.
+    property var listedIconSources: []
+
+    function refreshIconSources(): void {
+        const list = [];
+        for (const e of DesktopEntries.applications.values) {
+            if (root.isListed(e))
+                list.push({name: String(e.name).toLowerCase(), src: Quickshell.iconPath(e.icon, "application-x-executable")});
+        }
+        list.sort((a, b) => a.name.localeCompare(b.name));
+        root.listedIconSources = list.map(x => x.src);
+    }
+
+    onListChanged: root.refreshIconSources()
+
     function refreshHidden(): void {
         if (scan.running)
             scan.again = true;

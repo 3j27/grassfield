@@ -30,6 +30,12 @@ NavItem {
     ringRadius: height / 2
     visible: available
     onActivated: if (available) toggled()
+    // The chevron's action (open the section: the Wi-Fi networks, the sound devices) is an accessible action of its own:
+    // increase opens the section, decrease closes it (A11Y-09).
+    Accessible.onIncreaseAction: if (expandable && available && !expanded)
+        expandToggled()
+    Accessible.onDecreaseAction: if (expandable && available && expanded)
+        expandToggled()
     handlesArrow: true
     returnActivates: !expandable
     onConfirmed: if (expandable && available) expandToggled()

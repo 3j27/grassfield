@@ -334,4 +334,43 @@ TestCase {
         keyRelease(Qt.Key_Alt, Qt.NoModifier);
         verify(!m.altHeld);
     }
+
+    SignalSpy {
+        id: stepSpy
+        signalName: "menuStepRequested"
+    }
+
+    // GF-002 (audit): Right and Left in an open bar menu ask the bar for the next or previous title, also with the host's
+    // `bounds` set (the overlay sets it on every menu) and with no row selected (a menu opened with the pointer).
+    function test_rightAndLeftStepTheBarMenus() {
+        const m = makeMenu();
+        m.bounds = testCase;
+        m.currentIndex = -1;
+        stepSpy.target = m;
+        stepSpy.clear();
+        keyClick(Qt.Key_Right);
+        compare(stepSpy.count, 1);
+        compare(stepSpy.signalArguments[0][0], 1);
+        keyClick(Qt.Key_Left);
+        compare(stepSpy.count, 2);
+        compare(stepSpy.signalArguments[1][0], -1);
+    }
+
+    // macOS: no row is highlighted when a menu opens, and a submenu opened by the pointer has none either, until the pointer
+    // or a key selects one (a submenu opened with Right or Return highlights its first row).
+    function test_noHighlightUntilSelected() {
+        const m = makeMenu();
+        compare(m.currentIndex, -1);
+        wait(50);
+        const d = centreOf(m, "Delta");
+        m.trackPointer(d.x, d.y);
+        compare(m.openIndex, 4);
+        wait(100);
+        compare(m.submenuItem.currentIndex, -1);
+        m.closeSubmenu();
+        m.currentIndex = 4;
+        keyClick(Qt.Key_Right);
+        wait(100);
+        compare(m.submenuItem.currentIndex, 0);
+    }
 }

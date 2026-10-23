@@ -463,8 +463,8 @@ Window {
                     anchors.verticalCenter: parent.verticalCenter
                     radius: Tokens.radiusControl
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: search.activeFocus ? Tokens.controlFocusRing : 0
-                    border.color: Appearance.colors.accent
+                    border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
+                    border.color: Appearance.focusRingColor
 
                     Icon {
                         id: searchIcon

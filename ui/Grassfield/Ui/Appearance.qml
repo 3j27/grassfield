@@ -12,6 +12,11 @@ QtObject {
     property real transparency: Tokens.materialDefaultTransparency
     property bool reduceTransparency: false
     property bool reduceMotion: false
+    // Increase Contrast (Settings > Accessibility > Display): stronger borders and separators (the tokens that carry an
+    // `increaseContrast` value), secondary text in the primary colour.
+    property bool increaseContrast: false
+    // Text size multiplier (1 to 1.3, Settings > Accessibility > Display): the tokens marked `textScale` follow it.
+    property real textScale: 1
     // Icon appearance (ADR-0014): default | dark | clear | tinted, and the tint setting ("accent" or "#rrggbb").
     property string iconMode: "default"
     property string iconTintSetting: "accent"
@@ -36,8 +41,10 @@ QtObject {
     readonly property var colors: devGlyphMode !== "" ? glyphColors(baseColors) : baseColors
     // The palette of the appearance with the chosen accent applied (accent and accentText), live.
     readonly property var baseColors: dark ? accentedDark : accentedLight
-    readonly property var accentedDark: Accent.apply(Tokens.colorDark, accentSetting, true, Tokens)
-    readonly property var accentedLight: Accent.apply(Tokens.colorLight, accentSetting, false, Tokens)
+    readonly property var accentedDark: Accent.contrastBoost(Accent.apply(Tokens.colorDark, accentSetting, true, Tokens), increaseContrast)
+    readonly property var accentedLight: Accent.contrastBoost(Accent.apply(Tokens.colorLight, accentSetting, false, Tokens), increaseContrast)
+    // The keyboard focus ring: the accent, or the text colour where the accent does not hold 3:1 against the material (Accent.focusRing).
+    readonly property color focusRingColor: Accent.focusRing(baseColors.accent, baseColors.materialTint, baseColors.text, Tokens.controlFocusRingMinContrast)
     // The dark palette for surfaces that are always dark (Apps), hooked like `colors`.
     readonly property var darkColors: devGlyphMode !== "" ? glyphColors(accentedDark) : accentedDark
     // The light palette for surfaces that are always light (the menu bar's dark foreground over a light wallpaper), hooked like `colors`.

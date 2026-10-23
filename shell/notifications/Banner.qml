@@ -32,6 +32,8 @@ Item {
     Accessible.role: Accessible.AlertMessage
     Accessible.name: summary !== "" ? summary : appName
     Accessible.description: appName
+    // The default action (a click on the banner outside its buttons) for assistive technologies too (A11Y-09).
+    Accessible.onPressAction: Notifications.activateDefault(root.key)
 
     Component.onCompleted: slide = 0
 

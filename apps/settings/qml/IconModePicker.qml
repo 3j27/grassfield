@@ -77,14 +77,14 @@ FocusScope {
                 // Keyboard focus ring: outside the tile, set off by a gap, in the text colour (the selection ring is the
                 // accent border of the tile itself, so the two never read as one ring).
                 Rectangle {
-                    x: -(Tokens.controlFocusRing + Tokens.iconModePreviewFocusGap)
+                    x: -(Tokens.controlFocusOutline + Tokens.iconModePreviewFocusGap)
                     y: x
                     width: plate.width - 2 * x
                     height: plate.height - 2 * x
                     radius: Tokens.iconModePreviewRadius - x
                     color: "transparent"
-                    border.width: Tokens.controlFocusRing
-                    border.color: Appearance.colors.text
+                    border.width: Tokens.controlFocusOutline
+                    border.color: Appearance.focusRingColor
                     visible: tile.selected && root.activeFocus
                 }
 
@@ -95,7 +95,7 @@ FocusScope {
                     height: Tokens.iconModePreviewTileHeight
                     radius: Tokens.iconModePreviewRadius
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: tile.selected ? Tokens.controlFocusRing : Tokens.appsBorderWidth
+                    border.width: tile.selected ? Tokens.controlFocusOutline : Tokens.appsBorderWidth
                     border.color: tile.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
                     // A real icon through the real pipeline: the per-tile mode overrides the global one.

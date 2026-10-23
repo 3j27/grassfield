@@ -36,6 +36,8 @@ Scope {
     readonly property string appearance: ["dark", "light", "auto"].indexOf(config.appearance) >= 0 ? config.appearance : "dark"
     readonly property real transparency: clampNumber(config.material.transparency, 0, 1, 0.25)
     readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
+    // Text size multiplier of the shell's text (Settings > Accessibility > Display), 1 to 1.3; a hand-edited value is clamped.
+    readonly property real textSize: clampNumber(config.accessibility.textSize, 1, 1.3, 1)
     // Tile size of the Dock in px (Settings > Size); a hand-edited value is clamped to the slider range.
     readonly property int dockSize: tileSize(config.dock.size)
     // Screen edge of the Dock (Settings > Position on screen); anything but left/right is the bottom.
@@ -123,6 +125,8 @@ Scope {
     component AccessibilityConfig: JsonObject {
         property bool reduceTransparency: false
         property bool reduceMotion: false
+        property bool increaseContrast: false
+        property real textSize: 1
     }
 
     component DockConfig: JsonObject {
@@ -237,6 +241,14 @@ Scope {
 
     function setReduceMotion(value: bool): void {
         change("accessibility.reduceMotion", value);
+    }
+
+    function setIncreaseContrast(value: bool): void {
+        change("accessibility.increaseContrast", value);
+    }
+
+    function setTextSize(value: real): void {
+        change("accessibility.textSize", clampNumber(value, 1, 1.3, 1));
     }
 
     function setDockAutohide(value: bool): void {

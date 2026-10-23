@@ -211,6 +211,15 @@ Variants {
                     width: win.dragging ? win.width : win.tileSize.width
                     height: win.dragging ? win.height : win.tileSize.height
                 }
+                // Real blur behind the frosted tile (master-prompt 5.5, never faked): the tile's own shape is the region, and
+                // the namespace is in the layer rule list (config/hypr/grassfield/windows.lua) as the fallback. Reduce
+                // Transparency (opaque material) asks for none.
+                BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 ? tileBlur : null
+                Region {
+                    id: tileBlur
+                    item: tile
+                    radius: Tokens.widgetRadius
+                }
                 // qmllint enable missing-type
 
                 // Window origin in screen px, as the pointer sees it (the surface moves and grows).
@@ -303,7 +312,15 @@ Variants {
             // the keyboard release, and a click then belongs to the window under it.
             // qmllint disable missing-type
             mask: scope.menuEntry !== null ? null : menuPassThrough
+            // The menu is frosted like every menu: its own blur region while it is open.
+            BackgroundEffect.blurRegion: scope.menuEntry !== null && Appearance.effectiveTransparency > 0 ? menuBlur : null
             // qmllint enable missing-type
+
+            Region {
+                id: menuBlur
+                item: menuLoader
+                radius: Tokens.radiusMenu
+            }
 
             Region {
                 id: menuPassThrough
@@ -321,6 +338,7 @@ Variants {
             }
 
             Loader {
+                id: menuLoader
                 active: scope.menuEntry !== null
                 x: Math.max(Tokens.spacingSm, Math.min(scope.menuAt.x, menuWin.width - width - Tokens.spacingSm))
                 y: Math.max(Tokens.spacingSm, Math.min(scope.menuAt.y, menuWin.height - height - Tokens.spacingSm))
