@@ -62,7 +62,10 @@ lock_status() {
     secure=true
   fi
   requested=false
-  [ "$(marker)" = locked ] && requested=true
+  # "locked" or "locked sleeps=<n>" (shell/security/LockMachine.js markerLine).
+  case $(marker) in
+    locked | "locked sleeps="*) requested=true ;;
+  esac
   printf '{"secure": %s, "requested": %s}\n' "$secure" "$requested"
 }
 

@@ -112,30 +112,55 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   `omarchy-system-sleep-lock` asks "the shell" to lock with `omarchy-shell lock lock` and polls `omarchy-shell lock
   status` until `secure`, within logind's window, else it reports "Screen did not lock before suspend"):
   - the drop-in `10-grassfield.conf` no longer disables it unconditionally (`ConditionEnvironment=!GRASSFIELD_SESSION=1`):
-    its `ExecCondition=/usr/lib/grassfield/sleep-lock-gate` skips it in the Grassfield session while grassfield-shell
-    is `active`, `activating`, `reloading` or `refreshing`. A unit skipped by `ExecCondition=` is not failed and not
-    restarted (systemd.service(5)), so a running copy disarms itself at its next restart once the shell is back.
-  - In the Grassfield session nothing starts it while grassfield-shell runs; `OnFailure=omarchy-sleep-lock.service`
-    starts it when grassfield-shell has failed for good (start limit). It then never talks to Omarchy's shell: in this
-    session `/usr/lib/grassfield/omarchy-shims` is first in PATH, and its `omarchy-shell` stand-in answers `lock lock`
-    by starting grassfield-shell again (`reset-failed`, then a start) and asking it to lock (`qs ipc -c grassfield call
-    lock lock`: WlSessionLock + PamContext, no other locker), and `lock status` with `secure` = Hyprland lists `LOCK` on
-    every monitor, `requested` = grassfield-shell's crash-recovery marker says `locked`. Every other call fails as
-    Omarchy's wrapper does without its shell; nothing unlocks. This is the fail-safe: before each sleep the shell is
-    restarted and the session locked.
-  - grassfield-shell never stops Omarchy's unit (it could be in the middle of a sleep it is delaying). If both run (an
-    Omarchy unit started before the shell at session start), Omarchy's script only asks grassfield-shell to lock and
-    sees Hyprland's `LOCK`: a second, harmless path, without the 12 s delay or the false notice the drop-in was made for.
+    its `ExecCondition=/usr/lib/grassfield/sleep-lock-gate` skips it in the Grassfield session only while
+    grassfield-shell is up (`ActiveState=active` and `SubState=running`). `activating` is not enough (follow-up N1): it
+    covers the auto-restart wait after a crash and the shell's start-up, when no Grassfield inhibitor exists. A unit
+    skipped by `ExecCondition=` is not failed and not restarted (systemd.service(5)); Omarchy's unit exits after each
+    sleep and is started again (`Restart=always`), so a running copy disarms itself after its next sleep once the shell
+    is up.
+  - When it runs: at session start it starts with `graphical-session.target`, usually before grassfield-shell, and keeps
+    running until its first sleep; `OnFailure=omarchy-sleep-lock.service` starts it after EVERY crash of
+    grassfield-shell, not only at the start limit (systemd 254+ `RestartMode=normal`, the default: the unit passes through
+    `failed` before each restart; a clean exit, SIGTERM or `qs kill`, ends `inactive` and does not trigger it).
+  - It never talks to Omarchy's shell: in this session `/usr/lib/grassfield/omarchy-shims` is first in PATH, and its
+    `omarchy-shell` stand-in answers `lock lock` by starting grassfield-shell again when it is not running
+    (`reset-failed`, then a start) and asking it to lock (`qs ipc -c grassfield call lock lock`: WlSessionLock +
+    PamContext, no other locker), and `lock status` with `secure` = Hyprland lists `LOCK` on every monitor, `requested` =
+    grassfield-shell's crash-recovery marker says `locked`. Every other call fails as Omarchy's wrapper does without its
+    shell; nothing unlocks. Its clamshell step (`omarchy-hyprland-monitor-clamshell`, also called by Omarchy's wake
+    script) reaches a second stand-in that runs `grassfield-lid reconcile`, so Omarchy's panel switching never fights
+    Grassfield's (follow-up N4).
+  - grassfield-shell never stops Omarchy's unit (it could be in the middle of a sleep it is delaying). Both running is
+    harmless: Omarchy's script only asks grassfield-shell to lock and sees Hyprland's `LOCK`, without the 12 s delay or the
+    false notice the drop-in was made for.
   - In the Omarchy session the gate always lets it run, exactly as Omarchy ships it.
-  Checked by `tests/security/sleep_lock_units.sh` (the gate for every state, the unit and drop-in lines, the stand-in
-  against stub `systemctl`, `qs` and `hyprctl`, the package path) and `scripts/dev/omarchy-compat.sh` (Omarchy's script
-  still uses that `lock lock` / `lock status` contract). Runtime NOT VERIFIED until the owner check below.
+  Checked by `tests/security/sleep_lock_units.sh` (the gate for every ActiveState/SubState, the unit and drop-in lines,
+  both stand-ins against stubs, the package path) and `scripts/dev/omarchy-compat.sh` (Omarchy's script still uses the
+  `lock lock` / `lock status` contract and calls the clamshell helper by name). Runtime NOT VERIFIED until the owner
+  check below.
+- The restart path re-locks after a sleep no shell locked for (follow-up N1; a crash or restart right before or during
+  a sleep, when no inhibitor delayed it):
+  - the crash-recovery marker records the kernel's count of completed suspends (`/sys/power/suspend_stats/success`,
+    world-readable): `unlocked sleeps=<n>`. A starting shell that reads an `unlocked` line with another count than the
+    current one locks (`LockMachine.sleptSince`, `restoreAtStart`; log "the machine slept while no shell could lock").
+    A live shell locks before every sleep and rewrites the marker when it is unlocked, so a different count only means a
+    sleep that happened without a shell. Unknown counts (an old line without a count, an unreadable sysfs file) prove
+    nothing either way: no lock. Tests: `tst_lockmachine` `test_markerWithSleepCount`; `dev_gate.sh` starts the real Lock
+    singleton offscreen on a marker with the previous count (locks), the current count and no count (both unlocked).
+  - a shell whose `PrepareForSleep` watcher sees the resume (`false`) without having seen the matching `true` (it started,
+    or its watcher came back, after the sleep began) locks at once (`SleepInhibitor.afterResume`, reason `resume`).
+- The lid (`grassfield-lid closed`, follow-up N3): when `lock lid` gets no answer (shell down or starting) and no external
+  display is connected, the `omarchy-shell` stand-in is run in the background (restart + lock), so a lid close with
+  `HandleLidSwitch=ignore` or `lock` (no suspend, nothing else would lock) still locks; with an external display
+  connected (clamshell) nothing is locked, as before. `tests/shell/lid.sh`.
 - Known limit (owner): when grassfield-shell cannot start at all (a broken install), the fail-safe cannot lock either:
   Omarchy's script waits logind's window, reports that the screen did not lock (no notification server runs then: the
-  journal has it) and the machine sleeps unlocked. There is no second locker on purpose (security rules: WlSessionLock +
-  PamContext in grassfield-shell only). Refusing sleep instead (a logind `block` inhibitor) was rejected: a closed laptop
-  would then stay awake in a bag. A deliberate `systemctl --user stop grassfield-shell` is not a failure and does not
-  start the fail-safe. The lid path (`grassfield-lid` → `lock lid`) needs a running shell too.
+  journal has it) and the machine sleeps unlocked; a shell that starts later locks at once (the count rule above).
+  A crash and a sleep within a few hundred ms (before Omarchy's unit holds its inhibitor) also sleep without a lock; the
+  restarted shell then locks on resume, before any input. There is no second locker on purpose (security rules:
+  WlSessionLock + PamContext in grassfield-shell only). Refusing sleep instead (a logind `block` inhibitor) was rejected:
+  a closed laptop would then stay awake in a bag. A deliberate `systemctl --user stop grassfield-shell` is not a failure
+  and does not start the fail-safe.
 - Sleep inhibitor and `PrepareForSleep` watcher (`SleepInhibitor.qml`): never given up. An exit within 2 s of the start
   counts as a failure; after 5 in a row the module is "degraded": the user gets a notice in Notifications ("The screen
   may not lock before sleep", with the lock shortcut; Do Not Disturb silences its banner, the entry stays in the
@@ -278,8 +303,10 @@ A starting instance (session start, crash restart, soft reload) locks when ANY o
    the handed-over lock is kept, with no unlocked window (the new `WlSessionLock` has no Wayland lock object until its
    own reload). Verified offscreen by `tests/security/reload_order` (order, binding value, negative control,
    `Lock.qml` structure) and in nested by `reload_locked.sh` (marker removed / forged `unlocked` + reload → locked).
-2. Marker, read in `Component.onCompleted` (runs before the reload pass): anything but exactly `unlocked` → lock,
-   including an empty or unreadable marker (mode 000, a directory, I/O error). Only a missing file (FileView
+2. Marker, read in `Component.onCompleted` (runs before the reload pass): anything but an `unlocked` line (`unlocked`
+   or `unlocked sleeps=<n>`) → lock, including an empty or unreadable marker (mode 000, a directory, I/O error) and a
+   malformed line; an `unlocked sleeps=<n>` line whose count differs from the kernel's current count of completed
+   suspends → lock too (the machine slept while no shell could lock, see "Lock coverage"). Only a missing file (FileView
    `FileNotFound`) counts as missing (`LockMachine.markerRead`; `tests/security/marker_read` uses the real FileView).
 3. `XDG_RUNTIME_DIR` unset: no marker can prove the session unlocked → lock at start; the lock surface shows
    "Crash recovery unavailable: the lock state could not be saved." (also shown when a marker write fails; logged).
@@ -455,7 +482,8 @@ still reported secure (foreign takeover + release) → `locking` (fresh lock, re
 fingerprint success unlocks from `locked`. Unknown states/events never unlock (exhaustive test).
 
 Decisions:
-- Crash recovery marker: `$XDG_RUNTIME_DIR/grassfield-lock-<HYPRLAND_INSTANCE_SIGNATURE>` holds `locked`/`unlocked`
+- Crash recovery marker: `$XDG_RUNTIME_DIR/grassfield-lock-<HYPRLAND_INSTANCE_SIGNATURE>` holds `locked`/`unlocked`,
+  followed by ` sleeps=<n>` (the kernel's count of completed suspends) when it is readable
   (atomic, blocking write before the lock is requested, after unlock; re-read before and after each write, so a
   stale cache or a failed write is detected). See "Lock survival" for how a starting shell uses it.
 - `PamContext.user` is left unset: PAM authenticates the uid running the shell, not `$USER`.
