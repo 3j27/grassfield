@@ -173,7 +173,8 @@ package_grassfield-icons() {
   # Pebble's README states "GPL-3.0" and links a LICENSE file that does not exist at the pin (owner accepted the risk
   # 2026-10-23, THIRD_PARTY.md).
   license=(MIT GPL-3.0-only)
-  url="https://github.com/vinceliuice/MacTahoe-icon-theme"
+  # The project URL (package metadata is shown by pacman and software centres: no Apple trademark name there); the
+  # upstream URLs and commits are in /usr/share/licenses/grassfield-icons/SOURCE.
   depends=(breeze-icons)
   options=(!strip)
   install -d "$pkgdir/usr/share/icons"
