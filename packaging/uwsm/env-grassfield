@@ -3,7 +3,18 @@
 # XDG_CURRENT_DESKTOP ("Hyprland:Grassfield" for packaging/wayland-sessions/grassfield.desktop), exports the difference to
 # the systemd user manager and the D-Bus activation environment, and unsets it again at the end of the session.
 # The Omarchy session never sources this file: its XDG_CURRENT_DESKTOP has no Grassfield item.
+# Note: "Hyprland:Grassfield" is the value only while uwsm prepares the session. Omarchy's envs.lua (loaded by
+# config/hypr/grassfield/omarchy.lua) sets XDG_CURRENT_DESKTOP=Hyprland in the compositor, and `uwsm finalize` exports that
+# value, so the running session has XDG_CURRENT_DESKTOP=Hyprland on purpose (screen sharing, portals and Electron apps
+# recognise exactly that). XDG_SESSION_DESKTOP=Grassfield identifies the session; applications cannot use OnlyShowIn=Grassfield.
 # POSIX sh only (uwsm sources it with its own shell).
+
+# GF-032: commands that would start Omarchy's own shell next to grassfield-shell (the restart step of an Omarchy update,
+# theme and font changes) are shadowed by no-op stand-ins; this directory comes first in PATH for everything the systemd
+# user manager starts (Dock, D-Bus activation). The compositor's own children get the same PATH from omarchy.lua.
+if [ -x /usr/lib/grassfield/omarchy-shims/omarchy-restart-shell ]; then
+    export PATH="/usr/lib/grassfield/omarchy-shims:$PATH"
+fi
 
 # Qt (the shell, Grassfield Settings/Files/Preview, every other Qt app): QIconLoader reads this variable before the
 # platform theme's hint, so it wins over QT_QPA_PLATFORMTHEME=gtk3 from Omarchy's environment. An empty value is ignored.

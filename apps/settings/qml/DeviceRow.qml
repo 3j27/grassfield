@@ -46,11 +46,11 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        anchors.margins: Tokens.controlFocusRing / 2
+        anchors.margins: Tokens.controlFocusOutline / 2
         radius: Tokens.radiusMenu
         color: mouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: Appearance.colors.accent
+        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
+        border.color: Appearance.focusRingColor
     }
 
     Icon {

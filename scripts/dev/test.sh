@@ -98,6 +98,8 @@ if want headless && compgen -G "tests/unit/tst_*.qml" >/dev/null; then
   echo "$unit_out"
   # A failing case fails the run even if the runner exited 0.
   if grep -qE '^FAIL' <<<"$unit_out"; then rc=1; fi
+  # Gate Q2: a QML runtime error of a product file (TypeError, binding loop, ...) fails the run even when every case passed.
+  python3 -I tests/ci/qml_warnings.py <<<"$unit_out" || rc=1
   ((rc == 0)) || status=1
   record_run headless "tests/unit (qmltestrunner)" "$rc" "PASS"
 fi
@@ -134,6 +136,8 @@ for dir in tests/shell/*/ tests/security/*/; do
     timeout 60 qs -p "$dir" --no-color 2>&1) || { echo "$out"; echo "FAIL: $dir"; status=1; record "$layer" "${dir}shell.qml" fail; continue; }
   echo "$out" | grep -E "PASS|FAIL|SKIP" || { echo "$out"; status=1; }
   collect_skips "$out"
+  # Gate Q2 (see the unit run above).
+  python3 -I tests/ci/qml_warnings.py <<<"$out" || { status=1; record "$layer" "${dir}shell.qml" fail; continue; }
   if grep -q "FAIL" <<<"$out"; then status=1; record "$layer" "${dir}shell.qml" fail; continue; fi
   if grep -q "PASS" <<<"$out"; then record "$layer" "${dir}shell.qml" pass; elif grep -q SKIP <<<"$out"; then record "$layer" "${dir}shell.qml" skip; else status=1; record "$layer" "${dir}shell.qml" fail; fi
 done
@@ -216,6 +220,11 @@ if want logic; then
   python3 -I tests/visual/test_contrast_tokens.py || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/visual/test_contrast_tokens.py "$rc" PASS
+  # Gate Q2's filter on fixed samples.
+  rc=0
+  python3 -I tests/ci/qml_warnings.py --selftest || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/qml_warnings.py "$rc" PASS
   # The inventory gate on temporary fixtures.
   rc=0
   python3 -I tests/ci/inventory.py --selftest || rc=1

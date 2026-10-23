@@ -36,5 +36,6 @@ PopupMenu {
     ]
 
     onCloseRequested: Popups.close()
+    onMenuStepRequested: direction => Popups.stepMenu(direction)
     onActivated: Popups.close()
 }

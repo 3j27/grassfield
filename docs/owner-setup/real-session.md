@@ -3,22 +3,32 @@
 Everything below is run by the owner. Agents install nothing and never touch your session. Verified read-only on
 2026-10-20 against: Omarchy 4, Hyprland 0.56.2-2, Quickshell 0.3.1, Qt 6.11.2, SDDM 0.21.0-7.
 
-What the packages do: `grassfield-desktop` (shell, apps, cursors, session file, two user units that nothing enables) and
-`grassfield-compositor` (the Hyprland plugin, built against the installed Hyprland). They add no scriptlet, no service
-that starts by itself, no D-Bus service, no file under `$HOME`. The Omarchy session is not changed: Grassfield has its own
+What the packages do: `grassfield-desktop` (shell, apps, cursors, session file, the SDDM login drop-in
+`/etc/sddm.conf.d/grassfield.conf`, user units that only start inside Grassfield, a no-op stand-in directory for Omarchy's
+shell-restart commands) and `grassfield-compositor` (the Hyprland plugin, built against the installed Hyprland). They add one
+pacman scriptlet that only prints the login check, no service that starts by itself, no D-Bus service, no file under `$HOME`.
+The Omarchy session is not changed: Grassfield has its own
 Hyprland config (`--config /usr/share/grassfield/hypr/session.lua`) and its units only start when `GRASSFIELD_SESSION=1`.
 
-## 0. Decision before you start: how to get into the session
+## 0. How you get into the session (GF-015, decision D-2: the login screen leads into the desktop)
 
 The Omarchy SDDM theme has **no session picker**: it logs in the first session whose name contains "uwsm"
-(`/usr/share/omarchy/default/sddm/omarchy/Main.qml:12-19`). "Grassfield" will never be chosen from that greeter.
-Pick one (section 4 gives the commands):
+(`/usr/share/sddm/themes/omarchy/Main.qml:12-19`), and the autologin file names one session. Since the audit remediation the
+package ships a supported way, without touching any Omarchy file:
 
-- **A (recommended): start from a TTY.** No system file changes. Log out of Omarchy, switch to a TTY, run the one
-  `uwsm start` line from `grassfield.desktop`. Back to Omarchy: log out, then reboot or use the greeter.
-- **B: temporary SDDM theme with a session list.** One new file in `/etc/sddm.conf.d/`, removed afterwards. Not verified
-  by me (I did not read the stock themes); if the greeter fails to draw, use a TTY (Ctrl+Alt+F3) and remove the file.
-- **C: autologin into Grassfield for one boot.** Edit `/etc/sddm.conf.d/autologin.conf` (`Session=`), reboot, restore it.
+- `/etc/sddm.conf.d/grassfield.conf` (sorts after Omarchy's `autologin.conf` and `99-omarchy-login.conf`, so it wins; a pacman
+  backup file) lists the Grassfield directory first in SDDM's session path and makes `grassfield-login.desktop` the autologin
+  session. That entry is called "Grassfield (uwsm)", so Omarchy's theme picks it.
+- It runs `grassfield-login`, which starts Grassfield, or the unmodified Omarchy session when you chose it:
+  `grassfield-login set omarchy` (then log out and in), back with `grassfield-login set grassfield`. The choice is one line in
+  `~/.config/grassfield/login-session`; no root needed.
+- After install and upgrade pacman prints the result of `grassfield-login-check` (also runnable any time: `grassfield-login-check
+  --strict`); it warns when another SDDM file takes over, when the theme no longer behaves as assumed, or when autologin
+  names another session.
+- To go back to Omarchy's own login without uninstalling: `sudo rm /etc/sddm.conf.d/grassfield.conf` (reboot or restart SDDM).
+
+The TTY route below stays valid as the recovery path (and for the very first test, before you install the SDDM drop-in:
+install, then keep the file out of the way with `sudo mv /etc/sddm.conf.d/grassfield.conf ~/` until you want the new login).
 
 ## 1. Prerequisites
 
@@ -87,7 +97,17 @@ must be unchanged. In the Grassfield session, changing the icon theme with `gset
 
 ## 4. Log out, enter Grassfield, come back
 
-**Option A (TTY).**
+**Normal route (after section 3 with the SDDM drop-in): log out of Omarchy and log in.** The greeter (or the autologin after a
+reboot) now starts Grassfield. Back to Omarchy: `grassfield-login set omarchy` in a Grassfield terminal, log out, log in.
+Check once, read-only, in either session:
+```bash
+grassfield-login-check ; grassfield-login get
+cat /etc/sddm.conf.d/grassfield.conf
+```
+Expected: no `WARN:` line; `get` prints `grassfield`. Gate H (stock login screen reaches the desktop) is verified by you only:
+log out, type your password at the greeter, and write down what you got.
+
+**Option A (TTY), the recovery route.**
 1. Log out of Omarchy with its own menu. The SDDM greeter appears (autologin runs once per SDDM start; `Relogin` is not set).
 2. Press Ctrl+Alt+F3 and log in with your user and password.
 3. Run exactly the line of the session file:
@@ -96,19 +116,6 @@ must be unchanged. In the Grassfield session, changing the icon theme with `gset
    ```
 4. Back to Omarchy: Grassfield menu (leaf) > Log Out. Then either `reboot` from the TTY (autologin brings the normal
    Omarchy session back) or Ctrl+Alt+F1 or F2 for the greeter and log in (it picks the "uwsm" Hyprland session).
-
-**Option B (theme with a picker).**
-```bash
-printf '[Theme]\nCurrent=maldives\n' | sudo tee /etc/sddm.conf.d/zz-grassfield-test.conf
-```
-Log out, pick "Grassfield" in the greeter. Undo: `sudo rm /etc/sddm.conf.d/zz-grassfield-test.conf`.
-
-**Option C (one boot).** Back up and edit the autologin file, then reboot:
-```bash
-sudo cp /etc/sddm.conf.d/autologin.conf ~/autologin.conf.orig
-sudo sed -i 's/^Session=.*/Session=grassfield.desktop/' /etc/sddm.conf.d/autologin.conf
-```
-Undo (from Grassfield's terminal, SUPER+RETURN, or a TTY): `sudo cp ~/autologin.conf.orig /etc/sddm.conf.d/autologin.conf`, then reboot.
 
 ## 5. First-login checklist
 
@@ -211,6 +218,67 @@ grassfield-compositor-0.4.0-11-x86_64.pkg.tar.zst grassfield-icons-0.4.0-11-any.
       in front of it comes to the front (your Spotify-behind-Chrome case); clicking the other window brings it back in
       front.
 
+**New with the audit remediation (GF-AUDIT-001: GF-015, -023, -024, -025, -032 and the dropped Omarchy services).** Install the
+rebuilt packages as before, then log out and in (the Hyprland config, the uwsm environment and the units changed). Only you
+can run these; the ones marked (VM) are best done on a snapshot or a spare machine. Each line says what you should see.
+
+- [ ] Keyboard (GF-023): `hyprctl getoption input:kb_layout`, `input:kb_options`, `input:repeat_rate`, `input:repeat_delay`,
+      `input:numlock_by_default` (read-only) print the same values as in the Omarchy session (layout from `/etc/vconsole.conf`;
+      `compose:caps,shift:both_capslock_cancel`, 40, 250, 1). With a non-US layout (VM): type your password on the lock screen
+      with that layout. `journalctl --user -b | grep "grassfield: Omarchy include"` prints nothing.
+- [ ] Word navigation (GF-024): in Search, a Settings text field and a browser text field, Alt+Left/Right moves by word,
+      Alt+Shift+Left/Right selects by word, Alt+Backspace deletes the previous word. In a terminal (kitty/Alacritty/foot) Alt+arrows
+      are unchanged (your tmux/vim keys). Ctrl+Left/Right still switch Desktops, Ctrl+1..9 the Desktop, Ctrl+Up opens Overview.
+      Verify the forwarding itself with `tests/compositor/forward_keys.sh` in the nested session (below).
+- [ ] Command+number (GF-024): in Files Super+1, +2, +3, +4 switch the view (Icons, List, Columns, Gallery) and Super+Up goes to
+      the enclosing folder; in Preview Super+9 is Zoom to Fit. In a browser Super+1..9 selects the tab. Super+[ and Super+]
+      are Back and Forward (browser, Files). The menus of Files and Preview still print "Ctrl+1": that is the pending apps item.
+- [ ] Log Out, Restart, Shut Down (GF-025, on a snapshot or a spare session): open an editor with unsaved text, choose Log Out.
+      The window gets a close request and its "Save changes?" dialog stays; the session does NOT end. After 15 s a notice says
+      "Can't log out now: <app> ..." with the button "Log Out Anyway". Save, then Log Out again: it ends at once. An app that quits
+      cleanly ends the session after about one second. Restart and Shut Down behave the same. Expected `echo $?`: not applicable
+      (started by the shell); the log is `journalctl --user -b -t grassfield-shell | grep session-end`.
+- [ ] Omarchy update guard (GF-032, **VM or a disposable session only**: it must not touch your real Omarchy shell):
+      in a Grassfield terminal run `omarchy-restart-shell; echo "exit $?"`. Expected: "Grassfield session: the Omarchy shell is
+      not used here, nothing to restart." and `exit 0`; `pgrep -af "quickshell.*omarchy"` shows no Omarchy shell and the Grassfield
+      session has one menu bar, one Dock, one notification server (`busctl --user status org.freedesktop.Notifications`). Then
+      `type omarchy-restart-shell` prints a path under `/usr/lib/grassfield/omarchy-shims/`. A full Omarchy update is best run from
+      the Omarchy session; if you run it in Grassfield the end must print "Grassfield session: ..." and nothing else changes.
+- [ ] Login (GF-015, section 0): log out at the greeter, enter the password: Grassfield starts without a TTY. After a reboot with
+      autologin: Grassfield. `grassfield-login set omarchy`, log out, log in: Omarchy; back with `grassfield-login set grassfield`.
+- [ ] Screenshots: Super+Shift+3 (the screen), Super+Shift+4 (drag a selection), Super+Shift+5 (the picker); Print also. A notice
+      shows, the picture is in `~/Pictures` and on the clipboard (`wl-paste -t image/png | file -`). Clicking the notice does not open an
+      editor (known: it needs a hint Grassfield's server does not run).
+- [ ] Crash notice: `sleep 300 & kill -SEGV %1` (or `kill -ABRT`): within seconds a banner "sleep quit unexpectedly" appears
+      (needs a core dump: `coredumpctl list` shows it). A second one within 60 s for the same program does not repeat.
+- [ ] Low battery (unplugged laptop): at 20 %, 10 % and 5 % one banner each ("Low battery" / "Very low battery"). To test without
+      draining: `GRASSFIELD_POWER_SUPPLY` cannot be faked in the running unit; read the log instead after a real discharge:
+      `journalctl --user -u grassfield-battery-watch`. Desktop without battery: the unit is "inactive (condition)".
+- [ ] Removable media: plug a USB stick: it is mounted under `/run/media/$USER/` within seconds and Files lists it
+      (`systemctl --user is-active grassfield-automount` prints `active`).
+- [ ] Lid (needs an external display for the second half): lid closed without a display: the screen locks, the machine sleeps
+      (wake: locked). Lid closed with an external display: the machine keeps running on that display, the laptop panel is off,
+      no lock; windows moved to the external display. Open the lid: the panel is back with your usual scale and position.
+      Unplug the display with the lid closed: the panel comes back (`systemctl --user status` shows no failure; `grassfield-lid reconcile`
+      does the same by hand).
+- [ ] Pending migrations notice: when Omarchy has pending migrations the login shows "Pending Omarchy migrations"; clicking the
+      banner opens a floating terminal that runs the migrations (nothing pending: no notice).
+- [ ] Night Shift: `grassfield-nightshift toggle` warms the screen (`grassfield-nightshift status` prints `on`), again turns it off.
+- [ ] No second shell after the checks above: `systemctl --user list-units 'omarchy-*' 'grassfield-*' --no-pager` shows no
+      `omarchy-crash-watch`, `omarchy-migrate-notify` or `omarchy-sleep-lock` active in the Grassfield session (condition result "no").
+- [ ] Omarchy dependency check: `cd ~/workspace/grassfieldos && just check-omarchy` ends with "all Omarchy dependencies present".
+
+Nested-session checks I could not run (the session refuses to start in my sandbox; bare commands, ask before running):
+
+```bash
+just nested-up
+tests/compositor/forward_keys.sh        # Alt+arrows, Super+digits and Super+Up reach a client as the Ctrl chords; terminals keep Alt
+scripts/nestctl reload                  # T-OM4: a reload keeps bindings, one plugin, one shell (then: scripts/nestctl binds | grep -c ALT)
+just nested-down
+```
+Expected for `forward_keys.sh`: every line `PASS`, final exit status 0. If it prints FAIL for a `code:` key, Hyprland's `send_key_state`
+does not accept keycodes on 0.56.2: report which; the Super+digit forwarding then needs keysyms (works on US layouts only).
+
 ## 6. Known issues on main right now
 
 - Search/Apps keyboard focus on two outputs: under a fix pass.
@@ -227,12 +295,17 @@ grassfield-compositor-0.4.0-11-x86_64.pkg.tar.zst grassfield-icons-0.4.0-11-any.
   Grassfield apps.
 - Apps search placeholder in dark at high transparency over a white wallpaper is slightly under the contrast target.
 - The notification banner first-show delay is unmeasured on real hardware (you are the measurement).
-- Omarchy's own shell (bar, notifications, launcher, lock) does not run inside Grassfield, by design; Omarchy keybinds
-  and `udiskie` automount are not started. GTK applications keep the cursor theme already set in dconf (Grassfield does
-  not write it; Qt and Hyprland get "grassfield-cursors" through the environment).
+- Omarchy's own shell (bar, notifications, launcher, lock) does not run inside Grassfield, by design, and nothing starts it
+  there (stand-ins for the restart commands, GF-032). Omarchy's keybindings, menus, clipboard history, emoji picker and
+  screen-recording keys are not available; screenshots (Super+Shift+3/4/5), removable media, lid handling, crash and low-battery
+  notices, Night Shift (`grassfield-nightshift`) and the keyboard defaults are provided by Grassfield. GTK applications keep the
+  cursor theme already set in dconf (Grassfield does not write it; Qt and Hyprland get "grassfield-cursors" through the environment).
 - Dock "Open at Login" writes `~/.config/autostart/<app>.desktop`, which Omarchy's session also reads. Remove the file to undo.
-- Omarchy's crash-watch unit also runs in Grassfield: you may get "Process crashed ... click to diagnose with AI" banners for Grassfield
-  crashes; the click does nothing in Grassfield.
+- Omarchy's own crash-watch and migrations notice are switched off in Grassfield (drop-ins); Grassfield's own notices replace
+  them (no AI diagnosis; a click on the screenshot notice does not open an editor).
+- Settings > Keyboard does not list the new forwarded keys (Alt+arrows, Super+number) yet, and the menus of Files and Preview still
+  print Ctrl+1..4, Ctrl+Up and Ctrl+9 for the keys that Super+number now delivers (apps and Settings items).
+- Alt+Left/Right in a browser or Files no longer means Back/Forward (it is word navigation); use Super+[ and Super+].
 
 ## 7. Collecting logs for me
 
@@ -276,8 +349,9 @@ the session runs without titlebars/traffic lights and the global-menu protocol, 
 the reason. Rebuild with `cd ~/workspace/grassfieldos/packaging/arch && makepkg -si`, or run without it:
 `sudo pacman -Rns grassfield-compositor` (the session file skips a missing plugin).
 
-**Cannot reach Omarchy.** `reboot` (autologin: Omarchy). If SDDM autologin points to Grassfield (option C), restore
-`/etc/sddm.conf.d/autologin.conf` from the copy or the snapshot.
+**Cannot reach Omarchy.** The login now starts Grassfield. In a Grassfield terminal: `grassfield-login set omarchy`, log out, log in.
+If Grassfield does not start at all: Ctrl+Alt+F3, log in, run `grassfield-login set omarchy`, then `reboot` (or
+`sudo rm /etc/sddm.conf.d/grassfield.conf` to restore Omarchy's own login completely; `grassfield-login-check` explains what it found).
 
 ## 9. Uninstall
 

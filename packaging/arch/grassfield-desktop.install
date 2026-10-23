@@ -1,0 +1,12 @@
+# pacman scriptlet of grassfield-desktop (runs as root, only prints): the login-path check of GF-015.
+# It reads files and never changes anything; its lines are the owner's feedback that the login screen reaches Grassfield.
+
+post_install() {
+  echo "grassfield: checking the login path (also: /usr/lib/grassfield/grassfield-login-check)"
+  /usr/lib/grassfield/grassfield-login-check 2>&1 | sed 's/^/grassfield: /' || true
+  echo "grassfield: the login screen now starts Grassfield; Omarchy stays one command away: grassfield-login set omarchy"
+}
+
+post_upgrade() {
+  /usr/lib/grassfield/grassfield-login-check 2>&1 | sed 's/^/grassfield: /' || true
+}

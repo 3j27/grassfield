@@ -31,8 +31,8 @@ Item {
         anchors.fill: parent
         radius: height / 2
         color: root.checked ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: Appearance.colors.text
+        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
+        border.color: Appearance.focusRingColor
 
         Behavior on color {
             ColorAnimation {

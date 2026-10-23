@@ -189,8 +189,8 @@ Variants {
                         radius: Tokens.switcherSelectionRadius
                         visible: tile.current
                         color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHighlightOpacity)
-                        border.width: Tokens.controlFocusRing
-                        border.color: Appearance.colors.accent
+                        border.width: Tokens.controlFocusOutline
+                        border.color: Appearance.focusRingColor
                     }
 
                     TintedIcon {

@@ -196,6 +196,32 @@ TestCase {
         compare(IconShape.busy, 0);
     }
 
+    Component {
+        id: prewarmComponent
+
+        IconShapePrewarm {}
+    }
+
+    // PERF-01: the shapes of the listed apps' icons are read ahead of time, one at a time, only in an effect mode; an icon that
+    // appears afterwards finds its shape known (no read, no fade-in), and Default reads nothing.
+    function test_prewarmReadsAheadAndOnlyInAnEffectMode() {
+        const names = ["own-tile-squircle.svg", "own-tile-shadow.svg", "own-circle.svg"];
+        const sources = names.map(n => String(testCase.fixtureDir + n));
+        Appearance.iconMode = "default";
+        const idle = createTemporaryObject(prewarmComponent, testCase, {sources: sources});
+        wait(300);
+        compare(idle.done, 0, "Default reads nothing");
+        compare(IconShape.count, 0);
+        Appearance.iconMode = "tinted";
+        tryVerify(() => idle.done === 3, 8000, "three files read ahead");
+        compare(IconShape.count, 3);
+        compare(IconShape.busy, 0);
+        const icon = createTemporaryObject(iconComponent, testCase, {source: testCase.fixtureDir + "own-tile-squircle.svg"});
+        compare(icon.shapeKnown, true, "the icon finds its shape known at once");
+        verify(icon.ownTile);
+        compare(IconShape.count, 3, "and reads nothing itself");
+    }
+
     function test_glyphFixturesKeepTheGlyphScale() {
         for (const name of ["dark-glyph-no-plate.svg", "logo-no-plate.svg", "own-folder-shape.svg", "own-circle.svg", "own-sharp-square.svg"]) {
             const icon = testCase.read(name, "tinted");

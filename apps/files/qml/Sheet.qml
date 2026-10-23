@@ -124,8 +124,8 @@ Item {
                 height: Tokens.settingsSearchHeight
                 radius: Tokens.radiusControl
                 color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                border.width: field.activeFocus ? Tokens.controlFocusRing : 0
-                border.color: Appearance.colors.accent
+                border.width: field.activeFocus ? Tokens.controlFocusOutline : 0
+                border.color: Appearance.focusRingColor
 
                 TextInput {
                     id: field

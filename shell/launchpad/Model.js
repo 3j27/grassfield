@@ -177,6 +177,54 @@ function indexOfId(items, id) {
     return items.findIndex(i => i.id === id);
 }
 
+// ---- same name, different apps -------------------------------------------------------
+
+// A reverse-DNS desktop entry id names its vendor in the second label (org.gnome.Nautilus -> GNOME); null for any other id.
+const VENDOR_NAMES = {gnome: "GNOME", kde: "KDE", xfce: "Xfce", gimp: "GIMP", mozilla: "Mozilla", libreoffice: "LibreOffice"};
+
+function vendorOf(id) {
+    const m = /^[a-z]+\.([A-Za-z0-9_-]+)\.[A-Za-z0-9_.-]+$/.exec(String(id).replace(/\.desktop$/, ""));
+    if (!m)
+        return null;
+    const v = m[1];
+    return VENDOR_NAMES[v.toLowerCase()] ?? (v.charAt(0).toUpperCase() + v.slice(1));
+}
+
+// Two installed apps can carry one Name (Grassfield Files and GNOME Files are both "Files"; macOS has one Finder, UX-11):
+// no app is hidden, the names are told apart. Grassfield's own app (id org.grassfield.*) keeps the plain name, as the Finder
+// would; every other app of a colliding name gets its vendor ("Files (GNOME)"), else its generic name when that differs,
+// else its id. Two of them still equal after that get their ids. Records are {id, name, genericName}; a new array of
+// copies, `name` replaced where it collided (`baseName` keeps the entry's own).
+function disambiguate(records) {
+    const out = records.map(r => Object.assign({}, r, {baseName: r.name}));
+    const groups = {};
+    for (const r of out) {
+        const k = String(r.name ?? "").trim().toLowerCase();
+        (groups[k] = groups[k] ?? []).push(r);
+    }
+    for (const k of Object.keys(groups)) {
+        const group = groups[k];
+        if (k === "" || group.length < 2)
+            continue;
+        for (const r of group) {
+            if (String(r.id).startsWith("org.grassfield."))
+                continue;
+            const vendor = vendorOf(r.id);
+            const generic = String(r.genericName ?? "").trim();
+            const qualifier = vendor ?? (generic !== "" && generic.toLowerCase() !== k ? generic : String(r.id).replace(/\.desktop$/, ""));
+            r.name = r.baseName + " (" + qualifier + ")";
+        }
+        const seen = {};
+        for (const r of group)
+            seen[r.name] = (seen[r.name] ?? 0) + 1;
+        for (const r of group) {
+            if (seen[r.name] > 1)
+                r.name = r.baseName + " (" + String(r.id).replace(/\.desktop$/, "") + ")";
+        }
+    }
+    return out;
+}
+
 // ---- hidden entries ------------------------------------------------------------------
 
 // Set of hidden desktop entry ids from the output of hidden-entries.sh. Ids are normalized like

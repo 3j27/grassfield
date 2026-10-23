@@ -25,7 +25,8 @@ PopupMenu {
     signal choose(string action)
 
     accessibleName: qsTr("Desktop menu")
-    currentIndex: 0
+    // No row highlighted until the pointer or a key selects one (macOS).
+    currentIndex: -1
 
     function iconItems(): var {
         const several = count > 1;

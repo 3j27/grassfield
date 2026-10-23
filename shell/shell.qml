@@ -59,6 +59,18 @@ ShellRoot {
 
     Binding {
         target: Appearance
+        property: "increaseContrast"
+        value: Settings.increaseContrast
+    }
+
+    Binding {
+        target: Appearance
+        property: "textScale"
+        value: Settings.textSize
+    }
+
+    Binding {
+        target: Appearance
         property: "accentSetting"
         value: Settings.accentColor
     }

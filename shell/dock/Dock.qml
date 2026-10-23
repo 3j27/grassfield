@@ -1699,8 +1699,8 @@ Scope {
                                     y: tile.iconPos.y
                                     radius: win.dockMetrics.iconRadius * tile.tileScale
                                     color: "transparent"
-                                    border.width: Tokens.controlFocusRing
-                                    border.color: Appearance.colors.accent
+                                    border.width: Tokens.controlFocusOutline
+                                    border.color: Appearance.focusRingColor
                                 }
 
                                 // Running indicator.

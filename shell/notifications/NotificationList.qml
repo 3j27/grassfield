@@ -104,8 +104,8 @@ ListView {
             radius: height / 2
             // Same backing as the x of a card (A2: the label must stay legible on any wallpaper).
             color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
-            border.width: ctl.activeFocus ? Tokens.controlFocusRing : 1
-            border.color: ctl.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+            border.width: ctl.activeFocus ? Tokens.controlFocusOutline : 1
+            border.color: ctl.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
         }
 
         Icon {
@@ -872,8 +872,8 @@ ListView {
                     anchors.fill: parent
                     radius: width / 2
                     color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
-                    border.width: closeButton.activeFocus ? Tokens.controlFocusRing : 1
-                    border.color: closeButton.activeFocus ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+                    border.width: closeButton.activeFocus ? Tokens.controlFocusOutline : 1
+                    border.color: closeButton.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
                 }
 
                 Icon {
@@ -901,8 +901,8 @@ ListView {
                 anchors.fill: parent
                 radius: Tokens.radiusBanner
                 color: "transparent"
-                border.width: row.activeFocus ? Tokens.controlFocusRing : 0
-                border.color: Appearance.colors.accent
+                border.width: row.activeFocus ? Tokens.controlFocusOutline : 0
+                border.color: Appearance.focusRingColor
             }
 
             // One floating card: the group header on the first card of a group, the notification, Show

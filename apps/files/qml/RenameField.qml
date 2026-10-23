@@ -17,8 +17,8 @@ Rectangle {
     implicitHeight: input.implicitHeight + 2 * Tokens.spacingXs / 2
     radius: Tokens.radiusControl / 2
     color: Appearance.colors.materialTint
-    border.width: Tokens.controlFocusRing
-    border.color: Appearance.colors.accent
+    border.width: Tokens.controlFocusOutline
+    border.color: Appearance.focusRingColor
 
     function finish(commit: bool): void {
         if (root.done)
