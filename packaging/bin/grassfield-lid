@@ -28,7 +28,7 @@ DRM=${GRASSFIELD_DRM:-/sys/class/drm}
 RUNTIME=${XDG_RUNTIME_DIR:-/tmp}
 MARKER=$RUNTIME/grassfield-lid-internal-off
 LOCKFILE=$RUNTIME/grassfield-lid.lock
-LOCK_CMD=${GRASSFIELD_LID_LOCK:-qs ipc -c grassfield call lock lid}
+LOCK_CMD=${GRASSFIELD_LID_LOCK:-qs ipc -p /usr/share/grassfield/shell call lock lid}
 FALLBACK=${GRASSFIELD_LID_FALLBACK:-/usr/lib/grassfield/omarchy-shims/omarchy-shell}
 
 # Ask the shell to lock (it decides about clamshell mode). Its answers: ok, already-locked, docked, refused: <why>.

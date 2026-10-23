@@ -319,7 +319,7 @@ journalctl --user -b -u 'wayland-wm@*'        --no-pager > compositor-unit.log
 journalctl -b -p warning --no-pager > system-warnings.log
 ls "$XDG_RUNTIME_DIR"/hypr/*/hyprland.log && cp "$XDG_RUNTIME_DIR"/hypr/*/hyprland.log .   # copy before reboot (tmpfs)
 cp ~/.cache/hyprland/hyprlandCrashReport*.txt . 2>/dev/null                               # only after a crash
-qs log -c grassfield --tail 2000 > quickshell.log
+qs log -p /usr/share/grassfield/shell --tail 2000 > quickshell.log
 coredumpctl list --no-pager > coredumps.txt
 ```
 

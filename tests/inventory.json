@@ -161,6 +161,7 @@
  {"path": "tests/shell/omarchy_guard.sh", "layer": "logic"},
  {"path": "tests/shell/bindings_forward.sh", "layer": "logic"},
  {"path": "tests/shell/session_services.sh", "layer": "logic"},
+ {"path": "tests/shell/shell_unit.sh", "layer": "logic"},
  {"path": "tests/shell/omarchy_compat.sh", "layer": "data"},
  {"path": "tests/shell/cursors.sh", "layer": "logic"},
  {"path": "tests/shell/cursors_cancel.sh", "layer": "logic"},

@@ -25,7 +25,10 @@ Environment=QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1
 # While this shell runs it locks before sleep itself (shell/security/idle/SleepInhibitor.qml). An Omarchy sleep-lock unit
 # that happens to run as well is never stopped from here: it may be in the middle of a sleep it is delaying, and with the
 # stand-in it only ever asks this shell to lock (a second, harmless path).
-ExecStart=/usr/bin/qs -n -c grassfield
+# GF-115: the shell loads ONLY from the system location. `-c grassfield` would also search $XDG_CONFIG_HOME/quickshell, a
+# user-writable directory, and a copy there would replace the lock screen and the polkit agent. Every `qs ipc` caller
+# (bindings, lid, sleep-lock stand-in) names the same path. tests/shell/session_services.sh keeps them in step.
+ExecStart=/usr/bin/qs -n -p /usr/share/grassfield/shell
 # Gate R1 and GF-030: back within ~1 s after ANY exit while the session runs: a crash, SIGTERM, `qs kill`, exit 0.
 # Hyprland keeps a lock alive while the shell is away (ext-session-lock) and the restarted shell takes it back
 # (ADR-0010). A stop through systemd is never restarted: logout (graphical-session.target stops, PartOf=) or
@@ -33,6 +36,24 @@ ExecStart=/usr/bin/qs -n -c grassfield
 Restart=always
 RestartSec=1
 TimeoutStopSec=5
+# GF-081: Quickshell exits 255 when the compositor goes away first, which is how EVERY normal session end looks (the
+# Wayland connection drops before systemd's SIGTERM). That is not a failure: without this the unit ends "failed (exit
+# 255)" and OnFailure= starts Omarchy's sleep-lock unit at each logout. A crash by signal or any other exit code still
+# fails the unit and still fires OnFailure=; a start loop (10 starts in 30 s) still ends failed through StartLimit*.
+SuccessExitStatus=255
+# GF-040, resource guard. Measured (docs/audits/final-1.0/benchmarks/real-session-samples.md): idle 0.25 to 0.33 % of a
+# core, RSS 530 MB rising about 6 MB/h to 566 MB after 6 h; other real sessions peaked at 600 to 725 MB (gate P2 is 608 MB
+# after 10 min); one historical runaway (0.4.0-1) reached about 118 % CPU and 9.5 GB. The limits are set far above any
+# healthy figure and far below the runaway, so they never touch normal use:
+#   MemoryHigh=1536M  soft ceiling, about 2x the worst healthy peak: above it the kernel reclaims and throttles the shell
+#                     instead of letting it grow, and the pressure shows in `systemctl --user status`.
+#   MemoryMax=3G      hard ceiling (a third of the runaway): the shell is killed and Restart=always brings it back in
+#                     1 s, the compositor keeps any lock alive meanwhile (ADR-0010); OnFailure= then arms the sleep lock.
+#   CPUQuota=150%     one and a half cores: a spinning shell cannot starve the compositor, while the Overview and
+#                     Stage animations (a GUI thread plus the render thread) keep their headroom.
+MemoryHigh=1536M
+MemoryMax=3G
+CPUQuota=150%
 # No NoNewPrivileges/ProtectSystem here on purpose: the lock screen and polkit agent rely on the
 # setuid/setgid helpers unix_chkpwd and polkit-agent-helper-1, which NoNewPrivileges would break,
 # leaving the session unable to unlock.

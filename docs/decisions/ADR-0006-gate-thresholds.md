@@ -53,3 +53,10 @@ every choice: how macOS does it.
    (docs/audits/final-1.0/15-remediation-plan.md) closes, with the F1 sign-off per surface still owner-only. M5 and M6
    are not approved: they keep the owner-only items (L2 gates, R2, R3, C1 7 days, 30-day dogfood, hardware matrix,
    legal review).
+
+## Amendment 2026-10-23 (GF-040): resource guard of grassfield-shell.service
+Measured: idle CPU 0.25 to 0.33 % of one core, RSS 530 MB growing about 6 MB/h (566 MB after 6 h), other real sessions up to
+725 MB, one historical runaway of 118 % CPU and 9.5 GB (docs/audits/final-1.0/benchmarks/real-session-samples.md,
+08-performance-audit.md PERF-04). The unit sets `MemoryHigh=1536M`, `MemoryMax=3G`, `CPUQuota=150%`: every limit is far
+above any healthy figure (P2 stays 608 MB, a measured gate, not a limit) and below the runaway. Revisit when the long
+nested slope test exists.

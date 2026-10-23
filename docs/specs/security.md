@@ -127,7 +127,7 @@ macOS model: the screen always locks before sleep, and the lock never silently g
     `failed` before each restart; a clean exit, SIGTERM or `qs kill`, ends `inactive` and does not trigger it).
   - It never talks to Omarchy's shell: in this session `/usr/lib/grassfield/omarchy-shims` is first in PATH, and its
     `omarchy-shell` stand-in answers `lock lock` by starting grassfield-shell again when it is not running
-    (`reset-failed`, then a start) and asking it to lock (`qs ipc -c grassfield call lock lock`: WlSessionLock +
+    (`reset-failed`, then a start) and asking it to lock (`qs ipc -p /usr/share/grassfield/shell call lock lock`: WlSessionLock +
     PamContext, no other locker), and `lock status` with `secure` = Hyprland lists `LOCK` on every monitor, `requested` =
     grassfield-shell's crash-recovery marker says `locked`. Every other call fails as Omarchy's wrapper does without its
     shell; nothing unlocks. Its clamshell step (`omarchy-hyprland-monitor-clamshell`, also called by Omarchy's wake
@@ -240,7 +240,7 @@ VERIFIED until run).
 
 ## Lid, display power-off, screensaver inhibitors (D-4)
 - Lid: one binding, `switch:on:Lid Switch` in `config/hypr/grassfield/system.lua` (real session only, `locked = true`) →
-  `/usr/lib/grassfield/grassfield-lid closed`, which first sends `qs ipc -c grassfield call lock lid` on every close
+  `/usr/lib/grassfield/grassfield-lid closed`, which first sends `qs ipc -p /usr/share/grassfield/shell call lock lid` on every close
   (it decides nothing about locking; it only switches the laptop panel off and on for clamshell mode,
   `tests/shell/lid.sh`). `Lock.lockOnLid()` locks at
   once, whether or not logind suspends (`HandleLidSwitchExternalPower=ignore`, a docked lid, a failed suspend), except

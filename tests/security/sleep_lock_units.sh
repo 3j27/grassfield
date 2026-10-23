@@ -97,7 +97,7 @@ SH
 cat >"$tmp/sbin/qs" <<'SH'
 #!/bin/sh
 echo "qs $*" >>"$STUB_LOG"
-[ "$*" = "ipc -c grassfield call lock lock" ] || exit 9
+[ "$*" = "ipc -p /usr/share/grassfield/shell call lock lock" ] || exit 9
 [ -n "$STUB_QS" ] || exit 1
 printf '%s\n' "$STUB_QS"
 SH
@@ -120,12 +120,12 @@ locked='[{"name":"eDP-1","solitaryBlockedBy":["LOCK"]},{"name":"DP-1","solitaryB
 half='[{"name":"eDP-1","solitaryBlockedBy":["LOCK"]},{"name":"DP-1","solitaryBlockedBy":["WINDOWED"]}]'
 
 out=$(shimrun active ok "$locked" lock lock; echo "rc=$shim_rc")
-[[ $out == $'ok\nrc=0' ]] && ! grep -q "start\|reset-failed" "$tmp/log" && grep -qx "qs ipc -c grassfield call lock lock" "$tmp/log" \
+[[ $out == $'ok\nrc=0' ]] && ! grep -q "start\|reset-failed" "$tmp/log" && grep -qx "qs ipc -p /usr/share/grassfield/shell call lock lock" "$tmp/log" \
   && pass "stand-in: lock lock with grassfield-shell running asks it to lock, starts nothing" || bad "stand-in: running shell: $out / $(tr '\n' ';' <"$tmp/log")"
 for state in failed inactive; do
   out=$(shimrun "$state" ok "$locked" lock lock; echo "rc=$shim_rc")
   grep -qx "systemctl --user reset-failed grassfield-shell.service" "$tmp/log" && grep -qx "systemctl --user start --no-block grassfield-shell.service" "$tmp/log" \
-    && grep -qx "qs ipc -c grassfield call lock lock" "$tmp/log" && [[ $out == $'ok\nrc=0' ]] \
+    && grep -qx "qs ipc -p /usr/share/grassfield/shell call lock lock" "$tmp/log" && [[ $out == $'ok\nrc=0' ]] \
     && pass "stand-in: lock lock with grassfield-shell $state starts it again (reset-failed, no-block) and asks it to lock" \
     || bad "stand-in: shell $state: $out / $(tr '\n' ';' <"$tmp/log")"
 done
