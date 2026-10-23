@@ -29,8 +29,17 @@ w "$tmp/linked/deep/x.desktop" 'OnlyShowIn=KDE;'
 ln -s "$tmp/linked" "$sys/link"                            # symlinked folder: id link-deep-x
 w "$sys/with
 newline.desktop" 'OnlyShowIn=KDE;'                       # skipped
+# GF-102: helper launchers. Avahi browsers, lstopo and Fcitx tools by id; terminal servers and clients by Exec.
+for h in avahi-discover bssh bvnc lstopo fcitx5-configtool org.fcitx.fcitx5-qt6-gui-wrapper; do   # hidden
+  w "$sys/$h.desktop" 'Categories=System;'
+done
+printf '[Desktop Entry]\nName=Foot\nExec=foot\nCategories=System;TerminalEmulator;\n' > "$sys/foot.desktop"                  # shown
+printf '[Desktop Entry]\nName=Foot Client\nExec=footclient\nCategories=System;TerminalEmulator;\n' > "$sys/footclient.desktop"   # hidden
+printf '[Desktop Entry]\nName=Foot Server\nExec=foot --server\nCategories=System;TerminalEmulator;\n' > "$sys/foot-server.desktop"   # hidden
+printf '[Desktop Entry]\nName=Kitty\nExec=/usr/bin/kitty --single-instance\nCategories=System;TerminalEmulator;\n' > "$sys/kitty.desktop"   # shown
+printf '[Desktop Entry]\nName=Mail Client\nExec=mailclient\nCategories=Network;Email;\n' > "$sys/mailclient.desktop"                 # shown (not a terminal)
 got=$(XDG_DATA_HOME=$tmp/home XDG_DATA_DIRS=$tmp/sys XDG_CURRENT_DESKTOP=Hyprland sh "$root/shell/launchpad/hidden-entries.sh" | sort | tr '\n' ' ')
-want="crlf-kde link-deep-x not-hypr only-kde shadow-b spaced-kde spaced-not sub-nested "
+want="avahi-discover bssh bvnc crlf-kde fcitx5-configtool footclient foot-server link-deep-x lstopo not-hypr only-kde org.fcitx.fcitx5-qt6-gui-wrapper shadow-b spaced-kde spaced-not sub-nested "
 if [[ $got == "$want" ]]; then
   echo "PASS hidden-entries"
 else
