@@ -40,7 +40,7 @@ scope of each commit.
 - swatch rows in PopupMenu
 - TintedIcon with default, dark, clear and tinted modes; icons.mode and icons.tint settings; call sites move to TintedIcon
 - add TintedIcon, IconEffect, IconModes and the Settings icon picker
-- tune icon modes on WhiteSur (hue-keeping dark, tinted ramp, A2 contrast), fixed-size effect texture, tint caption
+- tune icon modes on the first third-party pack (hue-keeping dark, tinted ramp, A2 contrast), fixed-size effect texture, tint caption
 - Quick Settings keyboard model, capsule weights, tokens, Notifications footer
 - folder colour pipeline, icons.folderColor setting and folder style store
 - icon appearance modes drawn by a plate-detecting shader
@@ -188,9 +188,9 @@ scope of each commit.
 - build and install Grassfield Settings in the desktop package
 - build and install Grassfield Files (KIO) in the desktop package
 - hardened grassfield-menu-bridge user unit, started before apps
-- grassfield-whitesur-icons split package, session icon files, pkgrel 4 (ADR-0017 I2)
-- perceptual Apple-artwork detector for the WhiteSur guard (work in progress)
-- curated Apple-artwork blocklist, parallel detector, alias removal in the WhiteSur guard
+- split icon package for the first third-party pack (since dropped), session icon files, pkgrel 4 (ADR-0017 I2)
+- perceptual Apple-artwork detector for the icon-pack guard (work in progress)
+- curated Apple-artwork blocklist, parallel detector, alias removal in the icon-pack guard
 - session fontconfig preferring Inter, selected through FONTCONFIG_FILE
 - GTK font defaults in the session dconf profile (Inter 10, grayscale, slight)
 - icon theme composer and Apple-logo removal list
