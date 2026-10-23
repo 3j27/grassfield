@@ -1206,10 +1206,6 @@ QtObject {
     // estimate: panel scale at the start of the open animation (Reduce Motion: fade only)
     readonly property real launcherOpenScale: 0.96
 
-    // ADR-0014 shader: width in logical pixels of the edge highlight that keeps a dark plate visible on a dark material (macOS 26 icons have a specular rim)
-    readonly property real iconModeRimWidth: 1.5
-    // ADR-0014 shader: icon size (logical px) from which the edge highlight has its full width and opacity; it shrinks and fades below
-    readonly property int iconModeRimFullSize: 48
     // ADR-0014 (integrator decision 2026-10-22, the macOS model: small icons stay legible): icon edge in logical pixels below which the icon appearance modes do not apply and the Default artwork is drawn in every mode (list rows, menus, the sidebar: a plate and a recolour made json, cpp, txt, sh and csv the same tile at 16 px)
     readonly property int iconModeMinSize: 24
     // ADR-0014 Dark/Clear/Tinted: the system plate every icon sits on is inset by this fraction of the icon box on each side (macOS 26 plates leave a small margin)
@@ -1218,16 +1214,36 @@ QtObject {
     readonly property real iconModeSysPlateRadius: 0.225
     // ADR-0014 Dark/Clear/Tinted: scale of the artwork of every icon sitting on the system plate (macOS 26 shrinks artwork into the plate)
     readonly property real iconModeSysGlyphScale: 0.72
+    // ADR-0014 own-tile rule: alpha from which a pixel is part of an icon's shape (a shadow or a soft glow is below it and never counts)
+    readonly property real iconModeOwnTileAlpha: 0.5
+    // ADR-0014 own-tile rule: edge in pixels the icon file is drawn at for the shape test (one read per icon file; an edge is measured to about 1 percent)
+    readonly property int iconModeOwnTileProbeSize: 96
+    // ADR-0014 own-tile rule: largest difference between the width and the height of the shape (over the larger) for it to count as square
+    readonly property real iconModeOwnTileSquare: 0.03
+    // ADR-0014 own-tile rule: largest offset of the centre of the shape from the centre of the box (box fraction)
+    readonly property real iconModeOwnTileCentre: 0.03
+    // ADR-0014 own-tile rule: smallest edge of the shape over the box for it to be a tile (a smaller square is a glyph and sits on the system plate)
+    readonly property real iconModeOwnTileMinSide: 0.7
+    // ADR-0014 own-tile rule: lowest fill of the shape's box by opaque pixels (a rounded square of radius 22.5 percent fills 0.957, a squircle 0.95, a circle 0.785; 0.9 allows a tile with a badge over one corner)
+    readonly property real iconModeOwnTileFillMin: 0.9
+    // ADR-0014 own-tile rule: highest fill (a square with sharp corners fills 1; the plate's corners are rounded, so such an icon is not a tile)
+    readonly property real iconModeOwnTileFillMax: 0.998
+    // ADR-0014 own-tile rule: how far inside the box of the shape (fraction of its edge) the four corners are tested empty and the four edge middles filled
+    readonly property real iconModeOwnTileProbe: 0.01
+    // ADR-0014 own-tile rule: share of the middle half of each of the four edges of the shape that is filled (a folder's tab or a glyph's arms leave gaps, a tile's edge is straight)
+    readonly property real iconModeOwnTileEdge: 0.9
+    // ADR-0014 own-tile rule: corners of the shape (of four) that must be empty: a tile with a badge over one corner (an emblem sticking out of a tile) is still a tile; a square with sharp corners has none empty
+    readonly property int iconModeOwnTileCornersEmpty: 3
+    // ADR-0014 own-tile rule: lowest artwork scale of a tile icon (its tile is scaled onto the system plate: plate side over tile side)
+    readonly property real iconModeOwnTileScaleMin: 0.85
+    // ADR-0014 own-tile rule: highest artwork scale of a tile icon
+    readonly property real iconModeOwnTileScaleMax: 1.35
+    // estimate: icon files read at once for the shape test
+    readonly property int iconModeOwnTileConcurrency: 8
+    // estimate: ms after which a shape read that did not finish is given up (the icon then sits on the system plate like a glyph)
+    readonly property int iconModeOwnTileTimeout: 3000
     // ADR-0014 Clear over the bare wallpaper (desktop icons): opacity of the smoked glass plate, strong so that white ink and the plate edge hold on a white and on a black wallpaper
     readonly property real iconModeClearPlateAlphaWallpaper: 0.7
-    // ADR-0014 shader: lowest opacity factor of the edge highlight on small icons (it keeps a 1 px width and fades to this, so a 16 px icon is neither haloed nor edgeless)
-    readonly property real iconModeRimMinOpacity: 0.5
-    // ADR-0014 shader: narrowest edge highlight in logical pixels (small icons keep a rim that is visible on a dark material)
-    readonly property real iconModeRimMinWidth: 1.5
-    // ADR-0014 shader: where the rim starts to fade, as a share of its width
-    readonly property real iconModeRimInner: 0.8
-    // ADR-0014 Dark: factor of the rim opacity in the light appearance (a white rim on a light material would glare)
-    readonly property real iconModeDarkRimLight: 0.25
     // ADR-0014 Dark: lightness (sRGB 0..1) of the graphite system plate; macOS 26 Dark plates are near black.
     readonly property real iconModeDarkPlateLuma: 0.13
     // ADR-0014 Dark: the artwork keeps this share of its colour (1 = unchanged, 0 = grey): a modest desaturation, colour identity kept
@@ -1236,8 +1252,6 @@ QtObject {
     readonly property real iconModeDarkArtScale: 0.97
     // ADR-0014 Dark: lightness the darkest part of the artwork is mapped to (a black part separates a little from the graphite plate; the affine map to darkArtScale keeps black art darker than light art: >= 3:1 where the default has it)
     readonly property real iconModeDarkArtLift: 0.32
-    // ADR-0014 Dark: opacity of the white edge highlight in the dark appearance; chosen with the A2 test (docs/specs/ui.md) so the plate outline stays visible on the dark material
-    readonly property real iconModeDarkRim: 0.8
     // ADR-0014 Clear: opacity of the white glass plate in the dark appearance (the material shows through)
     readonly property real iconModeClearPlateAlphaDark: 0.22
     // ADR-0014 Clear: opacity of the dark glass plate in the light appearance (the material shows through)
@@ -1256,8 +1270,6 @@ QtObject {
     readonly property real iconModeClearInkFloor: 0.15
     // ADR-0014 Clear over the accent fill of a selected row (Search, Force Quit): opacity of the plate, dark on a bright accent and light on a dark one, so that the plate and the ink keep 4.5:1 against the accent (A2 accent row)
     readonly property real iconModeClearPlateAlphaAccent: 0.9
-    // ADR-0014 Clear: opacity of the glyph-coloured edge highlight of the glass plate
-    readonly property real iconModeClearRim: 0.9
     // ADR-0014 Tinted, dark appearance: the plate is the tint colour at this fraction of its brightness (a dark tinted plate, macOS 26)
     readonly property real iconModeTintedPlateScale: 0.3
     // ADR-0014 Tinted, light appearance: the plate is the tint colour mixed this far to white (a light tinted plate)
@@ -1270,12 +1282,6 @@ QtObject {
     readonly property real iconModeTintedRampLowLight: 0.12
     // ADR-0014 Tinted, light appearance: the artwork's lightest tone is the tint mixed this far to white (a wide ramp keeps the internal contrast of the icon)
     readonly property real iconModeTintedRampHighLight: 0.4
-    // ADR-0014 Tinted: opacity of the glyph-coloured edge highlight of the plate
-    readonly property real iconModeTintedRim: 1.0
-    // ADR-0014 Tinted, dark appearance: the rim is the tint mixed this far to white
-    readonly property real iconModeTintedRimMixDark: 0.9
-    // ADR-0014 Tinted, light appearance: the rim is the tint at this fraction of its brightness
-    readonly property real iconModeTintedRimShadeLight: 0.6
     // ADR-0014 Clear: from this material transparency (Control Center slider, 0..1) the wallpaper shows through the window material so much that Clear icons are drawn as over the bare wallpaper (smoked plate, opaque rim); A2 at 1.0 holds a floor of 2.0 in every mode, tint and size (docs/specs/ui.md)
     readonly property real iconModeWallpaperLikeTransparency: 0.8
     // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)

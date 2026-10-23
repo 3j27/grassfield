@@ -18,10 +18,10 @@ ShaderEffect {
     // Drawn over the accent fill of a selected row: 0 no, 1 a bright accent, 2 a dark one (the plate and the ink are the opposite of it).
     property real accentFill: 0
     // The folder colour step (FolderIcon): the artwork is recoloured in the shader, before the system plate is drawn,
-    // so the plate and its rim keep their look. Not used when "recolor" is false.
+    // so the plate keeps its look. Not used when "recolor" is false.
     property bool recolor: false
     property color recolorTint: "#000000"
-    // Nominal icon edge in logical pixels (the rim has a width in logical pixels).
+    // Nominal icon edge in logical pixels.
     property real nominalSize: 48
 
     readonly property var params: IconModes.effect(root.mode, root.tint)
@@ -37,21 +37,14 @@ ShaderEffect {
     readonly property real clearPlateAlphaWallpaper: Tokens.iconModeClearPlateAlphaWallpaper
     readonly property real sysPlateInset: Tokens.iconModeSysPlateInset
     readonly property real sysPlateRadius: Tokens.iconModeSysPlateRadius
-    readonly property real sysGlyphScale: Tokens.iconModeSysGlyphScale
-    // The rim keeps its width in logical pixels up to rimFullSize and shrinks and fades on smaller icons (a 1 px rim is
-    // heavy on a 16 px icon).
-    readonly property real sizeFactor: Math.min(1, root.nominalSize / Tokens.iconModeRimFullSize)
-    readonly property real rimGain: Math.max(Tokens.iconModeRimMinOpacity, root.sizeFactor)
-    readonly property real rimUv: Math.max(Tokens.iconModeRimMinWidth, Tokens.iconModeRimWidth * root.sizeFactor) / Math.max(1, root.nominalSize)
+    // Scale of the artwork about the centre: the glyph scale (the icon sits on the plate), or for an icon that is already a tile the scale that
+    // makes its own tile coincide with the plate (TintedIcon.artScale, IconTile.js).
+    property real artScale: Tokens.iconModeSysGlyphScale
+    readonly property real sysGlyphScale: root.artScale
     readonly property real darkPlateLuma: Tokens.iconModeDarkPlateLuma
     readonly property real darkArtSaturation: Tokens.iconModeDarkArtSaturation
     readonly property real darkArtScale: Tokens.iconModeDarkArtScale
     readonly property real darkArtLift: Tokens.iconModeDarkArtLift
-    readonly property real darkRim: Tokens.iconModeDarkRim
-    readonly property real rimInner: Tokens.iconModeRimInner
-    readonly property real darkRimLight: Tokens.iconModeDarkRimLight
-    readonly property real tintedRimMixDark: Tokens.iconModeTintedRimMixDark
-    readonly property real tintedRimShadeLight: Tokens.iconModeTintedRimShadeLight
     readonly property real clearPlateAlphaDark: Tokens.iconModeClearPlateAlphaDark
     readonly property real clearPlateAlphaLight: Tokens.iconModeClearPlateAlphaLight
     readonly property real clearInkDark: Tokens.iconModeClearInkDark
@@ -61,14 +54,12 @@ ShaderEffect {
     readonly property real clearBackdropMid: Tokens.iconModeClearBackdropMid
     readonly property real clearInkFloor: Tokens.iconModeClearInkFloor
     readonly property real clearPlateAlphaAccent: Tokens.iconModeClearPlateAlphaAccent
-    readonly property real clearRim: Tokens.iconModeClearRim
     readonly property real tintedPlateScale: Tokens.iconModeTintedPlateScale
     readonly property real tintedPlateMixLight: Tokens.iconModeTintedPlateMixLight
     readonly property real tintedRampLowDark: Tokens.iconModeTintedRampLowDark
     readonly property real tintedRampHighDark: Tokens.iconModeTintedRampHighDark
     readonly property real tintedRampLowLight: Tokens.iconModeTintedRampLowLight
     readonly property real tintedRampHighLight: Tokens.iconModeTintedRampHighLight
-    readonly property real tintedRim: Tokens.iconModeTintedRim
     readonly property color folderTint: Qt.rgba(root.recolorTint.r, root.recolorTint.g, root.recolorTint.b, root.recolor ? 1 : 0)
     readonly property real folderBrightness: Tokens.folderIconBrightness
     readonly property real folderContrast: Tokens.folderIconContrast

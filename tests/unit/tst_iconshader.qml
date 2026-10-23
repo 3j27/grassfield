@@ -47,7 +47,7 @@ TestCase {
     readonly property int rowsPerGroup: 12
     readonly property string fixtureDir: Qt.resolvedUrl("../fixtures/icons/")
     readonly property string breezeDir: "file:///usr/share/icons/breeze/apps/48/"
-    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo", "dark-plate-light-border", "white-page-document", "same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph"]
+    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo", "dark-plate-light-border", "white-page-document", "same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph", "own-tile-squircle", "own-tile-shadow", "own-circle"]
     // The base theme of the session is Breeze, then Adwaita and hicolor (ADR-0017): Breeze app icons read in place, never copied into the repo
     // (a missing file is skipped). Includes the terminals and monitors (dark plates with a light prompt or a coloured graph) whose internal
     // contrast is at risk, white-plated icons, tile-shaped icons (the plate must not double them) and plain glyphs.
@@ -184,11 +184,9 @@ TestCase {
         const at = (x, y) => x < 0 || y < 0 || x >= n || y >= n ? false : mask[y * n + x];
         const u = n / 48;
         const d2 = Math.max(1, Math.round(2 * u));
-        // The outline band holds the plate's edge highlight: the system plate is inset from the box by iconMode.sysPlateInset, the rim has
-        // its width in logical pixels (at least rimMinWidth) and one more pixel is antialiasing (3 to 4 px). The 2 px band that
-        // separates the ring from the edge (d2) saw only the antialiased edge pixel of the plate and never the rim, whatever its contrast.
-        const rimPx = Math.max(Tokens.iconModeRimMinWidth, Tokens.iconModeRimWidth * Math.min(1, n / Tokens.iconModeRimFullSize));
-        const dr = Math.max(2, Math.round(Tokens.iconModeSysPlateInset * n + 1 + rimPx));
+        // The outline band holds the plate's edge: the system plate is inset from the box by iconMode.sysPlateInset and one more pixel is antialiasing
+        // (no rim since the owner decision of 2026-10-23: the modes only change the colour).
+        const dr = Math.max(2, Math.round(Tokens.iconModeSysPlateInset * n + 1));
         const d4 = Math.max(2, Math.round(4 * u));
         const d8 = Math.max(3, Math.round(8 * u));
         const ring = [];
@@ -342,6 +340,18 @@ TestCase {
         return worst;
     }
 
+    // The own-tile rule measures each icon file once (IconShape); an icon is drawn once its scale is known. The board is drawn after that.
+    function settleShapes() {
+        tryVerify(() => {
+            for (let i = 0; i < slots.count; i++) {
+                const cell = slots.itemAt(i);
+                if (cell !== null && cell.icon.status === Image.Ready && !cell.icon.shapeKnown)
+                    return false;
+            }
+            return true;
+        }, 20000, "the icon shapes were not read");
+    }
+
     // One rendering of the whole board over a flat background colour; the icon of every fixture in every mode is
     // measured against it. Returns the number of renderings measured; failures are appended.
     function runScenario(name, dark, background, failures, overWallpaper) {
@@ -349,6 +359,7 @@ TestCase {
         testCase.wallpaperPass = overWallpaper === true;
         testCase.panelColor = background;
         testCase.scenariosRun[name] = true;
+        testCase.settleShapes();
         wait(500);
         waitForRendering(board);
         const img = grabImage(board);
@@ -394,7 +405,7 @@ TestCase {
             for (let m = 1; m < testCase.modes.length; m++) {
                 if (testCase.onlyMode !== "" && testCase.modes[m] !== testCase.onlyMode)
                     continue;
-                const r = measure(img, img2, cells[m], background, inverse, Tokens.iconModeSysGlyphScale);
+                const r = measure(img, img2, cells[m], background, inverse, cells[m].icon.artScale);
                 const label = `${testCase.fixtures[f].name} ${testCase.modes[m]} ${name}`;
                 if (r === null) {
                     failures.push(label + ": nothing drawn");
@@ -512,6 +523,7 @@ TestCase {
             testCase.darkPass = dark;
             testCase.wallpaperPass = false;
             testCase.panelColor = accent;
+            testCase.settleShapes();
             wait(500);
             waitForRendering(board);
             const img = grabImage(board);

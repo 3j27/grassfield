@@ -60,6 +60,7 @@
  {"path": "tests/unit/tst_iconmenu.qml", "layer": "headless"},
  {"path": "tests/unit/tst_iconmodes.qml", "layer": "headless"},
  {"path": "tests/unit/tst_iconshader.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_icontile.qml", "layer": "headless"},
  {"path": "tests/unit/tst_magnify.qml", "layer": "headless"},
  {"path": "tests/unit/tst_menubridge.qml", "layer": "headless"},
  {"path": "tests/unit/tst_menunav.qml", "layer": "headless"},

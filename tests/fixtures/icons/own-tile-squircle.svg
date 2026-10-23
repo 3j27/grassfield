@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Test fixture (own drawing): a tile of its own, a squircle (continuous corners) at 86 percent of the box, orange gradient, white glyph. -->
+  <defs><linearGradient id="p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB454"/><stop offset="1" stop-color="#F0642A"/></linearGradient></defs>
+  <path fill="url(#p)" d="M 38 9 L 90 9 C 110 9 119 18 119 38 L 119 90 C 119 110 110 119 90 119 L 38 119 C 18 119 9 110 9 90 L 9 38 C 9 18 18 9 38 9 Z"/>
+  <path fill="#FFFFFF" d="M 44 88 L 64 38 L 84 88 L 74 88 L 64 62 L 54 88 Z"/>
+</svg>

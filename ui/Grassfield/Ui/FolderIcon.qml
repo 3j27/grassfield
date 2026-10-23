@@ -60,7 +60,7 @@ Item {
         size: root.size
         oversample: root.oversample
         // Default mode (no effect item) and a failed shader: the folder colour is a layer over the plain icon. In an icon mode the
-        // shader recolours the artwork itself (TintedIcon.recolor), so that the system plate and its rim are not recoloured.
+        // shader recolours the artwork itself (TintedIcon.recolor), so that the system plate is not recoloured.
         recolor: root.recolored
         recolorTint: root.folderTint
         layer.enabled: root.recolored && (root.modeName === "default" || icon.effectFailed)
@@ -189,7 +189,7 @@ Item {
         anchors.fill: parent
         // In an icon mode the folder shrinks to sit on the system plate (the shader's sysGlyphScale):
         // the symbol follows it. Not when the shader failed and the plain icon is drawn.
-        scale: root.modeName !== "default" && !icon.effectFailed ? Tokens.iconModeSysGlyphScale : 1
+        scale: root.modeName !== "default" && !icon.effectFailed ? icon.artScale : 1
         transformOrigin: Item.Center
         clip: true
         visible: root.hasGlyph

@@ -27,3 +27,5 @@ PointerColors 1.0 PointerColors.js
 WallpaperConfig 1.0 WallpaperConfig.js
 GrassfieldArtwork 1.0 GrassfieldArtwork.qml
 MenuPlace 1.0 MenuPlace.js
+singleton IconShape 1.0 IconShape.qml
+IconTile 1.0 IconTile.js
