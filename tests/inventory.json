@@ -24,7 +24,9 @@
  {"path": "tests/visual/lib.sh", "reason": "helper sourced by the visual scripts"},
  {"path": "tests/visual/ipc.sh", "reason": "helper: qs ipc against the nested shell"},
  {"path": "tests/visual/run.sh", "reason": "runner of tests/visual/scenarios/*.sh, not a test itself"},
- {"path": "tests/compositor/titlebar_geometry.sh", "reason": "helper sourced by the compositor scenarios (titlebar metrics from Theme.hpp)"}
+ {"path": "tests/compositor/titlebar_geometry.sh", "reason": "helper sourced by the compositor scenarios (titlebar metrics from Theme.hpp)"},
+ {"path": "tests/compositor/window_geometry.sh", "reason": "helper sourced by soak.sh and input_consistency.sh (real window geometry from hyprctl clients)"},
+ {"path": "tests/compositor/soak_lib.sh", "reason": "helper sourced by soak.sh (verdict and RSS-slope functions, tested by tests/shell/soak_lib.sh)"}
 ],
 "tests": [
  {"path": "tests/unit/tst_a11ypress.qml", "layer": "headless"},
@@ -160,6 +162,7 @@
  {"path": "tests/shell/popup_owned_processes.sh", "layer": "data"},
  {"path": "tests/shell/settings_apply.sh", "layer": "headless"},
  {"path": "tests/shell/settings_system_guard.sh", "layer": "logic"},
+ {"path": "tests/shell/soak_lib.sh", "layer": "logic"},
  {"path": "tests/shell/watch_applications_pdeathsig.sh", "layer": "logic"},
  {"path": "tests/shell/watched_dir_race.sh", "layer": "headless"},
  {"path": "compositor/tests/AppmenuTest.cpp", "layer": "logic"},
