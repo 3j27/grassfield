@@ -21,6 +21,10 @@ Layers (first layer that provides an icon NAME wins; a name is a file name witho
        c. store: every name whose link chain resolves to Pebble's scalable/apps/softwarecenter.svg, and every name
           whose chain resolves to MacTahoe's App Store drawing (src/apps/scalable/softwarecenter.svg, or a file the
           list marks with kind `appstore`) is served by Pebble's bag; MacTahoe's entries for them are removed.
+     Aliases: an alias (link) whose chain target NAME was removed from its own layer because another layer provides
+       that name is re-pointed to the providing layer's drawing of that name (same context and size directory when the
+       provider has one, else its scalable drawing, else its largest size), by a relative link inside the theme. Only
+       an alias whose target was dropped as a listed logo (kind other than appstore) is dropped with it.
   2. Pebble:    the Pebble/ variant, minus listed files, for names not provided above
   3. ours:      branding scalable/devices (the six device glyphs), for names not provided above
 The theme keeps `Inherits=breeze,Adwaita,hicolor` (from the branding index.theme).
@@ -33,8 +37,8 @@ gtk-update-icon-cache; the default colour and the base variant apply no transfor
 
 List format (one entry per line, `#` comments): `<layer>:<path in the upstream checkout> [kind]`
   mactahoe:src/<category>/<size>/<file>      pebble:Pebble/<dir>/<dir>/<file>
-  kind: apple-logo (default) | finder-face | appstore. apple-logo and finder-face drop the file's name from that
-  layer; appstore marks a MacTahoe file whose names are served by Pebble's bag instead. A listed file that does not
+  kind: apple-logo (default) | finder-face | doubt | appstore. apple-logo, finder-face and doubt drop the file's name
+  from that layer (a doubtful drawing is dropped so that the next layer serves the name); appstore marks a MacTahoe file whose names are served by Pebble's bag instead. A listed file that does not
   exist in its checkout fails the composer (pin drift), and so does any listed name left in its layer's output.
 
 Output layout (no ambiguity: Pebble's directories would collide with ours, and the two upstream layouts differ):
@@ -60,7 +64,7 @@ MT_REMOVED = ["places/scalable/user-trash-dark.svg", "places/scalable/user-trash
 MT_STORE_ANCHOR = "apps/scalable/softwarecenter.svg"
 PB_STORE_ANCHOR = "scalable/apps/softwarecenter.svg"
 PB_PLACES = ("16x16/places", "scalable/places")
-KINDS = ("apple-logo", "finder-face", "appstore")
+KINDS = ("apple-logo", "finder-face", "doubt", "appstore")
 
 
 def die(msg):
@@ -125,15 +129,23 @@ class Layer:
         for r in [r for r in self.e if name_of(r) in names]:
             del self.e[r]
 
-    def prune_dangling(self):
-        n = 0
+    def snapshot(self):
+        c = Layer(self.label)
+        c.e = dict(self.e)
+        return c
+
+    def prune_dangling(self, orig):
+        """Remove the links that no longer resolve. Returns [(rel, name of the target in `orig` or None)]: the target
+        name tells the caller which drawing the alias was meant for."""
+        pruned = []
         while True:
             bad = [r for r, ent in self.e.items() if ent[0] == "l" and self.resolve(r) is None]
             if not bad:
-                return n
+                return pruned
             for r in bad:
                 del self.e[r]
-            n += len(bad)
+                t = orig.resolve(r)
+                pruned.append((r, name_of(t) if t else None))
 
 
 def parse_list(path):
@@ -269,33 +281,22 @@ def compose(a):
         die("MacTahoe store anchor missing: src/" + MT_STORE_ANCHOR)
     mt_store = {name_of(r) for r in mt.e if mt.resolve(r) in mt_anchor_present}
     folders = {name_of(r) for r in pb.e if r.startswith(PB_PLACES) and not name_of(r).endswith("-symbolic")}
-    # MacTahoe links to a folder drawing under another name (inode-directory...): redirected to Pebble's drawing
-    redirect = {}
-    for r in mt.e:
-        t = mt.resolve(r)
-        n = name_of(r)
-        if (t is not None and name_of(t) in folders and n not in folders and n not in pb.names()
-                and n not in own_names and n not in dropped_pb):
-            redirect[n] = name_of(t)
-    served_by_pb = (folders | pb_bag | mt_store | set(redirect)) - own_names
-    mt.drop_names(own_names | folders | pb_bag | mt_store | set(redirect))
-    counts["mactahoe pruned dangling"] = mt.prune_dangling()
+    mt_snap, pb_snap = mt.snapshot(), pb.snapshot()
+    mt.drop_names(own_names | folders | pb_bag | mt_store)
+    mt_pruned = mt.prune_dangling(mt_snap)
+    counts["mactahoe dangling links pruned (re-pointed or dropped)"] = len(mt_pruned)
 
-    # Pebble: names provided by layers 0 and 1 are dropped from it, the store and redirect names are (re)built
-    mt_names = mt.names()
+    # Pebble: names provided by layers 0 and 1 are dropped from it, the store names are (re)built. The pruned
+    # MacTahoe aliases are re-pointed later but keep their names (they are MacTahoe's).
+    mt_names = mt.names() | {name_of(r) for r, t in mt_pruned if t}
     pb.drop_names(own_names | mt_names)
     bag_dir = posixpath.dirname(PB_STORE_ANCHOR)
     for n in sorted((mt_store - pb_bag) - own_names - dropped_pb):
         pb.drop_names({n})
         pb.e["%s/%s.svg" % (bag_dir, n)] = ("l", posixpath.basename(PB_STORE_ANCHOR))
-    for n, target in sorted(redirect.items()):
-        for r in sorted(pb.e):
-            if name_of(r) == target and pb.e[r][0] == "f":
-                ext = posixpath.splitext(r)[1]
-                pb.e[posixpath.join(posixpath.dirname(r), n + ext)] = ("l", posixpath.basename(r))
-    counts["pebble pruned dangling"] = pb.prune_dangling()
-    mt_names = mt.names()
-    pb_names = pb.names()
+    pb_pruned = pb.prune_dangling(pb_snap)
+    counts["pebble dangling links pruned (re-pointed or dropped)"] = len(pb_pruned)
+    pb_names = pb.names() | {name_of(r) for r, t in pb_pruned if t}
     # layer 3: the device glyphs
     own_dev.drop_names(own_names | mt_names | pb_names)
 
@@ -306,6 +307,70 @@ def compose(a):
     for label, ly, prefix, _ in layers:
         for r, ent in ly.e.items():
             out_entries[prefix + r] = ent
+
+    # ---- aliases whose target name another layer provides: re-pointed to that layer's drawing
+    own_h, _, own_secs = parse_index(os.path.join(a.branding, "index.theme"))
+    secs_of = {"": own_secs, "base/": mt_secs0, "extra/": pb_secs0}
+    provide = [("", own_apps), ("base/", mt), ("extra/", pb), ("", own_dev)]
+    by_name = []
+    for prefix, ly in provide:
+        idx = {}
+        for r in ly.e:
+            t = ly.resolve(r)
+            if t is not None and t not in idx.setdefault(name_of(r), []):
+                idx[name_of(r)].append(t)
+        by_name.append(idx)
+
+    def info(prefix, rel):
+        d = posixpath.dirname(rel)
+        sec = dict(secs_of[prefix].get(d, []))
+        return (sec.get("Context", "").lower(), int(sec.get("Size", "0") or 0), sec.get("Type") == "Scalable",
+                "symbolic" in d)
+
+    def best(target_name, ctx, size, symb, dest_dir):
+        found = None
+        for (prefix, ly), idx in zip(provide, by_name):
+            if target_name in idx:
+                found = (prefix, idx[target_name])
+                break
+        if found is None:
+            return None
+        prefix, cands = found
+        scored = []
+        for f in cands:
+            fc, fs, fscal, fsym = info(prefix, f)
+            if fsym == symb and fc == ctx and fs == size:
+                k = (0, 0)
+            elif fsym == symb and fscal and fc == ctx:
+                k = (1, 0)
+            elif fsym == symb and fscal:
+                k = (2, 0)
+            elif fsym == symb:
+                k = (3, -fs)
+            else:
+                k = (4, -fs)
+            scored.append((k, f))
+        scored.sort()
+        f = scored[0][1]
+        return posixpath.splitext(f)[1], posixpath.relpath(prefix + f, dest_dir)
+
+    repointed = {"mactahoe": 0, "pebble": 0}
+    unresolved = {"mactahoe": [], "pebble": []}
+    for label, prefix, pruned in (("mactahoe", "base/", mt_pruned), ("pebble", "extra/", pb_pruned)):
+        for r, t in sorted(pruned):
+            if t is None:
+                continue
+            ctx, size, _, symb = info(prefix, r)
+            dest_dir = prefix + posixpath.dirname(r)
+            got = best(t, ctx, size, symb, dest_dir)
+            if got is None:
+                unresolved[label].append(name_of(r))
+                continue
+            ext, rel = got
+            dest = "%s/%s%s" % (dest_dir, name_of(r), ext)
+            if dest not in out_entries:
+                out_entries[dest] = ("l", rel)
+                repointed[label] += 1
 
     # ---- listed names must be gone from their layer's output
     for layer, rel, kind in entries:
@@ -380,10 +445,15 @@ def compose(a):
     for label, ly, _, _ in layers:
         nf = sum(1 for e in ly.e.values() if e[0] == "f")
         print("  %-16s %6d files %6d links %6d names" % (label, nf, len(ly.e) - nf, len(ly.names())))
-    print("  mactahoe: %d names dropped by the list (with their links), %d redirected to folders, %d store names"
-          % (len(dropped_mt), len(redirect), len(mt_store)))
+    print("  mactahoe: %d names dropped by the list (with their links), %d store names"
+          % (len(dropped_mt), len(mt_store)))
     print("  pebble: %d folder names, %d store names (incl. %d added aliases), %d names dropped by the list"
           % (len(folders), len(pb_bag | mt_store), len(mt_store - pb_bag), len(dropped_pb)))
+    print("  aliases re-pointed to another layer's drawing: %d mactahoe, %d pebble; unresolved: %d"
+          % (repointed["mactahoe"], repointed["pebble"], len(unresolved["mactahoe"]) + len(unresolved["pebble"])))
+    for k in ("mactahoe", "pebble"):
+        if unresolved[k]:
+            print("  unresolved %s aliases: %s" % (k, " ".join(sorted(set(unresolved[k]))[:20])))
     for k, v in sorted(counts.items()):
         print("  %s: %d" % (k, v))
     total = 0

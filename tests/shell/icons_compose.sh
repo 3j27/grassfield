@@ -110,6 +110,8 @@ for d in ("16", "scalable"):
     link(L, "places/%s/distributor-logo.svg" % d, "start-here.svg")
     link(L, "places/%s/inode-directory.svg" % d, "folder.svg")
 link(L, "places/scalable/logo-chain.svg", "distributor-logo.svg")
+link(L, "places/24/inode-directory.svg", "folder.svg")   # Pebble has no 24 px directory
+put(S, "apps/scalable/doubtful.svg", R)
 
 # Pebble-like
 pb = tmp + "/pb"
@@ -170,6 +172,8 @@ put(P, "scalable/apps/shared.svg", G)
 put(P, "scalable/apps/calendar.svg", G)
 put(P, "scalable/apps/own-app.svg", G)
 put(P, "scalable/apps/start-here.svg", G)
+link(P, "scalable/apps/start-alias.svg", "start-here.svg")
+put(P, "scalable/apps/doubtful.svg", G)
 link(P, "scalable/apps/dangling.svg", "missing.svg")
 link(P, "scalable/apps/shared-alias.svg", "shared.svg")   # its target name belongs to MacTahoe: dangling once dropped
 put(P, "scalable/apps/.hidden.svg", G)
@@ -192,6 +196,7 @@ mactahoe:src/places/16/start-here.svg
 mactahoe:src/places/scalable/start-here.svg
 mactahoe:src/mimes/24/start-here.svg   # a kind column is optional
 mactahoe:src/places/16/folder-apple.svg finder-face
+mactahoe:src/apps/scalable/doubtful.svg doubt
 """)
 write(tmp + "/list-missing.txt", "mactahoe:src/places/16/start-here.svg\nmactahoe:src/places/16/no-such-icon.svg\n")
 write(tmp + "/list-pebble.txt", "pebble:Pebble/scalable/apps/start-here.svg\n")
@@ -232,8 +237,12 @@ desc="Pebble folders: every size of folder and user-home is gone from MacTahoe, 
 check bash -ec 'cd "$1"; for n in folder user-home; do ls base/places/*/$n.* 2>/dev/null && exit 1; done; [ -f extra/16x16/places/folder.png ] && [ -f extra/scalable/places/folder.svg ] && [ -f extra/scalable/places/folder-git.svg ] && [ -f extra/scalable/places/user-home.svg ]; exit 0' _ "$out"
 desc="symbolic folder glyphs stay MacTahoe's"
 check bash -ec '[ -f "$1/base/places/symbolic/folder-symbolic.svg" ] && [ ! -e "$1/extra/symbolic/places/folder-symbolic.svg" ]' _ "$out"
-desc="a MacTahoe link to a folder drawing (inode-directory) is served by Pebble's folder"
-check bash -ec 'cd "$1"; [ ! -e base/places/16/inode-directory.svg ] && [ "$(readlink -f extra/scalable/places/inode-directory.svg)" = "$(readlink -f extra/scalable/places/folder.svg)" ] && [ "$(readlink -f extra/16x16/places/inode-directory.png)" = "$(readlink -f extra/16x16/places/folder.png)" ]' _ "$out"
+desc="a MacTahoe alias of a folder drawing (inode-directory) is re-pointed to Pebble's folder: same size directory when Pebble has one (16: png), else its scalable drawing (24, scalable); relative links"
+check bash -ec 'cd "$1"; [ ! -e base/places/16/inode-directory.svg ] && [ -L base/places/16/inode-directory.png ] && [ "$(readlink -f base/places/16/inode-directory.png)" = "$(readlink -f extra/16x16/places/folder.png)" ] && [ "$(readlink -f base/places/24/inode-directory.svg)" = "$(readlink -f extra/scalable/places/folder.svg)" ] && [ "$(readlink -f base/places/scalable/inode-directory.svg)" = "$(readlink -f extra/scalable/places/folder.svg)" ] && [ "$(readlink base/places/24/inode-directory.svg)" = ../../../extra/scalable/places/folder.svg ]' _ "$out"
+desc="a Pebble alias whose target name MacTahoe provides (shared-alias -> shared) is re-pointed to MacTahoe's drawing, not lost"
+check bash -ec 'cd "$1"; [ -L extra/scalable/apps/shared-alias.svg ] && [ "$(readlink -f extra/scalable/apps/shared-alias.svg)" = "$(readlink -f base/apps/scalable/shared.svg)" ] && [ "$(readlink extra/scalable/apps/shared-alias.svg)" = ../../../base/apps/scalable/shared.svg ]' _ "$out"
+desc="kind doubt: the MacTahoe drawing is dropped and Pebble serves the name"
+check bash -ec 'cd "$1"; [ ! -e base/apps/scalable/doubtful.svg ] && [ -f extra/scalable/apps/doubtful.svg ]' _ "$out"
 desc="store: MacTahoe's bag (every size) and its aliases are gone"
 check bash -ec 'cd "$1/base/apps"; ls */softwarecenter.* */gnome-software.* */org.gnome.Software.* */mt-store-only.* 2>/dev/null && exit 1; exit 0' _ "$out"
 desc="store: Pebble's aliases, a chained MacTahoe alias and the Pebble chain (software-center) resolve to Pebble's bag"
@@ -246,8 +255,8 @@ desc="a dropped logo name falls through to the next layer (Pebble start-here)"
 check test -f "$out/extra/scalable/apps/start-here.svg"
 desc="upstream behaviour kept: user-trash-dark is not installed; files in directories the index.theme does not list are ignored"
 check bash -ec '[ ! -e "$1/base/places/scalable/user-trash-dark.svg" ] && [ ! -e "$1/base/mimes" ]' _ "$out"
-desc="Pebble junk (hidden files, backup files, no extension, cache) is not installed; the dangling link is gone"
-check bash -ec 'cd "$1"; ! find . -name icon-theme.cache -o -name "*~" -o -name ".*.svg" -o -name noextension -o -name dangling.svg -o -name shared-alias.svg | grep -q .' _ "$out"
+desc="Pebble junk (hidden files, backup files, no extension, cache) is not installed; the upstream dangling link is gone"
+check bash -ec 'cd "$1"; ! find . -name icon-theme.cache -o -name "*~" -o -name ".*.svg" -o -name noextension -o -name dangling.svg | grep -q .' _ "$out"
 desc="no dangling link, no absolute link, no link escaping the theme"
 check bash -ec 'cd "$1"; real=$(readlink -f .); n=0; while IFS= read -r l; do t=$(readlink -f "$l") || exit 1; [ -f "$t" ] || { echo "dangling $l"; exit 1; }; case $t in "$real"/*) ;; *) echo "escape $l"; exit 1;; esac; case $(readlink "$l") in /*) exit 1;; esac; n=$((n+1)); done < <(find . -type l); [ "$n" -gt 0 ]' _ "$out"
 idx=$out/index.theme
@@ -281,16 +290,16 @@ check bash -ec 'diff -r --no-dereference "$1" "$2" >/dev/null' _ "$out" "$tmp/ag
 
 desc="a listed file missing from the source fails the composer (pin drift)"
 check bash -ec '! python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list-missing.txt" --out "$2/never" >/dev/null 2>&1 && [ ! -e "$2/never" ]' _ "$composer" "$tmp"
-desc="a pebble: entry drops that name from Pebble (start-here goes on to Breeze)"
+desc="a pebble: entry drops that name from Pebble with its aliases (start-here, start-alias go on to Breeze)"
 run "$tmp/list-pebble.txt" "$tmp/peb2" >/dev/null 2>&1
-check bash -ec '[ ! -e "$1/extra/scalable/apps/start-here.svg" ] && [ -f "$1/base/places/16/start-here.svg" ]' _ "$tmp/peb2"
+check bash -ec '[ ! -e "$1/extra/scalable/apps/start-here.svg" ] && [ ! -e "$1/extra/scalable/apps/start-alias.svg" ] && [ -f "$1/base/places/16/start-here.svg" ]' _ "$tmp/peb2"
 
 # ---- Qt: the colour at the centre of the icon, at 16 px and at large sizes
 probe=$tmp/icon_probe
 if command -v g++ >/dev/null && [[ -f /usr/include/qt6/QtGui/QIcon ]]; then
   g++ -std=c++20 -fPIC -o "$probe" "$root/tests/shell/icon_probe.cpp" -I/usr/include/qt6 -I/usr/include/qt6/QtGui -I/usr/include/qt6/QtCore -lQt6Gui -lQt6Core
   qt() { env -i PATH="$PATH" HOME="$tmp" XDG_RUNTIME_DIR="$tmp" QT_QPA_PLATFORM=offscreen XDG_DATA_DIRS="$tmp/fx" QT_QPA_SYSTEM_ICON_THEME=grassfield-icons "$probe" "$@"; }
-  q=$(qt folder at24:folder at128:folder at256:folder user-home at128:user-home folder-git inode-directory at128:inode-directory \
+  q=$(qt folder at24:folder at128:folder at256:folder user-home at128:user-home folder-git inode-directory at24:inode-directory at128:inode-directory shared-alias doubtful \
         calendar at128:calendar pb-only br-only own-app gnome-software org.gnome.Software mt-store-only software-center appstore \
         at128:gnome-software start-here distributor-logo logo-chain shared dev-only dev-shared folder-symbolic)
   echo "$q" | tr '\n' ' ' | sed 's/^/    Qt: /; s/$/\n/'
@@ -298,8 +307,10 @@ if command -v g++ >/dev/null && [[ -f /usr/include/qt6/QtGui/QIcon ]]; then
   red=#ff0000 green=#00ff00 blue=#0000ff yellow=#ffff00
   desc="Qt: folder is Pebble's at 16, 24, 128 and 256 px (no MacTahoe leftover at any size); user-home too"
   check bash -ec 'for s in "folder=$2" "folder@24=$2" "folder@128=$2" "folder@256=$2" "user-home=$2" "user-home@128=$2" "folder-git=$2"; do grep -qx "$s" <<<"$1" || { echo "$s"; exit 1; }; done' _ "$q" "$green"
-  desc="Qt: the folder alias inode-directory is Pebble's folder"
-  check bash -ec 'grep -qx "inode-directory=$2" <<<"$1" && grep -qx "inode-directory@128=$2" <<<"$1"' _ "$q" "$green"
+  desc="Qt: the folder alias inode-directory is Pebble's folder (16, 24, 128 px)"
+  check bash -ec 'grep -qx "inode-directory=$2" <<<"$1" && grep -qx "inode-directory@24=$2" <<<"$1" && grep -qx "inode-directory@128=$2" <<<"$1"' _ "$q" "$green"
+  desc="Qt: a Pebble alias of a MacTahoe name is MacTahoe's drawing; a doubtful MacTahoe drawing is Pebble's"
+  check bash -c 'grep -qx "shared-alias=$2" <<<"$1" && grep -qx "doubtful=$3" <<<"$1"' _ "$q" "$red" "$green"
   desc="Qt: MacTahoe-only name -> MacTahoe, Pebble-only -> Pebble, Breeze-only -> Breeze, ours first"
   check bash -ec 'for s in "calendar=$2" "calendar@128=$2" "pb-only=$3" "br-only=$5" "own-app=$4" "shared=$2" "dev-only=$4" "dev-shared=$3" "folder-symbolic=$2"; do grep -qx "$s" <<<"$1" || { echo "$s"; exit 1; }; done' _ "$q" "$red" "$green" "$blue" "$yellow"
   desc="Qt: store names (Pebble chain, MacTahoe chain, bag itself) -> Pebble's bag at every size"
@@ -314,13 +325,13 @@ fi
 if python3 -c 'import gi; gi.require_version("Gtk","3.0")' 2>/dev/null && python3 -c 'import gi; gi.require_version("Gtk","4.0")' 2>/dev/null; then
   for v in 3 4; do
     gtk() { env -i PATH="$PATH" HOME="$tmp" XDG_RUNTIME_DIR="$tmp" GSETTINGS_BACKEND=memory GF_ICON_SIZE="$1" python3 -I "$root/tests/shell/icon_probe_gtk.py" "$v" "$tmp/fx/icons" grassfield-icons "${@:2}" 2>/dev/null; }
-    names="folder user-home inode-directory calendar pb-only br-only own-app gnome-software org.gnome.Software mt-store-only software-center start-here distributor-logo shared dev-only dev-shared"
+    names="folder user-home inode-directory shared-alias doubtful calendar pb-only br-only own-app gnome-software org.gnome.Software mt-store-only software-center start-here distributor-logo shared dev-only dev-shared"
     g16=$(gtk 16 $names)
     g128=$(gtk 128 $names)
     echo "    GTK$v 16: $(tr '\n' ' ' <<<"$g16")"
     echo "    GTK$v 128: $(tr '\n' ' ' <<<"$g128")"
-    desc="GTK$v: folder, user-home and inode-directory come from Pebble at 16 px and at 128 px, never from MacTahoe"
-    check bash -ec 'for g in "$1" "$2"; do for n in folder user-home inode-directory; do grep -qE "^$n=grassfield-icons/extra/" <<<"$g" || { echo "$n"; exit 1; }; done; done; grep -qx "folder=grassfield-icons/extra/16x16/places/folder.png" <<<"$1" && grep -qx "folder=grassfield-icons/extra/scalable/places/folder.svg" <<<"$2"' _ "$g16" "$g128"
+    desc="GTK$v: folder and user-home come from Pebble, inode-directory is an alias of Pebble's folder at 16 px and at 128 px, never from MacTahoe"
+    check bash -ec 'for g in "$1" "$2"; do for n in folder user-home; do grep -qE "^$n=grassfield-icons/extra/" <<<"$g" || { echo "$n"; exit 1; }; done; grep -qE "^inode-directory=grassfield-icons/base/places/" <<<"$g" || exit 1; done; grep -qx "folder=grassfield-icons/extra/16x16/places/folder.png" <<<"$1" && grep -qx "folder=grassfield-icons/extra/scalable/places/folder.svg" <<<"$2"' _ "$g16" "$g128"
     desc="GTK$v: MacTahoe-only -> base, Pebble-only -> extra, Breeze-only -> breeze, ours -> scalable/, shared -> base"
     check bash -ec 'for g in "$1" "$2"; do grep -qE "^calendar=grassfield-icons/base/apps/" <<<"$g" && grep -qE "^pb-only=grassfield-icons/extra/" <<<"$g" && grep -qE "^br-only=breeze/" <<<"$g" && grep -qE "^own-app=grassfield-icons/scalable/apps/" <<<"$g" && grep -qE "^shared=grassfield-icons/base/" <<<"$g" && grep -qE "^dev-only=grassfield-icons/scalable/devices/" <<<"$g" && grep -qE "^dev-shared=grassfield-icons/extra/" <<<"$g" || exit 1; done' _ "$g16" "$g128"
     desc="GTK$v: every store name resolves to Pebble's bag (extra/), at 16 px and at 128 px"

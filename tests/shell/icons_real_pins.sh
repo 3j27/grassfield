@@ -43,6 +43,56 @@ check bash -ec 'cd "$1"; [ -z "$(find . -xtype l -print -quit)" ] && [ -z "$(fin
 desc="index.theme: Hidden=true, Inherits=breeze,Adwaita,hicolor, Directories, no forbidden word"
 check bash -ec 'grep -qx "Hidden=true" "$1" && grep -qx "Inherits=breeze,Adwaita,hicolor" "$1" && grep -q "^Directories=" "$1" && ! grep -qiE "mac|osx|apple|tahoe" "$1"' _ "$out/index.theme"
 
+# No icon name is lost: every Pebble name (in a directory its index.theme lists) is in the composed theme, except the names
+# of listed pebble: files and the aliases that resolve to them. The MacTahoe names that are missing are listed (they are the
+# logo names and their aliases, plus the two user-trash-*-dark files upstream's install.sh deletes).
+rep=$(python3 -I - "$out" "$tp/MacTahoe-icon-theme" "$tp/Pebble-Icon-Theme/Pebble" "$root/packaging/arch/icons-apple-logos.txt" <<'PY'
+import os, sys
+out, mt, pb, lst = sys.argv[1:5]
+def stem(f):
+    for e in (".svg", ".png"):
+        if f.endswith(e):
+            return f[: -len(e)]
+have = {stem(f) for _, _, fs in os.walk(out) for f in fs if stem(f)}
+dropped = set()
+for line in open(lst):
+    line = line.split("#", 1)[0].split()
+    if line and line[0].startswith("pebble:") and (len(line) == 1 or line[1] != "appstore"):
+        dropped.add(stem(os.path.basename(line[0])))
+def listed(root, index):
+    d = [l.split("=", 1)[1].strip() for l in open(index) if l.startswith("Directories=")][0]
+    return {x for x in d.split(",") if x}
+lost, allowed = [], []
+pbdirs = listed(pb, pb + "/index.theme")
+for d, _, fs in os.walk(pb):
+    if os.path.relpath(d, pb) not in pbdirs:
+        continue
+    for f in fs:
+        n = stem(f)
+        if not n or f.startswith("."):
+            continue
+        p = os.path.join(d, f)
+        real = os.path.realpath(p)
+        if not os.path.isfile(real):
+            continue  # dangling upstream
+        if n not in have:
+            (allowed if stem(os.path.basename(real)) in dropped or n in dropped else lost).append(n)
+mtlost = set()
+for sub in ("src", "links"):
+    for d, _, fs in os.walk(os.path.join(mt, sub)):
+        for f in fs:
+            n = stem(f)
+            if n and not f.startswith(".") and n not in have:
+                mtlost.add(n)
+print("PBLOST=%s" % " ".join(sorted(set(lost))))
+print("PBLOGO=%d" % len(set(allowed)))
+print("MTMISSING=%s" % " ".join(sorted(mtlost)))
+PY
+)
+echo "    $(grep '^PBLOGO' <<<"$rep")"; echo "    $(grep '^MTMISSING' <<<"$rep" | cut -c1-400)"
+desc="no Pebble name is lost (only logo-dropped names and their aliases may be missing): $(grep '^PBLOST=' <<<"$rep" | cut -c1-120)"
+check test "$(grep '^PBLOST=' <<<"$rep")" = "PBLOST="
+
 where() { # name -> layer directory of the first file or link of that name (by size order not implied)
   find "$out" \( -name "$1.svg" -o -name "$1.png" \) -printf '%P\n' | sort | tr '\n' ' '
 }
