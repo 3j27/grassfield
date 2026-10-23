@@ -168,6 +168,7 @@ Singleton {
     // on destruction. There is one visible Dock at a time (macOS: on the output where the pointer last reached its
     // edge): the Dock publishes that output in `dockScreenName`, and a window animates toward that Dock.
     property var dockOwners: ({})
+    property string lastDockRectProblem: ""
     property string dockScreenName: ""
 
     function registerDock(screenName: string, owner: var): void {
@@ -185,7 +186,16 @@ Singleton {
     // With "minimize into application icon" (dock.minimizeIntoApp) the rectangle is the tile of the window's app.
     function dockRect(screenName: string, index: int, adding: bool, toplevel: var): var {
         const owner = root.dockOwners[root.dockScreenName] || root.dockOwners[screenName];
-        return Minimized.finiteRect(owner ? owner.tileRect(index, adding, toplevel) : null) || {x: 0, y: 0, w: 0, h: 0};
+        const rect = Minimized.finiteRect(owner ? owner.tileRect(index, adding, toplevel) : null);
+        if (!rect) {
+            // The plugin then hides or shows the window without animation: say why (once per reason, not per call).
+            const why = !owner ? "no Dock registered for " + (root.dockScreenName || screenName) + " (registered: " + Object.keys(root.dockOwners).join(",") + ")" : "the Dock of " + (root.dockScreenName || screenName) + " has no tile rectangle for slot " + index;
+            if (why !== root.lastDockRectProblem) {
+                root.lastDockRectProblem = why;
+                console.warn("grassfield-shell: dockRect empty: " + why);
+            }
+        }
+        return rect || {x: 0, y: 0, w: 0, h: 0};
     }
 
     // Name of the monitor a window is on ("" if unknown).
