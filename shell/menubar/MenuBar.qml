@@ -178,13 +178,13 @@ Scope {
         function volume(value: real): string {
             if (!VisualFixtures.dev)
                 return "refused";
-            return Audio.ready ? (Audio.setVolume(value) ? "ok" : "refused: dev guard") : "unavailable: no output";
+            return Audio.deviceReady ? (Audio.setVolume(value) ? "ok" : "refused: dev guard") : "unavailable: no output";
         }
 
         function brightness(value: real): string {
             if (!VisualFixtures.dev)
                 return "refused";
-            if (!Brightness.available)
+            if (!Brightness.deviceAvailable)
                 return "unavailable: no backlight";
             return Brightness.setLevel(value) ? "ok" : "refused: dev guard";
         }
@@ -193,13 +193,13 @@ Scope {
         function volumeLevel(): string {
             if (!VisualFixtures.dev)
                 return "refused";
-            return Audio.sink !== null && Audio.sink.audio !== null ? Audio.deviceVolume.toFixed(2) : "none";
+            return Audio.deviceReady ? Audio.deviceVolume.toFixed(2) : "none";
         }
 
         function brightnessLevel(): string {
             if (!VisualFixtures.dev)
                 return "refused";
-            return Brightness.available ? Brightness.level.toFixed(2) : "none";
+            return Brightness.deviceAvailable ? Brightness.deviceLevel.toFixed(2) : "none";
         }
     }
 
