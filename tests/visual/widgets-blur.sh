@@ -36,9 +36,11 @@ echo "widget at $rect"
 vs_park
 vs_capture widgets-blur-on >/dev/null
 on="$VS_SHOTS/widgets-blur-on.$VS_LANG.png"
-# A 40x12 strip inside the tile near its top-left corner (the clock text is centred) and the same strip left of the tile.
+# A 40x12 strip inside the tile near its top-left corner (the clock text is centred) and the same strip just outside it.
 inside=$(sd "$on" "40x12+$((wx + 14))+$((wy + 10))")
-outside=$(sd "$on" "40x12+$((wx - 60))+$((wy + 10))")
+# Outside: right of the tile (a widget at the left edge has no room on its left), below it when the right is off the output.
+if (( wx + ww + 70 < 1900 )); then ox=$((wx + ww + 20)); oy=$((wy + 10)); else ox=$((wx + 14)); oy=$((wy + wh + 20)); fi
+outside=$(sd "$on" "40x12+${ox}+${oy}")
 echo "stripe deviation x100: inside the tile $inside, outside $outside"
 check "the stripes are visible outside the tile (deviation $outside > 2000)" test "$outside" -gt 2000
 check "the tile blurs them away: inside $inside < 25 % of outside $outside" test "$((inside * 4))" -lt "$outside"
