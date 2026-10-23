@@ -17,7 +17,7 @@ UI = pathlib.Path(__file__).resolve().parent.parent
 SRC = UI / "tokens" / "tokens.json"
 DST = UI / "Grassfield" / "Ui" / "Tokens.qml"
 PLUGIN_DST = UI.parent / "compositor" / "src" / "core" / "ThemeTokens.hpp"
-PLUGIN_GROUPS = ("titlebar",)
+PLUGIN_GROUPS = ("titlebar", "window")  # window: the lights the apps draw (ADR-0015 P7, one token source)
 
 
 def is_leaf(node):
