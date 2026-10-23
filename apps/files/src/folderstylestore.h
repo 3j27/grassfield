@@ -5,6 +5,7 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include <QList>
+#include <QPair>
 #include <QString>
 #include <QStringList>
 
@@ -114,6 +115,14 @@ public:
     // Files moved or renamed a folder: the entry of `from` (and of the folders under it) now belongs to `to`. True when
     // the store changed. Moves done outside Files are not seen: those entries are pruned at the next write.
     bool moveEntries(const QString &from, const QString &to);
+    // Several folders moved by one job: every pair is protected from a stale prune result BEFORE anything is collected, then
+    // the entries move in one load and one save.
+    bool moveEntries(const QList<QPair<QString, QString>> &pairs);
+    // A move or rename of these folders (their old paths) is in flight, from the start of the job to the end of its result
+    // slot: no prune result removes an entry at or under them meanwhile (a prune that looked at the disk after the move but
+    // before the entries moved calls every old path gone). Counted: overlapping jobs are fine.
+    void beginMoves(const QStringList &paths);
+    void endMoves(const QStringList &paths);
     // Files created a folder at `path`: an old entry for that path must not apply to it.
     bool dropEntry(const QString &path);
 
@@ -138,6 +147,7 @@ private:
     mutable qint64 m_serial = 0;
     mutable QHash<QString, FolderStyleLogic::Style> m_entries;
     std::shared_ptr<PruneJob> m_job;
+    QHash<QString, int> m_pending; // keys of folders whose move is in flight (beginMoves/endMoves)
     bool m_pruneAgain = false; // a forced prune was asked for while a job ran: it starts when that job is collected
     QElapsedTimer m_lastPrune;
     bool m_haveMounts = false;

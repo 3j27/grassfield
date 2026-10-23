@@ -21,7 +21,11 @@
 #include <QTimer>
 #include <QThread>
 
+#include <atomic>
+#include <chrono>
+#include <future>
 #include <memory>
+#include <thread>
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
@@ -517,6 +521,89 @@ TEST(FolderStyleStore, AForcedPruneAskedForWhileAJobWaitsRunsAfterIt)
     store.startPrune(true); // asked for while that job waits: queued, not dropped
     store.waitForPrune();
     EXPECT_EQ(store.fallbackCount(), 0) << "the queued forced prune saw the folder gone";
+}
+
+// Several folders moved by ONE job (FilesApp's result slot hands every pair at once): a prune that looked at the disk after the
+// move calls every old path gone; no pair may lose its entry because another pair was handled first (GF review 3).
+namespace {
+struct TwoFolders {
+    QString a, c, da, dc;
+};
+TwoFolders makeTwoFolders(const QTemporaryDir &dir, FolderStyleStore &store)
+{
+    TwoFolders f;
+    f.a = makeFolder(dir, QStringLiteral("src/a"));
+    f.c = makeFolder(dir, QStringLiteral("src/c"));
+    makeFolder(dir, QStringLiteral("dst"));
+    f.da = dir.filePath(QStringLiteral("dst/a"));
+    f.dc = dir.filePath(QStringLiteral("dst/c"));
+    ::chmod(QFile::encodeName(f.a).constData(), 0555);
+    ::chmod(QFile::encodeName(f.c).constData(), 0555);
+    EXPECT_TRUE(store.write(f.a, style("#e5484d")).fellBack);
+    EXPECT_TRUE(store.write(f.c, style("#3fae5a")).fellBack);
+    store.waitForPrune();
+    ::chmod(QFile::encodeName(f.a).constData(), 0755);
+    ::chmod(QFile::encodeName(f.c).constData(), 0755);
+    return f;
+}
+} // namespace
+
+TEST(FolderStyleStore, TwoFoldersMovedByOneJobKeepTheirColoursAgainstAFinishedPrune)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    FolderStyleStore store(dir->filePath(QStringLiteral("cfg/folder-styles.json")));
+    store.setMountsForTests(FolderStyleStore::Mounts::parse("1 0 0:1 / / rw - ext4 /dev/x rw\n", ""));
+    const TwoFolders f = makeTwoFolders(*dir, store);
+    store.injectFinishedPruneForTests({f.a, f.c}); // looked after the move: both old paths gone
+    ASSERT_TRUE(QDir().rename(f.a, f.da));
+    ASSERT_TRUE(QDir().rename(f.c, f.dc));
+    EXPECT_TRUE(store.moveEntries(QList<QPair<QString, QString>>{{f.a, f.da}, {f.c, f.dc}}));
+    EXPECT_EQ(store.read(f.da).color, QStringLiteral("#e5484d"));
+    EXPECT_EQ(store.read(f.dc).color, QStringLiteral("#3fae5a")) << "the second folder's colour survives the first pair's handling";
+}
+
+// The same with a real prune worker held at its first stat while both folders are renamed, and the registration FilesApp does
+// when the job starts (beginMoves) and ends (endMoves): an unrelated write collecting the result in between loses nothing.
+TEST(FolderStyleStore, ARealPruneWorkerCannotDropTheEntriesOfFoldersBeingMoved)
+{
+    SKIP_WITHOUT_SANDBOX(dir);
+    if (::geteuid() == 0)
+        GTEST_SKIP() << "root ignores permissions";
+    FolderStyleStore store(dir->filePath(QStringLiteral("cfg/folder-styles.json")));
+    store.setMountsForTests(FolderStyleStore::Mounts::parse("1 0 0:1 / / rw - ext4 /dev/x rw\n", ""));
+    const TwoFolders f = makeTwoFolders(*dir, store);
+    const QString other = makeFolder(*dir, QStringLiteral("other"));
+    ::chmod(QFile::encodeName(other).constData(), 0555);
+    store.beginMoves({f.a, f.c}); // the KIO job starts
+    std::promise<void> go;
+    std::shared_future<void> gate = go.get_future().share();
+    std::atomic<bool> first{true};
+    FolderStyleStore::setStatObserverForTests([gate, &first](const QString &) {
+        if (first.exchange(false))
+            gate.wait();
+    });
+    store.startPrune(true);
+    ASSERT_TRUE(QDir().rename(f.a, f.da));
+    ASSERT_TRUE(QDir().rename(f.c, f.dc));
+    go.set_value();
+    std::this_thread::sleep_for(std::chrono::milliseconds(300)); // the worker finishes: both old paths are gone on disk
+    FolderStyleStore::setStatObserverForTests({});
+    // Something else collects the finished result before the job's own result slot runs (a write to another folder).
+    ASSERT_TRUE(store.write(other, style("#8e5bea")).fellBack);
+    EXPECT_TRUE(store.moveEntries(QList<QPair<QString, QString>>{{f.a, f.da}, {f.c, f.dc}}));
+    store.endMoves({f.a, f.c}); // the job's result slot is done
+    EXPECT_EQ(store.read(f.da).color, QStringLiteral("#e5484d"));
+    EXPECT_EQ(store.read(f.dc).color, QStringLiteral("#3fae5a"));
+    // And once the move is over, a prune is free again to remove what really is gone.
+    store.waitForPrune();
+    ::chmod(QFile::encodeName(other).constData(), 0755);
+    ASSERT_TRUE(QDir(other).removeRecursively());
+    store.startPrune(true);
+    store.waitForPrune();
+    EXPECT_EQ(store.read(f.da).color, QStringLiteral("#e5484d"));
+    EXPECT_EQ(store.fallbackCount(), 2) << "the entry of the vanished unrelated folder is pruned, the moved ones stay";
 }
 
 TEST(FolderStyleStore, EntriesFollowRenamesAndAreNotInheritedByNewFolders)

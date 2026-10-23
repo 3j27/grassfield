@@ -544,13 +544,17 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
             f->expect(url, false);
     });
     if (cut) {
-        connect(job, &KJob::result, this, [this, job, urls, destination, created] {
+        const QStringList pending = beginStyleMoves(urls);
+        connect(job, &KJob::result, this, [this, job, urls, destination, created, pending] {
             // A cut selection is consumed by its paste.
-            if (job->error())
-                return;
-            QGuiApplication::clipboard()->clear();
-            for (const auto &pair : FolderStyleLogic::followingPaste(urls, destination, *created))
-                styleMoved(pair.first, pair.second);
+            if (!job->error()) {
+                QGuiApplication::clipboard()->clear();
+                QList<QPair<QUrl, QUrl>> pairs;
+                for (const auto &pair : FolderStyleLogic::followingPaste(urls, destination, *created))
+                    pairs.append({pair.first, pair.second});
+                styleMovedAll(pairs);
+            }
+            endStyleMoves(pending);
         });
     }
     track(job, countText(cut ? tr("Moving 1 item…") : tr("Copying 1 item…"), cut ? tr("Moving %1 items…") : tr("Copying %1 items…"), urls.size()));
@@ -644,12 +648,15 @@ void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
     attachDelegate(job);
     KIO::FileUndoManager::self()->recordJob(KIO::FileUndoManager::Rename, {url}, destination, job);
     QPointer<QObject> target = folder;
-    connect(job, &KJob::result, this, [this, job, url, destination, target] {
+    const QStringList pending = beginStyleMoves({url});
+    connect(job, &KJob::result, this, [this, job, url, destination, target, pending] {
         if (job->error()) {
+            endStyleMoves(pending);
             emit operationFailed(job->errorString());
             return;
         }
         styleMoved(url, destination);
+        endStyleMoves(pending);
         if (auto *f = asFolder(target))
             f->expect(destination, false);
     });
@@ -665,6 +672,38 @@ void FilesApp::styleMoved(const QUrl &from, const QUrl &to)
         emit folderStyleRevisionChanged();
         emit allFolderStylesChanged();
     }
+}
+
+void FilesApp::styleMovedAll(const QList<QPair<QUrl, QUrl>> &pairs)
+{
+    if (m_folderStyles.fallbackCount() == 0)
+        return;
+    QList<QPair<QString, QString>> local;
+    for (const auto &pair : pairs) {
+        if (pair.first.isLocalFile() && pair.second.isLocalFile())
+            local.append({pair.first.toLocalFile(), pair.second.toLocalFile()});
+    }
+    if (m_folderStyles.moveEntries(local)) {
+        ++m_folderStyleRevision;
+        emit folderStyleRevisionChanged();
+        emit allFolderStylesChanged();
+    }
+}
+
+QStringList FilesApp::beginStyleMoves(const QList<QUrl> &sources)
+{
+    QStringList paths;
+    for (const QUrl &u : sources) {
+        if (u.isLocalFile())
+            paths.append(u.toLocalFile());
+    }
+    m_folderStyles.beginMoves(paths);
+    return paths;
+}
+
+void FilesApp::endStyleMoves(const QStringList &paths)
+{
+    m_folderStyles.endMoves(paths);
 }
 
 void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
@@ -747,11 +786,15 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
             if (directory || renamed)
                 done->append({from, to});
         });
-        connect(job, &KJob::result, this, [this, job, done] {
-            if (job->error())
-                return;
-            for (const auto &pair : *done)
-                styleMoved(pair.first, pair.second);
+        const QStringList pending = beginStyleMoves(sources);
+        connect(job, &KJob::result, this, [this, job, done, pending] {
+            if (!job->error()) {
+                QList<QPair<QUrl, QUrl>> pairs;
+                for (const auto &pair : *done)
+                    pairs.append({pair.first, pair.second});
+                styleMovedAll(pairs);
+            }
+            endStyleMoves(pending);
         });
     }
     track(job, countText(copy ? tr("Copying 1 item…") : tr("Moving 1 item…"), copy ? tr("Copying %1 items…") : tr("Moving %1 items…"), sources.size()));
