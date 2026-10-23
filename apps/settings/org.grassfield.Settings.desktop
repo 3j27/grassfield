@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Grassfield Settings
+Name[fr]=Réglages Grassfield
 Comment=Configure the Grassfield desktop
+Comment[fr]=Configurer le bureau Grassfield
 Exec=grassfield-settings
 Icon=org.grassfield.Settings
 Terminal=false

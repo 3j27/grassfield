@@ -47,6 +47,55 @@ SettingsPage {
         return themeStatus.reason !== "" ? sentence + "\n" + qsTr("Details: %1").arg(themeStatus.reason) : sentence;
     }
 
+    // Accessibility > Display (macOS): Increase Contrast, Reduce Transparency, Reduce Motion and Text Size, all live in the
+    // shell. Reduce Transparency and Reduce Motion are the same keys as in Appearance (one setting, two places, as the
+    // Quick Settings Appearance section shows them too).
+    SettingsGroup {
+        caption: qsTr("Display")
+        footnote: qsTr("Text Size scales the text of the shell's panels and of Settings; the menu bar and menus keep their size, as on a Mac. Increase Contrast draws borders and separators stronger and secondary text in the primary colour.")
+
+        SettingsRow {
+            title: qsTr("Increase Contrast")
+            subtitle: qsTr("Stronger borders and separators, full-strength text.")
+            Toggle {
+                accessibleName: qsTr("Increase Contrast")
+                checked: root.store.value("accessibility.increaseContrast")
+                onToggled: c => root.store.set("accessibility.increaseContrast", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Reduce Transparency")
+            subtitle: qsTr("Opaque surfaces instead of translucent ones.")
+            Toggle {
+                accessibleName: qsTr("Reduce Transparency")
+                checked: root.store.value("accessibility.reduceTransparency")
+                onToggled: c => root.store.set("accessibility.reduceTransparency", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Reduce Motion")
+            subtitle: qsTr("Animations are shortened to quick crossfades, windows and Spaces included.")
+            Toggle {
+                accessibleName: qsTr("Reduce Motion")
+                checked: root.store.value("accessibility.reduceMotion")
+                onToggled: c => root.store.set("accessibility.reduceMotion", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Text Size")
+            subtitle: qsTr("The size of the text in the shell's panels and in Settings.")
+            Segmented {
+                accessibleName: qsTr("Text Size")
+                model: [{id: "1", text: qsTr("100%")}, {id: "1.1", text: qsTr("110%")}, {id: "1.2", text: qsTr("120%")}, {id: "1.3", text: qsTr("130%")}]
+                value: String(root.store.value("accessibility.textSize"))
+                onPicked: id => root.store.set("accessibility.textSize", Number(id))
+            }
+        }
+    }
+
     SettingsGroup {
         caption: qsTr("Pointer")
         footnote: themeStatus.result === "failed" ? root.failureText()

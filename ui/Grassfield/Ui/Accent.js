@@ -36,3 +36,46 @@ function apply(base, setting, dark, tokens) {
     }
     return c;
 }
+
+// ---- Focus ring colour and Increase Contrast ----
+
+// Channels (0..1) of a "#rrggbb" or "#aarrggbb" string; null for anything else.
+function rgb(hex) {
+    if (typeof hex !== "string" || !/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(hex))
+        return null;
+    const h = hex.slice(-6);
+    return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255];
+}
+
+function luminance(c) {
+    const f = v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+
+// WCAG 2.x contrast ratio of two "#rrggbb" colours; 1 when either is not one.
+function contrast(a, b) {
+    const ca = rgb(a);
+    const cb = rgb(b);
+    if (!ca || !cb)
+        return 1;
+    const la = luminance(ca);
+    const lb = luminance(cb);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+// The keyboard focus ring colour (one ring for every surface): the accent when it holds `minContrast` against the surface
+// tint, else the text colour (the light appearance's yellow accent is 1.8:1 against its material; every other accent in both
+// appearances passes), so the ring is a non-text element of 3:1 or more (WCAG 1.4.11) on every accent.
+function focusRing(accent, tint, text, minContrast) {
+    return contrast(accent, tint) >= minContrast ? accent : text;
+}
+
+// Increase Contrast (macOS Accessibility > Display): the secondary text colour is the primary one; the borders, separators and
+// fills are drawn stronger by the tokens that carry an `increaseContrast` value.
+function contrastBoost(palette, on) {
+    if (!on)
+        return palette;
+    const c = Object.assign({}, palette);
+    c.textSecondary = c.text;
+    return c;
+}

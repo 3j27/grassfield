@@ -192,17 +192,19 @@ Scope {
     function rebuildApps(): void {
         // The selection follows its app, not its index; the view keeps its scroll position.
         const keepId = selected >= 0 && selected < items.length ? items[selected].id : "";
-        const recs = [];
+        const raw = [];
         const cache = {};
         for (const e of DesktopEntries.applications.values) {
             // NoDisplay, OnlyShowIn and NotShowIn: the shared list in the Apps service.
             if (!Apps.isListed(e))
                 continue;
-            const rec = {id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
-                keywords: Array.from(e.keywords), icon: e.icon, entry: e, category: Model.categoryOf(e.categories)};
-            recs.push(rec);
-            cache[e.id] = {key: "app:" + e.id, id: e.id, name: e.name, rec: rec};
+            raw.push({id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
+                keywords: Array.from(e.keywords), icon: e.icon, entry: e, category: Model.categoryOf(e.categories)});
         }
+        // Two apps of one name are told apart (Files and Files (GNOME)); nothing is hidden.
+        const recs = Model.disambiguate(raw);
+        for (const rec of recs)
+            cache[rec.id] = {key: "app:" + rec.id, id: rec.id, name: rec.name, rec: rec};
         records = Model.sortApps(recs);
         itemById = cache;
         const g = Model.groupByCategory(records);

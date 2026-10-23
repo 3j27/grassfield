@@ -58,6 +58,12 @@ Scope {
             return Popups.active ? Popups.kind + "@" + Popups.screenName : "";
         }
 
+        // Test hook (tests/visual/menubar-macos.sh): "held" while the overlay waits for the end of a press on the bar before it
+        // takes the keyboard (a press whose release the bar never saw would leave it so: keys then reach the window below).
+        function keyboardWait(): string {
+            return Popups.active && Popups.pointerHeld ? "held" : "";
+        }
+
         // Test hook (tests/visual/menubar-status.sh): JSON {menusRight, status: [{name, x, w}]} of the bar of `screen`.
         function statusState(screen: string): string {
             if (!VisualFixtures.dev)
@@ -374,23 +380,67 @@ Scope {
                 return out;
             }
 
-            // Left/Right in an open menu (macOS): the previous or next title's menu, wrapping around.
+            // Every item the keyboard cycle reaches, in bar order: the left titles, then the status items that open a menu
+            // (third-party tray items first). Search, the clock and Do Not Disturb are not menus: they have their own keys.
+            function navEntries(): var {
+                const out = win.menuTitles();
+                const kids = rightRow.children;
+                for (let i = 0; i < kids.length; i++) {
+                    const k = kids[i] as BarButton;
+                    if (!k || !k.visible || !k.opensMenu)
+                        continue;
+                    if (k.objectName === "menubar-tray")
+                        out.push({kind: "tray", button: k, menu: null});
+                    else if (k.menuKind !== "")
+                        out.push({kind: k.menuKind, button: k, menu: null});
+                }
+                return out;
+            }
+
+            readonly property var popupKindOf: ({system: "system", app: "app", bridge: "appbridge", file: "appfile", window: "appwindow"})
+
+            function isEntryOpen(t: var): bool {
+                const popupKind = win.popupKindOf[t.kind] !== undefined ? win.popupKindOf[t.kind] : t.kind;
+                if (popupKind !== Popups.kind)
+                    return false;
+                if (t.menu)
+                    return Popups.data.dbusId === t.menu.dbusId;
+                if (t.kind === "tray")
+                    return Popups.data.item === t.button.item;
+                return true;
+            }
+
+            function openEntry(t: var): void {
+                if (t.menu)
+                    win.openBridge(t.button, t.menu);
+                else if (t.kind === "tray")
+                    win.openTray(t.button, t.button.item);
+                else
+                    win.popup(t.kind === "file" ? "appfile" : t.kind === "window" ? "appwindow" : t.kind);
+            }
+
+            // Left/Right in an open menu (macOS): the previous or next item's menu, wrapping around.
             function stepMenu(direction: int): void {
-                const titles = win.menuTitles();
-                const kindOf = {system: "system", app: "app", bridge: "appbridge", file: "appfile", window: "appwindow"};
+                const titles = win.navEntries();
                 let at = -1;
                 for (let i = 0; i < titles.length; i++) {
-                    const t = titles[i];
-                    if (kindOf[t.kind] === Popups.kind && (!t.menu || Popups.data.dbusId === t.menu.dbusId))
+                    if (win.isEntryOpen(titles[i]))
                         at = i;
                 }
                 if (at < 0 || titles.length < 2)
                     return;
-                const next = titles[(at + direction + titles.length) % titles.length];
-                if (next.menu)
-                    win.openBridge(next.button, next.menu);
-                else
-                    win.popup(kindOf[next.kind]);
+                win.openEntry(titles[(at + direction + titles.length) % titles.length]);
+            }
+
+            // Ctrl+F8 (macOS "move focus to the status menus"): the first status item's menu; no status menu: nothing.
+            function openFirstStatus(): void {
+                const all = win.navEntries();
+                for (let i = 0; i < all.length; i++) {
+                    if (["network", "volume", "battery", "controlcenter", "nowplaying", "tray"].indexOf(all[i].kind) >= 0) {
+                        win.openEntry(all[i]);
+                        return;
+                    }
+                }
             }
 
             Connections {
@@ -498,6 +548,9 @@ Scope {
 
             function popup(kind: string): void {
                 switch (kind) {
+                case "status":
+                    win.openFirstStatus();
+                    break;
                 case "system":
                     openFor("system", systemButton, "left", {});
                     break;
@@ -568,6 +621,12 @@ Scope {
                 id: hitItem
                 width: win.width
                 height: BarHide.inputHeight(Tokens.menubarHeight, Tokens.menubarRevealZone, win.away)
+            }
+
+            // The menu bar window is mapped for the whole session: it hosts the idle reads of the icon shapes (the first output's
+            // bar only), so that the Apps panel opens with every icon's shape known (PERF-01).
+            IconShapePrewarm {
+                sources: Quickshell.screens.length > 0 && Quickshell.screens[0].name === win.screen.name ? Apps.listedIconSources : []
             }
 
             HoverHandler {
@@ -815,6 +874,7 @@ Scope {
                         // Now Playing: the active player's controls, while it has a session.
                         BarButton {
                             id: nowPlayingButton
+                            menuKind: "nowplaying"
                             objectName: "menubar-nowplaying"
                             tint: win.barTint
                             shadowed: !win.showBackground
@@ -854,6 +914,7 @@ Scope {
 
                         BarButton {
                             id: networkButton
+                            menuKind: "network"
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
@@ -873,6 +934,7 @@ Scope {
 
                         BarButton {
                             id: volumeButton
+                            menuKind: "volume"
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
@@ -893,6 +955,7 @@ Scope {
 
                         BarButton {
                             id: batteryButton
+                            menuKind: "battery"
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow
@@ -942,6 +1005,7 @@ Scope {
 
                         BarButton {
                             id: ccButton
+                            menuKind: "controlcenter"
                             tint: win.barTint
                             shadowed: !win.showBackground
                             shadowColor: win.barShadow

@@ -1,0 +1,88 @@
+#!/bin/sh
+# Login entry of the Grassfield desktop (GF-015, owner decision D-2: the login screen leads into the desktop).
+#
+#   grassfield-login                    start the chosen session (this is what the login screen runs)
+#   grassfield-login get                print the chosen session: grassfield (default) or omarchy
+#   grassfield-login set grassfield|omarchy
+#
+# Why: Omarchy's SDDM theme has no session list; it logs into the first session whose name contains "uwsm"
+# (/usr/share/sddm/themes/omarchy/Main.qml), and autologin names one session file. /etc/sddm.conf.d/grassfield.conf puts the
+# entry "Grassfield (uwsm)" (packaging/sddm/grassfield-login.desktop, which runs this script) first in SDDM's session
+# directories and makes it the autologin session. This script then starts either Grassfield or the unmodified Omarchy
+# session, by a per-user choice kept in ~/.config/grassfield/login-session: Omarchy stays one command away and needs no root:
+#   grassfield-login set omarchy      then log out and in again (and back with `set grassfield`).
+# The session files started are the ones Omarchy and Grassfield install; their Exec lines are read, never copied.
+#
+# Test hooks: GRASSFIELD_LOGIN_ROOT (prefix of /usr), GRASSFIELD_LOGIN_DRY_RUN=1 (print the Exec line instead of running it).
+
+set -eu
+
+config=${XDG_CONFIG_HOME:-$HOME/.config}/grassfield/login-session
+root=${GRASSFIELD_LOGIN_ROOT:-}
+
+chosen() {
+  choice=grassfield
+  if [ -r "$config" ]; then
+    read -r choice <"$config" || true
+  fi
+  case $choice in
+    omarchy) echo omarchy ;;
+    *) echo grassfield ;;
+  esac
+}
+
+exec_line() {
+  # The first Exec= of a session file (trusted, root-owned system files).
+  [ -r "$1" ] || return 1
+  sed -n 's/^Exec=//p' "$1" | head -n 1
+}
+
+session_line() {
+  case $1 in
+    grassfield) exec_line "$root/usr/share/wayland-sessions/grassfield.desktop" ;;
+    omarchy)
+      exec_line "$root/usr/local/share/wayland-sessions/omarchy.desktop" ||
+        exec_line "$root/usr/share/wayland-sessions/hyprland-uwsm.desktop"
+      ;;
+  esac
+}
+
+case ${1:-start} in
+  get)
+    chosen
+    ;;
+  set)
+    case ${2:-} in
+      grassfield | omarchy) ;;
+      *)
+        echo "usage: grassfield-login set grassfield|omarchy" >&2
+        exit 2
+        ;;
+    esac
+    mkdir -p "$(dirname "$config")"
+    printf '%s\n' "$2" >"$config"
+    echo "Next login starts: $2 (log out and in to switch)."
+    ;;
+  start)
+    first=$(chosen)
+    if [ "$first" = grassfield ]; then second=omarchy; else second=grassfield; fi
+    line=$(session_line "$first") || line=
+    if [ -z "$line" ]; then
+      # The chosen session is not installed (a removed package must not lock the user out): the other one.
+      line=$(session_line "$second") || line=
+    fi
+    if [ -z "$line" ]; then
+      echo "grassfield-login: no session found (grassfield.desktop and omarchy.desktop missing)" >&2
+      exit 1
+    fi
+    if [ "${GRASSFIELD_LOGIN_DRY_RUN:-}" = 1 ]; then
+      printf '%s\n' "$line"
+      exit 0
+    fi
+    exec sh -c "exec $line"
+    ;;
+  *)
+    echo "usage: grassfield-login [get | set grassfield|omarchy]" >&2
+    exit 2
+    ;;
+esac

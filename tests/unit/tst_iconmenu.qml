@@ -19,6 +19,15 @@ TestCase {
         return m.model.filter(i => !i.separator).map(i => i.id);
     }
 
+    function test_noRowHighlightedAtOpen() {
+        const d = menu({kind: "desktop"});
+        compare(d.currentIndex, -1);
+        d.destroy();
+        const i = menu({kind: "icon", count: 1, singleName: "Report.pdf"});
+        compare(i.currentIndex, -1);
+        i.destroy();
+    }
+
     function test_desktopMenu() {
         const m = menu({kind: "desktop"});
         compare(ids(m), ["newFolder", "getInfo", "wallpaper", "editWidgets", "cleanUp", "cleanUpByMenu"]);

@@ -147,7 +147,7 @@ Item {
         height: (field.visible ? field.height : labelText.implicitHeight) + Tokens.spacingXs
         radius: Tokens.desktopIconSelectionRadius
         color: root.renaming ? Appearance.withAlpha(Appearance.colors.fieldFill, Tokens.desktopIconRenameFillOpacity) : (root.selected ? Appearance.colors.accent : "transparent")
-        border.width: root.renaming ? Tokens.controlFocusRing : 0
+        border.width: root.renaming ? Tokens.controlFocusOutline : 0
         border.color: root.renameError !== "" ? Appearance.darkColors.danger : Appearance.colors.accent
         // Second pass of the drop shadow: the shadow of the text and its own shadow, a denser soft halo (gate A2: white text
         // must stay legible on a white wallpaper). Off on the accent highlight and while renaming.

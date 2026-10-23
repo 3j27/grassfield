@@ -91,11 +91,20 @@ FocusScope {
     // grid with Down never changes a value. Keys a control did not handle reach these handlers.
     Keys.onUpPressed: event => event.accepted = gridNavigate(root.Window.window ? root.Window.window.activeFocusItem : null, 0, -1)
     Keys.onDownPressed: event => event.accepted = gridNavigate(root.Window.window ? root.Window.window.activeFocusItem : null, 0, 1)
+    // Left/Right: the control beside; at the edge of the grid the menu bar's previous or next status menu opens (macOS
+    // Ctrl+F8 walk), and Left in an expanded section collapses it first.
     Keys.onLeftPressed: event => {
         if (expanded !== "") {
             collapse();
-            event.accepted = true;
+        } else if (!gridNavigate(root.Window.window ? root.Window.window.activeFocusItem : null, -1, 0)) {
+            Popups.stepMenu(-1);
         }
+        event.accepted = true;
+    }
+    Keys.onRightPressed: event => {
+        if (expanded === "" && !gridNavigate(root.Window.window ? root.Window.window.activeFocusItem : null, 1, 0))
+            Popups.stepMenu(1);
+        event.accepted = true;
     }
 
     function collectTargets(node: Item, out: var): void {

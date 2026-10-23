@@ -170,6 +170,62 @@
         <translation>Vert</translation>
     </message>
     <message>
+        <source>Display</source>
+        <translation>Affichage</translation>
+    </message>
+    <message>
+        <source>Text Size scales the text of the shell&apos;s panels and of Settings; the menu bar and menus keep their size, as on a Mac. Increase Contrast draws borders and separators stronger and secondary text in the primary colour.</source>
+        <translation>La taille du texte agrandit le texte des panneaux du shell et de Réglages ; la barre des menus et les menus gardent leur taille, comme sur un Mac. Augmenter le contraste dessine les bordures et les séparateurs plus forts et le texte secondaire dans la couleur principale.</translation>
+    </message>
+    <message>
+        <source>Increase Contrast</source>
+        <translation>Augmenter le contraste</translation>
+    </message>
+    <message>
+        <source>Stronger borders and separators, full-strength text.</source>
+        <translation>Bordures et séparateurs plus marqués, texte à pleine intensité.</translation>
+    </message>
+    <message>
+        <source>Reduce Transparency</source>
+        <translation>Réduire la transparence</translation>
+    </message>
+    <message>
+        <source>Opaque surfaces instead of translucent ones.</source>
+        <translation>Surfaces opaques au lieu de translucides.</translation>
+    </message>
+    <message>
+        <source>Reduce Motion</source>
+        <translation>Réduire les animations</translation>
+    </message>
+    <message>
+        <source>Animations are shortened to quick crossfades, windows and Spaces included.</source>
+        <translation>Les animations sont remplacées par de courts fondus enchaînés, fenêtres et bureaux compris.</translation>
+    </message>
+    <message>
+        <source>Text Size</source>
+        <translation>Taille du texte</translation>
+    </message>
+    <message>
+        <source>The size of the text in the shell&apos;s panels and in Settings.</source>
+        <translation>La taille du texte dans les panneaux du shell et dans Réglages.</translation>
+    </message>
+    <message>
+        <source>100%</source>
+        <translation>100&#xa0;%</translation>
+    </message>
+    <message>
+        <source>110%</source>
+        <translation>110&#xa0;%</translation>
+    </message>
+    <message>
+        <source>120%</source>
+        <translation>120&#xa0;%</translation>
+    </message>
+    <message>
+        <source>130%</source>
+        <translation>130&#xa0;%</translation>
+    </message>
+    <message>
         <source>Applying the new pointer colours…</source>
         <translation>Application des nouvelles couleurs du pointeur…</translation>
     </message>
@@ -3331,8 +3387,8 @@
         <translation>Accessibilité</translation>
     </message>
     <message>
-        <source>pointer cursor size mouse large color colour outline fill</source>
-        <translation>pointeur curseur taille souris grand grande couleur contour remplissage</translation>
+        <source>pointer cursor size mouse large color colour outline fill contrast transparency motion text size larger display</source>
+        <translation>pointeur curseur taille souris grand couleur contour remplissage contraste transparence animation texte taille agrandir affichage</translation>
     </message>
     <message>
         <source>Desktop &amp; Dock</source>
@@ -4151,6 +4207,10 @@
     <message>
         <source>Locations</source>
         <translation>Emplacements</translation>
+    </message>
+    <message>
+        <source>Tags menu</source>
+        <translation>Menu des étiquettes</translation>
     </message>
     <message>
         <source>Tags</source>

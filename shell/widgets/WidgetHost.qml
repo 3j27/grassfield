@@ -102,8 +102,8 @@ FocusScope {
         anchors.fill: parent
         radius: Tokens.widgetRadius
         color: "transparent"
-        border.width: root.activeFocus && root.interactive ? Tokens.controlFocusRing : 0
-        border.color: Appearance.colors.accent
+        border.width: root.activeFocus && root.interactive ? Tokens.controlFocusOutline : 0
+        border.color: Appearance.focusRingColor
     }
 
     TapHandler {

@@ -319,8 +319,10 @@ have the monitor focus leaves the focus where it was: that window keeps the keyb
 150 ms after Esc) reach the chrome, which ignores them: they are lost, never delivered to another window (drop table below).
 
 Keyboard selection is one value for all outputs (`Overview.selected`, `spaceFocus`, `spaceScreen`), since the keyboard
-reaches whichever chrome Hyprland picked: the first arrow key selects the window that was active at open, wherever it is
-(`V2.startSelection`; macOS), later arrows move to the neighbour on that output (`Layout.neighbor`) and, with none that way,
+reaches whichever chrome Hyprland picked: the window that was active at open carries the highlight (`marked`, wherever it
+is; App Exposé), nothing is selected yet, and the first arrow key moves from it to its neighbour (`V2.startSelection` finds
+the start, `V2.startFromActive` says the first arrow already moves; with no window active at open the first arrow selects
+the first window in reading order and stays on it). Later arrows move to the neighbour on that output (`Layout.neighbor`) and, with none that way,
 to the window entered on the output lying that way (`V2.adjacentScreen`, `V2.entryWindow`: the same height, the near edge);
 up with nothing above enters the Desktops bar of that output.
 

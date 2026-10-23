@@ -70,8 +70,8 @@ Item {
         anchors.fill: parent
         radius: Tokens.radiusControl
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: Appearance.colors.accent
+        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
+        border.color: Appearance.focusRingColor
 
         Rectangle {
             anchors.fill: parent

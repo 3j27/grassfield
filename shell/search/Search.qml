@@ -10,6 +10,7 @@ import "Files.js" as Files
 import "Filters.js" as Filters
 import "Ranking.js" as Ranking
 import "Units.js" as Units
+import "../launchpad/Model.js" as Model
 
 // Search (spec docs/specs/search.md): a centered floating field with grouped results.
 // This Scope owns the state and all providers; SearchPanel renders it, one overlay window per
@@ -150,7 +151,8 @@ Scope {
             out.push({id: e.id, name: e.name, genericName: e.genericName, comment: e.comment,
                 keywords: Array.from(e.keywords), icon: e.icon, entry: e});
         }
-        appRecords = out;
+        // Two apps of one name are told apart (Files and Files (GNOME)), as in Apps; nothing is hidden.
+        appRecords = Model.disambiguate(out);
     }
 
     function commandList(): var {

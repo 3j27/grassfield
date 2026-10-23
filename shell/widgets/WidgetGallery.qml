@@ -80,11 +80,11 @@ FocusScope {
         x: Tokens.spacingLg
         y: header.y + header.height + Tokens.spacingMd
         width: parent.width - 2 * Tokens.spacingLg
-        height: noteLabel.y - y - Tokens.spacingSm
+        height: Math.max(0, noteLabel.y - y - Tokens.spacingSm)
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         spacing: Tokens.spacingLg
-        cacheBuffer: height
+        cacheBuffer: Math.max(0, height)
         model: Registry.manifests.filter(m => Widgets.available(m.id))
 
         delegate: Column {

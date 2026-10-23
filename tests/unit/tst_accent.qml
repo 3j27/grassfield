@@ -25,6 +25,8 @@ TestCase {
     function cleanup() {
         Appearance.accentSetting = "multicolor";
         Appearance.dark = true;
+        Appearance.increaseContrast = false;
+        Appearance.textScale = 1;
         Appearance.iconTintSetting = "accent";
         Appearance.folderColorSetting = "theme";
     }
@@ -101,6 +103,60 @@ TestCase {
         compare(Appearance.darkColors.accentText, Qt.color("#fffffe"));
         Appearance.devGlyphMode = "";
         compare(Appearance.colors.accentText.toString().toLowerCase(), String(Tokens.colorAccentDark.greenText).toLowerCase());
+    }
+
+    // The keyboard focus ring (UX-09, A11Y-08): one colour for every surface, 3:1 or more as a non-text element against the
+    // material tint and against that tint over the extreme wallpapers (the tint alpha floor), for every accent in both
+    // appearances, the light appearance's yellow included (it falls back to the text colour).
+    function test_focusRingHolds3to1OnEveryAccentInBothAppearances() {
+        function over(fg, a, bg) {
+            const f = Qt.color(fg), b = Qt.color(bg);
+            return Qt.rgba(f.r * a + b.r * (1 - a), f.g * a + b.g * (1 - a), f.b * a + b.b * (1 - a), 1);
+        }
+        for (const dark of [true, false]) {
+            Appearance.dark = dark;
+            for (const n of Accent.NAMES) {
+                Appearance.accentSetting = n;
+                const ring = Appearance.focusRingColor;
+                const tint = Appearance.colors.materialTint;
+                const alpha = Tokens.materialTintAlphaClamp;
+                for (const wallpaper of ["#000000", "#ffffff", Appearance.colors.materialTint]) {
+                    const surface = over(tint, alpha, wallpaper);
+                    verify(ratio(ring, surface) >= 3, (dark ? "dark " : "light ") + n + " ring " + ring + " on " + surface + ": " + ratio(ring, surface));
+                }
+            }
+        }
+        Appearance.dark = false;
+        Appearance.accentSetting = "yellow";
+        compare(Appearance.focusRingColor.toString(), Qt.color(Tokens.colorLight.text).toString(), "light yellow: the text colour");
+        Appearance.accentSetting = "blue";
+        compare(Appearance.focusRingColor.toString(), Qt.color(Tokens.colorAccentLight.blue).toString(), "light blue: the accent");
+    }
+
+    function test_increaseContrastAndTextSizeFollowTheSettings() {
+        const base = Tokens.materialBorderOpacity;
+        const body = Tokens.typographyBodySize;
+        compare(Appearance.colors.textSecondary, Tokens.colorDark.textSecondary);
+        Appearance.increaseContrast = true;
+        verify(Tokens.materialBorderOpacity > base * 2, "borders are stronger");
+        compare(Appearance.colors.textSecondary, Tokens.colorDark.text);
+        Appearance.increaseContrast = false;
+        compare(Tokens.materialBorderOpacity, base);
+        Appearance.textScale = 1.3;
+        compare(Tokens.typographyBodySize, Math.round(body * 1.3));
+        verify(Tokens.typographyCaptionSize > 11);
+        compare(Tokens.typographyMenuSize, 13, "the menu bar and menus keep their size");
+        Appearance.textScale = 1;
+        compare(Tokens.typographyBodySize, body);
+    }
+
+    function test_accessibilityKeysValidate() {
+        compare(Store.validate("accessibility.increaseContrast", true), "");
+        verify(Store.validate("accessibility.increaseContrast", "yes") !== "");
+        compare(Store.validate("accessibility.textSize", 1.2), "");
+        verify(Store.validate("accessibility.textSize", 0.5) !== "");
+        verify(Store.validate("accessibility.textSize", 2) !== "");
+        compare(Store.DEFAULTS["accessibility.textSize"], 1);
     }
 
     function test_settingsValidation() {

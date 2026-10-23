@@ -69,8 +69,8 @@ Column {
                     anchors.fill: parent
                     radius: Tokens.radiusControl
                     color: choice.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: choice.activeFocus ? Tokens.controlFocusRing : 0
-                    border.color: Appearance.colors.text
+                    border.width: choice.activeFocus ? Tokens.controlFocusOutline : 0
+                    border.color: Appearance.focusRingColor
                 }
 
                 Column {

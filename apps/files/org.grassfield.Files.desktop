@@ -1,8 +1,11 @@
 [Desktop Entry]
 Type=Application
 Name=Files
+Name[fr]=Fichiers
 GenericName=File Manager
+GenericName[fr]=Gestionnaire de fichiers
 Comment=Browse and manage your files
+Comment[fr]=Parcourir et gérer vos fichiers
 Exec=grassfield-files %U
 Icon=org.grassfield.Files
 Terminal=false
@@ -10,3 +13,4 @@ Categories=System;FileTools;FileManager;
 MimeType=inode/directory;
 StartupWMClass=org.grassfield.Files
 Keywords=folder;manager;explore;disk;filesystem;
+Keywords[fr]=dossier;gestionnaire;explorer;disque;système de fichiers;

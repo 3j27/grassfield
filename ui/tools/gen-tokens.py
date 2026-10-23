@@ -70,8 +70,18 @@ def generate(data):
             if not is_leaf(leaf):
                 raise SystemExit(f"tokens.json: {group}.{name} is not a {{value, source}} leaf")
             v = leaf["value"]
+            expr = qml_literal(v)
+            typ = qml_type(v)
+            # Optional leaf keys make a token follow an Appearance setting (Settings > Accessibility > Display):
+            #   "textScale": true        the size is scaled by Appearance.textScale and rounded (Text Size)
+            #   "increaseContrast": V    the value is V while Appearance.increaseContrast is on (Increase Contrast)
+            if leaf.get("textScale"):
+                expr = f"Math.round({expr} * Appearance.textScale)"
+                typ = "int"
+            if "increaseContrast" in leaf:
+                expr = f"Appearance.increaseContrast ? {qml_literal(leaf['increaseContrast'])} : {expr}"
             out.append(f"    // {leaf['source']}")
-            out.append(f"    readonly property {qml_type(v)} {camel(group, name)}: {qml_literal(v)}")
+            out.append(f"    readonly property {typ} {camel(group, name)}: {expr}")
     out.append("}")
     return "\n".join(out) + "\n"
 

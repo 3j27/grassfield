@@ -16,6 +16,7 @@ PopupMenu {
     ].filter(i => i.visible !== false)
 
     onCloseRequested: Popups.close()
+    onMenuStepRequested: direction => Popups.stepMenu(direction)
 
     onActivated: item => {
         if (item.id === "wifi")

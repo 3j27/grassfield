@@ -146,8 +146,8 @@ Column {
             height: Tokens.panelCcRowHeight
             radius: Tokens.radiusControl
             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-            border.width: password.activeFocus ? Tokens.controlFocusRing : 0
-            border.color: Appearance.colors.text
+            border.width: password.activeFocus ? Tokens.controlFocusOutline : 0
+            border.color: Appearance.focusRingColor
 
             TextInput {
                 id: password
