@@ -546,6 +546,11 @@ Decisions:
   `accentText` dots (the lock passes its dark palette's `accent`/`accentText`; the polkit field uses the same defaults).
   Before: white dots on the white focus-ring band, 1.7–2.1:1. Seen in nested (`.dev/shots/lock-selection.png`, letters typed
   and Ctrl+A, never submitted).
+- Password fields (GF-118): the lock and the polkit sheet share `PasswordField.qml`; the Wi-Fi password field of Quick
+  Settings (`WifiList.qml`) is the only other one. Each sets `inputMethodHints` `ImhSensitiveData | ImhNoPredictiveText |
+  ImhNoAutoUppercase` (and `ImhHiddenText` while masked), as macOS secure fields do: an input method (fcitx5 autostarts
+  on Omarchy) neither predicts, autocorrects nor learns the text. `tests/security/password_hints.sh` finds every QML
+  field whose `echoMode` can be `TextInput.Password` and fails when its own block lacks the first two hints.
 - Untrusted strings (PAM messages, polkit message/action ID/prompt/identities, user name) use `Text.PlainText`.
   Polkit strings are also flattened to one line by `AuthDialogModel.plainLine` (C0/C1 controls and line separators →
   space, bidi overrides/isolates/marks removed, length capped: message 400, others 200) and capped in rendered lines
