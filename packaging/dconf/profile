@@ -1,3 +1,6 @@
 # Grassfield session dconf profile (ADR-0017). The first line is the only writable database.
+# system-db:local sits above Grassfield's own defaults so an administrator's /etc/dconf/db/local (MDM-style defaults and
+# locks, GF-117) wins over them and over the user's settings; dconf skips it silently when it does not exist.
 user-db:user
+system-db:local
 file-db:/usr/share/grassfield/dconf/grassfield.db
