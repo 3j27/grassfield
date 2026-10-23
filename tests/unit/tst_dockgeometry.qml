@@ -365,4 +365,34 @@ TestCase {
         compare(small.separatorHeight, 33);
         fuzzyCompare(small.iconRadius, 11 * 32 / 48, 1e-9);
     }
+
+    // Shrink to fit (REQ-DOCK-PAR-d8): 12 tiles + 1 separator of 4+4+? px.
+    function test_fitSizeKeepsTheRequestedSizeWhenItFits() {
+        // 10 tiles of 48: 480 + 9 gaps of 4 + 2 x 10 = 536 px, room for 1920
+        compare(Geometry.fitSize(48, 10, 0, 12, 4, 10, 1908, 16), 48);
+        // exactly full: 480 + 9 x 4 + 20 = 536
+        compare(Geometry.fitSize(48, 10, 0, 12, 4, 10, 536, 16), 48);
+    }
+
+    function test_fitSizeShrinksUntilTheShelfFits() {
+        // 20 tiles + 1 separator in 800 px: fixed = 20 + 12 + 20 x 4 = 112 -> floor(688 / 20) = 34
+        compare(Geometry.fitSize(48, 20, 1, 12, 4, 10, 800, 16), 34);
+        const size = Geometry.fitSize(96, 20, 1, 12, 4, 10, 800, 16);
+        compare(size, 34);
+        verify(size * 20 + 112 <= 800);
+        verify((size + 1) * 20 + 112 > 800);
+    }
+
+    function test_fitSizeNeverGoesBelowTheFloorOrAboveTheRequest() {
+        compare(Geometry.fitSize(48, 200, 1, 12, 4, 10, 800, 16), 16);
+        // a requested size under the floor is kept (the user asked for it)
+        compare(Geometry.fitSize(12, 200, 1, 12, 4, 10, 800, 16), 12);
+        compare(Geometry.fitSize(32, 3, 1, 12, 4, 10, 4000, 16), 32);
+    }
+
+    function test_fitSizeIgnoresUnknownRoom() {
+        compare(Geometry.fitSize(48, 10, 0, 12, 4, 10, 0, 16), 48);
+        compare(Geometry.fitSize(48, 10, 0, 12, 4, 10, NaN, 16), 48);
+        compare(Geometry.fitSize(48, 0, 0, 12, 4, 10, 100, 16), 48);
+    }
 }

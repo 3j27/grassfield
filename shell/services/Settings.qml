@@ -49,6 +49,8 @@ Singleton {
     readonly property bool dockMagnificationEnabled: store.data.dock.magnificationEnabled
     readonly property bool dockAutohide: store.data.dock.autohide
     readonly property var dockRecent: store.dockRecent
+    readonly property var dockFolders: store.dockFolders
+    readonly property var dockStackOptions: store.dockStackOptions
     readonly property bool dockShowRecents: store.data.dock.showRecents
     readonly property bool dockMinimizeIntoApp: store.data.dock.minimizeIntoApp
     readonly property bool dockAnimateOpening: store.data.dock.animateOpening
@@ -152,6 +154,14 @@ Singleton {
 
     function setDockRecent(list: var): void {
         store.setDockRecent(list);
+    }
+
+    function setDockFolders(list: var): void {
+        store.setDockFolders(list);
+    }
+
+    function setDockStackOptions(options: var): void {
+        store.setDockStackOptions(options);
     }
 
     function setIconMode(value: string): void {

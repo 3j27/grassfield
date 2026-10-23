@@ -24,6 +24,10 @@
     "autohide": false,
     "recent": [],
     "showRecents": true,
+    "folders": [
+      "~/Downloads"
+    ],
+    "stackOptions": {},
     "minimizeIntoApp": false,
     "animateOpening": true,
     "showIndicators": true,

@@ -51,6 +51,8 @@ Scope {
         return list.join("\n") === "foot\nchromium\norg.gnome.Nautilus" ? ["chromium", "foot", "org.grassfield.Settings"] : list;
     }
     readonly property var dockRecent: stringList(config.dock.recent)
+    readonly property var dockFolders: stringList(config.dock.folders)
+    readonly property var dockStackOptions: config.dock.stackOptions && typeof config.dock.stackOptions === "object" ? config.dock.stackOptions : ({})
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string dockMinimizeEffect: ["funnel", "shrink"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "funnel"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
@@ -139,6 +141,9 @@ Scope {
         // Recently launched apps that are not pinned, newest first (owned by the Dock), and whether to show them.
         property var recent: []
         property bool showRecents: true
+        // Folder stacks in the right section of the Dock ("~/" allowed) and their options per folder (Stacks.js).
+        property var folders: ["~/Downloads"]
+        property var stackOptions: ({})
         // Minimized windows go into their app's tile instead of getting a tile of their own.
         property bool minimizeIntoApp: false
         // "Animate opening applications": the launch bounce (macOS). Attention bounces are not part of it.
@@ -274,6 +279,15 @@ Scope {
 
     function setDockRecent(list: var): void {
         change("dock.recent", stringList(list));
+    }
+
+    function setDockFolders(list: var): void {
+        change("dock.folders", stringList(list));
+    }
+
+    // Options of the stacks as a whole ({path: {sort, view, display}}, already normalized by Stacks.withOption).
+    function setDockStackOptions(options: var): void {
+        change("dock.stackOptions", options && typeof options === "object" ? options : ({}));
     }
 
     // corner: topLeft | topRight | bottomLeft | bottomRight.

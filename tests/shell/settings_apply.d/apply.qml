@@ -36,6 +36,8 @@ ShellRoot {
         ["dock.magnificationEnabled", true, () => Settings.dockMagnificationEnabled === true],
         ["dock.autohide", true, () => Settings.dockAutohide === true],
         ["dock.recent", ["x", "y"], () => Settings.dockRecent.join(",") === "x,y"],
+        ["dock.folders", ["~/Downloads", "/srv/x"], () => Settings.dockFolders.join(",") === "~/Downloads,/srv/x"],
+        ["dock.stackOptions", {"/srv/x": {sort: "name", view: "list"}}, () => Settings.dockStackOptions["/srv/x"] && Settings.dockStackOptions["/srv/x"].view === "list"],
         ["dock.showRecents", false, () => Settings.dockShowRecents === false],
         ["dock.minimizeIntoApp", true, () => Settings.dockMinimizeIntoApp === true],
         ["dock.animateOpening", false, () => Settings.dockAnimateOpening === false],

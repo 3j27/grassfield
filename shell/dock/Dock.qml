@@ -687,8 +687,9 @@ Scope {
 
             required property ShellScreen modelData
 
-            // Tile size (Settings > Size): everything below follows it (Geometry.metrics).
-            readonly property int iconSize: root.sizeNow
+            // Tile size (Settings > Size) shrunk to fit the screen along the Dock (Geometry.fitSize, macOS): everything below follows
+            // it (Geometry.metrics). The setting itself is never changed.
+            readonly property int iconSize: Geometry.fitSize(root.sizeNow, root.items.filter(it => it.kind !== "separator").length, root.items.filter(it => it.kind === "separator").length, separatorWidth, Tokens.dockSpacing, Tokens.dockPadding, mainTotal - 2 * Tokens.dockFitMargin, Tokens.dockFitMin)
             // The window is as deep as the largest Dock needs, whatever the size now: resizing never reconfigures the layer surface
             // (the pointer's coordinates in it stay put while the separator is dragged). It is transparent and takes input only where the mask says.
             readonly property var largest: Geometry.metrics(Tokens.dockSizeMax, {
@@ -1060,9 +1061,11 @@ Scope {
                 if (sep < 0 || !mon || index < 0)
                     return null;
                 const w = widths.slice();
+                // The folder stacks sit between the separator and the minimized tiles.
+                const first = sep + 1 + root.items.filter(it => it.kind === "folder").length;
                 if (adding)
-                    w.splice(sep + 1 + index, 0, iconSize);
-                const slot = Magnify.centersFor(w, Tokens.dockSpacing, (mainTotal - Magnify.totalWidth(w, Tokens.dockSpacing)) / 2)[sep + 1 + index];
+                    w.splice(first + index, 0, iconSize);
+                const slot = Magnify.centersFor(w, Tokens.dockSpacing, (mainTotal - Magnify.totalWidth(w, Tokens.dockSpacing)) / 2)[first + index];
                 if (slot === undefined)
                     return null;
                 return globalTileRect(mon, slot);
