@@ -2064,6 +2064,14 @@
         <translation>Ajouter des marges aux fenêtres en mosaïque</translation>
     </message>
     <message>
+        <source>Rebuild the compositor extension after Hyprland updates</source>
+        <translation>Recompiler l’extension du compositeur après les mises à jour de Hyprland</translation>
+    </message>
+    <message>
+        <source>Window titlebars, minimize and global menus need it. After an update of Hyprland, Grassfield builds it again in the background.</source>
+        <translation>Les barres de titre, la réduction des fenêtres et les menus globaux en dépendent. Après une mise à jour de Hyprland, Grassfield la recompile en arrière-plan.</translation>
+    </message>
+    <message>
         <source>Screen Corners</source>
         <translation>Coins de l’écran</translation>
     </message>

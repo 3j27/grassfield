@@ -34,7 +34,8 @@
     "tilingEdges": true,
     "tilingMenuBar": true,
     "tilingMargins": true,
-    "stages": false
+    "stages": false,
+    "rebuildExtension": false
   },
   "notifications": {
     "dnd": false,

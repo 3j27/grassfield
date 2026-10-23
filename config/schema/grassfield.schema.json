@@ -148,6 +148,9 @@
         },
         "stages": {
           "type": "boolean"
+        },
+        "rebuildExtension": {
+          "type": "boolean"
         }
       }
     },

@@ -255,6 +255,18 @@ SettingsPage {
                 onToggled: c => root.store.set("windows.tilingMargins", c)
             }
         }
+
+        // ADR-0009 amendment 2026-10-23 (audit GF-033): opt-in; off, a Hyprland update leaves the extension off until the
+        // user runs grassfield-compositor-rebuild (the session's notice says so).
+        SettingsRow {
+            title: qsTr("Rebuild the compositor extension after Hyprland updates")
+            subtitle: qsTr("Window titlebars, minimize and global menus need it. After an update of Hyprland, Grassfield builds it again in the background.")
+            Toggle {
+                accessibleName: qsTr("Rebuild the compositor extension after Hyprland updates")
+                checked: root.store.value("windows.rebuildExtension")
+                onToggled: c => root.store.set("windows.rebuildExtension", c)
+            }
+        }
     }
 
     SettingsGroup {
