@@ -250,6 +250,7 @@
  {"path": "tests/visual/preview-browse.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/recent-items.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/menu-stable.sh", "layer": "visual", "runner": "bare"},
+ {"path": "tests/visual/widgets-blur.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/wallpaper-fade.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/wallpaper-fr.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/wallpaper-online.sh", "layer": "visual", "runner": "bare"},

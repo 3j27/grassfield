@@ -11,7 +11,8 @@ PopupMenu {
     signal choose(string action)
 
     accessibleName: qsTr("Widget menu")
-    currentIndex: 0
+    // No row highlighted until the pointer or a key selects one (macOS).
+    currentIndex: -1
 
     model: {
         const items = [];

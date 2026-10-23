@@ -163,6 +163,41 @@ Singleton {
         }
     }
 
+    // Test hooks (tests/visual/widgets-blur.sh). `status` is read-only; the two that change placements are refused outside a
+    // nested dev session (GRASSFIELD_DEV=1, never GRASSFIELD_SESSION=1).
+    IpcHandler {
+        target: "widgets"
+
+        function devOnly(): bool {
+            return Quickshell.env("GRASSFIELD_DEV") === "1" && Quickshell.env("GRASSFIELD_SESSION") !== "1";
+        }
+
+        // JSON [{uid, id, size, x, y, w, h}]: the desktop widgets of `screen` in output pixels.
+        function status(screen: string): string {
+            const s = root.screenByName(screen);
+            if (!s)
+                return "[]";
+            const grid = root.gridFor(s);
+            return JSON.stringify(root.desktop.filter(e => e.screen === screen).map(e => {
+                const size = Placements.px(e.size, grid.cell, grid.gap);
+                return {uid: e.uid, id: e.id, size: e.size, x: grid.x0 + e.col * (grid.cell + grid.gap), y: grid.y0 + e.row * (grid.cell + grid.gap), w: size.w, h: size.h};
+            }));
+        }
+
+        function addDesktop(id: string, size: string, screen: string): string {
+            if (!devOnly())
+                return "refused";
+            return root.addDesktop(id, size, screen) ? "added" : "no room";
+        }
+
+        function clearDesktop(): string {
+            if (!devOnly())
+                return "refused";
+            root.apply(Object.assign({}, root.placements, {desktop: []}));
+            return "cleared";
+        }
+    }
+
     Timer {
         id: saveTimer
         interval: 300
