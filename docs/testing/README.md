@@ -88,3 +88,21 @@ see it fail, revert it. Record the layer change in `tests/inventory.json`.
 Moved down: `tests/apps/files_registrar.sh` (nested to headless): the nested session only supplied a Wayland socket; the app
 now runs on the offscreen platform. It needs a private D-Bus daemon (Unix socket), so it SKIPs inside the Claude Code
 sandbox and stays a bare command (`runner: bare`) until it has run on the owner's machine.
+
+## Gate run reports (GF-036)
+
+Run artefacts used to disappear with removed worktrees, so a result could not be re-audited. Every gate run can leave a dated
+report with the commit, the build id, the exit code and the log path:
+
+```bash
+just gate check just check                       # any command: runs it, tees the log, writes the report, keeps its exit code
+just gate nested-overview tests/compositor/overview.sh   # a bare nested command (ask the owner first)
+scripts/dev/gate-run.sh --record NAME EXIT LOG   # a script that ended on its own summary line records itself
+just gate-archive                                # copy .dev/gate-runs/* into docs/testing/runs/ (then review and commit)
+```
+
+Reports live in `.dev/gate-runs/<UTC stamp>-<name>.md` (git-ignored); `just gate-archive` copies reports and logs (a log over
+256 KiB as its last 2000 lines) into `docs/testing/runs/`, which the repository keeps. A report counts `PASS`, `FAIL`, `SKIP`,
+`NOT VERIFIED` and `PROXY` lines and says so when a run is not a plain pass: cite the report, not a remembered result.
+Release checks and nested gate runs are started through the same helper (`just gate release-check just release-check`), so
+there is one format; a script that prints its own summary line can call `--record` at its end. Test: `tests/shell/gate_run.sh`.
