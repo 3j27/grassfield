@@ -27,7 +27,7 @@ TestCase {
         compare(Units.answer("-40 f to c").text, "-40 C");
     }
 
-    function test_data() {
+    function test_dataSizes() {
         compare(Units.answer("2 GiB in MB").text, "2147.4836 MB");
         compare(Units.answer("1 TB to GB").text, "1000 GB");
         compare(Units.answer("1024 mib to gib").text, "1 GiB");
