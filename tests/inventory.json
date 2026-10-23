@@ -133,6 +133,7 @@
  {"path": "tests/shell/audio_dev_guard.sh", "layer": "headless"},
  {"path": "tests/shell/autostart_write.sh", "layer": "logic"},
  {"path": "tests/shell/check_schema_pattern.sh", "layer": "logic"},
+ {"path": "tests/shell/compositor_rebuild.sh", "layer": "logic"},
  {"path": "tests/shell/cursor_env.sh", "layer": "logic"},
  {"path": "tests/shell/cursors.sh", "layer": "logic"},
  {"path": "tests/shell/cursors_cancel.sh", "layer": "logic"},

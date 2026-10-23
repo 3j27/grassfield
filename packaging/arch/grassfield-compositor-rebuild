@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# grassfield-compositor-rebuild: keep a build of the Grassfield compositor extension that matches the installed Hyprland
+# (ADR-0009, amendment 2026-10-23; audit GF-033). Installed as /usr/lib/grassfield/grassfield-compositor-rebuild by the
+# grassfield-compositor package; run by the pacman hook grassfield-compositor-rebuild.hook after every transaction that
+# installs or upgrades hyprland or grassfield-compositor, or by hand (as root).
+#
+# A Hyprland plugin only hooks into the Hyprland build it was compiled for (the commit and the Hypr library minors). The
+# packaged plugin (/usr/lib/grassfield/grassfield-compositor.so) carries the ABI it was built for in a stamp next to it
+# (grassfield-compositor.abi). When the installed Hyprland has another ABI, the plugin is built from the sources the
+# package ships (/usr/src/grassfield-compositor) with CMake and the compiler only, as the unprivileged user nobody, in a
+# private directory, then installed with its stamp as /var/lib/grassfield/compositor/grassfield-compositor.so. The
+# session (config/hypr/grassfield/compositor.lua) loads the build whose stamp is the ABI of the Hyprland that runs. Never
+# changes or constrains Hyprland. The result goes to the status file (/var/lib/grassfield/compositor/status), the build
+# output to build.log next to it, and a line on the terminal (pacman's output).
+#
+# Usage: grassfield-compositor-rebuild [--hook | --check | --status | --clean | --print-abi [VERSION_H] | --build-into DIR]
+#   (none)            as root: build when no build matches the installed Hyprland; exit 1 when that fails
+#   --hook            the same, for the pacman hook: never fails the transaction (exit 0), says what it did
+#   --check           no build: the installed ABI and the build that matches it; exit 0 when one does, 1 otherwise
+#   --status          print the status file
+#   --clean           as root: remove the rebuilt build and the status (the package's removal hook)
+#   --print-abi [F]   the ABI string of a Hyprland version.h (default: the installed one); used for the stamps
+#   --build-into DIR  build the sources into DIR as the current user, no install (manual check of the toolchain)
+# Environment, for tests only: GF_VERSION_H, GF_LIB_DIR, GF_STATE_DIR, GF_SRC_DIR, GF_TEST_FAKE_BUILD=1 (a fake build:
+# writes a placeholder plugin instead of running CMake), GF_TOOLS_PATH (PATH used to look for the toolchain).
+set -uo pipefail
+
+version_h=${GF_VERSION_H:-/usr/include/hyprland/src/version.h}
+lib_dir=${GF_LIB_DIR:-/usr/lib/grassfield}
+state_dir=${GF_STATE_DIR:-/var/lib/grassfield/compositor}
+src_dir=${GF_SRC_DIR:-/usr/src/grassfield-compositor}
+packaged=$lib_dir/grassfield-compositor.so
+rebuilt=$state_dir/grassfield-compositor.so
+status_file=$state_dir/status
+build_log=$state_dir/build.log
+tools_path=${GF_TOOLS_PATH:-/usr/local/bin:/usr/bin}
+build_timeout=900
+
+say() { printf 'grassfield-compositor: %s\n' "$*"; }
+
+# One #define "value" of a version.h, "" when absent.
+define_of() { sed -n "s/^#define[[:space:]]\{1,\}$1[[:space:]]\{1,\}\"\([^\"]*\)\".*/\1/p" "$2" | head -n 1; }
+# PluginAPI.hpp stripPatch: what follows the last dot goes ("0.15.0" -> "0.15", "1" -> "1").
+strip_patch() { if [[ $1 == *.* ]]; then printf '%s' "${1%.*}"; else printf '%s' "$1"; fi; }
+
+# The ABI string of a Hyprland version.h (PluginAPI.hpp __hyprland_api_get_client_hash); exit 1 when a field is missing.
+abi_of() {
+  local f=$1 commit aq hu hg hc hlg
+  [[ -r $f ]] || return 1
+  commit=$(define_of GIT_COMMIT_HASH "$f") aq=$(define_of AQUAMARINE_VERSION "$f") hu=$(define_of HYPRUTILS_VERSION "$f")
+  hg=$(define_of HYPRGRAPHICS_VERSION "$f") hc=$(define_of HYPRCURSOR_VERSION "$f") hlg=$(define_of HYPRLANG_VERSION "$f")
+  [[ -n $commit && -n $aq && -n $hu && -n $hg && -n $hc && -n $hlg ]] || return 1
+  printf '%s_aq_%s_hu_%s_hg_%s_hc_%s_hlg_%s\n' "$commit" "$(strip_patch "$aq")" "$(strip_patch "$hu")" "$(strip_patch "$hg")" \
+    "$(strip_patch "$hc")" "$(strip_patch "$hlg")"
+}
+
+# The stamp of a build: the first line of <name>.abi next to it ("" when absent).
+stamp_of() { local s=${1%.so}.abi; [[ -r $s ]] && head -n 1 "$s" || true; }
+# The sources' identity (the package version written to $src_dir/VERSION), recorded in the rebuilt build's stamp.
+source_id() { head -n 1 "$src_dir/VERSION" 2>/dev/null || echo unknown; }
+
+write_status() { # <result> <reason> [plugin]
+  mkdir -p "$state_dir" 2>/dev/null || return 0
+  {
+    printf 'result=%s\n' "$1"
+    printf 'reason=%s\n' "$2"
+    printf 'abi=%s\n' "${installed:-unknown}"
+    printf 'plugin=%s\n' "${3:-}"
+    printf 'source=%s\n' "$(source_id)"
+    printf 'time=%s\n' "$(date --iso-8601=seconds)"
+  } >"$status_file.tmp" && mv -f "$status_file.tmp" "$status_file"
+}
+
+missing_tools() {
+  local t out=()
+  for t in cmake g++ make pkg-config hyprwayland-scanner; do PATH=$tools_path command -v "$t" >/dev/null 2>&1 || out+=("$t"); done
+  printf '%s' "${out[*]}"
+}
+
+# Builds the plugin from $src_dir into <outdir> (grassfield-compositor.so there), output appended to <log>.
+build_plugin() { # <outdir> <log> <as-user|"">
+  local out=$1 log=$2 user=$3 work run=()
+  if [[ ${GF_TEST_FAKE_BUILD:-} == 1 ]]; then
+    printf 'fake plugin for tests\n' >"$out/grassfield-compositor.so"
+    return 0
+  fi
+  work=$out/work
+  [[ -n $user ]] && run=(setpriv --reuid="$user" --regid="$user" --clear-groups --no-new-privs)
+  "${run[@]}" mkdir -p "$work" || return 1
+  # A clean environment: nothing from the caller's environment reaches CMake or the compiler.
+  timeout "$build_timeout" "${run[@]}" env -i PATH="$tools_path" HOME="$work" LANG=C \
+    cmake -S "$src_dir" -B "$work/build" -DCMAKE_BUILD_TYPE=Release -DGRASSFIELD_BUILD_TESTS=OFF -DGRASSFIELD_OUTPUT_DIR="$out" \
+    >>"$log" 2>&1 || return 1
+  # At most 4 compilers at once: each translation unit that includes Hyprland's headers takes about 1 GB.
+  local jobs
+  jobs=$(nproc 2>/dev/null || echo 2)
+  ((jobs > 4)) && jobs=4
+  timeout "$build_timeout" "${run[@]}" env -i PATH="$tools_path" HOME="$work" LANG=C \
+    cmake --build "$work/build" --parallel "$jobs" >>"$log" 2>&1 || return 1
+  [[ -s $out/grassfield-compositor.so ]]
+}
+
+mode=rebuild
+case ${1:-} in
+  "") ;;
+  --hook) mode=hook ;;
+  --check) mode=check ;;
+  --status) mode=status ;;
+  --clean) mode=clean ;;
+  --print-abi)
+    abi_of "${2:-$version_h}" || { echo "grassfield-compositor: no Hyprland version.h at ${2:-$version_h}" >&2; exit 1; }
+    exit 0
+    ;;
+  --build-into)
+    [[ -n ${2:-} ]] || { echo "usage: grassfield-compositor-rebuild --build-into DIR" >&2; exit 2; }
+    mkdir -p "$2" || exit 1
+    out=$(cd "$2" && pwd)
+    m=$(missing_tools)
+    [[ -z $m ]] || { say "cannot build: missing $m"; exit 1; }
+    if build_plugin "$out" "$out/build.log" ""; then say "built $out/grassfield-compositor.so"; abi_of "$version_h" >"$out/grassfield-compositor.abi"; exit 0; fi
+    say "build failed: see $out/build.log"
+    exit 1
+    ;;
+  *) sed -n '/^# Usage:/,/^# Environment/p' "$0" | sed '$d' >&2; exit 2 ;;
+esac
+
+if [[ $mode == status ]]; then
+  [[ -r $status_file ]] && cat "$status_file" || { echo "grassfield-compositor: no status yet" >&2; exit 1; }
+  exit 0
+fi
+
+installed=$(abi_of "$version_h") || installed=""
+
+if [[ $mode == check ]]; then
+  echo "installed Hyprland ABI: ${installed:-unknown (no $version_h)}"
+  echo "packaged build:  ${packaged} [$(stamp_of "$packaged")]"
+  echo "rebuilt build:   ${rebuilt} [$(stamp_of "$rebuilt")]"
+  [[ -n $installed && -f $packaged && $(stamp_of "$packaged") == "$installed" ]] && { echo "match: packaged"; exit 0; }
+  [[ -n $installed && -f $rebuilt && $(stamp_of "$rebuilt") == "$installed" ]] && { echo "match: rebuilt"; exit 0; }
+  echo "match: none (the session runs without the extension's features until a rebuild)"
+  exit 1
+fi
+
+# Root only past this point (the default paths), unless a test points the state elsewhere.
+if [[ -z ${GF_STATE_DIR:-} && $(id -u) != 0 ]]; then
+  say "run as root (sudo /usr/lib/grassfield/grassfield-compositor-rebuild)"
+  [[ $mode == hook ]] && exit 0
+  exit 1
+fi
+
+if [[ $mode == clean ]]; then
+  rm -f "$rebuilt" "${rebuilt%.so}.abi" "$status_file" "$build_log"
+  rmdir "$state_dir" 2>/dev/null
+  exit 0
+fi
+
+finish() { # <exit code>
+  [[ $mode == hook ]] && exit 0
+  exit "$1"
+}
+
+if [[ -z $installed ]]; then
+  say "Hyprland's version.h is missing ($version_h): nothing to match"
+  write_status unavailable no-hyprland-headers
+  finish 1
+fi
+
+# The packaged build matches: a rebuilt one is not needed any more (it may be from older sources).
+if [[ -f $packaged && $(stamp_of "$packaged") == "$installed" ]]; then
+  rm -f "$rebuilt" "${rebuilt%.so}.abi"
+  write_status packaged match "$packaged"
+  say "the packaged build matches the installed Hyprland ($installed)"
+  finish 0
+fi
+# A rebuilt build of these sources matches already.
+if [[ -f $rebuilt && $(stamp_of "$rebuilt") == "$installed" && $(sed -n 2p "${rebuilt%.so}.abi" 2>/dev/null) == "source $(source_id)" ]]; then
+  write_status rebuilt match "$rebuilt"
+  say "the build made on this machine matches the installed Hyprland ($installed)"
+  finish 0
+fi
+
+say "building the extension for the installed Hyprland ($installed); this takes a minute"
+missing=$(missing_tools)
+if [[ -n $missing ]]; then
+  say "cannot build: missing $missing; titlebars, minimize and global menus stay off until it is built"
+  write_status failed "missing-toolchain: $missing"
+  finish 1
+fi
+if [[ ! -r $src_dir/CMakeLists.txt ]]; then
+  say "cannot build: no sources in $src_dir"
+  write_status failed no-sources
+  finish 1
+fi
+
+mkdir -p "$state_dir" || { write_status failed no-state-dir; finish 1; }
+: >"$build_log"
+work=$(mktemp -d /var/tmp/grassfield-compositor.XXXXXX 2>/dev/null || mktemp -d) || { write_status failed no-temp-dir; finish 1; }
+trap 'rm -rf "$work"' EXIT
+user=""
+if [[ $(id -u) == 0 ]]; then
+  user=nobody
+  chown "$user:" "$work" 2>/dev/null || chown "$user" "$work" || { write_status failed no-build-user; finish 1; }
+fi
+if ! build_plugin "$work" "$build_log" "$user"; then
+  say "build failed (log: $build_log); titlebars, minimize and global menus stay off until it is built"
+  write_status failed build-failed
+  finish 1
+fi
+# Installed atomically: a session that has the previous build mapped keeps it.
+install -m 0755 "$work/grassfield-compositor.so" "$rebuilt.new" && mv -f "$rebuilt.new" "$rebuilt" || { write_status failed install-failed; finish 1; }
+printf '%s\nsource %s\n' "$installed" "$(source_id)" >"${rebuilt%.so}.abi.new" && mv -f "${rebuilt%.so}.abi.new" "${rebuilt%.so}.abi"
+write_status rebuilt built "$rebuilt"
+say "built for the installed Hyprland: $rebuilt (log: $build_log); log out and back in to use it"
+finish 0

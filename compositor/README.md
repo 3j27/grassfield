@@ -76,7 +76,23 @@ g++ -std=c++23 -O0 -g -Wall -Wextra -Isrc $(pkg-config --cflags gtest_main) \
 `compdb` writes `build/compile_commands.json` (one entry per translation unit, same flags as above, via `jq`).
 
 Outputs: `compositor/build/grassfield-compositor.so`, `compositor/build/grassfield-compositor-tests`,
-`compositor/build/compile_commands.json` (`compositor/build/` is gitignored).
+`compositor/build/compile_commands.json` (`compositor/build/` is gitignored). `-DGRASSFIELD_OUTPUT_DIR=<dir>` writes them
+elsewhere (the rebuild on the target builds from read-only sources).
+
+## After a Hyprland update (ADR-0009 amendment 2026-10-23)
+
+A plugin only hooks into the Hyprland build it was compiled for; the `hyprland` version is never constrained. The
+`grassfield-compositor` package ships, next to the plugin, its ABI stamp (`grassfield-compositor.abi`), the plugin sources
+(`/usr/src/grassfield-compositor`), `/usr/lib/grassfield/grassfield-compositor-rebuild` and a pacman hook. After every
+transaction that installs or upgrades `hyprland` or `grassfield-compositor`, the hook keeps a matching build: the packaged
+one when its stamp is the installed Hyprland's ABI, else a build made on the machine from the shipped sources (CMake and
+the compiler only, as the user `nobody`, in a private directory, at most 4 compilers, 15 min bound) installed as
+`/var/lib/grassfield/compositor/grassfield-compositor.so` with its stamp. The result is printed in pacman's output and
+written to `/var/lib/grassfield/compositor/status` (build output: `build.log` there). The session
+(`config/hypr/grassfield/compositor.lua`) loads the build whose stamp is the ABI of the Hyprland that runs; with none it
+loads the packaged one, which refuses to hook and shows the degraded-mode notice (how to rebuild). By hand:
+`sudo /usr/lib/grassfield/grassfield-compositor-rebuild` (`--check` without root tells which build matches; `--build-into
+DIR` builds as the current user to try the toolchain). Logic test: `tests/shell/compositor_rebuild.sh`.
 
 ## Test
 
