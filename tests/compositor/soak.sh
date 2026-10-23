@@ -249,6 +249,12 @@ far_point() { # <x> <y>
   done
   echo "$tx $ty"
 }
+# True when the compositor's cursor is within 3 px of <x>,<y> (output coordinates): the aim was reached.
+cursor_at() { # <x> <y>
+  HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j cursorpos 2>/dev/null \
+    | jq -e --argjson x "$1" --argjson y "$2" --argjson ox "$GF_OUT_X" --argjson oy "$GF_OUT_Y" \
+      '((.x - $ox - $x) | fabs) <= 3 and ((.y - $oy - $y) | fabs) <= 3' >/dev/null 2>&1
+}
 # True when a mapped window of <pid> is on screen on any output and not on a special workspace (minimized windows are).
 visible_anywhere() { # <pid>
   HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j clients 2>/dev/null \
@@ -344,9 +350,14 @@ while (( $(date +%s) < end_epoch )); do
       try_ cancel
       read -r px py <<<"$(gf_button_point close "$nx" "$ny" "$nw" "$nh")"
       read -r tx ty <<<"$(far_point "$px" "$py")"
+      # Effective only when the compositor reports the pointer on the button at the press, the window survived the
+      # release away from it and did not move: a press that missed proves nothing.
+      pointer abs "$px" "$py" sleep 120
+      landed=0
+      cursor_at "$px" "$py" && landed=1
       pointer abs "$px" "$py" sleep 50 down drag "$tx" "$ty" sleep 30 up
       sleep 0.3
-      if kill -0 "$npid" 2>/dev/null && cg=$(gf_window_geom "$npid" 1000) && ! gf_geom_moved "$cg" "$ng"; then ok_ cancel; fi ;;
+      if ((landed)) && kill -0 "$npid" 2>/dev/null && cg=$(gf_window_geom "$npid" 1000) && ! gf_geom_moved "$cg" "$ng"; then ok_ cancel; fi ;;
     6) # close the newest window with its close button
       try_ close
       read -r px py <<<"$(gf_button_point close "$nx" "$ny" "$nw" "$nh")"
@@ -436,19 +447,23 @@ else
 fi
 
 # Effective actions: a type that never ran or never took effect is a harness error; a low share is a failure.
+# Some titlebar action took effect: the harness reaches the windows, so an action type that never works is the product's.
+others_any() { local t; for t in drag zoom-dblclick zoom-button close minimize; do [[ $t != "$1" ]] && ((${eff[$t]:-0} > 0)) && return 0; done; return 1; }
 for t in drag abandoned zoom-dblclick zoom-button cancel close minimize restore; do
   a=${att[$t]:-0} e=${eff[$t]:-0}
+  o=0
+  others_any "$t" && o=1
   if [[ $t == abandoned ]]; then
     # Whether an abandoned drag moves the window is the compositor's choice: it must run, its effect is only reported.
     v=ok
     ((a > 0)) || v=harness
   else
-    v=$(soak_action_verdict "$a" "$e" "$min_pct")
+    v=$(soak_action_verdict "$a" "$e" "$min_pct" "$o")
   fi
   case $v in
     ok) say "check: $t: $e of $a effective" ;;
     harness) say "check: HARNESS ERROR $t: $e of $a effective (the harness could not drive it: no verdict on the product)"; harness=1 ;;
-    fail) say "check: FAIL $t: only $e of $a effective (minimum $min_pct %)"; fail=1 ;;
+    fail) say "check: FAIL $t: only $e of $a effective (minimum $min_pct %; if 0, the other titlebar actions did take effect)"; fail=1 ;;
   esac
 done
 v=$(soak_action_verdict "$spawned" "$((spawned - unmapped))" "$min_pct")

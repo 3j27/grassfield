@@ -16,6 +16,8 @@ expect() { # <name> <got> <want>
 # 0 attempts or 0 effective actions is a harness error (the audit's "0 minimize pairs" run), never a pass.
 expect "no attempt" "$(soak_action_verdict 0 0 50)" harness
 expect "425 attempts, 0 effective (the audited run)" "$(soak_action_verdict 425 0 50)" harness
+expect "0 effective while others work is a product failure" "$(soak_action_verdict 20 0 50 1)" fail
+expect "0 attempts is a harness error even when others work" "$(soak_action_verdict 0 0 50 1)" harness
 expect "below the minimum share" "$(soak_action_verdict 100 49 50)" fail
 expect "at the minimum share" "$(soak_action_verdict 100 50 50)" ok
 expect "all effective" "$(soak_action_verdict 7 7 50)" ok
