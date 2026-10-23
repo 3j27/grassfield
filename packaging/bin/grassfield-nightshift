@@ -1,0 +1,49 @@
+#!/bin/bash
+# Night Shift: warmer screen colours (macOS Night Shift; Omarchy's night light plugin does not run in Grassfield).
+#
+#   grassfield-nightshift on|off|toggle|status
+#
+# Drives hyprsunset (Omarchy installs it; its user unit is hyprsunset.service) through Hyprland's hyprsunset IPC, with the
+# same temperatures as omarchy-toggle-nightlight (4000 K warm, 6500 K off) so both sessions agree. `status` prints on or off.
+# The shell's Control Center switch (Quick Settings) calls this; there is no schedule yet.
+
+set -u
+
+WARM=4000
+NEUTRAL=6500
+IDENTITY=6000
+
+current() {
+  hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' | head -n 1
+}
+
+state() {
+  local t
+  t=$(current)
+  if [[ -n $t ]] && ((t < IDENTITY)); then echo on; else echo off; fi
+}
+
+apply() {
+  local target=$1
+  command -v hyprsunset >/dev/null || { echo "hyprsunset is not installed" >&2; exit 1; }
+  pgrep -x hyprsunset >/dev/null || systemctl --user start hyprsunset.service || exit 1
+  # A freshly started hyprsunset applies its own default at the end of its start-up: resend until it sticks.
+  local _
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    hyprctl hyprsunset temperature "$target" >/dev/null 2>&1
+    sleep 0.2
+    [[ $(current) == "$target" ]] && return 0
+  done
+  return 1
+}
+
+case ${1:-} in
+  on) apply "$WARM" ;;
+  off) apply "$NEUTRAL" ;;
+  toggle) if [[ $(state) == on ]]; then apply "$NEUTRAL"; else apply "$WARM"; fi ;;
+  status) state ;;
+  *)
+    echo "usage: grassfield-nightshift on|off|toggle|status" >&2
+    exit 2
+    ;;
+esac

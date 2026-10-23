@@ -1,4 +1,6 @@
--- Input defaults (ADR-0002). Keyboard layout comes from the Omarchy include in the real session.
+-- Input defaults (ADR-0002). Pointer behaviour only. The keyboard (layout from /etc/vconsole.conf, compose:caps, repeat
+-- rate and delay, numlock) is set by omarchy.lua, which loads Omarchy's default.hypr.input (or reproduces it) and the
+-- user's own ~/.config/hypr/input.lua before this file; this file must not set any kb_*, repeat_* or numlock key.
 
 hl.config({
   input = {

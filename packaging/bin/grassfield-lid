@@ -1,0 +1,89 @@
+#!/bin/bash
+# Lid and clamshell handling of the Grassfield session (docs/audits/final-1.0/02-omarchy-compatibility.md §5.3).
+#
+#   grassfield-lid closed      the lid was closed (Hyprland switch bind, config/hypr/grassfield/system.lua)
+#   grassfield-lid opened      the lid was opened
+#   grassfield-lid reconcile   a monitor was added or removed, or the session started
+#
+# macOS model: with the lid closed and an external display connected, the computer keeps running on that display (the
+# laptop panel is switched off and its windows move to the external display); with the lid closed and no external display
+# it sleeps, and the screen is locked first. logind decides about suspend (HandleLidSwitchDocked defaults to ignore, so a
+# docked lid does not suspend); this script locks, and turns the laptop panel off or on. Nothing here suspends.
+#
+# Test hooks: GRASSFIELD_LID_PROC (default /proc/acpi/button/lid), GRASSFIELD_DRM (default /sys/class/drm),
+# GRASSFIELD_LID_LOCK (the lock command), XDG_RUNTIME_DIR (marker and lock file).
+
+set -u
+
+LID_PROC=${GRASSFIELD_LID_PROC:-/proc/acpi/button/lid}
+DRM=${GRASSFIELD_DRM:-/sys/class/drm}
+RUNTIME=${XDG_RUNTIME_DIR:-/tmp}
+MARKER=$RUNTIME/grassfield-lid-internal-off
+LOCKFILE=$RUNTIME/grassfield-lid.lock
+LOCK_CMD=${GRASSFIELD_LID_LOCK:-qs ipc -c grassfield call lock lock}
+
+lid_closed() {
+  local state
+  for state in "$LID_PROC"/*/state; do
+    [[ -r $state ]] || continue
+    [[ $(<"$state") == *closed* ]] && return 0
+  done
+  return 1
+}
+
+# A connector of a built-in panel is eDP-N, LVDS-N or DSI-N (Hyprland uses the DRM connector names).
+internal_connector() {
+  local dir name
+  for dir in "$DRM"/card*-*; do
+    name=${dir##*/}
+    name=${name#card*-}
+    [[ $name =~ ^(eDP|LVDS|DSI)-[0-9A-Za-z]+$ ]] && { printf '%s\n' "$name"; return 0; }
+  done
+  return 1
+}
+
+external_connected() {
+  local status name
+  for status in "$DRM"/card*-*/status; do
+    [[ -e $status ]] || continue
+    name=${status%/status}
+    name=${name##*/}
+    [[ $name =~ -(eDP|LVDS|DSI)-[^/]+$ ]] && continue
+    [[ $(<"$status") == connected ]] && return 0
+  done
+  return 1
+}
+
+reconcile() {
+  local internal
+  (
+    flock -n 9 || exit 0
+    if lid_closed && external_connected && internal=$(internal_connector); then
+      if [[ ! -e $MARKER ]]; then
+        : >"$MARKER"
+        hyprctl eval "hl.monitor({ output = \"$internal\", disabled = true })" >/dev/null 2>&1 || rm -f "$MARKER"
+      fi
+    elif [[ -e $MARKER ]]; then
+      # Back to the user's own monitors.lua (scale, position): a reload applies it again.
+      rm -f "$MARKER"
+      hyprctl reload >/dev/null 2>&1 || true
+    fi
+  ) 9>"$LOCKFILE"
+}
+
+case ${1:-} in
+  closed)
+    if lid_closed && ! external_connected; then
+      # Lock before logind suspends (docked, the computer keeps running and stays unlocked, as on macOS).
+      $LOCK_CMD >/dev/null 2>&1 || true
+    fi
+    reconcile
+    ;;
+  opened | reconcile)
+    reconcile
+    ;;
+  *)
+    echo "usage: grassfield-lid closed|opened|reconcile" >&2
+    exit 2
+    ;;
+esac

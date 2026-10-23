@@ -18,5 +18,16 @@ hl.on("hyprland.start", function()
   --
   -- grassfield-shell runs as a systemd user service so it restarts on crash (gate R1). It starts even when the
   -- import or the bridge failed (";"): the bar then shows T0.
-  hl.exec_cmd("{ " .. import_env .. "; } && systemctl --user start grassfield-menu-bridge.service; systemctl --user start grassfield-shell.service")
+  --
+  -- Session services that Omarchy's own session provides through its shell or its autostart (02 §5.3): crash and
+  -- low-battery notifications, the pending-migrations notice, removable media (udiskie). Each unit has the same
+  -- ConditionEnvironment and skips itself where it does not apply (no battery, no udiskie).
+  local services = "grassfield-crash-watch.service grassfield-battery-watch.service grassfield-migrate-notify.service grassfield-automount.service"
+  hl.exec_cmd("{ " .. import_env .. "; } && systemctl --user start grassfield-menu-bridge.service; systemctl --user start grassfield-shell.service; systemctl --user start " .. services)
+
+  -- What Omarchy's autostart does besides starting its shell: the power profile for the current power source, the
+  -- post-boot hooks of ~/.config/omarchy/hooks, and the lid state (clamshell with an external display at start).
+  hl.exec_cmd("command -v omarchy-powerprofiles-init >/dev/null && omarchy-powerprofiles-init")
+  hl.exec_cmd("sleep 2; command -v omarchy-hook >/dev/null && omarchy-hook post-boot")
+  hl.exec_cmd("/usr/lib/grassfield/grassfield-lid reconcile")
 end)

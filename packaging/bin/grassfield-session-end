@@ -1,0 +1,131 @@
+#!/usr/bin/python3 -I
+"""End the Grassfield session the way macOS does (GF-025, owner decision 2026-10-23).
+
+    grassfield-session-end logout|restart|shutdown [--force] [--timeout SECONDS]
+
+Every open window is asked to close (xdg_toplevel.close, never a kill), so an application with unsaved work can show its
+own "Save?" sheet and keep the window open. Only when every window has gone is the session ended. If windows are still
+open after the timeout nothing is ended: a notice lists the applications and offers "<Action> Anyway" (macOS: "Shut Down
+Anyway"). Unsaved work is never lost silently. Omarchy's equivalent (omarchy-system-logout) closes the windows, waits one
+second and ends the session regardless; this one waits for the applications and lets them veto.
+
+Runs in the Grassfield session, started by the shell (shell/services/Power.qml). Standard library only; the helpers it
+runs (hyprctl, notify-send, systemctl, uwsm) are found through PATH.
+"""
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+ACTIONS = {
+    "logout": ("Log Out", "Log Out Anyway"),
+    "restart": ("Restart", "Restart Anyway"),
+    "shutdown": ("Shut Down", "Shut Down Anyway"),
+}
+ADDRESS = re.compile(r"^0x[0-9a-fA-F]+$")
+
+
+def run(argv, **kw):
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, timeout=kw.pop("timeout", 10), **kw)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def windows():
+    """Open client windows as [(address, class, title)]; None when the compositor cannot be asked."""
+    r = run(["hyprctl", "-j", "clients"])
+    if r is None or r.returncode != 0:
+        return None
+    try:
+        data = json.loads(r.stdout)
+    except ValueError:
+        return None
+    return [(c.get("address", ""), c.get("class", "") or "", c.get("title", "") or "") for c in data if isinstance(c, dict)]
+
+
+def close_windows(open_windows):
+    for address, _cls, _title in open_windows:
+        if ADDRESS.match(address):  # interpolated into a Lua expression below: nothing but a hex address passes
+            run(["hyprctl", "dispatch", 'hl.dsp.window.close({ window = "address:%s" })' % address])
+
+
+def app_names(open_windows):
+    names = []
+    for _address, cls, title in open_windows:
+        name = cls or title or "an application"
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def end_session(action):
+    """The step that really ends the session."""
+    if action == "logout":
+        # uwsm stops the compositor unit and the session's services in order; the compositor's own exit is the fallback.
+        r = run(["uwsm", "stop"])
+        if r is None or r.returncode != 0:
+            run(["hyprctl", "dispatch", "hl.dsp.exit()"])
+        return
+    state = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
+    # Omarchy keeps "reboot required" and "restart <service> required" markers; a restart or shutdown satisfies them.
+    for marker in glob.glob(os.path.join(state, "omarchy", "re*-required")):
+        try:
+            os.remove(marker)
+        except OSError:
+            pass
+    run(["systemctl", "reboot" if action == "restart" else "poweroff", "--no-wall"])
+
+
+def notify_blocked(action, names):
+    """Show the notice and wait for "<Action> Anyway". Returns True when the user chose it."""
+    label, anyway = ACTIONS[action]
+    title = "Can't %s now" % label.lower()
+    body = "These applications are still open and may be waiting for you to save your work: %s." % ", ".join(names[:5])
+    r = run(["notify-send", "-a", "Grassfield", "-u", "critical", "-t", "0", "-w", "-A", "force=" + anyway, title, body],
+            timeout=300)
+    return r is not None and r.stdout.strip() == "force"
+
+
+def main(argv):
+    force = "--force" in argv
+    timeout = float(os.environ.get("GRASSFIELD_SESSION_END_TIMEOUT", "15"))
+    args = []
+    rest = iter(argv[1:])
+    for a in rest:
+        if a == "--timeout":
+            timeout = float(next(rest, "15"))
+        elif not a.startswith("--"):
+            args.append(a)
+    if len(args) != 1 or args[0] not in ACTIONS:
+        print("usage: grassfield-session-end logout|restart|shutdown [--force] [--timeout SECONDS]", file=sys.stderr)
+        return 2
+    action = args[0]
+
+    current = windows()
+    if current is None:
+        # No compositor to ask (that is no reason to keep the user from logging out or powering off).
+        print("grassfield-session-end: cannot list windows, ending the session", file=sys.stderr)
+        end_session(action)
+        return 0
+    if not force:
+        # Ask the windows that exist now, once. A window that appears later is the application's own "Save changes?" sheet:
+        # closing it would answer Cancel for the user, so it is left alone and counted as "still open".
+        close_windows(current)
+        deadline = time.monotonic() + timeout
+        while current and time.monotonic() < deadline:
+            time.sleep(0.25)
+            current = windows() or []
+        if current:
+            if not notify_blocked(action, app_names(current)):
+                return 3
+    time.sleep(float(os.environ.get("GRASSFIELD_SESSION_END_GRACE", "1")))  # Chromium and friends finish writing
+    end_session(action)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -1,0 +1,73 @@
+#!/bin/sh
+# Install-time and on-demand check of the Grassfield login path (GF-015). Read-only, needs no privileges.
+#
+#   grassfield-login-check [--strict]
+#
+# Prints one line per check, "ok:" or "WARN:". Exit status 0 unless --strict and a check warned. The package runs it after
+# install and upgrade (grassfield-desktop.install); the owner can run it any time, for example after an Omarchy update.
+#
+# Test hook: GRASSFIELD_LOGIN_ROOT (prefix of /usr and /etc).
+
+root=${GRASSFIELD_LOGIN_ROOT:-}
+warned=0
+ok() { echo "ok: $*"; }
+warn() { echo "WARN: $*"; warned=1; }
+
+# 1. The session entries and the launcher.
+[ -r "$root/usr/share/wayland-sessions/grassfield.desktop" ] && ok "session file grassfield.desktop" ||
+  warn "/usr/share/wayland-sessions/grassfield.desktop is missing"
+[ -r "$root/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop" ] && ok "login entry 'Grassfield (uwsm)'" ||
+  warn "/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop is missing"
+[ -x "$root/usr/lib/grassfield/grassfield-login" ] && ok "launcher grassfield-login" || warn "/usr/lib/grassfield/grassfield-login is missing"
+command -v uwsm >/dev/null 2>&1 && ok "uwsm installed" || warn "uwsm is not installed (both sessions start through it)"
+
+# 2. SDDM reads our drop-in and it is the last word on SessionDir and the autologin session.
+dropin=$root/etc/sddm.conf.d/grassfield.conf
+if [ -r "$dropin" ]; then
+  ok "drop-in /etc/sddm.conf.d/grassfield.conf present"
+  last_dir=
+  last_session=
+  user=
+  for f in "$root"/usr/lib/sddm/sddm.conf.d/*.conf "$root"/etc/sddm.conf.d/*.conf "$root"/etc/sddm.conf; do
+    [ -r "$f" ] || continue
+    v=$(sed -n 's/^SessionDir=//p' "$f" | tail -n 1)
+    [ -n "$v" ] && last_dir=$v
+    v=$(sed -n 's/^Session=//p' "$f" | tail -n 1)
+    [ -n "$v" ] && last_session=$v
+    v=$(sed -n 's/^User=//p' "$f" | tail -n 1)
+    [ -n "$v" ] && user=$v
+  done
+  case $last_dir in
+    /usr/share/grassfield/sddm/wayland-sessions,*) ok "SDDM lists the Grassfield login entry first" ;;
+    *) warn "another SDDM file overrides SessionDir ($last_dir): the login screen may not start Grassfield" ;;
+  esac
+  if [ -n "$user" ]; then
+    [ "$last_session" = grassfield-login.desktop ] && ok "autologin starts Grassfield" ||
+      warn "autologin starts '$last_session', not grassfield-login.desktop (a file sorted after grassfield.conf sets it)"
+  else
+    ok "no autologin configured"
+  fi
+else
+  warn "/etc/sddm.conf.d/grassfield.conf is missing: the login screen starts Omarchy (run: grassfield-login set grassfield after restoring it)"
+fi
+
+# 3. The greeter theme heuristic Grassfield relies on, and whether the theme grew a session picker.
+theme=
+for f in "$root"/usr/lib/sddm/sddm.conf.d/*.conf "$root"/etc/sddm.conf.d/*.conf "$root"/etc/sddm.conf; do
+  [ -r "$f" ] || continue
+  v=$(sed -n '/^\[Theme\]/,/^\[/{s/^Current=//p}' "$f" | tail -n 1)
+  [ -n "$v" ] && theme=$v
+done
+qml=$root/usr/share/sddm/themes/$theme/Main.qml
+if [ -z "$theme" ] || [ ! -r "$qml" ]; then
+  ok "SDDM theme '${theme:-default}' has no readable Main.qml here (nothing to check)"
+elif grep -q 'indexOf("uwsm")' "$qml"; then
+  ok "theme '$theme' picks the first session named '*uwsm*' (Grassfield (uwsm) is first)"
+elif grep -q 'sessionModel' "$qml" && grep -qi 'ComboBox\|ListView\|session.*select' "$qml"; then
+  ok "theme '$theme' offers a session picker: choose 'Grassfield (uwsm)'"
+else
+  warn "theme '$theme' selects sessions in a way Grassfield does not know; check that the login screen reaches Grassfield (grassfield-login get)"
+fi
+
+[ "$warned" = 1 ] && [ "${1:-}" = --strict ] && exit 1
+exit 0
