@@ -296,7 +296,13 @@ Variants {
                 return null;
             }
 
-            onLoaded: (item as Item).forceActiveFocus()
+            onLoaded: {
+                // A menu's submenus open inside the screen: to the left of the menu when there is no room on the right.
+                const menu = item as PopupMenu;
+                if (menu)
+                    menu.bounds = win.contentItem;
+                (item as Item).forceActiveFocus();
+            }
         }
 
         Component {
