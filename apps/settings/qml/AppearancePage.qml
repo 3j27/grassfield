@@ -11,11 +11,10 @@ SettingsPage {
     SettingsGroup {
         SettingsRow {
             title: qsTr("Appearance")
-            subtitle: qsTr("Light or dark windows, menus and panels.")
+            subtitle: qsTr("Light or dark windows, menus and panels. Auto is light by day and dark at night.")
             Segmented {
                 accessibleName: qsTr("Appearance")
-                model: [{id: "light", text: qsTr("Light")}, {id: "dark", text: qsTr("Dark")}]
-                // "auto" in the file has no effect in the shell (it renders dark), so nothing is selected for it.
+                model: [{id: "light", text: qsTr("Light")}, {id: "dark", text: qsTr("Dark")}, {id: "auto", text: qsTr("Auto")}]
                 value: root.store.value("appearance")
                 onPicked: id => root.store.set("appearance", id)
             }

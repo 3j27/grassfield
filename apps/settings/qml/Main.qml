@@ -68,7 +68,16 @@ Window {
     Binding {
         target: Appearance
         property: "dark"
-        value: cfg.value("appearance") !== "light"
+        value: AutoAppearance.isDark(cfg.value("appearance"), root.clock, Tokens.autoAppearanceDarkFromHour, Tokens.autoAppearanceDarkToHour)
+    }
+
+    // Auto appearance follows the local schedule: re-evaluated each minute while it is selected.
+    property date clock: new Date()
+    Timer {
+        interval: Tokens.autoAppearanceRecheckInterval
+        repeat: true
+        running: cfg.value("appearance") === "auto"
+        onTriggered: root.clock = new Date()
     }
 
     // App windows are opaque: menus drawn with the shared material must not show what is behind them.
@@ -492,6 +501,7 @@ Window {
         id: notificationsPage
         NotificationsPage {
             store: cfg
+            backend: root.backend
         }
     }
 

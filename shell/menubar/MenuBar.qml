@@ -153,6 +153,28 @@ Scope {
         function reduceMotion(on: bool): void {
             Settings.setReduceMotion(on);
         }
+
+        // The Sound and Display sliders by IPC (REQ-QS-CC5/CC6 acceptance: set the slider, then `wpctl get-volume
+        // @DEFAULT_AUDIO_SINK@` or `brightnessctl` agrees). The same calls the sliders make, so the dev guard applies
+        // (a GRASSFIELD_DEV session answers "refused: dev guard" and changes nothing). `value` is 0..1.
+        function volume(value: real): string {
+            return Audio.ready ? (Audio.setVolume(value) ? "ok" : "refused: dev guard") : "unavailable: no output";
+        }
+
+        function brightness(value: real): string {
+            if (!Brightness.available)
+                return "unavailable: no backlight";
+            return Brightness.setLevel(value) ? "ok" : "refused: dev guard";
+        }
+
+        // Read-only: the level the sliders show, 0..1 with two decimals ("none" without the device).
+        function volumeLevel(): string {
+            return Audio.ready ? Audio.volume.toFixed(2) : "none";
+        }
+
+        function brightnessLevel(): string {
+            return Brightness.available ? Brightness.level.toFixed(2) : "none";
+        }
     }
 
     Variants {

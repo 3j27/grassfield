@@ -521,9 +521,20 @@ QtObject {
     readonly property int quicksettingsBackSize: 28
     // estimate: dev-guard note capsule
     readonly property int quicksettingsNoteHeight: 26
+    // ms: a burst of rfkill events re-reads the list once
+    readonly property int quicksettingsRfkillDebounce: 150
+
+    // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00
+    readonly property int autoAppearanceDarkFromHour: 19
+    // macOS Auto appearance turns light at sunrise; fixed local schedule: light from 07:00
+    readonly property int autoAppearanceDarkToHour: 7
+    // ms between two evaluations of the schedule while Auto is selected (minute resolution)
+    readonly property int autoAppearanceRecheckInterval: 60000
 
     // spec notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344
+    // ms to wait after the set of sender apps changes before notification-apps.json is rewritten
+    readonly property int notificationAppsWriteMs: 500
     // F1 gap 7: gap between stacked cards 6 +-1 (value only)
     readonly property int notificationBannerGap: 6
     // design/reference/macos (f1-reference-gaps.md gap 7): app icon 32 pt in banners and cards

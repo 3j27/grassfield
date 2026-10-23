@@ -9,6 +9,7 @@ import "Calc.js" as Calc
 import "Files.js" as Files
 import "Filters.js" as Filters
 import "Ranking.js" as Ranking
+import "SettingsPages.js" as SettingsPages
 import "Units.js" as Units
 import "../launchpad/Model.js" as Model
 
@@ -53,12 +54,30 @@ Scope {
     readonly property var chipLabels: ({
             "apps": qsTr("Applications"),
             "commands": qsTr("Commands"),
+            "settings": qsTr("Settings"),
             "documents": qsTr("Documents")
         })
 
-    // Lock Screen is offered only when the shell exposes a lock IPC target. The lock module
-    // (shell/security) does not ship one yet, so the command stays hidden.
-    readonly property bool lockAvailable: false
+    // Lock Screen: the lock module (shell/security/lock) exposes the `lock` IPC target and the Lock singleton the System
+    // menu already calls; the command locks through it (SessionState.requestLock, wired to Lock.lock in shell.qml;
+    // REQ-SRCH-PRV-d2). It is always on offer: a failed lock stays locked.
+    readonly property bool lockAvailable: true
+
+    // The pages of Grassfield Settings the provider offers (REQ-SRCH-PRV-d1); ids are the Settings sections.
+    readonly property var settingsPageList: [
+        {id: "wifi", title: qsTr("Wi-Fi"), keywords: [qsTr("wireless"), qsTr("network"), qsTr("internet")]},
+        {id: "bluetooth", title: qsTr("Bluetooth"), keywords: [qsTr("devices"), qsTr("headphones"), qsTr("pair")]},
+        {id: "sound", title: qsTr("Sound"), keywords: [qsTr("volume"), qsTr("output"), qsTr("input"), qsTr("microphone"), qsTr("mute")]},
+        {id: "displays", title: qsTr("Displays"), keywords: [qsTr("monitor"), qsTr("screen"), qsTr("resolution"), qsTr("scale")]},
+        {id: "appearance", title: qsTr("Appearance"), keywords: [qsTr("dark"), qsTr("light"), qsTr("auto"), qsTr("theme"), qsTr("accent"), qsTr("transparency"), qsTr("icons")]},
+        {id: "wallpaper", title: qsTr("Wallpaper"), keywords: [qsTr("background"), qsTr("picture"), qsTr("shuffle")]},
+        {id: "accessibility", title: qsTr("Accessibility"), keywords: [qsTr("pointer"), qsTr("cursor"), qsTr("contrast"), qsTr("reduce motion"), qsTr("text size")]},
+        {id: "desktop", title: qsTr("Desktop & Dock"), keywords: [qsTr("dock"), qsTr("magnification"), qsTr("menu bar"), qsTr("screen corners")]},
+        {id: "notifications", title: qsTr("Notifications"), keywords: [qsTr("do not disturb"), qsTr("previews"), qsTr("banners")]},
+        {id: "lock", title: qsTr("Lock Screen"), keywords: [qsTr("idle"), qsTr("password")]},
+        {id: "keyboard", title: qsTr("Keyboard"), keywords: [qsTr("shortcuts"), qsTr("keys")]},
+        {id: "about", title: qsTr("About"), keywords: [qsTr("version"), qsTr("system"), qsTr("hardware")]}
+    ].map(p => Object.assign({icon: SettingsPages.PAGES.find(d => d.id === p.id).icon}, p))
 
     // Latency log (P4): timestamps taken at the IPC call and at the keystroke.
     property real openStartMs: 0
@@ -182,6 +201,10 @@ Scope {
         return {kind: "command", key: "cmd:" + c.id, title: c.title, subtitle: qsTr("System command"), glyph: c.glyph, command: c.id};
     }
 
+    function mkSetting(h: var): var {
+        return {kind: "setting", key: "setting:" + h.page.id, title: h.page.title, subtitle: qsTr("Settings"), glyph: h.page.icon, page: h.page.id};
+    }
+
     function mkPath(kind: string, path: string): var {
         return {kind: kind, key: kind + ":" + path, title: Files.baseName(path), subtitle: Files.tildePath(Files.dirName(path), filesRoot),
             iconSource: Quickshell.iconPath("text-x-generic", true), path: path};
@@ -203,6 +226,7 @@ Scope {
             }
             cmds.sort((a, b) => b.score - a.score);
         }
+        let pages = q !== "" ? SettingsPages.match(settingsPageList, q) : [];
         const seen = {};
         let docs = [];
         for (const p of fileHits) {
@@ -226,12 +250,16 @@ Scope {
         if (q !== "" && !calc && !unit) {
             const appScore = apps.length > 0 ? apps[0].score : 0;
             const cmdScore = cmds.length > 0 ? cmds[0].score : 0;
-            if (appScore > 0 && appScore >= cmdScore) {
+            const pageScore = pages.length > 0 ? pages[0].score : 0;
+            if (appScore > 0 && appScore >= cmdScore && appScore >= pageScore) {
                 top = mkApp(apps[0]);
                 apps = apps.slice(1);
-            } else if (cmdScore > 0) {
+            } else if (cmdScore > 0 && cmdScore >= pageScore) {
                 top = mkCommand(cmds[0].cmd);
                 cmds = cmds.slice(1);
+            } else if (pageScore > 0) {
+                top = mkSetting(pages[0]);
+                pages = pages.slice(1);
             } else if (recents.length > 0) {
                 top = recents[0];
                 recents = recents.slice(1);
@@ -252,6 +280,8 @@ Scope {
             g.push({id: "apps", title: qsTr("Applications"), items: apps.map(r => mkApp(r))});
         if (cmds.length > 0)
             g.push({id: "commands", title: qsTr("Commands"), items: cmds.map(c => mkCommand(c.cmd))});
+        if (pages.length > 0)
+            g.push({id: "settings", title: qsTr("Settings"), items: pages.map(h => mkSetting(h))});
         if (docs.length > 0)
             g.push({id: "files", title: qsTr("Documents"), items: docs});
         if (recents.length > 0)
@@ -380,6 +410,11 @@ Scope {
             hide();
             runCommand(item.command);
             return;
+        case "setting":
+            hide();
+            if (SettingsPages.known(item.page))
+                SettingsApp.openSection(item.page);
+            return;
         case "file":
         case "recent":
             hide();
@@ -398,6 +433,9 @@ Scope {
 
     function runCommand(id: string): void {
         switch (id) {
+        case "lock":
+            SessionState.requestLock("search");
+            return;
         case "sleep":
             Power.sleepNow();
             return;

@@ -56,7 +56,7 @@ Grassfield sound (later), cross-device sync.
 | N9 | unit test of the sanitizer (QML TestCase) | L0 |
 
 ## Interfaces
-D-Bus `org.freedesktop.Notifications` 1.2 (spec). Settings keys `notifications.dnd`, `notifications.previews`.
+D-Bus `org.freedesktop.Notifications` 1.2 (spec). Settings keys `notifications.dnd`, `notifications.previews` (the default) and `notifications.appPreviews` (per-app overrides).
 IPC target `notifications`: `toggleCenter()`, `dnd(on)`.
 
 ## Degraded behavior
@@ -213,8 +213,13 @@ Not verified: transparency 0.6, Reduce Motion, two outputs, the fr strings on sc
   clear model (hover x on a card, group x growing into Clear All, Show Less, slide-out) was verified with `scripts/dev/pointer.sh` on the
   nested private bus (2026-10-19); the nested compositor draws few frames while idle, so the slide-out can look frozen in a capture taken
   right after the click (it finishes on the next frames; a pointer nudge drives them).
-- Banners appear on the first screen only; no per-app settings UI (only the global `notifications.previews`).
-- "unlocked" previews behave like "always" until the lock screen (L4) exists.
+- Banners appear on the first screen only.
+
+## Per-app previews (ADR-0004, C-NOTIF-2; owner decision 2026-10-23: follow macOS)
+macOS keeps one "Show previews" default (Always, When Unlocked, Never) and lets every app override it. Grassfield does the same; the earlier decision that the single global key was the whole requirement is superseded, and the global key stays as the default.
+- Keys: `notifications.previews` (default `unlocked`) and `notifications.appPreviews`, a list (at most 200) of `{app, previews}`; `app` is the sender's name (`Notification.appName`, the key the Notifications column groups by, compared without case or surrounding blanks), `previews` is `always`, `unlocked` or `never`. An app without an entry follows the global key. Rules in one copy: `ui/Grassfield/Ui/NotificationPrefs.js` (shell store, Settings, notification service); schema `config/schema/grassfield.schema.json`.
+- Effect (`Notifications.bodyFor(bodyHtml, appName)`, banners and the Notifications column): `never` hides the text (title and app stay); `always` shows it; `unlocked` hides it while the session lock is on (`Lock.locked`, shell/security/lock) and shows it again after unlocking. The lock screen itself never shows notifications (N10).
+- Settings > Notifications: "Show previews" (global) and "Application Notifications", one row per app with a Default / Always / When Unlocked / Never picker. The apps are the senders the shell has seen: the shell writes their names (never text) to `$configDir/notification-apps.json` (`{"apps": [...]}`, rewritten 500 ms after the set changes); apps that have a setting stay listed. Tests: `tests/unit/tst_notifprefs.qml`, `tests/shell/settings_roundtrip`.
 - Replacing notifications (same id) update the entry and restart the banner timer, but do not re-show a banner that already expired.
 - Relative times refresh every 30 s.
 - `appIcon` names resolve through the icon theme only; a missing icon shows a bell tile.

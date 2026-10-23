@@ -30,3 +30,5 @@ MenuPlace 1.0 MenuPlace.js
 singleton IconShape 1.0 IconShape.qml
 IconTile 1.0 IconTile.js
 IconShapePrewarm 1.0 IconShapePrewarm.qml
+AutoAppearance 1.0 AutoAppearance.js
+NotificationPrefs 1.0 NotificationPrefs.js
