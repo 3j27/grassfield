@@ -30,7 +30,7 @@ Item {
     readonly property real keyStep: 0.02
     readonly property real keyStepLarge: 0.1
 
-    implicitWidth: Tokens.settingsColorWellSize + 2 * Tokens.controlFocusRing
+    implicitWidth: Tokens.settingsColorWellSize + 2 * Tokens.controlFocusOutline
     implicitHeight: implicitWidth
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
@@ -139,8 +139,8 @@ Item {
         anchors.fill: parent
         radius: width / 2
         color: "transparent"
-        border.width: root.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: Appearance.colors.accent
+        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
+        border.color: Appearance.focusRingColor
 
         Rectangle {
             anchors.centerIn: parent
@@ -261,8 +261,8 @@ Item {
                         anchors.fill: parent
                         radius: Tokens.radiusControl
                         color: PointerColors.fromHsv(root.hue, 1, 1)
-                        border.width: square.activeFocus ? Tokens.controlFocusRing : 0
-                        border.color: Appearance.colors.accent
+                        border.width: square.activeFocus ? Tokens.controlFocusOutline : 0
+                        border.color: Appearance.focusRingColor
 
                         Rectangle {
                             anchors.fill: parent
@@ -338,8 +338,8 @@ Item {
                     height: Tokens.menuItemHeight + Tokens.spacingXs
                     radius: Tokens.radiusControl
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: hexField.activeFocus ? Tokens.controlFocusRing : 0
-                    border.color: Appearance.colors.accent
+                    border.width: hexField.activeFocus ? Tokens.controlFocusOutline : 0
+                    border.color: Appearance.focusRingColor
 
                     TextInput {
                         id: hexField

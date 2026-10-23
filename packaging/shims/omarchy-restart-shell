@@ -1,0 +1,10 @@
+#!/bin/sh
+# Grassfield session guard (GF-032, docs/compat.md). Installed to /usr/lib/grassfield/omarchy-shims/, a directory that
+# comes first in PATH only in a Grassfield session (config/hypr/grassfield/omarchy.lua guard_path, packaging/uwsm/env-grassfield).
+#
+# Omarchy's update (omarchy-update-restart), theme, font and voxtype tools run this command to restart the Omarchy shell.
+# In a Grassfield session that would start a second bar, notification server, polkit agent, idle timer and locker next to
+# grassfield-shell. This stand-in does nothing and reports success: Omarchy's callers treat the restart as best effort.
+# grassfield-shell is not touched (its files are not part of an Omarchy update); log out and in to restart it.
+echo "Grassfield session: the Omarchy shell is not used here, nothing to restart." >&2
+exit 0

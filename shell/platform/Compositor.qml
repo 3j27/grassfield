@@ -254,6 +254,26 @@ Singleton {
             tilingMargins: Settings.windowsTilingMargins ? "true" : "false"
         })
 
+    // Reduce Motion also shortens what Hyprland animates itself: window pop-in and the Spaces slide become crossfades
+    // (Minimized.motionCall). Applied whenever it changes, at every shell start (the compositor keeps what the previous shell
+    // set), and after a config reload while it is on (the reload restores the config's own animations, which is already
+    // right when it is off).
+    readonly property bool reduceMotion: Settings.reduceMotion
+    onReduceMotionChanged: pushMotion()
+
+    function pushMotion(): void {
+        dispatchRequest(Minimized.motionCall(root.reduceMotion));
+    }
+
+    Connections {
+        target: Hyprland
+
+        function onRawEvent(event: HyprlandEvent): void {
+            if (event.name === "configreloaded" && root.reduceMotion)
+                root.pushMotion();
+        }
+    }
+
     onTitlebarDoubleClickChanged: pushPluginConfig()
     onMinimizeEffectChanged: pushPluginConfig()
     onTilingConfigChanged: pushPluginConfig()
@@ -292,7 +312,12 @@ Singleton {
     }
 
     // The handshake may have completed before this singleton was first used.
-    Component.onCompleted: pushPluginConfig()
+    Component.onCompleted: {
+        pushPluginConfig();
+        // Always, whatever the value: Hyprland outlives the shell, so a restarted shell (or one that finds the setting off
+        // after a config reset) must not leave the compositor on the reduced animations of the previous run.
+        pushMotion();
+    }
 
     function isMinimized(toplevel: var): bool {
         return Minimized.has(root.minimized, toplevel);

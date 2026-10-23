@@ -336,9 +336,33 @@ Variants {
             return Math.max(0, spaces.findIndex(s => s.active));
         }
 
+        // Test hook: the Desktop tiles (the Desktops, then "+") as laid out now, in OUTPUT coordinates (the window starts
+        // below the menu bar): [{id, plus, active, x, y, w, h}]. Tests click these, never a copy of the layout constants.
+        function tileRects(): var {
+            const out = [];
+            for (let i = 0; i < tileRepeater.count; i++) {
+                const item = tileRepeater.itemAt(i) as Item;
+                if (!item)
+                    continue;
+                const p = item.mapToItem(contentRoot, 0, 0);
+                const t = tiles[i];
+                out.push({
+                    id: t.plus ? 0 : t.id,
+                    plus: t.plus === true,
+                    active: t.active === true,
+                    x: Math.round(p.x),
+                    y: Math.round(p.y + Tokens.menubarHeight),
+                    w: Math.round(item.width),
+                    h: Math.round(item.height)
+                });
+            }
+            return out;
+        }
+
         function statusData(): var {
             return {
                 name: screenName,
+                tileRects: tileRects(),
                 v2: v2,
                 v2Rects: v2 ? v2Rects() : [],
                 width: width,

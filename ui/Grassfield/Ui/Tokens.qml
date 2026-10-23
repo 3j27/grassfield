@@ -104,11 +104,11 @@ QtObject {
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyMenuBoldWeight: 700
     // estimate, pending F1 measurement from design/reference
-    readonly property int typographyBodySize: 13
+    readonly property int typographyBodySize: Math.round(13 * Appearance.textScale)
     // estimate, pending F1 measurement from design/reference
-    readonly property int typographyCaptionSize: 11
+    readonly property int typographyCaptionSize: Math.round(11 * Appearance.textScale)
     // estimate, pending F1 measurement from design/reference
-    readonly property int typographyTitleSize: 15
+    readonly property int typographyTitleSize: Math.round(15 * Appearance.textScale)
     // estimate, pending F1 measurement from design/reference
     readonly property int typographySmallWeight: 400
     // Inter dynamic metrics, text family (rsms.me/inter/lab, InterDynamicTracking): tracking in em = a + b * e^(c * size in px)
@@ -179,11 +179,11 @@ QtObject {
     // estimate, pending F1 measurement from design/reference
     readonly property real materialHighlightOpacity: 0.22
     // estimate, pending F1 measurement from design/reference
-    readonly property real materialBorderOpacity: 0.14
+    readonly property real materialBorderOpacity: Appearance.increaseContrast ? 0.5 : 0.14
     // estimate, pending F1 measurement from design/reference
     readonly property real materialHoverOpacity: 0.12
     // estimate, pending F1 measurement from design/reference
-    readonly property real materialSeparatorOpacity: 0.16
+    readonly property real materialSeparatorOpacity: Appearance.increaseContrast ? 0.45 : 0.16
     // estimate, pending F1 measurement from design/reference
     readonly property real materialFillOpacity: 0.14
     // estimate, pending F1 measurement from design/reference
@@ -191,7 +191,7 @@ QtObject {
     // estimate: hover opacity multiplier for an active menu bar item
     readonly property real materialHoverActiveFactor: 1.5
     // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope
-    readonly property real materialSeparatorOpacityLight: 0.08
+    readonly property real materialSeparatorOpacityLight: Appearance.increaseContrast ? 0.45 : 0.08
 
     // task spec / macOS convention, pending F1 measurement
     readonly property int menubarHeight: 24
@@ -235,8 +235,8 @@ QtObject {
     readonly property int menubarHideDuration: 250
     // estimate: the pointer must stay on the top edge this long before a hidden bar slides in (ms)
     readonly property int menubarRevealDwell: 120
-    // macOS: the menu bar of a display that is not the active one is dimmed (its titles and status items at this opacity, the band too); a single output is always active
-    readonly property real menubarInactiveOpacity: 0.5
+    // macOS: the menu bar of a display that is not the active one is dimmed (its titles and status items at this opacity, the band too); a single output is always active. A2: 0.65 keeps the dimmed foreground at 3:1 or more (tested for both tones in test_contrast_tokens.py; 0.5 gave 1.2 to 2.6)
+    readonly property real menubarInactiveOpacity: 0.65
     // estimate: slide in, ms (Reduce Motion: shown at once)
     readonly property int menubarRevealDuration: 200
 
@@ -409,12 +409,14 @@ QtObject {
     readonly property int controlToggleWidth: 36
     // F1 gap 12: toggle track 36x16
     readonly property int controlToggleHeight: 16
-    // estimate, pending F1 measurement from design/reference
+    // inner border of the security surfaces only (lock password field, polkit dialog; their spec pins it, reviewed separately); every other surface draws the one ring, control.focusOutline
     readonly property int controlFocusRing: 2
-    // F1 gap 13: macOS keyboard focus ring ~3.5, drawn outside the control, following its shape
+    // F1 gap 13: macOS keyboard focus ring ~3.5; the one keyboard focus ring of every surface (UX-09): this width, opaque, in Appearance.focusRingColor
     readonly property int controlFocusOutline: 3
-    // estimate: the macOS focus ring is the accent, translucent
-    readonly property real controlFocusOutlineOpacity: 0.6
+    // A11Y-08: the ring is opaque (it was 0.6, 2.5:1 in the light appearance); kept for hosts that blend it
+    readonly property real controlFocusOutlineOpacity: 1.0
+    // A11Y-08 / WCAG 1.4.11: the ring is the accent where the accent holds this against the surface tint (3:1 needed over the material, 0.5 of margin for the wallpaper behind it), else the text colour (the light yellow accent); tested for every accent in tests/unit/tst_accent.qml
+    readonly property real controlFocusRingMinContrast: 3.5
     // estimate
     readonly property int controlTooltipDelay: 500
     // F1 gap 13: push button minimum width ~64
@@ -514,7 +516,7 @@ QtObject {
     // F1 gap 6: inset of the content in a module (13.5)
     readonly property int quicksettingsPadding: 14
     // estimate: bold title of a slider module
-    readonly property int quicksettingsTitleSize: 13
+    readonly property int quicksettingsTitleSize: Math.round(13 * Appearance.textScale)
     // estimate: back button of an opened detail module
     readonly property int quicksettingsBackSize: 28
     // estimate: dev-guard note capsule
@@ -589,7 +591,7 @@ QtObject {
     // F1 gap 8: field row 56 +-1
     readonly property int searchFieldHeight: 56
     // F1 gap 8: query text ~26 +-1.5
-    readonly property int searchFieldSize: 26
+    readonly property int searchFieldSize: Math.round(26 * Appearance.textScale)
     // estimate
     readonly property int searchFieldIconSize: 22
     // F1 gap 8: result row 56 +-1
@@ -763,7 +765,7 @@ QtObject {
     // estimate: Settings app (docs/specs/settings.md)
     readonly property int settingsGroupGap: 20
     // estimate: Settings app (docs/specs/settings.md)
-    readonly property int settingsPageTitleSize: 20
+    readonly property int settingsPageTitleSize: Math.round(20 * Appearance.textScale)
     // estimate: Settings app (docs/specs/settings.md)
     readonly property int settingsGroupLabelWidth: 150
     // estimate: Settings app (docs/specs/settings.md)
@@ -1172,7 +1174,7 @@ QtObject {
     // F1 reference: icon 62 visible
     readonly property int launcherIconSize: 62
     // F1 reference: label about 12
-    readonly property int launcherLabelSize: 12
+    readonly property int launcherLabelSize: Math.round(12 * Appearance.textScale)
     // F1 reference: name under the icon, one or two lines
     readonly property int launcherLabelLines: 2
     // estimate: label line height relative to the label size
@@ -1246,6 +1248,8 @@ QtObject {
     readonly property real iconModeTileDarkArtLift: 0.0
     // ADR-0014 Clear over the bare wallpaper: lightness of the smoked plate (almost black, so a black folder on a black wallpaper still shows its plate while white ink and the plate hold on a white one; a lighter plate costs A2 rule E on mid-green wallpapers, modelled)
     readonly property real iconModeClearPlateWallpaperLuma: 0.05
+    // PERF-01 / UX-13: ms between two shape reads of the prewarm (IconShapePrewarm), one icon file at a time in the idle moments after the list of apps is known, so the Apps panel does not read about a hundred files while it opens
+    readonly property int iconModePrewarmGapMs: 40
     // ADR-0014 Clear over the bare wallpaper (desktop icons): opacity of the smoked glass plate, strong so that white ink and the plate edge hold on a white and on a black wallpaper
     readonly property real iconModeClearPlateAlphaWallpaper: 0.7
     // ADR-0014 Dark: lightness (sRGB 0..1) of the graphite system plate; macOS 26 Dark plates are near black.
@@ -1359,7 +1363,7 @@ QtObject {
     // estimate: panel inner margin around the tile grid
     readonly property int switcherPadding: 14
     // estimate: app name under the selected icon
-    readonly property int switcherNameSize: 15
+    readonly property int switcherNameSize: Math.round(15 * Appearance.textScale)
     // estimate: tile grid to app name
     readonly property int switcherNameGap: 8
     // estimate: app name line

@@ -44,8 +44,8 @@ Item {
         radius: Tokens.radiusControl
         color: "transparent"
         visible: root.activeFocus
-        border.width: Tokens.controlFocusRing
-        border.color: Appearance.colors.accent
+        border.width: Tokens.controlFocusOutline
+        border.color: Appearance.focusRingColor
     }
 
     Text {

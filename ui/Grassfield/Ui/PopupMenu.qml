@@ -72,7 +72,12 @@ FocusScope {
         root.forceActiveFocus();
     }
 
-    function openSubmenuAt(index: int, focusIt: bool): void {
+    // `byKey`: opened with the keyboard, so its first row is highlighted (macOS); opened by the pointer it has no highlight
+    // until the pointer or a key selects a row.
+    property bool submenuByKey: false
+
+    function openSubmenuAt(index: int, focusIt: bool, byKey: bool): void {
+        submenuByKey = byKey;
         openIndex = index;
         if (focusIt)
             Qt.callLater(() => {
@@ -86,7 +91,7 @@ FocusScope {
         if (!MenuNav.selectable(item))
             return;
         if (MenuNav.hasSubmenu(item))
-            openSubmenuAt(index, true);
+            openSubmenuAt(index, true, false);
         else if (MenuNav.hasSwatches(item))
             root.activateSwatch(index, root.swatchIndex);
         else
@@ -144,7 +149,7 @@ FocusScope {
         root.currentIndex = i;
         if (MenuNav.hasSubmenu(root.model[i])) {
             if (root.openIndex !== i)
-                root.openSubmenuAt(i, false);
+                root.openSubmenuAt(i, false, false);
         } else if (root.openIndex !== -1) {
             root.openIndex = -1;
         }
@@ -220,7 +225,7 @@ FocusScope {
             root.swatchIndex = MenuNav.stepSwatch(root.model[root.currentIndex], root.swatchIndex, 1);
             break;
         case "openSubmenu":
-            root.openSubmenuAt(root.currentIndex, true);
+            root.openSubmenuAt(root.currentIndex, true, true);
             break;
         case "close":
             root.closeRequested();
@@ -309,7 +314,7 @@ FocusScope {
                         onHovered: {
                             root.currentIndex = row.index;
                             if (hasSubmenu)
-                                root.openSubmenuAt(row.index, false);
+                                root.openSubmenuAt(row.index, false, false);
                             else if (root.openIndex !== -1)
                                 root.openIndex = -1;
                         }
@@ -367,7 +372,7 @@ FocusScope {
     onOpenIndexChanged: {
         const item = root.model[root.openIndex];
         if (root.openIndex >= 0 && MenuNav.hasSubmenu(item))
-            submenuLoader.setSource("PopupMenu.qml", {model: item.submenu, isSubmenu: true, currentIndex: MenuNav.first(item.submenu), bounds: root.bounds});
+            submenuLoader.setSource("PopupMenu.qml", {model: item.submenu, isSubmenu: true, currentIndex: root.submenuByKey ? MenuNav.first(item.submenu) : -1, bounds: root.bounds});
         else
             submenuLoader.source = "";
     }

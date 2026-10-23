@@ -3,7 +3,8 @@
 
 (a) lupdate dry run: translations/grassfield_fr.ts is up to date (no new/obsolete messages),
 (b) no unfinished message in the French catalog,
-(c) heuristic scan of QML for visible-text properties assigned a bare string literal.
+(c) heuristic scan of QML for visible-text properties assigned a bare string literal,
+(d) every .desktop entry of ours has a French Name, GenericName, Comment and Keywords where it has an English one.
 
 A deliberate exception (brand name, protocol token, data key) carries `// i18n-ignore` on the line.
 Usage: python3 -I scripts/dev/check-i18n.py [--no-lupdate]
@@ -26,6 +27,27 @@ VISIBLE = (
 # property: "literal"   (also inside inline JS objects: { label: "Foo" })
 LITERAL = re.compile(r'(?<![\w.])(?:' + VISIBLE + r')\s*:\s*("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')\s*(?:[,;}]|$|//)')
 HAS_WORD = re.compile(r"[^\W\d_]{2,}")  # at least two letters: skips symbols, numbers, "x", "%"
+
+
+def scan_desktop_entries():
+    """(d) every .desktop entry of ours carries a French name, generic name, comment and keywords where it has an English one
+    (the shell's Apps, Search and menu bar read them). Exception: the session entry's Name, a brand name."""
+    violations = []
+    files = sorted(list((ROOT / "apps").glob("*/*.desktop")) + list((ROOT / "packaging" / "wayland-sessions").glob("*.desktop")))
+    for path in files:
+        rel = path.relative_to(ROOT)
+        keys = {}
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "=" in line and not line.startswith("#"):
+                key, value = line.split("=", 1)
+                keys[key.strip()] = value
+        for key in ("Name", "GenericName", "Comment", "Keywords"):
+            if key not in keys or f"{key}[fr]" in keys:
+                continue
+            if key == "Name" and "wayland-sessions" in str(rel):
+                continue
+            violations.append(f"{rel}: {key} has no {key}[fr]")
+    return violations
 
 
 def scan_qml():
@@ -70,7 +92,7 @@ def main():
     if unfinished:
         failed = True
 
-    violations = scan_qml()
+    violations = scan_qml() + scan_desktop_entries()
     for v in violations:
         print(f"i18n: {v}")
     if violations:

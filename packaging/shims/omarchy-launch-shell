@@ -1,0 +1,6 @@
+#!/bin/sh
+# Grassfield session guard (GF-032): stands in for Omarchy's launcher of its own shell, which Omarchy's session autostart
+# and its restart command run through Hyprland (exec_cmd resolves the name with Hyprland's PATH). See omarchy-restart-shell
+# next to this file. Does nothing and reports success.
+echo "Grassfield session: the Omarchy shell is not started here." >&2
+exit 0

@@ -139,8 +139,8 @@ WidgetBase {
                     anchors.fill: parent
                     radius: width / 2
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: button.activeFocus ? Tokens.controlFocusRing : 0
-                    border.color: Appearance.colors.accent
+                    border.width: button.activeFocus ? Tokens.controlFocusOutline : 0
+                    border.color: Appearance.focusRingColor
                 }
 
                 Icon {

@@ -1,0 +1,36 @@
+[Unit]
+Description=Grassfield crash notifications
+Documentation=file:///usr/share/doc/grassfield/README.md
+# Replaces omarchy-crash-watch.service in this session (that one needs the Omarchy shell). Started by the session's autostart.
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+
+[Service]
+Type=simple
+Slice=session.slice
+ExecStart=/usr/lib/grassfield/grassfield-crash-watch
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=5
+# Hardening: it reads the journal and talks to the session bus, nothing else.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+MemoryMax=128M
+TasksMax=16
+
+[Install]
+WantedBy=graphical-session.target

@@ -88,7 +88,7 @@ Platform.MenuBar {
         }
         Platform.MenuItem {
             text: qsTr("Zoom to Fit")
-            shortcut: "Ctrl+9"
+            shortcut: "Super+9"
             enabled: bar.canZoom
             onTriggered: bar.view.fit()
         }

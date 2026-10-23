@@ -82,7 +82,7 @@ P2: with 5 widgets (3 desktop, 2 in the Center) RSS grew by about 32 MB with the
 - Per-screen grids are independent; changing the screen resolution re-fits the placements to the nearest free cell (and drops one that has no room).
 - Coverage is geometric: a translucent window over a widget still counts as covering it.
 - The Battery widget was not visually verified with real data (the development machine has no battery); its "No Battery" state was.
-- Desktop tiles have no blur behind them (the context menu and gallery are plain tinted surfaces).
+- Desktop tiles and their context menu blur what is behind them (a blur region of the tile's shape on each surface through BackgroundEffect, the namespaces `grassfield-widgets` and `grassfield-widgets-menu` in the layer rule list of `windows.lua` as the fallback; none under Reduce Transparency). Not verified on a real screen: `tests/visual/desktop-menus.sh` measures the edge deviation behind menus; widget tiles are checked the same way by `tests/visual/widgets-blur.sh`.
 
 ## Changelog
 ### widgets/1

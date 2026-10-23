@@ -7,7 +7,9 @@
 #   status-switch     with the volume menu open, moving onto the network item opens the network menu
 #   click-closes      a click on the open title closes its menu
 #   keyboard-right    with the app menu open, Right moves to the next title's menu (no submenu on the current row)
-#   no-hover-idle     hovering a title with no menu open draws nothing (macOS has no hover highlight in the bar)
+#   keyboard-walk     keyboard only (no pointer): Right walks the titles and the status menus and wraps, Left wraps back
+#   keyboard-status   `menubar open status` (Ctrl+F8) opens the first status menu
+#   no-hover-idle    hovering a title with no menu open draws nothing (macOS has no hover highlight in the bar)
 #   fullscreen-reveal with foot full screen the bar is hidden, and the pointer at the top edge reveals it over the window
 #   fullscreen-hidden  the IPC state of that bar: hidden (away) on the overlay layer with the exclusive zone kept, shown at the edge, away again
 # Usage (bare command): tests/visual/menubar-macos.sh
@@ -75,10 +77,45 @@ check "hover-switch: moving onto Window with the app menu open opens Window (got
 reset_menus
 vs_pointer abs "$app_x" 12 click >/dev/null
 vs_sleep 0.5
-"$VS_ROOT/scripts/dev/keys.sh" -k Right >/dev/null
-vs_sleep 0.5
+# The menu takes the keyboard a moment after it maps (an Exclusive layer; seconds in a loaded session, the audit ran this
+# with an 8 h soak on the same GPU): press Right until the menu is open and has the keyboard, at most 8 times. Stepping is
+# one title per key that arrived, so the check is "left the app title", not a fixed target.
+key_until() { # key from-kind -> waits for the kind to change; echoes the new kind
+  local key=$1 from=$2 n
+  for n in 1 2 3 4 5 6 7 8; do
+    "$VS_ROOT/scripts/dev/keys.sh" -k "$key" >/dev/null
+    vs_sleep 0.6
+    [[ $(kind) != "$from@$VS_OUTPUT" ]] && break
+  done
+  kind
+}
+k=$(key_until Right app)
+check "keyboard-right: Right in the app menu moves to the next title (got '${k:-none}', overlay keyboard wait '$(vs_ipc menubar keyboardWait | tr -d '"')')" test "$k" != "app@$VS_OUTPUT" -a -n "$k"
+
+# keyboard-walk: with no pointer at all (as Ctrl+F2 opens it), Right visits every title and every status menu in bar
+# order and wraps; Left goes back. The status items are the ones the audit found unreachable (A11Y-02).
+reset_menus
+vs_ipc menubar open system "$VS_OUTPUT" >/dev/null
+vs_sleep 0.8
+seen=""
+cur=system
+for _ in $(seq 1 14); do
+  nk=$(key_until Right "$cur")
+  [[ -n $nk ]] || break
+  cur=${nk%@*}
+  seen+=" $cur"
+  [[ $cur == system ]] && break
+done
+check "keyboard-walk: Right from the Grassfield menu reaches the Window menu and the status menus and wraps back ($seen)" \
+  bash -c '[[ " $1 " == *" app "* && " $1 " == *" appwindow "* && " $1 " == *" network "* && " $1 " == *" volume "* && " $1 " == *" controlcenter "* && "$1" == *system ]]' _ "$seen"
+k=$(key_until Left system)
+check "keyboard-walk: Left from the Grassfield menu wraps to the last status menu (got '${k:-none}')" test "$k" = "controlcenter@$VS_OUTPUT"
+# Ctrl+F8 equivalent: the status menus start at the first status item.
+reset_menus
+vs_ipc menubar open status "$VS_OUTPUT" >/dev/null
+vs_sleep 0.6
 k=$(kind)
-check "keyboard-right: Right in the app menu moves to the next title (got '${k:-none}')" test "$k" != "app@$VS_OUTPUT" -a -n "$k"
+check "keyboard-status: 'open status' opens the first status menu (got '${k:-none}')" bash -c '[[ $1 =~ ^(network|volume|battery|controlcenter|nowplaying|tray)@ ]]' _ "$k"
 
 # status-switch: the network and volume items sit left of Quick Settings and the clock; open volume through IPC, then move
 # onto the network item, found from the bar's right side in the capture-free way: IPC opens give the anchor, so use

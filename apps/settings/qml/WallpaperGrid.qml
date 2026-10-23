@@ -139,7 +139,7 @@ Item {
                     anchors.fill: parent
                     radius: face.radius
                     color: "transparent"
-                    border.width: tile.modelData.selected === true || tile.current ? Tokens.controlFocusRing : 1
+                    border.width: tile.modelData.selected === true || tile.current ? Tokens.controlFocusOutline : 1
                     border.color: tile.modelData.selected === true || tile.current ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                 }
             }
