@@ -393,6 +393,14 @@ Shell contract (for the integration):
    focus to the pointer's output when the focused window closes), else no window. **Front window** = the window of that
    Desktop focused last (Hyprland's focus events since the plugin loaded; macOS: the front-most window is the one activated
    last), then the stack top down; only windows taking input (never a Stages strip window), not hidden, focusable.
+   **A dialog that opens during the close** (audit GF-038, A11Y-10; macOS: a modal dialog takes the keys): when the chrome
+   that held the keyboard releases it, Hyprland clears the keyboard focus and refuses its own refocus while any Exclusive
+   layer is left, and only a pointer motion would give the keyboard to the remaining layer. While the request waits (and at
+   its bound), when the keyboard is on nothing (no window, no layer surface that takes it), the plugin gives it to the
+   remaining Exclusive layer as that motion would: the one under the cursor, else the newest; never a layer of the
+   namespace that held the keyboard when the request came (the closing chromes on the other outputs). Hyprland's own
+   surface focus (`CFocusState::rawSurfaceFocus`); no outcome is posted for it (the request still waits, then `focused`
+   after a short dialog or `timeout` past the bound).
 4. **The user wins.** A press after the request beside every Exclusive layer on a window (Hyprland gives such a press to the
    remaining Exclusive layer and focuses nothing) makes that window the target (`"target":"press"`); a press while Hyprland
    accepts window focus, or a user's focus choice of another window (key binding, dispatch, activation), ends the request

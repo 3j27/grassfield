@@ -54,6 +54,10 @@ namespace gf::deferredFocus {
     // Exclusive-layer list (CInputManager::mouseMoveUnified), run on a copy of the list (it is only read).
     bool cursorOnExclusiveLayer(const Vector2D& at);
 
+    // The mapped Exclusive layer surface at `at` (itself or one of its popups; the same hit test as cursorOnExclusiveLayer),
+    // or null.
+    PHLLS exclusiveLayerAt(const Vector2D& at);
+
     // Where a press that arrives now goes (before Hyprland handles it). `pointer`: a pointer button at the cursor; otherwise
     // a touch or a tablet tool, whose point is not the cursor (they count as presses into an Exclusive layer while one is
     // mapped).

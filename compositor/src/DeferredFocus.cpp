@@ -80,6 +80,21 @@ namespace gf::deferredFocus {
         return tester.layerPopupSurfaceAt(at, static_cast<const std::vector<PHLLSREF>*>(&exclusive), &local, &found) || tester.layerSurfaceAt(at, &exclusive, &local, &found);
     }
 
+    PHLLS exclusiveLayerAt(const Vector2D& at) {
+        if (!g_pInputManager || !Desktop::viewState())
+            return nullptr;
+        std::vector<PHLLSREF> exclusive = g_pInputManager->m_exclusiveLSes;
+        Vector2D              local;
+        PHLLS                 found;
+        const auto            tester = Desktop::viewState()->hitTest();
+        if (tester.layerPopupSurfaceAt(at, static_cast<const std::vector<PHLLSREF>*>(&exclusive), &local, &found) && found)
+            return found;
+        found.reset();
+        if (tester.layerSurfaceAt(at, &exclusive, &local, &found) && found)
+            return found;
+        return nullptr;
+    }
+
     df::PressContext pressContext(bool pointer) {
         df::PressContext context{.exclusive = exclusiveLayerMapped(), .onExclusive = true, .under = 0};
         if (pointer && context.exclusive && g_pInputManager && Desktop::viewState()) {

@@ -17,6 +17,7 @@
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
+#include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/protocols/LayerShell.hpp>
 #include <hyprland/src/state/WorkspaceState.hpp>
@@ -61,6 +62,9 @@ namespace {
         std::vector<SLayerWatch>         watches;
         std::vector<SFocusMark>          marks;
         uint64_t                         focusSeq = 0;
+        // The namespace of the layer surface that held the keyboard when the request came (the closing chrome, e.g.
+        // grassfield-overview; "" when none): its layers never get the keyboard from the dialog hand-over (GF-038).
+        std::string closing;
     };
 
     // Constructed on first use inside a guarded call (R13). Emptied by stop() before dlclose.
@@ -166,6 +170,7 @@ namespace {
     void endPending() {
         auto& s = S();
         s.pending.reset();
+        s.closing.clear();
         s.attempt.cancel(); // its callback is code of this library
         s.watches.clear();  // the commit listeners (their callbacks are code of this library)
         if (s.bound)
@@ -325,6 +330,41 @@ namespace {
         }
     }
 
+    // GF-038: a dialog (an Exclusive layer surface of another namespace than the closing one) that opened during the close
+    // gets the keyboard when the keyboard is on nothing, as a pointer motion would give it (core keyboardHandOver). Hyprland's
+    // Exclusive-layer list is only read; the focus goes through Hyprland's own surface focus.
+    void handOverKeyboard(std::string_view when) {
+        const auto fs = Desktop::focusState();
+        if (!fs || !g_pInputManager || gf::deferredFocus::sessionLocked())
+            return;
+        const auto owner = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus());
+        if ((owner.window && owner.window->m_isMapped) || layerKeepsKeyboard())
+            return; // a window, or a layer surface that takes the keyboard, holds it
+        const auto                       under = gf::deferredFocus::exclusiveLayerAt(g_pInputManager->getMouseCoordsInternal());
+        std::vector<PHLLS>               layers;
+        std::vector<of::ExclusiveLayer>  facts;
+        for (const auto& ref : g_pInputManager->m_exclusiveLSes) {
+            const auto ls = ref.lock();
+            if (!ls)
+                continue;
+            layers.push_back(ls);
+            facts.push_back(of::ExclusiveLayer{.ns = ls->m_namespace, .mapped = ls->m_mapped, .exclusive = gf::surfaces::interactivity(ls) == 1, .underCursor = ls == under});
+        }
+        const auto pick = of::keyboardHandOver(facts, S().closing, false);
+        if (!pick || *pick >= layers.size())
+            return;
+        const auto& ls      = layers[*pick];
+        const auto  surface = ls->resource();
+        if (!surface)
+            return;
+        fs->rawSurfaceFocus(surface);
+        const bool     held = gf::surfaces::keyboardFocus() == surface;
+        const auto&    req  = S().pending;
+        const uint32_t id   = req ? req->id : 0;
+        gf::logRequest(held ? Log::INFO : Log::WARN, "overview focus: request {}: the keyboard was on nothing: {} the layer {} that opened during the close ({})", id,
+                       held ? "given to" : "Hyprland did not give it to", ls->m_namespace, when);
+    }
+
     // One check of the waiting request: from the event loop after a layer surface change, a keyboard focus change, the lock
     // or the bound, or before a key.
     void attempt(std::string_view when) {
@@ -335,12 +375,13 @@ namespace {
         const of::Gate gate{.locked = gf::deferredFocus::sessionLocked(), .exclusive = gf::deferredFocus::exclusiveLayerMapped(), .expired = Clock::now() >= s.deadline};
         const auto     r = *s.pending;
         switch (of::step(gate)) {
-            case of::Step::Wait: return;
+            case of::Step::Wait: handOverKeyboard(when); return;
             case of::Step::Refuse:
                 endPending();
                 finish(of::Outcome::Refused, r, nullptr, std::nullopt, "locked", when);
                 return;
             case of::Step::Timeout:
+                handOverKeyboard(when); // before the request ends: a dialog that stays past the bound keeps the keys
                 endPending();
                 finish(of::Outcome::Timeout, r, nullptr, std::nullopt, "exclusive-layer", when);
                 return;
@@ -491,6 +532,11 @@ namespace gf::overviewFocus {
         const auto replaced = s.pending ? std::format(", replaces request {}", s.pending->id) : std::string{};
         if (!s.pending)
             watchLayers();
+        // The surface that is closing: the layer surface holding the keyboard now (a replacing request keeps the one known).
+        if (const auto holder = gf::surfaces::ownerOf(gf::deferredFocus::keyboardHolder()); holder.layer)
+            s.closing = holder.layer->m_namespace;
+        else if (!s.pending)
+            s.closing.clear();
         s.pending  = r;
         s.deadline = Clock::now() + of::kBound;
         armBound();
