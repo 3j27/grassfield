@@ -61,6 +61,8 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Volume down"),
     QT_TRANSLATE_NOOP("Bindings", "Brightness up"),
     QT_TRANSLATE_NOOP("Bindings", "Brightness down"),
+    QT_TRANSLATE_NOOP("Bindings", "Keyboard brightness up"),
+    QT_TRANSLATE_NOOP("Bindings", "Keyboard brightness down"),
     QT_TRANSLATE_NOOP("Bindings", "Previous word"),
     QT_TRANSLATE_NOOP("Bindings", "Next word"),
     QT_TRANSLATE_NOOP("Bindings", "Select to the previous word"),

@@ -365,4 +365,10 @@ TestCase {
         compare(V2.entryWindow([], "right", 0.5, area), "");
     }
 
+
+    // REQ-OVW-O7: a minimized window restored from the strip asks for no focus of its own (the restore focuses it).
+    function test_closeTargetMinimizedRestoreRequestsNothing() {
+        compare(V2.closeTarget({kind: "minimized", toplevel: {}}, {address: "0xa", workspaceId: 1}, 0), {kind: "skip"});
+        compare(V2.closeTarget({kind: "minimized"}, null, 7), {kind: "skip"});
+    }
 }

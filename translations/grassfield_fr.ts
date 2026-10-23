@@ -1071,6 +1071,14 @@
         <translation>Activer ou désactiver le masquage du Dock</translation>
     </message>
     <message>
+        <source>Keyboard brightness up</source>
+        <translation>Luminosité du clavier +</translation>
+    </message>
+    <message>
+        <source>Keyboard brightness down</source>
+        <translation>Luminosité du clavier -</translation>
+    </message>
+    <message>
         <source>Previous word</source>
         <translation>Mot précédent</translation>
     </message>
@@ -1535,10 +1543,6 @@
     <message>
         <source>Files</source>
         <translation>Fichiers</translation>
-    </message>
-    <message>
-        <source>Toolbar</source>
-        <translation>Barre d’outils</translation>
     </message>
     <message>
         <source>Back</source>
@@ -2108,6 +2112,34 @@
         <translation>Un petit point sous l’icône de chaque application ouverte.</translation>
     </message>
     <message>
+        <source>Choose a folder for the Dock</source>
+        <translation>Choisir un dossier pour le Dock</translation>
+    </message>
+    <message>
+        <source>Folders in the Dock</source>
+        <translation>Dossiers dans le Dock</translation>
+    </message>
+    <message>
+        <source>A folder in the Dock opens as a stack. You can also drag a folder to the right of the divider in the Dock.</source>
+        <translation>Un dossier du Dock s’ouvre comme une pile. Vous pouvez aussi faire glisser un dossier à droite du séparateur dans le Dock.</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Retirer</translation>
+    </message>
+    <message>
+        <source>Remove %1 from the Dock</source>
+        <translation>Retirer %1 du Dock</translation>
+    </message>
+    <message>
+        <source>Add a folder</source>
+        <translation>Ajouter un dossier</translation>
+    </message>
+    <message>
+        <source>Add Folder…</source>
+        <translation>Ajouter un dossier…</translation>
+    </message>
+    <message>
         <source>Menu Bar</source>
         <translation>Barre des menus</translation>
     </message>
@@ -2349,6 +2381,10 @@
         <translation>, demande votre attention</translation>
     </message>
     <message>
+        <source>%1, folder stack</source>
+        <translation>%1, pile de dossier</translation>
+    </message>
+    <message>
         <source>Remove</source>
         <translation>Retirer</translation>
     </message>
@@ -2390,6 +2426,70 @@
     <message>
         <source>Remove from Dock</source>
         <translation>Retirer du Dock</translation>
+    </message>
+    <message>
+        <source>Sort by</source>
+        <translation>Trier par</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Date Added</source>
+        <translation>Date d’ajout</translation>
+    </message>
+    <message>
+        <source>Date Modified</source>
+        <translation>Date de modification</translation>
+    </message>
+    <message>
+        <source>Date Created</source>
+        <translation>Date de création</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Display as</source>
+        <translation>Afficher comme</translation>
+    </message>
+    <message>
+        <source>Stack</source>
+        <translation>Pile</translation>
+    </message>
+    <message>
+        <source>Folder</source>
+        <translation>Dossier</translation>
+    </message>
+    <message>
+        <source>View content as</source>
+        <translation>Afficher le contenu comme</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Fan</source>
+        <translation>Éventail</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation>Grille</translation>
+    </message>
+    <message>
+        <source>List</source>
+        <translation>Liste</translation>
+    </message>
+    <message>
+        <source>Open in Files</source>
+        <translation>Ouvrir dans Fichiers</translation>
+    </message>
+    <message>
+        <source>Recent Documents</source>
+        <translation>Documents récents</translation>
     </message>
     <message>
         <source>Are you sure you want to permanently erase the items in the Trash?</source>
@@ -3925,6 +4025,14 @@
         <source>Volume %1%</source>
         <translation>Volume %1&#xa0;%</translation>
     </message>
+    <message>
+        <source>Keyboard brightness %1%</source>
+        <translation>Luminosité du clavier %1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Input source %1</source>
+        <translation>Source de saisie&#xa0;: %1</translation>
+    </message>
 </context>
 <context>
     <name>OverviewWindow</name>
@@ -3943,6 +4051,10 @@
     <message>
         <source>Desktop %1</source>
         <translation>Bureau %1</translation>
+    </message>
+    <message>
+        <source>%1, minimized</source>
+        <translation>%1, réduite</translation>
     </message>
 </context>
 <context>
@@ -4729,6 +4841,25 @@
     </message>
 </context>
 <context>
+    <name>StackPopup</name>
+    <message>
+        <source>%1 more in Files</source>
+        <translation>%1 de plus dans Fichiers</translation>
+    </message>
+    <message>
+        <source>Open in Files</source>
+        <translation>Ouvrir dans Fichiers</translation>
+    </message>
+    <message>
+        <source>%1 stack</source>
+        <translation>Pile %1</translation>
+    </message>
+    <message>
+        <source>Back to %1</source>
+        <translation>Retour à %1</translation>
+    </message>
+</context>
+<context>
     <name>Store</name>
     <message>
         <source>the file is not valid JSON (%1)</source>
@@ -4925,6 +5056,13 @@
     <message>
         <source>%1 menu</source>
         <translation>Menu %1</translation>
+    </message>
+</context>
+<context>
+    <name>UnifiedToolbar</name>
+    <message>
+        <source>Toolbar</source>
+        <translation>Barre d’outils</translation>
     </message>
 </context>
 <context>
@@ -5568,6 +5706,37 @@
     <message>
         <source>Signal %1 %</source>
         <translation>Signal %1&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>WindowControls</name>
+    <message>
+        <source>Window controls</source>
+        <translation>Commandes de la fenêtre</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Closes the window</source>
+        <translation>Ferme la fenêtre</translation>
+    </message>
+    <message>
+        <source>Minimize</source>
+        <translation>Réduire</translation>
+    </message>
+    <message>
+        <source>Minimizes the window to the Dock</source>
+        <translation>Réduit la fenêtre dans le Dock</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>Fills the screen below the menu bar, or restores the window. Option-click for full screen</source>
+        <translation>Remplit l’écran sous la barre des menus, ou restaure la fenêtre. Option-clic pour le plein écran</translation>
     </message>
 </context>
 <context>

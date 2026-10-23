@@ -32,6 +32,19 @@ function metrics(size, base) {
     };
 }
 
+// Shrink to fit (macOS: when the icons no longer fit along the screen, the whole Dock gets smaller so the shelf stays on
+// screen). The tile size to use for `requested` px tiles: the requested size while the shelf fits in `available` px along the
+// Dock, else the largest whole size that does, never below `floor`. `tiles` icon tiles, `separators` separators of
+// `separatorWidth` px, `spacing` between neighbours, `padding` at each end. Magnified icons overhang the shelf and are not
+// counted (macOS does not shrink for them either).
+function fitSize(requested, tiles, separators, separatorWidth, spacing, padding, available, floor) {
+    if (!(tiles > 0) || !(available > 0))
+        return requested;
+    const fixed = 2 * padding + separators * separatorWidth + Math.max(0, tiles + separators - 1) * spacing;
+    const fit = Math.floor((available - fixed) / tiles);
+    return Math.max(Math.min(requested, floor), Math.min(requested, fit));
+}
+
 // ---- Position on screen (Settings > Position on screen: Left / Bottom / Right) ----
 //
 // The Dock lives in a transparent layer window anchored to its screen edge. Everything is written along two axes:

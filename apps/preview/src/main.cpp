@@ -12,6 +12,7 @@
 
 #include "translationloader.h"
 #include "globalmenu.h"
+#include "windowchrome.h"
 #include "previewapp.h"
 #include "previewlogic.h"
 
@@ -33,6 +34,8 @@ int main(int argc, char *argv[])
     QImageReader::setAllocationLimit(preview::kAllocationLimitMb);
 
     QGuiApplication app(argc, argv);
+    // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
+    new grassfield::apps::ChromeTagger(&app);
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
     app.setApplicationName(QStringLiteral("grassfield-preview"));
     app.setApplicationVersion(QStringLiteral(GRASSFIELD_PREVIEW_VERSION));

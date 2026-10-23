@@ -107,6 +107,8 @@ QtObject {
     readonly property int typographyBodySize: Math.round(13 * Appearance.textScale)
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyCaptionSize: Math.round(11 * Appearance.textScale)
+    // estimate: a pressed light darkens by this much
+    readonly property real typographyPressedOpacity: 0.2
     // estimate, pending F1 measurement from design/reference
     readonly property int typographyTitleSize: Math.round(15 * Appearance.textScale)
     // estimate, pending F1 measurement from design/reference
@@ -306,6 +308,40 @@ QtObject {
     readonly property real dockRimOpacity: 0.34
     // macOS convention: at most three recent applications
     readonly property int dockRecentMax: 3
+    // estimate: recent documents listed in an app's Dock menu (macOS lists up to ten; five keep the menu short)
+    readonly property int dockRecentDocsMax: 5
+    // shrink to fit: free room kept at each end of the shelf along the Dock, px (same as the margin off the screen edge, dock.bottomMargin)
+    readonly property int dockFitMargin: 6
+    // shrink to fit: smallest tile the Dock shrinks to, px (below this it would be unusable; the shelf then overflows the screen)
+    readonly property int dockFitMin: 16
+    // macOS: a Fan shows about ten items; with Automatic a folder of more items opens as a Grid
+    readonly property int dockStackFanMax: 9
+    // estimate: folder stacks kept in the Dock (macOS has no hard limit)
+    readonly property int dockStackMax: 12
+    // estimate from macOS Fan: distance between two fanned icons along the way out, px (icon 48 + gap)
+    readonly property int dockStackFanStep: 56
+    // estimate from macOS Fan: sideways drift of the last fanned icon, px
+    readonly property int dockStackFanBend: 80
+    // estimate: icon of a stack item in the Fan and the Grid, px
+    readonly property int dockStackIconSize: 48
+    // estimate: width of a Grid cell, px
+    readonly property int dockStackCellWidth: 96
+    // estimate: height of a Grid cell (icon and two label lines), px
+    readonly property int dockStackCellHeight: 92
+    // estimate: widest Grid, columns
+    readonly property int dockStackGridMaxColumns: 5
+    // estimate: tallest Grid before it scrolls, rows
+    readonly property int dockStackGridMaxRows: 4
+    // estimate: tallest List before it scrolls, rows
+    readonly property int dockStackListMaxRows: 12
+    // estimate: width of a List, px
+    readonly property int dockStackListWidth: 260
+    // estimate: items a Grid or List holds (the rest are in Files)
+    readonly property int dockStackItemMax: 300
+    // macOS stack icon: sheets behind the top one are turned by this angle, degrees
+    readonly property int dockStackPileTilt: 5
+    // estimate: size of a pile sheet relative to the tile
+    readonly property real dockStackPileScale: 0.78
     // macOS 26 launch bounce rises about a third of the icon height (per icon size)
     readonly property real dockBounceHeightScale: 0.34
     // macOS: an icon darkens slightly while the mouse button is held (brightness, negative)
@@ -719,6 +755,16 @@ QtObject {
     readonly property int overviewTileMaxIcons: 4
     // estimate: window name pill
     readonly property int overviewLabelHeight: 34
+    // macOS Mission Control shows minimized windows smaller than the open ones, in a row below a divider: width of one minimized tile, px (it shrinks when the row would not fit)
+    readonly property int overviewMinimizedWidth: 144
+    // estimate (16:10 of minimizedWidth): height of one minimized tile, px
+    readonly property int overviewMinimizedHeight: 90
+    // estimate: space between minimized tiles, px
+    readonly property int overviewMinimizedGap: 16
+    // estimate: space above and below the minimized row (the divider sits in the upper one), px
+    readonly property int overviewMinimizedPad: 12
+    // estimate: window title under a minimized tile, px
+    readonly property int overviewMinimizedLabelHeight: 18
     // estimate: window name pill icon
     readonly property int overviewLabelIconSize: 20
     // estimate: window name pill
@@ -1420,6 +1466,49 @@ QtObject {
     readonly property int wallpaperMeteredTimeoutMs: 10000
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width)
     readonly property int wallpaperAboutWidth: 360
+
+    // ADR-0015 / f1-reference-gaps.md:102: traffic-light diameter, 14 pt; the compositor plugin's kButtonDiameter must equal it
+    readonly property int windowLightDiameter: 14
+    // ADR-0015 / f1-reference-gaps.md:103: gap between two light edges (pitch 23); plugin kButtonSpacing
+    readonly property int windowLightGap: 9
+    // ADR-0015 / f1-reference-gaps.md:107: unified toolbar row, 52 pt, holds the lights and the toolbar items
+    readonly property int windowUnifiedHeight: 52
+    // ADR-0015 / f1-reference-gaps.md:106: centre of the first light in a unified toolbar window, from the window's top-left corner (x and y)
+    readonly property real windowUnifiedLightCentre: 25.75
+    // ADR-0015: titlebar-only style, the plugin's kTitlebarHeight (32); also overview.windowTitlebarHeight
+    readonly property int windowTitlebarHeight: 32
+    // ADR-0015: titlebar style, left edge to the first light's edge (plugin kButtonInsetLeft); the centre is then at (16, 16)
+    readonly property int windowTitlebarLightInset: 9
+    // plugin kButtonHitSlop = diameter / 6: extra hit radius around a light, the gaps between lights stay drag area
+    readonly property real windowLightHitSlop: 2.3333
+    // plugin kTitlePadding: least gap between the lights and the title
+    readonly property int windowTitleGap: 8
+    // plugin kGlyphRatio, measured on the 2x reference: glyph box side over light diameter
+    readonly property real windowGlyphRatio: 0.55
+    // plugin kGlyphStroke, measured: stroke width over light diameter
+    readonly property real windowGlyphStroke: 0.12
+    // plugin kGlyphColor alpha: the glyph darkens the light under it by this much
+    readonly property real windowGlyphOpacity: 0.5
+    // plugin kCloseColor: own value, not copied
+    readonly property string windowCloseColor: "#E5534B"
+    // plugin kMinimizeColor: own value, not copied
+    readonly property string windowMinimizeColor: "#D9A93B"
+    // plugin kZoomColor: own value, not copied
+    readonly property string windowZoomColor: "#4FA64F"
+    // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance
+    readonly property string windowInactiveLightDark: "#5A5A5E"
+    // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance
+    readonly property string windowInactiveLightLight: "#D1D1D3"
+    // estimate: hairline around a light (darkening, drawn in the glyph colour), keeps the grey light visible on a same-grey toolbar
+    readonly property real windowLightBorderOpacity: 0.18
+    // estimate: a pressed light darkens by this much
+    readonly property real windowPressedOpacity: 0.2
+    // ADR-0015 / f1-reference-gaps.md:109: toolbar window title, about 15 pt bold
+    readonly property int windowTitleSize: Math.round(15 * Appearance.textScale)
+    // estimate: gap between toolbar items and groups
+    readonly property int windowItemsGap: 8
+    // estimate: space between the toolbar's trailing edge and its last item
+    readonly property int windowItemsInset: 14
 
     // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it
     readonly property int focusReturnReleaseHoldMs: 120

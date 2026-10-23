@@ -6,6 +6,7 @@
 #include "translationloader.h"
 #include "backend.h"
 #include "globalmenu.h"
+#include "windowchrome.h"
 
 #ifndef GRASSFIELD_SETTINGS_QML_DIR
 #define GRASSFIELD_SETTINGS_QML_DIR "/usr/share/grassfield/settings/qml"
@@ -17,6 +18,8 @@
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+    // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
+    new grassfield::apps::ChromeTagger(&app);
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
     app.setApplicationName(QStringLiteral("Grassfield Settings"));
     app.setApplicationVersion(QStringLiteral(GRASSFIELD_SETTINGS_VERSION));

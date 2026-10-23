@@ -1226,6 +1226,33 @@ client's recent input, as other compositors do) and exposing the result, e.g. a 
 the window, the source (xdg-activation, X11, foreign toplevel) and the validity; the plugin decision would then be a small pure
 rule (valid and recent: focus; else `urgent` only) with graceful degradation (no event: Hyprland's behaviour).
 
+## Plugin work item: client chrome (ADR-0015)
+Grassfield apps draw their own lights and toolbar (grassfield-ui `WindowControls` / `UnifiedToolbar`) and tag their window
+with an xdg-toplevel tag (`browser`, `settings`, `viewer`, `info`; apps/windowchrome.h). The plugin steps aside for those
+windows. Full text and rationale: docs/decisions/ADR-0015-unified-toolbar.md, "Implementation: app side ... and the plugin
+work item". P1-P7 are not implemented in `compositor/` yet; the app side, S1-S3 and H1 are, so until it lands tagged windows show two chromes.
+
+| Id | Change | Test |
+|---|---|---|
+| P1 | `isClientChrome(window)`: the window's Hyprland tags hold `grassfield-client-chrome` (a dynamic tag prints with `*`); `Titlebar::shouldShow()` is false for it; re-evaluated on `window.updateRules`; never `decorate = false` | GTest on the predicate; `client_chrome.sh` assertion 3 |
+| P2 | gfc/1 feature `client-chrome` (additive, ADR-0007), advertised only when P1 is registered | `Protocol.*` GTest |
+| P3 | Stages band (`core/Stages.cpp:486-489`, `Stages.hpp:49`) uses P1: band 0 for a tagged window | `StagesTest`, `stages.sh` |
+| P4 | `requestMove` for tagged windows: a zoomed window restores its remembered box under the pointer at the same grab ratio, then moves (FR8 for the app-drawn row) | `zoom_restore.sh` variant on the Settings fixture |
+| P5 | minimize bridge for tagged windows: `stateChanged` with `requestsMinimize` runs the FR6 path (`minimize-request`, `special:minimized`) | `client_chrome.sh` assertion 5 |
+| P6 | the plugin titlebar's green button with Alt held: true full screen (`FSMODE_FULLSCREEN`), glyph = full-screen arrows while Alt is held over the group (REQ-ADR0002-6, plugin part) | new case in `zoom_restore.sh` (Alt held through `scripts/dev/keys.sh`) or a `ZoomOption` GTest |
+| P7 | the light constants come from `window.*` of `ui/tokens/tokens.json` (generated, or a GTest comparing `Theme.hpp` with it) | GTest |
+| S1 (done) | `config/hypr/grassfield/windows.lua`: `hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })` | `tests/shell/client_chrome_rules.sh`; `just check-config`; `client_chrome.sh` assertion 2 |
+| S2 (done) | `gf-no-maximize-event` matches `{ class = ".*", xdg_tag = "negative:.+" }` (Q4: the tagged window's zoom is honoured) | `client_chrome_rules.sh`; `client_chrome.sh` assertion 6 |
+| S3 (done) | windows of role `info`: `match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 12` (titlebar style, Q5) | `client_chrome_rules.sh`; `getprop rounding` |
+| H1 (done) | shell: `shell/overview/OverviewWindow.qml` band 0 for tagged windows when `client-chrome` is advertised (`ClientChrome.js`); P3 must use the same tag | `tests/unit/tst_clientchrome.qml` + nested Overview shot |
+
+Degraded behaviour: without the plugin the app's lights and toolbar are drawn all the same (close, drag, zoom through
+xdg-toplevel requests; minimize has no effect, spike step 6). With an older plugin that lacks P1 the strip is drawn above the
+app's toolbar (plugin and apps ship from one release). `tests/compositor/client_chrome.sh [--no-plugin]` is the nested
+scenario: its header lists which assertion needs which item. S1-S3 and H1 are done (session rules, shell Overview band,
+capabilities file for the apps' minimize light); of the nested assertions only 3 (the strip, P1), 5 (minimize, P5) and the
+manual 9 (unload and reload, P1) still wait for the plugin.
+
 ## Known limitations (honest, user-visible gaps vs macOS)
 
 - Activation (spike above): every activation request focuses its window (`focus_on_activate = true`); macOS lets only an

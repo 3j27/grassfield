@@ -32,6 +32,10 @@ class FilesApp : public QObject
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
     Q_PROPERTY(bool devSession READ devSession CONSTANT)
     Q_PROPERTY(bool reduceMotion READ reduceMotion NOTIFY appearanceChanged)
+    // windows.titlebarDoubleClick of grassfield.json: zoom (default), minimize or none (the toolbar's double-click).
+    Q_PROPERTY(QString titlebarDoubleClick READ titlebarDoubleClick NOTIFY appearanceChanged)
+    // False when the shell says the compositor plugin is absent: the minimize light is greyed (ADR-0015 Q4b, chromecaps.h).
+    Q_PROPERTY(bool canMinimize READ canMinimize NOTIFY appearanceChanged)
     // accent.color: multicolor (the Grassfield green), blue, purple, pink, red, orange, yellow, green or graphite.
     Q_PROPERTY(QString accentColor READ accentColor NOTIFY appearanceChanged)
     Q_PROPERTY(QString iconMode READ iconMode NOTIFY appearanceChanged)
@@ -71,6 +75,8 @@ public:
     // GRASSFIELD_DEV=1: never offers anything that touches the owner's real trash (ADR-0011).
     bool devSession() const { return qEnvironmentVariable("GRASSFIELD_DEV") == QLatin1String("1"); }
     bool reduceMotion() const { return m_reduceMotion; }
+    QString titlebarDoubleClick() const { return m_titlebarDoubleClick; }
+    bool canMinimize() const { return m_canMinimize; }
     // Icon appearance (ADR-0014): default | dark | clear | tinted, and "accent" or #rrggbb.
     QString accentColor() const { return m_accentColor; }
     QString iconMode() const { return m_iconMode; }
@@ -230,6 +236,8 @@ private:
     bool m_autoAppearance = false;
     QTimer m_autoTimer;
     bool m_reduceMotion = false;
+    QString m_titlebarDoubleClick = QStringLiteral("zoom");
+    bool m_canMinimize = true;
     QString m_accentColor = QStringLiteral("multicolor");
     QString m_iconMode = QStringLiteral("default");
     QString m_iconTint = QStringLiteral("accent");

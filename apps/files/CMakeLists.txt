@@ -27,6 +27,10 @@ add_executable(grassfield-files
     src/folderstylelogic.cpp src/folderstylelogic.h
     src/folderstylestore.cpp src/folderstylestore.h)
 target_include_directories(grassfield-files PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/..)
+# windowchrome.h (ADR-0015): one Qt private header and the three xdg-toplevel-tag requests on libwayland-client.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
+target_link_libraries(grassfield-files PRIVATE Qt6::GuiPrivate PkgConfig::WAYLAND_CLIENT)
 target_link_libraries(grassfield-files PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::DBus
     KF6::KIOCore KF6::KIOGui KF6::KIOWidgets KF6::CoreAddons KF6::Service KF6::Solid)

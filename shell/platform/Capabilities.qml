@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import "CapabilityEvent.js" as CapabilityEvent
+import "CapabilitiesFile.js" as CapabilitiesFile
 import "../services/DevGate.js" as DevGate
 
 // Capability detection for grassfield-compositor (contract gfc/1).
@@ -131,6 +132,28 @@ Singleton {
         interval: root.helloRetryMs
         repeat: true
         onTriggered: Hyprland.dispatch(root.helloRequest)
+    }
+
+    // What the apps learn about the plugin (ADR-0015 Q4b: the minimize light is greyed without it): written once the answer is
+    // known (the plugin replied or the hello timed out) and on every change. CapabilitiesFile.js has the format and location.
+    readonly property string capabilitiesPath: CapabilitiesFile.path(Quickshell.env("GRASSFIELD_STATE_HOME"), Quickshell.env("XDG_RUNTIME_DIR"))
+
+    function writeCapabilitiesFile(): void {
+        if (!root.settled || root.capabilitiesPath === "")
+            return;
+        if (capabilitiesFile.path !== root.capabilitiesPath)
+            capabilitiesFile.path = root.capabilitiesPath;
+        capabilitiesFile.setText(CapabilitiesFile.payload(root.pluginPresent, root.features));
+    }
+
+    onSettledChanged: root.writeCapabilitiesFile()
+    onPluginPresentChanged: root.writeCapabilitiesFile()
+    onFeaturesChanged: root.writeCapabilitiesFile()
+
+    FileView {
+        id: capabilitiesFile
+        printErrors: false
+        atomicWrites: true
     }
 
     Component.onCompleted: {

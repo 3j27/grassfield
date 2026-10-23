@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import "RecentItemsLogic.js" as Logic
 import "../search/Files.js" as Files
+import "../dock/DockModel.js" as DockModel
 
 // Recent Items of the Grassfield menu (macOS Apple menu > Recent Items): the applications the shell launched (every
 // launch goes through Apps.launch: Dock, Apps, Search, menus) and the recently used documents (recently-used.xbel, read
@@ -37,6 +38,14 @@ Singleton {
         return Logic.applications(root.state, root.max, id => Apps.lookup(id));
     }
     readonly property var documents: Logic.documents(root.documentList, root.state, root.max)
+
+    // The documents `entry` (a desktop entry) opened, for its Dock menu (RecentItemsLogic.documentsForApp).
+    function documentsFor(entry: var, max: int): var {
+        if (!entry)
+            return [];
+        const args = DockModel.entryArgs(entry);
+        return Logic.documentsForApp(root.documentList, {name: entry.name ? String(entry.name) : "", cmd: args.length > 0 ? String(args[0]) : ""}, root.state, max);
+    }
 
     // The submenu rows of the Grassfield menu (PopupMenu model).
     function menu(): var {

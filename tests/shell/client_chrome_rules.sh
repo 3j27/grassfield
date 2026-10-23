@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# ADR-0015 session rules, offline (no session): the window rules S1-S3 of config/hypr/grassfield/windows.lua are accepted by
+# this Hyprland (`--verify-config`), a misspelled match key is refused (negative control: the check can fail), and the tag name
+# is the same in the rule, the shell (shell/overview/ClientChrome.js) and the spec (docs/specs/compositor.md, P1).
+# Exit 0 when every check passes; the verify-config checks SKIP (printed) without a Hyprland binary.
+set -uo pipefail
+
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+fails=0
+check() { if [[ $2 == 0 ]]; then echo "PASS $1"; else echo "FAIL $1"; fails=1; fi; }
+
+rules=$root/config/hypr/grassfield/windows.lua
+tag=$(sed -n 's/^var TAG = "\(.*\)";$/\1/p' "$root/shell/overview/ClientChrome.js")
+[[ -n $tag ]]
+check "the shell names the tag ($tag)" $?
+grep -q "tag = \"+$tag\"" "$rules"
+check "the session rule sets the same tag" $?
+grep -q "$tag" "$root/docs/specs/compositor.md"
+check "the spec (plugin work item P1) uses the same tag" $?
+grep -q 'name = "gf-no-maximize-event", match = { class = ".\*", xdg_tag = "negative:.+" }' "$rules"
+check "the maximize exemption matches only windows without an xdg tag (S2)" $?
+grep -q 'name = "gf-client-chrome-info-rounding".*xdg_tag = "^info\$".*rounding = 12' "$rules"
+check "windows of role info get radius 12 (S3)" $?
+if grep -v "^ *--" "$rules" | grep "decorate *= *false" | grep -v "gf-glance" | grep -q .; then
+  check "no rule but Glance's uses decorate = false (it drops the border and the shadow)" 1
+else
+  check "no rule but Glance's uses decorate = false (it drops the border and the shadow)" 0
+fi
+
+hypr=$(command -v Hyprland || true)
+if [[ -z $hypr ]]; then
+  echo "SKIP verify-config: no Hyprland binary"
+  exit $fails
+fi
+verify() { # <config dir> -> exit 0 when "config ok"
+  GRASSFIELD_CONFIG_DIR=$1 "$hypr" --verify-config --config "$1/session.lua" 2>&1 | sed -n '/Config parsing result/,$p' | grep -qx 'config ok'
+}
+verify "$root/config/hypr"
+check "Hyprland --verify-config accepts the rules (S1-S3)" $?
+cp -r "$root/config/hypr" "$tmp/hypr"
+sed -i 's/xdg_tag = "\.+"/xdg_tagg = ".+"/' "$tmp/hypr/grassfield/windows.lua"
+verify "$tmp/hypr"
+[[ $? != 0 ]]
+check "negative control: a misspelled match key is refused" $?
+exit $fails
