@@ -251,13 +251,47 @@ mv "$cache/grassfield" "$tmp/moved" && ln -s "$tmp/moved" "$cache/grassfield"
 vetted_refuses "a symlinked directory on the way" "is a symlink"
 rm -f "$cache/grassfield" && mv "$tmp/moved" "$cache/grassfield"
 mv "$cache" "$tmp/cache-real" && ln -s "$tmp/cache-real" "$cache"
-vetted_refuses "a symlinked cache root" "is a symlink"
+vetted_refuses "a symlinked cache root" "not a canonical path"
 rm -f "$cache" && mv "$tmp/cache-real" "$cache"
+# The cache root itself (review of b0d347e): only an absolute, canonical path; a trailing slash after a symlink used to
+# pass the symlink test (test -L follows "link/").
+vetted_refuses_as() { # <name> <what the reason says> <XDG_CACHE_HOME>
+  run XDG_CACHE_HOME="$3" "$script" --vetted; local rc=$?
+  expect "cache root: $1 -> refused" "$rc [$(cat "$tmp/out")] $(grep -c "$2" "$tmp/err")" "1 [] 1"
+}
+ln -s "$cache" "$tmp/cache-link"
+vetted_refuses_as "a symlink given with a trailing slash" "not a canonical path" "$tmp/cache-link/"
+vetted_refuses_as "a trailing slash" "not a canonical path" "$cache/"
+vetted_refuses_as "a path through .." "not a canonical path" "$tmp/lib/../cache"
+vetted_refuses_as "a relative path" "not an absolute path" "cache"
+rm -f "$tmp/cache-link"
 echo "$other" >"$tmp/stamp" && cp "$dest/grassfield-compositor.abi" "$tmp/good.abi" && cat "$tmp/stamp" >"$dest/grassfield-compositor.abi"
 vetted_refuses "a stamp for another ABI" "its stamp is not"
 cat "$tmp/good.abi" >"$dest/grassfield-compositor.abi"
 run "$script" --vetted; rc=$?
 expect "vetting: every case undone -> vouched for again" "$rc $(cat "$tmp/out")" "0 $so"
+
+# Above the cache root: every ancestor root's or the user's, not writable by group or others unless sticky (/tmp). A
+# foreign owner cannot be made without root; the mode cases go through the same check.
+mkdir -p "$tmp/anc"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script"; rc=$?
+expect "ancestors: a build under a private parent" "$rc" 0
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script" --vetted; rc=$?
+expect "ancestors: vouched for" "$rc $(cat "$tmp/out")" "0 $tmp/anc/cache/grassfield/compositor/$want/grassfield-compositor.so"
+chmod 0777 "$tmp/anc"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script" --vetted; rc=$?
+expect "ancestors: a parent others can write -> refused" "$rc [$(cat "$tmp/out")] $(grep -c 'above the cache directory, is writable' "$tmp/err")" "1 [] 1"
+chmod 0775 "$tmp/anc"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script" --vetted; rc=$?
+expect "ancestors: a parent the group can write -> refused" "$rc $(grep -c 'above the cache directory, is writable' "$tmp/err")" "1 1"
+chmod 1777 "$tmp/anc"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script" --vetted; rc=$?
+expect "ancestors: a sticky parent (like /tmp) is fine" "$rc $(cat "$tmp/out")" "0 $tmp/anc/cache/grassfield/compositor/$want/grassfield-compositor.so"
+chmod 0777 "$tmp/anc"
+rm -rf "$tmp/anc/cache"
+run XDG_CACHE_HOME="$tmp/anc/cache" "$script"; rc=$?
+expect "ancestors: no build under a parent others can write" "$rc $([[ -e $tmp/anc/cache ]] && echo created || echo untouched)" "1 untouched"
+chmod 0755 "$tmp/anc"
 
 # The build refuses a cache it could not vouch for afterwards, and its own odd results.
 rm -rf "$cache" && mkdir -p "$cache" && chmod 0777 "$cache"
