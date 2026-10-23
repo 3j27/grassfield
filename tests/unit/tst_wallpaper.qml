@@ -46,7 +46,7 @@ TestCase {
     }
 
     function test_invalidFieldsReadAsDefaults() {
-        const n = WallpaperConfig.normalize({source: "apod", path: "rel/x.jpg", color: "red", fit: 3, interval: "2s", shuffle: "yes", videoOnBattery: 1, online: {provider: "apod"}, outputs: "x"});
+        const n = WallpaperConfig.normalize({source: "apod", path: "rel/x.jpg", color: "red", fit: 3, interval: "2s", shuffle: "yes", videoOnBattery: 1, online: {provider: "nasa"}, outputs: "x"});
         compare(n.source, "builtin");
         compare(n.path, "");
         compare(n.color, "#000000");
@@ -470,7 +470,8 @@ TestCase {
         compare(WallpaperConfig.normalize({source: "online"}).source, "online", "needs no path");
         compare(WallpaperConfig.normalize({source: "online", online: {provider: "commons"}}).online, {provider: "commons"});
         compare(WallpaperConfig.normalize({source: "online", online: "x"}).online, {provider: "commons"});
-        compare(WallpaperConfig.normalize({source: "online", online: {provider: "apod"}}).online, {provider: "commons"}, "an unknown provider reads as the default");
+        compare(WallpaperConfig.normalize({source: "online", online: {provider: "apod"}}).online, {provider: "apod"});
+        compare(WallpaperConfig.normalize({source: "online", online: {provider: "nasa"}}).online, {provider: "commons"}, "an unknown provider reads as the default");
         compare(WallpaperConfig.resolve({source: "online"}, panel).source, "online");
         compare(WallpaperConfig.resolve({source: "online"}, panel).provider, "commons");
         // Off by default, and a display can opt out or in on its own.
@@ -488,7 +489,8 @@ TestCase {
         const out = "/home/u/.cache/grassfield/wallpapers/online/commons";
         compare(WallpaperConfig.fetchArgs("/usr/lib/grassfield/grassfield-wallpaper", "commons", "2026-10-22", out, "fr", ""), ["/usr/lib/grassfield/grassfield-wallpaper", "fetch", "commons", "--date", "2026-10-22", "--out", out, "--lang", "fr"]);
         compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22", out, "en", "http://127.0.0.1:8123").slice(-2), ["--base-url", "http://127.0.0.1:8123"]);
-        compare(WallpaperConfig.fetchArgs("/h", "apod", "2026-10-22", out, "en", ""), null);
+        compare(WallpaperConfig.fetchArgs("/h", "apod", "2026-10-22", out, "en", "").slice(0, 3), ["/h", "fetch", "apod"]);
+        compare(WallpaperConfig.fetchArgs("/h", "nasa", "2026-10-22", out, "en", ""), null);
         compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22x", out, "en", ""), null);
         compare(WallpaperConfig.fetchArgs("/h", "commons", "--out", out, "en", ""), null);
         compare(WallpaperConfig.fetchArgs("/h", "commons", "2026-10-22", "relative", "en", ""), null);
@@ -616,5 +618,124 @@ TestCase {
         compare(WallpaperConfig.displayUrl("https://a.org/x%E2%80%AEy"), "a.org/x%E2%80%AEy");
         compare(WallpaperConfig.displayUrl("https://a.org/x%E3%85%A4y"), "a.org/x%E3%85%A4y");
         compare(WallpaperConfig.displayUrl(undefined), "");
+    }
+
+    // ---- APOD, the aspect rule, video (ADR-0016 W7 and step 2) ----
+
+    function test_apodProvider() {
+        compare(WallpaperConfig.ONLINE_PROVIDERS, ["commons", "apod"]);
+        // The APOD day flips at 05:10 UTC (midnight US Eastern whatever the summer time), Commons at 00:10 UTC.
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 5, 9), "apod"), "2026-10-21");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 5, 10), "apod"), "2026-10-22");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 0, 10), "commons"), "2026-10-22");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 0, 10)), "2026-10-22", "no provider: Commons");
+        compare(WallpaperConfig.onlineDate(Date.UTC(2026, 9, 22, 0, 10), "nasa"), "2026-10-22", "unknown: Commons");
+        // The day's random slot lies within six hours after the flip.
+        const now = Date.UTC(2026, 9, 22, 12);
+        const s = WallpaperConfig.onlineSchedule({}, now, true, 0.0, "apod");
+        compare(s.date, "2026-10-22");
+        compare(s.state.slotAt, Date.UTC(2026, 9, 22, 5, 10));
+        compare(s.state.provider, "apod");
+        verify(WallpaperConfig.onlineSchedule({}, now, true, 0.999, "apod").state.slotAt <= Date.UTC(2026, 9, 22, 11, 10));
+    }
+
+    function test_eachProviderKeepsItsOwnAccounting() {
+        const now = Date.UTC(2026, 9, 22, 12);
+        let st = WallpaperConfig.onlineAfter({}, now, "2026-10-22", "ok", "commons");
+        compare(st.provider, "commons");
+        verify(!WallpaperConfig.onlineSchedule(st, now, true, 0, "commons").due, "Commons is done for the day");
+        // Switching to APOD: a day done for Commons says nothing about APOD, and nothing cached means fetch at once.
+        const a = WallpaperConfig.onlineSchedule(st, now, false, 0.9, "apod");
+        verify(a.due);
+        compare(a.state.provider, "apod");
+        compare(a.state.done, "");
+        // A state written before there were two providers belongs to Commons.
+        const old = {done: "2026-10-22", failures: 0};
+        verify(!WallpaperConfig.onlineSchedule(old, now, true, 0, "commons").due);
+        verify(WallpaperConfig.onlineSchedule(old, now, false, 0, "apod").due);
+        compare(WallpaperConfig.onlineStateOf({provider: "nasa"}).provider, "");
+    }
+
+    function test_onlineAspectRule() {
+        // Within 35 % of the output's aspect: Fill. Panoramas and portraits: Fit on the picture's mean colour.
+        compare(WallpaperConfig.onlineFit(1600, 1000, 1920, 1080, "#102030"), {fit: "fill", color: "#102030"});
+        compare(WallpaperConfig.onlineFit(1920, 1080, 1920, 1080, "#FFFFFF").fit, "fill");
+        compare(WallpaperConfig.onlineFit(1920, 1080, 1920, 1080, "#FFFFFF").color, "#ffffff");
+        compare(WallpaperConfig.onlineFit(4000, 1000, 1920, 1080, "#102030").fit, "fit", "a panorama");
+        compare(WallpaperConfig.onlineFit(1000, 1500, 1920, 1080, "#102030").fit, "fit", "a portrait");
+        // The limits: 1.35 times and 0.65 times the output's aspect are still Fill, a hair beyond is Fit.
+        const out = 1000 / 500;
+        compare(WallpaperConfig.onlineFit(out * 1.35 * 1000, 1000, 1000, 500, "#000000").fit, "fill");
+        compare(WallpaperConfig.onlineFit(out * 1.36 * 1000, 1000, 1000, 500, "#000000").fit, "fit");
+        compare(WallpaperConfig.onlineFit(out * 0.65 * 1000, 1000, 1000, 500, "#000000").fit, "fill");
+        compare(WallpaperConfig.onlineFit(out * 0.64 * 1000, 1000, 1000, 500, "#000000").fit, "fit");
+        // Anything unreadable is Fill on black.
+        compare(WallpaperConfig.onlineFit(0, 0, 1920, 1080, "red"), {fit: "fill", color: "#000000"});
+        compare(WallpaperConfig.onlineFit(1600, 1000, 1920, 1080, undefined).color, "#000000");
+    }
+
+    function test_videoHelperArguments() {
+        compare(WallpaperConfig.probeArgs("/h", "/v/a.mp4"), ["/h", "probe", "--", "/v/a.mp4"]);
+        compare(WallpaperConfig.probeArgs("/h", "rel.mp4"), null);
+        compare(WallpaperConfig.probeArgs("/h", "/v/a\nb.mp4"), null);
+        const out = "/home/u/.cache/grassfield/wallpapers/video";
+        const a = WallpaperConfig.transcodeArgs("/h", "/v/-evil.mp4", 1920, 1080, "fit", "#AABBCC", out, 24, 536870912, ["/c/k.mp4"], 600, 536870912);
+        compare(a.slice(0, 2), ["/h", "transcode"]);
+        compare(a.slice(-2), ["--", "/v/-evil.mp4"], "a path can never be read as an option");
+        compare(a[a.indexOf("--size") + 1], "1920x1080");
+        compare(a[a.indexOf("--color") + 1], "#aabbcc");
+        compare(a[a.indexOf("--keep") + 1], "/c/k.mp4");
+        compare(a[a.indexOf("--max-seconds") + 1], "600");
+        compare(WallpaperConfig.transcodeArgs("/h", "/v/a.mp4", 1920, 1080, "zoom", "#000000", out, 24, 0, [], 0, 0), null);
+        compare(WallpaperConfig.transcodeArgs("/h", "/v/a.mp4", 1920, 1080, "fill", "red", out, 24, 0, [], 0, 0), null);
+        compare(WallpaperConfig.transcodeArgs("/h", "/v/a.mp4", 1920, 1080, "fill", "#000000", "relative", 24, 0, [], 0, 0), null);
+        compare(WallpaperConfig.transcodeArgs("/h", "/v/a.mp4", 99999, 1080, "fill", "#000000", out, 0, 0, [], 9999, 0).slice(3, 4), ["16384x1080"]);
+        verify(WallpaperConfig.VIDEO_SUFFIXES.indexOf("mp4") >= 0);
+    }
+
+    function test_transcodeOutput() {
+        const t = WallpaperConfig.transcodeOutput('{"progress":0.25}\n{"progress":0.5}\nnot json\n{"ok":true,"code":0,"file":"/c/p.jpg"}\n');
+        compare(t.progress, 0.5);
+        compare(t.result.file, "/c/p.jpg");
+        const partial = WallpaperConfig.transcodeOutput('{"progress":0.3}\n{"progre');
+        compare(partial.progress, 0.3);
+        compare(partial.result, null);
+        compare(WallpaperConfig.transcodeOutput("").result, null);
+        compare(WallpaperConfig.transcodeOutput('{"progress":7}').progress, -1, "out of range");
+        compare(WallpaperConfig.transcodeOutput('[1,2]\n"x"\n').result, null);
+        compare(WallpaperConfig.transcodeOutput('{"ok":false,"code":14,"reason":"video too long"}').result.code, 14);
+    }
+
+    function test_videoFailureReasons() {
+        compare(WallpaperConfig.reasonOf(14), "video-too-long");
+        compare(WallpaperConfig.reasonOf(15), "transcode-failed");
+        compare(WallpaperConfig.reasonOf(16), "ffmpeg-missing");
+        compare(WallpaperConfig.reasonOf(17), "cancelled");
+        compare(WallpaperConfig.EXIT.VIDEO_TOO_LONG, 14);
+    }
+
+    function test_videoCrashMarker() {
+        compare(WallpaperConfig.videoMarkerOf({path: "/v/a.mp4", at: 5}), {path: "/v/a.mp4", at: 5});
+        compare(WallpaperConfig.videoMarkerOf({path: "/v/a.mp4"}).at, 0);
+        for (const bad of [null, 5, "x", [], {}, {path: "rel"}, {path: 3}, {path: "/v/a\nb"}])
+            compare(WallpaperConfig.videoMarkerOf(bad), null, JSON.stringify(bad));
+        verify(WallpaperConfig.videoBlocked("/v/a.mp4", "/v/a.mp4"));
+        verify(!WallpaperConfig.videoBlocked("/v/a.mp4", "/v/b.mp4"));
+        verify(!WallpaperConfig.videoBlocked("", ""));
+        verify(!WallpaperConfig.videoBlocked(undefined, "/v/a.mp4"));
+    }
+
+    function test_playbackInputsFeedThePolicy() {
+        const cfg = {videoOnBattery: false};
+        const play = WallpaperConfig.playbackInputs(false, false, false, false, cfg, false, "full");
+        compare(WallpaperConfig.playbackState(play).state, "play");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(true, false, false, false, cfg, false, "full")).reason, "locked");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, true, false, false, cfg, false, "full")).reason, "fullscreen");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, true, cfg, false, "full")).reason, "battery");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, true, {videoOnBattery: true}, false, "full")).state, "play");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, true, false, cfg, false, "full")).state, "settle");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, false, cfg, true, "full")).reason, "reduce-motion");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, false, cfg, false, "reduced")).reason, "reduced-profile");
+        compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, false, undefined, false, "full")).state, "play");
     }
 }

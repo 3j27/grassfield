@@ -140,7 +140,8 @@ TestCase {
         compare(Store.validate("wallpaper.source", "online"), "");
         verify(Store.validate("wallpaper.source", "apod") !== "");
         compare(Store.validate("wallpaper.online.provider", "commons"), "");
-        verify(Store.validate("wallpaper.online.provider", "apod") !== "");
+        compare(Store.validate("wallpaper.online.provider", "apod"), "");
+        verify(Store.validate("wallpaper.online.provider", "nasa") !== "");
         verify(Store.validate("wallpaper.online.provider", 1) !== "");
         compare(Store.read({wallpaper: {online: {provider: "commons"}}}, "wallpaper.online.provider"), "commons");
         compare(Store.read({wallpaper: {online: "x"}}, "wallpaper.online.provider"), "commons");
