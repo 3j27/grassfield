@@ -31,6 +31,7 @@ if [[ $what == compositor || $what == all ]]; then
   rm -rf "$cov/compositor"
   mkdir -p "$cov/compositor"
   cp -r "$root/compositor/src" "$root/compositor/tests" "$root/compositor/build-direct.sh" "$cov/compositor/"
+  cp "$root/VERSION" "$cov/VERSION" # build-direct.sh reads ../VERSION
   if PATH=$cov/shim:$PATH "$cov/compositor/build-direct.sh" tests >"$cov/compositor/build.log" 2>&1; then
     "$cov/compositor/build/grassfield-compositor-tests" --gtest_brief=1 >"$cov/compositor/tests.log" 2>&1 || { echo "coverage: compositor unit tests FAILED ($cov/compositor/tests.log)" >&2; status=1; }
     tail -n 3 "$cov/compositor/tests.log"

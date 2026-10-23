@@ -34,7 +34,6 @@ target_link_libraries(grassfield-files PRIVATE
     KF6::KIOCore KF6::KIOGui KF6::KIOWidgets KF6::CoreAddons KF6::Service KF6::Solid)
 target_compile_definitions(grassfield-files PRIVATE
     KF_DISABLE_DEPRECATED_BEFORE_AND_AT=0x061D00
-    GRASSFIELD_FILES_VERSION="${PROJECT_VERSION}"
     GRASSFIELD_FILES_QML_DIR="${CMAKE_INSTALL_PREFIX}/share/grassfield/files/qml")
 
 install(TARGETS grassfield-files RUNTIME DESTINATION bin)

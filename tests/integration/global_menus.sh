@@ -199,7 +199,7 @@ log_has() { grep -q -- "$2" "$1" 2>/dev/null; }
 # announces that PAM is suppressed in dev sessions (shell/security/lock/Lock.qml, GRASSFIELD_DEV_ALLOW_PAM gate).
 ENV_LINES=(
   "grassfield-polkit: not registered"
-  "quickshell.service.polkit"
+  "quickshell.service.polkit: failed to register listener" # Quickshell's own line for the same refusal (its text, not the category)
   "grassfield-lock: dev: PAM is suppressed on the lock (no real authentication; set GRASSFIELD_DEV_ALLOW_PAM=1 for the L2 failure-path test)"
 )
 shell_qml_issues() { # [log...] QML-level warnings and errors (default .dev/shell.log), minus ENV_LINES

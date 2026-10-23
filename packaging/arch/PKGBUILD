@@ -8,7 +8,7 @@
 #
 # Provenance (GF-044): the package is built from a `git archive` snapshot of HEAD, unpacked into $srcdir/snapshot by
 # prepare(); every build directory is under $srcdir, nothing is written to the live working tree and nothing that is
-# not committed is packaged (a dirty tree is reported). The commit is recorded in /usr/share/grassfield/BUILD-COMMIT.
+# not committed is packaged (a dirty tree is reported). The commit is recorded in /usr/share/grassfield/BUILD-COMMIT (desktop) and /usr/lib/grassfield/BUILD-COMMIT (plugin).
 # The installed plugin is the one built here (RelWithDebInfo, not stripped: a crash inside Hyprland needs its symbols;
 # the package is larger by the debug sections, there is no split -debug package).
 #
@@ -230,7 +230,7 @@ package_grassfield-compositor() {
   local root
   root=$(_root)
   install -Dm755 "$srcdir/compositor-build/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
-  install -Dm644 "$srcdir/BUILD-COMMIT" "$pkgdir/usr/share/licenses/grassfield-compositor/BUILD-COMMIT"
+  install -Dm644 "$srcdir/BUILD-COMMIT" "$pkgdir/usr/lib/grassfield/BUILD-COMMIT"
   install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/grassfield-compositor/LICENSE"
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-compositor/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/hyprland-BSD-3-Clause.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/hyprland-BSD-3-Clause.txt"

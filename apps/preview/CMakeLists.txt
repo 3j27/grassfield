@@ -20,7 +20,6 @@ add_executable(grassfield-preview
 target_include_directories(grassfield-preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_SOURCE_DIR}/../files/src)
 target_link_libraries(grassfield-preview PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus)
 target_compile_definitions(grassfield-preview PRIVATE
-    GRASSFIELD_PREVIEW_VERSION="${PROJECT_VERSION}"
     GRASSFIELD_PREVIEW_QML_DIR="${CMAKE_INSTALL_PREFIX}/share/grassfield/preview/qml")
 
 install(TARGETS grassfield-preview RUNTIME DESTINATION bin)
