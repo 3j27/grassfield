@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Services.Notifications
 import Grassfield.Ui
 import qs.platform
+import qs.security.lock
 import qs.services
 import "History.js" as History
 import "Sanitizer.js" as Sanitizer
@@ -31,7 +32,10 @@ Singleton {
     readonly property ListModel bannerModel: bannerStore
     readonly property int bannerCount: bannerStore.count
     readonly property bool dnd: Settings.notificationsDnd
-    readonly property bool previewsHidden: Settings.notificationsPreviews === "never"
+    // The global previews default is Settings.notificationsPreviews; each app may override it
+    // (Settings.notificationsAppPreviews, NotificationPrefs.js).
+    // Stays false in a session that has no lock service answering (the lock singleton reports false until it locks).
+    readonly property bool sessionLocked: Lock.locked
     // Wall clock for relative times, refreshed every 30 s.
     property real nowMs: Date.now()
 
@@ -79,6 +83,46 @@ Singleton {
     // Keys of banners under the pointer (a timer recreated by an update starts paused).
     property var heldKeys: ({})
 
+    // The apps that have sent notifications, for the Settings page (per-app previews): $configDir/notification-apps.json,
+    // {"apps": [names]}, rewritten shortly after the set of names changes. Names only, never text.
+    readonly property string appsFile: Settings.configDir + "/notification-apps.json"
+    readonly property var seenApps: {
+        const names = [];
+        const seen = {};
+        for (const e of history) {
+            const k = NotificationPrefs.keyOf(e.appName);
+            if (k !== "" && !seen[k]) {
+                seen[k] = true;
+                names.push(e.appName);
+            }
+        }
+        return names.sort();
+    }
+    onSeenAppsChanged: {
+        if (historyReady)
+            appsTimer.restart();
+    }
+
+    Timer {
+        id: appsTimer
+        interval: Tokens.notificationAppsWriteMs
+        onTriggered: {
+            const text = JSON.stringify({apps: root.seenApps}) + "\n";
+            if (text !== appsWriter.lastText) {
+                appsWriter.lastText = text;
+                appsWriter.setText(text);
+            }
+        }
+    }
+
+    FileView {
+        id: appsWriter
+        property string lastText: ""
+        path: root.appsFile
+        printErrors: false
+        atomicWrites: true
+    }
+
     ListModel {
         id: centerStore
         dynamicRoles: true
@@ -91,9 +135,11 @@ Singleton {
 
     // ---- API used by the UI ----
 
-    // Sanitized body (computed once per entry); empty when previews are hidden.
-    function bodyFor(bodyHtml: string): string {
-        return previewsHidden ? "" : bodyHtml;
+    // Sanitized body (computed once per entry); empty when previews are hidden for this app: its own setting, else the
+    // global one; "unlocked" hides the text while the session is locked. `appName` is the sender's name.
+    function bodyFor(bodyHtml: string, appName: string): string {
+        const policy = NotificationPrefs.effective(Settings.notificationsAppPreviews, appName, Settings.notificationsPreviews);
+        return NotificationPrefs.bodyShown(policy, sessionLocked) ? bodyHtml : "";
     }
 
     // Image (hint) first, then the app icon (theme name or path); "" when none resolves, so the

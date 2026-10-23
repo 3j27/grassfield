@@ -533,6 +533,8 @@ QtObject {
 
     // spec notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344
+    // ms to wait after the set of sender apps changes before notification-apps.json is rewritten
+    readonly property int notificationAppsWriteMs: 500
     // F1 gap 7: gap between stacked cards 6 +-1 (value only)
     readonly property int notificationBannerGap: 6
     // design/reference/macos (f1-reference-gaps.md gap 7): app icon 32 pt in banners and cards

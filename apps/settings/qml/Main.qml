@@ -501,6 +501,7 @@ Window {
         id: notificationsPage
         NotificationsPage {
             store: cfg
+            backend: root.backend
         }
     }
 

@@ -77,6 +77,7 @@ Singleton {
 
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
+    readonly property var notificationsAppPreviews: store.notificationsAppPreviews
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
     readonly property bool windowsTilingEdges: store.data.windows.tilingEdges
     readonly property bool windowsTilingMenuBar: store.data.windows.tilingMenuBar
@@ -171,6 +172,10 @@ Singleton {
 
     function setNotificationsDnd(value: bool): void {
         store.setNotificationsDnd(value);
+    }
+
+    function setNotificationsAppPreview(app: string, value: string): void {
+        store.setNotificationsAppPreview(app, value);
     }
 
     function setNotificationsPreviews(value: string): void {

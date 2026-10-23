@@ -73,6 +73,7 @@ ShellRoot {
             root.check("pinned", reader.data.dock.pinned.join(",") === "foot,kitty");
             root.check("dnd", reader.data.notifications.dnd === true);
             root.check("previews", reader.data.notifications.previews === "never");
+            root.check("app previews", reader.notificationsAppPreviews.length === 1 && reader.notificationsAppPreviews[0].app === "Signal" && reader.notificationsAppPreviews[0].previews === "always");
             root.check("version", reader.data.version === 1);
             root.check("icons mode", reader.data.icons.mode === "tinted" && reader.iconMode === "tinted");
             root.check("icons tint", reader.data.icons.tint === "#e5484d" && reader.iconTint === "#e5484d");
@@ -359,6 +360,14 @@ ShellRoot {
         writer.setDockPinned(["foot", "kitty"]);
         writer.setNotificationsDnd(true);
         writer.setNotificationsPreviews("never");
+        // Per-app previews: written as a list, an override follows the app, "default" removes it.
+        check("default app previews", writer.notificationsAppPreviews.length === 0);
+        writer.setNotificationsAppPreview("Signal", "always");
+        writer.setNotificationsAppPreview("Mail", "bogus");
+        check("app preview kept, bogus value ignored", writer.notificationsAppPreviews.length === 1 && writer.notificationsAppPreviews[0].app === "Signal");
+        writer.setNotificationsAppPreview("Mail", "unlocked");
+        writer.setNotificationsAppPreview("Mail", "default");
+        check("app preview back to default", writer.notificationsAppPreviews.length === 1);
         // Icon appearance (ADR-0014): defaults, normalization, values written to disk.
         check("default icon mode", writer.iconMode === "default" && writer.data.icons.mode === "default");
         check("default icon tint", writer.iconTint === "accent");

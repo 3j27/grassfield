@@ -53,6 +53,7 @@ Scope {
     readonly property var dockRecent: stringList(config.dock.recent)
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string dockMinimizeEffect: ["funnel", "shrink"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "funnel"
+    readonly property var notificationsAppPreviews: NotificationPrefs.normalize(config.notifications.appPreviews)
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
     readonly property string menubarAutoHide: ["always", "desktop", "fullscreen", "never"].indexOf(config.menubar.autoHide) >= 0 ? config.menubar.autoHide : "fullscreen"
     readonly property string accentColor: Accent.normalize(config.accent.color)
@@ -225,6 +226,8 @@ Scope {
         property bool dnd: false
         // always | unlocked | never (ADR-0004). "never" hides bodies; "unlocked" equals "always" until the lock screen exists.
         property string previews: "unlocked"
+        // Per-app overrides [{app, previews}] (NotificationPrefs.js).
+        property var appPreviews: []
     }
 
     function setAppearance(value: string): void {
@@ -317,6 +320,11 @@ Scope {
 
     function setNotificationsDnd(value: bool): void {
         change("notifications.dnd", value);
+    }
+
+    // One app's Show previews: always | unlocked | never, or "default" to follow the global setting again.
+    function setNotificationsAppPreview(app: string, value: string): void {
+        change("notifications.appPreviews", NotificationPrefs.withValue(notificationsAppPreviews, app, value));
     }
 
     function setNotificationsPreviews(value: string): void {
@@ -458,6 +466,10 @@ Scope {
             config.pointer.outlineColor = PointerColors.DEFAULT_OUTLINE;
         if (!("fillColor" in pointer))
             config.pointer.fillColor = PointerColors.DEFAULT_FILL;
+        // And for the per-app previews list.
+        const notif = parsed.notifications !== null && typeof parsed.notifications === "object" && !Array.isArray(parsed.notifications) ? parsed.notifications : {};
+        if (!("appPreviews" in notif))
+            config.notifications.appPreviews = [];
         // Same for the wallpaper group (ADR-0016): removing a key, or the whole object, reads as the defaults.
         const wp = parsed.wallpaper !== null && typeof parsed.wallpaper === "object" && !Array.isArray(parsed.wallpaper) ? parsed.wallpaper : {};
         const d = WallpaperConfig.WALLPAPER_DEFAULTS;
