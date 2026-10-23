@@ -228,7 +228,7 @@ Scope {
     }
 
     function setAppearance(value: string): void {
-        change("appearance", value === "light" ? "light" : "dark");
+        change("appearance", value === "light" || value === "auto" ? value : "dark");
     }
 
     function setTransparency(value: real): void {

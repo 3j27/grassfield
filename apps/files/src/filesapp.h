@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QSettings>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 
@@ -226,6 +227,8 @@ private:
     QSettings m_settings;
     QFileSystemWatcher m_watcher;
     bool m_dark = true;
+    bool m_autoAppearance = false;
+    QTimer m_autoTimer;
     bool m_reduceMotion = false;
     QString m_accentColor = QStringLiteral("multicolor");
     QString m_iconMode = QStringLiteral("default");

@@ -22,7 +22,10 @@ Singleton {
 
     // Validated by the store (out-of-range or unknown values fall back to the schema defaults).
     readonly property string appearance: store.appearance
-    readonly property bool dark: store.appearance !== "light"
+    // What the shell renders: "auto" follows the fixed local schedule (AutoAppearance.js, dark 19:00 to 07:00 by default),
+    // re-evaluated each minute while it is selected (a timer of the minute, not a poll of any service).
+    property date now: new Date()
+    readonly property bool dark: AutoAppearance.isDark(store.appearance, now, Tokens.autoAppearanceDarkFromHour, Tokens.autoAppearanceDarkToHour)
     readonly property real transparency: store.transparency
     readonly property string materialProfile: store.materialProfile
     readonly property bool reduceTransparency: store.data.accessibility.reduceTransparency
@@ -172,6 +175,14 @@ Singleton {
 
     function setNotificationsPreviews(value: string): void {
         store.setNotificationsPreviews(value);
+    }
+
+    Timer {
+        interval: Tokens.autoAppearanceRecheckInterval
+        repeat: true
+        running: store.appearance === "auto"
+        triggeredOnStart: true
+        onTriggered: root.now = new Date()
     }
 
     SettingsStore {

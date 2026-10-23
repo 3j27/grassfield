@@ -266,7 +266,7 @@ FocusScope {
                 inset: root.diskInset
                 iconName: Appearance.dark ? "moon" : "sun"
                 title: qsTr("Appearance")
-                subtitle: Settings.appearance === "light" ? qsTr("Light") : qsTr("Dark")
+                subtitle: Model.appearanceLabel(Settings.appearance, {light: qsTr("Light"), dark: qsTr("Dark"), auto: qsTr("Auto")})
                 on: root.expanded === "appearance"
                 expandable: true
                 expanded: root.expanded === "appearance"
@@ -493,7 +493,7 @@ FocusScope {
                     inset: root.diskInset
                     iconName: Appearance.dark ? "moon" : "sun"
                     title: qsTr("Appearance")
-                    subtitle: Settings.appearance === "light" ? qsTr("Light") : qsTr("Dark")
+                    subtitle: Model.appearanceLabel(Settings.appearance, {light: qsTr("Light"), dark: qsTr("Dark"), auto: qsTr("Auto")})
                     on: root.expanded === "appearance"
                     expandable: true
                     expanded: root.expanded === "appearance"
