@@ -55,7 +55,7 @@ Variants {
             height: Tokens.osdHeight
             opacity: Osd.shown ? 1 : 0
             Accessible.role: Accessible.ProgressBar
-            Accessible.name: Osd.kind === "brightness" ? qsTr("Brightness %1%").arg(Math.round(Osd.level * 100)) : qsTr("Volume %1%").arg(Math.round(Osd.level * 100))
+            Accessible.name: Osd.kind === "keyboard" ? qsTr("Keyboard brightness %1%").arg(Math.round(Osd.level * 100)) : Osd.kind === "brightness" ? qsTr("Brightness %1%").arg(Math.round(Osd.level * 100)) : qsTr("Volume %1%").arg(Math.round(Osd.level * 100))
 
             Behavior on opacity {
                 NumberAnimation {
