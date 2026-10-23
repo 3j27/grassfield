@@ -17,6 +17,7 @@ import qs.security.idle
 import qs.security.lock
 import qs.security.polkit
 import qs.services
+import qs.stages
 import qs.switcher
 
 // grassfield-shell root. Settings feed the design-system Appearance singleton; surfaces
@@ -186,6 +187,7 @@ ShellRoot {
         onAppsRequested: appsSurface.toggle()
     }
     Overlay {}
+    Stages {}
     Banners {}
     NotificationCenter {}
     OsdWindow {}

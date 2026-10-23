@@ -1,5 +1,4 @@
 import QtQuick
-import Grassfield.Ui
 import qs.platform
 import qs.services
 

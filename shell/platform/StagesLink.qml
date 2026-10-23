@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import qs.services
 import "Minimized.js" as Minimized
 import "StagesState.js" as StagesState
@@ -110,6 +111,20 @@ Singleton {
                 return root.enabled ? "waiting" : "off";
             const names = Object.keys(root.state.monitors);
             return "ready " + names.map(n => n + "=" + StagesState.stripStages(root.state.monitors[n]).length).join(",");
+        }
+
+        // Keyboard and scripting access (the strip itself takes no keyboard): the n-th strip stage (1 = most recent) of the
+        // focused output comes forward, as a click on its tile.
+        function activate(position: int): string {
+            const mon = root.monitorState(Compositor.focusedScreenName);
+            const stage = mon ? StagesState.stripStages(mon)[position - 1] : undefined;
+            return stage && root.send({op: "activate", stage: stage.id}) ? "ok" : "refused";
+        }
+
+        // The focused window becomes a stage of its own (macOS: drag it to the strip).
+        function newStage(): string {
+            const w = Compositor.activeWindow();
+            return w && root.send({op: "move", address: w.address, stage: "new"}) ? "ok" : "refused";
         }
 
         function enable(on: bool): string {

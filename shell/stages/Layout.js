@@ -46,9 +46,10 @@ function shown(on, stripCount, overlap, revealed) {
     return on && stripCount > 0 && (!overlap || revealed);
 }
 
-// The reveal edge zone exists only while there is something to reveal.
-function edgeActive(on, stripCount, isShown) {
-    return on && stripCount > 0 && !isShown;
+// The input region is the tiles' box while the strip is shown, else the thin edge zone (reveal on hover): never empty while
+// Stages is on, so the plugin's strip check (the surface owns an input region) always has one to look at.
+function edgeActive(on, isShown) {
+    return on && !isShown;
 }
 
 // Request for the plugin: Stages on or updated for the screens in `strips` ([{monitor, hidden, tiles}]).
