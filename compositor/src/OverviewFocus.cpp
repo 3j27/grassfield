@@ -340,17 +340,23 @@ namespace {
         const auto owner = gf::surfaces::ownerOf(gf::surfaces::keyboardFocus());
         if ((owner.window && owner.window->m_isMapped) || layerKeepsKeyboard())
             return; // a window, or a layer surface that takes the keyboard, holds it
-        const auto                       under = gf::deferredFocus::exclusiveLayerAt(g_pInputManager->getMouseCoordsInternal());
-        std::vector<PHLLS>               layers;
-        std::vector<of::ExclusiveLayer>  facts;
+        std::vector<PHLLS>              layers;
+        std::vector<of::ExclusiveLayer> facts;
         for (const auto& ref : g_pInputManager->m_exclusiveLSes) {
             const auto ls = ref.lock();
             if (!ls)
                 continue;
             layers.push_back(ls);
-            facts.push_back(of::ExclusiveLayer{.ns = ls->m_namespace, .mapped = ls->m_mapped, .exclusive = gf::surfaces::interactivity(ls) == 1, .underCursor = ls == under});
+            facts.push_back(of::ExclusiveLayer{.ns = ls->m_namespace, .mapped = ls->m_mapped, .exclusive = gf::surfaces::interactivity(ls) == 1, .underCursor = false});
         }
-        const auto pick = of::keyboardHandOver(facts, S().closing, false);
+        auto pick = of::keyboardHandOver(facts, S().closing, false);
+        if (!pick)
+            return; // only the closing surface's layers (the common case): no hit test
+        // A dialog is there: the one under the cursor, as a pointer motion would choose.
+        const auto under = gf::deferredFocus::exclusiveLayerAt(g_pInputManager->getMouseCoordsInternal());
+        for (size_t i = 0; i < facts.size(); ++i)
+            facts[i].underCursor = layers[i] == under;
+        pick = of::keyboardHandOver(facts, S().closing, false);
         if (!pick || *pick >= layers.size())
             return;
         const auto& ls      = layers[*pick];
