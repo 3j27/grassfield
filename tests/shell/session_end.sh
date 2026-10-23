@@ -18,7 +18,9 @@ d = os.environ["FAKE_DIR"]
 args = sys.argv[1:]
 clients = lambda: json.load(open(d + "/clients.json"))
 if args == ["-j", "clients"]:
-    if os.path.exists(d + "/compositor-down"):
+    n = int(open(d + "/clients.calls").read() or 0) + 1 if os.path.exists(d + "/clients.calls") else 1
+    open(d + "/clients.calls", "w").write(str(n))
+    if os.path.exists(d + "/compositor-down") or str(n) in os.environ.get("FAKE_FAIL_CALLS", "").split():
         sys.exit(1)
     print(json.dumps(clients()))
 elif args and args[0] == "dispatch":
@@ -36,21 +38,22 @@ elif args and args[0] == "dispatch":
             cl = [c for c in cl if c["address"] != a]
         json.dump(cl, open(d + "/clients.json", "w"))
 PY
-for name in uwsm systemctl; do
+for name in uwsm systemctl gdbus; do
   printf '#!/bin/sh\necho "%s $*" >>"$FAKE_DIR/calls.log"\n' "$name" >"$bin/$name"
 done
 cat >"$bin/notify-send" <<'SH'
 #!/bin/sh
 echo "notify-send $*" >>"$FAKE_DIR/calls.log"
+[ -z "$FAKE_NOTIFY_FAIL" ] || exit 1
 printf '%s' "${FAKE_NOTIFY_ANSWER:-}"
 SH
 chmod +x "$bin"/*
 
 run() { # run <clients-json> <args...>; env FAKE_* passes through; prints the exit status in $status
-  : >"$tmp/calls.log"; : >"$tmp/hyprctl.log"; rm -f "$tmp/compositor-down"
+  : >"$tmp/calls.log"; : >"$tmp/hyprctl.log"; rm -f "$tmp/compositor-down" "$tmp/clients.calls"
   printf '%s' "$1" >"$tmp/clients.json"; shift
   status=0
-  FAKE_DIR=$tmp PATH="$bin:/usr/bin:/bin" XDG_STATE_HOME=$tmp/state GRASSFIELD_SESSION_END_TIMEOUT=1 GRASSFIELD_SESSION_END_GRACE=0 \
+  FAKE_DIR=$tmp PATH="$bin:/usr/bin:/bin" XDG_RUNTIME_DIR=$tmp XDG_STATE_HOME=$tmp/state GRASSFIELD_SESSION_END_TIMEOUT=${SESSION_END_TIMEOUT:-1} GRASSFIELD_SESSION_END_GRACE=0 \
     python3 -I "$root/packaging/bin/grassfield-session-end" "$@" >"$tmp/out.log" 2>&1 || status=$?
 }
 two='[{"address":"0x1","class":"firefox","title":"a"},{"address":"0x2","class":"kate","title":"b"}]'
@@ -93,10 +96,35 @@ check bash -c '[[ ! -s "$1/hyprctl.log" ]]' _ "$tmp"
 run '[{"address":"0x1\"});os.exit()--","class":"x","title":"y"}]' logout
 check bash -c '[[ ! -s "$1/hyprctl.log" ]]' _ "$tmp"
 
-desc="no compositor to ask: the user is not locked in, the session ends"
-: >"$tmp/calls.log"; : >"$tmp/compositor-down"; printf '[]' >"$tmp/clients.json"; status=0
-FAKE_DIR=$tmp PATH="$bin:/usr/bin:/bin" XDG_STATE_HOME=$tmp/state GRASSFIELD_SESSION_END_GRACE=0 python3 -I "$root/packaging/bin/grassfield-session-end" shutdown >/dev/null 2>&1 || status=$?
+desc="GF-025 review: ONE failed window query while waiting is not 'no windows': it is retried, the window is still there, nothing is ended"
+FAKE_REFUSE="0x1" FAKE_FAIL_CALLS="2" run '[{"address":"0x1","class":"editor","title":"Save changes?"}]' logout
+check bash -c '! grep -q "uwsm stop" "$1/calls.log" && grep -q "^notify-send .*editor" "$1/calls.log" && [[ $2 == 3 ]] && [[ $(cat "$1/clients.calls") -ge 3 ]]' _ "$tmp" "$status"
+
+desc="a failed FIRST query is retried too: the window is found and closed, the session ends only after it is gone"
+FAKE_FAIL_CALLS="1 2" SESSION_END_TIMEOUT=3 run '[{"address":"0x1","class":"editor","title":"d"}]' logout
+check bash -c 'grep -q "address:0x1" "$1/hyprctl.log" && grep -qx "uwsm stop" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
+
+desc="no compositor to ask, ever: nothing is closed or ended, a notice says the list could not be read (exit 3)"
+: >"$tmp/calls.log"; : >"$tmp/compositor-down"; rm -f "$tmp/clients.calls"; printf '[]' >"$tmp/clients.json"; status=0
+FAKE_DIR=$tmp PATH="$bin:/usr/bin:/bin" XDG_RUNTIME_DIR=$tmp XDG_STATE_HOME=$tmp/state GRASSFIELD_SESSION_END_TIMEOUT=1 GRASSFIELD_SESSION_END_GRACE=0 python3 -I "$root/packaging/bin/grassfield-session-end" shutdown >/dev/null 2>&1 || status=$?
+check bash -c '! grep -q "systemctl" "$1/calls.log" && grep -q "^notify-send .*could not be read" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+
+desc="...and the user's own 'Shut Down Anyway' is honoured"
+: >"$tmp/calls.log"; status=0
+FAKE_NOTIFY_ANSWER=force FAKE_DIR=$tmp PATH="$bin:/usr/bin:/bin" XDG_RUNTIME_DIR=$tmp XDG_STATE_HOME=$tmp/state GRASSFIELD_SESSION_END_TIMEOUT=1 GRASSFIELD_SESSION_END_GRACE=0 python3 -I "$root/packaging/bin/grassfield-session-end" shutdown >/dev/null 2>&1 || status=$?
 check bash -c 'grep -qx "systemctl poweroff --no-wall" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
+
+desc="GF-025 review: a second run while one waits exits quietly and touches nothing (it would answer the Save sheet with Cancel)"
+( flock "$tmp/grassfield-session-end.lock" sleep 4 ) &
+holder=$!
+sleep 0.5
+FAKE_REFUSE="0x2" run "$two" logout
+check bash -c '[[ $2 == 0 ]] && [[ ! -s "$1/calls.log" ]] && [[ ! -s "$1/hyprctl.log" ]]' _ "$tmp" "$status"
+wait "$holder" || true
+
+desc="without notify-send the blocked logout still shows a notice through the shell's notification service (gdbus), ends nothing"
+FAKE_NOTIFY_FAIL=1 FAKE_REFUSE="0x2" run "$two" logout
+check bash -c 'grep -q "^gdbus call --session --dest org.freedesktop.Notifications .*kate" "$1/calls.log" && ! grep -q "uwsm stop" "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
 
 desc="an unknown action is refused (exit 2) and ends nothing"
 run '[]' hibernate

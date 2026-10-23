@@ -9,9 +9,15 @@ open after the timeout nothing is ended: a notice lists the applications and off
 Anyway"). Unsaved work is never lost silently. Omarchy's equivalent (omarchy-system-logout) closes the windows, waits one
 second and ends the session regardless; this one waits for the applications and lets them veto.
 
+An unknown state is never "no windows": a failed `hyprctl -j clients` is retried until the deadline, and a window list that
+stays unknown cancels the logout with a notice (the "Anyway" button is the user's decision, never the script's). Only one run
+exists at a time (a second Log Out click while the first waits exits quietly: its close requests would answer an
+application's "Save?" sheet with Cancel).
+
 Runs in the Grassfield session, started by the shell (shell/services/Power.qml). Standard library only; the helpers it
-runs (hyprctl, notify-send, systemctl, uwsm) are found through PATH.
+runs (hyprctl, notify-send or gdbus, systemctl, uwsm) are found through PATH.
 """
+import fcntl
 import glob
 import json
 import os
@@ -26,6 +32,7 @@ ACTIONS = {
     "shutdown": ("Shut Down", "Shut Down Anyway"),
 }
 ADDRESS = re.compile(r"^0x[0-9a-fA-F]+$")
+POLL = 0.25
 
 
 def run(argv, **kw):
@@ -43,6 +50,8 @@ def windows():
     try:
         data = json.loads(r.stdout)
     except ValueError:
+        return None
+    if not isinstance(data, list):
         return None
     return [(c.get("address", ""), c.get("class", "") or "", c.get("title", "") or "") for c in data if isinstance(c, dict)]
 
@@ -80,14 +89,68 @@ def end_session(action):
     run(["systemctl", "reboot" if action == "restart" else "poweroff", "--no-wall"])
 
 
-def notify_blocked(action, names):
-    """Show the notice and wait for "<Action> Anyway". Returns True when the user chose it."""
+def notify_plain(title, body):
+    """One notification without an answer, for when libnotify (notify-send, an optional dependency) is missing: the shell's
+    own notification service is asked over the session bus with gdbus (glib2). True when it was delivered."""
+    r = run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path",
+             "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.Notify", "Grassfield", "0", "",
+             title, body, "[]", "{'urgency': <byte 2>}", "0"])
+    return r is not None and r.returncode == 0
+
+
+def notify_blocked(action, names, unknown=False):
+    """Show the notice and wait for "<Action> Anyway". Returns True when the user chose it. Without notify-send the notice
+    is still shown (through notify_plain, without the button): nothing is ended then."""
     label, anyway = ACTIONS[action]
     title = "Can't %s now" % label.lower()
-    body = "These applications are still open and may be waiting for you to save your work: %s." % ", ".join(names[:5])
+    if unknown:
+        body = "The list of open windows could not be read, so nothing was closed. Your work may still be open."
+    else:
+        body = "These applications are still open and may be waiting for you to save your work: %s." % ", ".join(names[:5])
     r = run(["notify-send", "-a", "Grassfield", "-u", "critical", "-t", "0", "-w", "-A", "force=" + anyway, title, body],
             timeout=300)
-    return r is not None and r.stdout.strip() == "force"
+    if r is None or r.returncode != 0:
+        notify_plain(title, body)
+        return False
+    return r.stdout.strip() == "force"
+
+
+def single_instance():
+    """False when another run holds the lock (it keeps going). The lock lasts as long as this process."""
+    base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    try:
+        fd = os.open(os.path.join(base, "grassfield-session-end.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    except OSError:
+        return True  # no lock possible (no writable runtime directory): a lock is a courtesy, not a reason to stay logged in
+    return True
+
+
+def first_list(deadline):
+    """The window list before anything is closed; None when it stayed unknown until the deadline."""
+    while True:
+        cur = windows()
+        if cur is not None or time.monotonic() >= deadline:
+            return cur
+        time.sleep(POLL)
+
+
+def settle(deadline):
+    """(known, windows still open) at the deadline. A failed query is retried and is never read as "no windows": the state
+    is known only when the compositor's last answer was a list, and the session may end only on an empty known list."""
+    cur = None
+    last = []
+    while True:
+        cur = windows()
+        if cur is not None:
+            last = cur
+            if not cur:
+                return True, []
+        if time.monotonic() >= deadline:
+            return cur is not None, last
+        time.sleep(POLL)
 
 
 def main(argv):
@@ -104,24 +167,27 @@ def main(argv):
         print("usage: grassfield-session-end logout|restart|shutdown [--force] [--timeout SECONDS]", file=sys.stderr)
         return 2
     action = args[0]
-
-    current = windows()
-    if current is None:
-        # No compositor to ask (that is no reason to keep the user from logging out or powering off).
-        print("grassfield-session-end: cannot list windows, ending the session", file=sys.stderr)
-        end_session(action)
+    if not single_instance():
         return 0
+
     if not force:
-        # Ask the windows that exist now, once. A window that appears later is the application's own "Save changes?" sheet:
-        # closing it would answer Cancel for the user, so it is left alone and counted as "still open".
-        close_windows(current)
-        deadline = time.monotonic() + timeout
-        while current and time.monotonic() < deadline:
-            time.sleep(0.25)
-            current = windows() or []
-        if current:
-            if not notify_blocked(action, app_names(current)):
+        first = first_list(time.monotonic() + timeout)
+        if first is None:
+            print("grassfield-session-end: cannot list windows, nothing is ended", file=sys.stderr)
+            if not notify_blocked(action, [], unknown=True):
                 return 3
+        else:
+            # Ask the windows that exist now, once. A window that appears later is the application's own "Save changes?"
+            # sheet: closing it would answer Cancel for the user, so it is left alone and counted as "still open".
+            close_windows(first)
+            known, current = settle(time.monotonic() + timeout) if first else (True, [])
+            if not known:
+                print("grassfield-session-end: the window list stayed unknown, nothing is ended", file=sys.stderr)
+                if not notify_blocked(action, app_names(current), unknown=True):
+                    return 3
+            elif current:
+                if not notify_blocked(action, app_names(current)):
+                    return 3
     time.sleep(float(os.environ.get("GRASSFIELD_SESSION_END_GRACE", "1")))  # Chromium and friends finish writing
     end_session(action)
     return 0
