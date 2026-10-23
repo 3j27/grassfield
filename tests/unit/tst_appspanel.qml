@@ -17,6 +17,33 @@ TestCase {
 
     // ---- categories -------------------------------------------------------------------------
 
+    // UX-11: Grassfield Files and GNOME Files are both "Files": one keeps the plain name (the native app, as the Finder), the
+    // other is told apart, nothing is hidden and an app with a name of its own is untouched.
+    function test_sameNameIsToldApart() {
+        const recs = [
+            {id: "org.gnome.Nautilus", name: "Files", genericName: "File Manager"},
+            {id: "org.grassfield.Files", name: "Files", genericName: "File Manager"},
+            {id: "foot", name: "Foot", genericName: "Terminal"}
+        ];
+        const out = Model.disambiguate(recs);
+        compare(out.length, 3);
+        compare(out[0].name, "Files (GNOME)");
+        compare(out[0].baseName, "Files");
+        compare(out[1].name, "Files");
+        compare(out[2].name, "Foot");
+        compare(recs[0].name, "Files", "the input is not changed");
+        // No native app: both are qualified; a plain id falls back to the generic name, then to the id.
+        const two = Model.disambiguate([{id: "a.desktop", name: "Notes", genericName: "Text Editor"}, {id: "b", name: "notes", genericName: "Notes"}]);
+        compare(two[0].name, "Notes (Text Editor)");
+        compare(two[1].name, "notes (b)");
+        // Still equal after the qualifier: the ids decide.
+        const same = Model.disambiguate([{id: "org.x.App", name: "App"}, {id: "com.x.App", name: "App"}]);
+        compare(same[0].name === same[1].name, false);
+        compare(Model.vendorOf("org.kde.dolphin"), "KDE");
+        compare(Model.vendorOf("firefox"), null);
+        compare(Model.disambiguate([]).length, 0);
+    }
+
     function test_categoryMapping() {
         compare(Model.categoryOf(["Game", "ArcadeGame"]), "games");
         compare(Model.categoryOf(["Graphics", "2DGraphics", "RasterGraphics"]), "creativity");
