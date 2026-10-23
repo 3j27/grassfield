@@ -36,13 +36,33 @@ namespace gf::layerpointer {
         Schedule, // schedule an attempt from the event loop (after Hyprland has handled the event being delivered)
     };
 
+    // At most this many refreshes a second, whatever happens (a backstop: a loop this class does not foresee stays bounded
+    // and the compositor keeps answering).
+    inline constexpr uint32_t kMaxRefreshesPerSecond = 20;
+
     // One refresh owed per burst of events: the first one schedules an attempt from the event loop (after Hyprland's own
     // handling has run, including the pointer focus it sets); more events before it runs join it.
     class CRefreshState {
       public:
-        // A layer surface with namespace `ns` mapped, or the seat's keyboard went to one. True when an attempt must be
-        // scheduled now (a Grassfield layer and none scheduled yet).
+        // A layer surface with namespace `ns` mapped. True when an attempt must be scheduled now (a Grassfield layer, none
+        // scheduled yet, and not an effect of the refresh running now).
         bool     onLayerEvent(std::string_view ns);
+
+        // The seat's keyboard went to `surface` (an opaque identity; 0 for none). `layerNs`: the namespace of the layer
+        // surface it went to, empty for anything else (a window, a popup, nothing). Only a keyboard that MOVES to a
+        // Grassfield layer owes a refresh: Hyprland sets the keyboard focus again on the surface that already has it on every
+        // pointer focus refresh over an on-demand layer (the desktop icons), and counting that owed the next refresh, for
+        // ever (stages.sh on 2026-10-23: 10 million refreshes, the compositor stopped answering). Returns as onLayerEvent.
+        bool     onKeyboardFocus(uint64_t surface, std::string_view layerNs);
+
+        // Around a refresh (Hyprland's pointer focus logic running now): what it causes is its own, not a new layer event.
+        void     beginRefresh();
+        void     endRefresh();
+
+        // The refresh about to run fits the budget (kMaxRefreshesPerSecond per one-second window from `nowMs`); false: it is
+        // dropped (counted in dropped()).
+        bool     admit(uint64_t nowMs);
+        uint64_t dropped() const;
 
         // The scheduled attempt runs (or could not be scheduled: no event loop). Refresh (and nothing owed any more) when
         // a pointer device exists and no button is held; Wait otherwise; None when nothing is owed.
@@ -61,9 +81,14 @@ namespace gf::layerpointer {
         uint64_t refreshes() const;
 
       private:
-        bool     m_scheduled = false; // an event-loop attempt is scheduled
-        bool     m_owed      = false; // a Grassfield layer mapped or took the keyboard since the last refresh
-        uint64_t m_refreshes = 0;
+        bool     m_scheduled       = false; // an event-loop attempt is scheduled
+        bool     m_owed            = false; // a Grassfield layer mapped or took the keyboard since the last refresh
+        uint64_t m_refreshes       = 0;
+        uint64_t m_keyboardSurface = 0;     // where the seat's keyboard was last seen going
+        bool     m_inRefresh       = false;
+        uint64_t m_windowStartMs   = 0; // the budget's one-second window
+        uint32_t m_inWindow        = 0;
+        uint64_t m_dropped         = 0;
     };
 
 } // namespace gf::layerpointer

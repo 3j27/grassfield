@@ -11,6 +11,7 @@
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -51,12 +52,26 @@ namespace gf::layerPointer {
         // position, with its own wl_pointer.frame (as CInputManager::onMouseMoved sends one), so a button delivered next
         // arrives in a later frame. Hyprland's own rules apply (constraints, the lock, follow_mouse, Stages' blocked
         // windows); it is what one pixel of motion does.
+        uint64_t nowMs() {
+            return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+        }
+
         void refreshNow(std::string_view when) {
+            auto& s = st();
+            if (!s.refresh.admit(nowMs())) {
+                if (events::isLogMilestone(s.refresh.dropped()))
+                    logRequest(Log::WARN, "layer pointer: refresh dropped: more than {} a second ({}; {} dropped)", lp::kMaxRefreshesPerSecond, s.lastNamespace, s.refresh.dropped());
+                return;
+            }
+            // What the refresh causes (Hyprland sets the keyboard focus again on an on-demand layer under the cursor) is
+            // its own effect, never a new reason to refresh.
+            s.refresh.beginRefresh();
             g_pInputManager->simulateMouseMovement();
             g_pSeatManager->sendPointerFrame();
-            const auto n = st().refresh.refreshes();
+            s.refresh.endRefresh();
+            const auto n = s.refresh.refreshes();
             if (events::isLogMilestone(n))
-                logRequest(Log::DEBUG, "layer pointer: pointer focus refreshed at the cursor {} ({}; {} refresh(es))", when, st().lastNamespace, n);
+                logRequest(Log::DEBUG, "layer pointer: pointer focus refreshed at the cursor {} ({}; {} refresh(es))", when, s.lastNamespace, n);
         }
 
         void attempt() {
@@ -87,12 +102,18 @@ namespace gf::layerPointer {
                 scheduleAttempt();
         }
 
+        // Only a keyboard that moves to a Grassfield layer counts (core onKeyboardFocus): Hyprland sets it again on the layer
+        // that has it on each refresh over an on-demand layer.
         void onKeyboardFocus(const SP<CWLSurfaceResource>& surface) {
-            if (!st().ready || !surface)
+            auto& s = st();
+            if (!s.ready)
                 return;
-            const auto owner = surfaces::ownerOf(surface);
-            if (owner.layer && !owner.popup)
-                onLayerEvent(owner.layer);
+            const auto  owner = surface ? surfaces::ownerOf(surface) : surfaces::SOwner{};
+            const auto* layer = owner.layer && !owner.popup ? owner.layer.get() : nullptr;
+            if (layer && lp::isGrassfieldNamespace(layer->m_namespace))
+                s.lastNamespace = layer->m_namespace;
+            if (s.refresh.onKeyboardFocus(reinterpret_cast<uintptr_t>(surface.get()), layer ? std::string_view{layer->m_namespace} : std::string_view{}))
+                scheduleAttempt();
         }
     } // namespace
 

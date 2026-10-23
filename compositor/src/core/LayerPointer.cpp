@@ -7,7 +7,7 @@ namespace gf::layerpointer {
     }
 
     bool CRefreshState::onLayerEvent(std::string_view ns) {
-        if (!isGrassfieldNamespace(ns))
+        if (m_inRefresh || !isGrassfieldNamespace(ns))
             return false;
         m_owed = true;
         if (m_scheduled)
@@ -46,10 +46,48 @@ namespace gf::layerpointer {
         return Step::Schedule;
     }
 
+    bool CRefreshState::onKeyboardFocus(uint64_t surface, std::string_view layerNs) {
+        const bool moved  = surface != m_keyboardSurface;
+        m_keyboardSurface = surface;
+        if (!moved || surface == 0)
+            return false;
+        return onLayerEvent(layerNs); // nothing while a refresh runs; nothing for a window, a popup or another client's layer
+    }
+
+    void CRefreshState::beginRefresh() {
+        m_inRefresh = true;
+    }
+
+    void CRefreshState::endRefresh() {
+        m_inRefresh = false;
+    }
+
+    bool CRefreshState::admit(uint64_t nowMs) {
+        if (nowMs < m_windowStartMs || nowMs - m_windowStartMs >= 1000) {
+            m_windowStartMs = nowMs;
+            m_inWindow      = 0;
+        }
+        if (m_inWindow >= kMaxRefreshesPerSecond) {
+            ++m_dropped;
+            return false;
+        }
+        ++m_inWindow;
+        return true;
+    }
+
+    uint64_t CRefreshState::dropped() const {
+        return m_dropped;
+    }
+
     void CRefreshState::reset() {
-        m_scheduled = false;
-        m_owed      = false;
-        m_refreshes = 0;
+        m_scheduled       = false;
+        m_owed            = false;
+        m_refreshes       = 0;
+        m_keyboardSurface = 0;
+        m_inRefresh       = false;
+        m_windowStartMs   = 0;
+        m_inWindow        = 0;
+        m_dropped         = 0;
     }
 
     bool CRefreshState::scheduled() const {
