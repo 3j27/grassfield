@@ -114,6 +114,7 @@
  {"path": "tests/security/reload_order/shell.qml", "layer": "headless"},
  {"path": "tests/security/reload_locked.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/security/screenshare_rules.sh", "layer": "data"},
+ {"path": "tests/security/sleep_lock_units.sh", "layer": "data"},
  {"path": "tests/shell/apps_panel_perf/shell.qml", "layer": "headless"},
  {"path": "tests/shell/desktop_rename_focus/shell.qml", "layer": "headless"},
  {"path": "tests/shell/i18n_live/shell.qml", "layer": "headless"},

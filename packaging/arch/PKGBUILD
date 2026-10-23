@@ -111,9 +111,11 @@ package_grassfield-desktop() {
 
   install -Dm644 "$root/packaging/wayland-sessions/grassfield.desktop" "$pkgdir/usr/share/wayland-sessions/grassfield.desktop"
   install -Dm644 "$root/packaging/systemd/grassfield-shell.service" "$pkgdir/usr/lib/systemd/user/grassfield-shell.service"
-  # Omarchy's sleep-lock unit must stay inert inside the Grassfield session (the Omarchy shell it talks to is not running there).
+  # Omarchy's sleep-lock unit is skipped inside the Grassfield session only while grassfield-shell runs (D-12: the Omarchy
+  # shell it talks to is not running there, and grassfield-shell locks before sleep itself); the gate script decides.
   install -Dm644 "$root/packaging/systemd/omarchy-sleep-lock.service.d/10-grassfield.conf" \
     "$pkgdir/usr/lib/systemd/user/omarchy-sleep-lock.service.d/10-grassfield.conf"
+  install -Dm755 "$root/packaging/systemd/sleep-lock-gate" "$pkgdir/usr/lib/grassfield/sleep-lock-gate"
   # Menu bridge: /usr/bin/grassfield-menu-bridge, /usr/lib/systemd/user/grassfield-menu-bridge.service,
   # /usr/share/dbus-1/interfaces/org.grassfield.MenuBridge1.xml (started by the session's autostart.lua).
   DESTDIR="$pkgdir" cmake --install "$srcdir/menu-bridge-build"

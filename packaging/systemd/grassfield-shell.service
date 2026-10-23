@@ -6,15 +6,26 @@ After=graphical-session.target
 Requisite=graphical-session.target
 # Only inside the Grassfield session, never in the Omarchy session.
 ConditionEnvironment=GRASSFIELD_SESSION=1
+# A crash loop (10 starts within 30 s) stops the restarts and the unit fails: the shell is broken, not stopped.
+StartLimitIntervalSec=30
+StartLimitBurst=10
 
 [Service]
 Type=simple
 Slice=session.slice
 # Quickshell's own reload is off: package upgrades must not hot-reload a half-written tree.
 Environment=QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1
+# While this shell runs it locks before sleep itself (shell/security/idle/SleepInhibitor.qml): Omarchy's sleep-lock unit,
+# which asks the Omarchy shell (not running in this session) to lock, is stopped, and its Grassfield drop-in
+# (omarchy-sleep-lock.service.d/10-grassfield.conf) skips it whenever this unit is active or starting (D-12).
+# --no-block: no job ordering between the two units; "-": a missing unit (no Omarchy) is not an error.
+ExecStartPre=-/usr/bin/systemctl --user --no-block stop omarchy-sleep-lock.service
 ExecStart=/usr/bin/qs -n -c grassfield
-# Gate R1: restart within 3 s; Hyprland keeps a lock alive while the shell restarts (ADR-0010).
-Restart=on-failure
+# Gate R1 and GF-030: back within ~1 s after ANY exit while the session runs: a crash, SIGTERM, `qs kill`, exit 0.
+# Hyprland keeps a lock alive while the shell is away (ext-session-lock) and the restarted shell takes it back
+# (ADR-0010). A stop through systemd is never restarted: logout (graphical-session.target stops, PartOf=) or
+# `systemctl --user stop`; Requisite= refuses a start once the session target is gone.
+Restart=always
 RestartSec=1
 TimeoutStopSec=5
 # No NoNewPrivileges/ProtectSystem here on purpose: the lock screen and polkit agent rely on the
