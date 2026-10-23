@@ -622,21 +622,32 @@ function rememberPrevious(map, key, was, chosenPath) {
     return next;
 }
 
-// What Cancel does for the display `key` (whatever display the picker shows now has no say): {action, fields, map}. `action` is
-// "follow-all" (a display that had no wallpaper of its own: remove its override), "restore" (write `fields`: source and path),
-// or "artwork" (nothing was recorded, or the display already shows what it showed before). `map` is the map without that entry;
-// no other display's entry is touched.
-function cancelPlan(map, key, isDisplay, currentSource, currentPath) {
+// What Cancel does on the page, which shows the display `key` ("all" or a display key; `isDisplay`, `overridden`: that display has
+// a wallpaper of its own). Cancel acts on the SCOPE the choice was made in, never on the display the picker happens to show:
+//   - the entry of `key` exists: the choice was made for that scope; it is undone there;
+//   - no entry, a display that follows All Displays, and an entry for "all": the choice was made for All Displays and this display
+//     inherits it; it is undone for all ("all" scope), the display itself is not touched (no override is ever created for it);
+//   - otherwise (nothing recorded): "none" for a display (nothing to undo here), "artwork" for All Displays.
+// Returns {action, scope, fields, map}. `action`: "follow-all" (a display that had no wallpaper of its own: remove its override),
+// "restore" (write `fields`, source and path, in `scope`: "all" = the top level, "display" = the display's entry), "artwork" or
+// "none". `map` is the map without the entry that was used; no other entry is touched.
+function cancelPlan(map, key, isDisplay, overridden, currentSource, currentPath) {
     const all = Object.assign({}, isPlainObject(map) ? map : {});
-    const was = all[key];
-    delete all[key];
+    let scopeKey = key;
+    let scope = isDisplay ? "display" : "all";
+    if (!all[key] && isDisplay && !overridden && all.all) {
+        scopeKey = "all";
+        scope = "all";
+    }
+    const was = all[scopeKey];
+    delete all[scopeKey];
     if (!was)
-        return {action: "artwork", fields: null, map: all};
-    if (isDisplay && !was.overridden)
-        return {action: "follow-all", fields: null, map: all};
+        return {action: isDisplay ? "none" : "artwork", scope: scope, fields: null, map: all};
+    if (scope === "display" && !was.overridden)
+        return {action: "follow-all", scope: scope, fields: null, map: all};
     if (was.source === "video" && was.path === currentPath && currentSource === "video")
-        return {action: "artwork", fields: null, map: all};
-    return {action: "restore", fields: {source: was.source, path: was.path}, map: all};
+        return {action: "artwork", scope: scope, fields: null, map: all};
+    return {action: "restore", scope: scope, fields: {source: was.source, path: was.path}, map: all};
 }
 
 // ---- the aspect rule of the online pictures (ADR-0016 step 2) ----

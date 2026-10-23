@@ -299,8 +299,8 @@ SettingsPage {
         root.choose({"wallpaper.source": "online", "wallpaper.online.provider": root.disclosedProvider}, "", "");
     }
 
-    // What the display showed before a video was chosen: Cancel on the progress row puts it back (macOS: Cancel leaves things as
-    // they were). null when the video on screen was already the choice.
+    // What each scope ("all" or a display key) showed before a video was chosen there: {key: {source, path, overridden}}. Cancel on
+    // the progress row puts it back in that scope (macOS: Cancel leaves things as they were), see WallpaperConfig.cancelPlan.
     property var previousBy: ({})
 
     function useVideo(p: string): void {
@@ -315,13 +315,17 @@ SettingsPage {
     // Cancel the preparation of the video: the wallpaper that was there before (the shell stops the job when the setting changes).
     function cancelVideo(): void {
         // The plan is for the display the page shows now; the entries of other displays stay (WallpaperConfig.cancelPlan).
-        const plan = WallpaperConfig.cancelPlan(root.previousBy, root.displayId, root.currentDisplay !== null, root.source, root.path);
+        const plan = WallpaperConfig.cancelPlan(root.previousBy, root.displayId, root.currentDisplay !== null, root.overridden, root.source, root.path);
         root.previousBy = plan.map;
+        const entries = plan.fields ? {"wallpaper.source": plan.fields.source, "wallpaper.path": plan.fields.path} : null;
         if (plan.action === "follow-all")
             root.useAllDisplays();
+        else if (plan.action === "restore" && plan.scope === "all")
+            // The choice was made for All Displays: undone there (the top level), whatever display the picker shows.
+            root.store.setMany(entries);
         else if (plan.action === "restore")
-            root.writeFields({"wallpaper.source": plan.fields.source, "wallpaper.path": plan.fields.path});
-        else
+            root.writeFields(entries);
+        else if (plan.action === "artwork")
             root.useArtwork();
     }
 
@@ -722,7 +726,7 @@ SettingsPage {
             }
         }
 
-        // The shell transcodes the video once (H.264 at the display's size); its progress is reported in wallpaper-state.json.
+        // The shell transcodes the video once (H.264 with at most the pixels of 4K UHD, in the display's orientation); its progress is reported in wallpaper-state.json.
         SettingsRow {
             visible: root.transcoding
             title: qsTr("Preparing the video")

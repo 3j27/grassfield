@@ -150,7 +150,7 @@
  {"path": "tests/shell/wallpaper_online_start_fail.sh", "layer": "headless"},
  {"path": "tests/shell/wallpaper_video.sh", "layer": "headless"},
  {"path": "tests/shell/wallpaper_tool_signals.sh", "layer": "headless"},
- {"path": "tests/shell/wallpaper_video_heavy.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/shell/wallpaper_video_heavy.sh", "layer": "headless", "runner": "bare"},
  {"path": "tests/shell/audio_dev_guard.sh", "layer": "headless"},
  {"path": "tests/shell/osd_keyboard.sh", "layer": "headless"},
  {"path": "tests/shell/auto_appearance_tokens.sh", "layer": "logic"},

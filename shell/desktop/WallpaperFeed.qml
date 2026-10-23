@@ -11,7 +11,7 @@ import qs.services
 //   - source online (ADR-0016 step 2): the newest picture WallpaperOnline has on disk is prepared like a file (`label` is its
 //     title); with nothing cached the artwork shows and the state is "waiting" (Settings: "Waiting for a connection"). A newer
 //     picture (a day later) replaces it through the same crossfade.
-//   - source video (ADR-0016 W7): `probe`, then `transcode` (H.264 at the output's physical size; its progress is published for
+//   - source video (ADR-0016 W7): `probe`, then `transcode` (H.264 with at most the pixels of 4K UHD, in the output's orientation; its progress is published for
 //     Settings), then the poster frame is the picture (`imageUrl`, the lock screen's still) and `display.video` names the file
 //     Wallpaper.qml plays under the pause policy. A video that crashed the shell (WallpaperState.isVideoBlocked) shows its poster
 //     and is not played; the reason is "video-crashed".

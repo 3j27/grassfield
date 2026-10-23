@@ -285,7 +285,17 @@ QSize outputSize(const QSize &source, const QSize &limit)
 
 QSize videoLimit(const QSize &display)
 {
-    return QSize(std::min(display.width(), kMaxVideoWidth), std::min(display.height(), kMaxVideoHeight));
+    const qint64 pixels = qint64(display.width()) * display.height();
+    if (display.width() < 1 || display.height() < 1 || pixels <= kMaxVideoPixels)
+        return display;
+    // Above the budget: the display size scaled down uniformly (aspect and orientation kept), each side even and rounded down so
+    // the product stays within the budget.
+    const double scale = std::sqrt(double(kMaxVideoPixels) / double(pixels));
+    int w = std::max(2, int(std::floor(display.width() * scale + 1e-6)) & ~1);
+    int h = std::max(2, int(std::floor(display.height() * scale + 1e-6)) & ~1);
+    while (qint64(w) * h > kMaxVideoPixels && h > 2)
+        h -= 2;
+    return QSize(w, h);
 }
 
 int threadCount(int cpus)
@@ -475,8 +485,8 @@ ExitCode transcode(const TranscodeOptions &o, const std::function<void(double)> 
     if (const ExitCode c = probe(o.ffprobe, o.src, o.maxSeconds, &info, reason))
         return c;
     const QString real = QFileInfo(o.src).canonicalFilePath();
-    // The video is fitted inside 3840x2160 whatever the display (a 5K display shows the 4K video scaled); the poster is composed on
-    // the display itself. The file is shared by displays of any size above 4K.
+    // The video has at most the pixels of 4K UHD whatever the display (a 5K display shows a 4K video scaled; a display with fewer
+    // pixels gets its own size); the poster is composed on the display itself. Displays with the same video size share the file.
     const QSize vlimit = videoLimit(o.limit);
     const QSize size = outputSize(QSize(info.width, info.height), vlimit);
     const QString key = videoKey(real, bytes, mtime, vlimit);

@@ -765,27 +765,49 @@ TestCase {
         m = WallpaperConfig.rememberPrevious(m, A, {source: "folder", path: "/p/dir", overridden: true}, "/v/y.mp4");
         m = WallpaperConfig.rememberPrevious(m, B, {source: "file", path: "/p/inherited.jpg", overridden: false}, "/v/z.mp4");
         // The picker is on B when Cancel is pressed: B follows All Displays again; A's and All's entries are untouched.
-        let plan = WallpaperConfig.cancelPlan(m, B, true, "video", "/v/z.mp4");
+        let plan = WallpaperConfig.cancelPlan(m, B, true, true, "video", "/v/z.mp4");
         compare(plan.action, "follow-all");
         compare(Object.keys(plan.map).sort(), ["all", A].sort());
         compare(plan.map[A], {source: "folder", path: "/p/dir", overridden: true});
         m = plan.map;
         // Cancel for A restores its own wallpaper, not what the others had.
-        plan = WallpaperConfig.cancelPlan(m, A, true, "video", "/v/y.mp4");
+        plan = WallpaperConfig.cancelPlan(m, A, true, true, "video", "/v/y.mp4");
         compare(plan.action, "restore");
+        compare(plan.scope, "display");
         compare(plan.fields, {source: "folder", path: "/p/dir"});
         compare(Object.keys(plan.map), ["all"]);
         m = plan.map;
-        // Cancel for All Displays (not a display): the picture.
-        plan = WallpaperConfig.cancelPlan(m, "all", false, "video", "/v/x.mp4");
+        // Cancel for All Displays (not a display): the picture, at the top level.
+        plan = WallpaperConfig.cancelPlan(m, "all", false, false, "video", "/v/x.mp4");
         compare(plan.action, "restore");
+        compare(plan.scope, "all");
         compare(plan.fields, {source: "file", path: "/p/a.jpg"});
         compare(Object.keys(plan.map), []);
-        // Nothing recorded for the display: the artwork; and a second Cancel finds nothing.
-        compare(WallpaperConfig.cancelPlan(plan.map, A, true, "video", "/v/y.mp4").action, "artwork");
+        // Nothing recorded for the display, and nothing for All: a display has nothing to undo; All Displays gets the artwork.
+        compare(WallpaperConfig.cancelPlan(plan.map, A, true, true, "video", "/v/y.mp4").action, "none");
+        compare(WallpaperConfig.cancelPlan(plan.map, "all", false, false, "video", "/v/x.mp4").action, "artwork");
         // The video chosen again records nothing (the previous entry stays), and a missing map is harmless.
         const again = WallpaperConfig.rememberPrevious({all: {source: "file", path: "/p/a.jpg", overridden: false}}, "all", {source: "video", path: "/v/x.mp4", overridden: false}, "/v/x.mp4");
         compare(again.all.path, "/p/a.jpg");
-        compare(WallpaperConfig.cancelPlan(null, "all", false, "video", "/v/x.mp4").action, "artwork");
+        compare(WallpaperConfig.cancelPlan(null, "all", false, false, "video", "/v/x.mp4").action, "artwork");
+    }
+
+    // The video was chosen under All Displays; the picker is then moved to display A, which follows All Displays (it shows the
+    // inherited video and its progress), and Cancel is pressed: it undoes the choice for All Displays and creates no override for A.
+    function test_cancelOnAFollowingDisplayActsOnAllDisplays() {
+        const A = "n:eDP-1";
+        const B = "n:HDMI-A-1";
+        let m = WallpaperConfig.rememberPrevious({}, "all", {source: "file", path: "/p/a.jpg", overridden: false}, "/v/x.mp4");
+        const plan = WallpaperConfig.cancelPlan(m, A, true, false, "video", "/v/x.mp4");
+        compare(plan.action, "restore");
+        compare(plan.scope, "all");
+        compare(plan.fields, {source: "file", path: "/p/a.jpg"});
+        compare(Object.keys(plan.map), [], "the All Displays entry is used up");
+        // A display with an override of its own and no entry of its own does not borrow the All Displays entry.
+        const own = WallpaperConfig.cancelPlan(m, B, true, true, "video", "/v/x.mp4");
+        compare(own.action, "none");
+        compare(Object.keys(own.map), ["all"], "All's entry is untouched");
+        // After the plan was used, another Cancel on A finds nothing: no artwork override is created for A.
+        compare(WallpaperConfig.cancelPlan(plan.map, A, true, false, "video", "/v/x.mp4").action, "none");
     }
 }

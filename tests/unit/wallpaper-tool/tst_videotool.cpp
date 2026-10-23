@@ -325,6 +325,19 @@ TEST(VideoTool, ThreadsAreTheSameOnEveryMachine)
     const QStringList f = frameArgs(QStringLiteral("/v/a.mp4"), 1.0, QSize(1280, 1280));
     EXPECT_TRUE(f[f.indexOf(QStringLiteral("-vf")) + 1].contains(QStringLiteral("min(iw,1280)")));
     EXPECT_FALSE(frameArgs(QStringLiteral("/v/a.mp4"), 1.0).contains(QStringLiteral("-vf")));
+    // Threads on both sides of -i, at most kMaxThreads whatever is asked: the PNG encoder sizes its pool from the CPU count otherwise.
+    const QStringList g = frameArgs(QStringLiteral("/v/a.mp4"), 1.0, QSize(), 64);
+    const int in = g.indexOf(QStringLiteral("-i"));
+    int before = 0, after = 0;
+    for (int i = 0; i + 1 < g.size(); ++i) {
+        if (g[i] == QLatin1String("-threads")) {
+            EXPECT_LE(g[i + 1].toInt(), kMaxThreads);
+            (i < in ? before : after)++;
+        }
+    }
+    EXPECT_EQ(before, 1) << "decoder";
+    EXPECT_EQ(after, 1) << "PNG encoder (output side)";
+    EXPECT_LT(g.lastIndexOf(QStringLiteral("-threads")), g.indexOf(QStringLiteral("-f")));
 }
 
 TEST(VideoTool, A4kAnd8kSourceTranscodeUnderTheRealHeapCapWithForcedThreads)
@@ -376,12 +389,30 @@ TEST(VideoTool, TheHeapCapStopsARunawayDecode)
 
 TEST(VideoTool, TheVideoNeverExceeds4kWhateverTheDisplay)
 {
+    // At or below the pixel count of 4K UHD: the display's own size, whatever its orientation or aspect.
     EXPECT_EQ(videoLimit(QSize(1920, 1080)), QSize(1920, 1080));
     EXPECT_EQ(videoLimit(QSize(3840, 2160)), QSize(3840, 2160));
+    EXPECT_EQ(videoLimit(QSize(2160, 3840)), QSize(2160, 3840)) << "portrait 4K";
+    EXPECT_EQ(videoLimit(QSize(1440, 2560)), QSize(1440, 2560)) << "rotated QHD";
+    EXPECT_EQ(videoLimit(QSize(5120, 1440)), QSize(5120, 1440)) << "ultrawide, fewer pixels than 4K";
+    // Above it: scaled down uniformly to the budget, orientation kept.
     EXPECT_EQ(videoLimit(QSize(5120, 2880)), QSize(3840, 2160));
     EXPECT_EQ(videoLimit(QSize(7680, 4320)), QSize(3840, 2160));
-    EXPECT_EQ(videoLimit(QSize(2880, 5120)), QSize(2880, 2160));
-    // A 16:9 source on a 5K display is fitted inside 4K, never enlarged.
+    EXPECT_EQ(videoLimit(QSize(4320, 7680)), QSize(2160, 3840)) << "portrait 8K";
+    EXPECT_EQ(videoLimit(QSize(2880, 5120)), QSize(2160, 3840)) << "portrait 5K";
+    // Whatever the display: even sides, within the budget, aspect kept to a pixel or two, never larger than the display.
+    for (const QSize d : {QSize(6016, 3384), QSize(5120, 2160), QSize(3440, 1440), QSize(7680, 2160), QSize(4096, 4096), QSize(1, 1), QSize(8191, 4097)}) {
+        const QSize v = videoLimit(d);
+        EXPECT_LE(qint64(v.width()) * v.height(), kMaxVideoPixels) << d.width() << "x" << d.height();
+        EXPECT_LE(v.width(), d.width());
+        EXPECT_LE(v.height(), d.height());
+        if (d.width() * d.height() > 2) {
+            EXPECT_EQ(v.width() % 2, 0);
+            EXPECT_EQ(v.height() % 2, 0);
+        }
+    }
+    EXPECT_EQ(videoLimit(QSize(8191, 4097)).width() % 2, 0);
+    // A 16:9 source on a 5K display is fitted inside the budget size, never enlarged.
     EXPECT_EQ(outputSize(QSize(7680, 4320), videoLimit(QSize(5120, 2880))), QSize(3840, 2160));
     EXPECT_EQ(outputSize(QSize(1920, 1080), videoLimit(QSize(5120, 2880))), QSize(1920, 1080));
 }
