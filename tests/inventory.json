@@ -147,6 +147,8 @@
  {"path": "tests/shell/glyph_tables.sh", "layer": "data"},
  {"path": "tests/shell/hidden_entries.sh", "layer": "logic"},
  {"path": "tests/shell/icon_theme.sh", "layer": "data"},
+ {"path": "tests/shell/icons_compose.sh", "layer": "data"},
+ {"path": "tests/shell/icons_real_pins.sh", "layer": "data"},
  {"path": "tests/shell/mime_data.sh", "layer": "logic"},
  {"path": "tests/shell/no_whitesur.sh", "layer": "data"},
  {"path": "tests/shell/notif_hooks.sh", "layer": "headless"},

@@ -138,10 +138,26 @@ Pointer, `grassfield-cursors-custom` under `$XDG_DATA_HOME/icons`, owner decisio
 dependencies of `grassfield-desktop` (declared in `packaging/arch/PKGBUILD`); they are used as separate programs, nothing
 of them is linked or copied. The generated custom theme is derived from the same CC-BY-SA-4.0 templates.
 
-App icon theme (ADR-0017, amended 2026-10-21): `grassfield-icons` (`/usr/share/icons/grassfield-icons`,
-`branding/icons/theme/index.theme`, Grassfield's own file) is a wrapper whose own directory holds no icon yet; it inherits
-`breeze,Adwaita,hicolor`. The session selects it with `QT_QPA_SYSTEM_ICON_THEME` (uwsm `env-grassfield`) and, for GTK, a
-locked dconf database that holds only `icon-theme='grassfield-icons'`.
+App icon theme (ADR-0017; owner decision 2026-10-23): `grassfield-icons` (`/usr/share/icons/grassfield-icons`, its own
+package `grassfield-icons`, a dependency of `grassfield-desktop`) is ONE theme composed at build time by
+`packaging/arch/icons-compose.py` (header of the script: layers, directory layout) from two pinned third-party themes and
+Grassfield's own glyphs (`branding/icons/theme`, MIT); it inherits `breeze,Adwaita,hicolor`. First layer that provides an
+icon name wins: Grassfield's own app icons, MacTahoe, Pebble, Grassfield's device glyphs. Pebble supplies the folders and the
+store icon; the files and names listed in `packaging/arch/icons-apple-logos.txt` (Apple logo and look-alikes) are removed. The
+session selects the theme with `QT_QPA_SYSTEM_ICON_THEME` (uwsm `env-grassfield`) and, for GTK, a locked dconf database that
+holds only `icon-theme='grassfield-icons'`. Dev sessions compose the same theme with `scripts/dev/icons.sh` (`just icons`).
+- MacTahoe icon theme, `https://github.com/vinceliuice/MacTahoe-icon-theme` at commit
+  `839848b9a8a38a92a6936e30c4abe35cc6f2546d`, author Vince Liuice (AUTHORS). Licence: `COPYING` (GPL version 3, unmodified
+  text) is present; the README states no licence and no file carries an "or later" notice: GPL-3.0-only. COPYING and AUTHORS
+  ship in `/usr/share/licenses/grassfield-icons/`. Only the base variant, default colour; no upstream script runs.
+- Pebble icon theme, `https://github.com/a-shewale/Pebble-Icon-Theme` at commit
+  `185da58c2f4caf3c2a038aa0869fd2772acc0933`, only its main `Pebble/` variant. **Pebble: no licence file at the pin; its
+  README states GPL-3.0 (and links a LICENSE file that does not exist); owner accepted the risk 2026-10-23.** It credits
+  MacTahoe, Hatter and Adwaita as its sources. The credit note ships as `/usr/share/licenses/grassfield-icons/PEBBLE`, the
+  two sources and commits as `SOURCE`.
+- The composed package declares `license=(MIT GPL-3.0-only)`: MIT for Grassfield's own glyphs, GPL-3.0 for the third-party art.
+  **needs legal review:** Apple trademark artwork that the by-eye sweep may have missed in either theme, the missing Pebble
+  licence, and the aggregation with the MIT packages. The theme's `index.theme` and the UI name neither theme.
 
 Runtime theme dependencies (installed by pacman, read by Qt and GTK as data; nothing of them is vendored, copied or
 modified by Grassfield):

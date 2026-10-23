@@ -2,6 +2,7 @@
 // QIcon::fromTheme(name) (solid-colour fixture icons) or "-" when no icon resolves. An argument "cmp:<name>=<file>" prints
 // "<name>=same" when QIcon::fromTheme(name) at 16 and 48 px is pixel for pixel the image of <file>, "<name>=diff" when it is another
 // picture, "<name>=-" when nothing resolves (the shadowed device glyphs of the wrapper theme).
+// An argument "at<N>:<name>" prints "<name>@<N>=<colour>" for the icon rendered at N px instead of 16 (size-dependent lookup).
 // The offscreen platform has no icon search paths of its own (a Wayland or xcb session gets XDG_DATA_DIRS/icons from its
 // generic Unix platform theme), so the probe sets them from XDG_DATA_DIRS the same way.
 #include <QGuiApplication>
@@ -36,10 +37,23 @@ int main(int argc, char **argv)
             std::printf("%s=%s\n", name.toUtf8().constData(), verdict.toUtf8().constData());
             continue;
         }
-        const QIcon icon = QIcon::fromTheme(arg);
-        const QImage image = icon.pixmap(16).toImage();
-        const QString colour = image.isNull() ? QStringLiteral("-") : image.pixelColor(8, 8).name();
-        std::printf("%s=%s\n", argv[i], colour.toUtf8().constData());
+        int px = 16;
+        QString name = arg;
+        QString label = arg;
+        if (arg.startsWith(QStringLiteral("at"))) {
+            const int colon = arg.indexOf(u':');
+            bool ok = false;
+            const int n = colon > 2 ? arg.mid(2, colon - 2).toInt(&ok) : 0;
+            if (ok && n > 0) {
+                px = n;
+                name = arg.mid(colon + 1);
+                label = QStringLiteral("%1@%2").arg(name).arg(px);
+            }
+        }
+        const QIcon icon = QIcon::fromTheme(name);
+        const QImage image = icon.pixmap(px).toImage();
+        const QString colour = image.isNull() ? QStringLiteral("-") : image.pixelColor(px / 2, px / 2).name();
+        std::printf("%s=%s\n", label.toUtf8().constData(), colour.toUtf8().constData());
     }
     return 0;
 }

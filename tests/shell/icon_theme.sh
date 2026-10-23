@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ADR-0017 (spike I0 turned into a test): the Grassfield session icon theme.
 #  * packaging/uwsm/env-grassfield sets QT_QPA_SYSTEM_ICON_THEME and nothing else that matters;
-#  * scripts/dev/devenv.sh installs the wrapper into .dev/share/icons and selects it;
+#  * scripts/dev/devenv.sh installs the wrapper into .dev/share/icons and selects it (a composed theme, scripts/dev/icons.sh, is kept as is);
 #  * the wrapper's index.theme: Inherits=breeze,Adwaita,hicolor and one directory that exists once installed;
 #  * Qt (QIcon::fromTheme) and GTK 3/4 resolve through the wrapper: Breeze stand-in first, then Adwaita, then hicolor;
 #    the variable beats QT_QPA_PLATFORMTHEME-less defaults;
@@ -40,6 +40,21 @@ desc="devenv.sh installs the wrapper with its real scalable/apps directory"
 check bash -c 'cmp -s "$1/branding/icons/theme/index.theme" "$1/.dev/share/icons/grassfield-icons/index.theme" && [ -d "$1/.dev/share/icons/grassfield-icons/scalable/apps" ]' _ "$fake"
 desc="devenv.sh installs the device glyphs that shadow the Apple device pictures"
 check bash -c 'for n in phone-apple-iphone phone-apple-iphone-symbolic multimedia-player-ipod-mini-blue multimedia-player-ipod-mini-blue-symbolic multimedia-player-apple-ipod-touch-symbolic computer-apple-ipad-symbolic; do cmp -s "$1/branding/icons/theme/scalable/devices/$n.svg" "$1/.dev/share/icons/grassfield-icons/scalable/devices/$n.svg" || exit 1; done' _ "$fake"
+
+# devenv.sh with a composed theme (scripts/dev/icons.sh: stamp written last): used as is, never overwritten by the wrapper;
+# a composed tree without its stamp (interrupted composition) is replaced by the wrapper, never mixed with it.
+printf 'COMPOSED\n' > "$fake/.dev/share/icons/grassfield-icons/index.theme"
+mkdir -p "$fake/.dev/share/icons/grassfield-icons/base/places"
+printf 'x\n' > "$fake/.dev/share/icons/.grassfield-icons-stamp"
+out=$(env_of)
+desc="devenv.sh keeps a stamped composed theme untouched and selects it"
+check bash -c 'grep -qx COMPOSED "$1/.dev/share/icons/grassfield-icons/index.theme" && [ -d "$1/.dev/share/icons/grassfield-icons/base/places" ]' _ "$fake"
+desc="devenv.sh selects the composed theme"
+check grep -qx 'QT_QPA_SYSTEM_ICON_THEME=grassfield-icons' <<<"$out"
+rm -f "$fake/.dev/share/icons/.grassfield-icons-stamp"
+env_of >/dev/null
+desc="devenv.sh replaces a composed tree that has no stamp by the wrapper (no mixture)"
+check bash -c '! [ -e "$1/.dev/share/icons/grassfield-icons/base" ] && cmp -s "$1/branding/icons/theme/index.theme" "$1/.dev/share/icons/grassfield-icons/index.theme"' _ "$fake"
 
 # Fixture themes: breeze, Adwaita, hicolor (solid colours, named as the wrapper's Inherits).
 fix() { # dir
@@ -117,7 +132,7 @@ else
   echo "SKIP: installed Breeze and Adwaita through the wrapper (PyGObject with Gtk 3 and 4, or the themes, missing)"
 fi
 # ---- The Apple device pictures of Breeze and Adwaita (E27): the wrapper's own glyphs answer to those names, in Qt and in GTK 3 and 4.
-# The wrapper is installed as the PKGBUILD does (index.theme and scalable/devices); the real Breeze and Adwaita (when installed) are
+# The wrapper is installed as devenv.sh does offline (index.theme and scalable/devices; the package composes the full theme, tests/shell/icons_compose.sh); the real Breeze and Adwaita (when installed) are
 # its parents. A name that neither parent has still resolves to our glyph.
 shadowed="phone-apple-iphone phone-apple-iphone-symbolic multimedia-player-ipod-mini-blue multimedia-player-ipod-mini-blue-symbolic multimedia-player-apple-ipod-touch-symbolic computer-apple-ipad-symbolic"
 shd=$tmp/shadow
