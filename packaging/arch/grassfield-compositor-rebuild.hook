@@ -1,0 +1,16 @@
+# Grassfield (ADR-0009, amendment 2026-10-23; audit GF-033): after Hyprland or the extension is installed or updated, keep
+# a build of the compositor extension that matches the installed Hyprland. The packaged build is used when it matches;
+# otherwise the extension is built on this machine from /usr/src/grassfield-compositor (as the user nobody) and the result
+# is printed here and written to /var/lib/grassfield/compositor/status. Never changes Hyprland; never fails the
+# transaction.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = hyprland
+Target = grassfield-compositor
+
+[Action]
+Description = Matching the Grassfield compositor extension to the installed Hyprland...
+When = PostTransaction
+Exec = /usr/lib/grassfield/grassfield-compositor-rebuild --hook

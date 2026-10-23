@@ -266,8 +266,8 @@ SettingsPage {
             subtitle: qsTr("Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.")
             Toggle {
                 accessibleName: qsTr("Stages")
-                checked: root.store.value("windows.stagesEnabled")
-                onToggled: c => root.store.set("windows.stagesEnabled", c)
+                checked: root.store.value("windows.stages")
+                onToggled: c => root.store.set("windows.stages", c)
             }
         }
     }

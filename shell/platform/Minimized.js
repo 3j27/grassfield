@@ -2,7 +2,8 @@
 
 // Minimized-window bookkeeping (pure, unit-tested). The shell records every window it
 // minimized: Hyprland has no minimized state, so the record is the source of truth for the Dock.
-// Record: {toplevel, address, appId, title}.
+// Record: {toplevel, address, appId, title, screen} (`screen`: the display it was minimized from, "" when unknown, e.g. a
+// record rebuilt after a shell restart).
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
 var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile", "stages"];
@@ -150,94 +151,6 @@ function overviewFocusCall(target, id) {
     return guardedPluginCall("overview_focus", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
 }
 
-// hl.plugin.grassfield.stages(json) (gfc/1, docs/specs/stages.md "Shell contract" 3 and 5). `request` is one of
-//   {op: "on", durationMs: integer 0..2000, curve?: 4 numbers, strips: [{monitor, hidden: bool, tiles: [{x, y, w, h}]}]}
-//   {op: "off", durationMs}
-//   {op: "activate" | "merge", stage: id}
-//   {op: "move", address, stage: id | "new"}
-// built from validated pieces only (monitor names [A-Za-z0-9._-]{1,64}, at most 8 distinct strips of 1..8 tiles with finite
-// sides 16..800 px, hex address, integer stage ids) and quoted as a Lua string. "" when anything is invalid (callers must
-// not dispatch it). Overlap and the strip surface's coverage are the plugin's business (it refuses with a reason).
-function stageId(value) {
-    return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295 ? value : -1;
-}
-
-function stagesCall(request) {
-    if (!request || typeof request.op !== "string")
-        return "";
-    const body = {op: request.op};
-    switch (request.op) {
-    case "on":
-    case "off": {
-        const duration = Number(request.durationMs);
-        if (!Number.isFinite(duration) || duration < 0 || duration > 2000)
-            return "";
-        body.durationMs = Math.round(duration);
-        if (request.op === "off")
-            break;
-        const curve = request.curve;
-        if (curve !== undefined && curve !== null) {
-            if (!Array.isArray(curve) || curve.length !== 4)
-                return "";
-            const c = curve.map(Number);
-            if (!c.every(n => Number.isFinite(n)) || c[0] < 0 || c[0] > 1 || c[2] < 0 || c[2] > 1 || c[1] < -1 || c[1] > 2 || c[3] < -1 || c[3] > 2)
-                return "";
-            body.curve = c.map(n => Math.round(n * 1000) / 1000);
-        }
-        const strips = request.strips;
-        if (!Array.isArray(strips) || strips.length === 0 || strips.length > 8)
-            return "";
-        const seen = {};
-        body.strips = [];
-        for (const s of strips) {
-            if (!s || typeof s.monitor !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(s.monitor) || seen[s.monitor] || typeof s.hidden !== "boolean")
-                return "";
-            seen[s.monitor] = true;
-            if (!Array.isArray(s.tiles) || s.tiles.length === 0 || s.tiles.length > 8)
-                return "";
-            const tiles = [];
-            for (const t of s.tiles) {
-                const r = finiteRect(t);
-                if (!r || r.w < 16 || r.w > 800 || r.h < 16 || r.h > 800)
-                    return "";
-                tiles.push({x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h)});
-            }
-            body.strips.push({monitor: s.monitor, hidden: s.hidden, tiles: tiles});
-        }
-        break;
-    }
-    case "activate":
-    case "merge": {
-        const id = stageId(request.stage);
-        if (id < 0)
-            return "";
-        body.stage = id;
-        break;
-    }
-    case "move": {
-        const hex = normalizeAddress(request.address);
-        if (hex === "")
-            return "";
-        body.address = "0x" + hex;
-        if (request.stage === "new") {
-            body.stage = "new";
-        } else {
-            const id = stageId(request.stage);
-            if (id < 0)
-                return "";
-            body.stage = id;
-        }
-        break;
-    }
-    default:
-        return "";
-    }
-    const json = JSON.stringify(body);
-    if (json.length > 8192)
-        return "";
-    return guardedPluginCall("stages", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
-}
-
 // Reduce Motion for the animations Hyprland itself runs (A11Y-06; the shell cannot draw them): window opening and closing
 // (pop-in) and the Spaces slide become quick crossfades of at most 100 ms (speed 1 = 100 ms), window moves stop animating.
 // `normal` mirrors config/hypr/grassfield/looknfeel.lua (tests/unit/tst_minimized.qml checks the two agree); the call is a
@@ -269,16 +182,39 @@ function motionCall(reduced) {
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
 // tilingEdges / tilingMenuBar / tilingMargins: Settings windows.tiling* (feature "window-tiling").
-// stagesEnabled: Settings windows.stagesEnabled (feature "stages-available").
+// appearance: the appearance the shell shows (feature "appearance"): the compositor-drawn titlebars follow it (audit UX-06).
+// stagesEnabled: Settings windows.stages (feature "stages-available"; ADR-0013, owner decision D-4).
 var pluginConfig = {
     titlebarDoubleClick: ["zoom", "minimize", "none"],
     minimizeEffect: ["funnel", "shrink", "fade"],
     tilingEdges: ["true", "false"],
     tilingMenuBar: ["true", "false"],
     tilingMargins: ["true", "false"],
-    // Stages (docs/specs/stages.md ST1; Settings windows.stagesEnabled, feature "stages-available"): off at every plugin load.
+    appearance: ["dark", "light"],
     stagesEnabled: ["true", "false"]
 };
+
+// hl.plugin.grassfield.stages(json) (gfc/1 capability "stages", docs/specs/stages.md "Shell contract" 3 and 5), for the
+// Stages strip: `request` is the operation object ({op: "on", durationMs, curve?, strips: [...]}, {op: "off", durationMs},
+// {op: "activate" | "merge", stage}, {op: "move", address, stage}). Only the op is checked here (one of these five) and
+// the size (at most 8 KiB, the plugin's limit); the plugin validates every field strictly (untrusted input there). The JSON
+// is quoted as a Lua string (JSON.stringify escapes control characters; backslash and double quote are escaped for Lua).
+// "" when anything is invalid (callers must not dispatch it).
+var stagesOps = ["on", "off", "activate", "move", "merge"];
+
+function stagesCall(request) {
+    if (!request || typeof request !== "object" || Array.isArray(request) || stagesOps.indexOf(request.op) < 0)
+        return "";
+    let json = "";
+    try {
+        json = JSON.stringify(request);
+    } catch (e) {
+        return "";
+    }
+    if (typeof json !== "string" || json.length > 8192)
+        return "";
+    return guardedPluginCall("stages", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
+}
 
 function configCall(key, value) {
     if (typeof key !== "string" || !Object.prototype.hasOwnProperty.call(pluginConfig, key))
@@ -301,6 +237,19 @@ function normalizeAddress(address) {
 // Arbitrary names (e.g. "undefined" from a missing value) are rejected.
 function validWorkspace(workspace) {
     return /^(?:[1-9][0-9]{0,8}|special:[A-Za-z0-9_-]{1,64})$/.test(String(workspace));
+}
+
+// The Desktop a window restored WITHOUT the plugin goes to (owner decision D-1, the macOS model; audit GF-001): the one the
+// display it was minimized from (`screen`, recorded at the minimize) shows now; else (no record, display gone) the focused
+// Desktop. `monitors`: [{name, workspace}] with the id of the Desktop each display shows. "" when neither is valid. The
+// plugin, when present, does this itself (and gives the frame back).
+function restoreWorkspace(screen, monitors, focusedWorkspace) {
+    if (typeof screen === "string" && screen !== "" && Array.isArray(monitors)) {
+        const m = monitors.find(x => x && x.name === screen);
+        if (m && /^[1-9][0-9]{0,8}$/.test(String(m.workspace)))
+            return String(m.workspace);
+    }
+    return /^[1-9][0-9]{0,8}$/.test(String(focusedWorkspace)) ? String(focusedWorkspace) : "";
 }
 
 function moveRequest(address, workspace) {

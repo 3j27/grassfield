@@ -182,10 +182,30 @@ package_grassfield-desktop() {
 
 package_grassfield-compositor() {
   pkgdesc+=" — optional Hyprland plugin (titlebars, minimize, appmenu)"
-  depends=(hyprland)
+  # A plugin only hooks into the Hyprland build it was compiled for, and the hyprland version is never constrained here.
+  # After every Hyprland update the pacman hook grassfield-compositor-rebuild.hook builds the plugin on this machine from
+  # /usr/src/grassfield-compositor when the packaged build does not match (ADR-0009 amendment 2026-10-23, audit GF-033):
+  # cmake, gcc, make and pkgconf are what that build needs besides Hyprland's own dependencies (headers, lua,
+  # hyprwayland-scanner, pixman, libdrm, libglvnd).
+  depends=(hyprland cmake gcc make pkgconf)
   local root
   root=$(_root)
   install -Dm755 "$root/compositor/build/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
+  # Its stamp: the ABI it was built for (config/hypr/grassfield/compositor.lua loads the build whose stamp is the ABI of the
+  # Hyprland that runs).
+  "$root/packaging/arch/grassfield-compositor-rebuild" --print-abi >"$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
+  install -Dm755 "$root/packaging/arch/grassfield-compositor-rebuild" "$pkgdir/usr/lib/grassfield/grassfield-compositor-rebuild"
+  # The commands a person types are on PATH (sudo grassfield-compositor-rebuild, grassfield-compositor-rebuild --check).
+  install -d "$pkgdir/usr/bin"
+  ln -s ../lib/grassfield/grassfield-compositor-rebuild "$pkgdir/usr/bin/grassfield-compositor-rebuild"
+  install -Dm644 "$root/packaging/arch/grassfield-compositor-rebuild.hook" "$pkgdir/usr/share/libalpm/hooks/grassfield-compositor-rebuild.hook"
+  install -Dm644 "$root/packaging/arch/grassfield-compositor-clean.hook" "$pkgdir/usr/share/libalpm/hooks/grassfield-compositor-clean.hook"
+  # The sources that build is made from (the plugin only: no unit tests, no build directory).
+  local src=$pkgdir/usr/src/grassfield-compositor
+  install -Dm644 "$root/compositor/CMakeLists.txt" "$src/CMakeLists.txt"
+  cp -a --no-preserve=ownership "$root/compositor/src" "$src/src"
+  cp -a --no-preserve=ownership "$root/compositor/protocols" "$src/protocols"
+  printf '%s-%s\n' "$pkgver" "$pkgrel" >"$src/VERSION"
   install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/grassfield-compositor/LICENSE"
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-compositor/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/hyprland-BSD-3-Clause.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/hyprland-BSD-3-Clause.txt"

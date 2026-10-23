@@ -51,7 +51,7 @@ ShellRoot {
         ["windows.tilingEdges", false, () => Settings.windowsTilingEdges === false],
         ["windows.tilingMenuBar", false, () => Settings.windowsTilingMenuBar === false],
         ["windows.tilingMargins", false, () => Settings.windowsTilingMargins === false],
-        ["windows.stagesEnabled", true, () => Settings.windowsStagesEnabled === true],
+        ["windows.stages", true, () => Settings.windowsStages === true],
         ["notifications.dnd", true, () => Settings.notificationsDnd === true],
         ["notifications.previews", "never", () => Settings.notificationsPreviews === "never"],
         ["lock.idleMinutes", 17, () => Settings.lockIdleMinutes === 17],

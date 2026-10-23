@@ -32,39 +32,27 @@ TestCase {
         verify(Minimized.guardedPluginCall("stages", ["\"{}\""]).indexOf("p.stages") > 0);
     }
 
-    function test_stagesEnabledIsAnAllowedConfigKeyWithExactValues() {
-        verify(Minimized.configCall("stagesEnabled", "true") !== "");
-        verify(Minimized.configCall("stagesEnabled", "false") !== "");
-        compare(Minimized.configCall("stagesEnabled", "yes"), "");
-        compare(Minimized.configCall("stagesEnabled", true), "");
-    }
-
-    function test_onRequestIsBuiltFromValidatedPieces() {
+    function test_theVerbAcceptsOnlyTheFiveOperationsAndIsGuarded() {
         const strips = [{monitor: "GF-REF", hidden: false, tiles: [{x: 12, y: 100, w: 160, h: 120}]}];
         const lua = Minimized.stagesCall({op: "on", durationMs: 350, curve: [0.2, 0, 0, 1], strips: strips});
         verify(lua.indexOf("p.stages(") > 0);
         verify(lua.indexOf("\\\"op\\\":\\\"on\\\"") > 0);
-        compare(Minimized.stagesCall({op: "on", durationMs: 350, strips: []}), "");
-        compare(Minimized.stagesCall({op: "on", durationMs: 5000, strips: strips}), "");
-        compare(Minimized.stagesCall({op: "on", durationMs: 0, strips: [{monitor: "a\"b", hidden: false, tiles: strips[0].tiles}]}), "");
-        compare(Minimized.stagesCall({op: "on", durationMs: 0, strips: [{monitor: "A", hidden: false, tiles: [{x: 0, y: 0, w: 8, h: 120}]}]}), "");
-        compare(Minimized.stagesCall({op: "on", durationMs: 0, strips: [{monitor: "A", hidden: "no", tiles: strips[0].tiles}]}), "");
-        compare(Minimized.stagesCall({op: "on", durationMs: 0, strips: [strips[0], strips[0]]}), "");
+        for (const op of ["off", "activate", "merge", "move"])
+            verify(Minimized.stagesCall({op: op}) !== "");
+        compare(Minimized.stagesCall({op: "explode"}), "");
+        compare(Minimized.stagesCall({}), "");
+        compare(Minimized.stagesCall(null), "");
+        compare(Minimized.stagesCall([1]), "");
     }
 
-    function test_otherOpsValidateStageIdsAndAddresses() {
-        verify(Minimized.stagesCall({op: "activate", stage: 7}) !== "");
-        verify(Minimized.stagesCall({op: "merge", stage: 7}) !== "");
-        compare(Minimized.stagesCall({op: "activate", stage: "7"}), "");
-        compare(Minimized.stagesCall({op: "activate", stage: -1}), "");
-        compare(Minimized.stagesCall({op: "activate", stage: 1.5}), "");
-        verify(Minimized.stagesCall({op: "move", address: "0xAB12", stage: "new"}) !== "");
-        verify(Minimized.stagesCall({op: "move", address: "ab12", stage: 3}) !== "");
-        compare(Minimized.stagesCall({op: "move", address: "zz", stage: 3}), "");
-        compare(Minimized.stagesCall({op: "move", address: "ab12", stage: "old"}), "");
-        verify(Minimized.stagesCall({op: "off", durationMs: 350}) !== "");
-        compare(Minimized.stagesCall({op: "explode"}), "");
-        compare(Minimized.stagesCall(null), "");
+    function test_whatTheStripBuildsIsWithinTheContractLimits() {
+        // The plugin validates strictly (docs/specs/stages.md contract 3); the shell's own requests stay inside the limits.
+        const g = Layout.geometry(screen, insets, 8, t);
+        const req = Layout.onRequest([{monitor: "GF-REF", hidden: false, tiles: g.tiles}], 350, [0.2, 0, 0, 1]);
+        verify(Minimized.stagesCall(req).length < 8192);
+        for (const r of g.tiles)
+            verify(r.w >= 16 && r.w <= 800 && r.h >= 16 && r.h <= 800);
+        compare(g.tiles.length, 8);
     }
 
     // ---- event state ----
@@ -167,7 +155,7 @@ TestCase {
         compare(target.kind, "stage");
         const req = Layout.dropRequest(mon(), 0, target);
         compare(req.op, "move");
-        compare(req.address, "b2");
+        compare(req.address, "0xb2");
         compare(req.stage, 5);
     }
 

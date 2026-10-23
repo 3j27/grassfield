@@ -95,6 +95,21 @@ namespace {
         g_pHyprRenderer->addPassElement(makeUnique<CRectPassElement>(data));
     }
 
+    // A rect over Hyprland's blur of what is already drawn behind it (live blur, not xray: the windows behind count), under
+    // `tint`: the blurred material (owner decision D-8). Hyprland's own path (CRectPassElement with blur, as its group bars
+    // and other decorations use it); with Hyprland's blur disabled in the config it is drawn as the plain tint.
+    void addBlurredRect(const CBox& box, const CHyprColor& tint, int round, float roundingPower, float blurAlpha) {
+        CRectPassElement::SRectData data;
+        data.box           = box;
+        data.color         = tint;
+        data.round         = round;
+        data.roundingPower = roundingPower;
+        data.blur          = true;
+        data.xray          = false;
+        data.blurA         = blurAlpha;
+        g_pHyprRenderer->addPassElement(makeUnique<CRectPassElement>(data));
+    }
+
     const char* hitName(tb::HitTarget hit) {
         switch (hit) {
             case tb::HitTarget::None: return "none";
@@ -438,20 +453,24 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     const float  scale    = monitor->m_scale;
     const double rounding = std::max(0.0, static_cast<double>(w->rounding()));
     const float  power    = w->roundingPower();
-    const auto   palette  = theme::titlebarPalette(theme::kDefaultAppearance);
-    const auto   bgColor  = toColor(palette.background, alpha);
-    const int    roundPx  = static_cast<int>(std::round(rounding * scale));
+    const auto   appearance = gf::state().appearance; // follows the shell (config "appearance", audit UX-06)
+    const auto   palette    = theme::titlebarPalette(appearance);
+    const auto   bgColor    = toColor(palette.background, alpha);
+    const int    roundPx    = static_cast<int>(std::round(rounding * scale));
 
-    // 0. A drag of this window over a tiling place: the place's frame, translucent, under the window and over the
-    //    windows behind it (this decoration is drawn under the window's surface, after the windows below it).
+    // 0. A drag of this window over a tiling place: the place's frame under the window and over the windows behind it (this
+    //    decoration is drawn under the window's surface, after the windows below it), as the blurred material (owner
+    //    decision D-8, macOS's frosted pane): its edge, then a plate of Hyprland's blur of the windows behind under the
+    //    appearance's tint. Cheap: one blurred element, only while a drag has a place, damage limited to the frame.
     if (const auto& grab = pointerInput().grab; grab.deco == this && grab.snap && grab.snap->monitor.lock() == monitor) {
         CBox preview = grab.snap->frame;
         preview.translate(-monitor->m_position);
-        addRect(preview.scale(scale).round(), toColor(theme::kTilePreviewFill, alpha), roundPx, power);
+        addRect(preview.scale(scale).round(), toColor(palette.previewRim, alpha), roundPx, power);
         CBox inner = grab.snap->frame;
         inner.translate(-monitor->m_position);
         inner.expand(-theme::kTilePreviewRim);
-        addRect(inner.scale(scale).round(), toColor(theme::kTilePreviewInner, alpha), std::max(0, roundPx - static_cast<int>(std::round(theme::kTilePreviewRim * scale))), power);
+        addBlurredRect(inner.scale(scale).round(), toColor(palette.previewTint, alpha), std::max(0, roundPx - static_cast<int>(std::round(theme::kTilePreviewRim * scale))),
+                       power, alpha);
     }
 
     // 1. Background with rounded top corners: a rounded rect taller than the bar, clipped to the bar.
@@ -480,7 +499,7 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
         const auto r = tb::buttonRect(button);
         CBox       box{bar.x + r.x, bar.y + r.y, r.w, r.h};
         box.scale(scale).round();
-        addRect(box, toColor(tb::lightColor(button, active, hovered), alpha), static_cast<int>(std::round(box.w / 2.0)), 2.F);
+        addRect(box, toColor(tb::lightColor(button, active, hovered, appearance), alpha), static_cast<int>(std::round(box.w / 2.0)), 2.F);
     }
     if (hovered)
         drawGlyphs(bar, scale, alpha);
@@ -490,12 +509,13 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     if (w->m_title.empty() || maxWidthPx <= 0)
         return;
 
-    if (!m_title.texture || m_title.text != w->m_title || m_title.scale != scale || m_title.maxWidthPx != maxWidthPx) {
+    if (!m_title.texture || m_title.text != w->m_title || m_title.scale != scale || m_title.maxWidthPx != maxWidthPx || m_title.appearance != appearance) {
         m_title.texture    = g_pHyprRenderer->renderText(w->m_title, toColor(palette.title), static_cast<int>(std::round(theme::kTitleFontSizePt * scale)), false,
                                                          theme::kTitleFontFamily, maxWidthPx, theme::kTitleFontWeight);
         m_title.text       = w->m_title;
         m_title.scale      = scale;
         m_title.maxWidthPx = maxWidthPx;
+        m_title.appearance = appearance;
     }
 
     const auto& tex = m_title.texture;
@@ -596,6 +616,15 @@ void CGrassfieldTitlebar::onActiveWindowChanged(const PHLWINDOW& window) {
             const auto w = deco->window();
             if (w && (w == window || w == previous))
                 deco->damageEntire();
+        }
+    });
+}
+
+void CGrassfieldTitlebar::onAppearanceChanged() {
+    gf::guarded("titlebar onAppearanceChanged", [] {
+        for (auto* deco : gf::state().titlebars) {
+            deco->m_title.texture.reset(); // the title colour is in its texture: rebuilt on the next draw
+            deco->damageEntire();
         }
     });
 }

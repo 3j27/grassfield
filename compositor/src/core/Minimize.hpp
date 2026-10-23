@@ -7,9 +7,11 @@
 // Coordinates: "layout" = Hyprland's global logical coordinates (what hyprctl reports as `at`/`size`, and
 // what the shell sends as the Dock tile rectangle); "pixels" = a monitor's framebuffer coordinates.
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace gf::minimize {
@@ -133,5 +135,39 @@ namespace gf::minimize {
 
     // Boxes intersect (shared area > 0).
     bool intersects(const Box& a, const Box& b);
+
+    // ---- Where a restored window goes (owner decision D-1, 2026-10-23, the macOS model; audit GF-001) ----
+    // A window restored from the Dock or the Window menu comes back on the display it was minimized from, at its frame, on
+    // the Desktop that display shows now: never on the display of the Dock that was clicked. The place is recorded when the
+    // plugin minimizes the window. When that display is gone, the focused display takes the window, its frame kept at the
+    // same place relative to the display and fitted into it. Without a record (a window parked by the shell's fallback
+    // before the plugin loaded) the focused display's Desktop takes it, as before.
+
+    struct SavedPlace {
+        std::string monitor;          // the display's name (Hyprland's monitor name, stable across reconnects)
+        Box         monitorBox;       // that display then (layout)
+        Box         frame;            // the window's floating box then (layout; the surface, its titlebar above it)
+        bool        floating = false; // a floating window, not full screen or zoomed: its frame is given back
+    };
+
+    struct MonitorPlace {
+        std::string_view name;
+        Box              box;    // the display (layout)
+        Box              usable; // the display without its reserved areas (menu bar, Dock) (layout)
+    };
+
+    struct RestorePlan {
+        std::optional<size_t> monitor;       // index in the monitors: the display whose current Desktop takes the window
+        std::optional<Box>    frame;         // the box the window gets back; nullopt: Hyprland's placement stays
+        bool                  moved = false; // the display it was minimized from is gone: another display takes it
+    };
+
+    // `focused`: index of the focused display in `monitors` (nullopt: none). `titlebarHeight`: the band above the surface
+    // that must stay on the display when a frame is fitted.
+    RestorePlan planRestore(const std::optional<SavedPlace>& saved, std::span<const MonitorPlace> monitors, std::optional<size_t> focused, double titlebarHeight);
+
+    // `frame` (layout, the surface box) fitted into `usable` with its titlebar (titlebarHeight above the surface) inside:
+    // a side longer than the area shrinks to it, then the box moves in. A degenerate area returns `frame`.
+    Box fitFrame(const Box& frame, const Box& usable, double titlebarHeight);
 
 } // namespace gf::minimize

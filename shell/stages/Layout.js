@@ -93,10 +93,10 @@ function dropRequest(monitor, slot, target) {
     if (address === "" || !monitor)
         return null;
     if (target.kind === "stage")
-        return monitor.active >= 0 ? {op: "move", address: address, stage: monitor.active} : null;
+        return monitor.active >= 0 ? {op: "move", address: "0x" + address, stage: monitor.active} : null;
     if (target.kind === "tile" && target.slot !== slot) {
         const s = monitor.stages.find(x => x.slot === target.slot);
-        return s ? {op: "move", address: address, stage: s.id} : null;
+        return s ? {op: "move", address: "0x" + address, stage: s.id} : null;
     }
     return null;
 }

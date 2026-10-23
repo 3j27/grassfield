@@ -5,6 +5,7 @@
 #include "Plugin.hpp"
 #include "core/Genie.hpp"
 #include "core/Protocol.hpp"
+#include "core/Theme.hpp"
 
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
@@ -14,9 +15,12 @@
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/MiscFunctions.hpp>
+#include <hyprland/src/layout/LayoutManager.hpp>
+#include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/render/Framebuffer.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
@@ -86,8 +90,15 @@ namespace {
         STiming                      timing;
     };
 
+    // Where a window minimized by the plugin was (owner decision D-1): its display and frame, given back by restore().
+    struct SWindowPlace {
+        PHLWINDOWREF      window;
+        mz::SavedPlace    place;
+    };
+
     struct SMinimizeState {
         bool                             ready = false;
+        std::vector<SWindowPlace>        places; // one per minimized window; dropped at its restore, close or move elsewhere
         std::vector<SAnimation>          animations;
         std::vector<CHyprSignalListener> listeners;
         SP<CEventLoopTimer>              watchdog;
@@ -591,6 +602,94 @@ namespace {
         return mz::isGenieGeometry(geometry.visible, tileFit, edge) ? mz::Effect::Genie : mz::Effect::Scale;
     }
 
+    // ---- D-1: the display and frame a window is restored to ----
+
+    // The display under the middle of `box` (layout). The plugin's own titlebar drags do not update a window's m_monitor
+    // (Tiling.cpp): where the user sees the window is what counts.
+    PHLMONITOR monitorUnder(const mz::Box& box) {
+        if (!State::monitorState())
+            return nullptr;
+        const Vector2D middle{box.x + (box.w / 2.0), box.y + (box.h / 2.0)};
+        for (const auto& m : State::monitorState()->monitors()) {
+            if (m && m->m_enabled && m->logicalBox().containsPoint(middle))
+                return m;
+        }
+        return nullptr;
+    }
+
+    // A floating window that is not full screen or zoomed: its frame is its own (what tiler::placeable checks too).
+    bool keepsFrame(const PHLWINDOW& w) {
+        if (!w->m_isFloating || w->m_pinned || !w->layoutTarget())
+            return false;
+        const auto& fs = Fullscreen::controller();
+        return !fs || fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_NONE;
+    }
+
+    // Where `w` is now: its display and, when it keeps a frame, its floating box (layout).
+    std::optional<mz::SavedPlace> placeOf(const PHLWINDOW& w) {
+        auto mon = monitorUnder(visibleBox(w));
+        if (!mon)
+            mon = w->m_monitor.lock();
+        if (!mon)
+            return std::nullopt;
+        mz::SavedPlace place{.monitor = mon->m_name, .monitorBox = toBox(mon->logicalBox()), .frame = {}, .floating = keepsFrame(w)};
+        if (place.floating)
+            place.frame = toBox(w->layoutTarget()->position());
+        return place;
+    }
+
+    void forgetPlace(const PHLWINDOW& w) {
+        std::erase_if(st().places, [&w](const SWindowPlace& p) {
+            const auto pw = p.window.lock();
+            return !pw || pw == w;
+        });
+    }
+
+    void rememberPlace(const PHLWINDOW& w, mz::SavedPlace&& place) {
+        forgetPlace(w);
+        st().places.push_back(SWindowPlace{.window = w, .place = std::move(place)});
+    }
+
+    std::optional<mz::SavedPlace> takePlace(const PHLWINDOW& w) {
+        auto&      all = st().places;
+        const auto it  = std::ranges::find_if(all, [&w](const SWindowPlace& p) { return p.window.lock() == w; });
+        if (it == all.end())
+            return std::nullopt;
+        auto place = std::move(it->place);
+        all.erase(it);
+        return place;
+    }
+
+    struct SRestoreTarget {
+        PHLMONITOR             monitor; // the display whose current Desktop takes the window
+        std::optional<mz::Box> frame;   // the box it gets back (layout)
+        bool                   moved = false;
+    };
+
+    // core planRestore over the enabled displays (each showing a Desktop); the focused display without a plan.
+    SRestoreTarget restoreTarget(const std::optional<mz::SavedPlace>& saved) {
+        const auto                    focusMon = Desktop::focusState() ? Desktop::focusState()->monitor() : nullptr;
+        std::vector<PHLMONITOR>       mons;
+        std::vector<mz::MonitorPlace> places;
+        std::optional<size_t>         focused;
+        if (State::monitorState()) {
+            for (const auto& m : State::monitorState()->monitors()) {
+                if (!m || !m->m_enabled || !m->m_activeWorkspace)
+                    continue;
+                if (m == focusMon)
+                    focused = mons.size();
+                mons.push_back(m);
+                places.push_back(mz::MonitorPlace{.name = m->m_name, .box = toBox(m->logicalBox()), .usable = toBox(m->logicalBoxMinusReserved())});
+            }
+        }
+        const auto     plan = mz::planRestore(saved, places, focused, gf::theme::kTitlebarHeight);
+        SRestoreTarget out;
+        out.monitor = plan.monitor && *plan.monitor < mons.size() ? mons[*plan.monitor] : focusMon;
+        out.frame   = plan.frame;
+        out.moved   = plan.moved;
+        return out;
+    }
+
     // A minimize (window -> tile) or restore (tile -> window) animation of `w` toward / from the Dock tile.
     SAnimation makeAnimation(mz::Kind kind, const PHLWINDOW& w, uint64_t address, SP<Render::IFramebuffer>&& snapshot, const mz::SSnapshotGeometry& geometry,
                              const mz::Box& full, const mz::Box& tile, const PHLMONITOR& mon) {
@@ -636,14 +735,33 @@ namespace gf::minimizer {
             else if (stage == RENDER_POST)
                 gf::guarded("minimize frame timing", [] { frameEnded(); });
         }));
-        l.push_back(ev.window.close.listen([](const PHLWINDOW& w) { gf::guarded("minimize window.close", [&] { cancelFor(w); }); }));
+        l.push_back(ev.window.close.listen([](const PHLWINDOW& w) {
+            gf::guarded("minimize window.close", [&] {
+                cancelFor(w);
+                forgetPlace(w);
+            });
+        }));
+        // A minimized window that leaves special:minimized by another way than restore() (a dispatch, the shell's fallback)
+        // drops its recorded place: a later restore must not use a stale one.
+        l.push_back(ev.window.moveToWorkspace.listen([](const PHLWINDOW& w, const PHLWORKSPACE& ws) {
+            gf::guarded("minimize window.moveToWorkspace", [&] {
+                if (w && !(ws && ws->m_isSpecialWorkspace && ws->m_name == MINIMIZED_WORKSPACE))
+                    forgetPlace(w);
+            });
+        }));
         // Monitor changes: positions and scales captured with the snapshots are stale; finish at once.
         l.push_back(ev.monitor.removed.listen([](const PHLMONITOR& /*monitor*/) { gf::guarded("minimize monitor.removed", [] { completeAll(true); }); }));
         l.push_back(ev.monitor.layoutChanged.listen([] { gf::guarded("minimize monitor.layoutChanged", [] { completeAll(true); }); }));
         // A library pinned at an earlier unload (FR23) keeps its statics: a load starts the funnel afresh.
         gf::genie::reset();
         st().genieAdded = 0;
-        st().ready      = true;
+        // Places recorded before an unload survive it when the library stayed mapped (FR23): they hold no code of this
+        // library. A window that left special:minimized meanwhile (no listener while unloaded) drops its place.
+        std::erase_if(st().places, [](const SWindowPlace& p) {
+            const auto w = p.window.lock();
+            return !w || !onMinimizedWorkspace(w);
+        });
+        st().ready = true;
         return true;
     }
 
@@ -659,7 +777,7 @@ namespace gf::minimizer {
             if (auto& current = g_pHyprRenderer->currentPass(); &current != &g_pHyprRenderer->m_renderPass)
                 current.removeAllOfType(gf::genie::kPassName);
         }
-        completeAll(false);
+        completeAll(false); // the recorded places stay (plain data and Hyprland's weak references): see start()
         if (s.watchdog) {
             if (g_pEventLoopManager)
                 g_pEventLoopManager->removeTimer(s.watchdog);
@@ -725,11 +843,14 @@ namespace gf::minimizer {
             geometry = snapshotGeometry(w, mon);
             full     = fullBox(w);
         }
+        auto place = placeOf(w); // before the move: the display and frame the restore gives back (D-1)
 
         if (!hideOnMinimized(w)) {
             releaseSnapshot(snapshot);
             return;
         }
+        if (place)
+            rememberPlace(w, std::move(*place));
         if (!snapshot || !target) { // no snapshot without a target: no animation
             releaseSnapshot(snapshot);
             postState(mz::Kind::Minimize, address);
@@ -762,8 +883,11 @@ namespace gf::minimizer {
             return;
         }
 
-        const auto focusMon = Desktop::focusState()->monitor();
-        const auto ws       = focusMon ? focusMon->m_activeWorkspace : nullptr;
+        // D-1 (macOS): back on the display it was minimized from, on the Desktop that display shows now, at its frame; never
+        // on the display of the Dock that was clicked (that click focused it).
+        const auto saved = takePlace(w);
+        const auto place = restoreTarget(saved);
+        const auto ws    = place.monitor ? place.monitor->m_activeWorkspace : nullptr;
         if (!ws) {
             gf::log(Log::WARN, "restore: no active workspace");
             return;
@@ -772,6 +896,10 @@ namespace gf::minimizer {
             gf::log(Log::WARN, "restore: move of {:x} to workspace {} failed", address, ws->m_name);
             return;
         }
+        if (place.frame && keepsFrame(w) && g_layoutManager)
+            g_layoutManager->setTargetGeom(toCBox(*place.frame), w->layoutTarget());
+        gf::logRequest(Log::INFO, "restore {:x}: on {} (Desktop {}){}", address, place.monitor->m_name, ws->m_name,
+                       !saved ? ", no recorded place: the focused display" : place.moved ? ", its display is gone: the focused display" : "");
 
         // Hyprland fades a window in when it arrives on a visible workspace and may move it there with an
         // animation: settle both so the snapshot shows the window at its place, fully opaque.

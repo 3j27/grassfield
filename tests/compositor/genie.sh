@@ -157,6 +157,22 @@ client() { # <pid> -> "<address> <x> <y> <w> <h> <workspace name>" (x/y relative
   query clients | jq -r --argjson p "$1" --argjson mx "$mon_x" --argjson my "$mon_y" \
     '.[] | select(.pid == $p) | "\(.address) \(.at[0] - $mx) \(.at[1] - $my) \(.size[0]) \(.size[1]) \(.workspace.name)"'
 }
+client_monitor() { # <pid> -> the name of the display the window is on
+  local id
+  id=$(query clients | jq -r --argjson p "$1" '[.[] | select(.pid == $p)][0].monitor // empty')
+  [[ -n $id ]] && query monitors | jq -r --argjson id "$id" '.[] | select(.id == $id) | .name'
+}
+shown_ws() { query monitors | jq -r --arg n "$1" '.[] | select(.name == $n) | .activeWorkspace.name'; } # <display> -> its Desktop
+# D-1 (owner decision 2026-10-23, macOS): a restored window is back on its own display, on the Desktop that display shows,
+# at its geometry, whichever display has the Dock. Prints the details; 0 when it holds.
+back_in_place() { # <pid>
+  local x y w h ws mon want
+  read -r _ x y w h ws < <(client "$1")
+  mon=$(client_monitor "$1")
+  want=$(shown_ws "$mon0")
+  echo "${w}x${h} at ($x,$y) on $ws of ${mon:-?}; expected ${w0}x${h0} at ($x0,$y0) on $want of $mon0"
+  [[ $mon == "$mon0" && $ws == "$want" && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
+}
 event_count() { # <type> <hex>
   local n
   n=$(grep -c "grassfield>>{\"v\":\"gfc/1\",\"type\":\"$1\",\"address\":\"$2\"}" "$events" 2>/dev/null)
@@ -347,9 +363,9 @@ restore_round() { # <prefix> <slow 0|1>
   check "$1: restored event" $? "count $(event_count restored "$hex"), move -> event $(event_ms "$to_workspace" restored) ms"
   [[ -n $bpid ]] && wait "$bpid"
   sleep 0.4
-  read -r _ x y w h ws < <(client "$a_pid")
-  [[ $ws == "$ws0" && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
-  check "$1: A back at its geometry" $? "${w}x${h} at ($x,$y) on $ws"
+  local where
+  where=$(back_in_place "$a_pid")
+  check "$1: A back on its display, its Desktop, at its geometry (D-1)" $? "$where"
   pointer abs $((x0 + w0 / 2)) $((y0 + h0 / 2)) sleep 50 # off the Dock before the next round
 }
 # <n> minimize + restore pairs at normal speed, no capture: the plugin logs each animation's frame timing.
@@ -376,7 +392,8 @@ min_x=$((x0 + GF_TB_MIN_X))
 bar_y=$((y0 - GF_TB_MID))
 to_minimized="^[0-9]+ movewindowv2>>$hex,-?[0-9]+,special:minimized\$"
 to_workspace="^[0-9]+ movewindowv2>>$hex,[0-9]+,$ws0\$"
-say "  setup: A $addr ${w0}x${h0} at ($x0,$y0) on workspace $ws0"
+mon0=$(client_monitor "$a_pid")
+say "  setup: A $addr ${w0}x${h0} at ($x0,$y0) on workspace $ws0 of ${mon0:-?}"
 stable_capture "$run/with-window.ppm"
 
 if ((c2)); then
@@ -398,9 +415,8 @@ if ((c2)); then
     pointer abs "$c2_tile_x" "$c2_tile_y" sleep 400
     pointer abs "$c2_tile_x" "$c2_tile_y" sleep 40 click
     sleep 1
-    read -r _ x y w h ws < <(client "$a_pid")
-    [[ $ws == "$ws0" && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
-    check "C2: a click on the Dock tile restores A" $? "${w}x${h} at ($x,$y) on $ws"
+    where=$(back_in_place "$a_pid")
+    check "C2: a click on the Dock tile restores A on its display, its Desktop, at its geometry (D-1)" $? "$where"
   else
     say "  C2 restore: NOT VERIFIED (no tile position given)"
   fi
@@ -512,9 +528,10 @@ pointer abs "$tx" "$ty" sleep 40 click
 sleep 1
 plugin_unload
 sleep 0.5
-read -r _ x y w h ws < <(client "$a_pid")
-kill -0 "$hypr_pid" 2>/dev/null && [[ $ws == "$ws0" && $x == "$x0" && $y == "$y0" ]]
-check "unload mid-restore" $? "Hyprland alive, A on $ws at ($x,$y)"
+where=$(back_in_place "$a_pid")
+rc=$?
+kill -0 "$hypr_pid" 2>/dev/null && ((rc == 0))
+check "unload mid-restore" $? "Hyprland alive, A $where"
 pointer abs $((x0 + w0 / 2)) $((y0 + h0 / 2)) sleep 300
 stable_capture "$run/after-unload-restore.ppm"
 magick "$run/after-unload-restore.ppm" "$run/after-unload-restore.png" 2>>"$log"

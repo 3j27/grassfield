@@ -1437,4 +1437,33 @@ QtObject {
 
     // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it
     readonly property int focusReturnReleaseHoldMs: 120
+
+    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh)
+    readonly property string titlebarBackgroundDark: "#28282C"
+    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value)
+    readonly property string titlebarBackgroundLight: "#ECECEE"
+    // window title on the dark titlebar, drawn at titleOpacity
+    readonly property string titlebarTitleDark: "#ECECEE"
+    // window title on the light titlebar, drawn at titleOpacity
+    readonly property string titlebarTitleLight: "#28282C"
+    // estimate: the title a little softer than full ink, both appearances
+    readonly property real titlebarTitleOpacity: 0.85
+    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them)
+    readonly property string titlebarInactiveButtonDark: "#5A5A5E"
+    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar
+    readonly property string titlebarInactiveButtonLight: "#D1D1D3"
+    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS)
+    readonly property string titlebarPreviewTintDark: "#1D1F24"
+    // the same, light appearance (color.light.materialTint)
+    readonly property string titlebarPreviewTintLight: "#F3F4F6"
+    // estimate: opacity of the preview's tint over the blur: frosted, the windows behind it stay recognisable (pending F1 review)
+    readonly property real titlebarPreviewTintAlpha: 0.45
+    // the preview's edge, dark appearance (color.dark.materialBorder)
+    readonly property string titlebarPreviewRimDark: "#FFFFFF"
+    // the preview's edge, light appearance (color.light.materialBorder)
+    readonly property string titlebarPreviewRimLight: "#000000"
+    // estimate: the edge readable over light and dark windows (pending F1 review)
+    readonly property real titlebarPreviewRimOpacity: 0.22
+    // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8)
+    readonly property int titlebarPreviewRimWidth: 2
 }

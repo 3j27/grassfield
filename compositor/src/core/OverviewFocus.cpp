@@ -137,6 +137,21 @@ namespace gf::overviewfocus {
         return Step::Apply;
     }
 
+    std::optional<size_t> keyboardHandOver(std::span<const ExclusiveLayer> layers, std::string_view closing, bool keyboardHeld) {
+        if (keyboardHeld)
+            return std::nullopt;
+        std::optional<size_t> newest;
+        for (size_t i = 0; i < layers.size(); ++i) {
+            const auto& l = layers[i];
+            if (!l.mapped || !l.exclusive || (!closing.empty() && l.ns == closing))
+                continue;
+            if (l.underCursor)
+                return i;
+            newest = i;
+        }
+        return newest;
+    }
+
     WindowVerdict judgeWindow(const WindowFacts& facts) {
         if (!facts.exists)
             return WindowVerdict::Gone;

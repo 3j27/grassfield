@@ -4,7 +4,7 @@ import qs.services
 
 // Quick Settings: the Stages switch (docs/specs/stages.md; macOS: the Stage Manager tile). A 2x1 capsule that exists only while
 // the compositor plugin reports `stages-available` (nothing to switch otherwise). Off by default; the setting is persisted
-// (windows.stagesEnabled) and the shell pushes it to the plugin (platform/Compositor.qml). The host places it.
+// (windows.stages) and the shell pushes it to the plugin (platform/Compositor.qml). The host places it.
 Module {
     id: root
 
@@ -23,9 +23,9 @@ Module {
         inset: root.inset
         iconName: "overview"
         title: qsTr("Stages")
-        subtitle: Settings.windowsStagesEnabled ? qsTr("On") : qsTr("Off")
-        on: Settings.windowsStagesEnabled
+        subtitle: Settings.windowsStages ? qsTr("On") : qsTr("Off")
+        on: Settings.windowsStages
         available: StagesLink.available
-        onToggled: Settings.setStagesEnabled(!Settings.windowsStagesEnabled)
+        onToggled: Settings.setStagesEnabled(!Settings.windowsStages)
     }
 }

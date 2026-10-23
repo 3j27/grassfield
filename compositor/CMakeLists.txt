@@ -15,6 +15,11 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
+# Where the plugin and the tests are written: compositor/build by default (just plugin-build, the PKGBUILD); the rebuild
+# on the target (packaging/arch/grassfield-compositor-rebuild, ADR-0009 amendment) builds from the read-only sources in
+# /usr/src/grassfield-compositor into a private directory.
+set(GRASSFIELD_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build" CACHE PATH "Output directory of the plugin and the unit tests")
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland pixman-1 libdrm glesv2) # glesv2: the Genie draw (GenieDraw.cpp)
 pkg_check_modules(LUA REQUIRED lua) # headers only: symbols resolve from Hyprland's liblua at load time
@@ -45,7 +50,7 @@ target_include_directories(grassfield-compositor PRIVATE ${LUA_INCLUDE_DIRS} ${C
 target_compile_options(grassfield-compositor PRIVATE -Wall -Wextra)
 set_target_properties(grassfield-compositor PROPERTIES
   PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+  LIBRARY_OUTPUT_DIRECTORY ${GRASSFIELD_OUTPUT_DIR})
 
 option(GRASSFIELD_BUILD_TESTS "Build unit tests" ON)
 if(GRASSFIELD_BUILD_TESTS)
@@ -57,6 +62,6 @@ if(GRASSFIELD_BUILD_TESTS)
   target_link_libraries(grassfield-compositor-tests PRIVATE gfcore GTest::gtest_main)
   target_compile_options(grassfield-compositor-tests PRIVATE -Wall -Wextra)
   set_target_properties(grassfield-compositor-tests PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+    RUNTIME_OUTPUT_DIRECTORY ${GRASSFIELD_OUTPUT_DIR})
   add_test(NAME grassfield-compositor-tests COMMAND grassfield-compositor-tests)
 endif()

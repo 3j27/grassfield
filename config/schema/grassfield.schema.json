@@ -146,7 +146,7 @@
         "tilingMargins": {
           "type": "boolean"
         },
-        "stagesEnabled": {
+        "stages": {
           "type": "boolean"
         }
       }

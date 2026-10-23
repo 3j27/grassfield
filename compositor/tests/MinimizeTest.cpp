@@ -5,6 +5,8 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <optional>
+#include <span>
 #include <vector>
 
 using namespace gf::minimize;
@@ -203,4 +205,96 @@ TEST(MinimizeSnapshot, Intersects) {
     EXPECT_TRUE(intersects({0, 0, 10, 10}, {5, 5, 10, 10}));
     EXPECT_FALSE(intersects({0, 0, 10, 10}, {10, 0, 10, 10})); // touching edges share no area
     EXPECT_FALSE(intersects({0, 0, 0, 10}, {0, 0, 10, 10}));
+}
+
+// ---- D-1 (owner decision 2026-10-23, macOS; audit GF-001): a restored window comes back on its own display ----
+
+namespace {
+    // GF-REF (1920x1080 at 0,0, a 32 px menu bar) and a second display to its left, as in the audit's failing run
+    // (WAYLAND-1 at -1440,0): the Dock that was clicked is on the second one.
+    const MonitorPlace kRef{.name = "GF-REF", .box = {0, 0, 1920, 1080}, .usable = {0, 32, 1920, 1048}};
+    const MonitorPlace kLeft{.name = "WAYLAND-1", .box = {-1440, 0, 1440, 900}, .usable = {-1440, 32, 1440, 868}};
+    constexpr double   kTb = 32.0;
+
+    SavedPlace savedOnRef(Box frame = {610, 302, 700, 500}) {
+        return SavedPlace{.monitor = "GF-REF", .monitorBox = {0, 0, 1920, 1080}, .frame = frame, .floating = true};
+    }
+} // namespace
+
+TEST(MinimizeRestorePlace, ComesBackOnItsOwnDisplayAtItsFrameWhateverDisplayIsFocused) {
+    const std::array monitors{kLeft, kRef};
+    // The Dock click focused WAYLAND-1 (index 0): the window still goes back to GF-REF, at the very frame.
+    const auto plan = planRestore(savedOnRef(), monitors, 0, kTb);
+    ASSERT_TRUE(plan.monitor.has_value());
+    EXPECT_EQ(monitors[plan.monitor.value_or(0)].name, "GF-REF");
+    ASSERT_TRUE(plan.frame.has_value());
+    EXPECT_EQ(plan.frame.value_or(Box{}), (Box{610, 302, 700, 500}));
+    EXPECT_FALSE(plan.moved);
+}
+
+TEST(MinimizeRestorePlace, WithoutARecordTheFocusedDisplayTakesItAsBefore) {
+    const std::array monitors{kLeft, kRef};
+    const auto       plan = planRestore(std::nullopt, monitors, 1, kTb);
+    EXPECT_EQ(plan.monitor, std::optional<size_t>{1});
+    EXPECT_FALSE(plan.frame.has_value()) << "Hyprland's placement stays";
+    EXPECT_FALSE(plan.moved);
+    EXPECT_EQ(planRestore(std::nullopt, monitors, std::nullopt, kTb).monitor, std::optional<size_t>{0}) << "no focus: the first display";
+    EXPECT_EQ(planRestore(std::nullopt, monitors, 7, kTb).monitor, std::optional<size_t>{0}) << "an index out of range is no focus";
+    EXPECT_FALSE(planRestore(std::nullopt, std::span<const MonitorPlace>{}, std::nullopt, kTb).monitor.has_value()) << "no display at all";
+    EXPECT_FALSE(planRestore(savedOnRef(), std::span<const MonitorPlace>{}, std::nullopt, kTb).monitor.has_value());
+}
+
+TEST(MinimizeRestorePlace, ADisplayThatMovedKeepsTheFrameRelativeToIt) {
+    // GF-REF was re-arranged to the right of the other display since the minimize.
+    const MonitorPlace moved{.name = "GF-REF", .box = {1440, 0, 1920, 1080}, .usable = {1440, 32, 1920, 1048}};
+    const std::array   monitors{kLeft, moved};
+    const auto         plan = planRestore(savedOnRef(), monitors, 0, kTb);
+    EXPECT_EQ(plan.monitor, std::optional<size_t>{1});
+    ASSERT_TRUE(plan.frame.has_value());
+    EXPECT_EQ(plan.frame.value_or(Box{}), (Box{2050, 302, 700, 500}));
+    EXPECT_FALSE(plan.moved);
+}
+
+TEST(MinimizeRestorePlace, AGoneDisplayHandsTheWindowToTheFocusedOneFittedIntoIt) {
+    // Minimized on GF-REF (now unplugged) near its bottom-right corner; WAYLAND-1 (1440x900) is focused.
+    const std::array monitors{kLeft};
+    const auto       plan = planRestore(savedOnRef({1500, 700, 700, 500}), monitors, 0, kTb);
+    EXPECT_EQ(plan.monitor, std::optional<size_t>{0});
+    EXPECT_TRUE(plan.moved);
+    ASSERT_TRUE(plan.frame.has_value());
+    const Box f = plan.frame.value_or(Box{});
+    EXPECT_EQ(f.w, 700);
+    EXPECT_EQ(f.h, 500);
+    EXPECT_GE(f.x, kLeft.usable.x);
+    EXPECT_LE(f.x + f.w, kLeft.usable.x + kLeft.usable.w);
+    EXPECT_GE(f.y - kTb, kLeft.usable.y) << "the titlebar stays below the menu bar";
+    EXPECT_LE(f.y + f.h, kLeft.usable.y + kLeft.usable.h);
+}
+
+TEST(MinimizeRestorePlace, NoFrameForAZoomedOrFullScreenWindowOrABadRecord) {
+    const std::array monitors{kLeft, kRef};
+    SavedPlace       zoomed = savedOnRef();
+    zoomed.floating         = false;
+    auto plan               = planRestore(zoomed, monitors, 0, kTb);
+    EXPECT_EQ(plan.monitor, std::optional<size_t>{1}) << "still its own display";
+    EXPECT_FALSE(plan.frame.has_value()) << "its state (zoom, full screen, tiled) sets its size";
+    plan = planRestore(savedOnRef({NaN, 0, 700, 500}), monitors, 0, kTb);
+    EXPECT_FALSE(plan.frame.has_value());
+    plan = planRestore(savedOnRef({10, 40, 0, 500}), monitors, 0, kTb);
+    EXPECT_FALSE(plan.frame.has_value());
+    SavedPlace nameless = savedOnRef();
+    nameless.monitor    = "";
+    plan                = planRestore(nameless, monitors, 1, kTb);
+    EXPECT_EQ(plan.monitor, std::optional<size_t>{1}) << "an empty name never matches: the focused display";
+    EXPECT_TRUE(plan.moved);
+}
+
+TEST(MinimizeRestorePlace, FitFrameShrinksThenMovesIn) {
+    const Box usable{0, 32, 1440, 868};
+    EXPECT_EQ(fitFrame({100, 200, 700, 500}, usable, kTb), (Box{100, 200, 700, 500})) << "inside: unchanged";
+    EXPECT_EQ(fitFrame({-50, 0, 700, 500}, usable, kTb), (Box{0, 64, 700, 500})) << "moved in, titlebar below the menu bar";
+    EXPECT_EQ(fitFrame({1000, 700, 700, 500}, usable, kTb), (Box{740, 400, 700, 500}));
+    EXPECT_EQ(fitFrame({0, 0, 3000, 2000}, usable, kTb), (Box{0, 64, 1440, 836})) << "larger than the area: shrunk to it";
+    EXPECT_EQ(fitFrame({5, 6, 7, 8}, Box{0, 0, 0.5, 900}, kTb), (Box{5, 6, 7, 8})) << "degenerate area: unchanged";
+    EXPECT_EQ(fitFrame({5, 6, 7, 8}, Box{0, 0, 900, Inf}, kTb), (Box{5, 6, 7, 8})) << "non-finite area: unchanged";
 }

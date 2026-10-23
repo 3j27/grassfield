@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <vector>
 
 namespace gf::tiler {
@@ -164,11 +165,16 @@ namespace gf::tiler {
     }
 
     void tileRequest(std::string_view addressText, std::string_view placeName) {
-        const auto address = minimize::parseAddress(addressText);
-        PHLWINDOW  window;
-        if (address && Desktop::windowState()) {
+        const auto parsed = minimize::parseAddress(addressText);
+        if (!parsed) {
+            logRequest(Log::WARN, "tile: rejected: no such window");
+            return;
+        }
+        const uint64_t address = *parsed;
+        PHLWINDOW      window;
+        if (Desktop::windowState()) {
             for (const auto& w : Desktop::windowState()->windows()) {
-                if (w && reinterpret_cast<uintptr_t>(w.get()) == *address)
+                if (w && reinterpret_cast<uintptr_t>(w.get()) == address)
                     window = w;
             }
         }
@@ -179,7 +185,7 @@ namespace gf::tiler {
         if (placeName == "previous") {
             const auto before = placeable(window) && g_layoutManager ? takePrevious(window) : std::nullopt;
             if (!before) {
-                logRequest(Log::INFO, "tile {:x}: not tiled, nothing to return to", *address);
+                logRequest(Log::INFO, "tile {:x}: not tiled, nothing to return to", address);
                 return;
             }
             CBox box = *before;
@@ -205,7 +211,7 @@ namespace gf::tiler {
             return;
         }
         if (!tile(window, *place))
-            logRequest(Log::INFO, "tile {:x}: not placeable (full screen, pinned or not floating)", *address);
+            logRequest(Log::INFO, "tile {:x}: not placeable (full screen, pinned or not floating)", address);
     }
 
     void forgetAll() {

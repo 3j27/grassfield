@@ -17,8 +17,8 @@ Singleton {
 
     // The plugin offers Stages (the Quick Settings toggle and the Settings entry exist only then).
     readonly property bool available: Capabilities.has("stages-available")
-    // The user's setting (windows.stagesEnabled, off by default).
-    readonly property bool enabled: Settings.windowsStagesEnabled
+    // The user's setting (windows.stages, off by default).
+    readonly property bool enabled: Settings.windowsStages
     // The plugin's flag is on (`stages` capability): the strips may be mapped and `op:on` sent.
     readonly property bool flagOn: Capabilities.has("stages")
     readonly property bool active: available && enabled && flagOn
@@ -38,15 +38,12 @@ Singleton {
         return state && state.monitors[name] ? state.monitors[name] : null;
     }
 
-    // Sends a request through the validating builder; false (nothing sent) when it is invalid or Stages is not active.
+    // Sends an operation through Compositor.stages (the plugin validates every field); false (nothing sent) when Stages is not
+    // active or the request is not one of its operations.
     function send(request: var): bool {
         if (!root.active)
             return false;
-        const lua = Minimized.stagesCall(request);
-        if (lua === "")
-            return false;
-        Hyprland.dispatch(lua);
-        return true;
+        return Compositor.stages(request);
     }
 
     // Window class of a Hyprland window address (lower-case hex, no 0x), "" when unknown. `revision` makes bindings
@@ -124,7 +121,7 @@ Singleton {
         // The focused window becomes a stage of its own (macOS: drag it to the strip).
         function newStage(): string {
             const w = Compositor.activeWindow();
-            return w && root.send({op: "move", address: w.address, stage: "new"}) ? "ok" : "refused";
+            return w && root.send({op: "move", address: "0x" + Minimized.normalizeAddress(w.address), stage: "new"}) ? "ok" : "refused";
         }
 
         function enable(on: bool): string {

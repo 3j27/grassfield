@@ -275,10 +275,16 @@ window, so it is not counted as evidence either way).
 
 ## Shell ↔ plugin contract (gfc/1, additive; the shell side is "Shell side" below)
 1. **Detection.** `Capabilities.has("stages-available")` → show the Stages toggle in Quick Settings (off by default,
-   persisted by the shell, e.g. `stages.enabled`). Without it (no plugin, mismatch, hooks failed, after the unload event
-   with an empty list) hide the toggle and the strip. Push the setting after every capabilities event and on change:
-   `hl.plugin.grassfield.config("stagesEnabled", "true"|"false")` (add the key to the config allowlist in
-   `shell/platform/Minimized.js`). `Capabilities.has("stages")` → the flag is on: map the strip and send `op:on`.
+   persisted by the shell as Settings `windows.stages`). Without it (no plugin, mismatch, hooks failed, after the unload
+   event with an empty list) hide the toggle and the strip. **Done (2026-10-23, owner decision D-4, audit ARCH-05):** the
+   setting `windows.stages` (schema, defaults, `Settings.windowsStages`, the Settings app's store rules) and its push
+   `hl.plugin.grassfield.config("stagesEnabled", "true"|"false")` from `shell/platform/Compositor.qml` (`pushStagesFlag`:
+   when the setting changes and when `stages-available` appears, i.e. at every plugin load, which starts with the flag
+   off; not on every capabilities event, because the plugin re-posts them when the flag changes); the verb `stages` is in
+   the allowlist of `shell/platform/Minimized.js` and `Compositor.stages(request)` sends one operation (built by
+   `Minimized.stagesCall`, only while `stages` is advertised). Still to build (shell): the Quick Settings and Settings
+   toggles writing `windows.stages`, and the strip. `Capabilities.has("stages")` → the flag is on: map the strip and send
+   `op:on`.
 2. **Strip surfaces** (one per output; only outputs with a strip are managed):
    - input surface: namespace **`grassfield-stages`**, `WlrLayer.Top` (or Overlay), anchored to the left edge, keyboard
      `None`, **transparent where the thumbnails are** (the plugin draws them in the window layer, under Top). Its input
@@ -533,19 +539,17 @@ when the overview opens: prototype limit); desktop focus is unaffected (a press 
 ## Shell side (1.0 scope; macOS Stage Manager model; decided 2026-10-23, GF-AUDIT-001 C-STG-1 / C-X-13)
 
 Files: `shell/platform/StagesLink.qml` (capability, setting, events, verb; the only compositor access), `shell/platform/StagesState.js`
-(event parser), `shell/platform/Minimized.js` (`stages` verb in `pluginVerbs`, `stagesCall`, `stagesEnabled` in `pluginConfig`),
+(event parser), `shell/platform/Minimized.js` (`stages` verb, `stagesCall` and `Compositor.stages(request)` from the compositor enable path),
 `shell/stages/Stages.qml` (strip surface per output), `shell/stages/Layout.js` (geometry, requests), `shell/overlay/controlcenter/StagesToggle.qml`,
 `apps/settings/qml/DesktopPage.qml` (Settings > Desktop & Dock > Stages). Tokens: `stages.*`. Tests: `tests/unit/tst_stages.qml`,
 `tests/visual/scenarios/stages.sh`.
 
 - **Name.** UI name "Stages" (fr "Stages"); the Apple name appears in no string (`check-i18n`, grep of `shell/ apps/ translations/`).
-- **Setting.** `windows.stagesEnabled` in grassfield.json (schema, defaults `false`, Settings app Store rules). Off by default (C-X-13).
+- **Setting.** `windows.stages` in grassfield.json (schema, defaults `false`, Settings app Store rules). Off by default (C-X-13).
   The Quick Settings tile (2x1 beside Airplane Mode; on its own row while Now Playing takes that slot) and the Settings row exist
   only for the tile: the tile is hidden unless `Capabilities.has("stages-available")`; the Settings app cannot see capabilities, so its
   row is always listed with a footnote that the compositor extension is needed.
-- **Flag push.** `Compositor.pushPluginConfig` sends `config("stagesEnabled", ...)` after each capabilities event and on change, but only
-  when `stages-available` is present and the plugin's flag (`stages` capability) differs from the setting, so a capabilities event
-  never loops. Without `stages-available` nothing is sent (REQ-COMP-DEG-d10); flag off makes the plugin answer `disabled`.
+- **Flag push.** `Compositor.pushStagesFlag` (compositor enable path, contract 1) sends `config("stagesEnabled", ...)` when the setting changes and when `stages-available` appears, not on every capabilities event. Without `stages-available` nothing is sent (REQ-COMP-DEG-d10); flag off makes the plugin answer `disabled`. The strip sends its operations through `Compositor.stages(request)` (only while `stages` is advertised).
 - **Strip.** One surface per output, namespace `grassfield-stages` (layer rule `gf-shell-blur` lists it), Top layer, anchored top-left with
   explicit margins (`ExclusionMode.Ignore`), keyboard `None`, transparent over the plugin's thumbnails. Tiles 160x120, gap 24, centred
   vertically below the menu bar (macOS centres the strip), left of nothing but the Dock when the Dock is on the left (inset =
