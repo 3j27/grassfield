@@ -17,6 +17,8 @@ Window {
     // ADR-0015: this window draws its own chrome (lights and toolbar below); the apps' tagger (apps/windowchrome.h)
     // names its role for the compositor, whose plugin then draws no titlebar on it.
     property string gfChromeRole: "settings"
+    // False when the shell says the compositor plugin is absent: the minimize light is greyed (ADR-0015 Q4b).
+    property bool canMinimize: true
     // The title of the shown section (the toolbar's title; the page itself repeats nothing).
     readonly property string sectionTitle: {
         for (const e of root.sections) {
@@ -65,6 +67,24 @@ Window {
     minimumHeight: Tokens.settingsWindowMinHeight
     visible: true
     color: Appearance.colors.materialTint
+
+    function readCapabilities(): void {
+        const file = root.backend.readText(root.backend.capabilitiesFile);
+        root.canMinimize = WindowActions.minimizeAvailable(file.exists && file.ok ? file.text : "");
+    }
+
+    Component.onCompleted: {
+        root.backend.watch(root.backend.capabilitiesFile);
+        root.readCapabilities();
+    }
+
+    Connections {
+        target: root.backend
+        function onFileChanged(path: string): void {
+            if (path === root.backend.capabilitiesFile)
+                root.readCapabilities();
+        }
+    }
 
     ConfigStore {
         id: cfg
@@ -190,6 +210,7 @@ Window {
             width: parent.width
             window: root
             showTitle: false
+            canMinimize: root.canMinimize
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
         }
 
@@ -383,6 +404,7 @@ Window {
             window: root
             showControls: false
             title: root.sectionTitle
+            canMinimize: root.canMinimize
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
         }
 

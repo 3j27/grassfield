@@ -724,9 +724,21 @@ session config S1-S3 and the shell item H1.
 - **H1 Overview band (shell, with P3):** `shell/overview/OverviewWindow.qml:105-107` and `:131` use band 0 for windows whose
   Hyprland `tags` hold `grassfield-client-chrome*` when `client-chrome` is advertised; it must land with P1/P3 so that the
   shell's layout and the plugin's drawing agree.
-- **C2 behaviour:** without the plugin the app draws its lights and the minimize light should be greyed
-  (`WindowControls.canMinimize`); the shell-written capabilities file that feeds it (Q4 b) is not part of this slice, so the
-  light stays active and a press without the plugin has no effect (spike step 6).
+- **C2 behaviour (Q4b, done in the app and shell branch):** without the plugin the app draws its lights and the minimize light is
+  greyed and inert, as macOS greys an unavailable action.
+  - Channel: the shell writes `{"v":1,"pluginPresent":bool,"features":[...]}` to `$XDG_RUNTIME_DIR/grassfield-capabilities.json`
+    (`$GRASSFIELD_STATE_HOME/capabilities.json` in a dev session) once the plugin answered or the hello timed out, and on every
+    change (`shell/platform/Capabilities.qml`, format in `CapabilitiesFile.js`). A runtime-dir file never outlives the session.
+  - Apps: Files and Preview watch it with `apps/chromecaps.h` (property `canMinimize`), Settings through its backend
+    (`WindowActions.minimizeAvailable()`); the light is greyed only when the file says the plugin is absent or has no
+    `minimize` feature. A missing or malformed file means "not known": the light stays enabled.
+  - Tests: `tst_windowcontrols.qml`, `tst_clientchrome.qml`, gtest `ChromeCaps.*` in `tests/unit/files/tst_appscope.cpp`.
+- **S1-S3 and H1 (done in the same branch):** the three window rules are in `config/hypr/grassfield/windows.lua`
+  (`tests/shell/client_chrome_rules.sh`: `--verify-config` accepts them, a misspelled key is refused, the tag name is the same
+  in the rule, the shell and the spec). Overview v2 reads `tags` from Hyprland's window data
+  (`Compositor.windowsAcross`) and reserves no band above a window tagged `grassfield-client-chrome` once the plugin advertises
+  `client-chrome` (`shell/overview/ClientChrome.js`, `tst_clientchrome.qml`): without the feature the plugin still draws its strip
+  everywhere, so the band stays. Left for the plugin: P1-P7 (P3 must use the same tag).
 - **Tests:** `tests/compositor/client_chrome.sh` (assertions 1-9 and which depend on P*/S*, in its header); GTests for P1-P3,
   P5, P7; `tests/compositor/soak.sh` with the Settings app mapped.
 

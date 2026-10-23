@@ -363,6 +363,7 @@ Window {
         window: win
         showTitle: false
         doubleClickAction: win.app.titlebarDoubleClick
+        canMinimize: win.app.canMinimize
     }
 
     Item {
@@ -380,6 +381,7 @@ Window {
             showControls: false
             title: win.title
             doubleClickAction: win.app.titlebarDoubleClick
+            canMinimize: win.app.canMinimize
 
             leading: Row {
                 id: navButtons

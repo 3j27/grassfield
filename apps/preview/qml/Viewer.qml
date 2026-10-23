@@ -254,6 +254,7 @@ Window {
         window: win
         showTitle: false
         doubleClickAction: win.backend.titlebarDoubleClick
+        canMinimize: win.backend.canMinimize
 
         ToolbarGroup {
             id: sidebarGroup

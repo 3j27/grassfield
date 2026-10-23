@@ -23,6 +23,7 @@ TestCase {
         property bool dark: true
         property bool reduceMotion: true
         property string titlebarDoubleClick: "zoom"
+        property bool canMinimize: true
         function inspect(i) {
             return {ok: true, kind: "image", name: files[i].name, url: files[i].url, width: 1200, height: 800, frames: 1, animated: false, size: "1 MB", type: "PNG image", modified: "today", folder: "/x"};
         }

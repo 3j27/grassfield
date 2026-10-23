@@ -94,3 +94,24 @@ function lightGeometry(style, tokens) {
 function rowHeight(style, tokens) {
     return style === "titlebar" ? tokens.titlebarHeight : tokens.unifiedHeight;
 }
+
+// ADR-0015 Q4(b): minimize needs the compositor plugin (Hyprland does nothing on set_minimized), so an app greys its
+// minimize light when the plugin is absent, as macOS greys an unavailable action. The shell writes its capabilities to one
+// small file (apps/chromecaps.h holds the location and the same rule in C++). `text` is the file's content, "" when there is
+// none. Only a readable file that says the plugin is absent, or lacks the "minimize" feature, greys the light; anything else
+// is "not known" and leaves it enabled.
+function minimizeAvailable(text) {
+    let o = null;
+    try {
+        o = JSON.parse(text);
+    } catch (e) {
+        return true;
+    }
+    if (!o || typeof o !== "object" || o.v !== 1 || typeof o.pluginPresent !== "boolean")
+        return true;
+    if (!o.pluginPresent)
+        return false;
+    if (!Array.isArray(o.features))
+        return true;
+    return o.features.indexOf("minimize") >= 0;
+}

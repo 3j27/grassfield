@@ -90,6 +90,7 @@ Window {
         style: "titlebar"
         title: root.title
         doubleClickAction: root.app.titlebarDoubleClick
+        canMinimize: root.app.canMinimize
     }
 
     FocusScope {

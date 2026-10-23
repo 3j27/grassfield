@@ -2,6 +2,7 @@
 
 #include "previewlogic.h"
 #include "appscope.h"
+#include "chromecaps.h"
 
 #include <QCoreApplication>
 #include <QMutexLocker>
@@ -72,10 +73,23 @@ PreviewApp::PreviewApp(const QStringList &paths, const QStringList &errors, bool
         m_watcher.addPath(dir);
     if (QFileInfo::exists(file))
         m_watcher.addPath(file);
-    const auto reread = [this] {
+    // The shell's capabilities file (chromecaps.h, ADR-0015 Q4b) is watched the same way: it may not exist yet, so its directory too.
+    const auto watchCapabilities = [this] {
+        const QString caps = grassfield::apps::capabilitiesFile();
+        if (caps.isEmpty())
+            return;
+        const QString capsDir = QFileInfo(caps).absolutePath();
+        if (QFileInfo(capsDir).isDir() && !m_watcher.directories().contains(capsDir))
+            m_watcher.addPath(capsDir);
+        if (QFileInfo::exists(caps) && !m_watcher.files().contains(caps))
+            m_watcher.addPath(caps);
+    };
+    watchCapabilities();
+    const auto reread = [this, watchCapabilities] {
         const QString f = configFile();
         if (QFileInfo::exists(f) && !m_watcher.files().contains(f))
             m_watcher.addPath(f);
+        watchCapabilities();
         readAppearance();
     };
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, reread);
@@ -160,7 +174,9 @@ void PreviewApp::readAppearance()
                         QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(a))
             accent = a;
     }
-    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor || doubleClick != m_titlebarDoubleClick) {
+    const bool canMinimize = grassfield::apps::minimizeAvailableInFile();
+    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor || doubleClick != m_titlebarDoubleClick || canMinimize != m_canMinimize) {
+        m_canMinimize = canMinimize;
         m_titlebarDoubleClick = doubleClick;
         m_accentColor = accent;
         m_dark = dark;

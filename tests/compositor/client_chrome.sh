@@ -9,7 +9,8 @@
 # socket only.
 #
 # Assertions, and what each depends on (PLUGIN = the plugin work item of ADR-0015 / docs/specs/compositor.md must have
-# landed; SESSION = the session config of that work item (tag rule, maximize exemption); APP = already true with this slice):
+# landed; SESSION = the session rules S1-S3 in config/hypr/grassfield/windows.lua (in this tree); APP = true with the app side).
+# Only 3, 5 and 9 still wait for the plugin (P1, P5):
 #   1  APP      the Settings window carries xdg tag "settings"; the foot window carries none
 #   2  SESSION  the Settings window has the Hyprland tag grassfield-client-chrome (the rule on the xdg tag)
 #   3  PLUGIN   the Settings window has no grassfield-titlebar decoration; foot keeps its strip

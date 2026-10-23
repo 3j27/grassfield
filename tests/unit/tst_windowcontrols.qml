@@ -330,4 +330,25 @@ TestCase {
         compare(win.calls.indexOf("maximize"), -1, "the lights sit above the drag area");
         u.destroy();
     }
+
+    // ADR-0015 Q4(b): the shell's capabilities file greys the minimize light without the plugin ---------------------
+
+    function test_minimizeAvailableFollowsTheShellsCapabilitiesFile() {
+        verify(WindowActions.minimizeAvailable('{"v":1,"pluginPresent":true,"features":["decorations","minimize"]}'));
+        verify(!WindowActions.minimizeAvailable('{"v":1,"pluginPresent":false,"features":[]}'), "no plugin: greyed");
+        verify(!WindowActions.minimizeAvailable('{"v":1,"pluginPresent":true,"features":["decorations"]}'), "plugin without minimize: greyed");
+        // Unknown state (no file, unreadable, another version, wrong types) leaves the light enabled.
+        for (const text of ["", "not json", "[]", "null", '{"v":2,"pluginPresent":false}', '{"v":1,"pluginPresent":"no"}', '{"v":1,"pluginPresent":true}'])
+            verify(WindowActions.minimizeAvailable(text), "unknown state keeps it enabled: " + text);
+    }
+
+    function test_toolbarGreysAndDisablesMinimizeWhenUnavailable() {
+        const u = make(toolbarComponent, {canMinimize: false});
+        verify(u.controls.minimizeLight.grey);
+        verify(!u.controls.minimizeLight.lightEnabled);
+        verify(!u.controls.closeLight.grey);
+        u.controls.minimizeLight.Accessible.pressAction();
+        compare(win.calls.length, 0);
+        u.destroy();
+    }
 }
