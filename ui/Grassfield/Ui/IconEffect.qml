@@ -37,7 +37,10 @@ ShaderEffect {
     readonly property real clearPlateAlphaWallpaper: Tokens.iconModeClearPlateAlphaWallpaper
     readonly property real sysPlateInset: Tokens.iconModeSysPlateInset
     readonly property real sysPlateRadius: Tokens.iconModeSysPlateRadius
-    readonly property real sysGlyphScale: Tokens.iconModeSysGlyphScale
+    // Scale of the artwork about the centre: the glyph scale (the icon sits on the plate), or for an icon that is already a tile the scale that
+    // makes its own tile coincide with the plate (TintedIcon.artScale, IconTile.js).
+    property real artScale: Tokens.iconModeSysGlyphScale
+    readonly property real sysGlyphScale: root.artScale
     // The rim keeps its width in logical pixels up to rimFullSize and shrinks and fades on smaller icons (a 1 px rim is
     // heavy on a 16 px icon).
     readonly property real sizeFactor: Math.min(1, root.nominalSize / Tokens.iconModeRimFullSize)

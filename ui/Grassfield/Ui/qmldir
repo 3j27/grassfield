@@ -26,3 +26,5 @@ PointerSize 1.0 PointerSize.js
 PointerColors 1.0 PointerColors.js
 WallpaperConfig 1.0 WallpaperConfig.js
 GrassfieldArtwork 1.0 GrassfieldArtwork.qml
+singleton IconShape 1.0 IconShape.qml
+IconTile 1.0 IconTile.js

@@ -55,6 +55,20 @@ Item {
     // The shader could not be loaded or compiled: the plain image is shown instead of an effect that draws nothing.
     readonly property bool effectFailed: root.modeActive && (Appearance.iconShaderBroken || (effectLoader.item !== null && (effectLoader.item as IconEffect).failed))
 
+    // The own-tile rule (docs/specs/ui.md "Icon shader"): an icon that is already a rounded square filling its box is not put inside the system
+    // plate again; the shape of the icon file is measured once (IconShape, a CPU test of the alpha mask) and the artwork scaled so that its own tile
+    // coincides with the plate. Glyphs, folders and every other icon keep the glyph scale. Only in an effect mode (none in Default: no read at all).
+    property bool detectTile: true
+    readonly property bool shapeWanted: root.effectiveMode !== "default" && root.detectTile && !Appearance.iconShaderBroken
+    readonly property string shapeKey: String(root.source)
+    // undefined until the file is read, 0: not a tile, else the tile edge over the box.
+    readonly property var tileSide: !root.shapeWanted ? undefined : (root.shapeKey === "" ? 0 : IconShape.sideOf(root.shapeKey))
+    // False while the artwork is not drawn because its scale is not known yet (it fades in once, no icon jumps from one scale to the other).
+    readonly property bool shapeKnown: !root.shapeWanted || root.tileSide !== undefined
+    // The scale the artwork is drawn at in an effect mode.
+    readonly property real artScale: IconTile.artScale(root.tileSide === undefined ? 0 : root.tileSide, Tokens)
+    readonly property bool ownTile: root.tileSide !== undefined && root.tileSide > 0
+
     implicitWidth: size
     implicitHeight: size
     Accessible.role: Accessible.Graphic
@@ -83,6 +97,12 @@ Item {
         id: effectLoader
         anchors.fill: parent
         active: root.modeActive && root.visible && !Appearance.iconShaderBroken
+        opacity: root.shapeKnown ? 1 : 0
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.duration(Tokens.motionFast)
+            }
+        }
         sourceComponent: IconEffect {
             source: image
             mode: root.mode
@@ -93,7 +113,107 @@ Item {
             recolor: root.recolor
             recolorTint: root.recolorTint
             nominalSize: root.size
+            artScale: root.artScale
             shaderUrl: root.shaderUrl
+        }
+    }
+
+    // ---- Shape read: the raw icon file's alpha mask, by a few icons at a time, never from the visible icon ----
+    function measure() {
+        if (!root.shapeWanted || root.tileSide !== undefined || root.width <= 0 || root.height <= 0 || !root.visible || root.Window.window === null || probe.active)
+            return;
+        const key = root.shapeKey;
+        if (!IconShape.claim(key))
+            return;
+        probe.key = key;
+        probe.active = true;
+    }
+
+    function scheduleMeasure() {
+        settle.restart();
+    }
+
+    // Changes arrive in bursts (source, mode, window): look once after them, in a turn of the event loop of its own.
+    Timer {
+        id: settle
+
+        interval: 0
+        onTriggered: root.measure()
+    }
+
+    onShapeWantedChanged: root.scheduleMeasure()
+    onShapeKeyChanged: root.scheduleMeasure()
+    onVisibleChanged: root.scheduleMeasure()
+    Component.onCompleted: root.scheduleMeasure()
+    Component.onDestruction: {
+        if (probe.key !== "")
+            IconShape.release(probe.key);
+    }
+
+    Connections {
+        target: root.Window
+
+        function onWindowChanged() {
+            root.scheduleMeasure();
+        }
+    }
+
+    // A claim released by another icon, or a result stored (a file may be waiting for a free place): look again.
+    Connections {
+        target: IconShape
+
+        function onRevisionChanged() {
+            if (root.shapeWanted && root.tileSide === undefined)
+                root.scheduleMeasure();
+        }
+    }
+
+    Loader {
+        id: probe
+
+        property string key: ""
+
+        function finish(side) {
+            const k = probe.key;
+            probe.key = "";
+            probe.active = false;
+            if (k !== "")
+                IconShape.store(k, side);
+        }
+
+        active: false
+
+        sourceComponent: Canvas {
+            id: canvas
+
+            function read() {
+                if (probe.key === "")
+                    return;
+                const n = Tokens.iconModeOwnTileProbeSize;
+                const ctx = canvas.getContext("2d");
+                ctx.clearRect(0, 0, n, n);
+                ctx.drawImage(probe.key, 0, 0, n, n);
+                const data = ctx.getImageData(0, 0, n, n);
+                probe.finish(IconTile.measure(data.data, n, Tokens).side);
+            }
+
+            width: Tokens.iconModeOwnTileProbeSize
+            height: Tokens.iconModeOwnTileProbeSize
+            opacity: 0
+            renderTarget: Canvas.Image
+            renderStrategy: Canvas.Immediate
+            onImageLoaded: canvas.read()
+            onAvailableChanged: {
+                if (canvas.available && probe.key !== "" && canvas.isImageLoaded(probe.key))
+                    canvas.read();
+            }
+            Component.onCompleted: canvas.loadImage(probe.key)
+
+            Timer {
+                interval: Tokens.iconModeOwnTileTimeout
+                running: true
+                onTriggered: probe.finish(0)
+            }
         }
     }
 }

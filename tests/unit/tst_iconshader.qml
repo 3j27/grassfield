@@ -47,7 +47,7 @@ TestCase {
     readonly property int rowsPerGroup: 12
     readonly property string fixtureDir: Qt.resolvedUrl("../fixtures/icons/")
     readonly property string breezeDir: "file:///usr/share/icons/breeze/apps/48/"
-    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo", "dark-plate-light-border", "white-page-document", "same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph"]
+    readonly property var ownNames: ["white-plate-dark-glyph", "blue-plate-white-glyph", "graphite-plate-red-glyph", "white-plate-colour-glyph", "logo-no-plate", "dark-glyph-no-plate", "full-bleed-logo", "dark-plate-light-border", "white-page-document", "same-tone-glyph", "sky-mountain", "light-plate-lighter-glyph", "own-tile-squircle", "own-tile-shadow", "own-circle"]
     // The base theme of the session is Breeze, then Adwaita and hicolor (ADR-0017): Breeze app icons read in place, never copied into the repo
     // (a missing file is skipped). Includes the terminals and monitors (dark plates with a light prompt or a coloured graph) whose internal
     // contrast is at risk, white-plated icons, tile-shaped icons (the plate must not double them) and plain glyphs.
@@ -342,6 +342,18 @@ TestCase {
         return worst;
     }
 
+    // The own-tile rule measures each icon file once (IconShape); an icon is drawn once its scale is known. The board is drawn after that.
+    function settleShapes() {
+        tryVerify(() => {
+            for (let i = 0; i < slots.count; i++) {
+                const cell = slots.itemAt(i);
+                if (cell !== null && cell.icon.status === Image.Ready && !cell.icon.shapeKnown)
+                    return false;
+            }
+            return true;
+        }, 20000, "the icon shapes were not read");
+    }
+
     // One rendering of the whole board over a flat background colour; the icon of every fixture in every mode is
     // measured against it. Returns the number of renderings measured; failures are appended.
     function runScenario(name, dark, background, failures, overWallpaper) {
@@ -349,6 +361,7 @@ TestCase {
         testCase.wallpaperPass = overWallpaper === true;
         testCase.panelColor = background;
         testCase.scenariosRun[name] = true;
+        testCase.settleShapes();
         wait(500);
         waitForRendering(board);
         const img = grabImage(board);
@@ -394,7 +407,7 @@ TestCase {
             for (let m = 1; m < testCase.modes.length; m++) {
                 if (testCase.onlyMode !== "" && testCase.modes[m] !== testCase.onlyMode)
                     continue;
-                const r = measure(img, img2, cells[m], background, inverse, Tokens.iconModeSysGlyphScale);
+                const r = measure(img, img2, cells[m], background, inverse, cells[m].icon.artScale);
                 const label = `${testCase.fixtures[f].name} ${testCase.modes[m]} ${name}`;
                 if (r === null) {
                     failures.push(label + ": nothing drawn");
@@ -512,6 +525,7 @@ TestCase {
             testCase.darkPass = dark;
             testCase.wallpaperPass = false;
             testCase.panelColor = accent;
+            testCase.settleShapes();
             wait(500);
             waitForRendering(board);
             const img = grabImage(board);

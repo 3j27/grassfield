@@ -189,7 +189,7 @@ Item {
         anchors.fill: parent
         // In an icon mode the folder shrinks to sit on the system plate (the shader's sysGlyphScale):
         // the symbol follows it. Not when the shader failed and the plain icon is drawn.
-        scale: root.modeName !== "default" && !icon.effectFailed ? Tokens.iconModeSysGlyphScale : 1
+        scale: root.modeName !== "default" && !icon.effectFailed ? icon.artScale : 1
         transformOrigin: Item.Center
         clip: true
         visible: root.hasGlyph
