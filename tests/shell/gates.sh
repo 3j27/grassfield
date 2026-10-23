@@ -19,6 +19,7 @@ python3 -I "$root/scripts/gates/frame_pacing.py" --selftest || fails=$((fails + 
 python3 -I "$root/scripts/gates/session_start.py" --selftest || fails=$((fails + 1))
 "$root/scripts/dev/check-version.sh" --selftest || fails=$((fails + 1))
 "$root/scripts/dev/check-licenses.sh" --selftest || fails=$((fails + 1))
+"$root/scripts/gates/version-agreement.sh" --selftest || fails=$((fails + 1))
 
 # Release engineering checks on this tree, and the backup recipe on a throwaway folder.
 expect "one version source" "$(rc_of "$root/scripts/dev/check-version.sh")" 0

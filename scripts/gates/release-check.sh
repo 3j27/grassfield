@@ -5,11 +5,13 @@
 #
 #   1 check      `just check` of the snapshot: config, schema, qmllint, shaders, i18n, scripts, inventory, version
 #                coherence, clang-tidy (full run, no stamp), gitleaks of the snapshot
-#   2 test       `just test` of the snapshot (QML unit tests, gtest suites, compositor and bridge logic, inventory gate)
-#   3 coverage   scripts/gates/coverage.sh: line coverage of the compositor core and the menu bridge logic (Q3, >= 70 %)
-#   4 secrets    gitleaks over the WHOLE history of this repository (gate S1)
-#   5 plugin     the compositor plugin built with CMake/Ninja against the INSTALLED Hyprland headers
-#   6 plugin-rc  the same against rc-channel headers, only when --rc-headers is given (gate C3)
+#   2 plugin     the compositor plugin and its unit-test binary built with CMake/Ninja against the INSTALLED Hyprland headers
+#   3 comp-tests the compositor unit tests (compositor/build/grassfield-compositor-tests) run as their own step: in a clean
+#                tree `just test` finds no binary and records them as a silent skip, so they are not left to it
+#   4 test       `just test` of the snapshot (QML unit tests, gtest suites, bridge logic, inventory gate), run after 2 and 3
+#   5 coverage   scripts/gates/coverage.sh: line coverage of the compositor core and the menu bridge logic (Q3, >= 70 %)
+#   6 secrets    gitleaks over the WHOLE history of this repository (gate S1)
+#   7 plugin-rc  the same against rc-channel headers, only when --rc-headers is given (gate C3)
 #
 #   scripts/gates/release-check.sh [--rc-headers ROOT] [--keep] [--only step[,step...]]
 #     --rc-headers ROOT   an extracted rc-channel hyprland package: ROOT/usr/include/hyprland and
@@ -76,6 +78,11 @@ step() { # <name> <command...>: runs in the snapshot, logs to $logs/<name>.log
 note() { notes[${#notes[@]} - 1]=$1; }
 
 step check just check
+step plugin just plugin-build
+step comp-tests compositor/build/grassfield-compositor-tests
+if want comp-tests && [[ ${names[${#names[@]} - 1]:-} == comp-tests ]]; then
+  notes[${#notes[@]} - 1]=$(grep -a -E '^\[  (PASSED|FAILED)  \]' "$logs/comp-tests.log" | head -n 2 | paste -sd';' - | sed 's/\[ *//g; s/ *\]//g')
+fi
 step test just test
 if want test && [[ ${#names[@]} -gt 0 ]]; then
   skips=$(grep -a -E '^summary: [0-9]+ check\(s\) SKIPPED|^summary: no check skipped' "$logs/test.log" | tail -n 1)
@@ -87,7 +94,6 @@ if want coverage && [[ ${names[${#names[@]} - 1]:-} == coverage ]]; then
   notes[${#notes[@]} - 1]=$(grep -a -E '^coverage (compositor src/core|menu-bridge):' "$logs/coverage.log" | sed 's/^coverage //' | paste -sd ';' -)
 fi
 step secrets gitleaks detect --source "$root" --no-banner --redact
-step plugin just plugin-build
 if [[ -n $rc_headers ]]; then
   want plugin && cp "$src/compositor/build/grassfield-compositor.so" "$work/stock.so" 2>/dev/null
   step plugin-rc env PKG_CONFIG_PATH="$rc_headers/usr/share/pkgconfig" PKG_CONFIG_SYSROOT_DIR="$rc_headers" \

@@ -144,6 +144,10 @@ gate-frames *args:
 gate-startup *args:
     scripts/gates/session-start.sh {{args}}
 
+# GF-013: About, pacman, the plugin (`hyprctl grassfield`) and the menu bridge report the VERSION file's version: `just gate-version --nested` or `--installed` (bare command).
+gate-version *args:
+    scripts/gates/version-agreement.sh {{args}}
+
 # Off-machine copy: a verified git bundle of the whole repository into DIR (an external disk; GF-034).
 backup dir:
     scripts/dev/backup.sh {{dir}}

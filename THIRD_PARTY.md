@@ -90,9 +90,11 @@ Grassfield source headers name `omacom/omarchy`, branch quattro; both are record
 These three files are security modules. The upstream licence (basecamp/omarchy, tag v4.0.4, SHA-256
 `717ba1949502290f8e47688ae2e323acd06c8ca47aec9f7596b15f678c1af4a2`) names the copyright holder "David Heinemeier
 Hansson" (the installed omarchy package ships no licence file). `omarchy-MIT.txt` carries that LICENSE verbatim and
-`scripts/dev/check-licenses.sh` compares it with the hash. The comment headers of the three files still say
-"MIT License, Copyright (c) the Omarchy authors": they are security modules (a reviewer pass is required to touch them)
-and the shipped notice is the one that governs; correcting the headers is an open item.
+`scripts/dev/check-licenses.sh` compares it with the hash. The text was fetched from raw.githubusercontent.com at the tag
+during the 1.0.0-rc1 remediation (2026-10-23); an offline review cannot re-fetch it, so the pinned hash is the only local
+proof (re-fetch the URL and compare `sha256sum` to verify). The comment headers of the three files are corrected to "Copyright (c) David Heinemeier Hansson, MIT License" on the
+security branch (commit 7c8b088, a reviewed change to security modules); this branch does not touch them, so until that
+branch is merged the headers still say "the Omarchy authors" and the shipped notice is the one that governs.
 
 Run-time use without copying: `config/hypr/grassfield/omarchy.lua` requires Omarchy's Lua modules from
 `/usr/share/omarchy`; the lock uses the PAM service `omarchy-lock-password`. Trademark use of "Omarchy" in the UI:
