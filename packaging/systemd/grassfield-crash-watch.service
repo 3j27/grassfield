@@ -6,6 +6,9 @@ PartOf=graphical-session.target
 After=graphical-session.target
 Requisite=graphical-session.target
 ConditionEnvironment=GRASSFIELD_SESSION=1
+# A unit that keeps failing stops after 5 starts in 2 minutes (the default of 5 in 10 s is never reached with this RestartSec).
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
