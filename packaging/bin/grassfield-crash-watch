@@ -1,0 +1,80 @@
+#!/usr/bin/python3 -I
+"""Announce crashes of the user's programs with a notification (Grassfield's replacement of omarchy-crash-watch).
+
+Omarchy's watcher (omarchy-crash-watch.service) waits for the Omarchy shell's notification IPC and so can never notify in a
+Grassfield session; packaging/systemd/omarchy-crash-watch.service.d/10-grassfield.conf keeps it off there. This one follows
+the journal for systemd-coredump entries of this user and sends one notification per program per minute through the
+freedesktop notification service (Grassfield's own). It offers no AI diagnosis: the notification names the program and
+where the report is (coredumpctl).
+
+Run by grassfield-crash-watch.service. Standard library only.
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+COREDUMP_MESSAGE_ID = "fc2e22bc6ee647b6b90729ab34a250b1"  # systemd.journal-fields(7)
+DEDUPE_SECONDS = float(os.environ.get("GRASSFIELD_CRASH_DEDUPE_SECONDS", "60"))
+SEND_ATTEMPTS = int(os.environ.get("GRASSFIELD_CRASH_SEND_ATTEMPTS", "20"))
+
+
+def interesting(entry, uid, last, now):
+    """The name to announce for a journal entry, or None. `last` maps names to the time of their last announcement."""
+    try:
+        entry_uid = int(entry.get("_UID", "-"))
+    except (TypeError, ValueError):
+        return None
+    if entry_uid != uid:  # a daemon dumping core is a sysadmin's problem
+        return None
+    pid = str(entry.get("COREDUMP_PID", ""))
+    if not pid.isdigit():
+        return None
+    exe = entry.get("COREDUMP_EXE") or ""
+    comm = entry.get("COREDUMP_COMM") or ""
+    # comm is truncated to 15 characters: prefer the executable's name.
+    name = os.path.basename(exe) if exe.startswith("/") else comm
+    if not name or name.startswith("grassfield-crash-"):
+        return None
+    if now - last.get(name, -DEDUPE_SECONDS) < DEDUPE_SECONDS:
+        return None
+    return name
+
+
+def announce(name, signal):
+    body = "It stopped unexpectedly (%s). The report is kept by the system: coredumpctl list." % (signal or "crash")
+    # The notification service may still be starting (or restarting after a shell crash): retry for a while.
+    for _ in range(SEND_ATTEMPTS):
+        try:
+            r = subprocess.run(["notify-send", "-a", "Grassfield", "-u", "critical", "--", "%s quit unexpectedly" % name, body],
+                               capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            r = None
+        if r is not None and r.returncode == 0:
+            return True
+        time.sleep(1)
+    return False
+
+
+def main():
+    uid = os.getuid()
+    last = {}
+    cmd = ["journalctl", "-f", "-n", "0", "-o", "json", "MESSAGE_ID=" + COREDUMP_MESSAGE_ID]
+    with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True) as proc:
+        for line in proc.stdout:
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            name = interesting(entry, uid, last, time.monotonic())
+            # Only a delivered notification starts the dedupe window (a failed one must not hide the rest of a crash loop).
+            if name and announce(name, entry.get("COREDUMP_SIGNAL_NAME")):
+                last[name] = time.monotonic()
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

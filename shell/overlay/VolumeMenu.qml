@@ -15,6 +15,13 @@ FocusScope {
     Accessible.name: qsTr("Sound")
 
     Keys.onEscapePressed: Popups.close()
+    // Left/Right on the mute button or a device row: the previous or next status menu (the slider keeps them for the volume).
+    Keys.onLeftPressed: Popups.stepMenu(-1)
+    Keys.onRightPressed: Popups.stepMenu(1)
+    // The keyboard starts on the mute button so that Left/Right walk the status menus; Up/Down change the volume from anywhere
+    // (the slider itself answers to all four arrows once it has the focus, Tab).
+    Keys.onUpPressed: slider.nudge(1)
+    Keys.onDownPressed: slider.nudge(-1)
 
     Material {
         anchors.fill: parent
@@ -49,6 +56,7 @@ FocusScope {
                 width: Tokens.menuIconSize + Tokens.spacingSm
                 height: parent.height
                 activeFocusOnTab: true
+                focus: true
                 Accessible.role: Accessible.Button
                 Accessible.name: Audio.muted ? qsTr("Unmute") : qsTr("Mute")
                 Accessible.onPressAction: Audio.toggleMute()
@@ -63,8 +71,8 @@ FocusScope {
                     anchors.fill: parent
                     radius: Tokens.radiusControl
                     color: "transparent"
-                    border.width: muteButton.activeFocus ? Tokens.controlFocusRing : 0
-                    border.color: Appearance.colors.accent
+                    border.width: muteButton.activeFocus ? Tokens.controlFocusOutline : 0
+                    border.color: Appearance.focusRingColor
                 }
 
                 Icon {
@@ -86,7 +94,6 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
                 accessibleName: qsTr("Output volume")
                 value: Audio.volume
-                focus: true
                 onMoved: v => Audio.setVolume(v)
             }
         }

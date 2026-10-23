@@ -10,8 +10,8 @@
 # drag      (2) a window dragged to the "+" Space tile of its output, on each output, changes Space.
 # loop      (3) 10x open/close, alternating Esc and IPC close, focus alternating between outputs, the pointer on the OTHER
 #               output: after each close the previous window is the active one and gets the keys.
-# arrows    (2b) the first arrow key selects the window active at open (any output), the next crosses to the other output's
-#               window, Return focuses it: it alone gets the typed keys.
+# arrows    (2b) the window active at open carries the highlight; the first arrow moves to its neighbour on the other output,
+#               the opposite arrow returns, Return focuses the selection: it alone gets the typed keys.
 # desktop   (3c) a Desktop tile chosen on either output: that Desktop is shown and its window holds the keyboard.
 # interrupt (3d) a Desktop switch while open (the plugin ends its overview): same close, the Desktop now shown has the keyboard.
 # paths     (3b) every close path (Esc, IPC close, toggle, backdrop click, Apps / Search / the switcher opening through
@@ -229,13 +229,11 @@ t_hover() {
   wait_for 5 overview_closed
 }
 
-# tile_x <output> <index>: output-relative x of the index-th tile of the Spaces bar (the Spaces, then "+"); tiles are 168 px
-# wide with a pitch of 181 px, centred on the output.
-tile_x() {
-  local w n
-  w=$(status | jq -r --arg n "$1" '.screens[] | select(.name == $n) | .width')
-  n=$(status | jq -r --arg n "$1" '.screens[] | select(.name == $n) | .spaces | length + 1')
-  echo $(( w / 2 + (2 * $2 - (n - 1)) * 181 / 2 ))
+# tile_pos <output> <index>: "x y" (output-relative) of the middle of the index-th Desktop tile (the Desktops, then "+"), as
+# the shell lays it out right now (`overview status` tileRects). A copy of the layout constants here went stale (the tiles
+# are 138 px wide with a 32 px gap, "+" sits at the right edge) and made every Desktop-tile click miss (audit GF-019).
+tile_pos() {
+  status | jq -r --arg n "$1" --argjson i "$2" '.screens[] | select(.name == $n) | .tileRects[$i] | "\((.x + .w / 2) | floor) \((.y + (if .plus then .h / 2 else .h * 0.35 end)) | floor)"'
 }
 window_space() { "$root/scripts/nestctl" clients -j | jq -r --arg t "$1" '.[] | select(.title == $t) | .workspace.id'; }
 
@@ -249,7 +247,7 @@ move_to_space() { # <title> <workspace id>: without following (nested instance, 
 # Each output gets a second Space (a spare window C1/C2 parked there); then A and B are dragged to it while the keyboard
 # sits on the other output's chrome. The window must change Space.
 t_drag() {
-  local t other o x y spare tgt before after
+  local t other o x y tx ty spare tgt before after
   # Known placement whatever the earlier tests left: A and B on their output's own Space, the spares on a second one.
   ensure_spares
   for t in A B; do
@@ -261,7 +259,8 @@ t_drag() {
     [[ $tgt -ge 0 ]] || { check "drag: $o has a second Space tile" 1; continue; }
     before=$(window_space "$t")
     focus "$other"
-    ptr output "$o" abs "$x" "$y" sleep 400 down sleep 300 drag "$(tile_x "$o" "$tgt")" 88 sleep 500 up
+    read -r tx ty <<<"$(tile_pos "$o" "$tgt")"
+    ptr output "$o" abs "$x" "$y" sleep 400 down sleep 300 drag "$tx" "$ty" sleep 500 up
     sleep 1.5
     after=$(window_space "$t")
     [[ $before != "$after" ]]; check "drag: $t on $o dropped on another Space tile changed Space ($before -> $after)" $?
@@ -391,11 +390,12 @@ selected_title() {
   status | jq -r '[.screens[] | .selected as $s | .windows[] | select($s != "" and .address == $s) | .title] | first // ""'
 }
 
-# arrows: the first arrow key selects the window active at open, wherever it is (the holder chrome may be on the other
-# output); the next one crosses to the window on the output lying that way; Return focuses the selection, which alone gets
-# the typed keys.
+# arrows (App Exposé model, docs/specs/overview.md): the window active at open carries the highlight; the first arrow key
+# moves from it to its neighbour (the window on the output lying that way; the holder chrome may be on the other output),
+# the next one stays on the last output's window, the opposite arrow returns to the first window, Return focuses the
+# selection, which alone gets the typed keys.
 t_arrows() {
-  local first second dir back n=0 sel
+  local first second dir back n=0 sel marked
   for pair in "A B Right Left" "B A Left Right"; do
     read -r first second dir back <<<"$pair"
     for o in $OUT_A $OUT_B; do
@@ -403,16 +403,15 @@ t_arrows() {
       focus "$first"
       ptr output "$o" abs $park; sleep 0.3
       open_overview
+      marked=$(status | jq -r '[.screens[] | .marked as $m | .windows[] | select($m != "" and .address == $m) | .title] | first // ""')
+      [[ $marked == "$first" ]]; check "arrows: pointer on $o, $first active at open: it carries the highlight (marked=$marked)" $?
+      [[ -z $(selected_title) ]]; check "arrows: nothing is selected before the first key (selected=$(selected_title))" $?
       kb -k "$dir"
       sleep 0.4
       sel=$(selected_title)
-      [[ $sel == "$first" ]]; check "arrows: pointer on $o, $first active at open: first $dir selects $first (selected=$sel)" $?
+      [[ $sel == "$second" ]]; check "arrows: first $dir moves from $first to its neighbour $second (selected=$sel)" $?
       kb -k "$dir"
       sleep 0.4
-      sel=$(selected_title)
-      [[ $sel == "$second" ]]; check "arrows: $dir again crosses to $second (selected=$sel)" $?
-      kb -k "$dir"
-      sleep 0.3
       sel=$(selected_title)
       [[ $sel == "$second" ]]; check "arrows: $dir past the last output stays on $second (selected=$sel)" $?
       kb -k "$back"
@@ -458,7 +457,7 @@ ensure_spares() {
 # desktop: a Desktop tile chosen with the pointer: that Desktop is shown and its window holds the keyboard, whichever
 # window was active at open.
 t_desktop() {
-  local prev tgt o ws idx x n=0
+  local prev tgt o ws idx x y n=0
   ensure_spares
   for prev in A B; do
     for tgt in C1 C2; do
@@ -470,8 +469,8 @@ t_desktop() {
       open_overview
       idx=$(status | jq -r --arg n "$o" --argjson ws "$ws" '[.screens[] | select(.name == $n) | .spaces[] | .id] | index($ws) // -1')
       if [[ $idx -lt 0 ]]; then check "desktop: $o shows a tile for Desktop $ws" 1; ipc overview close >/dev/null; wait_for 5 overview_closed; continue; fi
-      x=$(tile_x "$o" "$idx")
-      ptr output "$o" abs "$x" 88 sleep 400 click
+      read -r x y <<<"$(tile_pos "$o" "$idx")"
+      ptr output "$o" abs "$x" "$y" sleep 400 click
       wait_for 5 overview_closed
       sleep 0.6
       keys_arrive "$tgt" "D$n$RANDOM"; check "desktop: tile $ws on $o chosen, $prev active at open: $tgt holds the keyboard" $?

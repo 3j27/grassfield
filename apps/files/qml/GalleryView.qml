@@ -320,8 +320,8 @@ FocusScope {
                 radius: Tokens.radiusControl
                 color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                 visible: cell.selected || drop.containsDrag
-                border.width: drop.containsDrag ? Tokens.filesDropBorder : cell.selected && strip.activeFocus ? Tokens.controlFocusRing : 0
-                border.color: Appearance.colors.accent
+                border.width: drop.containsDrag ? Tokens.filesDropBorder : cell.selected && strip.activeFocus ? Tokens.controlFocusOutline : 0
+                border.color: Appearance.focusRingColor
             }
 
             FileIcon {

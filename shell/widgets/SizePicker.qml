@@ -46,7 +46,7 @@ Row {
                 anchors.fill: parent
                 radius: Tokens.radiusControl
                 color: segment.selected ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                border.width: segment.activeFocus ? Tokens.controlFocusRing : 0
+                border.width: segment.activeFocus ? Tokens.controlFocusOutline : 0
                 border.color: segment.selected ? Appearance.colors.text : Appearance.colors.accent
             }
 

@@ -7,7 +7,9 @@
   },
   "accessibility": {
     "reduceTransparency": false,
-    "reduceMotion": false
+    "reduceMotion": false,
+    "increaseContrast": false,
+    "textSize": 1
   },
   "dock": {
     "pinned": [

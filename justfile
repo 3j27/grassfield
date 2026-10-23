@@ -50,6 +50,10 @@ check-secrets:
 check-scripts:
     for f in scripts/dev/*.sh; do bash -n "$f"; done
 
+# Omarchy private paths, commands and units Grassfield relies on (docs/compat.md); --require fails without Omarchy.
+check-omarchy *args:
+    scripts/dev/omarchy-compat.sh {{args}}
+
 # Offscreen unit tests (QML TestCase) and compositor unit tests when built.
 test:
     scripts/dev/test.sh

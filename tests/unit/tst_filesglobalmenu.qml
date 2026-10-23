@@ -38,6 +38,16 @@ TestCase {
         id: fakeApp
         property int folderStyleRevision: 0
         property int tagRevision: 0
+        // Everything the menu binds to, so that a real binding error is never hidden among fixture warnings (GF-073).
+        property bool canUndo: false
+        property bool canRedo: false
+        property bool canPaste: false
+        property bool galleryInfo: false
+        property bool sortDescending: false
+        property bool foldersFirst: true
+        property bool showHidden: false
+        property bool devSession: false
+        property var places: ({trashEmpty: true})
         function folderStyleUnavailable(urls: var): string {
             return "";
         }
@@ -55,7 +65,7 @@ TestCase {
     QtObject {
         id: fakeWin
         property var app: fakeApp
-        property var tab: ({})
+        property var tab: ({canBack: false, canForward: false, segments: []})
         property var folder: folder
         property var tabs: []
         property int currentIndex: 0

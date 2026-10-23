@@ -338,6 +338,29 @@ TestCase {
         compare(Minimized.finiteRect(null), null);
     }
 
+    // Reduce Motion for Hyprland's own animations (A11Y-06): the normal values are the config's (looknfeel.lua), the reduced
+    // ones are crossfades of at most 100 ms (speed 1) and no move animation; nothing outside the fixed table is interpolated.
+    function test_motionCallMatchesTheConfigAndReducesToCrossfades() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../config/hypr/grassfield/looknfeel.lua"), false);
+        xhr.send();
+        const lua = xhr.responseText;
+        for (const l of Minimized.motionLeaves.normal) {
+            const style = l.style ? ", style = \"" + l.style + "\"" : "";
+            const line = "hl.animation({ leaf = \"" + l.leaf + "\", enabled = true, speed = " + l.speed + ", bezier = \"" + l.bezier + "\"" + style + " })";
+            verify(lua.indexOf(line) >= 0, "looknfeel.lua has: " + line);
+        }
+        const reduced = Minimized.motionCall(true);
+        verify(reduced.startsWith("function() pcall(hl.animation, "), reduced);
+        verify(reduced.indexOf("leaf = \"windowsIn\", enabled = true, speed = 1, bezier = \"gfStandard\", style = \"popin 100%\"") >= 0);
+        verify(reduced.indexOf("leaf = \"workspaces\", enabled = true, speed = 1, bezier = \"gfStandard\", style = \"fade\"") >= 0);
+        verify(reduced.indexOf("leaf = \"windowsMove\", enabled = false") >= 0);
+        for (const l of Minimized.motionLeaves.reduced)
+            verify(l.speed <= 1, l.leaf + " is at most 100 ms");
+        compare(Minimized.motionCall(false).indexOf("slide") >= 0, true, "normal restores the Spaces slide");
+        compare(Minimized.motionCall(false).indexOf("popin 94%") >= 0, true);
+    }
+
     function test_isZoomed() {
         compare(Minimized.isZoomed({fullscreen: 1}), true);
         compare(Minimized.isZoomed({fullscreen: 2}), false);

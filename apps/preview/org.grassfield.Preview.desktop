@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Preview
+Name[fr]=Visionneuse
 Comment=View images, PDF documents, text, audio and video
+Comment[fr]=Afficher des images, des documents PDF, du texte, de l’audio et de la vidéo
 Exec=grassfield-preview %U
 Icon=org.grassfield.Preview
 Terminal=false

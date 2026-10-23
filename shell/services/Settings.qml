@@ -27,6 +27,8 @@ Singleton {
     readonly property string materialProfile: store.materialProfile
     readonly property bool reduceTransparency: store.data.accessibility.reduceTransparency
     readonly property bool reduceMotion: store.data.accessibility.reduceMotion
+    readonly property bool increaseContrast: store.data.accessibility.increaseContrast === true
+    readonly property real textSize: store.textSize
     readonly property var dockPinned: store.dockPinned
     readonly property int dockSize: store.dockSize
     // Metrics of the Dock at the stored tile size (what the others reserve around it; the Dock itself follows a live resize).
@@ -119,6 +121,14 @@ Singleton {
 
     function setReduceMotion(value: bool): void {
         store.setReduceMotion(value);
+    }
+
+    function setIncreaseContrast(value: bool): void {
+        store.setIncreaseContrast(value);
+    }
+
+    function setTextSize(value: real): void {
+        store.setTextSize(value);
     }
 
     function setDockAutohide(value: bool): void {

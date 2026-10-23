@@ -273,6 +273,25 @@ Singleton {
             console.info("grassfield: compositor setting stagesEnabled =", root.stagesFlag);
     }
 
+    // Reduce Motion also shortens what Hyprland animates itself: window pop-in and the Spaces slide become crossfades
+    // (Minimized.motionCall). Applied when it turns on or off, at start, and after a config reload (which restores the
+    // config's own animations).
+    readonly property bool reduceMotion: Settings.reduceMotion
+    onReduceMotionChanged: pushMotion()
+
+    function pushMotion(): void {
+        dispatchRequest(Minimized.motionCall(root.reduceMotion));
+    }
+
+    Connections {
+        target: Hyprland
+
+        function onRawEvent(event: HyprlandEvent): void {
+            if (event.name === "configreloaded" && root.reduceMotion)
+                root.pushMotion();
+        }
+    }
+
     onTitlebarDoubleClickChanged: pushPluginConfig()
     onMinimizeEffectChanged: pushPluginConfig()
     onTilingConfigChanged: pushPluginConfig()
@@ -327,6 +346,8 @@ Singleton {
     Component.onCompleted: {
         pushPluginConfig();
         pushStagesFlag();
+        if (root.reduceMotion)
+            pushMotion();
     }
 
     function isMinimized(toplevel: var): bool {

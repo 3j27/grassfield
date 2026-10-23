@@ -51,6 +51,14 @@
         },
         "reduceMotion": {
           "type": "boolean"
+        },
+        "increaseContrast": {
+          "type": "boolean"
+        },
+        "textSize": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1.3
         }
       }
     },

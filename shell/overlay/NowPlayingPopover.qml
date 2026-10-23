@@ -17,6 +17,9 @@ FocusScope {
     Accessible.name: qsTr("Now Playing")
 
     Keys.onEscapePressed: Popups.close()
+    // Left/Right (a control that has no use for them): the previous or next status menu.
+    Keys.onLeftPressed: Popups.stepMenu(-1)
+    Keys.onRightPressed: Popups.stepMenu(1)
     onAliveChanged: {
         if (!root.alive)
             Qt.callLater(Popups.close);

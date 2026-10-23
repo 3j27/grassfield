@@ -151,6 +151,33 @@ function overviewFocusCall(target, id) {
     return guardedPluginCall("overview_focus", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
 }
 
+// Reduce Motion for the animations Hyprland itself runs (A11Y-06; the shell cannot draw them): window opening and closing
+// (pop-in) and the Spaces slide become quick crossfades of at most 100 ms (speed 1 = 100 ms), window moves stop animating.
+// `normal` mirrors config/hypr/grassfield/looknfeel.lua (tests/unit/tst_minimized.qml checks the two agree); the call is a
+// Lua function sent through the same guarded channel as the plugin verbs, with `pcall` around each leaf so that a Hyprland
+// without the call (or a changed config API) does nothing. Nothing in it comes from outside.
+var motionLeaves = {
+    normal: [
+        {leaf: "windowsIn", speed: 2, bezier: "gfDecelerate", style: "popin 94%"},
+        {leaf: "windowsOut", speed: 1.2, bezier: "gfAccelerate", style: "popin 96%"},
+        {leaf: "windowsMove", speed: 3, bezier: "gfDecelerate"},
+        {leaf: "workspaces", speed: 4, bezier: "gfDecelerate", style: "slide"}
+    ],
+    reduced: [
+        {leaf: "windowsIn", speed: 1, bezier: "gfStandard", style: "popin 100%"},
+        {leaf: "windowsOut", speed: 1, bezier: "gfStandard", style: "popin 100%"},
+        {leaf: "windowsMove", speed: 1, bezier: "gfStandard", enabled: false},
+        {leaf: "workspaces", speed: 1, bezier: "gfStandard", style: "fade"}
+    ]
+};
+
+function motionCall(reduced) {
+    const leaves = reduced ? motionLeaves.reduced : motionLeaves.normal;
+    const calls = leaves.map(l => "pcall(hl.animation, { leaf = \"" + l.leaf + "\", enabled = " + (l.enabled === false ? "false" : "true")
+        + ", speed = " + l.speed + ", bezier = \"" + l.bezier + "\"" + (l.style ? ", style = \"" + l.style + "\"" : "") + " })");
+    return "function() " + calls.join("; ") + " end";
+}
+
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).

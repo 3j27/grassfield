@@ -1,0 +1,36 @@
+[Unit]
+Description=Grassfield low-battery warnings
+Documentation=file:///usr/share/doc/grassfield/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+ConditionPathExistsGlob=/sys/class/power_supply/BAT*
+
+[Service]
+Type=simple
+Slice=session.slice
+ExecStart=/usr/lib/grassfield/grassfield-battery-watch
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=5
+# Hardening: it reads sysfs and talks to the session bus, nothing else.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+MemoryMax=64M
+TasksMax=8
+
+[Install]
+WantedBy=graphical-session.target
