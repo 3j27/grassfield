@@ -79,9 +79,23 @@ Window {
         onTriggered: root.close()
     }
 
+    // ADR-0015: the window draws its own chrome (the titlebar style of grassfield-ui); the apps' tagger
+    // (apps/windowchrome.h) names its role for the compositor, whose plugin then draws no titlebar on it.
+    property string gfChromeRole: "info"
+
+    UnifiedToolbar {
+        id: chrome
+        width: parent.width
+        window: root
+        style: "titlebar"
+        title: root.title
+        doubleClickAction: root.app.titlebarDoubleClick
+    }
+
     FocusScope {
         id: panel
         anchors.fill: parent
+        anchors.topMargin: chrome.height
         Accessible.role: Accessible.Dialog
         Accessible.name: root.title
 

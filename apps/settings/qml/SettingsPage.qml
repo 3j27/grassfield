@@ -1,7 +1,7 @@
 import QtQuick
 import Grassfield.Ui
 
-// Scrolling detail pane: a large title, then groups stacked with groupGap.
+// Scrolling detail pane: the groups stacked with groupGap. The title is the window toolbar's (ADR-0015), not repeated here.
 Flickable {
     id: root
 
@@ -21,17 +21,5 @@ Flickable {
         y: Tokens.spacingLg
         width: Math.min(Tokens.settingsContentMaxWidth, root.width - 2 * Tokens.spacingLg)
         spacing: Tokens.settingsGroupGap
-
-        Text {
-            textFormat: Text.PlainText
-            width: parent.width
-            text: root.title
-            color: Appearance.colors.text
-            font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.settingsPageTitleSize
-            font.weight: Tokens.typographyMenuBoldWeight
-            Accessible.role: Accessible.Heading
-            Accessible.name: root.title
-        }
     }
 }

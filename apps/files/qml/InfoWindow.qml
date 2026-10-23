@@ -87,8 +87,22 @@ Window {
         {label: qsTr("You can:"), value: root.info.writable ? qsTr("Read & Write") : root.info.readable ? qsTr("Read only") : qsTr("No Access")}
     ]
 
+    // ADR-0015: the window draws its own chrome (the titlebar style of grassfield-ui); the apps' tagger
+    // (apps/windowchrome.h) names its role for the compositor, whose plugin then draws no titlebar on it.
+    property string gfChromeRole: "info"
+
+    UnifiedToolbar {
+        id: chrome
+        width: parent.width
+        window: root
+        style: "titlebar"
+        title: root.title
+        doubleClickAction: root.app.titlebarDoubleClick
+    }
+
     Flickable {
         anchors.fill: parent
+        anchors.topMargin: chrome.height
         acceptedButtons: Qt.NoButton
         contentHeight: content.implicitHeight + 2 * Tokens.spacingLg
         boundsBehavior: Flickable.StopAtBounds

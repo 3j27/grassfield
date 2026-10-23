@@ -14,6 +14,17 @@ Window {
     // Section to open first (--section=<id> on the command line); "" opens Appearance.
     property string startSection: ""
     readonly property alias searchField: search
+    // ADR-0015: this window draws its own chrome (lights and toolbar below); the apps' tagger (apps/windowchrome.h)
+    // names its role for the compositor, whose plugin then draws no titlebar on it.
+    property string gfChromeRole: "settings"
+    // The title of the shown section (the toolbar's title; the page itself repeats nothing).
+    readonly property string sectionTitle: {
+        for (const e of root.sections) {
+            if (e.id === root.selectedId)
+                return e.title;
+        }
+        return qsTr("Appearance");
+    }
 
     readonly property var sections: [
         {id: "wifi", title: qsTr("Wi-Fi"), icon: "wifi-3", keywords: qsTr("wireless network internet networkmanager")},
@@ -173,10 +184,19 @@ Window {
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
+        // The window lights, in the corner of the sidebar (ADR-0015); the toolbar over the detail pane holds the title.
+        UnifiedToolbar {
+            id: sidebarToolbar
+            width: parent.width
+            window: root
+            showTitle: false
+            doubleClickAction: cfg.value("windows.titlebarDoubleClick")
+        }
+
         Rectangle {
             id: searchBox
             x: Tokens.spacingMd
-            y: Tokens.spacingMd
+            y: sidebarToolbar.height
             width: parent.width - 2 * Tokens.spacingMd - 1
             height: Tokens.settingsSearchHeight
             radius: Tokens.radiusControl
@@ -357,11 +377,20 @@ Window {
         width: parent.width - sidebar.width
         height: parent.height
 
+        UnifiedToolbar {
+            id: detailToolbar
+            width: parent.width
+            window: root
+            showControls: false
+            title: root.sectionTitle
+            doubleClickAction: cfg.value("windows.titlebarDoubleClick")
+        }
+
         Rectangle {
             id: banner
             visible: root.bannerText !== ""
             x: Tokens.spacingLg
-            y: Tokens.spacingLg
+            y: detailToolbar.height + Tokens.spacingLg
             width: parent.width - 2 * Tokens.spacingLg
             height: visible ? bannerLabel.implicitHeight + 2 * Tokens.spacingMd : 0
             radius: Tokens.radiusMenu
@@ -390,7 +419,7 @@ Window {
         Loader {
             id: page
             anchors {
-                top: banner.visible ? banner.bottom : parent.top
+                top: banner.visible ? banner.bottom : detailToolbar.bottom
                 left: parent.left
                 right: parent.right
                 bottom: parent.bottom

@@ -20,6 +20,9 @@ Window {
     property bool infoOpen: false
     property bool slideshow: false
     property bool slideshowPaused: false
+    // ADR-0015: the window draws its own chrome (the unified toolbar below); the apps' tagger (apps/windowchrome.h) names
+    // its role for the compositor, whose plugin then draws no titlebar on it.
+    property string gfChromeRole: "viewer"
     readonly property int fileCount: win.backend.files.length
     readonly property bool canGoPrevious: win.current > 0
     readonly property bool canGoNext: win.current < win.fileCount - 1
@@ -240,16 +243,21 @@ Window {
 
     // ---- toolbar ---------------------------------------------------------------------------------
 
-    Item {
+    // The unified toolbar of grassfield-ui (ADR-0015): the lights, then the sidebar toggle, the two-line title block and the
+    // tools; its layer for a layout of its own holds them.
+    UnifiedToolbar {
         id: toolbar
         width: parent.width
         height: win.slideshow ? 0 : Tokens.previewToolbarHeight
         visible: !win.slideshow
         z: 2
+        window: win
+        showTitle: false
+        doubleClickAction: win.backend.titlebarDoubleClick
 
         ToolbarGroup {
             id: sidebarGroup
-            x: Tokens.spacingMd
+            x: toolbar.contentStart
             anchors.verticalCenter: parent.verticalCenter
             visible: win.hasSidebar
 

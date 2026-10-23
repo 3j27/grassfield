@@ -1417,10 +1417,6 @@
         <translation>Fichiers</translation>
     </message>
     <message>
-        <source>Toolbar</source>
-        <translation>Barre d’outils</translation>
-    </message>
-    <message>
         <source>Back</source>
         <translation>Précédent</translation>
     </message>

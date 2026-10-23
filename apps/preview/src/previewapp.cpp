@@ -144,18 +144,24 @@ void PreviewApp::readAppearance()
     bool dark = true;
     bool reduce = false;
     QString accent = QStringLiteral("multicolor");
+    QString doubleClick = QStringLiteral("zoom");
     QFile f(configFile());
     if (f.open(QIODevice::ReadOnly) && f.size() < 1024 * 1024) {
         const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
         dark = root.value(QStringLiteral("appearance")).toString() != QLatin1String("light");
         reduce = root.value(QStringLiteral("accessibility")).toObject().value(QStringLiteral("reduceMotion")).toBool(false);
+        // Same rule as the compositor plugin: anything but "minimize" and "none" is the default, "zoom".
+        const QString d = root.value(QStringLiteral("windows")).toObject().value(QStringLiteral("titlebarDoubleClick")).toString();
+        if (d == QLatin1String("minimize") || d == QLatin1String("none"))
+            doubleClick = d;
         // Accent colour: same names as ui/Grassfield/Ui/Accent.js; anything else reads as the default.
         const QString a = root.value(QStringLiteral("accent")).toObject().value(QStringLiteral("color")).toString();
         if (QStringList{QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("pink"), QStringLiteral("red"), QStringLiteral("orange"),
                         QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(a))
             accent = a;
     }
-    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor) {
+    if (dark != m_dark || reduce != m_reduceMotion || accent != m_accentColor || doubleClick != m_titlebarDoubleClick) {
+        m_titlebarDoubleClick = doubleClick;
         m_accentColor = accent;
         m_dark = dark;
         m_reduceMotion = reduce;

@@ -10,7 +10,8 @@ import "WindowActions.js" as Actions
 //   no items) and one over the content (showControls false).
 // style "titlebar": a 32-pt row with the lights and a centred title (Get Info, Customize Folder).
 //
-// Items: `leading` (default property, after the lights and before the title) and `trailing` (right-aligned). Empty
+// Items: `leading` (after the lights and before the title), `trailing` (right-aligned) and, for a layout of its own, the
+// default property (a layer over the whole toolbar). Empty
 // space is the window's drag area: a drag starts the compositor's interactive move (xdg_toplevel.move) and a double-click
 // does what `doubleClickAction` says (`windows.titlebarDoubleClick`: zoom, minimize or none).
 Item {
@@ -28,8 +29,11 @@ Item {
     property string doubleClickAction: "zoom"
     property bool canMinimize: true
     property string accessibleName: qsTr("Toolbar")
-    default property alias leading: leadingRow.data
+    // `leading` (after the lights, before the title) and `trailing` (right-aligned) are rows of items; anything else a host
+    // declares goes in `content`, a layer over the whole toolbar for a layout of its own (Preview's two-line title).
+    property alias leading: leadingRow.data
     property alias trailing: trailingRow.data
+    default property alias content: freeArea.data
 
     readonly property bool titlebarStyle: root.style === "titlebar"
     readonly property alias controls: lights
@@ -80,6 +84,11 @@ Item {
         window: root.window
         style: root.style
         canMinimize: root.canMinimize
+    }
+
+    Item {
+        id: freeArea
+        anchors.fill: parent
     }
 
     Row {

@@ -17,6 +17,8 @@ FocusScope {
     readonly property var places: root.app.places
     readonly property int currentRow: root.tab ? root.places.rowForUrl(root.tab.url) : -1
     property int keyRow: -1
+    // Space kept free at the top for the window lights (the toolbar drawn over it, ADR-0015).
+    property real topInset: 0
 
     Accessible.role: Accessible.List
     Accessible.name: qsTr("Sidebar")
@@ -87,7 +89,7 @@ FocusScope {
     ListView {
         id: list
         anchors.fill: parent
-        anchors.topMargin: Tokens.spacingSm
+        anchors.topMargin: root.topInset + Tokens.spacingSm
         anchors.leftMargin: Tokens.spacingSm
         anchors.rightMargin: Tokens.spacingSm + Tokens.appsBorderWidth
         model: root.places

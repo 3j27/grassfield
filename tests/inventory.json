@@ -194,6 +194,7 @@
  {"path": "scripts/dev/i18n-cmake-check.sh", "layer": "headless"},
  {"path": "tests/compositor/appmenu.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/chrome.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/compositor/client_chrome.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/click_focus.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/cursor_refresh.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/desktop_focus.sh", "layer": "nested", "runner": "bare"},

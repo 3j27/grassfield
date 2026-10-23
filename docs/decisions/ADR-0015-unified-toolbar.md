@@ -657,3 +657,80 @@ The owner asked for decisions without questions (2026-10-21, docs/STATE.md); the
   1. plugin parity: the tag rule, `requestMove` un-zoom, the minimize bridge for tagged windows, C2 behaviour;
   2. the grassfield-ui `WindowControls` / `UnifiedToolbar` components;
   3. F2b: sidebars and toolbars of Files, Settings and Preview.
+
+## Implementation: app side (2026-10-23, remediation wave 2) and the plugin work item
+Owner decision D-5 (accepted) and D-7 (window menu keyboard access plus app-drawn controls, A1 amended). The app side of
+option D is implemented; the plugin and session-config side is written down here as a work item for the compositor
+agent (the files are outside this slice).
+
+### Done (grassfield-ui and the apps)
+- **Tokens** `window.*` in `ui/tokens/tokens.json` (14, 9, 52, 25.75, 32, glyph and colour values equal to the plugin's
+  `Theme.hpp`); `tests/unit/tst_windowcontrols.qml` checks 52 / 14 / 9 / 25.75 and the geometry of both styles.
+- **`WindowControls`** (`ui/Grassfield/Ui/WindowControls.qml`, `WindowLight.qml`, `WindowGlyph.qml`): 14-pt lights, glyphs on
+  group hover, grey when the window is inactive (coloured again under the pointer), pressed state, disabled state,
+  hidden in full screen. Accessible buttons named Close, Minimize, Zoom, each with a press action that refuses a disabled
+  light (R12); not in the Tab chain (macOS); the keyboard routes are the shell's Window menu and Super+W, Super+M and
+  Super+Alt+F (bindings.lua).
+- **`UnifiedToolbar`** (`UnifiedToolbar.qml`): `unified` (52) and `titlebar` (32) styles, title, `leading` / `trailing` rows
+  and a free layer; empty space drags the window (`startSystemMove()` after Qt's drag threshold, decision "Dragging a zoomed
+  window" above) and a double-click follows `windows.titlebarDoubleClick` (`zoom`, `minimize`, `none`).
+- **Actions** (`WindowActions.js`) are plain xdg-toplevel requests made by Qt: close, `set_minimized`, and zoom.
+  - Zoom reads Qt's visibility only to pick the request: `showNormal()` when Qt believes the window is Maximized (always,
+    in the Grassfield session: the step 4 defect), `showMaximized()` otherwise. It never draws from that state.
+  - **Option(Alt)+click on the zoom light is true full screen** (`showFullScreen()`, and again to leave); the zoom glyph shows
+    the full-screen arrows while Alt is held over the group (REQ-ADR0002-6, app-drawn controls).
+- **Tag helper** `apps/windowchrome.h`: an application event filter tags each window that declares
+  `property string gfChromeRole` (`browser`, `settings`, `viewer`, `info`) with `xdg_toplevel_tag_manager_v1.set_toplevel_tag`
+  when its toplevel exists (`surfaceRoleCreated()`), before the first commit. One Qt private header
+  (`QtGui/qpa/qplatformwindow_p.h`) and the three requests written by hand on libwayland-client; no generated code. It logs
+  `grassfield: window tagged '<role>' (xdg-toplevel-tag)` or `no xdg-toplevel-tag manager`. Build: `Qt6::GuiPrivate` and
+  `wayland-client` (CMake), the include paths in each `build-direct.sh`. Packaging must list the libwayland-client
+  dependency (makedepends for the Qt private headers come with qt6-base).
+- **Adoption (Q3):** Files (`browser`: lights in a toolbar over the sidebar, title and items in the content toolbar; Get Info
+  and Customize Folder in the `titlebar` style, role `info`), Settings (`settings`: lights over the sidebar, the section
+  title in the content toolbar; the in-page title is gone), Preview main window (`viewer`: its two-line title block and tools
+  kept, in the toolbar's free layer). Glance keeps `decorate = false`. KIO and widget dialogs set no tag.
+- `windows.titlebarDoubleClick` is read live by each app (Files and Preview in C++ like their appearance, Settings from its
+  store).
+
+### Plugin work item (compositor-engineer; also in docs/specs/compositor.md "Plugin work item: client chrome")
+Until it lands a tagged window still gets the plugin strip above the app's own toolbar (two chromes). Items P1-P7 plus the
+session config S1-S3 and the shell item H1.
+- **P1 predicate.** `isClientChrome(window)`: the window's Hyprland tags hold `grassfield-client-chrome` (the dynamic tag
+  prints with a `*`; compare without it). `Titlebar::shouldShow()` returns false for it. Re-evaluated on `window.updateRules`
+  (main.cpp:84). Never `decorate = false` (it drops the border and the shadow, spike step 2).
+- **P2 capability.** Feature `client-chrome` added to the gfc/1 list (additive, ADR-0007), advertised only when P1 is
+  registered.
+- **P3 Stages band.** `core/Stages.cpp:486-489` and `Stages.hpp:49` use P1: a tagged window has band 0.
+- **P4 `requestMove`.** For tagged windows the plugin handles `CXDGToplevelResource::m_events.requestMove`: zoomed window
+  (`FSMODE_MAXIMIZED`) restores the remembered box, places it so the grab point keeps its horizontal ratio and the toolbar row
+  stays under the pointer, then starts the move (FR8 for the app-drawn row).
+- **P5 minimize bridge.** For tagged windows, `stateChanged` with `requestsMinimize` true runs the existing minimize path
+  (the same as the titlebar button, FR6: `minimize-request` to the shell, animation, `special:minimized`). Hyprland does
+  nothing on its own (spike step 5).
+- **P6 Option+click zoom on the plugin's own titlebar** (REQ-ADR0002-6, plugin part): the green button released with Alt held
+  toggles `FSMODE_FULLSCREEN` (menu bar hidden by the shell as in any full screen) instead of `FSMODE_MAXIMIZED`; while Alt is
+  held over the group its glyph is the full-screen arrows. Tested in `tests/compositor/titlebar_geometry.sh`-based
+  scenarios (a new case in `zoom_restore.sh` with `scripts/dev/keys.sh` holding Alt, or `ZoomOption` gtest).
+- **P7 one token source.** `ui/tools/gen-tokens.py` also writes the plugin's light constants (`kButtonDiameter`,
+  `kButtonSpacing`, `kTitlebarHeight`, `kButtonInsetLeft`, colours, glyph ratios) from `window.*`, or a GTest compares
+  `Theme.hpp` with `tokens.json` (ADR test plan, "generated light constants equal what the titlebar draws").
+- **S1 session rule** (`config/hypr/grassfield/windows.lua`, `--verify-config` accepted the keys in the spike):
+  `hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })`.
+- **S2 maximize exemption (Q4):** `gf-no-maximize-event` becomes `match = { class = ".*", xdg_tag = "negative:.+" }` so a
+  tagged window's zoom request is honoured.
+- **S3 radius (Q5):** unified windows keep the global 26; windows of role `info` (titlebar style) get 12:
+  `match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 12`.
+- **H1 Overview band (shell, with P3):** `shell/overview/OverviewWindow.qml:105-107` and `:131` use band 0 for windows whose
+  Hyprland `tags` hold `grassfield-client-chrome*` when `client-chrome` is advertised; it must land with P1/P3 so that the
+  shell's layout and the plugin's drawing agree.
+- **C2 behaviour:** without the plugin the app draws its lights and the minimize light should be greyed
+  (`WindowControls.canMinimize`); the shell-written capabilities file that feeds it (Q4 b) is not part of this slice, so the
+  light stays active and a press without the plugin has no effect (spike step 6).
+- **Tests:** `tests/compositor/client_chrome.sh` (assertions 1-9 and which depend on P*/S*, in its header); GTests for P1-P3,
+  P5, P7; `tests/compositor/soak.sh` with the Settings app mapped.
+
+### Not verified here (no nested session)
+The tag helper against a live Hyprland (the log line above), every visual state, hover glyphs, AT-SPI exposure with a screen
+reader (the unit test checks the Accessible properties and press actions only), the TapHandler double-tap in a real session
+(Qt's synthetic test events carry no timestamps), and `client_chrome.sh` itself.
