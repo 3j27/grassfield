@@ -3,6 +3,7 @@
 #include "autoappearance.h"
 
 #include "filelogic.h"
+#include "launchguard.h"
 #include "foldermodel.h"
 #include "folderstylelogic.h"
 #include "placesmodel.h"
@@ -419,11 +420,37 @@ QUrl FilesApp::resolveLocation(const QString &text, const QUrl &base) const
 
 void FilesApp::open(const QList<QUrl> &urls)
 {
-    if (!urls.isEmpty() && launchingBlocked()) {
+    // macOS Gatekeeper model (GF-070, DT-10): opening never runs a program, a script or an app launcher; they are refused
+    // here, before KIO sees them, whatever KIO would do. Decided before the test switch below so a scripted test sees it.
+    QList<QUrl> allowed;
+    QString refusedName;
+    LaunchGuard::Verdict refusedKind = LaunchGuard::Verdict::Open;
+    int refused = 0;
+    for (const QUrl &url : urls) {
+        const LaunchGuard::Verdict v = LaunchGuard::verdict(LaunchGuard::inspect(url));
+        if (v == LaunchGuard::Verdict::Open) {
+            allowed << url;
+            continue;
+        }
+        qInfo("grassfield-files: open refused (%s)", v == LaunchGuard::Verdict::RefuseLauncher ? "app launcher" : "program or script");
+        if (refused++ == 0) {
+            refusedName = url.fileName();
+            refusedKind = v;
+        }
+    }
+    if (refused == 1 && refusedKind == LaunchGuard::Verdict::RefuseLauncher)
+        emit operationFailed(tr("“%1” was not opened: it is an app launcher, and Files never starts apps from a folder. Open apps from the Dock, Apps or Search.").arg(refusedName));
+    else if (refused == 1)
+        emit operationFailed(tr("“%1” was not opened: it is a program or script, and Files never runs programs from a folder. To run it on purpose, use a terminal.").arg(refusedName));
+    else if (refused > 1)
+        emit operationFailed(tr("%1 items were not opened: Files never runs programs, scripts or app launchers from a folder.").arg(refused));
+    if (allowed.isEmpty())
+        return;
+    if (launchingBlocked()) {
         emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
         return;
     }
-    for (const QUrl &url : urls) {
+    for (const QUrl &url : std::as_const(allowed)) {
         auto *job = new KIO::OpenUrlJob(url, this);
         attachDelegate(job);
         // Never run programs or scripts from the file manager: they open in their associated app.

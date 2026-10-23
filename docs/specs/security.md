@@ -237,6 +237,35 @@ after; mutants removing a refusal fail it), `tests/security/lock_surfaces.sh` (s
 close-on-lock, IPC routes, screen corners, the polkit sheet; mutation self-test). Nested (bare, outside the sandbox):
 `tests/security/lock_privacy.sh` step `privacy` tries every surface over the lock and checks the captures (DT-08).
 
+## Files never runs what it opens (GF-070, SEC-12, DT-10)
+macOS model (Gatekeeper): double-clicking a downloaded app, script or launcher does not run it; macOS says it was not
+opened, and only a deliberate "Open Anyway" in System Settings runs it. Grassfield Files decides itself, before KIO
+(`KIO::OpenUrlJob::setRunExecutables(false)` documents executables but not every `.desktop` case; KIO's source is not on
+the host): `apps/files/src/launchguard.{h,cpp}` `LaunchGuard::verdict(inspect(url))` for every item `FilesApp::open`
+gets (Return, double-click, File > Open, the context menu), before the scripted-test switch:
+- Refused, "app launcher": a desktop entry (named `*.desktop` / `*.kdelnk`, or of type `application/x-desktop`), with or
+  without the permission bit, wherever it is, unless it is `Type=Link` to an http(s) URL with a host (a web link, like a
+  `.webloc`: KIO opens the browser) or a folder's `.directory`. `Type=Application`, `Service`, a missing or unknown Type,
+  an unreadable file and a link to a file or another scheme are refused (fail closed).
+- Refused, "program or script": an executable regular file whose type is a program or script (shared-mime-info:
+  `application/x-executable` and its sub-classes, scripts and AppImages included; `x-pie-executable`; `x-sharedlib`),
+  or that starts with `#!` or the ELF magic; Windows programs (`.exe`, `.msi`, …) even without the permission bit (their
+  handler, Wine, would run them).
+- Opened as before: folders, documents (also with the permission bit: every file of a FAT/NTFS volume has it), scripts
+  without the permission bit (text, in their editor, as KIO and macOS do), remote items (KIO never runs remote programs).
+- The user sees one banner: "“t.desktop” was not opened: it is an app launcher, and Files never starts apps from a folder.
+  Open apps from the Dock, Apps or Search." (programs: "… To run it on purpose, use a terminal."); the journal gets
+  `grassfield-files: open refused (<kind>)`. No "Open Anyway" in Files, on purpose: Grassfield has no signed-app notion to
+  base it on, apps start from the Dock, Apps and Search, and a program the user trusts runs from a terminal. "Open With"
+  is unchanged: it opens the item WITH the chosen app (a launcher in a text editor), it never runs the item.
+- The desktop already never runs `.desktop` files (`DesktopFiles.qml`, DT-11). The shell's `gio open` / `xdg-open` paths
+  (Search results, Dock stacks) hand files to their MIME handler; not changed here.
+Tests: `tests/unit/files/tst_launchguard.cpp` (verdicts; DT-10 on real files: `t.desktop` executable and not,
+`Invoice.pdf.desktop`, web and file links, an unreadable entry, scripts with and without the bit, a copied `/usr/bin/true`
+and a symlink to it, an `.exe` stub, a folder), nested `tests/apps/files_dt10.sh` (bare: pass 1 with the launch switch
+on, four "open refused" and nothing reaching the launch path; pass 2 without it, the marker the launchers would create
+never appears).
+
 ## Upstream base (GF-031)
 Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0` (installed
 4.0.4 = `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`, byte-identical to `/usr/share/omarchy/shell/plugins/lock/Service.qml`):
