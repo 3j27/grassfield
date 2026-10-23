@@ -918,8 +918,11 @@ Singleton {
             root.toggleCenter("");
         }
 
+        // Test hook: refused outside a dev session (VisualFixtures.dev, SEC-04: another process must not silence
+        // notifications, security notices included, behind the user's back). The user's switch is Quick Settings.
         function dnd(on: bool): void {
-            root.setDnd(on);
+            if (VisualFixtures.dev)
+                root.setDnd(on);
         }
 
         // Test hook (no pointer in the nested session): runs an action of the newest live
@@ -928,8 +931,10 @@ Singleton {
             return root.hookInvoke(actionId);
         }
 
-        // Test hook: one-line state.
+        // Test hook: one-line state (dev session only).
         function status(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             return "server=" + root.serverState + " history=" + root.count + " banners=" + root.bannerCount
                 + " dnd=" + root.dnd + " center=" + root.centerOpen + " keyboard=" + (root.centerOpen && root.centerKeyboardScreen === root.centerScreen)
                 + " keyboardOn=" + (root.centerKeyboardScreen === "" ? "none" : root.centerKeyboardScreen);

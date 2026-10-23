@@ -45,17 +45,23 @@ Scope {
             Popups.open(kind, screen, 0, 0, "center", {});
         }
 
+        // Test hook: refused outside a dev session (VisualFixtures.dev), like every read-only hook below (SEC-04).
         function close(): void {
-            Popups.close();
+            if (VisualFixtures.dev)
+                Popups.close();
         }
 
         // Test hook (tests/visual/menubar-macos.sh): the open popup's kind and output, "" when none. Read-only.
         function openKind(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             return Popups.active ? Popups.kind + "@" + Popups.screenName : "";
         }
 
         // Test hook (tests/visual/menubar-status.sh): JSON {menusRight, status: [{name, x, w}]} of the bar of `screen`.
         function statusState(screen: string): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             const all = bars.instances;
             let bar = all.length > 0 ? all[0] : null;
             for (let i = 0; i < all.length; i++) {
@@ -67,6 +73,8 @@ Scope {
 
         // Test hook (tests/visual/menubar-macos.sh): the auto-hide state of an output's bar as JSON. Read-only.
         function autohide(screen: string): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             const all = bars.instances;
             let bar = all.length > 0 ? all[0] : null;
             for (let i = 0; i < all.length; i++) {
@@ -90,6 +98,8 @@ Scope {
         // Test hook (tests/integration/global_menus.sh): JSON with the shown window, the bridge state, the bar's
         // left titles and, when a bridge menu is open, its rows (submenus included), in output coordinates.
         function bridgeState(screen: string): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             const all = bars.instances;
             let bar = all.length > 0 ? all[0] : null;
             for (let i = 0; i < all.length; i++) {
@@ -128,24 +138,29 @@ Scope {
         return out;
     }
 
-    // Test hook: set Control Center values the way the UI does (persisted too).
+    // Test hook: set Control Center values the way the UI does (persisted too). Refused outside a dev session
+    // (VisualFixtures.dev, SEC-04): another process must not change the user's settings behind their back.
     IpcHandler {
         target: "controlcenter"
 
         function transparency(value: real): void {
-            Settings.setTransparency(value);
+            if (VisualFixtures.dev)
+                Settings.setTransparency(value);
         }
 
         function appearance(name: string): void {
-            Settings.setAppearance(name);
+            if (VisualFixtures.dev)
+                Settings.setAppearance(name);
         }
 
         function reduceTransparency(on: bool): void {
-            Settings.setReduceTransparency(on);
+            if (VisualFixtures.dev)
+                Settings.setReduceTransparency(on);
         }
 
         function reduceMotion(on: bool): void {
-            Settings.setReduceMotion(on);
+            if (VisualFixtures.dev)
+                Settings.setReduceMotion(on);
         }
     }
 

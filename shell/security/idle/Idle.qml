@@ -3,23 +3,47 @@ pragma ComponentBehavior: Bound
 // quattro), MIT License, Copyright (c) the Omarchy authors: IdleMonitor with respectInhibitors.
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.services
 import qs.security.lock
 import "IdleModel.js" as IdleModel
+import "../../services/DevGate.js" as DevGate
 
 // Idle handling (SEC7, ADR-0010): after T-10 s without input the screens dim, at T the session
 // locks (T = lock.idleMinutes, default 5, 0 = never). Any input undims and cancels. Wayland idle
 // inhibitors (video players, presentations) are respected by the compositor's idle-notify
-// protocol. Display power-off after the lock is out of scope for M2. Also hosts the
-// lock-before-sleep inhibitor.
+// protocol. Display power-off on the lock screen (D-4, macOS): IdleModel.DISPLAY_OFF_SECONDS without input while
+// locked switch the displays off (Hyprland DPMS); input or the unlock switch them on (the compositor also wakes them on
+// a key press or pointer motion: misc.key_press_enables_dpms / mouse_move_enables_dpms, looknfeel.lua, so a shell that
+// died meanwhile cannot leave the screen dark). Also hosts the lock-before-sleep inhibitor.
 Scope {
     id: root
 
     readonly property var timing: IdleModel.timings(Settings.lockIdleMinutes)
     property bool dimmed: false
+    // Dev session only (DevGate): the dev hooks answer. Never in a real session (GRASSFIELD_SESSION=1), SEC-03.
+    readonly property bool devHooks: DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
+    // Seconds without input on the lock screen before the displays go off; 0 = never. Off in the nested dev session
+    // unless a test sets it (`idle devDisplayOff <seconds>`): a dark nested output would spoil the lock tests' captures.
+    property int displayOffSeconds: devHooks ? 0 : IdleModel.DISPLAY_OFF_SECONDS
+    // This module switched the displays off (and must switch them on again).
+    property bool displayOff: false
+
+    function setDisplays(on: bool): void {
+        if (on === !displayOff)
+            return;
+        displayOff = !on;
+        console.info("grassfield-idle: displays " + (on ? "on" : "off (locked, no input)"));
+        const action = on ? "enable" : "disable";
+        Hyprland.dispatch(Hyprland.usingLua ? "hl.dsp.dpms({ action = \"" + action + "\" })" : "dpms " + (on ? "on" : "off"));
+    }
+
+    function updateDisplays(): void {
+        setDisplays(!(lockedMonitor.enabled && lockedMonitor.isIdle));
+    }
 
     function update(): void {
         if (monitor.enabled && monitor.isIdle) {
@@ -63,6 +87,16 @@ Scope {
             if (result !== "ok")
                 console.warn("grassfield-idle: idle lock not engaged:", result);
         }
+    }
+
+    // Input on the lock screen (respectInhibitors false: a video behind the lock is not being watched).
+    IdleMonitor {
+        id: lockedMonitor
+        enabled: Lock.locked && root.displayOffSeconds > 0
+        timeout: Math.max(1, root.displayOffSeconds)
+        respectInhibitors: false
+        onIsIdleChanged: root.updateDisplays()
+        onEnabledChanged: root.updateDisplays()
     }
 
     SleepInhibitor {
@@ -117,30 +151,44 @@ Scope {
     IpcHandler {
         target: "idle"
 
-        // Test hook: idle state as JSON.
+        // Test hook (dev only, else "refused"): idle state as JSON.
         function status(): string {
+            if (!root.devHooks)
+                return DevGate.REFUSED;
             return JSON.stringify({
                 enabled: monitor.enabled,
                 idle: monitor.isIdle,
                 dimmed: root.dimmed,
                 dimSeconds: root.timing.dimSeconds,
                 lockSeconds: root.timing.lockSeconds,
-                sleepInhibitor: sleepInhibitor.inhibiting
+                sleepInhibitor: sleepInhibitor.inhibiting,
+                sleepDegraded: sleepInhibitor.degraded,
+                sleepBudgetMs: sleepInhibitor.budgetMs,
+                displayOffSeconds: root.displayOffSeconds,
+                displayOff: root.displayOff
             });
         }
 
-        // Dev-only test hook (GRASSFIELD_DEV=1, nested): run the before-sleep ("before") or
-        // after-resume ("after") path without logind (tests/security/reload_locked.sh). The dev
-        // shell never holds a real inhibitor, so nothing is delayed. Refused otherwise.
+        // Dev hook (dev only, else "refused"): run the before-sleep ("before") or after-resume ("after") path without
+        // logind (tests/security/reload_locked.sh). The dev shell never holds a real inhibitor, so nothing is delayed.
         function devSleep(phase: string): string {
-            if (Quickshell.env("GRASSFIELD_DEV") !== "1")
-                return "refused";
+            if (!root.devHooks)
+                return DevGate.REFUSED;
             if (phase === "before")
                 sleepInhibitor.beforeSleep();
             else if (phase === "after")
                 sleepInhibitor.afterResume();
             else
                 return "unknown phase";
+            return "ok";
+        }
+
+        // Dev hook (dev only, else "refused"): display power-off delay on the lock screen, 0..600 s (0 = never), for
+        // tests/security/lock_privacy.sh `display-off`. Takes effect at the next lock.
+        function devDisplayOff(seconds: int): string {
+            if (!root.devHooks || seconds < 0 || seconds > 600)
+                return DevGate.REFUSED;
+            root.displayOffSeconds = seconds;
             return "ok";
         }
     }

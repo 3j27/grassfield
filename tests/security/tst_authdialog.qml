@@ -298,6 +298,38 @@ TestCase {
         return item.visible === dialog.visible && item.opacity > 0 && item.height > 0 && p.y >= 0 && p.y + item.height <= dialog.height;
     }
 
+    function findNamed(item, name) {
+        if (item.objectName === name)
+            return item;
+        for (let i = 0; i < item.children.length; i++) {
+            const found = findNamed(item.children[i], name);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    // D-4 (macOS shows the app asking): with the requesting program's icon the lock becomes a badge on it; without one
+    // (no icon_name, or the theme lacks it) the sheet shows the lock alone, at full size.
+    function test_10_programIconWithLockBadge() {
+        const icon = findNamed(dialog, "polkitAppIcon");
+        const lock = findNamed(dialog, "polkitLock");
+        verify(icon !== null && lock !== null);
+        dialog.appIconSource = "";
+        waitForRendering(dialog);
+        verify(!icon.visible, "no program icon without a source");
+        compare(lock.size, Tokens.polkitIconSize);
+        dialog.appIconSource = Qt.resolvedUrl("../../branding/icons/symbolic/lock.svg");
+        tryCompare(icon, "status", Image.Ready);
+        verify(icon.visible);
+        compare(lock.size, Tokens.dockBadgeSize);
+        dialog.appIconSource = Qt.resolvedUrl("missing-icon.svg");
+        tryCompare(icon, "status", Image.Error);
+        verify(!icon.visible, "a broken source never shows");
+        compare(lock.size, Tokens.polkitIconSize);
+        dialog.appIconSource = "";
+    }
+
     // R12 review: a 5000-character multi-line message cannot push the action ID and the buttons out
     // of the sheet, nor draw its own "Action:" line or buttons (control and bidi characters removed).
     function test_5_longMultiLineMessageStaysBounded() {

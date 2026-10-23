@@ -500,7 +500,8 @@ Scope {
         }
     }
 
-    // Test hooks: qs ipc call search <toggle|open|close|query|status>.
+    // qs ipc call search <toggle|open|close|query|status>. toggle is the SUPER+SPACE binding; the others are test hooks,
+    // refused outside a dev session (VisualFixtures.dev, SEC-04: `status` returns what the user types).
     IpcHandler {
         target: "search"
 
@@ -509,15 +510,19 @@ Scope {
         }
 
         function open(text: string): void {
-            root.show(text);
+            if (VisualFixtures.dev)
+                root.show(text);
         }
 
         function close(): void {
-            root.hide();
+            if (VisualFixtures.dev)
+                root.hide();
         }
 
         // Sets the query without opening the window (provider tests).
         function query(text: string): void {
+            if (!VisualFixtures.dev)
+                return;
             root.keyStartMs = Date.now();
             root.setQuery(text);
             root.keyStartMs = 0;
@@ -532,6 +537,8 @@ Scope {
 
         // JSON of the visible groups.
         function status(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             return JSON.stringify({
                 open: root.open,
                 query: root.query,

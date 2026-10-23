@@ -72,6 +72,22 @@ TestCase {
         compare(model.prompt, "Password");
     }
 
+    // D-4: the action's theme icon is shown as the requesting program's; only a plain theme icon name passes.
+    function test_iconNameIsAPlainThemeName() {
+        compare(model.iconName, "");
+        flow.iconName = "org.gnome.Software";
+        compare(model.iconName, "org.gnome.Software");
+        flow.iconName = "drive-harddisk_x-1";
+        compare(model.iconName, "drive-harddisk_x-1");
+        const refused = ["/usr/share/icons/x.png", "file:///etc/passwd", "http://127.0.0.1:9/x.png", "../x", "a b", "image://icon/x", "x\ny", "‮x", "x".repeat(129)];
+        for (let i = 0; i < refused.length; i++) {
+            flow.iconName = refused[i];
+            compare(model.iconName, "", JSON.stringify(refused[i]).slice(0, 40));
+        }
+        model.flow = null;
+        compare(model.iconName, "");
+    }
+
     function test_neverAutoApproves() {
         // Polkit asks, fails, asks again, sends info: the model never answers on its own.
         flow.isResponseRequired = true;

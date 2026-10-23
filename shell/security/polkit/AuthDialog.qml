@@ -12,6 +12,8 @@ FocusScope {
     id: root
 
     required property AuthDialogModel model
+    // Image URL of the requesting program's icon (AuthAgent resolves model.iconName in the icon theme), or "".
+    property url appIconSource: ""
 
     readonly property real cornerRadius: Tokens.radiusDialog
     readonly property Item surface: material
@@ -60,11 +62,34 @@ FocusScope {
         width: root.width - 2 * Tokens.spacingLg
         spacing: Tokens.spacingMd
 
-        Icon {
+        // The requesting program's icon with a lock badge (macOS), when polkit names a theme icon that exists; else the
+        // lock alone.
+        Item {
+            objectName: "polkitIcon"
             anchors.horizontalCenter: parent.horizontalCenter
-            name: "lock"
-            size: Tokens.polkitIconSize
-            color: Appearance.colors.text
+            width: Tokens.polkitIconSize
+            height: Tokens.polkitIconSize
+
+            Image {
+                id: appIcon
+                objectName: "polkitAppIcon"
+                anchors.fill: parent
+                source: root.appIconSource
+                sourceSize: Qt.size(Tokens.polkitIconSize * 2, Tokens.polkitIconSize * 2)
+                fillMode: Image.PreserveAspectFit
+                asynchronous: false
+                visible: status === Image.Ready
+                Accessible.ignored: true
+            }
+
+            Icon {
+                objectName: "polkitLock"
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                name: "lock"
+                size: appIcon.visible ? Tokens.dockBadgeSize : Tokens.polkitIconSize
+                color: Appearance.colors.text
+            }
         }
 
         Text {

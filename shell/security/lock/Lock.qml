@@ -3,7 +3,12 @@ pragma Singleton
 // Portions adapted from Omarchy shell/plugins/lock/Service.qml (omacom/omarchy, branch quattro),
 // MIT License, Copyright (c) the Omarchy authors: the PamContext prompt/response wiring and the
 // WlSessionLock secure-state handling; the stranded-lock signal (LOCK in solitaryBlockedBy) comes
-// from Omarchy's omarchy-hyprland-session-locked.
+// from Omarchy's omarchy-hyprland-session-locked. Upstream base reviewed against Omarchy v4.0.6
+// (basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0, shell/plugins/lock/Service.qml): its
+// currentlyLocked() fix (a binding that missed a change notification made a lock before suspend look done) is
+// ported as currentlyLocked()/currentlySecure() below; its v4.0.5 stranded-lock change (no takeover while another
+// locker process runs, basecamp/omarchy@94a8fbc2d67eec5673c7f16b8c5e8a9c8452ffdc) is not: see checkStranded() and
+// docs/specs/security.md "Upstream base".
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
@@ -14,6 +19,7 @@ import Grassfield.Ui
 import qs.security
 import qs.services
 import "../LockMachine.js" as Machine
+import "../../services/DevGate.js" as DevGate
 
 // Session lock (ADR-0010, master-prompt R12): ext-session-lock through WlSessionLock, password
 // checked by PAM service "omarchy-lock-password" (no PAM file of ours). Only a PAM success
@@ -57,6 +63,14 @@ Singleton {
     property bool verified: false
     readonly property bool pamAvailable: controller.pamAvailable
     readonly property bool fingerprintAvailable: fingerprintFile.available
+    // Dev session (DevGate: GRASSFIELD_DEV=1 and no GRASSFIELD_SESSION=1): the test hooks below answer, and PAM is
+    // suppressed unless GRASSFIELD_DEV_ALLOW_PAM=1. In a real session (GRASSFIELD_SESSION=1) both are off even when
+    // GRASSFIELD_DEV=1 leaks into its environment (GF-AUDIT-001 SEC-03).
+    readonly property bool devHooks: DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))
+    readonly property bool pamSuppressed: controller.pamSuppressed
+    // Lock fields (one per screen) that hold typed text: only ever read by the dev hook devLockView (L2 test: the
+    // field is emptied after every attempt). Never the text, never its length.
+    property int filledFields: 0
 
     readonly property string loginName: Quickshell.env("USER")
     property string userName: loginName
@@ -99,14 +113,28 @@ Singleton {
             console.info("grassfield-lock: no takeover suspected; ownership check every " + Machine.PROBE_INTERVAL_MS + " ms");
     }
 
-    // Engage the lock. reason: "ipc" | "menu" | "idle" | "sleep" | "restore". Returns "ok",
+    // Decisions read the lock state afresh (port of Omarchy v4.0.6 currentlyLocked(), basecamp/omarchy@237f1b4: "A
+    // property binding that missed a change notification once reported locked after an unlock, and a lock request
+    // before suspend then took that for done and never locked the session"). The bindings above (locked, holding,
+    // secure) drive the UI and the timers; lock(), restore(), checkStranded() and the sleep delay
+    // (SleepInhibitor) decide on these instead: the state machine's storage, WlSessionLock's own getter and the
+    // verified flag, read at the moment of the decision.
+    function currentlyLocked(): bool {
+        return Machine.isLocked(controller.currentState());
+    }
+
+    function currentlySecure(): bool {
+        return Machine.isHolding(controller.currentState()) && sessionLock.secure && verified;
+    }
+
+    // Engage the lock. reason: "ipc" | "menu" | "idle" | "sleep" | "lid" | "restore". Returns "ok",
     // "already-locked" or "refused: missing-pam". When this shell already holds a lock, the
     // compositor is asked again (verify()): a session found unlocked under it gets a fresh lock once
     // a fresh answer confirms it (checkOwnership), never here on an earlier answer alone: relock()
     // releases the lock object first, and releasing the lock the compositor still uses unlocks the
     // session until the new lock arrives (R12 review #3: keys reached a window in forced runs).
     function lock(reason: string): string {
-        if (controller.locked) {
+        if (currentlyLocked()) {
             console.info("grassfield-lock: lock requested (" + reason + ") while " + controller.lockState + "; verifying the session lock");
             engage();
             verify();
@@ -126,6 +154,19 @@ Singleton {
         controller.requestLock();
         engage();
         return "ok";
+    }
+
+    // The lid was closed (Hyprland binding `switch:on:Lid Switch`, D-4): lock at once, whether or not logind suspends
+    // (HandleLidSwitchExternalPower=ignore, a delay inhibitor, a failed suspend), as macOS does, except in clamshell
+    // mode: a physical external display is active and still in use (Machine.lidShouldLock). When logind does suspend,
+    // the lock is then already on its way before PrepareForSleep. Returns lock()'s answer or "docked".
+    function lockOnLid(): string {
+        const names = Quickshell.screens.map(s => s.name);
+        if (!Machine.lidShouldLock(names)) {
+            console.info("grassfield-lock: lid closed with an external display active (clamshell); not locking");
+            return "docked";
+        }
+        return lock("lid");
     }
 
     // Ask the compositor for the lock; retried by retryTimer until it is confirmed.
@@ -238,7 +279,7 @@ Singleton {
     // Restore the lock if the previous instance held or wanted it (see the header). Only ever
     // locks; never unlocks.
     function restore(intent: bool, when: string): void {
-        if (controller.locked || !Machine.restoreAtStart(intent, markerPath !== "", readMarker()))
+        if (currentlyLocked() || !Machine.restoreAtStart(intent, markerPath !== "", readMarker()))
             return;
         console.info("grassfield-lock: restoring the lock (" + when + (intent ? ", carried intent" : "") + (markerPath === "" ? ", no XDG_RUNTIME_DIR" : "") + ")");
         lock("restore");
@@ -248,9 +289,14 @@ Singleton {
     // crashed instance whose marker was missing or wrong, or a live foreign locker (Hyprland cannot
     // tell them apart). Take it over (fail closed: a dead client's lock could never be unlocked
     // otherwise). If it was a live locker, its later release unlocks the session under this lock
-    // and ownershipProbe takes a fresh one.
+    // and ownershipProbe takes a fresh one. Omarchy v4.0.5 (basecamp/omarchy@94a8fbc) instead leaves the lock alone
+    // while another locker process runs, because its shell, once it has taken a live lock over, strands the session
+    // behind Hyprland's failsafe when it exits. Not ported: here the takeover only ever keeps the session locked, the
+    // ownership check re-locks after the foreign release (reload_locked.sh `foreign-restart`), and a Grassfield exit
+    // is followed by a restart that restores the lock from the marker; skipping the takeover would instead leave a
+    // dead client's lock (marker missing or forged) unlockable whenever any other Quickshell process of the user runs.
     function checkStranded(): void {
-        if (controller.locked) {
+        if (currentlyLocked()) {
             strandedProbe.stop();
             return;
         }
@@ -405,6 +451,11 @@ Singleton {
                 }
                 onSubmitted: password => controller.submit(password)
                 onEdited: controller.clearMessage()
+                onFieldEmptyChanged: root.filledFields = Math.max(0, root.filledFields + (fieldEmpty ? -1 : 1))
+                Component.onDestruction: {
+                    if (!fieldEmpty)
+                        root.filledFields = Math.max(0, root.filledFields - 1);
+                }
             }
 
             Connections {
@@ -590,7 +641,10 @@ Singleton {
         controller.pamAvailable = pamServiceInstalled();
         // Defence in depth: in a dev/test session, never hand a password to PAM unless the L2 test opts in.
         // A stray key reaching the lock field in nested then cannot count a faillock failure on the real account.
-        controller.pamSuppressed = Quickshell.env("GRASSFIELD_DEV") === "1" && Quickshell.env("GRASSFIELD_DEV_ALLOW_PAM") !== "1";
+        // Never in a real session (devHooks is false there whatever GRASSFIELD_DEV says): it could never be unlocked.
+        controller.pamSuppressed = root.devHooks && Quickshell.env("GRASSFIELD_DEV_ALLOW_PAM") !== "1";
+        if (Quickshell.env("GRASSFIELD_DEV") === "1" && !root.devHooks)
+            console.warn("grassfield-lock: GRASSFIELD_DEV=1 ignored in a real session (GRASSFIELD_SESSION=1): no dev hook, PAM not suppressed");
         if (controller.pamSuppressed)
             console.warn("grassfield-lock: dev: PAM is suppressed on the lock (no real authentication; set GRASSFIELD_DEV_ALLOW_PAM=1 for the L2 failure-path test)");
         restore(false, "start");
@@ -598,50 +652,92 @@ Singleton {
             strandedProbe.start();
     }
 
+    // Dev hooks (DevGate: dev session only, "refused" otherwise; tests/security/dev_gate checks both ways). Functions of
+    // the singleton so that the offscreen test can call them; the IPC handler below only forwards.
+
+    // Test hook: the state machine state.
+    function devStatus(): string {
+        return root.devHooks ? root.lockState : DevGate.REFUSED;
+    }
+
+    // Soft-reload the configuration the way Quickshell's file watcher would (tests/security/reload_locked.sh).
+    function devReload(): string {
+        if (!root.devHooks)
+            return DevGate.REFUSED;
+        console.warn("grassfield-lock: dev soft reload requested");
+        Qt.callLater(() => Quickshell.reload(false));
+        return "reloading";
+    }
+
+    // Pause the periodic lock ownership check for 10 s (answers to other queries, lock() and verify() still check).
+    function devPauseOwnershipCheck(): string {
+        if (!root.devHooks)
+            return DevGate.REFUSED;
+        console.warn("grassfield-lock: dev pause of the lock ownership check (10 s)");
+        devPause.restart();
+        return "paused";
+    }
+
+    // Count one "unlocked" answer Hyprland never gave, as a stale answer would, while the session is really locked
+    // (tests/security/reload_locked.sh `relock-confirm`). Only a relock can follow (never an unlock), and only once a
+    // fresh answer confirms it.
+    function devForgeUnlockedAnswer(): string {
+        if (!root.devHooks)
+            return DevGate.REFUSED;
+        if (!root.holding)
+            return "not-holding";
+        console.warn("grassfield-lock: dev forged one unlocked answer");
+        root.unlockedAnswers = 1;
+        return "forged";
+    }
+
+    // What the L2 wrong-password test checks after each attempt (tests/security/l2_wrong_password.sh): the state, whether
+    // any lock field still holds text (never the text or its length), the message shown, the failed attempts, and
+    // whether PAM is suppressed. JSON.
+    function devLockView(): string {
+        if (!root.devHooks)
+            return DevGate.REFUSED;
+        return JSON.stringify({
+            state: root.lockState,
+            field: root.filledFields > 0 ? "filled" : "empty",
+            message: controller.message,
+            failedAttempts: controller.failedAttempts,
+            pamSuppressed: controller.pamSuppressed
+        });
+    }
+
     IpcHandler {
         target: "lock"
 
-        // Used by the Hyprland binding (SUPER+CTRL+Q) and the Grassfield menu.
+        // Used by the Hyprland binding (SUPER+CTRL+Q), the screen corners and the Grassfield menu. Only ever locks.
         function lock(): string {
             return root.lock("ipc");
         }
 
-        // Test hook: the state machine state.
+        // Used by the Hyprland lid switch binding (bindings.lua). Only ever locks ("docked": clamshell, nothing done).
+        function lid(): string {
+            return root.lockOnLid();
+        }
+
+        // Dev hooks (refused outside a dev session).
         function status(): string {
-            return root.lockState;
+            return root.devStatus();
         }
 
-        // Dev-only test hook (GRASSFIELD_DEV=1, nested): soft-reload the configuration the way
-        // Quickshell's file watcher would (tests/security/reload_locked.sh). Refused otherwise.
         function devReload(): string {
-            if (Quickshell.env("GRASSFIELD_DEV") !== "1")
-                return "refused";
-            console.warn("grassfield-lock: dev soft reload requested");
-            Qt.callLater(() => Quickshell.reload(false));
-            return "reloading";
+            return root.devReload();
         }
 
-        // Dev-only test hook (GRASSFIELD_DEV=1, nested): pause the periodic lock ownership check for
-        // 10 s (answers to other queries, lock() and verify() still check). Refused otherwise.
         function devPauseOwnershipCheck(): string {
-            if (Quickshell.env("GRASSFIELD_DEV") !== "1")
-                return "refused";
-            console.warn("grassfield-lock: dev pause of the lock ownership check (10 s)");
-            devPause.restart();
-            return "paused";
+            return root.devPauseOwnershipCheck();
         }
 
-        // Dev-only test hook (GRASSFIELD_DEV=1, nested): count one "unlocked" answer Hyprland never gave, as a stale
-        // answer would, while the session is really locked (tests/security/reload_locked.sh `relock-confirm`). Only a
-        // relock can follow (never an unlock), and only once a fresh answer confirms it. Refused otherwise.
         function devForgeUnlockedAnswer(): string {
-            if (Quickshell.env("GRASSFIELD_DEV") !== "1")
-                return "refused";
-            if (!root.holding)
-                return "not-holding";
-            console.warn("grassfield-lock: dev forged one unlocked answer");
-            root.unlockedAnswers = 1;
-            return "forged";
+            return root.devForgeUnlockedAnswer();
+        }
+
+        function devLockView(): string {
+            return root.devLockView();
         }
     }
 }
