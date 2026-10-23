@@ -38,6 +38,7 @@ namespace gf::stages {
     inline constexpr double kMaxDurationMs   = 2000;
     inline constexpr double kMinTileSide     = 16;  // layout px
     inline constexpr double kMaxTileSide     = 800; // layout px
+    inline constexpr double kMaxTileCoord    = 1.0e6; // |x|, |y| of a tile (layout px): far beyond any monitor layout, never inf
 
     // Windows managed per workspace; further windows are shown normally (never hidden).
     inline constexpr size_t kMaxWindowsPerWorkspace = 64;
@@ -141,8 +142,9 @@ namespace gf::stages {
     // {"op":"merge","stage":N}, {"op":"move","address":"0x…","stage":N|"new"}. Strict: a JSON object of at most
     // kMaxPayloadBytes; `op` required; `durationMs` an integer 0..kMaxDurationMs (required for on); strips at most
     // kMaxStrips with distinct monitor names ([A-Za-z0-9._-], 1..kMaxMonitorName bytes), 1..kMaxTiles tiles each, finite
-    // numbers, sides kMinTileSide..kMaxTileSide, tiles of one strip not overlapping; stage ids positive integers below
-    // 2^32. Unknown keys are skipped (additive gfc/1 fields), a key given twice is an error. Whether monitors, stages and
+    // numbers, sides kMinTileSide..kMaxTileSide, |x| and |y| at most kMaxTileCoord, tiles of one strip not overlapping; stage
+    // ids positive integers below 2^32. Unknown keys are skipped (additive gfc/1 fields), a key given twice is an error.
+    // Whether monitors, stages and
     // windows exist and whether the strip surface covers the tiles is checked by the glue.
     std::expected<Request, std::string> parseRequest(std::string_view json);
 
@@ -176,11 +178,15 @@ namespace gf::stages {
     std::vector<StripTarget> stripTargets(size_t slot, std::span<const Box> tiles, bool hidden, bool fullscreen, const Box& monitor,
                                           std::span<const Box> surfacesBackToFront);
 
-    // ST17, the shell's strip surface for op:on: on the Top or Overlay layer, and while the strip is shown its box and input
-    // region cover every tile (input over a thumbnail must reach the strip, never the window drawn there). A hidden strip
-    // (hidden:true) draws its thumbnails off the monitor: only the layer is checked, so the shell may shrink the input
-    // region to its reveal zone at the edge (stages.md, Shell side work item 2). A reveal (hidden:false) is checked again.
-    bool stripAccepted(bool hidden, bool layerOk, bool boxCovers, bool inputCovers);
+    // Every tile lies inside `monitor` (1 px tolerance; finite and bounded). False without tiles.
+    bool tilesInMonitor(std::span<const Box> tiles, const Box& monitor);
+
+    // ST17, the shell's strip for op:on: its tiles inside their monitor (always: they are the shown places the hidden shift,
+    // the thumbnails and the drop zone are computed from), its surface on the Top or Overlay layer, and while the strip is
+    // shown the surface's box and input region over every tile (input over a thumbnail must reach the strip, never the
+    // window drawn there). A hidden strip (hidden:true) draws its thumbnails off the monitor: its input region may shrink
+    // to its reveal zone at the edge (stages.md, Shell side work item 2). A reveal (hidden:false) is checked again.
+    bool stripAccepted(bool hidden, bool layerOk, bool tilesInside, bool boxCovers, bool inputCovers);
 
     // ---- a window dragged to the strip (macOS: a window dragged onto the strip becomes a stage of its own) ----
 
@@ -194,6 +200,8 @@ namespace gf::stages {
     struct DropFacts {
         bool on       = false; // Stages is on (the shell sent op:on)
         bool hasStrip = false; // the release monitor has the shell's strip
+        bool hidden   = false; // that strip is hidden (slid out): no drop zone (macOS: the drop target is the visible strip; the
+                               // shell reveals it, hidden:false, while the pointer rests at the edge)
         bool inZone   = false; // inDropZone
         bool managed  = false; // the dragged window is in a stage of the Desktop shown there
         bool active   = false; // ... of its active stage (strip windows cannot be dragged: their input is blocked)

@@ -290,7 +290,8 @@ window, so it is not counted as evidence either way).
      `None`, **transparent where the thumbnails are** (the plugin draws them in the window layer, under Top). Its input
      region must cover every tile while the strip is shown (the plugin checks the corners and centre of each tile); when
      the strip is hidden, shrink the input region to a thin edge zone for the hover reveal and send `hidden:true`: for a
-     strip sent with `hidden:true` the plugin checks only the surface and its layer, not the tiles (core `stripAccepted`,
+     strip sent with `hidden:true` the plugin checks the surface, its layer and that the tiles lie on the monitor, not the
+     input region (core `stripAccepted`, `tilesInMonitor`; tile x and y are also bounded at parse, kMaxTileCoord;
      2026-10-23), also for the first `op:on`. Before a reveal (`hidden:false`) grow the input region over the tiles
      first: the reveal is checked like any shown strip (else `no-strip`).
    - optional plates (tile backgrounds, hover highlight): a separate surface on `WlrLayer.Bottom` (below windows, like the
@@ -334,7 +335,8 @@ window, so it is not counted as evidence either way).
      "stage":"new"}` would: drawn into its tile from where it was dropped, its real place back to where it was before
      the drag, the active stage's front window keeping the keyboard, then the usual `stages` event. Not when the release
      tiles the window (window tiling at the screen edge wins), the window is alone in its stage, or it belongs to another
-     output's Desktop. The shell may still send `move "new"` itself (a context action, a key binding);
+     output's Desktop, or the strip is hidden (the drop target is the visible strip: reveal it at the edge first). The
+     shell may still send `move "new"` itself (a context action, a key binding);
    - activating an app from the Dock or Search needs nothing special: Hyprland's focus of a strip window brings its stage
      forward (ST10).
 6. **Strip visibility.** Hide the strip (slide out, `hidden:true`, input region to the edge zone) while `overlap` is true;
@@ -557,7 +559,8 @@ The shell agent's "Shell side" section (branch of the strip) lists three plugin 
    a stage of its own`. The shell only has to show the target outline if it wants (it sees the result in the next
    `stages` event). NOT VERIFIED nested.
 2. **`op:on` with `hidden:true` and only the edge zone as input region**: it was refused (`no-strip`): the input
-   coverage was checked whatever `hidden` said. Fixed: a hidden strip is checked for its surface and layer only (core
+   coverage was checked whatever `hidden` said. Fixed: a hidden strip is checked for its surface, layer and tiles on the
+   monitor, not its input region (core
    `stripAccepted`, contract 2 above); a reveal (`hidden:false`) is checked over every tile, so grow the input region
    first. NOT VERIFIED nested.
 3. **Updates with fewer tiles**: smooth. An `op:on` while on replaces the strips and runs one retarget with the

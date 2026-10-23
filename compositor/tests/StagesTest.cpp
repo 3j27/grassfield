@@ -373,13 +373,42 @@ TEST(StagesShellItems, FewerTilesRetargetTheStagesBeyondTheTilesOffTheMonitor) {
 
 // Work item 2: op:on with hidden:true while the strip surface keeps only its reveal zone as input region is accepted (only
 // the layer is checked); a shown strip still needs its box and input region over every tile.
-TEST(StagesShellItems, AHiddenStripNeedsOnlyItsLayer) {
-    EXPECT_TRUE(stripAccepted(true, true, false, false)) << "hidden, reveal zone only";
-    EXPECT_TRUE(stripAccepted(true, true, true, true));
-    EXPECT_FALSE(stripAccepted(true, false, true, true)) << "the layer is always checked";
-    EXPECT_TRUE(stripAccepted(false, true, true, true));
-    EXPECT_FALSE(stripAccepted(false, true, true, false)) << "shown: input over every tile";
-    EXPECT_FALSE(stripAccepted(false, true, false, true)) << "shown: the surface over every tile";
+TEST(StagesShellItems, AHiddenStripNeedsItsLayerAndItsTilesOnTheMonitor) {
+    // stripAccepted(hidden, layerOk, tilesInside, boxCovers, inputCovers)
+    EXPECT_TRUE(stripAccepted(true, true, true, false, false)) << "hidden, reveal zone only";
+    EXPECT_TRUE(stripAccepted(true, true, true, true, true));
+    EXPECT_FALSE(stripAccepted(true, false, true, true, true)) << "the layer is always checked";
+    EXPECT_FALSE(stripAccepted(true, true, false, false, false)) << "hidden or not, the tiles lie on the monitor";
+    EXPECT_TRUE(stripAccepted(false, true, true, true, true));
+    EXPECT_FALSE(stripAccepted(false, true, true, true, false)) << "shown: input over every tile";
+    EXPECT_FALSE(stripAccepted(false, true, true, false, true)) << "shown: the surface over every tile";
+    EXPECT_FALSE(stripAccepted(false, true, false, true, true));
+}
+
+// Second review (2026-10-23): a hidden strip skipped every tile check, so tiles at x = +-1.7e308 reached the hidden shift
+// (-inf) and the interpolation (NaN), and a tile at x = 100000 made the whole monitor a drop zone.
+TEST(StagesShellItems, TilesAreBoundedWhateverTheStripState) {
+    const Box monitor{0, 0, 1920, 1080};
+    EXPECT_TRUE(tilesInMonitor(std::vector<Box>{{16, 272, 160, 120}}, monitor));
+    EXPECT_FALSE(tilesInMonitor(std::vector<Box>{{100000, 272, 160, 120}}, monitor)) << "off the monitor";
+    EXPECT_FALSE(tilesInMonitor(std::vector<Box>{{-1.7e308, 272, 160, 120}}, monitor));
+    EXPECT_FALSE(tilesInMonitor(std::vector<Box>{{std::nan(""), 272, 160, 120}}, monitor));
+    EXPECT_FALSE(tilesInMonitor(std::vector<Box>{}, monitor));
+    for (const char* x : {"1.7e308", "-1.7e308", "1000001", "-1000001"}) {
+        const std::string json = std::string{R"({"op":"on","durationMs":0,"strips":[{"monitor":"A","hidden":true,"tiles":[{"x":)"} + x + R"(,"y":10,"w":160,"h":120}]}]})";
+        EXPECT_FALSE(parseRequest(json).has_value()) << "x = " << x;
+        const std::string jsonY = std::string{R"({"op":"on","durationMs":0,"strips":[{"monitor":"A","tiles":[{"x":10,"y":)"} + x + R"(,"w":160,"h":120}]}]})";
+        EXPECT_FALSE(parseRequest(jsonY).has_value()) << "y = " << x;
+    }
+    EXPECT_TRUE(parseRequest(R"({"op":"on","durationMs":0,"strips":[{"monitor":"A","tiles":[{"x":-5000,"y":2160,"w":160,"h":120}]}]})").has_value())
+        << "a monitor left of or below the origin is fine";
+    // A strip that passes the checks gives finite targets and a bounded drop zone.
+    const std::vector<Box> tiles{{16, 272, 160, 120}};
+    ASSERT_TRUE(tilesInMonitor(tiles, monitor));
+    const auto t = stripTargets(0, tiles, true, false, monitor, std::vector<Box>{{600, 300, 800, 500}});
+    ASSERT_EQ(t.size(), 1U);
+    EXPECT_TRUE(std::isfinite(t[0].to.x) && std::isfinite(t[0].to.w));
+    EXPECT_FALSE(inDropZone(1800, 500, tiles, monitor));
 }
 
 // Work item 1: a titlebar drag released on the strip makes the window a stage of its own (macOS).
@@ -394,9 +423,12 @@ TEST(StagesShellItems, ADragReleasedOnTheStripIsOnItsOwnStage) {
     EXPECT_FALSE(inDropZone(1925, 400, std::vector<Box>{}, monitor)) << "no strip";
     EXPECT_FALSE(inDropZone(std::nan(""), 400, tiles, monitor));
 
-    const DropFacts drop{.on = true, .hasStrip = true, .inZone = true, .managed = true, .active = true, .alone = false, .tiling = false};
+    const DropFacts drop{.on = true, .hasStrip = true, .hidden = false, .inZone = true, .managed = true, .active = true, .alone = false, .tiling = false};
     EXPECT_EQ(dropAction(drop), DropAction::NewStage);
-    auto f = drop;
+    auto f   = drop;
+    f.hidden = true;
+    EXPECT_EQ(dropAction(f), DropAction::None) << "a hidden strip is no drop target (the shell reveals it at the edge first)";
+    f    = drop;
     f.on = false;
     EXPECT_EQ(dropAction(f), DropAction::None) << "Stages off";
     f          = drop;

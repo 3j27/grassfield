@@ -1369,11 +1369,13 @@ namespace {
             }
             const st::Box box{ls->m_geometry.x, ls->m_geometry.y, ls->m_geometry.w, ls->m_geometry.h};
             const bool    layerOk = ls->m_layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP;
-            // A hidden strip (its thumbnails off the monitor) may keep only its reveal zone as input region (core stripAccepted).
+            // The tiles always lie on their monitor; a hidden strip (its thumbnails off the monitor) may keep only its reveal
+            // zone as input region (core stripAccepted).
+            const bool inside  = st::tilesInMonitor(strip.tiles, monitorBox(mon));
             const bool boxOk   = strip.hidden || st::tilesCovered(strip.tiles, box, monitorBox(mon));
             const bool inputOk = strip.hidden || std::ranges::all_of(strip.tiles, [&ls](const st::Box& t) { return inputCovers(ls, t); });
-            if (!st::stripAccepted(strip.hidden, layerOk, boxOk, inputOk)) {
-                gf::logRequest(Log::WARN, "stages: rejected: the {} surface on {} (layer {}, box {:.0f},{:.0f} {:.0f}x{:.0f}) must be on the Top or Overlay layer and, while the strip is shown, cover every tile with its input region",
+            if (!st::stripAccepted(strip.hidden, layerOk, inside, boxOk, inputOk)) {
+                gf::logRequest(Log::WARN, "stages: rejected: the {} surface on {} (layer {}, box {:.0f},{:.0f} {:.0f}x{:.0f}) must be on the Top or Overlay layer, its tiles on the monitor and, while the strip is shown, under its box and input region",
                                STRIP_NAMESPACE, strip.monitor, ls->m_layer, box.x, box.y, box.w, box.h);
                 return false;
             }
@@ -1568,6 +1570,7 @@ namespace gf::stager {
         const auto&    stages  = shown ? sp->model.stages() : std::vector<st::Stage>{};
         const st::DropFacts facts{.on       = true,
                                   .hasStrip = strip != nullptr,
+                                  .hidden   = strip && strip->hidden,
                                   .inZone   = strip && st::inDropZone(x, y, strip->tiles, monitorBox(mon)),
                                   .managed  = shown,
                                   .active   = shown && sp->model.isActive(address),

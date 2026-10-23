@@ -245,6 +245,8 @@ namespace gf::stages {
             const Box tile{values[0], values[1], values[2], values[3]};
             if (tile.w < kMinTileSide || tile.h < kMinTileSide || tile.w > kMaxTileSide || tile.h > kMaxTileSide)
                 return Error{std::format("{}: w and h must be in {:.0f}..{:.0f}", where, kMinTileSide, kMaxTileSide)};
+            if (std::abs(tile.x) > kMaxTileCoord || std::abs(tile.y) > kMaxTileCoord)
+                return Error{std::format("{}: x and y must be within +-{:.0f}", where, kMaxTileCoord)};
             return tile;
         }
 
@@ -532,8 +534,12 @@ namespace gf::stages {
         return out;
     }
 
-    bool stripAccepted(bool hidden, bool layerOk, bool boxCovers, bool inputCovers) {
-        return layerOk && (hidden || (boxCovers && inputCovers));
+    bool tilesInMonitor(std::span<const Box> tiles, const Box& monitor) {
+        return !tiles.empty() && std::ranges::all_of(tiles, [&monitor](const Box& t) { return isFinite(t) && gf::overview::insideMonitor(t, monitor); });
+    }
+
+    bool stripAccepted(bool hidden, bool layerOk, bool tilesInside, bool boxCovers, bool inputCovers) {
+        return layerOk && tilesInside && (hidden || (boxCovers && inputCovers));
     }
 
     bool inDropZone(double x, double y, std::span<const Box> tiles, const Box& monitor) {
@@ -548,7 +554,7 @@ namespace gf::stages {
     }
 
     DropAction dropAction(const DropFacts& f) {
-        const bool drop = f.on && f.hasStrip && f.inZone && f.managed && f.active && !f.alone && !f.tiling;
+        const bool drop = f.on && f.hasStrip && !f.hidden && f.inZone && f.managed && f.active && !f.alone && !f.tiling;
         return drop ? DropAction::NewStage : DropAction::None;
     }
 
