@@ -123,6 +123,16 @@ FocusScope {
             required property string section
             width: ListView.view.width
             height: Tokens.filesSidebarHeaderHeight
+            // The Tags header has a menu (Show Hidden Tag) that a right click opens: the same menu through an accessible
+            // action (A11Y-09). The other headers are plain headings.
+            Accessible.role: header.section === "tags" ? Accessible.Button : Accessible.Heading
+            Accessible.name: header.section === "favorites" ? qsTr("Favorites") : header.section === "tags" ? qsTr("Tags menu") : qsTr("Locations")
+            Accessible.onPressAction: {
+                if (header.section === "tags") {
+                    const p = header.mapToItem(null, header.width / 2, header.height / 2);
+                    root.openTagMenu("", p.x, p.y);
+                }
+            }
 
             MouseArea {
                 anchors.fill: parent

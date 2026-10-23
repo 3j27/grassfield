@@ -31,6 +31,16 @@ Item {
 
     Accessible.role: Accessible.Graphic
     Accessible.name: qsTr("Image %1").arg(root.info.name ?? "")
+    // The double click of the TapHandler below (Zoom to Fit / Actual Size) as an accessible action (A11Y-09); the View menu
+    // has the same two commands.
+    Accessible.onPressAction: root.toggleActualSize()
+
+    function toggleActualSize(): void {
+        if (root.fitMode && root.fitScale < 1)
+            root.actualSize();
+        else
+            root.fit();
+    }
 
     function setZoom(value: real): void {
         const current = root.viewScale;
@@ -115,12 +125,7 @@ Item {
         // Double click toggles between Zoom to Fit and Actual Size (macOS Preview).
         TapHandler {
             acceptedButtons: Qt.LeftButton
-            onDoubleTapped: {
-                if (root.fitMode && root.fitScale < 1)
-                    root.actualSize();
-                else
-                    root.fit();
-            }
+            onDoubleTapped: root.toggleActualSize()
         }
 
         PinchHandler {
