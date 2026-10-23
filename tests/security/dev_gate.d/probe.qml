@@ -24,8 +24,18 @@ ShellRoot {
     }
 
     function run(): void {
-        check("started-unlocked", Lock.lockState === "unlocked");
-        if (expect === "closed") {
+        if (expect === "slept") {
+            // Follow-up N1: an "unlocked" marker written before a sleep the shell did not lock for -> the start locks
+            // (offscreen there is no compositor: the lock stays requested, "locking").
+            check("relocked-after-a-sleep", Lock.lockState !== "unlocked");
+        } else if (expect === "notslept") {
+            check("unlocked-without-a-sleep", Lock.lockState === "unlocked");
+        } else {
+            check("started-unlocked", Lock.lockState === "unlocked");
+        }
+        if (expect === "slept" || expect === "notslept") {
+            // nothing else: the start decision is the whole check
+        } else if (expect === "closed") {
             check("devHooks-off", Lock.devHooks === false);
             check("pam-not-suppressed", Lock.pamSuppressed === false);
             check("status-refused", Lock.devStatus() === "refused");

@@ -72,7 +72,14 @@ Scope {
     }
 
     function afterResume(): void {
-        console.info("grassfield-idle: system resumed");
+        // Resumed from a sleep this instance never prepared for (it started, or its watcher came back, after
+        // PrepareForSleep(true): a crash or restart right before the sleep): lock now, before anything else.
+        if (!sleeping) {
+            console.warn("grassfield-idle: resumed from a sleep this shell did not lock for; locking");
+            Lock.lock("resume");
+        } else {
+            console.info("grassfield-idle: system resumed");
+        }
         sleeping = false;
         releaseTimer.stop();
         take();

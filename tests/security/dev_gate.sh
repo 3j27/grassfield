@@ -52,4 +52,20 @@ check "open with the L2 PAM opt-in" open GRASSFIELD_DEV=1 GRASSFIELD_DEV_ALLOW_P
 check "closed in a real session" closed GRASSFIELD_SESSION=1
 check "closed in a real session with a leaked GRASSFIELD_DEV=1" closed GRASSFIELD_SESSION=1 GRASSFIELD_DEV=1 GRASSFIELD_DEV_ALLOW_PAM=1 GRASSFIELD_VISUAL_FIXTURES=1
 check "closed without any variable" closed
+
+# Follow-up N1: the marker records the kernel's count of completed suspends; a shell that starts after a sleep it could
+# not lock for (crash or restart right before or during it) finds an older count in an "unlocked" marker and locks.
+sleeps=$(cat /sys/power/suspend_stats/success 2>/dev/null || true)
+marker=$tmp/runtime/grassfield-lock-default
+if [[ $sleeps =~ ^[0-9]+$ ]]; then
+  printf 'unlocked sleeps=%s\n' "$((sleeps + 1))" >"$marker"
+  check "restart after a sleep no shell locked for -> locked" slept GRASSFIELD_SESSION=1
+  printf 'unlocked sleeps=%s\n' "$sleeps" >"$marker"
+  check "restart without a sleep since the unlock -> unlocked" notslept GRASSFIELD_SESSION=1
+  printf 'unlocked\n' >"$marker"
+  check "restart with an old marker without a count -> unlocked (no evidence)" notslept GRASSFIELD_SESSION=1
+  rm -f "$marker"
+else
+  echo "SKIP: dev gate sleep cases (/sys/power/suspend_stats/success unreadable here)"
+fi
 exit $fail

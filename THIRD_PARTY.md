@@ -82,32 +82,32 @@ Grassfield source headers name `omacom/omarchy`, branch quattro; both are record
 | `shell/security/idle/Idle.qml` | `shell/plugins/services/idle/Service.qml` | IdleMonitor with respectInhibitors |
 | `shell/security/polkit/AuthAgent.qml` | `shell/plugins/polkit/PolkitAgent.qml` | PolkitAgent/AuthFlow wiring |
 
-These three files are security modules; their headers say "MIT License, Copyright (c) the Omarchy authors" and are
-left unchanged. The full notice, with that wording, follows (also shipped as `omarchy-MIT.txt`). The installed
-omarchy package has no licence file, so the exact upstream copyright line is unverified: **needs legal review**.
+These three files are security modules; their headers say "Copyright (c) David Heinemeier Hansson, MIT License", as
+upstream's LICENSE at tag v4.0.4 (basecamp/omarchy@c668141e9c42b13c80c9ca4ea108e11708c5e8a5, the installed version;
+identical at v4.0.6). The installed omarchy package carries no licence file; the text below is upstream's LICENSE,
+verbatim (also shipped as `omarchy-MIT.txt`).
 
 ```
-MIT License
+Copyright (c) David Heinemeier Hansson
 
-Copyright (c) the Omarchy authors
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
 Run-time use without copying: `config/hypr/grassfield/omarchy.lua` requires Omarchy's Lua modules from

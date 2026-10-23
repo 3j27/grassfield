@@ -172,9 +172,9 @@ Scope {
         }
 
         // The Sound and Display sliders by IPC (REQ-QS-CC5/CC6 acceptance: set the slider, then `wpctl get-volume
-        // @DEFAULT_AUDIO_SINK@` or `brightnessctl` agrees). Test hooks (docs/specs/security.md "IPC surface", class dev):
-        // refused outside a dev session; inside one the sliders' own dev guard refuses the writes, since a nested session
-        // shares the real audio and backlight. The real-hardware write check is the owner's (L2). `value` is 0..1.
+        // @DEFAULT_AUDIO_SINK@` or `brightnessctl` agrees). Test hooks, so refused outside a dev session (SEC-04: another
+        // process must not drive the shell's controls); in the dev session the sliders' own dev guard then answers
+        // "refused: dev guard" and changes nothing (tests/shell/cc_sliders_ipc.sh). `value` is 0..1.
         function volume(value: real): string {
             if (!VisualFixtures.dev)
                 return "refused";
@@ -189,7 +189,7 @@ Scope {
             return Brightness.setLevel(value) ? "ok" : "refused: dev guard";
         }
 
-        // Read-only: the level the sliders show, 0..1 with two decimals ("none" without the device).
+        // Read-only: the level the sliders show, 0..1 with two decimals ("none" without the device). Dev session only.
         function volumeLevel(): string {
             if (!VisualFixtures.dev)
                 return "refused";
