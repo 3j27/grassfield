@@ -14,7 +14,11 @@ for Hyprland's focused window without the keyboard (FR30 (d)) and the keyboard b
 FR44-FR46, Track B3, owner defect #6), plugin 0.9.0-genie; the macOS 26 titlebar (F2a: 32-px bar, 14-px lights,
 hover glyphs, grey lights on inactive windows, square bar/content join, FR3-FR4c), plugin 0.10.0-chrome; window tiling
 (feature `window-tiling`, FR47-FR50), plugin 0.11.0-tiling; the pointer focus on a shell layer that maps or takes the
-keyboard under a resting pointer (feature `layer-pointer`, FR51-FR52). Plugin 0.12.0-pointer.
+keyboard under a resting pointer (feature `layer-pointer`, FR51-FR52), plugin 0.12.0-pointer; the GF-AUDIT-001
+remediation (2026-10-23): restore on the window's own display at its frame (FR15, owner decision D-1), a dialog that opens
+during the Overview close gets the keys (overview.md "Close focus", GF-038), the chrome follows the appearance (feature
+`appearance`, FR53, UX-06), the tiling preview is the blurred material (FR48, D-8), `CLater` cancels on destruction
+(ARCH-21), the rebuild for a new Hyprland (ADR-0009 amendment, GF-033). Plugin 0.13.0-audit.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
