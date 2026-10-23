@@ -1,5 +1,5 @@
 {
- "_doc": "A2 limits measured on Breeze, Adwaita and the own fixtures (tests/visual/icon-a2.sh). Key: the rule (E outside, S separation) and the label of the A2 line (icon, mode, size, appearance, scenario, tint, transparency); value: the measured metric of the rule, default: the Default rendering's. docs/specs/ui.md lists the same cells (tests/shell/a2_limits_doc.sh).",
+ "_doc": "A2 limits measured on the GPU (tests/visual/icon-a2.sh, run of 2026-10-23 on 915f076; these cells are not touched by the tile-plate change that followed). Key: the rule (E outside, S separation) and the label of the A2 line (icon, mode, size, appearance, scenario, tint, transparency); value: the measured metric of the rule, default: the Default rendering's. docs/specs/ui.md lists the same cells (tests/shell/a2_limits_doc.sh).",
  "limits": [
   {
    "key": "E breeze48:utilities-terminal tinted 24px dark window wallpaper #ffffff",
@@ -7,14 +7,69 @@
    "default": 5.3
   },
   {
-   "key": "E breeze:accessories-text-editor tinted 32px light window tint #E25AA1 transparency 1.0 wallpaper #808080",
-   "value": 1.93,
-   "default": 2.17
+   "key": "E hicolor:basecamp clear 24px dark window transparency 1.0 wallpaper #ffffff",
+   "value": 1.54,
+   "default": 1.92
   },
   {
-   "key": "E graphite-plate-red-glyph tinted 24px dark window wallpaper #808080",
-   "value": 2.81,
-   "default": 3.11
+   "key": "E hicolor:basecamp clear 48px light window wallpaper #000000",
+   "value": 2.03,
+   "default": 2.41
+  },
+  {
+   "key": "E hicolor:basecamp clear 48px light window wallpaper #808080",
+   "value": 2.45,
+   "default": 2.9
+  },
+  {
+   "key": "E hicolor:basecamp clear 48px light window wallpaper #ffffff",
+   "value": 2.87,
+   "default": 3.45
+  },
+  {
+   "key": "E hicolor:basecamp dark 24px dark window transparency 1.0 wallpaper #ffffff",
+   "value": 1.57,
+   "default": 1.92
+  },
+  {
+   "key": "E hicolor:basecamp dark 48px light window wallpaper #000000",
+   "value": 2.13,
+   "default": 2.41
+  },
+  {
+   "key": "E hicolor:basecamp dark 48px light window wallpaper #808080",
+   "value": 2.56,
+   "default": 2.9
+  },
+  {
+   "key": "E hicolor:basecamp tinted 24px dark window transparency 1.0 wallpaper #ffffff",
+   "value": 1.55,
+   "default": 1.92
+  },
+  {
+   "key": "E hicolor:basecamp tinted 32px dark window tint #E25AA1 transparency 1.0 wallpaper #ffffff",
+   "value": 1.56,
+   "default": 1.92
+  },
+  {
+   "key": "E hicolor:basecamp tinted 32px dark window tint #E6B422 transparency 1.0 wallpaper #ffffff",
+   "value": 1.52,
+   "default": 1.92
+  },
+  {
+   "key": "E hicolor:basecamp tinted 48px light window wallpaper #000000",
+   "value": 2.01,
+   "default": 2.41
+  },
+  {
+   "key": "E hicolor:basecamp tinted 48px light window wallpaper #808080",
+   "value": 2.42,
+   "default": 2.9
+  },
+  {
+   "key": "E hicolor:basecamp tinted 48px light window wallpaper #ffffff",
+   "value": 2.88,
+   "default": 3.45
   },
   {
    "key": "E hicolor:kdenlive tinted 24px dark window wallpaper #ffffff",
@@ -22,19 +77,19 @@
    "default": 4.53
   },
   {
+   "key": "E hicolor:kdenlive tinted 32px dark window tint #E25AA1 wallpaper #ffffff",
+   "value": 2.69,
+   "default": 3.54
+  },
+  {
+   "key": "E hicolor:kdenlive tinted 32px dark window wallpaper #ffffff",
+   "value": 2.64,
+   "default": 3.54
+  },
+  {
    "key": "E hicolor:obs tinted 24px dark window wallpaper #ffffff",
    "value": 2.6,
    "default": 6.68
-  },
-  {
-   "key": "E white-page-document tinted 32px light window tint #E6B422 wallpaper #000000",
-   "value": 2.71,
-   "default": 3.77
-  },
-  {
-   "key": "S hicolor:basecamp clear 32px dark window wallpaper #ffffff",
-   "value": 1.45,
-   "default": 1.71
   }
  ]
 }
