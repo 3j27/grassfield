@@ -63,10 +63,11 @@ TestCase {
 
     function test_schemaParity() {
         const leaves = schemaLeaves(readSchema(), "", {});
-        // Owned by other modules: version is fixed, dock.pinned and dock.recent belong to the Dock.
+        // Owned by other modules: version is fixed, dock.pinned, dock.recent and dock.folders belong to the Dock.
         delete leaves["version"];
         delete leaves["dock.pinned"];
         delete leaves["dock.recent"];
+        delete leaves["dock.folders"];
         compare(Object.keys(Store.RULES).sort(), Object.keys(leaves).sort());
         compare(Object.keys(Store.DEFAULTS).sort(), Object.keys(leaves).sort());
         for (const path in leaves) {
