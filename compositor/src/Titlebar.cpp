@@ -1,10 +1,12 @@
 #include "Titlebar.hpp"
 
+#include "ClientChrome.hpp"
 #include "DeferredFocus.hpp"
 #include "Ipc.hpp"
 #include "Plugin.hpp"
 #include "Stages.hpp"
 #include "Tiling.hpp"
+#include "core/ClientChrome.hpp"
 #include "core/PointerGesture.hpp"
 #include "core/Protocol.hpp"
 #include "core/Theme.hpp"
@@ -14,6 +16,7 @@
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/WLSurface.hpp>
+#include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
@@ -134,8 +137,7 @@ namespace {
     // parks the window on special:minimized itself when the plugin lacks the feature). Clicks can come from a
     // virtual pointer at any rate: the request is coalesced per window (spec FR24).
     void requestMinimize(const PHLWINDOW& w) {
-        const uint64_t address = reinterpret_cast<uintptr_t>(w.get());
-        gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::MinimizeRequest, .id = address}, gf::gfc::minimizeRequestJson(std::format("{:x}", address)));
+        gf::ipc::postMinimizeRequest(reinterpret_cast<uintptr_t>(w.get()));
     }
 
     // The one zoom toggle, shared by the zoom button and the double-click on the drag area.
@@ -151,6 +153,29 @@ namespace {
     Fullscreen::eFullscreenMode fullscreenMode(const PHLWINDOW& w) {
         const auto& fs = Fullscreen::controller();
         return fs ? fs->getFullscreenModes(w).internal : Fullscreen::FSMODE_NONE;
+    }
+
+    // Alt (Option) held on any keyboard.
+    bool altHeld() {
+        return g_pInputManager && (g_pInputManager->getModsFromAllKBs() & HL_MODIFIER_ALT) != 0;
+    }
+
+    // The zoom light (ADR-0015 P6, REQ-ADR0002-6): zoom (maximized) and back; with Alt held, true full screen (the shell
+    // hides the menu bar as in any full screen); a window in full screen leaves it.
+    void zoomLight(const PHLWINDOW& w) {
+        auto& fs = Fullscreen::controller();
+        if (!fs)
+            return;
+        const auto mode = fullscreenMode(w);
+        switch (gf::chrome::zoomAction(mode == Fullscreen::FSMODE_MAXIMIZED, mode == Fullscreen::FSMODE_FULLSCREEN, altHeld())) {
+            case gf::chrome::ZoomAction::EnterFullscreen:
+                gf::logRequest(Log::DEBUG, "titlebar zoom with Alt -> full screen");
+                fs->setFullscreenMode(w, Fullscreen::FSMODE_FULLSCREEN, Fullscreen::FSMODE_FULLSCREEN, false);
+                break;
+            case gf::chrome::ZoomAction::LeaveFullscreen: fs->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE, false); break;
+            case gf::chrome::ZoomAction::Zoom:
+            case gf::chrome::ZoomAction::Unzoom: toggleZoom(w); break;
+        }
     }
 
     // A move that starts on a maximized window: leave the maximized mode first (the layout gives the window
@@ -340,6 +365,8 @@ bool CGrassfieldTitlebar::shouldShow() const {
         return false;
     if (w->m_ruleApplicator && !w->m_ruleApplicator->decorate().valueOrDefault())
         return false;
+    if (gf::chrome::isClientChrome(w))
+        return false; // the app draws its own lights and toolbar (ADR-0015 P1)
     if (const auto& fs = Fullscreen::controller(); fs && fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_FULLSCREEN)
         return false;
     return true;
@@ -548,15 +575,17 @@ void CGrassfieldTitlebar::drawGlyphs(const CBox& bar, float scale, float alpha) 
         if (sizePx <= 0)
             continue;
 
-        auto& glyph = m_glyphs[i];
-        if (!glyph.texture || glyph.sizePx != sizePx || glyph.scale != scale) {
+        auto&      glyph  = m_glyphs[i];
+        const bool arrows = button == tb::Button::Zoom && gf::chrome::zoomGlyphIsArrows(altHeld());
+        if (!glyph.texture || glyph.sizePx != sizePx || glyph.scale != scale || glyph.arrows != arrows) {
             glyph = {};
-            auto pixels = tb::premultipliedBgra(tb::glyphMask(button, sizePx, theme::kGlyphStroke * theme::kButtonDiameter * scale), theme::kGlyphColor);
+            auto pixels = tb::premultipliedBgra(tb::glyphMask(button, sizePx, theme::kGlyphStroke * theme::kButtonDiameter * scale, arrows), theme::kGlyphColor);
             if (pixels.empty())
                 continue;
             glyph.texture = g_pHyprRenderer->createTexture(DRM_FORMAT_ARGB8888, pixels.data(), static_cast<uint32_t>(sizePx) * 4U, Vector2D{static_cast<double>(sizePx), static_cast<double>(sizePx)});
             glyph.sizePx  = sizePx;
             glyph.scale   = scale;
+            glyph.arrows  = arrows;
         }
         if (!glyph.texture || !glyph.texture->ok())
             continue;
@@ -629,6 +658,14 @@ void CGrassfieldTitlebar::onAppearanceChanged() {
             deco->m_title.texture.reset(); // the title colour is in its texture: rebuilt on the next draw
             deco->damageEntire();
         }
+    });
+}
+
+void CGrassfieldTitlebar::onKey() {
+    gf::guarded("titlebar onKey", [] {
+        // Only the lights under the pointer show glyphs; the frame drawn next reads Alt after Hyprland applied this key.
+        if (auto* hovered = pointerInput().hovered; isLive(hovered))
+            hovered->damageEntire();
     });
 }
 
@@ -732,7 +769,7 @@ void CGrassfieldTitlebar::activate(tb::Button button) {
             gf::logRequest(Log::DEBUG, "titlebar close");
             logIfFailed("close", Config::Actions::closeWindow(w));
             break;
-        case tb::Button::Zoom: gf::logRequest(Log::DEBUG, "titlebar zoom"); toggleZoom(w); break;
+        case tb::Button::Zoom: gf::logRequest(Log::DEBUG, "titlebar zoom"); zoomLight(w); break;
         case tb::Button::Minimize: gf::logRequest(Log::DEBUG, "titlebar minimize"); requestMinimize(w); break;
     }
 }

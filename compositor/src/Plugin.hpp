@@ -25,7 +25,7 @@ class IHyprWindowDecoration;
 namespace gf {
 
     inline constexpr const char* kPluginName    = "grassfield-compositor";
-    inline constexpr const char* kPluginVersion = "0.13.0-audit";
+    inline constexpr const char* kPluginVersion = "0.14.0";
 
     struct SPluginState {
         HANDLE                             handle = nullptr;

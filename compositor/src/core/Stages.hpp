@@ -47,7 +47,8 @@ namespace gf::stages {
     // in front of it; windows further back share the backmost position.
     inline constexpr size_t kStackDepth = 3;
     inline constexpr double kStackStep  = 8;
-    // The plugin's titlebar above each window's surface box (logical px, scaled with the thumbnail).
+    // The plugin's titlebar above each window's surface box (logical px, scaled with the thumbnail). A window that draws
+    // its own chrome has none (ADR-0015 P3, core/ClientChrome.hpp band): the glue passes the band of each window.
     inline constexpr double kTitlebarHeight = gf::theme::kTitlebarHeight;
     // How far left of its monitor a hidden strip's thumbnails are drawn (they are then not visible).
     inline constexpr double kHiddenMargin = 48;
@@ -153,7 +154,9 @@ namespace gf::stages {
     // Where each window of a strip stage is drawn in its tile: one surface rect per window, same order as
     // `surfacesBackToFront` (the windows' current surface boxes). Each window is fitted (uniform scale, centred, never
     // distorted) with its titlebar band into its stack position; the front window takes the bottom-right position.
-    std::vector<Box> thumbRects(const Box& tile, std::span<const Box> surfacesBackToFront);
+    // `bands`: the band above each window (same order; kTitlebarHeight, 0 for a window that draws its own chrome); empty,
+    // shorter, or a value that is not finite and >= 0: kTitlebarHeight.
+    std::vector<Box> thumbRects(const Box& tile, std::span<const Box> surfacesBackToFront, std::span<const double> bands = {});
 
     // How far a hidden strip slides left: the horizontal shift that puts the right edge of its tiles kHiddenMargin px left
     // of the monitor (its thumbnails are then not visible). Stages without a tile use the last tile, shifted the same way.
@@ -176,7 +179,7 @@ namespace gf::stages {
         std::optional<Box> thumb;
     };
     std::vector<StripTarget> stripTargets(size_t slot, std::span<const Box> tiles, bool hidden, bool fullscreen, const Box& monitor,
-                                          std::span<const Box> surfacesBackToFront);
+                                          std::span<const Box> surfacesBackToFront, std::span<const double> bands = {});
 
     // Every tile lies inside `monitor` (1 px tolerance; finite and bounded). False without tiles.
     bool tilesInMonitor(std::span<const Box> tiles, const Box& monitor);

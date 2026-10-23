@@ -109,8 +109,12 @@ compositor/build/grassfield-compositor-tests     # pure logic: protocol JSON, bu
                                                  # appmenu name/path validation and registrations,
                                                  # event coalescing and log rate limits (FR24),
                                                  # overview payload parsing / interpolation / chrome rule /
-                                                 # damage steps (FR25-FR29), desktop focus decisions (FR30)
+                                                 # damage steps (FR25-FR29), desktop focus decisions (FR30),
+                                                 # client chrome P1-P7 (ADR-0015)
 ```
+
+Windows that draw their own chrome (ADR-0015, feature `client-chrome`): nested `tests/compositor/client_chrome.sh` (with
+and without the plugin) and case 6 of `tests/compositor/zoom_restore.sh` (Alt+click full screen).
 
 ## Lint (gate Q1)
 

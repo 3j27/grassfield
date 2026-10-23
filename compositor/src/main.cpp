@@ -5,6 +5,7 @@
 // its degraded mode because no `grassfield` capabilities event is ever posted.
 
 #include "AppmenuServer.hpp"
+#include "ClientChrome.hpp"
 #include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
 #include "Ipc.hpp"
@@ -19,6 +20,7 @@
 
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
@@ -104,8 +106,13 @@ namespace {
             gf::guarded("stages pointer guard", [&] { gf::stager::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             // A press after an overview focus request wins over the target the shell named (recorded only).
             gf::guarded("overview focus press", [&] { gf::overviewFocus::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
+            // A press on a zoomed window that draws its own chrome, recorded while it is still zoomed: the app's move request
+            // that may follow takes it out of the zoom under the pointer (ADR-0015 P4).
+            gf::guarded("client chrome press", [&] { gf::chrome::beforePointerButton(e.state == WL_POINTER_BUTTON_STATE_PRESSED); });
             CGrassfieldTitlebar::onGlobalMouseButton(e);
         }));
+        // Keys are observed, never cancelled: Alt changes the zoom glyph of the hovered lights (ADR-0015 P6).
+        l.push_back(ev.input.keyboard.key.listen([](IKeyboard::SKeyEvent /*e*/, Event::SCallbackInfo& /*info*/) { CGrassfieldTitlebar::onKey(); }));
     }
 
     // The window whose m_windowDecorations owns `deco` (normally deco->window(); scanned as a fallback).
@@ -185,6 +192,7 @@ namespace {
             }
         };
         step("listeners", [&] { s.listeners.clear(); });
+        step("client chrome", [] { gf::chrome::stop(); });   // per-window toplevel listeners removed
         step("desktop focus", [] { gf::desktopFocus::stop(); }); // no press or commit may reach the policy any more
         step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
         step("overview", [] { gf::overviewer::stop(); });   // every window back to normal rendering, transformers detached
@@ -285,6 +293,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         if (!layerPointerOk) {
             gf::guarded("layer pointer rollback", [] { gf::layerPointer::stop(); });
             gf::log(Log::WARN, "layer pointer listener failed to register; layer-pointer not advertised");
+        }
+        // Optional feature: without it windows that draw their own chrome still get no titlebar (P1 needs no listener), but
+        // their minimize light and zoomed drag are not bridged and client-chrome is not advertised (the shell's Overview
+        // then keeps the titlebar band above them).
+        bool clientChromeOk = false;
+        gf::guarded("client chrome start", [&] { clientChromeOk = gf::chrome::start(); });
+        if (!clientChromeOk) {
+            gf::guarded("client chrome rollback", [] { gf::chrome::stop(); });
+            gf::log(Log::WARN, "client chrome listeners failed to register; client-chrome not advertised");
         }
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");

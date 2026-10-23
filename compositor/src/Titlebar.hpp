@@ -38,7 +38,8 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
 
     PHLWINDOW                  window() const;
 
-    // Floating, not full screen, decorations allowed by window rules.
+    // Floating, not full screen, decorations allowed by window rules, and not a window that draws its own chrome (the
+    // Hyprland tag grassfield-client-chrome, ADR-0015 P1: re-evaluated on window.updateRules, never decorate = false).
     bool shouldShow() const;
 
     // Re-evaluates visibility (floating / full screen / rule changes) and requests new extents if needed.
@@ -74,6 +75,10 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // The appearance changed (config "appearance", audit UX-06): every titlebar is drawn again in its palette.
     static void onAppearanceChanged();
 
+    // Keyboard listener (Event::bus()->m_events.input.keyboard.key, observed only): the lights under the pointer are drawn
+    // again, so that their zoom glyph follows Alt (the full-screen arrows while it is held, ADR-0015 P6).
+    static void onKey();
+
   private:
     CBox layoutBox() const; // titlebar box in global logical (layout) coordinates
     bool onButtonPress(const Vector2D& coords, const IPointer::SButtonEvent& e);
@@ -101,6 +106,7 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
         SP<Render::ITexture> texture;
         int                  sizePx = 0;
         float                scale  = 0.F;
+        bool                 arrows = false; // the zoom light's full-screen arrows (Alt held) instead of its +
     };
     std::array<SGlyph, gf::titlebar::kButtonOrder.size()> m_glyphs;
 };

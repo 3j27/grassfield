@@ -1,5 +1,6 @@
 #include "Stages.hpp"
 
+#include "ClientChrome.hpp"
 #include "DeferredFocus.hpp"
 #include "Ipc.hpp"
 #include "Overview.hpp"
@@ -858,10 +859,12 @@ namespace {
                 for (size_t k = 0; k < order.size(); ++k) {
                     std::vector<PHLWINDOW> ws;
                     std::vector<st::Box>   surfaces;
+                    std::vector<double>    bands; // the titlebar band above each thumbnail; none for client chrome (ADR-0015 P3)
                     for (const auto id : order[k].windows) {
                         if (const auto w = windowByAddress(id)) {
                             ws.push_back(w);
                             surfaces.push_back(tf::surfaceBox(w));
+                            bands.push_back(gf::chrome::bandOf(w));
                         }
                     }
                     if (!strip || k == 0) { // the active stage, or a workspace whose monitor has no strip: shown normally
@@ -869,7 +872,7 @@ namespace {
                             targets.push_back(STarget{.w = w, .inStrip = false, .to = std::nullopt, .thumb = std::nullopt});
                         continue;
                     }
-                    const auto drawn = st::stripTargets(k - 1, strip->tiles, strip->hidden, fs, monitorBox(mon), surfaces);
+                    const auto drawn = st::stripTargets(k - 1, strip->tiles, strip->hidden, fs, monitorBox(mon), surfaces, bands);
                     for (size_t i = 0; i < ws.size() && i < drawn.size(); ++i)
                         targets.push_back(STarget{.w = ws[i], .inStrip = true, .to = drawn[i].to, .thumb = drawn[i].thumb});
                 }

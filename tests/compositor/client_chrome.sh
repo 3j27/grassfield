@@ -8,9 +8,8 @@
 # (read-only here: `clients -j`, `decorations`, `monitors -j`). Clients start through scripts/dev/isolated.sh with the nested
 # socket only.
 #
-# Assertions, and what each depends on (PLUGIN = the plugin work item of ADR-0015 / docs/specs/compositor.md must have
-# landed; SESSION = the session rules S1-S3 in config/hypr/grassfield/windows.lua (in this tree); APP = true with the app side).
-# Only 3, 5 and 9 still wait for the plugin (P1, P5):
+# Assertions, and what each depends on (PLUGIN = the plugin work item of ADR-0015 / docs/specs/compositor.md, in this tree
+# since P1-P7; SESSION = the session rules S1-S3 in config/hypr/grassfield/windows.lua; APP = true with the app side):
 #   1  APP      the Settings window carries xdg tag "settings"; the foot window carries none
 #   2  SESSION  the Settings window has the Hyprland tag grassfield-client-chrome (the rule on the xdg tag)
 #   3  PLUGIN   the Settings window has no grassfield-titlebar decoration; foot keeps its strip
@@ -23,6 +22,10 @@
 #   8  APP      a double-click on empty toolbar space follows windows.titlebarDoubleClick (zoom: fullscreen=1)
 #   9  PLUGIN   plugin unload and reload while the window is mapped: never two sets of lights, never a strip: run by hand,
 #               see the end of this file (scripts/nestctl plugin unload|load are owner-approved nested commands)
+#   10 PLUGIN   a drag on empty toolbar space of the zoomed window takes it out of the zoom at its floating size, under the
+#               pointer at the same place in its toolbar row (P4: x within 3 px of the press's fraction, the row under the
+#               pointer); with --no-plugin Hyprland's own move un-zooms it centred on the pointer (reported, not checked)
+#   11 PLUGIN   the gfc/1 feature client-chrome is advertised (P2); with --no-plugin there is no feature list at all
 # Option(Alt)+click on the zoom light (true full screen, REQ-ADR0002-6) cannot be injected by scripts/dev/pointer.sh (no
 # modifier support): covered by tests/unit/tst_windowcontrols.qml (test_optionClickIsTrueFullScreen) and by hand.
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Log: .dev/client-chrome/run-<timestamp>.log.
@@ -164,6 +167,37 @@ pointer abs "$ex" "$ey" sleep 50 click sleep 60 click sleep 700
 read -r x y w h fs < <(geom org.grassfield.Settings)
 [[ $fs == 0 && $w == "$w0" && $h == "$h0" ]]
 check "double-click restores" $? "now ${w}x${h} fullscreen $fs"
+
+say "10 drag of the zoomed window from its toolbar (P4)"
+read -r x0 y0 w0 h0 _ < <(geom org.grassfield.Settings)
+read -r zx zy < <(light 2)
+pointer abs "$zx" "$zy" sleep 50 click sleep 700
+read -r zxx zyy zw zh fs < <(geom org.grassfield.Settings)
+if [[ $fs == 1 ]]; then
+  # Empty toolbar space three quarters across the zoomed window, in the row (26 px below its top edge).
+  px=$((zxx + zw * 3 / 4)) py=$((zyy + 26)) tx=$((mon_w / 2)) ty=$((mon_h / 2))
+  pointer abs "$px" "$py" sleep 50 down drag "$tx" "$ty" sleep 50 up sleep 700
+  read -r x y w h fs < <(geom org.grassfield.Settings)
+  fx=$((tx - x - w0 * 3 / 4)) fy=$((ty - y - 26))
+  if ((plugin)); then
+    [[ $fs == 0 && $w == "$w0" && $h == "$h0" && ${fx#-} -le 3 && ${fy#-} -le 12 ]]
+    check "zoomed drag: floating size, same place under the pointer (PLUGIN P4)" $? \
+      "now ${w}x${h} at ($x,$y) fullscreen $fs; pointer ($tx,$ty): x error $fx (<= 3), row error $fy (<= 12: Qt's drag threshold)"
+  else
+    say "  zoomed drag without the plugin: ${w}x${h} at ($x,$y) fullscreen $fs; x error $fx, row error $fy (Hyprland's own move)"
+  fi
+else
+  check "zoomed drag: the zoom light zoomed first" 1 "fullscreen $fs"
+fi
+
+say "11 the feature (P2)"
+if ((plugin)); then
+  feats=$(ctl -j grassfield 2>/dev/null | jq -r '.features | join(",")')
+  [[ ,$feats, == *,client-chrome,* ]]
+  check "client-chrome advertised (PLUGIN P2)" $? "features $feats"
+else
+  skip "feature" "no plugin loaded"
+fi
 
 say "5 minimize light"
 if ((plugin)); then

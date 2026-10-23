@@ -1,6 +1,7 @@
 #include "Ipc.hpp"
 
 #include "AppmenuServer.hpp"
+#include "ClientChrome.hpp"
 #include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
 #include "GenieDraw.hpp"
@@ -182,13 +183,18 @@ namespace gf::ipc {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
-                                                state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready(), state().luaConfigRegistered);
+                                                state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready(), state().luaConfigRegistered,
+                                                chrome::ready());
             return gfc::capabilitiesJson(features);
         }
     } // namespace
 
     void postCapabilities() {
         postEvent(events::Key{.channel = events::Channel::Capabilities, .id = 0}, currentCapabilities());
+    }
+
+    void postMinimizeRequest(uint64_t address) {
+        postEvent(events::Key{.channel = events::Channel::MinimizeRequest, .id = address}, gfc::minimizeRequestJson(std::format("{:x}", address)));
     }
 
     void postWithdrawn() {

@@ -201,6 +201,7 @@
  {"path": "compositor/tests/GenieTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/LayerPointerTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/TilingTest.cpp", "layer": "logic"},
+ {"path": "compositor/tests/ClientChromeTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/MinimizeTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/OverviewFocusTest.cpp", "layer": "logic"},
  {"path": "compositor/tests/OverviewTest.cpp", "layer": "logic"},

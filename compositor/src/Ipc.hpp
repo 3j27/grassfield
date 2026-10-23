@@ -5,6 +5,7 @@
 
 #include "core/EventThrottle.hpp"
 
+#include <cstdint>
 #include <string>
 
 namespace gf::ipc {
@@ -23,6 +24,11 @@ namespace gf::ipc {
 
     // Posts the capabilities event (features computed from what registered: see gfc::features).
     void postCapabilities();
+
+    // Posts minimize-request for the window at `address` (FR6: the shell answers with hl.plugin.grassfield.minimize and
+    // its Dock tile, or parks the window itself without the minimize feature). Coalesced per window (FR24): the titlebar's
+    // minimize light and a client-chrome window's set_minimized (ADR-0015 P5) take this one path.
+    void postMinimizeRequest(uint64_t address);
 
     // Unload: posts a capabilities event with no feature at once (not throttled), so that the shell goes back to its
     // fallbacks (desktop focus workarounds, minimize parking, T0 menus, thumbnails) as without the plugin.

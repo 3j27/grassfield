@@ -18,7 +18,8 @@ keyboard under a resting pointer (feature `layer-pointer`, FR51-FR52), plugin 0.
 remediation (2026-10-23): restore on the window's own display at its frame (FR15, owner decision D-1), a dialog that opens
 during the Overview close gets the keys (overview.md "Close focus", GF-038), the chrome follows the appearance (feature
 `appearance`, FR53, UX-06), the tiling preview is the blurred material (FR48, D-8), `CLater` cancels on destruction
-(ARCH-21), the rebuild for a new Hyprland (ADR-0009 amendment, GF-033). Plugin 0.13.0-audit.
+(ARCH-21), the rebuild for a new Hyprland (ADR-0009 amendment, GF-033). Plugin 0.13.0-audit. The unified toolbar's
+plugin work item (ADR-0015 P1-P7, feature `client-chrome`): plugin 0.14.0.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -109,8 +110,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `config` Lua function registered; `appmenu` (FR18), `overview` (FR29), `desktop-focus` + `desktop-focus-v2` (FR31),
   `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR52) likewise;
   `minimize-effect` (FR45) with `minimize` and `config`; `window-tiling` (FR50) when the `tile` Lua function and `config`
-  registered; `appearance` (FR53) with `config`; `stages` only while its flag is on
-  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance"]`
+  registered; `appearance` (FR53) with `config`; `client-chrome` (ADR-0015 P2) when the per-window toplevel listeners
+  registered; `stages` only while its flag is on
+  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome"]`
   when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
@@ -1230,14 +1232,16 @@ rule (valid and recent: focus; else `urgent` only) with graceful degradation (no
 Grassfield apps draw their own lights and toolbar (grassfield-ui `WindowControls` / `UnifiedToolbar`) and tag their window
 with an xdg-toplevel tag (`browser`, `settings`, `viewer`, `info`; apps/windowchrome.h). The plugin steps aside for those
 windows. Full text and rationale: docs/decisions/ADR-0015-unified-toolbar.md, "Implementation: app side ... and the plugin
-work item". P1-P7 are not implemented in `compositor/` yet; the app side, S1-S3 and H1 are, so until it lands tagged windows show two chromes.
+work item". P1-P7 are implemented (`core/ClientChrome.*`, `ClientChrome.*`, `Titlebar.cpp`, `core/Stages.*`, `Theme.hpp`;
+plugin 0.14.0); the app side, S1-S3 and H1 were done before. Unit tests: `tests/ClientChromeTest.cpp`. A window tagged after
+it mapped (a rule change) loses its strip on `window.updateRules`; its bridges P4 and P5 check the tag when they run.
 
 | Id | Change | Test |
 |---|---|---|
 | P1 | `isClientChrome(window)`: the window's Hyprland tags hold `grassfield-client-chrome` (a dynamic tag prints with `*`); `Titlebar::shouldShow()` is false for it; re-evaluated on `window.updateRules`; never `decorate = false` | GTest on the predicate; `client_chrome.sh` assertion 3 |
 | P2 | gfc/1 feature `client-chrome` (additive, ADR-0007), advertised only when P1 is registered | `Protocol.*` GTest |
 | P3 | Stages band (`core/Stages.cpp:486-489`, `Stages.hpp:49`) uses P1: band 0 for a tagged window | `StagesTest`, `stages.sh` |
-| P4 | `requestMove` for tagged windows: a zoomed window restores its remembered box under the pointer at the same grab ratio, then moves (FR8 for the app-drawn row) | `zoom_restore.sh` variant on the Settings fixture |
+| P4 | `requestMove` for tagged windows: a zoomed window restores its remembered box under the pointer at the same grab ratio, then moves (FR8 for the app-drawn row). Done: the press is recorded before Hyprland handles it (the window is still zoomed then); the move request that answers it (same window, button held, within 3 s) leaves the zoom if Hyprland's own handler did not, places the floating size by `titlebar::unzoomedDragBox`, then ends the move Hyprland started and begins one from there (`CLayoutManager::endDragTarget` / `setTargetGeom` / `beginDragTarget`) | `ClientChromeZoomedDrag.*` GTest; `client_chrome.sh` assertion 10 |
 | P5 | minimize bridge for tagged windows: `stateChanged` with `requestsMinimize` runs the FR6 path (`minimize-request`, `special:minimized`) | `client_chrome.sh` assertion 5 |
 | P6 | the plugin titlebar's green button with Alt held: true full screen (`FSMODE_FULLSCREEN`), glyph = full-screen arrows while Alt is held over the group (REQ-ADR0002-6, plugin part) | new case in `zoom_restore.sh` (Alt held through `scripts/dev/keys.sh`) or a `ZoomOption` GTest |
 | P7 | the light constants come from `window.*` of `ui/tokens/tokens.json` (generated, or a GTest comparing `Theme.hpp` with it) | GTest |
@@ -1249,9 +1253,11 @@ work item". P1-P7 are not implemented in `compositor/` yet; the app side, S1-S3 
 Degraded behaviour: without the plugin the app's lights and toolbar are drawn all the same (close, drag, zoom through
 xdg-toplevel requests; minimize has no effect, spike step 6). With an older plugin that lacks P1 the strip is drawn above the
 app's toolbar (plugin and apps ship from one release). `tests/compositor/client_chrome.sh [--no-plugin]` is the nested
-scenario: its header lists which assertion needs which item. S1-S3 and H1 are done (session rules, shell Overview band,
-capabilities file for the apps' minimize light); of the nested assertions only 3 (the strip, P1), 5 (minimize, P5) and the
-manual 9 (unload and reload, P1) still wait for the plugin.
+scenario: its header lists which assertion needs which item; assertions 3 (no strip, P1), 5 (minimize bridge, P5), 10
+(zoomed drag, P4) and 11 (feature, P2) need this plugin, 9 (unload and reload) is run by hand. P6 is case 6 of
+`tests/compositor/zoom_restore.sh` (Alt held with `scripts/dev/keys.sh`). P3 also gives the tiling and restore frames no
+band above such a window (`Tiling.cpp`, `Minimize.cpp` restore). P7: `ui/tools/gen-tokens.py` writes the `window` group into
+`ThemeTokens.hpp`; the colours come from it and `Theme.hpp` checks the metrics against it at compile time.
 
 ## Known limitations (honest, user-visible gaps vs macOS)
 

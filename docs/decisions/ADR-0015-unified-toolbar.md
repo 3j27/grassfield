@@ -694,8 +694,13 @@ agent (the files are outside this slice).
   store).
 
 ### Plugin work item (compositor-engineer; also in docs/specs/compositor.md "Plugin work item: client chrome")
-Until it lands a tagged window still gets the plugin strip above the app's own toolbar (two chromes). Items P1-P7 plus the
-session config S1-S3 and the shell item H1.
+Items P1-P7 plus the session config S1-S3 and the shell item H1. **Status (2026-10-23): P1-P7 implemented in plugin 0.14.0**
+(feature `client-chrome`; docs/specs/compositor.md "Plugin work item: client chrome" says how each one landed and which
+nested assertion covers it). With an older plugin a tagged window still gets the plugin strip above the app's own toolbar
+(two chromes). P4 as built: the press on a zoomed tagged window is recorded before Hyprland handles it; the move request
+that answers it leaves the zoom (if Hyprland's own handler did not), places the floating size at the press's horizontal
+fraction with the toolbar row under the pointer, and restarts Hyprland's move from there (public CLayoutManager calls; the
+window's own `xdgMoveRequest` listener is left in place, see spike step 3).
 - **P1 predicate.** `isClientChrome(window)`: the window's Hyprland tags hold `grassfield-client-chrome` (the dynamic tag
   prints with a `*`; compare without it). `Titlebar::shouldShow()` returns false for it. Re-evaluated on `window.updateRules`
   (main.cpp:84). Never `decorate = false` (it drops the border and the shadow, spike step 2).
