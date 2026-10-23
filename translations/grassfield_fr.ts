@@ -5735,8 +5735,8 @@
         <translation>Zoom</translation>
     </message>
     <message>
-        <source>Fills the screen below the menu bar, or restores the window. Option-click for full screen</source>
-        <translation>Remplit l’écran sous la barre des menus, ou restaure la fenêtre. Option-clic pour le plein écran</translation>
+        <source>Fills the screen below the menu bar, or restores the window. Alt-click for full screen</source>
+        <translation>Remplit l’écran sous la barre des menus, ou restaure la fenêtre. Alt-clic pour le plein écran</translation>
     </message>
 </context>
 <context>

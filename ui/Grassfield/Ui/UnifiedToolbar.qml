@@ -51,6 +51,15 @@ Item {
     Accessible.role: Accessible.ToolBar
     Accessible.name: root.accessibleName
 
+    // A point of the drag area (its coordinates) is on the lights: a press that starts there belongs to the lights, so a
+    // drag from a light never moves the window and a double-click on them is not the toolbar's (macOS; client_chrome.sh 7).
+    function onLights(x: real, y: real): bool {
+        if (!root.showControls || !lights.visible)
+            return false;
+        const p = lights.mapFromItem(dragArea, x, y);
+        return lights.overLights(p.x, p.y);
+    }
+
     // The double-click, also callable by a host (a keyboard route to the same action).
     function doubleClicked(): void {
         root.lastDoubleClick = Actions.doubleClick(root.window, root.doubleClickAction, root.canMinimize);
@@ -63,18 +72,23 @@ Item {
         z: -1
 
         DragHandler {
+            id: dragHandler
             target: null
             acceptedButtons: Qt.LeftButton
-            // The threshold is Qt's own drag distance; the compositor then follows the pointer (ADR-0015, step 3).
+            // The threshold is Qt's own drag distance; the compositor then follows the pointer (ADR-0015, step 3). A drag
+            // that started on a light is the light's (its press, then its release elsewhere: nothing).
             onActiveChanged: {
-                if (active && root.window)
+                if (active && root.window && !root.onLights(dragHandler.centroid.pressPosition.x, dragHandler.centroid.pressPosition.y))
                     root.window.startSystemMove();
             }
         }
 
         TapHandler {
             acceptedButtons: Qt.LeftButton
-            onDoubleTapped: root.doubleClicked()
+            onDoubleTapped: eventPoint => {
+                if (!root.onLights(eventPoint.position.x, eventPoint.position.y))
+                    root.doubleClicked();
+            }
         }
     }
 

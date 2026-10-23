@@ -7,7 +7,7 @@ import "WindowActions.js" as Actions
 //
 // Look (the compositor plugin's titlebar has the same values, from the window.* tokens): 14-pt lights 23 apart; the
 // glyphs (x, -, +) appear on all three while the pointer is over the group; an inactive window shows grey lights
-// (coloured again under the pointer); a disabled light is grey and inert; a pressed light darkens. Option/Alt held over
+// (coloured again under the pointer); a disabled light is grey and inert; a pressed light darkens. Alt (Option) held over
 // the group turns the zoom glyph into the full-screen arrows and the click into a true full screen. The lights are
 // hidden while the window is in full screen.
 //
@@ -68,6 +68,16 @@ Item {
         root.minimizeRequested();
         if (!root.handled && root.canMinimize)
             Actions.minimize(root.window);
+    }
+
+    // (x, y), in this item's coordinates, is on the group of lights: the lights, the gaps between them and the hit slop
+    // around (the hover area). A press there is the lights', never the toolbar's drag or double-click (macOS).
+    function overLights(x: real, y: real): bool {
+        if (root.fullScreen || !root.visible)
+            return false;
+        const slop = Tokens.windowLightHitSlop;
+        return x >= root.geometry.x0 - slop && x <= root.geometry.x0 + root.geometry.width + slop && y >= root.geometry.y0 - slop
+            && y <= root.geometry.y0 + Tokens.windowLightDiameter + slop;
     }
 
     function zoomWindow(fullScreen: bool): void {
@@ -135,7 +145,7 @@ Item {
         tint: Tokens.windowZoomColor
         glyph: Actions.zoomGlyph(root.altHeld)
         accessibleName: qsTr("Zoom")
-        accessibleDescription: qsTr("Fills the screen below the menu bar, or restores the window. Option-click for full screen")
+        accessibleDescription: qsTr("Fills the screen below the menu bar, or restores the window. Alt-click for full screen")
         windowActive: root.active
         groupHovered: root.hovered
         lightEnabled: root.canZoom

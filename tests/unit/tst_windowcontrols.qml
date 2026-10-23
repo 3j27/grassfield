@@ -323,6 +323,37 @@ TestCase {
         u.destroy();
     }
 
+    // client_chrome.sh 7 (nested, 2026-10-23): a drag that starts on a light moved the window. The press belongs to the
+    // lights (macOS): only a drag from empty space starts the compositor's move.
+    function test_dragFromEmptySpaceMovesTheWindow() {
+        const u = make(toolbarComponent, {});
+        mouseDrag(u, 400, 26, 200, 100);
+        verify(win.calls.indexOf("move") >= 0, "empty space drags the window: " + win.calls.join(","));
+        u.destroy();
+    }
+
+    function test_dragFromALightNeverMovesTheWindow() {
+        const u = make(toolbarComponent, {});
+        for (const light of [u.controls.closeLight, u.controls.minimizeLight, u.controls.zoomLight]) {
+            win.calls = [];
+            const p = u.mapFromItem(light, light.width / 2, light.height / 2);
+            mouseDrag(u, p.x, p.y, 200, 100);
+            compare(win.calls.indexOf("move"), -1, "a drag from a light: " + win.calls.join(","));
+        }
+        u.destroy();
+    }
+
+    function test_theLightsGroupCoversTheLightsAndTheirSlop() {
+        const c = make(controlsComponent, {style: "unified"});
+        const g = c.geometry;
+        verify(c.overLights(g.x0 + 7, g.y0 + 7), "the close light's centre");
+        verify(c.overLights(g.x0 + g.width - 1, g.y0 + 7), "the zoom light's right edge");
+        verify(c.overLights(g.x0 + 18, g.y0 + 7), "the gap between two lights");
+        verify(!c.overLights(g.x0 + g.width + Tokens.windowLightHitSlop + 1, g.y0 + 7), "right of the group");
+        verify(!c.overLights(g.x0 + 7, g.y0 + Tokens.windowLightDiameter + Tokens.windowLightHitSlop + 1), "below the group");
+        c.destroy();
+    }
+
     function test_pressOnALightDoesNotReachTheDragArea() {
         const u = make(toolbarComponent, {});
         const p = centre(u.controls.closeLight);
