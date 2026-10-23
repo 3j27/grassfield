@@ -149,6 +149,31 @@ mkdir -p "$tmp/run"
 luamod "c.remember('$packaged', function(n) return ({XDG_RUNTIME_DIR = '$tmp/run', HYPRLAND_INSTANCE_SIGNATURE = '$sig'})[n] end)"
 expect "lua: remember writes the runtime note of this instance" "$(cat "$tmp/run/grassfield-compositor-$sig" 2>/dev/null)" "$packaged"
 expect "lua: --vetted is never asked with an ABI the shell would expand" "$(luamod "c.rebuild = '/bin/echo'; print(c.vetted('a;b'), c.vetted('\$(x)'))")" "nil	nil"
+# The check runs on Hyprland's main thread during the parse (review of b0d347e): bounded, and only an answer of a check
+# that succeeded counts.
+printf '#!/bin/sh\nsleep 30\necho /never\n' >"$tmp/slow-vetted"
+printf '#!/bin/sh\necho /some/path\nexit 1\n' >"$tmp/failing-vetted"
+printf '#!/bin/sh\necho "/ok/$*"\n' >"$tmp/ok-vetted"
+chmod +x "$tmp/slow-vetted" "$tmp/failing-vetted" "$tmp/ok-vetted"
+started=$SECONDS
+expect "lua: a --vetted check that hangs is cut off and vouches for nothing" \
+  "$(luamod "c.rebuild = '$tmp/slow-vetted'; c.vetted_seconds = 1; print(c.vetted())")" "nil"
+((SECONDS - started <= 4)) && pass "lua: the hanging check was cut off within its bound" || bad "lua: the hanging check took $((SECONDS - started)) s"
+expect "lua: a --vetted check that fails vouches for nothing" "$(luamod "c.rebuild = '$tmp/failing-vetted'; print(c.vetted())")" "nil"
+expect "lua: a --vetted check that succeeds is read" "$(luamod "c.rebuild = '$tmp/ok-vetted'; print(c.vetted(), c.vetted('A_1'))")" "/ok/--vetted	/ok/--vetted A_1"
+expect "lua: no timeout tool, no check" "$(luamod "c.rebuild = '$tmp/ok-vetted'; c.timeout = '$tmp/none'; print(c.vetted())")" "nil"
+# Verify mode (just check runs Hyprland --verify-config with the session config): the loader writes no runtime note.
+expect "lua: verify mode is read from the command line" \
+  "$(luamod "print(c.verifying(function() return 'Hyprland\\0--verify-config\\0--config\\0x.lua\\0' end), c.verifying(function() return 'Hyprland\\0--config\\0x.lua\\0' end), c.verifying(function() return nil end))")" \
+  "true	false	false"
+expect "lua: a plain lua process is not in verify mode" "$(luamod "print(c.verifying())")" "false"
+if command -v Hyprland >/dev/null; then
+  mkdir -p "$tmp/rt"
+  printf 'package.path = "%s/config/hypr/?.lua;" .. package.path\nprint("gf-probe verifying=" .. tostring(require("grassfield.compositor").verifying()))\n' "$root" >"$tmp/probe.lua"
+  out=$(env -u HYPRLAND_INSTANCE_SIGNATURE XDG_RUNTIME_DIR="$tmp/rt" Hyprland --verify-config --config "$tmp/probe.lua" 2>&1)
+  [[ $out == *"gf-probe verifying=true"* ]] && pass "Hyprland --verify-config: the loader knows it is verifying" \
+    || bad "Hyprland --verify-config: the loader knows it is verifying ($(grep -m1 gf-probe <<<"$out"))"
+fi
 
 # ---- the user rebuild and the vetting, on temporary directories ----
 lib=$tmp/lib src=$tmp/src tools=$tmp/tools cache=$tmp/cache
