@@ -373,7 +373,7 @@ FocusScope {
                     anchors.right: entryDots.visible ? entryDots.left : chevron.left
                     anchors.rightMargin: Tokens.spacingXs
                     anchors.verticalCenter: parent.verticalCenter
-                    text: entry.name.replace(/[\r\n]+/g, "\u23CE")
+                    text: Nav.displayName(entry.name)
                     elide: Text.ElideMiddle
                     color: entry.emphasized ? Appearance.colors.accentText : Appearance.colors.text
                     font.family: Appearance.fontFamily

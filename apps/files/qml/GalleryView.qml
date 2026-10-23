@@ -205,7 +205,7 @@ FocusScope {
                     anchors.fill: parent
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
-                    text: page.name.replace(/[\r\n]+/g, "⏎")
+                    text: Nav.displayName(page.name)
                     elide: Text.ElideMiddle
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
@@ -432,7 +432,7 @@ FocusScope {
                 Text {
                     textFormat: Text.PlainText
                     width: parent.width
-                    text: root.info ? String(root.info.name).replace(/[\r\n]+/g, "⏎") : ""
+                    text: root.info ? Nav.displayName(root.info.name) : ""
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily

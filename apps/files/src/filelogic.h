@@ -50,6 +50,17 @@ struct Segment {
 // other schemes start at "<scheme>:/".
 QList<Segment> pathSegments(const QUrl &url, const QString &homePath, const QString &rootLabel, const QString &trashLabel);
 
+// Names that differ only by Unicode normalization (NFC "e acute" and NFD "e" + combining acute) are the same name to a
+// person: macOS compares them equal (GF-105). The file system keeps them apart, so Files checks collisions with this.
+bool sameName(const QString &a, const QString &b);
+
+// Match text for the folder filter: canonically decomposed, combining marks dropped, case folded ("resume" finds
+// "Résumé.txt" in either normalization form).
+QString foldForMatch(const QString &text);
+
+// Whether `name` contains the filter text under foldForMatch.
+bool nameMatchesFilter(const QString &name, const QString &filter);
+
 // A name a single file can take: not empty, not "." or "..", no '/', no NUL, at most 255 UTF-8 bytes.
 bool isValidFileName(const QString &name);
 

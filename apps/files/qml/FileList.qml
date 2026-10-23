@@ -250,7 +250,7 @@ FocusScope {
                 anchors.leftMargin: Tokens.spacingSm
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.nameWidth - icon.x - icon.width - 2 * Tokens.spacingSm - (rowDots.visible ? rowDots.width + Tokens.spacingSm : 0)
-                text: row.name.replace(/[\r\n]+/g, "\u23CE")
+                text: Nav.displayName(row.name)
                 elide: Text.ElideMiddle
                 color: row.foreground
                 font.family: Appearance.fontFamily

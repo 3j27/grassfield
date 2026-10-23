@@ -227,6 +227,32 @@ TEST(FileNames, UniqueAndDuplicateNames)
     EXPECT_EQ(duplicateName(".bashrc", false, "copy", exists), ".bashrc copy");
 }
 
+TEST(UnicodeNames, CanonicallyEquivalentNamesAreTheSameName)
+{
+    const QString nfc = QString::fromUtf8("R\xc3\xa9sum\xc3\xa9.txt");
+    const QString nfd = QString::fromUtf8("Re\xcc\x81sume\xcc\x81.txt");
+    EXPECT_NE(nfc, nfd);
+    EXPECT_TRUE(sameName(nfc, nfd));
+    EXPECT_TRUE(sameName(nfc, nfc));
+    EXPECT_FALSE(sameName(nfc, QStringLiteral("Resume.txt")));
+    EXPECT_FALSE(sameName(nfc, nfc.toUpper()));
+}
+
+TEST(UnicodeNames, FilterIgnoresCaseAndAccentsInBothForms)
+{
+    const QString nfc = QString::fromUtf8("R\xc3\xa9sum\xc3\xa9.txt");
+    const QString nfd = QString::fromUtf8("Re\xcc\x81sume\xcc\x81.txt");
+    for (const QString &name : {nfc, nfd}) {
+        EXPECT_TRUE(nameMatchesFilter(name, QStringLiteral("resume")));
+        EXPECT_TRUE(nameMatchesFilter(name, QStringLiteral("RESUME")));
+        EXPECT_TRUE(nameMatchesFilter(name, nfc.left(3)));
+        EXPECT_TRUE(nameMatchesFilter(name, nfd.left(4)));
+        EXPECT_FALSE(nameMatchesFilter(name, QStringLiteral("resumes")));
+    }
+    // Names with quotes and backslashes are plain text for the filter.
+    EXPECT_TRUE(nameMatchesFilter(QStringLiteral("a\"b\\c"), QStringLiteral("\"b\\")));
+}
+
 TEST(NetworkPlace, HidesTheAppleDevicesEntry)
 {
     // kio-extras remoteview entries in remote:/ (afc-network.desktop links to afc:/).

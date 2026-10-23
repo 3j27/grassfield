@@ -70,6 +70,19 @@ bool localExists(const QUrl &url)
     return url.isLocalFile() && QFileInfo::exists(url.toLocalFile());
 }
 
+// Whether `directory` (local) holds an entry named `name` or a canonically equivalent one (NFC/NFD), other than `except`.
+bool nameTaken(const QUrl &directory, const QString &name, const QString &except = QString())
+{
+    if (!directory.isLocalFile())
+        return false;
+    const QStringList entries = QDir(directory.toLocalFile()).entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
+    for (const QString &entry : entries) {
+        if (entry != except && FileLogic::sameName(entry, name))
+            return true;
+    }
+    return false;
+}
+
 // Scripted scenarios set GRASSFIELD_FILES_NO_LAUNCH=1: opening reports an error instead of starting
 // applications (a test must never launch the owner's apps). Logged so the scenario can assert it.
 bool launchingBlocked()
@@ -606,7 +619,7 @@ void FilesApp::emptyTrash()
 
 void FilesApp::newFolder(const QUrl &directory, QObject *folder)
 {
-    const QString name = FileLogic::uniqueName(tr("untitled folder"), [&directory](const QString &n) { return localExists(childUrl(directory, n)); });
+    const QString name = FileLogic::uniqueName(tr("untitled folder"), [&directory](const QString &n) { return nameTaken(directory, n); });
     const QUrl url = childUrl(directory, name);
     KIO::MkdirJob *job = KIO::mkdir(url);
     attachDelegate(job);
@@ -635,7 +648,9 @@ void FilesApp::rename(const QUrl &url, const QString &newName, QObject *folder)
     }
     const QUrl destination = childUrl(url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash), newName);
     // A case-only change on a case-sensitive filesystem is a different name and fine.
-    if (localExists(destination) && QFileInfo(destination.toLocalFile()).canonicalFilePath() != QFileInfo(url.toLocalFile()).canonicalFilePath()) {
+    const QUrl parent = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
+    if ((localExists(destination) && QFileInfo(destination.toLocalFile()).canonicalFilePath() != QFileInfo(url.toLocalFile()).canonicalFilePath())
+        || nameTaken(parent, newName, url.fileName())) {
         emit operationFailed(tr("The name “%1” is already taken. Please choose a different name.").arg(newName));
         return;
     }
@@ -675,7 +690,7 @@ void FilesApp::duplicate(const QList<QUrl> &urls, QObject *folder)
             continue;
         const QUrl directory = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
         const bool isDir = url.isLocalFile() && QFileInfo(url.toLocalFile()).isDir();
-        const QString name = FileLogic::duplicateName(url.fileName(), isDir, tr("copy"), [&directory](const QString &n) { return localExists(childUrl(directory, n)); });
+        const QString name = FileLogic::duplicateName(url.fileName(), isDir, tr("copy"), [&directory](const QString &n) { return nameTaken(directory, n); });
         const QUrl destination = childUrl(directory, name);
         KIO::CopyJob *job = KIO::copyAs(url, destination, KIO::HideProgressInfo);
         attachDelegate(job);

@@ -240,7 +240,7 @@ FocusScope {
                 anchors.topMargin: Tokens.spacingXs + Tokens.spacingXs / 2
                 width: cell.width - 2 * Tokens.spacingXs - cell.dotsRoom
                 horizontalAlignment: Text.AlignHCenter
-                text: cell.name.replace(/[\r\n]+/g, "\u23CE")
+                text: Nav.displayName(cell.name)
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 maximumLineCount: Tokens.filesIconLabelLines
                 elide: Text.ElideRight
