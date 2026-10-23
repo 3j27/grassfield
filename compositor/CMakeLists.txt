@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
-project(grassfield-compositor VERSION 0.1.0 LANGUAGES CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/GrassfieldVersion.cmake) # VERSION at the repository root
+project(grassfield-compositor VERSION ${GF_VERSION_NUMERIC} LANGUAGES CXX)
+add_compile_definitions(GRASSFIELD_VERSION="${GF_VERSION}")
 
 # Build against the INSTALLED Hyprland headers (master-prompt §5.6). Outputs:
 #   build/grassfield-compositor.so      the plugin
@@ -43,9 +45,9 @@ add_library(grassfield-compositor SHARED src/main.cpp src/Titlebar.cpp src/Ipc.c
 target_link_libraries(grassfield-compositor PRIVATE gfcore PkgConfig::HYPRLAND)
 target_include_directories(grassfield-compositor PRIVATE ${LUA_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_options(grassfield-compositor PRIVATE -Wall -Wextra)
-set_target_properties(grassfield-compositor PROPERTIES
-  PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+# Outputs stay in the build directory (outside the source tree for a packaging build; `just plugin-build` builds in
+# compositor/build, where the dev scripts look for the .so).
+set_target_properties(grassfield-compositor PROPERTIES PREFIX "")
 
 option(GRASSFIELD_BUILD_TESTS "Build unit tests" ON)
 if(GRASSFIELD_BUILD_TESTS)
@@ -56,7 +58,5 @@ if(GRASSFIELD_BUILD_TESTS)
     tests/DeferredFocusTest.cpp tests/OverviewFocusTest.cpp tests/GenieTest.cpp tests/TilingTest.cpp tests/LayerPointerTest.cpp)
   target_link_libraries(grassfield-compositor-tests PRIVATE gfcore GTest::gtest_main)
   target_compile_options(grassfield-compositor-tests PRIVATE -Wall -Wextra)
-  set_target_properties(grassfield-compositor-tests PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
   add_test(NAME grassfield-compositor-tests COMMAND grassfield-compositor-tests)
 endif()
