@@ -8,8 +8,20 @@ package.path = config_dir .. "/?.lua;" .. package.path
 local omarchy = require("grassfield.omarchy")
 if not omarchy.ok then
   print("grassfield: Omarchy include skipped: " .. tostring(omarchy.reason))
+end
+if not omarchy.ok or not omarchy.monitors then
   hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 end
+-- ADR-0001: a failed include is announced once (details in the journal, lines start with "grassfield: Omarchy include").
+if not omarchy.ok or #omarchy.problems > 0 then
+  hl.on("hyprland.start", function()
+    hl.exec_cmd("sleep 8; notify-send -a Grassfield -u critical Grassfield "
+      .. "'Some Omarchy settings (keyboard, monitors, environment) could not be loaded. "
+      .. "See: journalctl --user -b | grep grassfield:'")
+  end)
+end
+-- GF-032: the Omarchy shell must never start inside this session (updates, theme and font changes try to start it).
+omarchy.guard_path(os.getenv("GRASSFIELD_SHIM_DIR") or "/usr/lib/grassfield/omarchy-shims")
 
 hl.env("XDG_SESSION_DESKTOP", "Grassfield")
 hl.env("GRASSFIELD_SESSION", "1")

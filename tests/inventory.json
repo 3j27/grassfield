@@ -134,6 +134,8 @@
  {"path": "tests/shell/autostart_write.sh", "layer": "logic"},
  {"path": "tests/shell/check_schema_pattern.sh", "layer": "logic"},
  {"path": "tests/shell/cursor_env.sh", "layer": "logic"},
+ {"path": "tests/shell/omarchy_guard.sh", "layer": "logic"},
+ {"path": "tests/shell/session_input.sh", "layer": "logic"},
  {"path": "tests/shell/cursors.sh", "layer": "logic"},
  {"path": "tests/shell/cursors_cancel.sh", "layer": "logic"},
  {"path": "tests/shell/dconf_profile.sh", "layer": "data"},
