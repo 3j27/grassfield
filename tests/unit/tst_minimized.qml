@@ -33,9 +33,21 @@ TestCase {
         compare(Minimized.configCall("titlebarDoubleClick", "Zoom"), "");
         compare(Minimized.configCall("titlebarDoubleClick", "zoom\") os.exit() --"), "");
         compare(Minimized.configCall("titlebarDoubleClick", undefined), "");
-        compare(Minimized.configCall("appearance", "dark"), "");
+        compare(Minimized.configCall("titlebarDoubleClick", "dark"), "");
+        compare(Minimized.configCall("windowRule", "zoom"), "");
         compare(Minimized.configCall("__proto__", "zoom"), "");
         compare(Minimized.configCall("constructor", "zoom"), "");
+    }
+
+    // The appearance the compositor-drawn chrome follows (plugin feature "appearance", audit UX-06).
+    function test_configCallAppearance() {
+        compare(Minimized.configCall("appearance", "light"),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.config then p.config(\"appearance\", \"light\") end end");
+        verify(Minimized.configCall("appearance", "dark") !== "");
+        compare(Minimized.configCall("appearance", "auto"), "", "the shell sends the appearance it shows, never auto");
+        compare(Minimized.configCall("appearance", "Light"), "");
+        compare(Minimized.configCall("appearance", "light\") os.exit() --"), "");
+        compare(Minimized.configCall("appearance", true), "");
     }
 
     // Settings dock.minimizeEffect, or "fade" under Reduce Motion (plugin feature "minimize-effect").

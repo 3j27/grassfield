@@ -155,12 +155,14 @@ function overviewFocusCall(target, id) {
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
 // tilingEdges / tilingMenuBar / tilingMargins: Settings windows.tiling* (feature "window-tiling").
+// appearance: the appearance the shell shows (feature "appearance"): the compositor-drawn titlebars follow it (audit UX-06).
 var pluginConfig = {
     titlebarDoubleClick: ["zoom", "minimize", "none"],
     minimizeEffect: ["funnel", "shrink", "fade"],
     tilingEdges: ["true", "false"],
     tilingMenuBar: ["true", "false"],
-    tilingMargins: ["true", "false"]
+    tilingMargins: ["true", "false"],
+    appearance: ["dark", "light"]
 };
 
 function configCall(key, value) {

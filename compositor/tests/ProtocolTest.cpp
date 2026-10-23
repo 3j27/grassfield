@@ -105,6 +105,23 @@ TEST(Protocol, ConfigAllowlist) {
     EXPECT_FALSE(parseDoubleClickAction("", "zoom"));
 }
 
+// Audit UX-06: the chrome follows the appearance the shell pushes (config "appearance", feature "appearance").
+TEST(Protocol, AppearanceConfigAndFeature) {
+    using gf::theme::Appearance;
+    EXPECT_EQ(parseAppearance("appearance", "dark"), Appearance::Dark);
+    EXPECT_EQ(parseAppearance("appearance", "light"), Appearance::Light);
+    for (const std::string_view bad : {"auto", "Dark", "light ", "", "dark\"); os.exit() --"})
+        EXPECT_FALSE(parseAppearance("appearance", bad).has_value()) << bad;
+    EXPECT_FALSE(parseAppearance("titlebarDoubleClick", "dark").has_value());
+    EXPECT_FALSE(parseAppearance("appearance", std::string_view("dark\0", 5)).has_value());
+    EXPECT_EQ(kConfigAppearance, "appearance");
+    EXPECT_EQ(kFeatureAppearance, "appearance");
+    // Last in the list, only with config.
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","appearance"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, true, false, false, false, false, false, false, false, false, true, true, false)).find("appearance"), std::string::npos);
+}
+
 TEST(Protocol, JsonEscapeQuotesBackslashAndControls) {
     EXPECT_EQ(jsonEscape(R"(a"b\c)"), R"(a\"b\\c)");
     EXPECT_EQ(jsonEscape("line\nnext\ttab\r\b\f"), R"(line\nnext\ttab\r\b\f)");

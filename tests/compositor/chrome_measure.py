@@ -2,16 +2,17 @@
 """Measures the plugin titlebar of one window on a GF-REF capture (tests/compositor/chrome.sh). No third-party modules.
 
 Usage: chrome_measure.py <capture.ppm> <surface x> <surface y> <surface w> <bar height> <close x> <minimize x> <zoom x>
-       <bar middle> [fill=<rrggbb>] [radius=<px>]
+       <bar middle> [fill=<rrggbb>] [radius=<px>] [bar=<rrggbb>] [inactive=<rrggbb>]
 Positions in output pixels (scale 1): the surface box from `hyprctl clients`, the titlebar geometry from
 tests/compositor/titlebar_geometry.sh (button centres right of the surface's left edge, bar middle above its top edge).
 The corners are found where the fill colour starts: the titlebar's colour by default; without the plugin (bar height 0)
-the window's own content colour (fill=). radius= is the window's rounding, for the junction check.
+the window's own content colour (fill=). radius= is the window's rounding, for the junction check. bar= and inactive=:
+the palette of the appearance measured (ui/tokens/tokens.json "titlebar"; the dark values below by default).
 Prints key=value lines:
   <light>_cx <light>_cy   centre of the light (close, minimize, zoom), coverage-weighted, output px (pixel edges)
   <light>_d               diameter from the light's covered area
   <light>_glyph           dark pixels inside the light (its glyph)
-  <light>_grey            pixels of the inactive grey (titlebarPalette(Dark).inactiveLight) around the light's centre
+  <light>_grey            pixels of the inactive grey (titlebarPalette(appearance).inactiveLight) around the light's centre
   junction_left/_right    (with radius=) pixels of the content's top corner squares that the rounding cuts away (outside
                           the corner curve) and that differ from the content next to them: the curve between bar and
                           content; 0 when the bar and the content join square
@@ -25,13 +26,13 @@ Prints key=value lines:
 """
 import sys
 
-BAR = (40, 40, 44)  # compositor/src/core/Theme.hpp titlebarPalette(Dark).background
+BAR = (40, 40, 44)  # ui/tokens/tokens.json titlebar.backgroundDark (titlebarPalette(Dark).background)
 LIGHTS = {
     "close": (0xE5, 0x53, 0x4B),
     "minimize": (0xD9, 0xA9, 0x3B),
     "zoom": (0x4F, 0xA6, 0x4F),
 }
-INACTIVE = (0x5A, 0x5A, 0x5E)  # compositor/src/core/Theme.hpp titlebarPalette(Dark).inactiveLight
+INACTIVE = (0x5A, 0x5A, 0x5E)  # ui/tokens/tokens.json titlebar.inactiveButtonDark (titlebarPalette(Dark).inactiveLight)
 ROUNDING_POWER = 2.6  # config/hypr/grassfield/looknfeel.lua decoration.rounding_power
 
 
@@ -148,15 +149,24 @@ def main():
         raise SystemExit(__doc__)
     img = Image(sys.argv[1])
     sx, sy, sw, bar_h, close_x, min_x, zoom_x, mid = (int(v) for v in sys.argv[2:10])
-    fill, radius = BAR, 0
+    global BAR, INACTIVE  # the palette of the appearance measured (options bar= and inactive=, from the design tokens)
+    fill, radius = None, 0
     for option in sys.argv[10:]:
         key, _, value = option.partition("=")
-        if key == "fill":
-            fill = (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
+        if key in ("fill", "bar", "inactive"):
+            colour = (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
+            if key == "fill":
+                fill = colour
+            elif key == "bar":
+                BAR = colour
+            else:
+                INACTIVE = colour
         elif key == "radius":
             radius = int(value)
         else:
             raise SystemExit(__doc__)
+    if fill is None:
+        fill = BAR
     out = {}
     for name, ox in (("close", close_x), ("minimize", min_x), ("zoom", zoom_x)):
         out.update(measure_light(img, name, sx + ox, sy - mid))

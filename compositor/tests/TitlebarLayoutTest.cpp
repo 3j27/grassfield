@@ -414,3 +414,30 @@ TEST(Theme, ColorsAreGrassfieldValues) {
     EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.b, 238 / 255.F);
     EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.a, 1.F);
 }
+
+// Audit UX-06 / D-8: both appearances come from the design tokens (ui/tokens/tokens.json "titlebar", ThemeTokens.hpp).
+TEST(Theme, PaletteComesFromTheTokensForBothAppearances) {
+    using namespace gf::theme;
+    const auto same = [](const Rgba& a, const Rgba& b) { return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a; };
+    const auto dark  = titlebarPalette(Appearance::Dark);
+    const auto light = titlebarPalette(Appearance::Light);
+    EXPECT_TRUE(same(dark.background, fromHex(tokens::kTitlebarBackgroundDark)));
+    EXPECT_TRUE(same(light.background, fromHex(tokens::kTitlebarBackgroundLight)));
+    EXPECT_TRUE(same(dark.title, fromHex(tokens::kTitlebarTitleDark, static_cast<float>(tokens::kTitlebarTitleOpacity))));
+    EXPECT_TRUE(same(light.title, fromHex(tokens::kTitlebarTitleLight, static_cast<float>(tokens::kTitlebarTitleOpacity))));
+    EXPECT_TRUE(same(dark.inactiveLight, fromHex(tokens::kTitlebarInactiveButtonDark)));
+    EXPECT_TRUE(same(light.inactiveLight, fromHex(tokens::kTitlebarInactiveButtonLight)));
+    EXPECT_TRUE(same(light.previewTint, fromHex(tokens::kTitlebarPreviewTintLight, static_cast<float>(tokens::kTitlebarPreviewTintAlpha))));
+    EXPECT_TRUE(same(dark.previewRim, fromHex(tokens::kTitlebarPreviewRimDark, static_cast<float>(tokens::kTitlebarPreviewRimOpacity))));
+    // A light bar and dark text in the light appearance, the reverse in the dark one; the title readable on its bar.
+    const auto luma = [](const Rgba& c) { return (0.2126F * c.r) + (0.7152F * c.g) + (0.0722F * c.b); };
+    EXPECT_GT(luma(light.background), 0.8F);
+    EXPECT_LT(luma(dark.background), 0.2F);
+    EXPECT_GT(luma(light.background) - luma(light.title), 0.5F);
+    EXPECT_GT(luma(dark.title) - luma(dark.background), 0.5F);
+    // The preview is translucent (the blur behind it shows through) and has an edge of its own.
+    EXPECT_GT(dark.previewTint.a, 0.F);
+    EXPECT_LT(dark.previewTint.a, 1.F);
+    EXPECT_GT(kTilePreviewRim, 0.0);
+    EXPECT_EQ(kDefaultAppearance, Appearance::Dark) << "Grassfield's default until the shell pushes its appearance";
+}

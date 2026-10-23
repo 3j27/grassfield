@@ -257,15 +257,21 @@ Singleton {
             tilingMargins: Settings.windowsTilingMargins ? "true" : "false"
         })
 
+    // The appearance the shell shows: the compositor-drawn titlebars follow it (feature "appearance", audit UX-06).
+    readonly property string chromeAppearance: Appearance.dark ? "dark" : "light"
+
     onTitlebarDoubleClickChanged: pushPluginConfig()
     onMinimizeEffectChanged: pushPluginConfig()
     onTilingConfigChanged: pushPluginConfig()
+    onChromeAppearanceChanged: pushPluginConfig()
 
     function pushPluginConfig(): void {
         if (Capabilities.has("config") && dispatchRequest(Minimized.configCall("titlebarDoubleClick", root.titlebarDoubleClick)))
             console.info("grassfield: compositor setting titlebarDoubleClick =", root.titlebarDoubleClick);
         if (Capabilities.has("minimize-effect") && dispatchRequest(Minimized.configCall("minimizeEffect", root.minimizeEffect)))
             console.info("grassfield: compositor setting minimizeEffect =", root.minimizeEffect);
+        if (Capabilities.has("appearance") && dispatchRequest(Minimized.configCall("appearance", root.chromeAppearance)))
+            console.info("grassfield: compositor setting appearance =", root.chromeAppearance);
         if (Capabilities.has("window-tiling")) {
             for (const key of Object.keys(root.tilingConfig))
                 dispatchRequest(Minimized.configCall(key, root.tilingConfig[key]));

@@ -11,6 +11,8 @@
 //                    Quickshell (Hyprland evaluates `return hl.dispatch(<arg>)` under the Lua config).
 //   query:           `hyprctl grassfield` returns the capabilities JSON.
 
+#include "Theme.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -71,18 +73,28 @@ namespace gf::gfc {
     // pointer focus at the cursor, so a click without motion reaches what is under the pointer (spec FR51-FR52,
     // core/LayerPointer.hpp).
     inline constexpr std::string_view kFeatureLayerPointer = "layer-pointer";
+    // hl.plugin.grassfield.config("appearance", "dark" | "light") is accepted: the compositor-drawn chrome (titlebars, the
+    // tiling preview) follows the appearance (audit UX-06). Advertised with config; a shell pushes the key only when it sees
+    // this feature (older plugins reject the key).
+    inline constexpr std::string_view kFeatureAppearance = "appearance";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
-    // overview-focus, minimize-effect, window-tiling, layer-pointer.
+    // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance.
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
                                            bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
-                                           bool windowTiling = false, bool layerPointer = false);
+                                           bool windowTiling = false, bool layerPointer = false, bool appearance = false);
 
-    // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, stagesEnabled
-    // (core/Stages.hpp) and minimizeEffect (core/Minimize.hpp).
+    // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, appearance (below),
+    // stagesEnabled (core/Stages.hpp), minimizeEffect (core/Minimize.hpp) and the tiling keys (core/Tiling.hpp).
     inline constexpr std::string_view kConfigTitlebarDoubleClick = "titlebarDoubleClick";
+
+    // The appearance the chrome follows (Settings appearance, the effective light/dark the shell shows).
+    inline constexpr std::string_view kConfigAppearance = "appearance";
+
+    // nullopt unless key is kConfigAppearance and value is exactly "dark" or "light".
+    std::optional<theme::Appearance> parseAppearance(std::string_view key, std::string_view value);
 
     // What a double-click on a titlebar's drag area does (Settings windows.titlebarDoubleClick).
     enum class DoubleClickAction : uint8_t {
