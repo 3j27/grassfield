@@ -466,10 +466,6 @@
         <translation>Apparence</translation>
     </message>
     <message>
-        <source>Light or dark windows, menus and panels.</source>
-        <translation>Fenêtres, menus et panneaux clairs ou sombres.</translation>
-    </message>
-    <message>
         <source>Accent colour</source>
         <translation>Couleur d’accentuation</translation>
     </message>
@@ -500,6 +496,14 @@
     <message>
         <source>Blue</source>
         <translation>Bleu</translation>
+    </message>
+    <message>
+        <source>Light or dark windows, menus and panels. Auto is light by day and dark at night.</source>
+        <translation>Fenêtres, menus et panneaux clairs ou sombres. Automatique est clair le jour et sombre la nuit.</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Automatique</translation>
     </message>
     <message>
         <source>Purple</source>
@@ -631,6 +635,10 @@
     <message>
         <source>Dark</source>
         <translation>Sombre</translation>
+    </message>
+    <message>
+        <source>Auto</source>
+        <translation>Automatique</translation>
     </message>
     <message>
         <source>Transparency</source>
@@ -828,6 +836,34 @@
         <source>%1%</source>
         <translation>%1&#xa0;%</translation>
     </message>
+    <message>
+        <source>Power Adapter</source>
+        <translation>Adaptateur secteur</translation>
+    </message>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>%1, fully charged</source>
+        <translation>%1, complètement chargée</translation>
+    </message>
+    <message>
+        <source>%1, %2 until full</source>
+        <translation>%1, %2 avant la charge complète</translation>
+    </message>
+    <message>
+        <source>%1, charging</source>
+        <translation>%1, en charge</translation>
+    </message>
+    <message>
+        <source>%1, %2 remaining</source>
+        <translation>%1, %2 restantes</translation>
+    </message>
+    <message>
+        <source>%1, estimating time remaining</source>
+        <translation>%1, estimation du temps restant</translation>
+    </message>
 </context>
 <context>
     <name>BatteryMenu</name>
@@ -921,6 +957,22 @@
     <message>
         <source>Right</source>
         <translation>Droite</translation>
+    </message>
+    <message>
+        <source>Backspace</source>
+        <translation>Retour arrière</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>[</source>
+        <translation>[</translation>
+    </message>
+    <message>
+        <source>]</source>
+        <translation>]</translation>
     </message>
     <message>
         <source>Key above Tab</source>
@@ -1017,6 +1069,74 @@
     <message>
         <source>Turn Dock hiding on or off</source>
         <translation>Activer ou désactiver le masquage du Dock</translation>
+    </message>
+    <message>
+        <source>Previous word</source>
+        <translation>Mot précédent</translation>
+    </message>
+    <message>
+        <source>Next word</source>
+        <translation>Mot suivant</translation>
+    </message>
+    <message>
+        <source>Select to the previous word</source>
+        <translation>Sélectionner jusqu’au mot précédent</translation>
+    </message>
+    <message>
+        <source>Select to the next word</source>
+        <translation>Sélectionner jusqu’au mot suivant</translation>
+    </message>
+    <message>
+        <source>Delete the previous word</source>
+        <translation>Supprimer le mot précédent</translation>
+    </message>
+    <message>
+        <source>Delete the next word</source>
+        <translation>Supprimer le mot suivant</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Beginning of the line</source>
+        <translation>Début de la ligne</translation>
+    </message>
+    <message>
+        <source>End of the line</source>
+        <translation>Fin de la ligne</translation>
+    </message>
+    <message>
+        <source>Select to the beginning of the line</source>
+        <translation>Sélectionner jusqu’au début de la ligne</translation>
+    </message>
+    <message>
+        <source>Select to the end of the line</source>
+        <translation>Sélectionner jusqu’à la fin de la ligne</translation>
+    </message>
+    <message>
+        <source>Beginning of the document</source>
+        <translation>Début du document</translation>
+    </message>
+    <message>
+        <source>End of the document</source>
+        <translation>Fin du document</translation>
+    </message>
+    <message>
+        <source>Select to the beginning of the document</source>
+        <translation>Sélectionner jusqu’au début du document</translation>
+    </message>
+    <message>
+        <source>Select to the end of the document</source>
+        <translation>Sélectionner jusqu’à la fin du document</translation>
+    </message>
+    <message>
+        <source>Delete to the beginning of the line</source>
+        <translation>Supprimer jusqu’au début de la ligne</translation>
     </message>
     <message>
         <source>Next Desktop</source>
@@ -1354,32 +1474,32 @@
         <translation>Icônes</translation>
     </message>
     <message>
-        <source>Ctrl+1</source>
-        <translation>Ctrl+1</translation>
+        <source>Super+1</source>
+        <translation>Super+1</translation>
+    </message>
+    <message>
+        <source>Super+2</source>
+        <translation>Super+2</translation>
+    </message>
+    <message>
+        <source>Super+3</source>
+        <translation>Super+3</translation>
+    </message>
+    <message>
+        <source>Super+4</source>
+        <translation>Super+4</translation>
     </message>
     <message>
         <source>List</source>
         <translation>Liste</translation>
     </message>
     <message>
-        <source>Ctrl+2</source>
-        <translation>Ctrl+2</translation>
-    </message>
-    <message>
         <source>Columns</source>
         <translation>Colonnes</translation>
     </message>
     <message>
-        <source>Ctrl+3</source>
-        <translation>Ctrl+3</translation>
-    </message>
-    <message>
         <source>Gallery</source>
         <translation>Galerie</translation>
-    </message>
-    <message>
-        <source>Ctrl+4</source>
-        <translation>Ctrl+4</translation>
     </message>
     <message>
         <source>Sort By</source>
@@ -1617,6 +1737,10 @@
         <source>Not connected</source>
         <translation>Non connecté</translation>
     </message>
+    <message>
+        <source>Airplane Mode: %1; using the Wi-Fi and Bluetooth switches</source>
+        <translation>Mode avion : %1 ; les interrupteurs Wi-Fi et Bluetooth sont utilisés</translation>
+    </message>
 </context>
 <context>
     <name>Content</name>
@@ -1672,12 +1796,32 @@
         <translation>Activé</translation>
     </message>
     <message>
+        <source>Auto</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
         <source>Display</source>
         <translation>Écran</translation>
     </message>
     <message>
+        <source>Night Shift</source>
+        <translation>Night Shift</translation>
+    </message>
+    <message>
         <source>Display brightness</source>
         <translation>Luminosité de l’écran</translation>
+    </message>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>%1%</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Low Power Mode</source>
+        <translation>Mode économie d’énergie</translation>
     </message>
     <message>
         <source>Back</source>
@@ -3681,6 +3825,10 @@
         <translation>Notifications</translation>
     </message>
     <message>
+        <source>Default</source>
+        <translation>Par défaut</translation>
+    </message>
+    <message>
         <source>Do Not Disturb</source>
         <translation>Ne pas déranger</translation>
     </message>
@@ -3689,8 +3837,24 @@
         <translation>Désactive les bannières sauf les critiques&#xa0;; les notifications continuent de s’accumuler dans le panneau Notifications.</translation>
     </message>
     <message>
-        <source>Never hides the text of notifications. Until the lock screen reports its state to the notification service, When Unlocked behaves like Always.</source>
-        <translation>Ne masque jamais le texte des notifications. Tant que l’écran verrouillé ne transmet pas son état au service de notifications, Quand déverrouillé se comporte comme Toujours.</translation>
+        <source>Never hides the text of notifications. When Unlocked hides it while the screen is locked. Each app below can use its own setting.</source>
+        <translation>Jamais masque le texte des notifications. Si déverrouillé le masque tant que l’écran est verrouillé. Chaque app ci-dessous peut avoir son propre réglage.</translation>
+    </message>
+    <message>
+        <source>Application Notifications</source>
+        <translation>Notifications des applications</translation>
+    </message>
+    <message>
+        <source>Apps appear here after they send a notification.</source>
+        <translation>Les apps apparaissent ici après avoir envoyé une notification.</translation>
+    </message>
+    <message>
+        <source>Default follows the Show previews setting above.</source>
+        <translation>Par défaut suit le réglage « Afficher les aperçus » ci-dessus.</translation>
+    </message>
+    <message>
+        <source>Show previews for %1</source>
+        <translation>Afficher les aperçus pour %1</translation>
     </message>
     <message>
         <source>Show previews</source>
@@ -4055,6 +4219,21 @@
     </message>
 </context>
 <context>
+    <name>Rfkill</name>
+    <message>
+        <source>rfkill is not available on this computer</source>
+        <translation>rfkill n’est pas disponible sur cet ordinateur</translation>
+    </message>
+    <message>
+        <source>the rfkill tool is not installed</source>
+        <translation>l’outil rfkill n’est pas installé</translation>
+    </message>
+    <message>
+        <source>rfkill is not writable by this session</source>
+        <translation>rfkill n’est pas accessible en écriture pour cette session</translation>
+    </message>
+</context>
+<context>
     <name>ScrollBar</name>
     <message>
         <source>Scroll bar</source>
@@ -4144,8 +4323,232 @@
         <translation>Commandes</translation>
     </message>
     <message>
+        <source>Settings</source>
+        <translation>Réglages</translation>
+    </message>
+    <message>
         <source>Documents</source>
         <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>wireless</source>
+        <translation>sans fil</translation>
+    </message>
+    <message>
+        <source>network</source>
+        <translation>réseau</translation>
+    </message>
+    <message>
+        <source>internet</source>
+        <translation>internet</translation>
+    </message>
+    <message>
+        <source>Bluetooth</source>
+        <translation>Bluetooth</translation>
+    </message>
+    <message>
+        <source>devices</source>
+        <translation>appareils</translation>
+    </message>
+    <message>
+        <source>headphones</source>
+        <translation>casque</translation>
+    </message>
+    <message>
+        <source>pair</source>
+        <translation>associer</translation>
+    </message>
+    <message>
+        <source>Sound</source>
+        <translation>Son</translation>
+    </message>
+    <message>
+        <source>volume</source>
+        <translation>volume</translation>
+    </message>
+    <message>
+        <source>output</source>
+        <translation>sortie</translation>
+    </message>
+    <message>
+        <source>input</source>
+        <translation>entrée</translation>
+    </message>
+    <message>
+        <source>microphone</source>
+        <translation>microphone</translation>
+    </message>
+    <message>
+        <source>mute</source>
+        <translation>muet</translation>
+    </message>
+    <message>
+        <source>Displays</source>
+        <translation>Moniteurs</translation>
+    </message>
+    <message>
+        <source>monitor</source>
+        <translation>moniteur</translation>
+    </message>
+    <message>
+        <source>screen</source>
+        <translation>écran</translation>
+    </message>
+    <message>
+        <source>resolution</source>
+        <translation>résolution</translation>
+    </message>
+    <message>
+        <source>scale</source>
+        <translation>échelle</translation>
+    </message>
+    <message>
+        <source>Appearance</source>
+        <translation>Apparence</translation>
+    </message>
+    <message>
+        <source>dark</source>
+        <translation>sombre</translation>
+    </message>
+    <message>
+        <source>light</source>
+        <translation>clair</translation>
+    </message>
+    <message>
+        <source>auto</source>
+        <translation>automatique</translation>
+    </message>
+    <message>
+        <source>theme</source>
+        <translation>thème</translation>
+    </message>
+    <message>
+        <source>accent</source>
+        <translation>accent</translation>
+    </message>
+    <message>
+        <source>transparency</source>
+        <translation>transparence</translation>
+    </message>
+    <message>
+        <source>icons</source>
+        <translation>icônes</translation>
+    </message>
+    <message>
+        <source>Wallpaper</source>
+        <translation>Fond d’écran</translation>
+    </message>
+    <message>
+        <source>background</source>
+        <translation>arrière-plan</translation>
+    </message>
+    <message>
+        <source>picture</source>
+        <translation>image</translation>
+    </message>
+    <message>
+        <source>shuffle</source>
+        <translation>aléatoire</translation>
+    </message>
+    <message>
+        <source>Accessibility</source>
+        <translation>Accessibilité</translation>
+    </message>
+    <message>
+        <source>pointer</source>
+        <translation>pointeur</translation>
+    </message>
+    <message>
+        <source>cursor</source>
+        <translation>curseur</translation>
+    </message>
+    <message>
+        <source>contrast</source>
+        <translation>contraste</translation>
+    </message>
+    <message>
+        <source>reduce motion</source>
+        <translation>réduire les animations</translation>
+    </message>
+    <message>
+        <source>text size</source>
+        <translation>taille du texte</translation>
+    </message>
+    <message>
+        <source>Desktop &amp; Dock</source>
+        <translation>Bureau et Dock</translation>
+    </message>
+    <message>
+        <source>dock</source>
+        <translation>dock</translation>
+    </message>
+    <message>
+        <source>magnification</source>
+        <translation>agrandissement</translation>
+    </message>
+    <message>
+        <source>menu bar</source>
+        <translation>barre des menus</translation>
+    </message>
+    <message>
+        <source>screen corners</source>
+        <translation>coins de l’écran</translation>
+    </message>
+    <message>
+        <source>Notifications</source>
+        <translation>Notifications</translation>
+    </message>
+    <message>
+        <source>do not disturb</source>
+        <translation>ne pas déranger</translation>
+    </message>
+    <message>
+        <source>previews</source>
+        <translation>aperçus</translation>
+    </message>
+    <message>
+        <source>banners</source>
+        <translation>bannières</translation>
+    </message>
+    <message>
+        <source>idle</source>
+        <translation>inactivité</translation>
+    </message>
+    <message>
+        <source>password</source>
+        <translation>mot de passe</translation>
+    </message>
+    <message>
+        <source>Keyboard</source>
+        <translation>Clavier</translation>
+    </message>
+    <message>
+        <source>shortcuts</source>
+        <translation>raccourcis</translation>
+    </message>
+    <message>
+        <source>keys</source>
+        <translation>touches</translation>
+    </message>
+    <message>
+        <source>About</source>
+        <translation>À propos</translation>
+    </message>
+    <message>
+        <source>version</source>
+        <translation>version</translation>
+    </message>
+    <message>
+        <source>system</source>
+        <translation>système</translation>
+    </message>
+    <message>
+        <source>hardware</source>
+        <translation>matériel</translation>
     </message>
     <message>
         <source>Recent</source>
@@ -4242,6 +4645,18 @@
 </context>
 <context>
     <name>SleepInhibitor</name>
+    <message>
+        <source>The screen may not lock before sleep</source>
+        <translation>L’écran risque de ne pas se verrouiller avant la mise en veille</translation>
+    </message>
+    <message>
+        <source>Grassfield cannot see when the computer goes to sleep. Lock the screen yourself (Super+Control+Q) before you leave the computer.</source>
+        <translation>Grassfield ne voit pas quand l’ordinateur se met en veille. Verrouillez l’écran vous-même (Super+Contrôle+Q) avant de quitter l’ordinateur.</translation>
+    </message>
+    <message>
+        <source>Grassfield cannot delay sleep until the screen is locked. Lock the screen yourself (Super+Control+Q) before you close the lid.</source>
+        <translation>Grassfield ne peut pas retarder la mise en veille jusqu’au verrouillage de l’écran. Verrouillez l’écran vous-même (Super+Contrôle+Q) avant de fermer le capot.</translation>
+    </message>
     <message>
         <source>Lock the screen before sleep</source>
         <translation>Verrouiller l’écran avant la mise en veille</translation>

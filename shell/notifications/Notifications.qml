@@ -31,7 +31,10 @@ Singleton {
     readonly property ListModel bannerModel: bannerStore
     readonly property int bannerCount: bannerStore.count
     readonly property bool dnd: Settings.notificationsDnd
-    readonly property bool previewsHidden: Settings.notificationsPreviews === "never"
+    // The global previews default is Settings.notificationsPreviews; each app may override it
+    // (Settings.notificationsAppPreviews, NotificationPrefs.js).
+    // The session lock (SessionState mirrors shell/security/lock; false where nothing feeds it).
+    readonly property bool sessionLocked: SessionState.locked
     // Wall clock for relative times, refreshed every 30 s.
     property real nowMs: Date.now()
 
@@ -79,6 +82,46 @@ Singleton {
     // Keys of banners under the pointer (a timer recreated by an update starts paused).
     property var heldKeys: ({})
 
+    // The apps that have sent notifications, for the Settings page (per-app previews): $configDir/notification-apps.json,
+    // {"apps": [names]}, rewritten shortly after the set of names changes. Names only, never text.
+    readonly property string appsFile: Settings.configDir + "/notification-apps.json"
+    readonly property var seenApps: {
+        const names = [];
+        const seen = {};
+        for (const e of history) {
+            const k = NotificationPrefs.keyOf(e.appName);
+            if (k !== "" && !seen[k]) {
+                seen[k] = true;
+                names.push(e.appName);
+            }
+        }
+        return names.sort();
+    }
+    onSeenAppsChanged: {
+        if (historyReady)
+            appsTimer.restart();
+    }
+
+    Timer {
+        id: appsTimer
+        interval: Tokens.notificationAppsWriteMs
+        onTriggered: {
+            const text = JSON.stringify({apps: root.seenApps}) + "\n";
+            if (text !== appsWriter.lastText) {
+                appsWriter.lastText = text;
+                appsWriter.setText(text);
+            }
+        }
+    }
+
+    FileView {
+        id: appsWriter
+        property string lastText: ""
+        path: root.appsFile
+        printErrors: false
+        atomicWrites: true
+    }
+
     ListModel {
         id: centerStore
         dynamicRoles: true
@@ -91,9 +134,11 @@ Singleton {
 
     // ---- API used by the UI ----
 
-    // Sanitized body (computed once per entry); empty when previews are hidden.
-    function bodyFor(bodyHtml: string): string {
-        return previewsHidden ? "" : bodyHtml;
+    // Sanitized body (computed once per entry); empty when previews are hidden for this app: its own setting, else the
+    // global one; "unlocked" hides the text while the session is locked. `appName` is the sender's name.
+    function bodyFor(bodyHtml: string, appName: string): string {
+        const policy = NotificationPrefs.effective(Settings.notificationsAppPreviews, appName, Settings.notificationsPreviews);
+        return NotificationPrefs.bodyShown(policy, sessionLocked) ? bodyHtml : "";
     }
 
     // Image (hint) first, then the app icon (theme name or path); "" when none resolves, so the
@@ -918,8 +963,11 @@ Singleton {
             root.toggleCenter("");
         }
 
+        // Test hook: refused outside a dev session (VisualFixtures.dev, SEC-04: another process must not silence
+        // notifications, security notices included, behind the user's back). The user's switch is Quick Settings.
         function dnd(on: bool): void {
-            root.setDnd(on);
+            if (VisualFixtures.dev)
+                root.setDnd(on);
         }
 
         // Test hook (no pointer in the nested session): runs an action of the newest live
@@ -928,8 +976,10 @@ Singleton {
             return root.hookInvoke(actionId);
         }
 
-        // Test hook: one-line state.
+        // Test hook: one-line state (dev session only).
         function status(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             return "server=" + root.serverState + " history=" + root.count + " banners=" + root.bannerCount
                 + " dnd=" + root.dnd + " center=" + root.centerOpen + " keyboard=" + (root.centerOpen && root.centerKeyboardScreen === root.centerScreen)
                 + " keyboardOn=" + (root.centerKeyboardScreen === "" ? "none" : root.centerKeyboardScreen);

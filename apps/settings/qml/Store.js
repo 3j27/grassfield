@@ -41,6 +41,7 @@ const DEFAULTS = {
     "windows.rebuildExtension": false,
     "notifications.dnd": false,
     "notifications.previews": "unlocked",
+    "notifications.appPreviews": [],
     "lock.idleMinutes": 5,
     "hotCorners.topLeft": "none",
     "hotCorners.topRight": "none",
@@ -98,6 +99,8 @@ const RULES = {
     "windows.rebuildExtension": {type: "boolean"},
     "notifications.dnd": {type: "boolean"},
     "notifications.previews": {type: "enum", values: ["always", "unlocked", "never"]},
+    // Per-app override of the previews setting (ui/Grassfield/Ui/NotificationPrefs.js, one copy of the rules).
+    "notifications.appPreviews": {type: "notificationApps"},
     "lock.idleMinutes": {type: "integer", min: 0, max: 240},
     "hotCorners.topLeft": {type: "enum", values: CORNER_ACTIONS},
     "hotCorners.topRight": {type: "enum", values: CORNER_ACTIONS},
@@ -146,6 +149,10 @@ function validate(path, value) {
         return value === "" || Tree.WallpaperConfig.pathProblem(value) === "" ? "" : path + ": expected an absolute path without control characters (at most 4096 bytes)";
     case "wallpaperOutputs": {
         const why = Tree.WallpaperConfig.outputsProblem(value);
+        return why === "" ? "" : path + ": " + why;
+    }
+    case "notificationApps": {
+        const why = Tree.NotificationPrefs.problem(value);
         return why === "" ? "" : path + ": " + why;
     }
     case "boolean":
