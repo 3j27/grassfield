@@ -95,26 +95,70 @@ for path in scanned:
 corners = open("shell/desktop/HotCornerActions.js", encoding="utf-8").read()
 callers |= set(re.findall(r'\["(\w+)",\s*"(\w+)"\]', corners))
 
-DEV_GATES = ("VisualFixtures.dev", "DevGate.", "root.devHooks", "root.dev")
-FIXTURE_GATES = ("VisualFixtures.active", "root.hook")
+# Exact gates (follow-up N6: a name that merely starts like a gate, e.g. root.devSession reading GRASSFIELD_DEV alone,
+# is not one). A body is gated when it checks, directly or through a function of the same file it forwards to:
+#   dev       VisualFixtures.dev, the DevGate.allowed(GRASSFIELD_DEV, GRASSFIELD_SESSION) call, or a property of the same
+#             file defined as exactly one of those two
+#   fixtures  VisualFixtures.active, or a property of the same file defined as exactly that
+GATE_CALL = 'DevGate.allowed(Quickshell.env("GRASSFIELD_DEV"), Quickshell.env("GRASSFIELD_SESSION"))'
+DEV_EXPRS = ("VisualFixtures.dev", GATE_CALL)
+FIXTURE_EXPRS = ("VisualFixtures.active",)
+texts = {}
+
+
+def text_of(path):
+    if path not in texts:
+        texts[path] = open(path, encoding="utf-8").read()
+    return texts[path]
+
+
+def prop_expr(text, prop):
+    m = re.search(r"property\s+bool\s+%s\s*:\s*([^\n]+)" % re.escape(prop), text)
+    return m.group(1).strip() if m else None
+
+
+def fn_body(text, fn):
+    m = re.search(r"function\s+%s\s*\([^)]*\)[^{]*\{" % re.escape(fn), text)
+    return text[m.end():block_end(text, m.end())] if m else None
+
+
+def gated_by(body, text, exprs, depth=0):
+    for expr in exprs:
+        if re.search(re.escape(expr) + r"(?![\w.(])", body):
+            return True
+    # Properties read by the body (root.x or a bare x), defined in this file as exactly a gate expression.
+    for prop in set(re.findall(r"(?<![\w.])(?:root\.)?([A-Za-z_]\w*)(?![\w(])", body)):
+        if prop_expr(text, prop) in exprs:
+            return True
+    # Forwarding to a function of the same file (root.devStatus(), root.hookInvoke(id)): that function must be gated.
+    if depth == 0:
+        for fn in set(re.findall(r"\broot\.(\w+)\(", body)):
+            inner = fn_body(text, fn)
+            if inner is not None and gated_by(inner, text, exprs, 1):
+                return True
+    return False
+
+
 for key in sorted(code):
     if key not in doc:
         continue
     path, body = code[key]
+    text = text_of(path)
     name = "%s.%s (%s)" % (key[0], key[1], path)
     cls = doc[key]
-    gated = any(g in body for g in DEV_GATES + FIXTURE_GATES)
+    dev_gated = gated_by(body, text, DEV_EXPRS)
+    fixtures_gated = gated_by(body, text, FIXTURE_EXPRS)
     if cls == "action":
         if key not in callers:
             bad(name + ": class action but no binding, gesture or screen corner calls it")
-        elif gated:
+        elif dev_gated or fixtures_gated:
             bad(name + ": class action but gated")
     elif cls == "dev":
-        if not any(g in body for g in DEV_GATES):
-            bad(name + ": class dev but its body checks no dev gate")
+        if not dev_gated:
+            bad(name + ": class dev but its body checks no exact dev gate")
     elif cls == "fixtures":
-        if not any(g in body for g in FIXTURE_GATES):
-            bad(name + ": class fixtures but its body checks no fixtures gate")
+        if not fixtures_gated:
+            bad(name + ": class fixtures but its body checks no exact fixtures gate")
     else:
         bad(name + ": unknown class " + repr(cls))
 for key in sorted(callers - set(code)):

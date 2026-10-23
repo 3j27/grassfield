@@ -89,6 +89,7 @@ does not check its gate.
 | menubar | close, openKind, keyboardWait, statusState, autohide, bridgeState | dev | `bridgeState` returns the focused app's menu titles |
 | widgets | status, addDesktop, clearDesktop | dev | `tests/visual/widgets-blur.sh`; `addDesktop`/`clearDesktop` change the saved placements |
 | controlcenter | transparency, appearance, reduceTransparency, reduceMotion | dev | persisted settings changes |
+| controlcenter | volume, brightness, volumeLevel, brightnessLevel | dev | `tests/shell/cc_sliders_ipc.sh` (REQ-QS-CC5/CC6); in a real session the acceptance uses the sliders themselves |
 | dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
 | dock | hover, unhover, reveal, menu | dev | UI automation for tests |
 | dock | pinned, forceinterrupt, forcehold, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, magnify, click, centre | fixtures | visual tests; `click` launches an app |
