@@ -33,6 +33,8 @@ constexpr int kMajorVersion = 0;
 const char kContact[] = "chapdel.kamga2@gmail.com";
 
 const QStringList kHosts = {QStringLiteral("commons.wikimedia.org"), QStringLiteral("thumb.wikimedia.org"), QStringLiteral("upload.wikimedia.org")};
+// NASA APOD: the API and the picture host. science.nasa.gov (where the logo answer pointed) is deliberately not listed.
+const QStringList kApodHosts = {QStringLiteral("api.nasa.gov"), QStringLiteral("apod.nasa.gov")};
 
 QString site(const QString &baseUrl)
 {
@@ -188,15 +190,27 @@ bool baseUrlAllowed(const QString &base, bool dev)
     return port >= 1 && port <= 65535;
 }
 
+bool providerKnown(const QString &provider)
+{
+    return provider == QLatin1String("commons") || provider == QLatin1String("apod");
+}
+
 bool hostAllowed(const QUrl &url, const QString &baseUrl)
 {
+    return hostAllowedFor(QStringLiteral("commons"), url, baseUrl);
+}
+
+bool hostAllowedFor(const QString &provider, const QUrl &url, const QString &baseUrl)
+{
+    if (!providerKnown(provider))
+        return false;
     if (!url.isValid() || url.isRelative() || !url.userInfo().isEmpty() || !url.fragment().isEmpty())
         return false;
     if (!baseUrl.isEmpty()) {
         const QUrl b(baseUrl, QUrl::StrictMode);
         return url.scheme() == b.scheme() && url.host() == b.host() && url.port() == b.port();
     }
-    return url.scheme() == QLatin1String("https") && (url.port() == -1 || url.port() == 443) && kHosts.contains(url.host());
+    return url.scheme() == QLatin1String("https") && (url.port() == -1 || url.port() == 443) && (provider == QLatin1String("apod") ? kApodHosts : kHosts).contains(url.host());
 }
 
 QUrl withoutQuery(const QUrl &url)
@@ -283,13 +297,18 @@ bool imageSignatureOk(const QString &contentType, const QByteArray &head)
 
 bool outDirAllowed(const QString &out)
 {
-    if (!out.startsWith(QLatin1Char('/')))
+    return outDirAllowedFor(QStringLiteral("commons"), out);
+}
+
+bool outDirAllowedFor(const QString &provider, const QString &out)
+{
+    if (!providerKnown(provider) || !out.startsWith(QLatin1Char('/')))
         return false;
     const QStringList parts = out.split(QLatin1Char('/'), Qt::SkipEmptyParts);
     if (parts.contains(QStringLiteral("..")) || parts.contains(QStringLiteral(".")) || parts.size() < 5)
         return false;
     const int n = parts.size();
-    return parts[n - 1] == QLatin1String("commons") && parts[n - 2] == QLatin1String("online") && parts[n - 3] == QLatin1String("wallpapers")
+    return parts[n - 1] == provider && parts[n - 2] == QLatin1String("online") && parts[n - 3] == QLatin1String("wallpapers")
         && (parts[n - 4] == QLatin1String("grassfield") || parts[n - 4] == QLatin1String("cache"));
 }
 
@@ -372,12 +391,86 @@ ExitCode parseImageInfo(const QByteArray &json, const QString &fileName, const Q
     return Ok;
 }
 
-QJsonObject sidecarOf(const Parsed &p, const QString &caption, const QString &date, const QString &fetchedAtIso, int width, int height)
+QJsonObject sidecarOf(const Parsed &p, const QString &caption, const QString &date, const QString &fetchedAtIso, int width, int height, const QString &provider)
 {
-    return {{QStringLiteral("provider"), QStringLiteral("commons")}, {QStringLiteral("date"), date},       {QStringLiteral("title"), p.title},
+    return {{QStringLiteral("provider"), provider}, {QStringLiteral("date"), date},       {QStringLiteral("title"), p.title},
             {QStringLiteral("author"), p.author},                    {QStringLiteral("credit"), p.credit},  {QStringLiteral("caption"), caption},
             {QStringLiteral("licenseShort"), p.licenseShort},        {QStringLiteral("licenseUrl"), p.licenseUrl}, {QStringLiteral("sourceUrl"), p.sourceUrl},
             {QStringLiteral("fetchedAt"), fetchedAtIso},             {QStringLiteral("width"), width},      {QStringLiteral("height"), height}};
+}
+
+QUrl apodUrl(const QString &baseUrl, const QString &date)
+{
+    const QString origin = baseUrl.isEmpty() ? QStringLiteral("https://api.nasa.gov") : baseUrl;
+    QUrl url(origin + QStringLiteral("/planetary/apod"), QUrl::StrictMode);
+    url.setQuery(QStringLiteral("api_key=") + enc(QString::fromLatin1(kApodKey)) + QStringLiteral("&date=") + enc(date) + QStringLiteral("&thumbs=false"), QUrl::StrictMode);
+    return url;
+}
+
+namespace {
+
+// An image address of an APOD answer to the https URL to fetch, or an empty URL. The picture must be on apod.nasa.gov (with a
+// dev base URL: on that origin), under /apod/image/; a plain http address of apod.nasa.gov is upgraded to https; the query
+// string and fragment are dropped. Anything else (the NASA Science logo of the broken answers, another host) is refused.
+QUrl apodImage(const QString &raw, const QString &baseUrl)
+{
+    QUrl u(raw.trimmed(), QUrl::StrictMode);
+    if (!u.isValid() || u.isRelative() || !u.userInfo().isEmpty())
+        return {};
+    if (baseUrl.isEmpty()) {
+        if (u.scheme() == QLatin1String("http") && u.host() == QLatin1String("apod.nasa.gov") && (u.port() == -1 || u.port() == 80)) {
+            u.setScheme(QStringLiteral("https"));
+            u.setPort(-1);
+        }
+    }
+    u = withoutQuery(u);
+    if (!hostAllowedFor(QStringLiteral("apod"), u, baseUrl) || (baseUrl.isEmpty() && u.host() != QLatin1String("apod.nasa.gov")))
+        return {};
+    const QString path = u.path();
+    if (!path.startsWith(QStringLiteral("/apod/image/")) || path.contains(QLatin1String("..")) || path.size() > 200)
+        return {};
+    return u;
+}
+
+} // namespace
+
+ExitCode parseApod(const QByteArray &json, const QString &date, const QString &baseUrl, Parsed *out, QString *caption, QString *reason)
+{
+    auto fail = [&](ExitCode c, const char *why) {
+        if (reason)
+            *reason = QString::fromLatin1(why);
+        return c;
+    };
+    const QJsonObject o = object(json);
+    if (o.isEmpty() || !o.value(QStringLiteral("date")).isString())
+        return fail(BadResponse, "malformed answer");
+    if (o.value(QStringLiteral("date")).toString() != date)
+        return fail(BadResponse, "the answer is for another date");
+    if (o.value(QStringLiteral("media_type")).toString() != QLatin1String("image"))
+        return fail(Skipped, "today's entry is not a picture");
+    // hdurl first (the larger picture; the helper scales it down), then url.
+    QUrl image = apodImage(o.value(QStringLiteral("hdurl")).toString(), baseUrl);
+    if (!image.isValid() || image.isEmpty())
+        image = apodImage(o.value(QStringLiteral("url")).toString(), baseUrl);
+    if (!image.isValid() || image.isEmpty())
+        return fail(Skipped, "no picture on apod.nasa.gov");
+    Parsed p;
+    p.thumbUrl = image;
+    p.fileName = image.fileName();
+    p.title = plainText(o.value(QStringLiteral("title")).toString(), kMaxTitleChars);
+    if (p.title.isEmpty())
+        return fail(Skipped, "no title");
+    // Copyrighted days are shown with the credit (owner decision, ADR-0016): the holder is the author. A public entry has none.
+    const QString holder = plainText(o.value(QStringLiteral("copyright")).toString(), kMaxCreditChars);
+    p.author = holder;
+    p.credit = holder;
+    p.licenseShort = holder.isEmpty() ? QStringLiteral("Public domain (NASA)") : QStringLiteral("© ") + holder.left(60);
+    p.licenseUrl = QString();
+    const QDate d = QDate::fromString(date, QStringLiteral("yyyy-MM-dd"));
+    p.sourceUrl = (baseUrl.isEmpty() ? QStringLiteral("https://apod.nasa.gov") : baseUrl) + QStringLiteral("/apod/ap") + d.toString(QStringLiteral("yyMMdd")) + QStringLiteral(".html");
+    *caption = plainText(o.value(QStringLiteral("explanation")).toString(), kMaxCaptionChars);
+    *out = p;
+    return Ok;
 }
 
 QUrl apiUrl(const QString &baseUrl, const QList<QPair<QString, QString>> &query)
@@ -509,7 +602,7 @@ ExitCode runCurl(const Options &o, const QUrl &url, const QString &outFile, qint
 ExitCode httpGet(const Options &o, QUrl url, const QString &outFile, qint64 maxBytes, QString *contentType, QString *reason)
 {
     for (int hops = 0; hops <= kMaxRedirects; ++hops) {
-        if (!hostAllowed(url, o.baseUrl)) {
+        if (!hostAllowedFor(o.provider, url, o.baseUrl)) {
             *reason = QStringLiteral("host not allowed");
             return Network;
         }
@@ -580,7 +673,64 @@ struct Cleanup {
 
 } // namespace
 
-QJsonObject latestCached(const QString &dirPath, const QString &onlyDate)
+namespace {
+
+// Step 4 of every fetch: download the picture (Content-Type, magic bytes, size), decode it with the step 1 loader (header
+// limits, allocation limit), re-encode it (metadata and profile gone, sRGB, at most 3840 on a side), write it and its sidecar,
+// prune the folder.
+ExitCode storePicture(const Options &opts, const Parsed &parsed, const QString &caption, const QString &download, const QString &image, const QString &sidecar, QJsonObject *result, QString *reason)
+{
+        QString type;
+    if (const ExitCode c = httpGet(opts, parsed.thumbUrl, download, kMaxImageBytes, &type, reason))
+        return c;
+    QFile f(download);
+    if (!f.open(QIODevice::ReadOnly)) {
+        *reason = QStringLiteral("cannot read the download");
+        return Unreadable;
+    }
+    const QByteArray head = f.read(16);
+    f.close();
+    if (!imageSignatureOk(type, head)) {
+        *reason = QStringLiteral("not a jpeg, png or webp picture");
+        return Skipped;
+    }
+    QImage img;
+    if (const ExitCode c = loadPicture(download, QSize(kDefaultWidth, kDefaultWidth), Fit::Fit, &img)) {
+        *reason = QStringLiteral("the picture cannot be used");
+        return c;
+    }
+    // Re-encoded: metadata and profile gone, sRGB, at most 3840 on a side.
+    QImage rgb = flattened(img);
+    if (rgb.width() > kDefaultWidth || rgb.height() > kDefaultWidth)
+        rgb = rgb.scaled(QSize(kDefaultWidth, kDefaultWidth), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    QImageWriter w(&buffer, "jpg");
+    w.setQuality(92);
+    if (!w.write(rgb) || bytes.isEmpty() || !writeAtomic(image, bytes)) {
+        *reason = QStringLiteral("cannot write the picture");
+        return WriteFailed;
+    }
+    QFile::setPermissions(image, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    QJsonObject meta = sidecarOf(parsed, caption, opts.date, QDateTime::currentDateTimeUtc().toString(Qt::ISODate), rgb.width(), rgb.height(), opts.provider);
+    meta.insert(QStringLiteral("mean"), meanColor(rgb));
+    if (!writeAtomic(sidecar, QJsonDocument(meta).toJson(QJsonDocument::Compact))) {
+        QFile::remove(image);
+        *reason = QStringLiteral("cannot write the sidecar");
+        return WriteFailed;
+    }
+    QFile::setPermissions(sidecar, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    pruneOnline(opts.out, opts.date, kKeepDays, kKeepBytes);
+    QJsonObject l = latestCached(opts.out, opts.date, opts.provider);
+    l.insert(QStringLiteral("cached"), false);
+    *result = l;
+    return Ok;
+}
+
+} // namespace
+
+QJsonObject latestCached(const QString &dirPath, const QString &onlyDate, const QString &provider)
 {
     QDir dir(dirPath);
     QStringList names = dir.entryList({QStringLiteral("*.json")}, QDir::Files | QDir::NoSymLinks, QDir::Name);
@@ -602,7 +752,7 @@ QJsonObject latestCached(const QString &dirPath, const QString &onlyDate)
         if (!f.open(QIODevice::ReadOnly) || f.size() > 64 * 1024)
             continue;
         const QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
-        if (o.value(QStringLiteral("provider")).toString() != QLatin1String("commons") || o.value(QStringLiteral("date")).toString() != date)
+        if (o.value(QStringLiteral("provider")).toString() != provider || o.value(QStringLiteral("date")).toString() != date)
             continue;
         // What is handed on is a whitelist of text fields, cleaned again (the file is ours, but it is only a file).
         QJsonObject r{{QStringLiteral("ok"), true}, {QStringLiteral("found"), true}, {QStringLiteral("date"), date}, {QStringLiteral("file"), image}};
@@ -613,6 +763,11 @@ QJsonObject latestCached(const QString &dirPath, const QString &onlyDate)
         r.insert(QStringLiteral("licenseUrl"), safeHttpsUrl(o.value(QStringLiteral("licenseUrl")).toString(), 300));
         const QString src = o.value(QStringLiteral("sourceUrl")).toString();
         r.insert(QStringLiteral("sourceUrl"), src.startsWith(QStringLiteral("http://127.0.0.1:")) ? cleanChars(src, 400) : safeHttpsUrl(src, 400));
+        // The picture's mean colour ("#rrggbb"), the backdrop of a Fit (the aspect rule of ADR-0016 step 2).
+        static const QRegularExpression colour(QStringLiteral("\\A#[0-9a-f]{6}\\z"));
+        const QString mean = o.value(QStringLiteral("mean")).toString().toLower();
+        r.insert(QStringLiteral("mean"), colour.match(mean).hasMatch() ? mean : QStringLiteral("#000000"));
+        r.insert(QStringLiteral("provider"), provider);
         r.insert(QStringLiteral("width"), o.value(QStringLiteral("width")).toInt());
         r.insert(QStringLiteral("height"), o.value(QStringLiteral("height")).toInt());
         return r;
@@ -688,53 +843,48 @@ ExitCode fetchCommons(const Options &opts, QJsonObject *result, QString *reason)
     if (const ExitCode c = parseImageInfo(body, fileName, opts.baseUrl, &parsed, reason))
         return c;
 
-    // 4. the picture: Content-Type, magic bytes, size, then decoded by the step 1 loader (header limits, allocation limit).
-    const QString download = tmp("d");
-    QString type;
-    if (const ExitCode c = httpGet(opts, parsed.thumbUrl, download, kMaxImageBytes, &type, reason))
-        return c;
-    QFile f(download);
-    if (!f.open(QIODevice::ReadOnly)) {
-        *reason = QStringLiteral("cannot read the download");
-        return Unreadable;
+    return storePicture(opts, parsed, caption, tmp("d"), image, sidecar, result, reason);
+}
+
+ExitCode fetchApod(const Options &opts, QJsonObject *result, QString *reason)
+{
+    if (!opts.baseUrl.isEmpty() && !baseUrlAllowed(opts.baseUrl, opts.dev)) {
+        *reason = QStringLiteral("the base URL is only for a dev session and only http://127.0.0.1:<port>");
+        return Usage;
     }
-    const QByteArray head = f.read(16);
-    f.close();
-    if (!imageSignatureOk(type, head)) {
-        *reason = QStringLiteral("not a jpeg, png or webp picture");
-        return Skipped;
+    if (opts.provider != QLatin1String("apod") || !validDate(opts.date) || !outDirAllowedFor(QStringLiteral("apod"), opts.out)) {
+        *reason = QStringLiteral("bad date or output folder");
+        return Usage;
     }
-    QImage img;
-    if (const ExitCode c = loadPicture(download, QSize(kDefaultWidth, kDefaultWidth), Fit::Fit, &img)) {
-        *reason = QStringLiteral("the picture cannot be used");
-        return c;
-    }
-    // Re-encoded: metadata and profile gone, sRGB, at most 3840 on a side.
-    QImage rgb = flattened(img);
-    if (rgb.width() > kDefaultWidth || rgb.height() > kDefaultWidth)
-        rgb = rgb.scaled(QSize(kDefaultWidth, kDefaultWidth), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    QByteArray bytes;
-    QBuffer buffer(&bytes);
-    buffer.open(QIODevice::WriteOnly);
-    QImageWriter w(&buffer, "jpg");
-    w.setQuality(92);
-    if (!w.write(rgb) || bytes.isEmpty() || !writeAtomic(image, bytes)) {
-        *reason = QStringLiteral("cannot write the picture");
+    const QString image = opts.out + QLatin1Char('/') + opts.date + QStringLiteral(".jpg");
+    const QString sidecar = opts.out + QLatin1Char('/') + opts.date + QStringLiteral(".json");
+    if (!ensureCacheDir(QFileInfo(opts.out).absolutePath()) || !ensureCacheDir(opts.out)) {
+        *reason = QStringLiteral("cannot create the output folder");
         return WriteFailed;
     }
-    QFile::setPermissions(image, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    const QJsonObject meta = sidecarOf(parsed, caption, opts.date, QDateTime::currentDateTimeUtc().toString(Qt::ISODate), rgb.width(), rgb.height());
-    if (!writeAtomic(sidecar, QJsonDocument(meta).toJson(QJsonDocument::Compact))) {
-        QFile::remove(image);
-        *reason = QStringLiteral("cannot write the sidecar");
-        return WriteFailed;
+    if (QFileInfo(image).isFile() && QFileInfo(sidecar).isFile()) {
+        QJsonObject l = latestCached(opts.out, opts.date, QStringLiteral("apod"));
+        if (l.value(QStringLiteral("found")).toBool()) {
+            l.insert(QStringLiteral("cached"), true);
+            *result = l;
+            return Ok;
+        }
     }
-    QFile::setPermissions(sidecar, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    pruneOnline(opts.out, opts.date, kKeepDays, kKeepBytes);
-    QJsonObject l = latestCached(opts.out, opts.date);
-    l.insert(QStringLiteral("cached"), false);
-    *result = l;
-    return Ok;
+    Cleanup cleanup;
+    const QString stem = opts.out + QStringLiteral("/.dl-") + QString::number(::getpid()) + QLatin1Char('-');
+    auto tmp = [&](const char *n) {
+        const QString path = stem + QString::fromLatin1(n) + QStringLiteral(".part");
+        cleanup.paths << path;
+        return path;
+    };
+    QByteArray body;
+    if (const ExitCode c = getJson(opts, apodUrl(opts.baseUrl, opts.date), tmp("a"), &body, reason))
+        return c;
+    Parsed parsed;
+    QString caption;
+    if (const ExitCode c = parseApod(body, opts.date, opts.baseUrl, &parsed, &caption, reason))
+        return c;
+    return storePicture(opts, parsed, caption, tmp("d"), image, sidecar, result, reason);
 }
 
 } // namespace wallpaper::commons

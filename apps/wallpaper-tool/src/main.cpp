@@ -7,8 +7,8 @@
 //   grassfield-wallpaper probe     -- VIDEO
 //   grassfield-wallpaper transcode --size WxH --fit F --color #rrggbb --out DIR [--strip-rows N] [--cache-max-bytes N] [--max-seconds N]
 //                                  [--max-bytes N] [--keep FILE] -- VIDEO     (ADR-0016 W7; progress lines {"progress":0.4} then the result)
-//   grassfield-wallpaper fetch commons --date YYYY-MM-DD --out DIR [--width N] [--lang en|fr] [--base-url URL]   (ADR-0016 step 2)
-//   grassfield-wallpaper latest commons --out DIR
+//   grassfield-wallpaper fetch commons|apod --date YYYY-MM-DD --out DIR [--width N] [--lang en|fr] [--base-url URL]   (ADR-0016 step 2)
+//   grassfield-wallpaper latest commons|apod --out DIR
 //
 // One JSON object on stdout, and the exit code (wallpaper::ExitCode). Never a daemon. Only `fetch` uses the network (curl). The shell and
 // the Settings app run it with an argument vector; the shell then decodes only this tool's own output.
@@ -354,18 +354,20 @@ int cmdTranscode(const QStringList &args)
 // `fetch commons`: the day's Wikimedia Commons picture into the online cache (a fetch of a day already cached is a no-op).
 int cmdFetch(const QStringList &args)
 {
-    if (args.isEmpty() || args[0] != QLatin1String("commons"))
-        return fail(Usage, QStringLiteral("usage: fetch commons --date YYYY-MM-DD --out DIR"));
+    if (args.isEmpty() || !commons::providerKnown(args[0]))
+        return fail(Usage, QStringLiteral("usage: fetch commons|apod --date YYYY-MM-DD --out DIR"));
+    const QString provider = args[0];
     const Args a = parseArgs(args.mid(1), {QStringLiteral("date"), QStringLiteral("out"), QStringLiteral("width"), QStringLiteral("lang"), QStringLiteral("base-url")}, false);
     if (!a.ok)
         return fail(Usage, a.error);
     commons::Options o;
+    o.provider = provider;
     o.date = a.options.value(QStringLiteral("date"));
     if (!commons::validDate(o.date))
         return fail(Usage, QStringLiteral("bad --date"));
     o.out = a.options.value(QStringLiteral("out"));
-    if (!commons::outDirAllowed(o.out))
-        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/commons)"));
+    if (!commons::outDirAllowedFor(provider, o.out))
+        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/<provider>)"));
     bool ok = true;
     o.width = a.options.contains(QStringLiteral("width")) ? a.options.value(QStringLiteral("width")).toInt(&ok) : commons::kDefaultWidth;
     if (!ok || o.width < 640 || o.width > commons::kDefaultWidth)
@@ -381,7 +383,7 @@ int cmdFetch(const QStringList &args)
         o.curl = QStringLiteral("/usr/bin/curl");
     QJsonObject result;
     QString reason;
-    const ExitCode c = commons::fetchCommons(o, &result, &reason);
+    const ExitCode c = provider == QLatin1String("apod") ? commons::fetchApod(o, &result, &reason) : commons::fetchCommons(o, &result, &reason);
     if (c != Ok)
         return fail(c, reason);
     return finish(result, Ok);
@@ -389,15 +391,16 @@ int cmdFetch(const QStringList &args)
 
 int cmdLatest(const QStringList &args)
 {
-    if (args.isEmpty() || args[0] != QLatin1String("commons"))
-        return fail(Usage, QStringLiteral("usage: latest commons --out DIR"));
+    if (args.isEmpty() || !commons::providerKnown(args[0]))
+        return fail(Usage, QStringLiteral("usage: latest commons|apod --out DIR"));
+    const QString provider = args[0];
     const Args a = parseArgs(args.mid(1), {QStringLiteral("out")}, false);
     if (!a.ok)
         return fail(Usage, a.error);
     const QString out = a.options.value(QStringLiteral("out"));
-    if (!commons::outDirAllowed(out))
-        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/commons)"));
-    return finish(commons::latestCached(out), Ok);
+    if (!commons::outDirAllowedFor(provider, out))
+        return fail(Usage, QStringLiteral("--out must be the online cache (.../grassfield/wallpapers/online/<provider>)"));
+    return finish(commons::latestCached(out, QString(), provider), Ok);
 }
 
 } // namespace

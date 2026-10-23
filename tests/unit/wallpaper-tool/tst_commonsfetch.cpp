@@ -609,3 +609,169 @@ TEST_F(CommonsFetch, ABaseUrlOutsideADevSessionIsRefused)
     opts.baseUrl = QStringLiteral("http://localhost:1");
     EXPECT_EQ(fetchCommons(opts, &r, &why), Usage);
 }
+
+// ------------------------------------------------------- NASA APOD (ADR-0016 step 2, the second provider)
+
+TEST(ApodRules, HostsAreNasaOnlyAndProviderBound)
+{
+    const QString none;
+    EXPECT_TRUE(hostAllowedFor(QStringLiteral("apod"), QUrl(QStringLiteral("https://api.nasa.gov/planetary/apod")), none));
+    EXPECT_TRUE(hostAllowedFor(QStringLiteral("apod"), QUrl(QStringLiteral("https://apod.nasa.gov/apod/image/2610/a.jpg")), none));
+    // The site that served the logo answers, other NASA hosts, Commons hosts and look-alikes are refused.
+    for (const char *u : {"https://science.nasa.gov/x.jpg", "https://www.nasa.gov/x.jpg", "https://upload.wikimedia.org/x.jpg", "http://apod.nasa.gov/x.jpg", "https://apod.nasa.gov.evil.example/x.jpg", "https://apod.nasa.gov@evil.example/x.jpg", "https://apod.nasa.gov:8443/x.jpg"})
+        EXPECT_FALSE(hostAllowedFor(QStringLiteral("apod"), QUrl(QString::fromLatin1(u)), none)) << u;
+    EXPECT_FALSE(hostAllowedFor(QStringLiteral("commons"), QUrl(QStringLiteral("https://apod.nasa.gov/x.jpg")), none));
+    EXPECT_FALSE(hostAllowedFor(QStringLiteral("nasa"), QUrl(QStringLiteral("https://apod.nasa.gov/x.jpg")), none));
+    EXPECT_TRUE(outDirAllowedFor(QStringLiteral("apod"), QStringLiteral("/home/u/.cache/grassfield/wallpapers/online/apod")));
+    EXPECT_FALSE(outDirAllowedFor(QStringLiteral("apod"), QStringLiteral("/home/u/.cache/grassfield/wallpapers/online/commons")));
+    EXPECT_FALSE(commons::outDirAllowed(QStringLiteral("/home/u/.cache/grassfield/wallpapers/online/apod")));
+}
+
+TEST(ApodRules, TheRequestCarriesTheDemoKeyAndTheDate)
+{
+    const QUrl u = apodUrl(QString(), QStringLiteral("2026-10-20"));
+    EXPECT_EQ(u.host(), QStringLiteral("api.nasa.gov"));
+    EXPECT_EQ(u.path(), QStringLiteral("/planetary/apod"));
+    EXPECT_TRUE(u.query().contains(QStringLiteral("api_key=DEMO_KEY")));
+    EXPECT_TRUE(u.query().contains(QStringLiteral("date=2026-10-20")));
+    // The curl vector for it: https only, no cookie, no referer.
+    const QStringList a = curlArgs(u, QStringLiteral("/tmp/x"), 1000, QString());
+    EXPECT_EQ(a[a.indexOf(QStringLiteral("--proto")) + 1], QStringLiteral("=https"));
+    EXPECT_FALSE(a.contains(QStringLiteral("--cookie")));
+    EXPECT_FALSE(a.contains(QStringLiteral("--referer")));
+}
+
+TEST(ApodRules, ParsesARealShapeAndKeepsTheCopyrightHolder)
+{
+    const QString b = QStringLiteral("http://127.0.0.1:1");
+    auto answer = [&](const QByteArray &fields) { return QByteArray("{\"date\":\"2026-10-20\",\"media_type\":\"image\",\"title\":\"T\",") + fields + "}"; };
+    Parsed p;
+    QString caption, why;
+    ASSERT_EQ(parseApod(answer("\"url\":\"http://127.0.0.1:1/apod/image/2610/a.jpg?x=1\",\"explanation\":\"<b>Words</b> here\",\"copyright\":\" Jane\\n Doe \""), QStringLiteral("2026-10-20"), b, &p, &caption, &why), Ok) << why.toStdString();
+    EXPECT_EQ(p.thumbUrl.toString(), QStringLiteral("http://127.0.0.1:1/apod/image/2610/a.jpg"));
+    EXPECT_EQ(p.author, QStringLiteral("Jane Doe"));
+    EXPECT_EQ(p.licenseShort, QStringLiteral("© Jane Doe"));
+    EXPECT_EQ(caption, QStringLiteral("Words here"));
+    EXPECT_EQ(p.sourceUrl, QStringLiteral("http://127.0.0.1:1/apod/ap261020.html"));
+    // No copyright field: public, no holder.
+    ASSERT_EQ(parseApod(answer("\"url\":\"http://127.0.0.1:1/apod/image/a.jpg\""), QStringLiteral("2026-10-20"), b, &p, &caption, &why), Ok);
+    EXPECT_TRUE(p.author.isEmpty());
+    EXPECT_EQ(p.licenseShort, QStringLiteral("Public domain (NASA)"));
+    // An http address of apod.nasa.gov is upgraded to https; without a base URL nothing else is accepted.
+    ASSERT_EQ(parseApod(answer("\"url\":\"http://apod.nasa.gov/apod/image/2610/a.jpg\""), QStringLiteral("2026-10-20"), QString(), &p, &caption, &why), Ok);
+    EXPECT_EQ(p.thumbUrl.toString(), QStringLiteral("https://apod.nasa.gov/apod/image/2610/a.jpg"));
+    EXPECT_EQ(p.sourceUrl, QStringLiteral("https://apod.nasa.gov/apod/ap261020.html"));
+}
+
+TEST(ApodRules, RefusesLogosVideosForeignHostsAndWrongDates)
+{
+    auto parse = [&](const QByteArray &json, const QString &date = QStringLiteral("2026-10-20")) {
+        Parsed p;
+        QString caption, why;
+        return parseApod(json, date, QString(), &p, &caption, &why);
+    };
+    // The NASA logo of the broken answers (ADR-0016 step 2 verification): refused, never shown.
+    EXPECT_EQ(parse(R"({"date":"2026-10-20","media_type":"image","title":"NASA Science","url":"https://science.nasa.gov/wp-content/themes/nasa-science/assets/images/nasa-logo@2x.png","hdurl":"https://science.nasa.gov/wp-content/themes/nasa-science/assets/images/nasa-logo@2x.png"})"), Skipped);
+    // apod.nasa.gov but outside /apod/image/, another host, a traversal.
+    EXPECT_EQ(parse(R"({"date":"2026-10-20","media_type":"image","title":"T","url":"https://apod.nasa.gov/logo.png"})"), Skipped);
+    EXPECT_EQ(parse(R"({"date":"2026-10-20","media_type":"image","title":"T","url":"https://evil.example/apod/image/a.jpg"})"), Skipped);
+    EXPECT_EQ(parse(R"({"date":"2026-10-20","media_type":"image","title":"T","url":"https://apod.nasa.gov/apod/image/../../x.jpg"})"), Skipped);
+    // A bad hdurl falls back to a good url.
+    EXPECT_EQ(parse(R"({"date":"2026-10-20","media_type":"image","title":"T","url":"https://apod.nasa.gov/apod/image/a.jpg","hdurl":"https://science.nasa.gov/x.png"})"), Ok);
+    EXPECT_EQ(parse(R"({"date":"2026-10-20","media_type":"video","title":"T","url":"https://www.youtube.com/embed/x"})"), Skipped);
+    EXPECT_EQ(parse(R"({"date":"2026-10-20","media_type":"other","title":"T"})"), Skipped);
+    EXPECT_EQ(parse(R"({"date":"2026-10-19","media_type":"image","title":"T","url":"https://apod.nasa.gov/apod/image/a.jpg"})"), BadResponse);
+    EXPECT_EQ(parse("not json"), BadResponse);
+    EXPECT_EQ(parse(R"({"date":"2026-10-20","media_type":"image","title":"","url":"https://apod.nasa.gov/apod/image/a.jpg"})"), Skipped);
+}
+
+class ApodFetch : public CommonsFetch {
+protected:
+    void SetUp() override
+    {
+        CommonsFetch::SetUp();
+        for (const char *name : {"apod.json", "apod-2026-10-21.json", "apod-2026-10-22.json", "apod-2026-10-23.json"})
+            ASSERT_TRUE(QFile::copy(fixtureDir() + QLatin1Char('/') + QString::fromLatin1(name), fixtures + QLatin1Char('/') + QString::fromLatin1(name))) << name;
+        opts.provider = QStringLiteral("apod");
+        out = work.filePath(QStringLiteral("cache/wallpapers/online/apod"));
+        opts.out = out;
+    }
+};
+
+TEST_F(ApodFetch, FetchesAPublicEntryAndKeepsItsMeanColour)
+{
+    QJsonObject r;
+    QString why;
+    ASSERT_EQ(fetchApod(opts, &r, &why), Ok) << why.toStdString();
+    EXPECT_EQ(r.value(QStringLiteral("provider")).toString(), QStringLiteral("apod"));
+    EXPECT_EQ(r.value(QStringLiteral("title")).toString(), QStringLiteral("Gradient Over Stars"));
+    EXPECT_EQ(r.value(QStringLiteral("licenseShort")).toString(), QStringLiteral("Public domain (NASA)"));
+    EXPECT_EQ(r.value(QStringLiteral("sourceUrl")).toString(), base + QStringLiteral("/apod/ap261020.html"));
+    EXPECT_TRUE(r.value(QStringLiteral("mean")).toString().startsWith(QLatin1Char('#')));
+    EXPECT_EQ(QImage(out + QStringLiteral("/2026-10-20.jpg")).size(), QSize(1600, 1000));
+    EXPECT_EQ(online(), (QStringList{QStringLiteral("2026-10-20.jpg"), QStringLiteral("2026-10-20.json")}));
+    // Two requests: the API (with the demo key) and the bare picture; the fixed agent, no referer, no cookie.
+    const QStringList log = requests();
+    ASSERT_EQ(log.size(), 2) << log.join('\n').toStdString();
+    EXPECT_TRUE(log[0].startsWith(QStringLiteral("/planetary/apod?api_key=DEMO_KEY&date=2026-10-20")));
+    EXPECT_TRUE(log[1].startsWith(QStringLiteral("/apod/image/2610/picture.jpg | ")));
+    for (const QString &line : log) {
+        EXPECT_TRUE(line.contains(QStringLiteral("| ua=") + userAgent() + QStringLiteral(" |"))) << line.toStdString();
+        EXPECT_TRUE(line.contains(QStringLiteral("| referer= |")));
+        EXPECT_TRUE(line.endsWith(QStringLiteral("| cookie=")));
+    }
+    // A day already cached makes no request; `latest apod` reads it, `latest commons` of the same folder does not.
+    QJsonObject again;
+    ASSERT_EQ(fetchApod(opts, &again, &why), Ok);
+    EXPECT_TRUE(again.value(QStringLiteral("cached")).toBool());
+    EXPECT_EQ(requests().size(), 2);
+    EXPECT_TRUE(latestCached(out, QString(), QStringLiteral("apod")).value(QStringLiteral("found")).toBool());
+    EXPECT_FALSE(latestCached(out).value(QStringLiteral("found")).toBool());
+}
+
+TEST_F(ApodFetch, ACopyrightedEntryIsShownWithItsCredit)
+{
+    opts.date = QStringLiteral("2026-10-21");
+    QJsonObject r;
+    QString why;
+    ASSERT_EQ(fetchApod(opts, &r, &why), Ok) << why.toStdString();
+    EXPECT_EQ(r.value(QStringLiteral("author")).toString(), QStringLiteral("Jane Q. Public"));
+    EXPECT_EQ(r.value(QStringLiteral("credit")).toString(), QStringLiteral("Jane Q. Public"));
+    EXPECT_EQ(r.value(QStringLiteral("licenseShort")).toString(), QStringLiteral("© Jane Q. Public"));
+}
+
+TEST_F(ApodFetch, AVideoDayAndTheLogoAnswerAreSkippedWithoutAPictureRequest)
+{
+    for (const char *date : {"2026-10-22", "2026-10-23"}) {
+        opts.date = QString::fromLatin1(date);
+        QJsonObject r;
+        QString why;
+        EXPECT_EQ(fetchApod(opts, &r, &why), Skipped) << date << " " << why.toStdString();
+    }
+    for (const QString &line : requests())
+        EXPECT_TRUE(line.startsWith(QStringLiteral("/planetary/apod"))) << "only the API was asked: " << line.toStdString();
+    EXPECT_TRUE(online().isEmpty());
+}
+
+TEST_F(ApodFetch, AnAnswerForAnotherDateIsABadResponseAndAServerErrorIsANetworkFailure)
+{
+    opts.date = QStringLiteral("2026-10-19"); // the generic fixture answers 2026-10-20
+    QJsonObject r;
+    QString why;
+    EXPECT_EQ(fetchApod(opts, &r, &why), BadResponse);
+    mode("fail");
+    opts.date = QStringLiteral("2026-10-20");
+    EXPECT_EQ(fetchApod(opts, &r, &why), Network);
+}
+
+TEST_F(ApodFetch, TheBaseUrlIsDevOnlyAndTheFolderIsTheProvidersOwn)
+{
+    opts.dev = false;
+    QJsonObject r;
+    QString why;
+    EXPECT_EQ(fetchApod(opts, &r, &why), Usage);
+    opts.dev = true;
+    opts.out = work.filePath(QStringLiteral("cache/wallpapers/online/commons"));
+    EXPECT_EQ(fetchApod(opts, &r, &why), Usage);
+    EXPECT_TRUE(requests().isEmpty());
+}
