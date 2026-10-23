@@ -3,12 +3,18 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Services.UPower
 import Grassfield.Ui
+import qs.platform
 import qs.services
 
-// Desktop wallpaper: the Grassfield artwork (WallpaperArt) on the background layer of every screen.
+// Desktop wallpaper: the Grassfield artwork, a colour, a picture or a video (WallpaperFeed decides which) on the background
+// layer of every screen.
 Scope {
     id: root
+
+    // The session is locked (set from shell.qml, as Overview and the switcher get it): a video wallpaper pauses.
+    property bool locked: false
 
     // Dev-only wallpaper override for tests/visual (contrast on worst-case wallpapers): with
     // GRASSFIELD_DEV=1, GRASSFIELD_WALLPAPER_FILE (initial, trusted: set by the dev scripts) or
@@ -23,6 +29,10 @@ Scope {
     property string outcome: "idle"
     // Dev hook `qs ipc call wallpaper loadDelay <ms>`: the decode of every new picture starts that late (0 = off).
     property int loadDelayMs: 0
+    // Dev hooks `qs ipc call wallpaper videoIdle 1|0|real` and `videoBattery 1|0|real`: the pause policy's idle and battery
+    // inputs are forced (a nested test cannot make the compositor idle or unplug a laptop). "" = the real input.
+    property string devIdle: ""
+    property string devBattery: ""
     // Dev hook `qs ipc call wallpaper fadeLength <ms>`: the crossfade lasts that long (0 = the token), so that a capture lands in it.
     property int fadeLengthMs: 0
 
@@ -81,6 +91,36 @@ Scope {
                 return "refused";
             root.fadeLengthMs = Math.max(0, Math.min(60000, ms));
             return "ok";
+        }
+
+        // Dev only: force the idle input of the video pause policy ("1", "0", or "real").
+        function videoIdle(value: string): string {
+            if (!root.dev)
+                return "refused";
+            root.devIdle = value === "1" || value === "0" ? value : "";
+            return "ok";
+        }
+
+        // Dev only: force the battery input of the video pause policy ("1", "0", or "real").
+        function videoBattery(value: string): string {
+            if (!root.dev)
+                return "refused";
+            root.devBattery = value === "1" || value === "0" ? value : "";
+            return "ok";
+        }
+
+        // Dev only: one line of JSON about the video of an output: the policy and why, whether a frame is decoding, whether the
+        // player shows a frame, the video on screen.
+        function videoStatus(output: string): string {
+            if (!root.dev)
+                return "refused";
+            for (const w of variants.instances) {
+                if (w.modelData && w.modelData.name === output) {
+                    const inputs = WallpaperConfig.playbackInputs(root.locked, w.fullscreen, w.idle, w.onBattery, w.effective, Settings.reduceMotion, Settings.materialProfile);
+                    return JSON.stringify({policy: w.videoPolicy, reason: WallpaperConfig.playbackState(inputs).reason, playing: w.shown.videoPlaying, shown: w.shown.videoShown, video: w.shown.video, locked: root.locked, fullscreen: w.fullscreen, idle: w.idle, onBattery: w.onBattery});
+                }
+            }
+            return "unknown output";
         }
 
         // Dev only: where the crossfade of an output is, as the incoming slot's opacity (0 to 1; 0 also while a picture
@@ -224,7 +264,26 @@ Scope {
             //   - nothing else sets the opacity of a layer from the REQUESTED state: only the fade does.
             property WallpaperSlot shown: slotA
             property WallpaperSlot incoming: null
-            property var shownDesc: ({kind: "art", color: "", url: "", strip: null})
+            property var shownDesc: ({kind: "art", color: "", url: "", strip: null, video: ""})
+
+            // ---- the pause policy of a video wallpaper (ADR-0016 section 5), re-evaluated by every event ----
+            // Nothing polls: the lock state, the compositor's full-screen state of this output, the idle monitor, UPower and the
+            // settings each notify. The idle monitor only exists while a video is wanted, and it is NOT an inhibitor (a
+            // wallpaper never creates one, so the idle lock still fires while a video plays); it ignores inhibitors because it
+            // asks whether the user is away, not whether the session may sleep.
+            readonly property bool videoWanted: shownDesc.video !== undefined && shownDesc.video !== ""
+            readonly property bool fullscreen: win.modelData ? Compositor.fullscreenOn(win.modelData.name, Compositor.topologyRevision) : false
+            readonly property var effective: feed.cfg
+            readonly property bool idle: root.devIdle !== "" ? root.devIdle === "1" : idleMonitor.isIdle
+            readonly property bool onBattery: root.devBattery !== "" ? root.devBattery === "1" : UPower.onBattery
+            readonly property string videoPolicy: WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(root.locked, fullscreen, idle, onBattery, feed.cfg, Settings.reduceMotion, Settings.materialProfile)).state
+
+            IdleMonitor {
+                id: idleMonitor
+                enabled: win.videoWanted
+                timeout: Tokens.wallpaperVideoIdleSeconds
+                respectInhibitors: false
+            }
             property var pendingDesc: null
             property bool fadePending: false
 
@@ -233,20 +292,26 @@ Scope {
                 z: 1
                 opacity: 1
                 pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
+                onScreen: win.shown === slotA
+                playPolicy: win.videoPolicy
                 onPictureLoaded: win.slotLoaded(slotA)
                 onPictureFailed: win.slotFailed(slotA)
+                onVideoFailed: message => console.warn("wallpaper: " + feed.outputName + ": the video stopped: " + message)
             }
 
             WallpaperSlot {
                 id: slotB
                 z: 1
                 pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
+                onScreen: win.shown === slotB
+                playPolicy: win.videoPolicy
                 onPictureLoaded: win.slotLoaded(slotB)
                 onPictureFailed: win.slotFailed(slotB)
+                onVideoFailed: message => console.warn("wallpaper: " + feed.outputName + ": the video stopped: " + message)
             }
 
             function sameContent(a: var, b: var): bool {
-                return a.kind === b.kind && (a.kind !== "color" || a.color === b.color) && (a.kind !== "picture" || a.url === b.url);
+                return a.kind === b.kind && (a.kind !== "color" || a.color === b.color) && (a.kind !== "picture" || (a.url === b.url && (a.video || "") === (b.video || "")));
             }
 
             function show(desc: var): void {
@@ -269,6 +334,11 @@ Scope {
                 incoming.kind = desc.kind;
                 if (desc.kind === "color")
                     incoming.color = desc.color;
+                // A video wallpaper: the slot plays it once it is on screen (its poster is the picture that fades in).
+                incoming.video = desc.video || "";
+                incoming.videoFit = desc.fit || "fill";
+                incoming.posterMs = desc.posterMs || 0;
+                incoming.videoPath = desc.path || "";
                 if (desc.kind === "picture") {
                     // Dev hook `wallpaper loadDelay <ms>`: the decode is started late, to test changes that arrive faster.
                     if (root.loadDelayMs > 0) {
@@ -306,6 +376,7 @@ Scope {
                 toneDone = false;
                 if (incoming !== null) {
                     incoming.url = "";
+                    incoming.video = "";
                     incoming.opacity = 0;
                     incoming = null;
                 }
@@ -367,6 +438,7 @@ Scope {
                 if (old !== shown) {
                     old.opacity = 0;
                     old.url = "";
+                    old.video = "";
                 }
                 // The tone of the wallpaper that is on screen now.
                 reportTone(shownDesc);

@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // One slot of the desktop wallpaper (ADR-0016, Wallpaper.qml): the content of a slot is ONE of the three kinds of wallpaper,
@@ -14,6 +15,16 @@ Item {
     // file: URL of the prepared picture ("" releases it).
     property string url: ""
     property size pictureSize: Qt.size(1, 1)
+    // A video wallpaper (ADR-0016 W7): the picture above is its poster; `video` is the file: URL of the transcoded H.264 file
+    // played over it, but only while the slot is on screen (`onScreen`, so that an incoming slot that still fades in, and a
+    // slot being released, never start a decoder) and as the pause policy `playPolicy` allows.
+    property string video: ""
+    property string videoFit: "fill"
+    property int posterMs: 0
+    property string videoPath: ""
+    property bool onScreen: false
+    property string playPolicy: "pause"
+    signal videoFailed(string message)
 
     // The artwork's palette (the window's base colour and the menu bar tone of the artwork come from it).
     readonly property var art: artwork.art
@@ -56,6 +67,26 @@ Item {
                 root.pictureLoaded();
             else if (status === Image.Error)
                 root.pictureFailed();
+        }
+    }
+
+    // Loaded only for a video wallpaper that is on screen: no QtMultimedia object exists otherwise.
+    // The video is playing (a frame is being decoded), for the dev status and the tests.
+    readonly property bool videoPlaying: (videoLoader.item as WallpaperVideo)?.playing === true
+    // The player has shown a frame (it is playing or paused on its last frame).
+    readonly property bool videoShown: (videoLoader.item as WallpaperVideo)?.hasFrame === true
+
+    Loader {
+        id: videoLoader
+        anchors.fill: parent
+        active: root.kind === "picture" && root.video !== "" && root.onScreen
+        sourceComponent: WallpaperVideo {
+            source: root.video
+            fit: root.videoFit
+            posterMs: root.posterMs
+            policy: root.playPolicy
+            markerPath: root.videoPath
+            onFailed: message => root.videoFailed(message)
         }
     }
 }

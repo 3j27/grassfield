@@ -174,7 +174,10 @@ ShellRoot {
         }
     }
 
-    Wallpaper {}
+    Wallpaper {
+        // The session lock owns the screen: a video wallpaper pauses (ADR-0016 section 5).
+        locked: Lock.lockState !== "unlocked"
+    }
     HotCorners {}
     DesktopIcons {}
     DesktopWidgets {}

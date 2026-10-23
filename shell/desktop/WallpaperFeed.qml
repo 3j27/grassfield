@@ -11,6 +11,10 @@ import qs.services
 //   - source online (ADR-0016 step 2): the newest picture WallpaperOnline has on disk is prepared like a file (`label` is its
 //     title); with nothing cached the artwork shows and the state is "waiting" (Settings: "Waiting for a connection"). A newer
 //     picture (a day later) replaces it through the same crossfade.
+//   - source video (ADR-0016 W7): `probe`, then `transcode` (H.264 at the output's physical size; its progress is published for
+//     Settings), then the poster frame is the picture (`imageUrl`, the lock screen's still) and `display.video` names the file
+//     Wallpaper.qml plays under the pause policy. A video that crashed the shell (WallpaperState.videoBlocked) shows its poster
+//     and is not played; the reason is "video-crashed".
 //   - source folder: the helper lists the folder, WallpaperConfig.advance picks the next picture (sorted or shuffled without
 //     repeat, position kept in WallpaperState), the interval timer asks for the next one. A file that fails is skipped for the
 //     session; with every file failing the current picture stays and `reason` says why.
@@ -55,6 +59,10 @@ Scope {
     property var strip: null
     // File name of the picture shown (Settings caption).
     property string label: ""
+    // The transcode under way, 0..1 (-1: none). Published for Settings' progress row.
+    property real progress: -1
+    // The transcoded H.264 file of a video wallpaper on screen ("" for anything else).
+    property string videoFile: ""
     property var files: []
     property var bad: ({})
     property int generation: 0
@@ -103,7 +111,7 @@ Scope {
 
     property var activeJob: null
 
-    function startJob(kind: string, args: var, timeoutMs: int): void {
+    function startJob(kind: string, args: var, timeoutMs: int, streaming: bool): void {
         if (!args) {
             fail("invalid-path");
             return;
@@ -113,6 +121,8 @@ Scope {
             kind: kind,
             timeoutMs: timeoutMs,
             command: args,
+            streaming: streaming === true,
+            progressCallback: root.jobProgress,
             callback: root.jobFinished
         }) as WallpaperJob;
         activeJob = job;
@@ -139,7 +149,11 @@ Scope {
             path: cfg.path,
             name: label,
             files: files.length,
-            file: status === "ready" || (status === "error" && currentFile !== "") ? currentFile : ""
+            // The picture on screen: for a video wallpaper its poster frame (the lock screen's still).
+            file: status === "ready" || (status === "error" && currentFile !== "") ? currentFile : "",
+            video: videoFile,
+            // 0..1 while a video is being transcoded, -1 otherwise.
+            progress: progress
         });
     }
 
@@ -153,7 +167,9 @@ Scope {
         files = [];
         identity = "";
         currentSrc = "";
-        display = {kind: state === "color" ? "color" : "art", color: state === "color" ? cfg.color : "", url: "", strip: null};
+        progress = -1;
+        videoFile = "";
+        display = {kind: state === "color" ? "color" : "art", color: state === "color" ? cfg.color : "", url: "", strip: null, video: ""};
         publish();
     }
 
@@ -162,6 +178,7 @@ Scope {
         console.warn("wallpaper: " + outputName + ": " + why + (currentSrc !== "" ? " (" + currentSrc + ")" : ""));
         status = "error";
         reason = why;
+        progress = -1;
         publish();
     }
 
@@ -170,11 +187,15 @@ Scope {
         supersede();
         advanceRequested = false;
         const c = cfg;
-        if (c.source === "builtin" || c.source === "video") {
-            // Video wallpapers are not played yet: the artwork shows (ADR-0016 W7).
+        // A crashed video may play again once it is no longer anybody's wallpaper.
+        if (c.source !== "video")
+            WallpaperState.releaseVideo();
+        if (c.source === "builtin") {
             showNone("builtin");
-            if (c.source === "video")
-                fail("video-unavailable");
+            return;
+        }
+        if (c.source === "video") {
+            applyVideo();
             return;
         }
         if (c.source === "color") {
@@ -227,23 +248,100 @@ Scope {
         }
         files = [];
         label = e.title;
-        startPrepare(e.file);
+        // The aspect rule (ADR-0016 step 2): within 35 % of the output's aspect the picture fills, any other (a panorama, a
+        // portrait) is fitted on its own mean colour.
+        const f = WallpaperConfig.onlineFit(e.width, e.height, pixelWidth, pixelHeight, e.mean);
+        startPrepare(e.file, f.fit, f.color);
+    }
+
+    // The video wallpaper: probe (is it a video, how long, which codec), then transcode with progress.
+    function applyVideo(): void {
+        const c = cfg;
+        const why = WallpaperConfig.sourceProblem(c.path, WallpaperState.dev, WallpaperState.repoRoot);
+        if (why !== "") {
+            fail(why === "outside-dev" ? "outside-dev" : "invalid-path");
+            return;
+        }
+        if (WallpaperState.toolMissing) {
+            fail("helper-missing");
+            return;
+        }
+        files = [];
+        label = fileName(c.path);
+        currentSrc = c.path;
+        status = imageUrl === "" ? "preparing" : status;
+        reason = "";
+        progress = -1;
+        publish();
+        startJob("probe", WallpaperConfig.probeArgs(WallpaperState.tool, c.path), Tokens.wallpaperToolTimeoutMs, false);
+    }
+
+    function startTranscode(): void {
+        progress = 0;
+        publish();
+        // A video uses Fill or Fit only (WallpaperConfig.settle makes it so).
+        startJob("transcode", WallpaperConfig.transcodeArgs(WallpaperState.tool, cfg.path, pixelWidth, pixelHeight, cfg.fit === "fit" ? "fit" : "fill", cfg.color, WallpaperState.videoDir, Tokens.menubarHeight * scale, Tokens.wallpaperCacheMaxBytes, WallpaperState.currentVideoFiles(), Tokens.wallpaperVideoMaxSeconds, Tokens.wallpaperVideoMaxBytes), Tokens.wallpaperVideoToolTimeoutMs, true);
+    }
+
+    // The transcode's output so far: its progress lines. Only the job that is current counts.
+    function jobProgress(token: int, text: string): void {
+        if (token !== generation)
+            return;
+        const t = WallpaperConfig.transcodeOutput(text);
+        if (t.progress >= 0 && t.progress !== progress) {
+            progress = t.progress;
+            publish();
+        }
+    }
+
+    function probed(o: var, code: int, timedOut: bool): void {
+        if (o && o.ok === true) {
+            startTranscode();
+            return;
+        }
+        const id = failureId(o, code, timedOut);
+        // The codec or container cannot be read: "This video can't be played".
+        fail(id === "unsupported" || id === "unreadable" ? "video-unsupported" : id);
+    }
+
+    function transcoded(r: var, code: int, timedOut: bool): void {
+        if (r && r.ok === true && typeof r.file === "string" && typeof r.video === "string") {
+            const why = typeof r.real === "string" ? WallpaperConfig.sourceProblem(r.real, WallpaperState.dev, WallpaperState.repoRoot) : "";
+            if (why === "" && WallpaperConfig.isUnder(r.file, WallpaperState.videoDir) && WallpaperConfig.isUnder(r.video, WallpaperState.videoDir)) {
+                const blocked = WallpaperConfig.videoBlocked(WallpaperState.videoBlocked, cfg.path);
+                currentFile = r.file;
+                videoFile = r.video;
+                strip = r.strip || null;
+                imageUrl = "file://" + r.file;
+                display = {kind: "picture", color: cfg.color, url: imageUrl, strip: strip, video: blocked ? "" : "file://" + r.video, fit: cfg.fit === "fit" ? "fit" : "fill", posterMs: typeof r.posterMs === "number" ? r.posterMs : 0, path: cfg.path};
+                progress = -1;
+                status = "ready";
+                // The poster is shown and the video is not played again: said once, by the Settings pane.
+                reason = blocked ? "video-crashed" : "";
+                publish();
+                return;
+            }
+            fail("outside-dev");
+            return;
+        }
+        fail(failureId(r, code, timedOut));
     }
 
     function fileName(path: string): string {
         return path.substring(path.lastIndexOf("/") + 1);
     }
 
-    function startPrepare(path: string): void {
+    // `fit` and `color` are the settings' own unless the caller decides (the online aspect rule).
+    function startPrepare(path: string, fit: string, color: string): void {
         currentSrc = path;
         status = imageUrl === "" ? "preparing" : status;
         reason = "";
         publish();
-        startJob("prepare", WallpaperConfig.prepareArgs(WallpaperState.tool, path, pixelWidth, pixelHeight, cfg.fit, cfg.color, WallpaperState.preparedDir, Tokens.menubarHeight * scale, Tokens.wallpaperCacheMaxBytes, WallpaperState.currentFiles()), Tokens.wallpaperToolTimeoutMs);
+        startJob("prepare", WallpaperConfig.prepareArgs(WallpaperState.tool, path, pixelWidth, pixelHeight, fit || cfg.fit, color || cfg.color, WallpaperState.preparedDir, Tokens.menubarHeight * scale, Tokens.wallpaperCacheMaxBytes, WallpaperState.currentFiles()), Tokens.wallpaperToolTimeoutMs, false);
     }
 
     function startList(): void {
-        startJob("list", WallpaperConfig.listArgs(WallpaperState.tool, cfg.path, Tokens.wallpaperMaxListEntries), Tokens.wallpaperListTimeoutMs);
+        startJob("list", WallpaperConfig.listArgs(WallpaperState.tool, cfg.path, Tokens.wallpaperMaxListEntries), Tokens.wallpaperListTimeoutMs, false);
     }
 
     // The interval elapsed: list again (the folder may have changed) and show the next picture.
@@ -259,13 +357,20 @@ Scope {
         if (token !== generation)
             return;
         activeJob = null;
+        // A transcode prints progress lines before its result: the result is the line that has an exit code.
+        if (kind === "transcode") {
+            transcoded(WallpaperConfig.transcodeOutput(out).result, code, timedOut);
+            return;
+        }
         let o = null;
         try {
             o = JSON.parse(out);
         } catch (e) {
             o = null;
         }
-        if (kind === "list")
+        if (kind === "probe")
+            probed(o, code, timedOut);
+        else if (kind === "list")
             listed(o, code, timedOut);
         else
             prepared(o, code, timedOut);
@@ -347,7 +452,9 @@ Scope {
                 currentFile = o.file;
                 strip = o.strip || null;
                 imageUrl = "file://" + o.file;
-                display = {kind: "picture", color: "", url: imageUrl, strip: strip};
+                display = {kind: "picture", color: "", url: imageUrl, strip: strip, video: ""};
+                videoFile = "";
+                progress = -1;
                 status = "ready";
                 reason = "";
                 publish();

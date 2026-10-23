@@ -28,6 +28,8 @@ Singleton {
     readonly property string tool: WallpaperConfig.toolPath(environment)
     readonly property string cacheDir: WallpaperConfig.cacheRoot(environment)
     readonly property string preparedDir: cacheDir + "/prepared"
+    // The transcoded video wallpapers, their posters and statistics (grassfield-wallpaper transcode).
+    readonly property string videoDir: cacheDir + "/video"
 
     // GRASSFIELD_STATE_HOME (dev) wins; otherwise $XDG_STATE_HOME/grassfield.
     readonly property string stateDir: {
@@ -54,12 +56,16 @@ Singleton {
         const next = Object.assign({}, outputs);
         next[output] = info;
         outputs = next;
-        statusTimer.restart();
+        // Coalesced: the file is written once, a short while after the first change (a transcode reports its progress
+        // every percent; a restart on every report would never write until it ended).
+        if (!statusTimer.running)
+            statusTimer.start();
     }
 
     function reportOnline(info: var): void {
         online = info;
-        statusTimer.restart();
+        if (!statusTimer.running)
+            statusTimer.start();
     }
 
     // True while the picture of an output is the online daily one (the desktop menu's "About This Wallpaper").
@@ -68,10 +74,67 @@ Singleton {
         return !!o && o.source === "online" && o.state === "ready" && !!online.entry;
     }
 
-    // The prepared picture of an output (for the lock screen's still), "" when the artwork or a colour is shown.
+    // The still of an output for the lock screen (ADR-0016 section 6; read only, the lock calls it and nothing else here):
+    // the prepared picture, or the poster frame of a video wallpaper, both Grassfield's own JPEG or PNG in the 0700 cache folder
+    // (prepared/ or video/). "" when the artwork or a colour is shown, when nothing is ready, or when the path is not under
+    // the cache: the lock then keeps the artwork.
     function lockStill(output: string): string {
         const o = outputs[output];
-        return o && o.state === "ready" && o.file ? o.file : "";
+        if (!o || o.state !== "ready" || typeof o.file !== "string" || o.file === "")
+            return "";
+        const f = o.file;
+        return WallpaperConfig.isUnder(f, preparedDir) || WallpaperConfig.isUnder(f, videoDir) ? f : "";
+    }
+
+    // ---- video crash marker (ADR-0016 section 5) ----
+    // The shell writes {path, at} to wallpaper.json BEFORE a video starts playing and clears it after Tokens.wallpaperVideoStableMs
+    // of playback. A marker found at start means the shell died while that video started: the path is then `videoBlocked` (the
+    // poster still shows, no retry, Settings explains once) until the wallpaper is changed to something else.
+    property string videoBlocked: ""
+    property string videoStarting: ""
+
+    function markVideoStarting(path: string): void {
+        if (videoStarting === path)
+            return;
+        videoStarting = path;
+        writeNow();
+    }
+
+    function clearVideoStarting(): void {
+        if (videoStarting === "")
+            return;
+        videoStarting = "";
+        writeNow();
+    }
+
+    // A video is no longer the wallpaper of any output: it may play again the next time it is chosen.
+    function releaseVideo(): void {
+        if (videoBlocked === "")
+            return;
+        for (const name of Object.keys(outputs)) {
+            const o = outputs[name];
+            if (o.source === "video" && o.path === videoBlocked)
+                return;
+        }
+        videoBlocked = "";
+        writeNow();
+    }
+
+    function stateJson(): string {
+        const o = {displays: saved.displays};
+        if (videoStarting !== "")
+            o.videoStarting = {path: videoStarting, at: Date.now()};
+        if (videoBlocked !== "")
+            o.videoBlocked = videoBlocked;
+        return JSON.stringify(o, null, 2) + "\n";
+    }
+
+    // Written at once (the marker must be on disk before the video starts), atomically.
+    function writeNow(): void {
+        if (!stateReady)
+            return;
+        writeTimer.stop();
+        stateWriter.setText(stateJson());
     }
 
     // Names the running login: the compositor instance (a restart of the shell within it is not a new login), else the
@@ -85,6 +148,19 @@ Singleton {
             const f = outputs[name].file;
             if (typeof f === "string" && f !== "")
                 out.push(f);
+        }
+        return out;
+    }
+
+    // The transcoded files and posters on screen: the helper never prunes them from the video cache.
+    function currentVideoFiles(): var {
+        const out = [];
+        for (const name of Object.keys(outputs)) {
+            const o = outputs[name];
+            if (typeof o.video === "string" && o.video !== "")
+                out.push(o.video);
+            if (typeof o.file === "string" && o.file !== "" && WallpaperConfig.isUnder(o.file, videoDir))
+                out.push(o.file);
         }
         return out;
     }
@@ -110,7 +186,7 @@ Singleton {
     Timer {
         id: writeTimer
         interval: Tokens.wallpaperStateWriteMs
-        onTriggered: stateWriter.setText(JSON.stringify(root.saved, null, 2) + "\n")
+        onTriggered: stateWriter.setText(root.stateJson())
     }
 
     // The helper is installed and executable (checked once; "Wallpapers can't be prepared: the helper is missing").
@@ -144,6 +220,17 @@ Singleton {
             try {
                 const o = JSON.parse(text());
                 root.saved = {displays: o && typeof o.displays === "object" && o.displays !== null ? o.displays : {}};
+                // A marker left by the previous run: that video crashed the shell while it started. It becomes `videoBlocked`
+                // (no retry) and the marker is gone, so the next start does not read it again.
+                const marker = WallpaperConfig.videoMarkerOf(o ? o.videoStarting : null);
+                if (marker) {
+                    root.videoBlocked = marker.path;
+                    console.warn("wallpaper: the shell stopped while the video " + marker.path + " started; its poster is shown and it is not played again");
+                    root.stateReady = true;
+                    Qt.callLater(root.writeNow);
+                } else if (o && typeof o.videoBlocked === "string" && WallpaperConfig.pathProblem(o.videoBlocked) === "") {
+                    root.videoBlocked = o.videoBlocked;
+                }
             } catch (e) {
                 root.saved = {displays: {}};
             }
