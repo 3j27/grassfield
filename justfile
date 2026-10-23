@@ -14,8 +14,10 @@ check: check-config check-schema check-shell check-shaders check-i18n check-scri
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland.
 check-config:
     for cfg in dev session; do \
-      GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/$cfg.lua 2>&1 \
-        | sed -n '/Config parsing result/,$p' | tee /dev/stderr | grep -qx 'config ok'; \
+      out=$(GRASSFIELD_CONFIG_DIR={{justfile_directory()}}/config/hypr Hyprland --verify-config --config config/hypr/$cfg.lua 2>&1 \
+        | sed -n '/Config parsing result/,$p'); \
+      printf '%s\n' "$out"; \
+      printf '%s\n' "$out" | grep -qx 'config ok' || { echo "check-config: $cfg.lua: no 'config ok'" >&2; exit 1; }; \
     done
 
 # Validate the default grassfield.json (and any given files) against the versioned schema.
@@ -48,7 +50,7 @@ check-secrets:
 
 # Syntax-check shell scripts.
 check-scripts:
-    for f in scripts/dev/*.sh; do bash -n "$f"; done
+    for f in scripts/dev/*.sh tests/*/*.sh tests/visual/scenarios/*.sh; do bash -n "$f"; done
 
 # Offscreen unit tests (QML TestCase) and compositor unit tests when built.
 test:
