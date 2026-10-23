@@ -176,10 +176,11 @@ namespace gf::tiler {
             logRequest(Log::WARN, "tile: rejected: no such window");
             return;
         }
+        const uintptr_t addr = address.value_or(0); // a window was found, so the address parsed
         if (placeName == "previous") {
             const auto before = placeable(window) && g_layoutManager ? takePrevious(window) : std::nullopt;
             if (!before) {
-                logRequest(Log::INFO, "tile {:x}: not tiled, nothing to return to", *address);
+                logRequest(Log::INFO, "tile {:x}: not tiled, nothing to return to", addr);
                 return;
             }
             CBox box = *before;
@@ -205,7 +206,7 @@ namespace gf::tiler {
             return;
         }
         if (!tile(window, *place))
-            logRequest(Log::INFO, "tile {:x}: not placeable (full screen, pinned or not floating)", *address);
+            logRequest(Log::INFO, "tile {:x}: not placeable (full screen, pinned or not floating)", addr);
     }
 
     void forgetAll() {

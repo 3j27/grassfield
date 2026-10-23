@@ -103,7 +103,8 @@ TEST(TilingNames, PlacesAndOptionsParseStrictly) {
     for (const char* name : {"left", "right", "top", "bottom", "top-left", "top-right", "bottom-left", "bottom-right", "fill", "center"}) {
         const auto p = parsePlace(name);
         ASSERT_TRUE(p.has_value()) << name;
-        EXPECT_EQ(nameOf(*p), name);
+        if (p)
+            EXPECT_EQ(nameOf(*p), name);
     }
     for (const char* bad : {"", "Left", "left ", "topleft", "maximize", "fill\n"})
         EXPECT_FALSE(parsePlace(bad).has_value()) << bad;
