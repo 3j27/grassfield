@@ -148,7 +148,8 @@ drawing, and the Finder face) are removed, and the composer refuses an output th
 mark (`packaging/arch/icons-apple-signatures.txt`) or holds a copy of a listed file. Look-alikes of Apple's app icons
 (Calendar, Clock, Maps, Music, Notes, Photos, Safari, ...) are NOT removed: owner decision 2026-10-23, risk accepted. The
 session selects the theme with `QT_QPA_SYSTEM_ICON_THEME` (uwsm `env-grassfield`) and, for GTK, a locked dconf database that
-holds only `icon-theme='grassfield-icons'`. Dev sessions compose the same theme with `scripts/dev/icons.sh` (`just icons`).
+holds only `icon-theme='grassfield-icons'`. Grassfield's own apps and some system tools are mapped to pack drawings by
+`packaging/arch/icons-aliases.txt` (links inside the theme). Dev sessions compose the same theme with `scripts/dev/icons.sh` (`just icons`).
 - MacTahoe icon theme, `https://github.com/vinceliuice/MacTahoe-icon-theme` at commit
   `839848b9a8a38a92a6936e30c4abe35cc6f2546d`, author Vince Liuice (AUTHORS). Licence: `COPYING` (GPL version 3, unmodified
   text) is present; the README states no licence and no file carries an "or later" notice: GPL-3.0-only. COPYING and AUTHORS

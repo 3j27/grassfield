@@ -524,6 +524,13 @@ the locked dconf key, devenv.sh) is unchanged.
   files, Pebble 4,882 files). The composer fails when a listed file is missing from the source (pin drift) or when a
   listed file or a link to it is still in the output. The Finder face is treated as an Apple logo (it is Apple's mark for
   its file manager), so the file manager icon falls through to Pebble.
+- **System apps from the pack (owner 2026-10-23: "même les applis système doivent venir du pack").**
+  `packaging/arch/icons-aliases.txt` maps Grassfield's own app ids (`org.grassfield.Files`, `.Settings`, `.Preview`, and
+  `org.grassfield.Apps` for the Dock's Apps tile) and the session's system tools whose icon names the pack lacks (Image
+  Viewer, Disks, Disk Usage, Omarchy's calculator, writer, video trimmer, snapshot restore, Discord web app) to pack
+  drawings; the composer writes them as links in our own `scalable/apps` (searched first) and fails on a target without
+  a drawing. Outside the Grassfield session the apps keep their own icons (hicolor). The Dock's Apps tile draws the
+  theme's `org.grassfield.Apps` and falls back to its own glyph.
 - **No Apple trademark names in UI.** The composed index.theme is `Name=Grassfield`, `Hidden=true`, with no "Mac",
   "macOS", "OSX", "Apple" or "Tahoe". No About page row and no UI text names the upstream themes; the credits and licences
   are in THIRD_PARTY.md, branding/LICENSES.md and `/usr/share/licenses/grassfield-icons/`.

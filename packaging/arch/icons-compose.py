@@ -3,7 +3,7 @@
 
 Used by BOTH the package build (packaging/arch/PKGBUILD) and the dev provisioning (scripts/dev/icons.sh).
 
-  icons-compose.py --mactahoe DIR --pebble DIR --branding DIR --list FILE --out DIR [--signatures FILE]
+  icons-compose.py --mactahoe DIR --pebble DIR --branding DIR --list FILE --out DIR [--signatures FILE] [--aliases FILE]
 
   --mactahoe  checkout of the MacTahoe icon theme (vinceliuice/MacTahoe-icon-theme, pinned, GPL-3.0)
   --pebble    checkout of the Pebble icon theme (a-shewale/Pebble-Icon-Theme, pinned); only its Pebble/ variant is used
@@ -13,6 +13,9 @@ Used by BOTH the package build (packaging/arch/PKGBUILD) and the dev provisionin
   --signatures  SHA-256 fingerprints of Apple-mark glyph paths and rasters (default: icons-apple-signatures.txt next to
               this file); the composer fails when the output draws or embeds one of them, or holds a byte-for-byte copy
               of a listed file (a second guard after the list)
+  --aliases   `<alias> <target>` lines (default: icons-aliases.txt next to this file): each alias (Grassfield's own app
+              ids, the session's system tools) becomes a link in our own scalable/apps to the composed drawing of the
+              target name; the composer fails when a target has no drawing or an alias is already a layer's name
 
 Layers (first layer that provides an icon NAME wins; a name is a file name without extension):
   0. ours:      branding scalable/apps
@@ -174,6 +177,21 @@ def parse_list(path):
                 die("%s:%d: kind appstore is for mactahoe files" % (path, ln))
             entries.append((layer, rel, kind))
     return entries
+
+
+def parse_aliases(path):
+    """`<alias> <target name>` per line, `#` comments. Returns [(alias, target)]."""
+    out = []
+    with open(path, encoding="utf-8") as fh:
+        for ln, line in enumerate(fh, 1):
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) != 2 or not all(re.fullmatch(r"[A-Za-z0-9._+-]+", x) for x in parts):
+                die("%s:%d: expected `<alias> <target name>`, got %r" % (path, ln, line))
+            out.append((parts[0], parts[1]))
+    return out
 
 
 def parse_index(path):
@@ -382,6 +400,20 @@ def compose(a):
                 out_entries[dest] = ("l", rel)
                 repointed[label] += 1
 
+    # ---- aliases (icons-aliases.txt): Grassfield's own app ids and the session's system tools take the drawing of a
+    # name of the composed pack. They live in our own scalable/apps directory, the first one searched.
+    aliased = 0
+    for alias, target in parse_aliases(a.aliases):
+        if any(alias in idx for idx in by_name):
+            die("alias %s is already an icon name of a layer (%s): remove it from %s" % (alias, a.aliases, a.aliases))
+        got = best(target, "applications", 128, False, "scalable/apps")
+        if got is None:
+            die("alias %s: no drawing of %s in the composed layers (pin drift or a listed name?)" % (alias, target))
+        ext, rel = got
+        out_entries["scalable/apps/%s%s" % (alias, ext)] = ("l", rel)
+        aliased += 1
+    counts["aliases (icons-aliases.txt)"] = aliased
+
     # ---- listed names must be gone from their layer's output
     for layer, rel, kind in entries:
         if kind == "appstore":
@@ -561,13 +593,14 @@ def verify_signatures(out, sig_file, listed_hashes):
 
 
 def main(argv):
-    opts = {"signatures": os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons-apple-signatures.txt")}
+    here = os.path.dirname(os.path.abspath(__file__))
+    opts = {"signatures": os.path.join(here, "icons-apple-signatures.txt"), "aliases": os.path.join(here, "icons-aliases.txt")}
     it = iter(argv)
     for k in it:
-        if k in ("--mactahoe", "--pebble", "--branding", "--list", "--out", "--signatures"):
+        if k in ("--mactahoe", "--pebble", "--branding", "--list", "--out", "--signatures", "--aliases"):
             opts[k[2:]] = os.path.abspath(next(it, None) or die("missing value for " + k))
         else:
-            die("usage: icons-compose.py --mactahoe DIR --pebble DIR --branding DIR --list FILE --out DIR [--signatures FILE]")
+            die("usage: icons-compose.py --mactahoe DIR --pebble DIR --branding DIR --list FILE --out DIR [--signatures FILE] [--aliases FILE]")
     for k in ("mactahoe", "pebble", "branding", "list", "out"):
         if k not in opts:
             die("missing --" + k)

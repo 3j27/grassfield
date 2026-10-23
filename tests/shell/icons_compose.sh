@@ -215,6 +215,10 @@ mactahoe:src/apps/scalable/doubtful.svg doubt
 """)
 write(tmp + "/list-missing.txt", "mactahoe:src/places/16/start-here.svg\nmactahoe:src/places/16/no-such-icon.svg\n")
 write(tmp + "/list-pebble.txt", "pebble:Pebble/scalable/apps/start-here.svg\n")
+# aliases: an own app id onto a MacTahoe drawing and one onto a Pebble folder; then a missing target and a taken name
+write(tmp + "/aliases.txt", "# fixture aliases\norg.grassfield.FxApp calendar   # MacTahoe\norg.grassfield.FxFiles folder  # Pebble\n")
+write(tmp + "/aliases-missing.txt", "org.grassfield.FxApp no-such-target\n")
+write(tmp + "/aliases-taken.txt", "calendar folder\n")
 write(tmp + "/list-sq.txt", "mactahoe:src/places/16/start-here.svg\nmactahoe:src/apps/scalable/glyph-mark.svg\n")
 # shared.svg of MacTahoe is the same bytes as calendar.svg, which stays: listing it must fail the composition
 write(tmp + "/list-copy.txt", "mactahoe:src/places/16/start-here.svg\nmactahoe:src/apps/scalable/shared.svg\n")
@@ -234,7 +238,7 @@ theme("Adwaita", "hicolor", {})
 theme("breeze", "hicolor", {"br-only": Y, "folder": Y, "distributor-logo": Y, "calendar": Y})
 PY
 
-run() { python3 -I "$composer" --mactahoe "$tmp/mt" --pebble "$tmp/pb" --branding "$tmp/branding" --list "$1" --out "$2"; }
+run() { python3 -I "$composer" --mactahoe "$tmp/mt" --pebble "$tmp/pb" --branding "$tmp/branding" --aliases "${3:-$tmp/aliases.txt}" --list "$1" --out "$2"; }
 out=$tmp/fx/icons/grassfield-icons
 log=$(run "$tmp/list.txt" "$out" 2>&1) && rc=0 || rc=$?
 desc="composer succeeds on the fixtures (exit $rc)"
@@ -309,19 +313,23 @@ run "$tmp/list.txt" "$tmp/again" >/dev/null 2>&1
 check bash -ec 'diff -r --no-dereference "$1" "$2" >/dev/null' _ "$out" "$tmp/again"
 
 desc="a listed file missing from the source fails the composer (pin drift)"
-check bash -ec '! python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list-missing.txt" --out "$2/never" >/dev/null 2>&1 && [ ! -e "$2/never" ]' _ "$composer" "$tmp"
+check bash -ec '! python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --aliases "$2/aliases.txt" --list "$2/list-missing.txt" --out "$2/never" >/dev/null 2>&1 && [ ! -e "$2/never" ]' _ "$composer" "$tmp"
 desc="signature guard: a path whose signature is in the fingerprints file fails the composer and names the file, wherever the glyph sits"
 printf 'l5 0 l0 5 z' | sha256sum | cut -d' ' -f1 >"$tmp/sigs.txt"
-check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list.txt" --signatures "$2/sigs.txt" --out "$2/sigfail" 2>&1) && exit 1; grep -qE "Apple-mark glyph .* (base/apps/scalable/glyph-mark|extra/scalable/apps/pb-mark)\.svg" <<<"$out"' _ "$composer" "$tmp"
+check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --aliases "$2/aliases.txt" --list "$2/list.txt" --signatures "$2/sigs.txt" --out "$2/sigfail" 2>&1) && exit 1; grep -qE "Apple-mark glyph .* (base/apps/scalable/glyph-mark|extra/scalable/apps/pb-mark)\.svg" <<<"$out"' _ "$composer" "$tmp"
 desc="signature guard: the default fingerprints file (packaging/arch/icons-apple-signatures.txt) holds SHA-256 and raster:SHA-256 lines only and the fixtures pass it"
 check bash -ec '[ "$(grep -v "^#" "$1" | grep -cvE "^(raster:)?[0-9a-f]{64}$")" = 0 ] && [ "$(grep -cE "^[0-9a-f]{64}$" "$1")" -ge 1 ] && [ -f "$2/index.theme" ]' _ "$root/packaging/arch/icons-apple-signatures.txt" "$out"
 desc="signature guard: a path written with single quotes (d='...') is read too (Pebble's pb-mark, MacTahoe's twin listed)"
-check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list-sq.txt" --signatures "$2/sigs.txt" --out "$2/sqfail" 2>&1) && exit 1; grep -q "Apple-mark glyph .* extra/scalable/apps/pb-mark\.svg" <<<"$out"' _ "$composer" "$tmp"
+check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --aliases "$2/aliases.txt" --list "$2/list-sq.txt" --signatures "$2/sigs.txt" --out "$2/sqfail" 2>&1) && exit 1; grep -q "Apple-mark glyph .* extra/scalable/apps/pb-mark\.svg" <<<"$out"' _ "$composer" "$tmp"
+desc="aliases: an own app id takes the composed drawing of its target (MacTahoe calendar, Pebble folder), as a link in our own scalable/apps"
+check bash -ec 'cd "$1/scalable/apps"; [ "$(readlink org.grassfield.FxApp.svg)" = ../../base/apps/scalable/calendar.svg ] && [ "$(readlink org.grassfield.FxFiles.svg)" = ../../extra/scalable/places/folder.svg ] && [ -f org.grassfield.FxApp.svg ] && [ -f org.grassfield.FxFiles.svg ]' _ "$out"
+desc="aliases: a target without a drawing fails the composer; so does an alias that is already a layer's icon name"
+check bash -ec 'run() { python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list.txt" --aliases "$3" --out "$4" 2>&1; }; out=$(run "$1" "$2" "$2/aliases-missing.txt" "$2/af1") && exit 1; grep -q "no drawing of no-such-target" <<<"$out"; out=$(run "$1" "$2" "$2/aliases-taken.txt" "$2/af2") && exit 1; grep -q "alias calendar is already an icon name" <<<"$out"' _ "$composer" "$tmp"
 desc="raster guard: an image hidden in an SVG (display none) whose bytes have a raster: fingerprint fails the composer"
 { printf 'no such path' | sha256sum | cut -d' ' -f1; sed 's/^/raster:/' "$tmp/raster.sha256"; } >"$tmp/sigs-raster.txt"
-check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list.txt" --signatures "$2/sigs-raster.txt" --out "$2/rasterfail" 2>&1) && exit 1; grep -q "Apple-mark raster .* embedded in extra/scalable/apps/pb-raster.svg" <<<"$out"' _ "$composer" "$tmp"
+check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --aliases "$2/aliases.txt" --list "$2/list.txt" --signatures "$2/sigs-raster.txt" --out "$2/rasterfail" 2>&1) && exit 1; grep -q "Apple-mark raster .* embedded in extra/scalable/apps/pb-raster.svg" <<<"$out"' _ "$composer" "$tmp"
 desc="copy guard: an output file that is byte for byte a listed file (another name) fails the composer"
-check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --list "$2/list-copy.txt" --out "$2/copyfail" 2>&1) && exit 1; grep -q "is a copy of the listed file mactahoe:src/apps/scalable/shared.svg" <<<"$out"' _ "$composer" "$tmp"
+check bash -ec 'out=$(python3 -I "$1" --mactahoe "$2/mt" --pebble "$2/pb" --branding "$2/branding" --aliases "$2/aliases.txt" --list "$2/list-copy.txt" --out "$2/copyfail" 2>&1) && exit 1; grep -q "is a copy of the listed file mactahoe:src/apps/scalable/shared.svg" <<<"$out"' _ "$composer" "$tmp"
 desc="a pebble: entry drops that name from Pebble with its aliases (start-here, start-alias go on to Breeze)"
 run "$tmp/list-pebble.txt" "$tmp/peb2" >/dev/null 2>&1
 check bash -ec '[ ! -e "$1/extra/scalable/apps/start-here.svg" ] && [ ! -e "$1/extra/scalable/apps/start-alias.svg" ] && [ -f "$1/base/places/16/start-here.svg" ]' _ "$tmp/peb2"

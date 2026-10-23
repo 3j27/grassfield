@@ -1648,10 +1648,25 @@ Scope {
                                     }
                                 }
 
-                                // Apps: a rounded tile with the grid glyph (our own symbolic icon, no borrowed artwork).
+                                // Apps: the icon theme's org.grassfield.Apps (grassfield-icons maps it to the pack's app grid,
+                                // packaging/arch/icons-aliases.txt), in the user's icon mode; a rounded tile with our own grid glyph
+                                // when the theme has none (another icon theme, a dev session without the pack).
+                                TintedIcon {
+                                    id: appsThemed
+                                    readonly property string themed: Quickshell.iconPath("org.grassfield.Apps", true)
+                                    visible: tile.isAppsTile && themed !== ""
+                                    size: win.iconSize
+                                    oversample: appsThemed.modeActive ? Tokens.dockIconOversample : appsThemed.defaultOversample
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
+                                    source: tile.isAppsTile ? themed : ""
+                                }
+
                                 Rectangle {
                                     id: appsTileIcon
-                                    visible: tile.isAppsTile
+                                    visible: tile.isAppsTile && appsThemed.themed === ""
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     radius: win.dockMetrics.iconRadius * tile.tileScale

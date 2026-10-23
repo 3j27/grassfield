@@ -1,0 +1,24 @@
+# Icon aliases of the composed theme grassfield-icons (ADR-0017; owner 2026-10-23: "même les applis système doivent
+# venir du pack"). Input of packaging/arch/icons-compose.py (default next to it; --aliases FILE overrides).
+#   <alias> <target name>
+# Each alias becomes a link in our own scalable/apps directory (the first one searched) to the composed drawing of the
+# target name, so the app shows the pack's icon in the Grassfield session; outside it (another icon theme) the app keeps
+# its own icon (Grassfield's apps install theirs in hicolor). The composer fails when a target has no drawing (pin drift,
+# or a name dropped by icons-apple-logos.txt) or when an alias is already an icon name of a layer.
+# Chosen by eye on the composed pack (integrator, 2026-10-23); no target carries an Apple mark (the guard checks the output).
+
+# ---- Grassfield's own apps and the Dock's Apps tile
+org.grassfield.Files            file-manager            # Pebble's folder (the file manager; the Finder face is removed)
+org.grassfield.Settings         preferences-system      # the gear
+org.grassfield.Preview          org.gnome.Loupe         # a photo with a magnifier
+org.grassfield.Apps             view-app-grid           # the Dock's Apps tile (shell/dock/Dock.qml), the app grid
+
+# ---- the session's system tools (Omarchy) whose own icon names the pack does not have
+imv                             eog                     # Image Viewer
+org.gnome.DiskUtility           disk-utility            # Disks
+disk-usage                      baobab                  # Disk Usage
+omacalc                         accessories-calculator  # calculator
+omawrite                        accessories-text-editor # Markdown writer
+omacut                          vidcutter               # video trimmer
+LimineSnapperSync               preferences-system-backup  # restore a system snapshot
+omarchy-discord                 discord                 # Discord (Omarchy's web app entry)

@@ -29,7 +29,7 @@ force=0
 [[ ${1:-} == --force ]] && force=1
 
 # The stamp covers the pins and everything the composition reads from this repository.
-inputs=$(cd "$root" && { cat packaging/arch/icons-compose.py packaging/arch/icons-apple-logos.txt packaging/arch/icons-apple-signatures.txt; find branding/icons/theme -type f | LC_ALL=C sort | xargs cat; } | sha256sum | cut -c1-16)
+inputs=$(cd "$root" && { cat packaging/arch/icons-compose.py packaging/arch/icons-apple-logos.txt packaging/arch/icons-apple-signatures.txt packaging/arch/icons-aliases.txt; find branding/icons/theme -type f | LC_ALL=C sort | xargs cat; } | sha256sum | cut -c1-16)
 STAMP_VALUE="$MT_PIN-$PB_PIN-$inputs"
 
 if [[ $force == 0 && -f $stamp && $(<"$stamp") == "$STAMP_VALUE" && -f $theme/index.theme ]]; then
