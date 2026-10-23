@@ -1147,6 +1147,10 @@ QtObject {
     readonly property int previewSearchWidth: 200
     // page background of PDF thumbnails (documents are white in both themes)
     readonly property string previewPaper: "#FFFFFF"
+    // estimate: font size of the text lines in a text file's sidebar thumbnail (tiny, like the page it stands for)
+    readonly property int previewThumbnailTextSize: 6
+    // ink of the text lines in the sidebar thumbnail of a text file (drawn on the white paper, in both themes)
+    readonly property string previewPaperInk: "#4A4A4A"
     // estimate: Preview app (docs/specs/preview.md)
     readonly property int previewGlanceMinWidth: 360
     // estimate: Preview app (docs/specs/preview.md)

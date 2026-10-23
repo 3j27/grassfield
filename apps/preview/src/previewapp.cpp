@@ -178,6 +178,31 @@ QVariantMap PreviewApp::inspect(int index) const
     return inspectPath(pathAt(index));
 }
 
+QString PreviewApp::textSnippet(int index) const
+{
+    const QString path = pathAt(index);
+    if (path.isEmpty() || preview::classify(path) != preview::Kind::Text)
+        return {};
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    const QString head = QString::fromUtf8(file.read(2048));
+    QStringList lines;
+    for (const QString &raw : head.split(QLatin1Char('\n'))) {
+        QString line = raw.left(40);
+        for (QChar &c : line) {
+            if (c.unicode() < 0x20 && c != QLatin1Char('\t'))
+                c = QLatin1Char(' ');
+            else if (c == QLatin1Char('\t'))
+                c = QLatin1Char(' ');
+        }
+        lines << line;
+        if (lines.size() >= 12)
+            break;
+    }
+    return lines.join(QLatin1Char('\n')).trimmed().isEmpty() ? QString() : lines.join(QLatin1Char('\n'));
+}
+
 QVariantMap PreviewApp::inspectFirst() const
 {
     return inspectPath(m_firstPath);

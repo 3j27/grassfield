@@ -76,7 +76,7 @@ single instance.
     files followed, broken ones skipped); the opened file is always in the list at its sorted position, hidden or
     unreadable or not. At most 200 entries (a window around the opened file), at most 20000 directory entries scanned.
     Left/Right (and Page Up/Page Down on images, the toolbar arrows) move without wrapping; the subtitle shows
-    "n of N"; the sidebar lists the files as thumbnails (decoded at their size by `image://preview/thumb/<index>`),
+    "n of N"; the sidebar lists the files as thumbnails (decoded at their size by `image://preview/thumb/<index>`), Selection is a ring in the accent colour around the thumbnail (macOS Preview), never a solid plate over it; a text file shows its first lines (`PreviewApp.textSnippet`, 12 lines of 40 characters) on white paper (GF-101).
     starts closed for a folder and open for several named files; Info (Ctrl+I) shows kind, size, dimensions, date and
     folder; a slideshow (full screen, `preview.slideshowInterval`) steps through the images and stops after the last;
     zoom and rotation are view-only. Everything is read only: nothing is ever written.
