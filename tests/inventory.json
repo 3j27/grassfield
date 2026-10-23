@@ -254,6 +254,7 @@
  {"path": "tests/visual/dock-macos.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-motion.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-stacks.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/visual/osd-inputsource.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-perf.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/f2c.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/folder-colours-desktop.sh", "layer": "visual", "runner": "bare"},

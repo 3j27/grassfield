@@ -171,4 +171,55 @@ TestCase {
         const keys = items.map(DockModel.tileKey);
         compare(keys.length, new Set(keys).size);
     }
+
+    // ---- adding a folder by dropping it on the Dock ----
+
+    function test_insertFoldersAtASlot() {
+        const list = ["/a", "/b", "/c"];
+        compare(Stacks.insertFolders(list, ["/x"], 0, "/h", 12).join(), "/x,/a,/b,/c");
+        compare(Stacks.insertFolders(list, ["/x"], 2, "/h", 12).join(), "/a,/b,/x,/c");
+        compare(Stacks.insertFolders(list, ["/x"], 3, "/h", 12).join(), "/a,/b,/c,/x");
+        compare(Stacks.insertFolders(list, ["/x"], 99, "/h", 12).join(), "/a,/b,/c,/x");
+        compare(Stacks.insertFolders(list, ["/x"], -4, "/h", 12).join(), "/x,/a,/b,/c");
+        compare(Stacks.insertFolders([], ["/x", "/y"], 0, "/h", 12).join(), "/x,/y");
+    }
+
+    function test_insertFoldersMovesAnExistingOneAndExpandsHome() {
+        compare(Stacks.insertFolders(["/a", "/b", "/c"], ["/a"], 3, "/h", 12).join(), "/b,/c,/a", "moved to the end, not doubled");
+        compare(Stacks.insertFolders(["/a", "/b", "/c"], ["/c"], 0, "/h", 12).join(), "/c,/a,/b");
+        compare(Stacks.insertFolders(["/a", "/b"], ["/b"], 1, "/h", 12).join(), "/a,/b", "dropped on itself: unchanged");
+        compare(Stacks.insertFolders(["~/Downloads"], ["/h/Music"], 1, "/h", 12).join(), "/h/Downloads,/h/Music");
+    }
+
+    function test_insertFoldersRefusesJunkAndCaps() {
+        compare(Stacks.insertFolders(["/a"], ["rel", "/x/../y", "", 4], 1, "/h", 12).join(), "/a");
+        compare(Stacks.insertFolders(["/a", "/b"], ["/x"], 1, "/h", 2).join(), "/a,/x");
+        compare(Stacks.insertFolders(null, ["/x"], 0, "/h", 12).join(), "/x");
+        compare(Stacks.insertFolders(["/a"], ["/x"], undefined, "/h", 12).join(), "/a,/x");
+    }
+
+    function test_folderVerdict() {
+        const dir = "inode/directory";
+        compare(Stacks.folderVerdict(["/a"], {"/a": dir}), "yes");
+        compare(Stacks.folderVerdict(["/a", "/b"], {"/a": dir, "/b": dir}), "yes");
+        compare(Stacks.folderVerdict(["/a"], {}), "pending");
+        compare(Stacks.folderVerdict(["/a", "/b"], {"/a": dir}), "pending");
+        compare(Stacks.folderVerdict(["/a", "/b"], {"/a": "text/plain"}), "no", "a known file is refused at once");
+        compare(Stacks.folderVerdict(["/a"], {"/a": "-"}), "no");
+        compare(Stacks.folderVerdict([], {}), "no");
+        compare(Stacks.folderVerdict(null, null), "no");
+    }
+
+    function test_folderSlot() {
+        // tiles: 0 files, 1 apps, 2 foot, 3 separator, 4 folder A, 5 folder B, 6 trash
+        const centers = [20, 80, 140, 200, 260, 320, 380];
+        compare(Stacks.folderSlot(150, centers, 3, 2), -1, "left of the divider: refused");
+        compare(Stacks.folderSlot(199, centers, 3, 2), -1);
+        compare(Stacks.folderSlot(210, centers, 3, 2), 0, "right of the divider, before folder A");
+        compare(Stacks.folderSlot(300, centers, 3, 2), 1, "between A and B");
+        compare(Stacks.folderSlot(340, centers, 3, 2), 2, "after B");
+        compare(Stacks.folderSlot(900, centers, 3, 2), 2, "over the Trash: last folder slot");
+        compare(Stacks.folderSlot(250, centers, 3, 0), 0, "no folder yet");
+        compare(Stacks.folderSlot(250, centers, -1, 2), -1, "no divider");
+    }
 }

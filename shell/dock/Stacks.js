@@ -262,3 +262,48 @@ function hasPreview(mime) {
 function fileUrl(path) {
     return "file://" + String(path).split("/").map(encodeURIComponent).join("/");
 }
+
+// ---- Adding a folder by dropping it on the Dock (macOS: drag a folder to the right section of the Dock) ----
+
+// The folders after `add` (clean absolute paths, or ~/ ones) were dropped at slot `index` of the current list (0: first,
+// list.length: last). A folder that already is in the Dock moves to the slot instead of being added twice. At most `max`.
+function insertFolders(list, add, index, home, max) {
+    const current = folderList(list, home, 1000);
+    const incoming = folderList(add, home, 1000);
+    const rest = current.filter(p => incoming.indexOf(p) < 0);
+    const at = Math.max(0, Math.min(Number.isInteger(index) ? index : current.length, current.length));
+    const before = current.slice(0, at).filter(p => incoming.indexOf(p) < 0).length;
+    return rest.slice(0, before).concat(incoming, rest.slice(before)).slice(0, max);
+}
+
+// Whether dragged `paths` can be added: "yes" when every one is known to be a folder, "no" when one is known not to be (a
+// file, an unreadable path) or there is nothing, "pending" while some type is not looked up yet. `resolved` maps a path to its
+// type (dock/file-types.sh: inode/directory for a folder).
+function folderVerdict(paths, resolved) {
+    const list = Array.from(paths || []);
+    if (list.length === 0)
+        return "no";
+    let pending = false;
+    for (const p of list) {
+        const t = resolved ? resolved[p] : undefined;
+        if (t === undefined)
+            pending = true;
+        else if (t !== "inode/directory")
+            return "no";
+    }
+    return pending ? "pending" : "yes";
+}
+
+// The slot a folder dropped at `main` (a coordinate along the Dock) would take: the number of folder tiles whose centre lies
+// before it, or -1 when the pointer is left of the divider (the folders live in the right section). `centers` are the tile
+// centres of the unmagnified layout, `separator` the index of the divider tile (-1 none), `count` the folder tiles after it.
+function folderSlot(main, centers, separator, count) {
+    if (!(separator >= 0) || centers[separator] === undefined || main < centers[separator])
+        return -1;
+    let k = 0;
+    for (let i = separator + 1; i <= separator + count; i++) {
+        if (centers[i] !== undefined && centers[i] < main)
+            k++;
+    }
+    return k;
+}

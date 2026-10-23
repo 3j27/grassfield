@@ -295,6 +295,41 @@ Singleton {
         scanHover();
     }
 
+    // A drag of folders entered the Dock's shelf: look up the real types of its paths (Stacks.folderVerdict reads hoverTypes).
+    function hoverFolders(paths: var): void {
+        hoverClear.stop();
+        hoverWanted = hoverWanted.concat(DockModel.unknownPaths(paths, hoverTypes));
+        scanHover();
+    }
+
+    // The real types of dropped `paths` ({path: type}), looked up once (dock/file-types.sh), handed to `done`. A busy lookup
+    // is not queued: `done` gets an empty map then (nothing is added).
+    function dirsOf(paths: var, done: var): void {
+        const list = Array.from(paths || []).slice(0, 32);
+        if (list.length === 0 || dirScan.running) {
+            done({});
+            return;
+        }
+        dirScan.paths = list;
+        dirScan.done = done;
+        dirScan.command = ["timeout", "10", "sh", Quickshell.shellPath("dock/file-types.sh")].concat(list);
+        dirScan.running = true;
+    }
+
+    Process {
+        id: dirScan
+        property var paths: []
+        property var done: null
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const callback = dirScan.done;
+                dirScan.done = null;
+                if (callback)
+                    callback(DockModel.parseResolved(dirScan.paths, text));
+            }
+        }
+    }
+
     // A drag left a tile or was dropped: forget the cached types shortly after (a drag over the next tile reuses them).
     function hoverLeave(): void {
         hoverClear.restart();

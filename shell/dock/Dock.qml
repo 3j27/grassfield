@@ -531,6 +531,10 @@ Scope {
             root.rebuild();
         }
 
+        function onDockFoldersChanged(): void {
+            root.rebuild();
+        }
+
         function onDockShowRecentsChanged(): void {
             root.rebuild();
         }
@@ -697,6 +701,12 @@ Scope {
                     return String(all[i].iconSize);
             }
             return "";
+        }
+
+        // Adds `path` to the Dock's folders at slot `slot` as a drop would (fixtures only; real drags: tests/visual/dock-drops.sh style).
+        function addfolder(path: string, slot: int): void {
+            if (VisualFixtures.active)
+                Settings.setDockFolders(Stacks.insertFolders(Settings.dockFolders, [path], slot, Quickshell.env("HOME"), Tokens.dockStackMax));
         }
 
         // Opens the stack of tile `index` (a folder) on `screen` (same code path as a click; fixtures only).
@@ -895,6 +905,29 @@ Scope {
                 easing.type: Easing.OutQuad
             }
 
+            // A folder dragged over the shelf (macOS: dropped in the right section it becomes a stack): the slot it would take
+            // among the folder tiles (-1 none), and the gap that opens there (0..1, animated).
+            property int folderDropIndex: -1
+            property int folderDropLast: 0
+            property real gapGrow: 0
+            readonly property int separatorAt: root.items.findIndex(it => it.kind === "separator" && !it.divider)
+            readonly property int folderCount: root.items.filter(it => it.kind === "folder").length
+            onFolderDropIndexChanged: {
+                if (folderDropIndex >= 0)
+                    folderDropLast = folderDropIndex;
+                gapAnim.stop();
+                gapAnim.to = folderDropIndex >= 0 ? 1 : 0;
+                gapAnim.start();
+            }
+
+            NumberAnimation {
+                id: gapAnim
+                target: win
+                property: "gapGrow"
+                duration: Appearance.duration(Tokens.motionFast)
+                easing.type: Easing.OutQuad
+            }
+
             // Layout transition (DockModel.layoutTransition): position along the Dock of every tile (window coordinates) before a rebuild.
             property var layoutBefore: ({})
 
@@ -976,7 +1009,7 @@ Scope {
             readonly property var targetScales: pointerActive ? Magnify.slotScales(baseCenters, widths, Tokens.dockSpacing, separatorFlags, pointerX, pitch, maxScale, Tokens.dockMagnificationRadius) : widths.map(() => 1)
             property var smoothScales: []
             readonly property var scaleList: widths.map((w, i) => smoothScales[i] !== undefined ? smoothScales[i] : 1)
-            readonly property real shelfWidth: Magnify.totalWidth(widths.map((w, i) => w * scaleList[i]), Tokens.dockSpacing) + 2 * Tokens.dockPadding - dragCollapse * pitch
+            readonly property real shelfWidth: Magnify.totalWidth(widths.map((w, i) => w * scaleList[i]), Tokens.dockSpacing) + 2 * Tokens.dockPadding - dragCollapse * pitch + gapGrow * pitch
 
             // Autohide state machine (AutoHide.js, table in docs/specs/dock.md): inhibitors keep the shelf shown.
             property int pressedTile: -1
@@ -1280,6 +1313,64 @@ Scope {
                     borderOpacity: Tokens.dockRimOpacity
                     borderColor: Appearance.colors.materialHighlight
 
+                    // Folders dragged from Files, the desktop or anywhere that offers text/uri-list: dropped in the right section
+                    // (after the divider) they are kept in the Dock as stacks, at the slot where the gap opened. Under the tiles:
+                    // apps and the Trash take their own drops first.
+                    DropArea {
+                        id: folderDrop
+                        anchors.fill: parent
+                        keys: ["text/uri-list"]
+                        property var paths: []
+                        readonly property string verdict: paths.length === 0 ? "unknown" : Stacks.folderVerdict(paths, Apps.hoverTypes)
+                        function slotAt(drag: var): int {
+                            const main = win.vertical ? shelf.y + drag.y : shelf.x + drag.x;
+                            return Stacks.folderSlot(main, win.baseCenters, win.separatorAt, win.folderCount);
+                        }
+                        function read(drag: var): void {
+                            if (paths.length > 0)
+                                return;
+                            const found = Icons.parseUriList(drag.getDataAsString("text/uri-list"));
+                            if (found.length === 0)
+                                return;
+                            paths = found;
+                            Apps.hoverFolders(found);
+                        }
+                        function track(drag: var): void {
+                            read(drag);
+                            const slot = slotAt(drag);
+                            const ok = slot >= 0 && verdict !== "no";
+                            drag.accepted = ok;
+                            win.folderDropIndex = ok ? slot : -1;
+                        }
+                        onEntered: drag => {
+                            paths = [];
+                            track(drag);
+                        }
+                        onPositionChanged: drag => track(drag)
+                        onExited: {
+                            paths = [];
+                            win.folderDropIndex = -1;
+                            Apps.hoverLeave();
+                        }
+                        onDropped: drop => {
+                            const found = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
+                            const slot = slotAt(drop);
+                            paths = [];
+                            win.folderDropIndex = -1;
+                            if (found.length === 0 || slot < 0) {
+                                drop.accepted = false;
+                                return;
+                            }
+                            drop.accept(Qt.LinkAction);
+                            // The real types decide (a folder may carry an extension, a file may not): only folders are added.
+                            Apps.dirsOf(found, resolved => {
+                                const dirs = found.filter(p => resolved[p] === "inode/directory");
+                                if (dirs.length > 0)
+                                    Settings.setDockFolders(Stacks.insertFolders(Settings.dockFolders, dirs, slot, Quickshell.env("HOME"), Tokens.dockStackMax));
+                            });
+                        }
+                    }
+
                     // A row of tiles, or a column (first tile on top) on a side edge.
                     Grid {
                         id: tiles
@@ -1341,6 +1432,9 @@ Scope {
                                 readonly property real progress: isApp ? DockModel.tileProgress(MenuBridge.launcher, modelData) : -1
                                 // Neighbours of a dragged tile make room along the Dock (or close the gap while it is dragged out).
                                 readonly property real shiftMain: {
+                                    // A folder is dragged over the shelf: the tiles from the slot on make room for it (macOS).
+                                    if (win.dragFrom < 0 && (win.folderDropIndex >= 0 || win.gapGrow > 0))
+                                        return index >= win.separatorAt + 1 + win.folderDropLast ? win.gapGrow * win.pitch : 0;
                                     if (win.dragFrom < 0 || index === win.dragFrom)
                                         return 0;
                                     if (win.dragCollapsing)

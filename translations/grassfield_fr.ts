@@ -2108,6 +2108,34 @@
         <translation>Un petit point sous l’icône de chaque application ouverte.</translation>
     </message>
     <message>
+        <source>Choose a folder for the Dock</source>
+        <translation>Choisir un dossier pour le Dock</translation>
+    </message>
+    <message>
+        <source>Folders in the Dock</source>
+        <translation>Dossiers dans le Dock</translation>
+    </message>
+    <message>
+        <source>A folder in the Dock opens as a stack. You can also drag a folder to the right of the divider in the Dock.</source>
+        <translation>Un dossier du Dock s’ouvre comme une pile. Vous pouvez aussi faire glisser un dossier à droite du séparateur dans le Dock.</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Retirer</translation>
+    </message>
+    <message>
+        <source>Remove %1 from the Dock</source>
+        <translation>Retirer %1 du Dock</translation>
+    </message>
+    <message>
+        <source>Add a folder</source>
+        <translation>Ajouter un dossier</translation>
+    </message>
+    <message>
+        <source>Add Folder…</source>
+        <translation>Ajouter un dossier…</translation>
+    </message>
+    <message>
         <source>Menu Bar</source>
         <translation>Barre des menus</translation>
     </message>

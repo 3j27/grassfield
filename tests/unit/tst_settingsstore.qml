@@ -63,11 +63,10 @@ TestCase {
 
     function test_schemaParity() {
         const leaves = schemaLeaves(readSchema(), "", {});
-        // Owned by other modules: version is fixed, dock.pinned, dock.recent and dock.folders belong to the Dock.
+        // Owned by other modules: version is fixed, dock.pinned and dock.recent belong to the Dock.
         delete leaves["version"];
         delete leaves["dock.pinned"];
         delete leaves["dock.recent"];
-        delete leaves["dock.folders"];
         compare(Object.keys(Store.RULES).sort(), Object.keys(leaves).sort());
         compare(Object.keys(Store.DEFAULTS).sort(), Object.keys(leaves).sort());
         for (const path in leaves) {
@@ -79,7 +78,7 @@ TestCase {
                 compare(r.min, s.minimum, path);
             if (s.maximum !== undefined)
                 compare(r.max, s.maximum, path);
-            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" || r.type === "pointerColor" || r.type === "wallpaperPath" ? "string" : r.type === "wallpaperOutputs" || r.type === "notificationApps" ? "array" : r.type, s.type, path);
+            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" || r.type === "pointerColor" || r.type === "wallpaperPath" ? "string" : r.type === "wallpaperOutputs" || r.type === "notificationApps" || r.type === "pathList" ? "array" : r.type, s.type, path);
             // Defaults satisfy their own rule.
             compare(Store.validate(path, Store.DEFAULTS[path]), "", path);
         }
@@ -92,6 +91,18 @@ TestCase {
         const file = JSON.parse(xhr.responseText);
         for (const path in Store.DEFAULTS)
             compare(Store.read(file, path), Store.DEFAULTS[path], path);
+    }
+
+    function test_validateDockFolders() {
+        compare(Store.validate("dock.folders", ["~/Downloads", "/srv/x"]), "");
+        compare(Store.validate("dock.folders", []), "");
+        verify(Store.validate("dock.folders", "~/Downloads") !== "");
+        verify(Store.validate("dock.folders", ["relative"]) !== "");
+        verify(Store.validate("dock.folders", ["/a/../b"]) !== "");
+        verify(Store.validate("dock.folders", [""]) !== "");
+        verify(Store.validate("dock.folders", [5]) !== "");
+        verify(Store.validate("dock.folders", ["/a\nb"]) !== "");
+        verify(Store.validate("dock.folders", Array(13).fill("/a")) !== "");
     }
 
     function test_validate() {

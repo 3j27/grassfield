@@ -5,8 +5,11 @@
 #            (Name, Date Added, Date Modified, Kind) and hidden files never show; Esc closes it. Captures of the three views.
 #   fit      with dock.size 96 and 24 running apps with distinct ids the tiles shrink so that the shelf fits the output
 #            (`dock fitsize` below `dock sizenow`), and grow back to the setting when the apps are gone.
+#   drop     a folder dragged (a real GTK4 drag, tests/visual/fixtures/dragsrc.py, as dock-drops.sh) onto the Dock right of the
+#            divider is added to dock.folders and gets a tile; a file dragged there is not added; `dock addfolder` puts a folder at a
+#            slot (insertion order); Settings keeps the key.
 # Run as a BARE command with a relative path, on the reference machine only; the nested session it starts is torn down on exit.
-#   tests/visual/dock-stacks.sh [stack|fit]     (default: both)
+#   tests/visual/dock-stacks.sh [stack|fit|drop]     (default: all three)
 # Captures: .dev/visual/dock-stacks/. Exit status 1 when a check fails.
 source "$(dirname "$0")/lib.sh"
 set +e
@@ -115,6 +118,66 @@ if want stack; then
   setting ".dock.stackOptions = {} | .dock.folders = []"
   [[ $(tile_index "$fix") == null ]]; check "removing the folder from dock.folders removes its tile" $?
   rm -rf "$fix"
+fi
+
+if want drop; then
+  box=$VS_DEV/dropfix
+  rm -rf "$box"
+  mkdir -p "$box/Photos" "$box/Docs"
+  printf 'x' >"$box/note.txt"
+  setting ".dock.folders = [] | .dock.stackOptions = {}"
+  # The hook: slots of the insertion order.
+  vs_ipc dock addfolder "$box/Docs" 0 >/dev/null
+  sleep 1
+  vs_ipc dock addfolder "$box/Photos" 0 >/dev/null
+  sleep 1
+  [[ $(jq -r --arg a "$box/Photos" --arg b "$box/Docs" '.dock.folders == [$a, $b]' "$cfg") == true ]]; check "addfolder at slot 0 puts the new folder first" $?
+  setting ".dock.folders = []"
+  # A real drag: the pointer is a virtual pointer on the nested compositor, the source a GTK4 window offering text/uri-list.
+  sock=$(vs_nested_wayland)
+  origin=$("$VS_ROOT/scripts/nestctl" monitors -j | jq -r --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | "\(.x) \(.y)"')
+  ox=${origin% *}
+  oy=${origin#* }
+  drag_onto_divider() { # NAME PATH: drag PATH from a source window to the divider of the Dock, release
+    local name=$1 bus="" at i sx sy tx ty sidx wx wy ww wh
+    [[ -f $VS_DEV/bus.address ]] && bus=$(<"$VS_DEV/bus.address")
+    "$VS_ROOT/scripts/dev/isolated.sh" --name visual --config-home "$VS_DEV/config" --state-home "$VS_DEV/state" -- \
+      env WAYLAND_DISPLAY="$sock" DBUS_SESSION_BUS_ADDRESS="${bus:-}" LC_ALL=en_US.UTF-8 GSK_RENDERER=cairo GDK_BACKEND=wayland \
+      python3 -I "$VS_HERE/fixtures/dragsrc.py" 12 "$2" >/dev/null 2>"$out/$name.src.log" </dev/null &
+    vs_track "$!"
+    for i in $(seq 1 40); do
+      at=$("$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | select(.title == "gfdragsrc") | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' | head -n 1)
+      [[ -n $at ]] && break
+      sleep 0.25
+    done
+    [[ -n $at ]] || { echo "FAIL $name: the drag source window did not appear"; fail=1; return; }
+    read -r wx wy ww wh <<<"$at"
+    sleep 2
+    sidx=$(tile_index separator)
+    read -r tx ty <<<"$(vs_ipc dock centre "$sidx" "$VS_OUTPUT")"
+    tx=$((tx + 2))
+    sx=$((wx - ox + ww / 2))
+    sy=$((wy - oy + wh / 2))
+    "$VS_ROOT/scripts/dev/pointer.sh" output "$VS_OUTPUT" abs "$sx" "$sy" sleep 200 down sleep 200 drag "$tx" "$ty" sleep 1500 up sleep 400 abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null &
+    local ptr=$!
+    sleep 1.3
+    "$VS_ROOT/scripts/dev/shot.sh" "dock-stacks-$name" "$VS_OUTPUT" >/dev/null
+    cp "$VS_DEV/shots/dock-stacks-$name.png" "$out/$name.png" 2>/dev/null
+    wait "$ptr"
+    sleep 1.5
+    local pid
+    for pid in $("$VS_ROOT/scripts/nestctl" clients -j | jq -r '.[] | select(.title == "gfdragsrc") | .pid'); do
+      dev_may_signal "$pid" && kill "$pid" || true
+    done
+    sleep 1
+  }
+  drag_onto_divider folder-drop "$box/Photos"
+  [[ $(jq -r --arg a "$box/Photos" '.dock.folders | index($a) != null' "$cfg") == true ]]; check "a folder dropped right of the divider is added to dock.folders" $?
+  [[ $(tile_index "$box/Photos") != null ]]; check "and it is a tile of the Dock" $?
+  drag_onto_divider file-drop "$box/note.txt"
+  [[ $(jq -r '.dock.folders | length' "$cfg") == 1 ]]; check "a file dropped there is not added" $?
+  setting ".dock.folders = []"
+  rm -rf "$box"
 fi
 
 if want fit; then

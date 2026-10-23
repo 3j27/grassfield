@@ -197,6 +197,11 @@ Singleton {
                 InputSource.feed(data);
         }
 
+        // Test hook: "shown|kind|label" (dev session only).
+        function state(): string {
+            return VisualFixtures.dev ? [root.shown, root.kind, root.label].join("|") : "";
+        }
+
         function hide(): void {
             if (VisualFixtures.dev)
                 root.hide();

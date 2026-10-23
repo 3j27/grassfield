@@ -172,19 +172,24 @@ FocusScope {
     // Test hook (fixtures only): what the open stack shows, "view|name,name,..." in display order.
     IpcHandler {
         target: "dockstack"
-        enabled: VisualFixtures.active
 
         function state(): string {
+            if (!VisualFixtures.active)
+                return "";
             return root.view + "|" + root.entries.map(e => e.name).join(",");
         }
 
         // How many folders deep the stack is opened in place (0: the stack itself).
         function depth(): string {
+            if (!VisualFixtures.active)
+                return "";
             return String(root.trail.length);
         }
 
         // Opens the folder `name` of the listing in place (the click of a Grid or List item); "refused" for a file or a Fan.
         function enter(name: string): string {
+            if (!VisualFixtures.active)
+                return "refused";
             const at = root.entries.findIndex(e => e.name === name && e.isDir);
             if (at < 0 || root.fan)
                 return "refused";
@@ -193,7 +198,8 @@ FocusScope {
         }
 
         function back(): void {
-            root.back();
+            if (VisualFixtures.active)
+                root.back();
         }
     }
 

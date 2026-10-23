@@ -1,4 +1,6 @@
+pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Dialogs
 import Grassfield.Ui
 
 SettingsPage {
@@ -152,6 +154,62 @@ SettingsPage {
                 accessibleName: qsTr("Show indicators for open applications")
                 checked: root.store.value("dock.showIndicators")
                 onToggled: c => root.store.set("dock.showIndicators", c)
+            }
+        }
+    }
+
+    // Folders kept in the Dock as stacks (dock.folders). Dragging a folder onto the Dock's right section adds one too.
+    readonly property var dockFolders: store.value("dock.folders")
+
+    function urlToPath(u: url): string {
+        const s = u.toString();
+        return s.indexOf("file://") === 0 ? decodeURIComponent(s.substring(7)) : "";
+    }
+
+    function addDockFolder(path: string): void {
+        if (path === "" || dockFolders.indexOf(path) >= 0 || dockFolders.length >= 12)
+            return;
+        store.set("dock.folders", dockFolders.concat([path]));
+    }
+
+    function openAddFolder(): void {
+        addFolderDialog.open();
+    }
+
+    function removeDockFolder(path: string): void {
+        store.set("dock.folders", dockFolders.filter(f => f !== path));
+    }
+
+    FolderDialog {
+        id: addFolderDialog
+        title: qsTr("Choose a folder for the Dock")
+        onAccepted: root.addDockFolder(root.urlToPath(selectedFolder))
+    }
+
+    SettingsGroup {
+        caption: qsTr("Folders in the Dock")
+        footnote: qsTr("A folder in the Dock opens as a stack. You can also drag a folder to the right of the divider in the Dock.")
+
+        Repeater {
+            model: root.dockFolders
+
+            delegate: SettingsRow {
+                id: folderRow
+                required property string modelData
+                title: modelData
+                Button {
+                    text: qsTr("Remove")
+                    Accessible.name: qsTr("Remove %1 from the Dock").arg(folderRow.modelData)
+                    onClicked: root.removeDockFolder(folderRow.modelData)
+                }
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Add a folder")
+            Button {
+                text: qsTr("Add Folder…")
+                onClicked: root.openAddFolder()
             }
         }
     }
