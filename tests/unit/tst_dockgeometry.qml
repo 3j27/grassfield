@@ -365,4 +365,99 @@ TestCase {
         compare(small.separatorHeight, 33);
         fuzzyCompare(small.iconRadius, 11 * 32 / 48, 1e-9);
     }
+
+    // Shrink to fit (REQ-DOCK-PAR-d8): 12 tiles + 1 separator of 4+4+? px.
+    function test_fitSizeKeepsTheRequestedSizeWhenItFits() {
+        // 10 tiles of 48: 480 + 9 gaps of 4 + 2 x 10 = 536 px, room for 1920
+        compare(Geometry.fitSize(48, 10, 0, 12, 4, 10, 1908, 16), 48);
+        // exactly full: 480 + 9 x 4 + 20 = 536
+        compare(Geometry.fitSize(48, 10, 0, 12, 4, 10, 536, 16), 48);
+    }
+
+    function test_fitSizeShrinksUntilTheShelfFits() {
+        // 20 tiles + 1 separator in 800 px: fixed = 20 + 12 + 20 x 4 = 112 -> floor(688 / 20) = 34
+        compare(Geometry.fitSize(48, 20, 1, 12, 4, 10, 800, 16), 34);
+        const size = Geometry.fitSize(96, 20, 1, 12, 4, 10, 800, 16);
+        compare(size, 34);
+        verify(size * 20 + 112 <= 800);
+        verify((size + 1) * 20 + 112 > 800);
+    }
+
+    function test_fitSizeNeverGoesBelowTheFloorOrAboveTheRequest() {
+        compare(Geometry.fitSize(48, 200, 1, 12, 4, 10, 800, 16), 16);
+        // a requested size under the floor is kept (the user asked for it)
+        compare(Geometry.fitSize(12, 200, 1, 12, 4, 10, 800, 16), 12);
+        compare(Geometry.fitSize(32, 3, 1, 12, 4, 10, 4000, 16), 32);
+    }
+
+    function test_fitSizeIgnoresUnknownRoom() {
+        compare(Geometry.fitSize(48, 10, 0, 12, 4, 10, 0, 16), 48);
+        compare(Geometry.fitSize(48, 10, 0, 12, 4, 10, NaN, 16), 48);
+        compare(Geometry.fitSize(48, 0, 0, 12, 4, 10, 100, 16), 48);
+    }
+
+    // ---- the rectangle a minimizing window flies to (Compositor.dockRect -> Dock.tileRect -> minimizedSlotRect) ----
+
+    readonly property var dockItems: [
+        {kind: "files"}, {kind: "apps"}, {kind: "app"}, {kind: "app"}, {kind: "separator", divider: true}, {kind: "app"},
+        {kind: "separator"}, {kind: "folder"}, {kind: "minimized"}, {kind: "trash"}
+    ]
+
+    function slotOptions(extra) {
+        return Object.assign({index: 0, adding: false, iconSize: 48, spacing: 4, separatorWidth: 12, edge: "bottom", screenW: 1920, screenH: 1080,
+                depth: 140, margin: 6, padding: 10, indicatorArea: 8}, extra);
+    }
+
+    function inside(r, w, h) {
+        return isFinite(r.x) && isFinite(r.y) && r.w >= 1 && r.h >= 1 && r.x >= 0 && r.y >= 0 && r.x + r.w <= w && r.y + r.h <= h;
+    }
+
+    function test_minimizedSlotIsFiniteNotEmptyAndInsideTheOutput() {
+        for (const adding of [true, false]) {
+            const r = Geometry.minimizedSlotRect(dockItems, slotOptions({adding: adding}));
+            verify(r !== null);
+            verify(inside(r, 1920, 1080), JSON.stringify(r));
+            compare(r.w, 48);
+            compare(r.h, 48);
+        }
+    }
+
+    function test_minimizedSlotIsAfterTheFolderStacksAndBeforeTheTrash() {
+        // adding: a new tile inserted where the Trash was pushed to the right
+        const first = Geometry.minimizedSlotRect(dockItems, slotOptions({adding: true, index: 1}));
+        const none = Geometry.minimizedSlotRect(dockItems.filter(it => it.kind !== "folder"), slotOptions({adding: true, index: 1}));
+        verify(first !== null && none !== null);
+        // with a folder stack the slot is one tile (pitch) further along than without
+        verify(Math.abs((first.x - none.x) - 0) < 60);
+        const a = Geometry.minimizedSlotRect(dockItems, slotOptions({adding: false, index: 0}));
+        const b = Geometry.minimizedSlotRect(dockItems, slotOptions({adding: true, index: 1}));
+        verify(b.x > a.x, "the next minimized slot is to the right");
+    }
+
+    function test_minimizedSlotDoesNotNeedAWindowAndNeverLeavesTheOutput() {
+        // Tiny and huge outputs, and a Dock far wider than the output: always inside, never NaN.
+        for (const s of [{w: 320, h: 240}, {w: 1280, h: 720}, {w: 3840, h: 2160}]) {
+            for (const edge of ["bottom", "left", "right"]) {
+                const r = Geometry.minimizedSlotRect(dockItems, slotOptions({edge: edge, screenW: s.w, screenH: s.h, adding: true}));
+                verify(r !== null, edge);
+                verify(inside(r, s.w, s.h), edge + " " + s.w + "x" + s.h + " " + JSON.stringify(r));
+            }
+        }
+    }
+
+    function test_minimizedSlotRefusesWhatItCannotAnswer() {
+        compare(Geometry.minimizedSlotRect([], slotOptions({})), null);
+        compare(Geometry.minimizedSlotRect([{kind: "app"}, {kind: "trash"}], slotOptions({})), null, "no divider");
+        compare(Geometry.minimizedSlotRect(dockItems, slotOptions({index: -1})), null);
+        compare(Geometry.minimizedSlotRect(dockItems, slotOptions({iconSize: 0})), null);
+        compare(Geometry.minimizedSlotRect(dockItems, slotOptions({screenW: 0})), null);
+        compare(Geometry.minimizedSlotRect(dockItems, slotOptions({index: 40})), null, "a slot that does not exist");
+    }
+
+    function test_clampInto() {
+        const box = {x: 0, y: 0, w: 100, h: 50};
+        compare(Geometry.clampInto({x: -5, y: 60, w: 10, h: 10}, box), {x: 0, y: 40, w: 10, h: 10});
+        compare(Geometry.clampInto({x: 95, y: 5, w: 10, h: 10}, box), {x: 90, y: 5, w: 10, h: 10});
+        compare(Geometry.clampInto({x: 3, y: 4, w: 10, h: 10}, box), {x: 3, y: 4, w: 10, h: 10});
+    }
 }

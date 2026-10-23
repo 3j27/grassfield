@@ -1071,6 +1071,14 @@
         <translation>Activer ou désactiver le masquage du Dock</translation>
     </message>
     <message>
+        <source>Keyboard brightness up</source>
+        <translation>Luminosité du clavier +</translation>
+    </message>
+    <message>
+        <source>Keyboard brightness down</source>
+        <translation>Luminosité du clavier -</translation>
+    </message>
+    <message>
         <source>Previous word</source>
         <translation>Mot précédent</translation>
     </message>
@@ -2108,6 +2116,34 @@
         <translation>Un petit point sous l’icône de chaque application ouverte.</translation>
     </message>
     <message>
+        <source>Choose a folder for the Dock</source>
+        <translation>Choisir un dossier pour le Dock</translation>
+    </message>
+    <message>
+        <source>Folders in the Dock</source>
+        <translation>Dossiers dans le Dock</translation>
+    </message>
+    <message>
+        <source>A folder in the Dock opens as a stack. You can also drag a folder to the right of the divider in the Dock.</source>
+        <translation>Un dossier du Dock s’ouvre comme une pile. Vous pouvez aussi faire glisser un dossier à droite du séparateur dans le Dock.</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Retirer</translation>
+    </message>
+    <message>
+        <source>Remove %1 from the Dock</source>
+        <translation>Retirer %1 du Dock</translation>
+    </message>
+    <message>
+        <source>Add a folder</source>
+        <translation>Ajouter un dossier</translation>
+    </message>
+    <message>
+        <source>Add Folder…</source>
+        <translation>Ajouter un dossier…</translation>
+    </message>
+    <message>
         <source>Menu Bar</source>
         <translation>Barre des menus</translation>
     </message>
@@ -2206,6 +2242,14 @@
     <message>
         <source>Tiled windows have margins</source>
         <translation>Ajouter des marges aux fenêtres en mosaïque</translation>
+    </message>
+    <message>
+        <source>Rebuild the compositor extension after Hyprland updates</source>
+        <translation>Recompiler l’extension du compositeur après les mises à jour de Hyprland</translation>
+    </message>
+    <message>
+        <source>Window titlebars, minimize and global menus need it. After an update of Hyprland, Grassfield builds it again in the background.</source>
+        <translation>Les barres de titre, la réduction des fenêtres et les menus globaux en dépendent. Après une mise à jour de Hyprland, Grassfield la recompile en arrière-plan.</translation>
     </message>
     <message>
         <source>Screen Corners</source>
@@ -2341,6 +2385,10 @@
         <translation>, demande votre attention</translation>
     </message>
     <message>
+        <source>%1, folder stack</source>
+        <translation>%1, pile de dossier</translation>
+    </message>
+    <message>
         <source>Remove</source>
         <translation>Retirer</translation>
     </message>
@@ -2382,6 +2430,70 @@
     <message>
         <source>Remove from Dock</source>
         <translation>Retirer du Dock</translation>
+    </message>
+    <message>
+        <source>Sort by</source>
+        <translation>Trier par</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Date Added</source>
+        <translation>Date d’ajout</translation>
+    </message>
+    <message>
+        <source>Date Modified</source>
+        <translation>Date de modification</translation>
+    </message>
+    <message>
+        <source>Date Created</source>
+        <translation>Date de création</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Display as</source>
+        <translation>Afficher comme</translation>
+    </message>
+    <message>
+        <source>Stack</source>
+        <translation>Pile</translation>
+    </message>
+    <message>
+        <source>Folder</source>
+        <translation>Dossier</translation>
+    </message>
+    <message>
+        <source>View content as</source>
+        <translation>Afficher le contenu comme</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Fan</source>
+        <translation>Éventail</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation>Grille</translation>
+    </message>
+    <message>
+        <source>List</source>
+        <translation>Liste</translation>
+    </message>
+    <message>
+        <source>Open in Files</source>
+        <translation>Ouvrir dans Fichiers</translation>
+    </message>
+    <message>
+        <source>Recent Documents</source>
+        <translation>Documents récents</translation>
     </message>
     <message>
         <source>Are you sure you want to permanently erase the items in the Trash?</source>
@@ -3917,6 +4029,14 @@
         <source>Volume %1%</source>
         <translation>Volume %1&#xa0;%</translation>
     </message>
+    <message>
+        <source>Keyboard brightness %1%</source>
+        <translation>Luminosité du clavier %1&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Input source %1</source>
+        <translation>Source de saisie&#xa0;: %1</translation>
+    </message>
 </context>
 <context>
     <name>OverviewWindow</name>
@@ -3935,6 +4055,10 @@
     <message>
         <source>Desktop %1</source>
         <translation>Bureau %1</translation>
+    </message>
+    <message>
+        <source>%1, minimized</source>
+        <translation>%1, réduite</translation>
     </message>
 </context>
 <context>
@@ -4718,6 +4842,25 @@
     <message>
         <source>Mute input</source>
         <translation>Couper l’entrée</translation>
+    </message>
+</context>
+<context>
+    <name>StackPopup</name>
+    <message>
+        <source>%1 more in Files</source>
+        <translation>%1 de plus dans Fichiers</translation>
+    </message>
+    <message>
+        <source>Open in Files</source>
+        <translation>Ouvrir dans Fichiers</translation>
+    </message>
+    <message>
+        <source>%1 stack</source>
+        <translation>Pile %1</translation>
+    </message>
+    <message>
+        <source>Back to %1</source>
+        <translation>Retour à %1</translation>
     </message>
 </context>
 <context>
@@ -5685,6 +5828,42 @@
 <context>
     <name>shell</name>
     <message>
+        <source>It is not built for %1 yet. Window titlebars and minimize are unavailable while it is built in the background.</source>
+        <translation>Elle n’est pas encore compilée pour %1. Les barres de titre et la réduction des fenêtres sont indisponibles pendant sa compilation en arrière-plan.</translation>
+    </message>
+    <message>
+        <source>It is not built for %1 yet, so window titlebars and minimize are unavailable. Run grassfield-compositor-rebuild in a terminal, then log out and back in.</source>
+        <translation>Elle n’est pas encore compilée pour %1 : les barres de titre et la réduction des fenêtres sont indisponibles. Lancez grassfield-compositor-rebuild dans un terminal, puis fermez la session et rouvrez-la.</translation>
+    </message>
+    <message>
+        <source>Compositor extension needs a rebuild</source>
+        <translation>L’extension du compositeur doit être recompilée</translation>
+    </message>
+    <message>
+        <source>Compositor extension rebuilt</source>
+        <translation>Extension du compositeur recompilée</translation>
+    </message>
+    <message>
+        <source>It is built for %1 and loaded.</source>
+        <translation>Elle est compilée pour %1 et chargée.</translation>
+    </message>
+    <message>
+        <source>It is built for %1. Log out and back in to use it.</source>
+        <translation>Elle est compilée pour %1. Fermez la session et rouvrez-la pour l’utiliser.</translation>
+    </message>
+    <message>
+        <source>Compositor extension not rebuilt</source>
+        <translation>Extension du compositeur non recompilée</translation>
+    </message>
+    <message>
+        <source>The build tools are missing or another build is running. Run grassfield-compositor-rebuild in a terminal to see why.</source>
+        <translation>Les outils de compilation manquent ou une autre compilation est en cours. Lancez grassfield-compositor-rebuild dans un terminal pour en savoir plus.</translation>
+    </message>
+    <message>
+        <source>The build failed. Run grassfield-compositor-rebuild in a terminal to see why.</source>
+        <translation>La compilation a échoué. Lancez grassfield-compositor-rebuild dans un terminal pour en savoir plus.</translation>
+    </message>
+    <message>
         <source>Grassfield Settings is not installed</source>
         <translation>Réglages Grassfield n’est pas installé</translation>
     </message>
@@ -5703,6 +5882,14 @@
     <message>
         <source>Compositor extension not loaded</source>
         <translation>Extension du compositeur non chargée</translation>
+    </message>
+    <message>
+        <source>Hyprland %1</source>
+        <translation>Hyprland %1</translation>
+    </message>
+    <message>
+        <source>this version of Hyprland</source>
+        <translation>cette version de Hyprland</translation>
     </message>
     <message>
         <source>Window titlebars and minimize are unavailable (compositor extension not loaded).</source>

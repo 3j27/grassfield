@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Grassfield.I18n
 import Grassfield.Ui
 import qs.desktop
@@ -18,6 +19,7 @@ import qs.security.lock
 import qs.security.polkit
 import qs.services
 import qs.switcher
+import "platform/ExtensionStatus.js" as ExtensionStatus
 
 // grassfield-shell root. Settings feed the design-system Appearance singleton; surfaces
 // read Appearance and Tokens only.
@@ -151,16 +153,89 @@ ShellRoot {
 
     // One degraded-mode notice when the compositor extension is absent; withdrawn if it loads later.
     property string degradedNoticeKey: ""
+    // Why it is absent (ADR-0009 "Amendment 2026-10-23", GF-033): the session loads no build that is not made for the
+    // Hyprland that runs. The rebuild tool says whether none is (--status); with the opt-in setting
+    // windows.rebuildExtension the shell builds it once in the background (--session) and says how it went.
+    readonly property string extensionTool: "/usr/lib/grassfield/grassfield-compositor-rebuild"
+    property string extensionVersion: ""
+    property bool extensionRebuildTried: false
 
     // The degraded notice is shown once the compositor extension is known to be absent (Capabilities.absent: not at the
     // first timeout, a loaded plugin can answer late at login) and withdrawn when it is present.
     function syncDegradedNotice(): void {
         if (Capabilities.absent && degradedNoticeKey === "") {
-            console.info("grassfield: degraded notice posted (compositor extension absent)");
-            degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
+            if (!extensionStatus.running) {
+                extensionStatus.running = true;
+                extensionStatusLate.restart();
+            }
         } else if (!Capabilities.absent && degradedNoticeKey !== "") {
             Notifications.clear(degradedNoticeKey);
             degradedNoticeKey = "";
+        }
+    }
+
+    // "Hyprland 0.56.2", or a generic name when the tool gave no version.
+    function hyprlandName(): string {
+        return extensionVersion !== "" ? qsTr("Hyprland %1").arg(extensionVersion) : qsTr("this version of Hyprland");
+    }
+
+    // The notice for the --status answer (`text`, "" when the tool is not there or did not answer in time).
+    function postDegradedNotice(text: string): void {
+        extensionStatusLate.stop();
+        if (!Capabilities.absent || degradedNoticeKey !== "")
+            return;
+        const status = ExtensionStatus.parse(text);
+        const kind = ExtensionStatus.notice(status);
+        console.info("grassfield: degraded notice posted (compositor extension absent: " + kind + ")");
+        if (kind !== "mismatch") {
+            degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
+            return;
+        }
+        extensionVersion = ExtensionStatus.version(status);
+        const rebuild = ExtensionStatus.rebuilds(status, Settings.windowsRebuildExtension, extensionRebuildTried);
+        const body = rebuild ? qsTr("It is not built for %1 yet. Window titlebars and minimize are unavailable while it is built in the background.") : qsTr("It is not built for %1 yet, so window titlebars and minimize are unavailable. Run grassfield-compositor-rebuild in a terminal, then log out and back in.");
+        degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension needs a rebuild"), body.arg(hyprlandName()));
+        if (rebuild) {
+            extensionRebuildTried = true;
+            console.info("grassfield: compositor extension rebuild started");
+            extensionSession.running = true;
+        }
+    }
+
+    // The notice for the --session answer.
+    function postRebuildResult(text: string): void {
+        const outcome = ExtensionStatus.outcome(ExtensionStatus.parse(text));
+        console.info("grassfield: compositor extension rebuild: " + outcome);
+        if (outcome === "loaded")
+            Notifications.postInternal(qsTr("Compositor extension rebuilt"), qsTr("It is built for %1 and loaded.").arg(hyprlandName()));
+        else if (outcome === "built")
+            Notifications.postInternal(qsTr("Compositor extension rebuilt"), qsTr("It is built for %1. Log out and back in to use it.").arg(hyprlandName()));
+        else if (outcome === "cannot-build")
+            Notifications.postInternal(qsTr("Compositor extension not rebuilt"), qsTr("The build tools are missing or another build is running. Run grassfield-compositor-rebuild in a terminal to see why."));
+        else
+            Notifications.postInternal(qsTr("Compositor extension not rebuilt"), qsTr("The build failed. Run grassfield-compositor-rebuild in a terminal to see why."));
+    }
+
+    Process {
+        id: extensionStatus
+        command: [root.extensionTool, "--status"]
+        stdout: StdioCollector {
+            onStreamFinished: root.postDegradedNotice(text)
+        }
+    }
+
+    // No answer (the tool is not installed, or it hangs): the plain notice all the same.
+    Timer {
+        id: extensionStatusLate
+        interval: 3000
+        onTriggered: root.postDegradedNotice("")
+    }
+
+    Process {
+        id: extensionSession
+        command: [root.extensionTool, "--session"]
+        stdout: StdioCollector {
+            onStreamFinished: root.postRebuildResult(text)
         }
     }
 

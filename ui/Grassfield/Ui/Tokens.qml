@@ -306,6 +306,40 @@ QtObject {
     readonly property real dockRimOpacity: 0.34
     // macOS convention: at most three recent applications
     readonly property int dockRecentMax: 3
+    // estimate: recent documents listed in an app's Dock menu (macOS lists up to ten; five keep the menu short)
+    readonly property int dockRecentDocsMax: 5
+    // shrink to fit: free room kept at each end of the shelf along the Dock, px (same as the margin off the screen edge, dock.bottomMargin)
+    readonly property int dockFitMargin: 6
+    // shrink to fit: smallest tile the Dock shrinks to, px (below this it would be unusable; the shelf then overflows the screen)
+    readonly property int dockFitMin: 16
+    // macOS: a Fan shows about ten items; with Automatic a folder of more items opens as a Grid
+    readonly property int dockStackFanMax: 9
+    // estimate: folder stacks kept in the Dock (macOS has no hard limit)
+    readonly property int dockStackMax: 12
+    // estimate from macOS Fan: distance between two fanned icons along the way out, px (icon 48 + gap)
+    readonly property int dockStackFanStep: 56
+    // estimate from macOS Fan: sideways drift of the last fanned icon, px
+    readonly property int dockStackFanBend: 80
+    // estimate: icon of a stack item in the Fan and the Grid, px
+    readonly property int dockStackIconSize: 48
+    // estimate: width of a Grid cell, px
+    readonly property int dockStackCellWidth: 96
+    // estimate: height of a Grid cell (icon and two label lines), px
+    readonly property int dockStackCellHeight: 92
+    // estimate: widest Grid, columns
+    readonly property int dockStackGridMaxColumns: 5
+    // estimate: tallest Grid before it scrolls, rows
+    readonly property int dockStackGridMaxRows: 4
+    // estimate: tallest List before it scrolls, rows
+    readonly property int dockStackListMaxRows: 12
+    // estimate: width of a List, px
+    readonly property int dockStackListWidth: 260
+    // estimate: items a Grid or List holds (the rest are in Files)
+    readonly property int dockStackItemMax: 300
+    // macOS stack icon: sheets behind the top one are turned by this angle, degrees
+    readonly property int dockStackPileTilt: 5
+    // estimate: size of a pile sheet relative to the tile
+    readonly property real dockStackPileScale: 0.78
     // macOS 26 launch bounce rises about a third of the icon height (per icon size)
     readonly property real dockBounceHeightScale: 0.34
     // macOS: an icon darkens slightly while the mouse button is held (brightness, negative)
@@ -719,6 +753,16 @@ QtObject {
     readonly property int overviewTileMaxIcons: 4
     // estimate: window name pill
     readonly property int overviewLabelHeight: 34
+    // macOS Mission Control shows minimized windows smaller than the open ones, in a row below a divider: width of one minimized tile, px (it shrinks when the row would not fit)
+    readonly property int overviewMinimizedWidth: 144
+    // estimate (16:10 of minimizedWidth): height of one minimized tile, px
+    readonly property int overviewMinimizedHeight: 90
+    // estimate: space between minimized tiles, px
+    readonly property int overviewMinimizedGap: 16
+    // estimate: space above and below the minimized row (the divider sits in the upper one), px
+    readonly property int overviewMinimizedPad: 12
+    // estimate: window title under a minimized tile, px
+    readonly property int overviewMinimizedLabelHeight: 18
     // estimate: window name pill icon
     readonly property int overviewLabelIconSize: 20
     // estimate: window name pill
@@ -1439,4 +1483,33 @@ QtObject {
 
     // estimate (motion.fast): an Exclusive surface drops its keyboard first and stays mapped this long before it unmaps, so Hyprland sees the release while the surface still exists (a layer destroyed while Exclusive leaves no keyboard focus at all); the fade of Search and Apps runs in it
     readonly property int focusReturnReleaseHoldMs: 120
+
+    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh)
+    readonly property string titlebarBackgroundDark: "#28282C"
+    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value)
+    readonly property string titlebarBackgroundLight: "#ECECEE"
+    // window title on the dark titlebar, drawn at titleOpacity
+    readonly property string titlebarTitleDark: "#ECECEE"
+    // window title on the light titlebar, drawn at titleOpacity
+    readonly property string titlebarTitleLight: "#28282C"
+    // estimate: the title a little softer than full ink, both appearances
+    readonly property real titlebarTitleOpacity: 0.85
+    // the three lights of an inactive window, dark appearance: one step above its bar (macOS greys them)
+    readonly property string titlebarInactiveButtonDark: "#5A5A5E"
+    // the same, light appearance: the light-appearance reference samples about #D4D4D4 on a white bar
+    readonly property string titlebarInactiveButtonLight: "#D1D1D3"
+    // window-tiling preview (titlebar drag to an edge), dark appearance: the material tint (color.dark.materialTint) over Hyprland's blur of what is behind it (owner decision D-8: blurred material, as macOS)
+    readonly property string titlebarPreviewTintDark: "#1D1F24"
+    // the same, light appearance (color.light.materialTint)
+    readonly property string titlebarPreviewTintLight: "#F3F4F6"
+    // estimate: opacity of the preview's tint over the blur: frosted, the windows behind it stay recognisable (pending F1 review)
+    readonly property real titlebarPreviewTintAlpha: 0.45
+    // the preview's edge, dark appearance (color.dark.materialBorder)
+    readonly property string titlebarPreviewRimDark: "#FFFFFF"
+    // the preview's edge, light appearance (color.light.materialBorder)
+    readonly property string titlebarPreviewRimLight: "#000000"
+    // estimate: the edge readable over light and dark windows (pending F1 review)
+    readonly property real titlebarPreviewRimOpacity: 0.22
+    // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8)
+    readonly property int titlebarPreviewRimWidth: 2
 }

@@ -15,6 +15,7 @@ import "AutoHide.js" as AutoHide
 import "Attention.js" as Attention
 import "Magnify.js" as Magnify
 import "Geometry.js" as Geometry
+import "Stacks.js" as Stacks
 
 // Bottom dock, one per screen: pinned apps (Settings) and running apps (foreign-toplevel app ids
 // mapped to desktop entries), a separator and the Trash. Click launches, focuses the most recent
@@ -256,7 +257,8 @@ Scope {
         const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
         const all = windows.instances;
         all.forEach(w => w.captureLayout());
-        setItems(DockModel.withFixed(split.files, DockModel.withTail(shown, tail)));
+        const folders = DockModel.folderItems(Stacks.folderList(Settings.dockFolders, Quickshell.env("HOME"), Tokens.dockStackMax));
+        setItems(DockModel.withFixed(split.files, DockModel.withTail(shown, tail, folders)));
         all.forEach(w => w.playLayout());
         pruneLaunching();
         settleAttention();
@@ -325,6 +327,10 @@ Scope {
             Compositor.unminimize(item.toplevel);
             return;
         }
+        if (item.kind === "folder") {
+            root.openStackOf(item);
+            return;
+        }
         if (item.windows.length === 0) {
             root.launchItem(item);
             return;
@@ -334,6 +340,21 @@ Scope {
         const plan = Launch.activationPlan(item.windows.map(t => Compositor.windowInfo(t)));
         for (const top of plan)
             Compositor.activate(top);
+    }
+
+    // Opens the stack of a folder tile on the Dock's output (macOS: a click on Downloads).
+    function openStackOf(item: var): void {
+        const all = windows.instances;
+        const index = items.indexOf(item);
+        let target = null;
+        for (let i = 0; i < all.length; i++) {
+            if (all[i].screen.name === dockScreen)
+                target = all[i];
+        }
+        if (!target && all.length > 0)
+            target = all[0];
+        if (target && index >= 0)
+            target.openStack(index);
     }
 
     Component.onCompleted: {
@@ -510,6 +531,10 @@ Scope {
             root.rebuild();
         }
 
+        function onDockFoldersChanged(): void {
+            root.rebuild();
+        }
+
         function onDockShowRecentsChanged(): void {
             root.rebuild();
         }
@@ -666,6 +691,35 @@ Scope {
             root.enterKeyboardMode();
         }
 
+        // Tile size on `screen` after shrink to fit (Geometry.fitSize), px; compare with `sizenow` (fixtures only).
+        function fitsize(screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    return String(all[i].iconSize);
+            }
+            return "";
+        }
+
+        // Adds `path` to the Dock's folders at slot `slot` as a drop would (fixtures only; real drags: tests/visual/dock-drops.sh style).
+        function addfolder(path: string, slot: int): void {
+            if (VisualFixtures.active)
+                Settings.setDockFolders(Stacks.insertFolders(Settings.dockFolders, [path], slot, Quickshell.env("HOME"), Tokens.dockStackMax));
+        }
+
+        // Opens the stack of tile `index` (a folder) on `screen` (same code path as a click; fixtures only).
+        function stack(index: int, screen: string): void {
+            if (!VisualFixtures.active)
+                return;
+            const all = windows.instances;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    all[i].openStack(index);
+            }
+        }
+
         function menu(index: int, screen: string): void {
             if (!VisualFixtures.dev)
                 return;
@@ -693,8 +747,9 @@ Scope {
 
             required property ShellScreen modelData
 
-            // Tile size (Settings > Size): everything below follows it (Geometry.metrics).
-            readonly property int iconSize: root.sizeNow
+            // Tile size (Settings > Size) shrunk to fit the screen along the Dock (Geometry.fitSize, macOS): everything below follows
+            // it (Geometry.metrics). The setting itself is never changed.
+            readonly property int iconSize: Geometry.fitSize(root.sizeNow, root.items.filter(it => it.kind !== "separator").length, root.items.filter(it => it.kind === "separator").length, separatorWidth, Tokens.dockSpacing, Tokens.dockPadding, mainTotal - 2 * Tokens.dockFitMargin, Tokens.dockFitMin)
             // The window is as deep as the largest Dock needs, whatever the size now: resizing never reconfigures the layer surface
             // (the pointer's coordinates in it stay put while the separator is dragged). It is transparent and takes input only where the mask says.
             readonly property var largest: Geometry.metrics(Tokens.dockSizeMax, {
@@ -850,6 +905,29 @@ Scope {
                 easing.type: Easing.OutQuad
             }
 
+            // A folder dragged over the shelf (macOS: dropped in the right section it becomes a stack): the slot it would take
+            // among the folder tiles (-1 none), and the gap that opens there (0..1, animated).
+            property int folderDropIndex: -1
+            property int folderDropLast: 0
+            property real gapGrow: 0
+            readonly property int separatorAt: root.items.findIndex(it => it.kind === "separator" && !it.divider)
+            readonly property int folderCount: root.items.filter(it => it.kind === "folder").length
+            onFolderDropIndexChanged: {
+                if (folderDropIndex >= 0)
+                    folderDropLast = folderDropIndex;
+                gapAnim.stop();
+                gapAnim.to = folderDropIndex >= 0 ? 1 : 0;
+                gapAnim.start();
+            }
+
+            NumberAnimation {
+                id: gapAnim
+                target: win
+                property: "gapGrow"
+                duration: Appearance.duration(Tokens.motionFast)
+                easing.type: Easing.OutQuad
+            }
+
             // Layout transition (DockModel.layoutTransition): position along the Dock of every tile (window coordinates) before a rebuild.
             property var layoutBefore: ({})
 
@@ -931,7 +1009,7 @@ Scope {
             readonly property var targetScales: pointerActive ? Magnify.slotScales(baseCenters, widths, Tokens.dockSpacing, separatorFlags, pointerX, pitch, maxScale, Tokens.dockMagnificationRadius) : widths.map(() => 1)
             property var smoothScales: []
             readonly property var scaleList: widths.map((w, i) => smoothScales[i] !== undefined ? smoothScales[i] : 1)
-            readonly property real shelfWidth: Magnify.totalWidth(widths.map((w, i) => w * scaleList[i]), Tokens.dockSpacing) + 2 * Tokens.dockPadding - dragCollapse * pitch
+            readonly property real shelfWidth: Magnify.totalWidth(widths.map((w, i) => w * scaleList[i]), Tokens.dockSpacing) + 2 * Tokens.dockPadding - dragCollapse * pitch + gapGrow * pitch
 
             // Autohide state machine (AutoHide.js, table in docs/specs/dock.md): inhibitors keep the shelf shown.
             property int pressedTile: -1
@@ -944,7 +1022,7 @@ Scope {
             readonly property var hideInhibitors: ({
                     pointer: pointerActive,
                     drag: isDockScreen && dragFrom >= 0,
-                    popup: isDockScreen && Popups.kind === "dock",
+                    popup: isDockScreen && (Popups.kind === "dock" || Popups.kind === "dockstack"),
                     hold: isDockScreen && (pressedTile >= 0 || resizing),
                     keyboard: isDockScreen && root.keyboardMode,
                     forced: isDockScreen && root.testReveal,
@@ -992,16 +1070,41 @@ Scope {
                 return Math.round(origin.x + p.x) + " " + Math.round(origin.y + p.y);
             }
 
+            // Where a popup of tile `index` opens (the Dock menu's anchor).
+            function popupAnchor(index: int): var {
+                const t = tileRepeater.itemAt(index);
+                const c = t.mapToItem(null, t.width / 2, t.height / 2);
+                const centre = win.vertical ? win.origin.y + c.y : win.origin.x + c.x;
+                return Geometry.menuAnchor(win.edge, win.screen.width, win.screen.height, centre, shelfHeight, Tokens.dockBottomMargin, Tokens.dockMenuTailGap, Tokens.dockMenuTailHeight);
+            }
+
+            // The stack of a folder tile (Fan, Grid or List: Stacks.js); toggles when it is already open.
+            function openStack(index: int): void {
+                root.keyboardMode = false;
+                const item = root.items[index];
+                if (!item || item.kind !== "folder")
+                    return;
+                const at = popupAnchor(index);
+                const o = Stacks.optionsFor(Settings.dockStackOptions, item.path);
+                Popups.toggle("dockstack", win.screen.name, at.x, at.y, at.align, {path: item.path, name: item.name, sort: o.sort, view: o.view});
+            }
+
             function openMenu(index: int): void {
                 root.keyboardMode = false;
                 const item = root.items[index];
-                if (!item || (item.kind !== "app" && item.kind !== "files" && item.kind !== "trash"))
+                if (!item || (item.kind !== "app" && item.kind !== "files" && item.kind !== "trash" && item.kind !== "folder"))
                     return;
                 const t = tileRepeater.itemAt(index);
                 // Centre of the tile along the Dock in screen coordinates; the menu opens above a bottom Dock and beside a side one.
                 const c = t.mapToItem(null, t.width / 2, t.height / 2);
                 const centre = win.vertical ? win.origin.y + c.y : win.origin.x + c.x;
                 const at = Geometry.menuAnchor(win.edge, win.screen.width, win.screen.height, centre, shelfHeight, Tokens.dockBottomMargin, Tokens.dockMenuTailGap, Tokens.dockMenuTailHeight);
+                if (item.kind === "folder") {
+                    // macOS stack menu: Sort by, Display as, View content as, Options, Open.
+                    const o = Stacks.optionsFor(Settings.dockStackOptions, item.path);
+                    Popups.open("dock", win.screen.name, at.x, at.y, at.align, {kind: "folder", key: item.key, path: item.path, name: item.name, sort: o.sort, view: o.view, display: o.display, windows: [], running: false});
+                    return;
+                }
                 if (item.kind === "trash") {
                     // macOS Trash menu: Open, Empty Trash…
                     Trash.refresh();
@@ -1061,28 +1164,41 @@ Scope {
                     // Minimize into the application icon: the window goes to (and comes from) its app's tile.
                     const at = root.items.findIndex(it => (it.kind === "app" || it.kind === "files") && it.windows.indexOf(toplevel) >= 0);
                     if (at >= 0)
-                        return globalTileRect(mon, baseCenters[at]);
+                        return globalTileRect(mon, Magnify.centersFor(widths, Tokens.dockSpacing, (Geometry.mainSize(edge, screen.width, screen.height) - Magnify.totalWidth(widths, Tokens.dockSpacing)) / 2)[at]);
                 }
-                if (sep < 0 || !mon || index < 0)
+                if (sep < 0 || !mon || index < 0) {
+                    console.warn("grassfield-shell: Dock tileRect refused on", win.screen.name, "(divider at", sep, ", monitor", mon ? mon.name : "unknown to Hyprland", ", slot", index + ")");
                     return null;
-                const w = widths.slice();
-                if (adding)
-                    w.splice(sep + 1 + index, 0, iconSize);
-                const slot = Magnify.centersFor(w, Tokens.dockSpacing, (mainTotal - Magnify.totalWidth(w, Tokens.dockSpacing)) / 2)[sep + 1 + index];
-                if (slot === undefined)
-                    return null;
-                return globalTileRect(mon, slot);
+                }
+                // Pure (Geometry.minimizedSlotRect, tests/unit/tst_dockgeometry.qml): from the output's size, not the window's, which
+                // may not have its size yet when the compositor asks; wholly inside this output, which the plugin requires.
+                const r = Geometry.minimizedSlotRect(root.items, {
+                    index: index,
+                    adding: adding,
+                    iconSize: iconSize,
+                    spacing: Tokens.dockSpacing,
+                    separatorWidth: separatorWidth,
+                    edge: edge,
+                    screenW: screen.width,
+                    screenH: screen.height,
+                    depth: depth,
+                    margin: Tokens.dockBottomMargin,
+                    padding: Tokens.dockPadding,
+                    indicatorArea: indicatorArea
+                });
+                return r ? {x: mon.x + r.x, y: mon.y + r.y, w: r.w, h: r.h} : null;
             }
 
             // The unmagnified icon of the tile whose centre is `mainCenter` along the Dock, in global layout coordinates (the monitor `mon`).
             function globalTileRect(mon: var, mainCenter: real): var {
-                const r = Geometry.tileRect(edge, width, height, mainCenter, iconSize, Tokens.dockBottomMargin, Tokens.dockPadding, indicatorArea);
-                return {
-                    x: mon.x + origin.x + r.x,
-                    y: mon.y + origin.y + r.y,
-                    w: r.w,
-                    h: r.h
-                };
+                const sw = screen.width;
+                const sh = screen.height;
+                const winW = vertical ? depth : sw;
+                const winH = vertical ? sh : depth;
+                const r = Geometry.tileRect(edge, winW, winH, mainCenter, iconSize, Tokens.dockBottomMargin, Tokens.dockPadding, indicatorArea);
+                const o = Geometry.windowOrigin(edge, sw, sh, winW, winH);
+                const c = Geometry.clampInto({x: o.x + r.x, y: o.y + r.y, w: r.w, h: r.h}, {x: 0, y: 0, w: sw, h: sh});
+                return {x: mon.x + c.x, y: mon.y + c.y, w: c.w, h: c.h};
             }
 
             // modelData is already null when a removed screen destroys this window: keep the name.
@@ -1208,6 +1324,64 @@ Scope {
                     borderOpacity: Tokens.dockRimOpacity
                     borderColor: Appearance.colors.materialHighlight
 
+                    // Folders dragged from Files, the desktop or anywhere that offers text/uri-list: dropped in the right section
+                    // (after the divider) they are kept in the Dock as stacks, at the slot where the gap opened. Under the tiles:
+                    // apps and the Trash take their own drops first.
+                    DropArea {
+                        id: folderDrop
+                        anchors.fill: parent
+                        keys: ["text/uri-list"]
+                        property var paths: []
+                        readonly property string verdict: paths.length === 0 ? "unknown" : Stacks.folderVerdict(paths, Apps.hoverTypes)
+                        function slotAt(drag: var): int {
+                            const main = win.vertical ? shelf.y + drag.y : shelf.x + drag.x;
+                            return Stacks.folderSlot(main, win.baseCenters, win.separatorAt, win.folderCount);
+                        }
+                        function read(drag: var): void {
+                            if (paths.length > 0)
+                                return;
+                            const found = Icons.parseUriList(drag.getDataAsString("text/uri-list"));
+                            if (found.length === 0)
+                                return;
+                            paths = found;
+                            Apps.hoverFolders(found);
+                        }
+                        function track(drag: var): void {
+                            read(drag);
+                            const slot = slotAt(drag);
+                            const ok = slot >= 0 && verdict !== "no";
+                            drag.accepted = ok;
+                            win.folderDropIndex = ok ? slot : -1;
+                        }
+                        onEntered: drag => {
+                            paths = [];
+                            track(drag);
+                        }
+                        onPositionChanged: drag => track(drag)
+                        onExited: {
+                            paths = [];
+                            win.folderDropIndex = -1;
+                            Apps.hoverLeave();
+                        }
+                        onDropped: drop => {
+                            const found = Icons.parseUriList(drop.getDataAsString("text/uri-list"));
+                            const slot = slotAt(drop);
+                            paths = [];
+                            win.folderDropIndex = -1;
+                            if (found.length === 0 || slot < 0) {
+                                drop.accepted = false;
+                                return;
+                            }
+                            drop.accept(Qt.LinkAction);
+                            // The real types decide (a folder may carry an extension, a file may not): only folders are added.
+                            Apps.dirsOf(found, resolved => {
+                                const dirs = found.filter(p => resolved[p] === "inode/directory");
+                                if (dirs.length > 0)
+                                    Settings.setDockFolders(Stacks.insertFolders(Settings.dockFolders, dirs, slot, Quickshell.env("HOME"), Tokens.dockStackMax));
+                            });
+                        }
+                    }
+
                     // A row of tiles, or a column (first tile on top) on a side edge.
                     Grid {
                         id: tiles
@@ -1234,8 +1408,10 @@ Scope {
                                 readonly property bool isAppsTile: modelData.kind === "apps"
                                 readonly property bool isSeparator: modelData.kind === "separator"
                                 readonly property bool isMinimized: modelData.kind === "minimized"
+                                readonly property bool isFolder: modelData.kind === "folder"
+                                readonly property var folderOptions: isFolder ? Stacks.optionsFor(Settings.dockStackOptions, modelData.path) : ({sort: "dateAdded", view: "automatic", display: "stack"})
                                 readonly property bool running: isApp && modelData.windows.length > 0
-                                readonly property string label: isTrash ? qsTr("Trash") : isAppsTile ? qsTr("Apps") : (isApp || isMinimized ? modelData.name : "")
+                                readonly property string label: isTrash ? qsTr("Trash") : isAppsTile ? qsTr("Apps") : (isApp || isMinimized || isFolder ? modelData.name : "")
                                 readonly property real iconPx: win.iconSize * tileScale
                                 // The icon's place in the tile (it grows away from the screen edge) and the way out (bounce, hover rise).
                                 readonly property var iconPos: Geometry.iconOrigin(win.edge, win.iconSize, iconPx, win.indicatorArea)
@@ -1267,6 +1443,9 @@ Scope {
                                 readonly property real progress: isApp ? DockModel.tileProgress(MenuBridge.launcher, modelData) : -1
                                 // Neighbours of a dragged tile make room along the Dock (or close the gap while it is dragged out).
                                 readonly property real shiftMain: {
+                                    // A folder is dragged over the shelf: the tiles from the slot on make room for it (macOS).
+                                    if (win.dragFrom < 0 && (win.folderDropIndex >= 0 || win.gapGrow > 0))
+                                        return index >= win.separatorAt + 1 + win.folderDropLast ? win.gapGrow * win.pitch : 0;
                                     if (win.dragFrom < 0 || index === win.dragFrom)
                                         return 0;
                                     if (win.dragCollapsing)
@@ -1348,7 +1527,7 @@ Scope {
                                 }
                                 activeFocusOnTab: !isSeparator
                                 Accessible.role: isSeparator ? Accessible.Separator : Accessible.Button
-                                Accessible.name: isAppsTile ? qsTr("Apps") : isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? (badge === 1 ? qsTr(", 1 notification") : qsTr(", %1 notifications").arg(badge)) : "") + (attentive ? qsTr(", needs attention") : "")))
+                                Accessible.name: isAppsTile ? qsTr("Apps") : isFolder ? qsTr("%1, folder stack").arg(label) : isTrash ? (Trash.empty ? qsTr("Trash, empty") : qsTr("Trash, contains items")) : (isMinimized ? qsTr("%1, minimized").arg(label) : ((running ? qsTr("%1, running").arg(label) : label) + (badge > 0 ? (badge === 1 ? qsTr(", 1 notification") : qsTr(", %1 notifications").arg(badge)) : "") + (attentive ? qsTr(", needs attention") : "")))
                                 Accessible.focusable: !isSeparator
                                 Accessible.ignored: isSeparator
                                 Accessible.onPressAction: root.activateItem(modelData)
@@ -1621,6 +1800,31 @@ Scope {
                                         anchors.bottom: parent.bottom
                                         source: minimizedTile.iconSource
                                     }
+                                }
+
+                                // Folder stack (macOS: Downloads and other folders right of the divider): the newest items piled up
+                                // ("Display as: Stack", live), or the folder icon of the icon theme ("Folder", and an empty folder).
+                                StackPile {
+                                    id: pile
+                                    visible: tile.isFolder && tile.folderOptions.display === "stack" && !empty
+                                    folder: tile.isFolder && tile.folderOptions.display === "stack" ? tile.modelData.path : ""
+                                    size: win.iconSize
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
+                                }
+
+                                TintedIcon {
+                                    id: folderThemed
+                                    visible: tile.isFolder && !(tile.folderOptions.display === "stack" && !pile.empty)
+                                    size: win.iconSize
+                                    oversample: folderThemed.modeActive ? Tokens.dockIconOversample : folderThemed.defaultOversample
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
+                                    source: tile.isFolder ? Quickshell.iconPath(Stacks.folderIconName(tile.modelData.path, Quickshell.env("HOME")), "folder") : ""
                                 }
 
                                 // Trash: the icon theme's user-trash / user-trash-full (never hand-drawn), in the user's icon
@@ -1968,7 +2172,7 @@ Scope {
                                 }
 
                                 TapHandler {
-                                    enabled: tile.isApp || tile.isTrash
+                                    enabled: tile.isApp || tile.isTrash || tile.isFolder
                                     acceptedButtons: Qt.RightButton
                                     // macOS: a secondary click opens the Dock menu on the press, however long the button is held.
                                     onPressedChanged: if (pressed) {

@@ -46,6 +46,18 @@ function documents(list, state, max) {
     return (Array.isArray(list) ? list : []).filter(d => d && typeof d.path === "string" && d.path !== "" && d.modified > clearedAt).slice(0, max);
 }
 
+// Recent documents of one application (macOS: the app's Dock menu lists the documents it opened): the documents, newest
+// first, that registered `app` ({name, cmd}: the desktop entry's name and the program of its Exec line, both compared
+// without case) when they were used, after the menu was last cleared, at most `max`. A document that no application
+// registered is never listed.
+function documentsForApp(list, app, state, max) {
+    if (!app || (!app.name && !app.cmd))
+        return [];
+    const name = String(app.name || "").toLowerCase();
+    const cmd = String(app.cmd || "").replace(/^.*\//, "").toLowerCase();
+    return documents(list, state, Infinity).filter(d => Array.isArray(d.apps) && d.apps.some(a => a && ((cmd !== "" && String(a.cmd || "").toLowerCase() === cmd) || (name !== "" && String(a.name || "").toLowerCase() === name)))).slice(0, max);
+}
+
 // The submenu rows: a header and the items of each section (macOS shows both headers, also when a section is empty),
 // then Clear Menu (disabled when there is nothing to clear). `t` holds the translated texts.
 function menu(apps, docs, t) {

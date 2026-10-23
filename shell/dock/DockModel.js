@@ -54,9 +54,14 @@ function minimizedItems(records, lookup) {
     });
 }
 
-// Apps, a separator, minimized windows (right of the separator), then the trash.
-function withTail(apps, minimized) {
-    return apps.concat([{kind: "separator"}], minimized ? minimized : [], [{kind: "trash"}]);
+// Folder stacks as tiles: {kind: "folder", key: path, name, path}. `paths` are clean absolute paths (Stacks.folderList).
+function folderItems(paths) {
+    return (paths ? paths : []).map(p => ({kind: "folder", key: p, name: p.replace(/\/+$/, "").replace(/^.*\//, "") || "/", path: p}));
+}
+
+// Apps, a separator, the folder stacks (macOS: right section, left of the minimized windows), minimized windows, then the trash.
+function withTail(apps, minimized, folders) {
+    return apps.concat([{kind: "separator"}], folders ? folders : [], minimized ? minimized : [], [{kind: "trash"}]);
 }
 
 // The fixed first tile, "Apps" (macOS 26: Launchpad became Apps and keeps its Dock tile). Not an app: never pinned,

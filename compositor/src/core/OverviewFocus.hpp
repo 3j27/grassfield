@@ -83,6 +83,26 @@ namespace gf::overviewfocus {
 
     Step step(const Gate& gate);
 
+    // ---- a dialog that opens during the close (audit GF-038, A11Y-10) ----
+    // When the chrome that held the keyboard releases it, Hyprland 0.56.2 clears the keyboard focus and refuses its own
+    // refocus while any Exclusive layer is left ("refocusLastWindow: ignoring, exclusive LS present"). A dialog that mapped
+    // during the close (a polkit authentication) then gets no key until the pointer moves: Hyprland's pointer motion gives
+    // the keyboard to the Exclusive layer under the cursor, else to one of them (CInputManager::mouseMoveUnified). While a
+    // request waits (and at its bound), the plugin does what that motion does, for a dialog only: never for a surface of
+    // the one that is closing (its chromes on the other outputs release too, and a key must not reach a closing chrome).
+    struct ExclusiveLayer {
+        std::string_view ns;                  // the layer surface's namespace
+        bool             mapped      = false; // mapped
+        bool             exclusive   = false; // its keyboard interactivity is Exclusive now
+        bool             underCursor = false; // the cursor lies over it (or one of its popups)
+    };
+
+    // Index in `layers` (Hyprland's Exclusive-layer list, oldest first) of the layer that gets the keyboard, or nullopt.
+    // Nothing when `keyboardHeld` (a window, or a mapped layer surface that takes the keyboard, holds it). `closing`: the
+    // namespace of the layer surface that held the keyboard when the request came ("" when none): its layers never get it.
+    // Among the others (mapped, Exclusive): the one under the cursor, else the newest (the dialog on top).
+    std::optional<size_t> keyboardHandOver(std::span<const ExclusiveLayer> layers, std::string_view closing, bool keyboardHeld);
+
     // ---- what ----
 
     // The named window (Window, Remembered, Press) when Hyprland accepts window focus again.

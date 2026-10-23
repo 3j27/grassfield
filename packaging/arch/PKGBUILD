@@ -32,8 +32,10 @@ sha256sums=('4d91771b305c25b6a81e8a24e7c3d4ae49cce9754db199437191fa30cb9c60b0'
 _root() { realpath "$startdir/../.."; }
 
 build() {
+  # The plugin, its stamp and its unit tests go to $srcdir/compositor-out (never the tree's compositor/build, which
+  # just plugin-build also writes): package() ships exactly what this build made.
   cmake -S "$(_root)/compositor" -B "$srcdir/compositor-build" -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release -DGRASSFIELD_BUILD_TESTS=ON
+    -DCMAKE_BUILD_TYPE=Release -DGRASSFIELD_BUILD_TESTS=ON -DGRASSFIELD_OUTPUT_DIR="$srcdir/compositor-out"
   cmake --build "$srcdir/compositor-build"
   # Grassfield.I18n QML module (Translator singleton) and the compiled catalogs (translations/*.ts).
   cmake -S "$(_root)/ui/i18n" -B "$srcdir/i18n-build" -G Ninja \
@@ -65,7 +67,7 @@ build() {
 }
 
 check() {
-  "$(_root)/compositor/build/grassfield-compositor-tests"
+  "$srcdir/compositor-out/grassfield-compositor-tests"
   # The peer-to-peer D-Bus case skips itself where Unix sockets cannot be created (build sandboxes).
   "$srcdir/menu-bridge-build/menu-bridge-unit-tests"
 }
@@ -186,10 +188,44 @@ package_grassfield-desktop() {
 
 package_grassfield-compositor() {
   pkgdesc+=" — optional Hyprland plugin (titlebars, minimize, appmenu)"
+  # A plugin only hooks into the Hyprland build it was compiled for, and the hyprland version is never constrained here
+  # (ADR-0009 "Amendment 2026-10-23", audit GF-033): the session loads this build only when its stamp is the running
+  # Hyprland's ABI, else the user's own build (grassfield-compositor-rebuild, as the user, into the user's cache), else none
+  # (degraded mode with a notice). Nothing is ever compiled as root or by a pacman hook.
   depends=(hyprland)
+  # What the user's rebuild needs besides Hyprland's own dependencies (headers, lua, hyprwayland-scanner, pixman, libdrm,
+  # libglvnd).
+  optdepends=(
+    'cmake: grassfield-compositor-rebuild (the extension for a newer Hyprland)'
+    'gcc: grassfield-compositor-rebuild'
+    'make: grassfield-compositor-rebuild'
+    'pkgconf: grassfield-compositor-rebuild'
+  )
   local root
   root=$(_root)
-  install -Dm755 "$root/compositor/build/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
+  install -Dm755 "$srcdir/compositor-out/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
+  # Its stamp: the ABI it was built for, written by its own CMake build from the headers it was compiled against
+  # (compositor/abi-stamp.cmake; config/hypr/grassfield/compositor.lua loads the build whose stamp is the ABI of the
+  # Hyprland that runs). Packaging stops when it is not the installed Hyprland's: the build is stale.
+  local built_abi installed_abi
+  built_abi=$(head -n 1 "$srcdir/compositor-out/grassfield-compositor.abi")
+  installed_abi=$("$root/packaging/arch/grassfield-compositor-rebuild" --print-abi)
+  if [[ -z $built_abi || $built_abi != "$installed_abi" ]]; then
+    echo "grassfield-compositor: the plugin was built for '$built_abi', the installed Hyprland is '$installed_abi': rebuild it" >&2
+    return 1
+  fi
+  install -Dm644 "$srcdir/compositor-out/grassfield-compositor.abi" "$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
+  install -Dm755 "$root/packaging/arch/grassfield-compositor-rebuild" "$pkgdir/usr/lib/grassfield/grassfield-compositor-rebuild"
+  # The commands a person types are on PATH (grassfield-compositor-rebuild, grassfield-compositor-rebuild --check).
+  install -d "$pkgdir/usr/bin"
+  ln -s ../lib/grassfield/grassfield-compositor-rebuild "$pkgdir/usr/bin/grassfield-compositor-rebuild"
+  # The sources the user's rebuild is made from (the plugin only: no unit tests, no build directory).
+  local src=$pkgdir/usr/src/grassfield-compositor
+  install -Dm644 "$root/compositor/CMakeLists.txt" "$src/CMakeLists.txt"
+  install -Dm644 "$root/compositor/abi-stamp.cmake" "$src/abi-stamp.cmake"
+  cp -a --no-preserve=ownership "$root/compositor/src" "$src/src"
+  cp -a --no-preserve=ownership "$root/compositor/protocols" "$src/protocols"
+  printf '%s-%s\n' "$pkgver" "$pkgrel" >"$src/VERSION"
   install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/grassfield-compositor/LICENSE"
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-compositor/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/hyprland-BSD-3-Clause.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/hyprland-BSD-3-Clause.txt"

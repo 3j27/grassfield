@@ -15,6 +15,11 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
+# Where the plugin and the tests are written: compositor/build by default (just plugin-build, the PKGBUILD); the rebuild
+# on the target (packaging/arch/grassfield-compositor-rebuild, ADR-0009 amendment) builds from the read-only sources in
+# /usr/src/grassfield-compositor into a private directory.
+set(GRASSFIELD_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build" CACHE PATH "Output directory of the plugin and the unit tests")
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland pixman-1 libdrm glesv2) # glesv2: the Genie draw (GenieDraw.cpp)
 pkg_check_modules(LUA REQUIRED lua) # headers only: symbols resolve from Hyprland's liblua at load time
@@ -45,7 +50,21 @@ target_include_directories(grassfield-compositor PRIVATE ${LUA_INCLUDE_DIRS} ${C
 target_compile_options(grassfield-compositor PRIVATE -Wall -Wextra)
 set_target_properties(grassfield-compositor PROPERTIES
   PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+  LIBRARY_OUTPUT_DIRECTORY ${GRASSFIELD_OUTPUT_DIR})
+
+# The plugin's ABI stamp, next to it, from the version.h it is compiled against (ADR-0009 "Amendment 2026-10-23"): the
+# package installs it with the plugin, the user rebuild with its build, and the session loads a build only when its stamp
+# is the running Hyprland's ABI. Regenerated whenever that header changes, like the plugin.
+find_file(GF_HYPRLAND_VERSION_H NAMES hyprland/src/version.h HINTS ${HYPRLAND_INCLUDE_DIRS} REQUIRED)
+add_custom_command(
+  OUTPUT ${GRASSFIELD_OUTPUT_DIR}/grassfield-compositor.abi
+  COMMAND ${CMAKE_COMMAND} -DVERSION_H=${GF_HYPRLAND_VERSION_H} -DOUT=${GRASSFIELD_OUTPUT_DIR}/grassfield-compositor.abi
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/abi-stamp.cmake
+  DEPENDS ${GF_HYPRLAND_VERSION_H} ${CMAKE_CURRENT_SOURCE_DIR}/abi-stamp.cmake
+  VERBATIM)
+add_custom_target(grassfield-compositor-abi ALL DEPENDS ${GRASSFIELD_OUTPUT_DIR}/grassfield-compositor.abi)
+# Building the plugin alone (cmake --build --target grassfield-compositor, just plugin-build) refreshes its stamp too.
+add_dependencies(grassfield-compositor grassfield-compositor-abi)
 
 option(GRASSFIELD_BUILD_TESTS "Build unit tests" ON)
 if(GRASSFIELD_BUILD_TESTS)
@@ -57,6 +76,6 @@ if(GRASSFIELD_BUILD_TESTS)
   target_link_libraries(grassfield-compositor-tests PRIVATE gfcore GTest::gtest_main)
   target_compile_options(grassfield-compositor-tests PRIVATE -Wall -Wextra)
   set_target_properties(grassfield-compositor-tests PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+    RUNTIME_OUTPUT_DIRECTORY ${GRASSFIELD_OUTPUT_DIR})
   add_test(NAME grassfield-compositor-tests COMMAND grassfield-compositor-tests)
 endif()

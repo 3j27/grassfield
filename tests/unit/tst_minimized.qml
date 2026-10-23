@@ -33,9 +33,57 @@ TestCase {
         compare(Minimized.configCall("titlebarDoubleClick", "Zoom"), "");
         compare(Minimized.configCall("titlebarDoubleClick", "zoom\") os.exit() --"), "");
         compare(Minimized.configCall("titlebarDoubleClick", undefined), "");
-        compare(Minimized.configCall("appearance", "dark"), "");
+        compare(Minimized.configCall("titlebarDoubleClick", "dark"), "");
+        compare(Minimized.configCall("windowRule", "zoom"), "");
         compare(Minimized.configCall("__proto__", "zoom"), "");
         compare(Minimized.configCall("constructor", "zoom"), "");
+    }
+
+    // Stages from Settings (owner decision D-4, audit ARCH-05): the flag key and the verb the strip uses.
+    function test_stagesFlagAndVerb() {
+        compare(Minimized.configCall("stagesEnabled", "true"),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.config then p.config(\"stagesEnabled\", \"true\") end end");
+        verify(Minimized.configCall("stagesEnabled", "false") !== "");
+        compare(Minimized.configCall("stagesEnabled", "yes"), "");
+        compare(Minimized.configCall("stagesEnabled", true), "", "strings only, as the plugin reads them");
+        verify(Minimized.isPluginVerb("stages"));
+    }
+
+    function test_stagesCallQuotesTheOperationAsALuaString() {
+        compare(Minimized.stagesCall({op: "off", durationMs: 0}),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.stages then p.stages(\"{\\\"op\\\":\\\"off\\\",\\\"durationMs\\\":0}\") end end");
+        verify(Minimized.stagesCall({op: "activate", stage: 7}) !== "");
+        verify(Minimized.stagesCall({op: "move", address: "0x55ab", stage: "new"}) !== "");
+        verify(Minimized.stagesCall({op: "on", durationMs: 350, strips: [{monitor: "GF-REF", hidden: false, tiles: [{x: 16, y: 100, w: 188, h: 160}]}]}) !== "");
+        // A string that tries to leave the Lua literal stays inside it: the literal, read as Lua reads it (\\ and \"),
+        // gives back exactly the JSON of the request, and the call ends where it should.
+        const request = {op: "move", address: "\") os.exit() --", stage: "\\\"\n"};
+        const sneaky = Minimized.stagesCall(request);
+        const head = "if p and p.stages then p.stages(\"";
+        const tail = "\") end end";
+        verify(sneaky.indexOf(head) > 0 && sneaky.endsWith(tail), sneaky);
+        const literal = sneaky.slice(sneaky.indexOf(head) + head.length, sneaky.length - tail.length);
+        verify(!/(^|[^\\])"/.test(literal.replace(/\\\\/g, "")), "no unescaped quote inside the literal: " + literal);
+        const decoded = literal.replace(/\\(["\\])/g, "$1");
+        compare(JSON.stringify(JSON.parse(decoded)), JSON.stringify(request));
+        // Rejected: no or unknown op, not an object, too large.
+        compare(Minimized.stagesCall({op: "explode"}), "");
+        compare(Minimized.stagesCall({}), "");
+        compare(Minimized.stagesCall(null), "");
+        compare(Minimized.stagesCall("{\"op\":\"off\"}"), "");
+        compare(Minimized.stagesCall([{op: "off"}]), "");
+        compare(Minimized.stagesCall({op: "on", pad: "x".repeat(9000)}), "");
+    }
+
+    // The appearance the compositor-drawn chrome follows (plugin feature "appearance", audit UX-06).
+    function test_configCallAppearance() {
+        compare(Minimized.configCall("appearance", "light"),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.config then p.config(\"appearance\", \"light\") end end");
+        verify(Minimized.configCall("appearance", "dark") !== "");
+        compare(Minimized.configCall("appearance", "auto"), "", "the shell sends the appearance it shows, never auto");
+        compare(Minimized.configCall("appearance", "Light"), "");
+        compare(Minimized.configCall("appearance", "light\") os.exit() --"), "");
+        compare(Minimized.configCall("appearance", true), "");
     }
 
     // Settings dock.minimizeEffect, or "fade" under Reduce Motion (plugin feature "minimize-effect").
@@ -226,6 +274,22 @@ TestCase {
     function test_tileNameFallsBackToAppName() {
         const tiles = DockModel.minimizedItems([{toplevel: "a", address: "1", appId: "foot", title: ""}], lookup);
         compare(tiles[0].name, "Foot");
+    }
+
+    // D-1 (macOS; audit GF-001), without the plugin: the Desktop that the display the window was minimized from shows now,
+    // never the display of the Dock that was clicked (the focused one).
+    function test_restoreWorkspaceIsTheOwnDisplaysCurrentDesktop() {
+        const monitors = [{name: "WAYLAND-1", workspace: 1}, {name: "GF-REF", workspace: 4}];
+        compare(Minimized.restoreWorkspace("GF-REF", monitors, 1), "4", "its own display, whichever display is focused");
+        compare(Minimized.restoreWorkspace("WAYLAND-1", monitors, 4), "1");
+        compare(Minimized.restoreWorkspace("DP-9", monitors, 1), "1", "its display is gone: the focused Desktop");
+        compare(Minimized.restoreWorkspace("", monitors, 1), "1", "no record (rebuilt after a restart): the focused Desktop");
+        compare(Minimized.restoreWorkspace(undefined, monitors, 1), "1");
+        compare(Minimized.restoreWorkspace("GF-REF", [{name: "GF-REF", workspace: -98}], 2), "2", "a special workspace is never a Desktop");
+        compare(Minimized.restoreWorkspace("GF-REF", [{name: "GF-REF", workspace: "3\", x = 1"}], 2), "2", "only plain ids");
+        compare(Minimized.restoreWorkspace("GF-REF", null, 2), "2");
+        compare(Minimized.restoreWorkspace("GF-REF", [], 0), "", "nothing valid: nothing to move to");
+        compare(Minimized.restoreWorkspace("GF-REF", [null, {name: "GF-REF", workspace: 7}], 0), "7");
     }
 
     function test_moveRequestValidates() {

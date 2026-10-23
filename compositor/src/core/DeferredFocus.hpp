@@ -8,8 +8,69 @@
 // Hyprland glue (DeferredFocus.*) reads Hyprland's state into these structs and schedules the attempts.
 
 #include <cstdint>
+#include <functional>
+#include <optional>
+#include <utility>
 
 namespace gf::deferredfocus {
+
+    // ---- one callback from the event loop ----
+
+    // One callback from an event loop at a time (coalesced), owned RAII: the callback is code of the plugin library, so
+    // destroying the owner removes a callback that is still scheduled (no call into an unloaded library or a destroyed
+    // owner; audit ARCH-21). Owners still cancel() in their stop() before dlclose. Not copyable or movable: the scheduled
+    // callback refers to this object.
+    // `Loop` is the event loop: `static std::optional<uint64_t> post(const std::function<void()>&)` schedules a call and returns
+    // its sequence (nullopt: nothing was scheduled, no event loop); `static void remove(uint64_t)` removes a scheduled one
+    // (a sequence already run is ignored). The Hyprland glue uses CEventLoopManager::doLater / removeDoLater
+    // (DeferredFocus.hpp, gf::deferredFocus::CLater); the unit tests use a fake loop.
+    template <typename Loop>
+    class CLaterOn {
+      public:
+        CLaterOn() = default;
+        CLaterOn(const CLaterOn&)            = delete;
+        CLaterOn& operator=(const CLaterOn&) = delete;
+        CLaterOn(CLaterOn&&)                 = delete;
+        CLaterOn& operator=(CLaterOn&&)      = delete;
+
+        ~CLaterOn() {
+            try {
+                cancel();
+            } catch (...) { // NOLINT(bugprone-empty-catch): a destructor must not throw into Hyprland; nothing to report to
+            }
+        }
+
+        // Schedules `fn` unless a callback is already scheduled. `fn` must not throw (wrap it in gf::guarded). False when
+        // nothing was scheduled (already scheduled, or no event loop). The callback forgets its sequence before `fn` runs,
+        // so `fn` may schedule again.
+        bool schedule(std::function<void()> fn) {
+            if (m_seq)
+                return false;
+            m_seq = Loop::post([this, fn = std::move(fn)] {
+                m_seq.reset();
+                fn();
+            });
+            return m_seq.has_value();
+        }
+
+        bool scheduled() const {
+            return m_seq.has_value();
+        }
+
+        // Removes the scheduled callback (the loop will not call it).
+        void cancel() {
+            if (const auto seq = std::exchange(m_seq, std::nullopt))
+                Loop::remove(*seq);
+        }
+
+        // Forgets the scheduled callback without removing it (start(): a reload after a previous stop(), which cancelled).
+        void clear() {
+            m_seq.reset();
+        }
+
+      private:
+        std::optional<uint64_t> m_seq; // the loop's sequence of the scheduled callback
+    };
 
     using WindowId = uint64_t; // Hyprland window address (compared, never dereferenced)
 

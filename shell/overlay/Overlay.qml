@@ -47,7 +47,7 @@ Variants {
         // qmllint disable missing-type
         mask: win.open && !Popups.pointerHeld ? openMask : passThrough
         // Quick Settings is several floating modules: one blur region each. Everything else is one surface.
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.open && !(Popups.kind === "dockstack" && ((holder.item as StackPopup)?.fan ?? false)) ? (Popups.kind === "controlcenter" ? modulesRegion : blurRegion) : null
         // qmllint enable missing-type
 
         // The whole output, the menu bar strip included: the strip is handed to the bar below (Popups.bars). Leaving it out
@@ -282,6 +282,8 @@ Variants {
                     return controlCenter;
                 case "dock":
                     return dockMenu;
+                case "dockstack":
+                    return stackPopup;
                 case "about":
                     return aboutPanel;
                 case "forcequit":
@@ -356,6 +358,11 @@ Variants {
         Component {
             id: dockMenu
             DockMenu {}
+        }
+
+        Component {
+            id: stackPopup
+            StackPopup {}
         }
 
         Component {

@@ -55,7 +55,7 @@ Variants {
             height: Tokens.osdHeight
             opacity: Osd.shown ? 1 : 0
             Accessible.role: Accessible.ProgressBar
-            Accessible.name: Osd.kind === "brightness" ? qsTr("Brightness %1%").arg(Math.round(Osd.level * 100)) : qsTr("Volume %1%").arg(Math.round(Osd.level * 100))
+            Accessible.name: Osd.kind === "inputsource" ? qsTr("Input source %1").arg(Osd.label) : Osd.kind === "keyboard" ? qsTr("Keyboard brightness %1%").arg(Math.round(Osd.level * 100)) : Osd.kind === "brightness" ? qsTr("Brightness %1%").arg(Math.round(Osd.level * 100)) : qsTr("Volume %1%").arg(Math.round(Osd.level * 100))
 
             Behavior on opacity {
                 NumberAnimation {
@@ -76,8 +76,29 @@ Variants {
                 name: Osd.iconName
             }
 
+            Text {
+                id: sourceName
+                visible: Osd.kind === "inputsource"
+                textFormat: Text.PlainText
+                anchors {
+                    left: glyph.right
+                    leftMargin: Tokens.spacingMd
+                    right: parent.right
+                    rightMargin: Tokens.spacingLg
+                    verticalCenter: parent.verticalCenter
+                }
+                text: Osd.label
+                elide: Text.ElideRight
+                color: Appearance.colors.text
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyMenuSize
+                font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
+                font.weight: Tokens.typographyMenuBoldWeight
+            }
+
             Rectangle {
                 id: track
+                visible: Osd.kind !== "inputsource"
                 anchors {
                     left: glyph.right
                     leftMargin: Tokens.spacingMd

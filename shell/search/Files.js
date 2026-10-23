@@ -99,7 +99,27 @@ function unescapeXml(s) {
     return s.replace(/&(lt|gt|quot|apos|amp);/g, (m, n) => ({lt: "<", gt: ">", quot: "\"", apos: "'", amp: "&"})[n]);
 }
 
-// recently-used.xbel -> [{path, mime, modified (ms)}], newest first.
+// The applications that registered a bookmark (`<bookmark:application name="Text Editor" exec="&apos;gedit %U&apos;" .../>`):
+// [{name, cmd}] with cmd the program of the exec line without its directory ("gedit").
+function xbelApps(body) {
+    const out = [];
+    const re = /<bookmark:application\s+([^>]*?)\/?>/g;
+    let m;
+    while ((m = re.exec(body)) !== null) {
+        const name = /\sname="([^"]*)"/.exec(" " + m[1]);
+        const exec = /\sexec="([^"]*)"/.exec(" " + m[1]);
+        let cmd = "";
+        if (exec) {
+            const first = /^\s*(?:'([^']*)'|"([^"]*)"|(\S+))/.exec(unescapeXml(exec[1]));
+            const line = first ? (first[1] !== undefined ? first[1] : (first[2] !== undefined ? first[2] : first[3])) : "";
+            cmd = line.trim().split(/\s+/)[0].replace(/^.*\//, "");
+        }
+        out.push({name: name ? unescapeXml(name[1]) : "", cmd: cmd});
+    }
+    return out;
+}
+
+// recently-used.xbel -> [{path, mime, modified (ms), apps: [{name, cmd}]}], newest first.
 // With home set, entries outside it (or hidden) are dropped; non-file:// URIs always are.
 function parseXbel(text, home) {
     const out = [];
@@ -117,7 +137,7 @@ function parseXbel(text, home) {
         if (path === "")
             continue;
         const t = mod ? Date.parse(mod[1]) : 0;
-        out.push({path: path, mime: mime ? mime[1] : "", modified: isNaN(t) ? 0 : t});
+        out.push({path: path, mime: mime ? mime[1] : "", modified: isNaN(t) ? 0 : t, apps: xbelApps(m[2])});
     }
     out.sort((a, b) => b.modified - a.modified);
     return out;
