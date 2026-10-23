@@ -56,24 +56,6 @@ TestCase {
         verify(!out[1].isDefault);
     }
 
-    function test_airplaneDerivation() {
-        verify(Model.airplaneOn(true, false, true, false));
-        verify(!Model.airplaneOn(true, true, true, false));
-        verify(!Model.airplaneOn(true, false, true, true));
-        verify(Model.airplaneOn(true, false, false, false));
-        verify(Model.airplaneOn(false, false, true, false));
-        verify(!Model.airplaneOn(false, false, false, false));
-    }
-
-    function test_airplaneTargets() {
-        const on = Model.airplaneTargets(true, false, true);
-        compare(on.wifi, false);
-        compare(on.bluetooth, null);
-        const off = Model.airplaneTargets(true, true, false);
-        compare(off.wifi, true);
-        compare(off.bluetooth, true);
-    }
-
     function test_stepIndex() {
         compare(Model.stepIndex(-1, 3, 1), 0);
         compare(Model.stepIndex(-1, 3, -1), 2);

@@ -31,6 +31,7 @@
  {"path": "tests/unit/tst_accent.qml", "layer": "headless"},
  {"path": "tests/unit/tst_applaunch.qml", "layer": "headless"},
  {"path": "tests/unit/tst_appmenumodel.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_airplane.qml", "layer": "headless"},
  {"path": "tests/unit/tst_appspanel.qml", "layer": "headless"},
  {"path": "tests/unit/tst_appssearch.qml", "layer": "headless"},
  {"path": "tests/unit/tst_autoappearance.qml", "layer": "headless"},
