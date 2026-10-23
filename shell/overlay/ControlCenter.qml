@@ -20,6 +20,8 @@ FocusScope {
     property string expanded: ""
     // Shown while a GRASSFIELD_DEV session suppresses a change to the owner's machine.
     property bool devNote: false
+    // Text of the note capsule: "dev: not applied" for the dev guard, or why Airplane Mode used its fallback.
+    property string noteText: qsTr("dev: not applied")
 
     readonly property real cell: Tokens.quicksettingsCell
     readonly property real gap: Tokens.quicksettingsGap
@@ -55,7 +57,8 @@ FocusScope {
         });
     }
 
-    function showDevNote(): void {
+    function showDevNote(text: string): void {
+        noteText = text ? text : qsTr("dev: not applied");
         devNote = true;
         noteTimer.restart();
     }
@@ -150,6 +153,9 @@ FocusScope {
         target: Connectivity
         function onDevSuppressed() {
             root.showDevNote();
+        }
+        function onAirplaneFallback(why) {
+            root.showDevNote(why);
         }
     }
 
@@ -609,7 +615,7 @@ FocusScope {
         Caption {
             anchors.centerIn: parent
             elide: Text.ElideNone
-            text: qsTr("dev: not applied")
+            text: root.noteText
         }
     }
 }

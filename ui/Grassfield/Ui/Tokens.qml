@@ -521,6 +521,8 @@ QtObject {
     readonly property int quicksettingsBackSize: 28
     // estimate: dev-guard note capsule
     readonly property int quicksettingsNoteHeight: 26
+    // ms: a burst of rfkill events re-reads the list once
+    readonly property int quicksettingsRfkillDebounce: 150
 
     // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00
     readonly property int autoAppearanceDarkFromHour: 19
