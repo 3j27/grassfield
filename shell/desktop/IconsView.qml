@@ -621,16 +621,18 @@ FocusScope {
         // qmllint enable uncreatable-type
         id: menuPopup
 
+        // The popup covers the whole desktop surface and never resizes or repositions: the menu is placed inside it by
+        // MenuPlace.place (pure) and a submenu opens inside it too (PopupMenu.bounds), so nothing the compositor does to fit
+        // a growing popup (flip, slide) can move the menu once it is open (macOS: a context menu never moves).
         // qmllint disable missing-type
         anchor.window: root.hostWindow
-        anchor.rect: Qt.rect(root.menuAt.x, root.menuAt.y, 1, 1)
+        anchor.rect: Qt.rect(0, 0, root.hostWindow.width, root.hostWindow.height)
         anchor.edges: Edges.Top | Edges.Left
         anchor.gravity: Edges.Bottom | Edges.Right
-        anchor.adjustment: PopupAdjustment.All
+        anchor.adjustment: PopupAdjustment.None
         // qmllint enable missing-type
-        // The menu and its open submenu (Open With ▸, Clean Up By ▸), which opens to the right of the menu.
-        implicitWidth: Math.max(1, (menuLoader.item as PopupMenu)?.extent.width ?? 1)
-        implicitHeight: Math.max(1, (menuLoader.item as PopupMenu)?.extent.height ?? 1)
+        implicitWidth: Math.max(1, root.hostWindow.width)
+        implicitHeight: Math.max(1, root.hostWindow.height)
         color: "transparent"
         grabFocus: true
         // qmllint disable missing-type
@@ -663,10 +665,28 @@ FocusScope {
             }
         }
 
+        // A click anywhere outside the menu and its open submenu dismisses it, and is swallowed (the compositor did this
+        // when the popup was only as large as the menu; the popup now covers the screen, so the shell does).
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            onPressed: mouse => {
+                const menu = menuLoader.item as PopupMenu;
+                if (!menu || !menu.containsPoint(mouse.x, mouse.y))
+                    menuPopup.visible = false;
+            }
+        }
+
         Loader {
             id: menuLoader
+            // Where the menu opens: right of and below the pointer, flipped or slid to stay on the screen (MenuPlace.place). It
+            // reads the menu's own size only, never an open submenu's.
+            readonly property point placed: MenuPlace.place({x: root.menuAt.x, y: root.menuAt.y}, {w: (item as Item)?.width ?? 0, h: (item as Item)?.height ?? 0}, {w: menuPopup.width, h: menuPopup.height}, Tokens.panelPopupMargin)
+            x: placed.x
+            y: placed.y
             active: root.menuKind !== ""
             sourceComponent: IconMenu {
+                bounds: menuPopup.contentItem
                 kind: root.menuKind
                 showKeyHints: root.fileKeyActions
                 aboutWallpaper: WallpaperState.onlineShown(root.screen.name)

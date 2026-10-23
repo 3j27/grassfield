@@ -124,6 +124,17 @@ TestCase {
         compare(Launch.forceQuitPids(null).length, 0);
     }
 
+    // Options rows (macOS): Remove from Dock for every Dock app that is not running, pinned or recent.
+    function test_optionRows() {
+        const rows = (fixed, running, pinned, recent) => Launch.optionRows({fixed: fixed, running: running, pinned: pinned, recent: recent});
+        compare(JSON.stringify(rows(false, false, true, false)), JSON.stringify({keep: false, remove: true}));
+        compare(JSON.stringify(rows(false, false, false, true)), JSON.stringify({keep: true, remove: true}));
+        compare(JSON.stringify(rows(false, true, true, false)), JSON.stringify({keep: true, remove: false}));
+        compare(JSON.stringify(rows(false, true, false, false)), JSON.stringify({keep: true, remove: false}));
+        compare(JSON.stringify(rows(true, false, true, false)), JSON.stringify({keep: false, remove: false}));
+        compare(JSON.stringify(Launch.optionRows(null)), JSON.stringify({keep: false, remove: false}));
+    }
+
     function test_menuWindowsEmpty() {
         compare(Launch.menuWindows([], 40, "App").length, 0);
         compare(Launch.menuWindows(null, 40, "App").length, 0);

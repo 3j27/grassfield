@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "MenuNav.js" as MenuNav
+import "MenuPlace.js" as MenuPlace
 
 // macOS-style menu on the frosted material. The host window supplies the blur region (see Material).
 // model: [{id, text, shortcut?, iconName?, enabled?, checked?, destructive?, separator?, submenu?: [...]}]
@@ -324,21 +325,15 @@ FocusScope {
         const right = root.width - Tokens.menuSubmenuOverlap;
         if (!root.bounds)
             return right;
-        const margin = Tokens.spacingSm;
         const origin = root.mapToItem(root.bounds, 0, 0);
-        if (origin.x + right + width <= root.bounds.width - margin)
-            return right;
-        const left = Tokens.menuSubmenuOverlap - width;
-        // No room on either side: as far right as the area allows.
-        return origin.x + left >= margin ? left : Math.max(margin - origin.x, root.bounds.width - margin - origin.x - width);
+        return MenuPlace.submenuX(origin.x, root.width, width, Tokens.menuSubmenuOverlap, root.bounds.width, Tokens.spacingSm);
     }
 
     function submenuY(rowY: real, height: real): real {
         if (!root.bounds)
             return rowY;
-        const margin = Tokens.spacingSm;
         const origin = root.mapToItem(root.bounds, 0, 0);
-        return Math.max(margin - origin.y, Math.min(rowY, root.bounds.height - margin - origin.y - height));
+        return MenuPlace.submenuY(origin.y, rowY, height, root.bounds.height, Tokens.spacingSm);
     }
 
     // Submenu. A Loader by URL: a component cannot instantiate its own type directly.
