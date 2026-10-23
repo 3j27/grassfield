@@ -34,7 +34,7 @@ dev_nested_target "$dev" || exit 2
 sig=$DEV_NESTED_SIG hypr_pid=$DEV_NESTED_PID
 shell_pid=$(dev_live_pid "$dev/shell.pid" || true)
 [[ -n $shell_pid ]] && kill -0 "$shell_pid" 2>/dev/null || { echo "abi_mismatch: grassfield-shell is not running (scripts/dev/shell-run.sh)" >&2; exit 2; }
-for tool in jq cmake ninja strings; do
+for tool in jq cmake ninja; do
   command -v "$tool" >/dev/null || { echo "abi_mismatch: $tool is needed" >&2; exit 2; }
 done
 [[ -r $version_h ]] || { echo "abi_mismatch: no Hyprland headers ($version_h)" >&2; exit 2; }
@@ -77,7 +77,8 @@ if ! { cmake -S "$root/compositor" -B "$work/build" -G Ninja -DCMAKE_BUILD_TYPE=
 fi
 so=$work/out/grassfield-compositor.so
 real_commit=$(sed -n 's/^#define[[:space:]]*GIT_COMMIT_HASH[[:space:]]*"\([0-9a-f]*\)".*/\1/p' "$version_h")
-strings "$so" | grep -q "$foreign" && ! strings "$so" | grep -q "$real_commit"
+# No pipe into grep -q under pipefail: grep stops at the first match and the writer dies of SIGPIPE (status 141).
+grep -qaF -- "$foreign" "$so" && ! grep -qaF -- "$real_commit" "$so"
 check "the build carries the foreign commit, not the running one" $? "$foreign"
 
 # The extension is unloaded at exit whatever happens: the next scenario expects the session as it found it.

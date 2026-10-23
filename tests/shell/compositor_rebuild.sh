@@ -175,6 +175,40 @@ if command -v Hyprland >/dev/null; then
     || bad "Hyprland --verify-config: the loader knows it is verifying ($(grep -m1 gf-probe <<<"$out"))"
 fi
 
+# ---- session.lua's runtime note (review of dac8e71): a start writes it, verify mode writes nothing ----
+# session.lua itself under plain Lua: hl and the other session modules are stubs, the choice is fixed to a plugin file
+# that exists; remember() and verifying() are the real ones. Verify mode is the real detection: the interpreter runs
+# with --verify-config on its command line, as Hyprland --verify-config does (/proc/self/cmdline).
+cat >"$tmp/session-harness.lua" <<'EOF'
+local root = os.getenv("GF_ROOT")
+package.path = root .. "/config/hypr/?.lua;" .. package.path
+for _, name in ipairs({ "grassfield.core", "grassfield.autostart", "grassfield.system" }) do
+  package.preload[name] = function() return {} end
+end
+package.preload["grassfield.omarchy"] = function()
+  return { ok = true, monitors = true, problems = {}, guard_path = function() end }
+end
+local compositor = require("grassfield.compositor")
+compositor.choose = function() return os.getenv("GF_TEST_PLUGIN"), "packaged" end
+local loaded = {}
+hl = {
+  plugin = { load = function(p) loaded[#loaded + 1] = p end },
+  env = function() end, on = function() end, config = function() end, monitor = function() end, exec_cmd = function() end,
+}
+dofile(root .. "/config/hypr/session.lua")
+print("loaded=" .. tostring(loaded[1]))
+EOF
+printf 'plugin\n' >"$tmp/session-plugin.so"
+mkdir -p "$tmp/rt-start" "$tmp/rt-verify"
+out=$(GF_ROOT=$root GRASSFIELD_CONFIG_DIR=$root/config/hypr GF_TEST_PLUGIN=$tmp/session-plugin.so XDG_RUNTIME_DIR=$tmp/rt-start \
+  HYPRLAND_INSTANCE_SIGNATURE=$sig lua "$tmp/session-harness.lua" 2>&1)
+expect "session.lua: a start loads the chosen build" "$(grep '^loaded=' <<<"$out")" "loaded=$tmp/session-plugin.so"
+expect "session.lua: a start writes the runtime note of its instance" "$(cat "$tmp/rt-start/grassfield-compositor-$sig" 2>/dev/null)" "$tmp/session-plugin.so"
+out=$(GF_ROOT=$root GRASSFIELD_CONFIG_DIR=$root/config/hypr GF_TEST_PLUGIN=$tmp/session-plugin.so XDG_RUNTIME_DIR=$tmp/rt-verify \
+  HYPRLAND_INSTANCE_SIGNATURE=$sig lua "$tmp/session-harness.lua" --verify-config 2>&1)
+expect "session.lua: verify mode still parses the loader" "$(grep '^loaded=' <<<"$out")" "loaded=$tmp/session-plugin.so"
+expect "session.lua: verify mode writes no runtime note" "$(ls -A "$tmp/rt-verify")" ""
+
 # ---- the user rebuild and the vetting, on temporary directories ----
 lib=$tmp/lib src=$tmp/src tools=$tmp/tools cache=$tmp/cache
 mkdir -p "$lib" "$src" "$tools"

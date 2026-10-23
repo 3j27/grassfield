@@ -17,6 +17,7 @@ check: check-config check-schema check-shell check-shaders check-i18n check-scri
 # verify mode, config/hypr/grassfield/compositor.lua verifying()).
 check-config:
     rt=$(mktemp -d); trap 'rm -rf "$rt"' EXIT; \
+    [[ -r /usr/include/hyprland/src/version.h ]] || { echo "check-config: no Hyprland headers (/usr/include/hyprland/src/version.h): install hyprland" >&2; exit 1; }; \
     commit=$(sed -n 's/^#define[[:space:]]*GIT_COMMIT_HASH[[:space:]]*"\([0-9a-f]*\)".*/\1/p' /usr/include/hyprland/src/version.h); \
     for cfg in dev session; do \
       XDG_RUNTIME_DIR=$rt HYPRLAND_INSTANCE_SIGNATURE=${commit:-0000000}_0_verify \
