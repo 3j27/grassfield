@@ -92,10 +92,12 @@ does not check its gate.
 | controlcenter | volume, brightness, volumeLevel, brightnessLevel | dev | `tests/shell/cc_sliders_ipc.sh` (REQ-QS-CC5/CC6); in a real session the acceptance uses the sliders themselves |
 | dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
 | dock | hover, unhover, reveal, menu | dev | UI automation for tests |
-| dock | pinned, forceinterrupt, forcehold, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, magnify, click, centre | fixtures | visual tests; `click` launches an app |
-| osd | display, hide | dev | OSD spoofing |
+| dock | pinned, forceinterrupt, forcehold, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, stack, addfolder | fixtures | visual tests; `click` launches an app; `addfolder` changes `dock.folders` |
+| dockstack | state, depth, enter, back | fixtures | visual tests of the open folder stack (it lists a folder's file names) |
+| osd | display, hide, layout, state | dev | OSD spoofing (`layout` feeds a keyboard layout event) |
 | volume | up, down, mute | action | volume keys |
 | brightness | up, down | action | brightness keys |
+| keyboard | up, down | action | keyboard backlight keys (XF86KbdBrightnessUp/Down) |
 | capabilities | status | dev | visual tests wait on it |
 | bartone | status | dev | visual tests |
 | wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |

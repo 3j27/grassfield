@@ -132,6 +132,9 @@ function releaseDone(held, settled, forced) {
 function closeTarget(choice, previous, stayOnSpace) {
     if (choice && choice.kind === "other")
         return {kind: "skip"};
+    // A minimized window restored from the strip: the restore itself focuses it (Compositor.unminimize), nothing else is asked.
+    if (choice && choice.kind === "minimized")
+        return {kind: "skip"};
     if (choice && choice.kind === "ended")
         return choice.workspace > 0 ? {kind: "workspace", workspace: Math.floor(choice.workspace)} : {kind: "none"};
     if (choice && choice.kind === "window" && choice.address)

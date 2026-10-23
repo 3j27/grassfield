@@ -240,14 +240,41 @@ function layout(rects, area, opts) {
 // Spaces bar, above the Dock (when it takes space) and above the strip for the window label under the bottom row.
 // size {w, h} is the output size; r {menubar, barBottom, margin, label, dock, dockLeft, dockRight}, dock = the Dock's
 // height at the bottom and dockLeft / dockRight its width on a side edge (0 for an auto-hidden Dock or another edge).
+// `strip` (optional) is the height of the minimized-windows strip at the bottom (stripHeight).
 function freeArea(size, r) {
     const left = r.dockLeft || 0;
     return {
         x: r.margin + left,
         y: r.barBottom + r.margin,
         w: size.w - 2 * r.margin - left - (r.dockRight || 0),
-        h: size.h - r.menubar - r.barBottom - 2 * r.margin - r.label - r.dock
+        h: size.h - r.menubar - r.barBottom - 2 * r.margin - r.label - r.dock - (r.strip || 0)
     };
+}
+
+// ---- Minimized windows (macOS Mission Control: a row of smaller tiles below a divider) ----
+
+// Height of the minimized strip at the bottom of the free area: tile, title and the room above and below. 0 without any.
+// t = {w, h, label, gap, pad}.
+function stripHeight(count, t) {
+    return count > 0 ? t.h + t.label + 2 * t.pad : 0;
+}
+
+// Tiles of the strip: one row centred in `b` = {x, w, bottom} (bottom = the lowest y the strip may use), each tile t.w x
+// t.h, narrower (the same aspect) when the row would not fit. Returns {height, dividerY, rects: [{x, y, w, h}]}: the
+// divider is a hairline at dividerY, the tiles start t.pad below it and the title goes under each tile.
+function stripRects(count, b, t) {
+    if (!(count > 0))
+        return {height: 0, dividerY: b.bottom, rects: []};
+    const w = Math.max(1, Math.min(t.w, (b.w - (count - 1) * t.gap) / count));
+    const h = w * t.h / t.w;
+    const height = stripHeight(count, t);
+    const top = b.bottom - height;
+    const total = count * w + (count - 1) * t.gap;
+    const x0 = b.x + (b.w - total) / 2;
+    const rects = [];
+    for (let i = 0; i < count; i++)
+        rects.push({x: x0 + i * (w + t.gap), y: top + t.pad, w: w, h: h});
+    return {height: height, dividerY: top, rects: rects};
 }
 
 function intersects(a, b) {

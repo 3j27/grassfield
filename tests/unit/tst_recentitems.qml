@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../shell/services/RecentItemsLogic.js" as Logic
+import "../../shell/search/Files.js" as Files
 
 // Recent Items of the Grassfield menu (macOS Apple menu > Recent Items): launch history, Clear Menu, the submenu rows.
 TestCase {
@@ -63,5 +64,40 @@ TestCase {
         const empty = Logic.menu([], [], texts);
         compare(empty.filter(r => !r.separator).map(r => r.id).join(","), "recentHeader,recentHeader,recentClear");
         verify(!empty.find(r => r.id === "recentClear").enabled, "nothing to clear");
+    }
+
+    // REQ-DOCK-PAR-d6: recent documents of one application, for its Dock menu.
+    readonly property string xbel: "<xbel>"
+        + "<bookmark href=\"file:///home/u/a.txt\" modified=\"2026-01-02T00:00:00Z\"><info><metadata>"
+        + "<bookmark:applications><bookmark:application name=\"Text Editor\" exec=\"&apos;gedit %U&apos;\" modified=\"2026-01-02T00:00:00Z\" count=\"1\"/></bookmark:applications>"
+        + "</metadata></info></bookmark>"
+        + "<bookmark href=\"file:///home/u/b.png\" modified=\"2026-01-03T00:00:00Z\"><info><metadata>"
+        + "<bookmark:applications><bookmark:application name=\"Image Viewer\" exec=\"/usr/bin/eog %u\" count=\"1\"/><bookmark:application name=\"Text Editor\" exec=\"gedit\" count=\"1\"/></bookmark:applications>"
+        + "</metadata></info></bookmark>"
+        + "<bookmark href=\"file:///home/u/c.md\" modified=\"2026-01-04T00:00:00Z\"><info></info></bookmark></xbel>"
+
+    function test_xbelApplications() {
+        const r = Files.parseXbel(xbel);
+        compare(r.length, 3);
+        compare(r[0].path, "/home/u/c.md");
+        compare(r[0].apps.length, 0);
+        compare(r[1].apps.map(a => a.cmd).join(), "eog,gedit");
+        compare(r[2].apps[0].name, "Text Editor");
+        compare(r[2].apps[0].cmd, "gedit");
+    }
+
+    function test_documentsOfOneApp() {
+        const list = Files.parseXbel(xbel);
+        const state = {apps: [], clearedAt: 0};
+        const gedit = Logic.documentsForApp(list, {name: "Text Editor", cmd: "gedit"}, state, 5).map(d => d.path);
+        compare(gedit.join(), "/home/u/b.png,/home/u/a.txt", "newest first, by name or by program");
+        compare(Logic.documentsForApp(list, {name: "", cmd: "/usr/bin/eog"}, state, 5).map(d => d.path).join(), "/home/u/b.png");
+        compare(Logic.documentsForApp(list, {name: "text editor", cmd: ""}, state, 1).length, 1, "capped, case-insensitive");
+        compare(Logic.documentsForApp(list, {name: "Nope", cmd: "nope"}, state, 5).length, 0);
+        compare(Logic.documentsForApp(list, null, state, 5).length, 0);
+        compare(Logic.documentsForApp(list, {name: "", cmd: ""}, state, 5).length, 0, "an app with no identity matches nothing");
+        const cleared = {apps: [], clearedAt: Date.parse("2026-01-02T12:00:00Z")};
+        compare(Logic.documentsForApp(list, {name: "Text Editor", cmd: "gedit"}, cleared, 5).map(d => d.path).join(), "/home/u/b.png", "Clear Menu hides older documents");
+        compare(Logic.documentsForApp(null, {name: "x", cmd: "x"}, state, 5).length, 0);
     }
 }

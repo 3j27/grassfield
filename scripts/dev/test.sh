@@ -217,6 +217,11 @@ if want logic; then
   python3 -I tests/visual/test_contrast.py || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/visual/test_contrast.py "$rc" PASS
+  # Gate P3's frame statistics (tests/visual/frame-stats.py) on synthetic frame streams.
+  rc=0
+  python3 -I tests/visual/test_frame_stats.py >/dev/null || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/visual/test_frame_stats.py "$rc" PASS
   # Gate A2, exact token calculation (primary evidence): every text role over the worst-case wallpapers, both appearances, transparency 0..0.6.
   rc=0
   python3 -I tests/visual/test_contrast_tokens.py || rc=1

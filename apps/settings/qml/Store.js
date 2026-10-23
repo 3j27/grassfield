@@ -24,6 +24,7 @@ const DEFAULTS = {
     "dock.magnificationEnabled": false,
     "dock.autohide": false,
     "dock.showRecents": true,
+    "dock.folders": ["~/Downloads"],
     "dock.minimizeIntoApp": false,
     "dock.animateOpening": true,
     "dock.showIndicators": true,
@@ -82,6 +83,7 @@ const RULES = {
     "dock.magnificationEnabled": {type: "boolean"},
     "dock.autohide": {type: "boolean"},
     "dock.showRecents": {type: "boolean"},
+    "dock.folders": {type: "pathList"},
     "dock.minimizeIntoApp": {type: "boolean"},
     "dock.animateOpening": {type: "boolean"},
     "dock.showIndicators": {type: "boolean"},
@@ -154,6 +156,12 @@ function validate(path, value) {
     case "notificationApps": {
         const why = Tree.NotificationPrefs.problem(value);
         return why === "" ? "" : path + ": " + why;
+    }
+    case "pathList": {
+        // Folders kept in the Dock as stacks: absolute paths or ~/ ones, as the Dock reads them (shell/dock/Stacks.js folderList).
+        const ok = Array.isArray(value) && value.length <= 12 && value.every(v => typeof v === "string" && v !== "" && v.length <= 4096
+            && !/[\u0000-\u001f]/.test(v) && (v.indexOf("/") === 0 || v.indexOf("~/") === 0) && v.split("/").indexOf("..") < 0);
+        return ok ? "" : path + ": expected at most 12 absolute paths without control characters";
     }
     case "boolean":
         return typeof value === "boolean" ? "" : path + ": expected true or false";
