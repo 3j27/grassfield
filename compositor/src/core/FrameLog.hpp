@@ -3,8 +3,8 @@
 // Presented-frame timestamps per monitor (ADR-0006 gate P3: "≥ 95 % frames < 16.7 ms during dock magnification, Mission
 // Control open/close, Launchpad open"; the method needs presentation times, not render-thread times). The plugin records
 // the time of every presented frame of each monitor (Hyprland's CMonitor::m_events.presented, the output's presentation
-// feedback) in a ring; `hyprctl grassfield-frames` returns them; tests/compositor/frame_pacing.sh turns them into frame
-// pacing over the window of a real shell animation. Pure (no Hyprland include): unit-tested in tests/FrameLogTest.cpp.
+// feedback) in a ring; `hyprctl grassfield-frames` returns them; tests/visual/presented-frames.sh turns them into frame
+// pacing over the window of a real shell animation. Pure (no Hyprland include): unit-tested in compositor/tests/FrameLogTest.cpp.
 
 #include <cstddef>
 #include <cstdint>

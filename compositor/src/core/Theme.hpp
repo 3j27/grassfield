@@ -5,8 +5,8 @@
 // Single source of the plugin's visual values. The colours of the chrome come from the design tokens
 // (ui/tokens/tokens.json groups "titlebar" and "window", generated into ThemeTokens.hpp, ADR-0003); the metrics below are
 // still plain literals (tests/compositor/titlebar_geometry.sh reads them) and must equal the "window" tokens the apps
-// draw their own lights with (ADR-0015 P7): checked at compile time below and in tests/ThemeTest.cpp. Grassfield's own
-// values, not Apple's. No Hyprland includes: this header is used by the unit tests.
+// draw their own lights with (ADR-0015 P7): checked at compile time below and in compositor/tests/ClientChromeTest.cpp.
+// Grassfield's own values, not Apple's. No Hyprland includes: this header is used by the unit tests.
 
 #include "ThemeTokens.hpp"
 
