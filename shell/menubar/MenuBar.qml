@@ -162,6 +162,12 @@ Scope {
 
             required property ShellScreen modelData
 
+            // Gate P5: the first frame of this bar counts toward "grassfield-shell: usable" (platform/Usable.qml).
+            UsableProbe {
+                kind: "bar"
+                screenName: win.modelData.name
+            }
+
             // Last non-empty app: layer-shell focus (a popup is open) clears the active toplevel.
             // It only counts while that app still has a window: a killed last window must not leave
             // its name in the bar.

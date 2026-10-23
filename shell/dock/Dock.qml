@@ -687,6 +687,13 @@ Scope {
 
             required property ShellScreen modelData
 
+            // Gate P5: the first frame of this Dock counts toward "grassfield-shell: usable" (platform/Usable.qml).
+            UsableProbe {
+                kind: "dock"
+                screenName: win.modelData.name
+                active: win.visible
+            }
+
             // Tile size (Settings > Size): everything below follows it (Geometry.metrics).
             readonly property int iconSize: root.sizeNow
             // The window is as deep as the largest Dock needs, whatever the size now: resizing never reconfigures the layer surface
