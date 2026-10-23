@@ -7,14 +7,15 @@ shell runs with GRASSFIELD_RENDER_TIMING=1: scripts/dev/shell-run.sh --render-ti
 
 Each "frame rendered in R ms" line of the render thread is one frame of the surface being exercised (the shell draws
 nothing while idle, so the log of a scenario holds the scenario's frames). The times are whole milliseconds, so a frame
-is "within the budget" when R < threshold (R <= 16 for 16.7 ms). Verdict (master-prompt §10 P3: >= 95 % of frames
-< 16.7 ms): PASS at or above --min-share; FAIL below; INCONCLUSIVE (exit 2) with fewer than --min-frames frames, which
-is no evidence either way. One line is printed with the frame count, the share, p50/p95/p99 and the slowest frame.
+is "within the budget" when R < threshold (R <= 16 for 16.7 ms). One line is printed with the frame count, the share,
+p50/p95/p99 and the slowest frame.
 
-This is the shell's own render time (sync + render + swap), the method already used by tests/visual/apps-frames.py; the
-compositor's presentation feedback is not measured.
+THIS TOOL NEVER PRINTS PASS. Gate P3 (master-prompt §10, a † gate; ADR-0006) is defined on wp_presentation timestamps
+from a probe client, measured on the owner's real session. The shell's own render time (sync + render + swap, the method
+of tests/visual/apps-frames.py) is only a proxy: below --min-share it prints "PROXY FAIL" (exit 1, indicative); at or
+above it prints "PROXY, NOT VERIFIED" (exit 2); fewer than --min-frames frames is INCONCLUSIVE (exit 2).
 
-Exit: 0 PASS, 1 FAIL, 2 INCONCLUSIVE or usage error. Standard library only (python3 -I).
+Exit: 1 PROXY FAIL, 2 anything else (never 0). Standard library only (python3 -I).
 """
 import argparse
 import re
@@ -45,9 +46,12 @@ def verdict(values, threshold_ms, min_share, min_frames):
     stats = f"{within}/{n} frames < {threshold_ms:g} ms = {share:.1f} %, p50 {percentile(s, .5)} ms, p95 {percentile(s, .95)} ms, p99 {percentile(s, .99)} ms, slowest {s[-1]} ms"
     if n < min_frames:
         return 2, share, f"INCONCLUSIVE: only {n} frames (minimum {min_frames}); {stats}"
+    # P3 is defined on wp_presentation timestamps (ADR-0006) measured by the owner (L2, †). The shell's render-thread time
+    # is a proxy: it can say "clearly not met", never "met".
     if share >= min_share:
-        return 0, share, f"PASS: {stats} (needs >= {min_share:g} %)"
-    return 1, share, f"FAIL: {stats} (needs >= {min_share:g} %)"
+        return 2, share, (f"PROXY, NOT VERIFIED (not a pass: the gate needs wp_presentation timestamps, ADR-0006): shell render-thread "
+                          f"time meets the share, {stats} (needs >= {min_share:g} %)")
+    return 1, share, f"PROXY FAIL (indicative: shell render-thread time, not wp_presentation): {stats} (needs >= {min_share:g} %)"
 
 
 def selftest():
@@ -60,18 +64,19 @@ def selftest():
     log = "".join(f"2026-10-23 10:00:{i % 60:02d}.000 INFO qml: frame rendered in {ms} ms, sync=0, render=1, swap=2\n"
                   for i, ms in enumerate([8] * 96 + [30] * 4))
     expect("frames parsed", len(frames(log)), 100)
-    expect("96 % passes", verdict(frames(log), 16.7, 95, 100)[0], 0)
+    expect("96 % is only a proxy, never a pass", verdict(frames(log), 16.7, 95, 100)[0], 2)
+    expect("96 % says NOT VERIFIED", "NOT VERIFIED" in verdict(frames(log), 16.7, 95, 100)[2] and "PASS:" not in verdict(frames(log), 16.7, 95, 100)[2], True)
     log2 = "".join(f"frame rendered in {ms} ms\n" for ms in [8] * 90 + [30] * 10)
-    expect("90 % fails", verdict(frames(log2), 16.7, 95, 100)[0], 1)
+    expect("90 % is a proxy fail", verdict(frames(log2), 16.7, 95, 100)[0], 1)
     expect("few frames inconclusive", verdict([8] * 10, 16.7, 95, 100)[0], 2)
     expect("no frames inconclusive", verdict([], 16.7, 95, 100)[0], 2)
-    expect("16 ms is within 16.7", verdict([16] * 100, 16.7, 95, 100)[0], 0)
+    expect("16 ms is within 16.7", verdict([16] * 100, 16.7, 95, 100)[2].startswith("PROXY, NOT VERIFIED"), True)
     expect("17 ms is not", verdict([17] * 100, 16.7, 95, 100)[0], 1)
-    expect("exactly at the share", verdict([8] * 95 + [30] * 5, 16.7, 95, 100)[0], 0)
+    expect("exactly at the share", verdict([8] * 95 + [30] * 5, 16.7, 95, 100)[0], 2)
     if fails:
         print("\n".join("FAIL: " + f for f in fails))
         return 1
-    print("frame_pacing selftest: PASS (8 cases)")
+    print("frame_pacing selftest: PASS (9 cases)")
     return 0
 
 

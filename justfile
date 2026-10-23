@@ -132,7 +132,7 @@ coverage *args:
 gate-idle *args:
     scripts/gates/idle-cpu.sh {{args}}
 
-# Gate P2: resident memory against the omarchy-shell baseline, e.g. `just gate-rss --real --baseline-mb 310` (bare command).
+# Gate P2: resident memory against the omarchy-shell baseline, e.g. `just gate-rss --real --baseline-mb 458` (bare command).
 gate-rss *args:
     scripts/gates/rss.sh {{args}}
 

@@ -11,7 +11,9 @@
 # .dev/shell.log into .dev/gates/frame-pacing/<surface>.<timestamp>.log and judged by scripts/gates/frame_pacing.py:
 # >= 95 % of the frames < 16.7 ms and at least 100 frames. The gate asks for the Balanced power profile: the profile in
 # force is printed (powerprofilesctl get), it is not changed.
-# Exit: 0 every surface PASS, 1 any FAIL, 2 any INCONCLUSIVE (too few frames) or an environment error.
+# This is an L1 PROXY (the shell's render-thread time): the verdict lines say "PROXY, NOT VERIFIED" or "PROXY FAIL" and the
+# script never exits 0. The dagger gate itself needs wp_presentation timestamps on the owner's real session (ADR-0006).
+# Exit: 1 any PROXY FAIL, 2 otherwise (not verified, too few frames, or an environment error).
 source "$(dirname "$0")/../../tests/visual/lib.sh"
 
 what=${1:-all}

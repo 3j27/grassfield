@@ -14,7 +14,9 @@
 #     --seconds N      window length, default 600 (10 minutes)
 #     --interval S     sampling period, default 10 s
 #     --max-delta PCT  allowed excess over the baseline, default 0.5
-#     --min-seconds N  a shorter window is INCONCLUSIVE, default 60 (the 10-minute window is what the gate asks for)
+#     --min-seconds N  a shorter window is INCONCLUSIVE, default 60
+#     --gate-seconds N the window the gate defines, default 600: PASS needs at least that many seconds; shorter ones print
+#                      "PROXY, NOT VERIFIED". --nested is always a proxy (P1 is a † gate: owner-run, real session).
 #
 # The desktop must be idle (nothing open, nothing moving): the script reports what it measured, not what the screen did.
 # Prints per process: pid, name, samples, window, CPU ticks, mean and peak interval CPU; then one verdict line.
@@ -24,7 +26,7 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 # shellcheck source=lib.sh
 . "$root/scripts/gates/lib.sh"
 
-seconds=600 interval=10 maxdelta=0.5 minseconds=60 baseline="" baseline_pid="" nested=0 real=0
+seconds=600 gatesec=600 interval=10 maxdelta=0.5 minseconds=60 baseline="" baseline_pid="" nested=0 real=0
 pids=() labels=()
 while (($#)); do
   case $1 in
@@ -37,6 +39,7 @@ while (($#)); do
     --interval) shift; interval=$1 ;;
     --max-delta) shift; maxdelta=$1 ;;
     --min-seconds) shift; minseconds=$1 ;;
+    --gate-seconds) shift; gatesec=$1 ;;
     -h | --help) sed -n '2,/^set -uo/p' "$0" | sed '$d;s/^# \{0,1\}//'; exit 0 ;;
     *) echo "idle-cpu: unknown argument $1 (--help)" >&2; exit 2 ;;
   esac
@@ -114,9 +117,15 @@ if ((window < minseconds || samples < 3)); then
   exit 2
 fi
 if ((fail)); then echo "P1: FAIL (a measured process vanished); sum $total % of one core"; exit 1; fi
+# P1 is a † gate: owner-run, real session, 10 minutes (master-prompt §10). PASS needs exactly that measurement.
+if ((nested)); then proxy="nested session, not the owner's real session"; elif ((window < gatesec)); then proxy="a ${window} s window, the gate asks for ${gatesec} s"; else proxy=""; fi
 if gate_le "$total" "$bound"; then
+  if [[ -n $proxy ]]; then
+    echo "P1: PROXY, NOT VERIFIED ($proxy): sum $total % of one core <= $bound % (baseline $base + $maxdelta) over ${window} s, $samples samples; the † gate needs the owner's real session for ${gatesec} s"
+    exit 2
+  fi
   echo "P1: PASS: sum $total % of one core <= $bound % (baseline $base + $maxdelta) over ${window} s, $samples samples, ${#pids[@]} process(es)"
   exit 0
 fi
-echo "P1: FAIL: sum $total % of one core > $bound % (baseline $base + $maxdelta) over ${window} s, $samples samples, ${#pids[@]} process(es)"
+echo "P1: ${proxy:+PROXY }FAIL${proxy:+ (indicative: $proxy)}: sum $total % of one core > $bound % (baseline $base + $maxdelta) over ${window} s, $samples samples, ${#pids[@]} process(es)"
 exit 1
