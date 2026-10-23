@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # GF-AUDIT-001 SEC-02 / GF-030 / D-12: lock coverage never disappears silently.
 #   gate     packaging/systemd/sleep-lock-gate (ExecCondition of Omarchy's omarchy-sleep-lock.service) skips Omarchy's
-#            unit only in the Grassfield session while grassfield-shell is active, starting or reloading; it runs in the
-#            Omarchy session and whenever grassfield-shell is stopped, failed or unknown (a stub systemctl answers)
+#            unit only in the Grassfield session while grassfield-shell is up (active/running); it runs in the Omarchy
+#            session and whenever grassfield-shell is starting, waiting to restart after a crash (activating/auto-restart),
+#            stopped, failed or unknown (a stub systemctl answers)
 #   drop-in  10-grassfield.conf uses the gate and no longer disables Omarchy's unit unconditionally
 #   shell    grassfield-shell.service restarts after ANY exit (Restart=always, not on-failure), has a start limit, starts
 #            Omarchy's unit when it has failed for good (OnFailure=, the fail-safe), never stops that unit (it may be
@@ -22,34 +23,39 @@ bad() { echo "FAIL: sleep-lock units $*"; fail=1; }
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/sleep-lock-units.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
-# --- gate: a stub systemctl prints the state the case wants (or fails) ---
+# --- gate: a stub systemctl prints the ActiveState and SubState the case wants (or fails) ---
 mkdir -p "$tmp/bin"
 cat >"$tmp/bin/systemctl" <<'SH'
 #!/bin/sh
-[ "$*" = "--user show --property=ActiveState --value grassfield-shell.service" ] || { echo "unexpected: $*" >&2; exit 9; }
 [ "$STUB_STATE" = "<fail>" ] && exit 1
-printf '%s\n' "$STUB_STATE"
+case "$*" in
+  "--user show --property=ActiveState --value grassfield-shell.service") printf '%s\n' "$STUB_STATE" ;;
+  "--user show --property=SubState --value grassfield-shell.service") printf '%s\n' "$STUB_SUBSTATE" ;;
+  *) echo "unexpected: $*" >&2; exit 9 ;;
+esac
 SH
 chmod +x "$tmp/bin/systemctl"
-gate() { # <GRASSFIELD_SESSION or -> <state> -> prints the gate's exit code
+gate() { # <GRASSFIELD_SESSION or -> <ActiveState> <SubState> -> prints the gate's exit code
   local session=$1 rc=0
   if [[ $session == - ]]; then
-    env -i PATH="$tmp/bin:/usr/bin:/bin" STUB_STATE="$2" sh packaging/systemd/sleep-lock-gate || rc=$?
+    env -i PATH="$tmp/bin:/usr/bin:/bin" STUB_STATE="$2" STUB_SUBSTATE="$3" sh packaging/systemd/sleep-lock-gate || rc=$?
   else
-    env -i PATH="$tmp/bin:/usr/bin:/bin" STUB_STATE="$2" GRASSFIELD_SESSION="$session" sh packaging/systemd/sleep-lock-gate || rc=$?
+    env -i PATH="$tmp/bin:/usr/bin:/bin" STUB_STATE="$2" STUB_SUBSTATE="$3" GRASSFIELD_SESSION="$session" sh packaging/systemd/sleep-lock-gate || rc=$?
   fi
   echo "$rc"
 }
-for state in active activating reloading refreshing; do
-  [[ $(gate 1 "$state") == 1 ]] && pass "gate: Grassfield session, grassfield-shell $state -> Omarchy's unit skipped" \
-    || bad "gate: Grassfield session, grassfield-shell $state -> not skipped"
+[[ $(gate 1 active running) == 1 ]] && pass "gate: Grassfield session, grassfield-shell active/running -> Omarchy's unit skipped" \
+  || bad "gate: Grassfield session, grassfield-shell active/running -> not skipped"
+# N1: after a crash the shell is activating/auto-restart, then activating/start: no Grassfield inhibitor exists then.
+for pair in "activating auto-restart" "activating start" "active exited" "reloading running" "inactive dead" "failed failed" \
+  "deactivating stop-sigterm" "maintenance dead" "<fail> x"; do
+  read -r unit_state unit_sub <<<"$pair"
+  [[ $(gate 1 "$unit_state" "$unit_sub") == 0 ]] && pass "gate: Grassfield session, grassfield-shell '$pair' -> Omarchy's unit runs" \
+    || bad "gate: Grassfield session, grassfield-shell '$pair' -> skipped"
 done
-for state in inactive failed deactivating maintenance "" "<fail>"; do
-  [[ $(gate 1 "$state") == 0 ]] && pass "gate: Grassfield session, grassfield-shell '${state}' -> Omarchy's unit runs" \
-    || bad "gate: Grassfield session, grassfield-shell '${state}' -> skipped"
-done
+[[ $(gate 1 "" "") == 0 ]] && pass "gate: Grassfield session, no answer -> Omarchy's unit runs" || bad "gate: no answer -> skipped"
 for session in - 0 ""; do
-  [[ $(gate "$session" active) == 0 ]] && pass "gate: not the Grassfield session (GRASSFIELD_SESSION '$session') -> Omarchy's unit runs" \
+  [[ $(gate "$session" active running) == 0 ]] && pass "gate: not the Grassfield session (GRASSFIELD_SESSION '$session') -> Omarchy's unit runs" \
     || bad "gate: GRASSFIELD_SESSION '$session' -> skipped"
 done
 [[ -x packaging/systemd/sleep-lock-gate ]] && pass "gate: executable in the tree" || bad "gate: not executable"
@@ -132,9 +138,16 @@ out=$(shimrun active ok "$half" lock status)
 out=$(shimrun active ok "[]" lock status)
 [[ $(jq -r '.secure' <<<"$out") == false ]] && pass "stand-in: status not secure without a monitor answer" || bad "stand-in: status '$out' without monitors"
 [[ $(jq -r '.requested' <<<"$out") == false ]] && pass "stand-in: not requested without the crash-recovery marker" || bad "stand-in: requested '$out'"
-printf 'locked\n' >"$tmp/run/grassfield-lock-sig_1_x"
-out=$(shimrun active ok "$half" lock status)
-[[ $(jq -r '.requested' <<<"$out") == true ]] && pass "stand-in: requested once the marker (LockMachine.markerName) says locked" || bad "stand-in: marker ignored: '$out'"
+for line in "locked" "locked sleeps=12"; do
+  printf '%s\n' "$line" >"$tmp/run/grassfield-lock-sig_1_x"
+  out=$(shimrun active ok "$half" lock status)
+  [[ $(jq -r '.requested' <<<"$out") == true ]] && pass "stand-in: requested once the marker (LockMachine.markerName) says '$line'" || bad "stand-in: marker '$line' ignored: '$out'"
+done
+for line in "unlocked sleeps=12" "unlocked" "lockedx"; do
+  printf '%s\n' "$line" >"$tmp/run/grassfield-lock-sig_1_x"
+  out=$(shimrun active ok "$half" lock status)
+  [[ $(jq -r '.requested' <<<"$out") == false ]] && pass "stand-in: not requested with the marker '$line'" || bad "stand-in: marker '$line' read as requested: '$out'"
+done
 for args in "lock unlock" "notifications dismissAll" "shell toggle omarchy.menu"; do
   out=$(shimrun active ok "$locked" $args; echo "rc=$shim_rc")
   [[ $out == "rc=1" ]] && ! grep -q "^qs \|systemctl --user start" "$tmp/log" && pass "stand-in: '$args' fails and does nothing" || bad "stand-in: '$args' -> $out / $(tr '\n' ';' <"$tmp/log")"
@@ -142,6 +155,17 @@ done
 out=$(shimrun active ok "$locked" -q lock unlock; echo "rc=$shim_rc")
 [[ $out == "rc=0" ]] && ! grep -q "^qs " "$tmp/log" && pass "stand-in: -q makes an unknown call a silent success, still doing nothing" || bad "stand-in: -q gave $out"
 grep -q "unlock_and_destroy\|lock unlock\|call lock release" "$shim" && bad "stand-in: mentions an unlock call" || pass "stand-in: has no unlock path"
+
+# --- the clamshell stand-in (N4): Omarchy's sleep-lock and wake scripts call omarchy-hyprland-monitor-clamshell; in this
+# session it must hand over to grassfield-lid's own reconcile instead of Omarchy's panel switching ---
+clam=packaging/shims/omarchy-hyprland-monitor-clamshell
+printf '#!/bin/sh\necho "lid $*" >>"$STUB_LOG"\n' >"$tmp/sbin/grassfield-lid"
+chmod +x "$tmp/sbin/grassfield-lid"
+: >"$tmp/log"
+env -i PATH="$tmp/sbin:/usr/bin:/bin" STUB_LOG="$tmp/log" GRASSFIELD_LID_TOOL="$tmp/sbin/grassfield-lid" sh "$clam" && rc=0 || rc=$?
+[[ $rc == 0 && $(cat "$tmp/log") == "lid reconcile" ]] && pass "clamshell stand-in: runs grassfield-lid reconcile, nothing else" || bad "clamshell stand-in: rc $rc, calls '$(cat "$tmp/log")'"
+env -i PATH="/usr/bin:/bin" GRASSFIELD_LID_TOOL="$tmp/none" sh "$clam" && pass "clamshell stand-in: without grassfield-lid it does nothing and succeeds" || bad "clamshell stand-in: fails without grassfield-lid"
+grep -v '^#' "$clam" | grep -q "hyprctl\|monitors.lua\|toggles" && bad "clamshell stand-in: touches monitors itself" || pass "clamshell stand-in: never touches monitors itself"
 
 # --- package ---
 grep -q 'install -Dm755 "$root/packaging/systemd/sleep-lock-gate" "$pkgdir/usr/lib/grassfield/sleep-lock-gate"' packaging/arch/PKGBUILD \

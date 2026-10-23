@@ -1,0 +1,12 @@
+#!/bin/sh
+# Grassfield session stand-in for Omarchy's clamshell helper (follow-up N4). Installed to
+# /usr/lib/grassfield/omarchy-shims/, first in PATH only in a Grassfield session (see omarchy-restart-shell).
+#
+# Omarchy's sleep-lock script (omarchy-system-sleep-lock, run by omarchy-sleep-lock.service, which can run in this
+# session: packaging/systemd/omarchy-sleep-lock.service.d/10-grassfield.conf) and its wake script call this helper to
+# switch the laptop panel for clamshell mode with Omarchy's own state files and monitors.lua edits. In the Grassfield
+# session the lid and clamshell belong to /usr/lib/grassfield/grassfield-lid; running both would make them fight over
+# the laptop panel. This stand-in hands the call to grassfield-lid's reconcile (same decision, Grassfield's state).
+lid=${GRASSFIELD_LID_TOOL:-/usr/lib/grassfield/grassfield-lid}
+[ -x "$lid" ] || exit 0
+exec "$lid" reconcile
