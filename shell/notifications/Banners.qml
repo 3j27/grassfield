@@ -18,7 +18,7 @@ PanelWindow {
     // qmllint enable uncreatable-type
     id: win
 
-    readonly property string targetName: Compositor.focusedScreenName
+    readonly property string targetName: Compositor.activeScreenName
     readonly property var targetScreen: {
         for (const s of Quickshell.screens) {
             if (s.name === targetName)
@@ -28,7 +28,7 @@ PanelWindow {
     }
     readonly property int pad: Tokens.spacingLg
     // Space taken by the OSD pill (plus its gap) while it is on this screen.
-    readonly property real osdOffset: Osd.shown && targetScreen !== null && Quickshell.screens.length > 0 && targetScreen.name === Quickshell.screens[0].name ?Tokens.osdHeight + Tokens.osdGap : 0
+    readonly property real osdOffset: Osd.shown && targetScreen !== null && targetScreen.name === Compositor.activeScreenName ? Tokens.osdHeight + Tokens.osdGap : 0
 
     function itemFor(index: int): var {
         const loader = stack.itemAt(index) as Loader;

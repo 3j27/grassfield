@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import qs.platform
 import Quickshell
 
 // Which shell popup is open, where, and with which payload. One at a time. The Overlay window
@@ -80,9 +81,9 @@ Singleton {
         kind = popupKind;
     }
 
-    // Opens on the screen of the current popup, or the first screen (IPC and keyboard use).
+    // Opens on the screen of the current popup, or the active display (IPC and keyboard use).
     function openCentered(popupKind: string, payload: var): void {
-        const name = screenName !== "" ? screenName : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+        const name = screenName !== "" ? screenName : Compositor.activeScreenName;
         open(popupKind, name, 0, 0, "center", payload);
     }
 

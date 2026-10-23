@@ -109,13 +109,7 @@ Scope {
     // ---- state changes -------------------------------------------------------------------
 
     function focusedScreenName(): string {
-        const ws = Compositor.focusedWorkspace;
-        const name = ws && ws.monitor ? ws.monitor.name : "";
-        for (const s of Quickshell.screens) {
-            if (s.name === name)
-                return name;
-        }
-        return Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "";
+        return Compositor.activeScreenName;
     }
 
     function show(text: string): void {

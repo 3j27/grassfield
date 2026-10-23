@@ -262,7 +262,7 @@ Singleton {
             closeCenter();
             return;
         }
-        centerScreen = screen !== "" ? screen : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+        centerScreen = screen !== "" ? screen : Compositor.activeScreenName;
         Popups.close();
         centerOpen = true;
     }
