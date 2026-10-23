@@ -459,9 +459,14 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   over). Not for full-screen, maximized, pinned or tiled-by-layout windows. Pure logic `core/Tiling.*`
   (`placeForPointer`, `surfaceFor`), unit tests `TilingDrag.*`, `TilingPlace.*`.
 - **FR48** Preview: while the release would tile, the place's frame (titlebar included) is drawn under the dragged window
-  and over the windows behind it (the titlebar decoration's DECORATION_LAYER_UNDER pass), a translucent white rim
-  (`kTilePreviewFill`) and lighter inside (`kTilePreviewInner`), corners at the window's rounding; old and new frames
-  are damaged when the place changes and when the gesture ends or is cancelled.
+  and over the windows behind it (the titlebar decoration's DECORATION_LAYER_UNDER pass) as the **blurred material**
+  (owner decision D-8, macOS's frosted pane; audit UX-07 / GF-027): an edge of `kTilePreviewRim` px in the appearance's
+  rim colour, and inside it Hyprland's own blur of what is behind (`CRectPassElement` with `blur`, live, not xray: the
+  windows behind count) under the appearance's material tint (tokens `titlebar.previewTint*`, `previewRim*`, FR53),
+  corners at the window's rounding. One blurred element, drawn only while a drag has a place; with Hyprland's blur
+  disabled in the config the tint is drawn alone. Old and new frames are damaged when the place changes and when the
+  gesture ends or is cancelled. Measured by `tests/compositor/tiling.sh` (a pattern window behind the preview keeps under
+  30 % of its detail; an alpha-only pane keeps about 55 %).
 - **FR49** Placement: the release sets the surface box (`setTargetGeom`) to `surfaceFor(place)`: margins `kMargin` (8)
   around and between the tiles when "Tiled windows have margins" is on, the titlebar (`kTitlebarHeight`) inside the
   frame below the menu bar. The box from before the FIRST tiling is remembered (per window, forgotten when the window

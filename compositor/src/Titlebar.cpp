@@ -95,6 +95,21 @@ namespace {
         g_pHyprRenderer->addPassElement(makeUnique<CRectPassElement>(data));
     }
 
+    // A rect over Hyprland's blur of what is already drawn behind it (live blur, not xray: the windows behind count), under
+    // `tint`: the blurred material (owner decision D-8). Hyprland's own path (CRectPassElement with blur, as its group bars
+    // and other decorations use it); with Hyprland's blur disabled in the config it is drawn as the plain tint.
+    void addBlurredRect(const CBox& box, const CHyprColor& tint, int round, float roundingPower, float blurAlpha) {
+        CRectPassElement::SRectData data;
+        data.box           = box;
+        data.color         = tint;
+        data.round         = round;
+        data.roundingPower = roundingPower;
+        data.blur          = true;
+        data.xray          = false;
+        data.blurA         = blurAlpha;
+        g_pHyprRenderer->addPassElement(makeUnique<CRectPassElement>(data));
+    }
+
     const char* hitName(tb::HitTarget hit) {
         switch (hit) {
             case tb::HitTarget::None: return "none";
@@ -443,8 +458,10 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     const auto   bgColor    = toColor(palette.background, alpha);
     const int    roundPx    = static_cast<int>(std::round(rounding * scale));
 
-    // 0. A drag of this window over a tiling place: the place's frame, translucent, under the window and over the
-    //    windows behind it (this decoration is drawn under the window's surface, after the windows below it).
+    // 0. A drag of this window over a tiling place: the place's frame under the window and over the windows behind it (this
+    //    decoration is drawn under the window's surface, after the windows below it), as the blurred material (owner
+    //    decision D-8, macOS's frosted pane): its edge, then a plate of Hyprland's blur of the windows behind under the
+    //    appearance's tint. Cheap: one blurred element, only while a drag has a place, damage limited to the frame.
     if (const auto& grab = pointerInput().grab; grab.deco == this && grab.snap && grab.snap->monitor.lock() == monitor) {
         CBox preview = grab.snap->frame;
         preview.translate(-monitor->m_position);
@@ -452,7 +469,8 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
         CBox inner = grab.snap->frame;
         inner.translate(-monitor->m_position);
         inner.expand(-theme::kTilePreviewRim);
-        addRect(inner.scale(scale).round(), toColor(palette.previewTint, alpha), std::max(0, roundPx - static_cast<int>(std::round(theme::kTilePreviewRim * scale))), power);
+        addBlurredRect(inner.scale(scale).round(), toColor(palette.previewTint, alpha), std::max(0, roundPx - static_cast<int>(std::round(theme::kTilePreviewRim * scale))),
+                       power, alpha);
     }
 
     // 1. Background with rounded top corners: a rounded rect taller than the bar, clipped to the bar.
