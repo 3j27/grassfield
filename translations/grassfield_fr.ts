@@ -1071,6 +1071,26 @@
         <translation>Activer ou désactiver le masquage du Dock</translation>
     </message>
     <message>
+        <source>Bring Stage 1 forward</source>
+        <translation>Mettre le Stage 1 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 2 forward</source>
+        <translation>Mettre le Stage 2 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 3 forward</source>
+        <translation>Mettre le Stage 3 au premier plan</translation>
+    </message>
+    <message>
+        <source>Bring Stage 4 forward</source>
+        <translation>Mettre le Stage 4 au premier plan</translation>
+    </message>
+    <message>
+        <source>Move the window to a stage of its own</source>
+        <translation>Placer la fenêtre dans un Stage à part</translation>
+    </message>
+    <message>
         <source>Keyboard brightness up</source>
         <translation>Luminosité du clavier +</translation>
     </message>
