@@ -610,6 +610,35 @@ function videoBlocked(blocked, path) {
     return videoBlockedPaths(blocked).indexOf(path) >= 0;
 }
 
+// ---- Cancel of the video preparation (Settings > Wallpaper): what the display showed before, per display ----
+
+// The map of what each display showed before a video was chosen: {key: {source, path, overridden}}, `key` being "all" or a
+// display key. Returns a new map with `was` recorded for `key`; a video chosen again (the one already on screen) records nothing.
+function rememberPrevious(map, key, was, chosenPath) {
+    const next = Object.assign({}, isPlainObject(map) ? map : {});
+    if (was.source === "video" && was.path === chosenPath)
+        return next;
+    next[key] = {source: was.source, path: was.path, overridden: !!was.overridden};
+    return next;
+}
+
+// What Cancel does for the display `key` (whatever display the picker shows now has no say): {action, fields, map}. `action` is
+// "follow-all" (a display that had no wallpaper of its own: remove its override), "restore" (write `fields`: source and path),
+// or "artwork" (nothing was recorded, or the display already shows what it showed before). `map` is the map without that entry;
+// no other display's entry is touched.
+function cancelPlan(map, key, isDisplay, currentSource, currentPath) {
+    const all = Object.assign({}, isPlainObject(map) ? map : {});
+    const was = all[key];
+    delete all[key];
+    if (!was)
+        return {action: "artwork", fields: null, map: all};
+    if (isDisplay && !was.overridden)
+        return {action: "follow-all", fields: null, map: all};
+    if (was.source === "video" && was.path === currentPath && currentSource === "video")
+        return {action: "artwork", fields: null, map: all};
+    return {action: "restore", fields: {source: was.source, path: was.path}, map: all};
+}
+
 // ---- the aspect rule of the online pictures (ADR-0016 step 2) ----
 
 // A daily picture within +-35 % of the output's aspect ratio is Filled, any other (a panorama, a portrait) is Fitted on the

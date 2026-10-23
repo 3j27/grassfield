@@ -301,24 +301,26 @@ SettingsPage {
 
     // What the display showed before a video was chosen: Cancel on the progress row puts it back (macOS: Cancel leaves things as
     // they were). null when the video on screen was already the choice.
-    property var previous: null
+    property var previousBy: ({})
 
     function useVideo(p: string): void {
         // `overridden`: the chosen display had a wallpaper of its own. Without one, Cancel removes the override again (the display
         // follows All Displays as before) instead of writing a copy of the inherited values.
         const was = {source: root.source, path: root.path, overridden: root.overridden};
-        if (root.choose({"wallpaper.source": "video", "wallpaper.path": p}, "video", p) && !(was.source === "video" && was.path === p))
-            root.previous = was;
+        const key = root.displayId;
+        if (root.choose({"wallpaper.source": "video", "wallpaper.path": p}, "video", p))
+            root.previousBy = WallpaperConfig.rememberPrevious(root.previousBy, key, was, p);
     }
 
     // Cancel the preparation of the video: the wallpaper that was there before (the shell stops the job when the setting changes).
     function cancelVideo(): void {
-        const was = root.previous;
-        root.previous = null;
-        if (was && root.currentDisplay !== null && !was.overridden)
+        // The plan is for the display the page shows now; the entries of other displays stay (WallpaperConfig.cancelPlan).
+        const plan = WallpaperConfig.cancelPlan(root.previousBy, root.displayId, root.currentDisplay !== null, root.source, root.path);
+        root.previousBy = plan.map;
+        if (plan.action === "follow-all")
             root.useAllDisplays();
-        else if (was && !(was.source === "video" && was.path === root.path))
-            root.writeFields({"wallpaper.source": was.source, "wallpaper.path": was.path});
+        else if (plan.action === "restore")
+            root.writeFields({"wallpaper.source": plan.fields.source, "wallpaper.path": plan.fields.path});
         else
             root.useArtwork();
     }

@@ -50,7 +50,7 @@ check "no prepared picture was written" test -z "$(ls "$tmp/cache/wallpapers/pre
 
 # fetch against a loopback server that never answers: curl is running when the signal comes. The helper dies at once and curl
 # dies with it (parent-death signal), not after its 60 s --max-time.
-python3 -I "$root/tests/unit/wallpaper-tool/fixtures/slow_server.py" "$tmp/port" &
+python3 -I "$root/tests/unit/wallpaper-tool/fixtures/slow_server.py" "$tmp/port" >/dev/null 2>&1 </dev/null &
 slow=$!
 trap 'kill "$slow" 2>/dev/null || true; rm -rf "$tmp"' EXIT
 for _ in $(seq 1 50); do [[ -s $tmp/port ]] && break; sleep 0.1; done

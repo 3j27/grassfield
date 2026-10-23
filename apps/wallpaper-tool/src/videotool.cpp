@@ -283,6 +283,11 @@ QSize outputSize(const QSize &source, const QSize &limit)
     return QSize(even(source.width() * scale), even(source.height() * scale));
 }
 
+QSize videoLimit(const QSize &display)
+{
+    return QSize(std::min(display.width(), kMaxVideoWidth), std::min(display.height(), kMaxVideoHeight));
+}
+
 int threadCount(int cpus)
 {
     return std::clamp(cpus, 1, kMaxThreads);
@@ -325,7 +330,8 @@ QStringList frameArgs(const QString &file, double seconds, const QSize &fitInsid
             QStringLiteral("-ss"), QString::number(std::max(0.0, seconds), 'f', 3), QStringLiteral("-i"), file,
             QStringLiteral("-frames:v"), QStringLiteral("1"), QStringLiteral("-an"), QStringLiteral("-sn")};
     a += scale;
-    a += {QStringLiteral("-f"), QStringLiteral("image2pipe"), QStringLiteral("-c:v"), QStringLiteral("png"), QStringLiteral("-")};
+    // Output-side threads too: the PNG encoder sizes its pool from the CPU count otherwise (74 threads at 64 cores).
+    a += {QStringLiteral("-threads"), QString::number(std::clamp(threads, 1, kMaxThreads)), QStringLiteral("-f"), QStringLiteral("image2pipe"), QStringLiteral("-c:v"), QStringLiteral("png"), QStringLiteral("-")};
     return a;
 }
 
@@ -469,8 +475,11 @@ ExitCode transcode(const TranscodeOptions &o, const std::function<void(double)> 
     if (const ExitCode c = probe(o.ffprobe, o.src, o.maxSeconds, &info, reason))
         return c;
     const QString real = QFileInfo(o.src).canonicalFilePath();
-    const QSize size = outputSize(QSize(info.width, info.height), o.limit);
-    const QString key = videoKey(real, bytes, mtime, o.limit);
+    // The video is fitted inside 3840x2160 whatever the display (a 5K display shows the 4K video scaled); the poster is composed on
+    // the display itself. The file is shared by displays of any size above 4K.
+    const QSize vlimit = videoLimit(o.limit);
+    const QSize size = outputSize(QSize(info.width, info.height), vlimit);
+    const QString key = videoKey(real, bytes, mtime, vlimit);
     const QString mp4 = o.out + QLatin1Char('/') + key + QStringLiteral(".mp4");
     // The poster and the sidecar are named by the fit and the colour too (the picture on screen follows them).
     const QString full = cacheKey(real, bytes, mtime, o.limit, o.fit, o.color, o.stripRows);
@@ -539,7 +548,7 @@ ExitCode transcode(const TranscodeOptions &o, const std::function<void(double)> 
         // Whatever ffmpeg wrote, the file the shell plays must be what was asked for: H.264, no larger than the output.
         Info made;
         QString why;
-        if (probe(o.ffprobe, tmp, o.maxSeconds + 5, &made, &why) != Ok || made.codec != QLatin1String("h264") || made.width > o.limit.width() || made.height > o.limit.height() || made.fps > kMaxFps + 0.5 || made.audio) {
+        if (probe(o.ffprobe, tmp, o.maxSeconds + 5, &made, &why) != Ok || made.codec != QLatin1String("h264") || made.width > vlimit.width() || made.height > vlimit.height() || made.fps > kMaxFps + 0.5 || made.audio) {
             *reason = QStringLiteral("the transcoded file is not what was asked for");
             return TranscodeFailed;
         }

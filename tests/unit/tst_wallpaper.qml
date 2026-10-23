@@ -754,4 +754,38 @@ TestCase {
         verify(!WallpaperConfig.videoBlocked([], "/v/a.mp4"));
         verify(WallpaperConfig.videoBlocked("/v/a.mp4", "/v/a.mp4"));
     }
+
+    function test_cancelRestoresPerDisplay() {
+        const A = "n:eDP-1";
+        const B = "n:HDMI-A-1";
+        let m = {};
+        // "All Displays" showed a picture; a video is chosen: Cancel puts the picture back.
+        m = WallpaperConfig.rememberPrevious(m, "all", {source: "file", path: "/p/a.jpg", overridden: false}, "/v/x.mp4");
+        // Display A had its own folder; display B had none.
+        m = WallpaperConfig.rememberPrevious(m, A, {source: "folder", path: "/p/dir", overridden: true}, "/v/y.mp4");
+        m = WallpaperConfig.rememberPrevious(m, B, {source: "file", path: "/p/inherited.jpg", overridden: false}, "/v/z.mp4");
+        // The picker is on B when Cancel is pressed: B follows All Displays again; A's and All's entries are untouched.
+        let plan = WallpaperConfig.cancelPlan(m, B, true, "video", "/v/z.mp4");
+        compare(plan.action, "follow-all");
+        compare(Object.keys(plan.map).sort(), ["all", A].sort());
+        compare(plan.map[A], {source: "folder", path: "/p/dir", overridden: true});
+        m = plan.map;
+        // Cancel for A restores its own wallpaper, not what the others had.
+        plan = WallpaperConfig.cancelPlan(m, A, true, "video", "/v/y.mp4");
+        compare(plan.action, "restore");
+        compare(plan.fields, {source: "folder", path: "/p/dir"});
+        compare(Object.keys(plan.map), ["all"]);
+        m = plan.map;
+        // Cancel for All Displays (not a display): the picture.
+        plan = WallpaperConfig.cancelPlan(m, "all", false, "video", "/v/x.mp4");
+        compare(plan.action, "restore");
+        compare(plan.fields, {source: "file", path: "/p/a.jpg"});
+        compare(Object.keys(plan.map), []);
+        // Nothing recorded for the display: the artwork; and a second Cancel finds nothing.
+        compare(WallpaperConfig.cancelPlan(plan.map, A, true, "video", "/v/y.mp4").action, "artwork");
+        // The video chosen again records nothing (the previous entry stays), and a missing map is harmless.
+        const again = WallpaperConfig.rememberPrevious({all: {source: "file", path: "/p/a.jpg", overridden: false}}, "all", {source: "video", path: "/v/x.mp4", overridden: false}, "/v/x.mp4");
+        compare(again.all.path, "/p/a.jpg");
+        compare(WallpaperConfig.cancelPlan(null, "all", false, "video", "/v/x.mp4").action, "artwork");
+    }
 }

@@ -31,13 +31,20 @@ constexpr qint64 kMaxProbeJsonBytes = 1024 * 1024;
 constexpr const char *kDemuxers = "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi,ogg";
 // Limits of the child programs. Memory must not depend on the number of cores: ffmpeg, x264 and libavfilter size their thread
 // pools from the CPU count, and glibc reserves arena address space per thread, so every ffmpeg run gets an explicit thread count
-// (at most kMaxThreads), `MALLOC_ARENA_MAX=2`, and a cap on the HEAP (RLIMIT_DATA: brk and private writable mappings, the memory
-// really used) rather than on the address space (RLIMIT_AS, which counts reserved but unused arena and stack space).
+// (at most kMaxThreads), `MALLOC_ARENA_MAX=2`, and a cap on RLIMIT_DATA (brk and private writable mappings, thread stacks
+// included) rather than on the address space (RLIMIT_AS, which counts reserved but unused arena space too).
+// The transcoded video never exceeds kMaxVideoSize (macOS Aerials are 4K on 5K and 6K displays as well): x264 at 8 threads needs
+// 3-4.6 GiB there for any source codec, and above 4K it exceeds the cap (8K output: 8.9-9.7 GiB), so the shell scales the 4K
+// video to a bigger display.
 constexpr qint64 kMaxAlloc = qint64(1) << 30;
 constexpr int kMaxThreads = 8;
 constexpr qint64 kProbeDataLimit = qint64(1) << 30;
 constexpr qint64 kFrameDataLimit = qint64(3) << 30;
 constexpr qint64 kTranscodeDataLimit = qint64(6) << 30;
+constexpr int kMaxVideoWidth = 3840;
+constexpr int kMaxVideoHeight = 2160;
+// The size the transcoded video is fitted inside: `display` (the output's physical size) bounded by 3840x2160.
+QSize videoLimit(const QSize &display);
 // The thread count for a machine with `cpus` cores: 1 to kMaxThreads.
 int threadCount(int cpus);
 

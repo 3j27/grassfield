@@ -5,6 +5,7 @@
 
 Listens on 127.0.0.1 on a free port, writes the port to PORT_FILE, then holds every connection open for two minutes.
 """
+import signal
 import socket
 import sys
 import threading
@@ -17,6 +18,8 @@ def hold(conn):
 
 
 def main():
+    # A script killed with SIGKILL cannot clean up: the server ends by itself (SIGALRM) well before anything waits for it.
+    signal.alarm(150)
     s = socket.socket()
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind(("127.0.0.1", 0))

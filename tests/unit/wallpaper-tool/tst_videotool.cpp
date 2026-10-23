@@ -343,14 +343,15 @@ TEST(VideoTool, A4kAnd8kSourceTranscodeUnderTheRealHeapCapWithForcedThreads)
     QString why;
     ASSERT_EQ(transcode(o, nullptr, &r, &why), Ok) << why.toStdString();
     EXPECT_EQ(r.value(QStringLiteral("videoWidth")).toInt(), 3840);
-    // An 8K source (two frames) down to 4K, and up to the 8K output size, under the same cap.
+    // An 8K display (5K, 6K and 8K displays all get a 4K video, which the shell scales): the video never exceeds 3840x2160, the
+    // poster is composed on the display. A short 8K source here; the 60-frame 8K H.264, HEVC and AV1 runs are in VideoToolHeavy.
     const QString k8 = makeClip(dir, QStringLiteral("k8.mp4"), 1, QStringLiteral("7680x4320"), 2, QStringLiteral("-preset ultrafast"));
     o.src = k8;
-    ASSERT_EQ(transcode(o, nullptr, &r, &why), Ok) << "8K to 4K: " << why.toStdString();
-    EXPECT_EQ(r.value(QStringLiteral("videoWidth")).toInt(), 3840);
     o.limit = QSize(7680, 4320);
-    ASSERT_EQ(transcode(o, nullptr, &r, &why), Ok) << "8K to 8K: " << why.toStdString();
-    EXPECT_EQ(r.value(QStringLiteral("videoWidth")).toInt(), 7680);
+    ASSERT_EQ(transcode(o, nullptr, &r, &why), Ok) << "8K source, 8K display: " << why.toStdString();
+    EXPECT_EQ(r.value(QStringLiteral("videoWidth")).toInt(), 3840);
+    EXPECT_EQ(r.value(QStringLiteral("videoHeight")).toInt(), 2160);
+    EXPECT_EQ(r.value(QStringLiteral("width")).toInt(), 7680) << "the poster is the display's size";
 }
 
 TEST(VideoTool, TheHeapCapStopsARunawayDecode)
@@ -371,4 +372,57 @@ TEST(VideoTool, TheHeapCapStopsARunawayDecode)
     EXPECT_TRUE(QDir(videoDir(dir)).entryList({QStringLiteral("*.mp4")}, QDir::Files | QDir::Hidden).isEmpty());
     o.dataLimit = kTranscodeDataLimit;
     EXPECT_EQ(transcode(o, nullptr, &r, &why), Ok) << why.toStdString();
+}
+
+TEST(VideoTool, TheVideoNeverExceeds4kWhateverTheDisplay)
+{
+    EXPECT_EQ(videoLimit(QSize(1920, 1080)), QSize(1920, 1080));
+    EXPECT_EQ(videoLimit(QSize(3840, 2160)), QSize(3840, 2160));
+    EXPECT_EQ(videoLimit(QSize(5120, 2880)), QSize(3840, 2160));
+    EXPECT_EQ(videoLimit(QSize(7680, 4320)), QSize(3840, 2160));
+    EXPECT_EQ(videoLimit(QSize(2880, 5120)), QSize(2880, 2160));
+    // A 16:9 source on a 5K display is fitted inside 4K, never enlarged.
+    EXPECT_EQ(outputSize(QSize(7680, 4320), videoLimit(QSize(5120, 2880))), QSize(3840, 2160));
+    EXPECT_EQ(outputSize(QSize(1920, 1080), videoLimit(QSize(5120, 2880))), QSize(1920, 1080));
+}
+
+// ---- heavy (minutes): sources of 8K in three codecs, 60 frames, to a 4K video under the real cap with forced high thread counts.
+// Skipped unless GRASSFIELD_HEAVY_TESTS=1 (tests/shell/wallpaper_video_heavy.sh sets it): generating the HEVC source alone takes about 50 s.
+TEST(VideoToolHeavy, EightKSourcesInThreeCodecsTranscodeTo4kUnderTheRealCap)
+{
+    if (qEnvironmentVariable("GRASSFIELD_HEAVY_TESTS") != QLatin1String("1"))
+        GTEST_SKIP() << "heavy: set GRASSFIELD_HEAVY_TESTS=1";
+    if (!haveFfmpeg())
+        GTEST_SKIP() << "ffmpeg is not installed";
+    struct Source {
+        const char *name;
+        const char *codecArgs;
+        const char *expectedCodec;
+    };
+    const Source sources[] = {
+        {"h264.mp4", "-c:v libx264 -preset ultrafast -pix_fmt yuv420p", "h264"},
+        {"hevc10.mp4", "-c:v libx265 -preset ultrafast -pix_fmt yuv420p10le -x265-params log-level=error", "hevc"},
+        {"av1.mkv", "-c:v libsvtav1 -preset 12 -pix_fmt yuv420p", "av1"},
+    };
+    QTemporaryDir dir;
+    for (const Source &src : sources) {
+        const QString path = dir.filePath(QString::fromLatin1(src.name));
+        const QStringList args = QStringList{QStringLiteral("-v"), QStringLiteral("error"), QStringLiteral("-f"), QStringLiteral("lavfi"), QStringLiteral("-i"), QStringLiteral("testsrc2=size=7680x4320:rate=30:duration=2")}
+            + QString::fromLatin1(src.codecArgs).split(QLatin1Char(' ')) + QStringList{QStringLiteral("-y"), path};
+        ASSERT_EQ(QProcess::execute(QStringLiteral("/usr/bin/ffmpeg"), args), 0) << src.name;
+        TranscodeOptions o;
+        o.src = path;
+        o.out = videoDir(dir);
+        o.limit = QSize(7680, 4320); // an 8K display: the video is still fitted inside 3840x2160
+        o.threads = 256;             // clamped to kMaxThreads
+        QJsonObject r;
+        QString why;
+        ASSERT_EQ(transcode(o, nullptr, &r, &why), Ok) << src.name << ": " << why.toStdString();
+        EXPECT_EQ(r.value(QStringLiteral("codec")).toString(), QString::fromLatin1(src.expectedCodec));
+        EXPECT_EQ(r.value(QStringLiteral("videoWidth")).toInt(), 3840) << src.name;
+        EXPECT_EQ(r.value(QStringLiteral("videoHeight")).toInt(), 2160) << src.name;
+        // And its thumbnail (one frame scaled down inside the grab) works under the frame cap.
+        const QString thumb = dir.filePath(QStringLiteral("t-%1.jpg").arg(QString::fromLatin1(src.name)));
+        EXPECT_EQ(thumbnail(path, thumb, 320, &why), Ok) << src.name << ": " << why.toStdString();
+    }
 }
