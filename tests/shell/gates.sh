@@ -25,17 +25,35 @@ python3 -I "$root/scripts/gates/session_start.py" --selftest || fails=$((fails +
 # VERSION, the product version in cmake/VERSION) must configure and carry the product version.
 if command -v cmake >/dev/null && command -v ninja >/dev/null && pkg-config --exists hyprland; then
   rb=$work/usr-src/grassfield-compositor
-  mkdir -p "$rb/cmake"
-  cp "$root/compositor/CMakeLists.txt" "$root/compositor/abi-stamp.cmake" "$rb/"
-  cp -r "$root/compositor/src" "$root/compositor/protocols" "$rb/"
-  cp "$root/cmake/GrassfieldVersion.cmake" "$rb/cmake/"
-  cp "$root/VERSION" "$rb/cmake/VERSION"
+  mkdir -p "$rb"
+  # The very list the PKGBUILD installs (packaging/arch/compositor-rebuild-sources.txt).
+  while read -r from to; do
+    [[ -z $from || $from == \#* ]] && continue
+    mkdir -p "$(dirname "$rb/$to")"
+    cp -r "$root/$from" "$rb/$to"
+  done <"$root/packaging/arch/compositor-rebuild-sources.txt"
   echo "1.0.0rc1-1" >"$rb/VERSION"
   expect "the shipped rebuild sources configure" "$(rc_of cmake -S "$rb" -B "$work/usr-src/build" -G Ninja -DGRASSFIELD_BUILD_TESTS=OFF)" 0
   expect "and compile the product version in" "$(grep -c "GRASSFIELD_VERSION=.*$(tr -d '[:space:]' <"$root/VERSION")" "$work/usr-src/build/build.ninja" | awk '$1 > 0 {print "yes"}')" yes
 else
   echo "  SKIP the shipped rebuild layout (cmake, ninja or the hyprland headers missing)"
 fi
+
+# PKGBUILD prepare(): a rerun for another commit starts from nothing (stale build directories answered "no work to do").
+pk=$work/pkg
+mkdir -p "$pk/src/compositor-build" "$pk/src/compositor-out" "$pk/src/files-build" "$pk/src/snapshot"
+echo stale >"$pk/src/compositor-build/stale" && echo stale >"$pk/src/compositor-out/libgfcore.a" && echo stale >"$pk/src/files-build/x" && echo old >"$pk/src/snapshot/old"
+started=$(date +%s)
+sleep 1
+(
+  startdir=$root/packaging/arch srcdir=$pk/src
+  # shellcheck source=/dev/null
+  . "$root/packaging/arch/PKGBUILD"
+  prepare >/dev/null 2>&1
+)
+expect "prepare removes the build and output directories of an earlier run" "$([[ ! -e $pk/src/compositor-build && ! -e $pk/src/compositor-out && ! -e $pk/src/files-build && ! -e $pk/src/snapshot/old ]] && echo yes)" yes
+expect "prepare extracts HEAD with the time of now (a newer VERSION file than the run start)" "$([[ $(stat -c %Y "$pk/src/snapshot/VERSION" 2>/dev/null || echo 0) -ge $started ]] && echo yes)" yes
+expect "prepare records the commit" "$(<"$pk/src/BUILD-COMMIT")" "$(git -C "$root" rev-parse HEAD)"
 
 # Release engineering checks on this tree, and the backup recipe on a throwaway folder.
 expect "one version source" "$(rc_of "$root/scripts/dev/check-version.sh")" 0

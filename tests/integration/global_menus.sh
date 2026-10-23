@@ -197,8 +197,8 @@ log_has() { grep -q -- "$2" "$1" 2>/dev/null; }
 # Environmental lines of a nested dev session (GF-035): a line is dropped only when it ENDS with one of these messages,
 # complete (the level and category prefix before it is free, nothing after it), so no other warning of the same component
 # is hidden: the polkit agent cannot register because another agent owns the session; Quickshell's own line for the same
-# refusal (its text continues with the system's error, so that one entry, marked with "~", matches from its start and
-# anywhere in the line); and the lock announcing that PAM is suppressed in dev sessions (GRASSFIELD_DEV_ALLOW_PAM gate).
+# refusal (its text continues with the system's error, so that one entry, marked with "~", must START the message: right after
+# the line's level word, nothing before it); and the lock announcing that PAM is suppressed in dev sessions (GRASSFIELD_DEV_ALLOW_PAM gate).
 ENV_LINES=(
   "grassfield-polkit: not registered (another authentication agent owns this session); no dialog will be shown, nothing is approved"
   "~quickshell.service.polkit: failed to register listener"
@@ -208,7 +208,7 @@ shell_qml_issues() { # [log...] QML-level warnings and errors (default .dev/shel
   (($# > 0)) || set -- "$dev/shell.log"
   grep -h -E "WARN qml|ERROR|Binding loop|TypeError|ReferenceError" "$@" \
     | awk 'BEGIN { for (i = 1; i < ARGC; i++) { env[i] = ARGV[i]; ARGV[i] = "" } n = ARGC - 1 }
-           { for (i = 1; i <= n; i++) { m = env[i]; if (substr(m, 1, 1) == "~") { if (index($0, substr(m, 2)) > 0) next; continue } if (length($0) >= length(m) && substr($0, length($0) - length(m) + 1) == m) next } print }' "${ENV_LINES[@]}" || true
+           { for (i = 1; i <= n; i++) { m = env[i]; if (substr(m, 1, 1) == "~") { t = substr(m, 2); if (match($0, /^[ \t]*[A-Z]+[ \t]+/) && substr($0, RLENGTH + 1, length(t)) == t) next; continue } if (length($0) >= length(m) && substr($0, length($0) - length(m) + 1) == m) next } print }' "${ENV_LINES[@]}" || true
 }
 
 start_session() { # [nested-up options]

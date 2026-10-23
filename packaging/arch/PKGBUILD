@@ -49,9 +49,12 @@ _root() { echo "$srcdir/snapshot"; }
 prepare() {
   local repo
   repo=$(git -C "$startdir" rev-parse --show-toplevel)
-  rm -rf "$srcdir/snapshot"
+  # Nothing a previous `makepkg` run left may survive: `git archive` gives every file the commit's time, so a build directory
+  # of another commit with the same VERSION would answer "no work to do" and ship that commit's plugin and libraries under
+  # this commit's BUILD-COMMIT. Every build and output directory goes, and the files are extracted with the time of now (tar -m).
+  rm -rf "$srcdir/snapshot" "$srcdir"/*-build "$srcdir/compositor-out" "$srcdir/icons" "$srcdir/grassfield-icons" "$srcdir/grassfield.db" "$srcdir/BUILD-COMMIT"
   mkdir -p "$srcdir/snapshot"
-  git -C "$repo" archive --format=tar HEAD | tar -x -C "$srcdir/snapshot"
+  git -C "$repo" archive --format=tar HEAD | tar -x -m -C "$srcdir/snapshot"
   git -C "$repo" rev-parse HEAD >"$srcdir/BUILD-COMMIT"
   if [[ $(tr -d '[:space:]' <"$srcdir/snapshot/VERSION") != "$_ver" ]]; then
     echo "PKGBUILD: VERSION of HEAD ($(<"$srcdir/snapshot/VERSION")) is not the VERSION this PKGBUILD read ($_ver): commit it first" >&2
@@ -264,15 +267,19 @@ package_grassfield-compositor() {
   ln -s ../lib/grassfield/grassfield-compositor-rebuild "$pkgdir/usr/bin/grassfield-compositor-rebuild"
   # The sources the user's rebuild is made from (the plugin only: no unit tests, no build directory).
   local src=$pkgdir/usr/src/grassfield-compositor
-  install -Dm644 "$root/compositor/CMakeLists.txt" "$src/CMakeLists.txt"
-  install -Dm644 "$root/compositor/abi-stamp.cmake" "$src/abi-stamp.cmake"
-  cp -a --no-preserve=ownership "$root/compositor/src" "$src/src"
-  cp -a --no-preserve=ownership "$root/compositor/protocols" "$src/protocols"
+  # The list is shared with tests/shell/gates.sh (packaging/arch/compositor-rebuild-sources.txt).
+  local from to
+  while read -r from to; do
+    [[ -z $from || $from == \#* ]] && continue
+    if [[ -d $root/$from ]]; then
+      mkdir -p "$(dirname "$src/$to")"
+      cp -a --no-preserve=ownership "$root/$from" "$src/$to"
+    else
+      install -Dm644 "$root/$from" "$src/$to"
+    fi
+  done <"$root/packaging/arch/compositor-rebuild-sources.txt"
   printf '%s-%s\n' "$pkgver" "$pkgrel" >"$src/VERSION" # the source id the rebuild reports (a pacman version)
-  # The product version for the rebuild's CMake (cmake/GrassfieldVersion.cmake finds cmake/VERSION next to itself), and the
-  # build commit of the plugin.
-  install -Dm644 "$root/cmake/GrassfieldVersion.cmake" "$src/cmake/GrassfieldVersion.cmake"
-  install -Dm644 "$root/VERSION" "$src/cmake/VERSION"
+  # (cmake/VERSION, from the list, is the product version for the rebuild's CMake.) The build commit of the plugin:
   install -Dm644 "$srcdir/BUILD-COMMIT" "$pkgdir/usr/lib/grassfield/BUILD-COMMIT"
   install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/grassfield-compositor/LICENSE"
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-compositor/THIRD_PARTY.md"

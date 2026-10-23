@@ -4,7 +4,9 @@
 #   scripts/gates/version-agreement.sh --nested      this tree's dev builds: .dev/build/grassfield-menu-bridge --version,
 #                                                    `hyprctl grassfield` of the nested compositor (scripts/nestctl), the
 #                                                    VERSION file the shell's About reads
-#   scripts/gates/version-agreement.sh --installed   the installed packages in the running session (read only):
+#   scripts/gates/version-agreement.sh --installed [--instance SIG]   the installed packages in the running session (read only;
+#                                                    the plugin is asked on the Hyprland instance SIG, default the one in
+#                                                    HYPRLAND_INSTANCE_SIGNATURE; an instance that is this tree's nested one is refused):
 #                                                    pacman -Q grassfield-desktop / grassfield-compositor, /usr/bin/grassfield-menu-bridge --version,
 #                                                    `hyprctl grassfield`, /usr/share/grassfield/VERSION (About), /usr/share/grassfield/BUILD-COMMIT
 #   scripts/gates/version-agreement.sh --selftest
@@ -37,7 +39,9 @@ if [[ ${1:-} == --selftest ]]; then
 fi
 
 mode=${1:-}
-[[ $mode == --nested || $mode == --installed ]] || { echo "usage: version-agreement.sh --nested | --installed | --selftest" >&2; exit 2; }
+instance=""
+if [[ ${2:-} == --instance ]]; then instance=${3:-}; elif [[ -n ${2:-} ]]; then mode=""; fi
+[[ $mode == --nested || $mode == --installed ]] || { echo "usage: version-agreement.sh --nested | --installed [--instance SIG] | --selftest" >&2; exit 2; }
 want=$(tr -d '[:space:]' <"$root/VERSION")
 declare -a names=() vals=()
 add() { names+=("$1"); vals+=("$(norm "$2")"); }
@@ -56,8 +60,20 @@ else
     if v=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $2}') && [[ -n $v ]]; then add "pacman -Q $pkg" "$v"; else missing+=("$pkg not installed"); fi
   done
   if [[ -x /usr/bin/grassfield-menu-bridge ]]; then add "menu bridge (/usr/bin)" "$(/usr/bin/grassfield-menu-bridge --version | awk '{print $2}')"; else missing+=("menu bridge: not installed"); fi
-  v=$(hyprctl -j grassfield 2>/dev/null | plugin_version)
-  if [[ -n $v ]]; then add "plugin (hyprctl grassfield, running session)" "$v"; else missing+=("plugin: no running Hyprland with the plugin loaded"); fi
+  inst=${instance:-${HYPRLAND_INSTANCE_SIGNATURE:-}}
+  nested_inst=$(cat "$root/.dev/nested.instance" 2>/dev/null || true)
+  if [[ -z $inst ]]; then
+    missing+=("plugin: no Hyprland instance (pass --instance SIG, or run from the session: HYPRLAND_INSTANCE_SIGNATURE is empty)")
+  elif [[ -n $nested_inst && $inst == "$nested_inst" ]]; then
+    echo "version-agreement: refusing: instance $inst is this tree's nested session, not the installed one (use --nested)" >&2
+    exit 2
+  elif ! hyprctl instances -j 2>/dev/null | jq -e --arg i "$inst" 'any(.[]; .instance == $i)' >/dev/null 2>&1; then
+    missing+=("plugin: Hyprland instance $inst is not listed by hyprctl instances")
+  else
+    echo "  plugin asked on Hyprland instance $inst ($([[ -n $instance ]] && echo "--instance" || echo "HYPRLAND_INSTANCE_SIGNATURE"))"
+    v=$(HYPRLAND_INSTANCE_SIGNATURE=$inst hyprctl -j grassfield 2>/dev/null | plugin_version)
+    if [[ -n $v ]]; then add "plugin (hyprctl grassfield, instance ${inst:0:12})" "$v"; else missing+=("plugin: instance $inst has no plugin loaded"); fi
+  fi
   [[ -r /usr/share/grassfield/BUILD-COMMIT ]] && echo "build commit of the installed desktop package: $(</usr/share/grassfield/BUILD-COMMIT)"
 fi
 
