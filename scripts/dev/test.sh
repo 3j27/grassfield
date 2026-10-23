@@ -232,6 +232,12 @@ if want logic; then
   python3 -I tests/ci/qml_warnings.py --selftest || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/qml_warnings.py "$rc" PASS
+  # Sibling QML types a module's qmldir does not list (the shell would not load), on fixed samples; the tree itself is
+  # checked by `just check-shell`.
+  rc=0
+  python3 -I tests/ci/qmldir_types.py --selftest || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/qmldir_types.py "$rc" PASS
   # The inventory gate on temporary fixtures.
   rc=0
   python3 -I tests/ci/inventory.py --selftest || rc=1

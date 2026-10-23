@@ -35,6 +35,8 @@ check-schema *files:
 # Lint QML (0 warnings required in changed files, gate Q1).
 check-shell:
     scripts/dev/qmllint.sh
+    python3 -I tests/ci/qmldir_types.py --selftest
+    python3 -I tests/ci/qmldir_types.py
 
 # The committed .qsb shaders are current with their .frag sources (rebuild: scripts/dev/build-shaders.sh).
 check-shaders:
