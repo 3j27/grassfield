@@ -3,6 +3,9 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -167,6 +170,44 @@ TEST(OverviewFocusInput, OnlyAUserChoiceOfAnotherWindowEndsTheRequest) {
         EXPECT_FALSE(supersedes(origin, false)) << "Hyprland's own pick: " << static_cast<int>(origin);
     EXPECT_EQ(df::focusOrigin(df::FocusCause::PointerFollow, true, false), O::Restore) << "refocusLastWindow after a layer";
     EXPECT_EQ(df::focusOrigin(df::FocusCause::Click, true, false), O::CursorRefocus) << "a refocus at the cursor without a press";
+}
+
+// ---- a dialog that opens during the close (audit GF-038) ----
+
+TEST(OverviewFocusHandOver, ADialogLeftAfterTheChromesReleasedGetsTheKeyboard) {
+    // Case 11 of tests/compositor/overview_focus.sh: chrome A released (its keyboard None), chrome B still Exclusive and
+    // closing, the polkit-like dialog Exclusive; the keyboard is on nothing.
+    const std::array<ExclusiveLayer, 2> layers{{
+        {.ns = "grassfield-overview", .mapped = true, .exclusive = true, .underCursor = true},
+        {.ns = "grassfield-polkit", .mapped = true, .exclusive = true, .underCursor = false},
+    }};
+    EXPECT_EQ(keyboardHandOver(layers, "grassfield-overview", false), std::optional<size_t>{1}) << "the dialog, never a closing chrome";
+    EXPECT_EQ(keyboardHandOver(layers, "grassfield-overview", true), std::nullopt) << "something holds the keyboard: nothing changes";
+}
+
+TEST(OverviewFocusHandOver, NeverAClosingChromeNorAnUnmappedOrReleasedLayer) {
+    const std::array<ExclusiveLayer, 3> chromes{{
+        {.ns = "grassfield-overview", .mapped = true, .exclusive = true, .underCursor = true},
+        {.ns = "grassfield-overview", .mapped = true, .exclusive = true, .underCursor = false},
+        {.ns = "grassfield-polkit", .mapped = false, .exclusive = true, .underCursor = false},
+    }};
+    EXPECT_EQ(keyboardHandOver(chromes, "grassfield-overview", false), std::nullopt) << "cases 1-5: only chromes are left, the request waits";
+    const std::array<ExclusiveLayer, 1> released{{{.ns = "grassfield-polkit", .mapped = true, .exclusive = false, .underCursor = true}}};
+    EXPECT_EQ(keyboardHandOver(released, "grassfield-overview", false), std::nullopt) << "a dialog that let the keyboard go";
+    EXPECT_EQ(keyboardHandOver(std::span<const ExclusiveLayer>{}, "", false), std::nullopt);
+}
+
+TEST(OverviewFocusHandOver, TheLayerUnderTheCursorElseTheNewest) {
+    const std::array<ExclusiveLayer, 3> layers{{
+        {.ns = "dialog-a", .mapped = true, .exclusive = true, .underCursor = false},
+        {.ns = "dialog-b", .mapped = true, .exclusive = true, .underCursor = true},
+        {.ns = "dialog-c", .mapped = true, .exclusive = true, .underCursor = false},
+    }};
+    EXPECT_EQ(keyboardHandOver(layers, "grassfield-search", false), std::optional<size_t>{1}) << "under the cursor, as a pointer motion";
+    std::array<ExclusiveLayer, 3> resting = layers;
+    resting[1].underCursor                = false;
+    EXPECT_EQ(keyboardHandOver(resting, "grassfield-search", false), std::optional<size_t>{2}) << "else the newest (on top)";
+    EXPECT_EQ(keyboardHandOver(resting, "", false), std::optional<size_t>{2}) << "no closing surface known: any dialog";
 }
 
 // ---- events ----

@@ -21,6 +21,22 @@ python3 -I "$root/scripts/gates/session_start.py" --selftest || fails=$((fails +
 "$root/scripts/dev/check-licenses.sh" --selftest || fails=$((fails + 1))
 "$root/scripts/gates/version-agreement.sh" --selftest || fails=$((fails + 1))
 
+# The user's compositor rebuild (/usr/src/grassfield-compositor as the package lays it out: no ../cmake, the pacman source id in
+# VERSION, the product version in cmake/VERSION) must configure and carry the product version.
+if command -v cmake >/dev/null && command -v ninja >/dev/null && pkg-config --exists hyprland; then
+  rb=$work/usr-src/grassfield-compositor
+  mkdir -p "$rb/cmake"
+  cp "$root/compositor/CMakeLists.txt" "$root/compositor/abi-stamp.cmake" "$rb/"
+  cp -r "$root/compositor/src" "$root/compositor/protocols" "$rb/"
+  cp "$root/cmake/GrassfieldVersion.cmake" "$rb/cmake/"
+  cp "$root/VERSION" "$rb/cmake/VERSION"
+  echo "1.0.0rc1-1" >"$rb/VERSION"
+  expect "the shipped rebuild sources configure" "$(rc_of cmake -S "$rb" -B "$work/usr-src/build" -G Ninja -DGRASSFIELD_BUILD_TESTS=OFF)" 0
+  expect "and compile the product version in" "$(grep -c "GRASSFIELD_VERSION=.*$(tr -d '[:space:]' <"$root/VERSION")" "$work/usr-src/build/build.ninja" | awk '$1 > 0 {print "yes"}')" yes
+else
+  echo "  SKIP the shipped rebuild layout (cmake, ninja or the hyprland headers missing)"
+fi
+
 # Release engineering checks on this tree, and the backup recipe on a throwaway folder.
 expect "one version source" "$(rc_of "$root/scripts/dev/check-version.sh")" 0
 expect "licence notices" "$(rc_of "$root/scripts/dev/check-licenses.sh")" 0

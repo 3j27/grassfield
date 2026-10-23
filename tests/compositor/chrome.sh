@@ -16,6 +16,9 @@
 #     lights (the whole group, macOS); pointer away again: no glyph
 #   3 foot B opened and moved aside (A inactive): pointer on A's close light: lights coloured, glyphs on all three;
 #     pointer away: grey lights (titlebarPalette inactiveLight), no glyph
+#   3b the light appearance (audit UX-06; plugin feature "appearance"): the dev settings file says "light", the shell pushes
+#     it; A's bar in the light palette (ui/tokens/tokens.json titlebar.backgroundLight), its lights in place, grey while
+#     inactive, coloured once focused; back to dark: the dark bar again. The settings file is restored at exit.
 #   4 Grassfield Settings (org.grassfield.Settings, when .dev/build/grassfield-settings exists): the same lights and bar,
 #     radius 26 (the global default; corner inset 7-10 px), square join, glyphs with the pointer between its minimize
 #     and zoom lights
@@ -55,9 +58,27 @@ plugin=0
 HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null | jq -e '.features | index("decorations")' >/dev/null 2>&1 && plugin=1
 
 pids=()
+# The dev settings file of the nested shell (its GRASSFIELD_CONFIG_HOME), changed by step 3b and restored at exit.
+settings_file=$dev/config/grassfield.json
+settings_backup=$run/settings.backup
+had_settings=0
+[[ -f $settings_file ]] && { cp "$settings_file" "$settings_backup"; had_settings=1; }
+set_appearance() { # <dark|light>: rewrite the dev settings file, wait for the shell's push to the plugin
+  local base=$root/config/defaults/grassfield.json n
+  ((had_settings)) && base=$settings_backup
+  mkdir -p "$dev/config"
+  n=$(grep -c "compositor setting appearance = $1" "$dev/shell.log" 2>/dev/null)
+  jq --arg a "$1" '.appearance = $a' "$base" >"$settings_file.tmp" && mv "$settings_file.tmp" "$settings_file"
+  for _ in $(seq 1 30); do
+    (($(grep -c "compositor setting appearance = $1" "$dev/shell.log" 2>/dev/null) > ${n:-0})) && break
+    sleep 0.1
+  done
+  sleep 0.5 # the dispatch, then a frame
+}
 cleanup() {
   local p
   for p in "${pids[@]}"; do dev_may_signal "$p" && kill "$p" 2>/dev/null; done
+  if ((had_settings)); then cp "$settings_backup" "$settings_file"; else rm -f "$settings_file"; fi
 }
 trap cleanup EXIT
 
@@ -89,8 +110,15 @@ crops() { # <name> <x> <y> <w>: 2x crops (nearest neighbour) of the lights and o
   magick "$run/$name.ppm" -crop "48x$((GF_TB_HEIGHT + 24))+$((x + w - 40))+$((top - 8))" +repage -filter point -resize 400% "$run/$name-corner-right-4x.png"
 }
 
+# The palette the titlebar is measured against: the design tokens of the appearance shown (ui/tokens/tokens.json "titlebar").
+token_hex() { jq -r --arg k "$1" '.titlebar[$k].value' "$root/ui/tokens/tokens.json" | tr -d '#'; }
+palette_for() { # <dark|light>
+  local a=${1^}
+  palette_opts=("bar=$(token_hex "background$a")" "inactive=$(token_hex "inactiveButton$a")")
+}
+palette_for Dark
 measure() { # <name> <x> <y> <w> [radius] -> key=value lines in $run/<name>.txt, loaded into m[...]
-  local name=$1 x=$2 y=$3 w=$4 bar=$GF_TB_HEIGHT mid=$GF_TB_MID opts=()
+  local name=$1 x=$2 y=$3 w=$4 bar=$GF_TB_HEIGHT mid=$GF_TB_MID opts=("${palette_opts[@]}")
   [[ -n ${5:-} ]] && opts+=("radius=$5")
   # Without the plugin there is no titlebar: the corners are where the window's own content colour starts, sampled 16 px in
   # and 2 px down (inside the corner curve for radius 12 to 26, above the inset sidebar of Grassfield's apps).
@@ -233,6 +261,34 @@ if ((plugin)); then
     check_glyphs "A inactive, pointer away: no glyph" 1
   else
     check "foot B opened" 1 "window B not found"
+  fi
+
+  # 3b the light appearance (audit UX-06): the shell pushes it (feature "appearance") and every titlebar follows it
+  say "3b light appearance: the titlebars follow it"
+  if HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null | jq -e '.features | index("appearance")' >/dev/null 2>&1; then
+    set_appearance light
+    palette_for Light
+    park
+    capture a-light
+    crops a-light "$ax" "$ay" "$aw"
+    measure a-light "$ax" "$ay" "$aw"
+    check_bar "A (light)"
+    check_lights "A (light)" "$ax" "$ay"
+    [[ -n ${bw:-} ]] && check_grey "A inactive (light), pointer away: grey lights" 0
+    dispatch "hl.dsp.focus({ window = 'address:$a_addr' })"
+    sleep 0.6
+    park
+    capture a-light-active
+    measure a-light-active "$ax" "$ay" "$aw"
+    check_grey "A active (light): coloured lights" 1
+    set_appearance dark
+    palette_for Dark
+    park
+    capture a-dark-again
+    measure a-dark-again "$ax" "$ay" "$aw"
+    check_bar "A (dark again)"
+  else
+    check "3b: the plugin advertises \"appearance\"" 1 "features $(HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null | jq -c '.features')"
   fi
 fi
 

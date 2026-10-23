@@ -11,7 +11,7 @@ segments). Reasons: it matches the rest of the M2 notification surfaces (same co
 for tall icons. The centered-bottom square is not implemented.
 
 ## Purpose and non-goals
-Feedback for output volume/mute and display brightness changes, whoever causes them. Non-goals: keyboard backlight, microphone,
+Feedback for output volume/mute and display brightness changes, whoever causes them. Non-goals: microphone, input-source popup,
 media-key bindings (the session config binds keys to the IPC targets below), slider interaction (the pill never takes input).
 
 ## Functional requirements
@@ -30,6 +30,10 @@ media-key bindings (the session config binds keys to the IPC targets below), sli
 7. O7 In a `GRASSFIELD_DEV=1` session brightness is never changed (the nested shell controls the owner's hardware): the IPC only logs and
    shows the current level. Volume changes are real (5 % steps; tests restore the value).
 
+8. O8 Keyboard backlight HUD (macOS: the keyboard brightness HUD; REQ-OSD-NG-d1a, master prompt 5.2 "volume/brightness/keyboard OSD"; owner decision 2026-10-23, follow macOS): the same pill as volume and brightness (`kind` `keyboard`, the `keyboard` glyph and the continuous bar), shown on a change of `/sys/class/leds/*kbd_backlight/brightness` (`Brightness.kbdValue`, watched by FileView; the first value read after start is not a change; O4 applies) and by the IPC target `keyboard up|down` (a step is 1/16 of the range, the 16 notches of the macOS keys, at least one device step; `brightnessctl -d <device> set <n>` through `Brightness.setKbdLevel`, which in a `GRASSFIELD_DEV=1` session only logs, so the OSD then shows the current level, as O7). Without a keyboard backlight device the IPC logs "no keyboard backlight device" and nothing shows (O5). `osd display keyboard <0..1> false` shows it for tests. Accessible name "Keyboard brightness N%" (fr « Luminosité du clavier N % »). The input-source popup is requirement 9. Test: `tests/shell/osd_keyboard.sh` (offscreen, dev session, shims that fail if `brightnessctl` runs).
+
+9. O9 Input source HUD (macOS: the input source name appears when the keyboard layout changes; owner decision 2026-10-23): the same pill, `kind` `inputsource`, the `keyboard` glyph and the layout name (elided, `Osd.label`) in place of the bar, shown for `osd.hideDelay` when the compositor reports a layout change. `platform/InputSource.qml` listens to Hyprland's `activelayout>>keyboard,layout` event (event-driven; the only code that talks to the compositor) and `InputSource.js` decides (`tests/unit/tst_inputsource.qml`): the first layout seen on a keyboard is remembered without a HUD, so a session with one configured layout never shows anything (nothing says how many layouts exist, a change is the signal); a different layout on the same keyboard shows it; keyboards are independent; malformed events and names over 128 characters are ignored. O4 applies (nothing in the first 1.5 s). Accessible name "Input source <name>" (fr « Source de saisie : <name> »). Hooks (dev session only): `osd layout "<keyboard>,<name>"` feeds an event, `osd state` prints `shown|kind|label`. Tests: `tests/shell/osd_keyboard.sh` (logic, offscreen) and nested `tests/visual/osd-inputsource.sh` (HUD and its absence, capture).
+
 ## Acceptance criteria
 | ID | Test | Level |
 |---|---|---|
@@ -39,8 +43,8 @@ media-key bindings (the session config binds keys to the IPC targets below), sli
 | O5 | on a machine without backlight, `brightness up` logs "no backlight device" | L1 (not run here: the dev machine has intel_backlight) |
 
 ## Interfaces / contracts
-IPC targets (Quickshell IPC, `qs -p <shell> ipc call ...`): `osd display <volume|brightness> <0..1> <muted>` and `osd hide` (tests; the
-function is not called `show` because `qs ipc` reserves that word), `volume up|down|mute`, `brightness up|down`.
+IPC targets (Quickshell IPC, `qs -p <shell> ipc call ...`): `osd display <volume|brightness|keyboard> <0..1> <muted>` and `osd hide` (tests; the
+function is not called `show` because `qs ipc` reserves that word), `volume up|down|mute`, `brightness up|down`, `keyboard up|down` (backlight; bind the keyboard-backlight keys of the session config to it).
 Tokens: `osd.*` (width, height, iconSize, barHeight, gap, hideDelay). Services: `qs.services.Brightness` (device, level, available).
 Window: layer-shell Overlay, namespace `grassfield-osd`, first screen only.
 
@@ -63,6 +67,6 @@ Idle cost: one 1.5 s file read while a backlight exists. The pill exposes `Acces
 ## Known limitations
 - Top-right pill only, first screen only (not the screen of the focused window).
 - Brightness is not changed in the dev session, so only the display path is verified there.
-- No keyboard-backlight or microphone OSD; no segmented/centered style.
+- No microphone OSD (the keyboard backlight HUD is requirement 8, the input source HUD 9: it shows names as the compositor reports them, not flags or abbreviations, and a real layout switch cannot be made in the nested session, which has one layout); no segmented/centered style. The keyboard HUD is not verified on hardware (the dev machine has no `kbd_backlight` LED): the logic is tested with a faked device, the look is the volume pill's.
 - Volume cannot exceed 100 % (`-l 1`).
 - Hardware keys are not bound yet (owner/Hyprland config task).

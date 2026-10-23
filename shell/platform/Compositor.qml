@@ -212,7 +212,7 @@ Singleton {
         // Rectangle of the tile this window gets (appended after the existing minimized tiles),
         // computed before the list changes.
         const tile = dockRect(windowScreenName(top) || focusedScreenName, root.minimized.length, true, toplevel);
-        root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title});
+        root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title, screen: windowScreenName(top)});
         if (Capabilities.has("minimize"))
             dispatchRequest(pluginWindowCall("minimize", address, tile));
         else
@@ -220,8 +220,9 @@ Singleton {
         return true;
     }
 
-    // Restore a minimized window to the current workspace and focus it. The plugin moves, focuses
-    // and animates it itself; activating it here too would race the plugin (a focus request for a
+    // Restore a minimized window and focus it: back on the display it was minimized from, on the Desktop that display shows
+    // now (owner decision D-1, macOS), never on the display of the Dock that was clicked. The plugin moves, focuses and
+    // animates it itself (and gives its frame back); activating it here too would race the plugin (a focus request for a
     // window still on special:minimized opens that workspace).
     function unminimize(toplevel: var): void {
         const rec = root.minimized.find(r => r.toplevel === toplevel);
@@ -233,8 +234,10 @@ Singleton {
             dispatchRequest(pluginWindowCall("restore", rec.address, tile));
             return;
         }
-        if (root.focusedWorkspace)
-            dispatchRequest(moveRequest(rec.address, String(root.focusedWorkspace.id)));
+        const monitors = (Hyprland.monitors ? Hyprland.monitors.values : []).map(m => ({name: m.name, workspace: m.activeWorkspace ? m.activeWorkspace.id : 0}));
+        const workspace = Minimized.restoreWorkspace(rec.screen || "", monitors, root.focusedWorkspace ? root.focusedWorkspace.id : 0);
+        if (workspace !== "")
+            dispatchRequest(moveRequest(rec.address, workspace));
         toplevel.activate();
     }
 
@@ -253,6 +256,22 @@ Singleton {
             tilingMenuBar: Settings.windowsTilingMenuBar ? "true" : "false",
             tilingMargins: Settings.windowsTilingMargins ? "true" : "false"
         })
+
+    // The appearance the shell shows: the compositor-drawn titlebars follow it (feature "appearance", audit UX-06).
+    readonly property string chromeAppearance: Appearance.dark ? "dark" : "light"
+    // Stages (Settings windows.stages, ADR-0013, owner decision D-4): the plugin's flag follows the setting while the plugin
+    // offers Stages (feature "stages-available"; "stages" is then advertised while the flag is on, and the strip sends its
+    // operations with stages() below). Off by default; the flag alone changes nothing on screen until the strip sends op:on.
+    // Pushed when the setting changes and when stages-available appears (a plugin load starts with the flag off), not on
+    // every capabilities event: the plugin re-posts its capabilities when the flag changes, and a push there would undo a
+    // flag set by the nested Stages tests (tests/compositor/stages.sh, soak.sh, minimize.sh stages).
+    readonly property string stagesFlag: Settings.windowsStages ? "true" : "false"
+    readonly property bool stagesAvailable: Capabilities.has("stages-available")
+
+    function pushStagesFlag(): void {
+        if (root.stagesAvailable && dispatchRequest(Minimized.configCall("stagesEnabled", root.stagesFlag)))
+            console.info("grassfield: compositor setting stagesEnabled =", root.stagesFlag);
+    }
 
     // Reduce Motion also shortens what Hyprland animates itself: window pop-in and the Spaces slide become crossfades
     // (Minimized.motionCall). Applied whenever it changes, at every shell start (the compositor keeps what the previous shell
@@ -277,12 +296,25 @@ Singleton {
     onTitlebarDoubleClickChanged: pushPluginConfig()
     onMinimizeEffectChanged: pushPluginConfig()
     onTilingConfigChanged: pushPluginConfig()
+    onChromeAppearanceChanged: pushPluginConfig()
+    onStagesFlagChanged: pushStagesFlag()
+    onStagesAvailableChanged: pushStagesFlag()
+
+    // A Stages operation (docs/specs/stages.md "Shell contract"; Minimized.stagesCall) while the plugin advertises "stages"
+    // (the flag is on). False when not sent.
+    function stages(request: var): bool {
+        if (!Capabilities.has("stages"))
+            return false;
+        return dispatchRequest(Minimized.stagesCall(request));
+    }
 
     function pushPluginConfig(): void {
         if (Capabilities.has("config") && dispatchRequest(Minimized.configCall("titlebarDoubleClick", root.titlebarDoubleClick)))
             console.info("grassfield: compositor setting titlebarDoubleClick =", root.titlebarDoubleClick);
         if (Capabilities.has("minimize-effect") && dispatchRequest(Minimized.configCall("minimizeEffect", root.minimizeEffect)))
             console.info("grassfield: compositor setting minimizeEffect =", root.minimizeEffect);
+        if (Capabilities.has("appearance") && dispatchRequest(Minimized.configCall("appearance", root.chromeAppearance)))
+            console.info("grassfield: compositor setting appearance =", root.chromeAppearance);
         if (Capabilities.has("window-tiling")) {
             for (const key of Object.keys(root.tilingConfig))
                 dispatchRequest(Minimized.configCall(key, root.tilingConfig[key]));
@@ -314,6 +346,7 @@ Singleton {
     // The handshake may have completed before this singleton was first used.
     Component.onCompleted: {
         pushPluginConfig();
+        pushStagesFlag();
         // Always, whatever the value: Hyprland outlives the shell, so a restarted shell (or one that finds the setting off
         // after a config reset) must not leave the compositor on the reduced animations of the previous run.
         pushMotion();

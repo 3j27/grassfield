@@ -11,6 +11,7 @@
 #include "Plugin.hpp"
 #include "Stages.hpp"
 #include "Tiling.hpp"
+#include "Titlebar.hpp"
 #include "core/Minimize.hpp"
 #include "core/Overview.hpp"
 #include "core/OverviewFocus.hpp"
@@ -181,7 +182,7 @@ namespace gf::ipc {
         std::string currentCapabilities() {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
-                                                state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready());
+                                                state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready(), state().luaConfigRegistered);
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -300,6 +301,20 @@ namespace gf::ipc {
                     logRequest(Log::INFO, "config: {} = {}", minimize::kConfigMinimizeEffect, value.view());
                     return;
                 }
+                // The appearance the chrome follows (audit UX-06): every titlebar is drawn again in its palette.
+                if (key.ok && value.ok && key.view() == gfc::kConfigAppearance) {
+                    const auto appearance = gfc::parseAppearance(key.view(), value.view());
+                    if (!appearance) {
+                        logRequest(Log::WARN, "config: rejected ({} = dark|light)", gfc::kConfigAppearance);
+                        return;
+                    }
+                    const bool changed  = state().appearance != *appearance;
+                    state().appearance = *appearance;
+                    logRequest(Log::INFO, "config: {} = {}", gfc::kConfigAppearance, value.view());
+                    if (changed)
+                        CGrassfieldTitlebar::onAppearanceChanged();
+                    return;
+                }
                 // Window tiling (core/Tiling.hpp): Settings windows.tilingEdges / tilingMenuBar / tilingMargins.
                 if (key.ok && value.ok && (key.view() == tiling::kConfigEdges || key.view() == tiling::kConfigMenuBar || key.view() == tiling::kConfigMargins)) {
                     const auto on = tiling::parseBool(value.view());
@@ -318,8 +333,8 @@ namespace gf::ipc {
                 }
                 const auto action = key.ok && value.ok ? gfc::parseDoubleClickAction(key.view(), value.view()) : std::nullopt;
                 if (!action) {
-                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none, {} = true|false, {} = funnel|shrink|fade and the tiling keys are accepted)",
-                               gfc::kConfigTitlebarDoubleClick, gf::stages::kConfigStagesEnabled, minimize::kConfigMinimizeEffect);
+                    logRequest(Log::WARN, "config: rejected (only {} = zoom|minimize|none, {} = dark|light, {} = true|false, {} = funnel|shrink|fade and the tiling keys are accepted)",
+                               gfc::kConfigTitlebarDoubleClick, gfc::kConfigAppearance, gf::stages::kConfigStagesEnabled, minimize::kConfigMinimizeEffect);
                     return;
                 }
                 state().doubleClickAction = *action;

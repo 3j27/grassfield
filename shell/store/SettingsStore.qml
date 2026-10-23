@@ -51,6 +51,8 @@ Scope {
         return list.join("\n") === "foot\nchromium\norg.gnome.Nautilus" ? ["chromium", "foot", "org.grassfield.Settings"] : list;
     }
     readonly property var dockRecent: stringList(config.dock.recent)
+    readonly property var dockFolders: stringList(config.dock.folders)
+    readonly property var dockStackOptions: config.dock.stackOptions && typeof config.dock.stackOptions === "object" ? config.dock.stackOptions : ({})
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string dockMinimizeEffect: ["funnel", "shrink"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "funnel"
     readonly property var notificationsAppPreviews: NotificationPrefs.normalize(config.notifications.appPreviews)
@@ -140,6 +142,9 @@ Scope {
         // Recently launched apps that are not pinned, newest first (owned by the Dock), and whether to show them.
         property var recent: []
         property bool showRecents: true
+        // Folder stacks in the right section of the Dock ("~/" allowed) and their options per folder (Stacks.js).
+        property var folders: ["~/Downloads"]
+        property var stackOptions: ({})
         // Minimized windows go into their app's tile instead of getting a tile of their own.
         property bool minimizeIntoApp: false
         // "Animate opening applications": the launch bounce (macOS). Attention bounces are not part of it.
@@ -156,6 +161,13 @@ Scope {
         property bool tilingEdges: true
         property bool tilingMenuBar: true
         property bool tilingMargins: true
+        // Stages (macOS: Desktop & Dock > Windows, off by default; ADR-0013, owner decision D-4): pushed to the compositor
+        // plugin as config("stagesEnabled") while it advertises stages-available.
+        property bool stages: false
+        // "Rebuild the compositor extension after Hyprland updates" (opt-in, ADR-0009 amendment 2026-10-23): when no
+        // extension build matches the installed Hyprland the shell (shell.qml) runs grassfield-compositor-rebuild
+        // --session in the background.
+        property bool rebuildExtension: false
     }
 
     component LockConfig: JsonObject {
@@ -277,6 +289,15 @@ Scope {
 
     function setDockRecent(list: var): void {
         change("dock.recent", stringList(list));
+    }
+
+    function setDockFolders(list: var): void {
+        change("dock.folders", stringList(list));
+    }
+
+    // Options of the stacks as a whole ({path: {sort, view, display}}, already normalized by Stacks.withOption).
+    function setDockStackOptions(options: var): void {
+        change("dock.stackOptions", options && typeof options === "object" ? options : ({}));
     }
 
     // corner: topLeft | topRight | bottomLeft | bottomRight.
