@@ -98,6 +98,7 @@
  {"path": "tests/unit/tst_textformat.qml", "layer": "headless"},
  {"path": "tests/unit/tst_tokens.qml", "layer": "headless"},
  {"path": "tests/unit/tst_tracking.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_volumescale.qml", "layer": "headless"},
  {"path": "tests/unit/tst_wallpaper.qml", "layer": "headless"},
  {"path": "tests/unit/tst_widgets.qml", "layer": "headless"},
  {"path": "tests/unit/files/tst_appscope.cpp", "layer": "logic"},
