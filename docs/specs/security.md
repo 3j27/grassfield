@@ -108,20 +108,34 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   `failed`). A stop through systemd is never restarted (systemd semantics): logout stops `graphical-session.target`,
   which stops the shell (`PartOf=`), and `Requisite=graphical-session.target` refuses a restart once the target is gone,
   so a real logout is not fought. `systemctl --user stop grassfield-shell` stays a deliberate stop.
-- Omarchy's `omarchy-sleep-lock.service` (holds a second delay inhibitor and, before sleep, asks the Omarchy shell to
-  lock): the drop-in `10-grassfield.conf` no longer disables it unconditionally (`ConditionEnvironment=!GRASSFIELD_SESSION=1`);
-  its `ExecCondition=/usr/lib/grassfield/sleep-lock-gate` skips it only in the Grassfield session while
-  grassfield-shell is `active`, `activating`, `reloading` or `refreshing`; in the Omarchy session, and whenever
-  grassfield-shell is stopped, failed or unknown, it runs as Omarchy ships it. A unit skipped by `ExecCondition=` is not
-  failed and not restarted (systemd.service(5)). grassfield-shell's `ExecStartPre=-systemctl --user --no-block stop
-  omarchy-sleep-lock.service` stops an instance that started before the shell (session start race). Checked by
-  `tests/security/sleep_lock_units.sh` (the gate against a stub `systemctl` for every state, the unit and drop-in
-  lines, the package path). Runtime NOT VERIFIED until L2-12 and the owner check below.
-- Limit, stated plainly: in the Grassfield session Omarchy's sleep-lock can only ask the Omarchy shell to lock, and that
-  shell is not running there. When grassfield-shell has failed for good (start limit), Omarchy's unit may run (D-12) but
-  cannot lock; it only delays suspend by its budget. A real fallback locker (a minimal lock-only Quickshell unit with the
-  same `WlSessionLock` + `PamContext`, or starting Omarchy's shell) is an owner decision (open question in the
-  remediation report); nothing in this change pretends to provide it.
+- Omarchy's `omarchy-sleep-lock.service` (a logind delay inhibitor and a `PrepareForSleep` monitor; before sleep its
+  `omarchy-system-sleep-lock` asks "the shell" to lock with `omarchy-shell lock lock` and polls `omarchy-shell lock
+  status` until `secure`, within logind's window, else it reports "Screen did not lock before suspend"):
+  - the drop-in `10-grassfield.conf` no longer disables it unconditionally (`ConditionEnvironment=!GRASSFIELD_SESSION=1`):
+    its `ExecCondition=/usr/lib/grassfield/sleep-lock-gate` skips it in the Grassfield session while grassfield-shell
+    is `active`, `activating`, `reloading` or `refreshing`. A unit skipped by `ExecCondition=` is not failed and not
+    restarted (systemd.service(5)), so a running copy disarms itself at its next restart once the shell is back.
+  - In the Grassfield session nothing starts it while grassfield-shell runs; `OnFailure=omarchy-sleep-lock.service`
+    starts it when grassfield-shell has failed for good (start limit). It then never talks to Omarchy's shell: in this
+    session `/usr/lib/grassfield/omarchy-shims` is first in PATH, and its `omarchy-shell` stand-in answers `lock lock`
+    by starting grassfield-shell again (`reset-failed`, then a start) and asking it to lock (`qs ipc -c grassfield call
+    lock lock`: WlSessionLock + PamContext, no other locker), and `lock status` with `secure` = Hyprland lists `LOCK` on
+    every monitor, `requested` = grassfield-shell's crash-recovery marker says `locked`. Every other call fails as
+    Omarchy's wrapper does without its shell; nothing unlocks. This is the fail-safe: before each sleep the shell is
+    restarted and the session locked.
+  - grassfield-shell never stops Omarchy's unit (it could be in the middle of a sleep it is delaying). If both run (an
+    Omarchy unit started before the shell at session start), Omarchy's script only asks grassfield-shell to lock and
+    sees Hyprland's `LOCK`: a second, harmless path, without the 12 s delay or the false notice the drop-in was made for.
+  - In the Omarchy session the gate always lets it run, exactly as Omarchy ships it.
+  Checked by `tests/security/sleep_lock_units.sh` (the gate for every state, the unit and drop-in lines, the stand-in
+  against stub `systemctl`, `qs` and `hyprctl`, the package path) and `scripts/dev/omarchy-compat.sh` (Omarchy's script
+  still uses that `lock lock` / `lock status` contract). Runtime NOT VERIFIED until the owner check below.
+- Known limit (owner): when grassfield-shell cannot start at all (a broken install), the fail-safe cannot lock either:
+  Omarchy's script waits logind's window, reports that the screen did not lock (no notification server runs then: the
+  journal has it) and the machine sleeps unlocked. There is no second locker on purpose (security rules: WlSessionLock +
+  PamContext in grassfield-shell only). Refusing sleep instead (a logind `block` inhibitor) was rejected: a closed laptop
+  would then stay awake in a bag. A deliberate `systemctl --user stop grassfield-shell` is not a failure and does not
+  start the fail-safe. The lid path (`grassfield-lid` → `lock lid`) needs a running shell too.
 - Sleep inhibitor and `PrepareForSleep` watcher (`SleepInhibitor.qml`): never given up. An exit within 2 s of the start
   counts as a failure; after 5 in a row the module is "degraded": the user gets a notice in Notifications ("The screen
   may not lock before sleep", with the lock shortcut; Do Not Disturb silences its banner, the entry stays in the
@@ -137,6 +151,10 @@ macOS model: the screen always locks before sleep, and the lock never silently g
 Owner check (real session, L2-12 addition): `systemctl --user kill -s SIGTERM grassfield-shell.service; sleep 3;
 systemctl --user is-active grassfield-shell.service` → `active`; `systemctl --user show -P ActiveState
 omarchy-sleep-lock.service` → `inactive`; `systemd-inhibit --list | grep -c Grassfield` → `1`, and no `Omarchy` line.
+Fail-safe (owner, L2†, from a TTY or a terminal you can leave): `systemctl --user stop grassfield-shell.service;
+systemctl --user start omarchy-sleep-lock.service` (stands in for the start-limit failure), then `systemctl suspend`
+and wake: the Grassfield lock screen is shown before any content, and `journalctl --user -u omarchy-sleep-lock -b`
+has no "suspending without a secure lock" line.
 
 ## Graceful exit while locked (SEC-18 / GF-029, DT-21)
 Read in the sources (Quickshell v0.3.1, `quickshell-mirror/quickshell@v0.3.1`; Hyprland v0.56.2,
@@ -496,8 +514,9 @@ Known gaps: polkit `details` (program, command line, process) are not exposed by
 puts the program in `message`, which is shown, and the action's icon is shown (see "Polkit details"). Caps Lock is
 inferred from typed letters (no lock-key state in Quickshell). D-Bus `org.freedesktop.ScreenSaver` inhibitors are not
 handled (see D-4: not possible with the security modules' building blocks; proposal there). Display power-off on the
-lock screen is done (30 s), not yet seen on hardware (L2†). No fallback locker exists when grassfield-shell has failed
-for good (see "Lock coverage").
+lock screen is done (30 s), not yet seen on hardware (L2†). When grassfield-shell has failed for good, the fail-safe
+restarts it before sleep; a shell that cannot start at all leaves the machine to sleep unlocked (no second locker, by
+the security rules; see "Lock coverage").
 The marker file of a dead compositor instance stays in `$XDG_RUNTIME_DIR` until logout (a few bytes).
 Lock screen contrast: the lock's error, notice, Caps Lock, typed-dots, return-arrow and focus-ring states are proven by the
 token calculation only (the contrast run's nested capture is at rest: nothing is typed into the nested lock there; the
