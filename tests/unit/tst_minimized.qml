@@ -39,6 +39,42 @@ TestCase {
         compare(Minimized.configCall("constructor", "zoom"), "");
     }
 
+    // Stages from Settings (owner decision D-4, audit ARCH-05): the flag key and the verb the strip uses.
+    function test_stagesFlagAndVerb() {
+        compare(Minimized.configCall("stagesEnabled", "true"),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.config then p.config(\"stagesEnabled\", \"true\") end end");
+        verify(Minimized.configCall("stagesEnabled", "false") !== "");
+        compare(Minimized.configCall("stagesEnabled", "yes"), "");
+        compare(Minimized.configCall("stagesEnabled", true), "", "strings only, as the plugin reads them");
+        verify(Minimized.isPluginVerb("stages"));
+    }
+
+    function test_stagesCallQuotesTheOperationAsALuaString() {
+        compare(Minimized.stagesCall({op: "off", durationMs: 0}),
+                "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.stages then p.stages(\"{\\\"op\\\":\\\"off\\\",\\\"durationMs\\\":0}\") end end");
+        verify(Minimized.stagesCall({op: "activate", stage: 7}) !== "");
+        verify(Minimized.stagesCall({op: "move", address: "0x55ab", stage: "new"}) !== "");
+        verify(Minimized.stagesCall({op: "on", durationMs: 350, strips: [{monitor: "GF-REF", hidden: false, tiles: [{x: 16, y: 100, w: 188, h: 160}]}]}) !== "");
+        // A string that tries to leave the Lua literal stays inside it: the literal, read as Lua reads it (\\ and \"),
+        // gives back exactly the JSON of the request, and the call ends where it should.
+        const request = {op: "move", address: "\") os.exit() --", stage: "\\\"\n"};
+        const sneaky = Minimized.stagesCall(request);
+        const head = "if p and p.stages then p.stages(\"";
+        const tail = "\") end end";
+        verify(sneaky.indexOf(head) > 0 && sneaky.endsWith(tail), sneaky);
+        const literal = sneaky.slice(sneaky.indexOf(head) + head.length, sneaky.length - tail.length);
+        verify(!/(^|[^\\])"/.test(literal.replace(/\\\\/g, "")), "no unescaped quote inside the literal: " + literal);
+        const decoded = literal.replace(/\\(["\\])/g, "$1");
+        compare(JSON.stringify(JSON.parse(decoded)), JSON.stringify(request));
+        // Rejected: no or unknown op, not an object, too large.
+        compare(Minimized.stagesCall({op: "explode"}), "");
+        compare(Minimized.stagesCall({}), "");
+        compare(Minimized.stagesCall(null), "");
+        compare(Minimized.stagesCall("{\"op\":\"off\"}"), "");
+        compare(Minimized.stagesCall([{op: "off"}]), "");
+        compare(Minimized.stagesCall({op: "on", pad: "x".repeat(9000)}), "");
+    }
+
     // The appearance the compositor-drawn chrome follows (plugin feature "appearance", audit UX-06).
     function test_configCallAppearance() {
         compare(Minimized.configCall("appearance", "light"),

@@ -6,7 +6,7 @@
 // record rebuilt after a shell restart).
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile"];
+var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile", "stages"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -156,14 +156,38 @@ function overviewFocusCall(target, id) {
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
 // tilingEdges / tilingMenuBar / tilingMargins: Settings windows.tiling* (feature "window-tiling").
 // appearance: the appearance the shell shows (feature "appearance"): the compositor-drawn titlebars follow it (audit UX-06).
+// stagesEnabled: Settings windows.stages (feature "stages-available"; ADR-0013, owner decision D-4).
 var pluginConfig = {
     titlebarDoubleClick: ["zoom", "minimize", "none"],
     minimizeEffect: ["funnel", "shrink", "fade"],
     tilingEdges: ["true", "false"],
     tilingMenuBar: ["true", "false"],
     tilingMargins: ["true", "false"],
-    appearance: ["dark", "light"]
+    appearance: ["dark", "light"],
+    stagesEnabled: ["true", "false"]
 };
+
+// hl.plugin.grassfield.stages(json) (gfc/1 capability "stages", docs/specs/stages.md "Shell contract" 3 and 5), for the
+// Stages strip: `request` is the operation object ({op: "on", durationMs, curve?, strips: [...]}, {op: "off", durationMs},
+// {op: "activate" | "merge", stage}, {op: "move", address, stage}). Only the op is checked here (one of these five) and
+// the size (at most 8 KiB, the plugin's limit); the plugin validates every field strictly (untrusted input there). The JSON
+// is quoted as a Lua string (JSON.stringify escapes control characters; backslash and double quote are escaped for Lua).
+// "" when anything is invalid (callers must not dispatch it).
+var stagesOps = ["on", "off", "activate", "move", "merge"];
+
+function stagesCall(request) {
+    if (!request || typeof request !== "object" || Array.isArray(request) || stagesOps.indexOf(request.op) < 0)
+        return "";
+    let json = "";
+    try {
+        json = JSON.stringify(request);
+    } catch (e) {
+        return "";
+    }
+    if (typeof json !== "string" || json.length > 8192)
+        return "";
+    return guardedPluginCall("stages", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
+}
 
 function configCall(key, value) {
     if (typeof key !== "string" || !Object.prototype.hasOwnProperty.call(pluginConfig, key))

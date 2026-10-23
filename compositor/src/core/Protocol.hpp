@@ -52,8 +52,9 @@ namespace gf::gfc {
     // motion after a popup closed) and late grants dropped on any other focus change. Always advertised together with
     // desktop-focus; the shell enables its file-changing desktop keys only with this one (shell main 23caeab).
     inline constexpr std::string_view kFeatureDesktopFocusV2 = "desktop-focus-v2";
-    // Stages (ADR-0013): "stages-available" when the hooks and hl.plugin.grassfield.stages registered (the shell shows the
-    // Control Center toggle); "stages" only while the feature flag config stagesEnabled is true (the shell shows its strip).
+    // Stages (ADR-0013): "stages-available" when the hooks and hl.plugin.grassfield.stages registered (the shell pushes its
+    // setting windows.stages as config stagesEnabled; its Stages toggle and strip are D-4 work); "stages" only while the
+    // feature flag config stagesEnabled is true (the shell's strip then sends op:on).
     inline constexpr std::string_view kFeatureStagesAvailable = "stages-available";
     inline constexpr std::string_view kFeatureStages          = "stages";
     // hl.plugin.grassfield.cursor_refresh(): the pointer on screen is drawn again at the size Hyprland holds (after the

@@ -62,7 +62,8 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   keyboard None (`no-chrome` otherwise). Earlier every chrome had to be Exclusive, which made Hyprland refuse to give the
   keyboard back after the close on two outputs.
 - Feature `stages-available` / `stages` (2026-10-18, additive, ADR-0013): `stages-available` when the Stages listeners
-  and verb registered (Control Center shows the toggle); `stages` only while the flag is on.
+  and verb registered (the shell pushes its setting `windows.stages` as the flag, see below); `stages` only while the flag
+  is on.
 - Withdrawal at unload (2026-10-18, additive): `PLUGIN_EXIT` posts `{"v":"gfc/1","type":"capabilities","features":[]}`
   after removing every hook, so the shell drops each feature and returns to its fallbacks (desktop focus workarounds,
   minimize parking, T0 menus, thumbnails). The shell must treat every capabilities event as the current truth.
@@ -79,6 +80,13 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   `config` allowlist gains `tilingEdges`, `tilingMenuBar`, `tilingMargins` ∈ true|false (all true at load). The feature
   is advertised only when the `tile` and `config` verbs registered. (Other verbs added since 2026-10-18 and not listed
   above: `cursor_refresh()`, `overview_focus(json)`, `config("minimizeEffect", …)`; see their specs.)
+- Feature `appearance` (2026-10-23, additive, audit UX-06, docs/specs/compositor.md FR53): `config` allowlist gains
+  `appearance` ∈ dark|light (dark at load); the compositor-drawn titlebars and the tiling preview follow it. Advertised
+  with `config`; the shell sends the key only when it sees the feature.
+- Stages from Settings (2026-10-23, additive, owner decision D-4, audit ARCH-05): the shell's verb allowlist gains
+  `stages`; the shell persists the setting `stages.enabled` (off by default) and pushes `config("stagesEnabled", …)` after
+  every capabilities event with `stages-available` and on change. Until the shell's strip exists nothing sends `op:on`, so
+  the flag alone changes nothing on screen (docs/specs/stages.md "Shell contract").
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.

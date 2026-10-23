@@ -76,6 +76,7 @@ Singleton {
     readonly property bool windowsTilingEdges: store.data.windows.tilingEdges
     readonly property bool windowsTilingMenuBar: store.data.windows.tilingMenuBar
     readonly property bool windowsTilingMargins: store.data.windows.tilingMargins
+    readonly property bool windowsStages: store.data.windows.stages
     readonly property int lockIdleMinutes: store.lockIdleMinutes
 
     readonly property bool desktopShowIcons: store.data.desktop.showIcons

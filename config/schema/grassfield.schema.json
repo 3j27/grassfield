@@ -137,6 +137,9 @@
         },
         "tilingMargins": {
           "type": "boolean"
+        },
+        "stages": {
+          "type": "boolean"
         }
       }
     },

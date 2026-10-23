@@ -275,10 +275,16 @@ window, so it is not counted as evidence either way).
 
 ## Shell ↔ plugin contract (gfc/1, additive; for the shell-engineer — the shell side is not implemented)
 1. **Detection.** `Capabilities.has("stages-available")` → show the Stages toggle in Quick Settings (off by default,
-   persisted by the shell, e.g. `stages.enabled`). Without it (no plugin, mismatch, hooks failed, after the unload event
-   with an empty list) hide the toggle and the strip. Push the setting after every capabilities event and on change:
-   `hl.plugin.grassfield.config("stagesEnabled", "true"|"false")` (add the key to the config allowlist in
-   `shell/platform/Minimized.js`). `Capabilities.has("stages")` → the flag is on: map the strip and send `op:on`.
+   persisted by the shell as Settings `windows.stages`). Without it (no plugin, mismatch, hooks failed, after the unload
+   event with an empty list) hide the toggle and the strip. **Done (2026-10-23, owner decision D-4, audit ARCH-05):** the
+   setting `windows.stages` (schema, defaults, `Settings.windowsStages`, the Settings app's store rules) and its push
+   `hl.plugin.grassfield.config("stagesEnabled", "true"|"false")` from `shell/platform/Compositor.qml` (`pushStagesFlag`:
+   when the setting changes and when `stages-available` appears, i.e. at every plugin load, which starts with the flag
+   off; not on every capabilities event, because the plugin re-posts them when the flag changes); the verb `stages` is in
+   the allowlist of `shell/platform/Minimized.js` and `Compositor.stages(request)` sends one operation (built by
+   `Minimized.stagesCall`, only while `stages` is advertised). Still to build (shell): the Quick Settings and Settings
+   toggles writing `windows.stages`, and the strip. `Capabilities.has("stages")` → the flag is on: map the strip and send
+   `op:on`.
 2. **Strip surfaces** (one per output; only outputs with a strip are managed):
    - input surface: namespace **`grassfield-stages`**, `WlrLayer.Top` (or Overlay), anchored to the left edge, keyboard
      `None`, **transparent where the thumbnails are** (the plugin draws them in the window layer, under Top). Its input

@@ -31,7 +31,8 @@
     "titlebarDoubleClick": "zoom",
     "tilingEdges": true,
     "tilingMenuBar": true,
-    "tilingMargins": true
+    "tilingMargins": true,
+    "stages": false
   },
   "notifications": {
     "dnd": false,

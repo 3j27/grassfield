@@ -259,11 +259,34 @@ Singleton {
 
     // The appearance the shell shows: the compositor-drawn titlebars follow it (feature "appearance", audit UX-06).
     readonly property string chromeAppearance: Appearance.dark ? "dark" : "light"
+    // Stages (Settings windows.stages, ADR-0013, owner decision D-4): the plugin's flag follows the setting while the plugin
+    // offers Stages (feature "stages-available"; "stages" is then advertised while the flag is on, and the strip sends its
+    // operations with stages() below). Off by default; the flag alone changes nothing on screen until the strip sends op:on.
+    // Pushed when the setting changes and when stages-available appears (a plugin load starts with the flag off), not on
+    // every capabilities event: the plugin re-posts its capabilities when the flag changes, and a push there would undo a
+    // flag set by the nested Stages tests (tests/compositor/stages.sh, soak.sh, minimize.sh stages).
+    readonly property string stagesFlag: Settings.windowsStages ? "true" : "false"
+    readonly property bool stagesAvailable: Capabilities.has("stages-available")
+
+    function pushStagesFlag(): void {
+        if (root.stagesAvailable && dispatchRequest(Minimized.configCall("stagesEnabled", root.stagesFlag)))
+            console.info("grassfield: compositor setting stagesEnabled =", root.stagesFlag);
+    }
 
     onTitlebarDoubleClickChanged: pushPluginConfig()
     onMinimizeEffectChanged: pushPluginConfig()
     onTilingConfigChanged: pushPluginConfig()
     onChromeAppearanceChanged: pushPluginConfig()
+    onStagesFlagChanged: pushStagesFlag()
+    onStagesAvailableChanged: pushStagesFlag()
+
+    // A Stages operation (docs/specs/stages.md "Shell contract"; Minimized.stagesCall) while the plugin advertises "stages"
+    // (the flag is on). False when not sent.
+    function stages(request: var): bool {
+        if (!Capabilities.has("stages"))
+            return false;
+        return dispatchRequest(Minimized.stagesCall(request));
+    }
 
     function pushPluginConfig(): void {
         if (Capabilities.has("config") && dispatchRequest(Minimized.configCall("titlebarDoubleClick", root.titlebarDoubleClick)))
@@ -301,7 +324,10 @@ Singleton {
     }
 
     // The handshake may have completed before this singleton was first used.
-    Component.onCompleted: pushPluginConfig()
+    Component.onCompleted: {
+        pushPluginConfig();
+        pushStagesFlag();
+    }
 
     function isMinimized(toplevel: var): bool {
         return Minimized.has(root.minimized, toplevel);

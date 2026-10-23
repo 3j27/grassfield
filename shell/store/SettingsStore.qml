@@ -151,6 +151,9 @@ Scope {
         property bool tilingEdges: true
         property bool tilingMenuBar: true
         property bool tilingMargins: true
+        // Stages (macOS: Desktop & Dock > Windows, off by default; ADR-0013, owner decision D-4): pushed to the compositor
+        // plugin as config("stagesEnabled") while it advertises stages-available.
+        property bool stages: false
     }
 
     component LockConfig: JsonObject {

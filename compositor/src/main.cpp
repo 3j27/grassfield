@@ -252,7 +252,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
             gf::guarded("desktop focus rollback", [] { gf::desktopFocus::stop(); });
             gf::log(Log::WARN, "desktop focus listeners failed to register; desktop-focus not advertised");
         }
-        // Optional feature behind a flag (off at load): without it the shell hides the Stages toggle.
+        // Optional feature behind a flag (off at load; the shell pushes Settings windows.stages): without it the shell sends
+        // no Stages flag and no Stages operation.
         bool stagesOk = false;
         gf::guarded("stages start", [&] { stagesOk = gf::stager::start(); });
         if (!stagesOk) {
