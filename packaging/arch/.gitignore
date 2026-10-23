@@ -3,3 +3,5 @@
 /pkg/
 /*.pkg.tar.*
 /*.log
+/mactahoe-icon-theme/
+/pebble-icon-theme/

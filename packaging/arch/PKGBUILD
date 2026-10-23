@@ -1,11 +1,12 @@
 # Maintainer: Grassfield project
-# Local package build from this repository. grassfield-desktop and grassfield-compositor need no download:
+# Local package build from this repository. grassfield-desktop and grassfield-compositor need no download;
+# grassfield-icons fetches TWO pinned upstream commits (MacTahoe and Pebble icon themes, GPL-3.0, ADR-0017):
 #   cd packaging/arch && makepkg -si        (owner runs it; installs with sudo through pacman)
-# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor
+# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons
 # Never constrain the hyprland version here (ADR-0009, master-prompt §5.6).
 
 pkgbase=grassfield
-pkgname=(grassfield-desktop grassfield-compositor)
+pkgname=(grassfield-desktop grassfield-compositor grassfield-icons)
 pkgver=0.4.0
 pkgrel=10
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
@@ -14,8 +15,19 @@ url="https://grassfield.invalid"
 # Grassfield's own code is MIT (ADR-0005, accepted by the owner 2026-10-18; root LICENSE, installed by both packages).
 # Third-party notices: THIRD_PARTY.md, installed under /usr/share/licenses/<package>/.
 license=(MIT)
-makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf)
+makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf git)
 options=(!debug)
+# grassfield-icons (ADR-0017, owner decision 2026-10-23): ONE theme composed from two third-party themes by
+# packaging/arch/icons-compose.py (layers: our own icons, MacTahoe, Pebble, our device glyphs; Pebble folders and store
+# bag; Apple logos removed per packaging/arch/icons-apple-logos.txt). Integrity: the commit id (makepkg checks it out by
+# id) and the SHA-256 of the `git archive` of that commit (pacman 7.1 calc_checksum_git). No upstream script runs: the
+# composer reads src/, links/ and Pebble/ only. Same pins as scripts/dev/icons.sh: update both together.
+_mactahoe_commit=839848b9a8a38a92a6936e30c4abe35cc6f2546d
+_pebble_commit=185da58c2f4caf3c2a038aa0869fd2772acc0933
+source=("mactahoe-icon-theme::git+https://github.com/vinceliuice/MacTahoe-icon-theme.git#commit=${_mactahoe_commit}"
+        "pebble-icon-theme::git+https://github.com/a-shewale/Pebble-Icon-Theme.git#commit=${_pebble_commit}")
+sha256sums=('4d91771b305c25b6a81e8a24e7c3d4ae49cce9754db199437191fa30cb9c60b0'
+            '7bd4b12ca3914542857a159aed149d44e5d2b82a787c9d56f830da80fa0b9840')
 
 _root() { realpath "$startdir/../.."; }
 
@@ -46,6 +58,10 @@ build() {
   cmake --build "$srcdir/menu-bridge-build"
   # Grassfield cursors (ADR-0014): hyprcursor SVG theme + XCursor fallback from branding/cursors.
   "$(_root)/branding/cursors/build.sh" --out "$srcdir/icons"
+  # grassfield-icons (ADR-0017): compose the theme into a scratch directory; the composer fails on pin drift (a listed
+  # file missing) and when a listed logo, a dangling link or a forbidden word remains.
+  python3 -I "$startdir/icons-compose.py" --mactahoe "$srcdir/mactahoe-icon-theme" --pebble "$srcdir/pebble-icon-theme" \
+    --branding "$(_root)/branding/icons/theme" --list "$startdir/icons-apple-logos.txt" --out "$srcdir/grassfield-icons"
 }
 
 check() {
@@ -59,7 +75,7 @@ package_grassfield-desktop() {
   # python, librsvg (rsvg-convert) and hyprcursor (hyprcursor-util) are RUNTIME dependencies (owner decision 2026-10-19):
   # the shell runs /usr/share/grassfield/cursors/build.sh to regenerate the cursor theme for the pointer colours
   # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine python librsvg hyprcursor breeze-icons)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine python librsvg hyprcursor breeze-icons grassfield-icons)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
     'brightnessctl: display brightness OSD and Quick Settings slider'
@@ -121,12 +137,8 @@ package_grassfield-desktop() {
   install -m644 "$root"/branding/cursors/src/*.svg.in "$pkgdir/usr/share/grassfield/cursors/src/"
   chmod 755 "$pkgdir/usr/share/grassfield/cursors/build.sh"
 
-  # Session icon theme (ADR-0017): Grassfield's own icons first (none yet), then Breeze, Adwaita and hicolor (breeze-icons is a dependency; Adwaita comes with GTK).
-  # The empty scalable/apps directory is required: GTK drops a theme without a Directories entry, with its Inherits.
-  install -Dm644 "$root/branding/icons/theme/index.theme" "$pkgdir/usr/share/icons/grassfield-icons/index.theme"
-  install -d "$pkgdir/usr/share/icons/grassfield-icons/scalable/apps"
-  # Own generic phone, tablet and media player glyphs under the names of the Apple device pictures of Breeze and Adwaita (E27).
-  install -Dm644 "$root"/branding/icons/theme/scalable/devices/*.svg -t "$pkgdir/usr/share/icons/grassfield-icons/scalable/devices"
+  # The session icon theme grassfield-icons (ADR-0017) is its own package (a dependency): it also carries Grassfield's own
+  # generic phone, tablet and media player glyphs under the names of the Apple device pictures of Breeze and Adwaita (E27).
   # Session environment for uwsm (Grassfield desktop name only): Qt icon theme, the GTK dconf profile and the fontconfig file.
   install -Dm644 "$root/packaging/uwsm/env-grassfield" "$pkgdir/usr/share/uwsm/env-grassfield"
   install -Dm644 "$root/packaging/dconf/profile" "$pkgdir/usr/share/grassfield/dconf/profile"
@@ -151,4 +163,35 @@ package_grassfield-compositor() {
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-compositor/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/hyprland-BSD-3-Clause.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/hyprland-BSD-3-Clause.txt"
   install -Dm644 "$root/packaging/licenses/appmenu-LGPL-2.1-or-later.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/appmenu-LGPL-2.1-or-later.txt"
+}
+
+package_grassfield-icons() {
+  pkgdesc="Grassfield icon theme: own icons, a composed third-party set (GPL-3.0) with Pebble folders and store, Breeze fallback"
+  arch=(any)
+  # MIT for Grassfield's own glyphs (root LICENSE); GPL-3.0-only for the third-party art. MacTahoe ships COPYING (GPL
+  # version 3, unmodified text), its README states no licence and no file carries an "or later" notice: GPL-3.0-only.
+  # Pebble's README states "GPL-3.0" and links a LICENSE file that does not exist at the pin (owner accepted the risk
+  # 2026-10-23, THIRD_PARTY.md).
+  license=(MIT GPL-3.0-only)
+  # The project URL (package metadata is shown by pacman and software centres: no Apple trademark name there); the
+  # upstream URLs and commits are in /usr/share/licenses/grassfield-icons/SOURCE.
+  depends=(breeze-icons)
+  options=(!strip)
+  install -d "$pkgdir/usr/share/icons"
+  cp -a --no-preserve=ownership "$srcdir/grassfield-icons" "$pkgdir/usr/share/icons/grassfield-icons"
+  # The gtk-update-icon-cache pacman hook builds icon-theme.cache on the target; the composer ships none.
+  local lic="$pkgdir/usr/share/licenses/grassfield-icons"
+  install -Dm644 "$srcdir/mactahoe-icon-theme/COPYING" "$lic/COPYING"
+  install -Dm644 "$srcdir/mactahoe-icon-theme/AUTHORS" "$lic/AUTHORS"
+  install -Dm644 "$(_root)/LICENSE" "$lic/LICENSE"
+  install -Dm644 "$(_root)/THIRD_PARTY.md" "$lic/THIRD_PARTY.md"
+  printf '%s\n' \
+    "MacTahoe icon theme: https://github.com/vinceliuice/MacTahoe-icon-theme at commit ${_mactahoe_commit}" \
+    "Pebble icon theme:   https://github.com/a-shewale/Pebble-Icon-Theme at commit ${_pebble_commit}" \
+    >"$lic/SOURCE"
+  printf '%s\n' \
+    "Pebble icon theme (https://github.com/a-shewale/Pebble-Icon-Theme, commit ${_pebble_commit}), user a-shewale:" \
+    "its folders (places), the store icon and the icons not provided by the other layers are used in this theme." \
+    "Its README states GPL-3.0; the repository holds no licence file at this commit." \
+    >"$lic/PEBBLE"
 }

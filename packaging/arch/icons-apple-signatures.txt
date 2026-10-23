@@ -1,0 +1,32 @@
+# Fingerprints of the Apple-logo glyph paths found in the pinned upstream themes (ADR-0017, owner decision 2026-10-23).
+# Input of packaging/arch/icons-compose.py (default next to it; --signatures FILE overrides). The composer fails when
+# any regular SVG of the composed theme draws a path whose signature has one of these SHA-256 values, so a logo that a
+# pin change or an alias brings back cannot ship.
+# Signature of a path: its `d` data with runs of white space collapsed to one space, trimmed, and the first moveto
+# (`M x y` / `m x y`) removed, so the same glyph placed elsewhere in an icon has the same signature. Only hashes are
+# stored here: the repository holds no Apple artwork.
+# Source: every path of the files in icons-apple-logos.txt was drawn alone and looked at; the 23 that draw the apple
+# (alone, on an iMac chin, a mouse, an iPod, a drive, a menu bar, the rainbow logo pieces) are below.
+b4ab6eb070d1633bcee8653760c5feae4b76031dc7fbf887afb835fb380bb75b
+a644abc60014dff89b3c8c0852127303f1c4dfeea36ac80156a3ac9baa9b6740
+4f6b177f2a2429aac815933fccae5c52313ea6e9183ce4bdb254c09d91278df0
+43f4332ba638c5a38ab71ce17d1828d3df9e53f83049c217cd44225aeec3cafd
+8ab4e8da1106c9d8238540299717571064433fc9f11c3174ac23dd9a6d7d5080
+f44c1f71655a6189f861714715210b7f06537bd56c1c7182a4d6ebac65452a07
+ca61b8c8ae755d06419f84f12c8b67a53314cfeac7cc5bdfe0d698d2914bb37b
+11f9d3fb454706d35541aeaf035d5a551c61d527ab3c9c3c01c5a0b8f4e1dca8
+0123e9f3f0c7493596bb37cff7d6a887e2defaabb321f51ede879c7bbcce4c05
+c6636ca54af2e54d9938481249777c97da764fc1d6166f81cf72126afee58768
+c9ac2a2f54364428a15c45b5005140523655d46cb954f886a97daa158930b5bd
+adf1ec5274152d96ac90e74c24ff378ddc1a579c51dbd8d24cbb26799c2e527a
+d73373f0555c46ecbbf9979e29addd6d49e4d148c83c12af53d640fef0d4a713
+2c2485af4f5403605e677ba6cd228f37618b28862c1e763b89cc73318f9f7cb0
+9f6192f9372a094e34c109166a286a601cf8a6a60bd44de55c098d85447608dd
+c00583d51c00c7d67e39ca6984d7c7a6e98388fd1d183205d10ab07b750ed4a1
+5a6dba2c77478f0cbf61671ece7a992a03233f88e6d6c98550182e30eecbfcdc
+7da27e01b7eba98cccd5fb0fffc3b8187ec13501ce1a6879d154ff53e279add0
+69bf60ed9c19ab8b407a6071e7eb9e5c80661f3ec0f681e4e9de30fcbe5843b9
+11e81a44e7c4fab02745ccff490b5021e49ebb0bf937c62c816f5cb74a10dd4e
+16d1204389991e1f0d9afa0ee688ec756b3629ee43c0060ac25f7ed459047ac0
+3b4ea0c265eccc9b6fb05af0c151e1a0a60304e25bef6fc1c572f68fc7ccb2cd
+4319b13a36c83d96380d3d27aa3378b09fafb1512f62b4d1771088738979df8b

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Dev-only environment (sourced by nested-up.sh, shell-run.sh and isolated.sh; never by anything that touches the
 # owner's session). Puts <repo>/.dev/share first in XDG_DATA_DIRS so that dev processes find the icon and cursor
-# themes provisioned there (branding/cursors/build.sh, the Grassfield wrapper icon theme), and
+# themes provisioned there (branding/cursors/build.sh, the Grassfield icon theme: scripts/dev/icons.sh or the wrapper), and
 # selects the Grassfield icon theme for every Qt process (see below).
 # The Grassfield cursor theme (branding/cursors/build.sh, ADR-0014), when built under .dev/share/icons, is selected the
 # way config/hypr/grassfield/cursor.lua selects it for Hyprland and its children (exec_cmd, Xwayland): the shell, the
@@ -17,20 +17,24 @@ unset GRASSFIELD_SESSION QS_DISABLE_FILE_WATCHER QS_NO_RELOAD_POPUP INVOCATION_I
   MANAGERPID MANAGERPIDFDID UWSM_FINALIZE_VARNAMES UWSM_WAIT_VARNAMES
 
 _gf_dev_root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
-# The Grassfield app icon theme (ADR-0017): the wrapper theme (branding/icons/theme/index.theme: Grassfield's own icons,
-# then Breeze, Adwaita and hicolor) is copied to .dev/share/icons/grassfield-icons, with the real directories
-# GTK needs and its own device glyphs, and selected for every Qt process (Quickshell and the Grassfield apps) through QT_QPA_SYSTEM_ICON_THEME, as
-# /usr/share/uwsm/env-grassfield does in the real session. Dev processes resolve every other icon through Breeze and
-# Adwaita (both installed with Omarchy).
+# The Grassfield app icon theme (ADR-0017), selected for every Qt process (Quickshell and the Grassfield apps) through
+# QT_QPA_SYSTEM_ICON_THEME, as /usr/share/uwsm/env-grassfield does in the real session. Two forms of the same name:
+#  * composed (scripts/dev/icons.sh, `just icons`): .dev/share/icons/grassfield-icons holds the full theme and the stamp
+#    .grassfield-icons-stamp, written last; it is used as is;
+#  * otherwise (offline, never provisioned) the wrapper theme (branding/icons/theme/index.theme: Grassfield's own icons,
+#    then Breeze, Adwaita and hicolor) is copied there, with the real directories GTK needs and its own device glyphs.
 _gf_icon_src=$_gf_dev_root/branding/icons/theme/index.theme
-if [[ -f $_gf_icon_src ]]; then
-  _gf_icon_dst=$_gf_dev_root/.dev/share/icons/grassfield-icons
+_gf_icon_dst=$_gf_dev_root/.dev/share/icons/grassfield-icons
+if [[ -f $_gf_dev_root/.dev/share/icons/.grassfield-icons-stamp && -f $_gf_icon_dst/index.theme ]]; then
+  :
+elif [[ -f $_gf_icon_src ]]; then
+  # A composed tree without its stamp is a half-finished composition: never mix it with the wrapper.
+  [[ -d $_gf_icon_dst/base ]] && rm -rf "$_gf_icon_dst" 2>/dev/null
   { mkdir -p "$_gf_icon_dst/scalable/apps" "$_gf_icon_dst/scalable/devices" && { cmp -s "$_gf_icon_src" "$_gf_icon_dst/index.theme" || cp -f "$_gf_icon_src" "$_gf_icon_dst/index.theme"; }; } 2>/dev/null || true
   # Grassfield's own device glyphs that shadow the Apple device pictures of Breeze and Adwaita (E27).
   cp -f "$_gf_dev_root"/branding/icons/theme/scalable/devices/*.svg "$_gf_icon_dst/scalable/devices/" 2>/dev/null || true
-  unset _gf_icon_dst
 fi
-unset _gf_icon_src
+unset _gf_icon_src _gf_icon_dst
 # This tree's QML modules (Grassfield.Ui, the built Grassfield.I18n) always win over the packaged ones that an installed
 # grassfield-desktop puts in /usr/lib/qt6/qml/Grassfield (QML_IMPORT_PATH comes before the default import path).
 case ":${QML_IMPORT_PATH:-}:" in

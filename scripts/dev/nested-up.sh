@@ -31,6 +31,11 @@ dev=$root/.dev
 # A record written inside the sandbox's PID namespace names another process on the host (incident 2026-10-18).
 dev_require_host nested-up
 mkdir -p "$dev/state" "$dev/config" "$dev/shots"
+# The composed icon theme for dev sessions (ADR-0017): pinned GitHub sources composed under .dev/share, selected by
+# devenv.sh. Failure is not fatal: devenv.sh falls back to the wrapper theme (Breeze, Adwaita, hicolor). icons.sh returns
+# at once when its stamp matches; its network steps have time limits.
+"$root/scripts/dev/icons.sh" \
+  || echo "nested-up: composed icons not provisioned (continuing with the wrapper theme; retry: scripts/dev/icons.sh)" >&2
 # shellcheck source=devenv.sh
 . "$root/scripts/dev/devenv.sh"
 
