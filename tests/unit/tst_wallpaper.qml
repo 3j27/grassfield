@@ -738,4 +738,20 @@ TestCase {
         compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, false, cfg, false, "reduced")).reason, "reduced-profile");
         compare(WallpaperConfig.playbackState(WallpaperConfig.playbackInputs(false, false, false, false, undefined, false, "full")).state, "play");
     }
+
+    function test_videoMarkersAndBlockedLists() {
+        // One marker (older files) or a list of them; invalid ones are dropped; at most 16.
+        compare(WallpaperConfig.videoMarkersOf({path: "/v/a.mp4", at: 1}), [{path: "/v/a.mp4", at: 1}]);
+        compare(WallpaperConfig.videoMarkersOf([{path: "/v/a.mp4", at: 1}, {path: "rel"}, 5, {path: "/v/b.mp4"}]), [{path: "/v/a.mp4", at: 1}, {path: "/v/b.mp4", at: 0}]);
+        compare(WallpaperConfig.videoMarkersOf(null), []);
+        compare(WallpaperConfig.videoMarkersOf("x"), []);
+        compare(WallpaperConfig.videoMarkersOf(Array.from({length: 40}, (_, i) => ({path: "/v/" + i + ".mp4"}))).length, 16);
+        compare(WallpaperConfig.videoBlockedPaths("/v/a.mp4"), ["/v/a.mp4"]);
+        compare(WallpaperConfig.videoBlockedPaths(["/v/a.mp4", "rel", 3, "/v/b\nc"]), ["/v/a.mp4"]);
+        compare(WallpaperConfig.videoBlockedPaths(undefined), []);
+        verify(WallpaperConfig.videoBlocked(["/v/a.mp4", "/v/b.mp4"], "/v/b.mp4"));
+        verify(!WallpaperConfig.videoBlocked(["/v/a.mp4"], "/v/b.mp4"));
+        verify(!WallpaperConfig.videoBlocked([], "/v/a.mp4"));
+        verify(WallpaperConfig.videoBlocked("/v/a.mp4", "/v/a.mp4"));
+    }
 }

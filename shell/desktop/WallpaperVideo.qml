@@ -30,8 +30,11 @@ Item {
     property int posterMs: 0
     // "play" | "settle" | "pause" (named `policy`: Item already has a `state`).
     property string policy: "pause"
-    // The path the crash marker names (the user's own video).
+    // The path the crash marker names (the user's own video) and the owner of the marker (the output's name).
     property string markerPath: ""
+    property string markerOwner: ""
+    // The marker was written for this video: only the first play of it does (an unlock or an idle return starts nothing new).
+    property bool markerWritten: false
 
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     // A frame of the video has been shown (the poster is then covered).
@@ -75,6 +78,7 @@ Item {
     onPolicyChanged: sync()
     onSourceChanged: {
         seeked = false;
+        markerWritten = false;
         settle.stop();
     }
 
@@ -98,16 +102,18 @@ Item {
                 player.pause();
             // Paused on purpose, the shell is alive: nothing is starting any more.
             stable.stop();
-            WallpaperState.clearVideoStarting();
+            WallpaperState.clearVideoStarting(root.markerOwner);
         }
     }
 
     function begin(): void {
-        // The marker is on disk before the first frame is decoded.
-        if (root.markerPath !== "")
-            WallpaperState.markVideoStarting(root.markerPath);
+        // The marker is on disk before the first frame is decoded, and only for the first play of this video.
+        if (root.markerPath !== "" && !root.markerWritten) {
+            root.markerWritten = true;
+            WallpaperState.markVideoStarting(root.markerOwner, root.markerPath);
+            stable.restart();
+        }
         player.play();
-        stable.restart();
     }
 
     // Eases the rate down, then pauses.
@@ -120,7 +126,7 @@ Item {
         onFinished: {
             player.pause();
             stable.stop();
-            WallpaperState.clearVideoStarting();
+            WallpaperState.clearVideoStarting(root.markerOwner);
         }
     }
 
@@ -128,13 +134,13 @@ Item {
     Timer {
         id: stable
         interval: Tokens.wallpaperVideoStableMs
-        onTriggered: WallpaperState.clearVideoStarting()
+        onTriggered: WallpaperState.clearVideoStarting(root.markerOwner)
     }
 
     Component.onDestruction: {
         // Releasing the layer (another wallpaper took over) is a deliberate stop too.
         if (player.playbackState !== MediaPlayer.StoppedState)
             player.stop();
-        WallpaperState.clearVideoStarting();
+        WallpaperState.clearVideoStarting(root.markerOwner);
     }
 }

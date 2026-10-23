@@ -581,10 +581,33 @@ function videoMarkerOf(raw) {
     return {path: raw.path, at: typeof raw.at === "number" && isFinite(raw.at) ? raw.at : 0};
 }
 
+// The markers as stored: one object (older files) or a list of them, at most 16, each valid one as videoMarkerOf.
+function videoMarkersOf(raw) {
+    const list = Array.isArray(raw) ? raw.slice(0, 16) : (asArray(raw, 16) || [raw]);
+    const out = [];
+    for (const m of list) {
+        const mk = videoMarkerOf(m);
+        if (mk)
+            out.push(mk);
+    }
+    return out;
+}
+
+// The blocked paths as stored: a string (older files) or a list of paths, at most 16, valid absolute paths only.
+function videoBlockedPaths(raw) {
+    const list = typeof raw === "string" ? [raw] : (Array.isArray(raw) ? raw.slice(0, 16) : (asArray(raw, 16) || []));
+    return list.filter(p => typeof p === "string" && pathProblem(p) === "");
+}
+
 // True when the video at `path` must not be played: the shell found a marker for it at start (it died while the video started),
-// and the video is still the wallpaper. Another video, another source, or a re-selection (a new path) is free to play.
-function videoBlocked(blockedPath, path) {
-    return typeof blockedPath === "string" && blockedPath !== "" && blockedPath === path;
+// and the video is still the wallpaper. `blocked` is a path or a list of paths. Another video, another source, or a re-selection
+// (a new path) is free to play.
+function videoBlocked(blocked, path) {
+    if (typeof path !== "string" || path === "")
+        return false;
+    if (typeof blocked === "string")
+        return blocked === path;
+    return videoBlockedPaths(blocked).indexOf(path) >= 0;
 }
 
 // ---- the aspect rule of the online pictures (ADR-0016 step 2) ----

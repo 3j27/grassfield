@@ -13,7 +13,7 @@ import qs.services
 //     picture (a day later) replaces it through the same crossfade.
 //   - source video (ADR-0016 W7): `probe`, then `transcode` (H.264 at the output's physical size; its progress is published for
 //     Settings), then the poster frame is the picture (`imageUrl`, the lock screen's still) and `display.video` names the file
-//     Wallpaper.qml plays under the pause policy. A video that crashed the shell (WallpaperState.videoBlocked) shows its poster
+//     Wallpaper.qml plays under the pause policy. A video that crashed the shell (WallpaperState.isVideoBlocked) shows its poster
 //     and is not played; the reason is "video-crashed".
 //   - source folder: the helper lists the folder, WallpaperConfig.advance picks the next picture (sorted or shuffled without
 //     repeat, position kept in WallpaperState), the interval timer asks for the next one. A file that fails is skipped for the
@@ -308,7 +308,7 @@ Scope {
         if (r && r.ok === true && typeof r.file === "string" && typeof r.video === "string") {
             const why = typeof r.real === "string" ? WallpaperConfig.sourceProblem(r.real, WallpaperState.dev, WallpaperState.repoRoot) : "";
             if (why === "" && WallpaperConfig.isUnder(r.file, WallpaperState.videoDir) && WallpaperConfig.isUnder(r.video, WallpaperState.videoDir)) {
-                const blocked = WallpaperConfig.videoBlocked(WallpaperState.videoBlocked, cfg.path);
+                const blocked = WallpaperState.isVideoBlocked(cfg.path);
                 currentFile = r.file;
                 videoFile = r.video;
                 strip = r.strip || null;

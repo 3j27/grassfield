@@ -22,6 +22,8 @@ Item {
     property string videoFit: "fill"
     property int posterMs: 0
     property string videoPath: ""
+    // The output the crash marker of this slot's video belongs to.
+    property string markerOwner: ""
     property bool onScreen: false
     property string playPolicy: "pause"
     signal videoFailed(string message)
@@ -86,6 +88,7 @@ Item {
             posterMs: root.posterMs
             policy: root.playPolicy
             markerPath: root.videoPath
+            markerOwner: root.markerOwner
             onFailed: message => root.videoFailed(message)
         }
     }

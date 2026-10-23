@@ -295,6 +295,7 @@ Scope {
                 pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
                 onScreen: win.shown === slotA
                 playPolicy: win.videoPolicy
+                markerOwner: feed.outputName
                 onPictureLoaded: win.slotLoaded(slotA)
                 onPictureFailed: win.slotFailed(slotA)
                 onVideoFailed: message => console.warn("wallpaper: " + feed.outputName + ": the video stopped: " + message)
@@ -306,6 +307,7 @@ Scope {
                 pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
                 onScreen: win.shown === slotB
                 playPolicy: win.videoPolicy
+                markerOwner: feed.outputName
                 onPictureLoaded: win.slotLoaded(slotB)
                 onPictureFailed: win.slotFailed(slotB)
                 onVideoFailed: message => console.warn("wallpaper: " + feed.outputName + ": the video stopped: " + message)

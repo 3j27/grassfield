@@ -143,7 +143,7 @@ setcfg '.accessibility.reduceMotion = false | .wallpaper.source = "video" | .wal
 await 60 "field playing" true || true
 kill -9 "$(dev_live_pid "$VS_DEV/shell.pid")" 2>/dev/null || true
 sleep 1
-check "the crash marker is in wallpaper.json after the kill" test "$(jq -r '.videoStarting.path // ""' "$state")" = "$clip"
+check "the crash marker is in wallpaper.json after the kill" test "$(jq -r '.videoStarting[0].path // ""' "$state")" = "$clip"
 "$VS_ROOT/scripts/dev/shell-run.sh" --private-bus --lang "$VS_LANG" --desktop-dir "$VS_STATE/desktop" >/dev/null
 for i in $(seq 1 60); do vs_ipc lock status >/dev/null 2>&1 && break; sleep 0.5; done
 vs_ipc wallpaper videoBattery 0 >/dev/null
@@ -151,7 +151,7 @@ vs_ipc wallpaper videoIdle 0 >/dev/null
 check "the next shell reports the poster with the reason video-crashed" await 60 reasons video-crashed
 sleep 3
 check "the blocked video is not played" test "$(field playing)" = false
-check "the marker is gone and the block is remembered" test "$(jq -r '(.videoStarting // "none") + "|" + (.videoBlocked // "")' "$state")" = "none|$clip"
+check "the marker is gone and the block is remembered" test "$(jq -r '((.videoStarting | length | tostring) + "|" + ((.videoBlocked // []) | join(",")))' "$state")" = "0|$clip"
 vs_capture wallpaper-video-poster >/dev/null
 
 vs_kill_clients

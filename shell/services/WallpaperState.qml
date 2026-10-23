@@ -87,45 +87,60 @@ Singleton {
     }
 
     // ---- video crash marker (ADR-0016 section 5) ----
-    // The shell writes {path, at} to wallpaper.json BEFORE a video starts playing and clears it after Tokens.wallpaperVideoStableMs
-    // of playback. A marker found at start means the shell died while that video started: the path is then `videoBlocked` (the
-    // poster still shows, no retry, Settings explains once) until the wallpaper is changed to something else.
-    property string videoBlocked: ""
-    property string videoStarting: ""
+    // The shell writes {path, at} to wallpaper.json BEFORE a video FIRST starts playing and clears it after
+    // Tokens.wallpaperVideoStableMs of playback, or when that video is deliberately paused or released. Every output owns its marker
+    // (`owner` = the output's name): one output's pause never clears another output's marker, and a later play of the same video
+    // (after an unlock or an idle return) writes nothing. A marker found at start means the shell died while that video started:
+    // the path is then blocked (the poster still shows, no retry, Settings explains once) until the wallpaper is changed to
+    // something else.
+    property var videoBlockedPaths: []
+    // owner (output name) -> path of the video that output is starting.
+    property var videoStartingBy: ({})
 
-    function markVideoStarting(path: string): void {
-        if (videoStarting === path)
+    function isVideoBlocked(path: string): bool {
+        return WallpaperConfig.videoBlocked(videoBlockedPaths, path);
+    }
+
+    function markVideoStarting(owner: string, path: string): void {
+        if (videoStartingBy[owner] === path)
             return;
-        videoStarting = path;
+        const next = Object.assign({}, videoStartingBy);
+        next[owner] = path;
+        videoStartingBy = next;
         writeNow();
     }
 
-    function clearVideoStarting(): void {
-        if (videoStarting === "")
+    function clearVideoStarting(owner: string): void {
+        if (videoStartingBy[owner] === undefined)
             return;
-        videoStarting = "";
+        const next = Object.assign({}, videoStartingBy);
+        delete next[owner];
+        videoStartingBy = next;
         writeNow();
     }
 
     // A video is no longer the wallpaper of any output: it may play again the next time it is chosen.
     function releaseVideo(): void {
-        if (videoBlocked === "")
+        if (videoBlockedPaths.length === 0)
             return;
-        for (const name of Object.keys(outputs)) {
-            const o = outputs[name];
-            if (o.source === "video" && o.path === videoBlocked)
-                return;
-        }
-        videoBlocked = "";
+        const keep = videoBlockedPaths.filter(p => Object.keys(outputs).some(name => outputs[name].source === "video" && outputs[name].path === p));
+        if (keep.length === videoBlockedPaths.length)
+            return;
+        videoBlockedPaths = keep;
         writeNow();
     }
 
     function stateJson(): string {
         const o = {displays: saved.displays};
-        if (videoStarting !== "")
-            o.videoStarting = {path: videoStarting, at: Date.now()};
-        if (videoBlocked !== "")
-            o.videoBlocked = videoBlocked;
+        const starting = [];
+        for (const owner of Object.keys(videoStartingBy)) {
+            if (!starting.some(m => m.path === videoStartingBy[owner]))
+                starting.push({path: videoStartingBy[owner], at: Date.now()});
+        }
+        if (starting.length > 0)
+            o.videoStarting = starting;
+        if (videoBlockedPaths.length > 0)
+            o.videoBlocked = videoBlockedPaths;
         return JSON.stringify(o, null, 2) + "\n";
     }
 
@@ -222,14 +237,17 @@ Singleton {
                 root.saved = {displays: o && typeof o.displays === "object" && o.displays !== null ? o.displays : {}};
                 // A marker left by the previous run: that video crashed the shell while it started. It becomes `videoBlocked`
                 // (no retry) and the marker is gone, so the next start does not read it again.
-                const marker = WallpaperConfig.videoMarkerOf(o ? o.videoStarting : null);
-                if (marker) {
-                    root.videoBlocked = marker.path;
-                    console.warn("wallpaper: the shell stopped while the video " + marker.path + " started; its poster is shown and it is not played again");
+                const markers = WallpaperConfig.videoMarkersOf(o && o.videoStarting !== undefined ? o.videoStarting : []);
+                const blocked = WallpaperConfig.videoBlockedPaths(o ? o.videoBlocked : []);
+                for (const m of markers) {
+                    console.warn("wallpaper: the shell stopped while the video " + m.path + " started; its poster is shown and it is not played again");
+                    if (blocked.indexOf(m.path) < 0)
+                        blocked.push(m.path);
+                }
+                root.videoBlockedPaths = blocked.slice(0, 16);
+                if (markers.length > 0) {
                     root.stateReady = true;
                     Qt.callLater(root.writeNow);
-                } else if (o && typeof o.videoBlocked === "string" && WallpaperConfig.pathProblem(o.videoBlocked) === "") {
-                    root.videoBlocked = o.videoBlocked;
                 }
             } catch (e) {
                 root.saved = {displays: {}};
