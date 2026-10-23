@@ -35,11 +35,12 @@ require("grassfield.system")
 -- GTK applications keep whatever theme dconf already holds.
 hl.config({ cursor = { sync_gsettings_theme = false } })
 
--- Optional compositor extension (ADR-0009, amended 2026-10-23). Loaded at parse time (Hyprland applies the plugin list
--- right after parsing). grassfield.compositor picks the build made for the Hyprland that runs: the packaged one, or the
--- one the pacman hook rebuilt on this machine after a Hyprland update. Without one the packaged build is loaded anyway:
--- it refuses to hook into another Hyprland build and says so in a notification; the shell runs in degraded mode (§5.6).
-local plugin, why = "/usr/lib/grassfield/grassfield-compositor.so", "no choice"
+-- Optional compositor extension (ADR-0009, "Amendment 2026-10-23"). Loaded at parse time (Hyprland applies the plugin
+-- list right after parsing). grassfield.compositor picks the build made for the Hyprland that runs: the packaged one, else
+-- the one the user built (grassfield-compositor-rebuild). With none, nothing is loaded: the shell runs in degraded mode
+-- (§5.6, gate C2) and grassfield-compositor-rebuild --session says so once, with the Hyprland version and the recovery
+-- (it builds the extension itself when the user turned on Settings windows.rebuildExtension).
+local plugin, why = nil, "no choice"
 local chose, compositor = pcall(require, "grassfield.compositor")
 if chose then
   local ok, path, reason = pcall(compositor.choose)
@@ -51,14 +52,24 @@ if chose then
 else
   why = "module failed: " .. tostring(compositor)
 end
+if why:find("failed", 1, true) then
+  -- A loader defect must not cost the extension: the packaged build checks Hyprland's hash itself and refuses another
+  -- build with a notice.
+  print("grassfield: compositor extension: " .. why)
+  plugin = "/usr/lib/grassfield/grassfield-compositor.so"
+end
 local f = plugin and io.open(plugin, "r")
 if f then
   f:close()
-  if why ~= "packaged" and why ~= "rebuilt" then
-    print("grassfield: no compositor extension built for this Hyprland (" .. tostring(why) .. "); see grassfield-compositor-rebuild")
-  end
   local ok, err = pcall(hl.plugin.load, plugin)
-  if not ok then
+  if ok then
+    pcall(hl.env, "GRASSFIELD_COMPOSITOR_PLUGIN", plugin) -- kept by a config reload after a Hyprland update (compositor.lua)
+  else
     print("grassfield: compositor extension not loaded: " .. tostring(err))
   end
+elseif why == "no-match" then
+  print("grassfield: no compositor extension built for this Hyprland: degraded mode (grassfield-compositor-rebuild)")
+  hl.on("hyprland.start", function()
+    hl.exec_cmd("/usr/lib/grassfield/grassfield-compositor-rebuild --session")
+  end)
 end
