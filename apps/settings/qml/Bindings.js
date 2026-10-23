@@ -1,9 +1,9 @@
 .pragma library
 
 // Read-only parser for the Grassfield bindings file (config/hypr/grassfield/bindings.lua):
-// extracts the literal `bind("KEYS", "Description", ...)` lines. Loops and computed keys are skipped.
+// extracts the literal `bind("KEYS", "Description", ...)` lines (and the `word_key(...)` lines of forwarding.lua). Loops and computed keys are skipped.
 
-const BIND = /^\s*bind\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"/;
+const BIND = /^\s*(?:bind|word_key)\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"/;
 
 // Key names in English; the Keyboard page shows each through qsTranslate("Bindings", name) (translateKeys).
 const NAMES = {
@@ -13,13 +13,15 @@ const NAMES = {
     "TAB": QT_TRANSLATE_NOOP("Bindings", "Tab"), "ESCAPE": QT_TRANSLATE_NOOP("Bindings", "Esc"),
     "UP": QT_TRANSLATE_NOOP("Bindings", "Up"), "DOWN": QT_TRANSLATE_NOOP("Bindings", "Down"),
     "LEFT": QT_TRANSLATE_NOOP("Bindings", "Left"), "RIGHT": QT_TRANSLATE_NOOP("Bindings", "Right"),
+    "BACKSPACE": QT_TRANSLATE_NOOP("Bindings", "Backspace"), "DELETE": QT_TRANSLATE_NOOP("Bindings", "Delete"),
+    "bracketleft": QT_TRANSLATE_NOOP("Bindings", "["), "bracketright": QT_TRANSLATE_NOOP("Bindings", "]"),
     // The key above Tab, bound by keycode so that it works on every layout (grave on US, a different symbol on AZERTY).
     "code:49": QT_TRANSLATE_NOOP("Bindings", "Key above Tab"),
     "mouse:272": QT_TRANSLATE_NOOP("Bindings", "Left Mouse Button"),
     "mouse:273": QT_TRANSLATE_NOOP("Bindings", "Right Mouse Button")
 };
 
-// The literal descriptions of config/hypr/grassfield/bindings.lua, listed for translation: the Keyboard page shows a
+// The literal descriptions of config/hypr/grassfield/bindings.lua and forwarding.lua, listed for translation: the Keyboard page shows a
 // description through qsTranslate("Bindings", description) (an unlisted one stays in English).
 // tests/unit/tst_settingsstore.qml checks that every literal description of the real file is listed here.
 const DESCRIPTIONS = [
@@ -58,7 +60,24 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Volume up"),
     QT_TRANSLATE_NOOP("Bindings", "Volume down"),
     QT_TRANSLATE_NOOP("Bindings", "Brightness up"),
-    QT_TRANSLATE_NOOP("Bindings", "Brightness down")
+    QT_TRANSLATE_NOOP("Bindings", "Brightness down"),
+    QT_TRANSLATE_NOOP("Bindings", "Previous word"),
+    QT_TRANSLATE_NOOP("Bindings", "Next word"),
+    QT_TRANSLATE_NOOP("Bindings", "Select to the previous word"),
+    QT_TRANSLATE_NOOP("Bindings", "Select to the next word"),
+    QT_TRANSLATE_NOOP("Bindings", "Delete the previous word"),
+    QT_TRANSLATE_NOOP("Bindings", "Delete the next word"),
+    QT_TRANSLATE_NOOP("Bindings", "Back"),
+    QT_TRANSLATE_NOOP("Bindings", "Forward"),
+    QT_TRANSLATE_NOOP("Bindings", "Beginning of the line"),
+    QT_TRANSLATE_NOOP("Bindings", "End of the line"),
+    QT_TRANSLATE_NOOP("Bindings", "Select to the beginning of the line"),
+    QT_TRANSLATE_NOOP("Bindings", "Select to the end of the line"),
+    QT_TRANSLATE_NOOP("Bindings", "Beginning of the document"),
+    QT_TRANSLATE_NOOP("Bindings", "End of the document"),
+    QT_TRANSLATE_NOOP("Bindings", "Select to the beginning of the document"),
+    QT_TRANSLATE_NOOP("Bindings", "Select to the end of the document"),
+    QT_TRANSLATE_NOOP("Bindings", "Delete to the beginning of the line")
 ];
 
 // Descriptions of the bindings file that carry an internal feature name (Space, Notification Center) are shown under

@@ -331,7 +331,15 @@ TestCase {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", Qt.resolvedUrl("../../config/hypr/grassfield/bindings.lua"), false);
         xhr.send();
-        const list = Bindings.parse(xhr.responseText);
+        let text = xhr.responseText;
+        // The keys forwarded to the application (forwarding.lua) are listed on the same page.
+        xhr.open("GET", Qt.resolvedUrl("../../config/hypr/grassfield/forwarding.lua"), false);
+        xhr.send();
+        text += "\n" + xhr.responseText;
+        const list = Bindings.parse(text);
+        verify(list.some(b => b.keys === "Alt + Left" && b.description === "Previous word"), "word_key lines are parsed");
+        verify(list.some(b => b.keys === "Super + [" && b.description === "Back"));
+        verify(list.some(b => b.keys === "Super + Backspace" && b.description === "Delete to the beginning of the line"));
         const names = Object.keys(Bindings.NAMES).map(k => Bindings.NAMES[k]);
         for (const b of list) {
             verify(Bindings.DESCRIPTIONS.indexOf(b.description) >= 0, "not listed in Bindings.DESCRIPTIONS: " + b.description);
