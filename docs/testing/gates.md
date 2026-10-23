@@ -15,6 +15,7 @@ All of them are registered in `tests/inventory.json`; the pure logic is tested o
 | Q3 coverage >= 70 % | `just coverage` | gcov JSON summary (`scripts/gates/coverage_report.py`) of `compositor/src/core` and the menu bridge logic; the Hyprland glue and the bridge's Bridge/main/LauncherWatcher are listed as not measured |
 | local CI | `just release-check [--rc-headers ROOT]` | clean build of `git archive HEAD`: `just check`, `just test`, coverage, gitleaks of the history, plugin build (and against rc-channel headers when given); the summary lists the skipped cases of `just test`; bare |
 | C1 soak | `tests/compositor/soak.sh [seconds] [stages]` | aims at each window's real titlebar; counts effective actions; FAIL on a shell restart, an RSS slope above `SOAK_MAX_RSS_MB_H` (10), an unreadable log; HARNESS ERROR (exit 2) when an action type never took effect; bare, nested |
+| GF-013 version agreement | `just gate-version --nested` or `--installed` | VERSION is the reference; PASS needs every source of the mode (nested: menu bridge and plugin; installed: About file, pacman for both packages, bridge, plugin from `hyprctl grassfield`); a missing one is INCONCLUSIVE (exit 2), a differing one FAIL; bare |
 | off-machine copy | `just backup DIR` | git bundle of every ref, verified, with its SHA-256 |
 
 P4 (Search latency), R1 to R3 and A1 have no tool yet (GF-008 remains open for them).

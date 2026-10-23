@@ -31,8 +31,10 @@
 #                   SOAK_RSS_WARMUP_S (300) warm-up is at most SOAK_MAX_RSS_MB_H (10) MB/h (judged from 5 samples
 #                   and 10 minutes on; a shorter run says "not judged"), and a minimize animated;
 #   FAIL (exit 1)   any of those violated;
-#   2               usage or environment error, or HARNESS ERROR: no live plugin "minimize" or shell, or an action
-#                   type that never ran or never took effect (0 minimize/restore rounds is not a pass).
+#   2               usage or environment error, or HARNESS ERROR: no live plugin "minimize" or shell, an action
+#                   type that never ran, or one that never took effect while NO other titlebar action did either
+#                   (0 minimize/restore rounds is not a pass). An action type that never takes effect while the other
+#                   titlebar actions do is a FAIL of the product, not a harness error.
 # Log: .dev/soak-<timestamp>.log; RSS samples: .dev/soak-rss-{hyprland,shell}-<epoch>.tsv.
 set -uo pipefail
 
@@ -347,7 +349,6 @@ while (( $(date +%s) < end_epoch )); do
         wait_changed "$npid" "$zg" 1500 >/dev/null && ok_ zoom-button
       fi ;;
     5) # press the close button, move away, release: must not close (and must not drag the window)
-      try_ cancel
       read -r px py <<<"$(gf_button_point close "$nx" "$ny" "$nw" "$nh")"
       read -r tx ty <<<"$(far_point "$px" "$py")"
       # Effective only when the compositor reports the pointer on the button at the press, the window survived the
@@ -357,6 +358,8 @@ while (( $(date +%s) < end_epoch )); do
       cursor_at "$px" "$py" && landed=1
       pointer abs "$px" "$py" sleep 50 down drag "$tx" "$ty" sleep 30 up
       sleep 0.3
+      # A press the compositor did not see on the button is a harness miss: not an attempt (counted and reported, never a FAIL).
+      if ((landed)); then try_ cancel; else cancel_missed=$((${cancel_missed:-0} + 1)); fi
       if ((landed)) && kill -0 "$npid" 2>/dev/null && cg=$(gf_window_geom "$npid" 1000) && ! gf_geom_moved "$cg" "$ng"; then ok_ cancel; fi ;;
     6) # close the newest window with its close button
       try_ close
@@ -425,6 +428,7 @@ sample_tick
 
 elapsed=$(( $(date +%s) - start_epoch ))
 say "soak: done after ${elapsed}s, $round rounds: short $short, churn $spawned (no window found for $unmapped), effective/attempted: $(counters)"
+((${cancel_missed:-0} > 0)) && say "soak: cancel: ${cancel_missed} press(es) did not land on the button (harness miss, not counted as attempts)"
 say "soak: minimize: pressed but window not minimized: $skipped; minimized without a known Dock tile, not clicked: ${no_tile:-0}; previous tile reused: ${dock_cached:-0}"
 ((stages_mode)) && say "soak: Stages: $st_moves move-to-new-stage and $st_swaps activate requests, $(grep -ac 'grassfield>>{"v":"gfc/1","type":"stages"' "$events") stages events, still on: $(st_last | jq -r '.on')"
 
@@ -446,7 +450,8 @@ else
   fail=1
 fi
 
-# Effective actions: a type that never ran or never took effect is a harness error; a low share is a failure.
+# Effective actions: a type that never ran, or never took effect while nothing else did, is a harness error; a low share, or
+# none while other titlebar actions work, is a failure of the product.
 # Some titlebar action took effect: the harness reaches the windows, so an action type that never works is the product's.
 others_any() { local t; for t in drag zoom-dblclick zoom-button close minimize; do [[ $t != "$1" ]] && ((${eff[$t]:-0} > 0)) && return 0; done; return 1; }
 for t in drag abandoned zoom-dblclick zoom-button cancel close minimize restore; do

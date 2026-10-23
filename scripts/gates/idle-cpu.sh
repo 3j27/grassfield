@@ -15,6 +15,8 @@
 #     --interval S     sampling period, default 10 s
 #     --max-delta PCT  allowed excess over the baseline, default 0.5
 #     --min-seconds N  a shorter window is INCONCLUSIVE, default 60
+#     --real-session   asserts that the --pid processes belong to the owner's real session (--real implies it); without it
+#                      a --pid measurement is never a PASS (it could be the nested shell)
 #     --gate-seconds N the window the gate defines, default 600: PASS needs at least that many seconds; shorter ones print
 #                      "PROXY, NOT VERIFIED". --nested is always a proxy (P1 is a † gate: owner-run, real session).
 #
@@ -26,11 +28,12 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 # shellcheck source=lib.sh
 . "$root/scripts/gates/lib.sh"
 
-seconds=600 gatesec=600 interval=10 maxdelta=0.5 minseconds=60 baseline="" baseline_pid="" nested=0 real=0
+seconds=600 gatesec=600 interval=10 maxdelta=0.5 minseconds=60 baseline="" baseline_pid="" nested=0 real=0 realsession=0
 pids=() labels=()
 while (($#)); do
   case $1 in
     --nested) nested=1 ;;
+    --real-session) realsession=1 ;;
     --real) real=1 ;;
     --pid) shift; pids+=("${1%%=*}"); labels+=("${1#*=}"); [[ $1 == *=* ]] || labels[-1]="" ;;
     --baseline-pid) shift; baseline_pid=$1 ;;
@@ -118,7 +121,20 @@ if ((window < minseconds || samples < 3)); then
 fi
 if ((fail)); then echo "P1: FAIL (a measured process vanished); sum $total % of one core"; exit 1; fi
 # P1 is a † gate: owner-run, real session, 10 minutes (master-prompt §10). PASS needs exactly that measurement.
-if ((nested)); then proxy="nested session, not the owner's real session"; elif ((window < gatesec)); then proxy="a ${window} s window, the gate asks for ${gatesec} s"; else proxy=""; fi
+# PASS only for the real session over the gate window: --nested, the pid of a nested process, a --pid nobody said is the real
+# session, or a short window are proxies.
+proxy=""
+if ((real)); then realsession=1; fi
+if ((nested)); then proxy="nested session, not the owner's real session"
+elif ((!realsession)); then proxy="--pid without --real-session: not shown to be the owner's real session"
+elif ((window < gatesec)); then proxy="a ${window} s window, the gate asks for ${gatesec} s"; fi
+if [[ -z $proxy ]]; then
+  . "$root/scripts/dev/pidfile.sh"
+  for rec in shell menu-bridge; do
+    np=$(dev_live_pid "$root/.dev/$rec.pid" 2>/dev/null || true)
+    for p in "${pids[@]}"; do [[ -n $np && $p == "$np" ]] && proxy="pid $p is this tree's nested $rec"; done
+  done
+fi
 if gate_le "$total" "$bound"; then
   if [[ -n $proxy ]]; then
     echo "P1: PROXY, NOT VERIFIED ($proxy): sum $total % of one core <= $bound % (baseline $base + $maxdelta) over ${window} s, $samples samples; the † gate needs the owner's real session for ${gatesec} s"

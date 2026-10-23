@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Gate P2: resident memory of grassfield-shell against the omarchy-shell baseline: PASS when the RSS of the measured
-# processes is at most <baseline> + 150 MB (master-prompt §10 P2). RSS is VmRSS of /proc/<pid>/status; PSS from
+# processes is at most <baseline> + 150 MB (master-prompt §10 P2; MB = 1000 kB, the unit of ADR-0006: 458 824 kB = 458 MB). RSS is VmRSS of /proc/<pid>/status; PSS from
 # smaps_rollup is reported too when readable. Read-only.
 #
 #   scripts/gates/rss.sh [--nested | --real | --pid PID[=label]]... [options]
@@ -52,7 +52,7 @@ if ((real)); then
 fi
 ((${#pids[@]} > 0)) || { echo "rss: nothing to measure (--nested, --real or --pid)" >&2; exit 2; }
 
-pss_mb() { awk '/^Pss:/ {printf "%.1f", $2 / 1024}' "/proc/$1/smaps_rollup" 2>/dev/null; }
+pss_mb() { awk '/^Pss:/ {printf "%.1f", $2 / 1000}' "/proc/$1/smaps_rollup" 2>/dev/null; }
 declare -A lo=() hi=() sum=() cur=()
 for ((n = 1; n <= samples; n++)); do
   ((n > 1)) && sleep "$interval"
@@ -71,15 +71,15 @@ for i in "${!pids[@]}"; do
   name=${labels[$i]:-$(gate_comm "$p")}
   mean=$((sum[$p] / samples))
   pss=$(pss_mb "$p")
-  printf 'P2: %s (pid %s): RSS %d MB now (min %d, mean %d, max %d MB over %d sample(s))%s\n' "$name" "$p" $((cur[$p] / 1024)) $((lo[$p] / 1024)) $((mean / 1024)) $((hi[$p] / 1024)) "$samples" "${pss:+, PSS $pss MB}"
+  printf 'P2: %s (pid %s): RSS %d MB now (min %d, mean %d, max %d MB over %d sample(s))%s\n' "$name" "$p" $((cur[$p] / 1000)) $((lo[$p] / 1000)) $((mean / 1000)) $((hi[$p] / 1000)) "$samples" "${pss:+, PSS $pss MB}"
   [[ $name == *menu-bridge* ]] || ours_kb=$((ours_kb + cur[$p]))
 done
-ours_mb=$((ours_kb / 1024))
+ours_mb=$((ours_kb / 1000))
 base_mb=""
 if [[ -n $baseline_pid ]]; then
   b=$(gate_rss_kb "$baseline_pid")
   [[ $b =~ ^[0-9]+$ ]] || { echo "P2: baseline process $baseline_pid is not readable: INCONCLUSIVE" >&2; exit 2; }
-  base_mb=$((b / 1024))
+  base_mb=$((b / 1000))
   echo "P2: baseline $(gate_comm "$baseline_pid") (pid $baseline_pid): RSS $base_mb MB"
 elif [[ -n $baseline_mb ]]; then
   base_mb=$baseline_mb

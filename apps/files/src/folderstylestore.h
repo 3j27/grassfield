@@ -89,6 +89,9 @@ public:
     void startPrune(bool force = false);
     bool collectPruned();
     void waitForPrune();
+    // Tests: a prune job that started from the entries as they are now and has finished, saying `gone` (paths as given), waiting
+    // to be collected: the interleaving "a job looked at the old path, then the folder was renamed" without timing.
+    void injectFinishedPruneForTests(const QStringList &gone);
 
     void setFallbackFile(const QString &file);
     QString fallbackFile() const { return m_file; }
@@ -121,6 +124,7 @@ public:
     bool fallbackBroken() const;
 
 private:
+    bool collectPrunedNow();
     void ensureLoaded() const;
     bool loadFile() const;
     bool saveFile(QString *error);

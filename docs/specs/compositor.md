@@ -108,7 +108,7 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   registered; `stages` only while its flag is on
   (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer"]`
   when everything works and the flag is off).
-- **FR10** `hyprctl grassfield` returns the same capabilities JSON.
+- **FR10** `hyprctl grassfield` returns the capabilities JSON plus one field, `"version"` (the product version of the plugin, from the VERSION file; GF-013), as its last member. The `capabilities` event is unchanged (no `version`): its wire format is fixed by the unit tests.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
   and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers

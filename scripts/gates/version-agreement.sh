@@ -9,9 +9,11 @@
 #                                                    `hyprctl grassfield`, /usr/share/grassfield/VERSION (About), /usr/share/grassfield/BUILD-COMMIT
 #   scripts/gates/version-agreement.sh --selftest
 #
-# Every source is normalised to the form of VERSION (a pacman version 1.0.0rc1-1 becomes 1.0.0-rc1) and compared. A source
-# that cannot be read (no nested session, plugin not loaded, not installed) is listed as "not checked", never as agreeing;
-# fewer than three sources read is INCONCLUSIVE. Exit: 0 all that were read agree, 1 a disagreement, 2 inconclusive or usage.
+# The repository's VERSION file is the reference, not a source. Every source of the mode is normalised to its form (a pacman
+# version 1.0.0rc1-1 becomes 1.0.0-rc1) and compared: --nested needs the menu bridge and the plugin; --installed needs
+# About (/usr/share/grassfield/VERSION), pacman for grassfield-desktop and grassfield-compositor, the menu bridge and the
+# plugin. PASS requires EVERY one of them; a source that cannot be read is named as missing and the run is INCONCLUSIVE,
+# never a pass. Exit: 0 every source reports VERSION, 1 a source differs, 2 a source is missing or usage error.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 
@@ -43,13 +45,11 @@ missing=()
 
 plugin_version() { jq -r '.version // empty' 2>/dev/null; }
 if [[ $mode == --nested ]]; then
-  add "VERSION file (the shell's About reads it)" "$want"
   b=$root/.dev/build/grassfield-menu-bridge
   if [[ -x $b ]]; then add "menu bridge (dev build)" "$("$b" --version | awk '{print $2}')"; else missing+=("menu bridge: $b not built"); fi
   v=$("$root/scripts/nestctl" grassfield -j 2>/dev/null | plugin_version)
   if [[ -n $v ]]; then add "plugin (hyprctl grassfield, nested)" "$v"; else missing+=("plugin: the nested compositor has no plugin loaded or no nested session"); fi
 else
-  add "VERSION file of the repository" "$want"
   f=/usr/share/grassfield/VERSION
   if [[ -r $f ]]; then add "About (/usr/share/grassfield/VERSION)" "$(<"$f")"; else missing+=("About: $f not installed"); fi
   for pkg in grassfield-desktop grassfield-compositor; do
@@ -61,6 +61,7 @@ else
   [[ -r /usr/share/grassfield/BUILD-COMMIT ]] && echo "build commit of the installed desktop package: $(</usr/share/grassfield/BUILD-COMMIT)"
 fi
 
+echo "  reference: VERSION file of the repository = $want"
 bad=0
 for i in "${!names[@]}"; do
   if [[ ${vals[$i]} == "$(norm "$want")" ]]; then s=ok; else s="DIFFERS"; bad=1; fi
@@ -68,5 +69,5 @@ for i in "${!names[@]}"; do
 done
 for m in "${missing[@]}"; do echo "  not checked: $m"; done
 if ((bad)); then echo "version: FAIL: a part does not report $want (above)"; exit 1; fi
-if ((${#names[@]} < 3)); then echo "version: INCONCLUSIVE: only ${#names[@]} source(s) read, $want agreed by those"; exit 2; fi
-echo "version: PASS: ${#names[@]} sources report $want"
+if ((${#missing[@]} > 0)); then echo "version: INCONCLUSIVE: ${#missing[@]} source(s) could not be read (listed above as not checked); the ${#names[@]} read agree with $want"; exit 2; fi
+echo "version: PASS: all ${#names[@]} sources report $want"

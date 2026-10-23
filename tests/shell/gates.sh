@@ -41,11 +41,11 @@ bg+=("$busy")
 sleep 100 &
 idle=$!
 bg+=("$idle")
-out=$("$root/scripts/gates/idle-cpu.sh" --pid "$idle=idle-sleep" --seconds 4 --interval 1 --min-seconds 2 --gate-seconds 1 2>&1)
+out=$("$root/scripts/gates/idle-cpu.sh" --pid "$idle=idle-sleep" --seconds 4 --interval 1 --min-seconds 2 --gate-seconds 1 --real-session 2>&1)
 rc=$?
 expect "P1 idle process passes" "$rc" 0
 expect "P1 prints the verdict with samples" "$([[ $out == *"P1: PASS"*"4 samples"* ]] && echo yes)" yes
-out=$("$root/scripts/gates/idle-cpu.sh" --pid "$busy=busy-yes" --seconds 4 --interval 1 --min-seconds 2 --gate-seconds 1 2>&1)
+out=$("$root/scripts/gates/idle-cpu.sh" --pid "$busy=busy-yes" --seconds 4 --interval 1 --min-seconds 2 --gate-seconds 1 --real-session 2>&1)
 rc=$?
 expect "P1 busy process fails" "$rc" 1
 expect "P1 reports the CPU" "$([[ $out == *"P1: FAIL"* ]] && echo yes)" yes
@@ -53,10 +53,11 @@ expect "P1 short window is inconclusive" "$(rc_of "$root/scripts/gates/idle-cpu.
 expect "P1 without a target is an error" "$(rc_of "$root/scripts/gates/idle-cpu.sh" --seconds 3)" 2
 expect "P1 short window is a proxy, never a pass" "$(rc_of "$root/scripts/gates/idle-cpu.sh" --pid "$idle" --seconds 3 --interval 1 --min-seconds 2)" 2
 # The busy process is allowed when the baseline is as busy.
-expect "P1 baseline" "$(rc_of "$root/scripts/gates/idle-cpu.sh" --pid "$busy" --baseline-pid "$busy" --seconds 3 --interval 1 --min-seconds 2 --gate-seconds 1)" 0
+expect "P1 baseline" "$(rc_of "$root/scripts/gates/idle-cpu.sh" --pid "$busy" --baseline-pid "$busy" --seconds 3 --interval 1 --min-seconds 2 --gate-seconds 1 --real-session)" 0
+expect "P1 --pid without --real-session is a proxy, never a pass" "$(rc_of "$root/scripts/gates/idle-cpu.sh" --pid "$idle" --seconds 3 --interval 1 --min-seconds 2 --gate-seconds 1)" 2
 
 # P2: a process against a baseline.
-mb=$(($(gate_rss_kb "$idle") / 1024))
+mb=$(($(gate_rss_kb "$idle") / 1000))
 expect "P2 below baseline + delta passes" "$(rc_of "$root/scripts/gates/rss.sh" --pid "$idle" --baseline-mb "$mb")" 0
 expect "P2 above baseline + delta fails" "$(rc_of "$root/scripts/gates/rss.sh" --pid "$idle" --baseline-mb 0 --max-delta-mb 0)" 1
 expect "P2 without a baseline is inconclusive" "$(rc_of "$root/scripts/gates/rss.sh" --pid "$idle")" 2
