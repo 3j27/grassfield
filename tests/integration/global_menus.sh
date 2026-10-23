@@ -291,7 +291,15 @@ before=$(windows_of "$cr_pid")
 click_row '^New [Ww]indow$'
 check "pointer click on File > New window opened a window ($before -> 2)" wait_for 10 has_window "$cr_pid" 2
 say "  Chromium windows now: $(windows_of "$cr_pid")"
-say "  bridge resources (ADR-0008 budget: <= 20 MB RSS): $(ps -o rss=,time= -p "$(cat "$dev/menu-bridge.pid")" | awk '{printf "RSS %d kB, CPU time %s", $1, $2}')"
+# GF-080: the budget metric is PSS (proportional set size, /proc/PID/smaps_rollup "Pss"): the bridge shares its Qt and libc
+# pages with the shell and other processes, so RSS counts memory it does not own; PSS divides shared pages by their users.
+# Budget (ADR-0008, amendment 2026-10-23): PSS <= 20 MiB = 20480 kB with the Qt reference app, a Qt/KDE app and Chromium
+# mapped; RSS is printed for trend only. A bridge pid without smaps_rollup (not readable) is a failure, not a pass.
+bridge_pid=$(cat "$dev/menu-bridge.pid")
+pss_kb() { awk "/^Pss:/ {print \$2; exit}" "/proc/$1/smaps_rollup" 2>/dev/null; }
+bridge_pss=$(pss_kb "$bridge_pid")
+say "  bridge resources (ADR-0008 budget: PSS <= 20480 kB): PSS ${bridge_pss:-unreadable} kB; $(ps -o rss=,time= -p "$bridge_pid" | awk "{printf \"RSS %d kB (trend only), CPU time %s\", \$1, \$2}")"
+check "bridge PSS ${bridge_pss:-unreadable} kB is within the 20480 kB budget (GF-080)" test -n "${bridge_pss:-}" -a "${bridge_pss:-999999}" -le 20480
 
 # ---- Qt Linguist: a third-party Qt app (qt6-tools), master-prompt §12 ----
 say ""
