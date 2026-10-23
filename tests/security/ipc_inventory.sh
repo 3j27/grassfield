@@ -13,6 +13,7 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
 exec python3 -I - <<'PY'
 import glob
+import os
 import re
 import sys
 
@@ -86,6 +87,8 @@ callers = set(re.findall(r'shell\("(\w+)",\s*"(\w+)', bindings))
 callers |= {("switcher", f) for f in re.findall(r'(?:switcher_request|in_switcher_else)\("(\w+)"', bindings)}
 scanned = sorted(glob.glob("config/hypr/grassfield/*.lua")) + sorted(glob.glob("packaging/bin/*")) + sorted(glob.glob("packaging/shims/*"))
 for path in scanned:
+    if not os.path.isfile(path):
+        continue  # e.g. packaging/bin/__pycache__ left by another test
     for line in open(path, encoding="utf-8", errors="replace"):
         if "qs ipc" in line:
             callers |= set(re.findall(r"call (\w+) (\w+)", line))
