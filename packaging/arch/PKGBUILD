@@ -2,17 +2,31 @@
 # Local package build from this repository. grassfield-desktop and grassfield-compositor need no download;
 # grassfield-icons fetches TWO pinned upstream commits (MacTahoe and Pebble icon themes, GPL-3.0, ADR-0017):
 #   cd packaging/arch && makepkg -si        (owner runs it; installs with sudo through pacman)
-# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons
+# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons   (all three: the icon theme is
+#   installed with the others; naming only the first two leaves the 60 MiB icon theme behind, GF-046)
 # Never constrain the hyprland version here (ADR-0009, master-prompt §5.6).
+#
+# Provenance (GF-044): the package is built from a `git archive` snapshot of HEAD, unpacked into $srcdir/snapshot by
+# prepare(); every build directory is under $srcdir, nothing is written to the live working tree and nothing that is
+# not committed is packaged (a dirty tree is reported). The commit is recorded in /usr/share/grassfield/BUILD-COMMIT.
+# The installed plugin is the one built here (RelWithDebInfo, not stripped: a crash inside Hyprland needs its symbols;
+# the package is larger by the debug sections, there is no split -debug package).
+#
+# One version source (D-11): the VERSION file at the repository root. pkgver is that version without the hyphen
+# (1.0.0-rc1 -> 1.0.0rc1, which pacman orders before 1.0.0); pkgrel restarts at 1 with every new VERSION.
 
+_here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+_ver=$(tr -d '[:space:]' <"$_here/../../VERSION")
 pkgbase=grassfield
 pkgname=(grassfield-desktop grassfield-compositor grassfield-icons)
-pkgver=0.4.0
-pkgrel=12
+pkgver=${_ver//-/}
+pkgrel=1
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
 arch=(x86_64)
 url="https://grassfield.invalid"
-# Grassfield's own code is MIT (ADR-0005, accepted by the owner 2026-10-18; root LICENSE, installed by both packages).
+# Grassfield's own code is MIT (ADR-0005, accepted by the owner 2026-10-18; root LICENSE, installed by every package).
+# Each package function sets its own license= array (own art CC-BY-SA-4.0, generated appmenu code LGPL-2.1-or-later,
+# the icon pack GPL-3.0-only, ...): THIRD_PARTY.md has the table, scripts/dev/check-licenses.sh checks it.
 # Third-party notices: THIRD_PARTY.md, installed under /usr/share/licenses/<package>/.
 license=(MIT)
 makedepends=(cmake ninja pkgconf hyprland gtest lua extra-cmake-modules qt6-declarative qt6-tools hyprcursor librsvg python dconf git)
@@ -29,11 +43,28 @@ source=("mactahoe-icon-theme::git+https://github.com/vinceliuice/MacTahoe-icon-t
 sha256sums=('4d91771b305c25b6a81e8a24e7c3d4ae49cce9754db199437191fa30cb9c60b0'
             '7bd4b12ca3914542857a159aed149d44e5d2b82a787c9d56f830da80fa0b9840')
 
-_root() { realpath "$startdir/../.."; }
+# The source tree every step reads: the snapshot of HEAD made by prepare(), never the live working tree.
+_root() { echo "$srcdir/snapshot"; }
+
+prepare() {
+  local repo
+  repo=$(git -C "$startdir" rev-parse --show-toplevel)
+  rm -rf "$srcdir/snapshot"
+  mkdir -p "$srcdir/snapshot"
+  git -C "$repo" archive --format=tar HEAD | tar -x -C "$srcdir/snapshot"
+  git -C "$repo" rev-parse HEAD >"$srcdir/BUILD-COMMIT"
+  if [[ $(tr -d '[:space:]' <"$srcdir/snapshot/VERSION") != "$_ver" ]]; then
+    echo "PKGBUILD: VERSION of HEAD ($(<"$srcdir/snapshot/VERSION")) is not the VERSION this PKGBUILD read ($_ver): commit it first" >&2
+    return 1
+  fi
+  if [[ -n $(git -C "$repo" status --porcelain) ]]; then
+    echo "PKGBUILD: WARNING: uncommitted changes are NOT in this package (it is built from HEAD $(<"$srcdir/BUILD-COMMIT"))" >&2
+  fi
+}
 
 build() {
   cmake -S "$(_root)/compositor" -B "$srcdir/compositor-build" -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release -DGRASSFIELD_BUILD_TESTS=ON
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo -DGRASSFIELD_BUILD_TESTS=ON
   cmake --build "$srcdir/compositor-build"
   # Grassfield.I18n QML module (Translator singleton) and the compiled catalogs (translations/*.ts).
   cmake -S "$(_root)/ui/i18n" -B "$srcdir/i18n-build" -G Ninja \
@@ -60,12 +91,12 @@ build() {
   "$(_root)/branding/cursors/build.sh" --out "$srcdir/icons"
   # grassfield-icons (ADR-0017): compose the theme into a scratch directory; the composer fails on pin drift (a listed
   # file missing) and when a listed logo, a dangling link or a forbidden word remains.
-  python3 -I "$startdir/icons-compose.py" --mactahoe "$srcdir/mactahoe-icon-theme" --pebble "$srcdir/pebble-icon-theme" \
-    --branding "$(_root)/branding/icons/theme" --list "$startdir/icons-apple-logos.txt" --out "$srcdir/grassfield-icons"
+  python3 -I "$(_root)/packaging/arch/icons-compose.py" --mactahoe "$srcdir/mactahoe-icon-theme" --pebble "$srcdir/pebble-icon-theme" \
+    --branding "$(_root)/branding/icons/theme" --list "$(_root)/packaging/arch/icons-apple-logos.txt" --out "$srcdir/grassfield-icons"
 }
 
 check() {
-  "$(_root)/compositor/build/grassfield-compositor-tests"
+  "$srcdir/compositor-build/grassfield-compositor-tests"
   # The peer-to-peer D-Bus case skips itself where Unix sockets cannot be created (build sandboxes).
   "$srcdir/menu-bridge-build/menu-bridge-unit-tests"
 }
@@ -75,7 +106,11 @@ package_grassfield-desktop() {
   # python, librsvg (rsvg-convert) and hyprcursor (hyprcursor-util) are RUNTIME dependencies (owner decision 2026-10-19):
   # the shell runs /usr/share/grassfield/cursors/build.sh to regenerate the cursor theme for the pointer colours
   # (Settings > Accessibility > Pointer, ADR-0014) into $XDG_DATA_HOME/icons/grassfield-cursors-custom.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine python librsvg hyprcursor breeze-icons grassfield-icons)
+  # networkmanager (nmcli), bluez-utils (bluetoothctl), wireplumber (wpctl) and wl-clipboard (wl-copy) are run by Settings
+  # and the shell (GF-049, ARCH-08): declared, not assumed to come with Omarchy.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland qt6-svg inter-font kio solid kcoreaddons kservice qt6-multimedia qt6-imageformats qt6-webengine python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard)
+  # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0; Unicode-derived grapheme tables Unicode-3.0.
+  license=(MIT CC-BY-SA-4.0 Unicode-3.0)
   optdepends=(
     'grassfield-compositor: titlebars with traffic lights, minimize, global menu protocol'
     'brightnessctl: display brightness OSD and Quick Settings slider'
@@ -146,19 +181,29 @@ package_grassfield-desktop() {
   dconf compile "$srcdir/grassfield.db" "$root/packaging/dconf/grassfield.d"
   install -Dm644 "$srcdir/grassfield.db" "$pkgdir/usr/share/grassfield/dconf/grassfield.db"
 
+  # Version and build provenance: the shell's About reads VERSION (a sibling of the shell directory).
+  install -Dm644 "$root/VERSION" "$pkgdir/usr/share/grassfield/VERSION"
+  install -Dm644 "$srcdir/BUILD-COMMIT" "$pkgdir/usr/share/grassfield/BUILD-COMMIT"
+  install -Dm644 "$root/CHANGELOG.md" "$pkgdir/usr/share/doc/grassfield/CHANGELOG.md"
   install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/grassfield/README.md"
   install -Dm644 "$root/branding/LICENSES.md" "$pkgdir/usr/share/licenses/grassfield-desktop/BRANDING.md"
   install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/grassfield-desktop/LICENSE"
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-desktop/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/omarchy-MIT.txt" "$pkgdir/usr/share/licenses/grassfield-desktop/omarchy-MIT.txt"
+  install -Dm644 "$root/packaging/licenses/unicode-license-v3.txt" "$pkgdir/usr/share/licenses/grassfield-desktop/unicode-license-v3.txt"
 }
 
 package_grassfield-compositor() {
   pkgdesc+=" — optional Hyprland plugin (titlebars, minimize, appmenu)"
   depends=(hyprland)
+  # Own code MIT; the server code generated from the KDE appmenu protocol XML LGPL-2.1-or-later; Hyprland's headers BSD-3-Clause.
+  license=(MIT LGPL-2.1-or-later BSD-3-Clause)
+  # Debug symbols stay in the .so (built RelWithDebInfo): a crash inside Hyprland has to be readable. No split package.
+  options=(!strip)
   local root
   root=$(_root)
-  install -Dm755 "$root/compositor/build/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
+  install -Dm755 "$srcdir/compositor-build/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
+  install -Dm644 "$srcdir/BUILD-COMMIT" "$pkgdir/usr/share/licenses/grassfield-compositor/BUILD-COMMIT"
   install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/grassfield-compositor/LICENSE"
   install -Dm644 "$root/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-compositor/THIRD_PARTY.md"
   install -Dm644 "$root/packaging/licenses/hyprland-BSD-3-Clause.txt" "$pkgdir/usr/share/licenses/grassfield-compositor/hyprland-BSD-3-Clause.txt"
