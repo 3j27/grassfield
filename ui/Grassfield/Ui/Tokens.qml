@@ -1255,8 +1255,20 @@ QtObject {
     readonly property int iconModeOwnTileConcurrency: 8
     // estimate: ms after which a shape read that did not finish is given up (the icon then sits on the system plate like a glyph)
     readonly property int iconModeOwnTileTimeout: 3000
+    // ADR-0014 own-tile rule, Dark: lightness the darkest part of the artwork of a tile icon is mapped to (no lift: the tile covers the plate, so nothing has to separate from it, and a lift flattens the glyph-vs-tile contrast of the icon; A2 rule I)
+    readonly property real iconModeTileDarkArtLift: 0.0
+    // ADR-0014 Clear over the bare wallpaper: lightness of the smoked plate (almost black, so a black folder on a black wallpaper still shows its plate while white ink and the plate hold on a white one; a lighter plate costs A2 rule E on mid-green wallpapers, modelled)
+    readonly property real iconModeClearPlateWallpaperLuma: 0.05
     // PERF-01 / UX-13: ms between two shape reads of the prewarm (IconShapePrewarm), one icon file at a time in the idle moments after the list of apps is known, so the Apps panel does not read about a hundred files while it opens
     readonly property int iconModePrewarmGapMs: 40
+    // ADR-0014 own-tile rule, Tinted in the light appearance: the plate under a tile icon (seen only in the antialiased fringe of the tile's edge) is the tint at this fraction of its brightness, dark, so that the edge keeps its contrast against a light material (A2 rule E, 32 px)
+    readonly property real iconModeTileTintedPlateScaleLight: 0.3
+    // ADR-0014 own-tile rule, Clear in the light appearance: opacity of the plate under a tile icon (seen only in the fringe of its edge)
+    readonly property real iconModeTileClearPlateAlphaLight: 1.0
+    // ADR-0014 own-tile rule, Clear in the light appearance: lightness of the plate under a tile icon (black: the fringe of the edge keeps its contrast against a light material)
+    readonly property real iconModeTileClearPlateLightLuma: 0.0
+    // ADR-0014 Clear in the light appearance: lightness of the smoked plate (dark grey rather than black, so that a black folder on a black background still shows its plate at the same faint level as over the bare wallpaper; white and bright materials see it as the smoke it is: A2 changes by under 0.1 on every cell, modelled)
+    readonly property real iconModeClearPlateLightLuma: 0.3
     // ADR-0014 Clear over the bare wallpaper (desktop icons): opacity of the smoked glass plate, strong so that white ink and the plate edge hold on a white and on a black wallpaper
     readonly property real iconModeClearPlateAlphaWallpaper: 0.7
     // ADR-0014 Dark: lightness (sRGB 0..1) of the graphite system plate; macOS 26 Dark plates are near black.
@@ -1296,7 +1308,7 @@ QtObject {
     // ADR-0014 Tinted, light appearance: the artwork's darkest tone is the tint at this fraction of its brightness (dark on the light plate)
     readonly property real iconModeTintedRampLowLight: 0.12
     // ADR-0014 Tinted, light appearance: the artwork's lightest tone is the tint mixed this far to white (a wide ramp keeps the internal contrast of the icon)
-    readonly property real iconModeTintedRampHighLight: 0.4
+    readonly property real iconModeTintedRampHighLight: 0.2
     // ADR-0014 Clear: from this material transparency (Control Center slider, 0..1) the wallpaper shows through the window material so much that Clear icons are drawn as over the bare wallpaper (smoked plate, opaque rim); A2 at 1.0 holds a floor of 2.0 in every mode, tint and size (docs/specs/ui.md)
     readonly property real iconModeWallpaperLikeTransparency: 0.8
     // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)
