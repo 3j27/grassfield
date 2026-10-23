@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QThread>
 #include <QElapsedTimer>
 
 #include <algorithm>
@@ -79,22 +80,25 @@ struct Run {
 // Runs a program (argument vector, no shell) with a deadline. Lines of stdout go to `onLine` as they arrive (the progress);
 // otherwise stdout is collected up to `maxOut` bytes (more: the process is killed, `overflow`). The process runs at a low
 // priority and dies with the helper (PDEATHSIG); a stop signal to the helper kills it.
-Run run(const QString &program, const QStringList &args, int timeoutSeconds, qint64 maxOut, qint64 addressSpace, const std::function<void(const QString &)> &onLine = nullptr)
+Run run(const QString &program, const QStringList &args, int timeoutSeconds, qint64 maxOut, qint64 dataLimit, const std::function<void(const QString &)> &onLine = nullptr)
 {
     Run r;
     QProcess p;
     p.setProgram(program);
     p.setArguments(args);
-    p.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
-    p.setChildProcessModifier([addressSpace] {
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    // glibc reserves arena address space per thread: two arenas keep the footprint the same on 8 and on 64 cores.
+    env.insert(QStringLiteral("MALLOC_ARENA_MAX"), QStringLiteral("2"));
+    p.setProcessEnvironment(env);
+    p.setChildProcessModifier([dataLimit] {
         ::prctl(PR_SET_PDEATHSIG, SIGKILL);
         ::setpriority(PRIO_PROCESS, 0, 10);
-        // A hostile file cannot make the decoder take all the memory: the child's address space is capped (a failed allocation
-        // ends the run as a failure).
-        if (addressSpace > 0) {
+        // A hostile file cannot make the decoder take all the memory: the child's heap is capped (a failed allocation ends the
+        // run as a failure). RLIMIT_DATA, not RLIMIT_AS: it counts the memory in use, not the address space that threads reserve.
+        if (dataLimit > 0) {
             struct rlimit lim;
-            lim.rlim_cur = lim.rlim_max = rlim_t(addressSpace);
-            ::setrlimit(RLIMIT_AS, &lim);
+            lim.rlim_cur = lim.rlim_max = rlim_t(dataLimit);
+            ::setrlimit(RLIMIT_DATA, &lim);
         }
     });
     p.start();
@@ -169,9 +173,9 @@ QByteArray encodeJpeg(const QImage &img, int quality)
 }
 
 // One frame of `file` at `seconds`, null on failure.
-QImage grabFrame(const QString &ffmpeg, const QString &file, double seconds, QString *reason)
+QImage grabFrame(const QString &ffmpeg, const QString &file, double seconds, QString *reason, const QSize &fitInside = QSize())
 {
-    const Run r = run(ffmpeg, frameArgs(file, seconds), kFrameTimeoutSeconds, qint64(96) << 20, kFrameAddressSpace);
+    const Run r = run(ffmpeg, frameArgs(file, seconds, fitInside), kFrameTimeoutSeconds, qint64(96) << 20, kFrameDataLimit);
     if (r.aborted) {
         *reason = QStringLiteral("cancelled");
         return {};
@@ -279,8 +283,14 @@ QSize outputSize(const QSize &source, const QSize &limit)
     return QSize(even(source.width() * scale), even(source.height() * scale));
 }
 
-QStringList transcodeArgs(const QString &src, const QString &dst, const QSize &size, double sourceFps, int maxSeconds, qint64 maxBytes)
+int threadCount(int cpus)
 {
+    return std::clamp(cpus, 1, kMaxThreads);
+}
+
+QStringList transcodeArgs(const QString &src, const QString &dst, const QSize &size, double sourceFps, int maxSeconds, qint64 maxBytes, int threads)
+{
+    const QString n = QString::number(std::clamp(threads, 1, kMaxThreads));
     QString filter = QStringLiteral("scale=%1:%2:flags=lanczos").arg(size.width()).arg(size.height());
     if (sourceFps > kMaxFps + 0.01 || sourceFps <= 0)
         filter += QStringLiteral(",fps=%1").arg(int(kMaxFps));
@@ -289,10 +299,13 @@ QStringList transcodeArgs(const QString &src, const QString &dst, const QSize &s
     return {QStringLiteral("-nostdin"), QStringLiteral("-hide_banner"), QStringLiteral("-loglevel"), QStringLiteral("error"), QStringLiteral("-nostats"),
             QStringLiteral("-protocol_whitelist"), QStringLiteral("file"), QStringLiteral("-format_whitelist"), QString::fromLatin1(kDemuxers),
             QStringLiteral("-max_alloc"), QString::number(kMaxAlloc), QStringLiteral("-max_pixels"), QString::number(kMaxPixels),
+            // Explicit thread counts, the same on every machine: the decoder (input option), the filter graph, the encoder.
+            QStringLiteral("-filter_threads"), n, QStringLiteral("-threads"), n,
             QStringLiteral("-i"), src,
             QStringLiteral("-map"), QStringLiteral("0:v:0"), QStringLiteral("-an"), QStringLiteral("-sn"), QStringLiteral("-dn"),
             QStringLiteral("-map_metadata"), QStringLiteral("-1"), QStringLiteral("-map_chapters"), QStringLiteral("-1"),
             QStringLiteral("-vf"), filter,
+            QStringLiteral("-threads"), n,
             QStringLiteral("-c:v"), QStringLiteral("libx264"), QStringLiteral("-preset"), QStringLiteral("fast"), QStringLiteral("-crf"), QStringLiteral("22"),
             QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"), QStringLiteral("-profile:v"), QStringLiteral("high"),
             QStringLiteral("-movflags"), QStringLiteral("+faststart"),
@@ -300,14 +313,20 @@ QStringList transcodeArgs(const QString &src, const QString &dst, const QSize &s
             QStringLiteral("-progress"), QStringLiteral("pipe:1"), QStringLiteral("-f"), QStringLiteral("mp4"), QStringLiteral("-y"), dst};
 }
 
-QStringList frameArgs(const QString &file, double seconds)
+QStringList frameArgs(const QString &file, double seconds, const QSize &fitInside, int threads)
 {
-    return {QStringLiteral("-nostdin"), QStringLiteral("-hide_banner"), QStringLiteral("-loglevel"), QStringLiteral("error"),
+    QStringList scale;
+    if (fitInside.isValid() && !fitInside.isEmpty())
+        scale = {QStringLiteral("-vf"), QStringLiteral("scale='min(iw,%1)':'min(ih,%2)':force_original_aspect_ratio=decrease").arg(fitInside.width()).arg(fitInside.height())};
+    QStringList a = {QStringLiteral("-nostdin"), QStringLiteral("-hide_banner"), QStringLiteral("-loglevel"), QStringLiteral("error"),
             QStringLiteral("-protocol_whitelist"), QStringLiteral("file"), QStringLiteral("-format_whitelist"), QString::fromLatin1(kDemuxers),
             QStringLiteral("-max_alloc"), QString::number(kMaxAlloc), QStringLiteral("-max_pixels"), QString::number(kMaxPixels),
+            QStringLiteral("-threads"), QString::number(std::clamp(threads, 1, kMaxThreads)), QStringLiteral("-filter_threads"), QString::number(std::clamp(threads, 1, kMaxThreads)),
             QStringLiteral("-ss"), QString::number(std::max(0.0, seconds), 'f', 3), QStringLiteral("-i"), file,
-            QStringLiteral("-frames:v"), QStringLiteral("1"), QStringLiteral("-an"), QStringLiteral("-sn"),
-            QStringLiteral("-f"), QStringLiteral("image2pipe"), QStringLiteral("-c:v"), QStringLiteral("png"), QStringLiteral("-")};
+            QStringLiteral("-frames:v"), QStringLiteral("1"), QStringLiteral("-an"), QStringLiteral("-sn")};
+    a += scale;
+    a += {QStringLiteral("-f"), QStringLiteral("image2pipe"), QStringLiteral("-c:v"), QStringLiteral("png"), QStringLiteral("-")};
+    return a;
 }
 
 double progressOf(const QString &line, double duration)
@@ -382,7 +401,7 @@ void installSignalHandlers()
 
 ExitCode probe(const QString &ffprobe, const QString &path, int maxSeconds, Info *info, QString *reason)
 {
-    const Run r = run(ffprobe, ffprobeArgs(path), kProbeTimeoutSeconds, kMaxProbeJsonBytes, kProbeAddressSpace);
+    const Run r = run(ffprobe, ffprobeArgs(path), kProbeTimeoutSeconds, kMaxProbeJsonBytes, kProbeDataLimit);
     if (r.aborted) {
         *reason = QStringLiteral("cancelled");
         return Cancelled;
@@ -495,7 +514,7 @@ ExitCode transcode(const TranscodeOptions &o, const std::function<void(double)> 
                     progress(f);
             }
         };
-        const Run r = run(o.ffmpeg, transcodeArgs(o.src, tmp, size, info.fps, o.maxSeconds, o.maxBytes), kTranscodeTimeoutSeconds, 0, kTranscodeAddressSpace, onLine);
+        const Run r = run(o.ffmpeg, transcodeArgs(o.src, tmp, size, info.fps, o.maxSeconds, o.maxBytes, o.threads > 0 ? std::min(o.threads, kMaxThreads) : threadCount(QThread::idealThreadCount())), kTranscodeTimeoutSeconds, 0, o.dataLimit, onLine);
         if (r.aborted) {
             *reason = QStringLiteral("cancelled");
             return Cancelled;
@@ -593,7 +612,7 @@ ExitCode thumbnail(const QString &src, const QString &outFile, int width, QStrin
     Info info;
     if (const ExitCode c = probe(QStringLiteral("/usr/bin/ffprobe"), src, kMaxSeconds, &info, reason))
         return c;
-    const QImage frame = grabFrame(QStringLiteral("/usr/bin/ffmpeg"), src, posterSeconds(info.duration), reason);
+    const QImage frame = grabFrame(QStringLiteral("/usr/bin/ffmpeg"), src, posterSeconds(info.duration), reason, QSize(1280, 1280));
     if (frame.isNull())
         return *reason == QLatin1String("cancelled") ? Cancelled : TranscodeFailed;
     const QByteArray jpg = encodeJpeg(compose(frame, QSize(width, width * 10 / 16), Fit::Fill, QColor(Qt::black)), 85);

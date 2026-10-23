@@ -285,7 +285,7 @@ TEST(VideoTool, APlaylistIsRefusedWhateverItIsCalled)
 
 TEST(VideoTool, ANormalFileIsNotHurtByTheMemoryCapOfTheChild)
 {
-    // The children run under RLIMIT_AS (2, 4 and 8 GiB); a normal file works as before (this only shows the cap does not hurt: that it bites is not tested).
+    // The children run under RLIMIT_DATA (1, 3 and 6 GiB); a normal file works as before (that the cap bites is TheHeapCapStopsARunawayDecode).
     if (!haveFfmpeg())
         GTEST_SKIP() << "ffmpeg is not installed";
     QTemporaryDir dir;
@@ -293,4 +293,82 @@ TEST(VideoTool, ANormalFileIsNotHurtByTheMemoryCapOfTheChild)
     Info i;
     QString why;
     EXPECT_EQ(probe(QStringLiteral("/usr/bin/ffprobe"), clip, 600, &i, &why), Ok) << "a normal file is not hurt by the cap: " << why.toStdString();
+}
+
+TEST(VideoTool, ThreadsAreTheSameOnEveryMachine)
+{
+    EXPECT_EQ(threadCount(0), 1);
+    EXPECT_EQ(threadCount(1), 1);
+    EXPECT_EQ(threadCount(4), 4);
+    EXPECT_EQ(threadCount(8), kMaxThreads);
+    EXPECT_EQ(threadCount(32), kMaxThreads);
+    EXPECT_EQ(threadCount(256), kMaxThreads);
+    // Whatever count is asked for, the vector never carries more than kMaxThreads and always names the decoder, filter and encoder.
+    const QStringList a = transcodeArgs(QStringLiteral("/v/a.mp4"), QStringLiteral("/c/o.mp4"), QSize(3840, 2160), 60, 600, 1000000, 64);
+    int threads = 0, filters = 0;
+    for (int i = 0; i + 1 < a.size(); ++i) {
+        if (a[i] == QLatin1String("-threads")) {
+            ++threads;
+            EXPECT_LE(a[i + 1].toInt(), kMaxThreads);
+            EXPECT_GE(a[i + 1].toInt(), 1);
+        }
+        if (a[i] == QLatin1String("-filter_threads")) {
+            ++filters;
+            EXPECT_EQ(a[i + 1].toInt(), kMaxThreads);
+        }
+    }
+    EXPECT_EQ(threads, 2) << "one for the decoder (before -i), one for the encoder";
+    EXPECT_EQ(filters, 1);
+    EXPECT_LT(a.indexOf(QStringLiteral("-threads")), a.indexOf(QStringLiteral("-i")));
+    EXPECT_GT(a.lastIndexOf(QStringLiteral("-threads")), a.indexOf(QStringLiteral("-i")));
+    // A frame grab of a big source scales it down (never up); without a bound it does not scale.
+    const QStringList f = frameArgs(QStringLiteral("/v/a.mp4"), 1.0, QSize(1280, 1280));
+    EXPECT_TRUE(f[f.indexOf(QStringLiteral("-vf")) + 1].contains(QStringLiteral("min(iw,1280)")));
+    EXPECT_FALSE(frameArgs(QStringLiteral("/v/a.mp4"), 1.0).contains(QStringLiteral("-vf")));
+}
+
+TEST(VideoTool, A4kAnd8kSourceTranscodeUnderTheRealHeapCapWithForcedThreads)
+{
+    if (!haveFfmpeg())
+        GTEST_SKIP() << "ffmpeg is not installed";
+    QTemporaryDir dir;
+    // 4K 60 fps to 4K, with a thread count far above any machine's (clamped to kMaxThreads): the real cap (kTranscodeDataLimit).
+    const QString k4 = makeClip(dir, QStringLiteral("k4.mp4"), 1, QStringLiteral("3840x2160"), 60, QStringLiteral("-preset ultrafast"));
+    TranscodeOptions o;
+    o.src = k4;
+    o.out = videoDir(dir);
+    o.limit = QSize(3840, 2160);
+    o.threads = 256;
+    QJsonObject r;
+    QString why;
+    ASSERT_EQ(transcode(o, nullptr, &r, &why), Ok) << why.toStdString();
+    EXPECT_EQ(r.value(QStringLiteral("videoWidth")).toInt(), 3840);
+    // An 8K source (two frames) down to 4K, and up to the 8K output size, under the same cap.
+    const QString k8 = makeClip(dir, QStringLiteral("k8.mp4"), 1, QStringLiteral("7680x4320"), 2, QStringLiteral("-preset ultrafast"));
+    o.src = k8;
+    ASSERT_EQ(transcode(o, nullptr, &r, &why), Ok) << "8K to 4K: " << why.toStdString();
+    EXPECT_EQ(r.value(QStringLiteral("videoWidth")).toInt(), 3840);
+    o.limit = QSize(7680, 4320);
+    ASSERT_EQ(transcode(o, nullptr, &r, &why), Ok) << "8K to 8K: " << why.toStdString();
+    EXPECT_EQ(r.value(QStringLiteral("videoWidth")).toInt(), 7680);
+}
+
+TEST(VideoTool, TheHeapCapStopsARunawayDecode)
+{
+    if (!haveFfmpeg())
+        GTEST_SKIP() << "ffmpeg is not installed";
+    QTemporaryDir dir;
+    const QString k4 = makeClip(dir, QStringLiteral("k4.mp4"), 1, QStringLiteral("3840x2160"), 30, QStringLiteral("-preset ultrafast"));
+    TranscodeOptions o;
+    o.src = k4;
+    o.out = videoDir(dir);
+    o.limit = QSize(3840, 2160);
+    o.dataLimit = qint64(160) << 20; // far below what a 4K encode needs
+    QJsonObject r;
+    QString why;
+    EXPECT_EQ(transcode(o, nullptr, &r, &why), TranscodeFailed) << why.toStdString();
+    // The failure leaves nothing behind, and the same file passes with the real cap.
+    EXPECT_TRUE(QDir(videoDir(dir)).entryList({QStringLiteral("*.mp4")}, QDir::Files | QDir::Hidden).isEmpty());
+    o.dataLimit = kTranscodeDataLimit;
+    EXPECT_EQ(transcode(o, nullptr, &r, &why), Ok) << why.toStdString();
 }

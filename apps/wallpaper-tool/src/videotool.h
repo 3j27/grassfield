@@ -29,11 +29,17 @@ constexpr qint64 kMaxProbeJsonBytes = 1024 * 1024;
 // The only container formats ffmpeg may open (the demuxers behind the suffixes of videoSuffixes): a playlist (HLS, ffconcat, a
 // text file naming other files) is refused whatever its name.
 constexpr const char *kDemuxers = "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi,ogg";
-// Limits of the child programs: one allocation, the picture size (as the picture limits) and the address space.
+// Limits of the child programs. Memory must not depend on the number of cores: ffmpeg, x264 and libavfilter size their thread
+// pools from the CPU count, and glibc reserves arena address space per thread, so every ffmpeg run gets an explicit thread count
+// (at most kMaxThreads), `MALLOC_ARENA_MAX=2`, and a cap on the HEAP (RLIMIT_DATA: brk and private writable mappings, the memory
+// really used) rather than on the address space (RLIMIT_AS, which counts reserved but unused arena and stack space).
 constexpr qint64 kMaxAlloc = qint64(1) << 30;
-constexpr qint64 kProbeAddressSpace = qint64(2) << 30;
-constexpr qint64 kFrameAddressSpace = qint64(4) << 30;
-constexpr qint64 kTranscodeAddressSpace = qint64(8) << 30;
+constexpr int kMaxThreads = 8;
+constexpr qint64 kProbeDataLimit = qint64(1) << 30;
+constexpr qint64 kFrameDataLimit = qint64(3) << 30;
+constexpr qint64 kTranscodeDataLimit = qint64(6) << 30;
+// The thread count for a machine with `cpus` cores: 1 to kMaxThreads.
+int threadCount(int cpus);
 
 // What ffprobe says about a video's first video stream (after the display rotation).
 struct Info {
@@ -61,10 +67,12 @@ QSize outputSize(const QSize &source, const QSize &limit);
 
 // The ffmpeg argument vector of the transcode: H.264 (libx264) yuv420p at `size`, at most kMaxFps, no audio, no
 // subtitles, no metadata, +faststart, at most `maxSeconds` and `maxBytes`, progress on stdout.
-QStringList transcodeArgs(const QString &src, const QString &dst, const QSize &size, double sourceFps, int maxSeconds, qint64 maxBytes);
+// `threads` is the decoder, filter and encoder thread count (threadCount()).
+QStringList transcodeArgs(const QString &src, const QString &dst, const QSize &size, double sourceFps, int maxSeconds, qint64 maxBytes, int threads = kMaxThreads);
 
-// One frame at `seconds` as a PNG on stdout (no scaling: the caller composes it).
-QStringList frameArgs(const QString &file, double seconds);
+// One frame at `seconds` as a PNG on stdout. `fitInside`, when valid, scales a larger frame down to fit inside it (never up): a
+// thumbnail of an 8K source need not hold 33 megapixels.
+QStringList frameArgs(const QString &file, double seconds, const QSize &fitInside = QSize(), int threads = 2);
 
 // "out_time_us=<n>" (ffmpeg -progress) to the fraction done of `duration`, or -1 for any other line (or "N/A").
 double progressOf(const QString &line, double duration);
@@ -86,7 +94,7 @@ bool outDirAllowed(const QString &out);
 // ---- the processes ----
 
 // Called by the video subcommands only: every other subcommand keeps the default action, so a superseded `prepare`, `list`, still
-// `thumb` or `fetch` dies at once. A SIGTERM or SIGINT to the helper stops the running ffmpeg and ends the run with Cancelled (the handler is installed by main()).
+// `thumb` or `fetch` dies at once. A SIGTERM or SIGINT to the helper stops the running ffmpeg and ends the run with Cancelled.
 void installSignalHandlers();
 
 // ffprobe of a file already checked as a regular file.
@@ -103,6 +111,8 @@ struct TranscodeOptions {
     qint64 maxBytes = kMaxOutputBytes;
     qint64 cacheMaxBytes = qint64(512) << 20;
     QStringList keep;   // files of the cache that must survive the pruning
+    qint64 dataLimit = kTranscodeDataLimit; // heap cap of the ffmpeg child (tests lower it)
+    int threads = 0;                        // 0 = threadCount(the number of CPUs)
     QString ffmpeg = QStringLiteral("/usr/bin/ffmpeg");
     QString ffprobe = QStringLiteral("/usr/bin/ffprobe");
 };
