@@ -1016,7 +1016,7 @@ ListView {
                             urgency: item.urgency
                             actionsJson: item.actionsJson
                             live: row.live
-                            body: Notifications.bodyFor(item.bodyHtml)
+                            body: Notifications.bodyFor(item.bodyHtml, item.appName)
                             timeText: Notifications.timeFor(item.time)
                             iconSource: Notifications.iconSource(item.image, item.appIcon)
                             onActionTriggered: actionId => {

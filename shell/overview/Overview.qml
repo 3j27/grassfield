@@ -539,15 +539,17 @@ Scope {
         // in its "releasing" stage at least `ms` (1 to 10000), so that a click during the release can be tested. Refused
         // otherwise.
         function holdNextRelease(ms: int): string {
-            if (Quickshell.env("GRASSFIELD_DEV") !== "1" || Quickshell.env("GRASSFIELD_SESSION") === "1" || ms < 1 || ms > 10000)
+            if (!VisualFixtures.dev || ms < 1 || ms > 10000)
                 return "refused";
             root.testReleaseHoldNext = ms;
             return "held";
         }
 
-        // Test hook: JSON {open, stage, thumbnailMode, profile, screens: [{name, windows: [{address,
-        // appId, title, real, rect}], spaces, selected}]}. Rects are window-local pixels.
+        // Test hook (dev session only, VisualFixtures.dev, SEC-04): JSON {open, stage, thumbnailMode, profile,
+        // screens: [{name, windows: [{address, appId, title, real, rect}], spaces, selected}]}. Rects are window-local pixels.
         function status(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             const screens = [];
             const all = windows.instances;
             for (let i = 0; i < all.length; i++)

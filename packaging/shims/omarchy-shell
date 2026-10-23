@@ -1,0 +1,73 @@
+#!/bin/sh
+# Grassfield session stand-in for Omarchy's `omarchy-shell` IPC wrapper (D-12, GF-030). Installed to
+# /usr/lib/grassfield/omarchy-shims/, a directory that comes first in PATH only in a Grassfield session (see
+# omarchy-restart-shell next to this file).
+#
+# Omarchy's sleep-lock unit (omarchy-sleep-lock.service: a logind delay inhibitor and a PrepareForSleep monitor, whose
+# omarchy-system-sleep-lock asks the shell to lock with `omarchy-shell lock lock` and polls `omarchy-shell lock status`
+# until it reports {"secure": true}) is the fail-safe of the Grassfield session: grassfield-shell.service starts it
+# (OnFailure=) when the shell has failed for good. This stand-in answers those two calls with Grassfield's own lock
+# (WlSessionLock + PamContext("omarchy-lock-password") in grassfield-shell), never with another locker:
+#   lock lock     when grassfield-shell is not running, starts it again (reset-failed first: a shell at its start limit
+#                 is tried once more before sleep), waits for its IPC, then `qs ipc -c grassfield call lock lock`
+#   lock status   {"secure": <Hyprland reports LOCK on every monitor>, "requested": <grassfield-shell's crash-recovery
+#                 marker says "locked">} (read-only: hyprctl -j monitors, the marker file)
+# Every other call fails as Omarchy's wrapper does when its shell is not running ("-q": silent success). Nothing here
+# unlocks. Test: tests/security/sleep_lock_units.sh.
+quiet=0
+if [ "${1:-}" = "-q" ]; then
+  quiet=1
+  shift
+fi
+
+fail() {
+  [ "$quiet" = 1 ] && exit 0
+  echo "$1" >&2
+  exit 1
+}
+
+# grassfield-shell's crash-recovery marker (shell/security/LockMachine.js markerName): "locked" once a lock was requested.
+marker() {
+  id=${HYPRLAND_INSTANCE_SIGNATURE:-${WAYLAND_DISPLAY:-default}}
+  id=$(printf '%s' "$id" | tr -c 'A-Za-z0-9_.-' '_')
+  cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/grassfield-lock-$id" 2>/dev/null
+}
+
+lock_lock() {
+  case $(systemctl --user show --property=ActiveState --value grassfield-shell.service 2>/dev/null) in
+    active | activating | reloading) ;;
+    *)
+      systemctl --user reset-failed grassfield-shell.service >/dev/null 2>&1
+      systemctl --user start --no-block grassfield-shell.service >/dev/null 2>&1
+      ;;
+  esac
+  # The caller bounds this with its own timeout (omarchy-system-sleep-lock: what is left of logind's window).
+  tries=0
+  while [ "$tries" -lt 100 ]; do
+    out=$(qs ipc -c grassfield call lock lock 2>/dev/null) && case $out in
+      ok | already-locked | refused:*)
+        echo "$out"
+        exit 0
+        ;;
+    esac
+    tries=$((tries + 1))
+    sleep 0.1
+  done
+  fail "grassfield-shell is not running"
+}
+
+lock_status() {
+  secure=false
+  if hyprctl -j monitors 2>/dev/null | jq -e 'length > 0 and all(.[]; (.solitaryBlockedBy // []) | index("LOCK") != null)' >/dev/null 2>&1; then
+    secure=true
+  fi
+  requested=false
+  [ "$(marker)" = locked ] && requested=true
+  printf '{"secure": %s, "requested": %s}\n' "$secure" "$requested"
+}
+
+case "${1:-} ${2:-}" in
+  "lock lock") lock_lock ;;
+  "lock status") lock_status ;;
+  *) fail "omarchy-shell is not running (Grassfield session)" ;;
+esac

@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Lid and clamshell (macOS model): packaging/bin/grassfield-lid against fake /proc and /sys trees and a fake hyprctl.
-#  * lid closed, no external display: lock (logind suspends), the laptop panel is left alone;
-#  * lid closed with an external display: no lock, the laptop panel is switched off (the computer keeps running);
+#  * every lid close asks the shell to lock with `lock lid` (D-4); the shell decides: it does not lock in clamshell mode
+#    (shell/security/LockMachine.js lidShouldLock, tests/security/tst_lockmachine.qml), so the script never decides;
+#  * lid closed, no external display: the lock request, the laptop panel is left alone;
+#  * lid closed with an external display: the lock request too (the shell answers "docked"), and the laptop panel is
+#    switched off (the computer keeps running);
+#  * the lid switch is bound once (system.lua), not in bindings.lua;
 #  * lid opened, or the external display unplugged while closed: the user's monitor configuration is applied again;
 #  * every call is idempotent.
 set -euo pipefail
@@ -29,13 +33,22 @@ lid() {
 reset() { : >"$tmp/calls.log"; }
 calls() { cat "$tmp/calls.log"; }
 
-desc="lid closed, no external display: the screen is locked and the laptop panel is not touched"
+desc="lid closed, no external display: the shell is asked to lock and the laptop panel is not touched"
 reset; setup closed disconnected; lid closed
 check bash -c 'grep -qx lock "$1/calls.log" && ! grep -q hyprctl "$1/calls.log"' _ "$tmp"
 
-desc="lid closed with an external display: not locked, the laptop panel (eDP-1) is switched off"
+desc="lid closed with an external display: the shell is asked too (it decides: docked), the laptop panel (eDP-1) is switched off"
 reset; setup closed connected; lid closed
-check bash -c '! grep -qx lock "$1/calls.log" && grep -q "hyprctl eval hl.monitor({ output = \"eDP-1\", disabled = true })" "$1/calls.log"' _ "$tmp"
+check bash -c 'grep -qx lock "$1/calls.log" && grep -q "hyprctl eval hl.monitor({ output = \"eDP-1\", disabled = true })" "$1/calls.log"' _ "$tmp"
+
+desc="the lock request is sent first, before the panel changes (logind may suspend right after the close)"
+check bash -c '[[ $(head -n 1 "$1/calls.log") == lock ]]' _ "$tmp"
+
+desc="the default lock command is the shell's lid entry point (lock lid), never an unlock or another locker"
+check bash -c 'grep -qx "LOCK_CMD=\${GRASSFIELD_LID_LOCK:-qs ipc -c grassfield call lock lid}" "$1"' _ "$root/packaging/bin/grassfield-lid"
+
+desc="the lid switch is bound once: system.lua, not bindings.lua"
+check bash -c '[[ $(grep -c "switch:on:Lid Switch" "$1") == 1 ]] && ! grep -q "Lid Switch" "$2"' _ "$root/config/hypr/grassfield/system.lua" "$root/config/hypr/grassfield/bindings.lua"
 
 desc="repeated events do not switch it off again (idempotent)"
 reset; lid reconcile; lid closed
@@ -56,6 +69,10 @@ check bash -c '! grep -q hyprctl "$1/calls.log"' _ "$tmp"
 desc="a machine without a lid: reconcile does nothing"
 reset; rm -rf "$tmp/proc/LID0"; lid reconcile
 check bash -c '! grep -q hyprctl "$1/calls.log"' _ "$tmp"
+
+desc="a lid that /proc does not report as closed still sends the lock request (the switch event is the signal)"
+mkdir -p "$tmp/proc/LID0"; reset; setup open disconnected; lid closed
+check bash -c 'grep -qx lock "$1/calls.log"' _ "$tmp"
 
 desc="an unknown argument is refused"
 status=0; lid frobnicate 2>/dev/null || status=$?

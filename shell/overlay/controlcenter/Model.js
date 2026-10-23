@@ -113,6 +113,11 @@ function navTarget(rects, current, dx, dy) {
     return best;
 }
 
+// Subtitle of the Appearance module for the stored setting; `labels` = {light, dark, auto} (translated by the caller).
+function appearanceLabel(setting, labels) {
+    return setting === "light" ? labels.light : (setting === "auto" ? labels.auto : labels.dark);
+}
+
 // Quickshell ConnectionFailReason (enum order: Unknown, NoSecrets, WifiClientDisconnected,
 // WifiClientFailed, WifiAuthTimeout, WifiNetworkLost) -> a stable key the UI translates.
 function failReasonKey(reason) {

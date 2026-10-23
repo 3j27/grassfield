@@ -1,0 +1,13 @@
+#!/bin/sh
+# ExecCondition of Omarchy's omarchy-sleep-lock.service, through the Grassfield drop-in 10-grassfield.conf (D-12,
+# GF-AUDIT-001 SEC-02 / GF-030). Installed to /usr/lib/grassfield/sleep-lock-gate.
+#   exit 0  run Omarchy's sleep-lock (the Omarchy session; or grassfield-shell stopped, failed or unknown)
+#   exit 1  skip it (systemd: condition not met, not a failure): the Grassfield session, and grassfield-shell is active,
+#           starting or reloading, so Grassfield locks before sleep itself.
+# Read-only: one `systemctl --user show` query. Any doubt lets Omarchy's unit run (it never weakens the lock).
+[ "${GRASSFIELD_SESSION:-}" = 1 ] || exit 0
+state=$(systemctl --user show --property=ActiveState --value grassfield-shell.service 2>/dev/null) || exit 0
+case $state in
+  active | activating | reloading | refreshing) exit 1 ;;
+esac
+exit 0

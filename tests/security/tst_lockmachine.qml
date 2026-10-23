@@ -232,4 +232,29 @@ TestCase {
         compare(Machine.clockFormat("h:mm AP"), "h:mm");
         compare(Machine.clockFormat("HH:mm"), "H:mm");
     }
+
+    // Lock.currentlySecure() (Omarchy 4.0.6 port): only locked/authenticating hold a lock; anything else waits.
+    function test_isHolding() {
+        verify(Machine.isHolding("locked"));
+        verify(Machine.isHolding("authenticating"));
+        const others = ["unlocked", "locking", "", "LOCKED", undefined, null, "garbage"];
+        for (let i = 0; i < others.length; i++)
+            verify(!Machine.isHolding(others[i]), String(others[i]));
+    }
+
+    // D-4: the lid locks unless a physical external display is active (clamshell, macOS); unreadable input locks.
+    function test_lidShouldLock() {
+        verify(Machine.lidShouldLock(["eDP-1"]));
+        verify(Machine.lidShouldLock([]));
+        verify(Machine.lidShouldLock(["eDP-1", "HEADLESS-1"]), "a headless output is not a display in use");
+        verify(Machine.lidShouldLock(["WAYLAND-1", "GF-REF"]), "nested outputs are not external displays");
+        verify(Machine.lidShouldLock(["LVDS-1", "DSI-1"]));
+        verify(Machine.lidShouldLock(["eDP-1", "DPX-1", "HDMI-1", "dp-1", "DP-"]), "not a DRM connector name");
+        verify(Machine.lidShouldLock(undefined));
+        verify(Machine.lidShouldLock(null));
+        verify(Machine.lidShouldLock("DP-1"), "a string is not a list of names");
+        const docked = [["eDP-1", "DP-1"], ["DP-3"], ["eDP-1", "HDMI-A-1"], ["eDP-1", "DVI-D-2"], ["VGA-1"], ["eDP-1", "USB-1"]];
+        for (let i = 0; i < docked.length; i++)
+            verify(!Machine.lidShouldLock(docked[i]), docked[i].join(","));
+    }
 }

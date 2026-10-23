@@ -23,7 +23,8 @@ Scope {
     // maxBytes (checked with stat before it is used; `wallpaper status` reports the outcome in plain text).
     // Inert outside dev: every call is refused. The accepted path is kept in VisualFixtures (wallpaperOverride; read
     // back as wallpaperFile, "" outside dev), which the lock screen backdrop draws too.
-    readonly property bool dev: Quickshell.env("GRASSFIELD_DEV") === "1"
+    // The shell's one dev gate (GRASSFIELD_DEV=1 and no GRASSFIELD_SESSION=1, SEC-03/SEC-04).
+    readonly property bool dev: VisualFixtures.dev
     readonly property real maxBytes: 64 * 1024 * 1024
     property string pendingFile: ""
     property string outcome: "idle"

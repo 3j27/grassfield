@@ -50,6 +50,31 @@ function isLocked(state) {
     return state !== UNLOCKED;
 }
 
+// A lock of this shell that the compositor confirmed is held in these states (Lock.holding also needs
+// WlSessionLock.secure). Anything else, unknown states included, is not holding: a decision that waits for a held lock
+// (the sleep delay) then keeps waiting (fail closed).
+function isHolding(state) {
+    return state === LOCKED || state === AUTHENTICATING;
+}
+
+// Lid closed (Hyprland switch binding `switch:on:Lid Switch`, config/hypr/grassfield/bindings.lua): lock unless a
+// physical external display is active, which is clamshell mode, still in use on that display (macOS does not lock or
+// sleep then; Omarchy's omarchy-system-lid-close makes the same choice). `names` are the shell's output names
+// (Quickshell.screens). External connectors are the DRM names Hyprland gives physical outputs (DP-1, HDMI-A-1,
+// DVI-D-1, VGA-1, ...); the built-in panel (eDP, LVDS, DSI), headless and nested outputs (HEADLESS-1, WAYLAND-1, any
+// custom name) are not. Anything unreadable locks (fail closed).
+var EXTERNAL_OUTPUT = /^(DP|HDMI-[A-Z]|DVI-[A-Z]|VGA|TV|USB)-[0-9]+$/;
+
+function lidShouldLock(names) {
+    if (!names || typeof names.length !== "number")
+        return true;
+    for (var i = 0; i < names.length; i++) {
+        if (EXTERNAL_OUTPUT.test(String(names[i])))
+            return false;
+    }
+    return true;
+}
+
 // Crash-recovery marker ($XDG_RUNTIME_DIR, one per compositor instance), as returned by markerRead:
 // null when the file does not exist, else its content. Anything but an exact "unlocked" means the
 // session was (or may have been) locked: re-lock. That includes an empty or unreadable marker.
