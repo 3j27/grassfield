@@ -7,6 +7,7 @@
 #include "translationloader.h"
 #include "filesapp.h"
 #include "globalmenu.h"
+#include "windowchrome.h"
 #include "imageproviders.h"
 
 #ifndef GRASSFIELD_FILES_QML_DIR
@@ -20,6 +21,8 @@ int main(int argc, char *argv[])
 {
     // QApplication (not QGuiApplication): KIO's conflict, Open With and undo confirmation dialogs are widgets.
     QApplication app(argc, argv);
+    // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
+    new grassfield::apps::ChromeTagger(&app);
     grassfield::i18n::installForApplication(); // English source; fr via grassfield_fr.qm
     app.setApplicationName(QStringLiteral("grassfield-files"));
     app.setApplicationDisplayName(QObject::tr("Files"));

@@ -16,6 +16,10 @@ add_executable(grassfield-preview
     # Same sort order as Grassfield Files for the files of a folder (pure Qt Core logic, shared source).
     ../files/src/filelogic.cpp ../files/src/filelogic.h)
 target_include_directories(grassfield-preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_SOURCE_DIR}/../files/src)
+# windowchrome.h (ADR-0015): one Qt private header and the three xdg-toplevel-tag requests on libwayland-client.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
+target_link_libraries(grassfield-preview PRIVATE Qt6::GuiPrivate PkgConfig::WAYLAND_CLIENT)
 target_link_libraries(grassfield-preview PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus)
 target_compile_definitions(grassfield-preview PRIVATE
     GRASSFIELD_PREVIEW_VERSION="${PROJECT_VERSION}"
