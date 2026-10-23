@@ -4,10 +4,13 @@
 hl.window_rule({ name = "gf-float-all", match = { class = ".*" }, float = true })
 
 -- Don't let apps maximize themselves into a tiled state; Zoom is a Grassfield action.
--- A window that draws its own chrome and names its role with an xdg-toplevel tag (ADR-0015, apps/windowchrome.h) is
--- exempt: its zoom light sends the request. Hyprland toggles the maximized mode on any maximize request, so the app
--- sends exactly one per press and never draws from Qt's maximized state.
-hl.window_rule({ name = "gf-no-maximize-event", match = { class = ".*", xdg_tag = "negative:.+" }, suppress_event = "maximize" })
+-- Only a client-chrome window (ADR-0015, apps/windowchrome.h; the gf-client-chrome match below) is exempt: its zoom light
+-- sends the request. Hyprland toggles the maximized mode on any maximize request, so the app sends exactly one per press
+-- and never draws from Qt's maximized state. Every other window, tagged by its toolkit or not, keeps the suppression. Two
+-- rules make the negation of that match (any other class, or no xdg tag) without reading the tag itself: the tag is a
+-- dynamic effect, the suppression a static one read at map.
+hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^org\\.grassfield\\.(Files|Settings|Preview)$" }, suppress_event = "maximize" })
+hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = ".*", xdg_tag = "negative:.+" }, suppress_event = "maximize" })
 
 -- Client chrome (ADR-0015): Grassfield apps that draw their own lights and toolbar are tagged
 -- `grassfield-client-chrome`; the compositor plugin draws no titlebar on them (plugin work item P1, docs/specs/compositor.md)

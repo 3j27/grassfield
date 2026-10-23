@@ -19,8 +19,19 @@ grep -q "tag = \"+$tag\"" "$rules"
 check "the session rule sets the same tag" $?
 grep -q "$tag" "$root/docs/specs/compositor.md"
 check "the spec (plugin work item P1) uses the same tag" $?
-grep -q 'name = "gf-no-maximize-event", match = { class = ".\*", xdg_tag = "negative:.+" }' "$rules"
-check "the maximize exemption matches only windows without an xdg tag (S2)" $?
+# S2: the maximize exemption is exactly the client-chrome match (reviewer 2026-10-23: any xdg-tagged window was exempt).
+cc_class=$(sed -n 's/.*name = "gf-client-chrome", match = { class = "\([^"]*\)", xdg_tag = "\.+" }.*/\1/p' "$rules")
+[[ -n $cc_class ]]
+check "the client-chrome rule matches a class list and any xdg tag" $?
+grep -qF "name = \"gf-no-maximize-event\", match = { class = \"negative:$cc_class\" }, suppress_event = \"maximize\"" "$rules"
+check "S2: every other class keeps the maximize suppression" $?
+grep -q 'name = "gf-no-maximize-event-untagged", match = { class = ".\*", xdg_tag = "negative:.+" }, suppress_event = "maximize"' "$rules"
+check "S2: a window without an xdg tag keeps the maximize suppression" $?
+if grep -v "^ *--" "$rules" | grep 'suppress_event = "maximize"' | grep -v 'gf-no-maximize-event' | grep -q .; then
+  check "S2: no other rule touches the maximize suppression" 1
+else
+  check "S2: no other rule touches the maximize suppression" 0
+fi
 grep -q 'name = "gf-client-chrome-info-rounding".*xdg_tag = "^info\$".*rounding = 12' "$rules"
 check "windows of role info get radius 12 (S3)" $?
 if grep -v "^ *--" "$rules" | grep "decorate *= *false" | grep -v "gf-glance" | grep -q .; then

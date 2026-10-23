@@ -1262,7 +1262,7 @@ it mapped (a rule change) loses its strip on `window.updateRules`; its bridges P
 | P6 | the plugin titlebar's green button with Alt held: true full screen (`FSMODE_FULLSCREEN`), glyph = full-screen arrows while Alt is held over the group (REQ-ADR0002-6, plugin part) | new case in `zoom_restore.sh` (Alt held through `scripts/dev/keys.sh`) or a `ZoomOption` GTest |
 | P7 | the light constants come from `window.*` of `ui/tokens/tokens.json` (generated, or a GTest comparing `Theme.hpp` with it) | GTest |
 | S1 (done) | `config/hypr/grassfield/windows.lua`: `hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })` | `tests/shell/client_chrome_rules.sh`; `just check-config`; `client_chrome.sh` assertion 2 |
-| S2 (done) | `gf-no-maximize-event` matches `{ class = ".*", xdg_tag = "negative:.+" }` (Q4: the tagged window's zoom is honoured) | `client_chrome_rules.sh`; `client_chrome.sh` assertion 6 |
+| S2 (done) | `gf-no-maximize-event` matches every class but the S1 list, `gf-no-maximize-event-untagged` every window without an xdg tag: only an S1 window (a client-chrome one) is exempt (Q4: its zoom is honoured; another toolkit's tagged window is not, review 2026-10-23) | `client_chrome_rules.sh`; `client_chrome.sh` assertion 6 |
 | S3 (done) | windows of role `info`: `match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 12` (titlebar style, Q5) | `client_chrome_rules.sh`; `getprop rounding` |
 | H1 (done) | shell: `shell/overview/OverviewWindow.qml` band 0 for tagged windows when `client-chrome` is advertised (`ClientChrome.js`); P3 must use the same tag | `tests/unit/tst_clientchrome.qml` + nested Overview shot |
 

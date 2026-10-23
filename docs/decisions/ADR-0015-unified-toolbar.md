@@ -724,6 +724,11 @@ window's own `xdgMoveRequest` listener is left in place, see spike step 3).
   `hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })`.
 - **S2 maximize exemption (Q4):** `gf-no-maximize-event` becomes `match = { class = ".*", xdg_tag = "negative:.+" }` so a
   tagged window's zoom request is honoured.
+  - Revised on 2026-10-23 (review of part B): that match exempted any window with an xdg tag, whatever its toolkit. The
+    exemption is now exactly the S1 match: `gf-no-maximize-event` matches every other class
+    (`class = "negative:^org\\.grassfield\\.(Files|Settings|Preview)$"`) and `gf-no-maximize-event-untagged` every window
+    without an xdg tag (`class = ".*", xdg_tag = "negative:.+"`). It does not match the `grassfield-client-chrome` tag
+    itself, because the tag is a dynamic rule effect and the suppression a static one read at map.
 - **S3 radius (Q5):** unified windows keep the global 26; windows of role `info` (titlebar style) get 12:
   `match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 12`.
 - **H1 Overview band (shell, with P3):** `shell/overview/OverviewWindow.qml:105-107` and `:131` use band 0 for windows whose
