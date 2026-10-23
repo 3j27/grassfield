@@ -43,6 +43,8 @@ const DEFAULTS = {
     "notifications.dnd": false,
     "notifications.previews": "unlocked",
     "notifications.appPreviews": [],
+    "notifications.appStyles": [],
+    "notifications.history": "week",
     "lock.idleMinutes": 5,
     "hotCorners.topLeft": "none",
     "hotCorners.topRight": "none",
@@ -103,6 +105,9 @@ const RULES = {
     "notifications.previews": {type: "enum", values: ["always", "unlocked", "never"]},
     // Per-app override of the previews setting (ui/Grassfield/Ui/NotificationPrefs.js, one copy of the rules).
     "notifications.appPreviews": {type: "notificationApps"},
+    // Per-app alert style (banners | alerts | none) and how long the history stays on disk.
+    "notifications.appStyles": {type: "notificationStyles"},
+    "notifications.history": {type: "enum", values: ["week", "day", "never"]},
     "lock.idleMinutes": {type: "integer", min: 0, max: 240},
     "hotCorners.topLeft": {type: "enum", values: CORNER_ACTIONS},
     "hotCorners.topRight": {type: "enum", values: CORNER_ACTIONS},
@@ -155,6 +160,10 @@ function validate(path, value) {
     }
     case "notificationApps": {
         const why = Tree.NotificationPrefs.problem(value);
+        return why === "" ? "" : path + ": " + why;
+    }
+    case "notificationStyles": {
+        const why = Tree.NotificationPrefs.problemStyles(value);
         return why === "" ? "" : path + ": " + why;
     }
     case "pathList": {

@@ -3933,6 +3933,18 @@
         <translation>Notifications</translation>
     </message>
     <message>
+        <source>Banners</source>
+        <translation>Bannières</translation>
+    </message>
+    <message>
+        <source>Alerts</source>
+        <translation>Alertes</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
         <source>Default</source>
         <translation>Par défaut</translation>
     </message>
@@ -3949,6 +3961,22 @@
         <translation>Jamais masque le texte des notifications. Si déverrouillé le masque tant que l’écran est verrouillé. Chaque app ci-dessous peut avoir son propre réglage.</translation>
     </message>
     <message>
+        <source>How long the Notifications panel keeps notifications after a restart. The text of notifications from apps whose previews are Never is not kept.</source>
+        <translation>Durée pendant laquelle le panneau Notifications conserve les notifications après un redémarrage. Le texte des notifications des apps dont les aperçus sont réglés sur Jamais n’est pas conservé.</translation>
+    </message>
+    <message>
+        <source>Keep history</source>
+        <translation>Conserver l’historique</translation>
+    </message>
+    <message>
+        <source>1 Week</source>
+        <translation>1 semaine</translation>
+    </message>
+    <message>
+        <source>1 Day</source>
+        <translation>1 jour</translation>
+    </message>
+    <message>
         <source>Application Notifications</source>
         <translation>Notifications des applications</translation>
     </message>
@@ -3957,8 +3985,12 @@
         <translation>Les apps apparaissent ici après avoir envoyé une notification.</translation>
     </message>
     <message>
-        <source>Default follows the Show previews setting above.</source>
-        <translation>Par défaut suit le réglage « Afficher les aperçus » ci-dessus.</translation>
+        <source>Alerts stay on screen until you dismiss them; None shows no banner. Default follows the Show previews setting above.</source>
+        <translation>Les alertes restent à l’écran jusqu’à ce que vous les fermiez ; Aucune n’affiche pas de bannière. Par défaut suit le réglage Afficher les aperçus ci-dessus.</translation>
+    </message>
+    <message>
+        <source>Alert style for %1</source>
+        <translation>Style d’alerte pour %1</translation>
     </message>
     <message>
         <source>Show previews for %1</source>

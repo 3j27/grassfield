@@ -80,6 +80,8 @@ Singleton {
     readonly property bool notificationsDnd: store.data.notifications.dnd
     readonly property string notificationsPreviews: store.notificationsPreviews
     readonly property var notificationsAppPreviews: store.notificationsAppPreviews
+    readonly property var notificationsAppStyles: store.notificationsAppStyles
+    readonly property string notificationsHistory: store.notificationsHistory
     readonly property string titlebarDoubleClick: store.titlebarDoubleClick
     readonly property bool windowsTilingEdges: store.data.windows.tilingEdges
     readonly property bool windowsTilingMenuBar: store.data.windows.tilingMenuBar

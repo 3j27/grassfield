@@ -19,6 +19,19 @@ TestCase {
         compare(History.prune(list, now).map(e => e.key).join(","), "new,edge");
     }
 
+    // GF-113: retention, nothing at rest, no bodies for apps whose previews are Never.
+    function test_serializeRetentionAndBodies() {
+        const list = [entry("a", "Signal", now - 1000, {body: "secret"}), entry("b", "Mail", now - 2 * day, {body: "hello"})];
+        const day1 = JSON.parse(History.serialize(list, now, {maxAgeMs: day}));
+        compare(day1.notifications.map(e => e.key), ["a"]);
+        const never = JSON.parse(History.serialize(list, now, {keep: false}));
+        compare(never.notifications.length, 0);
+        const noBody = JSON.parse(History.serialize(list, now, {bodyKept: app => app !== "Signal"}));
+        compare(noBody.notifications[0].body, "");
+        compare(noBody.notifications[1].body, "hello");
+        compare(JSON.parse(History.serialize(list, now)).notifications[0].body, "secret");
+    }
+
     function test_pruneCapsAt200NewestFirst() {
         const list = [];
         for (let i = 0; i < 250; i++)

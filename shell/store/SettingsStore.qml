@@ -56,6 +56,8 @@ Scope {
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string dockMinimizeEffect: ["funnel", "shrink"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "funnel"
     readonly property var notificationsAppPreviews: NotificationPrefs.normalize(config.notifications.appPreviews)
+    readonly property var notificationsAppStyles: NotificationPrefs.normalizeStyles(config.notifications.appStyles)
+    readonly property string notificationsHistory: NotificationPrefs.validHistory(config.notifications.history) ? config.notifications.history : "week"
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
     readonly property string menubarAutoHide: ["always", "desktop", "fullscreen", "never"].indexOf(config.menubar.autoHide) >= 0 ? config.menubar.autoHide : "fullscreen"
     readonly property string accentColor: Accent.normalize(config.accent.color)
@@ -240,6 +242,10 @@ Scope {
         property string previews: "unlocked"
         // Per-app overrides [{app, previews}] (NotificationPrefs.js).
         property var appPreviews: []
+        // Per-app alert style overrides [{app, style}] (banners | alerts | none, NotificationPrefs.js).
+        property var appStyles: []
+        // How long the history stays on disk: week | day | never.
+        property string history: "week"
     }
 
     function setAppearance(value: string): void {
@@ -491,6 +497,10 @@ Scope {
         const notif = parsed.notifications !== null && typeof parsed.notifications === "object" && !Array.isArray(parsed.notifications) ? parsed.notifications : {};
         if (!("appPreviews" in notif))
             config.notifications.appPreviews = [];
+        if (!("appStyles" in notif))
+            config.notifications.appStyles = [];
+        if (!("history" in notif))
+            config.notifications.history = "week";
         // Same for the wallpaper group (ADR-0016): removing a key, or the whole object, reads as the defaults.
         const wp = parsed.wallpaper !== null && typeof parsed.wallpaper === "object" && !Array.isArray(parsed.wallpaper) ? parsed.wallpaper : {};
         const d = WallpaperConfig.WALLPAPER_DEFAULTS;

@@ -725,7 +725,11 @@ Singleton {
             updateEntry(key, entry);
         if (!dnd || entry.urgency === 2) {
             // Notification.expireTimeout is in milliseconds (see History.bannerTimeout).
-            showBanner(entry, History.bannerTimeout(entry.urgency, n.expireTimeout, Tokens.notificationBannerTimeout));
+            // Alert style of the sender (GF-107): None shows no banner, Alerts stay until dismissed.
+            const timeout = NotificationPrefs.bannerTimeoutFor(NotificationPrefs.styleFor(Settings.notificationsAppStyles, entry.appName),
+                History.bannerTimeout(entry.urgency, n.expireTimeout, Tokens.notificationBannerTimeout));
+            if (timeout !== null)
+                showBanner(entry, timeout);
         }
     }
 
@@ -818,12 +822,33 @@ Singleton {
         onLoadFailed: root.historyReady = true
     }
 
+    // A change of the retention or of a previews policy rewrites the file at once (bodies of an app set to Never leave it).
+    Connections {
+        target: Settings
+
+        function onNotificationsHistoryChanged(): void {
+            saveTimer.restart();
+        }
+
+        function onNotificationsPreviewsChanged(): void {
+            saveTimer.restart();
+        }
+
+        function onNotificationsAppPreviewsChanged(): void {
+            saveTimer.restart();
+        }
+    }
+
     Timer {
         id: saveTimer
         interval: 400
         onTriggered: {
             if (root.historyReady && root.serverState !== "external")
-                file.setText(History.serialize(root.history, Date.now()));
+                file.setText(History.serialize(root.history, Date.now(), {
+                    keep: Settings.notificationsHistory !== "never",
+                    maxAgeMs: NotificationPrefs.historyMaxAge(Settings.notificationsHistory),
+                    bodyKept: app => NotificationPrefs.effective(Settings.notificationsAppPreviews, app, Settings.notificationsPreviews) !== "never"
+                }));
         }
     }
 

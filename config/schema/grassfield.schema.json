@@ -197,6 +197,37 @@
             "never"
           ]
         },
+        "history": {
+          "type": "string",
+          "description": "How long the notification history stays on disk: a week (default), a day, or never (bodies of apps whose previews are Never are never stored).",
+          "enum": [
+            "week",
+            "day",
+            "never"
+          ]
+        },
+        "appStyles": {
+          "type": "array",
+          "description": "Per-app alert style (at most 200): apps listed here use alerts (stay until dismissed) or none (no banner) instead of banners. app is the sender's name.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "app": {
+                "type": "string",
+                "minLength": 1
+              },
+              "style": {
+                "type": "string",
+                "enum": [
+                  "banners",
+                  "alerts",
+                  "none"
+                ]
+              }
+            }
+          }
+        },
         "appPreviews": {
           "type": "array",
           "description": "Per-app Show previews (at most 200): the apps listed here override notifications.previews. app is the sender's name.",

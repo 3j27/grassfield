@@ -20,8 +20,9 @@ function shouldPersist(entry) {
 }
 
 // Newest first. Drops entries older than 7 days (relative to now) and anything beyond 200.
-function prune(entries, now) {
-    const kept = entries.filter(e => typeof e.time === "number" && now - e.time <= MAX_AGE_MS);
+function prune(entries, now, maxAgeMs) {
+    const maxAge = maxAgeMs > 0 ? maxAgeMs : MAX_AGE_MS;
+    const kept = entries.filter(e => typeof e.time === "number" && now - e.time <= maxAge);
     kept.sort((a, b) => b.time - a.time);
     return kept.slice(0, MAX_ENTRIES);
 }
@@ -38,13 +39,18 @@ function pushNewest(entries, entry, now) {
 }
 
 // JSON for notifications.json: persistable entries only, actions as labels, no images.
-function serialize(entries, now) {
-    const stored = prune(entries.filter(shouldPersist), now).map(e => ({
+// `opts` (GF-113, all optional): maxAgeMs, how long entries stay on disk (absent: 7 days); keep: false writes no
+// entry at all; bodyKept(appName) returning false drops the body of that app's entries (previews are Never for it:
+// the text is never shown, so it is not kept at rest either).
+function serialize(entries, now, opts) {
+    const o = opts || {};
+    const bodyKept = typeof o.bodyKept === "function" ? o.bodyKept : () => true;
+    const stored = (o.keep === false ? [] : prune(entries.filter(shouldPersist), now, o.maxAgeMs)).map(e => ({
         key: e.key,
         appName: e.appName,
         appIcon: e.appIcon,
         summary: e.summary,
-        body: e.body,
+        body: bodyKept(e.appName) ? e.body : "",
         time: e.time,
         urgency: e.urgency,
         actions: (e.actions || []).map(a => a.text)

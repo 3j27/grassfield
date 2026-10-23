@@ -43,7 +43,8 @@
   },
   "notifications": {
     "dnd": false,
-    "previews": "unlocked"
+    "previews": "unlocked",
+    "history": "week"
   },
   "lock": {
     "idleMinutes": 5
