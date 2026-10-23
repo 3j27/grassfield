@@ -49,6 +49,9 @@ ShaderEffect {
     property bool ownTile: false
     readonly property real tile: root.ownTile ? 1 : 0
     readonly property real tileDarkArtLift: Tokens.iconModeTileDarkArtLift
+    readonly property real tileTintedPlateScaleLight: Tokens.iconModeTileTintedPlateScaleLight
+    readonly property real tileClearPlateAlphaLight: Tokens.iconModeTileClearPlateAlphaLight
+    readonly property real tileClearPlateLightLuma: Tokens.iconModeTileClearPlateLightLuma
     readonly property real clearPlateWallpaperLuma: Tokens.iconModeClearPlateWallpaperLuma
     readonly property real clearPlateLightLuma: Tokens.iconModeClearPlateLightLuma
     readonly property real clearPlateAlphaDark: Tokens.iconModeClearPlateAlphaDark

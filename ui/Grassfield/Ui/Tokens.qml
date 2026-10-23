@@ -1250,6 +1250,12 @@ QtObject {
     readonly property real iconModeClearPlateWallpaperLuma: 0.05
     // PERF-01 / UX-13: ms between two shape reads of the prewarm (IconShapePrewarm), one icon file at a time in the idle moments after the list of apps is known, so the Apps panel does not read about a hundred files while it opens
     readonly property int iconModePrewarmGapMs: 40
+    // ADR-0014 own-tile rule, Tinted in the light appearance: the plate under a tile icon (seen only in the antialiased fringe of the tile's edge) is the tint at this fraction of its brightness, dark, so that the edge keeps its contrast against a light material (A2 rule E, 32 px)
+    readonly property real iconModeTileTintedPlateScaleLight: 0.3
+    // ADR-0014 own-tile rule, Clear in the light appearance: opacity of the plate under a tile icon (seen only in the fringe of its edge)
+    readonly property real iconModeTileClearPlateAlphaLight: 1.0
+    // ADR-0014 own-tile rule, Clear in the light appearance: lightness of the plate under a tile icon (black: the fringe of the edge keeps its contrast against a light material)
+    readonly property real iconModeTileClearPlateLightLuma: 0.0
     // ADR-0014 Clear in the light appearance: lightness of the smoked plate (dark grey rather than black, so that a black folder on a black background still shows its plate at the same faint level as over the bare wallpaper; white and bright materials see it as the smoke it is: A2 changes by under 0.1 on every cell, modelled)
     readonly property real iconModeClearPlateLightLuma: 0.3
     // ADR-0014 Clear over the bare wallpaper (desktop icons): opacity of the smoked glass plate, strong so that white ink and the plate edge hold on a white and on a black wallpaper
