@@ -4,7 +4,7 @@ UI naming (renamed 2026-10-18, owner decision): "Space" in older notes is shown 
 
 Status: spike positive; plugin prototype behind a feature flag (plugin 0.7.1-stages, 2026-10-19: fix pass 4 after the R13
 counter-review #4 of 0.6.3-stages, tested as 0.6.4-stages and again after the merge with cursor-refresh 0.7.0-cursor;
-nested only); shell strip NOT implemented (contract below). Decision: `docs/decisions/ADR-0013-stages.md` (Proposed). UI name **Stages** (§14);
+nested only); shell strip implemented ("Shell side" below; shell code not yet verified in a nested session). Decision: `docs/decisions/ADR-0013-stages.md`. UI name **Stages** (§14);
 the Apple name is never used in the UI. Code: `compositor/src/core/Stages.*` (model, validation, geometry, events; unit
 tests `compositor/tests/StagesTest.cpp`), `compositor/src/Stages.*` (Hyprland glue), `compositor/src/WindowTransform.*`
 (drawing shared with the overview), verb in `compositor/src/Ipc.cpp`. Nested scenario: `tests/compositor/stages.sh`
@@ -29,7 +29,7 @@ Purpose (M5, master-prompt §5.6 item 6, §12): "Stage Manager (plugin layout + 
 the highest-risk feature, last. This spike decides where the model lives and how Hyprland 0.56.2 can hide windows while
 showing them live in a strip, and delivers a plugin prototype with a precise shell contract.
 
-Non-goals of the prototype: the shell strip UI (shell-engineer, from the contract below), persistence of stages across a
+Non-goals of the prototype (C-STG-1: the shell strip is NOT a non-goal of 1.0, it is in scope and specified in "Shell side" below): persistence of stages across a
 plugin or shell restart, the "one window at a time" app mode, showing desktop icons while Stages is on (a shell choice),
 tiled windows (ADR-0002: floating-first; tiled and pinned windows stay out of Stages), transforming popups, a perspective
 tilt of stacked thumbnails (they are stacked flat, 8 px apart).
@@ -253,7 +253,7 @@ tilt of stacked thumbnails (they are stacked flat, 8 px apart).
 | ST17-ST18 | unit `StagesGeometry.TilesMustLieInsideTheStripSurfaceAndTheMonitor`; nested: `no-strip` without the surface; strip process exit → `interrupted`, 0 % grey, every window takes input; `op:on` again resumes with its stages | L0 / L1 | PASS |
 | ST19 | nested: `scripts/nestctl plugin unload` during Stages → rc 0, Hyprland alive, `unavailable`, no thumbnail, b3 takes clicks, sizes unchanged; reload → `stages-available` without `stages` | L1 | PASS |
 | ST20 | unit `StagesRequest.*`; nested: 6 invalid payloads → `invalid`; 1000 activate requests in one dispatch → 1 stages event, 1 `activewindowv2`, no socket2 subscriber dropped | L0 / L1 | PASS |
-| ST21 | `nested-up.sh --no-plugin` (no `grassfield` capabilities at all); shell side NOT implemented | L1 | plugin side by construction |
+| ST21 | `nested-up.sh --no-plugin` (no `grassfield` capabilities at all); shell: `tests/unit/tst_stages.qml` (verb and config builders), toggle visible only with `stages-available` (`StagesToggle.visible`, `StagesLink.available`) | L0 / L1 | plugin side by construction; shell side NOT verified nested |
 | ST22 | nested: switch to workspace 9 (no stage) and back: the same stage ids, thumbnails in the tiles | L1 | PASS |
 | Multi-output | per-workspace model and per-monitor strips; only GF-REF had a strip in the run (WAYLAND-1 had no Stages windows) | L1 | NOT VERIFIED |
 
@@ -273,7 +273,7 @@ closed g and f survived: the reviewer's sequence), 8d FAIL (the menu stayed open
 8e first check FAIL (no active window after `focus { last }`; that run's focus history differs because 8c closed the other
 window, so it is not counted as evidence either way).
 
-## Shell ↔ plugin contract (gfc/1, additive; for the shell-engineer — the shell side is not implemented)
+## Shell ↔ plugin contract (gfc/1, additive; the shell side is "Shell side" below)
 1. **Detection.** `Capabilities.has("stages-available")` → show the Stages toggle in Quick Settings (off by default,
    persisted by the shell, e.g. `stages.enabled`). Without it (no plugin, mismatch, hooks failed, after the unload event
    with an empty list) hide the toggle and the strip. Push the setting after every capabilities event and on change:
@@ -501,7 +501,7 @@ when the overview opens: prototype limit); desktop focus is unaffected (a press 
   ST6 guards).
 - While an Exclusive layer holds the keyboard after a swap, Hyprland has no active window (ST24): window key bindings and
   dispatchers without a window act on nothing until the layer releases the keyboard; the menu bar names no app unless the
-  shell reads the Stages event's `front` (contract item 4; shell side not implemented: a separate shell task). The
+  shell reads the Stages event's `front` (contract item 4; shell side: `shell/platform/StagesFront.js`). The
   plugin reads (never changes) Hyprland's Exclusive-layer list and lock state to know when Hyprland refuses window focus,
   and relies on the order of `CLayerSurface::onUnmap` (the `layer.closed` event before Hyprland's refocus) and on
   `CFocusState::resetWindowFocus`: re-verify `CFocusState::rawWindowFocus`, `CInputManager::{m_exclusiveLSes,
@@ -528,5 +528,53 @@ when the overview opens: prototype limit); desktop focus is unaffected (a press 
   until it sends `op:on` again; a plugin reload starts with the flag off.
 - Multiple outputs, fractional scales and rotated outputs are not verified; the strip of a monitor whose workspace shows
   a full-screen window is hidden.
-- The shell strip, Quick Settings toggle and Settings entry are not implemented (shell-engineer); F1 visual fidelity not
-  assessed (no strip UI).
+- The shell strip, Quick Settings toggle and Settings entry are implemented ("Shell side"); F1 visual fidelity not assessed.
+
+## Shell side (1.0 scope; macOS Stage Manager model; decided 2026-10-23, GF-AUDIT-001 C-STG-1 / C-X-13)
+
+Files: `shell/platform/StagesLink.qml` (capability, setting, events, verb; the only compositor access), `shell/platform/StagesState.js`
+(event parser), `shell/platform/Minimized.js` (`stages` verb in `pluginVerbs`, `stagesCall`, `stagesEnabled` in `pluginConfig`),
+`shell/stages/Stages.qml` (strip surface per output), `shell/stages/Layout.js` (geometry, requests), `shell/overlay/controlcenter/StagesToggle.qml`,
+`apps/settings/qml/DesktopPage.qml` (Settings > Desktop & Dock > Stages). Tokens: `stages.*`. Tests: `tests/unit/tst_stages.qml`,
+`tests/visual/scenarios/stages.sh`.
+
+- **Name.** UI name "Stages" (fr "Stages"); the Apple name appears in no string (`check-i18n`, grep of `shell/ apps/ translations/`).
+- **Setting.** `windows.stagesEnabled` in grassfield.json (schema, defaults `false`, Settings app Store rules). Off by default (C-X-13).
+  The Quick Settings tile (2x1 beside Airplane Mode; on its own row while Now Playing takes that slot) and the Settings row exist
+  only for the tile: the tile is hidden unless `Capabilities.has("stages-available")`; the Settings app cannot see capabilities, so its
+  row is always listed with a footnote that the compositor extension is needed.
+- **Flag push.** `Compositor.pushPluginConfig` sends `config("stagesEnabled", ...)` after each capabilities event and on change, but only
+  when `stages-available` is present and the plugin's flag (`stages` capability) differs from the setting, so a capabilities event
+  never loops. Without `stages-available` nothing is sent (REQ-COMP-DEG-d10); flag off makes the plugin answer `disabled`.
+- **Strip.** One surface per output, namespace `grassfield-stages` (layer rule `gf-shell-blur` lists it), Top layer, anchored top-left with
+  explicit margins (`ExclusionMode.Ignore`), keyboard `None`, transparent over the plugin's thumbnails. Tiles 160x120, gap 24, centred
+  vertically below the menu bar (macOS centres the strip), left of nothing but the Dock when the Dock is on the left (inset =
+  `Settings.dockFootprint.left`). Tile count = strip stages, capped by what fits (1..8). Drawn by the shell: a frosted app icon badge at
+  the tile's bottom-left (material blurred by the layer rule) and a hover / drop-target outline; never a fake blur.
+- **op:on.** One request for all outputs, sent debounced (`stages.resendDebounceMs`) only when tiles, `hidden` or timing change
+  (`signature`), after `StagesLink.resumed` (capabilities event with `stages`: contract 7) and again after `no-strip` or `interrupted`
+  (at most `stages.retryMax` times, `stages.retryMs` apart). Duration `motion.slow`, curve `motion.curveStandard`; Reduce Motion: 0 ms.
+- **Clicks.** Click on a tile: `activate`; Shift-click: `merge`. Drag a tile (threshold `stages.dragThreshold`): the pointer stays with
+  the strip surface, so the drop is resolved from surface coordinates: right of the surface = the stage area (`move` of the tile's front
+  window into the active stage), on another tile = that tile's stage, anywhere else nothing. The thumbnail cannot follow the pointer
+  (the plugin draws it in the window layer): a badge ghost follows it and the target tile gets the outline.
+- **Overlap and reveal.** `overlap` true: `hidden:true`, input region shrinks to the thin edge zone (`stages.revealZone`); the pointer
+  resting there for `stages.revealDwell` reveals the strip (`hidden:false`); leaving it for `stages.hideGrace` hides it again. With no
+  strip stage (only the active one) the strip is hidden (macOS shows no strip then). The input region is never empty while Stages is on.
+- **Keyboard and assistive tech.** The strip takes no keyboard (contract). Access without the pointer: the app switcher (SUPER+TAB),
+  the Dock and Search focus an app's window, which brings its stage forward (ST10); `qs ipc call stages activate <n>` (n-th strip stage
+  of the focused output, for key bindings and scripts) and `qs ipc call stages newStage` (focused window becomes its own stage);
+  the Quick Settings tile is a normal keyboard-reachable switch. Tiles expose `Accessible.Button` with the app name and window count
+  and a press action. A key binding for `activate` is left to the session config (not added: no macOS default exists).
+- **Overview (REQ-STG-SC-d8).** The overview lists strip windows like any window (nothing in `shell/overview` excludes them); clicking one
+  focuses it, which brings its stage forward (ST10). Not verified nested (ST16).
+
+### Plugin work items (contract gaps found writing the shell side)
+1. **Drag a window to the strip** (contract 5, third bullet): the shell cannot see a titlebar drag (Hyprland holds the pointer, no
+   event carries the drop point), so "drag a window of the stage to the strip" is not possible from the shell. Proposal: when the plugin
+   ends a titlebar drag (it already reports `overlap`) with the pointer inside the strip band, it performs `move ... "new"` itself, or
+   posts a `drop` field/event with the window address; the shell would then only draw the target outline.
+2. **Initial `op:on` with no strip stage**: the shell sends `hidden:true` with the thin edge zone as input region when there is nothing
+   to show; confirm the plugin's ST17 check accepts that (else it answers `no-strip` and the shell retries without effect).
+3. **Update with fewer tiles**: confirm `op:on` updates retarget thumbnails smoothly when the tile count (and so the centred tile
+   positions) changes.
