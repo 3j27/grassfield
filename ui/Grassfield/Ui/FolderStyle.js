@@ -556,7 +556,7 @@ function modeSamples(samples, mode, modeTint, dark, tokens, wall) {
             rgb = [ink, ink, ink];
             // The shader's solve: the composite is affine in linear light between the glass (black art) and the ink (white art).
             const pa = wall === true ? tokens.iconModeClearPlateAlphaWallpaper : (dark ? tokens.iconModeClearPlateAlphaDark : tokens.iconModeClearPlateAlphaLight);
-            const pg = dark && wall !== true ? 1 : 0;
+            const pg = dark && wall !== true ? 1 : (wall === true ? tokens.iconModeClearPlateWallpaperLuma : 0);
             const bd = wall === true ? tokens.iconModeClearBackdropMid : (dark ? tokens.iconModeClearBackdropDark : tokens.iconModeClearBackdropLight);
             const under = pg * pa + (1 - pa) * bd;
             const yin = 0.2126 * Math.pow(c[0], 2.2) + 0.7152 * Math.pow(c[1], 2.2) + 0.0722 * Math.pow(c[2], 2.2);
@@ -592,7 +592,7 @@ function underlay(mode, modeTint, dark, wall, backdrop, tokens) {
         return [tokens.iconModeDarkPlateLuma, tokens.iconModeDarkPlateLuma, tokens.iconModeDarkPlateLuma];
     if (name === "tinted")
         return dark ? t.map(v => v * tokens.iconModeTintedPlateScale) : t.map(v => v + (1 - v) * tokens.iconModeTintedPlateMixLight);
-    const glass = dark && !wall ? 1 : 0;
+    const glass = dark && !wall ? 1 : (wall ? tokens.iconModeClearPlateWallpaperLuma : 0);
     const alpha = wall ? tokens.iconModeClearPlateAlphaWallpaper : (dark ? tokens.iconModeClearPlateAlphaDark : tokens.iconModeClearPlateAlphaLight);
     return bd.map(v => glass * alpha + v * (1 - alpha));
 }

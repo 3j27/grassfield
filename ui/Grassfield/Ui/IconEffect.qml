@@ -45,6 +45,11 @@ ShaderEffect {
     readonly property real darkArtSaturation: Tokens.iconModeDarkArtSaturation
     readonly property real darkArtScale: Tokens.iconModeDarkArtScale
     readonly property real darkArtLift: Tokens.iconModeDarkArtLift
+    // The icon is its own rounded-square tile (own-tile rule, not over an accent fill): the maps keep the luminance of every pixel.
+    property bool ownTile: false
+    readonly property real tile: root.ownTile ? 1 : 0
+    readonly property real tileDarkArtLift: Tokens.iconModeTileDarkArtLift
+    readonly property real clearPlateWallpaperLuma: Tokens.iconModeClearPlateWallpaperLuma
     readonly property real clearPlateAlphaDark: Tokens.iconModeClearPlateAlphaDark
     readonly property real clearPlateAlphaLight: Tokens.iconModeClearPlateAlphaLight
     readonly property real clearInkDark: Tokens.iconModeClearInkDark

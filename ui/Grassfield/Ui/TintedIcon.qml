@@ -66,8 +66,9 @@ Item {
     // False while the artwork is not drawn because its scale is not known yet (it fades in once, no icon jumps from one scale to the other).
     readonly property bool shapeKnown: !root.shapeWanted || root.tileSide !== undefined
     // The scale the artwork is drawn at in an effect mode.
-    readonly property real artScale: IconTile.artScale(root.tileSide === undefined ? 0 : root.tileSide, Tokens)
-    readonly property bool ownTile: root.tileSide !== undefined && root.tileSide > 0
+    // Over an accent fill (a selected row) the icon keeps the system plate whatever its shape: the plate is what separates it from the fill.
+    readonly property bool ownTile: root.tileSide !== undefined && root.tileSide > 0 && !root.overAccent
+    readonly property real artScale: IconTile.artScale(root.ownTile ? root.tileSide : 0, Tokens)
 
     implicitWidth: size
     implicitHeight: size
@@ -114,6 +115,7 @@ Item {
             recolorTint: root.recolorTint
             nominalSize: root.size
             artScale: root.artScale
+            ownTile: root.ownTile
             shaderUrl: root.shaderUrl
         }
     }
