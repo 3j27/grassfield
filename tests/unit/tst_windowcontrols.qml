@@ -212,6 +212,22 @@ TestCase {
         c.destroy();
     }
 
+    // chrome.sh 4 (nested, 2026-10-23): the app's lights measured 11.7 px across instead of 14. The hairline was the disc's
+    // own border: on the GPU a translucent border is drawn instead of the fill there, so the outer pixel showed what is
+    // behind the light (the software renderer of this test draws it differently, so the structure is checked: the disc
+    // has no border of its own, a transparent ring over it darkens its edge).
+    function test_theHairlineDarkensTheEdgeInsteadOfCuttingIt() {
+        const c = make(controlsComponent, {});
+        const disc = c.closeLight.children.filter(o => o.radius !== undefined && o.border !== undefined)[0];
+        verify(disc !== undefined, "the disc");
+        compare(disc.width, Tokens.windowLightDiameter, "the disc is the whole light");
+        compare(disc.border.width, 0, "the disc draws no border of its own");
+        const ring = disc.children.filter(o => o.border !== undefined && o.border.width === 1 && o.color.a === 0)[0];
+        verify(ring !== undefined, "a transparent ring over the disc");
+        compare(ring.width, disc.width);
+        c.destroy();
+    }
+
     function test_disabledLightIsGreyAndInert() {
         const c = make(controlsComponent, {canMinimize: false});
         verify(c.minimizeLight.grey);

@@ -42,8 +42,7 @@ Item {
         anchors.fill: parent
         radius: width / 2
         color: root.grey ? (Appearance.dark ? Tokens.windowInactiveLightDark : Tokens.windowInactiveLightLight) : root.tint
-        border.width: 1
-        border.color: Appearance.withAlpha(Qt.rgba(0, 0, 0, 1), Tokens.windowLightBorderOpacity)
+        border.width: 0 // the hairline is the ring below, over the fill
 
         // A pressed light darkens.
         Rectangle {
@@ -51,6 +50,16 @@ Item {
             radius: parent.radius
             color: Appearance.withAlpha(Qt.rgba(0, 0, 0, 1), Tokens.windowPressedOpacity)
             visible: press.pressed && root.lightEnabled
+        }
+
+        // The hairline darkens the light's own edge (the full 14 px disc stays: a translucent border on the disc itself is
+        // drawn instead of its fill and showed what is behind the light, 12 px left; chrome.sh 4).
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            color: "transparent"
+            border.width: 1
+            border.color: Appearance.withAlpha(Qt.rgba(0, 0, 0, 1), Tokens.windowLightBorderOpacity)
         }
     }
 
