@@ -226,6 +226,62 @@
         <translation>130&#xa0;%</translation>
     </message>
     <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>Super + Alt + 8 turns zoom on or off, Super + Alt + = and Super + Alt + - change the level. The screen is magnified around the pointer.</source>
+        <translation>Super + Alt + 8 active ou désactive le zoom, Super + Alt + = et Super + Alt + - changent le niveau. L’écran est agrandi autour du pointeur.</translation>
+    </message>
+    <message>
+        <source>Magnify the screen.</source>
+        <translation>Agrandir l’écran.</translation>
+    </message>
+    <message>
+        <source>Zoom level</source>
+        <translation>Niveau de zoom</translation>
+    </message>
+    <message>
+        <source>1.5×</source>
+        <translation>1,5×</translation>
+    </message>
+    <message>
+        <source>2×</source>
+        <translation>2×</translation>
+    </message>
+    <message>
+        <source>3×</source>
+        <translation>3×</translation>
+    </message>
+    <message>
+        <source>4×</source>
+        <translation>4×</translation>
+    </message>
+    <message>
+        <source>5×</source>
+        <translation>5×</translation>
+    </message>
+    <message>
+        <source>Keyboard</source>
+        <translation>Clavier</translation>
+    </message>
+    <message>
+        <source>Sticky Keys and Slow Keys need support from the compositor, which Hyprland does not have yet.</source>
+        <translation>Les touches rémanentes et les touches lentes demandent une prise en charge par le compositeur, que Hyprland n’a pas encore.</translation>
+    </message>
+    <message>
+        <source>Sticky Keys</source>
+        <translation>Touches rémanentes</translation>
+    </message>
+    <message>
+        <source>Not available</source>
+        <translation>Indisponible</translation>
+    </message>
+    <message>
+        <source>Slow Keys</source>
+        <translation>Touches lentes</translation>
+    </message>
+    <message>
         <source>Applying the new pointer colours…</source>
         <translation>Application des nouvelles couleurs du pointeur…</translation>
     </message>
@@ -979,6 +1035,18 @@
         <translation>Touche au-dessus de Tab</translation>
     </message>
     <message>
+        <source>8</source>
+        <translation>8</translation>
+    </message>
+    <message>
+        <source>=</source>
+        <translation>=</translation>
+    </message>
+    <message>
+        <source>-</source>
+        <translation>-</translation>
+    </message>
+    <message>
         <source>Left Mouse Button</source>
         <translation>Bouton gauche de la souris</translation>
     </message>
@@ -1069,6 +1137,22 @@
     <message>
         <source>Turn Dock hiding on or off</source>
         <translation>Activer ou désactiver le masquage du Dock</translation>
+    </message>
+    <message>
+        <source>Show Desktop</source>
+        <translation>Afficher le bureau</translation>
+    </message>
+    <message>
+        <source>Turn screen zoom on or off</source>
+        <translation>Activer ou désactiver le zoom de l’écran</translation>
+    </message>
+    <message>
+        <source>Zoom in</source>
+        <translation>Zoom avant</translation>
+    </message>
+    <message>
+        <source>Zoom out</source>
+        <translation>Zoom arrière</translation>
     </message>
     <message>
         <source>Keyboard brightness up</source>
@@ -5605,6 +5689,22 @@
     <message>
         <source>Widget menu</source>
         <translation>Menu du widget</translation>
+    </message>
+    <message>
+        <source>Move Left</source>
+        <translation>Déplacer à gauche</translation>
+    </message>
+    <message>
+        <source>Move Right</source>
+        <translation>Déplacer à droite</translation>
+    </message>
+    <message>
+        <source>Move Up</source>
+        <translation>Déplacer vers le haut</translation>
+    </message>
+    <message>
+        <source>Move Down</source>
+        <translation>Déplacer vers le bas</translation>
     </message>
     <message>
         <source>Remove Widget</source>

@@ -100,6 +100,8 @@ Variants {
                 Widgets.remove(entry.uid);
             else if (action.startsWith("size:"))
                 Widgets.setSize(entry.uid, action.substring(5));
+            else if (action.startsWith("move:"))
+                Widgets.stepDesktop(entry.uid, action.substring(5), modelData.name);
         }
 
         // Off-grid or overlapping placements (screen geometry changed, hand-edited file) move to
@@ -344,6 +346,12 @@ Variants {
                 y: Math.max(Tokens.spacingSm, Math.min(scope.menuAt.y, menuWin.height - height - Tokens.spacingSm))
                 sourceComponent: WidgetMenu {
                     entry: scope.menuEntry
+                    moves: ({
+                            left: Widgets.canStepDesktop(scope.menuEntry.uid, "left", scope.modelData.name),
+                            right: Widgets.canStepDesktop(scope.menuEntry.uid, "right", scope.modelData.name),
+                            up: Widgets.canStepDesktop(scope.menuEntry.uid, "up", scope.modelData.name),
+                            down: Widgets.canStepDesktop(scope.menuEntry.uid, "down", scope.modelData.name)
+                        })
                     onChoose: action => scope.applyMenu(action)
                     onCloseRequested: scope.closeMenu()
                     Component.onCompleted: forceActiveFocus()

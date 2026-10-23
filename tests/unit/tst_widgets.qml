@@ -20,6 +20,34 @@ TestCase {
 
     // ---- registry --------------------------------------------------------------------------
 
+    // GF-106: the keyboard moves a desktop widget one cell and never hops over a neighbour or off the grid.
+    function test_stepDesktopMovesOneCell() {
+        let s = Placements.empty();
+        s = Placements.addDesktop(s, "clock", "small", "A", 6, 4);
+        const uid = s.desktop[0].uid;
+        compare(s.desktop[0].col, 0);
+        compare(Placements.stepSpot(s, uid, "left", 6, 4), null);
+        compare(Placements.stepSpot(s, uid, "up", 6, 4), null);
+        const right = Placements.stepDesktop(s, uid, "right", 6, 4);
+        compare(right.desktop[0].col, 1);
+        compare(right.desktop[0].row, 0);
+        const down = Placements.stepDesktop(right, uid, "down", 6, 4);
+        compare(down.desktop[0].row, 1);
+        compare(Placements.stepDesktop(s, uid, "left", 6, 4).desktop[0].col, 0);
+        compare(Placements.stepDesktop(s, "nope", "right", 6, 4).desktop.length, 1);
+        compare(Placements.stepSpot(s, uid, "sideways", 6, 4), null);
+    }
+
+    function test_stepDesktopRefusesATakenCell() {
+        let s = Placements.empty();
+        s = Placements.addDesktop(s, "clock", "small", "A", 6, 4);
+        s = Placements.addDesktop(s, "clock", "small", "A", 6, 4);
+        const a = s.desktop[0];
+        const b = s.desktop[1];
+        const spot = Placements.stepSpot(s, a.uid, b.row === a.row ? (b.col > a.col ? "right" : "left") : (b.row > a.row ? "down" : "up"), 6, 4);
+        compare(spot, null);
+    }
+
     function test_registryIsValid() {
         compare(Registry.validateAll(), "");
         compare(Registry.ids().join(","), "clock,calendar,battery,nowplaying,system");

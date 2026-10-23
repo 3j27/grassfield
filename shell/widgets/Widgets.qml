@@ -116,6 +116,29 @@ Singleton {
         }, grid.cols, grid.rows));
     }
 
+    // Keyboard moves (GF-106; the widget menu): one cell on the desktop, one place in the Notifications panel.
+    function canStepDesktop(uid: string, dir: string, screenName: string): bool {
+        const screen = screenByName(screenName);
+        if (!screen)
+            return false;
+        const grid = gridFor(screen);
+        return Placements.stepSpot(placements, uid, dir, grid.cols, grid.rows) !== null;
+    }
+
+    function stepDesktop(uid: string, dir: string, screenName: string): void {
+        const screen = screenByName(screenName);
+        if (!screen)
+            return;
+        const grid = gridFor(screen);
+        apply(Placements.stepDesktop(placements, uid, dir, grid.cols, grid.rows));
+    }
+
+    function stepCenter(uid: string, delta: int): void {
+        const at = placements.center.findIndex(e => e.uid === uid);
+        if (at >= 0)
+            apply(Placements.moveCenter(placements, uid, at + delta));
+    }
+
     // Moves the desktop widgets of a screen onto its grid (off-grid or overlapping ones go to the
     // nearest free cell; none that fits is dropped). Called on load and when the grid changes.
     function fitScreen(screenName: string): void {

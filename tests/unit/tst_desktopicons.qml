@@ -8,6 +8,19 @@ TestCase {
     id: testCase
     name: "DesktopIcons"
 
+    // GF-106: Tab and Shift+Tab walk through the icons in their visual order and wrap around.
+    function test_tabCyclesThroughTheIcons() {
+        const lay = {a: {col: 0, row: 0}, b: {col: 0, row: 1}, c: {col: 1, row: 0}};
+        compare(Logic.cycle(lay, "", false), "a");
+        compare(Logic.cycle(lay, "", true), "c");
+        compare(Logic.cycle(lay, "a", false), "b");
+        compare(Logic.cycle(lay, "b", false), "c");
+        compare(Logic.cycle(lay, "c", false), "a");
+        compare(Logic.cycle(lay, "a", true), "c");
+        compare(Logic.cycle(lay, "gone", false), "a");
+        compare(Logic.cycle({}, "", false), "");
+    }
+
     function test_gridSize() {
         compare(Logic.gridSize(1000, 500, 100, 100).cols, 10);
         compare(Logic.gridSize(1000, 500, 100, 100).rows, 5);

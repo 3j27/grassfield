@@ -107,4 +107,7 @@ check bash -c 'f="$1/apps/files/qml/GlobalMenu.qml"; p="$1/apps/preview/qml/Glob
 desc="Settings > Keyboard lists forwarding.lua (page reads it, parser accepts word_key lines)"
 check bash -c 'grep -q "forwarding.lua" "$1/apps/settings/qml/KeyboardPage.qml" && grep -q "word_key" "$1/apps/settings/qml/Bindings.js"' _ "$root"
 
+desc="GF-106 / GF-064: Show Desktop on Super+F3 and the zoom keys (Super+Alt+8, =, -) reach the shell, and none of them clashes with another bind"
+check bash -c 'f="$1/config/hypr/grassfield/bindings.lua"; for k in "SUPER + F3" "SUPER + ALT + code:17" "SUPER + ALT + code:21" "SUPER + ALT + code:20"; do [ "$(grep -c "^bind(\"$k\"" "$f")" = 1 ] || exit 1; done; grep -q "shell(\"windows\", \"showDesktop\")" "$f" && grep -q "shell(\"zoom\", \"toggle\")" "$f"' _ "$root"
+
 exit $fail

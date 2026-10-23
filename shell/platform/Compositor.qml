@@ -476,6 +476,39 @@ Singleton {
         hiddenWindows(0).forEach(w => dispatchRequest(moveRequest(Minimized.normalizeAddress(w.address), String(root.focusedWorkspace.id))));
     }
 
+    // Windows Show Desktop moved away: [address]. Non-empty means the desktop is shown and the next call brings them back.
+    property var desktopHidden: []
+
+    // Show Desktop (macOS F11 / Cmd+F3, GF-106): hides every visible window of the focused Space and hands the keyboard to
+    // the desktop icons (arrows and Tab move between them); called again it brings back the windows it hid, the ones still
+    // open. Without a focused Space nothing happens.
+    function showDesktop(): void {
+        const space = root.focusedWorkspace;
+        if (!space)
+            return;
+        if (root.desktopHidden.length > 0) {
+            const back = root.desktopHidden;
+            root.desktopHidden = [];
+            const parked = hiddenWindows(0).map(w => Minimized.normalizeAddress(w.address));
+            back.filter(a => parked.indexOf(a) >= 0).forEach(a => dispatchRequest(moveRequest(a, String(space.id))));
+            return;
+        }
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        const hide = [];
+        for (let i = 0; i < all.length; i++) {
+            const t = all[i];
+            if (t.workspace && t.workspace.id === space.id && t.wayland && !isMinimized(t.wayland) && !isHidden(t.wayland))
+                hide.push(t);
+        }
+        if (hide.length === 0) {
+            DesktopState.focusRequested();
+            return;
+        }
+        root.desktopHidden = hide.map(t => Minimized.normalizeAddress(t.address));
+        hide.forEach(t => dispatchRequest(moveRequest(t.address, hiddenWorkspace)));
+        DesktopState.focusRequested();
+    }
+
     // "Hide Others": hides every visible window of other apps.
     function hideOthers(appId: string): void {
         const keep = appId.toLowerCase();
@@ -569,6 +602,11 @@ Singleton {
         function hide(): void {
             if (root.focusedAppId !== "")
                 root.hideApp(root.focusedAppId);
+        }
+
+        // SUPER+F3 (macOS Cmd+F3, Fn+F11): Show Desktop.
+        function showDesktop(): void {
+            root.showDesktop();
         }
 
         // SUPER+`: next window of the focused app (macOS Cmd+`).

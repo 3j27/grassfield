@@ -77,6 +77,17 @@ Variants {
                 DesktopState.holdsKeyboard = false;
         }
 
+        // Show Desktop (Compositor.showDesktop) hands the keyboard to the desktop: arrows and Tab then move between icons.
+        Connections {
+            target: DesktopState
+
+            function onFocusRequested(): void {
+                win.feed({
+                    type: "request"
+                });
+            }
+        }
+
         // The policy was withdrawn (plugin unloaded) while the desktop holds the keyboard: the pointer-leave drop
         // is back, and the pointer may already be elsewhere.
         onPolicyChanged: {

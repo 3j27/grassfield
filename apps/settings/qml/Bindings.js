@@ -17,6 +17,8 @@ const NAMES = {
     "bracketleft": QT_TRANSLATE_NOOP("Bindings", "["), "bracketright": QT_TRANSLATE_NOOP("Bindings", "]"),
     // The key above Tab, bound by keycode so that it works on every layout (grave on US, a different symbol on AZERTY).
     "code:49": QT_TRANSLATE_NOOP("Bindings", "Key above Tab"),
+    // The 8, = and - keys of the zoom shortcuts, also by keycode.
+    "code:17": QT_TRANSLATE_NOOP("Bindings", "8"), "code:21": QT_TRANSLATE_NOOP("Bindings", "="), "code:20": QT_TRANSLATE_NOOP("Bindings", "-"),
     "mouse:272": QT_TRANSLATE_NOOP("Bindings", "Left Mouse Button"),
     "mouse:273": QT_TRANSLATE_NOOP("Bindings", "Right Mouse Button")
 };
@@ -56,6 +58,10 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Focus the menu bar"),
     QT_TRANSLATE_NOOP("Bindings", "Focus the Dock"),
     QT_TRANSLATE_NOOP("Bindings", "Turn Dock hiding on or off"),
+    QT_TRANSLATE_NOOP("Bindings", "Show Desktop"),
+    QT_TRANSLATE_NOOP("Bindings", "Turn screen zoom on or off"),
+    QT_TRANSLATE_NOOP("Bindings", "Zoom in"),
+    QT_TRANSLATE_NOOP("Bindings", "Zoom out"),
     QT_TRANSLATE_NOOP("Bindings", "Mute"),
     QT_TRANSLATE_NOOP("Bindings", "Volume up"),
     QT_TRANSLATE_NOOP("Bindings", "Volume down"),

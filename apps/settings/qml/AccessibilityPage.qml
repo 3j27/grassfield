@@ -96,6 +96,49 @@ SettingsPage {
         }
     }
 
+    // Accessibility > Zoom (macOS): the compositor magnifies the screen around the pointer (Hyprland cursor:zoom_factor).
+    SettingsGroup {
+        caption: qsTr("Zoom")
+        footnote: qsTr("Super + Alt + 8 turns zoom on or off, Super + Alt + = and Super + Alt + - change the level. The screen is magnified around the pointer.")
+
+        SettingsRow {
+            title: qsTr("Zoom")
+            subtitle: qsTr("Magnify the screen.")
+            Toggle {
+                accessibleName: qsTr("Zoom")
+                checked: root.store.value("accessibility.zoom")
+                onToggled: c => root.store.set("accessibility.zoom", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Zoom level")
+            Segmented {
+                accessibleName: qsTr("Zoom level")
+                model: [{id: "1.5", text: qsTr("1.5×")}, {id: "2", text: qsTr("2×")}, {id: "3", text: qsTr("3×")}, {id: "4", text: qsTr("4×")}, {id: "5", text: qsTr("5×")}]
+                value: String(root.store.value("accessibility.zoomLevel"))
+                onPicked: id => root.store.set("accessibility.zoomLevel", Number(id))
+            }
+        }
+    }
+
+    // Accessibility > Keyboard (macOS): Sticky Keys and Slow Keys are not offered: the Wayland compositor has no filter for
+    // them (no Hyprland option, no xkb equivalent outside X11), and a toggle that does nothing would mislead.
+    SettingsGroup {
+        caption: qsTr("Keyboard")
+        footnote: qsTr("Sticky Keys and Slow Keys need support from the compositor, which Hyprland does not have yet.")
+
+        SettingsRow {
+            title: qsTr("Sticky Keys")
+            valueText: qsTr("Not available")
+        }
+
+        SettingsRow {
+            title: qsTr("Slow Keys")
+            valueText: qsTr("Not available")
+        }
+    }
+
     SettingsGroup {
         caption: qsTr("Pointer")
         footnote: themeStatus.result === "failed" ? root.failureText()

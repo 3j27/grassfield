@@ -59,6 +59,16 @@
           "type": "number",
           "minimum": 1,
           "maximum": 1.3
+        },
+        "zoom": {
+          "type": "boolean",
+          "description": "Screen magnification on (Hyprland cursor:zoom_factor); toggled by Super+Alt+8."
+        },
+        "zoomLevel": {
+          "type": "number",
+          "minimum": 1.5,
+          "maximum": 5,
+          "description": "Magnification factor while zoom is on."
         }
       }
     },

@@ -38,6 +38,8 @@ Scope {
     readonly property string materialProfile: ["full", "balanced", "reduced"].indexOf(config.material.profile) >= 0 ? config.material.profile : "balanced"
     // Text size multiplier of the shell's text (Settings > Accessibility > Display), 1 to 1.3; a hand-edited value is clamped.
     readonly property real textSize: clampNumber(config.accessibility.textSize, 1, 1.3, 1)
+    readonly property bool zoomOn: config.accessibility.zoom === true
+    readonly property real zoomLevel: clampNumber(config.accessibility.zoomLevel, 1.5, 5, 2)
     // Tile size of the Dock in px (Settings > Size); a hand-edited value is clamped to the slider range.
     readonly property int dockSize: tileSize(config.dock.size)
     // Screen edge of the Dock (Settings > Position on screen); anything but left/right is the bottom.
@@ -132,6 +134,9 @@ Scope {
         property bool reduceMotion: false
         property bool increaseContrast: false
         property real textSize: 1
+        // Screen magnification (Hyprland cursor:zoom_factor): on or off, and the factor while on, 1.5 to 5.
+        property bool zoom: false
+        property real zoomLevel: 2
     }
 
     component DockConfig: JsonObject {
@@ -266,6 +271,14 @@ Scope {
 
     function setIncreaseContrast(value: bool): void {
         change("accessibility.increaseContrast", value);
+    }
+
+    function setZoom(value: bool): void {
+        change("accessibility.zoom", value);
+    }
+
+    function setZoomLevel(value: real): void {
+        change("accessibility.zoomLevel", clampNumber(Math.round(value * 2) / 2, 1.5, 5, 2));
     }
 
     function setTextSize(value: real): void {

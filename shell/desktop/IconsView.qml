@@ -444,6 +444,10 @@ FocusScope {
         if (dir !== "") {
             root.selectOnly(Logic.navigate(root.lay, root.current, dir));
             event.accepted = true;
+        } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+            // Tab and Shift+Tab walk through the icons (macOS), so the keyboard alone reaches every one.
+            root.selectOnly(Logic.cycle(root.lay, root.current, event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier) !== 0));
+            event.accepted = true;
         } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !ctrl && root.fileKeyActions) {
             // Return renames the selected file (macOS); opening is Ctrl+O or a double click.
             if (root.selectedNames.length === 1)

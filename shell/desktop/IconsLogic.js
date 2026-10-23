@@ -300,6 +300,18 @@ function visualOrder(lay) {
     return Object.keys(lay).sort((a, b) => lay[a].col - lay[b].col || lay[a].row - lay[b].row || (a < b ? -1 : a > b ? 1 : 0));
 }
 
+// Tab / Shift+Tab (GF-106): the icon after (before) `current` in visualOrder, wrapping around; the first (last) one when
+// nothing is current. "" for an empty desktop.
+function cycle(lay, current, backwards) {
+    const order = visualOrder(lay);
+    if (order.length === 0)
+        return "";
+    const at = order.indexOf(current);
+    if (at < 0)
+        return backwards ? order[order.length - 1] : order[0];
+    return order[(at + (backwards ? order.length - 1 : 1)) % order.length];
+}
+
 // Slots for `ordered` names, one after the other in column-first order, skipping blocked slots (under a widget).
 function arrange(ordered, cols, rows, blocked) {
     const out = {};

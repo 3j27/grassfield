@@ -383,6 +383,10 @@ Variants {
                         Widgets.remove(entry.uid);
                     else if (action.startsWith("size:"))
                         Widgets.setSize(entry.uid, action.substring(5));
+                    else if (action === "move:up")
+                        Widgets.stepCenter(entry.uid, -1);
+                    else if (action === "move:down")
+                        Widgets.stepCenter(entry.uid, 1);
                 }
 
                 // Only the slide animates (macOS: the column comes in from the right edge). The column's place follows
@@ -571,6 +575,10 @@ Variants {
                     y: Math.max(Tokens.spacingSm, Math.min(panel.menuY, panel.height - height - Tokens.spacingSm))
                     sourceComponent: WidgetMenu {
                         entry: panel.menuEntry
+                        moves: {
+                            const at = Widgets.center.findIndex(e => e.uid === panel.menuEntry.uid);
+                            return {up: at > 0, down: at >= 0 && at < Widgets.center.length - 1};
+                        }
                         onChoose: action => panel.applyWidgetMenu(action)
                         onCloseRequested: panel.closeWidgetMenu()
                         Component.onCompleted: forceActiveFocus()

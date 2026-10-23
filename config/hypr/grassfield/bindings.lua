@@ -120,6 +120,12 @@ bind("SUPER + ALT + ESCAPE", "Force Quit Applications", shell("menubar", "panel 
 -- Keyboard access to the menu bar and the Dock (gate A1), like Ctrl+F2 / Ctrl+F3.
 bind("CTRL + F2", "Focus the menu bar", shell("menubar", "open system ''"))
 bind("CTRL + F3", "Focus the Dock", shell("dock", "keyboard"))
+-- Show Desktop (macOS F11 / Command-F3): hides the windows of the Space and gives the desktop icons the keyboard; again, they return.
+bind("SUPER + F3", "Show Desktop", shell("windows", "showDesktop"))
+-- Screen zoom (macOS Option-Command-8, -= and --; GF-064). Bound by keycode (8, =, - keys) so it works on every layout.
+bind("SUPER + ALT + code:17", "Turn screen zoom on or off", shell("zoom", "toggle"))
+bind("SUPER + ALT + code:21", "Zoom in", shell("zoom", "zoomIn"), { repeating = true })
+bind("SUPER + ALT + code:20", "Zoom out", shell("zoom", "zoomOut"), { repeating = true })
 -- Turn Dock hiding on or off (macOS Option-Command-D).
 bind("SUPER + ALT + D", "Turn Dock hiding on or off", shell("dock", "toggleAutohide"))
 
