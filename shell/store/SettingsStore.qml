@@ -159,9 +159,9 @@ Scope {
         // Stages (macOS: Desktop & Dock > Windows, off by default; ADR-0013, owner decision D-4): pushed to the compositor
         // plugin as config("stagesEnabled") while it advertises stages-available.
         property bool stages: false
-        // "Rebuild the compositor extension after Hyprland updates" (opt-in, ADR-0009 amendment 2026-10-23): read by
-        // grassfield-compositor-rebuild --session, which the session runs when no extension build matches Hyprland. Kept
-        // here so that the shell's own writes of this file keep it.
+        // "Rebuild the compositor extension after Hyprland updates" (opt-in, ADR-0009 amendment 2026-10-23): when no
+        // extension build matches the installed Hyprland the shell (shell.qml) runs grassfield-compositor-rebuild
+        // --session in the background.
         property bool rebuildExtension: false
     }
 

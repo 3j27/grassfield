@@ -5573,6 +5573,42 @@
 <context>
     <name>shell</name>
     <message>
+        <source>It is not built for %1 yet. Window titlebars and minimize are unavailable while it is built in the background.</source>
+        <translation>Elle n’est pas encore compilée pour %1. Les barres de titre et la réduction des fenêtres sont indisponibles pendant sa compilation en arrière-plan.</translation>
+    </message>
+    <message>
+        <source>It is not built for %1 yet, so window titlebars and minimize are unavailable. Run grassfield-compositor-rebuild in a terminal, then log out and back in.</source>
+        <translation>Elle n’est pas encore compilée pour %1 : les barres de titre et la réduction des fenêtres sont indisponibles. Lancez grassfield-compositor-rebuild dans un terminal, puis fermez la session et rouvrez-la.</translation>
+    </message>
+    <message>
+        <source>Compositor extension needs a rebuild</source>
+        <translation>L’extension du compositeur doit être recompilée</translation>
+    </message>
+    <message>
+        <source>Compositor extension rebuilt</source>
+        <translation>Extension du compositeur recompilée</translation>
+    </message>
+    <message>
+        <source>It is built for %1 and loaded.</source>
+        <translation>Elle est compilée pour %1 et chargée.</translation>
+    </message>
+    <message>
+        <source>It is built for %1. Log out and back in to use it.</source>
+        <translation>Elle est compilée pour %1. Fermez la session et rouvrez-la pour l’utiliser.</translation>
+    </message>
+    <message>
+        <source>Compositor extension not rebuilt</source>
+        <translation>Extension du compositeur non recompilée</translation>
+    </message>
+    <message>
+        <source>The build tools are missing or another build is running. Run grassfield-compositor-rebuild in a terminal to see why.</source>
+        <translation>Les outils de compilation manquent ou une autre compilation est en cours. Lancez grassfield-compositor-rebuild dans un terminal pour en savoir plus.</translation>
+    </message>
+    <message>
+        <source>The build failed. Run grassfield-compositor-rebuild in a terminal to see why.</source>
+        <translation>La compilation a échoué. Lancez grassfield-compositor-rebuild dans un terminal pour en savoir plus.</translation>
+    </message>
+    <message>
         <source>Grassfield Settings is not installed</source>
         <translation>Réglages Grassfield n’est pas installé</translation>
     </message>
@@ -5591,6 +5627,14 @@
     <message>
         <source>Compositor extension not loaded</source>
         <translation>Extension du compositeur non chargée</translation>
+    </message>
+    <message>
+        <source>Hyprland %1</source>
+        <translation>Hyprland %1</translation>
+    </message>
+    <message>
+        <source>this version of Hyprland</source>
+        <translation>cette version de Hyprland</translation>
     </message>
     <message>
         <source>Window titlebars and minimize are unavailable (compositor extension not loaded).</source>
