@@ -52,8 +52,15 @@ clients() { timeout 5 "$root/scripts/nestctl" -j clients; }
 dispatch() { timeout 5 "$root/scripts/nestctl" dispatch "$1" >>"$log" 2>&1; }
 rounding_of() { timeout 5 "$root/scripts/nestctl" getprop "address:$1" rounding 2>>"$log" | head -n 1; } # effective window rule value
 
-read -r mon_x mon_y mon_w mon_h < <(timeout 5 "$root/scripts/nestctl" -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
-[[ -n ${mon_w:-} ]] || { echo "chrome: output $out not found" >&2; exit 2; }
+# In a fresh nested session GF-REF appears a moment after nested-up (Hyprland creates it from its start callback): wait
+# for it, bounded (10 s), instead of failing.
+mon_w=""
+for _ in $(seq 1 40); do
+  read -r mon_x mon_y mon_w mon_h < <(timeout 5 "$root/scripts/nestctl" -j monitors | jq -r --arg o "$out" '.[] | select(.name == $o) | "\(.x) \(.y) \(.width) \(.height)"')
+  [[ -n ${mon_w:-} ]] && break
+  sleep 0.25
+done
+[[ -n ${mon_w:-} ]] || { echo "chrome: output $out not found (waited 10 s)" >&2; exit 2; }
 plugin=0
 HYPRLAND_INSTANCE_SIGNATURE=$sig timeout 5 hyprctl -j grassfield 2>/dev/null | jq -e '.features | index("decorations")' >/dev/null 2>&1 && plugin=1
 
@@ -171,15 +178,18 @@ check_junction() { # <label>: no curve where the content meets the bar (the cont
   check "$1: bar and content join square" "$ok" "pixels of the cut top corners that differ from the content: left ${m[junction_left]:-?}, right ${m[junction_right]:-?} (before the fix: 21 at radius 12, 98 at radius 26)"
 }
 
-check_grey() { # <label> <0 = expect grey lights | 1 = expect coloured lights>
-  local label=$1 want=$2 ok=0 name details=""
+check_grey() { # <label> <0 = expect grey lights | 1 = expect coloured lights> [core]
+  # core (the light appearance): a coloured light is told from a grey one by the grey inside its 5 px core only; over a
+  # light bar the anti-aliased ring of the green light passes for the light grey (chrome_measure.py <light>_grey_core).
+  local label=$1 want=$2 key=grey ok=0 name details=""
+  [[ ${3:-} == core ]] && key=grey_core
   for name in close minimize zoom; do
     if ((want == 0)); then
       ((${m[${name}_grey]:-0} >= 100)) || ok=1 # a 14-px light is about 150 px
     else
-      ((${m[${name}_grey]:-0} <= 4)) && within "${m[${name}_d]:-0}" 14 1.2 || ok=1
+      ((${m[${name}_${key}]:-0} <= 4)) && within "${m[${name}_d]:-0}" 14 1.2 || ok=1
     fi
-    details+="$name grey ${m[${name}_grey]} px, colour diameter ${m[${name}_d]}; "
+    details+="$name grey ${m[${name}_grey]} px (core ${m[${name}_grey_core]:-?}), diameter ${m[${name}_d]} (${m[${name}_ref]:-colour}); "
   done
   check "$label" "$ok" "$details"
 }
@@ -280,7 +290,7 @@ if ((plugin)); then
     park
     capture a-light-active
     measure a-light-active "$ax" "$ay" "$aw"
-    check_grey "A active (light): coloured lights" 1
+    check_grey "A active (light): coloured lights" 1 core
     set_appearance dark
     palette_for Dark
     park
