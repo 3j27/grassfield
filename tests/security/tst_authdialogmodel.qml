@@ -72,7 +72,7 @@ TestCase {
         compare(model.prompt, "Password");
     }
 
-    // D-4: the action's theme icon is shown as the requesting program's; only a plain theme icon name passes.
+    // D-4: the action's theme icon is shown (with a lock badge); only a plain theme icon name passes.
     function test_iconNameIsAPlainThemeName() {
         compare(model.iconName, "");
         flow.iconName = "org.gnome.Software";

@@ -10,9 +10,10 @@
 -- count; the stop is printed to Hyprland's log). A new protected app in a later Omarchy release
 -- is picked up without a Grassfield change; tests/security/screenshare_rules.sh compares both sets.
 --
--- If no rule can be read (Omarchy missing, moved or restructured), the matches Omarchy 4.0.x ships are applied instead
--- (fail safe: the password managers are never left unprotected). Loaded by core.lua in both the real and the nested
--- session. Returns { source = "omarchy"|"fallback", matches = { <match table>... }, skipped = { "<file>: <error>"... } }.
+-- The matches Omarchy 4.0.x ships are always applied as well (duplicates dropped), so a file that stops early, moves or
+-- disappears never leaves 1Password or Bitwarden unprotected (fail safe). Loaded by core.lua in both the real and the
+-- nested session. Returns { source = "omarchy"|"builtin" (nothing read from Omarchy), matches = { <match table>... },
+-- skipped = { "<file>: <error>"... } }.
 
 local M = { source = "omarchy", matches = {}, skipped = {} }
 
@@ -22,9 +23,8 @@ if not omarchy_path or omarchy_path == "" then
 end
 local apps_dir = omarchy_path .. "/default/hypr/apps"
 
--- Omarchy 4.0.6 default/hypr/apps/1password.lua and bitwarden.lua (basecamp/omarchy@237f1b4), only when nothing can
--- be read from Omarchy itself.
-local FALLBACK = {
+-- Omarchy 4.0.6 default/hypr/apps/1password.lua and bitwarden.lua (basecamp/omarchy@237f1b4), always applied.
+local BUILTIN = {
   { class = "^(1[p|P]assword)$" },
   { class = "^(Bitwarden)$" },
   { class = "chrome-nngceckbapebfimnlniiiahkandclblb-Default" },
@@ -131,11 +131,11 @@ for _, path in ipairs(rule_files(apps_dir)) do
 end
 
 if #M.matches == 0 then
-  M.source = "fallback"
-  for _, match in ipairs(FALLBACK) do
-    add(copy_match(match))
-  end
-  print("grassfield: no screen-share rule read from " .. apps_dir .. "; applying the built-in password-manager rules")
+  M.source = "builtin"
+  print("grassfield: no screen-share rule read from " .. apps_dir .. "; the built-in password-manager rules still apply")
+end
+for _, match in ipairs(BUILTIN) do
+  add(copy_match(match))
 end
 for _, skipped in ipairs(M.skipped) do
   print("grassfield: screen-share rules: stopped reading " .. skipped)

@@ -12,7 +12,7 @@ FocusScope {
     id: root
 
     required property AuthDialogModel model
-    // Image URL of the requesting program's icon (AuthAgent resolves model.iconName in the icon theme), or "".
+    // Image URL of the action's icon (AuthAgent resolves model.iconName in the icon theme), or "".
     property url appIconSource: ""
 
     readonly property real cornerRadius: Tokens.radiusDialog
@@ -62,8 +62,8 @@ FocusScope {
         width: root.width - 2 * Tokens.spacingLg
         spacing: Tokens.spacingMd
 
-        // The requesting program's icon with a lock badge (macOS), when polkit names a theme icon that exists; else the
-        // lock alone.
+        // The action's icon with a lock badge (macOS style), when the action's polkit definition names a theme icon that
+        // exists; else the lock alone. It is not the icon of the program that asked (polkit does not give it here).
         Item {
             objectName: "polkitIcon"
             anchors.horizontalCenter: parent.horizontalCenter

@@ -25,10 +25,10 @@ QtObject {
     readonly property bool active: !!flow
     readonly property string message: flow ? plainLine(flow.message, maxMessageLength) : ""
     readonly property string actionId: flow ? plainLine(flow.actionId, maxDetailLength) : ""
-    // Theme icon of the action (polkit `icon_name` of the root-installed .policy file, AuthFlow.iconName): shown as the
-    // requesting program's icon (macOS names and shows the app asking, D-4). Quickshell 0.3.1's AuthFlow exposes no
-    // subject, process or command line; the message (pkexec names the program there), the action ID and this icon are
-    // all it offers. Only a plain theme icon name is accepted (no path, no URL), else "".
+    // The action's theme icon (polkit `icon_name` of the root-installed .policy file, AuthFlow.iconName), shown with a lock
+    // badge (D-4: macOS shows an icon for the request). It describes the action, not the program that asked: Quickshell
+    // 0.3.1's AuthFlow exposes no subject, process or command line; the message (pkexec names the program there), the
+    // action ID and this icon are all it offers. Only a plain theme icon name is accepted (no path, no URL), else "".
     readonly property string iconName: flow ? safeIconName(flow.iconName) : ""
     readonly property var identities: flow && flow.identities ? flow.identities : []
     readonly property var selectedIdentity: flow ? flow.selectedIdentity : null

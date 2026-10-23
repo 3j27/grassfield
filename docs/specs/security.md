@@ -201,9 +201,11 @@ Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff229
 (with their match) and every other `o.*`/`hl.*` call does nothing; `os`, `io`, `require` and the rest are absent, so
 nothing else of those files runs or applies. Each recorded match becomes `hl.window_rule({ name = "gf-no-screen-share-N",
 match = …, no_screen_share = true })`. With Omarchy 4.0.4/4.0.6: 1Password, Bitwarden and the Bitwarden Chromium extension
-window. A later Omarchy addition is picked up without a Grassfield change. Nothing readable → the three built-in matches
-(printed to Hyprland's log). Tests: `tests/security/screenshare_rules.sh` (rule count = Omarchy's `no_screen_share`
-count; fixture tree with a new app, a table match, an `os.execute`/`io.open` file whose calls never run; fallback;
+window. A later Omarchy addition is picked up without a Grassfield change. The three built-in matches are always added
+(duplicates dropped), so a rule file that stops early or disappears never leaves a password manager unprotected; when
+nothing at all is read, Hyprland's log says so. Tests: `tests/security/screenshare_rules.sh` (at least one rule per
+Omarchy `no_screen_share` rule; fixture tree with a new app, a table match, an `os.execute`/`io.open` file whose calls
+never run; a `1password.lua` that stops before its rule still leaves 1Password protected; nothing readable;
 wiring; mutation "keep every rule" fails it), `Hyprland --verify-config` in `just check` (a misspelt key fails it), and
 nested `lock_privacy.sh screenshare` (DT-05: a window with app_id `Bitwarden` is black in a `grim` capture; NOT
 VERIFIED until run).
@@ -218,7 +220,8 @@ VERIFIED until run).
   `VGA-n`, `TV-n`, `USB-n`; the built-in panel, headless and nested outputs do not count), as macOS and Omarchy's
   `omarchy-system-lid-close` do. When logind suspends, the lock is already on its way before `PrepareForSleep`.
   Hardware lid NOT VERIFIED (L2†; nested: `qs ipc call lock lid` locks, outputs WAYLAND-1 and GF-REF are not external).
-- Display power-off: `Idle.qml` watches input while locked (`IdleMonitor`, `respectInhibitors: false`) and after
+- Display power-off: `Idle.qml` watches input while the lock is secured (`Lock.holding`: confirmed by the compositor,
+  never while it is still being acquired; `IdleMonitor`, `respectInhibitors: false`) and after
   `IdleModel.DISPLAY_OFF_SECONDS` (30 s) without input switches the displays off through Hyprland
   (`hl.dsp.dpms({ action = "disable" })`); input or the unlock switches them on. `misc.key_press_enables_dpms` and
   `mouse_move_enables_dpms` (`looknfeel.lua`, Omarchy's values) let Hyprland itself wake the displays, so a shell that
@@ -238,8 +241,9 @@ Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quicks
 `responseVisible`, `supplementaryMessage`, `supplementaryIsError`, `isCompleted`, `isSuccessful`, `isCancelled`,
 `failed`, and no subject, process id, command line or `details`. The sheet shows everything that identifies the
 request: the message (polkit's text; for `pkexec` it names the program and its arguments), "Action: <id>", the
-identity, and now the action's `iconName` (from the root-installed `.policy` file) as the requesting program's icon with
-the lock as a badge, as on macOS (`AuthDialogModel.iconName`: plain theme names only; `AuthAgent` shows it only when the
+identity, and now the action's `iconName` (from the root-installed `.policy` file) with the lock as a badge, macOS style.
+That icon describes the action, not the program that asked: polkit does not tell the agent which process requested it
+through this API (`AuthDialogModel.iconName`: plain theme names only; `AuthAgent` shows it only when the
 theme has it; else the lock alone). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
 `test_10_programIconWithLockBadge`); visual NOT verified (a nested shell cannot register an agent: L5).
 
@@ -425,7 +429,7 @@ Only wrong attempts are ever used for the L2 failure path, and only by the owner
 | `packaging/systemd/sleep-lock-gate` | `ExecCondition` of Omarchy's sleep-lock unit (D-12), installed to `/usr/lib/grassfield/` |
 | `tests/security/tst_devgate.qml`, `dev_gate.sh` | Dev gate: predicate; real Lock singleton offscreen in five environments |
 | `tests/security/ipc_inventory.sh` | IPC surface = the table above; every action has a real-session caller, every hook its gate |
-| `tests/security/screenshare_rules.sh` | SEC-01 rule set against Omarchy's, fixture tree, fallback, wiring |
+| `tests/security/screenshare_rules.sh` | SEC-01 rule set against Omarchy's, fixture tree, built-in matches always applied, wiring |
 | `tests/security/sleep_lock_units.sh` | GF-030/D-12: gate script per state, unit and drop-in lines, package path |
 | `tests/security/lock_privacy.sh` | Nested L4 (no notification or window content on the lock), DT-05 screen share, D-4 lid lock and display off |
 | `tests/security/l2_wrong_password.sh` | Nested L2 with real PAM (opt-in), 3 random wrong passwords, Return ≤ 3, one run per 15 min |

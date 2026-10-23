@@ -89,10 +89,12 @@ Scope {
         }
     }
 
-    // Input on the lock screen (respectInhibitors false: a video behind the lock is not being watched).
+    // Input on the lock screen (respectInhibitors false: a video behind the lock is not being watched). Only while the lock
+    // is secured (Lock.holding: the compositor confirmed it and the lock surfaces are up), never while it is still being
+    // acquired: the displays never go dark over a session that is not locked yet.
     IdleMonitor {
         id: lockedMonitor
-        enabled: Lock.locked && root.displayOffSeconds > 0
+        enabled: Lock.holding && root.displayOffSeconds > 0
         timeout: Math.max(1, root.displayOffSeconds)
         respectInhibitors: false
         onIsIdleChanged: root.updateDisplays()

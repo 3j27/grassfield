@@ -309,7 +309,7 @@ TestCase {
         return null;
     }
 
-    // D-4 (macOS shows the app asking): with the requesting program's icon the lock becomes a badge on it; without one
+    // D-4 (macOS style): with the action's icon the lock becomes a badge on it; without one
     // (no icon_name, or the theme lacks it) the sheet shows the lock alone, at full size.
     function test_10_programIconWithLockBadge() {
         const icon = findNamed(dialog, "polkitAppIcon");
