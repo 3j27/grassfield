@@ -144,33 +144,24 @@ Singleton {
     }
 
     // Image (hint) first, then the app icon (theme name or path); "" when none resolves, so the
-    // UI falls back to the bell tile without asking Qt for a missing icon.
+    // UI falls back to the bell tile without asking Qt for a missing icon. Only local files, the image data the app sent
+    // and theme names are ever loaded (History.imageRef, GF-114): never a URL.
     function iconSource(image: string, appIcon: string): string {
-        if (image) {
-            // An absolute local path (image://icon//abs/path or a plain path) loads as given.
-            const local = History.absoluteImage(image);
-            if (local !== "")
-                return local;
-            // Quickshell reports a themed app_icon name as image://icon/<name>.
-            const themed = "image://icon/";
-            if (image.startsWith(themed) && image.indexOf("?") < 0) {
-                let name = "";
-                try {
-                    name = decodeURIComponent(image.slice(themed.length));
-                } catch (e) {
-                    return "";
-                }
-                return Quickshell.hasThemeIcon(name) ? image : "";
-            }
-            return image;
-        }
+        const ref = History.imageRef(image);
+        if (ref.kind === "file" || ref.kind === "attached")
+            return ref.source;
+        // Quickshell reports a themed app_icon name as image://icon/<name>.
+        if (ref.kind === "themed" && Quickshell.hasThemeIcon(ref.name))
+            return ref.source;
+        // No usable image (none, refused, or a name the theme lacks): the app icon.
         const icon = appIcon;
         if (!icon)
             return "";
-        if (icon.startsWith("/"))
-            return "file://" + icon;
-        if (icon.startsWith("file:"))
-            return icon;
+        if (icon.startsWith("/") || icon.startsWith("file:")) {
+            if (History.imageRef(icon).kind !== "file")
+                return "";
+            return icon.startsWith("/") ? "file://" + icon : icon;
+        }
         // iconPath(name, true) still yields an image://icon URL for a missing icon (Qt then warns
         // and paints a checkerboard), so ask the theme first.
         return Quickshell.hasThemeIcon(icon) ? Quickshell.iconPath(icon) : "";
@@ -684,13 +675,22 @@ Singleton {
         return (n.actions || []).map(a => ({id: a.identifier, text: a.text}));
     }
 
+    // The notification's image hint as kept: "" when it is not a local file, image data the app sent or a theme name
+    // (History.imageRef, GF-114: a URL is never fetched). Logged with its scheme only, never the reference.
+    function keptImage(image: string): string {
+        if (History.imageRef(image).kind !== "refused")
+            return image;
+        console.info("grassfield-notifications: a notification image was refused (" + (History.imageScheme(image) || "no scheme") + "): only local files, attached image data and theme icons are shown");
+        return "";
+    }
+
     function makeEntry(n: var, key: string): var {
         return {
             key: key,
             nid: n.id,
             appName: n.appName,
             appIcon: n.appIcon,
-            image: n.image,
+            image: keptImage(n.image),
             summary: n.summary,
             body: n.body,
             bodyHtml: Sanitizer.sanitize(n.body),

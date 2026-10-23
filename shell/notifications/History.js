@@ -147,10 +147,52 @@ function bannerTimeout(urgency, expireMs, defaultMs) {
     return defaultMs;
 }
 
-// An image that is an absolute local file (a plain path, or Quickshell's image://icon//abs/path
-// for an app_icon path): returned as given; "" for anything else (themed names, other URLs).
-function absoluteImage(image) {
-    if (typeof image !== "string")
-        return "";
-    return image.startsWith("/") || image.startsWith("image://icon//") ? image : "";
+// Longest image reference considered (a path or URL; Quickshell's own references are far shorter).
+const MAX_IMAGE_REF = 4096;
+
+// The images a notification may show (GF-AUDIT-001 GF-114, DT-07; macOS model: a notification shows the app's icon or an
+// image the app attached, never a picture fetched from somewhere). Accepted, as given:
+//   "file"     a local file: an absolute path ("/…", not "//…"), a file: URL without a host or with "localhost", and
+//              Quickshell's image://icon//<absolute path> (an app_icon path);
+//   "attached" Quickshell's in-memory copy of the image data the app sent (image://qsimage/…, the image-data hint);
+//   "themed"   a theme icon name (Quickshell's image://icon/<name>): `name` is decoded, the caller asks the theme.
+// "refused" for everything else: http:, https:, ftp:, data: (also an image-path hint's data URI), qrc:, other image
+// providers, relative paths, a file: URL naming another host, a malformed name, an oversized reference, control
+// characters. So a notification can never make the shell fetch anything. "none" for an empty or non-string value.
+// Returns {kind, source (what to load; "" unless file, attached or themed), name (themed only)}.
+function imageRef(image) {
+    if (typeof image !== "string" || image === "")
+        return {kind: "none", source: "", name: ""};
+    const refused = {kind: "refused", source: "", name: ""};
+    if (image.length > MAX_IMAGE_REF || /[\u0000-\u001f\u007f]/.test(image))
+        return refused;
+    if (image.startsWith("/"))
+        return image.startsWith("//") ? refused : {kind: "file", source: image, name: ""};
+    const lower = image.toLowerCase();
+    if (lower.startsWith("image://icon//"))
+        return image.length > 14 && image[14] !== "/" ? {kind: "file", source: image, name: ""} : refused;
+    if (lower.startsWith("image://qsimage/"))
+        return {kind: "attached", source: image, name: ""};
+    if (lower.startsWith("image://icon/")) {
+        const raw = image.slice(13);
+        if (raw === "" || raw.indexOf("?") >= 0 || raw.indexOf("#") >= 0)
+            return refused;
+        let name = "";
+        try {
+            name = decodeURIComponent(raw);
+        } catch (e) {
+            return refused;
+        }
+        return name !== "" && name.indexOf("/") < 0 && name.indexOf(":") < 0 ? {kind: "themed", source: image, name: name} : refused;
+    }
+    // file:/path, file:///path, file://localhost/path (case-insensitive scheme and host); never another host.
+    if (/^file:(?:\/\/(?:localhost)?)?\/[^/]/i.test(image))
+        return {kind: "file", source: image, name: ""};
+    return refused;
+}
+
+// The URL scheme of a refused image, for a log line that never repeats the reference itself ("" when there is none).
+function imageScheme(image) {
+    const m = /^([A-Za-z][A-Za-z0-9+.-]{0,15}):/.exec(typeof image === "string" ? image : "");
+    return m ? m[1].toLowerCase() : "";
 }

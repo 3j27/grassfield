@@ -131,6 +131,7 @@
  {"path": "tests/security/l2_wrong_password.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/security/upstream_drift.sh", "layer": "data"},
  {"path": "tests/security/password_hints.sh", "layer": "data"},
+ {"path": "tests/security/notif_remote_image.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/shell/apps_panel_perf/shell.qml", "layer": "headless"},
  {"path": "tests/shell/desktop_rename_focus/shell.qml", "layer": "headless"},
  {"path": "tests/shell/i18n_live/shell.qml", "layer": "headless"},

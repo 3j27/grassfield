@@ -162,7 +162,10 @@ from the installed qmltypes), Qt 6.11.2, `busctl` (ownership probe), `install`/`
   loaded machine: median 32-38 ms from 60 to 200 same-app entries (bare gdbus 16-17 ms); before: 44-54 ms at 200. With the Center
   open (history 200, `notifications toggleCenter`): median 35-37 ms against 28-33 ms closed (60 / 40 sends, 2026-10-17).
 - Body markup: `Sanitizer.sanitize` keeps only b, i, u and br (balanced); links render as "label (url)" text and are not clickable;
-  images are dropped (alt kept); everything else is stripped; 4000 characters max. Images in hints are loaded at <= 256 px.
+  images are dropped (alt kept); everything else is stripped; 4000 characters max. Images in hints are loaded at <= 256 px,
+  and only when they are a local file, the image data the app sent or a theme icon name (`History.imageRef`, GF-114): an
+  http(s), data, ftp or other URL is dropped at arrival (log line with the scheme only) and the app icon is shown instead;
+  `tests/unit/tst_notifhistory.qml`, nested DT-07 `tests/security/notif_remote_image.sh`.
 - DND: `notifications.dnd` in grassfield.json; Quick Settings "Do Not Disturb" tile; moon icon in the menu bar (click turns it off).
   Critical notifications still show; history is kept. `notifications.previews = never` hides bodies (banners and Center).
 - History (ADR-0004): `$GRASSFIELD_STATE_HOME/notifications.json` (dev) else `$XDG_STATE_HOME/grassfield/notifications.json`
