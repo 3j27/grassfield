@@ -289,7 +289,11 @@ window, so it is not counted as evidence either way).
    - input surface: namespace **`grassfield-stages`**, `WlrLayer.Top` (or Overlay), anchored to the left edge, keyboard
      `None`, **transparent where the thumbnails are** (the plugin draws them in the window layer, under Top). Its input
      region must cover every tile while the strip is shown (the plugin checks the corners and centre of each tile); when
-     the strip is hidden, shrink the input region to a thin edge zone for the hover reveal and send `hidden:true`.
+     the strip is hidden, shrink the input region to a thin edge zone for the hover reveal and send `hidden:true`: for a
+     strip sent with `hidden:true` the plugin checks the surface, its layer and that the tiles lie on the monitor, not the
+     input region (core `stripAccepted`, `tilesInMonitor`; tile x and y are also bounded at parse, kMaxTileCoord;
+     2026-10-23), also for the first `op:on`. Before a reveal (`hidden:false`) grow the input region over the tiles
+     first: the reveal is checked like any shown strip (else `no-strip`).
    - optional plates (tile backgrounds, hover highlight): a separate surface on `WlrLayer.Bottom` (below windows, like the
      overview backdrop). App icons and labels may go on the Top surface outside the thumbnail rects.
 3. **Turn on / update** (after the strip maps): `hl.plugin.grassfield.stages("<json>")` through `Hyprland.dispatch`,
@@ -325,8 +329,14 @@ window, so it is not counted as evidence either way).
      `{"op":"merge","stage":<id>}`;
    - drag a thumbnail (hit-test the tile's windows front to back, i.e. the list reversed) and drop it on the stage area →
      `{"op":"move","address":"0x<hex>","stage":<active id>}`; drop on another tile → that tile's stage id;
-   - drag a window of the stage to the strip (the shell sees it through Hyprland's move events; or a titlebar context
-     action) → `{"op":"move","address":"0x<hex>","stage":"new"}`;
+   - drag a window of the stage to the strip: **the plugin does it** (2026-10-23; the shell cannot see a titlebar drag).
+     A titlebar drag of a window of the active stage released on the strip of its output (left of the tiles' right edge
+     plus 16 px, any height; core `inDropZone`, `dropAction`) makes it a stage of its own, as `{"op":"move",…,
+     "stage":"new"}` would: drawn into its tile from where it was dropped, its real place back to where it was before
+     the drag, the active stage's front window keeping the keyboard, then the usual `stages` event. Not when the release
+     tiles the window (window tiling at the screen edge wins), the window is alone in its stage, or it belongs to another
+     output's Desktop, or the strip is hidden (the drop target is the visible strip: reveal it at the edge first). The
+     shell may still send `move "new"` itself (a context action, a key binding);
    - activating an app from the Dock or Search needs nothing special: Hyprland's focus of a strip window brings its stage
      forward (ST10).
 6. **Strip visibility.** Hide the strip (slide out, `hidden:true`, input region to the edge zone) while `overlap` is true;
@@ -570,15 +580,28 @@ Files: `shell/platform/StagesLink.qml` (capability, setting, events, verb; the o
   of the focused output, for key bindings and scripts) and `qs ipc call stages newStage` (focused window becomes its own stage);
   the Quick Settings tile is a normal keyboard-reachable switch. Tiles expose `Accessible.Button` with the app name and window count
   and a press action. A key binding for `activate` is left to the session config (not added: no macOS default exists).
+- **Final contract (plugin 0.13.0-audit).** Tiles are always on the monitor (a hidden strip is checked for surface, layer and tiles on the monitor, not input region); a reveal grows the input region over the tiles at once and sends `op:on` (`hidden:false`) after the debounce, so the plugin never sees a shown strip without its region. A window dragged by its titlebar onto the visible strip becomes its own stage in the plugin; the shell has nothing to do for it. The hidden strip has no drop zone: the edge zone only reveals.
 - **Overview (REQ-STG-SC-d8).** The overview lists strip windows like any window (nothing in `shell/overview` excludes them); clicking one
   focuses it, which brings its stage forward (ST10). Not verified nested (ST16).
 
-### Plugin work items (contract gaps found writing the shell side)
-1. **Drag a window to the strip** (contract 5, third bullet): the shell cannot see a titlebar drag (Hyprland holds the pointer, no
-   event carries the drop point), so "drag a window of the stage to the strip" is not possible from the shell. Proposal: when the plugin
-   ends a titlebar drag (it already reports `overlap`) with the pointer inside the strip band, it performs `move ... "new"` itself, or
-   posts a `drop` field/event with the window address; the shell would then only draw the target outline.
-2. **Initial `op:on` with no strip stage**: the shell sends `hidden:true` with the thin edge zone as input region when there is nothing
-   to show; confirm the plugin's ST17 check accepts that (else it answers `no-strip` and the shell retries without effect).
-3. **Update with fewer tiles**: confirm `op:on` updates retarget thumbnails smoothly when the tile count (and so the centred tile
-   positions) changes.
+## Plugin answers to the shell's work items (2026-10-23, plugin 0.13.0-audit)
+
+The shell agent's "Shell side" section (branch of the strip) lists three plugin work items; answers, with unit tests in
+`compositor/tests/StagesTest.cpp` (`StagesShellItems.*`):
+1. **Drag a window to the strip**: done in the plugin (contract 5 above). The titlebar release calls
+   `gf::stager::dropOnStrip` after window tiling; core `inDropZone` (the strip of the release output: left of its tiles'
+   right edge plus `kStripDropMargin` 16 px, the whole height) and `dropAction` (Stages on, a strip there, a window of the
+   active stage of the Desktop shown there, not alone in it, the release not tiling) decide; the model's
+   `moveWindow(window, new)` is what `op move "new"` runs. Log line: `stages: window <hex> dropped on the strip of <output>:
+   a stage of its own`. The shell only has to show the target outline if it wants (it sees the result in the next
+   `stages` event). NOT VERIFIED nested.
+2. **`op:on` with `hidden:true` and only the edge zone as input region**: it was refused (`no-strip`): the input
+   coverage was checked whatever `hidden` said. Fixed: a hidden strip is checked for its surface, layer and tiles on the
+   monitor, not its input region (core
+   `stripAccepted`, contract 2 above); a reveal (`hidden:false`) is checked over every tile, so grow the input region
+   first. NOT VERIFIED nested.
+3. **Updates with fewer tiles**: smooth. An `op:on` while on replaces the strips and runs one retarget with the
+   request's `durationMs` and curve; every window already drawn by Stages animates from where it is drawn at that
+   moment (`from = rect`) to its new target, and a stage that loses its tile slides off the monitor to the left (core
+   `stripTargets`: beside the last tile, shifted by `hiddenShift`; no `x/y/w/h` for it in the event). An update every
+   frame restarts the animation from the current place each time: send it debounced, as the shell does.

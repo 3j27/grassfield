@@ -84,9 +84,11 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   `appearance` ∈ dark|light (dark at load); the compositor-drawn titlebars and the tiling preview follow it. Advertised
   with `config`; the shell sends the key only when it sees the feature.
 - Stages from Settings (2026-10-23, additive, owner decision D-4, audit ARCH-05): the shell's verb allowlist gains
-  `stages`; the shell persists the setting `stages.enabled` (off by default) and pushes `config("stagesEnabled", …)` after
-  every capabilities event with `stages-available` and on change. Until the shell's strip exists nothing sends `op:on`, so
-  the flag alone changes nothing on screen (docs/specs/stages.md "Shell contract").
+  `stages`; the shell persists the setting `windows.stages` (off by default) and pushes `config("stagesEnabled", …)` when
+  that setting changes and when `stages-available` appears (every plugin load starts with the flag off), not after every
+  capabilities event (the plugin re-posts its capabilities when the flag changes; a push then would undo a flag set by
+  another caller). `Compositor.stages(request)` sends one operation while `stages` is advertised. Until the shell's strip
+  exists nothing sends `op:on`, so the flag alone changes nothing on screen (docs/specs/stages.md "Shell contract" item 1).
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.

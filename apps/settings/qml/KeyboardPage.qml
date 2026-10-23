@@ -12,7 +12,9 @@ SettingsPage {
 
     readonly property var shortcuts: {
         const file = root.backend.readText(root.backend.bindingsFile);
-        return file.ok ? Bindings.parse(file.text) : [];
+        // The keys forwarded to the focused application (word and line navigation, Command+[ ]) live next to it.
+        const forwarded = root.backend.readText(root.backend.bindingsFile.replace(/bindings\.lua$/, "forwarding.lua"));
+        return file.ok ? Bindings.parse(file.text + "\n" + (forwarded.ok ? forwarded.text : "")) : [];
     }
 
     SettingsGroup {

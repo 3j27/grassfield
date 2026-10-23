@@ -344,10 +344,17 @@ Also write down: time of the problem, what you pressed, which monitor.
 then `systemctl --user restart grassfield-shell.service`. If the compositor itself is gone you are on the greeter or the
 TTY: start Omarchy (`reboot`).
 
-**Plugin refused.** After a Hyprland update the plugin checks the compositor hash and refuses to hook when it differs:
-the session runs without titlebars/traffic lights and the global-menu protocol, and says so once. `hyprland.log` shows
-the reason. Rebuild with `cd ~/workspace/grassfieldos/packaging/arch && makepkg -si`, or run without it:
-`sudo pacman -Rns grassfield-compositor` (the session file skips a missing plugin).
+**Compositor extension off after a Hyprland update.** The extension only works with the Hyprland build it was compiled
+for (ADR-0009, "Amendment 2026-10-23"). When no build matches the Hyprland that runs, the session loads none: no
+titlebars/traffic lights, no minimize animation, no global menus, and one notice names the Hyprland version. Recovery, in
+a terminal of the Grassfield session, as yourself (never with sudo; it refuses root):
+`grassfield-compositor-rebuild` (about a minute; it needs cmake, gcc, make and pkgconf: `sudo pacman -S --needed cmake gcc
+make pkgconf` if it says they are missing), then log out and back in. `grassfield-compositor-rebuild --check` tells which
+build matches, and why your own build is not used when it is not (every directory from `~/.cache` down to it must be
+yours, not writable by group or others, and not a symlink). To have this done automatically after each Hyprland update, turn on Settings > Desktop & Dock > "Rebuild
+the compositor extension after Hyprland updates" (the build then runs in the background and loads itself when it can).
+A new `grassfield-compositor` package built for the new Hyprland also fixes it (`cd ~/workspace/grassfieldos/packaging/arch
+&& makepkg -si`). To run without it: `sudo pacman -Rns grassfield-compositor`.
 
 **Cannot reach Omarchy.** The login now starts Grassfield. In a Grassfield terminal: `grassfield-login set omarchy`, log out, log in.
 If Grassfield does not start at all: Ctrl+Alt+F3, log in, run `grassfield-login set omarchy`, then `reboot` (or

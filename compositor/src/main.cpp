@@ -221,10 +221,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     if (serverHash != clientHash) {
         // Refuse cleanly: nothing is hooked, so the session keeps Hyprland's defaults (C2).
         gf::log(Log::ERR, "ABI mismatch: Hyprland {} vs plugin built for {}; plugin inactive", serverHash, clientHash);
-        // The degraded-mode notice (audit GF-033): what is off and how to get it back. The pacman hook normally rebuilds
-        // the extension after a Hyprland update (ADR-0009 amendment); this shows when that build is missing or failed.
+        // The degraded-mode notice (audit GF-033): what is off and how to get it back. The session normally never loads a
+        // build stamped for another Hyprland (ADR-0009 "Amendment 2026-10-23", config/hypr/grassfield/compositor.lua);
+        // this shows when one is loaded anyway (by hand, or a stamp that lies).
         notify("[Grassfield] The compositor extension was built for another Hyprland: titlebars, minimize and global menus are off. "
-               "Rebuild it with: sudo /usr/lib/grassfield/grassfield-compositor-rebuild (status: /var/lib/grassfield/compositor/status), then log in again.",
+               "Run grassfield-compositor-rebuild in a terminal, then log out and back in.",
                CHyprColor{1.F, 0.35F, 0.3F, 1.F}, 30000.F);
         info.description += " [inactive: Hyprland version mismatch]";
         return info;

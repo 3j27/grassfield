@@ -306,6 +306,40 @@ QtObject {
     readonly property real dockRimOpacity: 0.34
     // macOS convention: at most three recent applications
     readonly property int dockRecentMax: 3
+    // estimate: recent documents listed in an app's Dock menu (macOS lists up to ten; five keep the menu short)
+    readonly property int dockRecentDocsMax: 5
+    // shrink to fit: free room kept at each end of the shelf along the Dock, px (same as the margin off the screen edge, dock.bottomMargin)
+    readonly property int dockFitMargin: 6
+    // shrink to fit: smallest tile the Dock shrinks to, px (below this it would be unusable; the shelf then overflows the screen)
+    readonly property int dockFitMin: 16
+    // macOS: a Fan shows about ten items; with Automatic a folder of more items opens as a Grid
+    readonly property int dockStackFanMax: 9
+    // estimate: folder stacks kept in the Dock (macOS has no hard limit)
+    readonly property int dockStackMax: 12
+    // estimate from macOS Fan: distance between two fanned icons along the way out, px (icon 48 + gap)
+    readonly property int dockStackFanStep: 56
+    // estimate from macOS Fan: sideways drift of the last fanned icon, px
+    readonly property int dockStackFanBend: 80
+    // estimate: icon of a stack item in the Fan and the Grid, px
+    readonly property int dockStackIconSize: 48
+    // estimate: width of a Grid cell, px
+    readonly property int dockStackCellWidth: 96
+    // estimate: height of a Grid cell (icon and two label lines), px
+    readonly property int dockStackCellHeight: 92
+    // estimate: widest Grid, columns
+    readonly property int dockStackGridMaxColumns: 5
+    // estimate: tallest Grid before it scrolls, rows
+    readonly property int dockStackGridMaxRows: 4
+    // estimate: tallest List before it scrolls, rows
+    readonly property int dockStackListMaxRows: 12
+    // estimate: width of a List, px
+    readonly property int dockStackListWidth: 260
+    // estimate: items a Grid or List holds (the rest are in Files)
+    readonly property int dockStackItemMax: 300
+    // macOS stack icon: sheets behind the top one are turned by this angle, degrees
+    readonly property int dockStackPileTilt: 5
+    // estimate: size of a pile sheet relative to the tile
+    readonly property real dockStackPileScale: 0.78
     // macOS 26 launch bounce rises about a third of the icon height (per icon size)
     readonly property real dockBounceHeightScale: 0.34
     // macOS: an icon darkens slightly while the mouse button is held (brightness, negative)
@@ -521,9 +555,20 @@ QtObject {
     readonly property int quicksettingsBackSize: 28
     // estimate: dev-guard note capsule
     readonly property int quicksettingsNoteHeight: 26
+    // ms: a burst of rfkill events re-reads the list once
+    readonly property int quicksettingsRfkillDebounce: 150
+
+    // macOS Auto appearance turns dark at sunset; Grassfield has no location service, so a fixed local schedule: dark from 19:00
+    readonly property int autoAppearanceDarkFromHour: 19
+    // macOS Auto appearance turns light at sunrise; fixed local schedule: light from 07:00
+    readonly property int autoAppearanceDarkToHour: 7
+    // ms between two evaluations of the schedule while Auto is selected (minute resolution)
+    readonly property int autoAppearanceRecheckInterval: 60000
 
     // spec notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344
+    // ms to wait after the set of sender apps changes before notification-apps.json is rewritten
+    readonly property int notificationAppsWriteMs: 500
     // F1 gap 7: gap between stacked cards 6 +-1 (value only)
     readonly property int notificationBannerGap: 6
     // design/reference/macos (f1-reference-gaps.md gap 7): app icon 32 pt in banners and cards
@@ -708,6 +753,16 @@ QtObject {
     readonly property int overviewTileMaxIcons: 4
     // estimate: window name pill
     readonly property int overviewLabelHeight: 34
+    // macOS Mission Control shows minimized windows smaller than the open ones, in a row below a divider: width of one minimized tile, px (it shrinks when the row would not fit)
+    readonly property int overviewMinimizedWidth: 144
+    // estimate (16:10 of minimizedWidth): height of one minimized tile, px
+    readonly property int overviewMinimizedHeight: 90
+    // estimate: space between minimized tiles, px
+    readonly property int overviewMinimizedGap: 16
+    // estimate: space above and below the minimized row (the divider sits in the upper one), px
+    readonly property int overviewMinimizedPad: 12
+    // estimate: window title under a minimized tile, px
+    readonly property int overviewMinimizedLabelHeight: 18
     // estimate: window name pill icon
     readonly property int overviewLabelIconSize: 20
     // estimate: window name pill
@@ -1244,8 +1299,20 @@ QtObject {
     readonly property int iconModeOwnTileConcurrency: 8
     // estimate: ms after which a shape read that did not finish is given up (the icon then sits on the system plate like a glyph)
     readonly property int iconModeOwnTileTimeout: 3000
+    // ADR-0014 own-tile rule, Dark: lightness the darkest part of the artwork of a tile icon is mapped to (no lift: the tile covers the plate, so nothing has to separate from it, and a lift flattens the glyph-vs-tile contrast of the icon; A2 rule I)
+    readonly property real iconModeTileDarkArtLift: 0.0
+    // ADR-0014 Clear over the bare wallpaper: lightness of the smoked plate (almost black, so a black folder on a black wallpaper still shows its plate while white ink and the plate hold on a white one; a lighter plate costs A2 rule E on mid-green wallpapers, modelled)
+    readonly property real iconModeClearPlateWallpaperLuma: 0.05
     // PERF-01 / UX-13: ms between two shape reads of the prewarm (IconShapePrewarm), one icon file at a time in the idle moments after the list of apps is known, so the Apps panel does not read about a hundred files while it opens
     readonly property int iconModePrewarmGapMs: 40
+    // ADR-0014 own-tile rule, Tinted in the light appearance: the plate under a tile icon (seen only in the antialiased fringe of the tile's edge) is the tint at this fraction of its brightness, dark, so that the edge keeps its contrast against a light material (A2 rule E, 32 px)
+    readonly property real iconModeTileTintedPlateScaleLight: 0.3
+    // ADR-0014 own-tile rule, Clear in the light appearance: opacity of the plate under a tile icon (seen only in the fringe of its edge)
+    readonly property real iconModeTileClearPlateAlphaLight: 1.0
+    // ADR-0014 own-tile rule, Clear in the light appearance: lightness of the plate under a tile icon (black: the fringe of the edge keeps its contrast against a light material)
+    readonly property real iconModeTileClearPlateLightLuma: 0.0
+    // ADR-0014 Clear in the light appearance: lightness of the smoked plate (dark grey rather than black, so that a black folder on a black background still shows its plate at the same faint level as over the bare wallpaper; white and bright materials see it as the smoke it is: A2 changes by under 0.1 on every cell, modelled)
+    readonly property real iconModeClearPlateLightLuma: 0.3
     // ADR-0014 Clear over the bare wallpaper (desktop icons): opacity of the smoked glass plate, strong so that white ink and the plate edge hold on a white and on a black wallpaper
     readonly property real iconModeClearPlateAlphaWallpaper: 0.7
     // ADR-0014 Dark: lightness (sRGB 0..1) of the graphite system plate; macOS 26 Dark plates are near black.
@@ -1285,7 +1352,7 @@ QtObject {
     // ADR-0014 Tinted, light appearance: the artwork's darkest tone is the tint at this fraction of its brightness (dark on the light plate)
     readonly property real iconModeTintedRampLowLight: 0.12
     // ADR-0014 Tinted, light appearance: the artwork's lightest tone is the tint mixed this far to white (a wide ramp keeps the internal contrast of the icon)
-    readonly property real iconModeTintedRampHighLight: 0.4
+    readonly property real iconModeTintedRampHighLight: 0.2
     // ADR-0014 Clear: from this material transparency (Control Center slider, 0..1) the wallpaper shows through the window material so much that Clear icons are drawn as over the bare wallpaper (smoked plate, opaque rim); A2 at 1.0 holds a floor of 2.0 in every mode, tint and size (docs/specs/ui.md)
     readonly property real iconModeWallpaperLikeTransparency: 0.8
     // estimate: Settings icon mode picker, sample icon edge (macOS 26 style tiles)

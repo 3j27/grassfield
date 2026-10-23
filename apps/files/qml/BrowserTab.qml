@@ -554,10 +554,10 @@ FocusScope {
 
     function viewSubmenu(): var {
         return {id: "viewAs", text: qsTr("View As"), submenu: [
-            {id: "view:icons", text: qsTr("Icons"), shortcut: qsTr("Ctrl+1"), checked: root.viewMode === "icons"},
-            {id: "view:list", text: qsTr("List"), shortcut: qsTr("Ctrl+2"), checked: root.viewMode === "list"},
-            {id: "view:columns", text: qsTr("Columns"), shortcut: qsTr("Ctrl+3"), checked: root.viewMode === "columns"},
-            {id: "view:gallery", text: qsTr("Gallery"), shortcut: qsTr("Ctrl+4"), checked: root.viewMode === "gallery"}
+            {id: "view:icons", text: qsTr("Icons"), shortcut: qsTr("Super+1"), checked: root.viewMode === "icons"},
+            {id: "view:list", text: qsTr("List"), shortcut: qsTr("Super+2"), checked: root.viewMode === "list"},
+            {id: "view:columns", text: qsTr("Columns"), shortcut: qsTr("Super+3"), checked: root.viewMode === "columns"},
+            {id: "view:gallery", text: qsTr("Gallery"), shortcut: qsTr("Super+4"), checked: root.viewMode === "gallery"}
         ]};
     }
 

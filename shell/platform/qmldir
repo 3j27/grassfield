@@ -7,3 +7,4 @@ PointerTheme 1.0 PointerTheme.qml
 singleton FocusReturn 1.0 FocusReturn.qml
 KeyboardRelease 1.0 KeyboardRelease.qml
 singleton StagesLink 1.0 StagesLink.qml
+singleton InputSource 1.0 InputSource.qml

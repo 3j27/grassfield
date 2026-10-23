@@ -140,12 +140,27 @@ Singleton {
         return action;
     }
 
-    // Airplane mode: derived from the radios (Wi-Fi through NetworkManager, Bluetooth through BlueZ).
-    // These are the services' power switches, not an rfkill soft block: the label says so.
-    readonly property bool airplane: Model.airplaneOn(wifiDevice !== null, wifiEnabled, BluetoothState.available, BluetoothState.enabled)
-    readonly property bool airplaneAvailable: wifiDevice !== null || BluetoothState.available
+    // Airplane mode (REQ-QS-CC3): an rfkill soft block of Wi-Fi, Bluetooth and cellular (Rfkill.qml; no root, /dev/rfkill is
+    // opened through the session's uaccess ACL). NetworkManager and BlueZ follow the block. When rfkill is not usable
+    // (no /dev/rfkill, not writable, no rfkill tool) the state is derived from the services' power switches and
+    // switching them is the fallback; `airplaneNote` then says why (shown once per use, and logged).
+    readonly property bool rfkillMode: Rfkill.known
+    readonly property bool airplane: rfkillMode ? Rfkill.airplane : Model.airplaneOn(wifiDevice !== null, wifiEnabled, BluetoothState.available, BluetoothState.enabled)
+    readonly property bool airplaneAvailable: rfkillMode || wifiDevice !== null || BluetoothState.available
+    // Why the soft block is not used, "" while it is (or while the probe has not finished).
+    readonly property string airplaneNote: Rfkill.probed && !Rfkill.usable ? qsTr("Airplane Mode: %1; using the Wi-Fi and Bluetooth switches").arg(Rfkill.reasonText) : ""
+    signal airplaneFallback(string why)
 
     function setAirplane(on: bool): void {
+        if (rfkillMode) {
+            if (!guarded("airplane mode (rfkill " + (on ? "block" : "unblock") + ")"))
+                Rfkill.setBlocked(on);
+            return;
+        }
+        if (airplaneNote !== "") {
+            console.info("airplane mode: " + airplaneNote);
+            airplaneFallback(airplaneNote);
+        }
         const t = Model.airplaneTargets(wifiDevice !== null, BluetoothState.available, on);
         if (t.wifi !== null)
             toggleWifi(t.wifi);

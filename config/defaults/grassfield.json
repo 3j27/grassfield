@@ -24,6 +24,10 @@
     "autohide": false,
     "recent": [],
     "showRecents": true,
+    "folders": [
+      "~/Downloads"
+    ],
+    "stackOptions": {},
     "minimizeIntoApp": false,
     "animateOpening": true,
     "showIndicators": true,
@@ -34,7 +38,8 @@
     "tilingEdges": true,
     "tilingMenuBar": true,
     "tilingMargins": true,
-    "stages": false
+    "stages": false,
+    "rebuildExtension": false
   },
   "notifications": {
     "dnd": false,

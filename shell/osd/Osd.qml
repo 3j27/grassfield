@@ -4,9 +4,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
+import qs.platform
 import qs.services
 
-// On-screen display state (volume and brightness). Spec: docs/specs/osd.md.
+// On-screen display state (volume, brightness, keyboard backlight and input source). Spec: docs/specs/osd.md.
 //
 // Shown when the default sink volume/mute or the backlight change (by any program), and by the
 // IPC targets osd (tests), volume and brightness (real changes).
@@ -17,19 +18,34 @@ Singleton {
     property real level: 0
     property bool muted: false
     property bool shown: false
+    // kind "inputsource": the name of the keyboard layout now active (macOS input source HUD): the pill shows it instead of a bar.
+    property string label: ""
 
-    readonly property string iconName: kind === "brightness" ? "sun" : (muted || level <= 0 ? "volume-mute" : level < 0.34 ? "volume-1" : level < 0.67 ? "volume-2" : "volume-3")
+    readonly property string iconName: kind === "keyboard" || kind === "inputsource" ? "keyboard" : kind === "brightness" ? "sun" : (muted || level <= 0 ? "volume-mute" : level < 0.34 ? "volume-1" : level < 0.67 ? "volume-2" : "volume-3")
 
     // Changes before this are start-up noise (initial volume read), not user actions.
     property bool armed: false
+    property bool kbdSeen: false
 
     function showValue(osdKind: string, osdLevel: real, osdMuted: bool): void {
         // NaN or infinite levels (bad IPC input, sensor glitch) are ignored; the rest is clamped.
         if (!isFinite(osdLevel))
             return;
-        kind = osdKind === "brightness" ? "brightness" : "volume";
+        kind = osdKind === "brightness" || osdKind === "keyboard" ? osdKind : "volume";
         level = Math.max(0, Math.min(1, osdLevel));
         muted = osdMuted;
+        shown = true;
+        hideTimer.restart();
+    }
+
+    // The layout changed (InputSource: only a real change of a keyboard that had another layout, so nothing with a single layout).
+    function showInputSource(name: string): void {
+        if (name === "")
+            return;
+        kind = "inputsource";
+        label = name;
+        level = 0;
+        muted = false;
         shown = true;
         hideTimer.restart();
     }
@@ -44,8 +60,30 @@ Singleton {
             showValue("brightness", Brightness.level, false);
     }
 
+    function showKeyboard(): void {
+        if (Brightness.kbdAvailable)
+            showValue("keyboard", Brightness.kbdLevel, false);
+    }
+
     function hide(): void {
         shown = false;
+    }
+
+    // Keyboard backlight keys (macOS: the keyboard brightness HUD). A step is 1/16 of the range, like the
+    // 16 notches of the macOS keys, but at least one device step.
+    function keyboardStep(direction: string): void {
+        if (!Brightness.kbdAvailable) {
+            console.info("osd: no keyboard backlight device; keyboard", direction, "ignored");
+            return;
+        }
+        if (direction !== "up" && direction !== "down") {
+            console.warn("osd: unknown keyboard command", direction);
+            return;
+        }
+        const step = Math.max(1 / 16, 1 / Brightness.kbdMax);
+        const target = Math.max(0, Math.min(1, Brightness.kbdLevel + (direction === "up" ? step : -step)));
+        if (!Brightness.setKbdLevel(target))
+            showKeyboard();
     }
 
     // Real volume change through wpctl (Audio.keyStep; refused in a dev session, nothing runs), then show.
@@ -119,18 +157,54 @@ Singleton {
         }
     }
 
+    Connections {
+        target: Brightness
+
+        // The first value is the initial read, not a user action.
+        function onKbdValueChanged(): void {
+            if (!root.kbdSeen)
+                root.kbdSeen = true;
+            else if (root.armed && Brightness.kbdAvailable)
+                root.showKeyboard();
+        }
+    }
+
+    Connections {
+        target: InputSource
+
+        function onLayoutChanged(name: string): void {
+            if (root.armed)
+                root.showInputSource(name);
+        }
+    }
+
     Component.onCompleted: arm.start()
 
     IpcHandler {
         target: "osd"
 
-        // qs ipc call osd display <volume|brightness> <0..1> <muted>
+        // Test hooks (dev session only, VisualFixtures.dev, SEC-04: no OSD spoofing by another process).
+        // qs ipc call osd display <volume|brightness|keyboard> <0..1> <muted>
         function display(kind: string, level: real, muted: bool): void {
-            root.showValue(kind, level, muted);
+            if (VisualFixtures.dev)
+                root.showValue(kind, level, muted);
+        }
+
+        // Test hook: a compositor layout event, "keyboard,Layout name" (the first one for a keyboard shows nothing, a different
+        // layout after it shows the input source HUD).
+        function layout(data: string): void {
+            if (VisualFixtures.dev)
+                InputSource.feed(data);
+        }
+
+        // Test hook: "shown|kind|label" (dev session only).
+        function state(): string {
+            return VisualFixtures.dev ? [root.shown, root.kind, root.label].join("|") : "";
         }
 
         function hide(): void {
-            root.hide();
+            if (VisualFixtures.dev)
+                root.hide();
         }
     }
 
@@ -159,6 +233,18 @@ Singleton {
 
         function down(): void {
             root.brightnessStep("down");
+        }
+    }
+
+    IpcHandler {
+        target: "keyboard"
+
+        function up(): void {
+            root.keyboardStep("up");
+        }
+
+        function down(): void {
+            root.keyboardStep("down");
         }
     }
 }

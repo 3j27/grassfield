@@ -117,21 +117,24 @@ package_grassfield-desktop() {
 
   install -Dm644 "$root/packaging/wayland-sessions/grassfield.desktop" "$pkgdir/usr/share/wayland-sessions/grassfield.desktop"
   install -Dm644 "$root/packaging/systemd/grassfield-shell.service" "$pkgdir/usr/lib/systemd/user/grassfield-shell.service"
-  # Omarchy's sleep-lock unit must stay inert inside the Grassfield session (the Omarchy shell it talks to is not running there).
+  # Omarchy's sleep-lock unit is skipped inside the Grassfield session only while grassfield-shell runs (D-12: the Omarchy
+  # shell it talks to is not running there, and grassfield-shell locks before sleep itself); the gate script decides.
   install -Dm644 "$root/packaging/systemd/omarchy-sleep-lock.service.d/10-grassfield.conf" \
     "$pkgdir/usr/lib/systemd/user/omarchy-sleep-lock.service.d/10-grassfield.conf"
+  install -Dm755 "$root/packaging/systemd/sleep-lock-gate" "$pkgdir/usr/lib/grassfield/sleep-lock-gate"
   # Session services and helpers that Omarchy's own session provides through its shell or autostart (audit GF-AUDIT-001,
   # 02 §5.3): crash, low-battery and migration notices, removable media, Night Shift, lid, graceful log out / restart /
   # shut down, login choice. All user units skip themselves outside the Grassfield session.
   install -d "$pkgdir/usr/lib/grassfield/omarchy-shims"
-  install -m755 "$root"/packaging/bin/* "$pkgdir/usr/lib/grassfield/"
+  # Regular files only: an ignored __pycache__ or editor directory in the tree must neither break nor enter the package.
+  find "$root/packaging/bin" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/" {} +
   # The commands a person types are on PATH.
   install -d "$pkgdir/usr/bin"
   for tool in grassfield-login grassfield-login-check grassfield-nightshift; do
     ln -s "../lib/grassfield/$tool" "$pkgdir/usr/bin/$tool"
   done
   # GF-032: stand-ins that keep Omarchy's update, theme and font tools from starting Omarchy's shell in this session.
-  install -m755 "$root"/packaging/shims/* "$pkgdir/usr/lib/grassfield/omarchy-shims/"
+  find "$root/packaging/shims" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/omarchy-shims/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
   install -Dm644 "$root/packaging/sddm/grassfield-login.desktop" "$pkgdir/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop"
   for unit in crash-watch battery-watch migrate-notify automount; do
@@ -182,27 +185,41 @@ package_grassfield-desktop() {
 
 package_grassfield-compositor() {
   pkgdesc+=" — optional Hyprland plugin (titlebars, minimize, appmenu)"
-  # A plugin only hooks into the Hyprland build it was compiled for, and the hyprland version is never constrained here.
-  # After every Hyprland update the pacman hook grassfield-compositor-rebuild.hook builds the plugin on this machine from
-  # /usr/src/grassfield-compositor when the packaged build does not match (ADR-0009 amendment 2026-10-23, audit GF-033):
-  # cmake, gcc, make and pkgconf are what that build needs besides Hyprland's own dependencies (headers, lua,
-  # hyprwayland-scanner, pixman, libdrm, libglvnd).
-  depends=(hyprland cmake gcc make pkgconf)
+  # A plugin only hooks into the Hyprland build it was compiled for, and the hyprland version is never constrained here
+  # (ADR-0009 "Amendment 2026-10-23", audit GF-033): the session loads this build only when its stamp is the running
+  # Hyprland's ABI, else the user's own build (grassfield-compositor-rebuild, as the user, into the user's cache), else none
+  # (degraded mode with a notice). Nothing is ever compiled as root or by a pacman hook.
+  depends=(hyprland)
+  # What the user's rebuild needs besides Hyprland's own dependencies (headers, lua, hyprwayland-scanner, pixman, libdrm,
+  # libglvnd).
+  optdepends=(
+    'cmake: grassfield-compositor-rebuild (the extension for a newer Hyprland)'
+    'gcc: grassfield-compositor-rebuild'
+    'make: grassfield-compositor-rebuild'
+    'pkgconf: grassfield-compositor-rebuild'
+  )
   local root
   root=$(_root)
   install -Dm755 "$root/compositor/build/grassfield-compositor.so" "$pkgdir/usr/lib/grassfield/grassfield-compositor.so"
-  # Its stamp: the ABI it was built for (config/hypr/grassfield/compositor.lua loads the build whose stamp is the ABI of the
-  # Hyprland that runs).
-  "$root/packaging/arch/grassfield-compositor-rebuild" --print-abi >"$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
+  # Its stamp: the ABI it was built for, written by its own CMake build from the headers it was compiled against
+  # (compositor/abi-stamp.cmake; config/hypr/grassfield/compositor.lua loads the build whose stamp is the ABI of the
+  # Hyprland that runs). Packaging stops when it is not the installed Hyprland's: the build is stale.
+  local built_abi installed_abi
+  built_abi=$(head -n 1 "$root/compositor/build/grassfield-compositor.abi")
+  installed_abi=$("$root/packaging/arch/grassfield-compositor-rebuild" --print-abi)
+  if [[ -z $built_abi || $built_abi != "$installed_abi" ]]; then
+    echo "grassfield-compositor: the plugin was built for '$built_abi', the installed Hyprland is '$installed_abi': rebuild it" >&2
+    return 1
+  fi
+  install -Dm644 "$root/compositor/build/grassfield-compositor.abi" "$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
   install -Dm755 "$root/packaging/arch/grassfield-compositor-rebuild" "$pkgdir/usr/lib/grassfield/grassfield-compositor-rebuild"
-  # The commands a person types are on PATH (sudo grassfield-compositor-rebuild, grassfield-compositor-rebuild --check).
+  # The commands a person types are on PATH (grassfield-compositor-rebuild, grassfield-compositor-rebuild --check).
   install -d "$pkgdir/usr/bin"
   ln -s ../lib/grassfield/grassfield-compositor-rebuild "$pkgdir/usr/bin/grassfield-compositor-rebuild"
-  install -Dm644 "$root/packaging/arch/grassfield-compositor-rebuild.hook" "$pkgdir/usr/share/libalpm/hooks/grassfield-compositor-rebuild.hook"
-  install -Dm644 "$root/packaging/arch/grassfield-compositor-clean.hook" "$pkgdir/usr/share/libalpm/hooks/grassfield-compositor-clean.hook"
-  # The sources that build is made from (the plugin only: no unit tests, no build directory).
+  # The sources the user's rebuild is made from (the plugin only: no unit tests, no build directory).
   local src=$pkgdir/usr/src/grassfield-compositor
   install -Dm644 "$root/compositor/CMakeLists.txt" "$src/CMakeLists.txt"
+  install -Dm644 "$root/compositor/abi-stamp.cmake" "$src/abi-stamp.cmake"
   cp -a --no-preserve=ownership "$root/compositor/src" "$src/src"
   cp -a --no-preserve=ownership "$root/compositor/protocols" "$src/protocols"
   printf '%s-%s\n' "$pkgver" "$pkgrel" >"$src/VERSION"

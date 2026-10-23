@@ -51,8 +51,11 @@ Scope {
         return list.join("\n") === "foot\nchromium\norg.gnome.Nautilus" ? ["chromium", "foot", "org.grassfield.Settings"] : list;
     }
     readonly property var dockRecent: stringList(config.dock.recent)
+    readonly property var dockFolders: stringList(config.dock.folders)
+    readonly property var dockStackOptions: config.dock.stackOptions && typeof config.dock.stackOptions === "object" ? config.dock.stackOptions : ({})
     readonly property string titlebarDoubleClick: ["zoom", "minimize", "none"].indexOf(config.windows.titlebarDoubleClick) >= 0 ? config.windows.titlebarDoubleClick : "zoom"
     readonly property string dockMinimizeEffect: ["funnel", "shrink"].indexOf(config.dock.minimizeEffect) >= 0 ? config.dock.minimizeEffect : "funnel"
+    readonly property var notificationsAppPreviews: NotificationPrefs.normalize(config.notifications.appPreviews)
     readonly property string notificationsPreviews: ["always", "unlocked", "never"].indexOf(config.notifications.previews) >= 0 ? config.notifications.previews : "unlocked"
     readonly property string menubarAutoHide: ["always", "desktop", "fullscreen", "never"].indexOf(config.menubar.autoHide) >= 0 ? config.menubar.autoHide : "fullscreen"
     readonly property string accentColor: Accent.normalize(config.accent.color)
@@ -139,6 +142,9 @@ Scope {
         // Recently launched apps that are not pinned, newest first (owned by the Dock), and whether to show them.
         property var recent: []
         property bool showRecents: true
+        // Folder stacks in the right section of the Dock ("~/" allowed) and their options per folder (Stacks.js).
+        property var folders: ["~/Downloads"]
+        property var stackOptions: ({})
         // Minimized windows go into their app's tile instead of getting a tile of their own.
         property bool minimizeIntoApp: false
         // "Animate opening applications": the launch bounce (macOS). Attention bounces are not part of it.
@@ -158,6 +164,10 @@ Scope {
         // Stages (macOS: Desktop & Dock > Windows, off by default; ADR-0013, owner decision D-4): pushed to the compositor
         // plugin as config("stagesEnabled") while it advertises stages-available.
         property bool stages: false
+        // "Rebuild the compositor extension after Hyprland updates" (opt-in, ADR-0009 amendment 2026-10-23): when no
+        // extension build matches the installed Hyprland the shell (shell.qml) runs grassfield-compositor-rebuild
+        // --session in the background.
+        property bool rebuildExtension: false
     }
 
     component LockConfig: JsonObject {
@@ -228,10 +238,12 @@ Scope {
         property bool dnd: false
         // always | unlocked | never (ADR-0004). "never" hides bodies; "unlocked" equals "always" until the lock screen exists.
         property string previews: "unlocked"
+        // Per-app overrides [{app, previews}] (NotificationPrefs.js).
+        property var appPreviews: []
     }
 
     function setAppearance(value: string): void {
-        change("appearance", value === "light" ? "light" : "dark");
+        change("appearance", value === "light" || value === "auto" ? value : "dark");
     }
 
     function setTransparency(value: real): void {
@@ -279,6 +291,15 @@ Scope {
         change("dock.recent", stringList(list));
     }
 
+    function setDockFolders(list: var): void {
+        change("dock.folders", stringList(list));
+    }
+
+    // Options of the stacks as a whole ({path: {sort, view, display}}, already normalized by Stacks.withOption).
+    function setDockStackOptions(options: var): void {
+        change("dock.stackOptions", options && typeof options === "object" ? options : ({}));
+    }
+
     // corner: topLeft | topRight | bottomLeft | bottomRight.
     function setHotCorner(corner: string, action: string): void {
         if (["topLeft", "topRight", "bottomLeft", "bottomRight"].indexOf(corner) < 0)
@@ -324,6 +345,11 @@ Scope {
 
     function setNotificationsDnd(value: bool): void {
         change("notifications.dnd", value);
+    }
+
+    // One app's Show previews: always | unlocked | never, or "default" to follow the global setting again.
+    function setNotificationsAppPreview(app: string, value: string): void {
+        change("notifications.appPreviews", NotificationPrefs.withValue(notificationsAppPreviews, app, value));
     }
 
     function setNotificationsPreviews(value: string): void {
@@ -465,6 +491,10 @@ Scope {
             config.pointer.outlineColor = PointerColors.DEFAULT_OUTLINE;
         if (!("fillColor" in pointer))
             config.pointer.fillColor = PointerColors.DEFAULT_FILL;
+        // And for the per-app previews list.
+        const notif = parsed.notifications !== null && typeof parsed.notifications === "object" && !Array.isArray(parsed.notifications) ? parsed.notifications : {};
+        if (!("appPreviews" in notif))
+            config.notifications.appPreviews = [];
         // Same for the wallpaper group (ADR-0016): removing a key, or the whole object, reads as the defaults.
         const wp = parsed.wallpaper !== null && typeof parsed.wallpaper === "object" && !Array.isArray(parsed.wallpaper) ? parsed.wallpaper : {};
         const d = WallpaperConfig.WALLPAPER_DEFAULTS;

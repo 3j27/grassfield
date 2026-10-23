@@ -78,7 +78,7 @@ TestCase {
                 compare(r.min, s.minimum, path);
             if (s.maximum !== undefined)
                 compare(r.max, s.maximum, path);
-            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" || r.type === "pointerColor" || r.type === "wallpaperPath" ? "string" : r.type === "wallpaperOutputs" ? "array" : r.type, s.type, path);
+            compare(r.type === "integer" ? "integer" : r.type === "enum" || r.type === "tint" || r.type === "folderColor" || r.type === "pointerColor" || r.type === "wallpaperPath" ? "string" : r.type === "wallpaperOutputs" || r.type === "notificationApps" || r.type === "pathList" ? "array" : r.type, s.type, path);
             // Defaults satisfy their own rule.
             compare(Store.validate(path, Store.DEFAULTS[path]), "", path);
         }
@@ -91,6 +91,18 @@ TestCase {
         const file = JSON.parse(xhr.responseText);
         for (const path in Store.DEFAULTS)
             compare(Store.read(file, path), Store.DEFAULTS[path], path);
+    }
+
+    function test_validateDockFolders() {
+        compare(Store.validate("dock.folders", ["~/Downloads", "/srv/x"]), "");
+        compare(Store.validate("dock.folders", []), "");
+        verify(Store.validate("dock.folders", "~/Downloads") !== "");
+        verify(Store.validate("dock.folders", ["relative"]) !== "");
+        verify(Store.validate("dock.folders", ["/a/../b"]) !== "");
+        verify(Store.validate("dock.folders", [""]) !== "");
+        verify(Store.validate("dock.folders", [5]) !== "");
+        verify(Store.validate("dock.folders", ["/a\nb"]) !== "");
+        verify(Store.validate("dock.folders", Array(13).fill("/a")) !== "");
     }
 
     function test_validate() {
@@ -330,7 +342,15 @@ TestCase {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", Qt.resolvedUrl("../../config/hypr/grassfield/bindings.lua"), false);
         xhr.send();
-        const list = Bindings.parse(xhr.responseText);
+        let text = xhr.responseText;
+        // The keys forwarded to the application (forwarding.lua) are listed on the same page.
+        xhr.open("GET", Qt.resolvedUrl("../../config/hypr/grassfield/forwarding.lua"), false);
+        xhr.send();
+        text += "\n" + xhr.responseText;
+        const list = Bindings.parse(text);
+        verify(list.some(b => b.keys === "Alt + Left" && b.description === "Previous word"), "word_key lines are parsed");
+        verify(list.some(b => b.keys === "Super + [" && b.description === "Back"));
+        verify(list.some(b => b.keys === "Super + Backspace" && b.description === "Delete to the beginning of the line"));
         const names = Object.keys(Bindings.NAMES).map(k => Bindings.NAMES[k]);
         for (const b of list) {
             verify(Bindings.DESCRIPTIONS.indexOf(b.description) >= 0, "not listed in Bindings.DESCRIPTIONS: " + b.description);

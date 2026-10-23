@@ -45,7 +45,7 @@ find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
     add_executable(files-unit-tests ../../tests/unit/files/tst_filelogic.cpp ../../tests/unit/files/tst_previewqueue.cpp
-        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_appscope.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp
+        ../../tests/unit/files/tst_tags.cpp ../../tests/unit/files/tst_folderstyle.cpp ../../tests/unit/files/tst_appscope.cpp ../../tests/unit/files/tst_autoappearance.cpp src/filelogic.cpp src/taglogic.cpp src/tagstore.cpp
         src/folderstylelogic.cpp src/folderstylestore.cpp)
     target_include_directories(files-unit-tests PRIVATE src ..)
     target_link_libraries(files-unit-tests PRIVATE Qt6::Core GTest::gtest GTest::gtest_main)

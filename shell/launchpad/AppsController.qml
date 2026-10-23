@@ -299,9 +299,11 @@ Scope {
             root.hide();
         }
 
-        // Test hook: JSON {open, query, category, chips, zone, selected, selectedId, keyNav, total, cols,
-        // panel: {x, y, w, h}, visible: [id] (items whose row is in the view)}.
+        // Test hook (dev session only, VisualFixtures.dev, SEC-04: it returns the typed query): JSON {open, query,
+        // category, chips, zone, selected, selectedId, keyNav, total, cols, panel: {x, y, w, h}, visible: [id]}.
         function status(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             const vis = root.viewFirst < 0 ? [] : root.items.slice(root.viewFirst, root.viewLast + 1).map(i => i.id);
             const sel = root.selected >= 0 && root.selected < root.items.length ? root.items[root.selected].id : "";
             return JSON.stringify({

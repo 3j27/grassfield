@@ -3,6 +3,7 @@
 #include "DeferredFocus.hpp"
 #include "Ipc.hpp"
 #include "Plugin.hpp"
+#include "Stages.hpp"
 #include "Tiling.hpp"
 #include "core/PointerGesture.hpp"
 #include "core/Protocol.hpp"
@@ -60,6 +61,8 @@ namespace {
         PHLWINDOWREF              window;   // window being moved
         Vector2D                  pressPos; // pointer at press (global logical)
         CBox                      startBox; // window layout box at press
+        CBox                      pressBox; // the same, never changed by an un-zoom or un-tile (a drop on the Stages strip gives it back)
+        bool                      plainPress = false; // pressed on a window that was neither zoomed nor tiled
         std::vector<WP<IPointer>> devices;  // pointer devices present at the press
     };
 
@@ -711,6 +714,8 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
         input.grab.window   = w;
         input.grab.pressPos = coords;
         input.grab.startBox = target->position();
+        input.grab.pressBox   = input.grab.startBox;
+        input.grab.plainPress = !input.grab.unzoom && !input.grab.untile;
         input.grab.devices  = pointerDevices();
     }
     input.presses.claim(e.button, target != nullptr);
@@ -767,6 +772,16 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
             damageSnap(grab.snap);
             if (const auto w = grab.window.lock())
                 gf::tiler::tile(w, grab.snap->place, grab.snap->monitor.lock());
+        }
+        // Released on the Stages strip (macOS: a window dragged onto the strip becomes a stage of its own): the plugin does
+        // what the shell's op move "new" does; the shell cannot see a titlebar drag (stages.md, Shell side work item 1).
+        if (grab.dragging && grab.moved && g_pInputManager) {
+            if (const auto w = grab.window.lock()) {
+                const auto at = g_pInputManager->getMouseCoordsInternal();
+                const auto& p = grab.pressBox;
+                gf::stager::dropOnStrip(w, at.x, at.y, grab.snap.has_value(),
+                                        grab.plainPress ? std::optional<gf::stages::Box>{gf::stages::Box{p.x, p.y, p.w, p.h}} : std::nullopt);
+            }
         }
 
         if (grab.button && isLive(grab.deco) && g_pInputManager) {

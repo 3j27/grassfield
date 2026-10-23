@@ -33,11 +33,11 @@ diffbox() {
   echo "${w}x${h}+$((x + MARGIN))+${y}"
 }
 
-# Pixels of strong colour (the highlighted row is the accent colour; the menu, its text and the frosted wallpaper are not).
-saturated() { # image box
+# Pixels of `box` within 8 % of colour `col` (the highlight colour, whatever the accent is).
+near() { # image box col
   local w h x y
   IFS='x+' read -r w h x y <<<"$2"
-  magick "$1" -crop "${w}x${h}+${x}+${y}" +repage -colorspace HSL -channel G -separate +channel -threshold 55% -format '%[fx:int(mean*w*h)]' info:
+  magick "$1" -crop "${w}x${h}+${x}+${y}" +repage -fuzz 8% -fill '#ff00ff' -opaque "$3" -fuzz 0 -fill black +opaque '#ff00ff' -colorspace Gray -threshold 20% -format '%[fx:int(mean*w*h)]' info:
 }
 
 first=1
@@ -49,7 +49,6 @@ for spot in "mid 700 500" "right 1900 500" "bottom 700 1070" "corner 1910 1070";
   box_a=$(diffbox "$a")
   echo "$name: menu box before the submenu: $box_a"
   IFS='x+' read -r bw bh bx by <<<"$box_a"
-  sat_closed=$(saturated "$a" "$box_a")
   opened=""
   box_b=""
   for step in $(seq 1 16); do
@@ -68,14 +67,19 @@ for spot in "mid 700 500" "right 1900 500" "bottom 700 1070" "corner 1910 1070";
   done
   check "$name: hovering the last row opened its submenu (step $step)" test -n "$opened"
   echo "$name: box after: $box_b"
-  top_a=$(magick "$a" -crop "$((bw / 2))x4+${bx}+${by}" +repage -format '%#' info:)
-  top_b=$(magick "$b" -crop "$((bw / 2))x4+${bx}+${by}" +repage -format '%#' info:)
+  # The half of the top border away from the right-click point (the pointer sprite sits at the corner the menu opened from).
+  if (( x < bx + bw / 2 )); then sx=$((bx + bw / 2)); else sx=$bx; fi
+  top_a=$(magick "$a" -crop "$((bw / 2 - 4))x4+${sx}+${by}" +repage -format '%#' info:)
+  top_b=$(magick "$b" -crop "$((bw / 2 - 4))x4+${sx}+${by}" +repage -format '%#' info:)
   check "$name: the parent's top border is pixel-identical before and after (same position)" test "$top_a" = "$top_b"
   if [[ -n $first ]]; then
     first=""
-    sat_open=$(saturated "$b" "$box_b")
-    echo "$name: saturated pixels: closed $sat_closed, with a row highlighted $sat_open"
-    check "no row is highlighted when the menu opens (saturated pixels $sat_closed; $sat_open once the pointer is on a row)" test "$((sat_closed + 1000))" -lt "$sat_open"
+    # The highlight colour is sampled from the hovered row (left of the pointer, inside the row), then counted in both boxes.
+    hl=$(magick "$b" -format "%[pixel:p{$((px - 25)),$py}]" info:)
+    n_closed=$(near "$a" "$box_a" "$hl")
+    n_open=$(near "$b" "$box_b" "$hl")
+    echo "$name: highlight colour $hl, pixels near it: closed $n_closed, with the row hovered $n_open"
+    check "no row is highlighted when the menu opens (closed $n_closed px of the highlight colour, hovered $n_open)" bash -c '[[ $2 -gt 1000 && $1 -lt 300 ]]' _ "$n_closed" "$n_open"
   fi
   vs_pointer abs 300 700 click >/dev/null
   vs_sleep 0.5

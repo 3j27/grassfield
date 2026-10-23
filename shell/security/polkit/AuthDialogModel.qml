@@ -10,7 +10,7 @@ import QtQuick
 QtObject {
     id: root
 
-    // The active AuthFlow, or null. Properties used: message, actionId, iconName, identities,
+    // The active AuthFlow, or null. Properties used: message, actionId, iconName (sanitized), identities,
     // selectedIdentity, isResponseRequired, inputPrompt, responseVisible, supplementaryMessage,
     // supplementaryIsError; methods submit(string), cancelAuthenticationRequest().
     property var flow: null
@@ -25,6 +25,11 @@ QtObject {
     readonly property bool active: !!flow
     readonly property string message: flow ? plainLine(flow.message, maxMessageLength) : ""
     readonly property string actionId: flow ? plainLine(flow.actionId, maxDetailLength) : ""
+    // The action's theme icon (polkit `icon_name` of the root-installed .policy file, AuthFlow.iconName), shown with a lock
+    // badge (D-4: macOS shows an icon for the request). It describes the action, not the program that asked: Quickshell
+    // 0.3.1's AuthFlow exposes no subject, process or command line; the message (pkexec names the program there), the
+    // action ID and this icon are all it offers. Only a plain theme icon name is accepted (no path, no URL), else "".
+    readonly property string iconName: flow ? safeIconName(flow.iconName) : ""
     readonly property var identities: flow && flow.identities ? flow.identities : []
     readonly property var selectedIdentity: flow ? flow.selectedIdentity : null
     readonly property string identityName: identityLabel(selectedIdentity)
@@ -68,6 +73,12 @@ QtObject {
         if (maxLength > 0 && t.length > maxLength)
             t = t.slice(0, maxLength - 1).trim() + "\u2026";
         return t;
+    }
+
+    // A theme icon name (letters, digits, ".", "_", "-"; 1 to 128 characters), else "".
+    function safeIconName(name: var): string {
+        const s = String(name === undefined || name === null ? "" : name);
+        return /^[A-Za-z0-9._-]{1,128}$/.test(s) ? s : "";
     }
 
     // "Password: " → "Password"

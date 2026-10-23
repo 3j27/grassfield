@@ -79,20 +79,24 @@ Outputs: `compositor/build/grassfield-compositor.so`, `compositor/build/grassfie
 `compositor/build/compile_commands.json` (`compositor/build/` is gitignored). `-DGRASSFIELD_OUTPUT_DIR=<dir>` writes them
 elsewhere (the rebuild on the target builds from read-only sources).
 
-## After a Hyprland update (ADR-0009 amendment 2026-10-23)
+## After a Hyprland update (ADR-0009, "Amendment 2026-10-23")
 
 A plugin only hooks into the Hyprland build it was compiled for; the `hyprland` version is never constrained. The
-`grassfield-compositor` package ships, next to the plugin, its ABI stamp (`grassfield-compositor.abi`), the plugin sources
-(`/usr/src/grassfield-compositor`), `/usr/lib/grassfield/grassfield-compositor-rebuild` and a pacman hook. After every
-transaction that installs or upgrades `hyprland` or `grassfield-compositor`, the hook keeps a matching build: the packaged
-one when its stamp is the installed Hyprland's ABI, else a build made on the machine from the shipped sources (CMake and
-the compiler only, as the user `nobody`, in a private directory, at most 4 compilers, 15 min bound) installed as
-`/var/lib/grassfield/compositor/grassfield-compositor.so` with its stamp. The result is printed in pacman's output and
-written to `/var/lib/grassfield/compositor/status` (build output: `build.log` there). The session
-(`config/hypr/grassfield/compositor.lua`) loads the build whose stamp is the ABI of the Hyprland that runs; with none it
-loads the packaged one, which refuses to hook and shows the degraded-mode notice (how to rebuild). By hand:
-`sudo /usr/lib/grassfield/grassfield-compositor-rebuild` (`--check` without root tells which build matches; `--build-into
-DIR` builds as the current user to try the toolchain). Logic test: `tests/shell/compositor_rebuild.sh`.
+`grassfield-compositor` package ships, next to the plugin, its ABI stamp (`grassfield-compositor.abi`, Hyprland's own
+client-hash formula, written by the build itself: `abi-stamp.cmake`, target `grassfield-compositor-abi`), the plugin
+sources (`/usr/src/grassfield-compositor`) and `grassfield-compositor-rebuild` (on PATH). The session
+(`config/hypr/grassfield/compositor.lua`) loads the packaged build when its stamp is the ABI of the Hyprland that runs,
+else the user's own build (`$XDG_CACHE_HOME/grassfield/compositor/<abi>/`) when `grassfield-compositor-rebuild --vetted`
+vouches for it (every directory from the cache root down, the plugin and its stamp: no symlinks, the user's, not writable
+by group or others; the stamp is the ABI), else nothing: degraded mode (gate C2) and one translated notice from the shell
+naming the Hyprland version and the recovery (`--status`). A config reload keeps the build of the first parse (runtime
+note). `grassfield-compositor-rebuild` (run as the user; it refuses root) builds the shipped sources with CMake and the
+compiler in a private temporary directory (nice, at most 4 compilers, 15 min bound per step) and installs the result in
+the user's cache (0700 directories, symlinks refused, the build's own stamp written last); log out and back in to use it.
+With the opt-in setting `windows.rebuildExtension` (Settings > Desktop & Dock, off by default) the shell runs that build
+itself in the background on a mismatch (`--session`) and loads the result into the running Hyprland when its ABI
+matches. Nothing is compiled as root or by a pacman hook. `--check` tells which build matches. Tests:
+`tests/shell/compositor_rebuild.sh`, `tests/unit/tst_extensionstatus.qml`.
 
 ## Test
 

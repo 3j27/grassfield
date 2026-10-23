@@ -34,6 +34,8 @@ Item {
     readonly property string shownName: VisualFixtures.active ? VisualFixtures.user : userName
     // file:// URL of the account picture, or "" for the initials disc.
     property string avatarSource: ""
+    // The password field holds no text (read by Lock.qml for the dev L2 check only; never the text or its length).
+    readonly property bool fieldEmpty: field.empty
 
     signal submitted(string password)
     // Typing started after an error: the error line gives way (e.g. to the Caps Lock hint).

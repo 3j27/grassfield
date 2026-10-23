@@ -10,24 +10,285 @@ Design: ADR-0010. Rules: master-prompt R12, §5.9. Gates: §10 L1–L5.
   user name field prefilled, password field, Cancel / Allow (default) buttons.
 
 ## Functional requirements
-1. SEC1 Lock engages via IPC `lock lock`, idle timeout, lid close, and before sleep (logind delay inhibitor).
-2. SEC2 Only PAM success (`omarchy-lock-password`) unlocks; errors/timeouts/crashes stay locked.
+1. SEC1 Lock engages via IPC `lock lock`, idle timeout, lid close (`lock lid`, also when logind does not suspend;
+   not in clamshell mode), and before sleep (logind delay inhibitor).
+2. SEC2 Only PAM success (`omarchy-lock-password`) unlocks; errors/timeouts/crashes/graceful exits stay locked.
 3. SEC3 Password cleared from the field and memory after each attempt; field disabled while authenticating.
 4. SEC4 Lock surface on every monitor; input never reaches other clients (ext-session-lock).
 5. SEC5 Lock screen shows clock, date, avatar (`~/.face` or AccountsService icon) and name — no notification
    content, no thumbnails.
-6. SEC6 Polkit agent: exactly one; shows message, action ID, program details; Cancel/Esc cancel; never auto-approve.
-7. SEC7 Idle: dim → lock → DPMS off; respects idle inhibitors.
+6. SEC6 Polkit agent: exactly one; shows message, action ID and the requesting program as far as polkit tells it
+   (see "Polkit details"); Cancel/Esc cancel; never auto-approve.
+7. SEC7 Idle: dim → lock → displays off on the idle lock screen (DPMS); respects Wayland idle inhibitors.
 8. SEC8 Fingerprint only if `/etc/pam.d/omarchy-lock-fingerprint` exists.
+9. SEC9 Lock coverage never disappears silently: the shell restarts after any exit while the session runs, Omarchy's
+   sleep-lock is skipped only while the shell runs, and a failing sleep inhibitor or watcher is reported to the user
+   and retried for as long as the shell runs (GF-030, D-12).
+10. SEC10 Dev and test switches (dev hooks, PAM suppression, no inhibitor) exist only in a dev session: one gate,
+    `GRASSFIELD_DEV=1` and no `GRASSFIELD_SESSION=1` (SEC-03); IPC test hooks and private state are refused in a real
+    session (SEC-04).
+11. SEC11 Password-manager windows are hidden from screen sharing and screencopy as in the Omarchy session (SEC-01).
 
 ## Acceptance criteria (gates)
 | Gate | Test | Level |
 |---|---|---|
-| L1 | lock in nested, `kill -9` the shell → nested stays locked (screenshot), restart shell → lock re-acquired; soft reload with the marker removed or forged → still locked; a foreign locker taking over and releasing the lock → locked again by Grassfield; nothing typed reaches a window (`tests/security/reload_locked.sh`) | L1, then L2† |
-| L2 | wrong password ×3 → error, still locked, field empty. **Never more than 3 wrong attempts per run**: the PAM service counts failures against the owner's real account (faillock deny=10). | L1 |
+| L1 | lock in nested, `kill -9` the shell → nested stays locked (screenshot), restart shell → lock re-acquired; soft reload with the marker removed or forged → still locked; a foreign locker taking over and releasing the lock → locked again by Grassfield; a graceful exit while locked (SIGTERM, `qs kill`) → still locked (`graceful-exit`, DT-21); nothing typed reaches a window (`tests/security/reload_locked.sh`, bare, outside the sandbox; `just test-security-nested`) | L1, then L2† |
+| L2 | `tests/security/l2_wrong_password.sh` (nested, real PAM through the opt-in `GRASSFIELD_DEV_ALLOW_PAM=1`, owner decision D-10): 3 random wrong passwords → each "Incorrect password", still locked (Hyprland `LOCK`), field empty, nothing reached the probe window. **Never more than 3 wrong attempts per run, never the right password, Return pressed at most 3 times**; a second run within 15 min is refused (faillock deny=10 shared with sudo) | L1 (owner runs it), then L2† |
 | L3 | lock shown before sleep | L2† owner |
-| L4 | screenshot of lock with pending notifications → none visible | L1 |
-| L5 | `pkexec --help` is safe: use `pkcheck --action-id org.freedesktop.policykit.exec --process $$ -u` in nested → agent dialog appears; Cancel → pkcheck fails; no auto-approve | L1 |
+| L4 | `tests/security/lock_privacy.sh` (nested): notifications with a marker image and a window filled with the marker colour, then lock and try to open every surface over it → no marker pixel in captures of both outputs (positive control before locking); `screenshare`: a Bitwarden-class window is black in a capture (DT-05) | L1 |
+| L5 | owner procedure "L5 polkit (owner, real session)" below: `pkcheck … --allow-user-interaction` (runs nothing as root) → dialog with message, action, icon; Esc/Cancel → exit 3; wrong password → "Incorrect password", no approval | L2† owner (a nested shell cannot register an agent) |
+
+## Dev gate (GF-AUDIT-001 SEC-03)
+One rule for every dev/test switch of the shell: `shell/services/DevGate.js` `allowed(GRASSFIELD_DEV, GRASSFIELD_SESSION)`
+is true only for `GRASSFIELD_DEV` exactly `1` AND `GRASSFIELD_SESSION` not `1`. The packaged session config sets
+`GRASSFIELD_SESSION=1` (`config/hypr/session.lua`); the nested dev session never does (`scripts/dev/devenv.sh` unsets an
+inherited one). A `GRASSFIELD_DEV=1` that leaks into a real session (environment.d, a uwsm env file, an import into the
+user manager) therefore changes nothing: no dev hook answers, PAM is not suppressed (the lock can be opened), the sleep
+inhibitor is taken, and the lock logs once "GRASSFIELD_DEV=1 ignored in a real session". Users: `Lock.devHooks`
+(`lock status|devReload|devPauseOwnershipCheck|devForgeUnlockedAnswer|devLockView`, PAM suppression), `Idle.devHooks`
+(`idle status|devSleep|devDisplayOff`, the display power-off default), `SleepInhibitor.dev` (no inhibitor in dev),
+`polkit status`, and, outside the security modules, `VisualFixtures.dev` (now `DevGate.allowed`), which every other IPC
+test hook checks. Tests: `tests/security/tst_devgate.qml` (the predicate), `tests/security/dev_gate.sh` (the real Lock
+singleton offscreen in five environments, including `GRASSFIELD_SESSION=1` with a leaked `GRASSFIELD_DEV=1`
+and `GRASSFIELD_DEV_ALLOW_PAM=1`: every hook `refused`, PAM not suppressed; mutation: a gate on `GRASSFIELD_DEV` alone
+fails it), `tests/security/ipc_inventory.sh` (no security module reads `GRASSFIELD_DEV` outside the gate).
+
+## IPC surface (GF-AUDIT-001 SEC-04)
+Quickshell's `IpcHandler` functions can be called by any process of the user (`qs ipc`, socket under
+`$XDG_RUNTIME_DIR`; Flatpak sandboxes cannot reach it). Classes: **action** = called by Grassfield's own bindings,
+gestures or screen corners (`config/hypr/grassfield/bindings.lua`, `shell/desktop/HotCornerActions.js`), available in a
+real session, never returns private state; **dev** = test hook, refused outside a dev session (`DevGate`, directly or
+through `VisualFixtures.dev`; void functions do nothing, others answer `refused`); **fixtures** = dev session AND
+`GRASSFIELD_VISUAL_FIXTURES=1`. No function unlocks, runs a command, opens a URL, reads notification content or
+approves polkit. `tests/security/ipc_inventory.sh` fails when a function is missing from this table or the table names
+one that does not exist, when an action has no real-session caller or is gated, and when a dev or fixtures function
+does not check its gate.
+
+<!-- ipc-inventory:begin -->
+| Target | Functions | Class | Caller, or why it is gated |
+|---|---|---|---|
+| lock | lock | action | SUPER+CTRL+Q, screen corner, Grassfield menu (in process). Only ever locks |
+| lock | lid | action | lid switch: `config/hypr/grassfield/system.lua` → `/usr/lib/grassfield/grassfield-lid closed` (D-4). Only ever locks; `docked` in clamshell mode |
+| lock | status, devReload, devPauseOwnershipCheck, devForgeUnlockedAnswer, devLockView | dev | `reload_locked.sh`, `l2_wrong_password.sh`; the pause widens the foreign-release window |
+| idle | status, devSleep, devDisplayOff | dev | `reload_locked.sh`, `lock_privacy.sh` |
+| polkit | status | dev | registration state (the journal has it in a real session) |
+| search | toggle | action | SUPER+SPACE |
+| search | open, close, query, status | dev | `status` returns what the user types; `query`/`open` inject a query |
+| search | filter | fixtures | visual tests |
+| apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
+| apps | status | dev | returns the typed query |
+| overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
+| overview | holdNextRelease, status | dev | `status` lists window titles and app ids |
+| switcher | next, previous, release, quit, hide | action | SUPER+TAB, SUPER+SHIFT+TAB, SUPER release, SUPER+Q, SUPER+H while the switcher is up |
+| switcher | right, left, cancel, status | dev | tests (arrows and Esc reach the switcher through its keyboard grab) |
+| windows | minimize, tile, hide, cycleApp | action | SUPER+M, SUPER+CTRL+arrows/R, SUPER+H, SUPER+` |
+| notifications | toggleCenter | action | SUPER+N, screen corner (in process) |
+| notifications | dnd, status | dev | `dnd` would let another process silence notices (security notices too) |
+| notifications | invoke, clearAll, dismissAll | fixtures | runs another app's action / removes history |
+| menubar | open, panel | action | CTRL+F2, SUPER+ALT+ESCAPE |
+| menubar | close, openKind, keyboardWait, statusState, autohide, bridgeState | dev | `bridgeState` returns the focused app's menu titles |
+| widgets | status, addDesktop, clearDesktop | dev | `tests/visual/widgets-blur.sh`; `addDesktop`/`clearDesktop` change the saved placements |
+| controlcenter | transparency, appearance, reduceTransparency, reduceMotion | dev | persisted settings changes |
+| controlcenter | volume, brightness, volumeLevel, brightnessLevel | dev | `tests/shell/cc_sliders_ipc.sh` (REQ-QS-CC5/CC6); in a real session the acceptance uses the sliders themselves |
+| dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
+| dock | hover, unhover, reveal, menu | dev | UI automation for tests |
+| dock | pinned, forceinterrupt, forcehold, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, stack, addfolder | fixtures | visual tests; `click` launches an app; `addfolder` changes `dock.folders` |
+| dockstack | state, depth, enter, back | fixtures | visual tests of the open folder stack (it lists a folder's file names) |
+| osd | display, hide, layout, state | dev | OSD spoofing (`layout` feeds a keyboard layout event) |
+| volume | up, down, mute | action | volume keys |
+| brightness | up, down | action | brightness keys |
+| keyboard | up, down | action | keyboard backlight keys (XF86KbdBrightnessUp/Down) |
+| capabilities | status | dev | visual tests wait on it |
+| bartone | status | dev | visual tests |
+| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
+| visual | glyphs | dev | contrast run |
+<!-- ipc-inventory:end -->
+
+## Lock coverage: restart, Omarchy's sleep-lock, failing inhibitor (GF-030, D-12)
+macOS model: the screen always locks before sleep, and the lock never silently goes away.
+- `grassfield-shell.service`: `Restart=always` (was `on-failure`: systemd does not restart a unit that exits 0 or is
+  stopped by SIGTERM/SIGINT/SIGHUP/SIGPIPE), `RestartSec=1`, start limit 10 starts in 30 s (a crash loop ends in
+  `failed`). A stop through systemd is never restarted (systemd semantics): logout stops `graphical-session.target`,
+  which stops the shell (`PartOf=`), and `Requisite=graphical-session.target` refuses a restart once the target is gone,
+  so a real logout is not fought. `systemctl --user stop grassfield-shell` stays a deliberate stop.
+- Omarchy's `omarchy-sleep-lock.service` (a logind delay inhibitor and a `PrepareForSleep` monitor; before sleep its
+  `omarchy-system-sleep-lock` asks "the shell" to lock with `omarchy-shell lock lock` and polls `omarchy-shell lock
+  status` until `secure`, within logind's window, else it reports "Screen did not lock before suspend"):
+  - the drop-in `10-grassfield.conf` no longer disables it unconditionally (`ConditionEnvironment=!GRASSFIELD_SESSION=1`):
+    its `ExecCondition=/usr/lib/grassfield/sleep-lock-gate` skips it in the Grassfield session only while
+    grassfield-shell is up (`ActiveState=active` and `SubState=running`). `activating` is not enough (follow-up N1): it
+    covers the auto-restart wait after a crash and the shell's start-up, when no Grassfield inhibitor exists. A unit
+    skipped by `ExecCondition=` is not failed and not restarted (systemd.service(5)); Omarchy's unit exits after each
+    sleep and is started again (`Restart=always`), so a running copy disarms itself after its next sleep once the shell
+    is up.
+  - When it runs: at session start it starts with `graphical-session.target`, usually before grassfield-shell, and keeps
+    running until its first sleep; `OnFailure=omarchy-sleep-lock.service` starts it after EVERY crash of
+    grassfield-shell, not only at the start limit (systemd 254+ `RestartMode=normal`, the default: the unit passes through
+    `failed` before each restart; a clean exit, SIGTERM or `qs kill`, ends `inactive` and does not trigger it).
+  - It never talks to Omarchy's shell: in this session `/usr/lib/grassfield/omarchy-shims` is first in PATH, and its
+    `omarchy-shell` stand-in answers `lock lock` by starting grassfield-shell again when it is not running
+    (`reset-failed`, then a start) and asking it to lock (`qs ipc -c grassfield call lock lock`: WlSessionLock +
+    PamContext, no other locker), and `lock status` with `secure` = Hyprland lists `LOCK` on every monitor, `requested` =
+    grassfield-shell's crash-recovery marker says `locked`. Every other call fails as Omarchy's wrapper does without its
+    shell; nothing unlocks. Its clamshell step (`omarchy-hyprland-monitor-clamshell`, also called by Omarchy's wake
+    script) reaches a second stand-in that runs `grassfield-lid reconcile`, so Omarchy's panel switching never fights
+    Grassfield's (follow-up N4).
+  - grassfield-shell never stops Omarchy's unit (it could be in the middle of a sleep it is delaying). Both running is
+    harmless: Omarchy's script only asks grassfield-shell to lock and sees Hyprland's `LOCK`, without the 12 s delay or the
+    false notice the drop-in was made for.
+  - In the Omarchy session the gate always lets it run, exactly as Omarchy ships it.
+  Checked by `tests/security/sleep_lock_units.sh` (the gate for every ActiveState/SubState, the unit and drop-in lines,
+  both stand-ins against stubs, the package path) and `scripts/dev/omarchy-compat.sh` (Omarchy's script still uses the
+  `lock lock` / `lock status` contract and calls the clamshell helper by name). Runtime NOT VERIFIED until the owner
+  check below.
+- The restart path re-locks after a sleep no shell locked for (follow-up N1; a crash or restart right before or during
+  a sleep, when no inhibitor delayed it):
+  - the crash-recovery marker records the kernel's count of completed suspends (`/sys/power/suspend_stats/success`,
+    world-readable): `unlocked sleeps=<n>`. A starting shell that reads an `unlocked` line with another count than the
+    current one locks (`LockMachine.sleptSince`, `restoreAtStart`; log "the machine slept while no shell could lock").
+    A live shell locks before every sleep and rewrites the marker when it is unlocked, so a different count only means a
+    sleep that happened without a shell. Unknown counts (an old line without a count, an unreadable sysfs file) prove
+    nothing either way: no lock. Tests: `tst_lockmachine` `test_markerWithSleepCount`; `dev_gate.sh` starts the real Lock
+    singleton offscreen on a marker with the previous count (locks), the current count and no count (both unlocked).
+  - a shell whose `PrepareForSleep` watcher sees the resume (`false`) without having seen the matching `true` (it started,
+    or its watcher came back, after the sleep began) locks at once (`SleepInhibitor.afterResume`, reason `resume`).
+- The lid (`grassfield-lid closed`, follow-up N3): when `lock lid` gets no answer (shell down or starting) and no external
+  display is connected, the `omarchy-shell` stand-in is run in the background (restart + lock), so a lid close with
+  `HandleLidSwitch=ignore` or `lock` (no suspend, nothing else would lock) still locks; with an external display
+  connected (clamshell) nothing is locked, as before. `tests/shell/lid.sh`.
+- Known limit (owner): when grassfield-shell cannot start at all (a broken install), the fail-safe cannot lock either:
+  Omarchy's script waits logind's window, reports that the screen did not lock (no notification server runs then: the
+  journal has it) and the machine sleeps unlocked; a shell that starts later locks at once (the count rule above).
+  A crash and a sleep within a few hundred ms (before Omarchy's unit holds its inhibitor) also sleep without a lock; the
+  restarted shell then locks on resume, before any input. There is no second locker on purpose (security rules:
+  WlSessionLock + PamContext in grassfield-shell only). Refusing sleep instead (a logind `block` inhibitor) was rejected:
+  a closed laptop would then stay awake in a bag. A deliberate `systemctl --user stop grassfield-shell` is not a failure
+  and does not start the fail-safe.
+- Sleep inhibitor and `PrepareForSleep` watcher (`SleepInhibitor.qml`): never given up. An exit within 2 s of the start
+  counts as a failure; after 5 in a row the module is "degraded": the user gets a notice in Notifications ("The screen
+  may not lock before sleep", with the lock shortcut; Do Not Disturb silences its banner, the entry stays in the
+  Notification Center), the journal says why, and the child is retried every 60 s instead of every 5 s. A run of 2 s
+  resets the count and withdraws the notice. Pure logic in `IdleModel.js` (`failuresAfterExit`, `retryDelayMs`,
+  `degraded`), unit-tested in `tst_idlemodel.qml`.
+- Sleep delay budget: the release timer was 4 s, below logind windows of 15 s that Omarchy ships
+  (`InhibitDelayMaxSec=15`, because a lid close that reconfigures displays can take longer to lock). It is now derived
+  from logind's `InhibitDelayMaxUSec` (`busctl get-property`, read once at start): window minus a fifth (at least 1 s),
+  capped at 12 s, 4 s when unreadable (port of Omarchy's `omarchy-system-sleep-lock` `derive_budget_ms`, MIT). The delay
+  still ends at once on a confirmed lock.
+
+Owner check (real session, L2-12 addition): `systemctl --user kill -s SIGTERM grassfield-shell.service; sleep 3;
+systemctl --user is-active grassfield-shell.service` → `active`; `systemctl --user show -P ActiveState
+omarchy-sleep-lock.service` → `inactive`; `systemd-inhibit --list | grep -c Grassfield` → `1`, and no `Omarchy` line.
+Fail-safe (owner, L2†, from a TTY or a terminal you can leave): `systemctl --user stop grassfield-shell.service;
+systemctl --user start omarchy-sleep-lock.service` (stands in for the start-limit failure), then `systemctl suspend`
+and wake: the Grassfield lock screen is shown before any content, and `journalctl --user -u omarchy-sleep-lock -b`
+has no "suspending without a secure lock" line.
+
+## Graceful exit while locked (SEC-18 / GF-029, DT-21)
+Read in the sources (Quickshell v0.3.1, `quickshell-mirror/quickshell@v0.3.1`; Hyprland v0.56.2,
+`hyprwm/Hyprland@v0.56.2`):
+- `qs kill` sends an IPC kill: `IpcKillCommand::exec` → `EngineGeneration::quit()` → `destroy()`: the root object is
+  deleted, then the JS engine is interrupted (`setInterrupted(true)`) and deleted. The Lock singleton is owned by the
+  engine (registered in `SingletonRegistry`, no parent), so it is destroyed with JS interrupted: no binding of
+  `Lock.qml` can run and set `WlSessionLock.locked = false` during teardown.
+- `WlSessionLock` has no destructor that unlocks; its `SessionLockManager` child deletes the `QSWaylandSessionLock`,
+  whose destructor sends `ext_session_lock_v1.destroy`, NOT `unlock_and_destroy` ("This will intentionally lock the
+  session if the lock is destroyed without calling unlock", `src/wayland/session_lock/lock.cpp`).
+- Hyprland 0.56.2 handles `destroy` like a dead client: `CSessionLock` is destroyed, the manager drops its lock state
+  (lock surfaces gone, the "lockscreen app died" screen), and `PROTO::sessionLock->m_locked` stays true: only
+  `unlock_and_destroy` sets it false (`src/protocols/SessionLock.cpp`). The session stays locked.
+- SIGTERM: Quickshell installs crash handlers for SIGSEGV/SIGABRT/SIGFPE/SIGILL/SIGBUS/SIGTRAP only
+  (`src/crash/handler.cpp`); SIGTERM's default action ends the process at once, which Hyprland sees as a dead client.
+- Either way the restarted shell (`Restart=always`) finds the marker `locked` and takes the lock back.
+Expected: locked in both cases. NOT VERIFIED at runtime until the nested `graceful-exit` step of
+`tests/security/reload_locked.sh` runs (bare, outside the sandbox): (a) `kill -TERM`, (b) `qs kill --pid`; after each,
+Hyprland lists `LOCK` on every monitor and nothing typed reaches the probe window; then the restarted shell reports
+`locked`. No code change was needed for this item; if the step ever shows an unlock, the shell must refuse IPC kill
+while locked (not possible in Quickshell 0.3.1) or the unit must restart it before input arrives.
+
+## Upstream base (GF-031)
+Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0` (installed
+4.0.4 = `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`, byte-identical to `/usr/share/omarchy/shell/plugins/lock/Service.qml`):
+- v4.0.6 `currentlyLocked()` ("A property binding that missed a change notification once reported locked after an
+  unlock, and a lock request before suspend then took that for done and never locked the session"): **ported** as
+  `Lock.currentlyLocked()` / `Lock.currentlySecure()` (state machine storage via `LockController.currentState()`,
+  `WlSessionLock.secure` read at the decision, the `verified` flag). Used by `lock()`, `restore()`, `checkStranded()` and
+  the before-sleep release in `SleepInhibitor` (was the `Lock.secure` binding).
+- v4.0.5 (`94a8fbc2d67eec5673c7f16b8c5e8a9c8452ffdc`) stranded-lock check skips the takeover while any other
+  `quickshell|qs|hyprlock` process of the user runs (`omarchy-hyprland-session-lock-stranded "$PPID"`): **not ported**.
+  Omarchy's problem is a shell that takes a live lock over and then strands it on exit; here a takeover only ever keeps
+  the session locked, the ownership check re-locks after the foreign release (`foreign-restart`, ≤ 150 ms), and an exit
+  is followed by a restart that restores from the marker. The process test would also block the recovery of a dead
+  client's lock whenever another Quickshell instance of the user runs (the nested dev session always has one).
+- Idle and polkit: v4.0.5/4.0.6 changes are `Commons.Color` renames (Qt 6.12) and screensaver handling Grassfield does
+  not use; nothing to port.
+
+## Screen-share protection (SEC-01 / GF-028)
+`config/hypr/grassfield/privacy.lua`, required by `core.lua` (real and nested session): reads Omarchy's own
+`default/hypr/apps/*.lua` in an empty Lua environment where `o.window` records only rules with `no_screen_share = true`
+(with their match) and every other `o.*`/`hl.*` call does nothing; `os`, `io`, `require` and the rest are absent, so
+nothing else of those files runs or applies. Each recorded match becomes `hl.window_rule({ name = "gf-no-screen-share-N",
+match = …, no_screen_share = true })`. With Omarchy 4.0.4/4.0.6: 1Password, Bitwarden and the Bitwarden Chromium extension
+window. A later Omarchy addition is picked up without a Grassfield change. The three built-in matches are always added
+(duplicates dropped), so a rule file that stops early or disappears never leaves a password manager unprotected; when
+nothing at all is read, Hyprland's log says so. Tests: `tests/security/screenshare_rules.sh` (at least one rule per
+Omarchy `no_screen_share` rule; fixture tree with a new app, a table match, an `os.execute`/`io.open` file whose calls
+never run; a `1password.lua` that stops before its rule still leaves 1Password protected; nothing readable;
+wiring; mutation "keep every rule" fails it), `Hyprland --verify-config` in `just check` (a misspelt key fails it), and
+nested `lock_privacy.sh screenshare` (DT-05: a window with app_id `Bitwarden` is black in a `grim` capture; NOT
+VERIFIED until run).
+
+## Lid, display power-off, screensaver inhibitors (D-4)
+- Lid: one binding, `switch:on:Lid Switch` in `config/hypr/grassfield/system.lua` (real session only, `locked = true`) →
+  `/usr/lib/grassfield/grassfield-lid closed`, which first sends `qs ipc -c grassfield call lock lid` on every close
+  (it decides nothing about locking; it only switches the laptop panel off and on for clamshell mode,
+  `tests/shell/lid.sh`). `Lock.lockOnLid()` locks at
+  once, whether or not logind suspends (`HandleLidSwitchExternalPower=ignore`, a docked lid, a failed suspend), except
+  in clamshell mode: a physical external output is active (`LockMachine.lidShouldLock`: `DP-n`, `HDMI-X-n`, `DVI-X-n`,
+  `VGA-n`, `TV-n`, `USB-n`; the built-in panel, headless and nested outputs do not count), as macOS and Omarchy's
+  `omarchy-system-lid-close` do. When logind suspends, the lock is already on its way before `PrepareForSleep`.
+  Hardware lid NOT VERIFIED (L2†; nested: `qs ipc call lock lid` locks, outputs WAYLAND-1 and GF-REF are not external).
+- Display power-off: `Idle.qml` watches input while the lock is secured (`Lock.holding`: confirmed by the compositor,
+  never while it is still being acquired; `IdleMonitor`, `respectInhibitors: false`) and after
+  `IdleModel.DISPLAY_OFF_SECONDS` (30 s) without input switches the displays off through Hyprland
+  (`hl.dsp.dpms({ action = "disable" })`); input or the unlock switches them on. `misc.key_press_enables_dpms` and
+  `mouse_move_enables_dpms` (`looknfeel.lua`, Omarchy's values) let Hyprland itself wake the displays, so a shell that
+  dies meanwhile cannot leave the screen dark. Off in the nested dev session unless `idle devDisplayOff <s>` sets it
+  (`lock_privacy.sh display-off`). NOT VERIFIED on hardware (L2†).
+- `org.freedesktop.ScreenSaver` inhibitors: **not implemented**, and not implementable inside the security modules'
+  building blocks: Quickshell 0.3.1 cannot own a D-Bus name or serve methods (only its Notifications, StatusNotifier
+  and MPRIS services do). Wayland-native players (mpv, Firefox, Chromium on Wayland) use the idle-inhibit protocol,
+  which `IdleMonitor { respectInhibitors: true }` honours (DT-16). Proposed (owner/integrator decision, cross-module):
+  the menu bridge (Qt D-Bus, already a session-bus service) implements `org.freedesktop.ScreenSaver.Inhibit/UnInhibit`
+  (cookies tracked per sender, dropped when the sender leaves the bus) and reports "inhibited" to the shell, which then
+  holds a Quickshell `IdleInhibitor`; an ADR is needed.
+
+## Polkit details (SEC-07, D-4)
+Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
+`message`, `iconName`, `actionId`, `cookie`, `identities`, `selectedIdentity`, `isResponseRequired`, `inputPrompt`,
+`responseVisible`, `supplementaryMessage`, `supplementaryIsError`, `isCompleted`, `isSuccessful`, `isCancelled`,
+`failed`, and no subject, process id, command line or `details`. The sheet shows everything that identifies the
+request: the message (polkit's text; for `pkexec` it names the program and its arguments), "Action: <id>", the
+identity, and now the action's `iconName` (from the root-installed `.policy` file) with the lock as a badge, macOS style.
+That icon describes the action, not the program that asked: polkit does not tell the agent which process requested it
+through this API (`AuthDialogModel.iconName`: plain theme names only; `AuthAgent` shows it only when the
+theme has it; else the lock alone). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
+`test_10_programIconWithLockBadge`); visual NOT verified (a nested shell cannot register an agent: L5).
+
+## L5 polkit (owner, real session)
+Never `pkexec` a real program for this test; `pkcheck` only asks polkit whether this terminal's shell may run the action
+and runs nothing as root. In a terminal of the Grassfield session:
+1. `journalctl --user -u grassfield-shell -b -o cat | grep -c 'authentication agent registered'` → `1`.
+2. `pkcheck --action-id org.freedesktop.policykit.exec --process $$ --allow-user-interaction; echo "exit $?"`. The
+   Grassfield sheet appears over a dimmed screen: the message, "Action: org.freedesktop.policykit.exec", "User: <you>",
+   a password field and Cancel / Allow. Press Esc → the sheet closes, `exit 3` (dismissed), nothing approved.
+3. Run step 2 again; type one wrong password, Return → the sheet shakes, "Incorrect password. Try again.", the field
+   is empty, nothing approved; then Cancel → `exit 3`. (One wrong attempt counts once in faillock, shared with sudo.)
+4. Optional, only if the owner wants the success path: step 2 with the right password → `exit 0`; polkit may then keep
+   the authorization for this shell for a few minutes (`auth_admin_keep`): close that terminal afterwards.
+5. Clicking outside the sheet never cancels or approves; `journalctl --user -u grassfield-shell -b -o cat | grep -i
+   polkit` shows no password and no "approved" line.
+PASS: 1–3 (and 5) as described. FAIL: any approval without the right password, a second agent, or the sheet missing.
 
 ## Lock survival (crash, reload) — fail closed
 Found in R12 review: a Quickshell soft reload while locked unlocked the session when the marker was missing or not
@@ -45,8 +306,10 @@ A starting instance (session start, crash restart, soft reload) locks when ANY o
    the handed-over lock is kept, with no unlocked window (the new `WlSessionLock` has no Wayland lock object until its
    own reload). Verified offscreen by `tests/security/reload_order` (order, binding value, negative control,
    `Lock.qml` structure) and in nested by `reload_locked.sh` (marker removed / forged `unlocked` + reload → locked).
-2. Marker, read in `Component.onCompleted` (runs before the reload pass): anything but exactly `unlocked` → lock,
-   including an empty or unreadable marker (mode 000, a directory, I/O error). Only a missing file (FileView
+2. Marker, read in `Component.onCompleted` (runs before the reload pass): anything but an `unlocked` line (`unlocked`
+   or `unlocked sleeps=<n>`) → lock, including an empty or unreadable marker (mode 000, a directory, I/O error) and a
+   malformed line; an `unlocked sleeps=<n>` line whose count differs from the kernel's current count of completed
+   suspends → lock too (the machine slept while no shell could lock, see "Lock coverage"). Only a missing file (FileView
    `FileNotFound`) counts as missing (`LockMachine.markerRead`; `tests/security/marker_read` uses the real FileView).
 3. `XDG_RUNTIME_DIR` unset: no marker can prove the session unlocked → lock at start; the lock surface shows
    "Crash recovery unavailable: the lock state could not be saved." (also shown when a marker write fails; logged).
@@ -130,7 +393,7 @@ change the window Hyprland refocuses, and the in-window key count needs it to be
 
 File watching is disabled in `shell.qml` (`settings.watchFiles: false`, re-applied after every reload since
 Quickshell resets it), so only an explicit `Quickshell.reload()` reloads the shell (none in production code; the dev
-hook `lock devReload` needs `GRASSFIELD_DEV=1`). Development restarts the shell with `scripts/dev/shell-run.sh`.
+hook `lock devReload` needs a dev session, see "Dev gate"). Development restarts the shell with `scripts/dev/shell-run.sh`.
 
 ## Test safety: never submit to PAM in nested
 A password submitted on the lock screen is checked against the owner's real account (`omarchy-lock-password`), and a
@@ -162,7 +425,7 @@ Only wrong attempts are ever used for the L2 failure path, and only by the owner
   agent already exists for the given subject" (confirmed). The module logs it once, shows no dialog and approves
   nothing. L5 functional checks move to L2 (owner); L1 covers the refusal path and unit tests of the dialog model.
 - Nested runs must not take a real logind sleep inhibitor (it would delay the owner's real suspend): the
-  inhibitor code path is disabled when `GRASSFIELD_DEV=1` and verified in L2.
+  inhibitor code path is disabled in a dev session (Dev gate) and verified in L2.
 - Lock restore on Hyprland 0.56.2 (`misc.allow_session_lock_restore = true`, needed for crash recovery) does NOT wait
   for a live locker to exit: any client of the session can take a live lock over at once and, by releasing it, unlock
   the session (a Hyprland behavior no shell can prevent). Grassfield re-locks when the next ownership check sees the
@@ -184,26 +447,37 @@ Only wrong attempts are ever used for the L2 failure path, and only by the owner
 ## Implementation (M2)
 | Path | Role |
 |---|---|
-| `shell/security/LockMachine.js` | Pure state machine `next(state, event)` and helpers (marker, initials, Caps Lock inference, clock pattern) |
+| `shell/security/LockMachine.js` | Pure state machine `next(state, event)` and helpers (marker, holding, lid decision, initials, Caps Lock inference, clock pattern) |
+| `shell/services/DevGate.js` | The shell's one dev gate (`allowed(GRASSFIELD_DEV, GRASSFIELD_SESSION)`), see "Dev gate" |
 | `shell/security/LockController.qml` | Auth controller over an injected PAM backend: one prompt answered, 30 s timeout, secret dropped on every outcome |
 | `shell/security/PasswordField.qml` | Shared password entry (Password echo, sensitive-data hints, plain-text placeholder, return arrow) |
 | `shell/security/lock/Lock.qml` | Singleton: `WlSessionLock`, `PamContext` (password; fingerprint only if its PAM file exists), crash marker, IPC `lock` |
 | `shell/security/lock/LockView.qml` | Lock surface (display only): blurred `WallpaperArt` under a scrim, date and clock, avatar/initials, name, dark frosted field, one hint line (gate A2, see Decisions) |
 | `shell/security/polkit/` | `AuthAgent` (PolkitAgent + overlay window, IPC `polkit status`), `AuthDialog`, `AuthDialogModel` |
-| `shell/security/idle/` | `Idle` (IdleMonitor, dim layer, idle lock, IPC `idle status`), `SleepInhibitor`, `IdleModel.js` |
+| `shell/security/idle/` | `Idle` (IdleMonitor, dim layer, idle lock, display power-off on the lock screen, IPC `idle`), `SleepInhibitor` (delay inhibitor, PrepareForSleep watcher, retry and notice, logind budget), `IdleModel.js` |
+| `config/hypr/grassfield/privacy.lua` | Omarchy's `no_screen_share` rules read from Omarchy's own files (SEC-01) |
+| `packaging/systemd/sleep-lock-gate` | `ExecCondition` of Omarchy's sleep-lock unit (D-12), installed to `/usr/lib/grassfield/` |
+| `tests/security/tst_devgate.qml`, `dev_gate.sh` | Dev gate: predicate; real Lock singleton offscreen in five environments |
+| `tests/security/ipc_inventory.sh` | IPC surface = the table above; every action has a real-session caller, every hook its gate |
+| `tests/security/screenshare_rules.sh` | SEC-01 rule set against Omarchy's, fixture tree, built-in matches always applied, wiring |
+| `tests/security/sleep_lock_units.sh` | GF-030/D-12: gate script per state, unit and drop-in lines, package path |
+| `tests/security/lock_privacy.sh` | Nested L4 (no notification or window content on the lock), DT-05 screen share, D-4 lid lock and display off |
+| `tests/security/l2_wrong_password.sh` | Nested L2 with real PAM (opt-in), 3 random wrong passwords, Return ≤ 3, one run per 15 min |
 | `tests/security/reload_order/` | Offscreen `qs` test of the Quickshell reload contract the lock relies on (run by `scripts/dev/test.sh`) |
 | `tests/security/marker_read/` | Offscreen `qs` test: marker reads through the real FileView (missing, `unlocked`, empty, mode 000, directory) |
 | `tests/security/foreign_locker/` | Nested fixture: a foreign ext-session-lock client (Quickshell), released over IPC `foreign unlock`; refuses to lock without `GRASSFIELD_FOREIGN_LOCKER=1` or on the owner's instance (`.dev/main.instance`) |
-| `tests/security/reload_locked.sh` | Nested scenario: reload with marker missing/forged, `kill -9` (L1), forged marker + crash, file watcher off, foreign locker takeover/restart (release → fresh lock ≤ 150 ms), `lock lock` and before-sleep during a desync, forced races `relock-confirm` and `foreign-gap`, `probe-cost`, `pam-audit`; `probe-memory` (10 min, explicit) |
+| `tests/security/reload_locked.sh` | Nested scenario: reload with marker missing/forged, `kill -9` (L1), forged marker + crash, graceful exit (SIGTERM, `qs kill`: DT-21), file watcher off, foreign locker takeover/restart (release → fresh lock ≤ 150 ms), `lock lock` and before-sleep during a desync, forced races `relock-confirm` and `foreign-gap`, `probe-cost`, `pam-audit`; `probe-memory` (10 min, explicit) |
 | `tests/security/pam_audit.sh` | Read-only PAM attempt audit over every Quickshell instance log of this tree (sourced by `reload_locked.sh`) |
 
-IPC (all on the shell instance): `lock lock` → `ok` / `already-locked` / `refused: missing-pam` (when already locked,
-the session lock is re-verified, see "Lock ownership"); `lock status` → `unlocked|locking|locked|authenticating`
-(test hook); dev hooks, only when `GRASSFIELD_DEV=1` (else `refused`), for tests/security/reload_locked.sh:
+IPC (all on the shell instance; classes in "IPC surface"): `lock lock` → `ok` / `already-locked` / `refused: missing-pam`
+(when already locked, the session lock is re-verified, see "Lock ownership"); `lock lid` → the same or `docked`. Dev
+hooks, only in a dev session (else `refused`): `lock status` → `unlocked|locking|locked|authenticating`;
 `lock devReload` → `reloading` (soft reload), `lock devPauseOwnershipCheck` → `paused` (periodic ownership check off
 for 10 s), `lock devForgeUnlockedAnswer` → `forged` | `not-holding` (counts one "unlocked" answer Hyprland never gave,
-as a stale answer would; only a confirmed relock can follow), `idle devSleep before|after` → `ok` (before-sleep /
-after-resume path without logind; no inhibitor in dev); `polkit status` → `registered|unregistered`; `idle status` → JSON.
+as a stale answer would; only a confirmed relock can follow), `lock devLockView` → JSON {state, field: empty|filled,
+message, failedAttempts, pamSuppressed} (never the text or its length), `idle devSleep before|after` → `ok`
+(before-sleep / after-resume path without logind; no inhibitor in dev), `idle devDisplayOff <0..600>` → `ok`,
+`idle status` → JSON, `polkit status` → `registered|unregistered`.
 
 States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> unlocked`;
 `failure|error|timeout|abort` → `locked`; a lock dropped by the compositor, or a session found unlocked under a lock
@@ -211,7 +485,8 @@ still reported secure (foreign takeover + release) → `locking` (fresh lock, re
 fingerprint success unlocks from `locked`. Unknown states/events never unlock (exhaustive test).
 
 Decisions:
-- Crash recovery marker: `$XDG_RUNTIME_DIR/grassfield-lock-<HYPRLAND_INSTANCE_SIGNATURE>` holds `locked`/`unlocked`
+- Crash recovery marker: `$XDG_RUNTIME_DIR/grassfield-lock-<HYPRLAND_INSTANCE_SIGNATURE>` holds `locked`/`unlocked`,
+  followed by ` sleeps=<n>` (the kernel's count of completed suspends) when it is readable
   (atomic, blocking write before the lock is requested, after unlock; re-read before and after each write, so a
   stale cache or a failed write is detected). See "Lock survival" for how a starting shell uses it.
 - `PamContext.user` is left unset: PAM authenticates the uid running the shell, not `$USER`.
@@ -219,23 +494,23 @@ Decisions:
   `respond()` until PAM's next message (found in nested L2).
 - Missing `/etc/pam.d/omarchy-lock-password`: new locks are refused (`refused: missing-pam`, logged); a lock being
   restored proceeds with a persistent "Authentication service unavailable" message (never fail open).
-- Dev PAM suppression (defence in depth, R12 review #3 MAJOR): in a dev session (`GRASSFIELD_DEV=1`) the lock never
+- Dev PAM suppression (defence in depth, R12 review #3 MAJOR): in a dev session (Dev gate) the lock never
   hands a password to PAM unless `GRASSFIELD_DEV_ALLOW_PAM=1` is also set (the opt-in for the L2 failure-path test).
   `Lock.qml` sets `LockController.pamSuppressed` from these at start; a suppressed `submit()` logs
   `grassfield-lock: dev: PAM submit suppressed`, clears the field and stays LOCKED (fail closed, never unlocks); the
   lock's notice line shows "dev: password checks disabled" so a dev value leaking into a real session is obvious. This
   stops a stray key that reaches the lock field in a nested test from counting a `faillock` failure against the
-  owner's real account (faillock is shared with sudo). Real sessions (`GRASSFIELD_DEV` unset) are unchanged:
-  `pamSuppressed` is false and authentication is normal. Unit-tested both ways (`tst_lockcontroller.qml`), structure
+  owner's real account (faillock is shared with sudo). Real sessions (`GRASSFIELD_SESSION=1`, whatever
+  `GRASSFIELD_DEV` says) are unchanged: `pamSuppressed` is false and authentication is normal. Unit-tested both ways (`tst_lockcontroller.qml`), structure
   checked by `tests/security/reload_order`.
 - Lock before sleep: Quickshell 0.3.1 has no D-Bus/logind API, so `systemd-inhibit --what=sleep --mode=delay … cat`
   (stdin pipe: the inhibitor dies with the shell) plus `gdbus monitor` on `/org/freedesktop/login1` for
   `PrepareForSleep`. Both run under `setpriv --pdeathsig TERM --` (util-linux), so a shell crash (even SIGKILL) leaves
   no orphan (verified in nested: `kill -9` of the shell → its `gdbus monitor` child is gone). Released once
-  `Lock.secure` holds (a confirmed lock, re-verified with Hyprland when it was already held; see "Lock ownership"), or
-  after 4 s; re-taken on resume. Skipped when
-  `GRASSFIELD_DEV=1` (log `grassfield-idle: inhibitor skipped (dev)`). Lid close locks through logind's
-  `HandleLidSwitch=suspend` → `PrepareForSleep`; no separate lid binding.
+  `Lock.currentlySecure()` holds (a confirmed lock, re-verified with Hyprland when it was already held; see "Lock
+  ownership"; read afresh, Omarchy 4.0.6 fix), or when logind's budget runs out (see "Lock coverage"); re-taken on
+  resume. Skipped in a dev session (log `grassfield-idle: inhibitor skipped (dev)`). Lid close also locks by itself
+  (`lock lid`, see D-4 above), before logind's `PrepareForSleep`.
 - Idle: `IdleMonitor { respectInhibitors: true }`, dim at T−10 s, lock at T; Quickshell 0.3.1 keeps the timeout an
   `IdleMonitor` was enabled with, so the monitor is re-enabled on every timeout change (verified in nested).
 - Lock screen contrast (gate A2, both appearances, any wallpaper): as on macOS, white text (dark palette, both appearances)
@@ -270,9 +545,13 @@ Decisions:
 `grassfield.json`: `lock.idleMinutes` (integer 0–240, default 5, 0 = never) is read through `Settings.lockIdleMinutes`
 (clamped); invalid values fall back to 5 in `IdleModel.timings`.
 
-Known gaps (M2): polkit `details` (program, command line) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec puts
-the program in `message`, which is shown. Caps Lock is inferred from typed letters (no lock-key state in Quickshell).
-Display power-off after the lock (T+60 s) and D-Bus `org.freedesktop.ScreenSaver` inhibitors are not handled.
+Known gaps: polkit `details` (program, command line, process) are not exposed by Quickshell 0.3.1 `AuthFlow`; pkexec
+puts the program in `message`, which is shown, and the action's icon is shown (see "Polkit details"). Caps Lock is
+inferred from typed letters (no lock-key state in Quickshell). D-Bus `org.freedesktop.ScreenSaver` inhibitors are not
+handled (see D-4: not possible with the security modules' building blocks; proposal there). Display power-off on the
+lock screen is done (30 s), not yet seen on hardware (L2†). When grassfield-shell has failed for good, the fail-safe
+restarts it before sleep; a shell that cannot start at all leaves the machine to sleep unlocked (no second locker, by
+the security rules; see "Lock coverage").
 The marker file of a dead compositor instance stays in `$XDG_RUNTIME_DIR` until logout (a few bytes).
 Lock screen contrast: the lock's error, notice, Caps Lock, typed-dots, return-arrow and focus-ring states are proven by the
 token calculation only (the contrast run's nested capture is at rest: nothing is typed into the nested lock there; the

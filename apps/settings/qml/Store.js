@@ -24,6 +24,7 @@ const DEFAULTS = {
     "dock.magnificationEnabled": false,
     "dock.autohide": false,
     "dock.showRecents": true,
+    "dock.folders": ["~/Downloads"],
     "dock.minimizeIntoApp": false,
     "dock.animateOpening": true,
     "dock.showIndicators": true,
@@ -38,8 +39,10 @@ const DEFAULTS = {
     "windows.tilingMenuBar": true,
     "windows.tilingMargins": true,
     "windows.stages": false,
+    "windows.rebuildExtension": false,
     "notifications.dnd": false,
     "notifications.previews": "unlocked",
+    "notifications.appPreviews": [],
     "lock.idleMinutes": 5,
     "hotCorners.topLeft": "none",
     "hotCorners.topRight": "none",
@@ -80,6 +83,7 @@ const RULES = {
     "dock.magnificationEnabled": {type: "boolean"},
     "dock.autohide": {type: "boolean"},
     "dock.showRecents": {type: "boolean"},
+    "dock.folders": {type: "pathList"},
     "dock.minimizeIntoApp": {type: "boolean"},
     "dock.animateOpening": {type: "boolean"},
     "dock.showIndicators": {type: "boolean"},
@@ -94,8 +98,11 @@ const RULES = {
     "windows.tilingMenuBar": {type: "boolean"},
     "windows.tilingMargins": {type: "boolean"},
     "windows.stages": {type: "boolean"},
+    "windows.rebuildExtension": {type: "boolean"},
     "notifications.dnd": {type: "boolean"},
     "notifications.previews": {type: "enum", values: ["always", "unlocked", "never"]},
+    // Per-app override of the previews setting (ui/Grassfield/Ui/NotificationPrefs.js, one copy of the rules).
+    "notifications.appPreviews": {type: "notificationApps"},
     "lock.idleMinutes": {type: "integer", min: 0, max: 240},
     "hotCorners.topLeft": {type: "enum", values: CORNER_ACTIONS},
     "hotCorners.topRight": {type: "enum", values: CORNER_ACTIONS},
@@ -145,6 +152,16 @@ function validate(path, value) {
     case "wallpaperOutputs": {
         const why = Tree.WallpaperConfig.outputsProblem(value);
         return why === "" ? "" : path + ": " + why;
+    }
+    case "notificationApps": {
+        const why = Tree.NotificationPrefs.problem(value);
+        return why === "" ? "" : path + ": " + why;
+    }
+    case "pathList": {
+        // Folders kept in the Dock as stacks: absolute paths or ~/ ones, as the Dock reads them (shell/dock/Stacks.js folderList).
+        const ok = Array.isArray(value) && value.length <= 12 && value.every(v => typeof v === "string" && v !== "" && v.length <= 4096
+            && !/[\u0000-\u001f]/.test(v) && (v.indexOf("/") === 0 || v.indexOf("~/") === 0) && v.split("/").indexOf("..") < 0);
+        return ok ? "" : path + ": expected at most 12 absolute paths without control characters";
     }
     case "boolean":
         return typeof value === "boolean" ? "" : path + ": expected true or false";

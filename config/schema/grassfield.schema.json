@@ -107,6 +107,34 @@
         "showRecents": {
           "type": "boolean"
         },
+        "folders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "stackOptions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "sort": {
+                "type": "string",
+                "enum": ["name", "dateAdded", "dateModified", "dateCreated", "kind"]
+              },
+              "view": {
+                "type": "string",
+                "enum": ["automatic", "fan", "grid", "list"]
+              },
+              "display": {
+                "type": "string",
+                "enum": ["stack", "folder"]
+              }
+            }
+          }
+        },
         "minimizeIntoApp": {
           "type": "boolean"
         },
@@ -148,6 +176,9 @@
         },
         "stages": {
           "type": "boolean"
+        },
+        "rebuildExtension": {
+          "type": "boolean"
         }
       }
     },
@@ -165,6 +196,28 @@
             "unlocked",
             "never"
           ]
+        },
+        "appPreviews": {
+          "type": "array",
+          "description": "Per-app Show previews (at most 200): the apps listed here override notifications.previews. app is the sender's name.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "app": {
+                "type": "string",
+                "minLength": 1
+              },
+              "previews": {
+                "type": "string",
+                "enum": [
+                  "always",
+                  "unlocked",
+                  "never"
+                ]
+              }
+            }
+          }
         }
       }
     },
