@@ -19,6 +19,17 @@ Singleton {
         Quickshell.execDetached(["systemctl", verb]);
     }
 
+    // Log out, restart and shut down first ask every application to close and wait for the ones that keep their window
+    // open to save work (packaging/bin/grassfield-session-end, GF-025). The session only ends when all windows are gone,
+    // or when the user chooses "... Anyway" in the notice that names the applications still open.
+    function endSession(action: string): void {
+        if (dev) {
+            console.warn("grassfield-shell: dev session, suppressed grassfield-session-end " + action);
+            return;
+        }
+        Quickshell.execDetached(["/usr/lib/grassfield/grassfield-session-end", action]);
+    }
+
     function sleepNow(): void {
         if (dev)
             Popups.notice(qsTr("Sleep"), qsTr("Development session: Sleep is disabled here so it cannot suspend your real computer."));
@@ -31,15 +42,18 @@ Singleton {
         case "restart":
             if (dev)
                 Popups.notice(qsTr("Restart"), qsTr("Development session: Restart is disabled here so it cannot reboot your real computer."));
-            systemctl("reboot");
+            endSession("restart");
             return;
         case "shutdown":
             if (dev)
                 Popups.notice(qsTr("Shut Down"), qsTr("Development session: Shut Down is disabled here so it cannot power off your real computer."));
-            systemctl("poweroff");
+            endSession("shutdown");
             return;
         case "logout":
-            Compositor.exitSession();
+            if (dev)
+                Compositor.exitSession();
+            else
+                endSession("logout");
             return;
         case "emptytrash":
             Trash.emptyNow();
