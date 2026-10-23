@@ -8,5 +8,10 @@ post_install() {
 }
 
 post_upgrade() {
+  # GF-115: since this version the shell is started from /usr/share/grassfield/shell by path. A shell still running from the
+  # earlier unit was started by name (through /etc/xdg/quickshell) and Quickshell matches instances by the path they were
+  # started with, so the key bindings, lid handler and sleep lock cannot reach it until it restarts. Restarting is safe while
+  # locked (the compositor keeps the lock, ADR-0010).
+  echo "grassfield: after this upgrade restart the shell once: systemctl --user restart grassfield-shell (or log out and in)"
   /usr/lib/grassfield/grassfield-login-check 2>&1 | sed 's/^/grassfield: /' || true
 }

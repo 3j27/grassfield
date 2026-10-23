@@ -12,9 +12,12 @@ exec_line=$(grep -E '^ExecStart=' "$unit")
 
 desc="ExecStart loads the shell by path from $SYSTEM_PATH (qs -n -p), never by name"
 check test "$exec_line" = "ExecStart=/usr/bin/qs -n -p $SYSTEM_PATH"
-desc="no installed caller selects the shell by name (-c grassfield): that also searches the user-writable ~/.config/quickshell"
-check bash -c '! grep -rnE "qs[[:space:]]+(ipc|log|kill)?[[:space:]]*-c[[:space:]]+grassfield" "$@" | grep -vE "^[^:]*:[0-9]*:[[:space:]]*(#|--)"' _ \
-  "$unit" "$root/packaging/bin" "$root/packaging/shims" "$root/packaging/uwsm" "$root/packaging/sddm" "$root/config"
+desc="no shipped file selects the shell by name (-c/--config grassfield): that also searches the user-writable ~/.config/quickshell"
+check bash -c '! grep -rnIE "qs[[:space:]]+((ipc|log|kill)[[:space:]]+)?(-c|--config)[[:space:]]+grassfield" "$@" | grep -vE "^[^:]*:[0-9]*:[[:space:]]*(#|--|//)"' _ \
+  "$root/apps" "$root/bridges" "$root/packaging" "$root/config" "$root/shell" "$root/ui" "$root/scripts/dev/gate-run.sh"
+desc="every shipped qs ipc/kill/log caller selects an instance by the system path (-p) or by pid (--pid), never by name or bare"
+check bash -c '! grep -rnIE "(\"qs\", *\"(ipc|kill|log)\"|\bqs[[:space:]]+(ipc|kill|log)\b)" "$@" | grep -vE "^[^:]*:[0-9]*:[[:space:]]*(#|--|//|\*)" | grep -vE "(-p |--pid|\"--pid\"|\"-p\")" | grep -v shell_selector' _ \
+  "$root/apps" "$root/bridges" "$root/packaging" "$root/config" "$root/shell/desktop/HotCornerActions.js" "$root/shell/desktop/HotCorners.qml"
 desc="every installed qs ipc caller (bindings, lid, sleep-lock stand-in) names the same system path as the unit"
 check bash -c 'grep -q "ipc -p $1" "$2/packaging/bin/grassfield-lid" "$2/packaging/shims/omarchy-shell" && grep -q "$1" "$2/config/hypr/grassfield/bindings.lua"' _ "$SYSTEM_PATH" "$root"
 desc="SuccessExitStatus=255: a session end (compositor gone first) leaves the unit inactive, not failed, and does not fire OnFailure"
