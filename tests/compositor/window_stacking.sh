@@ -14,6 +14,9 @@
 #   3 press on the visible part of B: B in front again (blue in the overlap)
 #   4 A activated by the focus dispatcher (no press, like the switcher or the Dock): in front
 #   5 B activated the same way: in front again
+#   5a B zoomed (Grassfield Zoom = Hyprland maximized) with A raised in front of it: a press on the visible part of B
+#      brings the zoomed B to the front (owner report 2026-10-23, zoomed Spotify stayed behind Chrome)
+#   5b A activated by the focus dispatcher: in front of the zoomed B again; B stays zoomed
 #   6 B full-screen, A activated: B keeps its full-screen state
 #   7 A moved to workspace 2, activated: its Desktop is shown and A is active
 # Without grassfield-compositor B is placed with the move dispatcher (scripts/dev/nested-up.sh --no-plugin).
@@ -148,6 +151,45 @@ sleep 0.6
 colour=$(pixel "$ox" "$oy")
 say "5 B activated through the focus dispatcher"
 check "B in front after activation" "$([[ $colour == 0000ff ]] && echo 0 || echo 1)" "pixel ($ox,$oy) = $colour, order: $(order)"
+
+# 5a Zoomed windows stack like any other (macOS: a zoomed window is an ordinary window; owner report 2026-10-23,
+# Spotify zoomed behind Chrome stayed behind when clicked). B zoomed (Grassfield Zoom = Hyprland maximized), A put in
+# front of it, then a press on the part of B that A does not cover brings B to the front.
+dispatch "hl.dsp.window.fullscreen({ mode = 'maximized', window = 'address:$b_addr' })"
+sleep 0.8
+fs_b=$(clients | jq -r --arg a "$b_addr" '.[] | select(.address == $a) | .fullscreen')
+dispatch "hl.dsp.focus({ window = 'address:$a_addr' })"
+sleep 0.4
+dispatch "hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:$a_addr' })"
+sleep 0.6
+acx=$((ax + aw / 2)) acy=$((ay + ah / 2))
+colour=$(pixel "$acx" "$acy")
+say "5a B zoomed (fullscreen $fs_b), A activated and raised: pixel at A's centre ($acx,$acy) = $colour"
+check "A in front of the zoomed B after its activation" "$([[ $colour == ff0000 ]] && echo 0 || echo 1)" "pixel ($acx,$acy) = $colour, order: $(order)"
+shot zoomed-a-front
+# A point of B outside A: B is zoomed, so the area right of A (or left of it when A reaches the right edge).
+if ((ax + aw + 60 < mon_w)); then px=$((ax + aw + 40)); else px=$((ax - 40)); fi
+py=$acy
+pointer abs "$px" "$py" sleep 100 click sleep 600
+colour=$(pixel "$acx" "$acy")
+say "5a pressed the zoomed B at ($px,$py)"
+check "zoomed B active after a press on it" "$([[ $(active_title) == gf-stack-b ]] && echo 0 || echo 1)" "active: $(active_title)"
+check "zoomed B in front after a press on it" "$([[ $colour == 0000ff ]] && echo 0 || echo 1)" "pixel ($acx,$acy) = $colour, order: $(order)"
+shot zoomed-b-front
+# 5b A activated by the focus dispatcher while B is zoomed: A comes in front of the zoomed window.
+dispatch "hl.dsp.focus({ window = 'address:$a_addr' })"
+sleep 0.6
+colour=$(pixel "$acx" "$acy")
+say "5b A activated through the focus dispatcher over the zoomed B"
+check "A in front of the zoomed B after activation" "$([[ $colour == ff0000 ]] && echo 0 || echo 1)" "pixel ($acx,$acy) = $colour, order: $(order)"
+fs_b2=$(clients | jq -r --arg a "$b_addr" '.[] | select(.address == $a) | .fullscreen')
+check "B still zoomed after the raises" "$([[ $fs_b2 == "$fs_b" && $fs_b != 0 ]] && echo 0 || echo 1)" "fullscreen $fs_b -> $fs_b2"
+dispatch "hl.dsp.window.fullscreen({ mode = 'maximized', window = 'address:$b_addr', action = 'unset' })"
+sleep 0.6
+dispatch "hl.dsp.focus({ window = 'address:$b_addr' })"
+sleep 0.6
+read -r bx by bw bh _ _ < <(geom gf-stack-b)
+say "5c B un-zoomed back at ($bx,$by) ${bw}x${bh}"
 
 # 6 Full-screen is left alone: B full-screen, A activated: B keeps its full-screen state and A is not drawn over it.
 dispatch "hl.dsp.window.fullscreen({ mode = 'fullscreen', window = 'address:$b_addr' })"
