@@ -89,6 +89,21 @@ Moved down: `tests/apps/files_registrar.sh` (nested to headless): the nested ses
 now runs on the offscreen platform. It needs a private D-Bus daemon (Unix socket), so it SKIPs inside the Claude Code
 sandbox and stays a bare command (`runner: bare`) until it has run on the owner's machine.
 
+## Gate tools with honest verdicts (GF-008 residual)
+
+`scripts/gates/` holds measurement tools whose verdict says what was measured: `PASS`/`FAIL` only from the real thing, `PROXY`
+for a lower bound (a part of the path), `NOT VERIFIED` when nothing could be measured.
+
+- `scripts/gates/p4-search-latency.sh` (gate P4): builds a 100k-file fixture under `.dev/p4-fixture`, indexes it with user-mode
+  `updatedb` and times the same `plocate` argv the Search provider uses: `PROXY` (provider only, ~26 ms median, 63 ms p95 on the
+  dev machine 2026-10-24). `--shell-log-apps FILE` judges app results per keystroke against 50 ms from the shell's own log
+  (`PASS`/`FAIL`); file results stay `PROXY` until the shell timestamps them end to end.
+- `scripts/gates/r1-restart.sh` (gate R1): `--journal` reads the real unit's journal (read-only) and times every restart the
+  unit made itself (a logout is not one) and checks that the lock state came back; `--nested` times a nested shell restart
+  (`PROXY`: the dev launcher, not the unit). Without a crash in the journal it says `NOT VERIFIED`.
+
+Test: `tests/shell/gate_tools.sh` (fixtures only).
+
 ## Gate run reports (GF-036)
 
 Run artefacts used to disappear with removed worktrees, so a result could not be re-audited. Every gate run can leave a dated
