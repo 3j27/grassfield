@@ -17,7 +17,7 @@ TimeoutStopSec=5
 # Hardening: it reads the journal and talks to the session bus, nothing else.
 NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=yes
+ProtectHome=read-only
 PrivateTmp=yes
 PrivateNetwork=yes
 RestrictAddressFamilies=AF_UNIX
