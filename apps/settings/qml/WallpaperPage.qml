@@ -227,19 +227,20 @@ SettingsPage {
         return WallpaperConfig.sourceProblem(p, root.backend.devSession, root.backend.devRoot);
     }
 
-    function choose(entries: var, recentKind: string, recentPath: string): void {
+    function choose(entries: var, recentKind: string, recentPath: string): bool {
         if (recentKind !== "") {
             const why = root.problem(recentPath);
             if (why !== "") {
                 root.refusal = root.reasonText(why === "outside-dev" ? "outside-dev" : "invalid-path", root.baseName(recentPath));
-                return;
+                return false;
             }
         }
         root.refusal = "";
         if (!root.writeFields(entries))
-            return;
+            return false;
         if (recentKind !== "")
             root.remember(recentKind, recentPath);
+        return true;
     }
 
     // Writes keys of grassfield.json in one write. For a chosen display the per-display keys go to that display's entry of
@@ -298,8 +299,24 @@ SettingsPage {
         root.choose({"wallpaper.source": "online", "wallpaper.online.provider": root.disclosedProvider}, "", "");
     }
 
+    // What the display showed before a video was chosen: Cancel on the progress row puts it back (macOS: Cancel leaves things as
+    // they were). null when the video on screen was already the choice.
+    property var previous: null
+
     function useVideo(p: string): void {
-        root.choose({"wallpaper.source": "video", "wallpaper.path": p}, "video", p);
+        const was = {source: root.source, path: root.path};
+        if (root.choose({"wallpaper.source": "video", "wallpaper.path": p}, "video", p) && !(was.source === "video" && was.path === p))
+            root.previous = was;
+    }
+
+    // Cancel the preparation of the video: the wallpaper that was there before (the shell stops the job when the setting changes).
+    function cancelVideo(): void {
+        const was = root.previous;
+        root.previous = null;
+        if (was && !(was.source === "video" && was.path === root.path))
+            root.writeFields({"wallpaper.source": was.source, "wallpaper.path": was.path});
+        else
+            root.useArtwork();
     }
 
     function useColor(c: string): void {
@@ -727,11 +744,11 @@ SettingsPage {
                     }
                 }
 
-                // Cancel: the Grassfield wallpaper again (the shell stops the job).
+                // Cancel: the wallpaper that was there before (the shell stops the job).
                 Button {
                     anchors.verticalCenter: parent.verticalCenter
                     text: qsTr("Cancel")
-                    onClicked: root.useArtwork()
+                    onClicked: root.cancelVideo()
                 }
             }
         }
