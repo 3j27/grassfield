@@ -38,17 +38,22 @@ TestCase {
         }
     }
 
+    // Untyped view of a control: the stock type has no such property, the lint must not know it.
+    function dyn(item: var): var {
+        return item;
+    }
+
     function test_stockControlsAreGrassfields() {
-        verify(button.primary !== undefined, "Button is Ui.Button (has `primary`)");
-        verify(tool.radio !== undefined, "ToolButton is Ui.ToolButton");
-        verify(combo.accessibleName !== undefined, "ComboBox is Ui.ComboBox");
-        verify(check.accessibleName !== undefined, "CheckBox is Ui.CheckBox");
-        verify(field.accessibleName !== undefined, "TextField is Ui.TextField");
+        verify(dyn(button).primary !== undefined, "Button is Ui.Button (has `primary`)");
+        verify(dyn(tool).radio !== undefined, "ToolButton is Ui.ToolButton");
+        verify(dyn(combo).accessibleName !== undefined, "ComboBox is Ui.ComboBox");
+        verify(dyn(check).accessibleName !== undefined, "CheckBox is Ui.CheckBox");
+        verify(dyn(field).accessibleName !== undefined, "TextField is Ui.TextField");
         compare(button.height, 32, "Ui.Button default height (menuItemHeight + spacing.sm)");
     }
 
     function test_uncoveredControlsFallBack() {
         verify(slider.value !== undefined, "Slider falls back to the fallback style and still works");
-        verify(slider.primary === undefined);
+        verify(dyn(slider).primary === undefined);
     }
 }
