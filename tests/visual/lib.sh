@@ -263,6 +263,25 @@ vs_notify() {
   DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "Software Update" -t 0 "Updates available" "3 updates are ready to install."
 }
 
+# vs_px_diff A B: number of pixels that differ between two captures (fuzz 2 %, absorbs antialiasing).
+vs_px_diff() {
+  local n
+  n=$(compare -metric AE -fuzz 2% "$1" "$2" null: 2>&1 || true)
+  awk -v n="${n%% *}" 'BEGIN { printf "%d\n", n + 0 }'
+}
+
+# vs_windows_over X,Y...: "class:title" of the mapped, not hidden windows on GF-REF that cover one of the output-pixel
+# points (a click there would land on the window, not on the desktop). Read-only (nestctl clients/monitors).
+vs_windows_over() {
+  local mon pts
+  mon=$("$VS_ROOT/scripts/nestctl" monitors -j | jq -c --arg n "$VS_OUTPUT" '.[] | select(.name == $n) | {id, x, y}')
+  pts=$(printf '%s\n' "$@" | jq -R 'split(",") | map(tonumber)' | jq -cs .)
+  "$VS_ROOT/scripts/nestctl" clients -j | jq -r --argjson m "$mon" --argjson p "$pts" '
+    .[] | select(.mapped and (.hidden | not) and .monitor == $m.id and ((.workspace.name // "") | startswith("special") | not))
+    | . as $w | select($p | any(. as $pt | ($pt[0] + $m.x) >= $w.at[0] and ($pt[0] + $m.x) < ($w.at[0] + $w.size[0]) and ($pt[1] + $m.y) >= $w.at[1] and ($pt[1] + $m.y) < ($w.at[1] + $w.size[1])))
+    | "\(.class):\(.title)"'
+}
+
 # Number of client windows in the nested compositor (read-only query).
 vs_client_count() { "$VS_ROOT/scripts/nestctl" clients -j | jq 'length'; }
 

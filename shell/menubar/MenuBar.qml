@@ -201,6 +201,23 @@ Scope {
                 return "refused";
             return Brightness.available ? Brightness.level.toFixed(2) : "none";
         }
+
+        // Read-only: what the shell applies of the Quick Settings values, as JSON (tests/visual/flow-quicksettings.sh,
+        // flow-settings.sh). `nightShift` is "hidden" when the helper or hyprsunset is missing (the switch is not
+        // shown), else "off" or "on". Dev session only.
+        function state(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            return JSON.stringify({
+                appearance: Settings.appearance,
+                dark: Settings.dark,
+                transparency: Math.round(Settings.transparency * 100) / 100,
+                reduceTransparency: Settings.reduceTransparency,
+                reduceMotion: Settings.reduceMotion,
+                dnd: Notifications.dnd,
+                nightShift: NightShift.available ? (NightShift.on ? "on" : "off") : "hidden"
+            });
+        }
     }
 
     Variants {
