@@ -35,6 +35,11 @@ Singleton {
     // (Settings.notificationsAppPreviews, NotificationPrefs.js).
     // The session lock (SessionState mirrors shell/security/lock; false where nothing feeds it).
     readonly property bool sessionLocked: SessionState.locked
+    // The session locks: the Notification Center closes (GF-116).
+    onSessionLockedChanged: {
+        if (sessionLocked && centerOpen)
+            closeCenter();
+    }
     // Wall clock for relative times, refreshed every 30 s.
     property real nowMs: Date.now()
 
@@ -232,6 +237,8 @@ Singleton {
     property bool galleryWanted: false
 
     function openWidgetGallery(screen: string): void {
+        if (SessionState.refuses("widget gallery"))
+            return;
         galleryWanted = true;
         if (!centerOpen)
             toggleCenter(screen);
@@ -242,6 +249,9 @@ Singleton {
             closeCenter();
             return;
         }
+        // Nothing opens over the lock screen (GF-116): SUPER+N, the clock, a screen corner and IPC alike.
+        if (SessionState.refuses("notification center"))
+            return;
         centerScreen = screen !== "" ? screen : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
         Popups.close();
         centerOpen = true;

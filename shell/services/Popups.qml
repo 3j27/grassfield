@@ -72,6 +72,9 @@ Singleton {
     }
 
     function open(popupKind: string, screen: string, x: real, y: real, alignment: string, payload: var): void {
+        // Nothing opens over the lock screen (GF-116): menus, Control Center, panels and sheets included.
+        if (SessionState.refuses("popup " + popupKind))
+            return;
         data = payload ? payload : {};
         screenName = screen;
         anchorX = x;
@@ -105,5 +108,15 @@ Singleton {
     function close(): void {
         kind = "";
         data = {};
+    }
+
+    // The session locks: whatever is open closes (Lock.lock() closes it too, before it asks for the lock).
+    Connections {
+        target: SessionState
+
+        function onLockedChanged(): void {
+            if (SessionState.locked)
+                root.close();
+        }
     }
 }

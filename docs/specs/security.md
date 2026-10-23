@@ -206,6 +206,37 @@ Hyprland lists `LOCK` on every monitor and nothing typed reaches the probe windo
 `locked`. No code change was needed for this item; if the step ever shows an unlock, the shell must refuse IPC kill
 while locked (not possible in Quickshell 0.3.1) or the unit must restart it before input arrives.
 
+## Nothing opens over the lock (GF-116, DT-08, DT-12)
+macOS model: while the screen is locked only the lock screen exists; Spotlight, Mission Control, Launchpad, Control
+Center, Notification Center, menus and the Dock do not open, and nothing waits behind the lock to appear at the unlock
+except an authorization request. Hyprland already keeps rendering and the keyboard on the ext-session-lock surfaces; the
+shell no longer relies on that alone:
+- One predicate, `SessionState.refuses(surface)` (`shell/services/SessionState.qml`): true while `SessionState.locked`
+  (bound in `shell.qml` to `Lock.locked`, i.e. locking, locked or authenticating; unknown states count as locked), with one
+  log line `grassfield: <surface> refused: the session is locked`. Each entry point asks it first: `Popups.open` (every
+  popup kind: Control Center, menu-bar menus, tray, Dock menus and stacks, About, Force Quit, confirm and notice sheets;
+  `toggle`, `openCentered`, `confirm` and `notice` go through `open`), `Search.show`, `AppsController.show`,
+  `Overview.show` (also its own `locked`), `Notifications.toggleCenter` / `openWidgetGallery`, `Dock.enterKeyboardMode`,
+  and the window commands of IPC target `windows` (minimize, tile, hide, cycleApp). The Switcher already refused
+  (`Switcher.step`). Bindings, IPC calls, screen corners and gestures all end in these entry points, so all are refused.
+- When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
+  the Overview (through its keyboard release), the Switcher, Dock keyboard mode. `Lock.lock()` also closes popups first.
+- Polkit: a request that arrives while locked waits (macOS shows the authorization sheet after the unlock): the sheet is
+  neither mapped nor given the keyboard until `SessionState.locked` is false; text typed into an open sheet is dropped when
+  the lock hides it. Nothing is answered meanwhile (polkit keeps the request pending; Cancel/Esc work once shown).
+- Not refused, on purpose: the lock itself (`lock lock`, `lock lid`), volume/brightness keys and their OSD (macOS changes
+  volume on the lock screen; the OSD is under the lock surface), notifications arriving (banners are under the lock surface;
+  previews follow "Show previews").
+- Plugin restore path (DT-12): `hl.plugin.grassfield.restore` still un-minimizes behind the lock and asks for a focus
+  Hyprland refuses; the fix is a plugin work item, `docs/specs/compositor.md` "Work item GF-116".
+- Fail mode: if the shell's `SessionState` wiring were missing, surfaces would open under the lock surface (Hyprland still
+  shows only the lock and keeps the keyboard there); no path of this change can unlock or hide the lock.
+Tests: `tests/security/lock_surfaces/shell.qml` (headless, the real Search, Apps, Notifications, Overview and Popups:
+control open while unlocked, all close at the lock, 17 popup kinds and every entry point refused while locked, open again
+after; mutants removing a refusal fail it), `tests/security/lock_surfaces.sh` (static: wiring, first-decision refusals,
+close-on-lock, IPC routes, screen corners, the polkit sheet; mutation self-test). Nested (bare, outside the sandbox):
+`tests/security/lock_privacy.sh` step `privacy` tries every surface over the lock and checks the captures (DT-08).
+
 ## Upstream base (GF-031)
 Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0` (installed
 4.0.4 = `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`, byte-identical to `/usr/share/omarchy/shell/plugins/lock/Service.qml`):

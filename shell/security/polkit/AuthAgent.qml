@@ -58,7 +58,22 @@ Scope {
         // qmllint enable uncreatable-type
         id: win
 
-        visible: dialogModel.active
+        // A request that arrives while the session is locked waits behind the lock (macOS: the authorization sheet shows
+        // once the user is back): the sheet is mapped, and takes the keyboard, only after the unlock (GF-116). The request
+        // itself stays pending; nothing is answered or approved meanwhile.
+        readonly property bool shown: dialogModel.active && !SessionState.locked
+
+        visible: shown
+        // Hidden by the lock: whatever was typed is dropped (as after every attempt). Shown again: the field takes the keys.
+        onShownChanged: {
+            const dialog = holder.item as AuthDialog;
+            if (!dialog)
+                return;
+            if (shown)
+                dialog.focusField();
+            else if (dialogModel.active)
+                dialogModel.clearRequested();
+        }
         anchors {
             top: true
             bottom: true
@@ -68,10 +83,10 @@ Scope {
         exclusionMode: ExclusionMode.Ignore
         color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.shadowOpacity)
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: dialogModel.active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: win.shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-polkit"
         // qmllint disable missing-type
-        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && dialogModel.active ? blurRegion : null
+        BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blurRegion : null
         // qmllint enable missing-type
 
         Region {

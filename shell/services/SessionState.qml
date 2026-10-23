@@ -15,4 +15,17 @@ QtObject {
     function requestLock(reason: string): void {
         lockRequested(reason);
     }
+
+    // GF-AUDIT-001 GF-116 (DT-08), macOS model: while the session is locked (or locking) nothing but the lock screen
+    // opens. Every shell surface asks this before it opens (Search, Apps, Overview, Notification Center, every Popups
+    // kind: Control Center, menus, panels; Dock keyboard mode; window commands), whatever asked: a binding, IPC, a screen
+    // corner, a gesture. True (and one log line naming the surface) while locked: the caller then stays closed. Each
+    // surface also closes itself when `locked` becomes true. Hyprland keeps input and rendering on the lock surfaces
+    // anyway (ext-session-lock); this is the shell's own defence, so nothing waits behind the lock either.
+    function refuses(surface: string): bool {
+        if (!locked)
+            return false;
+        console.info("grassfield: " + surface + " refused: the session is locked");
+        return true;
+    }
 }

@@ -1226,6 +1226,33 @@ client's recent input, as other compositors do) and exposing the result, e.g. a 
 the window, the source (xdg-activation, X11, foreign toplevel) and the validity; the plugin decision would then be a small pure
 rule (valid and recent: focus; else `urgent` only) with graceful degradation (no event: Hyprland's behaviour).
 
+## Work item GF-116: no restore and no window focus while the session is locked (open, compositor-engineer)
+
+Found by GF-AUDIT-001 SEC-13 / DT-12 and re-read for wave 3 (security-engineer, 2026-10-24; this item is the plugin part,
+the shell part is done: every shell surface refuses while locked, `docs/specs/security.md` "Nothing opens over the lock").
+Every plugin focus path asks `gf::deferredFocus` first (`DeferredFocus.cpp` `focusWindow` refuses while
+`windowFocusRefused()`; Stages and OverviewFocus gate on `sessionLocked()`), except the minimize restore:
+`Minimize.cpp` `restore(address, target)` moves the window back and then calls `Desktop::focusState()->fullWindowFocus(w,
+Desktop::FOCUS_REASON_OTHER)` directly (after the `alpha(WINDOW_ALPHA_MOVE_FROM_WORKSPACE)` warp, before
+`alterZOrder("top")`). `hl.plugin.grassfield.restore("0x<addr>", …)` is callable by any process of the user through
+Hyprland IPC, also while locked. Hyprland 0.56.2's `CFocusState::rawWindowFocus` refuses the keyboard under a session lock,
+so no key reaches the window today, but the window is un-minimized behind the lock and the plugin asks for a focus the
+rule says it never asks for. macOS: nothing un-minimizes while the screen is locked.
+
+Change (precise):
+1. At the top of `restore()`, after the address lookup: `if (gf::deferredFocus::sessionLocked()) { gf::logRequest(Log::INFO,
+   "restore {:x}: refused while the session is locked", address); return; }` before `takePlace(w)`: the window stays on
+   `special:minimized`, its recorded place is kept, no state is posted (the Dock's tile stays as it is).
+2. Defence in depth for the focus line: `if (const auto focus = Desktop::focusState(); focus &&
+   !gf::deferredFocus::windowFocusRefused()) focus->fullWindowFocus(w, Desktop::FOCUS_REASON_OTHER);` (Hyprland refuses the
+   same cases, so nothing changes while unlocked; under an Exclusive layer the window is raised but not focused, as
+   Hyprland already decides).
+3. Optional, same rule: `minimize()` refused while locked (the shell's `windows minimize` IPC already refuses).
+Tests: a core unit test of the decision if it moves to `core/` (`restoreAllowed(locked)`), and DT-12 in nested (bare):
+minimize a test window, `qs ipc -p shell call lock lock`, then `scripts/nestctl dispatch
+'hl.plugin.grassfield.restore("0x<addr>",0,0,10,10)'` → Hyprland log `restore …: refused while the session is locked`, the
+window still on `special:minimized` (`scripts/nestctl -j clients`), keys typed with `wtype` reach only the lock field.
+
 ## Known limitations (honest, user-visible gaps vs macOS)
 
 - Activation (spike above): every activation request focuses its window (`focus_on_activate = true`); macOS lets only an

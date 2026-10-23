@@ -106,6 +106,9 @@ Scope {
 
     // Enter keyboard mode and focus the first tile.
     function enterKeyboardMode(): void {
+        // The Dock never takes the keyboard over the lock screen (GF-116).
+        if (SessionState.refuses("dock keyboard"))
+            return;
         keyboardScreen = dockScreen;
         keyboardMode = true;
         Qt.callLater(() => {
@@ -434,6 +437,16 @@ Scope {
         function onLockedChanged(): void {
             root.interruptDrag();
             root.cancelClicks();
+        }
+    }
+
+    // The session locks: keyboard mode ends (GF-116).
+    Connections {
+        target: SessionState
+
+        function onLockedChanged(): void {
+            if (SessionState.locked)
+                root.keyboardMode = false;
         }
     }
 
