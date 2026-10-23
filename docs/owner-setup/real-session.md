@@ -67,8 +67,11 @@ systemctl --user cat omarchy-sleep-lock.service | tail -4                     # 
 The build leaves `packaging/arch/src`, `packaging/arch/pkg` and `*.pkg.tar.zst` (git-ignored) and writes
 `compositor/build/` in the checkout.
 
-**Icon theme (ADR-0017, amended 2026-10-21).** The session icon theme `grassfield-icons` resolves Grassfield's own icons,
-then Breeze (the `breeze-icons` dependency of `grassfield-desktop`), Adwaita and hicolor. The earlier optional
+**Icon theme (ADR-0017, amended 2026-10-23).** The session icon theme `grassfield-icons` is its own package
+(`grassfield-icons`, a dependency of `grassfield-desktop`): Grassfield's own icons, then the composed MacTahoe and Pebble
+layers (Apple logo removed, Pebble folders and store icon), then Breeze (`breeze-icons`), Adwaita and hicolor. Install it
+in the same `pacman -U` command as `grassfield-desktop` the first time (the theme files move between the two packages).
+The earlier optional
 `grassfield-whitesur-icons` package no longer exists: if you installed it, remove it with
 `sudo pacman -Rns grassfield-whitesur-icons`. Then **log out and log in again**: the icon variables are read at login.
 Nothing is written to `~/.config` or to your dconf database. Check afterwards (read-only):
@@ -194,6 +197,19 @@ grassfield-compositor-0.4.0-10-x86_64.pkg.tar.zst` from `packaging/arch`, then l
       screens one Dock that follows the screen whose bottom edge you touch; Super+Alt+D turns hiding on or off.
 - [ ] Dock: badges and progress set by the apps themselves (Telegram, Discord, Firefox downloads).
 - [ ] Two screens: the menu bar of the screen that is not active is dimmed.
+
+**New in 0.4.0-11** (the three packages in ONE command, from `packaging/arch`, because the icon theme moves from
+`grassfield-desktop` to its own package: `sudo pacman -U grassfield-desktop-0.4.0-11-x86_64.pkg.tar.zst
+grassfield-compositor-0.4.0-11-x86_64.pkg.tar.zst grassfield-icons-0.4.0-11-any.pkg.tar.zst`, then log out and back in):
+
+- [ ] Icons: the composed `grassfield-icons` pack (MacTahoe, Pebble folders and store bag, Pebble, then Breeze): Dock,
+      Apps, Search, Files, the desktop. No Apple logo anywhere (tell me the app name if you see one: it goes on the list).
+- [ ] Icons: Settings > Appearance > Icon appearance Dark, Clear, Tinted work on every icon; folder colours and folder
+      symbols on the new folders. Known: in those three modes a rounded-square icon still sits inside a second plate
+      (fix in progress, next package).
+- [ ] Windows: a zoomed window (green button or double-click on the title bar) that you click while another window is
+      in front of it comes to the front (your Spotify-behind-Chrome case); clicking the other window brings it back in
+      front.
 
 ## 6. Known issues on main right now
 
