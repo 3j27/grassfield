@@ -1,0 +1,229 @@
+// Video wallpapers of grassfield-wallpaper (ADR-0016 W7): the pure rules (argument vectors, probe parsing, sizes, progress,
+// worst-case statistics) and, when ffmpeg is installed, a real probe and transcode of a generated clip (nothing is committed).
+#include <gtest/gtest.h>
+
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QProcess>
+#include <QTemporaryDir>
+
+#include "videotool.h"
+
+using namespace wallpaper;
+using namespace wallpaper::video;
+
+namespace {
+
+bool haveFfmpeg()
+{
+    return QFileInfo::exists(QStringLiteral("/usr/bin/ffmpeg")) && QFileInfo::exists(QStringLiteral("/usr/bin/ffprobe"));
+}
+
+// A generated clip: lavfi testsrc2 with an audio track, `seconds` long, at `size` and `fps`.
+QString makeClip(const QTemporaryDir &dir, const QString &name, int seconds, const QString &size, int fps, const QString &extra = QString())
+{
+    const QString path = dir.filePath(name);
+    QStringList args = {QStringLiteral("-v"), QStringLiteral("error"), QStringLiteral("-f"), QStringLiteral("lavfi"), QStringLiteral("-i"),
+                        QStringLiteral("testsrc2=size=%1:rate=%2:duration=%3").arg(size).arg(fps).arg(seconds), QStringLiteral("-f"), QStringLiteral("lavfi"), QStringLiteral("-i"),
+                        QStringLiteral("sine=duration=%1").arg(seconds), QStringLiteral("-c:v"), QStringLiteral("libx264"), QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
+                        QStringLiteral("-c:a"), QStringLiteral("aac"), QStringLiteral("-shortest"), QStringLiteral("-y")};
+    if (!extra.isEmpty())
+        args << extra.split(QLatin1Char(' '));
+    args << path;
+    EXPECT_EQ(QProcess::execute(QStringLiteral("/usr/bin/ffmpeg"), args), 0);
+    return path;
+}
+
+QString videoDir(const QTemporaryDir &dir)
+{
+    return dir.filePath(QStringLiteral("cache/wallpapers/video"));
+}
+
+} // namespace
+
+TEST(VideoTool, OutputSizeFitsInsideAndNeverEnlarges)
+{
+    EXPECT_EQ(outputSize(QSize(3840, 2160), QSize(1920, 1080)), QSize(1920, 1080));
+    EXPECT_EQ(outputSize(QSize(1280, 720), QSize(1920, 1080)), QSize(1280, 720));
+    EXPECT_EQ(outputSize(QSize(2000, 2000), QSize(1920, 1080)), QSize(1080, 1080));
+    EXPECT_EQ(outputSize(QSize(1001, 999), QSize(2000, 2000)), QSize(1000, 998)); // even sides
+    EXPECT_EQ(outputSize(QSize(1080, 1920), QSize(1920, 1080)), QSize(606, 1080));
+    EXPECT_EQ(outputSize(QSize(0, 0), QSize(10, 10)), QSize(2, 2));
+}
+
+TEST(VideoTool, TranscodeArgumentsAreTheAdrOnes)
+{
+    const QStringList a = transcodeArgs(QStringLiteral("/v/in.mkv"), QStringLiteral("/c/out.mp4"), QSize(1920, 1080), 60.0, 600, 1000000);
+    EXPECT_TRUE(a.contains(QStringLiteral("-an")));
+    EXPECT_TRUE(a.contains(QStringLiteral("libx264")));
+    EXPECT_TRUE(a.contains(QStringLiteral("yuv420p")));
+    EXPECT_TRUE(a.contains(QStringLiteral("+faststart")));
+    EXPECT_EQ(a[a.indexOf(QStringLiteral("-t")) + 1], QStringLiteral("600"));
+    EXPECT_EQ(a[a.indexOf(QStringLiteral("-fs")) + 1], QStringLiteral("1000000"));
+    EXPECT_EQ(a[a.indexOf(QStringLiteral("-protocol_whitelist")) + 1], QStringLiteral("file"));
+    EXPECT_EQ(a[a.indexOf(QStringLiteral("-i")) + 1], QStringLiteral("/v/in.mkv"));
+    EXPECT_EQ(a.last(), QStringLiteral("/c/out.mp4"));
+    const QString filter = a[a.indexOf(QStringLiteral("-vf")) + 1];
+    EXPECT_TRUE(filter.startsWith(QStringLiteral("scale=1920:1080")));
+    EXPECT_TRUE(filter.contains(QStringLiteral("fps=30")));
+    // At 24 fps the rate is kept.
+    const QStringList b = transcodeArgs(QStringLiteral("/v/in.mkv"), QStringLiteral("/c/out.mp4"), QSize(640, 360), 24.0, 600, 1000000);
+    EXPECT_FALSE(b[b.indexOf(QStringLiteral("-vf")) + 1].contains(QStringLiteral("fps=")));
+    // A path that looks like an option is still the value of -i.
+    const QStringList c = ffprobeArgs(QStringLiteral("/-evil name.mp4"));
+    EXPECT_EQ(c.last(), QStringLiteral("/-evil name.mp4"));
+    EXPECT_EQ(c[c.indexOf(QStringLiteral("-i")) + 1], c.last());
+}
+
+TEST(VideoTool, ProbeParsing)
+{
+    const QByteArray good = R"({"streams":[{"codec_type":"audio"},{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"avg_frame_rate":"30000/1001"}],"format":{"duration":"12.5"}})";
+    Info i;
+    QString why;
+    ASSERT_EQ(parseProbe(good, 600, &i, &why), Ok);
+    EXPECT_EQ(i.width, 1920);
+    EXPECT_EQ(i.codec, QStringLiteral("h264"));
+    EXPECT_TRUE(i.audio);
+    EXPECT_NEAR(i.fps, 29.97, 0.01);
+    EXPECT_NEAR(i.duration, 12.5, 0.001);
+    // Rotation swaps the displayed size.
+    const QByteArray rotated = R"({"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"side_data_list":[{"rotation":-90}]}],"format":{"duration":"3"}})";
+    ASSERT_EQ(parseProbe(rotated, 600, &i, &why), Ok);
+    EXPECT_EQ(QSize(i.width, i.height), QSize(1080, 1920));
+    EXPECT_EQ(parseProbe(R"({"streams":[{"codec_type":"audio"}],"format":{"duration":"3"}})", 600, &i, &why), Unsupported);
+    EXPECT_EQ(parseProbe(R"({"streams":[{"codec_type":"video","width":10,"height":10,"disposition":{"attached_pic":1}}],"format":{"duration":"3"}})", 600, &i, &why), Unsupported);
+    EXPECT_EQ(parseProbe(R"({"streams":[{"codec_type":"video","width":64,"height":64}],"format":{"duration":"601"}})", 600, &i, &why), TooLongVideo);
+    EXPECT_EQ(parseProbe(R"({"streams":[{"codec_type":"video","width":64,"height":64}],"format":{}})", 600, &i, &why), Unreadable);
+    EXPECT_EQ(parseProbe(R"({"streams":[{"codec_type":"video","width":99999,"height":64}],"format":{"duration":"3"}})", 600, &i, &why), TooLargePicture);
+    EXPECT_EQ(parseProbe("not json", 600, &i, &why), Unreadable);
+}
+
+TEST(VideoTool, ProgressLines)
+{
+    EXPECT_NEAR(progressOf(QStringLiteral("out_time_us=5000000"), 10.0), 0.5, 1e-9);
+    EXPECT_EQ(progressOf(QStringLiteral("out_time_us=N/A"), 10.0), -1);
+    EXPECT_EQ(progressOf(QStringLiteral("frame=12"), 10.0), -1);
+    EXPECT_EQ(progressOf(QStringLiteral("out_time_us=5000000"), 0.0), -1);
+    EXPECT_EQ(progressOf(QStringLiteral("out_time_us=99000000"), 10.0), 1.0);
+}
+
+TEST(VideoTool, WorstStripTakesTheWorstOfEveryFrame)
+{
+    auto strip = [](double mean, double p5, double p95) {
+        const QJsonObject h{{QStringLiteral("mean"), mean}, {QStringLiteral("p5"), p5}, {QStringLiteral("p95"), p95}};
+        return QJsonObject{{QStringLiteral("rows"), 24}, {QStringLiteral("all"), h}, {QStringLiteral("left"), h}, {QStringLiteral("right"), h}};
+    };
+    const QJsonObject w = worstStrip({strip(0.2, 0.1, 0.4), strip(0.6, 0.3, 0.9)});
+    EXPECT_NEAR(w.value(QStringLiteral("all")).toObject().value(QStringLiteral("mean")).toDouble(), 0.4, 1e-9);
+    EXPECT_NEAR(w.value(QStringLiteral("all")).toObject().value(QStringLiteral("p5")).toDouble(), 0.1, 1e-9);
+    EXPECT_NEAR(w.value(QStringLiteral("right")).toObject().value(QStringLiteral("p95")).toDouble(), 0.9, 1e-9);
+    EXPECT_TRUE(worstStrip({}).isEmpty());
+}
+
+TEST(VideoTool, CacheFolderAndPoster)
+{
+    EXPECT_TRUE(video::outDirAllowed(QStringLiteral("/home/u/.cache/grassfield/wallpapers/video")));
+    EXPECT_TRUE(video::outDirAllowed(QStringLiteral("/repo/.dev/cache/wallpapers/video")));
+    EXPECT_FALSE(video::outDirAllowed(QStringLiteral("/home/u/Videos")));
+    EXPECT_FALSE(video::outDirAllowed(QStringLiteral("/home/u/.cache/grassfield/wallpapers/video/../../..")));
+    EXPECT_FALSE(video::outDirAllowed(QStringLiteral("wallpapers/video")));
+    EXPECT_DOUBLE_EQ(posterSeconds(20), 2.0);
+    EXPECT_DOUBLE_EQ(posterSeconds(600), 5.0);
+    EXPECT_TRUE(isVideoPath(QStringLiteral("/a/b.MP4")));
+    EXPECT_FALSE(isVideoPath(QStringLiteral("/a/b.jpg")));
+    EXPECT_TRUE(isCacheName(QStringLiteral("0123456789abcdef0123456789abcdef.mp4")));
+}
+
+TEST(VideoTool, TranscodesAClipToH264AtMostTheOutputSize)
+{
+    if (!haveFfmpeg())
+        GTEST_SKIP() << "ffmpeg is not installed";
+    QTemporaryDir dir;
+    const QString clip = makeClip(dir, QStringLiteral("clip.mp4"), 3, QStringLiteral("1280x720"), 60);
+    TranscodeOptions o;
+    o.src = clip;
+    o.out = videoDir(dir);
+    o.limit = QSize(640, 400);
+    o.fit = Fit::Fit;
+    o.color = QColor(Qt::black);
+    QJsonObject r;
+    QString why;
+    double lastProgress = -1;
+    ASSERT_EQ(transcode(o, [&](double f) { lastProgress = f; }, &r, &why), Ok) << why.toStdString();
+    EXPECT_FALSE(r.value(QStringLiteral("cached")).toBool());
+    EXPECT_DOUBLE_EQ(lastProgress, 1.0);
+    const QString mp4 = r.value(QStringLiteral("video")).toString();
+    Info made;
+    ASSERT_EQ(probe(QStringLiteral("/usr/bin/ffprobe"), mp4, 600, &made, &why), Ok) << why.toStdString();
+    EXPECT_EQ(made.codec, QStringLiteral("h264"));
+    EXPECT_LE(made.width, 640);
+    EXPECT_LE(made.height, 400);
+    EXPECT_LE(made.fps, 30.5);
+    EXPECT_FALSE(made.audio);
+    // The poster is composed on the whole output; the strip is the worst of the poster and the sampled frames.
+    QImage poster(r.value(QStringLiteral("file")).toString());
+    EXPECT_EQ(poster.size(), QSize(640, 400));
+    EXPECT_EQ(r.value(QStringLiteral("frames")).toInt(), 1 + kToneFrames);
+    EXPECT_TRUE(r.value(QStringLiteral("strip")).toObject().contains(QStringLiteral("all")));
+    EXPECT_EQ(QFileInfo(mp4).permissions() & (QFileDevice::ReadGroup | QFileDevice::ReadOther), QFileDevice::Permissions());
+    // A second run is answered from the cache and encodes nothing.
+    QJsonObject again;
+    ASSERT_EQ(transcode(o, nullptr, &again, &why), Ok);
+    EXPECT_TRUE(again.value(QStringLiteral("cached")).toBool());
+    EXPECT_EQ(again.value(QStringLiteral("video")).toString(), mp4);
+}
+
+TEST(VideoTool, RefusesTooLongNotAVideoAndNoVideo)
+{
+    if (!haveFfmpeg())
+        GTEST_SKIP() << "ffmpeg is not installed";
+    QTemporaryDir dir;
+    const QString clip = makeClip(dir, QStringLiteral("clip.mp4"), 4, QStringLiteral("160x90"), 10);
+    Info i;
+    QString why;
+    EXPECT_EQ(probe(QStringLiteral("/usr/bin/ffprobe"), clip, 2, &i, &why), TooLongVideo);
+    QFile junk(dir.filePath(QStringLiteral("junk.mp4")));
+    ASSERT_TRUE(junk.open(QIODevice::WriteOnly));
+    junk.write(QByteArray(4096, 'x'));
+    junk.close();
+    EXPECT_EQ(probe(QStringLiteral("/usr/bin/ffprobe"), junk.fileName(), 600, &i, &why), Unsupported);
+    const QString wav = dir.filePath(QStringLiteral("a.wav"));
+    ASSERT_EQ(QProcess::execute(QStringLiteral("/usr/bin/ffmpeg"), {QStringLiteral("-v"), QStringLiteral("error"), QStringLiteral("-f"), QStringLiteral("lavfi"), QStringLiteral("-i"), QStringLiteral("sine=duration=1"), QStringLiteral("-y"), wav}), 0);
+    EXPECT_EQ(probe(QStringLiteral("/usr/bin/ffprobe"), wav, 600, &i, &why), Unsupported);
+    TranscodeOptions o;
+    o.src = junk.fileName();
+    o.out = videoDir(dir);
+    o.limit = QSize(320, 200);
+    QJsonObject r;
+    EXPECT_EQ(transcode(o, nullptr, &r, &why), Unsupported);
+    // An output folder that is not the video cache is refused before anything runs.
+    o.out = dir.filePath(QStringLiteral("elsewhere"));
+    EXPECT_EQ(transcode(o, nullptr, &r, &why), Usage);
+    EXPECT_FALSE(QFileInfo::exists(o.out));
+}
+
+TEST(VideoTool, AMissingFfmpegIsItsOwnFailure)
+{
+    QTemporaryDir dir;
+    QFile f(dir.filePath(QStringLiteral("x.mp4")));
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(QByteArray(2048, 'x'));
+    f.close();
+    Info i;
+    QString why;
+    EXPECT_EQ(probe(QStringLiteral("/nonexistent/ffprobe"), f.fileName(), 600, &i, &why), FfmpegMissing);
+}
+
+TEST(VideoTool, ThumbnailOfAVideoIsOneFrame)
+{
+    if (!haveFfmpeg())
+        GTEST_SKIP() << "ffmpeg is not installed";
+    QTemporaryDir dir;
+    const QString clip = makeClip(dir, QStringLiteral("clip.mp4"), 2, QStringLiteral("320x180"), 15);
+    const QString out = dir.filePath(QStringLiteral("t.jpg"));
+    QString why;
+    ASSERT_EQ(thumbnail(clip, out, 320, &why), Ok) << why.toStdString();
+    EXPECT_EQ(QImage(out).size(), QSize(320, 200));
+}

@@ -21,7 +21,7 @@ fi
 if [[ ${1:-} == "--tests" ]]; then
   # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" -I"$here/src" -DFIXTURE_DIR="\"$root/tests/unit/wallpaper-tool/fixtures\"" $(pkg-config --cflags Qt6Core Qt6Gui) \
-    "$root/tests/unit/wallpaper-tool/tst_wallpaperlogic.cpp" "$root/tests/unit/wallpaper-tool/tst_commonsfetch.cpp" "$here/src/wallpaperlogic.cpp" "$here/src/commonsfetch.cpp" \
+    "$root/tests/unit/wallpaper-tool/tst_wallpaperlogic.cpp" "$root/tests/unit/wallpaper-tool/tst_commonsfetch.cpp" "$root/tests/unit/wallpaper-tool/tst_videotool.cpp" "$here/src/wallpaperlogic.cpp" "$here/src/commonsfetch.cpp" "$here/src/videotool.cpp" \
     $(pkg-config --libs Qt6Core Qt6Gui) -lgtest -lgtest_main -pthread \
     -o "$out/wallpaper-unit-tests$suffix"
   echo "built $out/wallpaper-unit-tests$suffix"
@@ -30,7 +30,7 @@ fi
 
 # shellcheck disable=SC2046
 g++ "${cxxflags[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core Qt6Gui) \
-  "$here/src/main.cpp" "$here/src/wallpaperlogic.cpp" "$here/src/commonsfetch.cpp" \
+  "$here/src/main.cpp" "$here/src/wallpaperlogic.cpp" "$here/src/commonsfetch.cpp" "$here/src/videotool.cpp" \
   $(pkg-config --libs Qt6Core Qt6Gui) \
   -o "$out/grassfield-wallpaper$suffix"
 echo "built $out/grassfield-wallpaper$suffix"
