@@ -4,6 +4,7 @@
 #include "ClientChrome.hpp"
 #include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
+#include "FrameProbe.hpp"
 #include "GenieDraw.hpp"
 #include "LayerPointer.hpp"
 #include "Minimize.hpp"
@@ -17,6 +18,7 @@
 #include "core/Overview.hpp"
 #include "core/OverviewFocus.hpp"
 #include "core/Protocol.hpp"
+#include "core/FrameLog.hpp"
 #include "core/Stages.hpp"
 
 #include <hyprland/src/managers/EventManager.hpp>
@@ -184,7 +186,7 @@ namespace gf::ipc {
             const auto features = gfc::features(minimizeAvailable(), state().luaConfigRegistered, appmenuAvailable(), overviewAvailable(), desktopFocus::ready(),
                                                 stagesAvailable(), stager::enabled(), cursorRefreshAvailable(), overviewFocusAvailable(), minimizeEffectAvailable(),
                                                 state().luaTileRegistered && state().luaConfigRegistered, layerPointer::ready(), state().luaConfigRegistered,
-                                                chrome::ready());
+                                                chrome::ready(), frameProbe::ready() && state().hyprctlFramesCommand != nullptr);
             return gfc::capabilitiesJson(features);
         }
     } // namespace
@@ -553,6 +555,15 @@ namespace gf::ipc {
             return out;
         }
 
+        // `hyprctl grassfield-frames`: the presented-frame timestamps of every monitor (ADR-0006 P3, core/FrameLog.hpp).
+        // Read-only, no argument; the same JSON for both output formats.
+        std::string hyprctlFrames(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
+            std::string out;
+            if (!guarded("hyprctl grassfield-frames", [&] { out = frameProbe::json(); }))
+                out = R"({"v":"gfc/1","type":"error"})";
+            return out;
+        }
+
         bool addLua(std::string_view name, PLUGIN_LUA_FN fn) {
             const bool ok = HyprlandAPI::addLuaFunction(state().handle, std::string{gfc::kLuaNamespace}, std::string{name}, fn);
             if (!ok)
@@ -593,6 +604,12 @@ namespace gf::ipc {
             log(Log::ERR, "registerHyprCtlCommand({}) failed", gfc::kHyprctlCommand);
             ok = false;
         }
+        // Optional: without it frame-times is not advertised, nothing else changes.
+        if (frameProbe::ready()) {
+            s.hyprctlFramesCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{frames::kHyprctlCommand}, .exact = true, .fn = hyprctlFrames});
+            if (!s.hyprctlFramesCommand)
+                log(Log::WARN, "registerHyprCtlCommand({}) failed; frame-times not advertised", frames::kHyprctlCommand);
+        }
 
         return ok;
     }
@@ -612,6 +629,10 @@ namespace gf::ipc {
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();
+        }
+        if (s.hyprctlFramesCommand) {
+            HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlFramesCommand);
+            s.hyprctlFramesCommand.reset();
         }
     }
 

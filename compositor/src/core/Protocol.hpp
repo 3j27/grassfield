@@ -82,14 +82,17 @@ namespace gf::gfc {
     // grassfield-client-chrome, band 0 in Stages, their minimize light and zoomed drag bridged). The shell's Overview
     // reserves no titlebar band above such a window only while this feature is advertised (shell/overview/ClientChrome.js).
     inline constexpr std::string_view kFeatureClientChrome = "client-chrome";
+    // ADR-0006 P3: per-monitor presented-frame timestamps, read with `hyprctl grassfield-frames` (core/FrameLog.hpp).
+    inline constexpr std::string_view kFeatureFrameTimes = "frame-times";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
-    // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome.
+    // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome, frame-times.
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
                                            bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
-                                           bool windowTiling = false, bool layerPointer = false, bool appearance = false, bool clientChrome = false);
+                                           bool windowTiling = false, bool layerPointer = false, bool appearance = false, bool clientChrome = false,
+                                           bool frameTimes = false);
 
     // Settings the shell pushes with hl.plugin.grassfield.config(key, value). Allowlist: this key, appearance (below),
     // stagesEnabled (core/Stages.hpp), minimizeEffect (core/Minimize.hpp) and the tiling keys (core/Tiling.hpp).

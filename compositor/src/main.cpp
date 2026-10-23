@@ -8,6 +8,7 @@
 #include "ClientChrome.hpp"
 #include "CursorRefresh.hpp"
 #include "DesktopFocus.hpp"
+#include "FrameProbe.hpp"
 #include "Ipc.hpp"
 #include "LayerPointer.hpp"
 #include "Minimize.hpp"
@@ -193,6 +194,7 @@ namespace {
         };
         step("listeners", [&] { s.listeners.clear(); });
         step("client chrome", [] { gf::chrome::stop(); });   // per-window toplevel listeners removed
+        step("frame probe", [] { gf::frameProbe::stop(); }); // presentation listeners removed
         step("desktop focus", [] { gf::desktopFocus::stop(); }); // no press or commit may reach the policy any more
         step("minimizer", [] { gf::minimizer::stop(); }); // before the Lua entry points go: animations complete, snapshots dropped
         step("overview", [] { gf::overviewer::stop(); });   // every window back to normal rendering, transformers detached
@@ -302,6 +304,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         if (!clientChromeOk) {
             gf::guarded("client chrome rollback", [] { gf::chrome::stop(); });
             gf::log(Log::WARN, "client chrome listeners failed to register; client-chrome not advertised");
+        }
+        // Optional feature (ADR-0006 P3): presented-frame timestamps; without it frame-times is not advertised.
+        bool frameProbeOk = false;
+        gf::guarded("frame probe start", [&] { frameProbeOk = gf::frameProbe::start(); });
+        if (!frameProbeOk) {
+            gf::guarded("frame probe rollback", [] { gf::frameProbe::stop(); });
+            gf::log(Log::WARN, "frame probe listeners failed to register; frame-times not advertised");
         }
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");

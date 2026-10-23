@@ -19,7 +19,8 @@ remediation (2026-10-23): restore on the window's own display at its frame (FR15
 during the Overview close gets the keys (overview.md "Close focus", GF-038), the chrome follows the appearance (feature
 `appearance`, FR53, UX-06), the tiling preview is the blurred material (FR48, D-8), `CLater` cancels on destruction
 (ARCH-21), the rebuild for a new Hyprland (ADR-0009 amendment, GF-033). Plugin 0.13.0-audit. The unified toolbar's
-plugin work item (ADR-0015 P1-P7, feature `client-chrome`): plugin 0.14.0.
+plugin work item (ADR-0015 P1-P7, feature `client-chrome`) and the presented-frame times of gate P3 (FR54, feature
+`frame-times`): plugin 0.14.0.
 Code: `compositor/`. Build and run: `compositor/README.md`.
 
 ## macOS reference behavior (from design/reference/, described in words — no Apple images committed)
@@ -111,10 +112,18 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   `stages-available` (FR33), `cursor-refresh` (FR40), `overview-focus` (FR43) and `layer-pointer` (FR52) likewise;
   `minimize-effect` (FR45) with `minimize` and `config`; `window-tiling` (FR50) when the `tile` Lua function and `config`
   registered; `appearance` (FR53) with `config`; `client-chrome` (ADR-0015 P2) when the per-window toplevel listeners
-  registered; `stages` only while its flag is on
-  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome"]`
+  registered; `frame-times` (FR54) when the presentation listeners and `hyprctl grassfield-frames` registered; `stages`
+  only while its flag is on
+  (FR33) (`["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer","appearance","client-chrome","frame-times"]`
   when everything works and the flag is off).
 - **FR10** `hyprctl grassfield` returns the same capabilities JSON.
+- **FR54** Presented-frame times (ADR-0006 gate P3): every output's presented frames (Hyprland's
+  `CMonitor::m_events.presented`, the presentation feedback) go into a ring of 1024 CLOCK_MONOTONIC microsecond stamps per
+  output (`core/FrameLog.*`, `FrameProbe.*`; a stamp not newer than the last is refused). `hyprctl grassfield-frames`
+  (exact, read-only, no argument) returns `{"v":"gfc/1","type":"frames","clock":"monotonic","unit":"us","monitors":[{"name",
+  "refreshHz","total","presented":[...]}]}` (at most 16 outputs, names escaped and cut at 64 bytes). One push per presented
+  frame on the compositor thread, nothing else. `tests/visual/presented-frames.sh` measures real shell animations with it
+  (Overview open/close, Launchpad open, Dock magnification) through `tests/visual/frame-stats.py`.
 - **FR11** No exception escapes into Hyprland; window/monitor pointers are null-checked; no blocking I/O.
 - **FR12** `PLUGIN_EXIT` removes all titlebars, Lua functions, the hyprctl command and event listeners,
   and ends a drag in progress. Titlebars of unmapped or hidden windows are destroyed too (Hyprland defers

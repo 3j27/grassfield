@@ -33,6 +33,7 @@ namespace gf {
 
         std::vector<CHyprSignalListener>   listeners;
         SP<SHyprCtlCommand>                hyprctlCommand;
+        SP<SHyprCtlCommand>                hyprctlFramesCommand; // `hyprctl grassfield-frames` (FrameProbe, feature frame-times)
         bool                               luaHelloRegistered    = false;
         bool                               luaMinimizeRegistered = false;
         bool                               luaRestoreRegistered  = false;

@@ -1,0 +1,23 @@
+#pragma once
+
+// Presentation-time probe (ADR-0006 gate P3; core/FrameLog.hpp): every monitor's presented frames (CMonitor::
+// m_events.presented, the output's presentation feedback) go into a per-monitor ring of CLOCK_MONOTONIC microseconds,
+// returned by `hyprctl grassfield-frames` (registered in Ipc.cpp; feature "frame-times"). One timestamp per presented
+// frame: no allocation once a monitor's ring exists, nothing else done on the compositor thread.
+
+#include <string>
+
+namespace gf::frameProbe {
+
+    // Listens to every monitor's presentations and to monitors being added and removed. False if the event bus is missing.
+    bool start();
+
+    // Unload: removes every listener (their callbacks are code of this library) and drops the rings.
+    void stop();
+
+    bool ready();
+
+    // The JSON `hyprctl grassfield-frames` returns (core framesJson), monitors in Hyprland's order.
+    std::string json();
+
+} // namespace gf::frameProbe
