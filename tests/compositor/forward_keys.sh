@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GF-024 / A11Y-04, macOS model: what the focused window receives for the forwarded keys of config/hypr/grassfield/forwarding.lua.
-# NESTED only (scripts/dev/nested-up.sh); never the owner's session. Keys are typed with scripts/dev/keys.sh (wtype, through
+# NESTED only (scripts/dev/nested-up.sh); never the owner's session. Keys are typed with tests/tools/vkbd (real modifier presses, through
 # the nested compositor's keybind path); a Qt window (tests/compositor/forward-keys-fixture) logs what it receives, a foot
 # window (a terminal class) records the bytes it receives.
 #
@@ -27,7 +27,7 @@ if [[ $sig == "$main" || $sig == "${HYPRLAND_INSTANCE_SIGNATURE:-}" || $sock == 
   echo "forward_keys: refusing: recorded nested instance is the main session" >&2
   exit 2
 fi
-for tool in jq foot qs wtype; do
+for tool in jq foot qs; do
   command -v "$tool" >/dev/null || { echo "forward_keys: $tool is needed" >&2; exit 2; }
 done
 
@@ -42,13 +42,32 @@ cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done; }
 trap cleanup EXIT
 check() { # <description> <expected line regex> <log-line-count-before>
   local got
-  got=$(tail -n +"$(($3 + 1))" "$fixlog" | grep "\[fk-fixture\] key=" | tail -n 1)
+  got=$(tail -n +"$(($3 + 1))" "$fixlog" | real_keys | tail -n 1)
   if [[ -n $got && $got =~ $2 ]]; then echo "PASS: $1 ($got)"; else echo "FAIL: $1 (expected $2, got: ${got:-nothing})"; fail=1; fi
 }
 nothing() { # <description> <log-line-count-before>
-  if [[ -z $(tail -n +"$(($2 + 1))" "$fixlog" | grep "\[fk-fixture\] key=") ]]; then echo "PASS: $1 (the application received nothing)"; else echo "FAIL: $1 (it received a key)"; fail=1; fi
+  if [[ -z $(tail -n +"$(($2 + 1))" "$fixlog" | real_keys) ]]; then echo "PASS: $1 (the application received nothing)"; else echo "FAIL: $1 (it received a key)"; fail=1; fi
 }
-keys() { timeout 10 "$root/scripts/dev/keys.sh" "$@" >>"$run/keys.log" 2>&1; sleep 0.4; }
+# Keys come from the virtual keyboard tests/tools/vkbd with real modifier presses: wtype -M modifiers never run Hyprland binds in
+# the nested session (docs/specs/compositor.md). The wtype-style arguments of the calls below are translated: -M MOD (down),
+# -k KEY (tap), -m MOD (up).
+keys() {
+  local args=() mod
+  while (($#)); do
+    case $1 in
+      -M | -m)
+        case $2 in alt) mod=Alt_L ;; shift) mod=Shift_L ;; logo) mod=Super_L ;; ctrl) mod=Control_L ;; *) echo "keys: bad modifier $2" >&2; return 2 ;; esac
+        if [[ $1 == -M ]]; then args+=(down "$mod"); else args+=(up "$mod"); fi
+        shift 2 ;;
+      -k) args+=(tap "$2"); shift 2 ;;
+      *) echo "keys: bad argument $1" >&2; return 2 ;;
+    esac
+  done
+  timeout 10 "$root/tests/tools/vkbd/vkbd.sh" "${args[@]}" >>"$run/keys.log" 2>&1
+  sleep 0.4
+}
+# Key presses of the modifiers themselves (Shift, Control, Meta, Alt, AltGr, Super_L/R) are not what is being checked.
+real_keys() { grep "\[fk-fixture\] key=" | grep -Ev "key=(1677724[89]|1677725[0-3]|1677729[89]|16777300|16781571) "; }
 lines() { wc -l <"$fixlog"; }
 
 WAYLAND_DISPLAY=$sock HYPRLAND_INSTANCE_SIGNATURE=$sig setsid "$root/scripts/dev/isolated.sh" --name forward-keys-fixture \
