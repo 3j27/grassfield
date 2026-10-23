@@ -113,6 +113,7 @@ bind("SUPER + SPACE", "Search", shell("search", "toggle"))
 bind("XF86LaunchA", "Apps", shell("apps", "toggle"))
 bind("CTRL + UP", "Overview", shell("overview", "toggle"))
 bind("SUPER + CTRL + Q", "Lock screen", shell("lock", "lock"))
+-- The lid switch is bound once, in system.lua (real session only): /usr/lib/grassfield/grassfield-lid calls `lock lid`.
 bind("SUPER + N", "Notification Center", shell("notifications", "toggleCenter"))
 bind("SUPER + ALT + ESCAPE", "Force Quit Applications", shell("menubar", "panel forcequit ''"))
 

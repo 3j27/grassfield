@@ -4638,6 +4638,18 @@
 <context>
     <name>SleepInhibitor</name>
     <message>
+        <source>The screen may not lock before sleep</source>
+        <translation>L’écran risque de ne pas se verrouiller avant la mise en veille</translation>
+    </message>
+    <message>
+        <source>Grassfield cannot see when the computer goes to sleep. Lock the screen yourself (Super+Control+Q) before you leave the computer.</source>
+        <translation>Grassfield ne voit pas quand l’ordinateur se met en veille. Verrouillez l’écran vous-même (Super+Contrôle+Q) avant de quitter l’ordinateur.</translation>
+    </message>
+    <message>
+        <source>Grassfield cannot delay sleep until the screen is locked. Lock the screen yourself (Super+Control+Q) before you close the lid.</source>
+        <translation>Grassfield ne peut pas retarder la mise en veille jusqu’au verrouillage de l’écran. Verrouillez l’écran vous-même (Super+Contrôle+Q) avant de fermer le capot.</translation>
+    </message>
+    <message>
         <source>Lock the screen before sleep</source>
         <translation>Verrouiller l’écran avant la mise en veille</translation>
     </message>
