@@ -58,6 +58,13 @@ QtObject {
         onTriggered: root.timedOut()
     }
 
+    // The state machine's state, read from its storage and not through a binding: decisions (lock requested before
+    // sleep, restore, stranded check) use it so that a binding that missed a change notification can never make a lock
+    // request look done (Omarchy 4.0.6 fix, see Lock.currentlyLocked()).
+    function currentState(): string {
+        return priv.state;
+    }
+
     function dispatch(event: string): string {
         const before = priv.state;
         const after = Machine.next(before, event);

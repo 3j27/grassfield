@@ -1,5 +1,6 @@
 #include "filesapp.h"
 #include "appscope.h"
+#include "autoappearance.h"
 
 #include "filelogic.h"
 #include "foldermodel.h"
@@ -141,6 +142,13 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, reread);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, reread);
     readAppearance();
+    // Auto appearance: the schedule is re-evaluated each minute while the setting is "auto".
+    m_autoTimer.setInterval(grassfield::apps::kAutoRecheckMs);
+    connect(&m_autoTimer, &QTimer::timeout, this, [this] {
+        if (m_autoAppearance)
+            readAppearance();
+    });
+    m_autoTimer.start();
 
     // The sidebar's Tags section: the tags seen in use (on shown items, set or searched in Files), kept across sessions.
     m_knownTags = TagLogic::displayOrder(m_settings.value(QStringLiteral("tags/known")).toStringList()).mid(0, kMaxKnownTags);
@@ -163,8 +171,10 @@ void FilesApp::readAppearance()
     QJsonObject root;
     if (f.open(QIODevice::ReadOnly))
         root = QJsonDocument::fromJson(f.read(4 * 1024 * 1024)).object();
-    // Same rule as the shell and Settings: anything but "light" renders dark.
-    const bool dark = root.value(QStringLiteral("appearance")).toString() != QLatin1String("light");
+    // Same rule as the shell and Settings: "light" is light, "auto" follows the local schedule, anything else renders dark.
+    const QString setting = root.value(QStringLiteral("appearance")).toString();
+    m_autoAppearance = setting == QLatin1String("auto");
+    const bool dark = grassfield::apps::isDarkAppearance(setting, QTime::currentTime());
     const bool reduce = root.value(QStringLiteral("accessibility")).toObject().value(QStringLiteral("reduceMotion")).toBool(false);
     // Icon appearance: the same validation as the shell (unknown values fall back to the defaults).
     const QJsonObject icons = root.value(QStringLiteral("icons")).toObject();

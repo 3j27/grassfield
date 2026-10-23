@@ -2,6 +2,7 @@
 
 #include "previewlogic.h"
 #include "appscope.h"
+#include "autoappearance.h"
 
 #include <QCoreApplication>
 #include <QMutexLocker>
@@ -81,6 +82,13 @@ PreviewApp::PreviewApp(const QStringList &paths, const QStringList &errors, bool
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, reread);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, reread);
     readAppearance();
+    // Auto appearance: the schedule is re-evaluated each minute while the setting is "auto".
+    m_autoTimer.setInterval(grassfield::apps::kAutoRecheckMs);
+    connect(&m_autoTimer, &QTimer::timeout, this, [this] {
+        if (m_autoAppearance)
+            readAppearance();
+    });
+    m_autoTimer.start();
 }
 
 PreviewApp::~PreviewApp()
@@ -147,7 +155,9 @@ void PreviewApp::readAppearance()
     QFile f(configFile());
     if (f.open(QIODevice::ReadOnly) && f.size() < 1024 * 1024) {
         const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
-        dark = root.value(QStringLiteral("appearance")).toString() != QLatin1String("light");
+        const QString setting = root.value(QStringLiteral("appearance")).toString();
+        m_autoAppearance = setting == QLatin1String("auto");
+        dark = grassfield::apps::isDarkAppearance(setting, QTime::currentTime());
         reduce = root.value(QStringLiteral("accessibility")).toObject().value(QStringLiteral("reduceMotion")).toBool(false);
         // Accent colour: same names as ui/Grassfield/Ui/Accent.js; anything else reads as the default.
         const QString a = root.value(QStringLiteral("accent")).toObject().value(QStringLiteral("color")).toString();

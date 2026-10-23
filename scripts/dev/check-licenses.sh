@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Licence notices and metadata (GF-014, ARCH-12), offline. Fails when:
-#   - packaging/licenses/omarchy-MIT.txt does not carry Omarchy's LICENSE verbatim: the block after its marker line must hash
-#     to the pinned SHA-256 of basecamp/omarchy v4.0.4's LICENSE and name "David Heinemeier Hansson"
+#   - packaging/licenses/omarchy-MIT.txt does not carry Omarchy's LICENSE verbatim: the text from its copyright line to the
+#     end must hash to the pinned SHA-256 of basecamp/omarchy v4.0.4's LICENSE and name "David Heinemeier Hansson"
 #   - a package_*() function of packaging/arch/PKGBUILD lacks a licence it ships: grassfield-desktop MIT + CC-BY-SA-4.0 +
 #     Unicode-3.0, grassfield-compositor MIT + LGPL-2.1-or-later + BSD-3-Clause, grassfield-icons MIT + GPL-3.0-only
 #   - a file of packaging/licenses/ is not installed by the PKGBUILD or not named in THIRD_PARTY.md
@@ -11,10 +11,10 @@
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 omarchy_sha=717ba1949502290f8e47688ae2e323acd06c8ca47aec9f7596b15f678c1af4a2
-marker='----- upstream LICENSE, verbatim -----'
+marker='Copyright (c) David Heinemeier Hansson'
 
-block_sha() { # <notice file>: SHA-256 of what follows the marker line
-  sed -n "/^$marker\$/,\$p" "$1" | tail -n +2 | sha256sum | cut -d' ' -f1
+block_sha() { # <notice file>: SHA-256 of the text from the copyright line to the end
+  sed -n "/^$marker\$/,\$p" "$1" | sha256sum | cut -d' ' -f1
 }
 licenses_of() { # <PKGBUILD> <package>: the license= array of package_<package>()
   awk -v fn="package_$2" '
@@ -61,8 +61,8 @@ selftest() {
   local d fails=0
   d=$(mktemp -d)
   trap 'rm -rf "$d"' RETURN
-  printf 'preamble\n%s\nCopyright (c) David Heinemeier Hansson\n\nbody\n' "$marker" >"$d/n.txt"
-  [[ $(block_sha "$d/n.txt") == "$(printf 'Copyright (c) David Heinemeier Hansson\n\nbody\n' | sha256sum | cut -d' ' -f1)" ]] || { echo "FAIL: block hash"; fails=1; }
+  printf 'preamble\n%s\n\nbody\n' "$marker" >"$d/n.txt"
+  [[ $(block_sha "$d/n.txt") == "$(printf '%s\n\nbody\n' "$marker" | sha256sum | cut -d' ' -f1)" ]] || { echo "FAIL: block hash"; fails=1; }
   printf 'package_x() {\n  license=(MIT GPL-3.0-only)\n}\npackage_y() {\n  license=(MIT)\n}\n' >"$d/PKGBUILD"
   [[ $(licenses_of "$d/PKGBUILD" x) == "MIT GPL-3.0-only" ]] || { echo "FAIL: license= of x"; fails=1; }
   [[ $(licenses_of "$d/PKGBUILD" y) == "MIT" ]] || { echo "FAIL: license= of y"; fails=1; }

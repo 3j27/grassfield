@@ -152,21 +152,24 @@ package_grassfield-desktop() {
 
   install -Dm644 "$root/packaging/wayland-sessions/grassfield.desktop" "$pkgdir/usr/share/wayland-sessions/grassfield.desktop"
   install -Dm644 "$root/packaging/systemd/grassfield-shell.service" "$pkgdir/usr/lib/systemd/user/grassfield-shell.service"
-  # Omarchy's sleep-lock unit must stay inert inside the Grassfield session (the Omarchy shell it talks to is not running there).
+  # Omarchy's sleep-lock unit is skipped inside the Grassfield session only while grassfield-shell runs (D-12: the Omarchy
+  # shell it talks to is not running there, and grassfield-shell locks before sleep itself); the gate script decides.
   install -Dm644 "$root/packaging/systemd/omarchy-sleep-lock.service.d/10-grassfield.conf" \
     "$pkgdir/usr/lib/systemd/user/omarchy-sleep-lock.service.d/10-grassfield.conf"
+  install -Dm755 "$root/packaging/systemd/sleep-lock-gate" "$pkgdir/usr/lib/grassfield/sleep-lock-gate"
   # Session services and helpers that Omarchy's own session provides through its shell or autostart (audit GF-AUDIT-001,
   # 02 §5.3): crash, low-battery and migration notices, removable media, Night Shift, lid, graceful log out / restart /
   # shut down, login choice. All user units skip themselves outside the Grassfield session.
   install -d "$pkgdir/usr/lib/grassfield/omarchy-shims"
-  install -m755 "$root"/packaging/bin/* "$pkgdir/usr/lib/grassfield/"
+  # Regular files only: an ignored __pycache__ or editor directory in the tree must neither break nor enter the package.
+  find "$root/packaging/bin" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/" {} +
   # The commands a person types are on PATH.
   install -d "$pkgdir/usr/bin"
   for tool in grassfield-login grassfield-login-check grassfield-nightshift; do
     ln -s "../lib/grassfield/$tool" "$pkgdir/usr/bin/$tool"
   done
   # GF-032: stand-ins that keep Omarchy's update, theme and font tools from starting Omarchy's shell in this session.
-  install -m755 "$root"/packaging/shims/* "$pkgdir/usr/lib/grassfield/omarchy-shims/"
+  find "$root/packaging/shims" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/omarchy-shims/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
   install -Dm644 "$root/packaging/sddm/grassfield-login.desktop" "$pkgdir/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop"
   for unit in crash-watch battery-watch migrate-notify automount; do

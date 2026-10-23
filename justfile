@@ -72,6 +72,21 @@ check-omarchy *args:
 test:
     scripts/dev/test.sh
 
+# Security gates L1 (+ DT-21 graceful exit) and L4 (+ DT-05 screen share, D-4 lid and display off), each on a fresh
+# nested session (ask). Bare, outside the sandbox only: inside it the scripts refuse (PID namespace). Every nested session
+# it opens ends locked and is stopped. L2 (tests/security/l2_wrong_password.sh) and L5 stay owner steps.
+test-security-nested:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    rc=0
+    scripts/dev/nested-up.sh || exit 2
+    tests/security/reload_locked.sh || rc=1
+    scripts/dev/nested-down.sh
+    scripts/dev/nested-up.sh || exit 2
+    tests/security/lock_privacy.sh || rc=1
+    scripts/dev/nested-down.sh
+    exit $rc
+
 # Gate A2 for the icon modes on a GPU scene graph, as a client of the nested session (ask).
 test-icons:
     tests/visual/icon-a2.sh

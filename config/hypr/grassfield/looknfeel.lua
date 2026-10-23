@@ -81,6 +81,11 @@ hl.config({
     animate_mouse_windowdragging = false,
     allow_session_lock_restore = true,
     session_lock_xray = false,
+    -- The shell switches the displays off on an idle lock screen (D-4, shell/security/idle/Idle.qml); the compositor
+    -- itself wakes them on any key or pointer motion, so a shell that is restarting can never leave the screen dark
+    -- (same values as Omarchy's default/hypr/input.lua, which this session does not load).
+    key_press_enables_dpms = true,
+    mouse_move_enables_dpms = true,
     on_focus_under_fullscreen = 1,
     initial_workspace_tracking = 0,
     background_color = "rgba(1c1c1eff)",

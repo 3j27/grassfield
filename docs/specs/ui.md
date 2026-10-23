@@ -21,7 +21,7 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | Key | Type / range | Default | Used by |
 |---|---|---|---|
 | `version` | int | 1 | contract |
-| `appearance` | `"dark"` \| `"light"` | `"dark"` | Appearance.dark |
+| `appearance` | `"dark"` \| `"light"` \| `"auto"` | `"dark"` | Appearance.dark (`auto`: light by day, dark 19:00-07:00 local, docs/specs/controlcenter.md "Auto appearance") |
 | `material.transparency` | number 0–1 | 0.25 | Appearance.transparency |
 | `accessibility.reduceTransparency` | bool | false | Appearance |
 | `accessibility.reduceMotion` | bool | false | Appearance |
@@ -51,7 +51,8 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.showIndicators` | bool | true | Dock, Settings |
 | `dock.minimizeEffect` | `"funnel"` \| `"shrink"` | `"funnel"` | Settings ("Minimize animation": "Funnel" \| "Shrink"); the shell pushes it to the compositor plugin (`hl.plugin.grassfield.config("minimizeEffect", …)`, feature `minimize-effect`), `"fade"` instead while `accessibility.reduceMotion` is true; without the plugin minimize has no animation |
 | `notifications.dnd` | bool | false | Notifications (banners suppressed except critical), menu bar moon |
-| `notifications.previews` | `"always"` \| `"unlocked"` \| `"never"` | `"unlocked"` | Notifications (`never` hides bodies) |
+| `notifications.previews` | `"always"` \| `"unlocked"` \| `"never"` | `"unlocked"` | Notifications (`never` hides bodies; `unlocked` hides them while locked) |
+| `notifications.appPreviews` | list of `{app, previews}` | `[]` | Per-app override of `notifications.previews` (docs/specs/notifications.md) |
 | `accent.color` | `"multicolor"` \| `"blue"` \| `"purple"` \| `"pink"` \| `"red"` \| `"orange"` \| `"yellow"` \| `"green"` \| `"graphite"` | `"multicolor"` | `Appearance.accentSetting`, resolved into `Appearance.colors.accent` / `accentText` (see Accent colour) |
 | `icons.mode` | `"default"` \| `"dark"` \| `"clear"` \| `"tinted"` | `"default"` | `Appearance.iconMode` (ADR-0014; the ADR names it `appearance.iconMode`, see Icon appearance modes) |
 | `icons.tint` | `"accent"` or `"#rrggbb"` | `"accent"` | `Appearance.iconTintSetting`, resolved to `Appearance.iconTint` |

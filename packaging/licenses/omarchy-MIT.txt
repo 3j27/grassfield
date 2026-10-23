@@ -1,11 +1,10 @@
-Notice for code adapted from Omarchy (https://github.com/basecamp/omarchy, MIT). Files of Grassfield adapted from it:
+Notice for code adapted from Omarchy (https://github.com/basecamp/omarchy, MIT License). Files:
 shell/security/lock/Lock.qml, shell/security/idle/Idle.qml, shell/security/polkit/AuthAgent.qml.
 
-The text below the marker line is the upstream LICENSE file, verbatim (basecamp/omarchy tag v4.0.4, SHA-256
-717ba1949502290f8e47688ae2e323acd06c8ca47aec9f7596b15f678c1af4a2). The copyright holder it names is
-"David Heinemeier Hansson". scripts/dev/check-licenses.sh (just check) compares the block with that hash.
+The licence below is upstream's LICENSE file, verbatim, at tag v4.0.4
+(basecamp/omarchy@c668141e9c42b13c80c9ca4ea108e11708c5e8a5, the installed Omarchy version; identical at v4.0.6,
+basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0). The installed omarchy package carries no licence file.
 
------ upstream LICENSE, verbatim -----
 Copyright (c) David Heinemeier Hansson
 
 Permission is hereby granted, free of charge, to any person obtaining

@@ -19,10 +19,13 @@ unset QT_QPA_PLATFORMTHEME
 export QT_QPA_PLATFORM=offscreen
 
 # Fresh copy of the sources and the test (the test imports ../../shell/security/polkit; `qs.security` through qs -> shell).
+# branding/icons/symbolic too: ui/Grassfield/Ui/icons links to it, and test_10 loads ../../branding/icons/symbolic/lock.svg
+# (without it the unmutated control fails and every "CAUGHT" would prove nothing; follow-up N9).
 fresh() {
   rm -rf "$scratch/src"
-  mkdir -p "$scratch/src/tests/security" "$scratch/src/qsroot"
+  mkdir -p "$scratch/src/tests/security" "$scratch/src/qsroot" "$scratch/src/branding/icons"
   cp -a "$root/ui" "$root/shell" "$scratch/src/"
+  cp -a "$root/branding/icons/symbolic" "$scratch/src/branding/icons/"
   cp "$root/tests/security/tst_authdialog.qml" "$scratch/src/tests/security/"
   ln -s "$scratch/src/shell" "$scratch/src/qsroot/qs"
 }

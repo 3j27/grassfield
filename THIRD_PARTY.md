@@ -87,14 +87,34 @@ Grassfield source headers name `omacom/omarchy`, branch quattro; both are record
 | `shell/security/idle/Idle.qml` | `shell/plugins/services/idle/Service.qml` | IdleMonitor with respectInhibitors |
 | `shell/security/polkit/AuthAgent.qml` | `shell/plugins/polkit/PolkitAgent.qml` | PolkitAgent/AuthFlow wiring |
 
-These three files are security modules. The upstream licence (basecamp/omarchy, tag v4.0.4, SHA-256
-`717ba1949502290f8e47688ae2e323acd06c8ca47aec9f7596b15f678c1af4a2`) names the copyright holder "David Heinemeier
-Hansson" (the installed omarchy package ships no licence file). `omarchy-MIT.txt` carries that LICENSE verbatim and
-`scripts/dev/check-licenses.sh` compares it with the hash. The text was fetched from raw.githubusercontent.com at the tag
-during the 1.0.0-rc1 remediation (2026-10-23); an offline review cannot re-fetch it, so the pinned hash is the only local
-proof (re-fetch the URL and compare `sha256sum` to verify). The comment headers of the three files are corrected to "Copyright (c) David Heinemeier Hansson, MIT License" on the
-security branch (commit 7c8b088, a reviewed change to security modules); this branch does not touch them, so until that
-branch is merged the headers still say "the Omarchy authors" and the shipped notice is the one that governs.
+These three files are security modules; their headers say "Copyright (c) David Heinemeier Hansson, MIT License", as
+upstream's LICENSE at tag v4.0.4 (basecamp/omarchy@c668141e9c42b13c80c9ca4ea108e11708c5e8a5, the installed version;
+identical at v4.0.6). The installed omarchy package carries no licence file; the text below is upstream's LICENSE,
+verbatim (also shipped as `omarchy-MIT.txt`; `scripts/dev/check-licenses.sh` compares the text from the copyright line on with
+SHA-256 `717ba1949502290f8e47688ae2e323acd06c8ca47aec9f7596b15f678c1af4a2`, the hash of that LICENSE).
+
+```
+Copyright (c) David Heinemeier Hansson
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
 
 Run-time use without copying: `config/hypr/grassfield/omarchy.lua` requires Omarchy's Lua modules from
 `/usr/share/omarchy`; the lock uses the PAM service `omarchy-lock-password`. Trademark use of "Omarchy" in the UI:

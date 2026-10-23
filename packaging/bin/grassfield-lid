@@ -8,10 +8,18 @@
 # macOS model: with the lid closed and an external display connected, the computer keeps running on that display (the
 # laptop panel is switched off and its windows move to the external display); with the lid closed and no external display
 # it sleeps, and the screen is locked first. logind decides about suspend (HandleLidSwitchDocked defaults to ignore, so a
-# docked lid does not suspend); this script locks, and turns the laptop panel off or on. Nothing here suspends.
+# docked lid does not suspend). On every lid close this script asks the shell to lock with `lock lid`; the shell decides
+# (shell/security/lock/Lock.qml lockOnLid, LockMachine.lidShouldLock: no lock while a physical external display is
+# active, i.e. clamshell mode; it locks also when logind does not suspend, D-4). This script only turns the laptop panel
+# off or on for clamshell mode. Nothing here suspends or unlocks.
+#
+# When the shell does not answer (stopped, crashed, restarting) and no external display is connected, the lock is not
+# dropped: Grassfield's `omarchy-shell` stand-in starts grassfield-shell again and asks it to lock (follow-up N3; the
+# lock stays grassfield-shell's WlSessionLock + PamContext, no other locker). That matters when logind does not suspend
+# on the lid (HandleLidSwitch=ignore or lock): nothing else would lock then.
 #
 # Test hooks: GRASSFIELD_LID_PROC (default /proc/acpi/button/lid), GRASSFIELD_DRM (default /sys/class/drm),
-# GRASSFIELD_LID_LOCK (the lock command), XDG_RUNTIME_DIR (marker and lock file).
+# GRASSFIELD_LID_LOCK (the lock command), GRASSFIELD_LID_FALLBACK (the stand-in), XDG_RUNTIME_DIR (marker and lock file).
 
 set -u
 
@@ -20,7 +28,23 @@ DRM=${GRASSFIELD_DRM:-/sys/class/drm}
 RUNTIME=${XDG_RUNTIME_DIR:-/tmp}
 MARKER=$RUNTIME/grassfield-lid-internal-off
 LOCKFILE=$RUNTIME/grassfield-lid.lock
-LOCK_CMD=${GRASSFIELD_LID_LOCK:-qs ipc -c grassfield call lock lock}
+LOCK_CMD=${GRASSFIELD_LID_LOCK:-qs ipc -c grassfield call lock lid}
+FALLBACK=${GRASSFIELD_LID_FALLBACK:-/usr/lib/grassfield/omarchy-shims/omarchy-shell}
+
+# Ask the shell to lock (it decides about clamshell mode). Its answers: ok, already-locked, docked, refused: <why>.
+lock_on_close() {
+  local answer
+  if answer=$($LOCK_CMD 2>/dev/null); then
+    case $answer in
+      ok | already-locked | docked | refused:*) return 0 ;;
+    esac
+  fi
+  # No answer (or "Not ready to accept queries yet"): the shell is down or starting. Clamshell decides here instead.
+  external_connected && return 0
+  # In the background: the panel handling must not wait for a shell restart (the stand-in waits up to ~10 s).
+  [[ -x $FALLBACK ]] && setsid -f "$FALLBACK" lock lock >/dev/null 2>&1 </dev/null
+  return 0
+}
 
 lid_closed() {
   local state
@@ -73,10 +97,10 @@ reconcile() {
 
 case ${1:-} in
   closed)
-    if lid_closed && ! external_connected; then
-      # Lock before logind suspends (docked, the computer keeps running and stays unlocked, as on macOS).
-      $LOCK_CMD >/dev/null 2>&1 || true
-    fi
+    # First, before logind may suspend: the shell locks unless an external display is active (clamshell: the computer
+    # keeps running and stays unlocked, as on macOS). Sent on every close, whatever /proc says (a lid that only reports
+    # through the input switch still locks).
+    lock_on_close
     reconcile
     ;;
   opened | reconcile)

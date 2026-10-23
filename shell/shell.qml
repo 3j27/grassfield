@@ -39,6 +39,21 @@ ShellRoot {
         value: Settings.dark
     }
 
+    // Lock state and lock requests for the modules that must not import shell/security (Notifications, Search).
+    Binding {
+        target: SessionState
+        property: "locked"
+        value: Lock.locked
+    }
+
+    Connections {
+        target: SessionState
+
+        function onLockRequested(reason: string): void {
+            Lock.lock(reason);
+        }
+    }
+
     Binding {
         target: Appearance
         property: "transparency"

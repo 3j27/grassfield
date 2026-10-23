@@ -41,8 +41,10 @@ Column {
 
         Repeater {
             model: [
-                {id: "light", text: qsTr("Light"), icon: "sun"},
-                {id: "dark", text: qsTr("Dark"), icon: "moon"}
+                {id: "light", text: qsTr("Light"), icons: ["sun"]},
+                {id: "dark", text: qsTr("Dark"), icons: ["moon"]},
+                // Auto (macOS): light by day, dark at night; drawn as both glyphs.
+                {id: "auto", text: qsTr("Auto"), icons: ["sun", "moon"]}
             ]
 
             delegate: Item {
@@ -51,7 +53,7 @@ Column {
                 required property var modelData
                 readonly property bool selected: Settings.appearance === modelData.id
 
-                width: (parent.width - Tokens.spacingSm) / 2
+                width: (parent.width - 2 * Tokens.spacingSm) / 3
                 height: Tokens.panelTileHeight
                 activeFocusOnTab: true
                 Accessible.role: Accessible.RadioButton
@@ -77,11 +79,20 @@ Column {
                     anchors.centerIn: parent
                     spacing: Tokens.spacingXs
 
-                    Icon {
+                    Row {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        size: Tokens.menuIconSize + 4
-                        name: choice.modelData.icon
-                        color: choice.selected ? Appearance.colors.accentText : Appearance.colors.text
+                        spacing: Tokens.spacingXs
+
+                        Repeater {
+                            model: choice.modelData.icons
+
+                            delegate: Icon {
+                                required property string modelData
+                                size: Tokens.menuIconSize + 4
+                                name: modelData
+                                color: choice.selected ? Appearance.colors.accentText : Appearance.colors.text
+                            }
+                        }
                     }
 
                     Label {

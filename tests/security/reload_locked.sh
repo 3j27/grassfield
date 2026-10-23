@@ -11,6 +11,8 @@
 #   marker-unlocked forge the marker to "unlocked", soft reload -> still locked, nothing reaches foot
 #   l1              kill -9 the shell -> nothing reaches foot; restart the shell -> locked again
 #   forged-crash    forge the marker to "unlocked", kill -9, restart -> the shell re-acquires the lock
+#   graceful-exit   DT-21 (SEC-18): SIGTERM, then `qs kill --pid`, while locked -> Hyprland keeps LOCK, nothing
+#                   reaches foot; the restarted shell is locked
 #   foreign-takeover (b) a foreign locker takes over the live Grassfield lock -> still locked; it
 #                   releases and exits -> Grassfield takes a fresh lock, nothing reaches foot
 #   foreign-restart (a) foreign locker holding the lock + marker forged "unlocked" + shell restart ->
@@ -239,6 +241,37 @@ crash_and_restart() { # <name> <wait seconds>
 }
 
 step_l1() { crash_and_restart l1 10; }
+
+# DT-21 / SEC-18 (GF-029): a GRACEFUL exit while locked must leave the session locked. (a) SIGTERM (Quickshell has no
+# SIGTERM handler: the process ends at once); (b) `qs kill --pid` (IPC kill: the engine is torn down and WlSessionLock's
+# lock object sends ext_session_lock_v1.destroy, never unlock_and_destroy; Hyprland 0.56.2 then keeps the session
+# locked). After each: Hyprland lists LOCK on every monitor, nothing typed reaches foot, the restarted shell is locked.
+graceful_case() { # <term|qskill>
+  local how=$1 pid s
+  s=$(wait_status locked 5) || { fail "graceful-exit ($how): precondition: status $s (run the lock step first)"; return; }
+  pid=$(shell_pid)
+  [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null || { fail "graceful-exit ($how): shell not running"; return; }
+  dev_may_signal "$pid" || { fail "graceful-exit ($how): refusing to signal PID $pid"; return; }
+  case $how in
+    term) kill -TERM "$pid" ;;
+    qskill) echo "qs kill -> $(qs kill --pid "$pid" 2>&1 | tr '\n' ' ')" ;;
+  esac
+  for _ in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$pid" 2>/dev/null; then fail "graceful-exit ($how): the shell did not exit within 5 s"; return; fi
+  sleep 0.5
+  echo "compositor after the $how exit: $(compositor_lock)"
+  if compositor_locked; then pass "graceful-exit ($how): Hyprland still reports LOCK on every monitor"; else fail "graceful-exit ($how): the session is UNLOCKED after a graceful exit (SEC-18: re-rate MEDIUM)"; fi
+  shot "graceful-$how-dead"
+  no_leak "graceful${how}" "graceful-exit ($how, shell gone)"
+  "$root/scripts/dev/shell-run.sh"
+  if s=$(wait_status locked 15); then pass "graceful-exit ($how): restarted shell status $s"; else fail "graceful-exit ($how): restarted shell status $s"; fi
+  no_leak "gracefulback${how}" "graceful-exit ($how, restarted)"
+}
+
+step_graceful_exit() {
+  graceful_case term
+  graceful_case qskill
+}
 
 step_forged_crash() {
   printf 'unlocked\n' >"$marker"
@@ -660,7 +693,7 @@ step_pam_audit() {
 }
 
 steps=("$@")
-[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock relock-confirm foreign-gap probe-cost marker-missing marker-unlocked l1 forged-crash foreign-takeover foreign-restart lock-desync sleep-desync cleanup pam-audit)
+[[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock relock-confirm foreign-gap probe-cost marker-missing marker-unlocked l1 forged-crash graceful-exit foreign-takeover foreign-restart lock-desync sleep-desync cleanup pam-audit)
 assert_no_pam "before the run"
 for s in "${steps[@]}"; do
   echo "== $s"
