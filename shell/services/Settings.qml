@@ -78,6 +78,7 @@ Singleton {
     readonly property bool windowsTilingEdges: store.data.windows.tilingEdges
     readonly property bool windowsTilingMenuBar: store.data.windows.tilingMenuBar
     readonly property bool windowsTilingMargins: store.data.windows.tilingMargins
+    readonly property bool windowsStagesEnabled: store.data.windows.stagesEnabled
     readonly property int lockIdleMinutes: store.lockIdleMinutes
 
     readonly property bool desktopShowIcons: store.data.desktop.showIcons
@@ -92,6 +93,10 @@ Singleton {
 
     function setHotCorner(corner: string, action: string): void {
         store.setHotCorner(corner, action);
+    }
+
+    function setStagesEnabled(value: bool): void {
+        store.setStagesEnabled(value);
     }
 
     function setDesktopShowIcons(value: bool): void {

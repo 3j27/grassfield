@@ -254,6 +254,10 @@ Singleton {
             tilingMargins: Settings.windowsTilingMargins ? "true" : "false"
         })
 
+    // Stages flag (Settings windows.stagesEnabled): pushed only when the plugin offers Stages and its flag differs (the
+    // capability `stages` is present exactly while the flag is on), so a capabilities event never causes a loop.
+    readonly property bool stagesEnabled: Settings.windowsStagesEnabled
+
     // Reduce Motion also shortens what Hyprland animates itself: window pop-in and the Spaces slide become crossfades
     // (Minimized.motionCall). Applied when it turns on or off, at start, and after a config reload (which restores the
     // config's own animations).
@@ -276,12 +280,16 @@ Singleton {
     onTitlebarDoubleClickChanged: pushPluginConfig()
     onMinimizeEffectChanged: pushPluginConfig()
     onTilingConfigChanged: pushPluginConfig()
+    onStagesEnabledChanged: pushPluginConfig()
 
     function pushPluginConfig(): void {
         if (Capabilities.has("config") && dispatchRequest(Minimized.configCall("titlebarDoubleClick", root.titlebarDoubleClick)))
             console.info("grassfield: compositor setting titlebarDoubleClick =", root.titlebarDoubleClick);
         if (Capabilities.has("minimize-effect") && dispatchRequest(Minimized.configCall("minimizeEffect", root.minimizeEffect)))
             console.info("grassfield: compositor setting minimizeEffect =", root.minimizeEffect);
+        if (Capabilities.has("stages-available") && Capabilities.has("stages") !== root.stagesEnabled
+                && dispatchRequest(Minimized.configCall("stagesEnabled", root.stagesEnabled ? "true" : "false")))
+            console.info("grassfield: compositor setting stagesEnabled =", root.stagesEnabled);
         if (Capabilities.has("window-tiling")) {
             for (const key of Object.keys(root.tilingConfig))
                 dispatchRequest(Minimized.configCall(key, root.tilingConfig[key]));

@@ -155,6 +155,8 @@ Scope {
         property bool tilingEdges: true
         property bool tilingMenuBar: true
         property bool tilingMargins: true
+        // Stages (feature "stages-available"): off by default; the shell pushes it to the plugin.
+        property bool stagesEnabled: false
     }
 
     component LockConfig: JsonObject {
@@ -281,6 +283,10 @@ Scope {
         if (["topLeft", "topRight", "bottomLeft", "bottomRight"].indexOf(corner) < 0)
             return;
         change("hotCorners." + corner, cornerAction(action));
+    }
+
+    function setStagesEnabled(value: bool): void {
+        change("windows.stagesEnabled", value);
     }
 
     function setDesktopShowIcons(value: bool): void {

@@ -258,6 +258,21 @@ SettingsPage {
     }
 
     SettingsGroup {
+        caption: qsTr("Stages")
+        footnote: qsTr("Needs the Grassfield compositor extension. The Stages switch is also in Quick Settings.")
+
+        SettingsRow {
+            title: qsTr("Stages")
+            subtitle: qsTr("Keep the windows of one app in the centre and the other recent apps as thumbnails on the left edge.")
+            Toggle {
+                accessibleName: qsTr("Stages")
+                checked: root.store.value("windows.stagesEnabled")
+                onToggled: c => root.store.set("windows.stagesEnabled", c)
+            }
+        }
+    }
+
+    SettingsGroup {
         caption: qsTr("Screen Corners")
         footnote: qsTr("Move the pointer into a screen corner to run the action.")
 

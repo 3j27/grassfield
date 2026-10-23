@@ -5,7 +5,7 @@
 // Record: {toplevel, address, appId, title}.
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile"];
+var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile", "stages"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -150,6 +150,94 @@ function overviewFocusCall(target, id) {
     return guardedPluginCall("overview_focus", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
 }
 
+// hl.plugin.grassfield.stages(json) (gfc/1, docs/specs/stages.md "Shell contract" 3 and 5). `request` is one of
+//   {op: "on", durationMs: integer 0..2000, curve?: 4 numbers, strips: [{monitor, hidden: bool, tiles: [{x, y, w, h}]}]}
+//   {op: "off", durationMs}
+//   {op: "activate" | "merge", stage: id}
+//   {op: "move", address, stage: id | "new"}
+// built from validated pieces only (monitor names [A-Za-z0-9._-]{1,64}, at most 8 distinct strips of 1..8 tiles with finite
+// sides 16..800 px, hex address, integer stage ids) and quoted as a Lua string. "" when anything is invalid (callers must
+// not dispatch it). Overlap and the strip surface's coverage are the plugin's business (it refuses with a reason).
+function stageId(value) {
+    return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295 ? value : -1;
+}
+
+function stagesCall(request) {
+    if (!request || typeof request.op !== "string")
+        return "";
+    const body = {op: request.op};
+    switch (request.op) {
+    case "on":
+    case "off": {
+        const duration = Number(request.durationMs);
+        if (!Number.isFinite(duration) || duration < 0 || duration > 2000)
+            return "";
+        body.durationMs = Math.round(duration);
+        if (request.op === "off")
+            break;
+        const curve = request.curve;
+        if (curve !== undefined && curve !== null) {
+            if (!Array.isArray(curve) || curve.length !== 4)
+                return "";
+            const c = curve.map(Number);
+            if (!c.every(n => Number.isFinite(n)) || c[0] < 0 || c[0] > 1 || c[2] < 0 || c[2] > 1 || c[1] < -1 || c[1] > 2 || c[3] < -1 || c[3] > 2)
+                return "";
+            body.curve = c.map(n => Math.round(n * 1000) / 1000);
+        }
+        const strips = request.strips;
+        if (!Array.isArray(strips) || strips.length === 0 || strips.length > 8)
+            return "";
+        const seen = {};
+        body.strips = [];
+        for (const s of strips) {
+            if (!s || typeof s.monitor !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(s.monitor) || seen[s.monitor] || typeof s.hidden !== "boolean")
+                return "";
+            seen[s.monitor] = true;
+            if (!Array.isArray(s.tiles) || s.tiles.length === 0 || s.tiles.length > 8)
+                return "";
+            const tiles = [];
+            for (const t of s.tiles) {
+                const r = finiteRect(t);
+                if (!r || r.w < 16 || r.w > 800 || r.h < 16 || r.h > 800)
+                    return "";
+                tiles.push({x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h)});
+            }
+            body.strips.push({monitor: s.monitor, hidden: s.hidden, tiles: tiles});
+        }
+        break;
+    }
+    case "activate":
+    case "merge": {
+        const id = stageId(request.stage);
+        if (id < 0)
+            return "";
+        body.stage = id;
+        break;
+    }
+    case "move": {
+        const hex = normalizeAddress(request.address);
+        if (hex === "")
+            return "";
+        body.address = "0x" + hex;
+        if (request.stage === "new") {
+            body.stage = "new";
+        } else {
+            const id = stageId(request.stage);
+            if (id < 0)
+                return "";
+            body.stage = id;
+        }
+        break;
+    }
+    default:
+        return "";
+    }
+    const json = JSON.stringify(body);
+    if (json.length > 8192)
+        return "";
+    return guardedPluginCall("stages", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
+}
+
 // Reduce Motion for the animations Hyprland itself runs (A11Y-06; the shell cannot draw them): window opening and closing
 // (pop-in) and the Spaces slide become quick crossfades of at most 100 ms (speed 1 = 100 ms), window moves stop animating.
 // `normal` mirrors config/hypr/grassfield/looknfeel.lua (tests/unit/tst_minimized.qml checks the two agree); the call is a
@@ -181,12 +269,15 @@ function motionCall(reduced) {
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
 // tilingEdges / tilingMenuBar / tilingMargins: Settings windows.tiling* (feature "window-tiling").
+// stagesEnabled: Settings windows.stagesEnabled (feature "stages-available").
 var pluginConfig = {
     titlebarDoubleClick: ["zoom", "minimize", "none"],
     minimizeEffect: ["funnel", "shrink", "fade"],
     tilingEdges: ["true", "false"],
     tilingMenuBar: ["true", "false"],
-    tilingMargins: ["true", "false"]
+    tilingMargins: ["true", "false"],
+    // Stages (docs/specs/stages.md ST1; Settings windows.stagesEnabled, feature "stages-available"): off at every plugin load.
+    stagesEnabled: ["true", "false"]
 };
 
 function configCall(key, value) {
