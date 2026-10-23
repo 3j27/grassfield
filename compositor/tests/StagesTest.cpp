@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -332,6 +333,103 @@ TEST(StagesGeometry, StripBand) {
     const std::vector<Box> tiles{{16, 120, 180, 130}, {16, 270, 180, 130}};
     EXPECT_EQ(stripBand(tiles, 10), (Box{6, 110, 200, 300}));
     EXPECT_EQ(stripBand(std::vector<Box>{}, 10), (Box{}));
+}
+
+// ---- the shell's work items (stages.md "Shell side", 2026-10-23) ----
+
+// Work item 3: an op:on update with fewer tiles retargets every strip window; the glue animates each one from where it is
+// drawn now (retarget: `from = rect`), so only the targets change, and they are these.
+TEST(StagesShellItems, FewerTilesRetargetTheStagesBeyondTheTilesOffTheMonitor) {
+    const Box              monitor{0, 0, 1920, 1080};
+    const std::vector<Box> three{{16, 200, 160, 120}, {16, 344, 160, 120}, {16, 488, 160, 120}};
+    const std::vector<Box> two{{16, 272, 160, 120}, {16, 416, 160, 120}}; // re-centred by the shell
+    const std::vector<Box> window{{600, 300, 800, 500}};
+    const auto inside = [](const Box& r, const Box& t) { return r.x >= t.x - 1e-9 && r.y >= t.y - 1e-9 && r.x + r.w <= t.x + t.w + 1e-9 && r.y + r.h <= t.y + t.h + 1e-9; };
+    // Three tiles: the stage in slot 2 is drawn in the third tile.
+    auto t = stripTargets(2, three, false, false, monitor, window);
+    ASSERT_EQ(t.size(), 1U);
+    EXPECT_TRUE(inside(t[0].to, three[2]));
+    ASSERT_TRUE(t[0].thumb.has_value());
+    // Two tiles: slot 1 follows its tile to its new place; slot 2 has no tile any more and slides off the monitor.
+    t = stripTargets(1, two, false, false, monitor, window);
+    ASSERT_EQ(t.size(), 1U);
+    EXPECT_TRUE(inside(t[0].to, two[1]));
+    EXPECT_EQ(t[0].to, thumbRects(two[1], window)[0]) << "shown strip: no shift";
+    t = stripTargets(2, two, false, false, monitor, window);
+    ASSERT_EQ(t.size(), 1U);
+    EXPECT_LT(t[0].to.x + t[0].to.w, monitor.x) << "beyond the tiles: off the monitor";
+    EXPECT_FALSE(t[0].thumb.has_value()) << "no tile: no thumbnail in the event";
+    // Hidden strip, or a full-screen window shown: every slot slides off, the thumbnail (its shown place) stays known.
+    for (const bool hidden : {true, false}) {
+        t = stripTargets(0, two, hidden, !hidden, monitor, window);
+        ASSERT_EQ(t.size(), 1U);
+        EXPECT_LT(t[0].to.x + t[0].to.w, monitor.x);
+        ASSERT_TRUE(t[0].thumb.has_value());
+        EXPECT_TRUE(inside(t[0].thumb.value_or(Box{}), two[0]));
+    }
+    EXPECT_TRUE(stripTargets(0, std::vector<Box>{}, false, false, monitor, window).empty()) << "no tiles: nothing (op:on always has 1..8)";
+    EXPECT_EQ(stripTargets(0, two, false, false, monitor, std::vector<Box>{{0, 0, 300, 200}, {10, 10, 300, 200}}).size(), 2U) << "one per window";
+}
+
+// Work item 2: op:on with hidden:true while the strip surface keeps only its reveal zone as input region is accepted (only
+// the layer is checked); a shown strip still needs its box and input region over every tile.
+TEST(StagesShellItems, AHiddenStripNeedsOnlyItsLayer) {
+    EXPECT_TRUE(stripAccepted(true, true, false, false)) << "hidden, reveal zone only";
+    EXPECT_TRUE(stripAccepted(true, true, true, true));
+    EXPECT_FALSE(stripAccepted(true, false, true, true)) << "the layer is always checked";
+    EXPECT_TRUE(stripAccepted(false, true, true, true));
+    EXPECT_FALSE(stripAccepted(false, true, true, false)) << "shown: input over every tile";
+    EXPECT_FALSE(stripAccepted(false, true, false, true)) << "shown: the surface over every tile";
+}
+
+// Work item 1: a titlebar drag released on the strip makes the window a stage of its own (macOS).
+TEST(StagesShellItems, ADragReleasedOnTheStripIsOnItsOwnStage) {
+    const Box              monitor{1920, 0, 1920, 1080}; // the second output
+    const std::vector<Box> tiles{{1936, 272, 160, 120}, {1936, 416, 160, 120}};
+    EXPECT_TRUE(inDropZone(1925, 50, tiles, monitor)) << "the strip is the left side, the whole height";
+    EXPECT_TRUE(inDropZone(1936 + 160 + kStripDropMargin, 900, tiles, monitor)) << "up to the tiles' right edge plus the margin";
+    EXPECT_FALSE(inDropZone(1936 + 160 + kStripDropMargin + 1, 400, tiles, monitor));
+    EXPECT_FALSE(inDropZone(1900, 400, tiles, monitor)) << "on the other output";
+    EXPECT_FALSE(inDropZone(1925, 1080, tiles, monitor)) << "below the output";
+    EXPECT_FALSE(inDropZone(1925, 400, std::vector<Box>{}, monitor)) << "no strip";
+    EXPECT_FALSE(inDropZone(std::nan(""), 400, tiles, monitor));
+
+    const DropFacts drop{.on = true, .hasStrip = true, .inZone = true, .managed = true, .active = true, .alone = false, .tiling = false};
+    EXPECT_EQ(dropAction(drop), DropAction::NewStage);
+    auto f = drop;
+    f.on = false;
+    EXPECT_EQ(dropAction(f), DropAction::None) << "Stages off";
+    f          = drop;
+    f.hasStrip = false;
+    EXPECT_EQ(dropAction(f), DropAction::None) << "no strip on that output";
+    f        = drop;
+    f.inZone = false;
+    EXPECT_EQ(dropAction(f), DropAction::None) << "released elsewhere: a normal drag";
+    f         = drop;
+    f.managed = false;
+    EXPECT_EQ(dropAction(f), DropAction::None) << "a window Stages does not manage, or on another output's Desktop";
+    f        = drop;
+    f.active = false;
+    EXPECT_EQ(dropAction(f), DropAction::None);
+    f       = drop;
+    f.alone = true;
+    EXPECT_EQ(dropAction(f), DropAction::None) << "already a stage of its own (moveWindow refuses it too)";
+    f        = drop;
+    f.tiling = true;
+    EXPECT_EQ(dropAction(f), DropAction::None) << "window tiling at the screen edge wins";
+}
+
+TEST(StagesShellItems, TheModelMovesTheDroppedWindowToTheFrontOfTheStrip) {
+    CWorkspaceStages ws;
+    StageId          next = 1;
+    ws.reset(std::vector<WindowInfo>{{.id = 1, .app = "foot"}, {.id = 2, .app = "foot"}, {.id = 3, .app = "files"}}, 2, next);
+    const auto active = ws.active();
+    ASSERT_TRUE(ws.isActive(2));
+    ASSERT_TRUE(ws.moveWindow(2, std::nullopt, next)) << "what dropOnStrip asks";
+    EXPECT_EQ(ws.active(), active) << "the stage it left stays active";
+    EXPECT_FALSE(ws.isActive(2));
+    ASSERT_GE(ws.stages().size(), 2U);
+    EXPECT_EQ(ws.stages()[1].windows, std::vector<WindowId>{2}) << "a stage of its own, first in the strip";
 }
 
 // ---- events and flag ----

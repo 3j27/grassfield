@@ -518,6 +518,40 @@ namespace gf::stages {
         return Box{x0 - margin, y0 - margin, (x1 - x0) + (2 * margin), (y1 - y0) + (2 * margin)};
     }
 
+    std::vector<StripTarget> stripTargets(size_t slot, std::span<const Box> tiles, bool hidden, bool fullscreen, const Box& monitor,
+                                          std::span<const Box> surfacesBackToFront) {
+        std::vector<StripTarget> out;
+        if (tiles.empty())
+            return out;
+        const bool   hasTile = slot < tiles.size();
+        const auto   rects   = thumbRects(hasTile ? tiles[slot] : tiles.back(), surfacesBackToFront);
+        const double shift   = (hidden || !hasTile || fullscreen) ? hiddenShift(tiles, monitor) : 0.0;
+        out.reserve(rects.size());
+        for (const auto& r : rects)
+            out.push_back(StripTarget{.to = Box{r.x + shift, r.y, r.w, r.h}, .thumb = hasTile ? std::optional<Box>{r} : std::nullopt});
+        return out;
+    }
+
+    bool stripAccepted(bool hidden, bool layerOk, bool boxCovers, bool inputCovers) {
+        return layerOk && (hidden || (boxCovers && inputCovers));
+    }
+
+    bool inDropZone(double x, double y, std::span<const Box> tiles, const Box& monitor) {
+        if (tiles.empty() || !std::isfinite(x) || !std::isfinite(y))
+            return false;
+        if (x < monitor.x || x >= monitor.x + monitor.w || y < monitor.y || y >= monitor.y + monitor.h)
+            return false;
+        double right = tiles[0].x + tiles[0].w;
+        for (const auto& t : tiles)
+            right = std::max(right, t.x + t.w);
+        return x <= right + kStripDropMargin;
+    }
+
+    DropAction dropAction(const DropFacts& f) {
+        const bool drop = f.on && f.hasStrip && f.inZone && f.managed && f.active && !f.alone && !f.tiling;
+        return drop ? DropAction::NewStage : DropAction::None;
+    }
+
     // ---- events ----
 
     std::string_view reasonName(Reason reason) {
