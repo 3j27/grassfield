@@ -42,10 +42,12 @@ constexpr qint64 kProbeDataLimit = qint64(1) << 30;
 constexpr qint64 kFrameDataLimit = qint64(3) << 30;
 constexpr qint64 kTranscodeDataLimit = qint64(6) << 30;
 constexpr qint64 kMaxVideoPixels = qint64(3840) * 2160;
-// The size the transcoded video is fitted inside. The rule: the video never has more pixels than 4K UHD (3840x2160 = 8,294,400),
-// and its orientation and aspect follow the display. A display at or below that pixel count gets its own size (2160x3840 portrait,
-// 1440x2560, 5120x1440 all native); above it, the display size is scaled down uniformly to the pixel budget (5120x2880 and
-// 7680x4320 give 3840x2160, a portrait 8K display 2160x3840); never enlarged, each side even.
+constexpr int kMaxVideoSide = 4096;
+// The size the transcoded video is fitted inside. The rule: the video never has more pixels than 4K UHD (3840x2160 = 8,294,400)
+// and no side above 4096 (the common hardware decode limit of H.264: VA-API on Intel and AMD), and its orientation and aspect
+// follow the display. A display within both limits gets its own size (2160x3840 portrait, 1440x2560); otherwise the display size is
+// scaled down uniformly (5120x2880 and 7680x4320 give 3840x2160, a portrait 8K display 2160x3840, 5120x1440 gives 4096x1152,
+// 7680x1080 gives 4096x576); never enlarged, each side even.
 QSize videoLimit(const QSize &display);
 // The thread count for a machine with `cpus` cores: 1 to kMaxThreads.
 int threadCount(int cpus);

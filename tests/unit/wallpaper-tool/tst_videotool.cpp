@@ -394,7 +394,12 @@ TEST(VideoTool, TheVideoNeverExceeds4kWhateverTheDisplay)
     EXPECT_EQ(videoLimit(QSize(3840, 2160)), QSize(3840, 2160));
     EXPECT_EQ(videoLimit(QSize(2160, 3840)), QSize(2160, 3840)) << "portrait 4K";
     EXPECT_EQ(videoLimit(QSize(1440, 2560)), QSize(1440, 2560)) << "rotated QHD";
-    EXPECT_EQ(videoLimit(QSize(5120, 1440)), QSize(5120, 1440)) << "ultrawide, fewer pixels than 4K";
+    // A side above 4096 (the H.264 hardware decode limit) is scaled down too, even under the pixel budget.
+    EXPECT_EQ(videoLimit(QSize(5120, 1440)), QSize(4096, 1152)) << "ultrawide, fewer pixels than 4K but a side above 4096";
+    EXPECT_EQ(videoLimit(QSize(7680, 1080)), QSize(4096, 576));
+    EXPECT_EQ(videoLimit(QSize(4096, 2160)), QSize(3964, 2090)) << "DCI 4K: over the pixel budget, scaled uniformly";
+    EXPECT_EQ(videoLimit(QSize(4096, 2000)), QSize(4096, 2000)) << "at the side limit and under the budget: native";
+    EXPECT_EQ(videoLimit(QSize(4096, 4096)), QSize(2880, 2880));
     // Above it: scaled down uniformly to the budget, orientation kept.
     EXPECT_EQ(videoLimit(QSize(5120, 2880)), QSize(3840, 2160));
     EXPECT_EQ(videoLimit(QSize(7680, 4320)), QSize(3840, 2160));
@@ -404,6 +409,7 @@ TEST(VideoTool, TheVideoNeverExceeds4kWhateverTheDisplay)
     for (const QSize d : {QSize(6016, 3384), QSize(5120, 2160), QSize(3440, 1440), QSize(7680, 2160), QSize(4096, 4096), QSize(1, 1), QSize(8191, 4097)}) {
         const QSize v = videoLimit(d);
         EXPECT_LE(qint64(v.width()) * v.height(), kMaxVideoPixels) << d.width() << "x" << d.height();
+        EXPECT_LE(std::max(v.width(), v.height()), kMaxVideoSide) << d.width() << "x" << d.height();
         EXPECT_LE(v.width(), d.width());
         EXPECT_LE(v.height(), d.height());
         if (d.width() * d.height() > 2) {

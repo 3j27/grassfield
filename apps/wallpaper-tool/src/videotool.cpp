@@ -286,11 +286,14 @@ QSize outputSize(const QSize &source, const QSize &limit)
 QSize videoLimit(const QSize &display)
 {
     const qint64 pixels = qint64(display.width()) * display.height();
-    if (display.width() < 1 || display.height() < 1 || pixels <= kMaxVideoPixels)
+    if (display.width() < 1 || display.height() < 1)
         return display;
-    // Above the budget: the display size scaled down uniformly (aspect and orientation kept), each side even and rounded down so
-    // the product stays within the budget.
-    const double scale = std::sqrt(double(kMaxVideoPixels) / double(pixels));
+    const int longest = std::max(display.width(), display.height());
+    if (pixels <= kMaxVideoPixels && longest <= kMaxVideoSide)
+        return display;
+    // Over the pixel budget or a side above 4096: the display size scaled down uniformly (aspect and orientation kept), each side
+    // even and rounded down so that both limits hold.
+    const double scale = std::min(std::sqrt(double(kMaxVideoPixels) / double(pixels)), double(kMaxVideoSide) / double(longest));
     int w = std::max(2, int(std::floor(display.width() * scale + 1e-6)) & ~1);
     int h = std::max(2, int(std::floor(display.height() * scale + 1e-6)) & ~1);
     while (qint64(w) * h > kMaxVideoPixels && h > 2)
@@ -489,7 +492,8 @@ ExitCode transcode(const TranscodeOptions &o, const std::function<void(double)> 
     // pixels gets its own size); the poster is composed on the display itself. Displays with the same video size share the file.
     const QSize vlimit = videoLimit(o.limit);
     const QSize size = outputSize(QSize(info.width, info.height), vlimit);
-    const QString key = videoKey(real, bytes, mtime, vlimit);
+    // Keyed by the size the file really has: a 1080p source on a 1440p and on a 4K display is the same file.
+    const QString key = videoKey(real, bytes, mtime, size);
     const QString mp4 = o.out + QLatin1Char('/') + key + QStringLiteral(".mp4");
     // The poster and the sidecar are named by the fit and the colour too (the picture on screen follows them).
     const QString full = cacheKey(real, bytes, mtime, o.limit, o.fit, o.color, o.stripRows);
