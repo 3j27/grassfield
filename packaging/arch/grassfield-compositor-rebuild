@@ -19,7 +19,8 @@
 #   --session         run by the session when no build matches: one notice naming the Hyprland version and the recovery;
 #                     with Settings windows.rebuildExtension on, the build runs now (nice, bounded), then is loaded
 #   --print-abi [F]   the ABI string of a Hyprland version.h (default: the installed one); used for the package's stamp
-# Refuses to run as root. Environment, for tests only: GF_VERSION_H, GF_LIB_DIR, GF_SRC_DIR, GF_TOOLS_PATH, GF_TEST_UID,
+# Refuses to run as root (--check and --print-abi only read). Environment, for tests only: GF_VERSION_H, GF_LIB_DIR,
+# GF_SRC_DIR, GF_TOOLS_PATH, GF_TEST_UID (0: behave as root; it can never lift the refusal),
 # GF_TEST_FAKE_BUILD (1: a placeholder plugin instead of CMake; symlink: a symlink as the build's result),
 # GF_NOTIFY_LOG (notices appended there instead of notify-send), GF_HYPRCTL (the hyprctl that loads the result).
 set -uo pipefail
@@ -133,6 +134,7 @@ build_and_install() { # <abi>
   mkdir -p "$cache_root" || return 1 # the user's own cache (it may be a link the user made); below it, only our 0700 dirs
   own_dir "$cache_root/grassfield" && own_dir "$cache_base" || return 1
   # One build at a time (the session's background build and a manual one).
+  [[ -L $cache_base/.lock ]] && { say "refusing: $cache_base/.lock is a symlink"; return 1; }
   exec 9>"$cache_base/.lock" || return 1
   flock -n 9 || { say "another build is running"; return 1; }
   dest=$cache_base/$abi
@@ -164,23 +166,26 @@ load_in_session() { # <path> <abi>
   [[ $out == *ok* ]]
 }
 
-uid=${GF_TEST_UID:-$(id -u)}
-if [[ $uid == 0 ]]; then
-  say "refusing to run as root: run it as the user whose session needs the extension (it builds into that user's cache)"
-  exit 1
-fi
-
 mode=build
 case ${1:-} in
   "") ;;
   --check) mode=check ;;
   --session) mode=session ;;
   --print-abi)
+    # Read only, also as root: makepkg's package() runs it under fakeroot for the package's stamp.
     abi_of "${2:-$version_h}" || { say "no Hyprland version.h at ${2:-$version_h}"; exit 1; }
     exit 0
     ;;
   *) sed -n '/^# Usage:/,/^# Refuses/p' "$0" | sed '$d' >&2; exit 2 ;;
 esac
+
+# Building (and the session's run, which may build) never runs as root. The test override can only add the refusal.
+uid=$(id -u)
+[[ ${GF_TEST_UID:-} == 0 ]] && uid=0
+if [[ $uid == 0 && $mode != check ]]; then
+  say "refusing to run as root: run it as the user whose session needs the extension (it builds into that user's cache)"
+  exit 1
+fi
 
 installed=$(abi_of "$version_h") || { say "Hyprland's version.h is missing ($version_h): is hyprland installed?"; exit 1; }
 version=$(version_of "$version_h")

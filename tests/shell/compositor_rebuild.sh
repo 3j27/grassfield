@@ -118,6 +118,16 @@ dest=$cache/grassfield/compositor/$want
 run GF_TEST_UID=0 "$script"; rc=$?
 expect "root: refused" "$rc $(grep -c 'refusing to run as root' "$tmp/out")" "1 1"
 [[ ! -e $cache ]] && pass "root: nothing written" || bad "root: nothing written"
+run GF_TEST_UID=0 "$script" --session; rc=$?
+expect "root: --session refused too" "$rc" 1
+expect "root: --print-abi still answers (it only reads)" "$(GF_TEST_UID=0 "$script" --print-abi "$tmp/version.h")" "$want"
+if command -v fakeroot >/dev/null; then
+  # makepkg's package() runs under fakeroot (uid 0): the package's stamp must still be written; a build never runs there,
+  # and the test override cannot lift the refusal.
+  expect "fakeroot: --print-abi (the PKGBUILD's stamp)" "$(fakeroot -- "$script" --print-abi "$tmp/version.h")" "$want"
+  run fakeroot -- env GF_TEST_UID=1000 "$script"; rc=$?
+  expect "fakeroot: a build is refused, GF_TEST_UID cannot lift it" "$rc $(grep -c 'refusing to run as root' "$tmp/out")" "1 1"
+fi
 
 run "$script" --check; rc=$?
 expect "--check: no build matches -> exit 1" "$rc" 1
