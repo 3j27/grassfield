@@ -647,8 +647,13 @@ FolderStyleStore::~FolderStyleStore()
 
 void FolderStyleStore::startPrune(bool force)
 {
-    if (m_job)
-        return; // one runs, or a finished one waits to be collected
+    if (m_job) {
+        // One runs, or a finished one waits to be collected. A forced request is not dropped: its snapshot must include
+        // what changed since this job started, so it runs once this one has been collected.
+        if (force)
+            m_pruneAgain = true;
+        return;
+    }
     if (m_entries.isEmpty())
         return;
     if (!force && m_lastPrune.isValid() && m_lastPrune.elapsed() < 60000)
@@ -677,6 +682,17 @@ bool FolderStyleStore::collectPruned()
         return false;
     const std::shared_ptr<PruneJob> job = m_job;
     m_job.reset();
+    // A forced prune asked for while this job ran starts after the entries of this one are applied (every way out below).
+    struct Again {
+        FolderStyleStore *store;
+        ~Again()
+        {
+            if (store->m_pruneAgain) {
+                store->m_pruneAgain = false;
+                store->startPrune(true);
+            }
+        }
+    } again{this};
     const QStringList touched = m_touched;
     m_touched.clear();
     // Decide from the file as it is now; an entry changed since the snapshot (or touched meanwhile) stays.
@@ -705,7 +721,9 @@ bool FolderStyleStore::collectPruned()
 
 void FolderStyleStore::waitForPrune()
 {
-    if (m_job)
+    // Also the job a forced request queued behind the one that was running.
+    for (int round = 0; m_job && round < 4; ++round) {
         m_job->wait(60000);
-    collectPruned();
+        collectPruned();
+    }
 }

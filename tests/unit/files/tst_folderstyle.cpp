@@ -485,6 +485,7 @@ TEST(FolderStyleStore, EntriesFollowRenamesAndAreNotInheritedByNewFolders)
     ::chmod(QFile::encodeName(other).constData(), 0555);
     ASSERT_TRUE(store.write(other, style("#8e5bea")).fellBack);
     ::chmod(QFile::encodeName(other).constData(), 0755);
+    store.waitForPrune(); // the write above may have started a background prune: drain it, then force one that sees every change
     store.startPrune(true);
     store.waitForPrune();
     EXPECT_EQ(store.fallbackCount(), 1) << "the entries of the vanished folders are pruned (by the worker)";

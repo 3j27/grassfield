@@ -134,6 +134,7 @@ private:
     mutable qint64 m_serial = 0;
     mutable QHash<QString, FolderStyleLogic::Style> m_entries;
     std::shared_ptr<PruneJob> m_job;
+    bool m_pruneAgain = false; // a forced prune was asked for while a job ran: it starts when that job is collected
     QElapsedTimer m_lastPrune;
     bool m_haveMounts = false;
     Mounts m_mounts;
