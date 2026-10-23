@@ -195,6 +195,9 @@ package_grassfield-compositor() {
   # Hyprland that runs).
   "$root/packaging/arch/grassfield-compositor-rebuild" --print-abi >"$pkgdir/usr/lib/grassfield/grassfield-compositor.abi"
   install -Dm755 "$root/packaging/arch/grassfield-compositor-rebuild" "$pkgdir/usr/lib/grassfield/grassfield-compositor-rebuild"
+  # The commands a person types are on PATH (sudo grassfield-compositor-rebuild, grassfield-compositor-rebuild --check).
+  install -d "$pkgdir/usr/bin"
+  ln -s ../lib/grassfield/grassfield-compositor-rebuild "$pkgdir/usr/bin/grassfield-compositor-rebuild"
   install -Dm644 "$root/packaging/arch/grassfield-compositor-rebuild.hook" "$pkgdir/usr/share/libalpm/hooks/grassfield-compositor-rebuild.hook"
   install -Dm644 "$root/packaging/arch/grassfield-compositor-clean.hook" "$pkgdir/usr/share/libalpm/hooks/grassfield-compositor-clean.hook"
   # The sources that build is made from (the plugin only: no unit tests, no build directory).
