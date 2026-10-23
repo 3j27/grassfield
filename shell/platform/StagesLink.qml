@@ -102,6 +102,8 @@ Singleton {
         target: "stages"
 
         function status(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             if (!root.available)
                 return "unavailable";
             if (!root.on)
@@ -125,6 +127,8 @@ Singleton {
         }
 
         function enable(on: bool): string {
+            if (!VisualFixtures.dev)
+                return "refused";
             Settings.setStagesEnabled(on);
             return "ok";
         }

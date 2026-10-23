@@ -579,7 +579,7 @@ Files: `shell/platform/StagesLink.qml` (capability, setting, events, verb; the o
   the Dock and Search focus an app's window, which brings its stage forward (ST10); `qs ipc call stages activate <n>` (n-th strip stage
   of the focused output, for key bindings and scripts) and `qs ipc call stages newStage` (focused window becomes its own stage);
   the Quick Settings tile is a normal keyboard-reachable switch. Tiles expose `Accessible.Button` with the app name and window count
-  and a press action. A key binding for `activate` is left to the session config (not added: no macOS default exists).
+  and a press action. Bindings (`config/hypr/grassfield/bindings.lua`): SUPER+ALT+1..4 = `stages activate n`, SUPER+ALT+S = `stages newStage`; `stages status` and `enable` are dev hooks (IPC inventory, `docs/specs/security.md`).
 - **Final contract (plugin 0.13.0-audit).** Tiles are always on the monitor (a hidden strip is checked for surface, layer and tiles on the monitor, not input region); a reveal grows the input region over the tiles at once and sends `op:on` (`hidden:false`) after the debounce, so the plugin never sees a shown strip without its region. A window dragged by its titlebar onto the visible strip becomes its own stage in the plugin; the shell has nothing to do for it. The hidden strip has no drop zone: the edge zone only reveals.
 - **Overview (REQ-STG-SC-d8).** The overview lists strip windows like any window (nothing in `shell/overview` excludes them); clicking one
   focuses it, which brings its stage forward (ST10). Not verified nested (ST16).

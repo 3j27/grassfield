@@ -99,6 +99,8 @@ does not check its gate.
 | brightness | up, down | action | brightness keys |
 | keyboard | up, down | action | keyboard backlight keys (XF86KbdBrightnessUp/Down) |
 | capabilities | status | dev | visual tests wait on it |
+| stages | activate, newStage | action | SUPER+ALT+1..4 (the n-th recent stage forward), SUPER+ALT+S (focused window to a stage of its own); they do nothing while Stages is off |
+| stages | status, enable | dev | `tests/visual/scenarios/stages.sh`; `enable` changes the persisted setting |
 | bartone | status | dev | visual tests |
 | wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
 | visual | glyphs | dev | contrast run |
