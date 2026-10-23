@@ -310,7 +310,7 @@ FocusScope {
                 inset: root.diskInset
                 iconName: "airplane"
                 title: qsTr("Airplane Mode")
-                subtitle: Connectivity.airplane ? qsTr("Wi-Fi and Bluetooth off") : qsTr("Off")
+                subtitle: Connectivity.airplane ? qsTr("On") : qsTr("Off")
                 on: Connectivity.airplane
                 available: Connectivity.airplaneAvailable
                 onToggled: Connectivity.setAirplane(!Connectivity.airplane)
@@ -577,6 +577,8 @@ FocusScope {
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width - lowPowerToggle.width - Tokens.spacingSm
                         text: qsTr("Low Power Mode")
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
                     }
 
                     Toggle {

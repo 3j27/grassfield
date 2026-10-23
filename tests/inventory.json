@@ -64,6 +64,7 @@
  {"path": "tests/unit/tst_iconcontrast.qml", "layer": "headless"},
  {"path": "tests/unit/tst_iconmenu.qml", "layer": "headless"},
  {"path": "tests/unit/tst_iconmodes.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_cclabels.qml", "layer": "headless"},
  {"path": "tests/unit/tst_iconshader.qml", "layer": "headless"},
  {"path": "tests/unit/tst_localeformat.qml", "layer": "headless"},
  {"path": "tests/unit/tst_icontile.qml", "layer": "headless"},
