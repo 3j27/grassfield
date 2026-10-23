@@ -20,6 +20,8 @@
 #include <map>
 #include <vector>
 
+#include <csignal>
+#include <sys/prctl.h>
 #include <unistd.h>
 
 namespace wallpaper::commons {
@@ -565,6 +567,9 @@ ExitCode runCurl(const Options &o, const QUrl &url, const QString &outFile, qint
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.remove(QStringLiteral("SSLKEYLOGFILE"));
     p.setProcessEnvironment(env);
+    // curl dies with the helper: a superseded fetch (SIGTERM, whose default action ends the helper) must not leave a transfer
+    // running for up to --max-time.
+    p.setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGKILL); });
     p.setProgram(o.curl);
     p.setArguments(curlArgs(url, outFile, maxBytes, o.baseUrl));
     p.start();
