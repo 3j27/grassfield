@@ -11,6 +11,8 @@ require("grassfield.cursor").apply()
 require("grassfield.looknfeel")
 require("grassfield.input")
 require("grassfield.windows")
+-- Omarchy's screen-share protection for password managers (SEC-01).
+require("grassfield.privacy")
 require("grassfield.placement")
 require("grassfield.stacking")
 require("grassfield.bindings")
