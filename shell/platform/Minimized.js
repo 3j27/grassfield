@@ -2,10 +2,11 @@
 
 // Minimized-window bookkeeping (pure, unit-tested). The shell records every window it
 // minimized: Hyprland has no minimized state, so the record is the source of truth for the Dock.
-// Record: {toplevel, address, appId, title}.
+// Record: {toplevel, address, appId, title, screen} (`screen`: the display it was minimized from, "" when unknown, e.g. a
+// record rebuilt after a shell restart).
 
 // Verbs of the compositor plugin (hl.plugin.grassfield.<verb>); anything else is never put in Lua.
-var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile"];
+var pluginVerbs = ["hello", "minimize", "restore", "config", "appmenu", "overview", "cursor_refresh", "overview_focus", "tile", "stages"];
 
 function isPluginVerb(verb) {
     return typeof verb === "string" && pluginVerbs.indexOf(verb) >= 0;
@@ -181,13 +182,39 @@ function motionCall(reduced) {
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).
 // tilingEdges / tilingMenuBar / tilingMargins: Settings windows.tiling* (feature "window-tiling").
+// appearance: the appearance the shell shows (feature "appearance"): the compositor-drawn titlebars follow it (audit UX-06).
+// stagesEnabled: Settings windows.stages (feature "stages-available"; ADR-0013, owner decision D-4).
 var pluginConfig = {
     titlebarDoubleClick: ["zoom", "minimize", "none"],
     minimizeEffect: ["funnel", "shrink", "fade"],
     tilingEdges: ["true", "false"],
     tilingMenuBar: ["true", "false"],
-    tilingMargins: ["true", "false"]
+    tilingMargins: ["true", "false"],
+    appearance: ["dark", "light"],
+    stagesEnabled: ["true", "false"]
 };
+
+// hl.plugin.grassfield.stages(json) (gfc/1 capability "stages", docs/specs/stages.md "Shell contract" 3 and 5), for the
+// Stages strip: `request` is the operation object ({op: "on", durationMs, curve?, strips: [...]}, {op: "off", durationMs},
+// {op: "activate" | "merge", stage}, {op: "move", address, stage}). Only the op is checked here (one of these five) and
+// the size (at most 8 KiB, the plugin's limit); the plugin validates every field strictly (untrusted input there). The JSON
+// is quoted as a Lua string (JSON.stringify escapes control characters; backslash and double quote are escaped for Lua).
+// "" when anything is invalid (callers must not dispatch it).
+var stagesOps = ["on", "off", "activate", "move", "merge"];
+
+function stagesCall(request) {
+    if (!request || typeof request !== "object" || Array.isArray(request) || stagesOps.indexOf(request.op) < 0)
+        return "";
+    let json = "";
+    try {
+        json = JSON.stringify(request);
+    } catch (e) {
+        return "";
+    }
+    if (typeof json !== "string" || json.length > 8192)
+        return "";
+    return guardedPluginCall("stages", ["\"" + json.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""]);
+}
 
 function configCall(key, value) {
     if (typeof key !== "string" || !Object.prototype.hasOwnProperty.call(pluginConfig, key))
@@ -210,6 +237,19 @@ function normalizeAddress(address) {
 // Arbitrary names (e.g. "undefined" from a missing value) are rejected.
 function validWorkspace(workspace) {
     return /^(?:[1-9][0-9]{0,8}|special:[A-Za-z0-9_-]{1,64})$/.test(String(workspace));
+}
+
+// The Desktop a window restored WITHOUT the plugin goes to (owner decision D-1, the macOS model; audit GF-001): the one the
+// display it was minimized from (`screen`, recorded at the minimize) shows now; else (no record, display gone) the focused
+// Desktop. `monitors`: [{name, workspace}] with the id of the Desktop each display shows. "" when neither is valid. The
+// plugin, when present, does this itself (and gives the frame back).
+function restoreWorkspace(screen, monitors, focusedWorkspace) {
+    if (typeof screen === "string" && screen !== "" && Array.isArray(monitors)) {
+        const m = monitors.find(x => x && x.name === screen);
+        if (m && /^[1-9][0-9]{0,8}$/.test(String(m.workspace)))
+            return String(m.workspace);
+    }
+    return /^[1-9][0-9]{0,8}$/.test(String(focusedWorkspace)) ? String(focusedWorkspace) : "";
 }
 
 function moveRequest(address, workspace) {

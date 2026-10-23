@@ -37,6 +37,8 @@ const DEFAULTS = {
     "windows.tilingEdges": true,
     "windows.tilingMenuBar": true,
     "windows.tilingMargins": true,
+    "windows.stages": false,
+    "windows.rebuildExtension": false,
     "notifications.dnd": false,
     "notifications.previews": "unlocked",
     "notifications.appPreviews": [],
@@ -93,6 +95,8 @@ const RULES = {
     "windows.tilingEdges": {type: "boolean"},
     "windows.tilingMenuBar": {type: "boolean"},
     "windows.tilingMargins": {type: "boolean"},
+    "windows.stages": {type: "boolean"},
+    "windows.rebuildExtension": {type: "boolean"},
     "notifications.dnd": {type: "boolean"},
     "notifications.previews": {type: "enum", values: ["always", "unlocked", "never"]},
     // Per-app override of the previews setting (ui/Grassfield/Ui/NotificationPrefs.js, one copy of the rules).

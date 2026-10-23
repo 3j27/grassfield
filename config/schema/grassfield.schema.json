@@ -145,6 +145,12 @@
         },
         "tilingMargins": {
           "type": "boolean"
+        },
+        "stages": {
+          "type": "boolean"
+        },
+        "rebuildExtension": {
+          "type": "boolean"
         }
       }
     },

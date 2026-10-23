@@ -100,7 +100,7 @@ namespace gf::gfc {
     }
 
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview, bool desktopFocus, bool stagesAvailable, bool stagesEnabled,
-                                           bool cursorRefresh, bool overviewFocus, bool minimizeEffect, bool windowTiling, bool layerPointer) {
+                                           bool cursorRefresh, bool overviewFocus, bool minimizeEffect, bool windowTiling, bool layerPointer, bool appearance) {
         std::vector<std::string_view> out{kFeatureDecorations};
         if (minimize)
             out.push_back(kFeatureMinimize);
@@ -129,7 +129,19 @@ namespace gf::gfc {
             out.push_back(kFeatureWindowTiling);
         if (layerPointer)
             out.push_back(kFeatureLayerPointer);
+        if (appearance)
+            out.push_back(kFeatureAppearance);
         return out;
+    }
+
+    std::optional<theme::Appearance> parseAppearance(std::string_view key, std::string_view value) {
+        if (key != kConfigAppearance)
+            return std::nullopt;
+        if (value == "dark")
+            return theme::Appearance::Dark;
+        if (value == "light")
+            return theme::Appearance::Light;
+        return std::nullopt;
     }
 
     std::optional<DoubleClickAction> parseDoubleClickAction(std::string_view key, std::string_view value) {

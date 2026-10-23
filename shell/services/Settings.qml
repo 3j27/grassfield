@@ -82,6 +82,9 @@ Singleton {
     readonly property bool windowsTilingEdges: store.data.windows.tilingEdges
     readonly property bool windowsTilingMenuBar: store.data.windows.tilingMenuBar
     readonly property bool windowsTilingMargins: store.data.windows.tilingMargins
+    readonly property bool windowsStages: store.data.windows.stages
+    // Opt-in: the shell builds the compositor extension when none is made for the installed Hyprland (shell.qml).
+    readonly property bool windowsRebuildExtension: store.data.windows.rebuildExtension
     readonly property int lockIdleMinutes: store.lockIdleMinutes
 
     readonly property bool desktopShowIcons: store.data.desktop.showIcons

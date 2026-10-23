@@ -2,9 +2,12 @@
 
 // Grassfield titlebar constants (S2 / M1 decorations).
 //
-// Single source of the plugin's visual values so they can be replaced by design tokens
-// (ui/tokens/tokens.json, ADR-0003) without touching drawing code. Grassfield's own values,
-// not Apple's. No Hyprland includes: this header is used by the unit tests.
+// Single source of the plugin's visual values. The colours of the chrome come from the design tokens
+// (ui/tokens/tokens.json group "titlebar", generated into ThemeTokens.hpp, ADR-0003); the metrics below are still plain
+// literals (tests/compositor/titlebar_geometry.sh reads them). Grassfield's own values, not Apple's. No Hyprland
+// includes: this header is used by the unit tests.
+
+#include "ThemeTokens.hpp"
 
 #include <cstdint>
 
@@ -72,32 +75,46 @@ namespace gf::theme {
         Light,
     };
 
+    // The colours of the compositor-drawn chrome, per appearance: design tokens (ui/tokens/tokens.json group "titlebar",
+    // generated into ThemeTokens.hpp by ui/tools/gen-tokens.py).
     struct TitlebarPalette {
         Rgba background;
         Rgba title;
-        // The three lights of an inactive window (macOS: grey; coloured again while the pointer is over them). Own values:
-        // the light-appearance reference samples about #D4D4D4 on a white bar; the dark value keeps the same small step
-        // above its bar.
+        // The three lights of an inactive window (macOS: grey; coloured again while the pointer is over them).
         Rgba inactiveLight;
+        // Window-tiling preview (core/Tiling.hpp, FR48; owner decision D-8): the frame of the place a titlebar drag would
+        // tile into, drawn under the dragged window as the blurred material (Hyprland's blur of what is behind it, under
+        // this tint, as macOS's frosted pane), and its edge.
+        Rgba previewTint;
+        Rgba previewRim;
     };
 
     constexpr TitlebarPalette titlebarPalette(Appearance appearance) {
+        constexpr auto titleAlpha = static_cast<float>(tokens::kTitlebarTitleOpacity);
+        constexpr auto tintAlpha  = static_cast<float>(tokens::kTitlebarPreviewTintAlpha);
+        constexpr auto rimAlpha   = static_cast<float>(tokens::kTitlebarPreviewRimOpacity);
         switch (appearance) {
             case Appearance::Light:
-                return TitlebarPalette{.background = fromRgb8(236, 236, 238), .title = fromRgb8(40, 40, 44, 0.85F), .inactiveLight = fromHex(0xD1D1D3)};
+                return TitlebarPalette{.background    = fromHex(tokens::kTitlebarBackgroundLight),
+                                       .title         = fromHex(tokens::kTitlebarTitleLight, titleAlpha),
+                                       .inactiveLight = fromHex(tokens::kTitlebarInactiveButtonLight),
+                                       .previewTint   = fromHex(tokens::kTitlebarPreviewTintLight, tintAlpha),
+                                       .previewRim    = fromHex(tokens::kTitlebarPreviewRimLight, rimAlpha)};
             case Appearance::Dark:
-            default: return TitlebarPalette{.background = fromRgb8(40, 40, 44), .title = fromRgb8(236, 236, 238, 0.85F), .inactiveLight = fromHex(0x5A5A5E)};
+            default:
+                return TitlebarPalette{.background    = fromHex(tokens::kTitlebarBackgroundDark),
+                                       .title         = fromHex(tokens::kTitlebarTitleDark, titleAlpha),
+                                       .inactiveLight = fromHex(tokens::kTitlebarInactiveButtonDark),
+                                       .previewTint   = fromHex(tokens::kTitlebarPreviewTintDark, tintAlpha),
+                                       .previewRim    = fromHex(tokens::kTitlebarPreviewRimDark, rimAlpha)};
         }
     }
 
-    // S2: fixed appearance. Switching follows the shell's appearance setting later (tokens + IPC).
+    // The appearance until the shell says otherwise (hl.plugin.grassfield.config("appearance", "dark" | "light"), feature
+    // "appearance"; Grassfield's default appearance is dark).
     inline constexpr Appearance kDefaultAppearance = Appearance::Dark;
 
-    // ---- Window tiling preview (core/Tiling.hpp, FR48) ----
-    // A translucent frame of the place a drag would tile into, under the dragged window: a light rim and a lighter
-    // inside, readable over light and dark windows (macOS shows a translucent pane). Corners follow the window's rounding.
-    inline constexpr Rgba   kTilePreviewFill  = fromHex(0xFFFFFF, 0.42F);
-    inline constexpr Rgba   kTilePreviewInner = fromHex(0xFFFFFF, 0.16F);
-    inline constexpr double kTilePreviewRim   = 2.0;
+    // The width of the tiling preview's edge (logical px).
+    inline constexpr double kTilePreviewRim = tokens::kTitlebarPreviewRimWidth;
 
 } // namespace gf::theme
