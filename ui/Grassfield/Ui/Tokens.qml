@@ -742,6 +742,16 @@ QtObject {
     readonly property int overviewTileMaxIcons: 4
     // estimate: window name pill
     readonly property int overviewLabelHeight: 34
+    // macOS Mission Control shows minimized windows smaller than the open ones, in a row below a divider: width of one minimized tile, px (it shrinks when the row would not fit)
+    readonly property int overviewMinimizedWidth: 144
+    // estimate (16:10 of minimizedWidth): height of one minimized tile, px
+    readonly property int overviewMinimizedHeight: 90
+    // estimate: space between minimized tiles, px
+    readonly property int overviewMinimizedGap: 16
+    // estimate: space above and below the minimized row (the divider sits in the upper one), px
+    readonly property int overviewMinimizedPad: 12
+    // estimate: window title under a minimized tile, px
+    readonly property int overviewMinimizedLabelHeight: 18
     // estimate: window name pill icon
     readonly property int overviewLabelIconSize: 20
     // estimate: window name pill

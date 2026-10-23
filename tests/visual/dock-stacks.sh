@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# Dock folder stacks and shrink to fit (docs/specs/dock.md requirements 24 and 25), on the nested session:
+#   stack    a fixture folder kept in the Dock's right section (dock.folders) is a tile left of the Trash; a click opens its stack
+#            (popup kind dockstack) as Fan, Grid or List per dock.stackOptions; the items come in the order of the chosen sort
+#            (Name, Date Added, Date Modified, Kind) and hidden files never show; Esc closes it. Captures of the three views.
+#   fit      with dock.size 96 and 24 running apps with distinct ids the tiles shrink so that the shelf fits the output
+#            (`dock fitsize` below `dock sizenow`), and grow back to the setting when the apps are gone.
+# Run as a BARE command with a relative path, on the reference machine only; the nested session it starts is torn down on exit.
+#   tests/visual/dock-stacks.sh [stack|fit]     (default: both)
+# Captures: .dev/visual/dock-stacks/. Exit status 1 when a check fails.
+source "$(dirname "$0")/lib.sh"
+set +e
+
+part=${1:-all}
+want() { [[ $part == all || $part == "$1" ]]; }
+out=$VS_STATE/dock-stacks
+was_running=0
+vs_nested_running && was_running=1
+cleanup() {
+  vs_nested_running && { vs_ipc overview close >/dev/null 2>&1 || true; vs_kill_clients || true; }
+  (( was_running )) || "$VS_ROOT/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
+  return 0
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+mkdir -p "$out"
+rm -f "$out"/*
+
+fail=0
+check() { if [[ $2 -eq 0 ]]; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
+cfg=$VS_DEV/config/grassfield/grassfield.json
+setting() { # <jq filter assigning the value>
+  local tmp
+  mkdir -p "$(dirname "$cfg")"
+  [[ -s $cfg ]] || echo '{}' >"$cfg"
+  tmp=$(mktemp "$cfg.XXXXXX") && jq "$1" "$cfg" >"$tmp" && mv "$tmp" "$cfg"
+  sleep 1.2
+}
+tile_index() { vs_ipc dock tiles | jq -r --arg k "$1" 'index($k)'; }
+popup() { vs_ipc dock popup; }
+state() { vs_ipc dockstack state; }
+
+vs_session en
+vs_reset dark 0.25
+vs_ipc dock magnify 1.6 false >/dev/null
+vs_ipc dock autohide false >/dev/null
+vs_ipc dock position bottom >/dev/null
+vs_ipc dock size 48 >/dev/null
+
+if want stack; then
+  fix=$VS_DEV/stackfix
+  rm -rf "$fix"
+  mkdir -p "$fix/Sub"
+  : >"$fix/.hidden"
+  printf 'a' >"$fix/beta.txt"; touch -d '2026-01-03' "$fix/beta.txt"
+  printf 'a' >"$fix/alpha.png.txt"; touch -d '2026-01-05' "$fix/alpha.png.txt"
+  printf 'a' >"$fix/gamma.md"; touch -d '2026-01-01' "$fix/gamma.md"
+  magick -size 64x64 xc:orange "$fix/photo.png" 2>/dev/null && touch -d '2026-01-04' "$fix/photo.png"
+  setting ".dock.folders = [\"$fix\"] | .dock.stackOptions = {}"
+  idx=$(tile_index "$fix")
+  [[ $idx != null && -n $idx ]]; check "the folder is a tile of the Dock (index $idx)" $?
+  tiles=$(vs_ipc dock tiles)
+  [[ $(jq -r --arg k "$fix" 'index($k) < index("trash")' <<<"$tiles") == true ]]; check "the folder tile is left of the Trash" $?
+  [[ $(jq -r --arg k "$fix" 'index("separator") // index(null) | . != null' <<<"$tiles") == true ]]; check "a divider sits before the folder section" $?
+
+  for v in fan grid list; do
+    setting ".dock.stackOptions = {\"$fix\": {\"view\": \"$v\"}}"
+    vs_ipc dock stack "$idx" "$VS_OUTPUT" >/dev/null
+    sleep 1.5
+    [[ $(popup) == dockstack ]]; check "$v: a click on the tile opens the stack" $?
+    s=$(state)
+    [[ ${s%%|*} == "$v" ]]; check "$v: the stack shows as $v (state $s)" $?
+    [[ ${s#*|} != *hidden* ]]; check "$v: hidden files are not listed" $?
+    VS_SETTLE=1 vs_capture "dock-stack-$v" >/dev/null
+    cp "$VS_SHOTS/dock-stack-$v.en.png" "$out/$v.png" 2>/dev/null
+    "$VS_ROOT/scripts/dev/keys.sh" -k Escape >/dev/null 2>&1
+    sleep 0.8
+    [[ -z $(popup) ]]; check "$v: Esc closes the stack" $?
+  done
+
+  for sort in name dateAdded dateModified kind; do
+    setting ".dock.stackOptions = {\"$fix\": {\"view\": \"list\", \"sort\": \"$sort\"}}"
+    vs_ipc dock stack "$idx" "$VS_OUTPUT" >/dev/null
+    sleep 1.2
+    s=$(state)
+    names=${s#*|}
+    case $sort in
+      name) [[ $names == "alpha.png.txt,beta.txt,gamma.md,photo.png,Sub" ]]; check "sort by name: $names" $? ;;
+      dateModified) [[ $names == alpha.png.txt,photo.png,beta.txt,gamma.md* || $names == Sub,alpha.png.txt,photo.png,beta.txt,gamma.md ]]; check "sort by date modified (newest first): $names" $? ;;
+      kind) [[ $names == Sub,* ]]; check "sort by kind: folders first: $names" $? ;;
+      dateAdded) [[ -n $names ]]; check "sort by date added lists the items: $names" $? ;;
+    esac
+    "$VS_ROOT/scripts/dev/keys.sh" -k Escape >/dev/null 2>&1
+    sleep 0.6
+  done
+  setting ".dock.stackOptions = {} | .dock.folders = []"
+  [[ $(tile_index "$fix") == null ]]; check "removing the folder from dock.folders removes its tile" $?
+  rm -rf "$fix"
+fi
+
+if want fit; then
+  setting ".dock.folders = []"
+  vs_ipc dock size 96 >/dev/null
+  sleep 1
+  [[ $(vs_ipc dock fitsize "$VS_OUTPUT") == 96 ]]; check "few apps: the tiles keep the setting (96)" $?
+  for i in $(seq 1 24); do vs_spawn foot --app-id "gffit$i"; sleep 0.5; done
+  sleep 4
+  now=$(vs_ipc dock sizenow)
+  fit=$(vs_ipc dock fitsize "$VS_OUTPUT")
+  [[ -n $fit && $fit -lt $now ]]; check "24 apps: the tiles shrink below the setting ($fit < $now)" $?
+  w=$("$VS_ROOT/scripts/nestctl" monitors -j | jq -r '[.[] | select(.name == "'"$VS_OUTPUT"'") | .width][0]')
+  n=$(vs_ipc dock tiles | jq 'length')
+  # shelf <= tiles * fit + gaps + padding (every tile counted as an icon, the separators are narrower: a stricter bound)
+  shelf=$(( n * fit + (n - 1) * 4 + 20 ))
+  [[ $shelf -le $w ]]; check "the shelf fits the output ($shelf <= $w px, $n tiles)" $?
+  VS_SETTLE=1 vs_capture dock-fit >/dev/null
+  cp "$VS_SHOTS/dock-fit.en.png" "$out/fit.png" 2>/dev/null
+  vs_kill_clients
+  sleep 4
+  [[ $(vs_ipc dock fitsize "$VS_OUTPUT") == 96 ]]; check "the apps are gone: the tiles are back to 96" $?
+  vs_ipc dock size 48 >/dev/null
+fi
+exit $fail

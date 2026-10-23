@@ -246,4 +246,51 @@ TestCase {
         const box = Layout.labelRect(rects, 0, 200, 34, 8, {w: 1920, h: 1000});
         verify(box.x >= 8 && box.y + box.h <= 1000 - 8);
     }
+
+    // ---- minimized strip (REQ-OVW-O7) ----
+
+    readonly property var tileSpec: ({w: 144, h: 90, label: 18, gap: 16, pad: 12})
+
+    function test_stripHeightIsZeroWithoutMinimizedWindows() {
+        compare(Layout.stripHeight(0, tileSpec), 0);
+        compare(Layout.stripHeight(1, tileSpec), 90 + 18 + 24);
+        const none = Layout.stripRects(0, {x: 32, w: 1856, bottom: 1000}, tileSpec);
+        compare(none.rects.length, 0);
+        compare(none.height, 0);
+    }
+
+    function test_freeAreaReservesTheStrip() {
+        const plain = Layout.freeArea({w: 1920, h: 1080}, reserve);
+        const withStrip = Layout.freeArea({w: 1920, h: 1080}, Object.assign({}, reserve, {strip: 132}));
+        compare(withStrip.h, plain.h - 132);
+        compare(withStrip.y, plain.y);
+    }
+
+    function test_stripTilesAreCentredInOneRowBelowTheDivider() {
+        const bounds = {x: 32, w: 1856, bottom: 1000};
+        const s = Layout.stripRects(3, bounds, tileSpec);
+        compare(s.rects.length, 3);
+        compare(s.height, 132);
+        compare(s.dividerY, 1000 - 132);
+        compare(s.rects[0].w, 144);
+        compare(s.rects[0].h, 90);
+        compare(s.rects[0].y, s.dividerY + 12);
+        const left = s.rects[0].x - 32;
+        const right = 32 + 1856 - (s.rects[2].x + s.rects[2].w);
+        fuzzyCompare(left, right, 1e-9);
+        compare(s.rects[1].x - (s.rects[0].x + s.rects[0].w), 16);
+    }
+
+    function test_stripTilesShrinkToFitKeepingTheAspect() {
+        const bounds = {x: 0, w: 400, bottom: 800};
+        const s = Layout.stripRects(5, bounds, tileSpec);
+        compare(s.rects.length, 5);
+        const w = (400 - 4 * 16) / 5;
+        fuzzyCompare(s.rects[0].w, w, 1e-9);
+        fuzzyCompare(s.rects[0].h, w * 90 / 144, 1e-9);
+        verify(s.rects[4].x + s.rects[4].w <= 400 + 1e-9);
+        verify(s.rects[0].x >= -1e-9);
+        // never a zero or negative tile, whatever the room
+        verify(Layout.stripRects(50, {x: 0, w: 10, bottom: 100}, tileSpec).rects[0].w >= 1);
+    }
 }

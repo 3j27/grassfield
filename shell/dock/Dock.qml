@@ -683,6 +683,18 @@ Scope {
             root.enterKeyboardMode();
         }
 
+        // Tile size on `screen` after shrink to fit (Geometry.fitSize), px; compare with `sizenow` (fixtures only).
+        function fitsize(screen: string): string {
+            if (!VisualFixtures.active)
+                return "";
+            const all = windows.instances;
+            for (let i = 0; i < all.length; i++) {
+                if (all[i].screen.name === screen)
+                    return String(all[i].iconSize);
+            }
+            return "";
+        }
+
         // Opens the stack of tile `index` (a folder) on `screen` (same code path as a click; fixtures only).
         function stack(index: int, screen: string): void {
             if (!VisualFixtures.active)

@@ -124,6 +124,16 @@ FocusScope {
         easing.type: Easing.OutQuad
     }
 
+    // Test hook (fixtures only): what the open stack shows, "view|name,name,..." in display order.
+    IpcHandler {
+        target: "dockstack"
+        enabled: VisualFixtures.active
+
+        function state(): string {
+            return root.view + "|" + root.entries.map(e => e.name).join(",");
+        }
+    }
+
     // ---- Fan ----
 
     Item {

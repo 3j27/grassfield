@@ -3844,6 +3844,10 @@
         <source>Desktop %1</source>
         <translation>Bureau %1</translation>
     </message>
+    <message>
+        <source>%1, minimized</source>
+        <translation>%1, réduite</translation>
+    </message>
 </context>
 <context>
     <name>PasswordField</name>

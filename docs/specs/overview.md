@@ -23,15 +23,31 @@ v2 (M3): live transforms of real windows by `grassfield-compositor` (`hl.plugin.
 4. O4 Desktops bar: one tile per workspace on the monitor + "+" creates the next workspace.
 5. O5 Drag a window thumbnail onto a Desktop tile → `movetoworkspacesilent`.
 6. O6 Keyboard: arrows move selection, Return focuses, Esc exits.
-7. O7 Minimized windows appear in a separate strip (M2 with minimize).
+7. O7 Minimized windows appear in a separate strip (M2 with minimize). Done 2026-10-23 (REQ-OVW-O7; owner decision, follow macOS Mission Control and App Exposé: minimized windows sit in a row of smaller tiles below a divider, and a click restores one): see "Minimized windows" below.
+
+## Minimized windows (O7)
+
+Shell side only, no plugin change: the plugin does not transform windows parked on `special:minimized` (see "v2 spike", answer (a)), and the strip does not need it. The strip draws the shell's own record of what it minimized (`Compositor.minimized`, `platform/Minimized.js`; rebuilt from `special:minimized` after a shell restart), on the output that has the Dock (the minimized tiles of the Dock are there).
+- Layout (`Layout.stripHeight`, `Layout.stripRects`, pure, `tests/unit/tst_overviewlayout.qml`): a hairline divider at the top of a strip at the bottom of the free area (above the Dock's reserve), then one row of tiles centred, each `overview.minimizedWidth` x `minimizedHeight` (144 x 90), `minimizedGap` 16 apart, narrower with the same aspect when the row would not fit, the window title under each tile (`minimizedLabelHeight`). The strip's height (`tile + label + 2 x minimizedPad`) is taken from the area the open windows are laid out in (`freeArea(strip)`), so the windows never overlap it; with no minimized window the strip does not exist and the layout is unchanged.
+- Tile: a plate with the app icon, and in the `full` material profile a live `ScreencopyView` of the window fitted inside it (as the Dock's minimized tile), the title below. Hover and keyboard focus draw the accent outline. Accessible name "<title>, minimized".
+- Click, or Return on the focused tile: the Overview closes and then the window is restored to the current Desktop and focused (`Compositor.unminimize`, the call a Dock click makes, after the chromes released the keyboard; `V2.closeTarget` kind `minimized` asks the plugin for no focus of its own). Nothing is restored while the session is locked.
+- Keyboard: Down from the last row of windows enters the strip (first tile), Left/Right move along it, Up returns to the windows, Return restores, Tab leaves it for the Desktops bar.
+- Status hook: `overview status` lists `minimized` (address, appId, title, window-local `rect`) and `minFocus` per output.
+- Tests: nested `tests/visual/overview-minimized.sh` (no strip without minimized windows; two minimized windows give two tiles below every open window; click restores and focuses; the restored window leaves the strip; Down then Return restores); unit tests above. Visual NOT verified when this was written.
+
+## Measuring P3 and S4
+
+- P3 (gate: at least 95 % of frames on time during open and close, Balanced profile): `tests/visual/overview-frames.sh [cycles] [profile]` runs the probe `tests/tools/framepulse` (a window that redraws on every frame callback and prints the interval between two callbacks, wall-clock stamped; it refuses the owner's Wayland socket) in the nested session while the Overview opens and closes `cycles` times with Reduce Motion off; `tests/visual/frame-stats.py` keeps the frames of the 700 ms after each request and prints, per phase, the median, the 95th percentile, the worst interval and the share within 1.2 refresh periods (20 ms at 60 Hz; a dropped frame is two periods): PASS at 95 % or more in the open phase, the close phase and overall (`tests/visual/test_frame_stats.py` checks the statistics on synthetic streams). Frame-callback intervals measure frames the compositor delivered late or dropped, not the shell's own render time; on the nested output they are an indication, the gate is the owner's L2 run (the same script against a nested session on the real machine). What a full probe would still add: the presentation-time protocol (actual photon time), `perf`/`intel_gpu_top`, not installed here.
+- S4 (cost of 9 thumbnails per profile): `tests/visual/overview-cost.sh [seconds]` prints the markdown table of the S4 results (shell and nested Hyprland CPU and RSS closed and open for full, balanced and reduced) to paste into this file and into ADR-0006's notes (C-OVW-4: ADR-0006 has no S4 entry yet; the figures live above under "S4 results" until the run is recorded), and fails when balanced costs 5 % or more of a core with the Overview open.
 
 ## Acceptance criteria
 | ID | Test | Level |
 |---|---|---|
 | O2 | layout unit tests (QML TestCase) | L0 |
 | O1/O4/O6 | nested scenario with 6 windows + screenshots | L1 |
-| P3 | frame timing open/close | L2† |
-| S4 spike | ScreencopyView cost of 9 toplevels recorded in ADR-0006 notes | L1 |
+| P3 | frame timing open/close: `tests/visual/overview-frames.sh` (probe `tests/tools/framepulse`, statistics `frame-stats.py`) | L2† (script run by the owner) |
+| S4 spike | ScreencopyView cost of 9 toplevels recorded in ADR-0006 notes: `tests/visual/overview-cost.sh` prints the table | L1 |
+| O7 | minimized strip: `tests/visual/overview-minimized.sh`, layout in `tst_overviewlayout.qml` | L0 + L1 |
 | v2 spike | live transforms: mechanism, layering, input, CPU, cleanup (`tests/compositor/overview.sh check`, `perf`) | L1 |
 
 ## Known limitations
