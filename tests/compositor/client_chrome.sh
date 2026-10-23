@@ -5,14 +5,16 @@
 # Usage: tests/compositor/client_chrome.sh [--no-plugin]
 # NESTED only: needs scripts/dev/nested-up.sh (add --no-plugin there for the second form) and the Settings app built with
 # apps/settings/build-direct.sh. Pointer input goes through scripts/dev/pointer.sh; hyprctl only through scripts/nestctl
-# (read-only here: `clients -j`, `decorations`, `monitors -j`). Clients start through scripts/dev/isolated.sh with the nested
+# (read-only here: `clients -j`, `monitors -j`, `grassfield -j`; the restore of step 5 and two focus dispatches), captures with grim. Clients start through scripts/dev/isolated.sh with the nested
 # socket only.
 #
 # Assertions, and what each depends on (PLUGIN = the plugin work item of ADR-0015 / docs/specs/compositor.md, in this tree
 # since P1-P7; SESSION = the session rules S1-S3 in config/hypr/grassfield/windows.lua; APP = true with the app side):
 #   1  APP      the Settings window carries xdg tag "settings"; the foot window carries none
 #   2  SESSION  the Settings window has the Hyprland tag grassfield-client-chrome (the rule on the xdg tag)
-#   3  PLUGIN   the Settings window has no grassfield-titlebar decoration; foot keeps its strip
+#   3  PLUGIN   no plugin strip above the Settings window, one above foot: measured on a capture (the pixel 16 px above
+#               the middle of each surface against the strip's colour, ui/tokens/tokens.json titlebar.background*). The
+#               decoration object itself stays attached to every window (hyprctl decorations lists it): P1 hides it
 #   4  APP      the close light (25.75, 25.75 from the surface's top-left) closes the window, with and without the plugin
 #   5  PLUGIN   the minimize light puts the window on special:minimized (the bridge: requestsMinimize -> minimize-request);
 #               skipped with --no-plugin (the light is greyed there, ADR-0015 Q4)
@@ -81,6 +83,27 @@ geom() {
     '.[] | select(.class == $c) | "\(.at[0] - $mx) \(.at[1] - $my) \(.size[0]) \(.size[1]) \(.fullscreen)"' | head -1
 }
 mapped() { [[ -n $(client "$1" .address) ]]; }
+# The plugin strip above a surface: 1 when the row 16 px above its top edge has the strip's colour (either appearance) at
+# five points across the window (20 % to 80 % of its width; a shadow over the wallpaper is neither that colour nor
+# uniform), 0 otherwise. <png> <x> <y> <w> (output px).
+strip_above() {
+  local i hexes=()
+  for i in 20 35 50 65 80; do
+    hexes+=("$(magick "$1" -format "%[hex:p{$(($2 + $4 * i / 100)),$(($3 - 16))}]" info: 2>/dev/null | cut -c1-6)")
+  done
+  python3 -I - "$(jq -r '.titlebar.backgroundDark.value' "$root/ui/tokens/tokens.json")" \
+    "$(jq -r '.titlebar.backgroundLight.value' "$root/ui/tokens/tokens.json")" "${hexes[@]}" <<'PY'
+import sys
+def rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) if len(h) >= 6 else None
+tokens = [rgb(t) for t in sys.argv[1:3]]
+points = [rgb(h) for h in sys.argv[3:]]
+def near(a, b):
+    return a is not None and b is not None and max(abs(x - y) for x, y in zip(a, b)) <= 8
+print(1 if points and all(any(near(p, t) for t in tokens) for p in points) else 0)
+PY
+}
 
 launch_settings() {
   pointer abs $((mon_w / 2)) $((mon_h / 2)) sleep 50
@@ -113,14 +136,13 @@ htags=$(client org.grassfield.Settings '.tags | join(",")')
 [[ $htags == *grassfield-client-chrome* ]]
 check "hyprland tag (SESSION)" $? "tags '$htags'"
 if ((plugin)); then
-  sa=$(client org.grassfield.Settings .address)
-  fa=$(client foot .address)
-  ctl decorations "address:$sa" 2>&1 | grep -q grassfield-titlebar
-  s_strip=$?
-  ctl decorations "address:$fa" 2>&1 | grep -q grassfield-titlebar
-  f_strip=$?
-  [[ $s_strip != 0 && $f_strip == 0 ]]
-  check "no strip on the app window, strip on foot (PLUGIN)" $? "app strip exit $s_strip (want 1), foot strip exit $f_strip (want 0)"
+  WAYLAND_DISPLAY=$sock timeout 10 grim -o "$out" "$work/strip.png" 2>>"$log"
+  read -r gx gy gw _ _ < <(geom org.grassfield.Settings)
+  read -r fx fy fw _ _ < <(geom foot)
+  s_strip=$(strip_above "$work/strip.png" "$gx" "$gy" "$gw")
+  f_strip=$(strip_above "$work/strip.png" "$fx" "$fy" "$fw")
+  [[ $s_strip == 0 && $f_strip == 1 ]]
+  check "no strip on the app window, strip on foot (PLUGIN P1)" $? "strip colour above Settings: $s_strip (want 0), above foot: $f_strip (want 1); capture $work/strip.png"
 else
   skip "strip" "no plugin loaded"
 fi
@@ -163,13 +185,22 @@ pointer abs "$ex" "$ey" sleep 50 click sleep 60 click sleep 700
 read -r _ _ _ _ fs < <(geom org.grassfield.Settings)
 [[ $fs == 1 ]]
 check "double-click zooms (SESSION)" $? "fullscreen $fs, want 1"
+# The zoomed window's own toolbar row: the point is computed again from its zoomed geometry.
+read -r zx0 zy0 zw0 _ _ < <(geom org.grassfield.Settings)
+ex=$((zx0 + zw0 - 120))
+ey=$((zy0 + 26))
 pointer abs "$ex" "$ey" sleep 50 click sleep 60 click sleep 700
 read -r x y w h fs < <(geom org.grassfield.Settings)
 [[ $fs == 0 && $w == "$w0" && $h == "$h0" ]]
 check "double-click restores" $? "now ${w}x${h} fullscreen $fs"
 
 say "10 drag of the zoomed window from its toolbar (P4)"
-read -r x0 y0 w0 h0 _ < <(geom org.grassfield.Settings)
+read -r x0 y0 w0 h0 fs0 < <(geom org.grassfield.Settings)
+if [[ $fs0 == 1 ]]; then # a step above left it zoomed: back to its floating box first
+  read -r zx zy < <(light 2)
+  pointer abs "$zx" "$zy" sleep 50 click sleep 700
+  read -r x0 y0 w0 h0 _ < <(geom org.grassfield.Settings)
+fi
 read -r zx zy < <(light 2)
 pointer abs "$zx" "$zy" sleep 50 click sleep 700
 read -r zxx zyy zw zh fs < <(geom org.grassfield.Settings)
@@ -206,8 +237,18 @@ if ((plugin)); then
   ws=$(client org.grassfield.Settings .workspace.name)
   [[ $ws == special:minimized ]]
   check "minimize (PLUGIN: bridge)" $? "workspace '$ws'"
-  # Bring it back for the close test: the Dock is not running here, so the plugin's own restore is not exercised.
-  mapped org.grassfield.Settings && ctl dispatch 'hl.dsp.focus({window="class:org.grassfield.Settings"})' >>"$log" 2>&1
+  # Bring it back for the close test: the plugin's restore (what a click on its Dock tile asks for, without a tile to grow
+  # from), then wait until it is on a regular workspace again.
+  ma=$(client org.grassfield.Settings .address)
+  [[ -n $ma ]] && ctl dispatch "hl.plugin.grassfield.restore(\"$ma\", 0, 0, 0, 0)" >>"$log" 2>&1
+  for _ in $(seq 1 20); do
+    [[ $(client org.grassfield.Settings .workspace.name) != special:minimized ]] && break
+    sleep 0.25
+  done
+  ws=$(client org.grassfield.Settings .workspace.name)
+  [[ -n $ws && $ws != special:minimized ]]
+  check "restored for the close test" $? "workspace '$ws'"
+  sleep 0.5
 else
   skip "minimize" "no plugin: the light is greyed, ADR-0015 Q4"
 fi
