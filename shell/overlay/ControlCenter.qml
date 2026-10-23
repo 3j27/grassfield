@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 import qs.notifications
+import qs.platform
 import qs.services
 import qs.overlay.controlcenter
 import "controlcenter/Model.js" as Model
@@ -27,12 +28,14 @@ FocusScope {
     readonly property real pad: Tokens.quicksettingsPadding
     // Inset of the icon disk inside a capsule (the disk is vertically centred, so it is centred in a 1x1 too).
     readonly property real diskInset: (cell - Tokens.quicksettingsIconDisk) / 2
-    readonly property real groupHeight: 3 * cell + 2 * gap
+    // Stages (only with the plugin's `stages-available`) sits beside Airplane Mode; while Now Playing takes that slot it gets a row of its own.
+    readonly property bool stagesRow: StagesLink.available && Media.available
+    readonly property real groupHeight: stagesRow ? 4 * cell + 3 * gap : 3 * cell + 2 * gap
     readonly property real gridBottom: sliders.height > 0 ? sliders.y + sliders.height : groupHeight
     readonly property real bodyHeight: expanded === "" ? gridBottom : detail.height
 
     // The visible glass surfaces, for the Overlay's blur regions.
-    readonly property var surfaces: [wifi, bluetooth, airplane, dnd, nowPlaying, appearanceSide, display, keyboard, sound, appearanceBottom, detail, note].filter(m => m.visible)
+    readonly property var surfaces: [wifi, bluetooth, airplane, dnd, nowPlaying, appearanceSide, stagesToggle, display, keyboard, sound, appearanceBottom, detail, note].filter(m => m.visible)
 
     function toggleSection(id: string): void {
         if (expanded === id)
@@ -279,7 +282,7 @@ FocusScope {
             id: airplane
             y: 2 * root.pitch
             // Full width while no player takes the 2x2 slot at the right.
-            cols: Media.available ? 2 : 4
+            cols: Media.available || StagesLink.available ? 2 : 4
 
             RadioRow {
                 width: parent.width
@@ -292,6 +295,13 @@ FocusScope {
                 available: Connectivity.airplaneAvailable
                 onToggled: Connectivity.setAirplane(!Connectivity.airplane)
             }
+        }
+
+        StagesToggle {
+            id: stagesToggle
+            x: Media.available ? 0 : 2 * root.pitch
+            y: Media.available ? 3 * root.pitch : 2 * root.pitch
+            inset: root.diskInset
         }
 
         Column {

@@ -10,3 +10,4 @@ BluetoothList 1.0 BluetoothList.qml
 SoundList 1.0 SoundList.qml
 NowPlaying 1.0 NowPlaying.qml
 AppearanceSection 1.0 AppearanceSection.qml
+StagesToggle 1.0 StagesToggle.qml
