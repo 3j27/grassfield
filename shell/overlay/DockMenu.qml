@@ -69,14 +69,16 @@ PopupMenu {
     }
 
     // Options submenu (macOS): a running app has "Keep in Dock" (checked when kept; unchecking removes it once the app quits);
-    // a kept app that is not running has "Remove from Dock" and no "Keep in Dock"; a recent app that is not kept has "Keep in Dock".
+    // a kept app that is not running has "Remove from Dock" and no "Keep in Dock"; a recent app that is not kept has both
+    // (Launch.optionRows); Remove from Dock on a recent forgets it until it is launched and quits again.
     function optionItems(): var {
         const items = [];
         // The fixed Files tile (like the Finder's) is always in the Dock: no Keep or Remove, and no "Show in Files" on Files itself.
         if (info.fixed !== true) {
-            if (info.running === true || info.pinned !== true)
+            const rows = Launch.optionRows({fixed: info.fixed, running: info.running, pinned: info.pinned, recent: info.recent});
+            if (rows.keep)
                 items.push({id: "keep", text: qsTr("Keep in Dock"), checked: info.pinned === true, enabled: info.pinned === true || entry !== null});
-            else
+            if (rows.remove)
                 items.push({id: "remove", text: qsTr("Remove from Dock")});
         }
         items.push({id: "login", text: qsTr("Open at Login"), checked: autostart, enabled: entry !== null});
@@ -230,7 +232,10 @@ PopupMenu {
             Apps.launch(data.entry.actions[item.index]);
             break;
         case "remove":
-            Settings.setDockPinned(DockModel.unpinKey(Settings.dockPinned, data.key, root.lookupFn));
+            if (data.pinned)
+                Settings.setDockPinned(DockModel.unpinKey(Settings.dockPinned, data.key, root.lookupFn));
+            if (data.recent)
+                Settings.setDockRecent(Settings.dockRecent.filter(r => r !== data.key));
             break;
         case "keep":
             if (data.pinned)

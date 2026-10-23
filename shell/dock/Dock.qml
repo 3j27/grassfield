@@ -1006,6 +1006,7 @@ Scope {
                     key: item.key,
                     entry: item.entry,
                     pinned: item.pinned,
+                    recent: item.recent === true,
                     running: item.windows.length > 0,
                     fixed: item.fixed === true,
                     windows: item.windows

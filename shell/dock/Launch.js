@@ -78,3 +78,19 @@ function menuWindows(windows, max, appName) {
         };
     });
 }
+
+// Which Dock-membership rows the Options submenu of a tile offers (macOS: a running app has Keep in Dock, checked while it is
+// kept; an app that is not running and is in the Dock, pinned or in the recent section, has Remove from Dock). A recent app
+// that is not kept also has Keep in Dock. The fixed Files tile is always in the Dock: neither row.
+// `tile` = {fixed, running, pinned, recent}; returns {keep, remove} booleans.
+function optionRows(tile) {
+    if (!tile || tile.fixed === true)
+        return {keep: false, remove: false};
+    const running = tile.running === true;
+    const pinned = tile.pinned === true;
+    const recent = tile.recent === true;
+    return {
+        keep: running || !pinned,
+        remove: !running && (pinned || recent)
+    };
+}
