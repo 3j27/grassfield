@@ -222,6 +222,17 @@ Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff229
   client's lock whenever another Quickshell instance of the user runs (the nested dev session always has one).
 - Idle and polkit: v4.0.5/4.0.6 changes are `Commons.Color` renames (Qt 6.12) and screensaver handling Grassfield does
   not use; nothing to port.
+- Pinned (GF-031 drift check): `docs/upstream/omarchy.lock` holds the sha256 of every upstream file a fork derives from
+  (`plugins/lock/Service.qml` → `Lock.qml`, `plugins/services/idle/Service.qml` → `Idle.qml`,
+  `plugins/polkit/PolkitAgent.qml` → `AuthAgent.qml`, `bin/omarchy-system-sleep-lock` → `IdleModel.js` budget and the
+  `omarchy-shell` stand-in, `bin/omarchy-hyprland-session-locked` → the stranded-lock signal), the installed package
+  (4.0.4-1) and the reviewed upstream revisions. `scripts/dev/upstream-drift.sh` (`just check-upstream`, part of
+  `just check`) fails when the installed Omarchy changed or removed one of them, naming the forks to review; without
+  Omarchy it says SKIP. It also fails, Omarchy or not, when a pinned fork is gone or no longer names its upstream file, and
+  when a source file says "adapted from Omarchy" without being pinned. After the review (port or reject, recorded in this
+  section): `scripts/dev/upstream-drift.sh --update` re-pins. Test: `tests/security/upstream_drift.sh` (fixture trees:
+  unchanged, edited, removed, no Omarchy, `--update`, malformed lock, lost attribution, unpinned fork; the real lock
+  against the installed Omarchy).
 
 ## Screen-share protection (SEC-01 / GF-028)
 `config/hypr/grassfield/privacy.lua`, required by `core.lua` (real and nested session): reads Omarchy's own

@@ -9,7 +9,7 @@ default:
     @just --list
 
 # All offline checks (L0).
-check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-secrets
+check: check-config check-schema check-shell check-shaders check-i18n check-scripts check-inventory check-upstream check-secrets
 
 # Validate the Grassfield Hyprland Lua config with the installed Hyprland. Verify mode inherits this environment, a
 # running Hyprland's signature included: it runs with a scratch runtime directory and a signature of the installed
@@ -53,6 +53,11 @@ i18n-update:
 # Every test is registered in tests/inventory.json with exactly one layer (static, cheap; docs/testing/README.md).
 check-inventory:
     python3 -I tests/ci/inventory.py
+
+# The upstream Omarchy files the security forks derive from are unchanged (docs/upstream/omarchy.lock, GF-031); after a
+# review of an upstream change: scripts/dev/upstream-drift.sh --update.
+check-upstream:
+    scripts/dev/upstream-drift.sh
 
 # Secret scan of the whole history (gate S1).
 check-secrets:
