@@ -89,6 +89,7 @@
  {"path": "tests/unit/tst_switchermodel.qml", "layer": "headless"},
  {"path": "tests/unit/tst_textformat.qml", "layer": "headless"},
  {"path": "tests/unit/tst_tokens.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_windowcontrols.qml", "layer": "headless"},
  {"path": "tests/unit/tst_tracking.qml", "layer": "headless"},
  {"path": "tests/unit/tst_wallpaper.qml", "layer": "headless"},
  {"path": "tests/unit/tst_widgets.qml", "layer": "headless"},
