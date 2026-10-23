@@ -71,7 +71,21 @@ sent("SUPER + bracketleft", "firefox", "send_key_state(ALT,Left,down) send_key_s
 sent("SUPER + bracketright", "firefox", "send_key_state(ALT,Right,down) send_key_state(ALT,Right,up)")
 -- Command+number and Command+Up reach the keys the Grassfield apps advertise with Ctrl (by keycode: every layout).
 for n = 1, 9 do sent("SUPER + code:" .. (n + 9), "org.grassfield.Files", "send_key_state(CTRL,code:" .. (n + 9) .. ",down) send_key_state(CTRL,code:" .. (n + 9) .. ",up)") end
-sent("SUPER + UP", "org.grassfield.Files", "send_key_state(CTRL,Up,down) send_key_state(CTRL,Up,up)")
+-- Command+arrows (macOS text model); Grassfield Files keeps Enclosing Folder / Open on Command+Up / Down.
+local function both(mods, key) return "send_key_state(" .. mods .. "," .. key .. ",down) send_key_state(" .. mods .. "," .. key .. ",up)" end
+sent("SUPER + UP", "org.grassfield.Files", both("CTRL", "Up"))
+sent("SUPER + DOWN", "org.grassfield.Files", both("CTRL", "Down"))
+sent("SUPER + UP", "firefox", both("CTRL", "Home"))
+sent("SUPER + DOWN", "firefox", both("CTRL", "End"))
+sent("SUPER + UP", "kitty", both("CTRL", "Home"))
+sent("SUPER + LEFT", "firefox", both("", "Home"))
+sent("SUPER + RIGHT", "kitty", both("", "End"))
+sent("SUPER + SHIFT + LEFT", "firefox", both("SHIFT", "Home"))
+sent("SUPER + SHIFT + RIGHT", "firefox", both("SHIFT", "End"))
+sent("SUPER + SHIFT + UP", "firefox", both("CTRL SHIFT", "Home"))
+sent("SUPER + SHIFT + DOWN", "org.grassfield.Files", both("CTRL SHIFT", "End"))
+-- Command+Backspace: Shift+Home, then BackSpace from the timer (the stub runs timers in order, including ones they add).
+sent("SUPER + BACKSPACE", "firefox", both("SHIFT", "Home") .. " " .. both("", "BackSpace"))
 print("repeat " .. tostring(binds["ALT + LEFT"].opts.repeating) .. " " .. tostring(binds["ALT + BACKSPACE"].opts.repeating))
 LUA
 
@@ -80,11 +94,17 @@ echo "$out" | sed 's/^/    /'
 desc="Spaces and Overview binds are still dispatchers (CTRL+LEFT/RIGHT, CTRL+1..9 focus Spaces, CTRL+UP runs the Overview command): the macOS keys are kept"
 check grep -q "^spaces dsp.focus dsp.focus dsp.focus dsp.focus dsp.exec_cmd$" <<<"$out"
 desc="every forwarded key sends exactly the expected chord (no BAD line)"
-check bash -c '! grep -q "^BAD" <<<"$1" && [[ $(grep -c "^ok " <<<"$1") == 23 ]]' _ "$out"
+check bash -c '! grep -q "^BAD" <<<"$1" && [[ $(grep -c "^ok " <<<"$1") == 34 ]]' _ "$out"
 desc="word navigation repeats while the keys are held"
 check grep -q "^repeat true true$" <<<"$out"
 
 desc="Files and Preview advertise the keys that Super now delivers (Ctrl+1..4, Ctrl+Up; Ctrl+9)"
 check bash -c 'grep -q "Ctrl+1" "$1/apps/files/qml/BrowserWindow.qml" && grep -q "Ctrl+Up" "$1/apps/files/qml/BrowserWindow.qml" && grep -q "Ctrl+9" "$1/apps/preview/qml/Viewer.qml"' _ "$root"
+
+desc="Files and Preview menus show the chord the user presses (Super+1..4, Super+Up, Super+Down, Super+9), not the Ctrl one they accept"
+check bash -c 'f="$1/apps/files/qml/GlobalMenu.qml"; p="$1/apps/preview/qml/GlobalMenu.qml"; for k in 1 2 3 4 Up Down; do grep -q "shortcut: \"Super+$k\"" "$f" || exit 1; done; grep -q "shortcut: \"Super+9\"" "$p" && ! grep -q "shortcut: \"Ctrl+\(1\|2\|3\|4\|Up\|Down\|9\)\"" "$f" "$p"' _ "$root"
+
+desc="Settings > Keyboard lists forwarding.lua (page reads it, parser accepts word_key lines)"
+check bash -c 'grep -q "forwarding.lua" "$1/apps/settings/qml/KeyboardPage.qml" && grep -q "word_key" "$1/apps/settings/qml/Bindings.js"' _ "$root"
 
 exit $fail

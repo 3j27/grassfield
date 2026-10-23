@@ -923,6 +923,22 @@
         <translation>Droite</translation>
     </message>
     <message>
+        <source>Backspace</source>
+        <translation>Retour arrière</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>[</source>
+        <translation>[</translation>
+    </message>
+    <message>
+        <source>]</source>
+        <translation>]</translation>
+    </message>
+    <message>
         <source>Key above Tab</source>
         <translation>Touche au-dessus de Tab</translation>
     </message>
@@ -1017,6 +1033,74 @@
     <message>
         <source>Turn Dock hiding on or off</source>
         <translation>Activer ou désactiver le masquage du Dock</translation>
+    </message>
+    <message>
+        <source>Previous word</source>
+        <translation>Mot précédent</translation>
+    </message>
+    <message>
+        <source>Next word</source>
+        <translation>Mot suivant</translation>
+    </message>
+    <message>
+        <source>Select to the previous word</source>
+        <translation>Sélectionner jusqu’au mot précédent</translation>
+    </message>
+    <message>
+        <source>Select to the next word</source>
+        <translation>Sélectionner jusqu’au mot suivant</translation>
+    </message>
+    <message>
+        <source>Delete the previous word</source>
+        <translation>Supprimer le mot précédent</translation>
+    </message>
+    <message>
+        <source>Delete the next word</source>
+        <translation>Supprimer le mot suivant</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Beginning of the line</source>
+        <translation>Début de la ligne</translation>
+    </message>
+    <message>
+        <source>End of the line</source>
+        <translation>Fin de la ligne</translation>
+    </message>
+    <message>
+        <source>Select to the beginning of the line</source>
+        <translation>Sélectionner jusqu’au début de la ligne</translation>
+    </message>
+    <message>
+        <source>Select to the end of the line</source>
+        <translation>Sélectionner jusqu’à la fin de la ligne</translation>
+    </message>
+    <message>
+        <source>Beginning of the document</source>
+        <translation>Début du document</translation>
+    </message>
+    <message>
+        <source>End of the document</source>
+        <translation>Fin du document</translation>
+    </message>
+    <message>
+        <source>Select to the beginning of the document</source>
+        <translation>Sélectionner jusqu’au début du document</translation>
+    </message>
+    <message>
+        <source>Select to the end of the document</source>
+        <translation>Sélectionner jusqu’à la fin du document</translation>
+    </message>
+    <message>
+        <source>Delete to the beginning of the line</source>
+        <translation>Supprimer jusqu’au début de la ligne</translation>
     </message>
     <message>
         <source>Next Desktop</source>
@@ -1354,32 +1438,32 @@
         <translation>Icônes</translation>
     </message>
     <message>
-        <source>Ctrl+1</source>
-        <translation>Ctrl+1</translation>
+        <source>Super+1</source>
+        <translation>Super+1</translation>
+    </message>
+    <message>
+        <source>Super+2</source>
+        <translation>Super+2</translation>
+    </message>
+    <message>
+        <source>Super+3</source>
+        <translation>Super+3</translation>
+    </message>
+    <message>
+        <source>Super+4</source>
+        <translation>Super+4</translation>
     </message>
     <message>
         <source>List</source>
         <translation>Liste</translation>
     </message>
     <message>
-        <source>Ctrl+2</source>
-        <translation>Ctrl+2</translation>
-    </message>
-    <message>
         <source>Columns</source>
         <translation>Colonnes</translation>
     </message>
     <message>
-        <source>Ctrl+3</source>
-        <translation>Ctrl+3</translation>
-    </message>
-    <message>
         <source>Gallery</source>
         <translation>Galerie</translation>
-    </message>
-    <message>
-        <source>Ctrl+4</source>
-        <translation>Ctrl+4</translation>
     </message>
     <message>
         <source>Sort By</source>
