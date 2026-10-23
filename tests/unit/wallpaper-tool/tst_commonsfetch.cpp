@@ -775,3 +775,15 @@ TEST_F(ApodFetch, TheBaseUrlIsDevOnlyAndTheFolderIsTheProvidersOwn)
     EXPECT_EQ(fetchApod(opts, &r, &why), Usage);
     EXPECT_TRUE(requests().isEmpty());
 }
+
+TEST_F(ApodFetch, ARedirectToAnotherPageOfAnAllowedHostIsRefusedAtEveryHop)
+{
+    mode("apod-path-redirect");
+    QJsonObject r;
+    QString why;
+    EXPECT_EQ(fetchApod(opts, &r, &why), Network);
+    EXPECT_EQ(why, QStringLiteral("host not allowed"));
+    for (const QString &line : requests())
+        EXPECT_FALSE(line.startsWith(QStringLiteral("/thumb/"))) << "the redirect target was requested: " << line.toStdString();
+    EXPECT_TRUE(online().isEmpty());
+}

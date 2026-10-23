@@ -79,16 +79,23 @@ struct Run {
 // Runs a program (argument vector, no shell) with a deadline. Lines of stdout go to `onLine` as they arrive (the progress);
 // otherwise stdout is collected up to `maxOut` bytes (more: the process is killed, `overflow`). The process runs at a low
 // priority and dies with the helper (PDEATHSIG); a stop signal to the helper kills it.
-Run run(const QString &program, const QStringList &args, int timeoutSeconds, qint64 maxOut, const std::function<void(const QString &)> &onLine = nullptr)
+Run run(const QString &program, const QStringList &args, int timeoutSeconds, qint64 maxOut, qint64 addressSpace, const std::function<void(const QString &)> &onLine = nullptr)
 {
     Run r;
     QProcess p;
     p.setProgram(program);
     p.setArguments(args);
     p.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
-    p.setChildProcessModifier([] {
+    p.setChildProcessModifier([addressSpace] {
         ::prctl(PR_SET_PDEATHSIG, SIGKILL);
         ::setpriority(PRIO_PROCESS, 0, 10);
+        // A hostile file cannot make the decoder take all the memory: the child's address space is capped (a failed allocation
+        // ends the run as a failure).
+        if (addressSpace > 0) {
+            struct rlimit lim;
+            lim.rlim_cur = lim.rlim_max = rlim_t(addressSpace);
+            ::setrlimit(RLIMIT_AS, &lim);
+        }
     });
     p.start();
     if (!p.waitForStarted(5000))
@@ -164,7 +171,7 @@ QByteArray encodeJpeg(const QImage &img, int quality)
 // One frame of `file` at `seconds`, null on failure.
 QImage grabFrame(const QString &ffmpeg, const QString &file, double seconds, QString *reason)
 {
-    const Run r = run(ffmpeg, frameArgs(file, seconds), kFrameTimeoutSeconds, qint64(96) << 20);
+    const Run r = run(ffmpeg, frameArgs(file, seconds), kFrameTimeoutSeconds, qint64(96) << 20, kFrameAddressSpace);
     if (r.aborted) {
         *reason = QStringLiteral("cancelled");
         return {};
@@ -195,7 +202,7 @@ bool isVideoPath(const QString &path)
 
 QStringList ffprobeArgs(const QString &path)
 {
-    return {QStringLiteral("-v"), QStringLiteral("error"), QStringLiteral("-protocol_whitelist"), QStringLiteral("file"), QStringLiteral("-print_format"), QStringLiteral("json"),
+    return {QStringLiteral("-v"), QStringLiteral("error"), QStringLiteral("-protocol_whitelist"), QStringLiteral("file"), QStringLiteral("-format_whitelist"), QString::fromLatin1(kDemuxers), QStringLiteral("-print_format"), QStringLiteral("json"),
             QStringLiteral("-show_format"), QStringLiteral("-show_streams"), QStringLiteral("-i"), path};
 }
 
@@ -280,7 +287,8 @@ QStringList transcodeArgs(const QString &src, const QString &dst, const QSize &s
     filter += QStringLiteral(",setsar=1,format=yuv420p");
     // An unknown frame rate (0) gets the cap too: a variable-rate file is made constant at the cap.
     return {QStringLiteral("-nostdin"), QStringLiteral("-hide_banner"), QStringLiteral("-loglevel"), QStringLiteral("error"), QStringLiteral("-nostats"),
-            QStringLiteral("-protocol_whitelist"), QStringLiteral("file"),
+            QStringLiteral("-protocol_whitelist"), QStringLiteral("file"), QStringLiteral("-format_whitelist"), QString::fromLatin1(kDemuxers),
+            QStringLiteral("-max_alloc"), QString::number(kMaxAlloc), QStringLiteral("-max_pixels"), QString::number(kMaxPixels),
             QStringLiteral("-i"), src,
             QStringLiteral("-map"), QStringLiteral("0:v:0"), QStringLiteral("-an"), QStringLiteral("-sn"), QStringLiteral("-dn"),
             QStringLiteral("-map_metadata"), QStringLiteral("-1"), QStringLiteral("-map_chapters"), QStringLiteral("-1"),
@@ -295,7 +303,8 @@ QStringList transcodeArgs(const QString &src, const QString &dst, const QSize &s
 QStringList frameArgs(const QString &file, double seconds)
 {
     return {QStringLiteral("-nostdin"), QStringLiteral("-hide_banner"), QStringLiteral("-loglevel"), QStringLiteral("error"),
-            QStringLiteral("-protocol_whitelist"), QStringLiteral("file"),
+            QStringLiteral("-protocol_whitelist"), QStringLiteral("file"), QStringLiteral("-format_whitelist"), QString::fromLatin1(kDemuxers),
+            QStringLiteral("-max_alloc"), QString::number(kMaxAlloc), QStringLiteral("-max_pixels"), QString::number(kMaxPixels),
             QStringLiteral("-ss"), QString::number(std::max(0.0, seconds), 'f', 3), QStringLiteral("-i"), file,
             QStringLiteral("-frames:v"), QStringLiteral("1"), QStringLiteral("-an"), QStringLiteral("-sn"),
             QStringLiteral("-f"), QStringLiteral("image2pipe"), QStringLiteral("-c:v"), QStringLiteral("png"), QStringLiteral("-")};
@@ -373,7 +382,7 @@ void installSignalHandlers()
 
 ExitCode probe(const QString &ffprobe, const QString &path, int maxSeconds, Info *info, QString *reason)
 {
-    const Run r = run(ffprobe, ffprobeArgs(path), kProbeTimeoutSeconds, kMaxProbeJsonBytes);
+    const Run r = run(ffprobe, ffprobeArgs(path), kProbeTimeoutSeconds, kMaxProbeJsonBytes, kProbeAddressSpace);
     if (r.aborted) {
         *reason = QStringLiteral("cancelled");
         return Cancelled;
@@ -486,7 +495,7 @@ ExitCode transcode(const TranscodeOptions &o, const std::function<void(double)> 
                     progress(f);
             }
         };
-        const Run r = run(o.ffmpeg, transcodeArgs(o.src, tmp, size, info.fps, o.maxSeconds, o.maxBytes), kTranscodeTimeoutSeconds, 0, onLine);
+        const Run r = run(o.ffmpeg, transcodeArgs(o.src, tmp, size, info.fps, o.maxSeconds, o.maxBytes), kTranscodeTimeoutSeconds, 0, kTranscodeAddressSpace, onLine);
         if (r.aborted) {
             *reason = QStringLiteral("cancelled");
             return Cancelled;

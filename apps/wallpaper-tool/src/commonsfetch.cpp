@@ -599,10 +599,23 @@ ExitCode runCurl(const Options &o, const QUrl &url, const QString &outFile, qint
 
 // GET with every hop checked against the allow-list (curl itself does not follow redirects here: one redirect to another
 // host is refused before any request is made to it).
-ExitCode httpGet(const Options &o, QUrl url, const QString &outFile, qint64 maxBytes, QString *contentType, QString *reason)
+// `pathRule`: when not empty, every hop (the first URL and each redirect) must have exactly that path (a rule ending in "/" is a
+// prefix: the path starts with it, no ".." in it). APOD uses it so that a redirect cannot lead from the API or an
+// /apod/image/ picture to another page of an allowed host (the NASA logo lives elsewhere on the site).
+bool pathAllowed(const QUrl &url, const QString &rule)
+{
+    if (rule.isEmpty())
+        return true;
+    const QString path = url.path();
+    if (path.contains(QLatin1String("..")))
+        return false;
+    return rule.endsWith(QLatin1Char('/')) ? path.startsWith(rule) : path == rule;
+}
+
+ExitCode httpGet(const Options &o, QUrl url, const QString &outFile, qint64 maxBytes, QString *contentType, QString *reason, const QString &pathRule = QString())
 {
     for (int hops = 0; hops <= kMaxRedirects; ++hops) {
-        if (!hostAllowedFor(o.provider, url, o.baseUrl)) {
+        if (!hostAllowedFor(o.provider, url, o.baseUrl) || !pathAllowed(url, pathRule)) {
             *reason = QStringLiteral("host not allowed");
             return Network;
         }
@@ -632,10 +645,10 @@ ExitCode httpGet(const Options &o, QUrl url, const QString &outFile, qint64 maxB
 }
 
 // A JSON answer: size-limited, regular file, a JSON content type.
-ExitCode getJson(const Options &o, const QUrl &url, const QString &tmp, QByteArray *body, QString *reason)
+ExitCode getJson(const Options &o, const QUrl &url, const QString &tmp, QByteArray *body, QString *reason, const QString &pathRule = QString())
 {
     QString type;
-    if (const ExitCode c = httpGet(o, url, tmp, kMaxJsonBytes, &type, reason))
+    if (const ExitCode c = httpGet(o, url, tmp, kMaxJsonBytes, &type, reason, pathRule))
         return c == TooLargeFile ? BadResponse : c;
     QFile f(tmp);
     const bool ok = type.contains(QStringLiteral("json"), Qt::CaseInsensitive) && f.open(QIODevice::ReadOnly);
@@ -681,7 +694,7 @@ namespace {
 ExitCode storePicture(const Options &opts, const Parsed &parsed, const QString &caption, const QString &download, const QString &image, const QString &sidecar, QJsonObject *result, QString *reason)
 {
         QString type;
-    if (const ExitCode c = httpGet(opts, parsed.thumbUrl, download, kMaxImageBytes, &type, reason))
+    if (const ExitCode c = httpGet(opts, parsed.thumbUrl, download, kMaxImageBytes, &type, reason, opts.provider == QLatin1String("apod") ? QStringLiteral("/apod/image/") : QString()))
         return c;
     QFile f(download);
     if (!f.open(QIODevice::ReadOnly)) {
@@ -878,7 +891,7 @@ ExitCode fetchApod(const Options &opts, QJsonObject *result, QString *reason)
         return path;
     };
     QByteArray body;
-    if (const ExitCode c = getJson(opts, apodUrl(opts.baseUrl, opts.date), tmp("a"), &body, reason))
+    if (const ExitCode c = getJson(opts, apodUrl(opts.baseUrl, opts.date), tmp("a"), &body, reason, QStringLiteral("/planetary/apod")))
         return c;
     Parsed parsed;
     QString caption;

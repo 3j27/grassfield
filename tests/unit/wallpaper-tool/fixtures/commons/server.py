@@ -99,6 +99,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if url.path.startswith("/apod/image/"):
             name = os.path.basename(url.path)
+            if mode == "apod-path-redirect":
+                # A redirect to another page of the same (allowed) host: the path rule must refuse it before any request there.
+                self.send(302, "text/plain", b"", {"Location": "/thumb/picture.jpg"})
+                return
             raw = self.fixture(name)
             if raw is None:
                 self.send(404, "text/plain", b"missing picture")

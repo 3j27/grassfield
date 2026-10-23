@@ -237,6 +237,7 @@ int cmdThumb(const QStringList &args)
         return fail(WriteFailed, QStringLiteral("cannot create the output folder"));
     if (!QFileInfo::exists(image) && isVideo) {
         // A video's thumbnail is one of its frames (Settings > Wallpaper, the Videos grid).
+        video::installSignalHandlers();
         QString why;
         if (const ExitCode c = video::thumbnail(a.positional, image, width, &why))
             return fail(c, why);
@@ -288,8 +289,11 @@ int cmdProbe(const QStringList &args)
         return fail(Usage, a.error);
     if (!a.positional.startsWith(QLatin1Char('/')))
         return fail(Usage, QStringLiteral("the video path must be absolute"));
+    if (!video::isVideoPath(a.positional))
+        return fail(Unsupported, QStringLiteral("not a video file name"));
     if (const ExitCode c = checkFile(a.positional, video::kMaxSourceBytes))
         return fail(c, QString::fromLatin1(reasonName(c)));
+    video::installSignalHandlers();
     video::Info info;
     QString why;
     if (const ExitCode c = video::probe(QStringLiteral("/usr/bin/ffprobe"), a.positional, video::kMaxSeconds, &info, &why))
@@ -341,6 +345,9 @@ int cmdTranscode(const QStringList &args)
     }
     if (!a.positional.startsWith(QLatin1Char('/')))
         return fail(Usage, QStringLiteral("the video path must be absolute"));
+    if (!video::isVideoPath(a.positional))
+        return fail(Unsupported, QStringLiteral("not a video file name"));
+    video::installSignalHandlers();
     o.src = a.positional;
     o.keep = a.keeps;
     QJsonObject result;
@@ -409,7 +416,6 @@ int main(int argc, char *argv[])
 {
     // Untrusted pictures: every decoder is bounded to this much memory.
     QImageReader::setAllocationLimit(kAllocationLimitMb);
-    video::installSignalHandlers();
     QCoreApplication app(argc, argv);
     const QStringList args = app.arguments().mid(1);
     if (args.isEmpty())

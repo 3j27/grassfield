@@ -26,6 +26,14 @@ constexpr int kTranscodeTimeoutSeconds = 1800;             // one run of ffmpeg 
 constexpr int kProbeTimeoutSeconds = 30;
 constexpr int kFrameTimeoutSeconds = 30;
 constexpr qint64 kMaxProbeJsonBytes = 1024 * 1024;
+// The only container formats ffmpeg may open (the demuxers behind the suffixes of videoSuffixes): a playlist (HLS, ffconcat, a
+// text file naming other files) is refused whatever its name.
+constexpr const char *kDemuxers = "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi,ogg";
+// Limits of the child programs: one allocation, the picture size (as the picture limits) and the address space.
+constexpr qint64 kMaxAlloc = qint64(1) << 30;
+constexpr qint64 kProbeAddressSpace = qint64(2) << 30;
+constexpr qint64 kFrameAddressSpace = qint64(4) << 30;
+constexpr qint64 kTranscodeAddressSpace = qint64(8) << 30;
 
 // What ffprobe says about a video's first video stream (after the display rotation).
 struct Info {
@@ -41,8 +49,8 @@ struct Info {
 QStringList videoSuffixes();
 bool isVideoPath(const QString &path);
 
-// ffprobe: one JSON document on stdout. `--` and a path that starts with "/" keep it from being read as an option or a
-// protocol; the protocol whitelist is plain files.
+// ffprobe: one JSON document on stdout. The path is the value of `-i` (ffmpeg has no `--`) and starts with "/", so it is never read as
+// an option or a protocol; the protocol whitelist is plain files and the format whitelist the containers of kDemuxers.
 QStringList ffprobeArgs(const QString &path);
 // Reads the JSON. Unsupported: no video stream (or no size). Unreadable: not JSON. TooLongVideo: longer than `maxSeconds`
 // (a duration that is not known is Unreadable: a wallpaper loops, a stream of unknown length is not accepted).
@@ -77,7 +85,8 @@ bool outDirAllowed(const QString &out);
 
 // ---- the processes ----
 
-// A SIGTERM or SIGINT to the helper stops the running ffmpeg and ends the run with Cancelled (the handler is installed by main()).
+// Called by the video subcommands only: every other subcommand keeps the default action, so a superseded `prepare`, `list`, still
+// `thumb` or `fetch` dies at once. A SIGTERM or SIGINT to the helper stops the running ffmpeg and ends the run with Cancelled (the handler is installed by main()).
 void installSignalHandlers();
 
 // ffprobe of a file already checked as a regular file.

@@ -227,3 +227,70 @@ TEST(VideoTool, ThumbnailOfAVideoIsOneFrame)
     ASSERT_EQ(thumbnail(clip, out, 320, &why), Ok) << why.toStdString();
     EXPECT_EQ(QImage(out).size(), QSize(320, 200));
 }
+
+TEST(VideoTool, ArgumentsWhitelistTheContainersAndBoundTheDecoder)
+{
+    for (const QStringList &a : {ffprobeArgs(QStringLiteral("/v/a.mp4")), frameArgs(QStringLiteral("/v/a.mp4"), 1.0), transcodeArgs(QStringLiteral("/v/a.mp4"), QStringLiteral("/c/o.mp4"), QSize(640, 360), 30, 600, 1000000)}) {
+        const int i = a.indexOf(QStringLiteral("-format_whitelist"));
+        ASSERT_GE(i, 0);
+        EXPECT_EQ(a[i + 1], QString::fromLatin1(kDemuxers));
+        EXPECT_FALSE(a[i + 1].contains(QStringLiteral("hls")));
+        EXPECT_FALSE(a[i + 1].contains(QStringLiteral("concat")));
+        EXPECT_EQ(a[a.indexOf(QStringLiteral("-protocol_whitelist")) + 1], QStringLiteral("file"));
+    }
+    for (const QStringList &a : {frameArgs(QStringLiteral("/v/a.mp4"), 1.0), transcodeArgs(QStringLiteral("/v/a.mp4"), QStringLiteral("/c/o.mp4"), QSize(640, 360), 30, 600, 1000000)}) {
+        EXPECT_EQ(a[a.indexOf(QStringLiteral("-max_pixels")) + 1].toLongLong(), kMaxPixels);
+        EXPECT_EQ(a[a.indexOf(QStringLiteral("-max_alloc")) + 1].toLongLong(), kMaxAlloc);
+    }
+}
+
+TEST(VideoTool, APlaylistIsRefusedWhateverItIsCalled)
+{
+    if (!haveFfmpeg())
+        GTEST_SKIP() << "ffmpeg is not installed";
+    QTemporaryDir dir;
+    const QString clip = makeClip(dir, QStringLiteral("clip.mp4"), 2, QStringLiteral("160x90"), 10);
+    struct Case {
+        const char *name;
+        QByteArray body;
+    };
+    const Case cases[] = {
+        {"hls.mp4", "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nclip.mp4\n#EXT-X-ENDLIST\n"},
+        {"concat.mkv", "ffconcat version 1.0\nfile clip.mp4\n"},
+        {"abs.mov", QByteArray("ffconcat version 1.0\nfile '") + clip.toUtf8() + "'\n"},
+    };
+    for (const Case &c : cases) {
+        QFile f(dir.filePath(QString::fromLatin1(c.name)));
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write(c.body);
+        f.close();
+        Info i;
+        QString why;
+        EXPECT_NE(probe(QStringLiteral("/usr/bin/ffprobe"), f.fileName(), 600, &i, &why), Ok) << c.name;
+        TranscodeOptions o;
+        o.src = f.fileName();
+        o.out = videoDir(dir);
+        o.limit = QSize(160, 100);
+        QJsonObject r;
+        EXPECT_NE(transcode(o, nullptr, &r, &why), Ok) << c.name;
+    }
+    // The containers of the supported suffixes still open.
+    for (const char *name : {"b.mkv", "c.avi", "d.mov"}) {
+        const QString p = makeClip(dir, QString::fromLatin1(name), 1, QStringLiteral("160x90"), 10);
+        Info i;
+        QString why;
+        EXPECT_EQ(probe(QStringLiteral("/usr/bin/ffprobe"), p, 600, &i, &why), Ok) << name << " " << why.toStdString();
+    }
+}
+
+TEST(VideoTool, ANormalFileIsNotHurtByTheMemoryCapOfTheChild)
+{
+    // The children run under RLIMIT_AS (2, 4 and 8 GiB); a normal file works as before (this only shows the cap does not hurt: that it bites is not tested).
+    if (!haveFfmpeg())
+        GTEST_SKIP() << "ffmpeg is not installed";
+    QTemporaryDir dir;
+    const QString clip = makeClip(dir, QStringLiteral("clip.mp4"), 1, QStringLiteral("160x90"), 10);
+    Info i;
+    QString why;
+    EXPECT_EQ(probe(QStringLiteral("/usr/bin/ffprobe"), clip, 600, &i, &why), Ok) << "a normal file is not hurt by the cap: " << why.toStdString();
+}
