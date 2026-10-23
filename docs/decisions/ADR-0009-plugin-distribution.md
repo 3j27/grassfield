@@ -46,31 +46,42 @@ default path, option 3 the opt-in recovery; option 2 stays rejected.
 
 What ships (`grassfield-compositor`, `depends=(hyprland)` only, no version constraint):
 - `/usr/lib/grassfield/grassfield-compositor.so` and its stamp `grassfield-compositor.abi`: the ABI string it was built
-  for, computed from Hyprland's `version.h` with Hyprland's own formula (`PluginAPI.hpp` `__hyprland_api_get_client_hash`:
-  commit, then the aquamarine, hyprutils, hyprgraphics, hyprcursor and hyprlang minors). One build per package for now;
-  more prebuilt variants (one per ABI of the stable and rc channels) can be added later next to it, with their stamps.
-- The plugin sources in `/usr/src/grassfield-compositor` (CMakeLists.txt, src/, protocols/, VERSION) and
-  `grassfield-compositor-rebuild` (on PATH). cmake, gcc, make and pkgconf are optdepends (the rebuild's toolchain);
-  libnotify too (the notice).
+  for, computed with Hyprland's own formula (`PluginAPI.hpp` `__hyprland_api_get_client_hash`: commit, then the
+  aquamarine, hyprutils, hyprgraphics, hyprcursor and hyprlang minors) by its own CMake build from the `version.h` it was
+  compiled against (`compositor/abi-stamp.cmake`), so a stamp always belongs to its build. `package()` stops when that
+  stamp is not the installed Hyprland's (a stale build). One build per package for now; more prebuilt variants (one per
+  ABI of the stable and rc channels) can be added later next to it, with their stamps.
+- The plugin sources in `/usr/src/grassfield-compositor` (CMakeLists.txt, abi-stamp.cmake, src/, protocols/, VERSION) and
+  `grassfield-compositor-rebuild` (on PATH). cmake, gcc, make and pkgconf are optdepends (the rebuild's toolchain).
 
 Loader order (`config/hypr/grassfield/compositor.lua`, run by `session.lua` at parse time): the first build whose stamp
 is the ABI of the Hyprland that runs (the installed `version.h`, its commit checked against `HYPRLAND_INSTANCE_SIGNATURE`):
-1. the packaged build;
-2. the user's build, `$XDG_CACHE_HOME/grassfield/compositor/<abi>/grassfield-compositor.so`;
-3. none: nothing is loaded. The session runs in degraded mode (gate C2) and `grassfield-compositor-rebuild --session`
-   shows one notice naming the Hyprland version and the recovery.
-A config reload after Hyprland was updated under a running session keeps the build loaded at login (its stamp names the
-running commit). If the loader itself fails, the packaged build is loaded: it compares Hyprland's hash itself and refuses
-another build with its own notice.
+1. the packaged build (root's, a plain file);
+2. the user's build, `$XDG_CACHE_HOME/grassfield/compositor/<abi>/grassfield-compositor.so`, only when
+   `grassfield-compositor-rebuild --vetted` vouches for it. Lua cannot look at owners, modes or symlinks; the script has
+   the one checker (`private_entry`), also used when it builds: every directory from the cache root down, the plugin and
+   its stamp are no symlinks (lstat), owned by the user and not writable by group or others, and the stamp is the ABI;
+3. none: nothing is loaded. The session runs in degraded mode (gate C2) and the shell shows one translated notice: it asks
+   `grassfield-compositor-rebuild --status` and, on a mismatch, names the Hyprland version and the recovery.
+A config reload in the same Hyprland keeps the build its first parse loaded: `session.lua` writes the path to a runtime
+note (`$XDG_RUNTIME_DIR/grassfield-compositor-<instance signature>`) and the loader names that path again (Hyprland keeps
+a plugin loaded from a path the list still names and unloads the others), even when a package update in the same
+transaction replaced the files since. The note is a hint: only the packaged path, or a user build of the running commit
+that `--vetted <abi>` still vouches for. A Hyprland updated under the session is reconsidered at the next login. If the
+loader itself fails, the packaged build is loaded: it compares Hyprland's hash itself and refuses another build with its
+own notice.
 
 User rebuild (option 3): `grassfield-compositor-rebuild` refuses to run as root. It builds the shipped sources with CMake
 and the compiler, in a private temporary directory, with a clean environment, at low priority, with at most 4 compilers and
-a 15-minute bound per step. It installs the result in the user's cache: 0700 directories, symlinks refused (cache
-directories, the build's result, planted files), the plugin then its stamp each written to a new file and renamed into
-place, the stamp last. Opt-in Settings toggle `windows.rebuildExtension`, "Rebuild the compositor extension after Hyprland
-updates" (Desktop & Dock, off by default): on a mismatch the session's `--session` run builds in the background, then
-loads the result into the running Hyprland (`hyprctl plugin load`) when its ABI is the running one, else tells the user
-to log out and back in. With the toggle off the notice gives the command.
+a 15-minute bound per step. It refuses a cache root it could not vouch for afterwards, creates its directories 0700,
+refuses symlinks (cache directories, the lock, the build's result) and a result whose own stamp is another ABI, and
+installs the plugin then that stamp, each written to a new file and renamed into place, the stamp last; then vets the
+result as the loader will. Opt-in Settings toggle `windows.rebuildExtension`, "Rebuild the compositor extension after
+Hyprland updates" (Desktop & Dock, off by default): on a mismatch the shell runs `--session` once in the background; it
+builds (or takes a build that matches already), loads the result into the running Hyprland (Hyprland's plugin load
+request, an exact `ok`) when its ABI is the running one, and answers `result=loaded|built|failed`; the shell turns that
+into a translated notice (loaded; built, log out and back in; failed, with the command). With the toggle off the notice
+gives the command. The script itself never posts notices: all user-facing text is in the shell's catalog.
 
 Why the root pacman hook of the first remediation (2026-10-23, branch only, never released) was dropped: it was option 2.
 A root process handed its build directory to `nobody` and then installed the result as root, so any uid-65534 process
@@ -78,6 +89,8 @@ could swap the file (a link to a secret became a world-readable copy, or its own
 every user's Hyprland). It also compiled code as root without the user asking, could block pacman for up to twice 900 s,
 and made the toolchain a hard dependency. Nothing in the amended design runs as root after the package is installed.
 
-Tests: `tests/shell/compositor_rebuild.sh` (logic): the formula in bash and Lua, the loader's choice including the
-mismatch and the update under a session, root and symlink refusal, the cache install, the `--session` notice and build. The
-nested part of the C2 mismatch test (a mismatched build loaded by hand) is still to be written (audit plan 1.8).
+Tests: `tests/shell/compositor_rebuild.sh` (logic): the formula in CMake, bash and Lua, the loader's choice including the
+mismatch, the runtime note and the update under a session, the vetting (mode and symlink cases of every entry; a foreign
+owner needs root to set up), root and symlink refusal, the cache install, the `--status` and `--session` answers.
+`tests/unit/tst_extensionstatus.qml`: the shell's reading of those answers. The nested part of the C2 mismatch test (a
+mismatched build loaded by hand) is still to be written (audit plan 1.8).

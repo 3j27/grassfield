@@ -4,25 +4,28 @@
 # (on PATH) by the grassfield-compositor package.
 #
 # A Hyprland plugin only hooks into the Hyprland build it was compiled for (the commit and the Hypr library minors). The
-# package ships the plugin with the ABI it was built for in a stamp next to it (grassfield-compositor.abi) and the plugin
-# sources (/usr/src/grassfield-compositor). When the installed Hyprland has another ABI, the session loads no extension
-# (degraded mode, gate C2) and starts this script with --session, which says so once; the user (or, with the opt-in
-# setting windows.rebuildExtension, the session) builds it here: CMake and the compiler from the shipped sources, in a
-# private temporary directory, as the user, never as root; the result goes to
-# $XDG_CACHE_HOME/grassfield/compositor/<abi>/grassfield-compositor.so with its stamp, written last. The session loads it
-# at the next login (config/hypr/grassfield/compositor.lua), and --session loads it into the running Hyprland at once
-# when its ABI is the running one.
+# package ships the plugin with the ABI it was built for in a stamp next to it (grassfield-compositor.abi, written by its
+# own build: compositor/abi-stamp.cmake) and the plugin sources (/usr/src/grassfield-compositor). When the installed
+# Hyprland has another ABI, the session loads no extension (degraded mode, gate C2) and the shell says so, translated; the
+# user (or, with the opt-in setting windows.rebuildExtension, the shell) builds it here: CMake and the compiler from the
+# shipped sources, in a private temporary directory, as the user, never as root. The result goes to
+# $XDG_CACHE_HOME/grassfield/compositor/<abi>/grassfield-compositor.so with the stamp of that build, written last. The
+# session loads it (config/hypr/grassfield/compositor.lua) only after --vetted has checked every directory from the cache
+# root down and both files: not symlinks, owned by the user, not writable by group or others.
 #
-# Usage: grassfield-compositor-rebuild [--check | --session | --print-abi [VERSION_H]]
+# Usage: grassfield-compositor-rebuild [--check | --status | --vetted [ABI] | --session | --print-abi [VERSION_H]]
 #   (none)            build now when no build matches the installed Hyprland, then log out and back in
-#   --check           which build matches the installed Hyprland: exit 0 when one does, 1 when none does
-#   --session         run by the session when no build matches: one notice naming the Hyprland version and the recovery;
-#                     with Settings windows.rebuildExtension on, the build runs now (nice, bounded), then is loaded
-#   --print-abi [F]   the ABI string of a Hyprland version.h (default: the installed one); used for the package's stamp
-# Refuses to run as root (--check and --print-abi only read). Environment, for tests only: GF_VERSION_H, GF_LIB_DIR,
-# GF_SRC_DIR, GF_TOOLS_PATH, GF_TEST_UID (0: behave as root; it can never lift the refusal),
-# GF_TEST_FAKE_BUILD (1: a placeholder plugin instead of CMake; symlink: a symlink as the build's result),
-# GF_NOTIFY_LOG (notices appended there instead of notify-send), GF_HYPRCTL (the hyprctl that loads the result).
+#   --check           which build matches the installed Hyprland, for a person: exit 0 when one does, 1 when none does
+#   --status          the same for the shell, key=value lines: state=match|mismatch|unknown, version=, abi=, reason=
+#   --vetted [ABI]    for the session loader: the path of the user's build for ABI (default: the installed Hyprland's)
+#                     when every check passes (exit 0), else nothing on stdout and the reason on stderr (exit 1)
+#   --session         for the shell (opt-in setting): build when no build matches, then load the result into the running
+#                     Hyprland when its ABI is the running one; key=value lines: result=loaded|built|failed, reason=
+#   --print-abi [F]   the ABI string of a Hyprland version.h (default: the installed one)
+# Refuses to build as root (--check, --status, --vetted and --print-abi only read). Environment, for tests only:
+# GF_VERSION_H, GF_LIB_DIR, GF_SRC_DIR, GF_TOOLS_PATH, GF_TEST_UID (0: behave as root; it can never lift the refusal),
+# GF_TEST_FAKE_BUILD (1: a placeholder plugin and stamp instead of CMake; symlink: a symlink as the build's result; stale:
+# a stamp for another ABI), GF_HYPRCTL (the hyprctl that loads the result).
 set -uo pipefail
 
 version_h=${GF_VERSION_H:-/usr/include/hyprland/src/version.h}
@@ -31,9 +34,9 @@ src_dir=${GF_SRC_DIR:-/usr/src/grassfield-compositor}
 packaged=$lib_dir/grassfield-compositor.so
 cache_root=${XDG_CACHE_HOME:-${HOME:-}/.cache}
 cache_base=$cache_root/grassfield/compositor
-config_dir=${GRASSFIELD_CONFIG_HOME:-${XDG_CONFIG_HOME:-${HOME:-}/.config}/grassfield}
 tools_path=${GF_TOOLS_PATH:-/usr/local/bin:/usr/bin}
 build_timeout=900
+me=$(id -u)
 
 say() { printf 'grassfield-compositor-rebuild: %s\n' "$*" >&2; } # messages on stderr: stdout carries results
 
@@ -63,25 +66,55 @@ version_of() {
 
 # A regular file that is not a symlink.
 plain_file() { [[ -f $1 && ! -L $1 ]]; }
-# The stamp of a build: the first line of <name>.abi next to it, read only from a plain file ("" otherwise).
-stamp_of() { local s=${1%.so}.abi; plain_file "$s" && head -n 1 "$s" || true; }
+# The first line of a plain file ("" otherwise).
+first_line() { plain_file "$1" && head -n 1 "$1" || true; }
+stamp_of() { first_line "${1%.so}.abi"; }
 user_build() { printf '%s/%s/grassfield-compositor.so' "$cache_base" "$1"; }
 source_id() { head -n 1 "$src_dir/VERSION" 2>/dev/null || echo unknown; }
 
-# The build that matches <abi>: the packaged one, else the user's (plain files only); exit 1 when none does.
-matching_build() {
-  local u
-  if plain_file "$packaged" && [[ $(stamp_of "$packaged") == "$1" ]]; then printf '%s' "$packaged"; return 0; fi
-  u=$(user_build "$1")
-  if plain_file "$u" && [[ $(stamp_of "$u") == "$1" ]]; then printf '%s' "$u"; return 0; fi
-  return 1
+# An entry of the user's build path, looked at itself (lstat: a symlink is never followed): of the type asked (d or f),
+# owned by the user, not writable by group or others. Prints why when it is not.
+private_entry() { # <path> <d|f>
+  local owner mode
+  if [[ -L $1 ]]; then echo "$1 is a symlink"; return 1; fi
+  if [[ $2 == d && ! -d $1 ]] || [[ $2 == f && ! -f $1 ]]; then echo "$1 is missing or not a $([[ $2 == d ]] && echo directory || echo file)"; return 1; fi
+  read -r owner mode < <(stat -c '%u %a' -- "$1" 2>/dev/null) || { echo "$1 cannot be read"; return 1; }
+  [[ $owner == "$me" ]] || { echo "$1 belongs to uid $owner, not $me"; return 1; }
+  ((8#$mode & 8#022)) && { echo "$1 is writable by group or others (mode $mode)"; return 1; }
+  return 0
 }
 
-# A directory of ours: created 0700 when missing; refused when it is a symlink, not a directory or not owned by the user.
+# The directories from the cache root down to <dir> pass private_entry.
+private_dirs() { # <dir under cache_base, or cache_base>
+  local d why
+  for d in "$cache_root" "$cache_root/grassfield" "$cache_base" "$@"; do
+    why=$(private_entry "$d" d) || { echo "$why"; return 1; }
+  done
+}
+
+# The user's build for <abi> when every check passes: the directories from the cache root down, the plugin and its stamp
+# (private entries), and the stamp is <abi>. Prints the path; otherwise exit 1 with the reason on stderr.
+vetted_user_build() { # <abi>
+  local dir=$cache_base/$1 so why
+  so=$dir/grassfield-compositor.so
+  why=$(private_dirs "$dir") || { say "your build is not used: $why"; return 1; }
+  why=$(private_entry "$so" f) || { say "your build is not used: $why"; return 1; }
+  why=$(private_entry "$dir/grassfield-compositor.abi" f) || { say "your build is not used: $why"; return 1; }
+  [[ $(stamp_of "$so") == "$1" ]] || { say "your build is not used: its stamp is not $1"; return 1; }
+  printf '%s' "$so"
+}
+
+# The build that matches <abi>: the packaged one (a plain file whose stamp is <abi>), else the user's vetted one.
+matching_build() { # <abi>
+  if plain_file "$packaged" && [[ $(stamp_of "$packaged") == "$1" ]]; then printf '%s' "$packaged"; return 0; fi
+  vetted_user_build "$1" 2>/dev/null
+}
+
+# A directory of ours below the cache root: created 0700 when missing, then checked like the loader checks it.
 own_dir() {
-  [[ -L $1 ]] && { say "refusing: $1 is a symlink"; return 1; }
-  [[ -e $1 ]] || mkdir -m 0700 "$1" 2>/dev/null || { say "cannot create $1"; return 1; }
-  [[ -d $1 && ! -L $1 && -O $1 ]] || { say "refusing: $1 is not a directory of this user"; return 1; }
+  local why
+  [[ -L $1 ]] || [[ -e $1 ]] || mkdir -m 0700 "$1" 2>/dev/null || { echo "cannot create $1"; return 1; }
+  why=$(private_entry "$1" d) || { echo "$why"; return 1; }
   chmod 0700 "$1"
 }
 
@@ -91,32 +124,15 @@ missing_tools() {
   printf '%s' "${out[*]}"
 }
 
-# Settings windows.rebuildExtension (opt-in, off by default): "true" or "false".
-rebuild_setting() {
-  local f=$config_dir/grassfield.json
-  plain_file "$f" && command -v python3 >/dev/null || { echo false; return; }
-  python3 -I -c 'import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-    print("true" if isinstance(d, dict) and isinstance(d.get("windows"), dict) and d["windows"].get("rebuildExtension") is True else "false")
-except Exception:
-    print("false")' "$f"
-}
-
-notify() { # <low|normal|critical> <text>: one desktop notice (the user's session)
-  if [[ -n ${GF_NOTIFY_LOG:-} ]]; then printf '%s\t%s\n' "$1" "$2" >>"$GF_NOTIFY_LOG"; return 0; fi
-  command -v notify-send >/dev/null && notify-send -a Grassfield -u "$1" Grassfield "$2" 2>/dev/null && return 0
-  say "$2"
-}
-
-# Builds the plugin from the shipped sources into <dir> (grassfield-compositor.so there), output appended to <log>. Nothing
-# from the caller's environment reaches CMake or the compiler; low priority, bounded, at most 4 compilers (each translation
-# unit that includes Hyprland's headers takes about 1 GB).
+# Builds the plugin from the shipped sources into <dir> (grassfield-compositor.so and its stamp there, by CMake), output
+# appended to <log>. Nothing from the caller's environment reaches CMake or the compiler; low priority, bounded, at most 4
+# compilers (each translation unit that includes Hyprland's headers takes about 1 GB).
 build_into() { # <dir> <log>
   local out=$1 log=$2 jobs
   case ${GF_TEST_FAKE_BUILD:-} in
-    1) printf 'fake plugin for tests\n' >"$out/grassfield-compositor.so"; return 0 ;;
-    symlink) ln -s /etc/passwd "$out/grassfield-compositor.so"; return 0 ;;
+    1) printf 'fake plugin for tests\n' >"$out/grassfield-compositor.so"; abi_of "$version_h" >"$out/grassfield-compositor.abi"; return 0 ;;
+    symlink) ln -s /etc/passwd "$out/grassfield-compositor.so"; abi_of "$version_h" >"$out/grassfield-compositor.abi"; return 0 ;;
+    stale) printf 'fake plugin for tests\n' >"$out/grassfield-compositor.so"; echo stale >"$out/grassfield-compositor.abi"; return 0 ;;
   esac
   jobs=$(nproc 2>/dev/null || echo 2)
   ((jobs > 4)) && jobs=4
@@ -127,22 +143,24 @@ build_into() { # <dir> <log>
     cmake --build "$out/work" --parallel "$jobs" >>"$log" 2>&1
 }
 
-# Builds for <abi> and installs the result as the user's build: the plugin first, its stamp last, each through a new file
-# renamed into place (a session that has the previous build mapped keeps it). Prints the installed path.
+# Builds for <abi> and installs the result as the user's build: the plugin first, its stamp (the build's own) last, each
+# through a new file renamed into place (a session that has the previous build mapped keeps it); then checks it as the
+# session will. Prints the installed path. Exit 2: cannot build here (toolchain, sources, cache), 3: the build failed.
 build_and_install() { # <abi>
-  local abi=$1 dest work so tmp log
-  mkdir -p "$cache_root" || return 1 # the user's own cache (it may be a link the user made); below it, only our 0700 dirs
-  own_dir "$cache_root/grassfield" && own_dir "$cache_base" || return 1
-  # One build at a time (the session's background build and a manual one).
-  [[ -L $cache_base/.lock ]] && { say "refusing: $cache_base/.lock is a symlink"; return 1; }
-  exec 9>"$cache_base/.lock" || return 1
-  flock -n 9 || { say "another build is running"; return 1; }
+  local abi=$1 dest work so stamp tmp log why
+  mkdir -p "$cache_root" 2>/dev/null
+  why=$(private_entry "$cache_root" d) || { say "cannot use the cache directory: $why (the session would not load a build from it)"; return 2; }
+  why=$(own_dir "$cache_root/grassfield") && why=$(own_dir "$cache_base") || { say "cannot use the cache directory: $why"; return 2; }
+  # One build at a time (the shell's background build and a manual one).
+  [[ -L $cache_base/.lock ]] && { say "refusing: $cache_base/.lock is a symlink"; return 2; }
+  exec 9>"$cache_base/.lock" || return 2
+  flock -n 9 || { say "another build is running"; return 2; }
   dest=$cache_base/$abi
-  own_dir "$dest" || return 1
+  why=$(own_dir "$dest") || { say "cannot use the cache directory: $why"; return 2; }
   log=$cache_base/build.log
-  [[ -L $log ]] && { say "refusing: $log is a symlink"; return 1; }
+  [[ -L $log ]] && { say "refusing: $log is a symlink"; return 2; }
   : >"$log"
-  work=$(mktemp -d "$cache_base/.build.XXXXXX") || return 1
+  work=$(mktemp -d "$cache_base/.build.XXXXXX") || return 2
   # shellcheck disable=SC2064 # the directory is known now
   trap "rm -rf '$work'" EXIT
   [[ -z $(missing_tools) ]] || { say "cannot build: missing $(missing_tools) (install them: pacman -S --needed cmake gcc make pkgconf)"; return 2; }
@@ -150,80 +168,100 @@ build_and_install() { # <abi>
   build_into "$work" "$log" || { say "the build failed (log: $log)"; return 3; }
   so=$work/grassfield-compositor.so
   plain_file "$so" || { say "refusing the build's result: not a regular file ($so)"; return 3; }
-  tmp=$(mktemp "$dest/.plugin.XXXXXX") || return 1
-  cat "$so" >"$tmp" && chmod 0700 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.so" || { rm -f "$tmp"; return 1; }
-  tmp=$(mktemp "$dest/.stamp.XXXXXX") || return 1
-  printf '%s\nsource %s\n' "$abi" "$(source_id)" >"$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.abi" || { rm -f "$tmp"; return 1; }
-  printf '%s' "$dest/grassfield-compositor.so"
+  stamp=$(first_line "$work/grassfield-compositor.abi")
+  [[ $stamp == "$abi" ]] || { say "refusing the build's result: built for '$stamp', not '$abi'"; return 3; }
+  tmp=$(mktemp "$dest/.plugin.XXXXXX") || return 2
+  cat "$so" >"$tmp" && chmod 0700 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.so" || { rm -f "$tmp"; return 2; }
+  tmp=$(mktemp "$dest/.stamp.XXXXXX") || return 2
+  printf '%s\nsource %s\n' "$stamp" "$(source_id)" >"$tmp" && chmod 0600 "$tmp" && mv -f "$tmp" "$dest/grassfield-compositor.abi" || { rm -f "$tmp"; return 2; }
+  vetted_user_build "$abi"
 }
 
 # Loads <path> (built for <abi>) into the running Hyprland when it is that Hyprland's ABI (its instance signature starts
-# with the commit; the installed headers give the rest). Exit 0 when Hyprland took it.
+# with the commit; the installed headers give the rest). Exit 0 when Hyprland answered exactly "ok".
 load_in_session() { # <path> <abi>
   local sig=${HYPRLAND_INSTANCE_SIGNATURE:-} out
   [[ -n $sig && $2 == "${sig%%_*}"_* ]] || return 1
   out=$("${GF_HYPRCTL:-hyprctl}" plugin load "$1" 2>&1) || return 1
-  [[ $out == *ok* ]]
+  [[ $(printf '%s' "$out" | tr -d '[:space:]') == ok ]]
 }
 
 mode=build
 case ${1:-} in
   "") ;;
   --check) mode=check ;;
+  --status) mode=status ;;
+  --vetted)
+    mode=vetted
+    # An ABI names a directory: letters, digits, dots, dashes and underscores, never "." or "..".
+    if [[ -n ${2:-} && ( ! $2 =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ) ]]; then say "not an ABI: $2"; exit 1; fi
+    ;;
   --session) mode=session ;;
   --print-abi)
-    # Read only, also as root: makepkg's package() runs it under fakeroot for the package's stamp.
+    # Read only, also as root: makepkg's package() runs it under fakeroot for its stamp check.
     abi_of "${2:-$version_h}" || { say "no Hyprland version.h at ${2:-$version_h}"; exit 1; }
     exit 0
     ;;
   *) sed -n '/^# Usage:/,/^# Refuses/p' "$0" | sed '$d' >&2; exit 2 ;;
 esac
 
-# Building (and the session's run, which may build) never runs as root. The test override can only add the refusal.
-uid=$(id -u)
+# Building (none, --session) never runs as root. The test override can only add the refusal.
+uid=$me
 [[ ${GF_TEST_UID:-} == 0 ]] && uid=0
-if [[ $uid == 0 && $mode != check ]]; then
+if [[ $uid == 0 && ($mode == build || $mode == session) ]]; then
   say "refusing to run as root: run it as the user whose session needs the extension (it builds into that user's cache)"
   exit 1
 fi
 
-installed=$(abi_of "$version_h") || { say "Hyprland's version.h is missing ($version_h): is hyprland installed?"; exit 1; }
+installed=$(abi_of "$version_h") || installed=""
 version=$(version_of "$version_h")
 
-if [[ $mode == check ]]; then
-  echo "installed Hyprland: $version ($installed)"
-  echo "packaged build:     $packaged [$(stamp_of "$packaged")]"
-  echo "your build:         $(user_build "$installed") [$(stamp_of "$(user_build "$installed")")]"
-  if path=$(matching_build "$installed"); then echo "match: $path"; exit 0; fi
-  echo "match: none (the session runs without the extension: titlebars, minimize and global menus are off)"
-  exit 1
-fi
+case $mode in
+  vetted)
+    abi=${2:-$installed}
+    [[ -n $abi ]] || { say "Hyprland's version.h is missing ($version_h)"; exit 1; }
+    path=$(vetted_user_build "$abi") || exit 1
+    printf '%s\n' "$path"
+    exit 0
+    ;;
+  status)
+    if [[ -z $installed ]]; then printf 'state=unknown\nreason=no-headers\n'; exit 0; fi
+    if [[ ! -f $packaged && ! -L $packaged ]]; then printf 'state=unknown\nreason=not-installed\nversion=%s\n' "$version"; exit 0; fi
+    if path=$(matching_build "$installed"); then printf 'state=match\nversion=%s\nabi=%s\npath=%s\n' "$version" "$installed" "$path"; exit 0; fi
+    printf 'state=mismatch\nversion=%s\nabi=%s\n' "$version" "$installed"
+    exit 0
+    ;;
+  check)
+    [[ -n $installed ]] || { say "Hyprland's version.h is missing ($version_h): is hyprland installed?"; exit 1; }
+    echo "installed Hyprland: $version ($installed)"
+    echo "packaged build:     $packaged [$(stamp_of "$packaged")]"
+    echo "your build:         $(user_build "$installed") [$(stamp_of "$(user_build "$installed")")]"
+    if path=$(matching_build "$installed"); then echo "match: $path"; exit 0; fi
+    vetted_user_build "$installed" >/dev/null # says why your build is not used, when there is one
+    echo "match: none (the session runs without the extension: titlebars, minimize and global menus are off)"
+    exit 1
+    ;;
+esac
 
-if path=$(matching_build "$installed"); then
-  [[ $mode == build ]] && say "nothing to build: $path matches Hyprland $version"
-  exit 0
-fi
+[[ -n $installed ]] || { say "Hyprland's version.h is missing ($version_h): is hyprland installed?"; exit 1; }
 
 if [[ $mode == build ]]; then
+  if path=$(matching_build "$installed"); then say "nothing to build: $path matches Hyprland $version"; exit 0; fi
   say "building the extension for Hyprland $version ($installed); this takes a minute or two"
   path=$(build_and_install "$installed") || exit 1
   say "built: $path. Log out and back in to use it."
   exit 0
 fi
 
-# --session: the session loaded no extension (no build matches the Hyprland that runs).
-if [[ $(rebuild_setting) != true ]]; then
-  notify critical "No build of the compositor extension matches Hyprland $version: titlebars, minimize and global menus are off. Run grassfield-compositor-rebuild in a terminal, then log out and back in (or turn on Settings > Desktop & Dock > Rebuild the compositor extension after Hyprland updates)."
-  exit 0
+# --session (the shell, opt-in setting): build when needed (a build that matches already, e.g. made by hand since the
+# login, is used as it is), load when possible; the shell turns the result into a translated notice.
+if ! path=$(matching_build "$installed"); then
+  path=$(build_and_install "$installed")
+  case $? in
+    0) ;;
+    2) printf 'result=failed\nreason=cannot-build\n'; exit 1 ;;
+    *) printf 'result=failed\nreason=build-failed\n'; exit 1 ;;
+  esac
 fi
-notify normal "Hyprland $version is new: Grassfield is building its compositor extension (titlebars, minimize, global menus) in the background."
-if ! path=$(build_and_install "$installed"); then
-  notify critical "The compositor extension could not be built for Hyprland $version: titlebars, minimize and global menus stay off. Run grassfield-compositor-rebuild in a terminal to see why (log: $cache_base/build.log)."
-  exit 1
-fi
-if load_in_session "$path" "$installed"; then
-  notify normal "The compositor extension is ready for Hyprland $version: titlebars, minimize and global menus are back."
-else
-  notify normal "The compositor extension is ready for Hyprland $version. Log out and back in to use it."
-fi
+if load_in_session "$path" "$installed"; then printf 'result=loaded\npath=%s\n' "$path"; else printf 'result=built\npath=%s\n' "$path"; fi
 exit 0

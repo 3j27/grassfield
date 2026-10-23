@@ -37,9 +37,10 @@ hl.config({ cursor = { sync_gsettings_theme = false } })
 
 -- Optional compositor extension (ADR-0009, "Amendment 2026-10-23"). Loaded at parse time (Hyprland applies the plugin
 -- list right after parsing). grassfield.compositor picks the build made for the Hyprland that runs: the packaged one, else
--- the one the user built (grassfield-compositor-rebuild). With none, nothing is loaded: the shell runs in degraded mode
--- (§5.6, gate C2) and grassfield-compositor-rebuild --session says so once, with the Hyprland version and the recovery
--- (it builds the extension itself when the user turned on Settings windows.rebuildExtension).
+-- the one the user built (grassfield-compositor-rebuild, vouched for by its --vetted check). With none, nothing is loaded:
+-- the shell runs in degraded mode (§5.6, gate C2) and tells the user, translated, with the Hyprland version and the
+-- recovery (it builds the extension itself when the user turned on Settings windows.rebuildExtension). A config reload in
+-- the same Hyprland keeps the build its first parse loaded.
 local plugin, why = nil, "no choice"
 local chose, compositor = pcall(require, "grassfield.compositor")
 if chose then
@@ -62,14 +63,13 @@ local f = plugin and io.open(plugin, "r")
 if f then
   f:close()
   local ok, err = pcall(hl.plugin.load, plugin)
-  if ok then
-    pcall(hl.env, "GRASSFIELD_COMPOSITOR_PLUGIN", plugin) -- kept by a config reload after a Hyprland update (compositor.lua)
-  else
+  if ok and chose and why ~= "kept" then
+    pcall(compositor.remember, plugin)
+  elseif not ok then
     print("grassfield: compositor extension not loaded: " .. tostring(err))
   end
 elseif why == "no-match" then
-  print("grassfield: no compositor extension built for this Hyprland: degraded mode (grassfield-compositor-rebuild)")
-  hl.on("hyprland.start", function()
-    hl.exec_cmd("/usr/lib/grassfield/grassfield-compositor-rebuild --session")
-  end)
+  print("grassfield: no compositor extension built for this Hyprland: degraded mode (grassfield-compositor-rebuild --check)")
+elseif why == "updated" then
+  print("grassfield: Hyprland was updated under this session: the compositor extension is reconsidered at the next login")
 end

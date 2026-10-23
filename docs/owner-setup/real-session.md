@@ -350,7 +350,8 @@ titlebars/traffic lights, no minimize animation, no global menus, and one notice
 a terminal of the Grassfield session, as yourself (never with sudo; it refuses root):
 `grassfield-compositor-rebuild` (about a minute; it needs cmake, gcc, make and pkgconf: `sudo pacman -S --needed cmake gcc
 make pkgconf` if it says they are missing), then log out and back in. `grassfield-compositor-rebuild --check` tells which
-build matches. To have this done automatically after each Hyprland update, turn on Settings > Desktop & Dock > "Rebuild
+build matches, and why your own build is not used when it is not (every directory from `~/.cache` down to it must be
+yours, not writable by group or others, and not a symlink). To have this done automatically after each Hyprland update, turn on Settings > Desktop & Dock > "Rebuild
 the compositor extension after Hyprland updates" (the build then runs in the background and loads itself when it can).
 A new `grassfield-compositor` package built for the new Hyprland also fixes it (`cd ~/workspace/grassfieldos/packaging/arch
 && makepkg -si`). To run without it: `sudo pacman -Rns grassfield-compositor`.

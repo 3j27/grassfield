@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
 # The compositor extension after a Hyprland update (ADR-0009 options 1 and 3, "Amendment 2026-10-23"; audit GF-033), without
 # a compositor and without building anything:
-#   - the ABI string of a Hyprland version.h, computed the same way by packaging/arch/grassfield-compositor-rebuild (bash)
-#     and config/hypr/grassfield/compositor.lua (Lua), as Hyprland's PluginAPI.hpp computes it (the formula is checked in
-#     the installed header when present);
-#   - the session's choice (offline part of the C2 mismatch test, plan 1.8): the packaged build, the user's build, and on a
-#     stamp mismatch NO build (degraded mode) plus the notice path; Hyprland updated under the session;
-#   - the user rebuild: refuses root, refuses symlinks (cache directories, the build's result), installs into the user's
-#     cache with 0700 directories and the stamp last, the --session notice (setting off: the command; on: the build, the
-#     load into the running Hyprland when its ABI matches, else log in again), a missing toolchain.
-# Layer logic (scripts/dev/test.sh). Writes only under a temporary directory; hyprctl and notify-send are replaced.
+#   - the ABI string of a Hyprland version.h, computed the same way by compositor/abi-stamp.cmake (the build's own stamp),
+#     packaging/arch/grassfield-compositor-rebuild (bash) and config/hypr/grassfield/compositor.lua (Lua), as Hyprland's
+#     PluginAPI.hpp computes it (the formula is checked in the installed header when present);
+#   - the session's choice (offline part of the C2 mismatch test, plan 1.8): the packaged build, the user's build only as
+#     --vetted vouches for it, on a mismatch NO build (degraded mode); a config reload keeps the build of the first parse
+#     (runtime note), even when a package update replaced its files; Hyprland updated under the session;
+#   - the vetting (one checker, used by the loader through --vetted and by the script itself): every directory from the
+#     cache root down, the plugin and its stamp are no symlinks and not writable by group or others (a foreign owner
+#     cannot be made without root: private_entry compares stat's owner with id -u, the same code path);
+#   - the user rebuild: refuses root, refuses symlinks, installs into the user's cache with 0700 directories and the
+#     build's own stamp last, --status and --session answers for the shell (which turns them into translated notices),
+#     the load into the running Hyprland only on an exact "ok", a missing toolchain, a stale build.
+# Layer logic (scripts/dev/test.sh). Writes only under a temporary directory; hyprctl is replaced.
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 script=$root/packaging/arch/grassfield-compositor-rebuild
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/compositor-rebuild.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+trap 'chmod -R u+rwX "$tmp" 2>/dev/null; rm -rf "$tmp"' EXIT
 fail=0
 pass() { echo "PASS: compositor_rebuild: $1"; }
 bad() { echo "FAIL: compositor_rebuild: $1"; fail=1; }
@@ -49,158 +53,277 @@ expect "lua: the same ABI" "$(luamod "local f = io.open('$tmp/version.h'); print
 grep -v HYPRLANG_VERSION "$tmp/version.h" >"$tmp/partial.h"
 "$script" --print-abi "$tmp/partial.h" >/dev/null 2>&1 && bad "bash: a missing field is an error" || pass "bash: a missing field is an error"
 expect "lua: a missing field gives nil" "$(luamod "local f = io.open('$tmp/partial.h'); print(c.abi(f:read('a')))")" "nil"
+if command -v cmake >/dev/null; then
+  cmake -DVERSION_H="$tmp/version.h" -DOUT="$tmp/cmake.abi" -P "$root/compositor/abi-stamp.cmake" >/dev/null 2>&1
+  expect "cmake: the build's own stamp is the same ABI" "$(cat "$tmp/cmake.abi" 2>/dev/null)" "$want"
+  cmake -DVERSION_H="$tmp/partial.h" -DOUT="$tmp/partial.abi" -P "$root/compositor/abi-stamp.cmake" >/dev/null 2>&1 \
+    && bad "cmake: a missing field fails the build" || pass "cmake: a missing field fails the build"
+  [[ ! -e $tmp/partial.abi ]] && pass "cmake: no stamp for a partial version.h" || bad "cmake: no stamp for a partial version.h"
+fi
 real=/usr/include/hyprland/src/version.h
 if [[ -r $real ]]; then
   expect "bash and lua agree on the installed Hyprland" "$("$script" --print-abi "$real")" "$(luamod "local f = io.open('$real'); print(c.abi(f:read('a')))")"
+  if command -v cmake >/dev/null; then
+    cmake -DVERSION_H="$real" -DOUT="$tmp/real.abi" -P "$root/compositor/abi-stamp.cmake" >/dev/null 2>&1
+    expect "bash and cmake agree on the installed Hyprland" "$(cat "$tmp/real.abi" 2>/dev/null)" "$("$script" --print-abi "$real")"
+  fi
 fi
 api=/usr/include/hyprland/src/plugins/PluginAPI.hpp
 if [[ -r $api ]]; then
   formula=$(tr -d ' \n' <"$api")
   [[ $formula == *'GIT_COMMIT_HASH}+"_aq_"+stripPatch(AQUAMARINE_VERSION)+"_hu_"+stripPatch(HYPRUTILS_VERSION)+"_hg_"+stripPatch(HYPRGRAPHICS_VERSION)+"_hc_"+stripPatch(HYPRCURSOR_VERSION)+"_hlg_"+stripPatch(HYPRLANG_VERSION)'* ]] \
     && pass "Hyprland's PluginAPI.hpp still computes the hash this way" \
-    || bad "Hyprland's PluginAPI.hpp computes its client hash differently: update abi_of and compositor.lua"
+    || bad "Hyprland's PluginAPI.hpp computes its client hash differently: update abi_of, abi-stamp.cmake and compositor.lua"
 fi
 
-# ---- the session's choice (compositor.lua) ----
-packaged_abi=/usr/lib/grassfield/grassfield-compositor.abi
-user_abi_of() { echo "/home/u/.cache/grassfield/compositor/$1/grassfield-compositor.abi"; }
-choose() { # <packaged stamp|-> <user build ABI dir|-> <user stamp|-> <signature|-> [loaded env path]: prints "<why> <path>"
-  luamod "
-    local stamps = {}
-    if '$1' ~= '-' then stamps['$packaged_abi'] = '$1' end
-    if '$2' ~= '-' then stamps['/home/u/.cache/grassfield/compositor/$2/grassfield-compositor.abi'] = '$3' end
-    if '${5:-}' ~= '' then stamps[('${5:-}'):gsub('%.so\$', '.abi')] = '$3' end
-    local f = io.open('$tmp/version.h'); local vh = f:read('a'); f:close()
-    local vars = { HOME = '/home/u', HYPRLAND_INSTANCE_SIGNATURE = ('$4' ~= '-') and '$4' or nil, GRASSFIELD_COMPOSITOR_PLUGIN = '${5:-}' }
-    local env = {
-      reader = function(p) if p == c.version_h then return vh end; local s = stamps[p]; if s then return s .. '\nsource 1\n' end; return nil end,
-      exists = function(p) return stamps[(p:gsub('%.so\$', '.abi'))] ~= nil end,
-      getenv = function(n) return vars[n] end,
-    }
-    local path, why = c.choose(env); print(why .. ' ' .. tostring(path))"
+# ---- the session's choice (compositor.lua), every file and the --vetted answer simulated ----
+cat >"$tmp/choose.lua" <<'EOF'
+-- arg: <version.h> <packaged stamp | - (no packaged build) | EMPTY> <ABIs --vetted vouches for, comma-separated | ->
+--      <instance signature | -> <runtime note content | -> [packaged file missing: gone]
+package.path = os.getenv("GF_ROOT") .. "/config/hypr/?.lua;" .. package.path
+local c = require("grassfield.compositor")
+local f = io.open(arg[1]); local vh = f:read("a"); f:close()
+local vars = { HOME = "/home/u", XDG_RUNTIME_DIR = "/run/user/1000" }
+if arg[4] ~= "-" then vars.HYPRLAND_INSTANCE_SIGNATURE = arg[4] end
+local getenv = function(n) return vars[n] end
+local vouched = {}
+for a in (arg[3] ~= "-" and arg[3] or ""):gmatch("[^,]+") do vouched[a] = true end
+local note = c.note_path(getenv)
+local calls = {}
+local env = {
+  read = function(p) if p == c.version_h then return vh end return nil end,
+  line = function(p)
+    if p == note and arg[5] ~= "-" then return arg[5] end
+    if p == "/usr/lib/grassfield/grassfield-compositor.abi" and arg[2] ~= "-" then return arg[2] == "EMPTY" and "" or arg[2] end
+    return nil
+  end,
+  exists = function(p) return p == c.packaged and arg[2] ~= "-" and arg[6] ~= "gone" end,
+  getenv = getenv,
+  vetted = function(abi)
+    calls[#calls + 1] = abi or "installed"
+    local a = abi or c.abi(vh)
+    if vouched[a] then return c.user_build(a, getenv) end
+    return nil
+  end,
 }
+local path, why = c.choose(env)
+print(why .. " " .. tostring(path))
+EOF
+choose() { GF_ROOT=$root lua "$tmp/choose.lua" "$tmp/version.h" "$@"; }
 sig=0123456789abcdef0123456789abcdef01234567_1792717195_16028387
-userpath=/home/u/.cache/grassfield/compositor/$want/grassfield-compositor.so
-expect "choice: the packaged build matches" "$(choose "$want" "$want" "$want" "$sig")" "packaged /usr/lib/grassfield/grassfield-compositor.so"
-expect "choice: the user's build matches" "$(choose "$other" "$want" "$want" "$sig")" "user $userpath"
-expect "choice: mismatch -> nothing is loaded (degraded mode, notice)" "$(choose "$other" - - "$sig")" "no-match nil"
-expect "choice: a user build with a wrong stamp is not loaded" "$(choose "$other" "$want" "$other" "$sig")" "no-match nil"
-expect "choice: no extension installed" "$(choose - - - "$sig")" "none nil"
-expect "choice: a packaged build without a stamp (older package) is not loaded blind" "$(choose "" - - "$sig")" "no-match nil"
-expect "choice: no signature: the installed headers decide" "$(choose "$other" "$want" "$want" -)" "user $userpath"
-# Hyprland updated under the running session (a config reload): the running commit is the old one.
 old_sig=fedcba9876543210fedcba9876543210fedcba98_1792717195_1
-expect "choice: updated under the session: the packaged build for the running commit" "$(choose "$other" "$want" "$want" "$old_sig")" "packaged /usr/lib/grassfield/grassfield-compositor.so"
-expect "choice: updated under the session: the build loaded at login stays" \
-  "$(choose "$want" - "$other" "$old_sig" /home/u/.cache/grassfield/compositor/$other/grassfield-compositor.so)" "loaded /home/u/.cache/grassfield/compositor/$other/grassfield-compositor.so"
-expect "choice: updated under the session, nothing for the running commit: nothing until the next login" "$(choose "$want" - - "$old_sig")" "updated nil"
+packaged=/usr/lib/grassfield/grassfield-compositor.so
+userpath=/home/u/.cache/grassfield/compositor/$want/grassfield-compositor.so
+olduser=/home/u/.cache/grassfield/compositor/$other/grassfield-compositor.so
+expect "choice: the packaged build matches" "$(choose "$want" "$want" "$sig" -)" "packaged $packaged"
+expect "choice: the user's build, vouched for by --vetted" "$(choose "$other" "$want" "$sig" -)" "user $userpath"
+expect "choice: mismatch -> nothing is loaded (degraded mode)" "$(choose "$other" - "$sig" -)" "no-match nil"
+expect "choice: a user build --vetted does not vouch for is not loaded" "$(choose "$other" "$other" "$sig" -)" "no-match nil"
+expect "choice: no extension installed" "$(choose - - "$sig" -)" "none nil"
+expect "choice: a packaged build with an empty stamp is not loaded blind" "$(choose EMPTY - "$sig" -)" "no-match nil"
+expect "choice: no signature: the installed headers decide" "$(choose "$other" "$want" - -)" "user $userpath"
+# A config reload: the build of the first parse stays, as the runtime note names it.
+expect "reload: the packaged build stays" "$(choose "$want" - "$sig" "$packaged")" "kept $packaged"
+expect "reload: the packaged build stays after a package update replaced it in the same transaction" \
+  "$(choose "$want" - "$old_sig" "$packaged")" "kept $packaged"
+expect "reload: the packaged file is gone: not kept" "$(choose "$want" - "$old_sig" "$packaged" gone)" "updated nil"
+expect "reload: the user's build of the running commit stays while --vetted vouches for it" \
+  "$(choose "$want" "$other" "$old_sig" "$olduser")" "kept $olduser"
+expect "reload: a user build --vetted no longer vouches for is dropped (nothing until the next login)" \
+  "$(choose "$want" - "$old_sig" "$olduser")" "updated nil"
+expect "reload: a user build of another commit is not kept" "$(choose "$other" "$other,$want" "$sig" "$olduser")" "user $userpath"
+expect "reload: a note naming any other path is ignored" "$(choose "$want" - "$sig" /tmp/evil/grassfield-compositor.so)" "packaged $packaged"
+expect "reload: a note with a path that climbs out is ignored" \
+  "$(choose "$other" "x" "$sig" "/home/u/.cache/grassfield/compositor/x/../../../../evil/grassfield-compositor.so")" "no-match nil"
+expect "updated under the session, no note: nothing until the next login" "$(choose "$want" "$want" "$old_sig" -)" "updated nil"
 expect "lua: the running commit" "$(luamod "print(c.running_commit('efb50993780079460b0cbed1363e2166a2de1d9f_1792717195_16028387'))")" "efb50993780079460b0cbed1363e2166a2de1d9f"
 expect "lua: no commit in a bad signature" "$(luamod "print(c.running_commit('nothing'), c.running_commit(nil))")" "nil	nil"
 expect "lua: XDG_CACHE_HOME wins" "$(luamod "print(c.user_build('A', function(n) return ({XDG_CACHE_HOME = '/x', HOME = '/h'})[n] end))")" "/x/grassfield/compositor/A/grassfield-compositor.so"
+expect "lua: the ABI of a user build path, nothing else" \
+  "$(luamod "local g = function(n) return ({HOME = '/h'})[n] end; print(c.user_build_abi('/h/.cache/grassfield/compositor/abc_1/grassfield-compositor.so', g), c.user_build_abi('/h/.cache/grassfield/compositor/a/b/grassfield-compositor.so', g), c.user_build_abi('/h/.cache/grassfield/compositor/.x/grassfield-compositor.so', g), c.user_build_abi('/other/grassfield-compositor.so', g))")" \
+  "abc_1	nil	nil	nil"
+expect "lua: the runtime note path, the signature reduced to letters, digits and _" \
+  "$(luamod "print(c.note_path(function(n) return ({XDG_RUNTIME_DIR = '/run/user/1', HYPRLAND_INSTANCE_SIGNATURE = 'ab_1/../x'})[n] end))")" \
+  "/run/user/1/grassfield-compositor-ab_1x"
+mkdir -p "$tmp/run"
+luamod "c.remember('$packaged', function(n) return ({XDG_RUNTIME_DIR = '$tmp/run', HYPRLAND_INSTANCE_SIGNATURE = '$sig'})[n] end)"
+expect "lua: remember writes the runtime note of this instance" "$(cat "$tmp/run/grassfield-compositor-$sig" 2>/dev/null)" "$packaged"
+expect "lua: --vetted is never asked with an ABI the shell would expand" "$(luamod "c.rebuild = '/bin/echo'; print(c.vetted('a;b'), c.vetted('\$(x)'))")" "nil	nil"
 
-# ---- the user rebuild on temporary directories ----
-lib=$tmp/lib src=$tmp/src tools=$tmp/tools cache=$tmp/cache conf=$tmp/conf notes=$tmp/notes.log
-mkdir -p "$lib" "$src" "$tools" "$conf"
+# ---- the user rebuild and the vetting, on temporary directories ----
+lib=$tmp/lib src=$tmp/src tools=$tmp/tools cache=$tmp/cache
+mkdir -p "$lib" "$src" "$tools"
 printf 'cmake_minimum_required(VERSION 3.27)\n' >"$src/CMakeLists.txt"
 echo "0.5.0-1" >"$src/VERSION"
 printf 'plugin\n' >"$lib/grassfield-compositor.so"
 echo "$other" >"$lib/grassfield-compositor.abi"
 for t in cmake g++ make pkg-config hyprwayland-scanner; do printf '#!/bin/sh\nexit 0\n' >"$tools/$t"; chmod +x "$tools/$t"; done
 printf '#!/bin/sh\necho "$@" >>"%s/hyprctl.log"\necho ok\n' "$tmp" >"$tmp/hyprctl-ok"
+printf '#!/bin/sh\necho "$@" >>"%s/hyprctl.log"\nprintf "ok\\nerror: plugin refused\\n"\n' "$tmp" >"$tmp/hyprctl-okish"
 printf '#!/bin/sh\necho "error: plugin refused"\nexit 1\n' >"$tmp/hyprctl-no"
-chmod +x "$tmp/hyprctl-ok" "$tmp/hyprctl-no"
-run() { # [env ...] -- args: the script with the test environment
-  env GF_VERSION_H="$tmp/version.h" GF_LIB_DIR="$lib" GF_SRC_DIR="$src" GF_TOOLS_PATH="$tools" XDG_CACHE_HOME="$cache" \
-    GRASSFIELD_CONFIG_HOME="$conf" GF_NOTIFY_LOG="$notes" GF_TEST_FAKE_BUILD=1 HYPRLAND_INSTANCE_SIGNATURE= "$@" >"$tmp/out" 2>&1
+chmod +x "$tmp/hyprctl-ok" "$tmp/hyprctl-okish" "$tmp/hyprctl-no"
+testenv=(GF_VERSION_H="$tmp/version.h" GF_LIB_DIR="$lib" GF_SRC_DIR="$src" GF_TOOLS_PATH="$tools" XDG_CACHE_HOME="$cache")
+run() { # [env ...] -- args: the script with the test environment; stdout in $tmp/out, stderr in $tmp/err
+  env "${testenv[@]}" GF_TEST_FAKE_BUILD=1 HYPRLAND_INSTANCE_SIGNATURE= "$@" >"$tmp/out" 2>"$tmp/err"
 }
 dest=$cache/grassfield/compositor/$want
+so=$dest/grassfield-compositor.so
 
 run GF_TEST_UID=0 "$script"; rc=$?
-expect "root: refused" "$rc $(grep -c 'refusing to run as root' "$tmp/out")" "1 1"
+expect "root: refused" "$rc $(grep -c 'refusing to run as root' "$tmp/err")" "1 1"
 [[ ! -e $cache ]] && pass "root: nothing written" || bad "root: nothing written"
 run GF_TEST_UID=0 "$script" --session; rc=$?
 expect "root: --session refused too" "$rc" 1
 expect "root: --print-abi still answers (it only reads)" "$(GF_TEST_UID=0 "$script" --print-abi "$tmp/version.h")" "$want"
+run GF_TEST_UID=0 "$script" --status; rc=$?
+expect "root: --status still answers (it only reads)" "$rc $(head -n 1 "$tmp/out")" "0 state=mismatch"
 if command -v fakeroot >/dev/null; then
-  # makepkg's package() runs under fakeroot (uid 0): the package's stamp must still be written; a build never runs there,
-  # and the test override cannot lift the refusal.
-  expect "fakeroot: --print-abi (the PKGBUILD's stamp)" "$(fakeroot -- "$script" --print-abi "$tmp/version.h")" "$want"
+  # makepkg's package() runs under fakeroot (uid 0): the PKGBUILD's stamp check still reads the installed ABI; a build
+  # never runs there, and the test override cannot lift the refusal.
+  expect "fakeroot: --print-abi (the PKGBUILD's stamp check)" "$(fakeroot -- "$script" --print-abi "$tmp/version.h")" "$want"
   run fakeroot -- env GF_TEST_UID=1000 "$script"; rc=$?
-  expect "fakeroot: a build is refused, GF_TEST_UID cannot lift it" "$rc $(grep -c 'refusing to run as root' "$tmp/out")" "1 1"
+  expect "fakeroot: a build is refused, GF_TEST_UID cannot lift it" "$rc $(grep -c 'refusing to run as root' "$tmp/err")" "1 1"
 fi
 
 run "$script" --check; rc=$?
 expect "--check: no build matches -> exit 1" "$rc" 1
+run "$script" --status; rc=$?
+expect "--status: a mismatch names the version and the ABI" "$rc $(tr '\n' ' ' <"$tmp/out")" "0 state=mismatch version=v0.57.0 abi=$want "
+run "$script" --vetted; rc=$?
+expect "--vetted: no build -> exit 1, nothing on stdout" "$rc [$(cat "$tmp/out")]" "1 []"
 
 run "$script"; rc=$?
 expect "build: exit 0" "$rc" 0
-[[ -f $dest/grassfield-compositor.so && ! -L $dest/grassfield-compositor.so ]] && pass "build: installed in the user's cache" || bad "build: installed in the user's cache ($(cat "$tmp/out"))"
-expect "build: its stamp" "$(head -n 1 "$dest/grassfield-compositor.abi" 2>/dev/null) / $(sed -n 2p "$dest/grassfield-compositor.abi" 2>/dev/null)" "$want / source 0.5.0-1"
-expect "build: 0700 directories" "$(stat -c %a "$cache/grassfield" "$cache/grassfield/compositor" "$dest" | tr '\n' ' ')" "700 700 700 "
+[[ -f $so && ! -L $so ]] && pass "build: installed in the user's cache" || bad "build: installed in the user's cache ($(cat "$tmp/err"))"
+expect "build: the build's own stamp, then the source" "$(head -n 1 "$dest/grassfield-compositor.abi" 2>/dev/null) / $(sed -n 2p "$dest/grassfield-compositor.abi" 2>/dev/null)" "$want / source 0.5.0-1"
+expect "build: 0700 directories, 0700 plugin, 0600 stamp" \
+  "$(stat -c %a "$cache/grassfield" "$cache/grassfield/compositor" "$dest" "$so" "$dest/grassfield-compositor.abi" | tr '\n' ' ')" "700 700 700 700 600 "
 expect "build: no temporary file left" "$(find "$cache/grassfield/compositor" -name '.*' -not -name .lock | wc -l)" 0
-grep -q "Log out and back in" "$tmp/out" && pass "build: says how to use it" || bad "build: says how to use it"
+grep -q "Log out and back in" "$tmp/err" && pass "build: says how to use it" || bad "build: says how to use it"
+run "$script" --vetted; rc=$?
+expect "--vetted: vouches for the user's build" "$rc $(cat "$tmp/out")" "0 $so"
+run "$script" --vetted "$want"; rc=$?
+expect "--vetted ABI: the same build" "$rc $(cat "$tmp/out")" "0 $so"
+run "$script" --vetted "$other"; rc=$?
+expect "--vetted another ABI: no build there" "$rc [$(cat "$tmp/out")]" "1 []"
+run "$script" --vetted ../x; rc=$?
+expect "--vetted: not an ABI" "$rc $(grep -c 'not an ABI' "$tmp/err")" "1 1"
+run "$script" --status; rc=$?
+expect "--status: the user's build matches" "$(head -n 1 "$tmp/out") $(grep '^path=' "$tmp/out")" "state=match path=$so"
 run "$script" --check; rc=$?
-expect "--check: the user's build matches -> exit 0" "$rc $(tail -n 1 "$tmp/out")" "0 match: $dest/grassfield-compositor.so"
+expect "--check: the user's build matches -> exit 0" "$rc $(tail -n 1 "$tmp/out")" "0 match: $so"
 run "$script"; rc=$?
-expect "build again: nothing to build" "$rc $(grep -c 'nothing to build' "$tmp/out")" "0 1"
+expect "build again: nothing to build" "$rc $(grep -c 'nothing to build' "$tmp/err")" "0 1"
+# The loader asks the script (Lua cannot look at owners, modes or symlinks): the real module, the real script.
+expect "lua: M.vetted asks the script and gets the user's build" \
+  "$(env "${testenv[@]}" lua -e "package.path = '$root/config/hypr/?.lua;' .. package.path; local c = require('grassfield.compositor'); c.rebuild = '$script'; print(c.vetted(), c.vetted('$want'), c.vetted('$other'))")" \
+  "$so	$so	nil"
 
-# Symlinks are refused: a cache directory, a planted plugin, the build's own result.
-rm -rf "$cache"
-mkdir -p "$cache" "$tmp/elsewhere"
+# The vetting: each entry from the cache root down, the plugin and the stamp. Each case is undone after it.
+vetted_refuses() { # <name> <what the reason says>
+  run "$script" --vetted; local rc=$?
+  expect "vetting: $1 -> refused" "$rc [$(cat "$tmp/out")] $(grep -c "$2" "$tmp/err")" "1 [] 1"
+  run "$script" --status
+  expect "vetting: $1 -> --status says mismatch" "$(head -n 1 "$tmp/out")" "state=mismatch"
+}
+for d in "$cache" "$cache/grassfield" "$cache/grassfield/compositor" "$dest"; do
+  mode=$(stat -c %a "$d")
+  chmod g+w "$d"
+  vetted_refuses "group-writable ${d#"$tmp"/}" "writable by group or others"
+  chmod "$mode" "$d"
+  chmod o+w "$d"
+  vetted_refuses "world-writable ${d#"$tmp"/}" "writable by group or others"
+  chmod "$mode" "$d"
+done
+chmod 0666 "$so"
+vetted_refuses "a plugin others can write" "writable by group or others"
+chmod 0700 "$so"
+chmod 0622 "$dest/grassfield-compositor.abi"
+vetted_refuses "a stamp others can write" "writable by group or others"
+chmod 0600 "$dest/grassfield-compositor.abi"
+mv "$so" "$tmp/real.so" && ln -s "$tmp/real.so" "$so"
+vetted_refuses "a symlinked plugin" "is a symlink"
+rm -f "$so" && mv "$tmp/real.so" "$so"
+mv "$dest/grassfield-compositor.abi" "$tmp/real.abi" && ln -s "$tmp/real.abi" "$dest/grassfield-compositor.abi"
+vetted_refuses "a symlinked stamp" "is a symlink"
+rm -f "$dest/grassfield-compositor.abi" && mv "$tmp/real.abi" "$dest/grassfield-compositor.abi"
+mv "$cache/grassfield" "$tmp/moved" && ln -s "$tmp/moved" "$cache/grassfield"
+vetted_refuses "a symlinked directory on the way" "is a symlink"
+rm -f "$cache/grassfield" && mv "$tmp/moved" "$cache/grassfield"
+mv "$cache" "$tmp/cache-real" && ln -s "$tmp/cache-real" "$cache"
+vetted_refuses "a symlinked cache root" "is a symlink"
+rm -f "$cache" && mv "$tmp/cache-real" "$cache"
+echo "$other" >"$tmp/stamp" && cp "$dest/grassfield-compositor.abi" "$tmp/good.abi" && cat "$tmp/stamp" >"$dest/grassfield-compositor.abi"
+vetted_refuses "a stamp for another ABI" "its stamp is not"
+cat "$tmp/good.abi" >"$dest/grassfield-compositor.abi"
+run "$script" --vetted; rc=$?
+expect "vetting: every case undone -> vouched for again" "$rc $(cat "$tmp/out")" "0 $so"
+
+# The build refuses a cache it could not vouch for afterwards, and its own odd results.
+rm -rf "$cache" && mkdir -p "$cache" && chmod 0777 "$cache"
+run "$script"; rc=$?
+expect "build: a cache root others can write -> refused" "$rc $(grep -c 'writable by group or others' "$tmp/err")" "1 1"
+[[ -z $(ls -A "$cache") ]] && pass "build: nothing written into it" || bad "build: nothing written into it"
+rm -rf "$cache" && mkdir -p "$cache" "$tmp/elsewhere"
 ln -s "$tmp/elsewhere" "$cache/grassfield"
 run "$script"; rc=$?
-expect "symlinked cache directory: refused" "$rc $(grep -c 'is a symlink' "$tmp/out")" "1 1"
-[[ -z $(ls -A "$tmp/elsewhere") ]] && pass "symlinked cache directory: nothing written through it" || bad "symlinked cache directory: nothing written through it"
-rm -f "$cache/grassfield"
-mkdir -p "$dest" && chmod 700 "$cache/grassfield" "$cache/grassfield/compositor" "$dest"
-ln -s "$lib/grassfield-compositor.so" "$dest/grassfield-compositor.so"
-echo "$want" >"$dest/grassfield-compositor.abi"
-run "$script" --check; rc=$?
-expect "a planted symlink is not a build" "$rc" 1
+expect "build: a symlinked cache directory -> refused" "$rc $(grep -c 'is a symlink' "$tmp/err")" "1 1"
+[[ -z $(ls -A "$tmp/elsewhere") ]] && pass "build: nothing written through it" || bad "build: nothing written through it"
+rm -rf "$cache" && mkdir -p "$cache/grassfield/compositor" && chmod -R 0700 "$cache/grassfield"
+ln -s "$tmp/lockfile" "$cache/grassfield/compositor/.lock"
+run "$script"; rc=$?
+expect "build: a symlinked lock -> refused" "$rc $(grep -c 'lock is a symlink' "$tmp/err") $([[ -e $tmp/lockfile ]] && echo written || echo untouched)" "1 1 untouched"
 rm -rf "$cache"
 run GF_TEST_FAKE_BUILD=symlink "$script"; rc=$?
-expect "the build's result is a symlink: refused" "$rc $(grep -c 'not a regular file' "$tmp/out")" "1 1"
-[[ ! -e $dest/grassfield-compositor.so ]] && pass "the build's result is a symlink: nothing installed" || bad "the build's result is a symlink: nothing installed"
+expect "build: its result is a symlink -> refused" "$rc $(grep -c 'not a regular file' "$tmp/err")" "1 1"
+[[ ! -e $so ]] && pass "build: a symlink result installs nothing" || bad "build: a symlink result installs nothing"
+rm -rf "$cache"
+run GF_TEST_FAKE_BUILD=stale "$script"; rc=$?
+expect "build: its own stamp is another ABI -> refused" "$rc $(grep -c "built for 'stale'" "$tmp/err")" "1 1"
+[[ ! -e $so ]] && pass "build: a stale result installs nothing" || bad "build: a stale result installs nothing"
 
-# --session, the setting off: one notice with the Hyprland version and the command; nothing built.
-rm -rf "$cache" "$notes"
-run "$script" --session; rc=$?
-expect "--session, setting off: exit 0, one notice" "$rc $(wc -l <"$notes")" "0 1"
-grep -q "critical.*Hyprland v0.57.0.*Run grassfield-compositor-rebuild in a terminal" "$notes" && pass "--session, setting off: the notice names the version and the command" || bad "--session, setting off: the notice ($(cat "$notes"))"
-[[ ! -e $dest ]] && pass "--session, setting off: nothing built" || bad "--session, setting off: nothing built"
-
-# --session, the setting on: built, then loaded into the running Hyprland when its commit is the build's.
-printf '{"windows": {"rebuildExtension": true}}\n' >"$conf/grassfield.json"
-rm -f "$notes" "$tmp/hyprctl.log"
+# --session (the shell, opt-in setting): build when needed, load into the running Hyprland on an exact "ok".
+rm -rf "$cache" "$tmp/hyprctl.log"
 run HYPRLAND_INSTANCE_SIGNATURE="$sig" GF_HYPRCTL="$tmp/hyprctl-ok" "$script" --session; rc=$?
-expect "--session, setting on: exit 0, built" "$rc $([[ -f $dest/grassfield-compositor.so ]] && echo built)" "0 built"
-expect "--session, setting on: loaded into the running Hyprland" "$(cat "$tmp/hyprctl.log" 2>/dev/null)" "plugin load $dest/grassfield-compositor.so"
-grep -q "titlebars, minimize and global menus are back" "$notes" && pass "--session, setting on: says it is back" || bad "--session, setting on: says it is back ($(cat "$notes"))"
-rm -rf "$cache" "$notes" "$tmp/hyprctl.log"
+expect "--session: built and loaded" "$rc $(tr '\n' ' ' <"$tmp/out")" "0 result=loaded path=$so "
+expect "--session: hyprctl got the vetted build" "$(cat "$tmp/hyprctl.log" 2>/dev/null)" "plugin load $so"
+rm -f "$tmp/hyprctl.log" "$cache/grassfield/compositor/build.log"
+run HYPRLAND_INSTANCE_SIGNATURE="$sig" GF_HYPRCTL="$tmp/hyprctl-ok" "$script" --session; rc=$?
+expect "--session: a build that matches already is loaded, not rebuilt" \
+  "$rc $(head -n 1 "$tmp/out") $([[ -e $cache/grassfield/compositor/build.log ]] && echo rebuilt || echo kept)" "0 result=loaded kept"
+rm -rf "$cache" "$tmp/hyprctl.log"
 run HYPRLAND_INSTANCE_SIGNATURE="$old_sig" GF_HYPRCTL="$tmp/hyprctl-ok" "$script" --session; rc=$?
-[[ ! -e $tmp/hyprctl.log ]] && pass "--session: another Hyprland runs: not loaded" || bad "--session: another Hyprland runs: not loaded"
-grep -q "Log out and back in" "$notes" && pass "--session: another Hyprland runs: log in again" || bad "--session: another Hyprland runs: log in again ($(cat "$notes"))"
-rm -rf "$cache" "$notes"
+expect "--session: another Hyprland runs: built, not loaded" "$rc $(head -n 1 "$tmp/out") $([[ -e $tmp/hyprctl.log ]] && echo called || echo untouched)" "0 result=built untouched"
+rm -rf "$cache"
 run HYPRLAND_INSTANCE_SIGNATURE="$sig" GF_HYPRCTL="$tmp/hyprctl-no" "$script" --session; rc=$?
-grep -q "Log out and back in" "$notes" && pass "--session: Hyprland refuses the load: log in again" || bad "--session: Hyprland refuses the load: log in again"
-rm -rf "$cache" "$notes"
+expect "--session: Hyprland refuses the load: built" "$rc $(head -n 1 "$tmp/out")" "0 result=built"
+rm -rf "$cache"
+run HYPRLAND_INSTANCE_SIGNATURE="$sig" GF_HYPRCTL="$tmp/hyprctl-okish" "$script" --session; rc=$?
+expect "--session: an answer that is not exactly ok is not a load" "$rc $(head -n 1 "$tmp/out")" "0 result=built"
+rm -rf "$cache"
+run GF_TEST_FAKE_BUILD=stale "$script" --session; rc=$?
+expect "--session: the build fails" "$rc $(tr '\n' ' ' <"$tmp/out")" "1 result=failed reason=build-failed "
+rm -rf "$cache"
 rm -f "$tools/hyprwayland-scanner"
 run "$script" --session; rc=$?
-expect "--session: missing toolchain: exit 1" "$rc" 1
-grep -q "critical.*could not be built for Hyprland v0.57.0" "$notes" && pass "--session: missing toolchain: says so" || bad "--session: missing toolchain: says so ($(cat "$notes"))"
+expect "--session: missing toolchain" "$rc $(tr '\n' ' ' <"$tmp/out")" "1 result=failed reason=cannot-build "
 printf '#!/bin/sh\nexit 0\n' >"$tools/hyprwayland-scanner" && chmod +x "$tools/hyprwayland-scanner"
-printf '{"windows": {"rebuildExtension": "yes"}}\n' >"$conf/grassfield.json"
-rm -rf "$cache" "$notes"
-run "$script" --session; rc=$?
-[[ ! -e $dest ]] && pass "--session: a setting that is not exactly true builds nothing" || bad "--session: a setting that is not exactly true builds nothing"
 
-# The packaged build matches: nothing to do in any mode.
+# The packaged build matches: --check and --status say so; a symlink in its place is not a packaged build.
 echo "$want" >"$lib/grassfield-compositor.abi"
-rm -rf "$cache" "$notes"
-run "$script" --session; rc=$?
-expect "packaged build matches: --session says nothing" "$rc $([[ -e $notes ]] && echo notice || echo quiet)" "0 quiet"
+rm -rf "$cache"
 run "$script" --check; rc=$?
 expect "packaged build matches: --check exit 0" "$rc $(tail -n 1 "$tmp/out")" "0 match: $lib/grassfield-compositor.so"
+run "$script" --status
+expect "packaged build matches: --status" "$(head -n 1 "$tmp/out") $(grep '^path=' "$tmp/out")" "state=match path=$lib/grassfield-compositor.so"
+mv "$lib/grassfield-compositor.so" "$tmp/pkg.so" && ln -s "$tmp/pkg.so" "$lib/grassfield-compositor.so"
+run "$script" --status
+expect "a symlink in the packaged place is not a build" "$(head -n 1 "$tmp/out")" "state=mismatch"
+rm -f "$lib/grassfield-compositor.so"
+run "$script" --status
+expect "--status: no extension installed" "$(head -n 2 "$tmp/out" | tr '\n' ' ')" "state=unknown reason=not-installed "
+run GF_VERSION_H="$tmp/none.h" "$script" --status
+expect "--status: no Hyprland headers" "$(tr '\n' ' ' <"$tmp/out")" "state=unknown reason=no-headers "
 
 run "$script" --bogus; rc=$?
 expect "unknown option: usage, exit 2" "$rc" 2
